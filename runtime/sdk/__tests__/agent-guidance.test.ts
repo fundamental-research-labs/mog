@@ -198,12 +198,12 @@ describe('SDK agent API guidance', () => {
       preflight.diagnostics.map((diagnostic) => [diagnostic.entryId, diagnostic]),
     );
     const expectedEntryIds = [
-      'round57.worksheet.getCellValue.diagnostic',
-      'round57.worksheet.rawCellData.diagnostic',
-      'round57.worksheet.getFormat.diagnostic',
-      'round57.worksheet.indexToAddress.diagnostic',
-      'round57.worksheet.addressToIndex.diagnostic',
-      'round57.worksheet.privateColLetter.diagnostic',
+      'mog-api.worksheet.getCellValue.unsupported',
+      'mog-api.worksheet.rawCellData.unsupported',
+      'mog-api.worksheet.getFormat.unsupported',
+      'mog-api.worksheet.indexToAddress.unsupported',
+      'mog-api.worksheet.addressToIndex.unsupported',
+      'mog-api.worksheet.privateColLetter.unsupported',
     ];
 
     for (const entryId of expectedEntryIds) {
@@ -217,13 +217,13 @@ describe('SDK agent API guidance', () => {
       );
     }
 
-    expect(byId.get('round57.worksheet.getCellValue.diagnostic')?.mogReplacements).toEqual(
+    expect(byId.get('mog-api.worksheet.getCellValue.unsupported')?.mogReplacements).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ path: 'ws.getValue' }),
         expect.objectContaining({ path: 'ws.getCell' }),
       ]),
     );
-    expect(byId.get('round57.worksheet.getFormat.diagnostic')?.mogReplacements).toEqual(
+    expect(byId.get('mog-api.worksheet.getFormat.unsupported')?.mogReplacements).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ path: 'ws.formats.getDisplayedCellProperties' }),
         expect.objectContaining({ path: 'ws.formats.get' }),
@@ -243,23 +243,23 @@ describe('SDK agent API guidance', () => {
       expect.arrayContaining([
         expect.objectContaining({
           code: 'MOG002_MOG_API_USAGE',
-          entryId: 'round57.workbook.getSheet.missing-await',
-          matcherId: 'compatibility.round57.workbook.getSheet.missing-await.workbook',
+          entryId: 'mog-api.workbook.getSheet.missing-await',
+          matcherId: 'compatibility.mog-api.workbook.getSheet.missing-await.workbook',
           blocking: true,
           message: expect.stringContaining('getSheet is async'),
           suggestion: expect.stringContaining('const ws = await wb.getSheet(name);'),
         }),
         expect.objectContaining({
           code: 'MOG002_MOG_API_USAGE',
-          entryId: 'round57.workbook.getSheet.missing-await',
-          matcherId: 'compatibility.round57.workbook.getSheet.missing-await.wb',
+          entryId: 'mog-api.workbook.getSheet.missing-await',
+          matcherId: 'compatibility.mog-api.workbook.getSheet.missing-await.wb',
           blocking: true,
         }),
       ]),
     );
   });
 
-  it('does not flag comments, strings, valid Mog calls, or unrelated local helper names for round-57 guidance', () => {
+  it('does not flag comments, strings, valid Mog calls, or unrelated local helper names for Mog API guidance', () => {
     const source = `
       // await ws.getCellValue("A1");
       const text = 'ws.rawCellData("A1"); ws.getFormat("A1"); ws._colLetter(1); workbook.getSheet("S").getValue("A1")';
@@ -289,10 +289,10 @@ describe('SDK agent API guidance', () => {
       console.log(text, helpers, ws2, ws3);
     `;
 
-    const round57Diagnostics = analyzeMogCode(source).filter((diagnostic) =>
-      diagnostic.entryId.startsWith('round57.'),
+    const mogApiDiagnostics = analyzeMogCode(source).filter((diagnostic) =>
+      diagnostic.entryId.startsWith('mog-api.'),
     );
-    expect(round57Diagnostics).toEqual([]);
+    expect(mogApiDiagnostics).toEqual([]);
   });
 
   it('surfaces pivot handle getInfo in generated API metadata and describe output', () => {

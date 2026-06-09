@@ -566,6 +566,284 @@
     "schemaVersion": "1",
     "entries": [
       {
+        "id": "mog-api.worksheet.addressToIndex.unsupported",
+        "observedPath": "ws.addressToIndex",
+        "canonicalPath": "wb.addressToIndex",
+        "status": "structured_diagnostic",
+        "appliesTo": "method",
+        "ownerTheme": "sdk-agent-guidance/worksheet-api-usage",
+        "ownerPackage": "@mog-sdk/sdk",
+        "firstObservedVersion": "0.9.2",
+        "canonicalSince": null,
+        "deprecatedSince": null,
+        "removeAfter": null,
+        "evidence": [
+          {
+            "source": "source",
+            "reference": "api-compatibility:mog-api/worksheet-method-guidance"
+          }
+        ],
+        "behavior": "Address conversion helpers are workbook APIs; worksheets do not expose addressToIndex().",
+        "runtimeSurfaces": [
+          "executeCode-preflight",
+          "agent-guidance",
+          "docs",
+          "api-eval"
+        ],
+        "surfaceDisposition": {
+          "typescript": "structured_diagnostic",
+          "kernel": "structured_diagnostic",
+          "executeCode-preflight": "structured_diagnostic",
+          "api-describe": "structured_diagnostic",
+          "agent-guidance": "structured_diagnostic",
+          "docs": "structured_diagnostic",
+          "python": "structured_diagnostic",
+          "api-eval": "structured_diagnostic"
+        },
+        "diagnostics": {
+          "code": "MOG002_MOG_API_USAGE",
+          "message": "ws.addressToIndex(address) is not a Mog worksheet method. Use wb.addressToIndex(address).",
+          "replacements": [
+            "wb.addressToIndex"
+          ]
+        },
+        "verification": [
+          "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe"
+        ]
+      },
+      {
+        "id": "mog-api.worksheet.getCellValue.unsupported",
+        "observedPath": "ws.getCellValue",
+        "canonicalPath": "ws.getValue",
+        "status": "structured_diagnostic",
+        "appliesTo": "method",
+        "ownerTheme": "sdk-agent-guidance/worksheet-api-usage",
+        "ownerPackage": "@mog-sdk/sdk",
+        "firstObservedVersion": "0.9.2",
+        "canonicalSince": null,
+        "deprecatedSince": null,
+        "removeAfter": null,
+        "evidence": [
+          {
+            "source": "source",
+            "reference": "api-compatibility:mog-api/worksheet-method-guidance"
+          }
+        ],
+        "behavior": "Worksheet does not expose getCellValue(); use ws.getValue(address) for the computed value or (await ws.getCell(address)).value when full cell data is needed.",
+        "runtimeSurfaces": [
+          "executeCode-preflight",
+          "agent-guidance",
+          "docs",
+          "api-eval"
+        ],
+        "surfaceDisposition": {
+          "typescript": "structured_diagnostic",
+          "kernel": "structured_diagnostic",
+          "executeCode-preflight": "structured_diagnostic",
+          "api-describe": "structured_diagnostic",
+          "agent-guidance": "structured_diagnostic",
+          "docs": "structured_diagnostic",
+          "python": "structured_diagnostic",
+          "api-eval": "structured_diagnostic"
+        },
+        "diagnostics": {
+          "code": "MOG002_MOG_API_USAGE",
+          "message": "ws.getCellValue(address) is not a Mog worksheet method. Use await ws.getValue(address), or (await ws.getCell(address)).value when full cell data is needed.",
+          "replacements": [
+            "ws.getValue",
+            "ws.getCell"
+          ]
+        },
+        "verification": [
+          "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe"
+        ]
+      },
+      {
+        "id": "mog-api.worksheet.getFormat.unsupported",
+        "observedPath": "ws.getFormat",
+        "canonicalPath": "ws.formats.getDisplayedCellProperties",
+        "status": "structured_diagnostic",
+        "appliesTo": "method",
+        "ownerTheme": "sdk-agent-guidance/worksheet-api-usage",
+        "ownerPackage": "@mog-sdk/sdk",
+        "firstObservedVersion": "0.9.2",
+        "canonicalSince": null,
+        "deprecatedSince": null,
+        "removeAfter": null,
+        "evidence": [
+          {
+            "source": "source",
+            "reference": "api-compatibility:mog-api/worksheet-method-guidance"
+          }
+        ],
+        "behavior": "Worksheet formatting reads are namespaced under ws.formats; use displayed properties for effective formatting or ws.formats.get() for explicit stored formatting.",
+        "runtimeSurfaces": [
+          "executeCode-preflight",
+          "agent-guidance",
+          "docs",
+          "api-eval"
+        ],
+        "surfaceDisposition": {
+          "typescript": "structured_diagnostic",
+          "kernel": "structured_diagnostic",
+          "executeCode-preflight": "structured_diagnostic",
+          "api-describe": "structured_diagnostic",
+          "agent-guidance": "structured_diagnostic",
+          "docs": "structured_diagnostic",
+          "python": "structured_diagnostic",
+          "api-eval": "structured_diagnostic"
+        },
+        "diagnostics": {
+          "code": "MOG002_MOG_API_USAGE",
+          "message": "ws.getFormat(address) is not a Mog worksheet method. Use ws.formats.getDisplayedCellProperties(address) for effective formatting, or ws.formats.get(address) for explicit stored formatting.",
+          "replacements": [
+            "ws.formats.getDisplayedCellProperties",
+            "ws.formats.get"
+          ]
+        },
+        "verification": [
+          "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe"
+        ]
+      },
+      {
+        "id": "mog-api.worksheet.indexToAddress.unsupported",
+        "observedPath": "ws.indexToAddress",
+        "canonicalPath": "wb.indexToAddress",
+        "status": "structured_diagnostic",
+        "appliesTo": "method",
+        "ownerTheme": "sdk-agent-guidance/worksheet-api-usage",
+        "ownerPackage": "@mog-sdk/sdk",
+        "firstObservedVersion": "0.9.2",
+        "canonicalSince": null,
+        "deprecatedSince": null,
+        "removeAfter": null,
+        "evidence": [
+          {
+            "source": "source",
+            "reference": "api-compatibility:mog-api/worksheet-method-guidance"
+          }
+        ],
+        "behavior": "Address conversion helpers are workbook APIs; worksheets do not expose indexToAddress().",
+        "runtimeSurfaces": [
+          "executeCode-preflight",
+          "agent-guidance",
+          "docs",
+          "api-eval"
+        ],
+        "surfaceDisposition": {
+          "typescript": "structured_diagnostic",
+          "kernel": "structured_diagnostic",
+          "executeCode-preflight": "structured_diagnostic",
+          "api-describe": "structured_diagnostic",
+          "agent-guidance": "structured_diagnostic",
+          "docs": "structured_diagnostic",
+          "python": "structured_diagnostic",
+          "api-eval": "structured_diagnostic"
+        },
+        "diagnostics": {
+          "code": "MOG002_MOG_API_USAGE",
+          "message": "ws.indexToAddress(row, col) is not a Mog worksheet method. Use wb.indexToAddress(row, col).",
+          "replacements": [
+            "wb.indexToAddress"
+          ]
+        },
+        "verification": [
+          "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe"
+        ]
+      },
+      {
+        "id": "mog-api.worksheet.privateColLetter.unsupported",
+        "observedPath": "ws._colLetter",
+        "canonicalPath": "wb.indexToAddress",
+        "status": "structured_diagnostic",
+        "appliesTo": "method",
+        "ownerTheme": "sdk-agent-guidance/worksheet-api-usage",
+        "ownerPackage": "@mog-sdk/sdk",
+        "firstObservedVersion": "0.9.2",
+        "canonicalSince": null,
+        "deprecatedSince": null,
+        "removeAfter": null,
+        "evidence": [
+          {
+            "source": "source",
+            "reference": "api-compatibility:mog-api/worksheet-method-guidance"
+          }
+        ],
+        "behavior": "Private worksheet/helper guesses such as _colLetter are not public Mog APIs; use workbook address helpers where possible.",
+        "runtimeSurfaces": [
+          "executeCode-preflight",
+          "agent-guidance",
+          "docs",
+          "api-eval"
+        ],
+        "surfaceDisposition": {
+          "typescript": "structured_diagnostic",
+          "kernel": "structured_diagnostic",
+          "executeCode-preflight": "structured_diagnostic",
+          "api-describe": "structured_diagnostic",
+          "agent-guidance": "structured_diagnostic",
+          "docs": "structured_diagnostic",
+          "python": "structured_diagnostic",
+          "api-eval": "structured_diagnostic"
+        },
+        "diagnostics": {
+          "code": "MOG002_MOG_API_USAGE",
+          "message": "ws._colLetter(index) is not a public Mog worksheet method. Use wb.indexToAddress(row, col) when converting indexes to addresses.",
+          "replacements": [
+            "wb.indexToAddress"
+          ]
+        },
+        "verification": [
+          "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe"
+        ]
+      },
+      {
+        "id": "mog-api.worksheet.rawCellData.unsupported",
+        "observedPath": "ws.rawCellData",
+        "canonicalPath": "ws.getRawCellData",
+        "status": "structured_diagnostic",
+        "appliesTo": "method",
+        "ownerTheme": "sdk-agent-guidance/worksheet-api-usage",
+        "ownerPackage": "@mog-sdk/sdk",
+        "firstObservedVersion": "0.9.2",
+        "canonicalSince": null,
+        "deprecatedSince": null,
+        "removeAfter": null,
+        "evidence": [
+          {
+            "source": "source",
+            "reference": "api-compatibility:mog-api/worksheet-method-guidance"
+          }
+        ],
+        "behavior": "Worksheet raw cell data reads use ws.getRawCellData(address); there is no ws.rawCellData() shortcut.",
+        "runtimeSurfaces": [
+          "executeCode-preflight",
+          "agent-guidance",
+          "docs",
+          "api-eval"
+        ],
+        "surfaceDisposition": {
+          "typescript": "structured_diagnostic",
+          "kernel": "structured_diagnostic",
+          "executeCode-preflight": "structured_diagnostic",
+          "api-describe": "structured_diagnostic",
+          "agent-guidance": "structured_diagnostic",
+          "docs": "structured_diagnostic",
+          "python": "structured_diagnostic",
+          "api-eval": "structured_diagnostic"
+        },
+        "diagnostics": {
+          "code": "MOG002_MOG_API_USAGE",
+          "message": "ws.rawCellData(address) is not a Mog worksheet method. Use await ws.getRawCellData(address).",
+          "replacements": [
+            "ws.getRawCellData"
+          ]
+        },
+        "verification": [
+          "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe"
+        ]
+      },
+      {
         "id": "round5.chart.addChart.diagnostic",
         "observedPath": "ws.addChart",
         "canonicalPath": "ws.charts.add",
@@ -1356,14 +1634,16 @@
           "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe",
           "dev/api-eval/scenarios/api-compatibility/chart-learned-path.ts"
         ]
-      },
-      {
-        "id": "round57.worksheet.addressToIndex.diagnostic",
+      }
+    ],
+    "byId": {
+      "mog-api.worksheet.addressToIndex.unsupported": {
+        "id": "mog-api.worksheet.addressToIndex.unsupported",
         "observedPath": "ws.addressToIndex",
         "canonicalPath": "wb.addressToIndex",
         "status": "structured_diagnostic",
         "appliesTo": "method",
-        "ownerTheme": "round-57/sdk-agent-guidance",
+        "ownerTheme": "sdk-agent-guidance/worksheet-api-usage",
         "ownerPackage": "@mog-sdk/sdk",
         "firstObservedVersion": "0.9.2",
         "canonicalSince": null,
@@ -1372,7 +1652,7 @@
         "evidence": [
           {
             "source": "source",
-            "reference": "api-compatibility:round57/mog-method-guidance"
+            "reference": "api-compatibility:mog-api/worksheet-method-guidance"
           }
         ],
         "behavior": "Address conversion helpers are workbook APIs; worksheets do not expose addressToIndex().",
@@ -1403,13 +1683,13 @@
           "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe"
         ]
       },
-      {
-        "id": "round57.worksheet.getCellValue.diagnostic",
+      "mog-api.worksheet.getCellValue.unsupported": {
+        "id": "mog-api.worksheet.getCellValue.unsupported",
         "observedPath": "ws.getCellValue",
         "canonicalPath": "ws.getValue",
         "status": "structured_diagnostic",
         "appliesTo": "method",
-        "ownerTheme": "round-57/sdk-agent-guidance",
+        "ownerTheme": "sdk-agent-guidance/worksheet-api-usage",
         "ownerPackage": "@mog-sdk/sdk",
         "firstObservedVersion": "0.9.2",
         "canonicalSince": null,
@@ -1418,7 +1698,7 @@
         "evidence": [
           {
             "source": "source",
-            "reference": "api-compatibility:round57/mog-method-guidance"
+            "reference": "api-compatibility:mog-api/worksheet-method-guidance"
           }
         ],
         "behavior": "Worksheet does not expose getCellValue(); use ws.getValue(address) for the computed value or (await ws.getCell(address)).value when full cell data is needed.",
@@ -1450,13 +1730,13 @@
           "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe"
         ]
       },
-      {
-        "id": "round57.worksheet.getFormat.diagnostic",
+      "mog-api.worksheet.getFormat.unsupported": {
+        "id": "mog-api.worksheet.getFormat.unsupported",
         "observedPath": "ws.getFormat",
         "canonicalPath": "ws.formats.getDisplayedCellProperties",
         "status": "structured_diagnostic",
         "appliesTo": "method",
-        "ownerTheme": "round-57/sdk-agent-guidance",
+        "ownerTheme": "sdk-agent-guidance/worksheet-api-usage",
         "ownerPackage": "@mog-sdk/sdk",
         "firstObservedVersion": "0.9.2",
         "canonicalSince": null,
@@ -1465,7 +1745,7 @@
         "evidence": [
           {
             "source": "source",
-            "reference": "api-compatibility:round57/mog-method-guidance"
+            "reference": "api-compatibility:mog-api/worksheet-method-guidance"
           }
         ],
         "behavior": "Worksheet formatting reads are namespaced under ws.formats; use displayed properties for effective formatting or ws.formats.get() for explicit stored formatting.",
@@ -1497,13 +1777,13 @@
           "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe"
         ]
       },
-      {
-        "id": "round57.worksheet.indexToAddress.diagnostic",
+      "mog-api.worksheet.indexToAddress.unsupported": {
+        "id": "mog-api.worksheet.indexToAddress.unsupported",
         "observedPath": "ws.indexToAddress",
         "canonicalPath": "wb.indexToAddress",
         "status": "structured_diagnostic",
         "appliesTo": "method",
-        "ownerTheme": "round-57/sdk-agent-guidance",
+        "ownerTheme": "sdk-agent-guidance/worksheet-api-usage",
         "ownerPackage": "@mog-sdk/sdk",
         "firstObservedVersion": "0.9.2",
         "canonicalSince": null,
@@ -1512,7 +1792,7 @@
         "evidence": [
           {
             "source": "source",
-            "reference": "api-compatibility:round57/mog-method-guidance"
+            "reference": "api-compatibility:mog-api/worksheet-method-guidance"
           }
         ],
         "behavior": "Address conversion helpers are workbook APIs; worksheets do not expose indexToAddress().",
@@ -1543,13 +1823,13 @@
           "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe"
         ]
       },
-      {
-        "id": "round57.worksheet.privateColLetter.diagnostic",
+      "mog-api.worksheet.privateColLetter.unsupported": {
+        "id": "mog-api.worksheet.privateColLetter.unsupported",
         "observedPath": "ws._colLetter",
         "canonicalPath": "wb.indexToAddress",
         "status": "structured_diagnostic",
         "appliesTo": "method",
-        "ownerTheme": "round-57/sdk-agent-guidance",
+        "ownerTheme": "sdk-agent-guidance/worksheet-api-usage",
         "ownerPackage": "@mog-sdk/sdk",
         "firstObservedVersion": "0.9.2",
         "canonicalSince": null,
@@ -1558,7 +1838,7 @@
         "evidence": [
           {
             "source": "source",
-            "reference": "api-compatibility:round57/mog-method-guidance"
+            "reference": "api-compatibility:mog-api/worksheet-method-guidance"
           }
         ],
         "behavior": "Private worksheet/helper guesses such as _colLetter are not public Mog APIs; use workbook address helpers where possible.",
@@ -1589,13 +1869,13 @@
           "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe"
         ]
       },
-      {
-        "id": "round57.worksheet.rawCellData.diagnostic",
+      "mog-api.worksheet.rawCellData.unsupported": {
+        "id": "mog-api.worksheet.rawCellData.unsupported",
         "observedPath": "ws.rawCellData",
         "canonicalPath": "ws.getRawCellData",
         "status": "structured_diagnostic",
         "appliesTo": "method",
-        "ownerTheme": "round-57/sdk-agent-guidance",
+        "ownerTheme": "sdk-agent-guidance/worksheet-api-usage",
         "ownerPackage": "@mog-sdk/sdk",
         "firstObservedVersion": "0.9.2",
         "canonicalSince": null,
@@ -1604,7 +1884,7 @@
         "evidence": [
           {
             "source": "source",
-            "reference": "api-compatibility:round57/mog-method-guidance"
+            "reference": "api-compatibility:mog-api/worksheet-method-guidance"
           }
         ],
         "behavior": "Worksheet raw cell data reads use ws.getRawCellData(address); there is no ws.rawCellData() shortcut.",
@@ -1634,9 +1914,7 @@
         "verification": [
           "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe"
         ]
-      }
-    ],
-    "byId": {
+      },
       "round5.chart.addChart.diagnostic": {
         "id": "round5.chart.addChart.diagnostic",
         "observedPath": "ws.addChart",
@@ -2428,284 +2706,6 @@
           "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe",
           "dev/api-eval/scenarios/api-compatibility/chart-learned-path.ts"
         ]
-      },
-      "round57.worksheet.addressToIndex.diagnostic": {
-        "id": "round57.worksheet.addressToIndex.diagnostic",
-        "observedPath": "ws.addressToIndex",
-        "canonicalPath": "wb.addressToIndex",
-        "status": "structured_diagnostic",
-        "appliesTo": "method",
-        "ownerTheme": "round-57/sdk-agent-guidance",
-        "ownerPackage": "@mog-sdk/sdk",
-        "firstObservedVersion": "0.9.2",
-        "canonicalSince": null,
-        "deprecatedSince": null,
-        "removeAfter": null,
-        "evidence": [
-          {
-            "source": "source",
-            "reference": "api-compatibility:round57/mog-method-guidance"
-          }
-        ],
-        "behavior": "Address conversion helpers are workbook APIs; worksheets do not expose addressToIndex().",
-        "runtimeSurfaces": [
-          "executeCode-preflight",
-          "agent-guidance",
-          "docs",
-          "api-eval"
-        ],
-        "surfaceDisposition": {
-          "typescript": "structured_diagnostic",
-          "kernel": "structured_diagnostic",
-          "executeCode-preflight": "structured_diagnostic",
-          "api-describe": "structured_diagnostic",
-          "agent-guidance": "structured_diagnostic",
-          "docs": "structured_diagnostic",
-          "python": "structured_diagnostic",
-          "api-eval": "structured_diagnostic"
-        },
-        "diagnostics": {
-          "code": "MOG002_MOG_API_USAGE",
-          "message": "ws.addressToIndex(address) is not a Mog worksheet method. Use wb.addressToIndex(address).",
-          "replacements": [
-            "wb.addressToIndex"
-          ]
-        },
-        "verification": [
-          "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe"
-        ]
-      },
-      "round57.worksheet.getCellValue.diagnostic": {
-        "id": "round57.worksheet.getCellValue.diagnostic",
-        "observedPath": "ws.getCellValue",
-        "canonicalPath": "ws.getValue",
-        "status": "structured_diagnostic",
-        "appliesTo": "method",
-        "ownerTheme": "round-57/sdk-agent-guidance",
-        "ownerPackage": "@mog-sdk/sdk",
-        "firstObservedVersion": "0.9.2",
-        "canonicalSince": null,
-        "deprecatedSince": null,
-        "removeAfter": null,
-        "evidence": [
-          {
-            "source": "source",
-            "reference": "api-compatibility:round57/mog-method-guidance"
-          }
-        ],
-        "behavior": "Worksheet does not expose getCellValue(); use ws.getValue(address) for the computed value or (await ws.getCell(address)).value when full cell data is needed.",
-        "runtimeSurfaces": [
-          "executeCode-preflight",
-          "agent-guidance",
-          "docs",
-          "api-eval"
-        ],
-        "surfaceDisposition": {
-          "typescript": "structured_diagnostic",
-          "kernel": "structured_diagnostic",
-          "executeCode-preflight": "structured_diagnostic",
-          "api-describe": "structured_diagnostic",
-          "agent-guidance": "structured_diagnostic",
-          "docs": "structured_diagnostic",
-          "python": "structured_diagnostic",
-          "api-eval": "structured_diagnostic"
-        },
-        "diagnostics": {
-          "code": "MOG002_MOG_API_USAGE",
-          "message": "ws.getCellValue(address) is not a Mog worksheet method. Use await ws.getValue(address), or (await ws.getCell(address)).value when full cell data is needed.",
-          "replacements": [
-            "ws.getValue",
-            "ws.getCell"
-          ]
-        },
-        "verification": [
-          "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe"
-        ]
-      },
-      "round57.worksheet.getFormat.diagnostic": {
-        "id": "round57.worksheet.getFormat.diagnostic",
-        "observedPath": "ws.getFormat",
-        "canonicalPath": "ws.formats.getDisplayedCellProperties",
-        "status": "structured_diagnostic",
-        "appliesTo": "method",
-        "ownerTheme": "round-57/sdk-agent-guidance",
-        "ownerPackage": "@mog-sdk/sdk",
-        "firstObservedVersion": "0.9.2",
-        "canonicalSince": null,
-        "deprecatedSince": null,
-        "removeAfter": null,
-        "evidence": [
-          {
-            "source": "source",
-            "reference": "api-compatibility:round57/mog-method-guidance"
-          }
-        ],
-        "behavior": "Worksheet formatting reads are namespaced under ws.formats; use displayed properties for effective formatting or ws.formats.get() for explicit stored formatting.",
-        "runtimeSurfaces": [
-          "executeCode-preflight",
-          "agent-guidance",
-          "docs",
-          "api-eval"
-        ],
-        "surfaceDisposition": {
-          "typescript": "structured_diagnostic",
-          "kernel": "structured_diagnostic",
-          "executeCode-preflight": "structured_diagnostic",
-          "api-describe": "structured_diagnostic",
-          "agent-guidance": "structured_diagnostic",
-          "docs": "structured_diagnostic",
-          "python": "structured_diagnostic",
-          "api-eval": "structured_diagnostic"
-        },
-        "diagnostics": {
-          "code": "MOG002_MOG_API_USAGE",
-          "message": "ws.getFormat(address) is not a Mog worksheet method. Use ws.formats.getDisplayedCellProperties(address) for effective formatting, or ws.formats.get(address) for explicit stored formatting.",
-          "replacements": [
-            "ws.formats.getDisplayedCellProperties",
-            "ws.formats.get"
-          ]
-        },
-        "verification": [
-          "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe"
-        ]
-      },
-      "round57.worksheet.indexToAddress.diagnostic": {
-        "id": "round57.worksheet.indexToAddress.diagnostic",
-        "observedPath": "ws.indexToAddress",
-        "canonicalPath": "wb.indexToAddress",
-        "status": "structured_diagnostic",
-        "appliesTo": "method",
-        "ownerTheme": "round-57/sdk-agent-guidance",
-        "ownerPackage": "@mog-sdk/sdk",
-        "firstObservedVersion": "0.9.2",
-        "canonicalSince": null,
-        "deprecatedSince": null,
-        "removeAfter": null,
-        "evidence": [
-          {
-            "source": "source",
-            "reference": "api-compatibility:round57/mog-method-guidance"
-          }
-        ],
-        "behavior": "Address conversion helpers are workbook APIs; worksheets do not expose indexToAddress().",
-        "runtimeSurfaces": [
-          "executeCode-preflight",
-          "agent-guidance",
-          "docs",
-          "api-eval"
-        ],
-        "surfaceDisposition": {
-          "typescript": "structured_diagnostic",
-          "kernel": "structured_diagnostic",
-          "executeCode-preflight": "structured_diagnostic",
-          "api-describe": "structured_diagnostic",
-          "agent-guidance": "structured_diagnostic",
-          "docs": "structured_diagnostic",
-          "python": "structured_diagnostic",
-          "api-eval": "structured_diagnostic"
-        },
-        "diagnostics": {
-          "code": "MOG002_MOG_API_USAGE",
-          "message": "ws.indexToAddress(row, col) is not a Mog worksheet method. Use wb.indexToAddress(row, col).",
-          "replacements": [
-            "wb.indexToAddress"
-          ]
-        },
-        "verification": [
-          "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe"
-        ]
-      },
-      "round57.worksheet.privateColLetter.diagnostic": {
-        "id": "round57.worksheet.privateColLetter.diagnostic",
-        "observedPath": "ws._colLetter",
-        "canonicalPath": "wb.indexToAddress",
-        "status": "structured_diagnostic",
-        "appliesTo": "method",
-        "ownerTheme": "round-57/sdk-agent-guidance",
-        "ownerPackage": "@mog-sdk/sdk",
-        "firstObservedVersion": "0.9.2",
-        "canonicalSince": null,
-        "deprecatedSince": null,
-        "removeAfter": null,
-        "evidence": [
-          {
-            "source": "source",
-            "reference": "api-compatibility:round57/mog-method-guidance"
-          }
-        ],
-        "behavior": "Private worksheet/helper guesses such as _colLetter are not public Mog APIs; use workbook address helpers where possible.",
-        "runtimeSurfaces": [
-          "executeCode-preflight",
-          "agent-guidance",
-          "docs",
-          "api-eval"
-        ],
-        "surfaceDisposition": {
-          "typescript": "structured_diagnostic",
-          "kernel": "structured_diagnostic",
-          "executeCode-preflight": "structured_diagnostic",
-          "api-describe": "structured_diagnostic",
-          "agent-guidance": "structured_diagnostic",
-          "docs": "structured_diagnostic",
-          "python": "structured_diagnostic",
-          "api-eval": "structured_diagnostic"
-        },
-        "diagnostics": {
-          "code": "MOG002_MOG_API_USAGE",
-          "message": "ws._colLetter(index) is not a public Mog worksheet method. Use wb.indexToAddress(row, col) when converting indexes to addresses.",
-          "replacements": [
-            "wb.indexToAddress"
-          ]
-        },
-        "verification": [
-          "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe"
-        ]
-      },
-      "round57.worksheet.rawCellData.diagnostic": {
-        "id": "round57.worksheet.rawCellData.diagnostic",
-        "observedPath": "ws.rawCellData",
-        "canonicalPath": "ws.getRawCellData",
-        "status": "structured_diagnostic",
-        "appliesTo": "method",
-        "ownerTheme": "round-57/sdk-agent-guidance",
-        "ownerPackage": "@mog-sdk/sdk",
-        "firstObservedVersion": "0.9.2",
-        "canonicalSince": null,
-        "deprecatedSince": null,
-        "removeAfter": null,
-        "evidence": [
-          {
-            "source": "source",
-            "reference": "api-compatibility:round57/mog-method-guidance"
-          }
-        ],
-        "behavior": "Worksheet raw cell data reads use ws.getRawCellData(address); there is no ws.rawCellData() shortcut.",
-        "runtimeSurfaces": [
-          "executeCode-preflight",
-          "agent-guidance",
-          "docs",
-          "api-eval"
-        ],
-        "surfaceDisposition": {
-          "typescript": "structured_diagnostic",
-          "kernel": "structured_diagnostic",
-          "executeCode-preflight": "structured_diagnostic",
-          "api-describe": "structured_diagnostic",
-          "agent-guidance": "structured_diagnostic",
-          "docs": "structured_diagnostic",
-          "python": "structured_diagnostic",
-          "api-eval": "structured_diagnostic"
-        },
-        "diagnostics": {
-          "code": "MOG002_MOG_API_USAGE",
-          "message": "ws.rawCellData(address) is not a Mog worksheet method. Use await ws.getRawCellData(address).",
-          "replacements": [
-            "ws.getRawCellData"
-          ]
-        },
-        "verification": [
-          "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe"
-        ]
       }
     },
     "byObservedPath": {
@@ -2995,12 +2995,12 @@
       ],
       "ws._colLetter": [
         {
-          "id": "round57.worksheet.privateColLetter.diagnostic",
+          "id": "mog-api.worksheet.privateColLetter.unsupported",
           "observedPath": "ws._colLetter",
           "canonicalPath": "wb.indexToAddress",
           "status": "structured_diagnostic",
           "appliesTo": "method",
-          "ownerTheme": "round-57/sdk-agent-guidance",
+          "ownerTheme": "sdk-agent-guidance/worksheet-api-usage",
           "ownerPackage": "@mog-sdk/sdk",
           "firstObservedVersion": "0.9.2",
           "canonicalSince": null,
@@ -3009,7 +3009,7 @@
           "evidence": [
             {
               "source": "source",
-              "reference": "api-compatibility:round57/mog-method-guidance"
+              "reference": "api-compatibility:mog-api/worksheet-method-guidance"
             }
           ],
           "behavior": "Private worksheet/helper guesses such as _colLetter are not public Mog APIs; use workbook address helpers where possible.",
@@ -3043,12 +3043,12 @@
       ],
       "ws._colLetter()": [
         {
-          "id": "round57.worksheet.privateColLetter.diagnostic",
+          "id": "mog-api.worksheet.privateColLetter.unsupported",
           "observedPath": "ws._colLetter",
           "canonicalPath": "wb.indexToAddress",
           "status": "structured_diagnostic",
           "appliesTo": "method",
-          "ownerTheme": "round-57/sdk-agent-guidance",
+          "ownerTheme": "sdk-agent-guidance/worksheet-api-usage",
           "ownerPackage": "@mog-sdk/sdk",
           "firstObservedVersion": "0.9.2",
           "canonicalSince": null,
@@ -3057,7 +3057,7 @@
           "evidence": [
             {
               "source": "source",
-              "reference": "api-compatibility:round57/mog-method-guidance"
+              "reference": "api-compatibility:mog-api/worksheet-method-guidance"
             }
           ],
           "behavior": "Private worksheet/helper guesses such as _colLetter are not public Mog APIs; use workbook address helpers where possible.",
@@ -3285,12 +3285,12 @@
       ],
       "ws.addressToIndex": [
         {
-          "id": "round57.worksheet.addressToIndex.diagnostic",
+          "id": "mog-api.worksheet.addressToIndex.unsupported",
           "observedPath": "ws.addressToIndex",
           "canonicalPath": "wb.addressToIndex",
           "status": "structured_diagnostic",
           "appliesTo": "method",
-          "ownerTheme": "round-57/sdk-agent-guidance",
+          "ownerTheme": "sdk-agent-guidance/worksheet-api-usage",
           "ownerPackage": "@mog-sdk/sdk",
           "firstObservedVersion": "0.9.2",
           "canonicalSince": null,
@@ -3299,7 +3299,7 @@
           "evidence": [
             {
               "source": "source",
-              "reference": "api-compatibility:round57/mog-method-guidance"
+              "reference": "api-compatibility:mog-api/worksheet-method-guidance"
             }
           ],
           "behavior": "Address conversion helpers are workbook APIs; worksheets do not expose addressToIndex().",
@@ -3333,12 +3333,12 @@
       ],
       "ws.addressToIndex()": [
         {
-          "id": "round57.worksheet.addressToIndex.diagnostic",
+          "id": "mog-api.worksheet.addressToIndex.unsupported",
           "observedPath": "ws.addressToIndex",
           "canonicalPath": "wb.addressToIndex",
           "status": "structured_diagnostic",
           "appliesTo": "method",
-          "ownerTheme": "round-57/sdk-agent-guidance",
+          "ownerTheme": "sdk-agent-guidance/worksheet-api-usage",
           "ownerPackage": "@mog-sdk/sdk",
           "firstObservedVersion": "0.9.2",
           "canonicalSince": null,
@@ -3347,7 +3347,7 @@
           "evidence": [
             {
               "source": "source",
-              "reference": "api-compatibility:round57/mog-method-guidance"
+              "reference": "api-compatibility:mog-api/worksheet-method-guidance"
             }
           ],
           "behavior": "Address conversion helpers are workbook APIs; worksheets do not expose addressToIndex().",
@@ -3477,12 +3477,12 @@
       ],
       "ws.getCellValue": [
         {
-          "id": "round57.worksheet.getCellValue.diagnostic",
+          "id": "mog-api.worksheet.getCellValue.unsupported",
           "observedPath": "ws.getCellValue",
           "canonicalPath": "ws.getValue",
           "status": "structured_diagnostic",
           "appliesTo": "method",
-          "ownerTheme": "round-57/sdk-agent-guidance",
+          "ownerTheme": "sdk-agent-guidance/worksheet-api-usage",
           "ownerPackage": "@mog-sdk/sdk",
           "firstObservedVersion": "0.9.2",
           "canonicalSince": null,
@@ -3491,7 +3491,7 @@
           "evidence": [
             {
               "source": "source",
-              "reference": "api-compatibility:round57/mog-method-guidance"
+              "reference": "api-compatibility:mog-api/worksheet-method-guidance"
             }
           ],
           "behavior": "Worksheet does not expose getCellValue(); use ws.getValue(address) for the computed value or (await ws.getCell(address)).value when full cell data is needed.",
@@ -3526,12 +3526,12 @@
       ],
       "ws.getCellValue()": [
         {
-          "id": "round57.worksheet.getCellValue.diagnostic",
+          "id": "mog-api.worksheet.getCellValue.unsupported",
           "observedPath": "ws.getCellValue",
           "canonicalPath": "ws.getValue",
           "status": "structured_diagnostic",
           "appliesTo": "method",
-          "ownerTheme": "round-57/sdk-agent-guidance",
+          "ownerTheme": "sdk-agent-guidance/worksheet-api-usage",
           "ownerPackage": "@mog-sdk/sdk",
           "firstObservedVersion": "0.9.2",
           "canonicalSince": null,
@@ -3540,7 +3540,7 @@
           "evidence": [
             {
               "source": "source",
-              "reference": "api-compatibility:round57/mog-method-guidance"
+              "reference": "api-compatibility:mog-api/worksheet-method-guidance"
             }
           ],
           "behavior": "Worksheet does not expose getCellValue(); use ws.getValue(address) for the computed value or (await ws.getCell(address)).value when full cell data is needed.",
@@ -3773,12 +3773,12 @@
       ],
       "ws.getFormat": [
         {
-          "id": "round57.worksheet.getFormat.diagnostic",
+          "id": "mog-api.worksheet.getFormat.unsupported",
           "observedPath": "ws.getFormat",
           "canonicalPath": "ws.formats.getDisplayedCellProperties",
           "status": "structured_diagnostic",
           "appliesTo": "method",
-          "ownerTheme": "round-57/sdk-agent-guidance",
+          "ownerTheme": "sdk-agent-guidance/worksheet-api-usage",
           "ownerPackage": "@mog-sdk/sdk",
           "firstObservedVersion": "0.9.2",
           "canonicalSince": null,
@@ -3787,7 +3787,7 @@
           "evidence": [
             {
               "source": "source",
-              "reference": "api-compatibility:round57/mog-method-guidance"
+              "reference": "api-compatibility:mog-api/worksheet-method-guidance"
             }
           ],
           "behavior": "Worksheet formatting reads are namespaced under ws.formats; use displayed properties for effective formatting or ws.formats.get() for explicit stored formatting.",
@@ -3822,12 +3822,12 @@
       ],
       "ws.getFormat()": [
         {
-          "id": "round57.worksheet.getFormat.diagnostic",
+          "id": "mog-api.worksheet.getFormat.unsupported",
           "observedPath": "ws.getFormat",
           "canonicalPath": "ws.formats.getDisplayedCellProperties",
           "status": "structured_diagnostic",
           "appliesTo": "method",
-          "ownerTheme": "round-57/sdk-agent-guidance",
+          "ownerTheme": "sdk-agent-guidance/worksheet-api-usage",
           "ownerPackage": "@mog-sdk/sdk",
           "firstObservedVersion": "0.9.2",
           "canonicalSince": null,
@@ -3836,7 +3836,7 @@
           "evidence": [
             {
               "source": "source",
-              "reference": "api-compatibility:round57/mog-method-guidance"
+              "reference": "api-compatibility:mog-api/worksheet-method-guidance"
             }
           ],
           "behavior": "Worksheet formatting reads are namespaced under ws.formats; use displayed properties for effective formatting or ws.formats.get() for explicit stored formatting.",
@@ -3969,12 +3969,12 @@
       ],
       "ws.indexToAddress": [
         {
-          "id": "round57.worksheet.indexToAddress.diagnostic",
+          "id": "mog-api.worksheet.indexToAddress.unsupported",
           "observedPath": "ws.indexToAddress",
           "canonicalPath": "wb.indexToAddress",
           "status": "structured_diagnostic",
           "appliesTo": "method",
-          "ownerTheme": "round-57/sdk-agent-guidance",
+          "ownerTheme": "sdk-agent-guidance/worksheet-api-usage",
           "ownerPackage": "@mog-sdk/sdk",
           "firstObservedVersion": "0.9.2",
           "canonicalSince": null,
@@ -3983,7 +3983,7 @@
           "evidence": [
             {
               "source": "source",
-              "reference": "api-compatibility:round57/mog-method-guidance"
+              "reference": "api-compatibility:mog-api/worksheet-method-guidance"
             }
           ],
           "behavior": "Address conversion helpers are workbook APIs; worksheets do not expose indexToAddress().",
@@ -4017,12 +4017,12 @@
       ],
       "ws.indexToAddress()": [
         {
-          "id": "round57.worksheet.indexToAddress.diagnostic",
+          "id": "mog-api.worksheet.indexToAddress.unsupported",
           "observedPath": "ws.indexToAddress",
           "canonicalPath": "wb.indexToAddress",
           "status": "structured_diagnostic",
           "appliesTo": "method",
-          "ownerTheme": "round-57/sdk-agent-guidance",
+          "ownerTheme": "sdk-agent-guidance/worksheet-api-usage",
           "ownerPackage": "@mog-sdk/sdk",
           "firstObservedVersion": "0.9.2",
           "canonicalSince": null,
@@ -4031,7 +4031,7 @@
           "evidence": [
             {
               "source": "source",
-              "reference": "api-compatibility:round57/mog-method-guidance"
+              "reference": "api-compatibility:mog-api/worksheet-method-guidance"
             }
           ],
           "behavior": "Address conversion helpers are workbook APIs; worksheets do not expose indexToAddress().",
@@ -4553,12 +4553,12 @@
       ],
       "ws.rawCellData": [
         {
-          "id": "round57.worksheet.rawCellData.diagnostic",
+          "id": "mog-api.worksheet.rawCellData.unsupported",
           "observedPath": "ws.rawCellData",
           "canonicalPath": "ws.getRawCellData",
           "status": "structured_diagnostic",
           "appliesTo": "method",
-          "ownerTheme": "round-57/sdk-agent-guidance",
+          "ownerTheme": "sdk-agent-guidance/worksheet-api-usage",
           "ownerPackage": "@mog-sdk/sdk",
           "firstObservedVersion": "0.9.2",
           "canonicalSince": null,
@@ -4567,7 +4567,7 @@
           "evidence": [
             {
               "source": "source",
-              "reference": "api-compatibility:round57/mog-method-guidance"
+              "reference": "api-compatibility:mog-api/worksheet-method-guidance"
             }
           ],
           "behavior": "Worksheet raw cell data reads use ws.getRawCellData(address); there is no ws.rawCellData() shortcut.",
@@ -4601,12 +4601,12 @@
       ],
       "ws.rawCellData()": [
         {
-          "id": "round57.worksheet.rawCellData.diagnostic",
+          "id": "mog-api.worksheet.rawCellData.unsupported",
           "observedPath": "ws.rawCellData",
           "canonicalPath": "ws.getRawCellData",
           "status": "structured_diagnostic",
           "appliesTo": "method",
-          "ownerTheme": "round-57/sdk-agent-guidance",
+          "ownerTheme": "sdk-agent-guidance/worksheet-api-usage",
           "ownerPackage": "@mog-sdk/sdk",
           "firstObservedVersion": "0.9.2",
           "canonicalSince": null,
@@ -4615,7 +4615,7 @@
           "evidence": [
             {
               "source": "source",
-              "reference": "api-compatibility:round57/mog-method-guidance"
+              "reference": "api-compatibility:mog-api/worksheet-method-guidance"
             }
           ],
           "behavior": "Worksheet raw cell data reads use ws.getRawCellData(address); there is no ws.rawCellData() shortcut.",
@@ -5229,12 +5229,12 @@
       ],
       "wb.addressToIndex": [
         {
-          "id": "round57.worksheet.addressToIndex.diagnostic",
+          "id": "mog-api.worksheet.addressToIndex.unsupported",
           "observedPath": "ws.addressToIndex",
           "canonicalPath": "wb.addressToIndex",
           "status": "structured_diagnostic",
           "appliesTo": "method",
-          "ownerTheme": "round-57/sdk-agent-guidance",
+          "ownerTheme": "sdk-agent-guidance/worksheet-api-usage",
           "ownerPackage": "@mog-sdk/sdk",
           "firstObservedVersion": "0.9.2",
           "canonicalSince": null,
@@ -5243,7 +5243,7 @@
           "evidence": [
             {
               "source": "source",
-              "reference": "api-compatibility:round57/mog-method-guidance"
+              "reference": "api-compatibility:mog-api/worksheet-method-guidance"
             }
           ],
           "behavior": "Address conversion helpers are workbook APIs; worksheets do not expose addressToIndex().",
@@ -5277,12 +5277,12 @@
       ],
       "wb.addressToIndex()": [
         {
-          "id": "round57.worksheet.addressToIndex.diagnostic",
+          "id": "mog-api.worksheet.addressToIndex.unsupported",
           "observedPath": "ws.addressToIndex",
           "canonicalPath": "wb.addressToIndex",
           "status": "structured_diagnostic",
           "appliesTo": "method",
-          "ownerTheme": "round-57/sdk-agent-guidance",
+          "ownerTheme": "sdk-agent-guidance/worksheet-api-usage",
           "ownerPackage": "@mog-sdk/sdk",
           "firstObservedVersion": "0.9.2",
           "canonicalSince": null,
@@ -5291,7 +5291,7 @@
           "evidence": [
             {
               "source": "source",
-              "reference": "api-compatibility:round57/mog-method-guidance"
+              "reference": "api-compatibility:mog-api/worksheet-method-guidance"
             }
           ],
           "behavior": "Address conversion helpers are workbook APIs; worksheets do not expose addressToIndex().",
@@ -5325,12 +5325,12 @@
       ],
       "wb.indexToAddress": [
         {
-          "id": "round57.worksheet.indexToAddress.diagnostic",
+          "id": "mog-api.worksheet.indexToAddress.unsupported",
           "observedPath": "ws.indexToAddress",
           "canonicalPath": "wb.indexToAddress",
           "status": "structured_diagnostic",
           "appliesTo": "method",
-          "ownerTheme": "round-57/sdk-agent-guidance",
+          "ownerTheme": "sdk-agent-guidance/worksheet-api-usage",
           "ownerPackage": "@mog-sdk/sdk",
           "firstObservedVersion": "0.9.2",
           "canonicalSince": null,
@@ -5339,7 +5339,7 @@
           "evidence": [
             {
               "source": "source",
-              "reference": "api-compatibility:round57/mog-method-guidance"
+              "reference": "api-compatibility:mog-api/worksheet-method-guidance"
             }
           ],
           "behavior": "Address conversion helpers are workbook APIs; worksheets do not expose indexToAddress().",
@@ -5371,12 +5371,12 @@
           ]
         },
         {
-          "id": "round57.worksheet.privateColLetter.diagnostic",
+          "id": "mog-api.worksheet.privateColLetter.unsupported",
           "observedPath": "ws._colLetter",
           "canonicalPath": "wb.indexToAddress",
           "status": "structured_diagnostic",
           "appliesTo": "method",
-          "ownerTheme": "round-57/sdk-agent-guidance",
+          "ownerTheme": "sdk-agent-guidance/worksheet-api-usage",
           "ownerPackage": "@mog-sdk/sdk",
           "firstObservedVersion": "0.9.2",
           "canonicalSince": null,
@@ -5385,7 +5385,7 @@
           "evidence": [
             {
               "source": "source",
-              "reference": "api-compatibility:round57/mog-method-guidance"
+              "reference": "api-compatibility:mog-api/worksheet-method-guidance"
             }
           ],
           "behavior": "Private worksheet/helper guesses such as _colLetter are not public Mog APIs; use workbook address helpers where possible.",
@@ -5419,12 +5419,12 @@
       ],
       "wb.indexToAddress()": [
         {
-          "id": "round57.worksheet.indexToAddress.diagnostic",
+          "id": "mog-api.worksheet.indexToAddress.unsupported",
           "observedPath": "ws.indexToAddress",
           "canonicalPath": "wb.indexToAddress",
           "status": "structured_diagnostic",
           "appliesTo": "method",
-          "ownerTheme": "round-57/sdk-agent-guidance",
+          "ownerTheme": "sdk-agent-guidance/worksheet-api-usage",
           "ownerPackage": "@mog-sdk/sdk",
           "firstObservedVersion": "0.9.2",
           "canonicalSince": null,
@@ -5433,7 +5433,7 @@
           "evidence": [
             {
               "source": "source",
-              "reference": "api-compatibility:round57/mog-method-guidance"
+              "reference": "api-compatibility:mog-api/worksheet-method-guidance"
             }
           ],
           "behavior": "Address conversion helpers are workbook APIs; worksheets do not expose indexToAddress().",
@@ -5465,12 +5465,12 @@
           ]
         },
         {
-          "id": "round57.worksheet.privateColLetter.diagnostic",
+          "id": "mog-api.worksheet.privateColLetter.unsupported",
           "observedPath": "ws._colLetter",
           "canonicalPath": "wb.indexToAddress",
           "status": "structured_diagnostic",
           "appliesTo": "method",
-          "ownerTheme": "round-57/sdk-agent-guidance",
+          "ownerTheme": "sdk-agent-guidance/worksheet-api-usage",
           "ownerPackage": "@mog-sdk/sdk",
           "firstObservedVersion": "0.9.2",
           "canonicalSince": null,
@@ -5479,7 +5479,7 @@
           "evidence": [
             {
               "source": "source",
-              "reference": "api-compatibility:round57/mog-method-guidance"
+              "reference": "api-compatibility:mog-api/worksheet-method-guidance"
             }
           ],
           "behavior": "Private worksheet/helper guesses such as _colLetter are not public Mog APIs; use workbook address helpers where possible.",
@@ -6379,12 +6379,12 @@
       ],
       "ws.formats.getDisplayedCellProperties": [
         {
-          "id": "round57.worksheet.getFormat.diagnostic",
+          "id": "mog-api.worksheet.getFormat.unsupported",
           "observedPath": "ws.getFormat",
           "canonicalPath": "ws.formats.getDisplayedCellProperties",
           "status": "structured_diagnostic",
           "appliesTo": "method",
-          "ownerTheme": "round-57/sdk-agent-guidance",
+          "ownerTheme": "sdk-agent-guidance/worksheet-api-usage",
           "ownerPackage": "@mog-sdk/sdk",
           "firstObservedVersion": "0.9.2",
           "canonicalSince": null,
@@ -6393,7 +6393,7 @@
           "evidence": [
             {
               "source": "source",
-              "reference": "api-compatibility:round57/mog-method-guidance"
+              "reference": "api-compatibility:mog-api/worksheet-method-guidance"
             }
           ],
           "behavior": "Worksheet formatting reads are namespaced under ws.formats; use displayed properties for effective formatting or ws.formats.get() for explicit stored formatting.",
@@ -6428,12 +6428,12 @@
       ],
       "ws.formats.getDisplayedCellProperties()": [
         {
-          "id": "round57.worksheet.getFormat.diagnostic",
+          "id": "mog-api.worksheet.getFormat.unsupported",
           "observedPath": "ws.getFormat",
           "canonicalPath": "ws.formats.getDisplayedCellProperties",
           "status": "structured_diagnostic",
           "appliesTo": "method",
-          "ownerTheme": "round-57/sdk-agent-guidance",
+          "ownerTheme": "sdk-agent-guidance/worksheet-api-usage",
           "ownerPackage": "@mog-sdk/sdk",
           "firstObservedVersion": "0.9.2",
           "canonicalSince": null,
@@ -6442,7 +6442,7 @@
           "evidence": [
             {
               "source": "source",
-              "reference": "api-compatibility:round57/mog-method-guidance"
+              "reference": "api-compatibility:mog-api/worksheet-method-guidance"
             }
           ],
           "behavior": "Worksheet formatting reads are namespaced under ws.formats; use displayed properties for effective formatting or ws.formats.get() for explicit stored formatting.",
@@ -6477,12 +6477,12 @@
       ],
       "ws.getRawCellData": [
         {
-          "id": "round57.worksheet.rawCellData.diagnostic",
+          "id": "mog-api.worksheet.rawCellData.unsupported",
           "observedPath": "ws.rawCellData",
           "canonicalPath": "ws.getRawCellData",
           "status": "structured_diagnostic",
           "appliesTo": "method",
-          "ownerTheme": "round-57/sdk-agent-guidance",
+          "ownerTheme": "sdk-agent-guidance/worksheet-api-usage",
           "ownerPackage": "@mog-sdk/sdk",
           "firstObservedVersion": "0.9.2",
           "canonicalSince": null,
@@ -6491,7 +6491,7 @@
           "evidence": [
             {
               "source": "source",
-              "reference": "api-compatibility:round57/mog-method-guidance"
+              "reference": "api-compatibility:mog-api/worksheet-method-guidance"
             }
           ],
           "behavior": "Worksheet raw cell data reads use ws.getRawCellData(address); there is no ws.rawCellData() shortcut.",
@@ -6525,12 +6525,12 @@
       ],
       "ws.getRawCellData()": [
         {
-          "id": "round57.worksheet.rawCellData.diagnostic",
+          "id": "mog-api.worksheet.rawCellData.unsupported",
           "observedPath": "ws.rawCellData",
           "canonicalPath": "ws.getRawCellData",
           "status": "structured_diagnostic",
           "appliesTo": "method",
-          "ownerTheme": "round-57/sdk-agent-guidance",
+          "ownerTheme": "sdk-agent-guidance/worksheet-api-usage",
           "ownerPackage": "@mog-sdk/sdk",
           "firstObservedVersion": "0.9.2",
           "canonicalSince": null,
@@ -6539,7 +6539,7 @@
           "evidence": [
             {
               "source": "source",
-              "reference": "api-compatibility:round57/mog-method-guidance"
+              "reference": "api-compatibility:mog-api/worksheet-method-guidance"
             }
           ],
           "behavior": "Worksheet raw cell data reads use ws.getRawCellData(address); there is no ws.rawCellData() shortcut.",
@@ -6573,12 +6573,12 @@
       ],
       "ws.getValue": [
         {
-          "id": "round57.worksheet.getCellValue.diagnostic",
+          "id": "mog-api.worksheet.getCellValue.unsupported",
           "observedPath": "ws.getCellValue",
           "canonicalPath": "ws.getValue",
           "status": "structured_diagnostic",
           "appliesTo": "method",
-          "ownerTheme": "round-57/sdk-agent-guidance",
+          "ownerTheme": "sdk-agent-guidance/worksheet-api-usage",
           "ownerPackage": "@mog-sdk/sdk",
           "firstObservedVersion": "0.9.2",
           "canonicalSince": null,
@@ -6587,7 +6587,7 @@
           "evidence": [
             {
               "source": "source",
-              "reference": "api-compatibility:round57/mog-method-guidance"
+              "reference": "api-compatibility:mog-api/worksheet-method-guidance"
             }
           ],
           "behavior": "Worksheet does not expose getCellValue(); use ws.getValue(address) for the computed value or (await ws.getCell(address)).value when full cell data is needed.",
@@ -6622,12 +6622,12 @@
       ],
       "ws.getValue()": [
         {
-          "id": "round57.worksheet.getCellValue.diagnostic",
+          "id": "mog-api.worksheet.getCellValue.unsupported",
           "observedPath": "ws.getCellValue",
           "canonicalPath": "ws.getValue",
           "status": "structured_diagnostic",
           "appliesTo": "method",
-          "ownerTheme": "round-57/sdk-agent-guidance",
+          "ownerTheme": "sdk-agent-guidance/worksheet-api-usage",
           "ownerPackage": "@mog-sdk/sdk",
           "firstObservedVersion": "0.9.2",
           "canonicalSince": null,
@@ -6636,7 +6636,7 @@
           "evidence": [
             {
               "source": "source",
-              "reference": "api-compatibility:round57/mog-method-guidance"
+              "reference": "api-compatibility:mog-api/worksheet-method-guidance"
             }
           ],
           "behavior": "Worksheet does not expose getCellValue(); use ws.getValue(address) for the computed value or (await ws.getCell(address)).value when full cell data is needed.",

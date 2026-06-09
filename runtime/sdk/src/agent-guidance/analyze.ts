@@ -367,8 +367,8 @@ function diagnosticFromGetSheetMissingAwait(
     severity: 'error',
     dialect: 'mog-version',
     category: 'workbook',
-    entryId: 'round57.workbook.getSheet.missing-await',
-    matcherId: `compatibility.round57.workbook.getSheet.missing-await.${workbookAlias}`,
+    entryId: 'mog-api.workbook.getSheet.missing-await',
+    matcherId: `compatibility.mog-api.workbook.getSheet.missing-await.${workbookAlias}`,
     offendingSymbol: `${getSheetPath}(...).getValue`,
     message:
       'getSheet is async, so workbook.getSheet(...).getValue(...) tries to call getValue on a Promise instead of a worksheet.',
@@ -430,7 +430,7 @@ export function analyzeMogCode(code: string): ApiGuidanceDiagnostic[] {
 
   for (const match of getSheetMissingAwaitMatches(stripped)) {
     const span = spanFor(code, match.start, match.end);
-    const key = `round57.workbook.getSheet.missing-await:${span.start}`;
+    const key = `mog-api.workbook.getSheet.missing-await:${span.start}`;
     if (seen.has(key)) continue;
     seen.add(key);
     diagnostics.push(diagnosticFromGetSheetMissingAwait(match.workbookAlias, span));

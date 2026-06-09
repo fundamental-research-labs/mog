@@ -1,4 +1,4 @@
-import { MAX_COLS, MAX_ROWS } from '@mog-sdk/contracts/core';
+import { MAX_COLS, MAX_ROWS, type CellRange } from '@mog-sdk/contracts/core';
 
 import { KernelError, MogSdkError } from '../../errors';
 import { resolveCell, resolveCellArgs, resolveRange } from '../internal/address-resolver';
@@ -373,6 +373,20 @@ describe('resolveRange', () => {
           validationKind: 'invalidRangeAddress',
           path: ['range'],
           received: 'A1:',
+        }),
+      );
+    });
+
+    it('reports null range objects with structured diagnostics', () => {
+      const error = captureKernelError(() => resolveRange(null as unknown as CellRange));
+      expect(error.code).toBe('API_INVALID_ARGUMENT');
+      expect(error.context).toEqual(
+        expect.objectContaining({
+          validationKind: 'invalidRangeObject',
+          path: ['range'],
+          expected: expect.stringContaining('CellRange object'),
+          received: null,
+          suggestion: expect.stringContaining('range string'),
         }),
       );
     });

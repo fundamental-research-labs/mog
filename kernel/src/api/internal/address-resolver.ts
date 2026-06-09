@@ -192,6 +192,17 @@ export function resolveRange(
   d?: number,
 ): { startRow: number; startCol: number; endRow: number; endCol: number } {
   if (typeof a === 'object') {
+    if (a === null) {
+      failAddressDiagnostic({
+        validationKind: 'invalidRangeObject',
+        message: 'Invalid range argument: null',
+        path: ['range'],
+        expected:
+          'range string such as "A1:B2", CellRange object, or numeric start/end bounds',
+        received: a,
+        suggestion: 'Pass a range string such as "A1:B2" or a CellRange object.',
+      });
+    }
     const range = {
       startRow: a.startRow,
       startCol: a.startCol,

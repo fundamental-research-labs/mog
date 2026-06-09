@@ -87,7 +87,7 @@
       "typeText": "{row:number;col:number}",
       "compatibility": [
         {
-          "id": "round57.worksheet.addressToIndex.diagnostic",
+          "id": "mog-api.worksheet.addressToIndex.unsupported",
           "observedPath": "ws.addressToIndex",
           "canonicalPath": "wb.addressToIndex",
           "status": "structured_diagnostic",
@@ -1539,14 +1539,14 @@
       "typeText": "string",
       "compatibility": [
         {
-          "id": "round57.worksheet.indexToAddress.diagnostic",
+          "id": "mog-api.worksheet.indexToAddress.unsupported",
           "observedPath": "ws.indexToAddress",
           "canonicalPath": "wb.indexToAddress",
           "status": "structured_diagnostic",
           "appliesTo": "method"
         },
         {
-          "id": "round57.worksheet.privateColLetter.diagnostic",
+          "id": "mog-api.worksheet.privateColLetter.unsupported",
           "observedPath": "ws._colLetter",
           "canonicalPath": "wb.indexToAddress",
           "status": "structured_diagnostic",
@@ -9032,7 +9032,7 @@
       "typeText": "Promise<CellFormat>",
       "compatibility": [
         {
-          "id": "round57.worksheet.getFormat.diagnostic",
+          "id": "mog-api.worksheet.getFormat.unsupported",
           "observedPath": "ws.getFormat",
           "canonicalPath": "ws.formats.getDisplayedCellProperties",
           "status": "structured_diagnostic",
@@ -10024,7 +10024,7 @@
       "typeText": "Promise<RawCellData>",
       "compatibility": [
         {
-          "id": "round57.worksheet.rawCellData.diagnostic",
+          "id": "mog-api.worksheet.rawCellData.unsupported",
           "observedPath": "ws.rawCellData",
           "canonicalPath": "ws.getRawCellData",
           "status": "structured_diagnostic",
@@ -10140,7 +10140,7 @@
       "typeText": "Promise<CellValuePrimitive>",
       "compatibility": [
         {
-          "id": "round57.worksheet.getCellValue.diagnostic",
+          "id": "mog-api.worksheet.getCellValue.unsupported",
           "observedPath": "ws.getCellValue",
           "canonicalPath": "ws.getValue",
           "status": "structured_diagnostic",
@@ -17913,7 +17913,7 @@
       "typeText": "{row:number;col:number}",
       "compatibility": [
         {
-          "id": "round57.worksheet.addressToIndex.diagnostic",
+          "id": "mog-api.worksheet.addressToIndex.unsupported",
           "observedPath": "ws.addressToIndex",
           "canonicalPath": "wb.addressToIndex",
           "status": "structured_diagnostic",
@@ -19365,14 +19365,14 @@
       "typeText": "string",
       "compatibility": [
         {
-          "id": "round57.worksheet.indexToAddress.diagnostic",
+          "id": "mog-api.worksheet.indexToAddress.unsupported",
           "observedPath": "ws.indexToAddress",
           "canonicalPath": "wb.indexToAddress",
           "status": "structured_diagnostic",
           "appliesTo": "method"
         },
         {
-          "id": "round57.worksheet.privateColLetter.diagnostic",
+          "id": "mog-api.worksheet.privateColLetter.unsupported",
           "observedPath": "ws._colLetter",
           "canonicalPath": "wb.indexToAddress",
           "status": "structured_diagnostic",
@@ -26858,7 +26858,7 @@
       "typeText": "Promise<CellFormat>",
       "compatibility": [
         {
-          "id": "round57.worksheet.getFormat.diagnostic",
+          "id": "mog-api.worksheet.getFormat.unsupported",
           "observedPath": "ws.getFormat",
           "canonicalPath": "ws.formats.getDisplayedCellProperties",
           "status": "structured_diagnostic",
@@ -27850,7 +27850,7 @@
       "typeText": "Promise<RawCellData>",
       "compatibility": [
         {
-          "id": "round57.worksheet.rawCellData.diagnostic",
+          "id": "mog-api.worksheet.rawCellData.unsupported",
           "observedPath": "ws.rawCellData",
           "canonicalPath": "ws.getRawCellData",
           "status": "structured_diagnostic",
@@ -27966,7 +27966,7 @@
       "typeText": "Promise<CellValuePrimitive>",
       "compatibility": [
         {
-          "id": "round57.worksheet.getCellValue.diagnostic",
+          "id": "mog-api.worksheet.getCellValue.unsupported",
           "observedPath": "ws.getCellValue",
           "canonicalPath": "ws.getValue",
           "status": "structured_diagnostic",

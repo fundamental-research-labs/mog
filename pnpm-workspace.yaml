@@ -81,8 +81,13 @@ overrides:
   react-icons: 5.5.0
 
 allowBuilds:
+  '@vscode/vsce-sign': true
   esbuild: true
+  keytar: true
   unrs-resolver: true
 
 onlyBuiltDependencies:
+  - '@vscode/vsce-sign'
   - esbuild
+  - keytar
+  - unrs-resolver

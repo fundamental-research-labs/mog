@@ -191,6 +191,7 @@ describe('Clipboard Paste Integration', () => {
     const sheetId = 'sheet-1' as SheetId;
     const sourceRange = { startRow: 0, startCol: 0, endRow: 1, endCol: 2 };
     const targetRange = { startRow: 2, startCol: 5, endRow: 5, endCol: 10 };
+    const collapsedPreviewRange = { startRow: 2, startCol: 5, endRow: 3, endCol: 7 };
     const clipboardData: ClipboardData = {
       sourceSheetId: sheetId,
       sourceRanges: [sourceRange],
@@ -223,14 +224,14 @@ describe('Clipboard Paste Integration', () => {
       clipboardActor,
       store,
       getActiveSheetId: () => sheetId,
-      getSelectionRange: () => targetRange,
+      getSelectionRange: () => collapsedPreviewRange,
       onPasteComplete,
       updateSelectionAfterPaste,
       onSizeMismatch,
     });
 
     clipboardActor.send({ type: 'COPY', ranges: [sourceRange], data: clipboardData });
-    clipboardActor.send({ type: 'PASTE', targetCell: { row: 2, col: 5 } });
+    clipboardActor.send({ type: 'PASTE', targetCell: { row: 2, col: 5 }, targetRange });
     await waitForPendingClipboardPaste();
 
     expect(onSizeMismatch).not.toHaveBeenCalled();

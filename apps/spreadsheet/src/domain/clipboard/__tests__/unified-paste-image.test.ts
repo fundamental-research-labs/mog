@@ -234,6 +234,43 @@ describe('unifiedPaste — image routing', () => {
     );
   });
 
+  it('forwards the selected target range captured before async clipboard read', async () => {
+    installClipboard([makeClipItem({ 'text/plain': blobLike('A\tB\nC\tD', 'text/plain') })]);
+    const commands = makeCommands();
+    const targetRange = { startRow: 4, startCol: 2, endRow: 7, endCol: 5 };
+
+    await unifiedPaste(ACTIVE_CELL, {
+      getClipboardSnapshot: () =>
+        ({
+          context: {
+            isCut: false,
+            data: {
+              textSignature: 'A\tB\nC\tD',
+              sourceRanges: [{ startRow: 0, startCol: 0, endRow: 1, endCol: 1 }],
+              sourceSheetId: 'sheet-1',
+              cells: {
+                '0,0': { raw: 'A' },
+                '0,1': { raw: 'B' },
+                '1,0': { raw: 'C' },
+                '1,1': { raw: 'D' },
+              },
+            },
+          },
+          matches: () => true,
+        }) as any,
+      commands,
+      getTargetRange: () => targetRange,
+      readPasteDefaultsPreference: () => null,
+    });
+
+    expect((commands as any).paste).toHaveBeenCalledWith(
+      ACTIVE_CELL,
+      undefined,
+      undefined,
+      targetRange,
+    );
+  });
+
   it('preserves internal cut normal paste even when a saved default exists', async () => {
     installClipboard([makeClipItem({ 'text/plain': blobLike('A', 'text/plain') })]);
     const commands = makeCommands();

@@ -74,6 +74,7 @@ import { useRenderContextConfig } from './effects/useRenderContextConfig';
 import { useRendererDependencies } from './effects/useRendererDependencies';
 import { useRendererLifecycle } from './effects/useRendererLifecycle';
 import { useRendererSync } from './effects/useRendererSync';
+import { useRendererViewRestore } from './effects/useRendererViewRestore';
 import { useSparklineCFIntegration } from './effects/useSparklineCFIntegration';
 import { useCellDataCallbacks } from './hooks/useCellDataCallbacks';
 // NOTE: useInputMessageTooltip is now called internally by InputMessageOverlay
@@ -102,7 +103,6 @@ import { InlineSliderEditor } from './editors/InlineSliderEditor';
 import { ValidationDropdownOverlay } from './editors/ValidationDropdownOverlay';
 
 import { useRemoteCursors } from '../../hooks/collab/useRemoteCursors';
-import { isValidRestoredSelection } from './utils/restored-selection';
 
 function getOutlineSummaryIndex(start: number, end: number, summaryAfter: boolean): number {
   return summaryAfter ? end + 1 : start - 1;
@@ -127,7 +127,6 @@ export const SpreadsheetGrid = memo(function SpreadsheetGrid({
   showFps = false,
 }: SpreadsheetGridProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const restoredImportedSelectionSheetsRef = useRef<Set<string>>(new Set());
 
   // Get coordinator for setting renderer dependencies
   const coordinator = useCoordinator();
@@ -436,68 +435,7 @@ export const SpreadsheetGrid = memo(function SpreadsheetGrid({
     [wb],
   );
 
-  // Apply post-mount renderer side-effects from the mirror snapshot.
-  // The sheetStateProvider above feeds the renderer's sync reads, but the
-  // renderer also needs an explicit kick on mount/sheet-switch:
-  // 1. Non-zero scroll position must be applied via applyCellLevelScroll
-  // (renderer initializes at {0,0} otherwise).
-  // 2. View options must be pushed into the renderer adapter so layers
-  // reflect the authoritative kernel values for the first paint.
-  // Both reads are sync from the mirror — no Promise.all, no race window.
-  useEffect(() => {
-    const viewOpts = wb.mirror.getViewOptions(activeSheetId);
-    const scrollPos = wb.mirror.getScrollPosition(activeSheetId);
-
-    // Guard: only push view options if the renderer's current sheet matches
-    // (preserves original semantics for mid-switch races).
-    const renderCap = coordinator.renderer.getRenderCapability();
-    if (renderCap && renderCap.getCurrentSheetId() === activeSheetId) {
-      const renderState = coordinator.renderer.getRenderState();
-      if (renderState) {
-        renderState.update({
-          viewOptions: {
-            showGridlines: viewOpts.showGridlines,
-            showRowHeaders: viewOpts.showRowHeaders,
-            showColumnHeaders: viewOpts.showColumnHeaders,
-          },
-        });
-      }
-    }
-
-    // Apply scroll position from Rust ground truth only when there is no
-    // in-session pixel-level state. Sheet switches restore exact pixel scroll
-    // through renderer-execution; replaying the coarser cell-level mirror here
-    // can shift the viewport by several rows after the exact restore.
-    const sessionViewState = uiStoreApi.getState().getSheetViewState(activeSheetId);
-    if (!sessionViewState && (scrollPos.topRow > 0 || scrollPos.leftCol > 0)) {
-      coordinator.renderer.applyCellLevelScroll(scrollPos.topRow, scrollPos.leftCol);
-    }
-
-    if (!sessionViewState && !restoredImportedSelectionSheetsRef.current.has(activeSheetId)) {
-      const savedSelection = wb.mirror.getViewSelection(activeSheetId);
-      if (savedSelection && isValidRestoredSelection(savedSelection)) {
-        restoredImportedSelectionSheetsRef.current.add(activeSheetId);
-        coordinator.grid.access.actors.selection.send({
-          type: 'SET_SELECTION',
-          ranges: savedSelection.ranges,
-          activeCell: savedSelection.activeCell,
-          anchor: null,
-          anchorCol: null,
-          anchorRow: null,
-          source: 'restore',
-        });
-      }
-    }
-  }, [wb, activeSheetId, coordinator, uiStoreApi]);
-
-  useEffect(() => {
-    const renderCap = coordinator.renderer.getRenderCapability();
-    if (!renderCap || renderCap.getCurrentSheetId() !== activeSheetId) return;
-    coordinator.renderer.updateContext({
-      sheetViewSkin: rendererSkin,
-      chromeTheme: rendererSkin.chromeTheme,
-    });
-  }, [activeSheetId, coordinator, rendererSkin]);
+  useRendererViewRestore({ wb, activeSheetId, coordinator, isReady, rendererSheetId, uiStoreApi, rendererSkin });
 
   // Use extracted hook for renderer dependencies
   useRendererDependencies({

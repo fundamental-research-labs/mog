@@ -25,6 +25,7 @@ import {
   DialogHeader,
   Label,
   RadioGroup,
+  usePlatformInfo,
 } from '@mog/shell';
 import type { PasteSpecialOptions } from '../../systems/shared/types';
 
@@ -64,6 +65,11 @@ interface PasteSpecialDialogProps {
 export function PasteSpecialDialog({ onPaste }: PasteSpecialDialogProps) {
   const isOpen = useUIStore((s) => s.pasteSpecialDialogOpen);
   const closeDialog = useUIStore((s) => s.closePasteSpecialDialog);
+  const { isMacOS } = usePlatformInfo();
+  const shortcutLabel = useCallback(
+    (label: string, shortcut: string) => (isMacOS ? label : `${label} (${shortcut})`),
+    [isMacOS],
+  );
 
   // Local state for form values
   const [pasteType, setPasteType] = useState<PasteType>('all');
@@ -266,11 +272,11 @@ export function PasteSpecialDialog({ onPaste }: PasteSpecialDialogProps) {
                 value={pasteType}
                 onChange={(val) => setPasteType(val as PasteType)}
                 options={[
-                  { value: 'all', label: 'All (Alt+A)' },
-                  { value: 'formulas', label: 'Formulas (Alt+F)' },
-                  { value: 'values', label: 'Values (Alt+V)' },
-                  { value: 'formats', label: 'Formats (Alt+T)' },
-                  { value: 'comments', label: 'Comments (Alt+C)' },
+                  { value: 'all', label: shortcutLabel('All', 'Alt+A') },
+                  { value: 'formulas', label: shortcutLabel('Formulas', 'Alt+F') },
+                  { value: 'values', label: shortcutLabel('Values', 'Alt+V') },
+                  { value: 'formats', label: shortcutLabel('Formats', 'Alt+T') },
+                  { value: 'comments', label: shortcutLabel('Comments', 'Alt+C') },
                   { value: 'validation', label: 'Validation' },
                   { value: 'allExceptBorders', label: 'All except borders' },
                   { value: 'columnWidths', label: 'Column widths' },
@@ -289,11 +295,11 @@ export function PasteSpecialDialog({ onPaste }: PasteSpecialDialogProps) {
                 value={operation}
                 onChange={(val) => setOperation(val as PasteOperation)}
                 options={[
-                  { value: 'none', label: 'None (Alt+N)' },
-                  { value: 'add', label: 'Add (Alt+D)' },
-                  { value: 'subtract', label: 'Subtract (Alt+S)' },
-                  { value: 'multiply', label: 'Multiply (Alt+M)' },
-                  { value: 'divide', label: 'Divide (Alt+I)' },
+                  { value: 'none', label: shortcutLabel('None', 'Alt+N') },
+                  { value: 'add', label: shortcutLabel('Add', 'Alt+D') },
+                  { value: 'subtract', label: shortcutLabel('Subtract', 'Alt+S') },
+                  { value: 'multiply', label: shortcutLabel('Multiply', 'Alt+M') },
+                  { value: 'divide', label: shortcutLabel('Divide', 'Alt+I') },
                 ]}
                 size="sm"
               />
@@ -308,12 +314,12 @@ export function PasteSpecialDialog({ onPaste }: PasteSpecialDialogProps) {
             <Checkbox
               checked={skipBlanks}
               onChange={(checked) => setSkipBlanks(checked)}
-              label="Skip blanks (Alt+B)"
+              label={shortcutLabel('Skip blanks', 'Alt+B')}
             />
             <Checkbox
               checked={transpose}
               onChange={(checked) => setTranspose(checked)}
-              label="Transpose (Alt+E)"
+              label={shortcutLabel('Transpose', 'Alt+E')}
             />
           </div>
         </div>
@@ -321,7 +327,7 @@ export function PasteSpecialDialog({ onPaste }: PasteSpecialDialogProps) {
 
       <DialogFooter>
         <Button variant="secondary" onClick={handlePasteLink}>
-          Paste Link (Alt+L)
+          {shortcutLabel('Paste Link', 'Alt+L')}
         </Button>
         <div className="flex-1" /> {/* Spacer to push Cancel/OK to the right */}
         <Button variant="secondary" onClick={handleCancel}>

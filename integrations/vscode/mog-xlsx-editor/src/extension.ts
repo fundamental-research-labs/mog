@@ -110,7 +110,7 @@ class MogXlsxEditorProvider implements vscode.CustomEditorProvider<MogXlsxDocume
       webviewPanel,
       (dirtyDocument) => this.onDidChangeCustomDocumentEmitter.fire({ document: dirtyDocument }),
       (readyDocument) => this.markInitialized(readyDocument),
-      (hostSaveDocument, save) => this.writeHostInitiatedSave(hostSaveDocument, save),
+      (hostSaveDocument, save) => this.runHostInitiatedSave(hostSaveDocument, save),
     );
     document.attachController(controller);
   }
@@ -234,19 +234,22 @@ class MogXlsxEditorProvider implements vscode.CustomEditorProvider<MogXlsxDocume
     }
   }
 
-  private async writeHostInitiatedSave(
+  private async runHostInitiatedSave(
     document: MogXlsxDocument,
     save: import('./protocol.js').SaveResultPayload,
   ): Promise<void> {
     const controller = document.requireController();
-    const bytes = numberArrayToBytes(save.bytes);
+    const clearQueuedSave = controller.queueSaveBytesForNextSave(save);
     try {
-      await vscode.workspace.fs.writeFile(document.uri, bytes);
-      const versionId = document.markSaved(bytes);
-      await controller.postSaveAck(save.requestId, versionId);
+      const saved = await vscode.workspace.save(document.uri);
+      if (!saved) {
+        throw new Error('VS Code did not save the active Mog XLSX custom editor');
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      await controller.postSaveFailed(save.requestId, message);
+      if (clearQueuedSave()) {
+        await controller.postSaveFailed(save.requestId, message);
+      }
       throw error;
     }
   }

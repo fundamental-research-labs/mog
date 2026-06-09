@@ -1,5 +1,5 @@
 import { jest } from '@jest/globals';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 
 jest.unstable_mockModule('zustand', () => ({
   useStore: (store: { getState: () => unknown }, selector: (state: unknown) => unknown) =>
@@ -14,7 +14,8 @@ jest.unstable_mockModule('../../../internal-api', () => ({
       subscribe: () => () => {},
     },
   }),
-  useFeatureGate: (_scope: string, capability: string) => capability === 'fileMenu',
+  useFeatureGate: (_scope: string, capability: string) =>
+    ['fileMenu', 'save', 'undo', 'redo'].includes(capability),
 }));
 
 jest.unstable_mockModule('../../../hooks/toolbar/use-action-dependencies', () => ({
@@ -93,5 +94,37 @@ describe('TabBar text wrapping', () => {
       'whitespace-nowrap',
     );
     expect(screen.getByTestId('tabbar-command-cluster')).toHaveClass('hidden', 'min-[720px]:flex');
+  });
+
+  it('renders Save as a persistent quick-access command next to Undo', () => {
+    render(
+      <TabBar
+        tabs={[
+          { id: 'home', label: 'Home' },
+          { id: 'page', label: 'Page Layout' },
+        ]}
+        activeTab="home"
+        onTabChange={jest.fn()}
+        onFileClick={jest.fn()}
+        onSave={jest.fn()}
+        onUndo={jest.fn()}
+        onRedo={jest.fn()}
+        canUndo
+        canRedo
+      />,
+    );
+
+    const quickAccess = screen.getByTestId('tabbar-quick-access');
+    expect(within(quickAccess).getByRole('button', { name: 'Save' })).not.toHaveClass('hidden');
+    expect(
+      within(quickAccess)
+        .getAllByRole('button')
+        .map((button) => button.getAttribute('aria-label')),
+    ).toEqual(['Save', 'Undo', 'Redo']);
+    expect(
+      within(screen.getByTestId('tabbar-command-cluster')).queryByRole('button', {
+        name: 'Save',
+      }),
+    ).toBeNull();
   });
 });

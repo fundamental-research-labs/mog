@@ -90,6 +90,14 @@ function isDialogKeyboardTarget(target: HTMLElement | null): boolean {
   return Boolean(target.closest('[role="dialog"]'));
 }
 
+function isNativeEditableShortcut(e: KeyboardEvent, target: HTMLElement | null): boolean {
+  if (!isEditableKeyboardTarget(target)) return false;
+  if (!(e.ctrlKey || e.metaKey) || e.altKey) return false;
+
+  const key = e.key.toLowerCase();
+  return key === 'c' || key === 'x' || key === 'v' || key === 'z' || key === 'y';
+}
+
 /**
  * Hook to access pane navigation element registration.
  * Used by components to register their DOM elements for F6 navigation.
@@ -306,25 +314,25 @@ function KeyboardCaptureSetup({
         editorSnapshot.matches('formulaEditing') ||
         editorSnapshot.matches('richTextEditing') ||
         editorSnapshot.matches('imeComposing');
+      const target = keyboardEventTargetElement(e);
+
+      if (
+        isGlobalShortcut(e) &&
+        !isDialogKeyboardTarget(target) &&
+        !isNativeEditableShortcut(e, target)
+      ) {
+        const result = keyboardCoordinator.handleKeyboardEvent(e);
+        if (result.handled) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+        return;
+      }
 
       if (!isEditing) {
         // Not editing — normally grid's onKeyDown handles shortcuts via bubbling.
         // But if focus is on BODY (e.g., after context menu close), the grid never
         // receives the event. Route through the coordinator directly in that case.
-        const target = keyboardEventTargetElement(e);
-        if (
-          isGlobalShortcut(e) &&
-          !isEditableKeyboardTarget(target) &&
-          !isDialogKeyboardTarget(target)
-        ) {
-          const result = keyboardCoordinator.handleKeyboardEvent(e);
-          if (result.handled) {
-            e.preventDefault();
-            e.stopPropagation();
-          }
-          return;
-        }
-
         const activeTag = document.activeElement?.tagName;
 
         if (activeTag === 'BODY' || activeTag === 'HTML') {
@@ -408,7 +416,6 @@ function KeyboardCaptureSetup({
           return;
         }
 
-        const target = keyboardEventTargetElement(e);
         const isPrintableFormulaInput =
           editorSnapshot.matches({ formulaEditing: 'enterMode' }) &&
           e.key.length === 1 &&

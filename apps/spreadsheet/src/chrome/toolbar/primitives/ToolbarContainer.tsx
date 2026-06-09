@@ -11,7 +11,7 @@
  * All callback props use useCallback to ensure stable references.
  */
 
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   dispatch,
   useActiveSheetId,
@@ -88,6 +88,7 @@ export const ToolbarContainer = React.memo(function ToolbarContainer({
   const deps = useActionDependencies();
   const activeSheetId = useActiveSheetId();
   const wb = useWorkbook();
+  const [defaultSavePending, setDefaultSavePending] = useState(false);
   // NOTE: Removed useSelection() subscription - this was causing 16,733ms of wasted render time
   // Selection data is now read on-demand when toolbar actions are invoked via coordinator.grid.getSelectionSnapshot()
   const zoomLevels = useZoomLevels();
@@ -138,6 +139,19 @@ export const ToolbarContainer = React.memo(function ToolbarContainer({
     canUndo,
     canRedo,
   } = useToolbarActions();
+
+  const handleSave = useCallback(() => {
+    if (onSave) {
+      onSave();
+      return;
+    }
+    if (defaultSavePending) return;
+
+    setDefaultSavePending(true);
+    void Promise.resolve(dispatch('SAVE', deps)).finally(() => {
+      setDefaultSavePending(false);
+    });
+  }, [defaultSavePending, deps, onSave]);
 
   // ===========================================================================
   // CLIPBOARD (Clipboard & Paste Special)
@@ -359,8 +373,8 @@ export const ToolbarContainer = React.memo(function ToolbarContainer({
       onCloseUndoDropdown={handleCloseUndoDropdown}
       onUndoToEntry={handleUndoToEntry}
       // Save (used by TabBar)
-      onSave={onSave}
-      isSaving={isSaving}
+      onSave={handleSave}
+      isSaving={isSaving || defaultSavePending}
       // Export (used by TabBar)
       onExport={onExport}
       isExporting={isExporting}

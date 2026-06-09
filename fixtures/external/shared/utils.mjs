@@ -10,16 +10,16 @@ import {
   cpSync,
   mkdirSync,
   readFileSync,
-  writeFileSync,
   rmSync,
   existsSync,
   mkdtempSync,
+  writeFileSync,
 } from 'node:fs';
 import { resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { randomBytes } from 'node:crypto';
 import {
-  buildPublicPackageManifest,
+  createPublicPackageCandidate,
   discoverWorkspacePackages,
 } from '../../../tools/public-package-manifest.mjs';
 import { loadPackageInventory } from '../../../tools/package-export-dispositions.mjs';
@@ -35,8 +35,8 @@ export class FixtureInstallError extends Error {
 }
 
 /**
- * Pack a package directory into a tarball.
- * @param {string} packageDir - Absolute path to the package directory
+ * Pack a workspace package into the same release candidate shape used by publish flows.
+ * @param {string} packageDir - Absolute path to the workspace package directory
  * @returns {string} Absolute path to the created tarball
  */
 export function packPackage(packageDir) {
@@ -44,17 +44,12 @@ export function packPackage(packageDir) {
   const workspacePackages = discoverWorkspacePackages();
   const manifestPath = resolve(packageDir, 'package.json');
   const manifest = JSON.parse(readFileSync(manifestPath, 'utf-8'));
-  let packDir = packageDir;
-  const packManifest = buildPublicPackageManifest(manifest, { inventory, workspacePackages });
-
-  if (JSON.stringify(packManifest) !== JSON.stringify(manifest)) {
-    packDir = mkdtempSync(resolve(tmpdir(), 'mog-pack-'));
-    cpSync(packageDir, packDir, {
-      recursive: true,
-      filter: (source) => !source.includes('/node_modules/'),
-    });
-    writeFileSync(resolve(packDir, 'package.json'), `${JSON.stringify(packManifest, null, 2)}\n`);
-  }
+  const packDir = mkdtempSync(resolve(tmpdir(), 'mog-pack-'));
+  createPublicPackageCandidate(manifest.name, {
+    inventory,
+    workspacePackages,
+    outDir: packDir,
+  });
 
   const packOutput = execSync('npm pack --pack-destination /tmp --json', {
     cwd: packDir,

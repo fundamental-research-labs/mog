@@ -821,7 +821,7 @@ jobs:
           fi
           echo "Publishing $PACKAGE_NAME..."
           cd "$dir"
-          pnpm publish --access public --no-git-checks "${NPM_TAG_ARGS[@]}"
+          pnpm publish --access public --provenance --no-git-checks "${NPM_TAG_ARGS[@]}"
           cd "$GITHUB_WORKSPACE"
 
       - name: CLI registry install smoke

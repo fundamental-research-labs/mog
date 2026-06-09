@@ -6,7 +6,7 @@
   // disposition: "ship-public" | "binary-wrapper" | "bundle-only" | "workspace-internal"
   //            | "private" | "dev-eval" | "generated-asset" | "reserved" | "monorepo-root"
   // requirePrivate: true if the package.json MUST have "private": true
-  // publicTarget: the @mog-sdk/* name this package publishes as (null if not publishable)
+  // publicTarget: the public package or marketplace target (null if not publishable)
   // forbiddenRuntimeDeps: patterns that must NOT appear in dependencies/peerDependencies
 
   // ── monorepo root ─────────────────────────────────────────────────────
@@ -659,6 +659,14 @@
     "disposition": "private",
     "requirePrivate": true,
     "publicTarget": null,
+    "forbiddenRuntimeDeps": [],
+  },
+
+  // ── marketplace integrations ─────────────────────────────────────────
+  "mog-xlsx-editor": {
+    "disposition": "marketplace-extension",
+    "requirePrivate": false,
+    "publicTarget": "vscode:mog.mog-xlsx-editor",
     "forbiddenRuntimeDeps": [],
   },
 

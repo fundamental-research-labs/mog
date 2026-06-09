@@ -1,0 +1,14 @@
+.gitignore
+.vscode-test/**
+node_modules/**
+src/**
+webview/**
+tests/**
+scripts/**
+fixtures/**
+dist/e2e/**
+tsconfig.json
+*.tsbuildinfo
+dist/*.vsix
+dist/**/*.map
+media/**/*.map

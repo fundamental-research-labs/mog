@@ -1,0 +1,77 @@
+{
+  "name": "mog-xlsx-editor",
+  "displayName": "Mog Spreadsheet",
+  "description": "VS Code custom editor for XLSX files powered by Mog Spreadsheet.",
+  "version": "0.0.1",
+  "publisher": "mog",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "mog",
+    "spreadsheet",
+    "xlsx",
+    "vscode"
+  ],
+  "activationEvents": [
+    "onCustomEditor:mog.xlsxEditor"
+  ],
+  "main": "./dist/extension.cjs",
+  "contributes": {
+    "customEditors": [
+      {
+        "viewType": "mog.xlsxEditor",
+        "displayName": "Mog Spreadsheet",
+        "selector": [
+          {
+            "filenamePattern": "*.xlsx"
+          }
+        ],
+        "priority": "option"
+      }
+    ]
+  },
+  "scripts": {
+    "build": "pnpm build:spreadsheet-app && node scripts/build.mjs",
+    "build:spreadsheet-app": "pnpm --filter @mog-sdk/spreadsheet-app build",
+    "watch": "pnpm build:spreadsheet-app && node scripts/build.mjs --watch",
+    "typecheck": "pnpm build:spreadsheet-app && tsc --noEmit -p tsconfig.json",
+    "test": "node --import tsx --test \"tests/unit/**/*.test.ts\"",
+    "fixtures": "node scripts/generate-fixtures.mjs",
+    "package": "pnpm fixtures && pnpm build && node scripts/clean-package-output.mjs && vsce package --no-dependencies --out dist/mog-xlsx-editor.vsix",
+    "publish:marketplace": "pnpm package && vsce publish --no-dependencies --packagePath dist/mog-xlsx-editor.vsix",
+    "test:e2e:vscode": "pnpm fixtures && pnpm build && node --import tsx tests/e2e/run-vscode-tests.ts",
+    "test:e2e:cursor": "MOG_VSCODE_EXECUTABLE_PATH=/Applications/Cursor.app/Contents/MacOS/Cursor pnpm test:e2e:vscode"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/fundamental-research-labs/mog",
+    "directory": "integrations/vscode/mog-xlsx-editor"
+  },
+  "devDependencies": {
+    "@mog-sdk/spreadsheet-app": "workspace:*",
+    "@types/node": "^25.5.0",
+    "@types/mocha": "^10.0.10",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@types/vscode": "1.90.0",
+    "@vscode/test-electron": "^2.5.2",
+    "@vscode/vsce": "^3.6.0",
+    "@xstate/react": "^6.1.0",
+    "esbuild": "^0.25.0",
+    "exceljs": "^4.4.0",
+    "lucide-react": "^0.468.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.2",
+    "use-sync-external-store": "^1.6.0",
+    "xstate": "^5.31.1",
+    "zustand": "^5.0.0"
+  }
+}

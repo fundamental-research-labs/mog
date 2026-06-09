@@ -1,0 +1,42 @@
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+body {
+  background: var(--vscode-editor-background);
+  color: var(--vscode-editor-foreground);
+}
+
+#root {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+}
+
+.mog-vscode-fallback {
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  font: 13px var(--vscode-font-family);
+}
+
+.mog-vscode-error {
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  padding: 16px;
+  font: 12px var(--vscode-editor-font-family);
+  white-space: pre-wrap;
+  color: var(--vscode-errorForeground);
+  background: var(--vscode-editor-background);
+}

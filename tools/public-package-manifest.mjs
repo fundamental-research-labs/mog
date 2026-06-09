@@ -1,4 +1,5 @@
 import {
+  chmodSync,
   cpSync,
   existsSync,
   globSync,
@@ -19,6 +20,7 @@ import {
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 export const REPO_ROOT = resolve(__dirname, '..');
+const PUBLIC_PACKAGE_DISPOSITIONS = new Set(['ship-public', 'binary-wrapper']);
 
 export function loadJsonc(filePath) {
   const raw = readFileSync(filePath, 'utf-8');
@@ -80,9 +82,13 @@ export function discoverWorkspacePackages(root = REPO_ROOT) {
 
 export function publicPackageNames(inventory = loadPackageInventory(REPO_ROOT)) {
   return Object.entries(inventory)
-    .filter(([, entry]) => ['ship-public', 'binary-wrapper'].includes(entry.disposition))
+    .filter(([, entry]) => isPublicPackageInventoryEntry(entry))
     .map(([name, entry]) => entry.publicTarget ?? name)
     .sort();
+}
+
+export function publicPackageOutputDirectoryName(packageName) {
+  return packageName.replace(/^@/, '').replace(/\//g, '__');
 }
 
 export function buildPublicPackageManifest(manifest, options = {}) {
@@ -90,7 +96,7 @@ export function buildPublicPackageManifest(manifest, options = {}) {
   const workspacePackages = options.workspacePackages ?? new Map();
   const packageName = manifest.name;
   const inventoryEntry = inventory[packageName];
-  if (!inventoryEntry || !['ship-public', 'binary-wrapper'].includes(inventoryEntry.disposition)) {
+  if (!isPublicPackageInventoryEntry(inventoryEntry)) {
     throw new Error(`${packageName ?? '<unnamed>'}: package is not a public pack target`);
   }
 
@@ -183,6 +189,41 @@ function isForbiddenProtocol(spec) {
   );
 }
 
+function isPublicPackageInventoryEntry(entry) {
+  return Boolean(entry && PUBLIC_PACKAGE_DISPOSITIONS.has(entry.disposition));
+}
+
+export function createPublicPackageCandidate(packageName, options = {}) {
+  const root = options.root ?? REPO_ROOT;
+  const inventory = options.inventory ?? loadPackageInventory(root);
+  if (!isPublicPackageInventoryEntry(inventory[packageName])) {
+    throw new Error(`${packageName}: package is not a public pack target`);
+  }
+  const workspacePackages = options.workspacePackages ?? discoverWorkspacePackages(root);
+  const workspacePackage = workspacePackages.get(packageName);
+  if (!workspacePackage) {
+    throw new Error(`${packageName}: workspace package directory not found`);
+  }
+
+  const outDir =
+    options.outDir ?? mkdtempSync(resolve(tmpdir(), 'mog-public-package-candidate-'));
+  if (packageName === '@mog-sdk/cli') {
+    return createCliPublicPackageDirectory(workspacePackage.dir, {
+      root,
+      inventory,
+      workspacePackages,
+      outDir,
+    });
+  }
+
+  return createPublicPackageDirectory(workspacePackage.dir, {
+    root,
+    inventory,
+    workspacePackages,
+    outDir,
+  });
+}
+
 export function createPublicPackageDirectory(packageDir, options = {}) {
   const root = options.root ?? REPO_ROOT;
   const inventory = options.inventory ?? loadPackageInventory(root);
@@ -192,24 +233,97 @@ export function createPublicPackageDirectory(packageDir, options = {}) {
   const publicManifest = buildPublicPackageManifest(manifest, { inventory, workspacePackages });
   const outDir = options.outDir ?? mkdtempSync(resolve(tmpdir(), 'mog-public-package-'));
 
-  rmSync(outDir, { recursive: true, force: true });
-  mkdirSync(outDir, { recursive: true });
-  copyDeclaredPackageFiles(packageDir, outDir, publicManifest);
+  cpSync(packageDir, outDir, {
+    recursive: true,
+    filter: (source) => !source.includes('/node_modules/'),
+  });
   writeFileSync(resolve(outDir, 'package.json'), `${JSON.stringify(publicManifest, null, 2)}\n`);
   return outDir;
 }
 
-function copyDeclaredPackageFiles(packageDir, outDir, manifest) {
-  for (const entry of manifest.files ?? []) {
-    if (typeof entry !== 'string') continue;
-    const normalized = entry.replace(/^\.\//, '').replace(/\/+$/, '');
-    if (!normalized || normalized.includes('..')) continue;
+export function createCliPublicPackageDirectory(cliDir, options = {}) {
+  const root = options.root ?? REPO_ROOT;
+  const workspacePackages = options.workspacePackages ?? discoverWorkspacePackages(root);
+  const manifestPath = resolve(cliDir, 'package.json');
+  const manifest = JSON.parse(readFileSync(manifestPath, 'utf-8'));
+  const sdkManifest =
+    workspacePackages.get('@mog-sdk/sdk')?.manifest ??
+    JSON.parse(readFileSync(resolve(root, 'runtime/sdk/package.json'), 'utf-8'));
+  const outDir = options.outDir ?? mkdtempSync(resolve(tmpdir(), 'mog-cli-public-package-'));
+  const distFile = resolve(cliDir, 'dist/mog.cjs');
+  const distMapFile = resolve(cliDir, 'dist/mog.cjs.map');
 
-    const source = resolve(packageDir, normalized);
-    if (!existsSync(source)) continue;
-
-    const destination = resolve(outDir, normalized);
-    mkdirSync(dirname(destination), { recursive: true });
-    cpSync(source, destination, { recursive: true });
+  if (manifest.name !== '@mog-sdk/cli') {
+    throw new Error(`CLI package manifest name ${manifest.name} is not @mog-sdk/cli`);
   }
+  if (manifest.version !== sdkManifest.version) {
+    throw new Error(
+      `@mog-sdk/cli version ${manifest.version} must match @mog-sdk/sdk version ${sdkManifest.version}`,
+    );
+  }
+  if (manifest.bin?.mog !== './dist/mog.cjs') {
+    throw new Error(`@mog-sdk/cli bin.mog is ${manifest.bin?.mog}, expected ./dist/mog.cjs`);
+  }
+  if (!existsSync(distFile)) {
+    throw new Error(`Missing built CLI at ${distFile}. Run pnpm --filter @mog-sdk/cli build first.`);
+  }
+
+  rmSync(outDir, { recursive: true, force: true });
+  mkdirSync(resolve(outDir, 'dist'), { recursive: true });
+  cpSync(distFile, resolve(outDir, 'dist/mog.cjs'));
+  if (existsSync(distMapFile)) cpSync(distMapFile, resolve(outDir, 'dist/mog.cjs.map'));
+  chmodSync(resolve(outDir, 'dist/mog.cjs'), 0o755);
+
+  const readmePath = resolve(cliDir, 'README.md');
+  if (existsSync(readmePath)) {
+    cpSync(readmePath, resolve(outDir, 'README.md'));
+  } else {
+    writeFileSync(
+      resolve(outDir, 'README.md'),
+      [
+        '# Mog CLI',
+        '',
+        'Command-line interface for operating Mog workbooks with the headless SDK.',
+        '',
+      ].join('\n'),
+    );
+  }
+
+  const packageLicensePath = resolve(cliDir, 'LICENSE');
+  const rootLicensePath = resolve(root, 'LICENSE');
+  if (existsSync(packageLicensePath)) {
+    cpSync(packageLicensePath, resolve(outDir, 'LICENSE'));
+  } else if (existsSync(rootLicensePath)) {
+    cpSync(rootLicensePath, resolve(outDir, 'LICENSE'));
+  }
+
+  const publicManifest = buildCliPublicPackageManifest(manifest, sdkManifest.version);
+  writeFileSync(resolve(outDir, 'package.json'), `${JSON.stringify(publicManifest, null, 2)}\n`);
+  return outDir;
+}
+
+function buildCliPublicPackageManifest(manifest, sdkVersion) {
+  return {
+    name: '@mog-sdk/cli',
+    version: manifest.version,
+    description:
+      manifest.description ?? 'Command-line interface for operating Mog workbooks with the headless SDK',
+    license: manifest.license ?? 'MIT',
+    type: 'commonjs',
+    bin: {
+      mog: './dist/mog.cjs',
+    },
+    files: ['dist', 'README.md'],
+    engines: manifest.engines ?? {
+      node: '>=18',
+    },
+    repository: manifest.repository,
+    publishConfig: {
+      access: manifest.publishConfig?.access ?? 'public',
+    },
+    keywords: manifest.keywords,
+    dependencies: {
+      '@mog-sdk/sdk': sdkVersion,
+    },
+  };
 }

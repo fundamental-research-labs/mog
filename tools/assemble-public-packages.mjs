@@ -4,9 +4,10 @@ import { existsSync, mkdirSync, rmSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  createPublicPackageDirectory,
+  createPublicPackageCandidate,
   discoverWorkspacePackages,
   loadJsonc,
+  publicPackageOutputDirectoryName,
   publicPackageNames,
 } from './public-package-manifest.mjs';
 
@@ -33,8 +34,8 @@ for (const packageName of names) {
     continue;
   }
 
-  const packageOutDir = resolve(outRoot, packageName.replace(/^@/, '').replace(/\//g, '__'));
-  createPublicPackageDirectory(workspacePackage.dir, {
+  const packageOutDir = resolve(outRoot, publicPackageOutputDirectoryName(packageName));
+  createPublicPackageCandidate(packageName, {
     root: ROOT,
     inventory,
     workspacePackages,

@@ -643,6 +643,12 @@
   },
 
   // ── private (product apps, native binaries, servers) ──────────────────
+  "@mog/spreadsheet-dev": {
+    "disposition": "private",
+    "requirePrivate": true,
+    "publicTarget": null,
+    "forbiddenRuntimeDeps": [],
+  },
   "@mog/app-spreadsheet": {
     "disposition": "private",
     "requirePrivate": true,
@@ -690,6 +696,12 @@
     "forbiddenRuntimeDeps": [],
   },
   "@mog/spreadsheet-testing": {
+    "disposition": "workspace-internal",
+    "requirePrivate": true,
+    "publicTarget": null,
+    "forbiddenRuntimeDeps": [],
+  },
+  "@mog/vite-wasm-plugin": {
     "disposition": "workspace-internal",
     "requirePrivate": true,
     "publicTarget": null,

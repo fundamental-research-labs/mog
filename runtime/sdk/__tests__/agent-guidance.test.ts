@@ -61,12 +61,12 @@ describe('SDK agent API guidance', () => {
     expect(canonical?.kind).toBe('mog-api');
     if (canonical?.kind !== 'mog-api') throw new Error('expected canonical Mog guidance');
     expect(canonical.target.compatibility?.map((entry) => entry.id)).toContain(
-      'round55.worksheet.getCharts.alias',
+      'mog-api.worksheet.getCharts.alias',
     );
 
     const method = api.describe('ws.getCharts');
     expect(method && 'compatibility' in method ? method.compatibility : []).toContainEqual(
-      expect.objectContaining({ id: 'round55.worksheet.getCharts.alias' }),
+      expect.objectContaining({ id: 'mog-api.worksheet.getCharts.alias' }),
     );
   });
 
@@ -154,7 +154,7 @@ describe('SDK agent API guidance', () => {
       expect.objectContaining({
         code: 'MOG002_MOG_API_USAGE',
         dialect: 'mog-version',
-        entryId: 'round5.chart.listCharts.deprecated',
+        entryId: 'mog-api.chart.root.listCharts.deprecated',
         compatibilityStatus: 'deprecated_alias',
         blocking: false,
       }),
@@ -169,11 +169,11 @@ describe('SDK agent API guidance', () => {
     expect(rejected.diagnostics).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          entryId: 'round5.chart.addChart.diagnostic',
+          entryId: 'mog-api.chart.root.addChart.unsupported',
           blocking: true,
         }),
         expect.objectContaining({
-          entryId: 'round55.pivot.handle.describe.diagnostic',
+          entryId: 'mog-api.pivot.handle.describe.unsupported',
           blocking: true,
         }),
       ]),
@@ -329,7 +329,7 @@ describe('SDK agent API guidance', () => {
     if (handleDescribeDiagnostic?.kind !== 'mog-api-compatibility') {
       throw new Error('expected pivot handle describe compatibility guidance');
     }
-    expect(handleDescribeDiagnostic.entry.id).toBe('round55.pivot.handle.describe.diagnostic');
+    expect(handleDescribeDiagnostic.entry.id).toBe('mog-api.pivot.handle.describe.unsupported');
     expect(handleDescribeDiagnostic.entry.diagnostics?.replacements).toContain(
       'type:PivotTableHandle.getInfo',
     );

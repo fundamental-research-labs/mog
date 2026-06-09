@@ -4749,7 +4749,7 @@
       "typeText": "Promise<PivotTableConfig>",
       "compatibility": [
         {
-          "id": "round5.pivot.addPivotTable.deprecated",
+          "id": "mog-api.pivot.root.addPivotTable.deprecated",
           "observedPath": "ws.addPivotTable",
           "canonicalPath": "ws.pivots.add",
           "status": "deprecated_alias",
@@ -5139,7 +5139,7 @@
       "typeText": "Promise<Chart>",
       "compatibility": [
         {
-          "id": "round5.chart.addChart.diagnostic",
+          "id": "mog-api.chart.root.addChart.unsupported",
           "observedPath": "ws.addChart",
           "canonicalPath": "ws.charts.add",
           "status": "structured_diagnostic",
@@ -5318,7 +5318,7 @@
       "typeText": "Promise<Chart|null>",
       "compatibility": [
         {
-          "id": "round5.chart.getChart.deprecated",
+          "id": "mog-api.chart.root.getChart.deprecated",
           "observedPath": "ws.getChart",
           "canonicalPath": "ws.charts.get",
           "status": "deprecated_alias",
@@ -5725,21 +5725,21 @@
       "typeText": "Promise<Chart[]>",
       "compatibility": [
         {
-          "id": "round5.chart.listCharts.deprecated",
-          "observedPath": "ws.listCharts",
-          "canonicalPath": "ws.charts.list",
-          "status": "deprecated_alias",
-          "appliesTo": "method"
-        },
-        {
-          "id": "round55.chart.not-found-guidance",
+          "id": "mog-api.chart.not-found-guidance",
           "observedPath": "chartNotFound suggestion: getCharts()",
           "canonicalPath": "ws.charts.list",
           "status": "structured_diagnostic",
           "appliesTo": "result"
         },
         {
-          "id": "round55.worksheet.getCharts.alias",
+          "id": "mog-api.chart.root.listCharts.deprecated",
+          "observedPath": "ws.listCharts",
+          "canonicalPath": "ws.charts.list",
+          "status": "deprecated_alias",
+          "appliesTo": "method"
+        },
+        {
+          "id": "mog-api.worksheet.getCharts.alias",
           "observedPath": "ws.getCharts",
           "canonicalPath": "ws.charts.list",
           "status": "supported_alias",
@@ -5804,7 +5804,7 @@
       "typeText": "Promise<void>",
       "compatibility": [
         {
-          "id": "round5.chart.removeChart.deprecated",
+          "id": "mog-api.chart.root.removeChart.deprecated",
           "observedPath": "ws.removeChart",
           "canonicalPath": "ws.charts.remove",
           "status": "deprecated_alias",
@@ -6192,7 +6192,7 @@
       "typeText": "Promise<void>",
       "compatibility": [
         {
-          "id": "round5.chart.updateChart.deprecated",
+          "id": "mog-api.chart.root.updateChart.deprecated",
           "observedPath": "ws.updateChart",
           "canonicalPath": "ws.charts.update",
           "status": "deprecated_alias",
@@ -7395,7 +7395,7 @@
       "typeText": "Promise<string>",
       "compatibility": [
         {
-          "id": "round55.worksheet.describeRange.no-arg",
+          "id": "mog-api.worksheet.describeRange.no-range",
           "observedPath": "ws.describeRange()",
           "canonicalPath": "ws.describeRange",
           "status": "contract_extension",
@@ -9550,7 +9550,7 @@
       "typeText": "Promise<Chart|null>",
       "compatibility": [
         {
-          "id": "round5.chart.getChart.deprecated",
+          "id": "mog-api.chart.root.getChart.deprecated",
           "observedPath": "ws.getChart",
           "canonicalPath": "ws.charts.get",
           "status": "deprecated_alias",
@@ -9576,7 +9576,7 @@
       "typeText": "Promise<Chart[]>",
       "compatibility": [
         {
-          "id": "round55.worksheet.getCharts.alias",
+          "id": "mog-api.worksheet.getCharts.alias",
           "observedPath": "ws.getCharts",
           "canonicalPath": "ws.charts.list",
           "status": "supported_alias",
@@ -9890,7 +9890,7 @@
       "typeText": "Promise<PivotTableHandle|null>",
       "compatibility": [
         {
-          "id": "round5.pivot.getPivotTable.deprecated",
+          "id": "mog-api.pivot.root.getPivotTable.deprecated",
           "observedPath": "ws.getPivotTable",
           "canonicalPath": "ws.pivots.get",
           "status": "deprecated_alias",
@@ -11034,7 +11034,7 @@
       "typeText": "Promise<Chart[]>",
       "compatibility": [
         {
-          "id": "round5.chart.listCharts.deprecated",
+          "id": "mog-api.chart.root.listCharts.deprecated",
           "observedPath": "ws.listCharts",
           "canonicalPath": "ws.charts.list",
           "status": "deprecated_alias",
@@ -11060,7 +11060,7 @@
       "typeText": "Promise<PivotTableInfo[]>",
       "compatibility": [
         {
-          "id": "round5.pivot.listPivotTables.deprecated",
+          "id": "mog-api.pivot.root.listPivotTables.deprecated",
           "observedPath": "ws.listPivotTables",
           "canonicalPath": "ws.pivots.list",
           "status": "deprecated_alias",
@@ -12058,7 +12058,7 @@
       "typeText": "Promise<PivotTableConfig>",
       "compatibility": [
         {
-          "id": "round5.pivot.addPivotTable.deprecated",
+          "id": "mog-api.pivot.root.addPivotTable.deprecated",
           "observedPath": "ws.addPivotTable",
           "canonicalPath": "ws.pivots.add",
           "status": "deprecated_alias",
@@ -12199,7 +12199,7 @@
       "typeText": "Promise<PivotTableHandle|null>",
       "compatibility": [
         {
-          "id": "round5.pivot.getPivotTable.deprecated",
+          "id": "mog-api.pivot.root.getPivotTable.deprecated",
           "observedPath": "ws.getPivotTable",
           "canonicalPath": "ws.pivots.get",
           "status": "deprecated_alias",
@@ -12606,7 +12606,7 @@
       "typeText": "Promise<PivotTableInfo[]>",
       "compatibility": [
         {
-          "id": "round5.pivot.listPivotTables.deprecated",
+          "id": "mog-api.pivot.root.listPivotTables.deprecated",
           "observedPath": "ws.listPivotTables",
           "canonicalPath": "ws.pivots.list",
           "status": "deprecated_alias",
@@ -12709,7 +12709,7 @@
       "typeText": "Promise<void>",
       "compatibility": [
         {
-          "id": "round5.pivot.removePivotTable.deprecated",
+          "id": "mog-api.pivot.root.removePivotTable.deprecated",
           "observedPath": "ws.removePivotTable",
           "canonicalPath": "ws.pivots.remove",
           "status": "deprecated_alias",
@@ -12964,7 +12964,7 @@
       "typeText": "Promise<void>",
       "compatibility": [
         {
-          "id": "round55.pivot.collection.setItemVisibility.alias",
+          "id": "mog-api.pivot.collection.setItemVisibility.alias",
           "observedPath": "ws.pivots.setItemVisibility",
           "canonicalPath": "ws.pivots.setPivotItemVisibility",
           "status": "supported_alias",
@@ -13010,7 +13010,7 @@
       "typeText": "Promise<void>",
       "compatibility": [
         {
-          "id": "round55.pivot.collection.setItemVisibility.alias",
+          "id": "mog-api.pivot.collection.setItemVisibility.alias",
           "observedPath": "ws.pivots.setItemVisibility",
           "canonicalPath": "ws.pivots.setPivotItemVisibility",
           "status": "supported_alias",
@@ -14024,7 +14024,7 @@
       "typeText": "Promise<void>",
       "compatibility": [
         {
-          "id": "round5.chart.removeChart.deprecated",
+          "id": "mog-api.chart.root.removeChart.deprecated",
           "observedPath": "ws.removeChart",
           "canonicalPath": "ws.charts.remove",
           "status": "deprecated_alias",
@@ -14050,7 +14050,7 @@
       "typeText": "Promise<void>",
       "compatibility": [
         {
-          "id": "round5.pivot.removePivotTable.deprecated",
+          "id": "mog-api.pivot.root.removePivotTable.deprecated",
           "observedPath": "ws.removePivotTable",
           "canonicalPath": "ws.pivots.remove",
           "status": "deprecated_alias",
@@ -17090,7 +17090,7 @@
       "typeText": "Promise<void>",
       "compatibility": [
         {
-          "id": "round5.chart.updateChart.deprecated",
+          "id": "mog-api.chart.root.updateChart.deprecated",
           "observedPath": "ws.updateChart",
           "canonicalPath": "ws.charts.update",
           "status": "deprecated_alias",
@@ -22575,7 +22575,7 @@
       "typeText": "Promise<PivotTableConfig>",
       "compatibility": [
         {
-          "id": "round5.pivot.addPivotTable.deprecated",
+          "id": "mog-api.pivot.root.addPivotTable.deprecated",
           "observedPath": "ws.addPivotTable",
           "canonicalPath": "ws.pivots.add",
           "status": "deprecated_alias",
@@ -22965,7 +22965,7 @@
       "typeText": "Promise<Chart>",
       "compatibility": [
         {
-          "id": "round5.chart.addChart.diagnostic",
+          "id": "mog-api.chart.root.addChart.unsupported",
           "observedPath": "ws.addChart",
           "canonicalPath": "ws.charts.add",
           "status": "structured_diagnostic",
@@ -23144,7 +23144,7 @@
       "typeText": "Promise<Chart|null>",
       "compatibility": [
         {
-          "id": "round5.chart.getChart.deprecated",
+          "id": "mog-api.chart.root.getChart.deprecated",
           "observedPath": "ws.getChart",
           "canonicalPath": "ws.charts.get",
           "status": "deprecated_alias",
@@ -23551,21 +23551,21 @@
       "typeText": "Promise<Chart[]>",
       "compatibility": [
         {
-          "id": "round5.chart.listCharts.deprecated",
-          "observedPath": "ws.listCharts",
-          "canonicalPath": "ws.charts.list",
-          "status": "deprecated_alias",
-          "appliesTo": "method"
-        },
-        {
-          "id": "round55.chart.not-found-guidance",
+          "id": "mog-api.chart.not-found-guidance",
           "observedPath": "chartNotFound suggestion: getCharts()",
           "canonicalPath": "ws.charts.list",
           "status": "structured_diagnostic",
           "appliesTo": "result"
         },
         {
-          "id": "round55.worksheet.getCharts.alias",
+          "id": "mog-api.chart.root.listCharts.deprecated",
+          "observedPath": "ws.listCharts",
+          "canonicalPath": "ws.charts.list",
+          "status": "deprecated_alias",
+          "appliesTo": "method"
+        },
+        {
+          "id": "mog-api.worksheet.getCharts.alias",
           "observedPath": "ws.getCharts",
           "canonicalPath": "ws.charts.list",
           "status": "supported_alias",
@@ -23630,7 +23630,7 @@
       "typeText": "Promise<void>",
       "compatibility": [
         {
-          "id": "round5.chart.removeChart.deprecated",
+          "id": "mog-api.chart.root.removeChart.deprecated",
           "observedPath": "ws.removeChart",
           "canonicalPath": "ws.charts.remove",
           "status": "deprecated_alias",
@@ -24018,7 +24018,7 @@
       "typeText": "Promise<void>",
       "compatibility": [
         {
-          "id": "round5.chart.updateChart.deprecated",
+          "id": "mog-api.chart.root.updateChart.deprecated",
           "observedPath": "ws.updateChart",
           "canonicalPath": "ws.charts.update",
           "status": "deprecated_alias",
@@ -25221,7 +25221,7 @@
       "typeText": "Promise<string>",
       "compatibility": [
         {
-          "id": "round55.worksheet.describeRange.no-arg",
+          "id": "mog-api.worksheet.describeRange.no-range",
           "observedPath": "ws.describeRange()",
           "canonicalPath": "ws.describeRange",
           "status": "contract_extension",
@@ -27376,7 +27376,7 @@
       "typeText": "Promise<Chart|null>",
       "compatibility": [
         {
-          "id": "round5.chart.getChart.deprecated",
+          "id": "mog-api.chart.root.getChart.deprecated",
           "observedPath": "ws.getChart",
           "canonicalPath": "ws.charts.get",
           "status": "deprecated_alias",
@@ -27402,7 +27402,7 @@
       "typeText": "Promise<Chart[]>",
       "compatibility": [
         {
-          "id": "round55.worksheet.getCharts.alias",
+          "id": "mog-api.worksheet.getCharts.alias",
           "observedPath": "ws.getCharts",
           "canonicalPath": "ws.charts.list",
           "status": "supported_alias",
@@ -27716,7 +27716,7 @@
       "typeText": "Promise<PivotTableHandle|null>",
       "compatibility": [
         {
-          "id": "round5.pivot.getPivotTable.deprecated",
+          "id": "mog-api.pivot.root.getPivotTable.deprecated",
           "observedPath": "ws.getPivotTable",
           "canonicalPath": "ws.pivots.get",
           "status": "deprecated_alias",
@@ -28860,7 +28860,7 @@
       "typeText": "Promise<Chart[]>",
       "compatibility": [
         {
-          "id": "round5.chart.listCharts.deprecated",
+          "id": "mog-api.chart.root.listCharts.deprecated",
           "observedPath": "ws.listCharts",
           "canonicalPath": "ws.charts.list",
           "status": "deprecated_alias",
@@ -28886,7 +28886,7 @@
       "typeText": "Promise<PivotTableInfo[]>",
       "compatibility": [
         {
-          "id": "round5.pivot.listPivotTables.deprecated",
+          "id": "mog-api.pivot.root.listPivotTables.deprecated",
           "observedPath": "ws.listPivotTables",
           "canonicalPath": "ws.pivots.list",
           "status": "deprecated_alias",
@@ -29884,7 +29884,7 @@
       "typeText": "Promise<PivotTableConfig>",
       "compatibility": [
         {
-          "id": "round5.pivot.addPivotTable.deprecated",
+          "id": "mog-api.pivot.root.addPivotTable.deprecated",
           "observedPath": "ws.addPivotTable",
           "canonicalPath": "ws.pivots.add",
           "status": "deprecated_alias",
@@ -30025,7 +30025,7 @@
       "typeText": "Promise<PivotTableHandle|null>",
       "compatibility": [
         {
-          "id": "round5.pivot.getPivotTable.deprecated",
+          "id": "mog-api.pivot.root.getPivotTable.deprecated",
           "observedPath": "ws.getPivotTable",
           "canonicalPath": "ws.pivots.get",
           "status": "deprecated_alias",
@@ -30432,7 +30432,7 @@
       "typeText": "Promise<PivotTableInfo[]>",
       "compatibility": [
         {
-          "id": "round5.pivot.listPivotTables.deprecated",
+          "id": "mog-api.pivot.root.listPivotTables.deprecated",
           "observedPath": "ws.listPivotTables",
           "canonicalPath": "ws.pivots.list",
           "status": "deprecated_alias",
@@ -30535,7 +30535,7 @@
       "typeText": "Promise<void>",
       "compatibility": [
         {
-          "id": "round5.pivot.removePivotTable.deprecated",
+          "id": "mog-api.pivot.root.removePivotTable.deprecated",
           "observedPath": "ws.removePivotTable",
           "canonicalPath": "ws.pivots.remove",
           "status": "deprecated_alias",
@@ -30790,7 +30790,7 @@
       "typeText": "Promise<void>",
       "compatibility": [
         {
-          "id": "round55.pivot.collection.setItemVisibility.alias",
+          "id": "mog-api.pivot.collection.setItemVisibility.alias",
           "observedPath": "ws.pivots.setItemVisibility",
           "canonicalPath": "ws.pivots.setPivotItemVisibility",
           "status": "supported_alias",
@@ -30836,7 +30836,7 @@
       "typeText": "Promise<void>",
       "compatibility": [
         {
-          "id": "round55.pivot.collection.setItemVisibility.alias",
+          "id": "mog-api.pivot.collection.setItemVisibility.alias",
           "observedPath": "ws.pivots.setItemVisibility",
           "canonicalPath": "ws.pivots.setPivotItemVisibility",
           "status": "supported_alias",
@@ -31850,7 +31850,7 @@
       "typeText": "Promise<void>",
       "compatibility": [
         {
-          "id": "round5.chart.removeChart.deprecated",
+          "id": "mog-api.chart.root.removeChart.deprecated",
           "observedPath": "ws.removeChart",
           "canonicalPath": "ws.charts.remove",
           "status": "deprecated_alias",
@@ -31876,7 +31876,7 @@
       "typeText": "Promise<void>",
       "compatibility": [
         {
-          "id": "round5.pivot.removePivotTable.deprecated",
+          "id": "mog-api.pivot.root.removePivotTable.deprecated",
           "observedPath": "ws.removePivotTable",
           "canonicalPath": "ws.pivots.remove",
           "status": "deprecated_alias",
@@ -34916,7 +34916,7 @@
       "typeText": "Promise<void>",
       "compatibility": [
         {
-          "id": "round5.chart.updateChart.deprecated",
+          "id": "mog-api.chart.root.updateChart.deprecated",
           "observedPath": "ws.updateChart",
           "canonicalPath": "ws.charts.update",
           "status": "deprecated_alias",

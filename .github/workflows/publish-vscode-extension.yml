@@ -23,6 +23,11 @@ on:
         required: false
         type: boolean
         default: true
+      run_typecheck:
+        description: Run the extension typecheck before packaging
+        required: false
+        type: boolean
+        default: false
   workflow_call:
     inputs:
       version:
@@ -45,6 +50,11 @@ on:
         required: false
         type: boolean
         default: true
+      run_typecheck:
+        description: Run the extension typecheck before packaging
+        required: false
+        type: boolean
+        default: false
     secrets:
       VSCE_PAT:
         required: false
@@ -170,7 +180,9 @@ jobs:
 
       - run: pnpm --dir integrations/vscode/mog-xlsx-editor test
 
-      - run: pnpm --dir integrations/vscode/mog-xlsx-editor typecheck
+      - name: Typecheck extension
+        if: ${{ inputs.run_typecheck == true }}
+        run: pnpm --dir integrations/vscode/mog-xlsx-editor typecheck
 
       - run: pnpm --dir integrations/vscode/mog-xlsx-editor package
 

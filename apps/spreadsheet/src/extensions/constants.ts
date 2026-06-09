@@ -28,9 +28,7 @@ export const CDN_ORIGIN = 'https://cdn.shortcut.io';
  * Development mode origins (localhost variations)
  */
 export const DEV_EXTENSION_ORIGINS = [
-  'http://localhost:3001',
   'http://localhost:3002',
-  'http://127.0.0.1:3001',
   'http://127.0.0.1:3002',
   // Add-in dev servers (HTTPS)
   'https://localhost:4000',

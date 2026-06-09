@@ -4,6 +4,7 @@
   "private": true,
   "description": "Spreadsheet engine workspace",
   "scripts": {
+    "dev": "pnpm --filter @mog/spreadsheet-dev dev",
     "typecheck": "pnpm typecheck:prepare && tsc -b",
     "typecheck:prepare": "node infra/icons/scripts/ensure-generated.mjs && pnpm --filter @mog-sdk/contracts build && pnpm --filter @mog-sdk/kernel build",
     "test": "pnpm -r --if-present --filter './apps/spreadsheet' --filter './canvas/drawing-canvas' --filter './canvas/drawing/engine' --filter './canvas/drawing/geometry' --filter './canvas/drawing/ink' --filter './canvas/drawing/shapes' --filter './canvas/drawing/diagram' --filter './canvas/drawing/text-effects' --filter './canvas/engine' --filter './canvas/grid-canvas' --filter './canvas/grid-renderer' --filter './canvas/overlay' --filter './charts' --filter './contracts' --filter './kernel' --filter './shell' --filter './table-engine' --filter './typeset/math-engine' run test",

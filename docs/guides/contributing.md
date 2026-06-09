@@ -53,10 +53,16 @@ product surface. `pnpm-workspace.yaml`, the root `Cargo.toml`,
 
 ### Running the App Locally
 
-There is no single root `dev` script. Use the package-level script for the app
-or surface you are changing, then widen to repo-level checks before opening a
-pull request. For example, `@mog-sdk/embed` has a Vite dev script and the
-first-party spreadsheet app has its own package-level dev script.
+The first-party spreadsheet dev app lives in `dev/app` and can be started from
+the repo root:
+
+```bash
+pnpm dev
+```
+
+It serves `http://localhost:3002`. For other package-specific surfaces, use the
+package-level dev script for the surface you are changing, then widen to
+repo-level checks before opening a pull request.
 
 ### Running Tests
 

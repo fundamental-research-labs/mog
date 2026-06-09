@@ -1,4 +1,5 @@
 use super::super::YrsComputeEngine;
+use super::super::construction;
 use super::super::services;
 use crate::snapshot::{FloatingObjectChange, MutationResult, RecalcResult};
 use cell_types::SheetId;
@@ -12,6 +13,8 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         change: &StructureChange,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+        self.complete_deferred_hydration_for_structure_change()?;
+
         // Pass 1: Suppress observer, apply structural ops + merge rebuild + formula recalc.
         //
         // Wrap the entire operation in an undo group so the separate Yrs
@@ -41,6 +44,21 @@ impl YrsComputeEngine {
         self.security.bump_structure_version();
 
         self.finish_structure_change(sheet_id, recalc, Some(change))
+    }
+
+    fn complete_deferred_hydration_for_structure_change(&mut self) -> Result<(), ComputeError> {
+        let Some(mut completion) = construction::stage_deferred_hydration(self)? else {
+            return Ok(());
+        };
+
+        if completion.calculation.full_calc_on_load || completion.calculation.force_full_calc {
+            Self::materialize_all_pivots_for_import_open(
+                &mut completion.stores,
+                &mut completion.mirror,
+            );
+        }
+        construction::commit_deferred_hydration(self, completion);
+        Ok(())
     }
 
     pub(super) fn finish_structure_change(

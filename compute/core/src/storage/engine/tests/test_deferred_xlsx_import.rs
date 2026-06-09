@@ -10,4 +10,5 @@ mod identity_allocation;
 mod partial_export;
 mod provider_replay;
 mod range_streaming;
+mod structural_shared_formulas;
 mod support;

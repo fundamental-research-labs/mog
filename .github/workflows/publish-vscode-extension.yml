@@ -229,9 +229,9 @@ jobs:
             echo "::error::Repository secret OVSX_PAT is not configured."
             exit 1
           fi
-          npx --yes ovsx@1.0.0 --pat "$OVSX_PAT" create-namespace mog || \
-            echo "Open VSX namespace mog may already exist; verifying token access next."
-          npx --yes ovsx@1.0.0 --pat "$OVSX_PAT" verify-pat mog
+          npx --yes ovsx@1.0.0 --pat "$OVSX_PAT" create-namespace FundamentalResearchLabs || \
+            echo "Open VSX namespace FundamentalResearchLabs may already exist; verifying token access next."
+          npx --yes ovsx@1.0.0 --pat "$OVSX_PAT" verify-pat FundamentalResearchLabs
 
       - name: Publish to Open VSX
         if: ${{ inputs.dry-run == false && inputs.publish_open_vsx != false }}

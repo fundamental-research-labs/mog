@@ -80,6 +80,7 @@ export {
   transposeData,
   type PasteStoreOperations,
 } from './paste-executor';
+export { executePasteIntoTargetRange } from './paste-target-range';
 
 // Paste Preview Calculator
 export {

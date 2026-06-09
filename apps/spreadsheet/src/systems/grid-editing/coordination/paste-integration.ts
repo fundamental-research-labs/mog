@@ -16,9 +16,11 @@ import { sheetId as toSheetId, type CellRange, type SheetId } from '@mog-sdk/con
 
 import {
   createDefaultPasteOptions,
-  executePaste,
+  executePasteIntoTargetRange,
   getClipboardDimensions,
+  isFullShapeRange,
   isMatchingFullShapePaste,
+  normalizeRange,
   type PasteStoreOperations,
 } from '../../../domain/clipboard';
 import type { clipboardMachine } from '../machines/clipboard-machine';
@@ -137,16 +139,8 @@ export interface ClipboardPasteIntegrationConfig {
     pendingData: PendingPasteData,
   ) => void;
   /**
-   * Callback to show the cut-paste overwrite confirmation dialog.
-   *
-   * Excel/Sheets parity: when a CUT-paste's destination contains existing
-   * non-empty cells, prompt the user before overwriting. The integration
-   * detects the overwrite condition (cut + non-empty destination) and calls
-   * this callback BEFORE any writes. The host stores `pendingData` so the
-   * Confirm path can retry the paste with `skipOverwriteCheck=true`.
-   *
-   * Plain copy-paste does NOT call this callback (Excel parity — copy-paste
-   * always overwrites silently).
+   * Deprecated host callback retained for older dialog wiring.
+   * Normal paste integration commits cut-paste overwrites directly.
    */
   onCutOverwriteConfirm?: (pendingData: {
     targetCell: { row: number; col: number };
@@ -208,6 +202,31 @@ export interface ClipboardPasteIntegrationConfig {
   getHiddenRows?: (sheetId: SheetId) => Promise<Set<number>>;
 }
 
+function getRangeSize(range: CellRange): PasteSize {
+  const normalized = normalizeRange(range);
+  return {
+    rows: normalized.endRow - normalized.startRow + 1,
+    cols: normalized.endCol - normalized.startCol + 1,
+  };
+}
+
+function createSourceFootprintRange(
+  targetCell: { row: number; col: number },
+  sourceSize: PasteSize,
+): CellRange {
+  return {
+    startRow: targetCell.row,
+    startCol: targetCell.col,
+    endRow: targetCell.row + sourceSize.rows - 1,
+    endCol: targetCell.col + sourceSize.cols - 1,
+  };
+}
+
+function selectionCanReceiveWholeTiles(sourceSize: PasteSize, targetSize: PasteSize): boolean {
+  if (sourceSize.rows <= 0 || sourceSize.cols <= 0) return false;
+  return targetSize.rows % sourceSize.rows === 0 && targetSize.cols % sourceSize.cols === 0;
+}
+
 // =============================================================================
 // PASTE INTEGRATION IMPLEMENTATION
 // =============================================================================
@@ -226,7 +245,7 @@ export interface ClipboardPasteIntegrationConfig {
  * - pastePreviewTarget: target cell
  * - pasteOptions: PasteSpecialOptions (if PASTE_SPECIAL)
  * 3. This integration detects 'pasting' state
- * 4. Calls executePaste() with the context data
+ * 4. Executes the paste with the context data
  * 5. Sends PASTE_COMPLETE or PASTE_ERROR to complete the flow
  *
  */
@@ -242,7 +261,6 @@ export function setupClipboardPasteIntegration(
     updateSelectionAfterPaste,
     onCutPasteComplete,
     onSizeMismatch,
-    onCutOverwriteConfirm,
     checkProtection,
     getProtectionInfo,
     onProtectionError,
@@ -261,10 +279,9 @@ export function setupClipboardPasteIntegration(
     const isPasting = state.matches('pasting');
 
     // Record the current snapshot before running side effects. `handlePaste`
-    // may synchronously send machine events (for example PASTE_ERROR for an
-    // overwrite confirmation), and nested subscriptions must be allowed to
-    // advance this value instead of being overwritten by a stale `pasting`
-    // snapshot after the side effect returns.
+    // may synchronously send machine events, and nested subscriptions must be
+    // allowed to advance this value instead of being overwritten by a stale
+    // `pasting` snapshot after the side effect returns.
     previousState = state;
 
     if (!wasPasting && isPasting) {
@@ -278,11 +295,11 @@ export function setupClipboardPasteIntegration(
     const {
       data,
       pastePreviewTarget,
+      pasteTargetRange,
       pasteOptions,
       isCut,
       sourceRanges,
       skipSizeCheck,
-      skipOverwriteCheck,
     } = state.context;
 
     // Must have clipboard data and a target cell
@@ -300,33 +317,45 @@ export function setupClipboardPasteIntegration(
       return;
     }
 
-    // Size mismatch check
-    // Check if clipboard data size matches target selection size
-    // Skip check if user already confirmed via dialog (skipSizeCheck=true)
-    // Also skip for single-cell selections (paste will expand naturally)
-    if (!skipSizeCheck && getSelectionRange && onSizeMismatch) {
-      const selectionRange = getSelectionRange();
+    const clipboardSize = getClipboardDimensions(data);
+    const capturedTargetRange = pasteTargetRange ? normalizeRange(pasteTargetRange) : null;
+    let targetRange = capturedTargetRange ?? createSourceFootprintRange(pastePreviewTarget, clipboardSize);
+
+    // Size mismatch check and target-range planning.
+    // Multi-cell selections that can be filled by whole source tiles are carried
+    // forward into paste execution. Other mismatches keep the existing dialog path.
+    {
+      const selectionRange = capturedTargetRange ?? getSelectionRange?.();
       if (selectionRange) {
-        const sourceSize = getClipboardDimensions(data);
-        const targetRows = selectionRange.endRow - selectionRange.startRow + 1;
-        const targetCols = selectionRange.endCol - selectionRange.startCol + 1;
-        const targetSize = { rows: targetRows, cols: targetCols };
+        const normalizedSelection = normalizeRange(selectionRange);
+        const targetSize = getRangeSize(normalizedSelection);
 
         // Only check mismatch for multi-cell selections
-        const isMultiCellSelection = targetRows > 1 || targetCols > 1;
+        const isMultiCellSelection = targetSize.rows > 1 || targetSize.cols > 1;
         const sizesMatch =
-          sourceSize.rows === targetSize.rows && sourceSize.cols === targetSize.cols;
-        const fullShapeIntentMatches = isMatchingFullShapePaste(data.sourceRanges, selectionRange);
+          clipboardSize.rows === targetSize.rows && clipboardSize.cols === targetSize.cols;
+        const fullShapeIntentMatches = isMatchingFullShapePaste(
+          data.sourceRanges,
+          normalizedSelection,
+        );
+        const finiteRectangularSelection = !isFullShapeRange(normalizedSelection);
+        const canFillSelectionWithTiles =
+          finiteRectangularSelection && selectionCanReceiveWholeTiles(clipboardSize, targetSize);
+
+        if (!isCut && isMultiCellSelection && canFillSelectionWithTiles) {
+          targetRange = normalizedSelection;
+        }
 
         // Handle special cases that don't need warnings
         // 1. Single cell source - can fill any selection (tiling)
-        const isSingleCellSource = sourceSize.rows === 1 && sourceSize.cols === 1;
+        const isSingleCellSource = clipboardSize.rows === 1 && clipboardSize.cols === 1;
         // 2. Exact multiple - target is exact multiple of source (tiling)
-        const isExactMultiple =
-          targetRows % sourceSize.rows === 0 && targetCols % sourceSize.cols === 0;
+        const isExactMultiple = selectionCanReceiveWholeTiles(clipboardSize, targetSize);
 
         // Show warning only for true mismatches (not exact multiples or single-cell sources)
         const needsWarning =
+          !skipSizeCheck &&
+          !!onSizeMismatch &&
           isMultiCellSelection &&
           !sizesMatch &&
           !fullShapeIntentMatches &&
@@ -338,26 +367,16 @@ export function setupClipboardPasteIntegration(
           clipboardActor.send({ type: 'PASTE_ERROR', message: 'Size mismatch' });
 
           // Trigger dialog
-          onSizeMismatch(sourceSize, targetSize, {
+          onSizeMismatch(clipboardSize, targetSize, {
             targetCell: pastePreviewTarget,
             sheetId,
-            targetRange: selectionRange,
+            targetRange: normalizedSelection,
           });
 
           return;
         }
       }
     }
-
-    // Protection check with partial protection support
-    // Calculate target range from clipboard dimensions (needed for both protection checks)
-    const clipboardSize = getClipboardDimensions(data);
-    const targetRange: CellRange = {
-      startRow: pastePreviewTarget.row,
-      startCol: pastePreviewTarget.col,
-      endRow: pastePreviewTarget.row + clipboardSize.rows - 1,
-      endCol: pastePreviewTarget.col + clipboardSize.cols - 1,
-    };
 
     // Track protected cells for partial paste
     let protectedCellsSet: Set<string> | undefined;
@@ -420,54 +439,6 @@ export function setupClipboardPasteIntegration(
           message,
         });
         onMergeOverlapWarning?.(message);
-        return;
-      }
-    }
-
-    // Cut-paste overwrite confirmation (Excel/Sheets parity).
-    //
-    // When a CUT-paste's destination contains existing non-empty cells, prompt
-    // the user before overwriting. We defer mutations entirely: send PASTE_ERROR
-    // (which keeps the cut state alive in `hasCut`) and surface the dialog. The
-    // host stores the pending data; on Confirm it re-fires PASTE with
-    // skipOverwriteCheck=true; on Cancel it clears the clipboard.
-    //
-    // Plain copy-paste does NOT trigger this dialog (Excel parity — copy-paste
-    // overwrites silently). Skip when the user has already confirmed.
-    if (isCut && !skipOverwriteCheck && onCutOverwriteConfirm) {
-      let destNonEmpty = false;
-      outer: for (let r = targetRange.startRow; r <= targetRange.endRow; r++) {
-        for (let c = targetRange.startCol; c <= targetRange.endCol; c++) {
-          const existing = store.getCellData(sheetId, r, c);
-          if (existing) {
-            const raw = existing.raw;
-            const computed = existing.computed;
-            const formula = existing.formula;
-            const hasValue =
-              (raw !== undefined && raw !== null && raw !== '') ||
-              (computed !== undefined && computed !== null && computed !== '') ||
-              (formula !== undefined && formula !== null && formula !== '');
-            if (hasValue) {
-              destNonEmpty = true;
-              break outer;
-            }
-          }
-        }
-      }
-
-      if (destNonEmpty) {
-        // Defer mutations and surface the confirmation dialog. PASTE_ERROR while
-        // isCut transitions back to `hasCut`, preserving marching-ants and
-        // clipboard data so the user can re-trigger the paste.
-        clipboardActor.send({
-          type: 'PASTE_ERROR',
-          message: 'Awaiting overwrite confirmation',
-        });
-        onCutOverwriteConfirm({
-          targetCell: pastePreviewTarget,
-          sheetId,
-          pasteOptions,
-        });
         return;
       }
     }
@@ -583,9 +554,10 @@ export function setupClipboardPasteIntegration(
       } else {
         // Copy-paste (or cut-paste fallback): Use executePaste to create new CellIds
         // Include skipCells for partial protection handling
-        const pasteOptions = protectedCellsSet
-          ? { ...options, skipCells: protectedCellsSet }
-          : options;
+        const executionOptions = {
+          ...options,
+          ...(protectedCellsSet ? { skipCells: protectedCellsSet } : {}),
+        };
 
         // Pre-fetch hidden-rows bitmap so paste skips filtered rows
         // (Excel parity). getHiddenRows is async; augment the store with a
@@ -598,12 +570,13 @@ export function setupClipboardPasteIntegration(
           }
         }
 
-        const result = await executePaste(
+        const result = await executePasteIntoTargetRange(
           data,
           pastePreviewTarget,
           sheetId,
-          pasteOptions,
+          executionOptions,
           effectiveStore,
+          targetRange,
         );
 
         if (result.success) {

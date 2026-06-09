@@ -201,6 +201,8 @@ export interface ExternalPastePayload {
   text: string;
   /** Target cell for paste */
   targetCell: CellCoord;
+  /** Optional selected target range at paste time. */
+  targetRange?: CellRange | null;
   /** Optional HTML from clipboard */
   html?: string;
   /** Optional explicit/defaulted paste options */
@@ -240,6 +242,8 @@ export interface ClipboardState {
     isCut: boolean;
     /** Target cell for paste preview */
     pastePreviewTarget: CellCoord | null;
+    /** Selected target range captured when paste was requested */
+    pasteTargetRange?: CellRange | null;
     /** Current phase for marching ants animation (0-7) */
     marchingAntsPhase: number;
     /** Error message from failed paste */

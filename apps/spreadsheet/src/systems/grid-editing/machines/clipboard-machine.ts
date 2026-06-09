@@ -76,6 +76,8 @@ export interface ClipboardContext {
   isCut: boolean;
   /** Target cell for paste preview */
   pastePreviewTarget: CellCoord | null;
+  /** Selected target range captured when paste was requested */
+  pasteTargetRange: CellRange | null;
   /** Current phase for marching ants animation (0-7) */
   marchingAntsPhase: number;
   /** Error message from failed paste */
@@ -129,6 +131,7 @@ const initialContext: ClipboardContext = {
   viewData: null,
   isCut: false,
   pastePreviewTarget: null,
+  pasteTargetRange: null,
   marchingAntsPhase: 0,
   errorMessage: null,
   pasteOptions: null,
@@ -148,13 +151,20 @@ export type ClipboardEvent =
   | { type: 'CUT'; ranges: CellRange[]; data: ClipboardData; viewData?: ViewClipboardData }
   | { type: 'COPY_VIEW'; viewData: ViewClipboardData }
   | { type: 'CUT_VIEW'; viewData: ViewClipboardData }
-  | { type: 'PASTE'; targetCell: CellCoord; skipSizeCheck?: boolean; skipOverwriteCheck?: boolean }
+  | {
+      type: 'PASTE';
+      targetCell: CellCoord;
+      skipSizeCheck?: boolean;
+      skipOverwriteCheck?: boolean;
+      targetRange?: CellRange | null;
+    }
   | {
       type: 'PASTE_SPECIAL';
       targetCell: CellCoord;
       options: PasteSpecialOptions;
       skipSizeCheck?: boolean;
       skipOverwriteCheck?: boolean;
+      targetRange?: CellRange | null;
     }
   | { type: 'SHOW_PASTE_PREVIEW'; targetCell: CellCoord }
   | { type: 'HIDE_PASTE_PREVIEW' }
@@ -225,11 +235,13 @@ export const ClipboardEvents = {
     targetCell: CellCoord,
     skipSizeCheck?: boolean,
     skipOverwriteCheck?: boolean,
+    targetRange?: CellRange | null,
   ): ClipboardEvent => ({
     type: 'PASTE',
     targetCell,
     skipSizeCheck,
     skipOverwriteCheck,
+    targetRange,
   }),
 
   pasteSpecial: (
@@ -237,12 +249,14 @@ export const ClipboardEvents = {
     options: PasteSpecialOptions,
     skipSizeCheck?: boolean,
     skipOverwriteCheck?: boolean,
+    targetRange?: CellRange | null,
   ): ClipboardEvent => ({
     type: 'PASTE_SPECIAL',
     targetCell,
     options,
     skipSizeCheck,
     skipOverwriteCheck,
+    targetRange,
   }),
 
   showPastePreview: (targetCell: CellCoord): ClipboardEvent => ({
@@ -671,6 +685,10 @@ export const clipboardMachine = setup({
       }
       return {
         pastePreviewTarget: event.targetCell,
+        pasteTargetRange:
+          event.type === 'PASTE' || event.type === 'PASTE_SPECIAL'
+            ? (event.targetRange ?? null)
+            : null,
         // Capture retry flags from paste events.
         skipSizeCheck:
           event.type === 'PASTE' || event.type === 'PASTE_SPECIAL'
@@ -688,6 +706,7 @@ export const clipboardMachine = setup({
     // Clear paste preview
     clearPastePreview: assign(() => ({
       pastePreviewTarget: null,
+      pasteTargetRange: null,
     })),
 
     // Set paste options for paste special
@@ -716,6 +735,7 @@ export const clipboardMachine = setup({
         viewData: null,
         isCut: false,
         pastePreviewTarget: null,
+        pasteTargetRange: null,
         marchingAntsPhase: 0,
         suppressedTextSignature,
       };
@@ -743,6 +763,7 @@ export const clipboardMachine = setup({
         viewData: null,
         isCut: false,
         pastePreviewTarget: null,
+        pasteTargetRange: null,
         marchingAntsPhase: 0,
         errorMessage: null,
         pasteOptions: null,
@@ -802,6 +823,7 @@ export const clipboardMachine = setup({
         sourceRanges,
         isCut: false,
         pastePreviewTarget: event.targetCell,
+        pasteTargetRange: event.targetRange ?? null,
         pasteOptions: event.options ?? null,
         suppressedTextSignature: null,
       };

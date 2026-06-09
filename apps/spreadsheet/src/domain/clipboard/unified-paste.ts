@@ -53,6 +53,12 @@ export interface UnifiedPasteDeps {
   /** Commands for sending events to clipboard machine */
   commands: ClipboardCommands;
   /**
+   * Read the selected target range at paste invocation time. This is captured
+   * before async clipboard reads so exact-multiple selections cannot collapse
+   * to the active-cell footprint while paste is in flight.
+   */
+  getTargetRange?: () => CellRange | null;
+  /**
    * Insert an image blob as a floating picture anchored at the given cell.
    * Optional — only the regular-paste paths (PASTE handler, pasteToSelection
    * hook) wire this. Paste-special variants (values/formulas/formats/transpose
@@ -149,6 +155,7 @@ export async function unifiedPaste(
   deps: UnifiedPasteDeps,
   options?: PasteSpecialOptions,
 ): Promise<void> {
+  const targetRange = deps.getTargetRange?.() ?? null;
   const initialClipboardState = deps.getClipboardSnapshot();
   const initialClipboardData = clipboardSelectors.data(initialClipboardState);
   let pendingPreviewShown = false;
@@ -278,12 +285,13 @@ export async function unifiedPaste(
           deps.commands.externalPaste({
             text: clipboardData.textSignature ?? systemText,
             targetCell: activeCell,
+            targetRange,
             options: resolvedOptions,
           }),
         deps,
       );
     } else if (options) {
-      await routePasteCommand(() => deps.commands.pasteSpecial(activeCell, options), deps);
+      await routePasteCommand(() => deps.commands.pasteSpecial(activeCell, options, undefined, undefined, targetRange), deps);
     } else if (isCut) {
       resolveDefaultPasteOptions(
         (deps.readPasteDefaultsPreference ?? readPasteDefaultsPreference)(),
@@ -292,7 +300,7 @@ export async function unifiedPaste(
           hasInternalRichData: true,
         },
       );
-      await routePasteCommand(() => deps.commands.paste(activeCell), deps);
+      await routePasteCommand(() => deps.commands.paste(activeCell, undefined, undefined, targetRange), deps);
     } else {
       const resolvedOptions = resolveNormalPasteOptions(deps, {
         sourceKind: 'internal-copy',
@@ -301,10 +309,21 @@ export async function unifiedPaste(
       if (resolvedOptions) {
         await routePasteCommand(
           () => deps.commands.pasteSpecial(activeCell, resolvedOptions),
+          () =>
+            deps.commands.pasteSpecial(
+              activeCell,
+              resolvedOptions,
+              undefined,
+              undefined,
+              targetRange,
+            ),
           deps,
         );
       } else {
-        await routePasteCommand(() => deps.commands.paste(activeCell), deps);
+        await routePasteCommand(
+          () => deps.commands.paste(activeCell, undefined, undefined, targetRange),
+          deps,
+        );
       }
     }
     return;
@@ -332,6 +351,7 @@ export async function unifiedPaste(
         deps.commands.externalPaste({
           text: systemText,
           targetCell: activeCell,
+          targetRange,
           html: systemHTML,
           options: resolvedOptions,
         }),
@@ -365,7 +385,10 @@ export async function unifiedPaste(
         deps,
       );
     } else if (options) {
-      await routePasteCommand(() => deps.commands.pasteSpecial(activeCell, options), deps);
+      await routePasteCommand(
+        () => deps.commands.pasteSpecial(activeCell, options, undefined, undefined, targetRange),
+        deps,
+      );
     } else if (isCut) {
       resolveDefaultPasteOptions(
         (deps.readPasteDefaultsPreference ?? readPasteDefaultsPreference)(),
@@ -374,7 +397,10 @@ export async function unifiedPaste(
           hasInternalRichData: true,
         },
       );
-      await routePasteCommand(() => deps.commands.paste(activeCell), deps);
+      await routePasteCommand(
+        () => deps.commands.paste(activeCell, undefined, undefined, targetRange),
+        deps,
+      );
     } else {
       const resolvedOptions = resolveNormalPasteOptions(deps, {
         sourceKind: 'internal-copy',
@@ -383,10 +409,21 @@ export async function unifiedPaste(
       if (resolvedOptions) {
         await routePasteCommand(
           () => deps.commands.pasteSpecial(activeCell, resolvedOptions),
+          () =>
+            deps.commands.pasteSpecial(
+              activeCell,
+              resolvedOptions,
+              undefined,
+              undefined,
+              targetRange,
+            ),
           deps,
         );
       } else {
-        await routePasteCommand(() => deps.commands.paste(activeCell), deps);
+        await routePasteCommand(
+          () => deps.commands.paste(activeCell, undefined, undefined, targetRange),
+          deps,
+        );
       }
     }
   }

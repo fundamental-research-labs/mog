@@ -743,12 +743,8 @@ export interface ClipboardDependencies {
   /** Callback to show protection error dialog */
   onProtectionError?: (message: string) => void;
   /**
-   * Callback to show the cut-paste overwrite confirmation dialog.
-   *
-   * Invoked when a CUT-paste's destination contains existing non-empty cells,
-   * so the user can confirm/cancel the overwrite before any writes happen.
-   * The host stores `pendingData` so the Confirm path can re-trigger the
-   * paste with `skipOverwriteCheck=true`.
+   * Deprecated callback retained for older overwrite-confirm dialog wiring.
+   * Normal cut-paste commits overwrites directly.
    */
   onCutOverwriteConfirm?: (pendingData: {
     targetCell: { row: number; col: number };

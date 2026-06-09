@@ -48,14 +48,19 @@ export function createClipboardCommands(actor: MinimalActor): ClipboardCommands 
 
     cut: (ranges: CellRange[], data: ClipboardData) => actor.send({ type: 'CUT', ranges, data }),
 
-    paste: (targetCell: CellCoord, skipSizeCheck?: boolean, skipOverwriteCheck?: boolean) =>
-      actor.send({ type: 'PASTE', targetCell, skipSizeCheck, skipOverwriteCheck }),
+    paste: (
+      targetCell: CellCoord,
+      skipSizeCheck?: boolean,
+      skipOverwriteCheck?: boolean,
+      targetRange?: CellRange | null,
+    ) => actor.send({ type: 'PASTE', targetCell, skipSizeCheck, skipOverwriteCheck, targetRange }),
 
     pasteSpecial: (
       targetCell: CellCoord,
       options: PasteSpecialOptions,
       skipSizeCheck?: boolean,
       skipOverwriteCheck?: boolean,
+      targetRange?: CellRange | null,
     ) =>
       actor.send({
         type: 'PASTE_SPECIAL',
@@ -63,6 +68,7 @@ export function createClipboardCommands(actor: MinimalActor): ClipboardCommands 
         options,
         skipSizeCheck,
         skipOverwriteCheck,
+        targetRange,
       }),
 
     // -------------------------------------------------------------------------

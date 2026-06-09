@@ -998,8 +998,14 @@ export interface ClipboardCommands {
    * @param skipSizeCheck - Whether to skip size mismatch warning
    * @param skipOverwriteCheck - Whether to skip cut-paste overwrite confirmation
    *   (set after the user has explicitly confirmed the overwrite)
+   * @param targetRange - Optional selected target range captured at paste time
    */
-  paste(targetCell: CellCoord, skipSizeCheck?: boolean, skipOverwriteCheck?: boolean): void;
+  paste(
+    targetCell: CellCoord,
+    skipSizeCheck?: boolean,
+    skipOverwriteCheck?: boolean,
+    targetRange?: CellRange | null,
+  ): void;
 
   /**
    * Paste with special options to a specific target cell.
@@ -1009,12 +1015,14 @@ export interface ClipboardCommands {
    * @param skipSizeCheck - Whether to skip size mismatch warning
    * @param skipOverwriteCheck - Whether to skip cut-paste overwrite confirmation
    *   (set after the user has explicitly confirmed the overwrite)
+   * @param targetRange - Optional selected target range captured at paste time
    */
   pasteSpecial(
     targetCell: CellCoord,
     options: PasteSpecialOptions,
     skipSizeCheck?: boolean,
     skipOverwriteCheck?: boolean,
+    targetRange?: CellRange | null,
   ): void;
 
   // -------------------------------------------------------------------------

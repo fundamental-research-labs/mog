@@ -2,6 +2,8 @@ use std::collections::HashSet;
 
 use cell_types::{CellId, SheetId};
 use compute_document::hex::id_to_hex;
+use compute_document::identity::GridIndex;
+use domain_types::units::Points;
 use formula_types::StructureChange;
 use value_types::ComputeError;
 
@@ -21,6 +23,10 @@ use super::range_virtual_cells::{
     collect_virtual_cell_ids_for_deleted_cols, collect_virtual_cell_ids_for_deleted_rows,
     purge_virtual_cell_ids_from_yrs,
 };
+
+struct StructureChangePreflight {
+    inherited_insert_row_height: Option<Points>,
+}
 
 // -------------------------------------------------------------------
 // Structure Change (insert/delete rows/cols)
@@ -42,47 +48,16 @@ pub(in crate::storage::engine) fn apply_structure_change(
     sheet_id: &SheetId,
     change: &StructureChange,
 ) -> Result<RecalcResult, ComputeError> {
-    let grid = stores
-        .grid_indexes
-        .get(sheet_id)
-        .ok_or_else(|| ComputeError::SheetNotFound {
-            sheet_id: sheet_id.to_uuid_string(),
-        })?;
-
-    match change {
-        StructureChange::DeleteRows { at, count, .. } => {
-            validation::structure::validate_delete_bounds(*at, *count, grid.row_count())?;
-        }
-        StructureChange::DeleteCols { at, count, .. } => {
-            validation::structure::validate_delete_bounds(*at, *count, grid.col_count())?;
-        }
-        _ => {}
-    }
-
-    // Deferred import/minimal init keeps formula text but postpones AST and
-    // identity formula construction until the first mutation. Structural
-    // changes must force that construction before positions are shifted or
-    // deleted, otherwise references into the deleted band are reparsed against
-    // the post-delete sheet and can silently bind to the shifted survivor.
-    stores.compute.ensure_graph_built(mirror)?;
-
-    let grid = stores
-        .grid_indexes
-        .get_mut(sheet_id)
-        .expect("sheet grid checked before deferred graph build");
-
+    let preflight = preflight_structure_change(stores, mirror, sheet_id, change)?;
     let doc = stores.storage.doc();
     let sheets_map = doc.get_or_insert_map("sheets");
-    let inherited_insert_row_height = match change {
-        StructureChange::InsertRows { at, .. } => dimensions::get_row_height_explicit(
-            stores.storage.doc(),
-            stores.storage.sheets(),
-            sheet_id,
-            *at,
-            Some(grid),
-        ),
-        _ => None,
-    };
+    let grid =
+        stores
+            .grid_indexes
+            .get_mut(sheet_id)
+            .ok_or_else(|| ComputeError::SheetNotFound {
+                sheet_id: sheet_id.to_uuid_string(),
+            })?;
 
     // Pre-delete re-anchor pass: shrink any IdentityRangeRef whose endpoint
     // sits inside the doomed row/col band to the nearest surviving cell so
@@ -118,16 +93,9 @@ pub(in crate::storage::engine) fn apply_structure_change(
     match change {
         StructureChange::InsertRows { at, count, .. } => {
             StructuralOps::insert_rows(doc, &sheets_map, grid, mirror, sheet_id, *at, *count)?;
-            if let Some(height) = inherited_insert_row_height {
+            if let Some(height) = preflight.inherited_insert_row_height {
                 for row in *at..(*at + *count) {
-                    dimensions::set_row_height(
-                        stores.storage.doc(),
-                        stores.storage.sheets(),
-                        sheet_id,
-                        row,
-                        height,
-                        Some(grid),
-                    )?;
+                    dimensions::set_row_height(doc, &sheets_map, sheet_id, row, height, Some(grid))?;
                 }
             }
         }
@@ -214,6 +182,61 @@ pub(in crate::storage::engine) fn apply_structure_change(
     regenerate_named_range_yrs_refs(stores, mirror);
 
     Ok(result)
+}
+
+fn preflight_structure_change(
+    stores: &mut EngineStores,
+    mirror: &mut CellMirror,
+    sheet_id: &SheetId,
+    change: &StructureChange,
+) -> Result<StructureChangePreflight, ComputeError> {
+    let inherited_insert_row_height = {
+        let grid = grid_index(stores, sheet_id)?;
+
+        match change {
+            StructureChange::DeleteRows { at, count, .. } => {
+                validation::structure::validate_delete_bounds(*at, *count, grid.row_count())?;
+            }
+            StructureChange::DeleteCols { at, count, .. } => {
+                validation::structure::validate_delete_bounds(*at, *count, grid.col_count())?;
+            }
+            _ => {}
+        }
+
+        match change {
+            StructureChange::InsertRows { at, .. } => dimensions::get_row_height_explicit(
+                stores.storage.doc(),
+                stores.storage.sheets(),
+                sheet_id,
+                *at,
+                Some(grid),
+            ),
+            _ => None,
+        }
+    };
+
+    // Deferred import/minimal init keeps formula text but postpones AST and
+    // identity formula construction until the first mutation. Structural
+    // changes must force that construction before positions are shifted or
+    // deleted, otherwise references into the deleted band are reparsed against
+    // the post-delete sheet and can silently bind to the shifted survivor.
+    stores.compute.ensure_graph_built(mirror)?;
+
+    Ok(StructureChangePreflight {
+        inherited_insert_row_height,
+    })
+}
+
+fn grid_index<'a>(
+    stores: &'a EngineStores,
+    sheet_id: &SheetId,
+) -> Result<&'a GridIndex, ComputeError> {
+    stores
+        .grid_indexes
+        .get(sheet_id)
+        .ok_or_else(|| ComputeError::SheetNotFound {
+            sheet_id: sheet_id.to_uuid_string(),
+        })
 }
 
 /// Merge structural viewport patches into a recalc result, deduplicating

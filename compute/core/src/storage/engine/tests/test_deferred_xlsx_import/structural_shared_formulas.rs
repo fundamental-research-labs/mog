@@ -24,10 +24,7 @@ fn cell_ref(row: u32, col: u32) -> String {
 }
 
 fn value_cell(row: u32, col: u32, value: f64) -> String {
-    format!(
-        r#"<c r="{}"><v>{value}</v></c>"#,
-        cell_ref(row, col)
-    )
+    format!(r#"<c r="{}"><v>{value}</v></c>"#, cell_ref(row, col))
 }
 
 fn shared_master(row: u32, col: u32, end_col: u32, si: u32, formula: String, value: f64) -> String {

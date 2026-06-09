@@ -26,9 +26,11 @@ const VALID_DISPOSITIONS = new Set([
   'private',
   'dev-eval',
   'generated-asset',
+  'marketplace-extension',
   'reserved',
   'monorepo-root',
 ]);
+const NPM_PUBLISHABLE_DISPOSITIONS = new Set(['ship-public', 'binary-wrapper']);
 const VALID_EXPORT_DISPOSITIONS = new Set([
   'public-experimental',
   'workspace-private-friend',
@@ -249,7 +251,7 @@ function validateExportDisposition(name, manifest, entry, inventory, errors) {
     }
   }
 
-  if (['ship-public', 'binary-wrapper'].includes(entry.disposition)) {
+  if (NPM_PUBLISHABLE_DISPOSITIONS.has(entry.disposition)) {
     for (const [subpath, target] of exportMapEntries(manifest)) {
       const disposition = exportDispositions[subpath];
       if (subpath === '.') {
@@ -357,7 +359,7 @@ for (const pkg of workspacePackages) {
 
   // 1b. Publishable public artifacts must not remain private/source-only.
   if (
-    ['ship-public', 'binary-wrapper'].includes(entry.disposition) &&
+    NPM_PUBLISHABLE_DISPOSITIONS.has(entry.disposition) &&
     entry.publicTarget &&
     manifest.private === true
   ) {
@@ -368,7 +370,7 @@ for (const pkg of workspacePackages) {
   }
 
   // 2. Namespace policy: ship-public publicTarget must be in @mog-sdk/*
-  if (['ship-public', 'binary-wrapper'].includes(entry.disposition) && entry.publicTarget) {
+  if (NPM_PUBLISHABLE_DISPOSITIONS.has(entry.disposition) && entry.publicTarget) {
     if (!entry.publicTarget.startsWith('@mog-sdk/')) {
       errors.push(`${name}: publicTarget "${entry.publicTarget}" must be in @mog-sdk/* namespace`);
     }
@@ -408,7 +410,7 @@ for (const pkg of workspacePackages) {
 
   // 3c. Public SDK packages must not grow agent/provider SDK dependencies.
   // AI orchestration belongs in private eval/server packages, not shipped SDKs.
-  if (['ship-public', 'binary-wrapper'].includes(entry.disposition)) {
+  if (NPM_PUBLISHABLE_DISPOSITIONS.has(entry.disposition)) {
     for (const depField of ALL_DEP_FIELDS) {
       for (const depName of dependencyNames(manifest, depField)) {
         for (const pattern of PUBLIC_SDK_FORBIDDEN_AI_DEPS) {
@@ -423,22 +425,26 @@ for (const pkg of workspacePackages) {
     }
   }
 
-  // 4. Publishability check: non-private packages without ship-public or binary-wrapper
-  //    disposition should not be publishable
-  if (manifest.private !== true && !['ship-public', 'binary-wrapper'].includes(entry.disposition)) {
+  // 4. Publishability check: non-private packages need an explicit public
+  //    disposition. Most public artifacts are npm packages, while marketplace
+  //    extensions publish through host-specific tooling such as VSCE.
+  if (
+    manifest.private !== true &&
+    !NPM_PUBLISHABLE_DISPOSITIONS.has(entry.disposition) &&
+    entry.disposition !== 'marketplace-extension'
+  ) {
     if (!entry.publicTarget) {
       errors.push(
         `${name} (${relPath}): missing "private": true for disposition "${entry.disposition}". ` +
-          `Only ship-public and binary-wrapper packages may be publishable.`,
+          `Only ship-public, binary-wrapper, and marketplace-extension packages may be publishable.`,
       );
     }
   }
 
-  // 5. publishConfig.access check: only ship-public and binary-wrapper should have "public"
+  // 5. publishConfig.access check: only npm-published packages should have "public"
   if (
     manifest.publishConfig?.access === 'public' &&
-    entry.disposition !== 'ship-public' &&
-    entry.disposition !== 'binary-wrapper'
+    !NPM_PUBLISHABLE_DISPOSITIONS.has(entry.disposition)
   ) {
     errors.push(
       `${name} (${relPath}): publishConfig.access is "public" but disposition is "${entry.disposition}". ` +
@@ -447,7 +453,7 @@ for (const pkg of workspacePackages) {
   }
 
   // 6. Public package name must match publicTarget
-  if (entry.publicTarget && ['ship-public', 'binary-wrapper'].includes(entry.disposition)) {
+  if (entry.publicTarget && NPM_PUBLISHABLE_DISPOSITIONS.has(entry.disposition)) {
     if (manifest.name !== entry.publicTarget) {
       errors.push(
         `${name} (${relPath}): manifest.name "${manifest.name}" does not match publicTarget "${entry.publicTarget}". ` +
@@ -465,7 +471,7 @@ for (const pkg of workspacePackages) {
   }
 
   // 8. Public packages must have "files" limited to built artifacts
-  if (['ship-public', 'binary-wrapper'].includes(entry.disposition) && !entry.requirePrivate) {
+  if (NPM_PUBLISHABLE_DISPOSITIONS.has(entry.disposition) && !entry.requirePrivate) {
     const files = manifest.files;
     if (!files || !Array.isArray(files)) {
       errors.push(
@@ -513,7 +519,7 @@ for (const pkg of workspacePackages) {
   // 9. Public package source manifests may use workspace: specs for local
   // development. Packed-manifest validation in check:external-fixtures is the
   // release gate that proves pnpm rewrote them to registry-safe semver.
-  if (['ship-public', 'binary-wrapper'].includes(entry.disposition) && !entry.requirePrivate) {
+  if (NPM_PUBLISHABLE_DISPOSITIONS.has(entry.disposition) && !entry.requirePrivate) {
     for (const depField of RUNTIME_DEP_FIELDS) {
       for (const [depName, depVersion] of dependencyEntries(manifest, depField)) {
         if (

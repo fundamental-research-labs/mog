@@ -87,6 +87,20 @@ function toCellRawValue(value: CellValue | null | undefined): CellRawValue {
   return typeof value === 'object' ? null : value;
 }
 
+function cloneRange(range: CellRange | null | undefined): CellRange | null {
+  if (!range) return null;
+  return {
+    startRow: range.startRow,
+    startCol: range.startCol,
+    endRow: range.endRow,
+    endCol: range.endCol,
+  };
+}
+
+function getPasteTargetRange(deps: ActionDependencies): CellRange | null {
+  return cloneRange(deps.accessors.selection.getRanges()[0]);
+}
+
 // =============================================================================
 // Clipboard Data Building Helpers (for unified copy/cut)
 // =============================================================================
@@ -733,12 +747,14 @@ const runPaste: AsyncActionHandler = async (deps) => {
 
   // Get active cell synchronously via accessors
   const activeCell = deps.accessors.selection.getActiveCell();
+  const targetRange = getPasteTargetRange(deps);
 
   // Await async operation - unifiedPaste reads system clipboard
   // and routes to appropriate paste method (internal or external)
   const pastePromise = unifiedPaste(activeCell, {
     getClipboardSnapshot: () => deps.accessors.clipboard.getSnapshot(),
     commands: deps.commands.clipboard,
+    getTargetRange: () => targetRange,
     waitForPasteCommit: waitForPendingClipboardPaste,
     suppressNextUndo: () => uiStore.getState().suppressNextUndo(),
     pasteImage: async (blob, anchorCell) => {
@@ -895,12 +911,14 @@ export const PASTE_VALUES: AsyncActionHandler = async (deps) => {
   }
 
   const activeCell = deps.accessors.selection.getActiveCell();
+  const targetRange = getPasteTargetRange(deps);
 
   await unifiedPaste(
     activeCell,
     {
       getClipboardSnapshot: () => deps.accessors.clipboard.getSnapshot(),
       commands: deps.commands.clipboard,
+      getTargetRange: () => targetRange,
       waitForPasteCommit: waitForPendingClipboardPaste,
     },
     { values: true },
@@ -926,12 +944,14 @@ export const PASTE_FORMULAS: AsyncActionHandler = async (deps) => {
   }
 
   const activeCell = deps.accessors.selection.getActiveCell();
+  const targetRange = getPasteTargetRange(deps);
 
   await unifiedPaste(
     activeCell,
     {
       getClipboardSnapshot: () => deps.accessors.clipboard.getSnapshot(),
       commands: deps.commands.clipboard,
+      getTargetRange: () => targetRange,
       waitForPasteCommit: waitForPendingClipboardPaste,
     },
     { formulas: true },
@@ -957,12 +977,14 @@ export const PASTE_FORMATTING: AsyncActionHandler = async (deps) => {
   }
 
   const activeCell = deps.accessors.selection.getActiveCell();
+  const targetRange = getPasteTargetRange(deps);
 
   await unifiedPaste(
     activeCell,
     {
       getClipboardSnapshot: () => deps.accessors.clipboard.getSnapshot(),
       commands: deps.commands.clipboard,
+      getTargetRange: () => targetRange,
       waitForPasteCommit: waitForPendingClipboardPaste,
     },
     { formats: true },
@@ -987,12 +1009,14 @@ export const PASTE_TRANSPOSE: AsyncActionHandler = async (deps) => {
   }
 
   const activeCell = deps.accessors.selection.getActiveCell();
+  const targetRange = getPasteTargetRange(deps);
 
   await unifiedPaste(
     activeCell,
     {
       getClipboardSnapshot: () => deps.accessors.clipboard.getSnapshot(),
       commands: deps.commands.clipboard,
+      getTargetRange: () => targetRange,
       waitForPasteCommit: waitForPendingClipboardPaste,
     },
     { transpose: true },
@@ -1023,12 +1047,14 @@ export const PASTE_LINK: AsyncActionHandler = async (deps) => {
   }
 
   const activeCell = deps.accessors.selection.getActiveCell();
+  const targetRange = getPasteTargetRange(deps);
 
   await unifiedPaste(
     activeCell,
     {
       getClipboardSnapshot: () => deps.accessors.clipboard.getSnapshot(),
       commands: deps.commands.clipboard,
+      getTargetRange: () => targetRange,
       waitForPasteCommit: waitForPendingClipboardPaste,
     },
     { pasteLink: true },
@@ -1150,7 +1176,12 @@ export const CONFIRM_PASTE_SIZE_MISMATCH: ActionHandler = (deps) => {
 
   // Execute the paste via clipboard commands
   // The clipboard machine will handle the actual paste operation
-  deps.commands.clipboard.paste(pendingPasteData.targetCell, true /* skipSizeCheck */);
+  deps.commands.clipboard.paste(
+    pendingPasteData.targetCell,
+    true /* skipSizeCheck */,
+    undefined,
+    pendingPasteData.targetRange,
+  );
 
   return handled();
 };

@@ -291,7 +291,10 @@ export async function unifiedPaste(
         deps,
       );
     } else if (options) {
-      await routePasteCommand(() => deps.commands.pasteSpecial(activeCell, options, undefined, undefined, targetRange), deps);
+      await routePasteCommand(
+        () => deps.commands.pasteSpecial(activeCell, options, undefined, undefined, targetRange),
+        deps,
+      );
     } else if (isCut) {
       resolveDefaultPasteOptions(
         (deps.readPasteDefaultsPreference ?? readPasteDefaultsPreference)(),
@@ -300,7 +303,10 @@ export async function unifiedPaste(
           hasInternalRichData: true,
         },
       );
-      await routePasteCommand(() => deps.commands.paste(activeCell, undefined, undefined, targetRange), deps);
+      await routePasteCommand(
+        () => deps.commands.paste(activeCell, undefined, undefined, targetRange),
+        deps,
+      );
     } else {
       const resolvedOptions = resolveNormalPasteOptions(deps, {
         sourceKind: 'internal-copy',
@@ -308,7 +314,6 @@ export async function unifiedPaste(
       });
       if (resolvedOptions) {
         await routePasteCommand(
-          () => deps.commands.pasteSpecial(activeCell, resolvedOptions),
           () =>
             deps.commands.pasteSpecial(
               activeCell,
@@ -380,6 +385,7 @@ export async function unifiedPaste(
           deps.commands.externalPaste({
             text: clipboardData.textSignature ?? '',
             targetCell: activeCell,
+            targetRange,
             options: resolvedOptions,
           }),
         deps,
@@ -408,7 +414,6 @@ export async function unifiedPaste(
       });
       if (resolvedOptions) {
         await routePasteCommand(
-          () => deps.commands.pasteSpecial(activeCell, resolvedOptions),
           () =>
             deps.commands.pasteSpecial(
               activeCell,

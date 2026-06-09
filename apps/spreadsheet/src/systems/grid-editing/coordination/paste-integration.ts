@@ -319,7 +319,8 @@ export function setupClipboardPasteIntegration(
 
     const clipboardSize = getClipboardDimensions(data);
     const capturedTargetRange = pasteTargetRange ? normalizeRange(pasteTargetRange) : null;
-    let targetRange = capturedTargetRange ?? createSourceFootprintRange(pastePreviewTarget, clipboardSize);
+    let targetRange =
+      capturedTargetRange ?? createSourceFootprintRange(pastePreviewTarget, clipboardSize);
 
     // Size mismatch check and target-range planning.
     // Multi-cell selections that can be filled by whole source tiles are carried

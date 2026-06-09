@@ -171,6 +171,16 @@ function toCellRawValue(value: CellValue | null | undefined): CellRawValue {
   return typeof value === 'object' ? null : value;
 }
 
+function cloneRange(range: CellRange | null | undefined): CellRange | null {
+  if (!range) return null;
+  return {
+    startRow: range.startRow,
+    startCol: range.startCol,
+    endRow: range.endRow,
+    endCol: range.endCol,
+  };
+}
+
 // =============================================================================
 // HOOK RETURN TYPE
 // =============================================================================
@@ -808,10 +818,13 @@ export function useClipboard(): UseClipboardReturn {
     // / O-A: surface fire-and-forget rejections (e.g. compute bridge
     // throws inside `unifiedPaste`) in __dt.recentErrors as 'handler:PASTE'.
     return withHandlerErrors('PASTE', async () => {
-      const activeCell = coordinator.grid.getSelectionSnapshot().activeCell;
+      const selectionSnapshot = coordinator.grid.getSelectionSnapshot();
+      const activeCell = selectionSnapshot.activeCell;
+      const targetRange = cloneRange(selectionSnapshot.ranges[0]);
       await unifiedPaste(activeCell, {
         getClipboardSnapshot: () => actor.getSnapshot() as ClipboardState,
         commands,
+        getTargetRange: () => targetRange,
         waitForPasteCommit: waitForPendingClipboardPaste,
         pasteImage: async (blob, anchorCell) => {
           const ws = wb.getSheetById(activeSheetId);
@@ -828,12 +841,15 @@ export function useClipboard(): UseClipboardReturn {
   const pasteValues = useCallback(async (): Promise<void> => {
     if (readOnly) return; // Read-only mode: block paste
     return withHandlerErrors('PASTE_VALUES', async () => {
-      const activeCell = coordinator.grid.getSelectionSnapshot().activeCell;
+      const selectionSnapshot = coordinator.grid.getSelectionSnapshot();
+      const activeCell = selectionSnapshot.activeCell;
+      const targetRange = cloneRange(selectionSnapshot.ranges[0]);
       await unifiedPaste(
         activeCell,
         {
           getClipboardSnapshot: () => actor.getSnapshot() as ClipboardState,
           commands,
+          getTargetRange: () => targetRange,
           waitForPasteCommit: waitForPendingClipboardPaste,
         },
         { values: true },
@@ -844,12 +860,15 @@ export function useClipboard(): UseClipboardReturn {
   const pasteFormulas = useCallback(async (): Promise<void> => {
     if (readOnly) return; // Read-only mode: block paste
     return withHandlerErrors('PASTE_FORMULAS', async () => {
-      const activeCell = coordinator.grid.getSelectionSnapshot().activeCell;
+      const selectionSnapshot = coordinator.grid.getSelectionSnapshot();
+      const activeCell = selectionSnapshot.activeCell;
+      const targetRange = cloneRange(selectionSnapshot.ranges[0]);
       await unifiedPaste(
         activeCell,
         {
           getClipboardSnapshot: () => actor.getSnapshot() as ClipboardState,
           commands,
+          getTargetRange: () => targetRange,
           waitForPasteCommit: waitForPendingClipboardPaste,
         },
         { formulas: true },
@@ -860,12 +879,15 @@ export function useClipboard(): UseClipboardReturn {
   const pasteFormats = useCallback(async (): Promise<void> => {
     if (readOnly) return; // Read-only mode: block paste
     return withHandlerErrors('PASTE_FORMATTING', async () => {
-      const activeCell = coordinator.grid.getSelectionSnapshot().activeCell;
+      const selectionSnapshot = coordinator.grid.getSelectionSnapshot();
+      const activeCell = selectionSnapshot.activeCell;
+      const targetRange = cloneRange(selectionSnapshot.ranges[0]);
       await unifiedPaste(
         activeCell,
         {
           getClipboardSnapshot: () => actor.getSnapshot() as ClipboardState,
           commands,
+          getTargetRange: () => targetRange,
           waitForPasteCommit: waitForPendingClipboardPaste,
         },
         { formats: true },
@@ -1171,7 +1193,9 @@ export function useClipboardEvents(options: UseClipboardEventsOptions): UseClipb
         await waitForPendingClipboardCapture();
 
         // On-demand read: Get activeCell only when the paste event fires
-        const activeCell = coordinator.grid.getSelectionSnapshot().activeCell;
+        const selectionSnapshot = coordinator.grid.getSelectionSnapshot();
+        const activeCell = selectionSnapshot.activeCell;
+        const targetRange = cloneRange(selectionSnapshot.ranges[0]);
 
         // Get system clipboard text for signature comparison
         const systemText = event.clipboardData?.getData('text/plain') ?? '';
@@ -1195,10 +1219,18 @@ export function useClipboardEvents(options: UseClipboardEventsOptions): UseClipb
           });
           if (resolved.appliesDefault) {
             await sendClipboardPasteCommand(() =>
-              commands.pasteSpecial(activeCell, resolved.options),
+              commands.pasteSpecial(
+                activeCell,
+                resolved.options,
+                undefined,
+                undefined,
+                targetRange,
+              ),
             );
           } else {
-            await sendClipboardPasteCommand(() => commands.paste(activeCell));
+            await sendClipboardPasteCommand(() =>
+              commands.paste(activeCell, undefined, undefined, targetRange),
+            );
           }
           // Count cells from internal clipboard
           if (clipboardData.sourceRanges && clipboardData.sourceRanges.length > 0) {
@@ -1237,6 +1269,7 @@ export function useClipboardEvents(options: UseClipboardEventsOptions): UseClipb
             commands.externalPaste({
               text,
               targetCell: activeCell,
+              targetRange,
               html: html || undefined,
               options: resolvedOptions,
             }),
@@ -1282,7 +1315,9 @@ export function useClipboardEvents(options: UseClipboardEventsOptions): UseClipb
     await waitForPendingClipboardCapture();
 
     // On-demand read: Get activeCell only when pasteFromSystemClipboard is called
-    const activeCell = coordinator.grid.getSelectionSnapshot().activeCell;
+    const selectionSnapshot = coordinator.grid.getSelectionSnapshot();
+    const activeCell = selectionSnapshot.activeCell;
+    const targetRange = cloneRange(selectionSnapshot.ranges[0]);
 
     // Read system clipboard text for signature comparison
     let systemText = '';
@@ -1308,9 +1343,13 @@ export function useClipboardEvents(options: UseClipboardEventsOptions): UseClipb
         hasInternalRichData: true,
       });
       if (resolved.appliesDefault) {
-        await sendClipboardPasteCommand(() => commands.pasteSpecial(activeCell, resolved.options));
+        await sendClipboardPasteCommand(() =>
+          commands.pasteSpecial(activeCell, resolved.options, undefined, undefined, targetRange),
+        );
       } else {
-        await sendClipboardPasteCommand(() => commands.paste(activeCell));
+        await sendClipboardPasteCommand(() =>
+          commands.paste(activeCell, undefined, undefined, targetRange),
+        );
       }
       if (clipboardData.sourceRanges && clipboardData.sourceRanges.length > 0) {
         const range = clipboardData.sourceRanges[0];
@@ -1330,7 +1369,12 @@ export function useClipboardEvents(options: UseClipboardEventsOptions): UseClipb
       const resolvedOptions = resolved.appliesDefault ? resolved.options : undefined;
       if (shouldNoopExternalFormatsPaste(resolvedOptions)) return 0;
       await sendClipboardPasteCommand(() =>
-        commands.externalPaste({ text, targetCell: activeCell, options: resolvedOptions }),
+        commands.externalPaste({
+          text,
+          targetCell: activeCell,
+          targetRange,
+          options: resolvedOptions,
+        }),
       );
       return 1;
     }

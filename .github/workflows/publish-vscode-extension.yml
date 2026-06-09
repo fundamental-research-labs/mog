@@ -28,6 +28,11 @@ on:
         required: false
         type: boolean
         default: false
+      wasm_package_version:
+        description: Optional @mog-sdk/wasm version to hydrate into the VSIX; defaults to version
+        required: false
+        type: string
+        default: ''
   workflow_call:
     inputs:
       version:
@@ -55,6 +60,11 @@ on:
         required: false
         type: boolean
         default: false
+      wasm_package_version:
+        description: Optional @mog-sdk/wasm version to hydrate into the VSIX; defaults to version
+        required: false
+        type: string
+        default: ''
     secrets:
       VSCE_PAT:
         required: false
@@ -170,8 +180,12 @@ jobs:
       - name: Hydrate WASM package assets
         env:
           VERSION: ${{ steps.version.outputs.version }}
+          INPUT_WASM_PACKAGE_VERSION: ${{ inputs.wasm_package_version }}
         run: |
-          TARBALL=$(npm pack "@mog-sdk/wasm@${VERSION}" --pack-destination "$RUNNER_TEMP")
+          WASM_PACKAGE_VERSION="${INPUT_WASM_PACKAGE_VERSION:-$VERSION}"
+          node -e "if (!/^\d+\.\d+\.\d+(-[\w.]+)?$/.test('$WASM_PACKAGE_VERSION')) { console.error('Invalid @mog-sdk/wasm semver:', '$WASM_PACKAGE_VERSION'); process.exit(1); }"
+          echo "Hydrating @mog-sdk/wasm@${WASM_PACKAGE_VERSION} for extension ${VERSION}."
+          TARBALL=$(npm pack "@mog-sdk/wasm@${WASM_PACKAGE_VERSION}" --pack-destination "$RUNNER_TEMP")
           mkdir -p "$RUNNER_TEMP/mog-sdk-wasm"
           tar -xzf "$RUNNER_TEMP/$TARBALL" -C "$RUNNER_TEMP/mog-sdk-wasm"
           cp "$RUNNER_TEMP"/mog-sdk-wasm/package/compute_core_wasm* compute/wasm/npm/

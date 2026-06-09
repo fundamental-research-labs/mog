@@ -1,16 +1,21 @@
-# Mog XLSX Editor
+# Mog Spreadsheet
 
-VS Code/Cursor custom editor for `.xlsx` files using
-`@mog-sdk/spreadsheet-app`.
+Open `.xlsx` workbooks directly in VS Code and Cursor with Mog's spreadsheet
+runtime.
 
-The extension registers `mog.xlsxEditor` with option priority. Build it with:
+Mog brings a full spreadsheet experience into the editor: workbook loading,
+grid editing, formula recalculation, formatting, sheet navigation, and XLSX
+save/export through the same engine used by Mog's browser spreadsheet app.
 
-```bash
-pnpm --dir integrations/vscode/mog-xlsx-editor package
-```
+## Features
 
-The first acceptance target is the local VS Code E2E suite:
+- Opens `.xlsx` files as a VS Code custom editor.
+- Lets you inspect and edit workbook data without leaving your code workspace.
+- Saves workbook changes back to XLSX.
+- Uses Mog's Rust-backed compute engine and web spreadsheet UI.
 
-```bash
-pnpm --dir integrations/vscode/mog-xlsx-editor test:e2e:vscode
-```
+## Usage
+
+Open an `.xlsx` file and choose **Mog Spreadsheet** when VS Code asks which
+editor to use. To make it the default, use **Reopen Editor With...** and select
+**Mog Spreadsheet**.

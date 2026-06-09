@@ -1,20 +1,25 @@
 {
   "name": "mog-xlsx-editor",
   "displayName": "Mog Spreadsheet",
-  "description": "VS Code custom editor for XLSX files powered by Mog Spreadsheet.",
+  "description": "Open, inspect, edit, and save XLSX workbooks in VS Code with Mog's spreadsheet runtime.",
   "version": "0.9.1",
   "publisher": "mog",
+  "icon": "resources/icon.png",
   "license": "Apache-2.0",
   "type": "module",
   "engines": {
     "vscode": "^1.90.0"
   },
   "categories": [
+    "Data Science",
     "Other"
   ],
   "keywords": [
+    "excel",
+    "formula",
     "mog",
     "spreadsheet",
+    "workbook",
     "xlsx",
     "vscode"
   ],

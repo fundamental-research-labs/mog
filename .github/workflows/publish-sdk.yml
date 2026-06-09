@@ -169,6 +169,7 @@ jobs:
             "@mog-sdk/linux-arm64-musl"
             "@mog-sdk/win32-x64-msvc"
             "@mog-sdk/wasm"
+            "@mog-sdk/chart-raster-wasm"
             "@mog-sdk/contracts"
             "@mog-sdk/sheet-view"
             "@mog-sdk/spreadsheet-app"
@@ -745,7 +746,7 @@ jobs:
             NPM_TAG_ARGS=(--tag "${{ steps.npm-tag.outputs.tag }}")
           fi
           VERSION="${{ needs.version.outputs.version }}"
-          for dir in artifacts/public-packages/mog-sdk__darwin-arm64 artifacts/public-packages/mog-sdk__darwin-x64 artifacts/public-packages/mog-sdk__linux-x64-gnu artifacts/public-packages/mog-sdk__linux-arm64-gnu artifacts/public-packages/mog-sdk__linux-x64-musl artifacts/public-packages/mog-sdk__linux-arm64-musl artifacts/public-packages/mog-sdk__win32-x64-msvc artifacts/public-packages/mog-sdk__wasm; do
+          for dir in artifacts/public-packages/mog-sdk__darwin-arm64 artifacts/public-packages/mog-sdk__darwin-x64 artifacts/public-packages/mog-sdk__linux-x64-gnu artifacts/public-packages/mog-sdk__linux-arm64-gnu artifacts/public-packages/mog-sdk__linux-x64-musl artifacts/public-packages/mog-sdk__linux-arm64-musl artifacts/public-packages/mog-sdk__win32-x64-msvc artifacts/public-packages/mog-sdk__wasm artifacts/public-packages/mog-sdk__chart-raster-wasm; do
             PACKAGE_NAME=$(node -p "require('./$dir/package.json').name")
             if npm view "$PACKAGE_NAME@$VERSION" version 2>/dev/null; then
               echo "$PACKAGE_NAME@$VERSION already published; skipping."
@@ -872,6 +873,7 @@ jobs:
             "@mog-sdk/linux-arm64-musl"
             "@mog-sdk/win32-x64-msvc"
             "@mog-sdk/wasm"
+            "@mog-sdk/chart-raster-wasm"
             "@mog-sdk/contracts"
             "@mog-sdk/sheet-view"
             "@mog-sdk/spreadsheet-app"
@@ -938,6 +940,8 @@ jobs:
           echo "- \`@mog-sdk/linux-arm64-musl@${VERSION}\`" >> "$GITHUB_STEP_SUMMARY"
           echo "- \`@mog-sdk/win32-x64-msvc@${VERSION}\`" >> "$GITHUB_STEP_SUMMARY"
           echo "- \`@mog-sdk/wasm@${VERSION}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- \`@mog-sdk/chart-raster-wasm@${VERSION}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- \`@mog-sdk/contracts@${VERSION}\`" >> "$GITHUB_STEP_SUMMARY"
           echo "- \`@mog-sdk/sheet-view@${VERSION}\`" >> "$GITHUB_STEP_SUMMARY"
           echo "- \`@mog-sdk/spreadsheet-app@${VERSION}\`" >> "$GITHUB_STEP_SUMMARY"
           echo "- \`@mog-sdk/embed@${VERSION}\`" >> "$GITHUB_STEP_SUMMARY"

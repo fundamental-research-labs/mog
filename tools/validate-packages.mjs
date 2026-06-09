@@ -297,6 +297,22 @@ function formatSet(set) {
   return [...set].sort().join(', ') || '(none)';
 }
 
+function assertSetEquals(label, expected, actual) {
+  const onlyExpected = setDifference(expected, actual);
+  const onlyActual = setDifference(actual, expected);
+  if (onlyExpected.length > 0 || onlyActual.length > 0) {
+    errors.push(
+      `${label} mismatch: only expected: ${onlyExpected.join(', ') || '(none)'}; only actual: ${
+        onlyActual.join(', ') || '(none)'
+      }`,
+    );
+  }
+}
+
+function publicPackageOutputDirectoryName(packageName) {
+  return packageName.replace(/^@/, '').replace(/\//g, '__');
+}
+
 function packageNameForPath(packagePath) {
   const manifestPath = join(ROOT, packagePath, 'package.json');
   if (!existsSync(manifestPath)) return null;
@@ -305,6 +321,41 @@ function packageNameForPath(packagePath) {
   } catch {
     return null;
   }
+}
+
+function workflowSection(workflow, startMarker, endMarker) {
+  const startIndex = workflow.indexOf(startMarker);
+  if (startIndex === -1) {
+    errors.push(`publish-sdk workflow is missing section marker "${startMarker}"`);
+    return '';
+  }
+  const endIndex = workflow.indexOf(endMarker, startIndex + startMarker.length);
+  if (endIndex === -1) {
+    errors.push(
+      `publish-sdk workflow section "${startMarker}" is missing end marker "${endMarker}"`,
+    );
+    return workflow.slice(startIndex);
+  }
+  return workflow.slice(startIndex, endIndex);
+}
+
+function packageNamesInText(text) {
+  return new Set(text.match(/@mog-sdk\/[A-Za-z0-9_-]+/g) ?? []);
+}
+
+function publicPackageNamesFromArtifactDirs(text, packageByOutputDir) {
+  const names = new Set();
+  const re = /artifacts\/public-packages\/(mog-sdk__[A-Za-z0-9_-]+)/g;
+  for (const match of text.matchAll(re)) {
+    const outputDir = match[1];
+    const packageName = packageByOutputDir.get(outputDir);
+    if (packageName) {
+      names.add(packageName);
+    } else {
+      errors.push(`publish-sdk workflow references unknown public package directory ${outputDir}`);
+    }
+  }
+  return names;
 }
 
 for (const pkg of workspacePackages) {
@@ -536,7 +587,88 @@ for (const pkg of workspacePackages) {
   }
 }
 
-// 10. Native binary wrapper consistency.
+// 10. Publish workflow consistency.
+// The public package inventory and publish-sdk workflow must describe the same
+// npm surface. This catches packages that are built or version-validated but
+// omitted from production publish/verification steps.
+const npmPublicInventory = new Set(
+  Object.entries(inventory)
+    .filter(
+      ([, entry]) => NPM_PUBLISHABLE_DISPOSITIONS.has(entry.disposition) && !entry.requirePrivate,
+    )
+    .map(([name, entry]) => entry.publicTarget ?? name),
+);
+const publicPackageByOutputDir = new Map(
+  [...npmPublicInventory].map((name) => [publicPackageOutputDirectoryName(name), name]),
+);
+const publishWorkflowPath = join(ROOT, '.github/workflows/publish-sdk.yml');
+let publishWorkflow = '';
+const publishWorkflowPublishedPackages = new Set();
+if (existsSync(publishWorkflowPath)) {
+  publishWorkflow = readFileSync(publishWorkflowPath, 'utf-8');
+  const prePublishPackages = packageNamesInText(
+    workflowSection(
+      publishWorkflow,
+      '- name: Check not already published',
+      '- name: Determine Python SDK version',
+    ),
+  );
+  const postPublishPackages = packageNamesInText(
+    workflowSection(
+      publishWorkflow,
+      '- name: Post-publish verification (npm)',
+      '- name: Publish Python wheels to PyPI',
+    ),
+  );
+  const summaryPackages = packageNamesInText(
+    workflowSection(publishWorkflow, '- name: Summary', '  release:'),
+  );
+  for (const section of [
+    workflowSection(
+      publishWorkflow,
+      '- name: Publish platform packages',
+      '- name: Publish public TypeScript packages',
+    ),
+    workflowSection(
+      publishWorkflow,
+      '- name: Publish public TypeScript packages',
+      '- name: Wait for CLI dependency visibility',
+    ),
+    workflowSection(
+      publishWorkflow,
+      '- name: Publish CLI package',
+      '- name: CLI registry install smoke',
+    ),
+  ]) {
+    for (const packageName of publicPackageNamesFromArtifactDirs(
+      section,
+      publicPackageByOutputDir,
+    )) {
+      publishWorkflowPublishedPackages.add(packageName);
+    }
+  }
+
+  assertSetEquals(
+    'publish-sdk pre-publish npm package list',
+    npmPublicInventory,
+    prePublishPackages,
+  );
+  assertSetEquals(
+    'publish-sdk explicit npm publish package directories',
+    npmPublicInventory,
+    publishWorkflowPublishedPackages,
+  );
+  assertSetEquals(
+    'publish-sdk post-publish npm verification list',
+    npmPublicInventory,
+    postPublishPackages,
+  );
+  assertSetEquals('publish-sdk summary npm package list', npmPublicInventory, summaryPackages);
+} else {
+  errors.push('publish-sdk workflow is missing');
+}
+
+// 11. Native binary wrapper consistency.
 // The SDK optional dependencies, compute/napi package mappings, native
 // package inventory, and publish matrix must describe the same public set.
 const nativeInventory = new Set(
@@ -569,10 +701,8 @@ if (existsSync(napiManifestPath)) {
     ),
   );
 }
-const publishWorkflowPath = join(ROOT, '.github/workflows/publish-sdk.yml');
 const publishNativePackages = new Set();
-if (existsSync(publishWorkflowPath)) {
-  const publishWorkflow = readFileSync(publishWorkflowPath, 'utf-8');
+if (publishWorkflow) {
   const re = /compute\/napi\/npm\/([A-Za-z0-9_-]+)/g;
   for (const match of publishWorkflow.matchAll(re)) {
     const packageName = packageNameForPath(`compute/napi/npm/${match[1]}`);
@@ -607,6 +737,8 @@ console.log('validate:packages coverage:');
 console.log(`  workspace packages discovered: ${workspacePackages.length}`);
 console.log(`  inventory entries: ${Object.keys(inventory).length}`);
 console.log(`  classified workspace packages: ${classified.size}`);
+console.log(`  public npm inventory: ${formatSet(npmPublicInventory)}`);
+console.log(`  publish workflow packages: ${formatSet(publishWorkflowPublishedPackages)}`);
 console.log(`  native inventory: ${formatSet(nativeInventory)}`);
 console.log(`  node optional deps: ${formatSet(nodeOptional)}`);
 console.log(`  napi mappings: ${formatSet(napiPackageMap)}`);

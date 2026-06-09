@@ -197,7 +197,7 @@ export class WorksheetSparklinesImpl implements WorksheetSparklines {
     const updatedGroup: SparklineGroup = {
       ...group,
       ...updates,
-      updatedAt: Date.now(),
+      updatedAt: this.ctx.clock.now(),
     };
 
     // Propagate updates to all member sparklines.

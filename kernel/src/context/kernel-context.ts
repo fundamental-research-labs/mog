@@ -58,7 +58,7 @@ import { createStateMirror } from '../document/state-mirror';
 import { RangeMetadataCache } from '../bridges/wire/range-metadata-cache';
 import { disposeWorksheetValidationCache } from '../api/worksheet/validation-cache';
 
-import type { DocumentContext } from './types';
+import type { DocumentContext, KernelClock } from './types';
 import { WriteGate } from '../document/write-gate';
 import {
   NO_HOST_OPERATION_GATE,
@@ -70,8 +70,8 @@ import type { WorkbookLinkResolver, WorkbookLinkStatusScope } from '../services/
 // Re-export contract types for local use
 export type { IDomainContext, IKernelContext, ISlicerBridge, ISpreadsheetKernelContext };
 
-// Re-export DocumentContext type for convenience
-export type { DocumentContext } from './types';
+// Re-export DocumentContext types for convenience
+export type { DocumentContext, KernelClock } from './types';
 
 // =============================================================================
 // Options
@@ -91,6 +91,9 @@ export interface DocumentContextOptions {
    * for the rationale (host-local is meaningless on a cloud worker).
    */
   userTimezone: string;
+
+  /** Document-scoped time authority. Host-backed documents pass the trusted host clock. */
+  clock: KernelClock;
 
   /**
    * Host contract context (02a foundation). When present, principal setup
@@ -350,6 +353,7 @@ export function createDocumentContext(
   };
 
   const ctx: DocumentContext = {
+    clock: options.clock,
     writeGate,
     operationGate,
     workbookLinks,

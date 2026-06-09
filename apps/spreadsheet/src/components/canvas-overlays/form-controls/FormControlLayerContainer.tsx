@@ -26,6 +26,16 @@ import { useWorksheet } from '../../../infra/context';
 import type { ResolvedFormControl } from './FormControlLayer';
 import { FormControlLayer } from './FormControlLayer';
 
+function scheduleFrame(callback: () => void): () => void {
+  if (typeof requestAnimationFrame === 'function' && typeof cancelAnimationFrame === 'function') {
+    const frameId = requestAnimationFrame(callback);
+    return () => cancelAnimationFrame(frameId);
+  }
+
+  const timerId = setTimeout(callback, 0);
+  return () => clearTimeout(timerId);
+}
+
 // =============================================================================
 // Component
 // =============================================================================
@@ -39,7 +49,7 @@ export function FormControlLayerContainer() {
 
   const [resolvedControls, setResolvedControls] = useState<ResolvedFormControl[]>([]);
   const [refreshVersion, setRefreshVersion] = useState(0);
-  const geometryRefreshFrameRef = useRef<number | null>(null);
+  const cancelGeometryRefreshRef = useRef<(() => void) | null>(null);
 
   const sheetId = ws.getSheetId();
 
@@ -48,14 +58,10 @@ export function FormControlLayerContainer() {
   }, []);
 
   const scheduleGeometryRefresh = useCallback(() => {
-    if (typeof window === 'undefined') {
-      refreshNow();
-      return;
-    }
-    if (geometryRefreshFrameRef.current !== null) return;
+    if (cancelGeometryRefreshRef.current !== null) return;
 
-    geometryRefreshFrameRef.current = window.requestAnimationFrame(() => {
-      geometryRefreshFrameRef.current = null;
+    cancelGeometryRefreshRef.current = scheduleFrame(() => {
+      cancelGeometryRefreshRef.current = null;
       refreshNow();
     });
   }, [refreshNow]);
@@ -125,10 +131,8 @@ export function FormControlLayerContainer() {
 
   useEffect(() => {
     return () => {
-      if (geometryRefreshFrameRef.current !== null && typeof window !== 'undefined') {
-        window.cancelAnimationFrame(geometryRefreshFrameRef.current);
-        geometryRefreshFrameRef.current = null;
-      }
+      cancelGeometryRefreshRef.current?.();
+      cancelGeometryRefreshRef.current = null;
     };
   }, []);
 

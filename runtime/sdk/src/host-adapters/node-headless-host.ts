@@ -136,6 +136,14 @@ export interface MogSdkLogger {
   error?(...args: unknown[]): void;
 }
 
+export function createNodeHeadlessClock(): HostClock {
+  return {
+    now: () => Date.now(),
+    dateNow: () => Date.now(),
+    performanceNow: () => performance.now(),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Result
 // ---------------------------------------------------------------------------
@@ -296,11 +304,7 @@ export function createNodeHeadlessHost(config: NodeHeadlessHostConfig): NodeHead
 
   // --- Clock ---
 
-  const clock: HostClock = {
-    now: () => Date.now(),
-    dateNow: () => Date.now(),
-    performanceNow: () => performance.now(),
-  };
+  const clock = createNodeHeadlessClock();
 
   // --- Session ---
 

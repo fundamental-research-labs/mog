@@ -8,6 +8,7 @@ import type {
 import type { ISpreadsheetKernelContext } from '@mog-sdk/contracts/kernel';
 import type { DocumentSecurityConfig } from '@mog-sdk/contracts/security';
 import { DocumentLifecycleSystem } from '../../document';
+import type { KernelClock } from '../../context';
 import { LegacyOptionRejectedError } from '../../errors/document';
 import { slog } from '../../lib/slog';
 import type { DocumentHandleInternal } from './document-handle-types';
@@ -40,6 +41,7 @@ export type XlsxDocumentHandleFactory<THandle extends DocumentHandleInternal> = 
 
 export interface XlsxDocumentImportDependencies<THandle extends DocumentHandleInternal> {
   generateDocumentId(): string;
+  clock: KernelClock;
   createDocumentHandle: XlsxDocumentHandleFactory<THandle>;
 }
 
@@ -143,6 +145,7 @@ export async function createFromXlsxDocument<THandle extends DocumentHandleInter
       napiAddon: options?.napiAddon,
       security: options?.security,
       userTimezone,
+      clock: deps.clock,
     });
     lifecycle.createFromXlsx(
       options?.documentId ?? deps.generateDocumentId(),

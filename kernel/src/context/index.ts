@@ -19,6 +19,7 @@ export {
   type IKernelContext,
   type ISlicerBridge,
   type ISpreadsheetKernelContext,
+  type KernelClock,
 } from './kernel-context';
 export {
   projectPrincipal,

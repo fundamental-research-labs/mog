@@ -29,7 +29,7 @@ import type {
 } from '@mog-sdk/contracts/document';
 import type { CheckpointResult, CloseResult } from '@mog-sdk/types-document/storage/lifecycle';
 import type { DocumentByteSyncPort, Provider } from '../../document/providers/provider';
-import type { DocumentContext } from '../../context';
+import type { DocumentContext, KernelClock } from '../../context';
 
 import type { ISpreadsheetKernelContext } from '@mog-sdk/contracts/kernel';
 import type { KernelHostContext } from '@mog-sdk/types-host/kernel';
@@ -150,6 +150,7 @@ export async function createInteractiveDeferredDocumentFromXlsx(
   assertInteractiveDeferredImportToken(token);
   return createFromXlsxDocument(source, options, 'interactiveDeferred', {
     generateDocumentId,
+    clock: DOCUMENT_FACTORY_CLOCK,
     createDocumentHandle,
   });
 }
@@ -162,9 +163,18 @@ export async function createInteractiveDeferredDocumentFromXlsx(
  * Generate a unique document ID using UUID v7 format.
  * Time-sortable and collision-resistant.
  */
+function currentEpochMillis(): number {
+  return Date.now();
+}
+
+const DOCUMENT_FACTORY_CLOCK: KernelClock = {
+  now: currentEpochMillis,
+  dateNow: currentEpochMillis,
+};
+
 function generateDocumentId(): string {
   // UUID v7 implementation (matches generateCellId in cell-identity.ts)
-  const timestamp = Date.now();
+  const timestamp = currentEpochMillis();
 
   // Convert timestamp to hex (48 bits = 12 hex chars)
   const timestampHex = timestamp.toString(16).padStart(12, '0');
@@ -285,6 +295,7 @@ export const DocumentFactory = {
       napiAddon: options?.napiAddon,
       security: options?.security,
       userTimezone,
+      clock: DOCUMENT_FACTORY_CLOCK,
     });
     lifecycle.create(documentId, options ?? {});
     await lifecycle.waitForReady();
@@ -358,6 +369,7 @@ export const DocumentFactory = {
   ): Promise<DocumentImportResult & { handle?: DocumentHandle }> {
     return createFromXlsxDocument(source, options, 'durable', {
       generateDocumentId,
+      clock: DOCUMENT_FACTORY_CLOCK,
       createDocumentHandle,
     });
   },
@@ -402,6 +414,7 @@ export const DocumentFactory = {
         napiAddon: options?.napiAddon,
         security: options?.security,
         userTimezone,
+        clock: DOCUMENT_FACTORY_CLOCK,
       });
       lifecycle.createFromCsv(
         options?.documentId ?? generateDocumentId(),
@@ -515,6 +528,7 @@ export const DocumentFactory = {
       security: undefined,
       userTimezone,
       kernelHostContext: hostContext,
+      clock: hostContext.clock,
     });
     lifecycle.create(documentId, {
       skipDefaultSheet: options?.skipDefaultSheet,

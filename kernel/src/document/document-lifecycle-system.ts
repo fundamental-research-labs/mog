@@ -42,7 +42,7 @@ import type {
 } from '@mog-sdk/types-document/storage/lifecycle';
 import type { MaterializationState } from '@mog-sdk/contracts/api';
 import type { ComputeBridge } from '../bridges/compute/compute-bridge';
-import type { DocumentContext } from '../context/types';
+import type { DocumentContext, KernelClock } from '../context/types';
 import type { WorkbookLinkResolver, WorkbookLinkStatusScope } from '../services/workbook-links';
 import type { RustDocument } from './rust-document';
 import type { WriteGate } from './write-gate';
@@ -202,6 +202,9 @@ export interface DocumentLifecycleConfigLegacy {
    */
   userTimezone: string;
 
+  /** Document-scoped time authority. Direct factory paths must pass this explicitly. */
+  clock: KernelClock;
+
   /**
    * Host contract context. When provided, the kernel uses the host-supplied
    * principal, storage, timezone, and runtime config instead of the legacy
@@ -289,6 +292,9 @@ export class DocumentLifecycleSystem {
 
   /** IANA timezone name for the user's calendar frame this session */
   private readonly userTimezone: string;
+
+  /** Document-scoped time authority */
+  private readonly clock: KernelClock;
 
   /** Host contract context (02a foundation path) — legacy/cooperative path only */
   private readonly kernelHostContext: KernelHostContext | undefined;
@@ -379,6 +385,7 @@ export class DocumentLifecycleSystem {
 
       this.environment = transportConfig.environment;
       this.userTimezone = input.timezone.userTimezone;
+      this.clock = input.clock;
       this.hostLifecycleInput = input;
 
       // Host path does NOT use legacy fields — set them to undefined/empty
@@ -399,6 +406,7 @@ export class DocumentLifecycleSystem {
       this.napiAddon = config.napiAddon;
       this.securityConfig = config.security;
       this.userTimezone = config.userTimezone;
+      this.clock = config.clock;
       this.kernelHostContext = config.kernelHostContext;
       this.workbookLinkResolver = config.workbookLinkResolver;
       this.workbookLinkScope = config.workbookLinkScope;
@@ -1909,6 +1917,7 @@ export class DocumentLifecycleSystem {
         environment: this.environment === 'headless' ? 'headless' : 'app',
         security: undefined,
         userTimezone: lifecycleInput.timezone.userTimezone,
+        clock: lifecycleInput.clock,
         kernelHostContext: undefined,
         workbookLinkResolver: lifecycleInput.workbookLinkResolver as
           | WorkbookLinkResolver
@@ -1943,6 +1952,7 @@ export class DocumentLifecycleSystem {
       environment: this.environment === 'headless' ? 'headless' : 'app',
       security: this.securityConfig,
       userTimezone: this.userTimezone,
+      clock: this.clock,
       kernelHostContext: this.kernelHostContext,
       workbookLinkResolver: this.workbookLinkResolver,
       workbookLinkScope: this.workbookLinkScope,

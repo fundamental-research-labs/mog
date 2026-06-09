@@ -20,6 +20,12 @@ import type { WorkbookLinkService, WorkbookLinkStatusScope } from '../services/w
 // DocumentContext Interface (engine-internal, scoped to one open document)
 // =============================================================================
 
+export interface KernelClock {
+  now(): number;
+  dateNow(): number;
+  performanceNow?(): number;
+}
+
 /**
  * DocumentContext is the engine-internal context scoped to one open document.
  *
@@ -32,6 +38,12 @@ import type { WorkbookLinkService, WorkbookLinkStatusScope } from '../services/w
  * Engine internals use DocumentContext (full + compute bridge + viewport).
  */
 export interface DocumentContext extends ISpreadsheetKernelContext {
+  // ===========================================================================
+  // Clock: document-scoped time authority
+  // ===========================================================================
+
+  readonly clock: KernelClock;
+
   // ===========================================================================
   // WriteGate: Storage/policy mutation guard (the write gate)
   // ===========================================================================

@@ -9,7 +9,7 @@
  * workspace-private and stripped from public artifacts.
  */
 
-import type { KernelHostContext } from '@mog-sdk/types-host/kernel';
+import type { HostClock, KernelHostContext } from '@mog-sdk/types-host/kernel';
 import type { HostKernelAdapterBindings } from '@mog-sdk/types-host/bindings';
 import type { DocumentImportOptions, DocumentImportWarning } from '@mog-sdk/contracts/document';
 import {
@@ -102,6 +102,7 @@ export interface CreateHeadlessDocumentOptions {
   readonly documentId: string;
   readonly napiAddon?: unknown;
   readonly userTimezone: string;
+  readonly clock: HostClock;
   readonly initialSnapshot?: Record<string, unknown>;
   readonly yrsState?: Uint8Array;
   readonly workbookLinkResolver?: HeadlessWorkbookLinkResolver;
@@ -368,6 +369,7 @@ export async function createHeadlessDocument(
     environment: 'headless',
     napiAddon: options.napiAddon,
     userTimezone: options.userTimezone,
+    clock: options.clock,
     workbookLinkResolver: options.workbookLinkResolver as any,
     workbookLinkScope: options.workbookLinkScope as any,
   });
@@ -390,6 +392,7 @@ export async function importHeadlessDocumentFromXlsx(
     environment: 'headless',
     napiAddon: options.napiAddon,
     userTimezone: options.userTimezone,
+    clock: options.clock,
     workbookLinkResolver: options.workbookLinkResolver as any,
     workbookLinkScope: options.workbookLinkScope as any,
   });

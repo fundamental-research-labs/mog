@@ -36,6 +36,7 @@ import {
   type DocumentSyncCapableHandle,
 } from '@mog/kernel-host-internal';
 import {
+  createNodeHeadlessClock,
   createNodeHeadlessHost,
   type NodeHeadlessHostResult,
 } from './host-adapters/node-headless-host';
@@ -637,6 +638,7 @@ class HeadlessLifecycleSystem {
       documentId: docId,
       napiAddon: this.options.computeAddon,
       userTimezone: this.options.userTimezone ?? 'UTC',
+      clock: createNodeHeadlessClock(),
       initialSnapshot: this.options.initialSnapshot,
       yrsState: this.options.yrsState,
       workbookLinkResolver: this.options.workbookLinkResolver,
@@ -660,6 +662,7 @@ class HeadlessLifecycleSystem {
       documentId: docId,
       napiAddon: this.options.computeAddon,
       userTimezone: this.options.userTimezone ?? 'UTC',
+      clock: createNodeHeadlessClock(),
       importOptions: this.options.importOptions,
       workbookLinkResolver: this.options.workbookLinkResolver,
       workbookLinkScope: this.options.workbookLinkScope,

@@ -13,6 +13,16 @@ on:
         required: false
         type: boolean
         default: true
+      publish_vs_marketplace:
+        description: Publish to the VS Code Marketplace when dry-run is false
+        required: false
+        type: boolean
+        default: true
+      publish_open_vsx:
+        description: Publish to Open VSX when dry-run is false
+        required: false
+        type: boolean
+        default: true
   workflow_call:
     inputs:
       version:
@@ -25,8 +35,20 @@ on:
         required: false
         type: boolean
         default: true
+      publish_vs_marketplace:
+        description: Publish to the VS Code Marketplace when dry-run is false
+        required: false
+        type: boolean
+        default: true
+      publish_open_vsx:
+        description: Publish to Open VSX when dry-run is false
+        required: false
+        type: boolean
+        default: true
     secrets:
       VSCE_PAT:
+        required: false
+      OVSX_PAT:
         required: false
     outputs:
       extension-version:
@@ -159,7 +181,7 @@ jobs:
           if-no-files-found: error
 
       - name: Publish to VS Code Marketplace
-        if: ${{ inputs.dry-run == false }}
+        if: ${{ inputs.dry-run == false && inputs.publish_vs_marketplace != false }}
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
         run: |
@@ -171,3 +193,16 @@ jobs:
             --no-dependencies \
             --packagePath dist/mog-xlsx-editor.vsix \
             --pat "$VSCE_PAT"
+
+      - name: Publish to Open VSX
+        if: ${{ inputs.dry-run == false && inputs.publish_open_vsx != false }}
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+        run: |
+          if [ -z "$OVSX_PAT" ]; then
+            echo "::error::Repository secret OVSX_PAT is not configured."
+            exit 1
+          fi
+          npx --yes ovsx@1.0.0 --pat "$OVSX_PAT" publish \
+            integrations/vscode/mog-xlsx-editor/dist/mog-xlsx-editor.vsix \
+            --skip-duplicate

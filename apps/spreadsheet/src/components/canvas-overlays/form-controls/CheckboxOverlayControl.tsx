@@ -31,6 +31,8 @@ export interface CheckboxOverlayControlProps {
   height: number;
   /** Callback to write a value to the linked cell */
   onCellValueChange: (controlId: string, value: unknown) => void;
+  /** Linked cell position for DOM readbacks and app-eval probes. */
+  linkedCellPosition?: { row: number; col: number };
 }
 
 // =============================================================================
@@ -65,6 +67,7 @@ export const CheckboxOverlayControl = memo(function CheckboxOverlayControl({
   width,
   height,
   onCellValueChange,
+  linkedCellPosition,
 }: CheckboxOverlayControlProps) {
   const checked = isChecked(cellValue);
   const hasLabel = Boolean(control.label);
@@ -100,6 +103,8 @@ export const CheckboxOverlayControl = memo(function CheckboxOverlayControl({
       }}
       data-no-grid-pointer="true"
       data-testid={`form-control-checkbox-${control.id}`}
+      data-form-control-linked-row={linkedCellPosition?.row}
+      data-form-control-linked-col={linkedCellPosition?.col}
     >
       <input
         type="checkbox"

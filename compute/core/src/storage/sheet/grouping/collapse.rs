@@ -19,10 +19,14 @@ pub fn set_group_collapsed(
         .chain(config.column_groups.iter_mut())
         .find(|g| g.id == group_id);
     if let Some(group) = found {
-        if group.collapsed == collapsed {
+        let clear_imported_hidden = !collapsed && group.hidden;
+        if group.collapsed == collapsed && !clear_imported_hidden {
             return;
         }
         group.collapsed = collapsed;
+        if clear_imported_hidden {
+            group.hidden = false;
+        }
         set_sheet_grouping_config(doc, sheets, sheet_id, &config);
     }
 }

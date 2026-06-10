@@ -297,14 +297,14 @@ export function CellContextMenu({ target, targetRow, targetCol, onClose }: CellC
           onClick: actions.insertColumnLeft,
         });
       } else {
-        // Cell range selection: "Insert..." (opens dialog)
+        // Cell range selection: "Insert..." or "Insert Cut Cells" when a cut is active.
         items.push({
           id: 'insert',
-          label: 'Insert...',
+          label: actions.hasCutClipboard ? 'Insert Cut Cells' : 'Insert...',
           icon: <InsertCellsIcon />,
           disabled: !actions.isContiguousSelection,
           dividerAfter: true,
-          onClick: actions.insertCells,
+          onClick: actions.hasCutClipboard ? actions.insertCutCells : actions.insertCells,
         });
       }
     }

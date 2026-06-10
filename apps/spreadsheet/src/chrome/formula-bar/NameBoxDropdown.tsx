@@ -431,13 +431,22 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
         }
       };
 
+      const setCellSelection = (
+        range: CellRange,
+        nextActiveCell: { row: number; col: number },
+      ): void => {
+        deps.commands.object.deselectAll();
+        deps.commands.chart.deselectAll();
+        selectionCommands.setSelection([range], nextActiveCell);
+      };
+
       if (trimmedAddress.includes(':')) {
         const parsedRange = parseCellRange(trimmedAddress);
         if (parsedRange) {
           if (parsedRange.sheetName) {
             await activateSheetByName(parsedRange.sheetName);
           }
-          selectionCommands.setSelection([rangeFromParsedCellRange(parsedRange)], {
+          setCellSelection(rangeFromParsedCellRange(parsedRange), {
             row: parsedRange.startRow,
             col: parsedRange.startCol,
           });
@@ -460,7 +469,7 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
         if (parsedRange.sheetName) {
           await activateSheetByName(parsedRange.sheetName);
         }
-        selectionCommands.setSelection([rangeFromParsedCellRange(parsedRange)], {
+        setCellSelection(rangeFromParsedCellRange(parsedRange), {
           row: parsedRange.startRow,
           col: parsedRange.startCol,
         });
@@ -501,15 +510,13 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
         if (parsed) {
           // Switch to table's sheet if different
           await activateSheetByName(matchingTable.sheetName);
-          selectionCommands.setSelection(
-            [
-              {
-                startRow: parsed.row,
-                startCol: parsed.col,
-                endRow: parsed.row,
-                endCol: parsed.col,
-              },
-            ],
+          setCellSelection(
+            {
+              startRow: parsed.row,
+              startCol: parsed.col,
+              endRow: parsed.row,
+              endCol: parsed.col,
+            },
             { row: parsed.row, col: parsed.col },
           );
         }
@@ -547,7 +554,7 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
 
         // Set selection to the range (or single cell when start === end);
         // the viewport-follow coordinator scrolls into view via the SET_SELECTION emit.
-        selectionCommands.setSelection([rangeFromParsedCellRange(parsed)], {
+        setCellSelection(rangeFromParsedCellRange(parsed), {
           row: parsed.startRow,
           col: parsed.startCol,
         });
@@ -599,6 +606,8 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
       openDefineNameDialog,
       wb,
       refreshNamedRanges,
+      deps.commands.object,
+      deps.commands.chart,
     ],
   );
 

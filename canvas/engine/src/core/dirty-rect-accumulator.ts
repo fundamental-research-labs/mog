@@ -41,7 +41,13 @@ export class DirtyRectAccumulator {
     if (hint.type === 'rect') {
       this._rects.push(hint.bounds);
     } else if (hint.type === 'rects') {
-      this._rects.push(...hint.bounds);
+      if (this._rects.length + hint.bounds.length > DirtyRectAccumulator.COALESCE_THRESHOLD) {
+        this.mergeRectsIntoBoundingUnion(hint.bounds);
+      } else {
+        for (const bounds of hint.bounds) {
+          this._rects.push(bounds);
+        }
+      }
     }
 
     if (this._rects.length > DirtyRectAccumulator.COALESCE_THRESHOLD) {
@@ -106,6 +112,37 @@ export class DirtyRectAccumulator {
     }
 
     // Replace all rects with the bounding union (stays in doc-space)
+    this._rects.length = 0;
+    this._rects.push({
+      x: minX,
+      y: minY,
+      width: maxX - minX,
+      height: maxY - minY,
+    } as DocSpaceRect);
+  }
+
+  private mergeRectsIntoBoundingUnion(rects: readonly DocSpaceRect[]): void {
+    if (rects.length === 0) return;
+
+    let minX = Infinity,
+      minY = Infinity,
+      maxX = -Infinity,
+      maxY = -Infinity;
+
+    for (const r of this._rects) {
+      minX = Math.min(minX, r.x);
+      minY = Math.min(minY, r.y);
+      maxX = Math.max(maxX, r.x + r.width);
+      maxY = Math.max(maxY, r.y + r.height);
+    }
+
+    for (const r of rects) {
+      minX = Math.min(minX, r.x);
+      minY = Math.min(minY, r.y);
+      maxX = Math.max(maxX, r.x + r.width);
+      maxY = Math.max(maxY, r.y + r.height);
+    }
+
     this._rects.length = 0;
     this._rects.push({
       x: minX,

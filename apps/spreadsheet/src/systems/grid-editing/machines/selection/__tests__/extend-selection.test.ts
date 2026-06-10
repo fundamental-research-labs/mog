@@ -410,6 +410,34 @@ describe('extendSelection - Shift+Arrow bug tests', () => {
       expect(result.activeCell).toEqual({ row: 4, col: 1 });
     });
 
+    it('repeated Shift+Right extends by worksheet coordinates across hidden columns', () => {
+      let context: SelectionContext = {
+        ...initialSelectionContext,
+        activeCell: { row: 16, col: 12 }, // M17
+        pendingRange: { startRow: 16, startCol: 12, endRow: 16, endCol: 12 },
+        anchor: null,
+        isColHidden: (col) => col >= 15 && col <= 26, // P:AA
+      };
+
+      for (let col = 12; col < 27; col += 1) {
+        const result = callExtendSelection(context, {
+          type: 'KEY_ARROW',
+          direction: 'right',
+          shiftKey: true,
+        });
+        context = { ...context, ...result };
+      }
+
+      expect(context.pendingRange).toEqual({
+        startRow: 16,
+        startCol: 12,
+        endRow: 16,
+        endCol: 27,
+      });
+      expect(context.anchor).toEqual({ row: 16, col: 12 });
+      expect(context.activeCell).toEqual({ row: 16, col: 12 });
+    });
+
     it('preserves a full-column selection when extending right from Ctrl+Space', () => {
       const context: SelectionContext = {
         ...initialSelectionContext,

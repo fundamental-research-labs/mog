@@ -78,4 +78,29 @@ describe('ViewportRegionImpl async cleanup ordering', () => {
 
     expect(bridge.updateViewportVisibleWindow).toHaveBeenCalledWith('vp-1', 'sheet-1', nextBounds);
   });
+
+  it('collapses degenerate frozen-corner bounds before registering or refreshing', async () => {
+    const bridge = createBridge();
+    const region = new ViewportRegionImpl(
+      'sheet-1' as any,
+      { startRow: 0, startCol: 0, endRow: 1, endCol: -1 },
+      bridge,
+      'frozen-corner:sheet-1',
+    );
+
+    await region.refresh('none');
+
+    const normalizedBounds = { startRow: 0, startCol: 0, endRow: 1, endCol: 0 };
+    expect(bridge.registerViewportRegion).toHaveBeenCalledWith(
+      'frozen-corner:sheet-1',
+      'sheet-1',
+      normalizedBounds,
+    );
+    expect(bridge.refreshViewportForRegion).toHaveBeenCalledWith(
+      'frozen-corner:sheet-1',
+      'sheet-1',
+      normalizedBounds,
+      'none',
+    );
+  });
 });

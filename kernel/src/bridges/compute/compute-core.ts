@@ -33,7 +33,11 @@ import type { ReadonlyBinaryViewportBuffer } from '../wire/viewport-coordinator'
 import type { CellMetadataCache } from '../wire/cell-metadata-cache';
 import type { RangeMetadataCache } from '../wire/range-metadata-cache';
 import { ViewportCoordinatorRegistry } from '../wire/viewport-coordinator-registry';
-import type { ViewportPrefetchState, ViewportScrollBehavior } from '../wire/viewport-prefetch';
+import {
+  normalizeViewportBounds,
+  type ViewportPrefetchState,
+  type ViewportScrollBehavior,
+} from '../wire/viewport-prefetch';
 
 import { ViewportFetchManager } from './viewport-fetch-manager';
 import {
@@ -1284,7 +1288,12 @@ export class ComputeCore {
     scrollBehavior: ViewportScrollBehavior = 'free',
   ): Promise<void> {
     this.ensureInitialized();
-    return this.fetchManager!.refresh(viewportId, sheetId, bounds, scrollBehavior);
+    return this.fetchManager!.refresh(
+      viewportId,
+      sheetId,
+      normalizeViewportBounds(bounds),
+      scrollBehavior,
+    );
   }
 
   /**
@@ -1297,7 +1306,7 @@ export class ComputeCore {
     bounds: { startRow: number; startCol: number; endRow: number; endCol: number },
   ): void {
     if (!this.isInitialized) return;
-    this.fetchManager?.updateVisibleWindow(viewportId, sheetId, bounds);
+    this.fetchManager?.updateVisibleWindow(viewportId, sheetId, normalizeViewportBounds(bounds));
   }
 
   /**
@@ -1371,14 +1380,15 @@ export class ComputeCore {
     bounds: { startRow: number; startCol: number; endRow: number; endCol: number },
   ): Promise<void> {
     this.ensureInitialized();
+    const normalizedBounds = normalizeViewportBounds(bounds);
     await this.transport.call<void>('compute_register_viewport', {
       docId: this.docId,
       viewportId,
       sheetId,
-      startRow: bounds.startRow,
-      startCol: bounds.startCol,
-      endRow: bounds.endRow,
-      endCol: bounds.endCol,
+      startRow: normalizedBounds.startRow,
+      startCol: normalizedBounds.startCol,
+      endRow: normalizedBounds.endRow,
+      endCol: normalizedBounds.endCol,
     });
   }
 
@@ -1390,13 +1400,14 @@ export class ComputeCore {
     bounds: { startRow: number; startCol: number; endRow: number; endCol: number },
   ): Promise<void> {
     this.ensureInitialized();
+    const normalizedBounds = normalizeViewportBounds(bounds);
     await this.transport.call<void>('compute_update_viewport_bounds', {
       docId: this.docId,
       viewportId,
-      startRow: bounds.startRow,
-      startCol: bounds.startCol,
-      endRow: bounds.endRow,
-      endCol: bounds.endCol,
+      startRow: normalizedBounds.startRow,
+      startCol: normalizedBounds.startCol,
+      endRow: normalizedBounds.endRow,
+      endCol: normalizedBounds.endCol,
     });
   }
 

@@ -2049,6 +2049,11 @@ export class GridEditingSystem implements IGridEditingSystem {
     });
     this.cleanupFns.push(() => selSub.unsubscribe());
 
+    const userSelectionSub = this.selectionActor.on('userSelectionChanged', () => {
+      for (const cb of this.selectionActiveCallbacks) cb();
+    });
+    this.cleanupFns.push(() => userSelectionSub.unsubscribe());
+
     // Editor state change subscription
     const editorSub = this.editorActor.subscribe((state) => {
       // Notify generic state change

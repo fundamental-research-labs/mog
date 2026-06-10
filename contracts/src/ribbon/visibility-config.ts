@@ -311,6 +311,7 @@ export const RIBBON_VISIBILITY_SCHEMA = {
       ruler: true,
       gridlines: true,
       formulaBar: true,
+      statusBar: true,
       headings: true,
       horizontalScrollbar: true,
       verticalScrollbar: true,

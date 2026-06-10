@@ -185,6 +185,7 @@ function createMockDeps(overrides?: Partial<ActionDependencies>): ActionDependen
       getResolvedFormulaRanges: () => [],
       getActiveFormulaRange: () => null,
       getCommitType: () => null,
+      getEditStartSelectionRanges: () => null,
       isInactive: () => true,
       isEditing: () => false,
       isFormulaEditing: () => false,
@@ -1207,6 +1208,7 @@ describe('Chart Handlers - Context Menu Actions', () => {
  */
 function createDepsWithSelection(opts: {
   ranges: Array<{ startRow: number; startCol: number; endRow: number; endCol: number }>;
+  editStartRanges?: Array<{ startRow: number; startCol: number; endRow: number; endCol: number }>;
   expandedRegion?: { startRow: number; startCol: number; endRow: number; endCol: number };
   insertChartWizardOpenSpy?: jest.Mock;
 }): ActionDependencies {
@@ -1214,6 +1216,7 @@ function createDepsWithSelection(opts: {
 
   // Override selection.getDataBoundedRanges
   (deps.accessors.selection as any).getDataBoundedRanges = () => opts.ranges;
+  (deps.accessors.editor as any).getEditStartSelectionRanges = () => opts.editStartRanges ?? null;
 
   // Wire getCurrentRegion to return the configured expanded block (or echo input)
   const ws = (deps.workbook as any).activeSheet;
@@ -1284,6 +1287,22 @@ describe('Chart Handlers - Current-Region Auto-Expansion', () => {
       expect(addedConfig.dataRange).toBe('A1:D6');
     });
 
+    it('uses edit-start multi-cell selection when active selection collapsed during enter-mode', async () => {
+      const deps = createDepsWithSelection({
+        ranges: [{ startRow: 2, startCol: 12, endRow: 2, endCol: 12 }],
+        editStartRanges: [{ startRow: 2, startCol: 12, endRow: 20, endCol: 13 }],
+        expandedRegion: { startRow: 0, startCol: 11, endRow: 2, endCol: 13 },
+      });
+
+      const result = await ChartHandlers.CREATE_EMBEDDED_CHART(deps);
+      expect(result.handled).toBe(true);
+
+      const ws = (deps.workbook as any).activeSheet;
+      expect(ws.getCurrentRegion).not.toHaveBeenCalled();
+      const addedConfig = ws.charts.add.mock.calls[0][0];
+      expect(addedConfig.dataRange).toBe('M3:N21');
+    });
+
     it('expands single-row header selection (A1:D1) to the full data block', async () => {
       // A single-row selection treated as a header row should expand down to
       // the contiguous data region.
@@ -1350,6 +1369,20 @@ describe('Chart Handlers - Current-Region Auto-Expansion', () => {
       expect(openSpy).toHaveBeenCalledWith('A1:C5');
     });
 
+    it('opens wizard from edit-start multi-cell selection when active selection collapsed', async () => {
+      const openSpy = jest.fn();
+      const deps = createDepsWithSelection({
+        ranges: [{ startRow: 2, startCol: 12, endRow: 2, endCol: 12 }],
+        editStartRanges: [{ startRow: 2, startCol: 12, endRow: 20, endCol: 13 }],
+        expandedRegion: { startRow: 0, startCol: 11, endRow: 2, endCol: 13 },
+        insertChartWizardOpenSpy: openSpy,
+      });
+
+      const result = await ChartHandlers.OPEN_INSERT_CHART_WIZARD_DIALOG(deps);
+      expect(result.handled).toBe(true);
+      expect(openSpy).toHaveBeenCalledWith('M3:N21');
+    });
+
     it('opens wizard with empty initialDataRange when no selection', async () => {
       const openSpy = jest.fn();
       const deps = createDepsWithSelection({
@@ -1373,6 +1406,19 @@ describe('Chart Handlers - Current-Region Auto-Expansion', () => {
       const result = await ChartHandlers.OPEN_INSERT_CHART_WIZARD_DIALOG(deps);
       expect(result.handled).toBe(true);
       expect(openSpy).toHaveBeenCalledWith('A1:D10');
+    });
+
+    it('does not shrink a wider single-row chart selection to a narrower current region', async () => {
+      const openSpy = jest.fn();
+      const deps = createDepsWithSelection({
+        ranges: [{ startRow: 20, startCol: 11, endRow: 20, endCol: 27 }],
+        expandedRegion: { startRow: 20, startCol: 11, endRow: 20, endCol: 13 },
+        insertChartWizardOpenSpy: openSpy,
+      });
+
+      const result = await ChartHandlers.OPEN_INSERT_CHART_WIZARD_DIALOG(deps);
+      expect(result.handled).toBe(true);
+      expect(openSpy).toHaveBeenCalledWith('L21:AB21');
     });
   });
 });

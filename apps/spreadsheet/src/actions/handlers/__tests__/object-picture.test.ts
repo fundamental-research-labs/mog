@@ -32,6 +32,7 @@ function createMockDeps(picture: PictureOverrides = {}): {
   comboBoxAdd: jest.Mock;
   setCell: jest.Mock;
   setFormat: jest.Mock;
+  getCell: jest.Mock;
   pictureUpdate: jest.Mock;
   canDoStructureOp: jest.Mock;
   uiState: {
@@ -46,6 +47,7 @@ function createMockDeps(picture: PictureOverrides = {}): {
   const textBoxAdd = jest.fn(async () => ({ id: 'textbox-new-1' }));
   const checkboxAdd = jest.fn(async () => ({ id: 'checkbox-new-1' }));
   const comboBoxAdd = jest.fn(async () => ({ id: 'combobox-new-1' }));
+  const getCell = jest.fn(async () => ({ value: null, displayText: null, formula: null }));
   const setCell = jest.fn(async () => undefined);
   const setFormat = jest.fn(async () => undefined);
   const pictureUpdate = jest.fn(async () => undefined);
@@ -82,6 +84,7 @@ function createMockDeps(picture: PictureOverrides = {}): {
       formats: {
         set: setFormat,
       },
+      getCell,
       setCell,
       protection: {
         canDoStructureOp,
@@ -133,6 +136,7 @@ function createMockDeps(picture: PictureOverrides = {}): {
     comboBoxAdd,
     setCell,
     setFormat,
+    getCell,
     pictureUpdate,
     canDoStructureOp,
     uiState,
@@ -226,7 +230,7 @@ describe('object picture handlers', () => {
 
   describe('form control insertion', () => {
     it('inserts a checkbox form control through the worksheet API', async () => {
-      const { deps, checkboxAdd, setCell, setFormat, canDoStructureOp } = createMockDeps();
+      const { deps, checkboxAdd, getCell, setCell, setFormat, canDoStructureOp } = createMockDeps();
 
       const result = await ObjectHandlers.INSERT_FORM_CONTROL_CHECKBOX(deps);
 
@@ -238,9 +242,31 @@ describe('object picture handlers', () => {
         width: 16,
         height: 16,
       });
+      expect(getCell).toHaveBeenCalledWith(0, 0);
       expect(setCell).toHaveBeenCalledWith(0, 0, false);
       expect(setFormat).toHaveBeenCalledWith(0, 0, { numberFormat: ';;;' });
       expect(canDoStructureOp).toHaveBeenCalledWith('editObject');
+    });
+
+    it('does not overwrite a populated cell when inserting a checkbox form control', async () => {
+      const { deps, checkboxAdd, getCell, setCell, setFormat } = createMockDeps();
+      getCell.mockResolvedValueOnce({
+        value: 34500,
+        displayText: '34,500 ',
+        formula: '',
+      });
+
+      const result = await ObjectHandlers.INSERT_FORM_CONTROL_CHECKBOX(deps);
+
+      expect(result.handled).toBe(true);
+      expect(checkboxAdd).toHaveBeenCalledWith({
+        anchor: { row: 0, col: 0 },
+        linkedCell: { row: 0, col: 0 },
+        width: 16,
+        height: 16,
+      });
+      expect(setCell).not.toHaveBeenCalled();
+      expect(setFormat).not.toHaveBeenCalled();
     });
 
     it('inserts a combo box form control through the worksheet API', async () => {

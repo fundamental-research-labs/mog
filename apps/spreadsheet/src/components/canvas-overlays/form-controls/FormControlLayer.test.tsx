@@ -2,12 +2,16 @@ import { jest } from '@jest/globals';
 import '@testing-library/jest-dom';
 import { fireEvent, render, screen } from '@testing-library/react';
 
-import type { ScrollBarControl, SpinnerControl } from '@mog-sdk/contracts/form-controls';
+import type {
+  CheckboxControl,
+  ScrollBarControl,
+  SpinnerControl,
+} from '@mog-sdk/contracts/form-controls';
 
 import { FormControlLayer, type ResolvedFormControl } from './FormControlLayer';
 
 function resolved(
-  control: ScrollBarControl | SpinnerControl,
+  control: CheckboxControl | ScrollBarControl | SpinnerControl,
   cellValue: unknown,
 ): ResolvedFormControl {
   return {
@@ -22,6 +26,33 @@ function resolved(
 }
 
 describe('FormControlLayer numeric controls', () => {
+  it('exposes checkbox linked-cell coordinates on the visible checkbox overlay', () => {
+    const control: CheckboxControl = {
+      id: 'check-1',
+      type: 'checkbox',
+      sheetId: 'sheet-1' as never,
+      anchor: { cellId: 'cell-a1' as never, xOffset: 0, yOffset: 0 },
+      width: 16,
+      height: 16,
+      enabled: true,
+      zIndex: 3,
+      linkedCellId: 'cell-a1' as never,
+    };
+
+    render(
+      <FormControlLayer controls={[resolved(control, false)]} onCellValueChange={jest.fn()} />,
+    );
+
+    expect(screen.getByTestId('form-control-checkbox-check-1')).toHaveAttribute(
+      'data-form-control-linked-row',
+      '3',
+    );
+    expect(screen.getByTestId('form-control-checkbox-check-1')).toHaveAttribute(
+      'data-form-control-linked-col',
+      '7',
+    );
+  });
+
   it('renders scroll bars as DOM form-control overlays and writes numeric values', () => {
     const onCellValueChange = jest.fn();
     const control: ScrollBarControl = {

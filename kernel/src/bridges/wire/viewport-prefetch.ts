@@ -146,6 +146,33 @@ export function canSkipRefetch(
 // ---------------------------------------------------------------------------
 
 /**
+ * Normalize viewport bounds before they cross the Rust bridge.
+ *
+ * Some pane layouts legitimately produce a degenerate visible range, e.g. a
+ * frozen-corner viewport with no frozen columns has `endCol: -1`. The Rust ABI
+ * takes unsigned coordinates, so negative ends must be collapsed before IPC
+ * instead of wrapping to `u32::MAX`.
+ */
+export function normalizeViewportBounds(
+  bounds: PrefetchBounds,
+  sheetDimensions: { maxRow: number; maxCol: number } = { maxRow: 1048576, maxCol: 16384 },
+): PrefetchBounds {
+  const maxRow = Math.max(0, sheetDimensions.maxRow);
+  const maxCol = Math.max(0, sheetDimensions.maxCol);
+  const startRow = Math.min(maxRow, Math.max(0, bounds.startRow));
+  const startCol = Math.min(maxCol, Math.max(0, bounds.startCol));
+  const endRow = Math.min(maxRow, Math.max(startRow, bounds.endRow));
+  const endCol = Math.min(maxCol, Math.max(startCol, bounds.endCol));
+
+  return {
+    startRow,
+    startCol,
+    endRow,
+    endCol,
+  };
+}
+
+/**
  * Compute oversized prefetch bounds around the visible area.
  * Clamps to [0, sheetDimensions.maxRow/maxCol].
  */
@@ -157,12 +184,15 @@ export function computePrefetchBounds(
     overscanCols: DEFAULT_OVERSCAN_COLS,
   },
 ): PrefetchBounds {
-  return {
-    startRow: Math.max(0, visibleBounds.startRow - config.overscanRows),
-    startCol: Math.max(0, visibleBounds.startCol - config.overscanCols),
-    endRow: Math.min(sheetDimensions.maxRow, visibleBounds.endRow + config.overscanRows),
-    endCol: Math.min(sheetDimensions.maxCol, visibleBounds.endCol + config.overscanCols),
-  };
+  return normalizeViewportBounds(
+    {
+      startRow: visibleBounds.startRow - config.overscanRows,
+      startCol: visibleBounds.startCol - config.overscanCols,
+      endRow: visibleBounds.endRow + config.overscanRows,
+      endCol: visibleBounds.endCol + config.overscanCols,
+    },
+    sheetDimensions,
+  );
 }
 
 /**

@@ -17,16 +17,20 @@
  */
 
 import React, { useCallback, useEffect } from 'react';
+import { useSelector } from '@xstate/react';
 import {
   dispatch,
   useActionDependencies,
   useActiveSheetId,
+  useCoordinator,
   useFeatureGate,
   useUIStore,
 } from '../../../internal-api';
 
 import { Tooltip } from '@mog/shell';
+import type { ClipboardState } from '@mog-sdk/contracts/actors';
 import { CELLS_COLLAPSE_CONFIG } from '@mog-sdk/contracts/ribbon';
+import { clipboardSelectors } from '../../../selectors';
 import { useDispatch } from '../../../hooks/toolbar/use-action-dependencies';
 import { useSheetProtectionPermissions } from '../../../hooks/structure/use-sheet-protection';
 import { useWorkbookStructureProtection } from '../../../hooks/structure/use-workbook-protection';
@@ -79,9 +83,17 @@ export const CellsGroup = React.memo(function CellsGroup() {
 
   const deps = useActionDependencies();
   const dispatchAction = useDispatch();
+  const coordinator = useCoordinator();
   const activeSheetId = useActiveSheetId();
   const sheetPermissions = useSheetProtectionPermissions(activeSheetId);
   const workbookStructureLocked = useWorkbookStructureProtection();
+  const hasCutCells = useSelector(coordinator.grid.access.actors.clipboard, (state) => {
+    const clipboardState = state as ClipboardState;
+    return (
+      clipboardSelectors.hasCut(clipboardState) &&
+      clipboardSelectors.cutSource(clipboardState) !== null
+    );
+  });
 
   // ===========================================================================
   // Local State (dropdown visibility)
@@ -170,7 +182,11 @@ export const CellsGroup = React.memo(function CellsGroup() {
                     aria-label="Insert"
                     onClick={(e) => {
                       e.stopPropagation();
-                      dispatchAction('INSERT_CELLS_SHIFT_DOWN');
+                      if (hasCutCells) {
+                        setTimeout(() => dispatchAction('INSERT_CUT_CELLS_SHIFT_DOWN'), 0);
+                      } else {
+                        dispatchAction('INSERT_CELLS_SHIFT_DOWN');
+                      }
                     }}
                   >
                     <span className="flex items-center justify-center w-4 h-4">
@@ -200,11 +216,18 @@ export const CellsGroup = React.memo(function CellsGroup() {
             menuLabel="Insert options"
           >
             <RibbonDropdownItem
-              dataValue="insert-cells"
+              dataValue={hasCutCells ? 'insert-cut-cells' : 'insert-cells'}
               icon={<InsertCellsIcon />}
-              onClick={() => dispatchAction('OPEN_INSERT_CELLS_DIALOG')}
+              onClick={() => {
+                if (hasCutCells) {
+                  setInsertDropdownOpen(false);
+                  setTimeout(() => dispatchAction('INSERT_CUT_CELLS_SHIFT_DOWN'), 0);
+                } else {
+                  dispatchAction('OPEN_INSERT_CELLS_DIALOG');
+                }
+              }}
             >
-              Insert Cells...
+              {hasCutCells ? 'Insert Cut Cells' : 'Insert Cells...'}
             </RibbonDropdownItem>
             <RibbonDropdownItem
               dataValue="insert-rows"

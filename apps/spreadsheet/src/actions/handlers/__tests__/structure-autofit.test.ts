@@ -11,6 +11,7 @@ import {
 const autoFitRows = jest.fn(async () => undefined);
 const autoFitColumns = jest.fn(async () => undefined);
 const getTextMeasurementService = jest.fn(() => ({ measure: jest.fn() }));
+const pasteHandler = jest.fn(async () => ({ handled: true }));
 
 jest.unstable_mockModule('../../../systems/grid-editing/features/autofit', () => ({
   autoFitRows,
@@ -19,6 +20,10 @@ jest.unstable_mockModule('../../../systems/grid-editing/features/autofit', () =>
 
 jest.unstable_mockModule('@mog/grid-renderer', () => ({
   getTextMeasurementService,
+}));
+
+jest.unstable_mockModule('../clipboard-paste', () => ({
+  PASTE: pasteHandler,
 }));
 
 const StructureHandlers = await import('../structure');
@@ -62,6 +67,7 @@ function createDeps(
   const workbook = {
     getSheetById: jest.fn(() => worksheet),
     activeSheet: worksheet,
+    batch: jest.fn(async (_label: string, fn: (wb: unknown) => Promise<unknown>) => fn(workbook)),
   };
 
   return {
@@ -71,6 +77,11 @@ function createDeps(
       selection: {
         getActiveCell: jest.fn(() => options.activeCell ?? { row: 4, col: 3 }),
         getRanges: jest.fn(() => options.ranges ?? []),
+      },
+      clipboard: {
+        hasCut: jest.fn(() => true),
+        getIsCut: jest.fn(() => true),
+        isExternalClipboard: jest.fn(() => false),
       },
     },
     commands: {
@@ -94,6 +105,7 @@ describe('Structure autofit handlers', () => {
     autoFitRows.mockClear();
     autoFitColumns.mockClear();
     getTextMeasurementService.mockClear();
+    pasteHandler.mockClear();
   });
 
   it('AUTO_FIT_COLUMN_WIDTH targets the active column when no selection ranges are available', async () => {
@@ -186,6 +198,30 @@ describe('Structure autofit handlers', () => {
 
     const worksheet = deps.workbook.activeSheet as any;
     expect(worksheet.structure.insertCellsWithShift).toHaveBeenCalledWith(4, 3, 4, 3, 'down');
+  });
+
+  it('INSERT_CUT_CELLS_SHIFT_DOWN inserts the active-cell slot and awaits paste', async () => {
+    const deps = createDeps({ activeCell: { row: 4, col: 3 }, ranges: [] });
+
+    const result = await StructureHandlers.INSERT_CUT_CELLS_SHIFT_DOWN(deps);
+
+    const worksheet = deps.workbook.activeSheet as any;
+    expect(result.handled).toBe(true);
+    expect(deps.workbook.batch).toHaveBeenCalledWith('Insert Cut Cells', expect.any(Function));
+    expect(worksheet.structure.insertCellsWithShift).toHaveBeenCalledWith(4, 3, 4, 3, 'down');
+    expect(pasteHandler).toHaveBeenCalledWith(deps);
+  });
+
+  it('INSERT_CUT_CELLS_SHIFT_DOWN is disabled without an active cut clipboard', async () => {
+    const deps = createDeps({ activeCell: { row: 4, col: 3 }, ranges: [] });
+    (deps.accessors.clipboard.hasCut as jest.Mock).mockReturnValue(false);
+
+    const result = await StructureHandlers.INSERT_CUT_CELLS_SHIFT_DOWN(deps);
+
+    const worksheet = deps.workbook.activeSheet as any;
+    expect(result.handled).toBe(false);
+    expect(worksheet.structure.insertCellsWithShift).not.toHaveBeenCalled();
+    expect(pasteHandler).not.toHaveBeenCalled();
   });
 
   it('visibility and explicit sizing actions target the active row or column when ranges are empty', async () => {

@@ -42,6 +42,37 @@ const DELETE_OPTIONS: ShiftOption[] = [
   { value: 'column', label: 'Entire column' },
 ];
 
+const APPLY_AFTER_CLOSE_DELAY_MS = 100;
+
+type DialogActionWindow = typeof window & {
+  __MOG_PENDING_DIALOG_ACTION__?: Promise<void>;
+};
+
+function scheduleDialogAction(action: () => unknown): void {
+  const global = window as DialogActionWindow;
+  const pending = new Promise<void>((resolve, reject) => {
+    window.setTimeout(() => {
+      Promise.resolve()
+        .then(action)
+        .then(
+          () => {
+            if (global.__MOG_PENDING_DIALOG_ACTION__ === pending) {
+              delete global.__MOG_PENDING_DIALOG_ACTION__;
+            }
+            resolve();
+          },
+          (error) => {
+            if (global.__MOG_PENDING_DIALOG_ACTION__ === pending) {
+              delete global.__MOG_PENDING_DIALOG_ACTION__;
+            }
+            reject(error);
+          },
+        );
+    }, APPLY_AFTER_CLOSE_DELAY_MS);
+  });
+  global.__MOG_PENDING_DIALOG_ACTION__ = pending;
+}
+
 // =============================================================================
 // Component
 // =============================================================================
@@ -78,33 +109,42 @@ export function InsertCellsDialog() {
       return;
     }
 
-    // If user selected entire row/column, delegate to row/column actions
-    if (selectedOption === 'row') {
-      if (mode === 'insert') {
-        dispatch('INSERT_ROW_ABOVE', deps);
+    const action = () => {
+      // If user selected entire row/column, delegate to row/column actions
+      if (selectedOption === 'row') {
+        if (mode === 'insert') {
+          return dispatch('INSERT_ROW_ABOVE', deps);
+        } else {
+          return dispatch('DELETE_ROWS', deps);
+        }
+      } else if (selectedOption === 'column') {
+        if (mode === 'insert') {
+          return dispatch('INSERT_COLUMN_LEFT', deps);
+        } else {
+          return dispatch('DELETE_COLUMNS', deps);
+        }
       } else {
-        dispatch('DELETE_ROWS', deps);
+        // Shift cells in specified direction
+        if (mode === 'insert') {
+          if (deps.accessors.clipboard.hasCut()) {
+            return deps.commands.clipboard.paste({ row: range.startRow, col: range.startCol });
+          }
+
+          // Insert cells - shift existing cells right or down
+          const direction = selectedOption === 'right' ? 'right' : 'down';
+          return dispatch('INSERT_CELLS', deps, { range, direction });
+        } else {
+          // Delete cells - shift remaining cells left or up
+          const direction = selectedOption === 'left' ? 'left' : 'up';
+          return dispatch('DELETE_CELLS', deps, { range, direction });
+        }
       }
-    } else if (selectedOption === 'column') {
-      if (mode === 'insert') {
-        dispatch('INSERT_COLUMN_LEFT', deps);
-      } else {
-        dispatch('DELETE_COLUMNS', deps);
-      }
-    } else {
-      // Shift cells in specified direction
-      if (mode === 'insert') {
-        // Insert cells - shift existing cells right or down
-        const direction = selectedOption === 'right' ? 'right' : 'down';
-        dispatch('INSERT_CELLS', deps, { range, direction });
-      } else {
-        // Delete cells - shift remaining cells left or up
-        const direction = selectedOption === 'left' ? 'left' : 'up';
-        dispatch('DELETE_CELLS', deps, { range, direction });
-      }
-    }
+    };
 
     closeDialog();
+    // Structural mutations can synchronously monopolize the main thread; let the
+    // click/close sequence complete before starting the apply work.
+    scheduleDialogAction(action);
   }, [selectedOption, mode, range, deps, closeDialog]);
 
   // Handle Cancel button click

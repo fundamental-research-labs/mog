@@ -88,6 +88,7 @@ const ControlRenderer = memo(
             width={width}
             height={height}
             onCellValueChange={onCellValueChange}
+            linkedCellPosition={linkedCellPosition}
           />
         );
         break;

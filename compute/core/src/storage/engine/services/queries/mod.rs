@@ -19,8 +19,8 @@ use crate::snapshot::{
 use crate::storage::cells::values as cell_values;
 use crate::storage::infra::cell_iter;
 use crate::storage::sheet::{
-    dimensions as sheet_dimensions, merges, order, print, properties, protection, settings, view,
-    visibility,
+    dimensions as sheet_dimensions, grouping as sheet_grouping, merges, order, print, properties,
+    protection, settings, view, visibility,
 };
 use crate::storage::workbook::named_ranges as workbook_named_ranges;
 use crate::storage::workbook::settings as workbook_settings;

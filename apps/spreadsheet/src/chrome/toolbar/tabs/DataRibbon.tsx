@@ -442,6 +442,9 @@ export function DataRibbon({
     setIsGroupDropdownOpen(false);
     groupColumns();
   }, [groupColumns]);
+  const handleUngroupClick = useCallback(() => {
+    window.setTimeout(() => dispatch('UNGROUP'), 0);
+  }, [dispatch]);
 
   useEffect(() => {
     if (!canGroup) setIsGroupDropdownOpen(false);
@@ -932,7 +935,7 @@ export function DataRibbon({
             width="narrow"
             icon={<UngroupIcon />}
             label="Ungroup"
-            onClick={() => dispatch('UNGROUP')}
+            onClick={handleUngroupClick}
             disabled={!canUngroup}
             title="Ungroup selected rows (Alt+Shift+Left)"
             aria-label="Ungroup"

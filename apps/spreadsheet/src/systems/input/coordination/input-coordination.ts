@@ -1022,12 +1022,13 @@ export class InputCoordinator {
   }
 
   /**
-   * Reset the internal scroll position without triggering any side effects.
+   * Reset the internal scroll position without writing back to the renderer.
    *
    * Use this when an external system (e.g., renderer-execution) has already
    * set the scroll position and the physics engine needs to sync to it.
-   * This avoids re-triggering the save path (onScrollPositionChanged) or
-   * firing scroll callbacks that would create a feedback loop.
+   * This avoids re-triggering the save path (onScrollPositionChanged) while
+   * still publishing the adopted position to scroll subscribers such as the
+   * scrollbar bounds bridge.
    *
    * Specifically used during sheet switch: renderer-execution restores scroll
    * via renderer.setScroll(), then calls this to sync the physics engine.
@@ -1038,9 +1039,16 @@ export class InputCoordinator {
   resetScrollPosition(x: number, y: number): void {
     this.assertNotDisposed();
     this.stopAllAnimations();
+    const bounds = this.scrollPhysics.getBounds();
+    const maxX = Math.max(bounds.maxX, x);
+    const maxY = Math.max(bounds.maxY, y);
+    if (maxX !== bounds.maxX || maxY !== bounds.maxY) {
+      this.scrollPhysics.setBounds(bounds.minX, maxX, bounds.minY, maxY);
+    }
     this.scrollPhysics.setPosition(x, y);
-    // Intentionally does NOT call applyScrollPosition(), notifyScrollCallbacks(),
-    // or requestRender() — the caller has already applied the position externally.
+    this.notifyScrollCallbacks();
+    // Intentionally does NOT call applyScrollPosition() or requestRender() —
+    // the caller has already applied the position externally.
   }
 
   /**

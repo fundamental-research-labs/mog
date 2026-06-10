@@ -35,6 +35,7 @@ import {
   createFullColumnRangeSpan,
   createFullRowRangeSpan,
   getMovingEdge,
+  moveCell,
   moveCellSkipHidden,
   normalizeRange,
   rangeFromAnchorAndCell,
@@ -173,16 +174,12 @@ const extendSelection = assign(
       const movingEdge = getMovingEdge(context.pendingRange, anchorCell);
       const targetRow =
         event.direction === 'up' || event.direction === 'down'
-          ? moveCellSkipHidden(
-              movingEdge,
-              event.direction,
-              1,
-              context.isRowHidden,
-              context.isColHidden,
-            ).row
+          ? moveCell(movingEdge, event.direction, 1).row
           : movingEdge.row;
       const activeCell =
-        context.modes.extend && !event.shiftKey ? { row: targetRow, col: anchorCell.col } : anchorCell;
+        context.modes.extend && !event.shiftKey
+          ? { row: targetRow, col: anchorCell.col }
+          : anchorCell;
 
       return {
         pendingRange: createFullRowRangeSpan(anchorCell.row, targetRow),
@@ -199,16 +196,12 @@ const extendSelection = assign(
       const movingEdge = getMovingEdge(context.pendingRange, anchorCell);
       const targetCol =
         event.direction === 'left' || event.direction === 'right'
-          ? moveCellSkipHidden(
-              movingEdge,
-              event.direction,
-              1,
-              context.isRowHidden,
-              context.isColHidden,
-            ).col
+          ? moveCell(movingEdge, event.direction, 1).col
           : movingEdge.col;
       const activeCell =
-        context.modes.extend && !event.shiftKey ? { row: anchorCell.row, col: targetCol } : anchorCell;
+        context.modes.extend && !event.shiftKey
+          ? { row: anchorCell.row, col: targetCol }
+          : anchorCell;
 
       return {
         pendingRange: createFullColumnRangeSpan(anchorCell.col, targetCol),
@@ -223,14 +216,10 @@ const extendSelection = assign(
     // Get the "moving edge" - the corner opposite the anchor that should move
     // For first extend (single cell), the moving edge is the activeCell itself
     const movingEdge = getMovingEdge(context.pendingRange, anchor);
-    // Move the moving edge in the arrow direction
-    const stepped = moveCellSkipHidden(
-      movingEdge,
-      event.direction,
-      1,
-      context.isRowHidden,
-      context.isColHidden,
-    );
+    // Shift+Arrow changes range geometry by worksheet coordinates. Hidden
+    // rows/columns remain part of the selected rectangle; plain navigation
+    // uses moveCellSkipHidden separately.
+    const stepped = moveCell(movingEdge, event.direction, 1);
     // extend past a merge boundary so the moving edge doesn't
     // sit on the merge interior — matches the same machine-internal escape
     // used by `moveActiveCell`.

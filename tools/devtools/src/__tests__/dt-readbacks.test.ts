@@ -759,6 +759,78 @@ describe('__dt rendered-state readbacks (app-eval / app-eval rendered-state read
     });
   });
 
+  test('getCellValue preserves populated linked-cell display under an unlabeled checkbox overlay', () => {
+    runtime = setupRuntime({
+      drawings: [],
+      rowHeights: { 20: 24 },
+      colWidths: { 12: 100 },
+      viewportCells: {
+        '20,12': {
+          displayText: '34,500',
+          valueType: 1,
+          numberValue: 34500,
+          hasFormula: false,
+        },
+      },
+    });
+
+    const fakeDocument: any = {
+      querySelector: (selector: string) =>
+        selector ===
+        '[data-form-control-type="checkbox"][data-form-control-linked-row="20"][data-form-control-linked-col="12"]'
+          ? {
+              querySelector: (childSelector: string) =>
+                childSelector === '[data-testid^="form-control-checkbox-"]'
+                  ? { textContent: '' }
+                  : null,
+            }
+          : null,
+    };
+    (globalThis as any).document = fakeDocument;
+    (globalThis as any).window.document = fakeDocument;
+
+    const cell = runtime.api.getCellValue(20, 12);
+
+    expect(cell?.displayText).toBe('34,500');
+    expect(cell?.valueType).toBe(1);
+    expect(cell?.numberValue).toBe(34500);
+  });
+
+  test('getCellValue masks boolean linked-cell display under an unlabeled checkbox overlay', () => {
+    runtime = setupRuntime({
+      drawings: [],
+      rowHeights: { 0: 24 },
+      colWidths: { 0: 100 },
+      viewportCells: {
+        '0,0': {
+          displayText: 'FALSE',
+          valueType: 3,
+          hasFormula: false,
+        },
+      },
+    });
+
+    const fakeDocument: any = {
+      querySelector: (selector: string) =>
+        selector ===
+        '[data-form-control-type="checkbox"][data-form-control-linked-row="0"][data-form-control-linked-col="0"]'
+          ? {
+              querySelector: (childSelector: string) =>
+                childSelector === '[data-testid^="form-control-checkbox-"]'
+                  ? { textContent: '' }
+                  : null,
+            }
+          : null,
+    };
+    (globalThis as any).document = fakeDocument;
+    (globalThis as any).window.document = fakeDocument;
+
+    const cell = runtime.api.getCellValue(0, 0);
+
+    expect(cell?.displayText).toBe('');
+    expect(cell?.valueType).toBe(3);
+  });
+
   test('getCellsViaBridge returns empty data for covered merged cells', async () => {
     runtime = setupRuntime({
       drawings: [],

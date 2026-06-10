@@ -48,6 +48,8 @@ interface CachedCellData extends Omit<IdentifiedCellData, 'cellId'> {
   cellId: CellId;
   /** Alias: the value field used for search matching (same as `value`) */
   displayValue: CellValue | null;
+  /** Whether this cell is hidden by its row or column. */
+  isHidden: boolean;
 }
 
 /**
@@ -333,12 +335,16 @@ export class FindReplaceCoordinator {
 
       // Use unified Worksheet API -- returns cells with CellId, value, formula, display string
       const ws = workbook.getSheetById(sheetId);
-      const identifiedCells = await ws.getRangeWithIdentity(
-        dataBounds.minRow,
-        dataBounds.minCol,
-        dataBounds.maxRow,
-        dataBounds.maxCol,
-      );
+      const [identifiedCells, hiddenRows, hiddenCols] = await Promise.all([
+        ws.getRangeWithIdentity(
+          dataBounds.minRow,
+          dataBounds.minCol,
+          dataBounds.maxRow,
+          dataBounds.maxCol,
+        ),
+        ws.layout.getHiddenRowsBitmap(),
+        ws.layout.getHiddenColumnsBitmap(),
+      ]);
 
       const cells: CachedCellData[] = [];
       const cellIndex = new Map<CellId, CachedCellData>();
@@ -348,6 +354,7 @@ export class FindReplaceCoordinator {
           ...ic,
           cellId: toCellId(ic.cellId),
           displayValue: ic.value,
+          isHidden: hiddenRows.has(ic.row) || hiddenCols.has(ic.col),
         };
         cells.push(cached);
         cellIndex.set(cached.cellId, cached);
@@ -379,11 +386,21 @@ export class FindReplaceCoordinator {
 
       const isReplacementQuery =
         this.lastExecutedQuery.trim() !== '' && this.lastExecutedQuery !== query;
-      const initialCurrentIndex = isReplacementQuery && results.length > 0 ? -1 : undefined;
+      const activeCellBeforeSearch = this.getActiveCell();
+      const firstResultPosition = results[0] ? this.getCachedResultPosition(results[0]) : null;
+      const activeWasFirstResult =
+        firstResultPosition !== null &&
+        firstResultPosition.sheet === activeSheetId &&
+        activeCellBeforeSearch?.row === firstResultPosition.row &&
+        activeCellBeforeSearch?.col === firstResultPosition.col;
+      const initialCurrentIndex =
+        results.length === 0 ? undefined : isReplacementQuery || !activeWasFirstResult ? -1 : 0;
 
       // Send results to machine. Replacement searches keep results highlighted
       // but leave navigation unselected so the first explicit Enter lands on
-      // the first result instead of skipping to the second.
+      // the first result instead of skipping to the second. Fresh searches do
+      // the same when live search moves the active cell to a different first
+      // result; if the active cell was already the first result, Enter advances.
       this.deps.findReplaceActor.send({
         type: 'SEARCH_COMPLETE',
         results,
@@ -391,8 +408,10 @@ export class FindReplaceCoordinator {
       });
       this.lastExecutedQuery = query;
 
-      // If there are results, navigate to the first one
-      if (results.length > 0 && initialCurrentIndex !== -1) {
+      // If there are results for a fresh query, live-search to the first one.
+      // Keep currentIndex at -1 when this is a new jump so the first Enter
+      // confirms that result instead of skipping past it.
+      if (results.length > 0 && !isReplacementQuery && !activeWasFirstResult) {
         await this.navigateToResult(results[0]);
       }
 
@@ -412,10 +431,8 @@ export class FindReplaceCoordinator {
     if (!this.deps) return;
 
     // Resolve from cache first (O(1)), fallback to deps
-    const cached = this.searchCache?.sheets.get(result.sheetId)?.cellIndex.get(result.cellId);
-    const position = cached
-      ? { row: cached.row, col: cached.col, sheet: result.sheetId }
-      : await this.deps.resolveCellPosition(result.cellId);
+    const position =
+      this.getCachedResultPosition(result) ?? (await this.deps.resolveCellPosition(result.cellId));
     if (!position) {
       console.warn('[FindReplaceCoordinator] Could not resolve position for', result.cellId);
       return;
@@ -631,6 +648,21 @@ export class FindReplaceCoordinator {
     const regex = new RegExp(escapeRegExp(query), 'gi');
     return currentValue.replace(regex, replacement);
   }
+
+  private getCachedResultPosition(
+    result: SearchResult,
+  ): { row: number; col: number; sheet: SheetId } | null {
+    const cached = this.searchCache?.sheets.get(result.sheetId)?.cellIndex.get(result.cellId);
+    return cached ? { row: cached.row, col: cached.col, sheet: result.sheetId } : null;
+  }
+
+  private getActiveCell(): { row: number; col: number } | null {
+    try {
+      return this.deps?.selectionActor.getSnapshot().context.activeCell ?? null;
+    } catch {
+      return null;
+    }
+  }
 }
 
 // =============================================================================
@@ -651,7 +683,7 @@ function createSearchProviderFromCache(cache: SearchCache): SearchDataProvider {
       if (!sheetData) return [];
 
       // Copy and sort by direction
-      const sorted = [...sheetData.cells];
+      const sorted = sheetData.cells.filter((cell) => !cell.isHidden);
       if (direction === 'byRow') {
         sorted.sort((a, b) => (a.row !== b.row ? a.row - b.row : a.col - b.col));
       } else {

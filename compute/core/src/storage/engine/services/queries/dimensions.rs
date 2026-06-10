@@ -9,7 +9,10 @@ pub(in crate::storage::engine) fn is_row_hidden_query(
     sheet_id: &SheetId,
     row: u32,
 ) -> bool {
-    sheet_dimensions::is_row_hidden(stores.storage.doc(), stores.storage.sheets(), sheet_id, row)
+    let doc = stores.storage.doc();
+    let sheets = stores.storage.sheets();
+    sheet_dimensions::is_row_hidden(doc, sheets, sheet_id, row)
+        || !sheet_grouping::is_row_visible_by_groups(doc, sheets, sheet_id, row)
 }
 
 pub(in crate::storage::engine) fn is_col_hidden_query(
@@ -17,7 +20,10 @@ pub(in crate::storage::engine) fn is_col_hidden_query(
     sheet_id: &SheetId,
     col: u32,
 ) -> bool {
-    sheet_dimensions::is_column_hidden(stores.storage.doc(), stores.storage.sheets(), sheet_id, col)
+    let doc = stores.storage.doc();
+    let sheets = stores.storage.sheets();
+    sheet_dimensions::is_column_hidden(doc, sheets, sheet_id, col)
+        || !sheet_grouping::is_column_visible_by_groups(doc, sheets, sheet_id, col)
 }
 
 pub(in crate::storage::engine) fn get_hidden_rows(

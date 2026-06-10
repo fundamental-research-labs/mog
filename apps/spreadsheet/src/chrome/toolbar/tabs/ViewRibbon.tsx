@@ -3,7 +3,7 @@
  *
  * View tab content matching Excel 365 group order:
  * 1. Workbook Views - Normal, Page Break Preview, Page Layout, Custom Views
- * 2. Show - Ruler, Gridlines, Formula Bar, Headings
+ * 2. Show - Status Bar, Gridlines, Formula Bar, Headings
  * 3. Zoom - Zoom Out, dropdown, 100%, Zoom In, Zoom to Selection
  * 4. Window - New Window, Arrange All, Freeze Panes, Split, Hide, Unhide, Switch Windows
  * 5. Settings - CUSTOM (not in Excel, our addition for workbook/sheet settings)
@@ -160,30 +160,6 @@ function CustomViewsIcon() {
         strokeWidth="1.2"
         fill="none"
       />
-    </svg>
-  );
-}
-
-/** Ruler icon */
-function RulerIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <rect
-        x="1"
-        y="6"
-        width="14"
-        height="4"
-        rx="0.5"
-        stroke="currentColor"
-        strokeWidth="1.2"
-        fill="none"
-      />
-      <line x1="3" y1="6" x2="3" y2="8" stroke="currentColor" strokeWidth="1" />
-      <line x1="5" y1="6" x2="5" y2="7" stroke="currentColor" strokeWidth="1" />
-      <line x1="7" y1="6" x2="7" y2="8" stroke="currentColor" strokeWidth="1" />
-      <line x1="9" y1="6" x2="9" y2="7" stroke="currentColor" strokeWidth="1" />
-      <line x1="11" y1="6" x2="11" y2="8" stroke="currentColor" strokeWidth="1" />
-      <line x1="13" y1="6" x2="13" y2="7" stroke="currentColor" strokeWidth="1" />
     </svg>
   );
 }
@@ -363,6 +339,10 @@ interface ViewRibbonProps {
   showFormulaBar?: boolean;
   /** Called when formula bar toggle is clicked */
   onToggleFormulaBar?: () => void;
+  /** Whether the status bar is shown */
+  showStatusBar?: boolean;
+  /** Called when status bar toggle is clicked */
+  onToggleStatusBar?: () => void;
   // Scrollbar visibility (Issue 7: View Options)
   /** Whether horizontal scrollbar is shown */
   showHorizontalScrollbar?: boolean;
@@ -427,6 +407,8 @@ export function ViewRibbon({
   // V1: Formula Bar visibility
   showFormulaBar = true,
   onToggleFormulaBar,
+  showStatusBar = true,
+  onToggleStatusBar,
   // Scrollbar visibility (Issue 7: View Options)
   showHorizontalScrollbar = true,
   onToggleHorizontalScrollbar,
@@ -645,18 +627,26 @@ export function ViewRibbon({
             height: 'var(--ribbon-content-height)',
           }}
         >
-          {/* Row 1: Ruler | Headings */}
-          <RibbonVisibilityItem item="ruler">
+          {/* Row 1: Status Bar | Headings */}
+          <RibbonVisibilityItem item="statusBar">
             <label
-              className="flex items-center gap-1 whitespace-nowrap cursor-pointer opacity-50 min-w-0"
+              data-testid="panel-status-bar-reopen"
+              data-action="open-panel-status-bar"
+              className={`flex items-center gap-1 whitespace-nowrap cursor-pointer min-w-0 ${!onToggleStatusBar ? 'opacity-50' : ''}`}
               style={{ height: 'var(--ribbon-button-height-third)' }}
-              title="Ruler (coming soon)"
             >
               <span className="w-4 h-4 flex-shrink-0 flex items-center justify-center">
-                <RulerIcon />
+                <span className="text-ribbon-compact" aria-hidden="true">
+                  =
+                </span>
               </span>
-              <Checkbox disabled aria-label="Ruler" />
-              <span className="text-ribbon-compact text-ss-text-secondary">Ruler</span>
+              <Checkbox
+                checked={showStatusBar}
+                onChange={() => onToggleStatusBar?.()}
+                disabled={!onToggleStatusBar}
+                aria-label="Status Bar"
+              />
+              <span className="text-ribbon-compact text-ss-text-secondary">Status Bar</span>
             </label>
           </RibbonVisibilityItem>
           <RibbonVisibilityItem item="headings">
@@ -695,6 +685,7 @@ export function ViewRibbon({
               <span className="text-ribbon-compact text-ss-text-secondary">Gridlines</span>
             </label>
           </RibbonVisibilityItem>
+
           {/* Chrome-symmetry: Formula Bar reopen lives here. The label
  carries the contract testid + data-action; the Checkbox
  inherits the label click target so a single click toggles
@@ -737,6 +728,7 @@ export function ViewRibbon({
               <span className="text-ribbon-compact text-ss-text-secondary">H-Scroll</span>
             </label>
           </RibbonVisibilityItem>
+
           <RibbonVisibilityItem item="verticalScrollbar">
             <label
               className={`flex items-center gap-1 whitespace-nowrap cursor-pointer min-w-0 ${!onToggleVerticalScrollbar ? 'opacity-50' : ''}`}

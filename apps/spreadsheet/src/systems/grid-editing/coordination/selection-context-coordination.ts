@@ -147,7 +147,20 @@ export function setupSelectionContextCoordination(
     prevSelectionActive = isActive;
   });
 
-  // 2. Object interaction machine subscription (handles all floating objects including charts)
+  // 2. User selection emit subscription. SET_SELECTION can replace the current
+  // cell range while the selection machine stays idle, so state-transition
+  // checks above do not see a new active-selection transition.
+  const unsubUserSelection = selectionActor.on('userSelectionChanged', () => {
+    if (!hasObjectSelection(objectInteractionActor.getSnapshot())) return;
+
+    activeContext = 'cells';
+    objectInteractionActor.send({
+      type: 'EXTERNAL_SELECTION_ACTIVE',
+      context: 'cells',
+    });
+  });
+
+  // 3. Object interaction machine subscription (handles all floating objects including charts)
   const unsubObjects = objectInteractionActor.subscribe((state: ObjectInteractionState_) => {
     const isSelected = hasObjectSelection(state);
 
@@ -175,6 +188,7 @@ export function setupSelectionContextCoordination(
   return {
     cleanup: () => {
       unsubSelection.unsubscribe();
+      unsubUserSelection.unsubscribe();
       unsubObjects.unsubscribe();
     },
     getActiveContext: () => activeContext,

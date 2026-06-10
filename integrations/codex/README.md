@@ -1,0 +1,83 @@
+# Mog Codex Plugin
+
+This private build harness produces the public Codex plugin bundle at `plugins/mog`.
+The plugin lets Codex start a localhost Mog spreadsheet host, open that host in
+the Codex in-app browser, operate on the same visible workbook through MCP
+tools, and export XLSX bytes to explicit host paths.
+
+## Build
+
+```bash
+pnpm --dir integrations/codex build
+pnpm --dir integrations/codex typecheck
+pnpm --dir integrations/codex test
+pnpm --dir integrations/codex validate-plugin
+```
+
+The installable plugin code is under `plugins/mog`. Sparse Git-backed
+marketplace installs should include both `.agents/plugins` and `plugins/mog`.
+The browser runtime does not vendor the compute WASM binary in Git; it loads the
+version-pinned published `@mog-sdk/wasm` package from jsDelivr's npm mirror.
+
+## Install
+
+Local checkout:
+
+```bash
+codex plugin marketplace add /absolute/path/to/mog
+```
+
+Git-backed marketplace:
+
+```bash
+codex plugin marketplace add fundamental-research-labs/mog --ref main
+```
+
+Sparse Git-backed marketplace:
+
+```bash
+codex plugin marketplace add fundamental-research-labs/mog --ref main \
+  --sparse .agents/plugins --sparse plugins/mog
+```
+
+Do not use a raw GitHub URL to `.agents/plugins/marketplace.json`; Codex needs
+the marketplace root so it can resolve `./plugins/mog`.
+
+## Tools
+
+- `mog_browser_start`: create a blank workbook session or import an explicit
+  local `.xlsx` path and return a localhost browser URL.
+- `mog_browser_status`: report server, browser, workbook, canvas, and smoke
+  readiness.
+- `mog_cell_read`: read a cell or range from the browser-visible workbook.
+- `mog_cell_write`: write a value to the browser-visible workbook.
+- `mog_selection_set`: set the visible selection.
+- `mog_export_xlsx`: export the browser-visible workbook to an explicit local
+  path.
+- `mog_session_close`: close a session and pending browser RPC resources.
+
+## Desktop Manual Acceptance
+
+Codex desktop automation is not available from this repo, so verify the desktop
+path manually:
+
+1. Install the marketplace from a local `../mog` checkout.
+2. Install and enable the Mog plugin in Codex.
+3. Start a new Codex thread.
+4. Ask Codex to use Mog to open a blank spreadsheet.
+5. Open the returned localhost URL in the Codex in-app browser, or let Browser
+   Use open it when enabled.
+6. Confirm the page reports ready through `mog_browser_status`.
+7. Ask Codex to write a value to `A1`.
+8. Confirm the browser grid shows the value.
+9. Ask Codex to export the workbook to an explicit path.
+10. Open or inspect the exported file.
+
+Automatic click-to-open `.xlsx` file association is not part of Codex's
+documented plugin API. Users should ask Codex to open an explicit `.xlsx` path
+with Mog until Codex exposes file or link handler contributions.
+
+The first browser load requires network access to
+`https://cdn.jsdelivr.net/npm/@mog-sdk/wasm@0.9.2/` so the browser can load the
+published WASM package. The plugin validator fails if a WASM file is vendored
+under `plugins/mog/dist`.

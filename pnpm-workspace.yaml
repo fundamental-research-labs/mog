@@ -42,6 +42,7 @@ packages:
   - 'infra/rust-bridge/bridge-ts'
   - 'infra/rust-bridge/client'
   - 'infra/transport'
+  - 'integrations/codex'
   - 'integrations/vscode/mog-xlsx-editor'
   - 'kernel'
   - 'kernel/host-internal'

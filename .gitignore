@@ -63,6 +63,10 @@ __pycache__/
 
 # Misc
 .mcp.json
+!plugins/mog/.mcp.json
+!plugins/mog/dist/
+!plugins/mog/dist/**
+plugins/mog/dist/**/*.wasm
 logo/generated/
 rust_out
 .wrangler/

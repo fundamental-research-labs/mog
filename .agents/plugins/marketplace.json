@@ -1,0 +1,20 @@
+{
+  "name": "mog-public-plugins",
+  "interface": {
+    "displayName": "Mog Public Plugins"
+  },
+  "plugins": [
+    {
+      "name": "mog",
+      "source": {
+        "source": "local",
+        "path": "./plugins/mog"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

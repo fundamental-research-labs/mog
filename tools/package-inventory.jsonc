@@ -661,6 +661,12 @@
     "publicTarget": null,
     "forbiddenRuntimeDeps": [],
   },
+  "@mog/codex-plugin-build": {
+    "disposition": "private",
+    "requirePrivate": true,
+    "publicTarget": null,
+    "forbiddenRuntimeDeps": [],
+  },
 
   // ── marketplace integrations ─────────────────────────────────────────
   "mog-xlsx-editor": {

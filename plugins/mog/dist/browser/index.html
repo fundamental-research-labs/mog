@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: blob:; font-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://cdn.jsdelivr.net; connect-src 'self' https://cdn.jsdelivr.net; worker-src 'self' blob:;">
+  <link rel="stylesheet" href="/assets/spreadsheet-app.css">
+  <link rel="stylesheet" href="/assets/host.css">
+  <title>Mog Spreadsheet</title>
+</head>
+<body>
+  <div id="root" data-mog-codex-state="loading"></div>
+  <script type="importmap">{
+  "imports": {
+    "@mog-sdk/wasm": "https://cdn.jsdelivr.net/npm/@mog-sdk/wasm@0.9.2/compute_core_wasm.js"
+  }
+}</script>
+  <script type="module" src="/assets/browser.js"></script>
+</body>
+</html>

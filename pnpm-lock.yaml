@@ -1108,6 +1108,31 @@ importers:
         specifier: workspace:*
         version: link:../../compute/napi
 
+  integrations/codex:
+    dependencies:
+      '@mog-sdk/spreadsheet-app':
+        specifier: workspace:*
+        version: link:../../runtime/spreadsheet-app
+      react:
+        specifier: ^19.0.0
+        version: 19.2.6
+      react-dom:
+        specifier: ^19.0.0
+        version: 19.2.6(react@19.2.6)
+    devDependencies:
+      '@types/node':
+        specifier: ^25.5.0
+        version: 25.9.1
+      esbuild:
+        specifier: ^0.25.0
+        version: 0.25.12
+      playwright-core:
+        specifier: ^1.60.0
+        version: 1.60.0
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+
   integrations/vscode/mog-xlsx-editor:
     devDependencies:
       '@mog-sdk/spreadsheet-app':

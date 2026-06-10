@@ -1,0 +1,32 @@
+{
+  "name": "mog",
+  "version": "0.9.2",
+  "description": "Open, inspect, edit, and export Mog spreadsheets from Codex.",
+  "author": {
+    "name": "Mog",
+    "url": "https://github.com/fundamental-research-labs/mog"
+  },
+  "homepage": "https://github.com/fundamental-research-labs/mog",
+  "repository": "https://github.com/fundamental-research-labs/mog",
+  "license": "Apache-2.0",
+  "keywords": ["spreadsheet", "xlsx", "codex", "mcp", "data"],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Mog",
+    "shortDescription": "Spreadsheet workflows inside Codex",
+    "longDescription": "Use Mog to open a browser-visible spreadsheet, inspect and edit workbook cells through MCP tools, and export XLSX files to explicit host paths.",
+    "developerName": "Mog",
+    "category": "Productivity",
+    "capabilities": ["Interactive", "Read", "Write"],
+    "websiteURL": "https://github.com/fundamental-research-labs/mog",
+    "defaultPrompt": [
+      "Open a blank Mog spreadsheet in the browser",
+      "Open this XLSX file in Mog and summarize the visible workbook",
+      "Write values into a Mog workbook and export it as XLSX"
+    ],
+    "brandColor": "#10A37F",
+    "composerIcon": "./assets/icon.png",
+    "logo": "./assets/logo.png"
+  }
+}

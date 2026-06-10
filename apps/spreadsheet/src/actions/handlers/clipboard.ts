@@ -51,6 +51,7 @@ import { blobToDataUrl } from '../../utils/blob-to-data-url';
 import { pasteChartFromClipboard } from './chart-clipboard';
 import { getUIStore, handled } from './handler-utils';
 import {
+  getActiveClipboardPaste,
   trackActiveClipboardPaste,
   waitForPendingClipboardPaste,
 } from '../../systems/grid-editing/coordination/pending-clipboard-paste';
@@ -727,7 +728,14 @@ function emitClipboardSettlement(
  * Announces "Pasted" for screen reader accessibility.
  *
  */
-export const PASTE: AsyncActionHandler = (deps) => runPaste(deps);
+export const PASTE: AsyncActionHandler = (deps) => {
+  if (isEditing(deps)) {
+    return runPaste(deps);
+  }
+  const pastePromise = runPaste(deps);
+  trackActiveClipboardPaste(pastePromise);
+  return pastePromise;
+};
 
 const runPaste: AsyncActionHandler = async (deps) => {
   // In edit mode, let native browser handle text paste at cursor
@@ -767,7 +775,6 @@ const runPaste: AsyncActionHandler = async (deps) => {
       });
     },
   });
-  trackActiveClipboardPaste(pastePromise);
   await pastePromise;
 
   // Accessibility announcement for paste operation
@@ -817,6 +824,14 @@ export const CLEAR_CLIPBOARD: ActionHandler = (deps) => {
   // routed through the selection actor; the UIStore
   // mode slice fields were retired.
   deps.commands.selection.exitAllModes();
+
+  const activePaste = getActiveClipboardPaste();
+  if (activePaste) {
+    void activePaste.finally(() => {
+      deps.commands.clipboard.clear();
+    });
+    return handled();
+  }
 
   // Otherwise, clear the clipboard as normal
   deps.commands.clipboard.clear();

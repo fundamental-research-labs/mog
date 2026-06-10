@@ -78,7 +78,7 @@ export interface OverflowResult {
  */
 const fontStringCache = new Map<string, string>();
 const MAX_FONT_CACHE_SIZE = 5000;
-const VERTICAL_CLIP_HORIZONTAL_MARGIN = 1_000_000;
+const VERTICAL_CLIP_HORIZONTAL_MARGIN = 16_000;
 
 /**
  * Clip text paint to the row's vertical interior while leaving horizontal

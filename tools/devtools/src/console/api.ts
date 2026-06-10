@@ -577,6 +577,11 @@ export function createConsoleAPI(
     height: number;
   };
 
+  type RenderedCellSize = {
+    width: number;
+    height: number;
+  };
+
   function getRenderedCellBounds(row: number, col: number): RenderedCellBounds | null {
     try {
       const coordinator = (window as any).__COORDINATOR__;
@@ -601,6 +606,28 @@ export function createConsoleAPI(
     } catch {
       return null;
     }
+  }
+
+  function getRenderedCellSize(row: number, col: number): RenderedCellSize | null {
+    try {
+      const coordinator = (window as any).__COORDINATOR__;
+      const geometry = coordinator?.renderer?.getGeometry?.();
+      const size = geometry?.getCellRenderedSize?.({ row, col });
+      if (
+        size &&
+        Number.isFinite(size.width) &&
+        Number.isFinite(size.height) &&
+        size.width >= 0 &&
+        size.height >= 0
+      ) {
+        return { width: size.width, height: size.height };
+      }
+    } catch {
+      // fall through to visible page-bounds fallback
+    }
+
+    const bounds = getRenderedCellBounds(row, col);
+    return bounds ? { width: bounds.width, height: bounds.height } : null;
   }
 
   /**
@@ -2123,6 +2150,14 @@ export function createConsoleAPI(
 
     async getRenderedColWidth(_sheet: string | null, col: number): Promise<number | null> {
       return getRenderedCellBounds(0, col)?.width ?? null;
+    },
+
+    async getRenderedCellSize(
+      _sheet: string | null,
+      row: number,
+      col: number,
+    ): Promise<{ width: number; height: number } | null> {
+      return getRenderedCellSize(row, col);
     },
 
     getRenderedViewportStartRow(scope: string = 'main'): number | null {

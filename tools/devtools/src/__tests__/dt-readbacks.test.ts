@@ -34,7 +34,14 @@ interface FakeSceneObject {
   visible: boolean;
   groupId: string | null;
   rotation?: number;
-  data?: { src?: string; chartId?: string; wordArt?: unknown };
+  data?: {
+    src?: string;
+    chartId?: string;
+    wordArt?: unknown;
+    chartType?: string;
+    dataRange?: string;
+    sourceRange?: string;
+  };
 }
 
 function makeSceneGraph(objects: FakeSceneObject[]) {
@@ -117,6 +124,7 @@ function setupRuntime(opts: {
   bridgeColPositions?: Record<number, number>;
   coordinateDocumentPixelToCell?: boolean;
   renderedCellSizes?: Record<string, { width: number; height: number }>;
+  charts?: Array<Record<string, unknown>>;
 }): RuntimeBundle {
   const g = globalThis as { window?: Record<string, unknown>; document?: unknown };
 
@@ -214,6 +222,17 @@ function setupRuntime(opts: {
       activeSheet: {
         sheetId: 'sheet-1',
         getSheetId: () => 'sheet-1',
+        charts: {
+          get: async (id: string) =>
+            opts.charts?.find(
+              (chart) =>
+                chart.id === id ||
+                chart.chartId === id ||
+                chart.objectId === id ||
+                chart.name === id,
+            ) ?? null,
+          list: async () => opts.charts ?? [],
+        },
         layout: {
           // No documentPixelToCell here — force fallback to coordinator's
           // coordinate system.
@@ -406,6 +425,50 @@ describe('__dt rendered-state readbacks (app-eval / app-eval rendered-state read
     expect(byId['legacy-text-effect-1']).toBe('wordArt');
     expect(byId['plain-textbox']).toBe('shape');
     expect(byId['smartart-1']).toBe('smartArt');
+  });
+
+  test('getRenderedDrawings enriches chart descriptors from the chart model', async () => {
+    runtime = setupRuntime({
+      drawings: [
+        {
+          id: 'chart-object-1',
+          type: 'chart',
+          bounds: { x: 256, y: 20, width: 512, height: 280 },
+          zIndex: 1,
+          visible: true,
+          groupId: null,
+          data: { chartId: 'chart-1' } as any,
+        },
+      ],
+      rowHeights: Object.fromEntries(Array.from({ length: 20 }, (_v, row) => [row, 20])),
+      colWidths: Object.fromEntries(Array.from({ length: 16 }, (_v, col) => [col, 64])),
+      coordinateDocumentPixelToCell: false,
+      charts: [
+        {
+          id: 'chart-1',
+          type: 'combo',
+          dataRange: 'Data!A2:C5',
+          anchorRow: 1,
+          anchorCol: 4,
+        },
+      ],
+    });
+
+    const drawings = await runtime.api.getRenderedDrawings();
+    expect(drawings).toHaveLength(1);
+    expect(drawings[0]).toMatchObject({
+      id: 'chart-object-1',
+      kind: 'chart',
+      chartType: 'combo',
+      dataRange: 'Data!A2:C5',
+      sourceRange: 'Data!A2:C5',
+      chartRange: 'E2:M16',
+      usedSyntheticAnchorFallback: false,
+      anchor: {
+        from: { row: 1, col: 4 },
+        to: { row: 15, col: 12 },
+      },
+    });
   });
 
   test('getRenderedDrawings includes visible DOM form-control overlays', async () => {

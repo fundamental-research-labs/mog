@@ -1223,6 +1223,11 @@ export interface DrawingDescriptor {
   visible: boolean;
   /** For image/chart drawings, the source URL or chart id. Optional for shapes. */
   src?: string;
+  chartType?: string;
+  dataRange?: string;
+  sourceRange?: string;
+  chartRange?: string;
+  usedSyntheticAnchorFallback?: boolean;
 }
 
 export interface PixelRect {

@@ -116,6 +116,7 @@ function setupRuntime(opts: {
   colWidths: Record<number, number>;
   bridgeColPositions?: Record<number, number>;
   coordinateDocumentPixelToCell?: boolean;
+  renderedCellSizes?: Record<string, { width: number; height: number }>;
 }): RuntimeBundle {
   const g = globalThis as { window?: Record<string, unknown>; document?: unknown };
 
@@ -165,6 +166,14 @@ function setupRuntime(opts: {
             const w = opts.colWidths[cell.col];
             if (h == null || w == null) return null;
             return { x: 0, y: 0, width: w, height: h };
+          },
+          getCellRenderedSize(cell: { row: number; col: number }) {
+            const explicit = opts.renderedCellSizes?.[`${cell.row},${cell.col}`];
+            if (explicit) return explicit;
+            const h = opts.rowHeights[cell.row];
+            const w = opts.colWidths[cell.col];
+            if (h == null || w == null) return null;
+            return { width: w, height: h };
           },
           getVisibleRange() {
             return renderer.getCoordinateSystem().getVisibleRange();
@@ -510,6 +519,21 @@ describe('__dt rendered-state readbacks (app-eval / app-eval rendered-state read
     });
     const w = await runtime.api.getRenderedColWidth(null, 999);
     expect(w).toBeNull();
+  });
+
+  test('getRenderedCellSize reports intrinsic size when page bounds are not visible', async () => {
+    runtime = setupRuntime({
+      drawings: [],
+      rowHeights: {},
+      colWidths: {},
+      renderedCellSizes: { '0,255': { width: 64, height: 24 } },
+    });
+
+    await expect(runtime.api.getRenderedCellSize(null, 0, 255)).resolves.toEqual({
+      width: 64,
+      height: 24,
+    });
+    await expect(runtime.api.getRenderedColWidth(null, 255)).resolves.toBeNull();
   });
 
   test('getCanvasSnapshot returns empty Uint8Array when no canvas exists', async () => {

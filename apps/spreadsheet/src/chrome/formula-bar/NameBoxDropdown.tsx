@@ -138,7 +138,7 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
   // selection settles (transitions to 'idle' state), preventing re-renders during drag.
   // @see engine/src/state/hooks/use-debounced-selection.ts
   // =============================================================================
-  const { ranges, activeCell } = useDebouncedSelection();
+  const { ranges, activeCell } = useDebouncedSelection(0);
 
   const selectionCommands = useMemo(
     () => createSelectionCommands(coordinator.grid.access.actors.selection),

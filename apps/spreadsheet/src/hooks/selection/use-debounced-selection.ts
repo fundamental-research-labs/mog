@@ -125,6 +125,13 @@ export function useDebouncedSelection(
         if (debounceRef.current) {
           clearTimeout(debounceRef.current);
         }
+        if (debounceMs <= 0) {
+          const snapshot = getSelectionSnapshot(state);
+          setDebouncedRanges(snapshot.ranges);
+          setDebouncedActiveCell(snapshot.activeCell);
+          debounceRef.current = null;
+          return;
+        }
         debounceRef.current = setTimeout(() => {
           const snapshot = getSelectionSnapshot(state);
           setDebouncedRanges(snapshot.ranges);

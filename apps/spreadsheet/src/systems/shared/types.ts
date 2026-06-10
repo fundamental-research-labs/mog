@@ -573,12 +573,15 @@ export function moveCellSkipHidden(
         break;
     }
 
-    // Check if new position is hidden
-    const rowHidden = isRowHidden?.(row) ?? false;
-    const colHidden = isColHidden?.(col) ?? false;
+    // Check only the moving axis. A hidden stationary column must not block
+    // vertical movement within that column, and vice versa for hidden rows.
+    const hiddenOnMovingAxis =
+      direction === 'up' || direction === 'down'
+        ? (isRowHidden?.(row) ?? false)
+        : (isColHidden?.(col) ?? false);
 
     // If not hidden, count as a successful move
-    if (!rowHidden && !colHidden) {
+    if (!hiddenOnMovingAxis) {
       moved++;
     }
 
@@ -590,7 +593,10 @@ export function moveCellSkipHidden(
       (direction === 'right' && col === MAX_COLS - 1)
     ) {
       // If we're at boundary and it's hidden, try to stay at visible cell
-      const atHidden = (isRowHidden?.(row) ?? false) || (isColHidden?.(col) ?? false);
+      const atHidden =
+        direction === 'up' || direction === 'down'
+          ? (isRowHidden?.(row) ?? false)
+          : (isColHidden?.(col) ?? false);
       if (atHidden && moved === 0) {
         // Couldn't find any visible cell in that direction, stay at original
         return cell;

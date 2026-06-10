@@ -41,6 +41,7 @@ import type {
 } from '@mog-sdk/contracts/viewport';
 
 import type { RendererActor } from '../machines/grid-renderer-machine';
+import { resolveCellLevelScrollPosition } from './cell-scroll';
 
 const INTERNAL_GRID_RENDERER_KEY = '__mogInternalGridRenderer';
 
@@ -183,19 +184,16 @@ export function setupRendererExecution(config: RendererExecutionConfig): Rendere
     }
 
     // Fall back to the workbook-persisted cell top-left for first visits after
-    // load, matching the initial sheet path.
-    const rowDims = sheetView.geometry.getDimensions({ row: topRow, col: 0 });
-    const colDims = sheetView.geometry.getDimensions({ row: 0, col: leftCol });
-    const rowDim = rowDims.find((d: any) => 'top' in d);
-    const colDim = colDims.find((d: any) => 'left' in d);
-    if (rowDim && 'top' in rowDim && colDim && 'left' in colDim) {
-      scroll = {
-        x: colDim.left,
-        y: rowDim.top,
-      };
-    }
-
-    return scroll;
+    // load, matching the initial sheet path. Frozen panes pin rows/columns in
+    // place, so scrollable pixels start after the frozen boundary.
+    return (
+      resolveCellLevelScrollPosition({
+        geometry: sheetView.geometry,
+        viewport: sheetView.viewport,
+        topRow,
+        leftCol,
+      }) ?? scroll
+    );
   }
 
   // ===========================================================================

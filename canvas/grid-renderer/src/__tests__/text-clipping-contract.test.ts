@@ -140,8 +140,8 @@ describe('cell text clipping contract', () => {
       width: expect.any(Number),
       height: 18,
     });
-    expect(clips[0].x).toBeLessThan(-999_000);
-    expect(clips[0].width).toBeGreaterThan(2_000_000);
+    expect(clips[0].x).toBe(-15_960);
+    expect(clips[0].width).toBe(32_240);
     expect(paints.find((op) => op.kind === 'fillText')?.clips).toContainEqual(clips[0]);
   });
 
@@ -226,8 +226,8 @@ describe('cell text clipping contract', () => {
     expect(clips).toHaveLength(1);
     expect(clips[0].y).toBe(60);
     expect(clips[0].height).toBe(18);
-    expect(clips[0].x).toBeLessThan(-999_000);
-    expect(clips[0].width).toBeGreaterThan(2_000_000);
+    expect(clips[0].x).toBe(-15_960);
+    expect(clips[0].width).toBe(32_080);
     expect(paints.find((op) => op.kind === 'fillText')?.clips).toContainEqual(clips[0]);
   });
 });

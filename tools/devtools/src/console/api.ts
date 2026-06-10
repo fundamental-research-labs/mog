@@ -39,6 +39,7 @@ import {
   readIconBucket,
   readResolvedNumberFormats,
 } from './viewport-inspector';
+import { completeDrawingAnchor, getChartReadback } from './drawing-readbacks';
 
 export function createConsoleAPI(
   store: EventStore,
@@ -2037,6 +2038,13 @@ export function createConsoleAPI(
             obj.bounds.x + obj.bounds.width,
             obj.bounds.y + obj.bounds.height,
           );
+          const fallbackAnchor = {
+            from: fromCell ?? { row: 0, col: 0 },
+            ...(toCell ? { to: toCell } : {}),
+          };
+          const modelAnchor = completeDrawingAnchor(model?.anchor, toCell);
+          const chartReadback = kind === 'chart' ? await getChartReadback(ws, obj, toCell) : null;
+          const { anchor: chartAnchor, ...chartFields } = chartReadback ?? {};
           const canvasBounds = {
             x: obj.bounds.x + DEFAULT_ROW_HEADER_WIDTH_PX,
             y: obj.bounds.y + DEFAULT_COL_HEADER_HEIGHT_PX,
@@ -2046,13 +2054,11 @@ export function createConsoleAPI(
           out.push({
             id: obj.id,
             kind,
-            anchor: model?.anchor ?? {
-              from: fromCell ?? { row: 0, col: 0 },
-              ...(toCell ? { to: toCell } : {}),
-            },
+            anchor: chartAnchor ?? modelAnchor ?? fallbackAnchor,
             boundsPx: canvasBounds,
             visible: !!obj.visible,
             ...(extractSrc(obj) ? { src: extractSrc(obj)! } : {}),
+            ...chartFields,
           });
         }
 

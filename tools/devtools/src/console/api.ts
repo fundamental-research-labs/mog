@@ -39,6 +39,7 @@ import {
   readIconBucket,
   readResolvedNumberFormats,
 } from './viewport-inspector';
+import { completeDrawingAnchor, getChartReadback } from './drawing-readbacks';
 
 export function createConsoleAPI(
   store: EventStore,
@@ -577,6 +578,11 @@ export function createConsoleAPI(
     height: number;
   };
 
+  type RenderedCellSize = {
+    width: number;
+    height: number;
+  };
+
   function getRenderedCellBounds(row: number, col: number): RenderedCellBounds | null {
     try {
       const coordinator = (window as any).__COORDINATOR__;
@@ -601,6 +607,28 @@ export function createConsoleAPI(
     } catch {
       return null;
     }
+  }
+
+  function getRenderedCellSize(row: number, col: number): RenderedCellSize | null {
+    try {
+      const coordinator = (window as any).__COORDINATOR__;
+      const geometry = coordinator?.renderer?.getGeometry?.();
+      const size = geometry?.getCellRenderedSize?.({ row, col });
+      if (
+        size &&
+        Number.isFinite(size.width) &&
+        Number.isFinite(size.height) &&
+        size.width >= 0 &&
+        size.height >= 0
+      ) {
+        return { width: size.width, height: size.height };
+      }
+    } catch {
+      // fall through to visible page-bounds fallback
+    }
+
+    const bounds = getRenderedCellBounds(row, col);
+    return bounds ? { width: bounds.width, height: bounds.height } : null;
   }
 
   /**
@@ -2037,22 +2065,27 @@ export function createConsoleAPI(
             obj.bounds.x + obj.bounds.width,
             obj.bounds.y + obj.bounds.height,
           );
-          const canvasBounds = {
-            x: obj.bounds.x + DEFAULT_ROW_HEADER_WIDTH_PX,
-            y: obj.bounds.y + DEFAULT_COL_HEADER_HEIGHT_PX,
+          const fallbackAnchor = {
+            from: fromCell ?? { row: 0, col: 0 },
+            ...(toCell ? { to: toCell } : {}),
+          };
+          const modelAnchor = completeDrawingAnchor(model?.anchor, toCell);
+          const chartReadback = kind === 'chart' ? await getChartReadback(ws, obj, toCell) : null;
+          const { anchor: chartAnchor, ...chartFields } = chartReadback ?? {};
+          const documentBounds = {
+            x: obj.bounds.x,
+            y: obj.bounds.y,
             w: obj.bounds.width,
             h: obj.bounds.height,
           };
           out.push({
             id: obj.id,
             kind,
-            anchor: model?.anchor ?? {
-              from: fromCell ?? { row: 0, col: 0 },
-              ...(toCell ? { to: toCell } : {}),
-            },
-            boundsPx: canvasBounds,
+            anchor: chartAnchor ?? modelAnchor ?? fallbackAnchor,
+            boundsPx: documentBounds,
             visible: !!obj.visible,
             ...(extractSrc(obj) ? { src: extractSrc(obj)! } : {}),
+            ...chartFields,
           });
         }
 
@@ -2123,6 +2156,14 @@ export function createConsoleAPI(
 
     async getRenderedColWidth(_sheet: string | null, col: number): Promise<number | null> {
       return getRenderedCellBounds(0, col)?.width ?? null;
+    },
+
+    async getRenderedCellSize(
+      _sheet: string | null,
+      row: number,
+      col: number,
+    ): Promise<{ width: number; height: number } | null> {
+      return getRenderedCellSize(row, col);
     },
 
     getRenderedViewportStartRow(scope: string = 'main'): number | null {

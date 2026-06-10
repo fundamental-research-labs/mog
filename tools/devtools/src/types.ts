@@ -701,6 +701,17 @@ export interface DevToolsConsoleAPI {
   getRenderedColWidth(sheet: string | null, col: number): Promise<number | null>;
 
   /**
+   * Intrinsic rendered cell size in CSS pixels, independent of current viewport
+   * visibility when SheetView geometry can resolve it. Falls back to page
+   * bounds for older renderer adapters.
+   */
+  getRenderedCellSize(
+    sheet: string | null,
+    row: number,
+    col: number,
+  ): Promise<{ width: number; height: number } | null>;
+
+  /**
    * First row whose canvas geometry is currently resolvable for the given
    * renderer viewport scope. Unlike {@link getViewportStartRow}, this is not a
    * compute/prefetch bound; it is derived from the live grid renderer and is
@@ -1212,6 +1223,11 @@ export interface DrawingDescriptor {
   visible: boolean;
   /** For image/chart drawings, the source URL or chart id. Optional for shapes. */
   src?: string;
+  chartType?: string;
+  dataRange?: string;
+  sourceRange?: string;
+  chartRange?: string;
+  usedSyntheticAnchorFallback?: boolean;
 }
 
 export interface PixelRect {

@@ -427,6 +427,89 @@ function getActiveSheetId(): string | null {
   }
 }
 
+type NormalizedMergeRegion = {
+  startRow: number;
+  startCol: number;
+  endRow: number;
+  endCol: number;
+};
+
+function readNumericField(input: Record<string, unknown>, keys: readonly string[]): number | null {
+  for (const key of keys) {
+    const value = input[key];
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+  }
+  return null;
+}
+
+function normalizeMergeRegion(region: unknown): NormalizedMergeRegion | null {
+  if (!region || typeof region !== 'object') return null;
+  const record = region as Record<string, unknown>;
+  const startRow = readNumericField(record, ['startRow', 'start_row', 'row', 'anchorRow']);
+  const startCol = readNumericField(record, ['startCol', 'start_col', 'col', 'anchorCol']);
+  const endRow = readNumericField(record, ['endRow', 'end_row']);
+  const endCol = readNumericField(record, ['endCol', 'end_col']);
+  if (startRow === null || startCol === null || endRow === null || endCol === null) return null;
+  return {
+    startRow: Math.min(startRow, endRow),
+    startCol: Math.min(startCol, endCol),
+    endRow: Math.max(startRow, endRow),
+    endCol: Math.max(startCol, endCol),
+  };
+}
+
+function isCoveredCell(row: number, col: number, region: NormalizedMergeRegion | null): boolean {
+  if (!region) return false;
+  const inside =
+    row >= region.startRow &&
+    row <= region.endRow &&
+    col >= region.startCol &&
+    col <= region.endCol;
+  return inside && (row !== region.startRow || col !== region.startCol);
+}
+
+function readRenderedMergeRegion(row: number, col: number): NormalizedMergeRegion | null {
+  try {
+    const coord = (window as any).__COORDINATOR__;
+    const geometry = coord?.renderer?.getGeometry?.();
+    return normalizeMergeRegion(geometry?.getMergeAnchor?.(row, col));
+  } catch {
+    return null;
+  }
+}
+
+async function readBridgeMergeRegions(
+  bridge: any,
+  sheetId: string,
+): Promise<NormalizedMergeRegion[]> {
+  if (typeof bridge?.getAllMergesInSheet !== 'function') return [];
+  try {
+    const regions = await bridge.getAllMergesInSheet(sheetId);
+    if (!Array.isArray(regions)) return [];
+    return regions
+      .map(normalizeMergeRegion)
+      .filter((region): region is NormalizedMergeRegion => Boolean(region));
+  } catch {
+    return [];
+  }
+}
+
+function emptyCellReadback(
+  row: number,
+  col: number,
+  viewportId: string,
+): import('../types').ProgrammaticCellValue {
+  return {
+    row,
+    col,
+    viewportId,
+    displayText: null,
+    valueType: 0,
+    hasFormula: false,
+    errorText: null,
+  };
+}
+
 /**
  * Read a batch of cells via the compute bridge — the same path
  * production code uses for out-of-viewport range queries
@@ -461,6 +544,7 @@ export async function readCellsViaBridge(
 
   const sheetId = getActiveSheetId();
   if (!sheetId) return out;
+  const mergeRegions = await readBridgeMergeRegions(bridge, sheetId);
 
   // Issue one queryRange per requested cell, in parallel. Each call is sparse
   // (the result array is empty when the cell holds no value), so even very
@@ -481,6 +565,11 @@ export async function readCellsViaBridge(
   );
 
   for (const { row, col, cell } of settled) {
+    if (mergeRegions.some((region) => isCoveredCell(row, col, region))) {
+      out[`${row},${col}`] = emptyCellReadback(row, col, '__bridge__');
+      continue;
+    }
+
     const formatted: string | null =
       typeof cell?.formatted === 'string' && cell.formatted !== '' ? cell.formatted : null;
     const formula: string | undefined =
@@ -690,6 +779,12 @@ export function readCellValue(
     if (!accessor) return null;
     const exists = accessor.moveTo?.(row, col);
     if (!exists) return null;
+    const mergeRegion =
+      readRenderedMergeRegion(row, col) ??
+      normalizeMergeRegion(
+        accessor.mergeBounds ?? accessor.mergeRegion ?? accessor.mergedRegion ?? null,
+      );
+    if (isCoveredCell(row, col, mergeRegion)) return emptyCellReadback(row, col, vpId);
     const displayText = hasLinkedUnlabeledCheckboxOverlay(row, col)
       ? ''
       : (accessor.displayText ?? null);

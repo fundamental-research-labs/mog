@@ -125,10 +125,88 @@ function setupRuntime(opts: {
   coordinateDocumentPixelToCell?: boolean;
   renderedCellSizes?: Record<string, { width: number; height: number }>;
   charts?: Array<Record<string, unknown>>;
+  viewportCells?: Record<
+    string,
+    {
+      displayText?: string | null;
+      valueType?: number;
+      numberValue?: number;
+      hasFormula?: boolean;
+      errorText?: string | null;
+    }
+  >;
+  bridgeCells?: Record<
+    string,
+    {
+      formatted?: string | null;
+      value?: unknown;
+      formula?: string;
+    }
+  >;
+  merges?: Array<{ startRow: number; startCol: number; endRow: number; endCol: number }>;
 }): RuntimeBundle {
   const g = globalThis as { window?: Record<string, unknown>; document?: unknown };
 
   const sceneGraph = makeSceneGraph(opts.drawings);
+  const viewportId = 'main:sheet-1';
+  const computeBridge: Record<string, unknown> = {};
+  if (opts.bridgeColPositions) {
+    computeBridge.getColPosition = async (_sheetId: string, col: number) =>
+      opts.bridgeColPositions?.[col] ?? 0;
+  }
+  if (opts.viewportCells) {
+    computeBridge.getPerViewportStates = () => new Map([[viewportId, {}]]);
+    computeBridge.getAccessorForViewport = (id: string) => {
+      if (id !== viewportId) return null;
+      let current:
+        | {
+            displayText?: string | null;
+            valueType?: number;
+            numberValue?: number;
+            hasFormula?: boolean;
+            errorText?: string | null;
+          }
+        | undefined;
+      return {
+        moveTo(row: number, col: number) {
+          current = opts.viewportCells?.[`${row},${col}`];
+          return current !== undefined;
+        },
+        get displayText() {
+          return current?.displayText ?? null;
+        },
+        get valueType() {
+          return current?.valueType ?? 0;
+        },
+        get numberValue() {
+          return current?.numberValue;
+        },
+        get hasFormula() {
+          return current?.hasFormula ?? false;
+        },
+        get errorText() {
+          return current?.errorText ?? null;
+        },
+      };
+    };
+  }
+  if (opts.bridgeCells || opts.merges) {
+    computeBridge.queryRange = async (
+      _sheetId: string,
+      startRow: number,
+      startCol: number,
+      _endRow: number,
+      _endCol: number,
+    ) => {
+      const cell = opts.bridgeCells?.[`${startRow},${startCol}`];
+      return {
+        cells: cell ? [{ row: startRow, col: startCol, ...cell }] : [],
+        merges: opts.merges ?? [],
+      };
+    };
+    computeBridge.getAllMergesInSheet = async () => opts.merges ?? [];
+  }
+
   // __SHELL__ is still consulted by other readbacks (workbook lookup
   // fallback, principal resolution) but the scene graph is now sourced
   // from SheetView's object-scene capability — see `getRenderedDrawings`
@@ -139,14 +217,12 @@ function setupRuntime(opts: {
       getDocument: (id: string) =>
         id === 'doc-1'
           ? {
-              context: opts.bridgeColPositions
-                ? {
-                    computeBridge: {
-                      getColPosition: async (_sheetId: string, col: number) =>
-                        opts.bridgeColPositions?.[col] ?? 0,
-                    },
-                  }
-                : {},
+              context:
+                Object.keys(computeBridge).length > 0
+                  ? {
+                      computeBridge,
+                    }
+                  : {},
             }
           : null,
     },
@@ -185,6 +261,17 @@ function setupRuntime(opts: {
           },
           getVisibleRange() {
             return renderer.getCoordinateSystem().getVisibleRange();
+          },
+          getMergeAnchor(row: number, col: number) {
+            return (
+              opts.merges?.find(
+                (merge) =>
+                  row >= merge.startRow &&
+                  row <= merge.endRow &&
+                  col >= merge.startCol &&
+                  col <= merge.endCol,
+              ) ?? null
+            );
           },
           getPositionDimensions() {
             return {
@@ -643,6 +730,65 @@ describe('__dt rendered-state readbacks (app-eval / app-eval rendered-state read
     } finally {
       delete (globalThis as any).document;
     }
+  });
+
+  test('getCellValue returns empty data for covered merged cells', () => {
+    runtime = setupRuntime({
+      drawings: [],
+      rowHeights: { 0: 24, 1: 24 },
+      colWidths: { 0: 100, 1: 100 },
+      viewportCells: {
+        '0,0': { displayText: 'Merged', valueType: 2 },
+        '1,1': { displayText: 'Merged', valueType: 2 },
+      },
+      merges: [{ startRow: 0, startCol: 0, endRow: 1, endCol: 1 }],
+    });
+
+    expect(runtime.api.getCellValue(0, 0)).toMatchObject({
+      row: 0,
+      col: 0,
+      displayText: 'Merged',
+      valueType: 2,
+    });
+    expect(runtime.api.getCellValue(1, 1)).toMatchObject({
+      row: 1,
+      col: 1,
+      displayText: null,
+      valueType: 0,
+      hasFormula: false,
+    });
+  });
+
+  test('getCellsViaBridge returns empty data for covered merged cells', async () => {
+    runtime = setupRuntime({
+      drawings: [],
+      rowHeights: { 0: 24, 1: 24 },
+      colWidths: { 0: 100, 1: 100 },
+      bridgeCells: {
+        '0,0': { formatted: 'Merged', value: 'Merged' },
+        '1,1': { formatted: 'Merged', value: 'Merged' },
+      },
+      merges: [{ startRow: 0, startCol: 0, endRow: 1, endCol: 1 }],
+    });
+
+    const cells = await runtime.api.getCellsViaBridge([
+      { row: 0, col: 0 },
+      { row: 1, col: 1 },
+    ]);
+
+    expect(cells['0,0']).toMatchObject({
+      row: 0,
+      col: 0,
+      displayText: 'Merged',
+      valueType: 2,
+    });
+    expect(cells['1,1']).toMatchObject({
+      row: 1,
+      col: 1,
+      displayText: null,
+      valueType: 0,
+      hasFormula: false,
+    });
   });
 
   test('getDisplayedFormatsForCells uses range prefetch for dense in-limit cells', async () => {

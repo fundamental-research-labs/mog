@@ -38,7 +38,7 @@
  *
  */
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useStore } from 'zustand';
 import {
   useActiveSheetId,
@@ -48,7 +48,12 @@ import {
 } from '../../../internal-api';
 
 import { Tooltip } from '@mog/shell';
-import type { BorderPresetMode, BorderStyle, CellBorders } from '@mog-sdk/contracts/core';
+import type {
+  BorderPresetMode,
+  BorderStyle,
+  CellBorders,
+  CellFormat,
+} from '@mog-sdk/contracts/core';
 import { FONT_COLLAPSE_CONFIG } from '@mog-sdk/contracts/ribbon';
 import { BorderPicker } from '../../../components/pickers/BorderPicker';
 import { ColorPicker } from '../../../components/pickers/ColorPicker';
@@ -83,6 +88,7 @@ import {
 import { RibbonVisibilityItem } from '../visibility/RibbonVisibilityContext';
 // Note: DropdownArrowIcon is still used for the font picker dropdown
 import { DEFAULT_FONT_FAMILY, DEFAULT_FONT_SIZE } from '../primitives/ToolbarStyles';
+import { getCommonSelectionFontColor } from './font-color-selection';
 
 // =============================================================================
 // Helpers
@@ -180,6 +186,7 @@ export const FontGroup = React.memo(function FontGroup() {
   const fontSize = useUIStore((s) => s.activeCellFormat?.fontSize ?? DEFAULT_FONT_SIZE);
   const fontColor = useUIStore((s) => s.activeCellFormat?.fontColor);
   const backgroundColor = useUIStore((s) => s.activeCellFormat?.backgroundColor);
+  const toolbarRanges = useUIStore((s) => s.toolbarRanges);
 
   // ===========================================================================
   // Collapse Support
@@ -264,6 +271,24 @@ export const FontGroup = React.memo(function FontGroup() {
   const [recentFontColors, setRecentFontColors] = useState(() => getRecentColors('font'));
   const [recentFillColors, setRecentFillColors] = useState(() => getRecentColors('fill'));
   const [recentBorderColors, setRecentBorderColors] = useState(() => getRecentColors('border'));
+  const fontColorPickerValue = useMemo(() => {
+    if (!fontColorOpen) return fontColor;
+    return getCommonSelectionFontColor({
+      ranges: toolbarRanges,
+      activeCellFontColor: fontColor,
+      getCellFormat: (row, col) => {
+        if (!activeSheetId) return undefined;
+        try {
+          const format = coordinator.workbook
+            ?.getSheetById(activeSheetId)
+            ?.viewport.getCellData(row, col)?.format;
+          return (format as CellFormat | undefined) ?? undefined;
+        } catch {
+          return undefined;
+        }
+      },
+    });
+  }, [activeSheetId, coordinator, fontColor, fontColorOpen, toolbarRanges]);
 
   // Handler to apply font color and track in recents.
   const handleFontColorChange = useCallback(
@@ -633,7 +658,7 @@ export const FontGroup = React.memo(function FontGroup() {
             <RibbonDropdownPanel open={fontColorOpen} onClose={() => setFontColorOpen(false)}>
               <div data-testid="ribbon-dropdown-menu-font-color">
                 <ColorPicker
-                  value={fontColor}
+                  value={fontColorPickerValue}
                   onChange={(color) => {
                     handleFontColorChange(color);
                     setFontColorOpen(false);

@@ -8,6 +8,19 @@
 import type { PlatformIdentity } from '@mog-sdk/contracts/platform';
 import { isTauri } from './tauri/detection';
 
+function detectAppEvalOSOverride(): PlatformIdentity['os'] | null {
+  if (typeof window === 'undefined') return null;
+
+  try {
+    const params = new URLSearchParams(window.location.search);
+    if (params.has('app-eval-platform-mac')) return 'macos';
+  } catch {
+    // Ignore malformed or unavailable location state and use host detection.
+  }
+
+  return null;
+}
+
 /**
  * Detect the host operating system.
  *
@@ -16,6 +29,9 @@ import { isTauri } from './tauri/detection';
  * inside Tauri's webview.
  */
 function detectOS(): PlatformIdentity['os'] {
+  const appEvalOverride = detectAppEvalOSOverride();
+  if (appEvalOverride) return appEvalOverride;
+
   if (typeof navigator === 'undefined') return 'windows'; // SSR / test default
 
   // Modern API (Chromium 93+, Edge 93+). Works in Tauri's webview.

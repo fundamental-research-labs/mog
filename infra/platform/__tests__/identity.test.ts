@@ -38,7 +38,26 @@ function withNavigator(
   }
 }
 
+function withLocationSearch(search: string, fn: () => void): void {
+  const originalUrl = window.location.href;
+  window.history.replaceState({}, '', search);
+  try {
+    fn();
+  } finally {
+    window.history.replaceState({}, '', originalUrl);
+  }
+}
+
 describe('createPlatformIdentity', () => {
+  it('honors the app-eval macOS platform override before userAgentData', () => {
+    withLocationSearch('/?app-eval-platform-mac', () => {
+      withNavigator({ platform: 'MacIntel', userAgentData: { platform: 'Linux' } }, () => {
+        const id = createPlatformIdentity();
+        expect(id.os).toBe('macos');
+      });
+    });
+  });
+
   describe('via userAgentData (modern Chromium path)', () => {
     it('detects macOS', () => {
       withNavigator({ userAgentData: { platform: 'macOS' } }, () => {

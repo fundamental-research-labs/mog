@@ -163,9 +163,14 @@ async function validateDist() {
   const distStats = await stat(resolve(pluginRoot, 'dist')).catch(() => null);
   if (!distStats?.isDirectory()) fail('plugins/mog/dist must be a directory');
 
-  const wasmFiles = (await listFiles(resolve(pluginRoot, 'dist'))).filter((path) => path.endsWith('.wasm'));
+  const distFiles = await listFiles(resolve(pluginRoot, 'dist'));
+  const wasmFiles = distFiles.filter((path) => path.endsWith('.wasm'));
   if (wasmFiles.length > 0) {
     fail(`plugins/mog/dist must not vendor WASM files; use the published @mog-sdk/wasm package: ${wasmFiles.join(', ')}`);
+  }
+  const fontFiles = distFiles.filter((path) => /\.(?:ttf|otf|woff2?)$/i.test(path));
+  if (fontFiles.length > 0) {
+    fail(`plugins/mog/dist must not vendor font files; use browser/system font fallback: ${fontFiles.join(', ')}`);
   }
 
   const [manifest, wasmPackage, importMap] = await Promise.all([

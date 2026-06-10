@@ -1,4 +1,4 @@
-import { copyFile, cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as esbuild from 'esbuild';
@@ -20,6 +20,10 @@ const importMap = {
   },
 };
 const importMapJson = JSON.stringify(importMap, null, 2);
+
+function stripVendoredFontFaces(css) {
+  return css.replace(/@font-face\{[^{}]*url\([^)]*\.(?:ttf|otf|woff2?)[^{}]*\}/gi, '');
+}
 
 await rm(resolve(pluginRoot, 'dist'), { recursive: true, force: true });
 await mkdir(browserAssets, { recursive: true });
@@ -46,10 +50,11 @@ await writeFile(
 `,
 );
 
+const spreadsheetCss = await readFile(resolve(spreadsheetAppDist, 'styles.css'), 'utf8');
+
 await Promise.all([
-  copyFile(resolve(spreadsheetAppDist, 'styles.css'), resolve(browserAssets, 'spreadsheet-app.css')),
+  writeFile(resolve(browserAssets, 'spreadsheet-app.css'), stripVendoredFontFaces(spreadsheetCss)),
   copyFile(resolve(packageRoot, 'src/browser/host.css'), resolve(browserAssets, 'host.css')),
-  cp(resolve(spreadsheetAppDist, 'assets'), resolve(browserAssets, 'assets'), { recursive: true }),
   writeFile(resolve(browserAssets, 'import-map.json'), importMapJson),
 ]);
 

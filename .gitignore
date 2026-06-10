@@ -67,6 +67,10 @@ __pycache__/
 !plugins/mog/dist/
 !plugins/mog/dist/**
 plugins/mog/dist/**/*.wasm
+plugins/mog/dist/**/*.ttf
+plugins/mog/dist/**/*.otf
+plugins/mog/dist/**/*.woff
+plugins/mog/dist/**/*.woff2
 logo/generated/
 rust_out
 .wrangler/

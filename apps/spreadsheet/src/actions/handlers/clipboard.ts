@@ -546,9 +546,18 @@ export const COPY: ActionHandler = (deps) => {
     rejectData = rej;
   });
   const settlementId = ++clipboardSettlementSequence;
+  let settledTsv = '';
 
   // SYNCHRONOUS: Reserve clipboard slot within user activation window.
   const clipboardWritePromise = writeToSystemClipboard(dataPromise);
+  const clipboardSettlementPromise = clipboardWritePromise
+    .then(() => {
+      emitClipboardSettlement('copy', settlementId, settledTsv, true);
+    })
+    .catch((clipErr) => {
+      console.warn('System clipboard write failed (copy):', clipErr);
+      emitClipboardSettlement('copy', settlementId, settledTsv, false, clipErr);
+    });
 
   // ASYNC: Bridge work runs in background via .then/.catch chain.
   // Handler returns handled() synchronously below.
@@ -560,6 +569,7 @@ export const COPY: ActionHandler = (deps) => {
 
       // Store text signature for external clipboard detection
       data.textSignature = tsv;
+      settledTsv = tsv;
 
       // Resolve the deferred promise — clipboard now receives the data.
       resolveData({ tsv, html });
@@ -569,16 +579,6 @@ export const COPY: ActionHandler = (deps) => {
       // system clipboard write fails (e.g., headless browsers, Playwright).
       copyCutDeps.commands.copy(mutableRanges, data);
 
-      // Await the clipboard write — best-effort, failure is non-fatal.
-      void clipboardWritePromise
-        .then(() => {
-          emitClipboardSettlement('copy', settlementId, tsv, true);
-        })
-        .catch((clipErr) => {
-          console.warn('System clipboard write failed (copy):', clipErr);
-          emitClipboardSettlement('copy', settlementId, tsv, false, clipErr);
-        });
-
       // Accessibility announcement for copy operation
       getUIStore(deps).getState().announce('Copied to clipboard', 'polite');
     })
@@ -587,7 +587,9 @@ export const COPY: ActionHandler = (deps) => {
       rejectData(err);
       console.error('Copy failed:', err);
     });
-  trackPendingClipboardCapture(capturePromise);
+  trackPendingClipboardCapture(
+    Promise.all([capturePromise, clipboardSettlementPromise]).then(() => undefined),
+  );
 
   return handled();
 };
@@ -638,9 +640,18 @@ export const CUT: ActionHandler = (deps) => {
     rejectData = rej;
   });
   const settlementId = ++clipboardSettlementSequence;
+  let settledTsv = '';
 
   // SYNCHRONOUS: Reserve clipboard slot within user activation window.
   const clipboardWritePromise = writeToSystemClipboard(dataPromise);
+  const clipboardSettlementPromise = clipboardWritePromise
+    .then(() => {
+      emitClipboardSettlement('cut', settlementId, settledTsv, true);
+    })
+    .catch((clipErr) => {
+      console.warn('System clipboard write failed (cut):', clipErr);
+      emitClipboardSettlement('cut', settlementId, settledTsv, false, clipErr);
+    });
 
   // ASYNC: Bridge work runs in background via .then/.catch chain.
   // Handler returns handled() synchronously below.
@@ -652,6 +663,7 @@ export const CUT: ActionHandler = (deps) => {
 
       // Store text signature for external clipboard detection
       data.textSignature = tsv;
+      settledTsv = tsv;
 
       // Resolve the deferred promise — clipboard now receives the data.
       resolveData({ tsv, html });
@@ -661,16 +673,6 @@ export const CUT: ActionHandler = (deps) => {
       // system clipboard write fails (e.g., headless browsers, Playwright).
       copyCutDeps.commands.cut(mutableRanges, data);
 
-      // Await the clipboard write — best-effort, failure is non-fatal.
-      void clipboardWritePromise
-        .then(() => {
-          emitClipboardSettlement('cut', settlementId, tsv, true);
-        })
-        .catch((clipErr) => {
-          console.warn('System clipboard write failed (cut):', clipErr);
-          emitClipboardSettlement('cut', settlementId, tsv, false, clipErr);
-        });
-
       // Accessibility announcement for cut operation
       getUIStore(deps).getState().announce('Cut to clipboard', 'polite');
     })
@@ -678,7 +680,9 @@ export const CUT: ActionHandler = (deps) => {
       rejectData(err);
       console.error('Cut failed:', err);
     });
-  trackPendingClipboardCapture(capturePromise);
+  trackPendingClipboardCapture(
+    Promise.all([capturePromise, clipboardSettlementPromise]).then(() => undefined),
+  );
 
   return handled();
 };

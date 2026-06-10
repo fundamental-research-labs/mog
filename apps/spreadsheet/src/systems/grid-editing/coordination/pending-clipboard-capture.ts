@@ -1,16 +1,21 @@
-let pendingClipboardCapture: Promise<void> | null = null;
+type PendingClipboardCaptureGlobal = typeof globalThis & {
+  __MOG_PENDING_CLIPBOARD_CAPTURE__?: Promise<unknown>;
+};
+
+const globalPendingClipboardCapture = () => globalThis as PendingClipboardCaptureGlobal;
 
 export function trackPendingClipboardCapture(promise: Promise<void>): void {
-  let tracked: Promise<void>;
-  tracked = promise.finally(() => {
-    if (pendingClipboardCapture === tracked) {
-      pendingClipboardCapture = null;
+  const global = globalPendingClipboardCapture();
+  const tracked = promise.catch(() => undefined);
+  global.__MOG_PENDING_CLIPBOARD_CAPTURE__ = tracked;
+  void tracked.finally(() => {
+    if (global.__MOG_PENDING_CLIPBOARD_CAPTURE__ === tracked) {
+      delete global.__MOG_PENDING_CLIPBOARD_CAPTURE__;
     }
   });
-  pendingClipboardCapture = tracked;
 }
 
 export async function waitForPendingClipboardCapture(): Promise<void> {
-  if (!pendingClipboardCapture) return;
-  await pendingClipboardCapture.catch(() => undefined);
+  await Promise.resolve();
+  await globalPendingClipboardCapture().__MOG_PENDING_CLIPBOARD_CAPTURE__;
 }

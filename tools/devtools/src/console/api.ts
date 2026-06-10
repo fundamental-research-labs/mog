@@ -2064,9 +2064,9 @@ export function createConsoleAPI(
             obj.bounds.x + obj.bounds.width,
             obj.bounds.y + obj.bounds.height,
           );
-          const canvasBounds = {
-            x: obj.bounds.x + DEFAULT_ROW_HEADER_WIDTH_PX,
-            y: obj.bounds.y + DEFAULT_COL_HEADER_HEIGHT_PX,
+          const documentBounds = {
+            x: obj.bounds.x,
+            y: obj.bounds.y,
             w: obj.bounds.width,
             h: obj.bounds.height,
           };
@@ -2077,7 +2077,7 @@ export function createConsoleAPI(
               from: fromCell ?? { row: 0, col: 0 },
               ...(toCell ? { to: toCell } : {}),
             },
-            boundsPx: canvasBounds,
+            boundsPx: documentBounds,
             visible: !!obj.visible,
             ...(extractSrc(obj) ? { src: extractSrc(obj)! } : {}),
           });

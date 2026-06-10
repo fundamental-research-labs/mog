@@ -279,12 +279,37 @@ describe('__dt rendered-state readbacks (app-eval / app-eval rendered-state read
     const d = drawings[0];
     expect(d.id).toBe('pic-1');
     expect(d.kind).toBe('image');
-    expect(d.boundsPx).toEqual({ x: 150, y: 48, w: 200, h: 96 });
+    expect(d.boundsPx).toEqual({ x: 100, y: 24, w: 200, h: 96 });
     expect(d.visible).toBe(true);
     expect(d.src).toBe('mog://image/abc.png');
     // anchor.from snaps (100, 24) → row 1, col 1; anchor.to snaps (300, 120) → row 5, col 3.
     expect(d.anchor.from).toEqual({ row: 1, col: 1 });
     expect(d.anchor.to).toEqual({ row: 5, col: 3 });
+  });
+
+  test('getRenderedDrawings reports diagram scene bounds in document space', async () => {
+    runtime = setupRuntime({
+      drawings: [
+        {
+          id: 'diagram-1',
+          type: 'diagram',
+          bounds: { x: 100, y: 100, width: 400, height: 300 },
+          zIndex: 1,
+          visible: true,
+          groupId: null,
+        },
+      ],
+      rowHeights: { 0: 24, 1: 24, 2: 24, 3: 24, 4: 24, 5: 24, 6: 24 },
+      colWidths: { 0: 100, 1: 100, 2: 100, 3: 100, 4: 100, 5: 100 },
+    });
+
+    const drawings = await runtime.api.getRenderedDrawings();
+    expect(drawings).toHaveLength(1);
+    expect(drawings[0]).toMatchObject({
+      id: 'diagram-1',
+      kind: 'diagram',
+      boundsPx: { x: 100, y: 100, w: 400, h: 300 },
+    });
   });
 
   test('getRenderedDrawings snaps anchors through SheetView geometry dimensions', async () => {

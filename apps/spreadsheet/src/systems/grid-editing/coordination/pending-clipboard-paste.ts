@@ -46,3 +46,7 @@ export async function waitForActiveClipboardPaste(): Promise<void> {
   await Promise.resolve();
   await globalPendingClipboardPaste().__MOG_ACTIVE_CLIPBOARD_PASTE__;
 }
+
+export function getActiveClipboardPaste(): Promise<unknown> | undefined {
+  return globalPendingClipboardPaste().__MOG_ACTIVE_CLIPBOARD_PASTE__;
+}

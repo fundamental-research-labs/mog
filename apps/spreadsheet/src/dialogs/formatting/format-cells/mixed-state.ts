@@ -17,7 +17,19 @@
  * vs cascade-absent (null) both resolve to 0 and do NOT show as mixed.
  */
 
-import type { CellFormat } from '@mog-sdk/contracts/core';
+import type { CellFormat, CellRange } from '@mog-sdk/contracts/core';
+
+type CellFormatReadback = Partial<{ [K in keyof CellFormat]: CellFormat[K] | null }>;
+
+type FormatReader = {
+  get(row: number, col: number): Promise<CellFormatReadback | null>;
+  getCellProperties(
+    startRow: number,
+    startCol: number,
+    endRow: number,
+    endCol: number,
+  ): Promise<Array<Array<CellFormatReadback | null>>>;
+};
 
 /**
  * Properties tracked for mixed-state detection. Borders and number format are
@@ -82,6 +94,34 @@ const FORMAT_DEFAULTS: Partial<Record<keyof CellFormat, unknown>> = {
   // default to undefined — leaving them out of the table is correct.
 };
 
+const COLOR_PROPERTIES = new Set<keyof CellFormat>([
+  'fontColor',
+  'backgroundColor',
+  'patternForegroundColor',
+]);
+
+function normalizeColor(value: string): string {
+  const trimmed = value.trim();
+  const shortHex = trimmed.match(/^#([0-9a-f]{3})$/i);
+  if (shortHex) {
+    return `#${shortHex[1]
+      .split('')
+      .map((part) => part + part)
+      .join('')
+      .toUpperCase()}`;
+  }
+  const longHex = trimmed.match(/^#([0-9a-f]{6})$/i);
+  if (longHex) return `#${longHex[1].toUpperCase()}`;
+  return trimmed.toLowerCase();
+}
+
+function normalizeComparableValue(value: unknown, key: keyof CellFormat): unknown {
+  if (COLOR_PROPERTIES.has(key) && typeof value === 'string') {
+    return normalizeColor(value);
+  }
+  return value;
+}
+
 function deepEqual(a: unknown, b: unknown): boolean {
   if (a === b) return true;
   if (a === null || b === null) return false;
@@ -94,9 +134,20 @@ function deepEqual(a: unknown, b: unknown): boolean {
 
 function normalize(value: unknown, key: keyof CellFormat): unknown {
   if (value === undefined || value === null) {
-    return FORMAT_DEFAULTS[key];
+    return normalizeComparableValue(FORMAT_DEFAULTS[key], key);
   }
-  return value;
+  return normalizeComparableValue(value, key);
+}
+
+function normalizeWithDefault(
+  value: unknown,
+  key: keyof CellFormat,
+  propertyDefault?: unknown,
+): unknown {
+  if (value === undefined || value === null) {
+    return normalizeComparableValue(propertyDefault ?? FORMAT_DEFAULTS[key], key);
+  }
+  return normalizeComparableValue(value, key);
 }
 
 /**
@@ -108,8 +159,8 @@ function normalize(value: unknown, key: keyof CellFormat): unknown {
  * `null` means the cell had no overrides anywhere (cascade equals defaults).
  */
 export function detectMixedProperties(
-  base: Partial<CellFormat>,
-  cells: ReadonlyArray<CellFormat | null>,
+  base: CellFormatReadback,
+  cells: ReadonlyArray<CellFormatReadback | null>,
 ): Set<keyof CellFormat> {
   const mixed = new Set<keyof CellFormat>();
 
@@ -135,7 +186,7 @@ export function detectMixedProperties(
  * null/undefined.
  */
 export function buildMergedFormat(
-  base: Partial<CellFormat>,
+  base: CellFormatReadback,
   mixed: ReadonlySet<keyof CellFormat>,
 ): Partial<CellFormat> {
   const merged: Partial<CellFormat> = {};
@@ -181,3 +232,104 @@ export function totalCellCount(
 }
 
 export const MAX_CELLS_FOR_MIXED_SCAN = 10_000;
+
+export interface ReadCommonFormatPropertyOptions<K extends keyof CellFormat> {
+  formats: FormatReader;
+  activeCell: { row: number; col: number };
+  ranges: readonly CellRange[];
+  property: K;
+  /**
+   * Optional UI-level default for properties that the worksheet cascade leaves
+   * absent but a control should still display as a concrete value. For example,
+   * automatic font color displays as black in the toolbar while still comparing
+   * equal to an explicit black selection.
+   */
+  defaultValue?: NonNullable<CellFormat[K]>;
+  maxCells?: number;
+}
+
+export interface CommonFormatPropertyResult<K extends keyof CellFormat> {
+  value: NonNullable<CellFormat[K]> | undefined;
+  mixed: boolean;
+  limited: boolean;
+}
+
+function normalizeRange(range: CellRange): CellRange {
+  return {
+    ...range,
+    startRow: Math.min(range.startRow, range.endRow),
+    endRow: Math.max(range.startRow, range.endRow),
+    startCol: Math.min(range.startCol, range.endCol),
+    endCol: Math.max(range.startCol, range.endCol),
+  };
+}
+
+function isSingleCellSelection(ranges: readonly CellRange[]): boolean {
+  return (
+    ranges.length === 1 &&
+    ranges[0].startRow === ranges[0].endRow &&
+    ranges[0].startCol === ranges[0].endCol
+  );
+}
+
+function typedValue<K extends keyof CellFormat>(
+  value: unknown,
+): NonNullable<CellFormat[K]> | undefined {
+  return value === undefined ? undefined : (value as NonNullable<CellFormat[K]>);
+}
+
+/**
+ * Read the common resolved value for one format property across a selection.
+ *
+ * This is the property-level counterpart to Format Cells mixed-state detection:
+ * it reads through worksheet format APIs, never viewport render caches, and
+ * returns `undefined` when the selection is mixed or too large to scan safely.
+ */
+export async function readCommonFormatProperty<K extends keyof CellFormat>({
+  formats,
+  activeCell,
+  ranges,
+  property,
+  defaultValue,
+  maxCells = MAX_CELLS_FOR_MIXED_SCAN,
+}: ReadCommonFormatPropertyOptions<K>): Promise<CommonFormatPropertyResult<K>> {
+  let base: CellFormatReadback;
+  try {
+    base = (await formats.get(activeCell.row, activeCell.col)) ?? {};
+  } catch {
+    return { value: undefined, mixed: true, limited: false };
+  }
+  const baseValue = normalizeWithDefault(base[property], property, defaultValue);
+
+  if (ranges.length === 0 || isSingleCellSelection(ranges)) {
+    return { value: typedValue<K>(baseValue), mixed: false, limited: false };
+  }
+
+  if (totalCellCount(ranges) > maxCells) {
+    return { value: undefined, mixed: true, limited: true };
+  }
+
+  for (const range of ranges.map(normalizeRange)) {
+    let grid: Array<Array<CellFormatReadback | null>>;
+    try {
+      grid = await formats.getCellProperties(
+        range.startRow,
+        range.startCol,
+        range.endRow,
+        range.endCol,
+      );
+    } catch {
+      return { value: undefined, mixed: true, limited: false };
+    }
+    for (const row of grid) {
+      for (const cell of row) {
+        const cellValue = normalizeWithDefault(cell?.[property], property, defaultValue);
+        if (!deepEqual(cellValue, baseValue)) {
+          return { value: undefined, mixed: true, limited: false };
+        }
+      }
+    }
+  }
+
+  return { value: typedValue<K>(baseValue), mixed: false, limited: false };
+}

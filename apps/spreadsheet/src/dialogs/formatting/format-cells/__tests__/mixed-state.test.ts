@@ -12,10 +12,13 @@
  */
 
 import type { CellFormat } from '@mog-sdk/contracts/core';
+import { jest } from '@jest/globals';
 
 import {
   buildMergedFormat,
   detectMixedProperties,
+  MAX_CELLS_FOR_MIXED_SCAN,
+  readCommonFormatProperty,
   totalCellCount,
   TRACKED_PROPERTIES,
 } from '../mixed-state';
@@ -103,6 +106,12 @@ describe('detectMixedProperties', () => {
     expect(detectMixedProperties(base, cells).has('fontColor')).toBe(false);
   });
 
+  it('normalizes equivalent hex colors before comparing', () => {
+    const base: Partial<CellFormat> = { fontColor: '#000' };
+    const cells: (CellFormat | null)[] = [{ fontColor: '#000000' }];
+    expect(detectMixedProperties(base, cells).has('fontColor')).toBe(false);
+  });
+
   it('returns early once all tracked properties are mixed', () => {
     // Sanity: large input doesn't affect correctness.
     const base: Partial<CellFormat> = {};
@@ -187,5 +196,150 @@ describe('totalCellCount', () => {
 
   it('handles inverted (end < start) ranges via abs', () => {
     expect(totalCellCount([{ startRow: 4, startCol: 4, endRow: 0, endCol: 0 }])).toBe(25);
+  });
+});
+
+describe('readCommonFormatProperty', () => {
+  const activeCell = { row: 0, col: 0 };
+  const singleCell = [{ startRow: 0, startCol: 0, endRow: 0, endCol: 0 }];
+  const twoCells = [{ startRow: 0, startCol: 0, endRow: 0, endCol: 1 }];
+
+  function createReader({
+    base,
+    grid,
+  }: {
+    base?: Partial<CellFormat> | null;
+    grid?: Array<Array<Partial<CellFormat> | null>>;
+  }) {
+    return {
+      get: jest.fn().mockResolvedValue(base ?? {}),
+      getCellProperties: jest.fn().mockResolvedValue(grid ?? [[base ?? {}]]),
+    };
+  }
+
+  it('materializes default automatic font color as black', async () => {
+    const worksheet = {
+      viewport: { getCellData: jest.fn(() => undefined) },
+      formats: createReader({ base: { fontColor: null } as unknown as Partial<CellFormat> }),
+    };
+
+    const result = await readCommonFormatProperty({
+      formats: worksheet.formats,
+      activeCell,
+      ranges: singleCell,
+      property: 'fontColor',
+      defaultValue: '#000000',
+    });
+
+    expect(result).toEqual({ value: '#000000', mixed: false, limited: false });
+    expect(worksheet.formats.getCellProperties).not.toHaveBeenCalled();
+    expect(worksheet.viewport.getCellData).not.toHaveBeenCalled();
+  });
+
+  it('keeps explicit black as the common font color', async () => {
+    const reader = createReader({
+      base: { fontColor: '#000000' },
+      grid: [[{ fontColor: '#000000' }, { fontColor: '#000000' }]],
+    });
+
+    const result = await readCommonFormatProperty({
+      formats: reader,
+      activeCell,
+      ranges: twoCells,
+      property: 'fontColor',
+      defaultValue: '#000000',
+    });
+
+    expect(result).toEqual({ value: '#000000', mixed: false, limited: false });
+  });
+
+  it('normalizes equivalent hex values before returning a common color', async () => {
+    const reader = createReader({
+      base: { fontColor: '#000' },
+      grid: [[{ fontColor: '#000' }, { fontColor: '#000000' }]],
+    });
+
+    const result = await readCommonFormatProperty({
+      formats: reader,
+      activeCell,
+      ranges: twoCells,
+      property: 'fontColor',
+      defaultValue: '#000000',
+    });
+
+    expect(result).toEqual({ value: '#000000', mixed: false, limited: false });
+  });
+
+  it('returns mixed for black and red font colors', async () => {
+    const reader = createReader({
+      base: { fontColor: '#000000' },
+      grid: [[{ fontColor: '#000000' }, { fontColor: '#FF0000' }]],
+    });
+
+    const result = await readCommonFormatProperty({
+      formats: reader,
+      activeCell,
+      ranges: twoCells,
+      property: 'fontColor',
+      defaultValue: '#000000',
+    });
+
+    expect(result).toEqual({ value: undefined, mixed: true, limited: false });
+  });
+
+  it('returns mixed without scanning when the selection exceeds the scan threshold', async () => {
+    const reader = createReader({ base: { fontColor: '#000000' } });
+
+    const result = await readCommonFormatProperty({
+      formats: reader,
+      activeCell,
+      ranges: [{ startRow: 0, startCol: 0, endRow: MAX_CELLS_FOR_MIXED_SCAN, endCol: 0 }],
+      property: 'fontColor',
+      defaultValue: '#000000',
+    });
+
+    expect(result).toEqual({ value: undefined, mixed: true, limited: true });
+    expect(reader.getCellProperties).not.toHaveBeenCalled();
+  });
+
+  it('returns mixed on format lookup failure instead of falling back to active cell color', async () => {
+    const reader = {
+      get: jest.fn().mockResolvedValue({ fontColor: '#000000' }),
+      getCellProperties: jest.fn().mockRejectedValue(new Error('format lookup failed')),
+    };
+
+    const result = await readCommonFormatProperty({
+      formats: reader,
+      activeCell,
+      ranges: twoCells,
+      property: 'fontColor',
+      defaultValue: '#000000',
+    });
+
+    expect(result).toEqual({ value: undefined, mixed: true, limited: false });
+  });
+
+  it('scans off-viewport cells through the worksheet format reader', async () => {
+    const worksheet = {
+      viewport: { getCellData: jest.fn(() => ({ format: { fontColor: '#000000' } })) },
+      formats: createReader({
+        base: { fontColor: '#000000' },
+        grid: [[{ fontColor: '#000000' }, { fontColor: '#FF0000' }]],
+      }),
+    };
+    const offViewportActiveCell = { row: 5000, col: 3 };
+    const offViewportRange = [{ startRow: 5000, startCol: 3, endRow: 5000, endCol: 4 }];
+
+    const result = await readCommonFormatProperty({
+      formats: worksheet.formats,
+      activeCell: offViewportActiveCell,
+      ranges: offViewportRange,
+      property: 'fontColor',
+      defaultValue: '#000000',
+    });
+
+    expect(result).toEqual({ value: undefined, mixed: true, limited: false });
+    expect(worksheet.formats.getCellProperties).toHaveBeenCalledWith(5000, 3, 5000, 4);
+    expect(worksheet.viewport.getCellData).not.toHaveBeenCalled();
   });
 });

@@ -41,10 +41,12 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useStore } from 'zustand';
 import {
+  useActiveCell,
   useActiveSheetId,
   useDocumentContext,
   useFeatureGate,
   useUIStore,
+  useWorkbook,
 } from '../../../internal-api';
 
 import { Tooltip } from '@mog/shell';
@@ -60,6 +62,7 @@ import { useSheetProtectionPermissions } from '../../../hooks/structure/use-shee
 import { OFFICE_THEME } from '../../../infra/styles/built-in-themes';
 import { getRecentColors } from '../../../infra/styles/recent-colors';
 import type { BorderSelection, BorderStyleType } from '../../../internal-api';
+import { readCommonFormatProperty } from '../../../dialogs/formatting/format-cells/mixed-state';
 import { useGroupRenderMode } from '../collapse';
 import { keyTipRegistry } from '../keytips';
 import { RibbonButton } from '../primitives/RibbonButton';
@@ -159,7 +162,9 @@ export const FontGroup = React.memo(function FontGroup() {
 
   const dispatch = useDispatch();
   const coordinator = useCoordinator();
+  const wb = useWorkbook();
   const activeSheetId = useActiveSheetId();
+  const { activeCell } = useActiveCell();
   const canFormatCells = useSheetProtectionPermissions(activeSheetId).formatCells;
 
   // ===========================================================================
@@ -178,8 +183,12 @@ export const FontGroup = React.memo(function FontGroup() {
   const isStrikethrough = useUIStore((s) => s.activeCellFormat?.strikethrough ?? false);
   const fontFamily = useUIStore((s) => s.activeCellFormat?.fontFamily ?? DEFAULT_FONT_FAMILY);
   const fontSize = useUIStore((s) => s.activeCellFormat?.fontSize ?? DEFAULT_FONT_SIZE);
-  const fontColor = useUIStore((s) => s.activeCellFormat?.fontColor);
+  // Invalidation only: the picker value itself must come from worksheet formats
+  // so off-viewport and mixed selections are read correctly.
+  const activeCellFormatForInvalidation = useUIStore((s) => s.activeCellFormat);
   const backgroundColor = useUIStore((s) => s.activeCellFormat?.backgroundColor);
+  const toolbarRanges = useUIStore((s) => s.toolbarRanges);
+  const [fontColor, setFontColor] = useState<string | undefined>(undefined);
 
   // ===========================================================================
   // Collapse Support
@@ -218,6 +227,43 @@ export const FontGroup = React.memo(function FontGroup() {
   const lastUsedFontColor = useStore(uiStore, (s) => s.lastUsedFontColor);
   const lastUsedFillColor = useStore(uiStore, (s) => s.lastUsedFillColor);
   const lastUsedBorderFormat = useStore(uiStore, (s) => s.lastUsedBorderFormat);
+
+  useEffect(() => {
+    let cancelled = false;
+    setFontColor(undefined);
+
+    const readSelectionFontColor = async () => {
+      try {
+        const ws = wb.getSheetById(activeSheetId);
+        const result = await readCommonFormatProperty({
+          formats: ws.formats,
+          activeCell,
+          ranges: toolbarRanges,
+          property: 'fontColor',
+          defaultValue: DEFAULT_FONT_COLOR,
+        });
+        if (!cancelled) {
+          setFontColor(result.value);
+        }
+      } catch {
+        if (!cancelled) {
+          setFontColor(undefined);
+        }
+      }
+    };
+
+    void readSelectionFontColor();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    wb,
+    activeSheetId,
+    activeCell.row,
+    activeCell.col,
+    toolbarRanges,
+    activeCellFormatForInvalidation,
+  ]);
 
   const setFontPickerOpen = useCallback(
     (open: boolean) => {

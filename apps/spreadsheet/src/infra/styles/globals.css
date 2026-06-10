@@ -191,6 +191,12 @@
   /* Tooltip timing */
   --tooltip-delay: 500ms;
   --tooltip-offset: 8px;
+
+  /* Custom grid scrollbars */
+  --scrollbar-track: rgba(32, 33, 36, 0.04);
+  --scrollbar-track-border: rgba(32, 33, 36, 0.08);
+  --scrollbar-thumb: rgba(95, 99, 104, 0.48);
+  --scrollbar-thumb-active: rgba(95, 99, 104, 0.72);
 }
 
 /* ============================================
@@ -721,6 +727,10 @@
     --formula-paren-5: #fcd34d;
     --formula-paren-match-bg: rgba(253, 224, 71, 0.24);
     --formula-paren-error-bg: rgba(248, 113, 113, 0.22);
+    --scrollbar-track: rgba(244, 247, 245, 0.08);
+    --scrollbar-track-border: rgba(244, 247, 245, 0.12);
+    --scrollbar-thumb: rgba(198, 208, 203, 0.62);
+    --scrollbar-thumb-active: rgba(244, 247, 245, 0.86);
   }
 
   [data-mog-color-scheme='dark'] .bg-white,

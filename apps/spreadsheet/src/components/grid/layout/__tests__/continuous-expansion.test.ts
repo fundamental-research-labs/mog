@@ -9,7 +9,13 @@
  * 5. Thumb bounds — thumb stays within [0, scrollableTrack]
  */
 
-import { computeContinuousExpansion, computeScrollbarDragPosition } from '../ScrollContainer';
+import {
+  computeContinuousExpansion,
+  computeScrollbarDragPosition,
+  getScrollbarThumbColor,
+  SCROLLBAR_TRACK_BORDER_COLOR,
+  SCROLLBAR_TRACK_COLOR,
+} from '../ScrollContainer';
 
 // Mirror the constants from the implementation
 const DEFAULT_ROW_HEIGHT = 20;
@@ -413,5 +419,14 @@ describe('computeScrollbarDragPosition', () => {
       maxScroll: 8_000,
     });
     expect(returnedLeftAfterContraction).toBe(0);
+  });
+});
+
+describe('scrollbar theme tokens', () => {
+  it('uses theme tokens for track and thumb contrast', () => {
+    expect(SCROLLBAR_TRACK_COLOR).toContain('--scrollbar-track');
+    expect(SCROLLBAR_TRACK_BORDER_COLOR).toContain('--scrollbar-track-border');
+    expect(getScrollbarThumbColor(false)).toContain('--scrollbar-thumb');
+    expect(getScrollbarThumbColor(true)).toContain('--scrollbar-thumb-active');
   });
 });

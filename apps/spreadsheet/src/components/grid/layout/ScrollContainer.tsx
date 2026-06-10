@@ -41,6 +41,15 @@ export interface ScrollContainerProps {
 /** Minimum thumb size in px to keep it grabbable */
 const MIN_THUMB_SIZE = 24;
 const EDGE_SNAP_PX = 4;
+export const SCROLLBAR_TRACK_COLOR = 'var(--scrollbar-track, rgba(0, 0, 0, 0.04))';
+export const SCROLLBAR_TRACK_BORDER_COLOR =
+  'var(--scrollbar-track-border, rgba(0, 0, 0, 0.08))';
+
+export function getScrollbarThumbColor(isDragging: boolean): string {
+  return isDragging
+    ? 'var(--scrollbar-thumb-active, rgba(0, 0, 0, 0.5))'
+    : 'var(--scrollbar-thumb, rgba(0, 0, 0, 0.3))';
+}
 
 /** Excel maximum dimensions */
 const MAX_HEIGHT = 1_048_576 * DEFAULT_ROW_HEIGHT;
@@ -285,6 +294,7 @@ function ScrollbarTrack({
   const trackRef = useRef<HTMLDivElement>(null);
   const isDraggingRef = useRef(false);
   const dragStartRef = useRef({ thumbPointerOffset: 0 });
+  const [isDragging, setIsDragging] = useState(false);
 
   const isVertical = orientation === 'vertical';
 
@@ -306,6 +316,7 @@ function ScrollbarTrack({
       e.stopPropagation();
       (e.target as HTMLElement).setPointerCapture(e.pointerId);
       isDraggingRef.current = true;
+      setIsDragging(true);
       const thumbRect = (e.currentTarget as HTMLElement).getBoundingClientRect();
       dragStartRef.current = {
         thumbPointerOffset: isVertical ? e.clientY - thumbRect.top : e.clientX - thumbRect.left,
@@ -332,9 +343,14 @@ function ScrollbarTrack({
     [isVertical, scrollableTrack, maxScroll, onScroll],
   );
 
-  const handleThumbPointerUp = useCallback((e: React.PointerEvent) => {
+  const finishThumbDrag = useCallback((e: React.PointerEvent) => {
     isDraggingRef.current = false;
-    (e.target as HTMLElement).releasePointerCapture(e.pointerId);
+    setIsDragging(false);
+    try {
+      (e.target as HTMLElement).releasePointerCapture(e.pointerId);
+    } catch {
+      /* release is best-effort */
+    }
   }, []);
 
   // Click on track → page scroll in that direction
@@ -364,6 +380,9 @@ function ScrollbarTrack({
         right: 0,
         bottom: SCROLL_BAR_WIDTH,
         width: SCROLL_BAR_WIDTH,
+        boxSizing: 'border-box',
+        backgroundColor: SCROLLBAR_TRACK_COLOR,
+        borderLeft: `1px solid ${SCROLLBAR_TRACK_BORDER_COLOR}`,
         opacity: isVisible ? 1 : 0,
         transition: 'opacity 0.3s ease',
       }
@@ -373,6 +392,9 @@ function ScrollbarTrack({
         bottom: 0,
         right: SCROLL_BAR_WIDTH,
         height: SCROLL_BAR_WIDTH,
+        boxSizing: 'border-box',
+        backgroundColor: SCROLLBAR_TRACK_COLOR,
+        borderTop: `1px solid ${SCROLLBAR_TRACK_BORDER_COLOR}`,
         opacity: isVisible ? 1 : 0,
         transition: 'opacity 0.3s ease',
       };
@@ -386,9 +408,7 @@ function ScrollbarTrack({
         right: 2,
         height: thumbSize,
         borderRadius: 4,
-        backgroundColor: isDraggingRef.current
-          ? 'var(--scrollbar-thumb-active, rgba(0, 0, 0, 0.5))'
-          : 'var(--scrollbar-thumb, rgba(0, 0, 0, 0.3))',
+        backgroundColor: getScrollbarThumbColor(isDragging),
         cursor: 'pointer',
       }
     : {
@@ -398,9 +418,7 @@ function ScrollbarTrack({
         bottom: 2,
         width: thumbSize,
         borderRadius: 4,
-        backgroundColor: isDraggingRef.current
-          ? 'var(--scrollbar-thumb-active, rgba(0, 0, 0, 0.5))'
-          : 'var(--scrollbar-thumb, rgba(0, 0, 0, 0.3))',
+        backgroundColor: getScrollbarThumbColor(isDragging),
         cursor: 'pointer',
       };
 
@@ -417,7 +435,8 @@ function ScrollbarTrack({
         style={thumbStyle}
         onPointerDown={handleThumbPointerDown}
         onPointerMove={handleThumbPointerMove}
-        onPointerUp={handleThumbPointerUp}
+        onPointerUp={finishThumbDrag}
+        onPointerCancel={finishThumbDrag}
         onClick={(e) => e.stopPropagation()} // Don't trigger track click
       />
     </div>

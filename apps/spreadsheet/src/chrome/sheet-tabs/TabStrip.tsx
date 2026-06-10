@@ -19,6 +19,7 @@ import { useCallback, useEffect, useRef, useState, type MouseEvent } from 'react
 import { dispatch, useActionDependencies, useCoordinator } from '../../internal-api';
 
 import { Button, usePlatformInfo } from '@mog/shell';
+import { ArrowLeftSvg, ArrowRightSvg } from '@mog/icons';
 import { useSheetSelection } from '../../hooks/selection/use-sheet-selection';
 import { useAllSheetsProtection } from '../../hooks/structure/use-sheet-protection';
 import { useWorkbookStructureProtection } from '../../hooks/structure/use-workbook-protection';
@@ -82,17 +83,18 @@ interface ScrollButtonProps {
 }
 
 function ScrollButton({ direction, disabled, onClick }: ScrollButtonProps) {
+  const ScrollIcon = direction === 'left' ? ArrowLeftSvg : ArrowRightSvg;
+
   return (
-    <Button
-      variant="ghost"
-      size="sm"
+    <button
+      type="button"
       onClick={onClick}
       disabled={disabled}
-      className="w-6 h-6 p-0 shrink-0"
+      className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded border border-ss-border bg-ss-surface text-ss-text shadow-ss-sm transition-colors duration-ss-fast hover:border-ss-border-hover hover:bg-ss-surface-hover active:bg-ss-surface-active disabled:cursor-not-allowed disabled:text-ss-text-tertiary disabled:opacity-75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ss-primary focus-visible:ring-offset-1"
       aria-label={`Scroll tabs ${direction}`}
     >
-      {direction === 'left' ? '◀' : '▶'}
-    </Button>
+      <ScrollIcon className="h-3.5 w-3.5" aria-hidden="true" focusable="false" />
+    </button>
   );
 }
 

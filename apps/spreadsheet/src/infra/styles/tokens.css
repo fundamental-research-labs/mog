@@ -90,6 +90,12 @@
   /* Tooltip timing */
   --tooltip-delay: 500ms;
   --tooltip-offset: 8px;
+
+  /* Custom grid scrollbars */
+  --scrollbar-track: rgba(32, 33, 36, 0.04);
+  --scrollbar-track-border: rgba(32, 33, 36, 0.08);
+  --scrollbar-thumb: rgba(95, 99, 104, 0.48);
+  --scrollbar-thumb-active: rgba(95, 99, 104, 0.72);
 }
 
 /* ============================================

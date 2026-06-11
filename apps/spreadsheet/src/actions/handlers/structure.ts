@@ -665,14 +665,19 @@ export const INSERT_CELLS_SHIFT_DOWN: AsyncActionHandler = async (deps) => {
  * Insert cells for an active cut range, then paste the cut data into the
  * inserted destination. Mirrors Excel's Home > Insert > Insert Cut Cells route.
  */
-export const INSERT_CUT_CELLS_SHIFT_DOWN: AsyncActionHandler = async (deps) => {
+export const INSERT_CUT_CELLS: AsyncActionHandler = async (deps, payload) => {
   const clipboard = deps.accessors.clipboard;
   if (!clipboard.hasCut() || !clipboard.getIsCut() || clipboard.isExternalClipboard()) {
     return notHandled('disabled');
   }
 
   const { activeCell, ranges } = getSelectionContext(deps);
-  const range = getRangesOrActiveCell(ranges, activeCell)[0];
+  const { range: payloadRange, direction: payloadDirection } = (payload ?? {}) as {
+    range?: CellRange;
+    direction?: 'right' | 'down';
+  };
+  const range = payloadRange ?? getRangesOrActiveCell(ranges, activeCell)[0];
+  const direction = payloadDirection === 'right' ? 'right' : 'down';
 
   return withProtectionFeedback(deps, () =>
     deps.workbook.batch('Insert Cut Cells', async () => {
@@ -688,7 +693,7 @@ export const INSERT_CUT_CELLS_SHIFT_DOWN: AsyncActionHandler = async (deps) => {
           range.startCol,
           range.endRow,
           range.endCol,
-          'down',
+          direction,
         );
       }
 
@@ -699,6 +704,9 @@ export const INSERT_CUT_CELLS_SHIFT_DOWN: AsyncActionHandler = async (deps) => {
     }),
   );
 };
+
+export const INSERT_CUT_CELLS_SHIFT_DOWN: AsyncActionHandler = async (deps) =>
+  INSERT_CUT_CELLS(deps, { direction: 'down' });
 
 /**
  * Insert cells by shifting existing cells in a specified direction.

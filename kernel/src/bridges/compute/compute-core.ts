@@ -89,6 +89,39 @@ function isShowFormulasChange(change: SheetSettingsChange): boolean {
   return change.changedKey === 'showFormulas';
 }
 
+function historyReplayNeedsFullViewportRefresh(result: MutationResult): boolean {
+  return Boolean(
+    result.propertyChanges?.length ||
+      result.dimensionChanges?.length ||
+      result.mergeChanges?.length ||
+      result.visibilityChanges?.length ||
+      result.commentChanges?.length ||
+      result.filterChanges?.length ||
+      result.tableChanges?.length ||
+      result.slicerChanges?.length ||
+      result.sheetChanges?.length ||
+      result.settingsChanges?.length ||
+      result.pageBreakChanges?.length ||
+      result.printAreaChanges?.length ||
+      result.printTitlesChanges?.length ||
+      result.printSettingsChanges?.length ||
+      result.splitConfigChanges?.length ||
+      result.scrollPositionChanges?.length ||
+      result.viewSelectionChanges?.length ||
+      result.workbookSettingsChanges?.length ||
+      result.cfChanges?.length ||
+      result.namedRangeChanges?.length ||
+      result.groupingChanges?.length ||
+      result.sparklineChanges?.length ||
+      result.sortingChanges?.length ||
+      result.structureChanges?.length ||
+      result.floatingObjectChanges?.length ||
+      result.floatingObjectGroupChanges?.length ||
+      result.pivotChanges?.length ||
+      result.rangeChanges?.length,
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Active instance registry — prevents stale compute_destroy from killing
 // a newer instance that was initialized with the same docId.
@@ -1627,11 +1660,9 @@ export class ComputeCore {
       undefined,
       'compute_undo',
     );
-    // History replay can change derived/effective viewport state without
-    // Rust emitting the same fine-grained viewport patches as the original
-    // forward mutation. Re-read visible buffers so undo never paints stale
-    // effective formatting, table styles, or related derived state.
-    await this.forceRefreshAllViewports();
+    if (historyReplayNeedsFullViewportRefresh(result)) {
+      await this.forceRefreshAllViewports();
+    }
     return result;
   }
 
@@ -1642,7 +1673,9 @@ export class ComputeCore {
       undefined,
       'compute_redo',
     );
-    await this.forceRefreshAllViewports();
+    if (historyReplayNeedsFullViewportRefresh(result)) {
+      await this.forceRefreshAllViewports();
+    }
     return result;
   }
 

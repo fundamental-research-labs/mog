@@ -78,7 +78,7 @@ export async function resolveDataCommandTarget(
 ): Promise<DataCommandTarget | null> {
   return resolveDataTarget(ws, userRange, {
     allowEmptySingleCell: false,
-    inferHeadersForExplicitMultiRow: true,
+    inferHeadersForExplicitMultiRow: false,
   });
 }
 

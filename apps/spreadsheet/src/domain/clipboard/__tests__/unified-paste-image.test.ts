@@ -332,6 +332,39 @@ describe('unifiedPaste — image routing', () => {
     });
   });
 
+  it('keeps fresh internal clipboard when exported HTML has no cells', async () => {
+    installClipboard([
+      makeClipItem({
+        'text/html': blobLike('<table><tbody><tr></tr></tbody></table>', 'text/html'),
+      }),
+    ]);
+    const commands = makeCommands();
+
+    await unifiedPaste(ACTIVE_CELL, {
+      getClipboardSnapshot: () =>
+        ({
+          context: {
+            isCut: false,
+            isStale: false,
+            data: {
+              textSignature: '',
+              sourceRanges: [{ startRow: 6, startCol: 27, endRow: 6, endCol: 27 }],
+              sourceSheetId: 'sheet-1',
+              cells: {
+                '0,0': { raw: '103,188 ', formula: '=407039-AA7-Z7-Y7' },
+              },
+            },
+          },
+          matches: () => true,
+        }) as any,
+      commands,
+      readPasteDefaultsPreference: () => null,
+    });
+
+    expect((commands as any).paste).toHaveBeenCalledWith(ACTIVE_CELL);
+    expect((commands as any).externalPaste).not.toHaveBeenCalled();
+  });
+
   it('no-ops external plain text when the saved default is formats only', async () => {
     installClipboard([makeClipItem({ 'text/plain': blobLike('A', 'text/plain') })]);
     const commands = makeCommands();

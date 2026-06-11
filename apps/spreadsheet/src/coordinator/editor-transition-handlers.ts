@@ -31,6 +31,7 @@ function wasEditingNowInactive(
   const wasEditing =
     prevState.matches('formulaEditing') ||
     prevState.matches('editing') ||
+    prevState.matches('error') ||
     prevState.matches('committing');
   return wasEditing && currentState.matches('inactive');
 }

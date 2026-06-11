@@ -486,6 +486,7 @@ export const HANDLER_MAP: Record<ActionType, AnyActionHandler> = {
   // Insert/Delete cells with shift
   INSERT_CELLS: StructureHandlers.INSERT_CELLS,
   INSERT_CELLS_SHIFT_DOWN: StructureHandlers.INSERT_CELLS_SHIFT_DOWN,
+  INSERT_CUT_CELLS: StructureHandlers.INSERT_CUT_CELLS,
   INSERT_CUT_CELLS_SHIFT_DOWN: StructureHandlers.INSERT_CUT_CELLS_SHIFT_DOWN,
   DELETE_CELLS: StructureHandlers.DELETE_CELLS,
   HIDE_ROW: StructureHandlers.HIDE_ROW,

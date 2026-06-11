@@ -243,14 +243,14 @@ describe('selection-mode lifecycle', () => {
     }
   });
 
-  it('8. mouse_shift_click_keeps_active_cell_at_anchor', () => {
+  it('8. mouse_shift_click_moves_active_cell_to_clicked_edge', () => {
     const actor = startActorAt(0, 0);
 
     actor.send({ type: 'MOUSE_DOWN', cell: cell(2, 2), shiftKey: true, ctrlKey: false });
 
     let after = actor.getSnapshot().context;
     expect(after.anchor).toEqual(cell(0, 0));
-    expect(after.activeCell).toEqual(cell(0, 0));
+    expect(after.activeCell).toEqual(cell(2, 2));
     expect(after.pendingRange).toEqual(rng(0, 0, 2, 2));
 
     actor.send({ type: 'MOUSE_UP' });
@@ -258,7 +258,7 @@ describe('selection-mode lifecycle', () => {
 
     after = actor.getSnapshot().context;
     expect(after.anchor).toEqual(cell(0, 0));
-    expect(after.activeCell).toEqual(cell(0, 0));
+    expect(after.activeCell).toEqual(cell(0, 1));
     expect(after.pendingRange).toEqual(rng(0, 0, 0, 1));
     actor.stop();
   });
@@ -532,6 +532,23 @@ describe('selection-mode lifecycle', () => {
     const after = actor.getSnapshot().context;
     expect(after.activeCell).toEqual(cell(4, 0));
     expect(after.pendingRange).toEqual(rng(4, 0, 4, 0));
+    actor.stop();
+  });
+
+  it('14d. set_selection_single_cell_inside_merge_resolves_to_merge_anchor', () => {
+    const actor = startActorAt(0, 0);
+    pushMerge(actor, rng(6, 26, 6, 27)); // AA7:AB7
+
+    actor.send({
+      type: 'SET_SELECTION',
+      ranges: [rng(6, 27, 6, 27)],
+      activeCell: cell(6, 27),
+    });
+
+    const after = actor.getSnapshot().context;
+    expect(after.activeCell).toEqual(cell(6, 26));
+    expect(after.anchor).toEqual(cell(6, 26));
+    expect(after.pendingRange).toEqual(rng(6, 26, 6, 27));
     actor.stop();
   });
 

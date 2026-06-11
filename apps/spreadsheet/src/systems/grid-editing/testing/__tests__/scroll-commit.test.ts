@@ -58,7 +58,7 @@ describe('setupScrollCommitCoordination', () => {
     expect(sent).toEqual([{ type: 'COMMIT', direction: 'none' }]);
   });
 
-  it('commits edit on scroll while formula editing', () => {
+  it('does not commit formula point-mode on scroll', () => {
     const { actor, sent } = createMockEditorActor(['formulaEditing']);
     let scrollCallback: (() => void) | null = null;
 
@@ -74,7 +74,7 @@ describe('setupScrollCommitCoordination', () => {
 
     scrollCallback!();
 
-    expect(sent).toEqual([{ type: 'COMMIT', direction: 'none' }]);
+    expect(sent).toEqual([]);
   });
 
   it('commits edit on scroll while rich text editing', () => {

@@ -56,11 +56,14 @@ function getSelectionScrollIntent(event: SelectionEvent): SelectionScrollIntent 
  */
 export const emitUserSelectionChanged = emit(
   ({ context, event }: { context: SelectionContext; event: SelectionEvent }) => {
-    const followCell = getSelectionViewportFollowCell(
-      context.pendingRange,
-      context.activeCell,
-      context.anchor,
-    );
+    const followCell =
+      event.type === 'SET_SELECTION' && event.anchor === undefined
+        ? context.activeCell
+        : getSelectionViewportFollowCell(
+            context.pendingRange,
+            context.activeCell,
+            context.anchor,
+          );
     const scrollIntent = getSelectionScrollIntent(event);
 
     return {

@@ -385,6 +385,32 @@ describe('Workbook SHOW_DETAIL/HIDE_DETAIL summary selections', () => {
     expect(layout.unhideColumns).toHaveBeenCalledWith(15, 26);
   });
 
+  it('expands an imported hidden column group from its visible leading sibling group', async () => {
+    const range: CellRange = { startRow: 12, startCol: 11, endRow: 12, endCol: 11 };
+    const { deps, outline, layout } = createMockDeps([range], {
+      rowGroups: [],
+      columnGroups: [
+        { id: 'cols-l', start: 11, end: 11, level: 1, collapsed: false },
+        {
+          id: 'kewpie-fiscal-cols',
+          start: 15,
+          end: 26,
+          level: 1,
+          collapsed: true,
+          hidden: true,
+        },
+      ],
+    });
+
+    const result = await SHOW_DETAIL(deps);
+
+    expect(result.handled).toBe(true);
+    expect(outline.toggleCollapsed).toHaveBeenCalledTimes(1);
+    expect(outline.toggleCollapsed).toHaveBeenCalledWith('kewpie-fiscal-cols');
+    expect(layout.unhideColumns).toHaveBeenCalledTimes(1);
+    expect(layout.unhideColumns).toHaveBeenCalledWith(15, 26);
+  });
+
   it('expands a collapsed column group when the selection overlaps hidden detail columns', async () => {
     const range: CellRange = { startRow: 2, startCol: 11, endRow: 20, endCol: 27 };
     const { deps, outline } = createMockDeps([range], {
@@ -514,5 +540,29 @@ describe('Workbook SHOW_DETAIL/HIDE_DETAIL summary selections', () => {
     expect(layout.hideColumns).toHaveBeenCalledWith([
       15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26,
     ]);
+  });
+
+  it('collapses an imported hidden column group instead of its visible leading sibling group', async () => {
+    const range: CellRange = { startRow: 12, startCol: 11, endRow: 12, endCol: 11 };
+    const { deps, outline, layout } = createMockDeps([range], {
+      rowGroups: [],
+      columnGroups: [
+        { id: 'cols-l', start: 11, end: 11, level: 1, collapsed: false },
+        {
+          id: 'kewpie-fiscal-cols',
+          start: 15,
+          end: 26,
+          level: 1,
+          collapsed: false,
+        },
+      ],
+    });
+
+    const result = await HIDE_DETAIL(deps);
+
+    expect(result.handled).toBe(true);
+    expect(outline.toggleCollapsed).toHaveBeenCalledTimes(1);
+    expect(outline.toggleCollapsed).toHaveBeenCalledWith('kewpie-fiscal-cols');
+    expect(layout.hideColumns).not.toHaveBeenCalled();
   });
 });

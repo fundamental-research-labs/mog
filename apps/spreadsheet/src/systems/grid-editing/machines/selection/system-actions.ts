@@ -36,6 +36,40 @@ import type { SelectionContext, SelectionEvent, SelectionModes } from './types';
 // SYSTEM ACTIONS
 // =============================================================================
 
+function isSingleCellRange(range: CellRange): boolean {
+  return (
+    range.isFullColumn !== true &&
+    range.isFullRow !== true &&
+    range.startRow === range.endRow &&
+    range.startCol === range.endCol
+  );
+}
+
+function resolveSingleCellMergeSelection(
+  context: SelectionContext,
+  ranges: CellRange[],
+  activeCell: CellCoord,
+): { ranges: CellRange[]; activeCell: CellCoord } {
+  if (ranges.length !== 1) return { ranges, activeCell };
+
+  const target = ranges[0]!;
+  if (
+    !isSingleCellRange(target) ||
+    target.startRow !== activeCell.row ||
+    target.startCol !== activeCell.col
+  ) {
+    return { ranges, activeCell };
+  }
+
+  const merged = context.getMergedRegionAt?.(activeCell.row, activeCell.col) ?? null;
+  if (!merged) return { ranges, activeCell };
+
+  return {
+    ranges: [merged],
+    activeCell: { row: merged.startRow, col: merged.startCol },
+  };
+}
+
 /**
  * Direct set selection. Source-aware: only `event.source === 'user'`
  * preserves modes and `committedRanges`. All other sources
@@ -58,7 +92,9 @@ const setSelection = assign(
 
     const source = event.source ?? 'user';
     const isUser = source === 'user';
-    const ranges = event.ranges.length > 0 ? event.ranges : [singleCellRange(event.activeCell)];
+    let ranges = event.ranges.length > 0 ? event.ranges : [singleCellRange(event.activeCell)];
+    let activeCell = event.activeCell;
+    ({ ranges, activeCell } = resolveSingleCellMergeSelection(context, ranges, activeCell));
     const trailing = ranges[ranges.length - 1]!;
     const leading = ranges.slice(0, -1);
 
@@ -82,9 +118,9 @@ const setSelection = assign(
       committedRanges: nextCommitted,
       pendingRange: nextPending,
       modes: nextModes,
-      activeCell: event.activeCell,
+      activeCell,
       // Use provided anchor or fallback to activeCell for backwards compatibility
-      anchor: event.anchor !== undefined ? event.anchor : event.activeCell,
+      anchor: event.anchor !== undefined ? event.anchor : activeCell,
       // Support column/row selection restoration
       anchorCol: event.anchorCol ?? null,
       anchorRow: event.anchorRow ?? null,

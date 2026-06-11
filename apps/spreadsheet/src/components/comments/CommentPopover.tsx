@@ -424,14 +424,12 @@ export function CommentPopover() {
   const handleResolve = useCallback(async () => {
     const rootComment = comments[0];
     if (!rootComment) return;
+    if (rootComment.commentType === 'note') return;
 
     const nextResolved = !(rootComment.resolved ?? false);
     const threadId = rootComment.threadId ?? rootComment.id;
-    if (rootComment.commentType === 'note') {
-      await convertNoteToThread(rootComment.id);
-    }
     resolveThread(threadId, nextResolved);
-  }, [comments, convertNoteToThread, resolveThread]);
+  }, [comments, resolveThread]);
 
   const handleDelete = useCallback(
     async (commentId: string) => {
@@ -499,7 +497,8 @@ export function CommentPopover() {
 
   const primaryComment = comments[0] ?? null;
   const isNoteBacked = primaryComment?.commentType === 'note';
-  const isResolved = comments.length > 0 && comments[0].resolved;
+  const canResolveThread = comments.length > 0 && !isNoteBacked;
+  const isResolved = canResolveThread && comments[0].resolved;
 
   // Memoize the virtual ref object for stability
   const virtualRefObject = useMemo(() => virtualRef, []);
@@ -614,8 +613,8 @@ export function CommentPopover() {
   );
 
   // ===========================================================================
-  // Comment popover body. Note-backed imports use the modern comment surface;
-  // note storage only changes mutation paths that must promote before writing.
+  // Comment popover body. Notes share the popover shell, but thread-only
+  // controls stay hidden until a note is promoted by replying.
   // ===========================================================================
   const CommentBody = (
     <>
@@ -632,7 +631,7 @@ export function CommentPopover() {
           )}
         </div>
         <div className="flex gap-1">
-          {comments.length > 0 && (
+          {canResolveThread && (
             <button
               type="button"
               data-testid="resolve-thread"

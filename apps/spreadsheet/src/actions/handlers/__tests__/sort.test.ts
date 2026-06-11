@@ -23,6 +23,7 @@ interface MockSetup {
   sortRange: jest.Mock;
   getCurrentRegion: jest.Mock;
   getMergedRegions: jest.Mock;
+  listSummaries: jest.Mock;
   openSortDialog: jest.Mock;
 }
 
@@ -37,6 +38,14 @@ function makeMockDeps(opts: {
   currentRegion?: CellRange;
   mergedRegions?: CellRange[];
   cellValues?: Record<string, unknown>;
+  filterSummaries?: Array<{
+    id: string;
+    filterKind: 'autoFilter' | 'tableFilter' | 'advancedFilter';
+    range: CellRange;
+    tableId?: string;
+    activeColumnCount: number;
+    hasActiveCriteria: boolean;
+  }>;
   activeFormat?: { backgroundColor?: string; fontColor?: string };
 }): MockSetup {
   const activeCell = opts.activeCell ?? { row: 0, col: 0 };
@@ -56,11 +65,15 @@ function makeMockDeps(opts: {
   const getCell = jest.fn((row: number, col: number) =>
     Promise.resolve({ value: opts.cellValues?.[`${row},${col}`] ?? null }),
   );
+  const listSummaries = jest.fn().mockResolvedValue((opts.filterSummaries ?? []) as never);
 
   const ws = {
     getCell,
     getCurrentRegion,
     sortRange,
+    filters: {
+      listSummaries,
+    },
     formats: {
       get: jest.fn().mockResolvedValue((opts.activeFormat ?? {}) as never),
     },
@@ -91,7 +104,7 @@ function makeMockDeps(opts: {
     getActiveSheetId: () => 'sheet1' as any,
   } as unknown as ActionDependencies;
 
-  return { deps, sortRange, getCurrentRegion, getMergedRegions, openSortDialog };
+  return { deps, sortRange, getCurrentRegion, getMergedRegions, listSummaries, openSortDialog };
 }
 
 describe('SORT_ASCENDING — current-region auto-expansion', () => {
@@ -133,6 +146,36 @@ describe('SORT_ASCENDING — current-region auto-expansion', () => {
     expect(optionsArg).toEqual({
       columns: [{ column: 2, direction: 'asc' }],
       hasHeaders: false,
+    });
+  });
+
+  test('single cell inside an AutoFilter sorts the filter range over visible rows', async () => {
+    const setup = makeMockDeps({
+      selectionRanges: [{ startRow: 12, startCol: 27, endRow: 12, endCol: 27 }],
+      activeCell: { row: 12, col: 27 },
+      currentRegion: { startRow: 6, startCol: 15, endRow: 37, endCol: 42 },
+      filterSummaries: [
+        {
+          id: 'filter-1',
+          filterKind: 'autoFilter',
+          range: { startRow: 2, startCol: 11, endRow: 20, endCol: 27 },
+          activeColumnCount: 1,
+          hasActiveCriteria: true,
+        },
+      ],
+    });
+
+    await SORT_ASCENDING(setup.deps);
+
+    expect(setup.listSummaries).toHaveBeenCalledWith({ scope: 'available' });
+    expect(setup.getCurrentRegion).not.toHaveBeenCalled();
+    expect(setup.sortRange).toHaveBeenCalledTimes(1);
+    const [rangeArg, optionsArg] = setup.sortRange.mock.calls[0] as [unknown, unknown];
+    expect(rangeArg).toEqual({ startRow: 2, startCol: 11, endRow: 20, endCol: 27 });
+    expect(optionsArg).toEqual({
+      columns: [{ column: 16, direction: 'asc' }],
+      hasHeaders: true,
+      visibleRowsOnly: true,
     });
   });
 
@@ -206,7 +249,7 @@ describe('SORT_ASCENDING — current-region auto-expansion', () => {
     });
   });
 
-  test('explicit A2:A6 mixed data selection preserves a detected header row', async () => {
+  test('explicit A2:A6 mixed data selection is sorted as headerless', async () => {
     const setup = makeMockDeps({
       selectionRanges: [{ startRow: 1, startCol: 0, endRow: 5, endCol: 0 }],
       activeCell: { row: 1, col: 0 },
@@ -224,7 +267,7 @@ describe('SORT_ASCENDING — current-region auto-expansion', () => {
     expect(rangeArg).toEqual({ startRow: 1, startCol: 0, endRow: 5, endCol: 0 });
     expect(optionsArg).toEqual({
       columns: [{ column: 0, direction: 'asc' }],
-      hasHeaders: true,
+      hasHeaders: false,
     });
   });
 

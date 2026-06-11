@@ -16,7 +16,7 @@
  * @module components/canvas-overlays/form-controls
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 import type { FormControl } from '@mog-sdk/contracts/form-controls';
 
@@ -163,24 +163,28 @@ export function FormControlLayerContainer() {
   // SCROLL TRANSFORM - 60fps GPU-accelerated scrolling
   // ═══════════════════════════════════════════════════════════════════════════
 
-  useEffect(() => {
+  const syncScrollTransform = useCallback(() => {
     const viewport = getViewport();
-    if (!viewport || !isReady) return;
+    if (!viewport || !isReady || !overlayRef.current) return;
 
-    const syncScroll = () => {
-      const pos = viewport.getScrollPosition();
-      if (overlayRef.current) {
-        overlayRef.current.style.transform = `translate3d(${-pos.x}px, ${-pos.y}px, 0)`;
-      }
-    };
+    const pos = viewport.getScrollPosition();
+    overlayRef.current.style.transform = `translate3d(${-pos.x}px, ${-pos.y}px, 0)`;
+  }, [getViewport, isReady]);
 
-    syncScroll();
+  useLayoutEffect(() => {
+    syncScrollTransform();
+  }, [resolvedControls.length, syncScrollTransform]);
+
+  useEffect(() => {
+    if (!isReady) return;
+
+    syncScrollTransform();
 
     const inputCoordinator = coordinator.input.inputCoordinator;
-    const unsubscribe = inputCoordinator.onScrollChange(syncScroll);
+    const unsubscribe = inputCoordinator.onScrollChange(syncScrollTransform);
 
     return unsubscribe;
-  }, [getViewport, coordinator, isReady]);
+  }, [coordinator, isReady, syncScrollTransform]);
 
   // ═══════════════════════════════════════════════════════════════════════════
   // EARLY RETURNS - After all hooks have been called

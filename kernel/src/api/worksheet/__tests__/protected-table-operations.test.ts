@@ -24,6 +24,10 @@ jest.mock('../../../bridges/compute/compute-core', () => ({
 
 const SHEET_ID = sheetId('sheet-1');
 
+type PendingDialogActionGlobal = typeof globalThis & {
+  __MOG_PENDING_DIALOG_ACTION__?: Promise<unknown>;
+};
+
 const protectedOptions = {
   selectLockedCells: true,
   selectUnlockedCells: true,
@@ -155,6 +159,36 @@ function expectProtected(error: unknown, operation: string) {
 }
 
 describe('protected sheet table operation policy', () => {
+  afterEach(() => {
+    delete (globalThis as PendingDialogActionGlobal).__MOG_PENDING_DIALOG_ACTION__;
+  });
+
+  it('waits for pending dialog table mutations before listing tables', async () => {
+    const ctx = createCtx(null);
+    const tables = new WorksheetTablesImpl(ctx, SHEET_ID);
+    let resolveDialogAction!: () => void;
+    (globalThis as PendingDialogActionGlobal).__MOG_PENDING_DIALOG_ACTION__ = new Promise<void>(
+      (resolve) => {
+        resolveDialogAction = resolve;
+      },
+    );
+
+    const listPromise = tables.list();
+    await Promise.resolve();
+
+    expect(ctx.computeBridge.getAllTablesInSheet).not.toHaveBeenCalled();
+
+    resolveDialogAction();
+    await expect(listPromise).resolves.toEqual([
+      expect.objectContaining({
+        name: 'Sales',
+        range: 'A1:D6',
+        showFilterButtons: true,
+      }),
+    ]);
+    expect(ctx.computeBridge.getAllTablesInSheet).toHaveBeenCalledWith(SHEET_ID);
+  });
+
   it('blocks structural table definition mutations before bridge writes', async () => {
     const ctx = createCtx();
     const tables = new WorksheetTablesImpl(ctx, SHEET_ID);

@@ -105,6 +105,27 @@ export function InsertRibbon() {
   // mirrors the prior `useInsertActions` derivation; it stays here as a
   // granular state read at the call site.
   const [selectionIsInTable, setSelectionIsInTable] = useState(false);
+  const [tableTopologyVersion, setTableTopologyVersion] = useState(0);
+
+  useEffect(() => {
+    const ws = wb.getSheetById(activeSheetId);
+    const bump = (event?: { sheetId?: string }) => {
+      if (event?.sheetId && event.sheetId !== activeSheetId) return;
+      setTableTopologyVersion((version) => version + 1);
+    };
+    const unsubscribers = [
+      ws.on('table:created', bump),
+      ws.on('table:updated', bump),
+      ws.on('table:resized', bump),
+      ws.on('table:total-row-changed', bump),
+      ws.on('table:converted-to-range', bump),
+      ws.on('table:deleted', bump),
+    ];
+    return () => {
+      for (const unsubscribe of unsubscribers) unsubscribe();
+    };
+  }, [wb, activeSheetId]);
+
   useEffect(() => {
     let cancelled = false;
     void (async () => {
@@ -119,7 +140,7 @@ export function InsertRibbon() {
     return () => {
       cancelled = true;
     };
-  }, [wb, activeSheetId, activeRow, activeCol]);
+  }, [wb, activeSheetId, activeRow, activeCol, tableTopologyVersion]);
 
   // Chart is disabled if there's no selection range
   const chartDisabled = useMemo(() => ranges.length === 0, [ranges]);

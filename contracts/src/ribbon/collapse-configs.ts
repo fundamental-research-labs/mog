@@ -610,7 +610,7 @@ export const WINDOW_COLLAPSE_CONFIG: GroupCollapseConfig = {
   levels: {
     0: 'full',
     1: 'compact',
-    2: 'dropdown',
+    2: 'icons',
     3: 'dropdown',
     4: 'hidden',
   },

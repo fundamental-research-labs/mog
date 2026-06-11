@@ -1,6 +1,6 @@
 {
   "name": "@mog-sdk/embed",
-  "version": "0.9.2",
+  "version": "0.9.3",
   "license": "Apache-2.0",
   "repository": "https://github.com/fundamental-research-labs/mog",
   "description": "Embeddable read-only Mog spreadsheet component",

@@ -9,6 +9,7 @@
  * @see coordination/editor-commit-coordination.ts
  */
 
+import { sheetId as toSheetId } from '@mog-sdk/contracts/core';
 import { createIntegrationSimulator, type IntegrationSimulator } from '../../integration-simulator';
 
 // =============================================================================
@@ -270,5 +271,31 @@ describe('Formula editing mode', () => {
 
     expect(sim.isEditing()).toBe(false);
     expect(sim.activeCell()).toEqual({ row: 1, col: 0 });
+  });
+
+  it('formula bar Enter commits without moving the active cell', async () => {
+    sim = createIntegrationSimulator({
+      activeCell: { row: 0, col: 0 },
+    });
+
+    const cell = sim.activeCell();
+    sim.system.access.actors.selection.send({
+      type: 'BEGIN_CELL_EDIT',
+      cell,
+    });
+    sim.system.access.actors.editor.send({
+      type: 'START_EDITING',
+      cell,
+      sheetId: toSheetId('sheet-1'),
+      initialValue: '=SUM(A2:A5)',
+      entryMode: 'formulaBar',
+      preEditSelectionRanges: sim.selectionRanges(),
+    });
+
+    await sim.system.commitWithKey('enter');
+    await sim.flush();
+
+    expect(sim.isEditing()).toBe(false);
+    expect(sim.activeCell()).toEqual({ row: 0, col: 0 });
   });
 });

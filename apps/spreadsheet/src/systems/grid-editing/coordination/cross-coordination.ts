@@ -186,8 +186,9 @@ export function setupEditorToSelectionCoordination(
     if (wasCommitting && isInactive && previousState?.context.commitDirection) {
       const direction = previousState.context.commitDirection;
       const commitKey = previousState.context.commitKey;
+      const entryMode = previousState.context.entryMode;
       const suppressEnterNavigation =
-        previousState.context.entryMode === 'doubleClick' &&
+        (entryMode === 'doubleClick' || entryMode === 'formulaBar') &&
         (commitKey === 'enter' || commitKey === 'shift-enter');
       const editingSheetId = previousState.context.sheetId;
       const currentSheetId = getCurrentSheetId?.();

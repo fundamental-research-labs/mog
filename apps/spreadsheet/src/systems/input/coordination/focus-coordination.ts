@@ -208,6 +208,9 @@ export class FocusCoordination {
       if (top && top.type === 'sheetTabs') {
         return;
       }
+      if (this.shouldPreserveCurrentFocusForGridRestore()) {
+        return;
+      }
       this.focusGridContainer();
     });
   }
@@ -376,6 +379,11 @@ export class FocusCoordination {
     }
   }
 
+  private shouldPreserveCurrentFocusForGridRestore(): boolean {
+    const active = document.activeElement;
+    return active instanceof HTMLElement && active.matches('[data-testid="name-box"]');
+  }
+
   // ===========================================================================
   // PRIVATE: SUBSCRIPTIONS
   // ===========================================================================
@@ -392,6 +400,7 @@ export class FocusCoordination {
         const poppedLayer = this.previousStack[this.previousStack.length - 1];
         // Delay to allow DOM to update after dialog unmounts
         requestAnimationFrame(() => {
+          if (this.shouldPreserveCurrentFocusForGridRestore()) return;
           this.restoreFocus(poppedLayer.returnFocusTarget);
         });
       }
@@ -399,6 +408,7 @@ export class FocusCoordination {
       // Focus grid when returning to grid state with only base layer
       if (state.matches('grid') && currentStack.length === 1 && this.previousStack.length > 1) {
         requestAnimationFrame(() => {
+          if (this.shouldPreserveCurrentFocusForGridRestore()) return;
           this.focusGridContainer();
         });
       }

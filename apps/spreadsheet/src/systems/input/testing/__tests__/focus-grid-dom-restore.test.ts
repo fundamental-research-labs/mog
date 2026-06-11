@@ -63,6 +63,23 @@ describe('focusGrid DOM restore', () => {
     expect(document.activeElement).toBe(gridContainer);
   });
 
+  it('does not steal focus from the name box input', async () => {
+    system.setGridContainer(gridContainer);
+    const nameBox = document.createElement('input');
+    nameBox.setAttribute('data-testid', 'name-box');
+    document.body.appendChild(nameBox);
+    nameBox.focus();
+
+    try {
+      system.focusGrid();
+      await flushRaf();
+
+      expect(document.activeElement).toBe(nameBox);
+    } finally {
+      document.body.removeChild(nameBox);
+    }
+  });
+
   it('is a no-op on DOM (and does not throw) when no grid container is registered', async () => {
     // Note: setGridContainer is intentionally NOT called here.
     expect(document.activeElement).toBe(document.body);

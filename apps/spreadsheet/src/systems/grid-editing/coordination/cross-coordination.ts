@@ -49,6 +49,10 @@ export type EditorState = SnapshotFrom<typeof editorMachine>;
 export type ClipboardState = SnapshotFrom<typeof clipboardMachine>;
 export type RendererState = SnapshotFrom<typeof rendererMachine>;
 
+function isFormulaSourceCommit(state: EditorState): boolean {
+  return !state.context.formulaInputIsLiteral && state.context.value.trimStart().startsWith('=');
+}
+
 /**
  * Callback to notify renderer of layer invalidation.
  */
@@ -186,9 +190,10 @@ export function setupEditorToSelectionCoordination(
     if (wasCommitting && isInactive && previousState?.context.commitDirection) {
       const direction = previousState.context.commitDirection;
       const commitKey = previousState.context.commitKey;
+      const isEnterKeyCommit = commitKey === 'enter' || commitKey === 'shift-enter';
       const suppressEnterNavigation =
-        previousState.context.entryMode === 'doubleClick' &&
-        (commitKey === 'enter' || commitKey === 'shift-enter');
+        isEnterKeyCommit &&
+        (previousState.context.entryMode === 'doubleClick' || isFormulaSourceCommit(previousState));
       const editingSheetId = previousState.context.sheetId;
       const currentSheetId = getCurrentSheetId?.();
       const committedFromDifferentSheet =

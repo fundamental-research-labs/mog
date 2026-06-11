@@ -61,6 +61,14 @@ type ChartSourceRange = {
   endCol: number;
 };
 
+type WorksheetChartSourceVisibility = {
+  getValue?: (row: number, col: number) => unknown | Promise<unknown>;
+  layout?: {
+    isRowHidden?: (row: number) => boolean | Promise<boolean>;
+    isColumnHidden?: (col: number) => boolean | Promise<boolean>;
+  };
+};
+
 /**
  * Type guard to check if coordinator exposes renderer capabilities.
  */
@@ -102,6 +110,122 @@ function getChartSourceRanges(deps: ActionDependencies, sheetId: SheetId): Chart
   }
 
   return deps.accessors.selection.getDataBoundedRanges(sheetId);
+}
+
+async function isSourceRowHidden(
+  ws: WorksheetChartSourceVisibility,
+  row: number,
+): Promise<boolean> {
+  return (await ws.layout?.isRowHidden?.(row)) ?? false;
+}
+
+async function isSourceColumnHidden(
+  ws: WorksheetChartSourceVisibility,
+  col: number,
+): Promise<boolean> {
+  return (await ws.layout?.isColumnHidden?.(col)) ?? false;
+}
+
+async function isBlankChartSourceCell(
+  ws: WorksheetChartSourceVisibility,
+  row: number,
+  col: number,
+): Promise<boolean> {
+  if (!ws.getValue) return false;
+  const value = await ws.getValue(row, col);
+  return value === null || value === undefined || (typeof value === 'string' && value.trim() === '');
+}
+
+async function isBlankChartSourceColumn(
+  ws: WorksheetChartSourceVisibility,
+  range: ChartSourceRange,
+  col: number,
+): Promise<boolean> {
+  for (let row = range.startRow; row <= range.endRow; row++) {
+    if (!(await isBlankChartSourceCell(ws, row, col))) return false;
+  }
+  return true;
+}
+
+async function isBlankChartSourceRow(
+  ws: WorksheetChartSourceVisibility,
+  range: ChartSourceRange,
+  row: number,
+): Promise<boolean> {
+  for (let col = range.startCol; col <= range.endCol; col++) {
+    if (!(await isBlankChartSourceCell(ws, row, col))) return false;
+  }
+  return true;
+}
+
+async function getFirstVisibleChartSourceBlock(
+  ws: WorksheetChartSourceVisibility,
+  range: ChartSourceRange,
+): Promise<{ range: ChartSourceRange; changed: boolean } | null> {
+  let startRow = range.startRow;
+  while (startRow <= range.endRow && (await isSourceRowHidden(ws, startRow))) {
+    startRow++;
+  }
+  if (startRow > range.endRow) return null;
+
+  let endRow = startRow;
+  while (endRow + 1 <= range.endRow && !(await isSourceRowHidden(ws, endRow + 1))) {
+    endRow++;
+  }
+
+  let startCol = range.startCol;
+  while (startCol <= range.endCol && (await isSourceColumnHidden(ws, startCol))) {
+    startCol++;
+  }
+  if (startCol > range.endCol) return null;
+
+  let endCol = startCol;
+  while (endCol + 1 <= range.endCol && !(await isSourceColumnHidden(ws, endCol + 1))) {
+    endCol++;
+  }
+
+  const visibleRange = { startRow, startCol, endRow, endCol };
+  return {
+    range: visibleRange,
+    changed:
+      visibleRange.startRow !== range.startRow ||
+      visibleRange.startCol !== range.startCol ||
+      visibleRange.endRow !== range.endRow ||
+      visibleRange.endCol !== range.endCol,
+  };
+}
+
+async function trimTrailingBlankChartSourceEdges(
+  ws: WorksheetChartSourceVisibility,
+  range: ChartSourceRange,
+): Promise<ChartSourceRange> {
+  let next = { ...range };
+
+  while (
+    next.endCol > next.startCol &&
+    (await isBlankChartSourceColumn(ws, next, next.endCol))
+  ) {
+    next = { ...next, endCol: next.endCol - 1 };
+  }
+
+  while (
+    next.endRow > next.startRow &&
+    (await isBlankChartSourceRow(ws, next, next.endRow))
+  ) {
+    next = { ...next, endRow: next.endRow - 1 };
+  }
+
+  return next;
+}
+
+async function normalizeEmbeddedChartSourceRange(
+  ws: WorksheetChartSourceVisibility,
+  range: ChartSourceRange,
+): Promise<ChartSourceRange> {
+  const visibleBlock = await getFirstVisibleChartSourceBlock(ws, range);
+  if (!visibleBlock) return range;
+  if (!visibleBlock.changed) return range;
+  return trimTrailingBlankChartSourceEdges(ws, visibleBlock.range);
 }
 
 /**
@@ -926,7 +1050,7 @@ export const CREATE_EMBEDDED_CHART: AsyncActionHandler = async (
     // Excel parity: expand single-cell / single-row selections to the
     // surrounding data region. Multi-row selections pass through unchanged.
     const expanded = await expandToDataRegion(ws, ranges[0]);
-    const range = expanded ?? ranges[0];
+    const range = await normalizeEmbeddedChartSourceRange(ws, expanded ?? ranges[0]);
     const dataRange = rangeToA1Notation(range);
 
     // Use smart positioning to ensure chart is visible

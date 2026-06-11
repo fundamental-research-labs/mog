@@ -61,6 +61,11 @@ function createMockDeps(overrides?: Partial<ActionDependencies>): ActionDependen
       endRow: row,
       endCol: col,
     })),
+    getValue: jest.fn().mockResolvedValue(null),
+    layout: {
+      isRowHidden: jest.fn().mockResolvedValue(false),
+      isColumnHidden: jest.fn().mockResolvedValue(false),
+    },
     // Namespaced charts API (current source uses ws.charts.*)
     charts: {
       get: jest.fn().mockResolvedValue(null),
@@ -1301,6 +1306,28 @@ describe('Chart Handlers - Current-Region Auto-Expansion', () => {
       expect(ws.getCurrentRegion).not.toHaveBeenCalled();
       const addedConfig = ws.charts.add.mock.calls[0][0];
       expect(addedConfig.dataRange).toBe('M3:N21');
+    });
+
+    it('uses the first visible source block when collapsed outline columns split a selected row', async () => {
+      const deps = createDepsWithSelection({
+        ranges: [{ startRow: 20, startCol: 11, endRow: 20, endCol: 27 }],
+      });
+
+      const ws = (deps.workbook as any).activeSheet;
+      ws.layout.isColumnHidden.mockImplementation(async (col: number) => col >= 15 && col <= 26);
+      ws.getValue.mockImplementation(async (row: number, col: number) => {
+        if (row !== 20) return null;
+        if (col === 12) return 34500;
+        if (col === 13) return 45000;
+        if (col === 27) return 6732;
+        return null;
+      });
+
+      const result = await ChartHandlers.CREATE_EMBEDDED_CHART(deps);
+      expect(result.handled).toBe(true);
+
+      const addedConfig = ws.charts.add.mock.calls[0][0];
+      expect(addedConfig.dataRange).toBe('L21:N21');
     });
 
     it('expands single-row header selection (A1:D1) to the full data block', async () => {

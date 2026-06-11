@@ -100,6 +100,13 @@ function isDialogKeyboardTarget(target: HTMLElement | null): boolean {
   return Boolean(target.closest('[role="dialog"]'));
 }
 
+function isSpreadsheetEditorKeyboardTarget(target: HTMLElement | null): boolean {
+  if (!target) return false;
+  return Boolean(
+    target.closest('[data-testid="inline-cell-editor"], [data-testid="formula-bar-input"]'),
+  );
+}
+
 function isNativeEditableShortcut(e: KeyboardEvent, target: HTMLElement | null): boolean {
   if (!isEditableKeyboardTarget(target)) return false;
   if (!(e.ctrlKey || e.metaKey) || e.altKey) return false;
@@ -339,6 +346,10 @@ function KeyboardCaptureSetup({
         editorSnapshot.matches('imeComposing');
       const target = keyboardEventTargetElement(e);
 
+      if (isEditableKeyboardTarget(target) && !isSpreadsheetEditorKeyboardTarget(target)) {
+        return;
+      }
+
       if (
         isGlobalShortcut(e) &&
         !isDialogKeyboardTarget(target) &&
@@ -359,6 +370,9 @@ function KeyboardCaptureSetup({
         const activeTag = document.activeElement?.tagName;
 
         if (activeTag === 'BODY' || activeTag === 'HTML') {
+          if (isEditableKeyboardTarget(target) || isDialogKeyboardTarget(target)) {
+            return;
+          }
           // Escape with an open popover/dialog: let it bubble so the
           // popover's own keydown handler can close it. Some popovers
           // (e.g. CommentPopover) decline Radix's auto-focus to keep the

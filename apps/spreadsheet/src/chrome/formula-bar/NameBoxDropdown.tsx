@@ -369,6 +369,7 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
   // Handle clicking on the name box to open dropdown
   const handleNameBoxClick = useCallback(() => {
     if (!isEditing) {
+      coordinator.grid.cancelEdit();
       setValidationError(null);
       setIsEditing(true);
       setInputValue(cellAddress);
@@ -378,10 +379,11 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
         inputRef.current?.select();
       });
     }
-  }, [isEditing, cellAddress]);
+  }, [coordinator, isEditing, cellAddress]);
 
   // Handle double-click to edit (navigate by typing)
   const handleDoubleClick = useCallback(() => {
+    coordinator.grid.cancelEdit();
     setValidationError(null);
     setIsEditing(true);
     setInputValue(cellAddress);
@@ -391,7 +393,7 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
       inputRef.current?.focus();
       inputRef.current?.select();
     });
-  }, [cellAddress]);
+  }, [coordinator, cellAddress]);
 
   // Handle input change while editing
   const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -647,6 +649,7 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
     (e: React.KeyboardEvent<HTMLInputElement>) => {
       if (e.key === 'Enter') {
         e.preventDefault();
+        e.stopPropagation();
         // Read straight from the DOM so test harnesses (Playwright `fill`)
         // and rapid user input both commit the actual typed value, even if
         // the `inputValue` state hasn't flushed yet.
@@ -668,6 +671,7 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
         coordinator.input.focusGrid();
       } else if (e.key === 'Escape') {
         e.preventDefault();
+        e.stopPropagation();
         setValidationError(null);
         setIsEditing(false);
         setIsOpen(false);

@@ -66,6 +66,7 @@ export const emitUserSelectionChanged = emit(
       type: 'userSelectionChanged' as const,
       activeCell: context.activeCell,
       followCell,
+      range: context.pendingRange,
       ...(scrollIntent ? { scrollIntent } : {}),
     };
   },

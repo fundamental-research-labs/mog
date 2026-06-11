@@ -108,6 +108,20 @@ function isNativeEditableShortcut(e: KeyboardEvent, target: HTMLElement | null):
   return key === 'c' || key === 'x' || key === 'v' || key === 'z' || key === 'y';
 }
 
+export function shouldCommitFormulaBarEnterInPlace(
+  e: Pick<KeyboardEvent, 'key' | 'shiftKey' | 'ctrlKey' | 'metaKey' | 'altKey'>,
+  currentLayerType: string,
+): boolean {
+  return (
+    currentLayerType === 'formulaBar' &&
+    e.key === 'Enter' &&
+    !e.shiftKey &&
+    !e.ctrlKey &&
+    !e.metaKey &&
+    !e.altKey
+  );
+}
+
 /**
  * Hook to access pane navigation element registration.
  * Used by components to register their DOM elements for F6 navigation.
@@ -480,6 +494,19 @@ function KeyboardCaptureSetup({
       const { isSuggestionsOpen, isPickerOpen } = editorSnapshot.context;
       if (isSuggestionsOpen || isPickerOpen) {
         return;
+      }
+
+      if (shouldCommitFormulaBarEnterInPlace(e, currentLayerType)) {
+        const result = keyboardCoordinator.dispatchAction('COMMIT_IN_PLACE');
+        const handledInPlace = result instanceof Promise ? true : result?.handled === true;
+
+        if (handledInPlace) {
+          coordinator.input.access.commands.paneFocus?.resetToGrid();
+          coordinator.input.resetFocusToGrid();
+          e.preventDefault();
+          e.stopPropagation();
+          return;
+        }
       }
 
       // Route to KeyboardCoordinator

@@ -249,6 +249,28 @@ describe('SORT_ASCENDING — current-region auto-expansion', () => {
     });
   });
 
+  test('multi-row selection with a blank leading sort-key row sorts the body below it', async () => {
+    const setup = makeMockDeps({
+      selectionRanges: [{ startRow: 457, startCol: 4, endRow: 479, endCol: 6 }],
+      activeCell: { row: 457, col: 6 },
+      cellValues: {
+        '458,6': 167726,
+        '459,6': 57825,
+      },
+    });
+
+    await SORT_ASCENDING(setup.deps);
+
+    expect(setup.getCurrentRegion).not.toHaveBeenCalled();
+    expect(setup.sortRange).toHaveBeenCalledTimes(1);
+    const [rangeArg, optionsArg] = setup.sortRange.mock.calls[0] as [unknown, unknown];
+    expect(rangeArg).toEqual({ startRow: 458, startCol: 4, endRow: 479, endCol: 6 });
+    expect(optionsArg).toEqual({
+      columns: [{ column: 2, direction: 'asc' }],
+      hasHeaders: false,
+    });
+  });
+
   test('explicit A2:A6 mixed data selection is sorted as headerless', async () => {
     const setup = makeMockDeps({
       selectionRanges: [{ startRow: 1, startCol: 0, endRow: 5, endCol: 0 }],

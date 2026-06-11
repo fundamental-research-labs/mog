@@ -111,6 +111,8 @@ type SortCommandTarget = DataCommandTarget & {
   readonly visibleRowsOnly?: boolean;
 };
 
+const LEADING_BLANK_SORT_SCAN_ROW_LIMIT = 100;
+
 function isSingleCellRange(range: CellRange): boolean {
   return range.startRow === range.endRow && range.startCol === range.endCol;
 }
@@ -159,6 +161,55 @@ async function resolveAutoFilterSortTarget(
     wasExpanded: false,
     visibleRowsOnly: true,
   };
+}
+
+function hasSortKeySignal(cell: { value?: unknown } | null | undefined): boolean {
+  const value = cell?.value;
+  if (value == null || value === '') return false;
+  if (typeof value === 'string') return value.trim().length > 0;
+  return true;
+}
+
+async function trimLeadingBlankSortKeyRows(
+  ws: Worksheet,
+  target: SortCommandTarget,
+  activeCell: CellCoord,
+  relativeSortColumn: number,
+): Promise<SortCommandTarget> {
+  const range = target.range;
+  if (target.hasHeaders || target.visibleRowsOnly || range.startRow >= range.endRow) {
+    return target;
+  }
+  if (
+    activeCell.row !== range.startRow ||
+    activeCell.col < range.startCol ||
+    activeCell.col > range.endCol
+  ) {
+    return target;
+  }
+
+  const sortColumn = range.startCol + relativeSortColumn;
+  if (sortColumn < range.startCol || sortColumn > range.endCol) {
+    return target;
+  }
+
+  if (hasSortKeySignal(await ws.getCell(range.startRow, sortColumn))) {
+    return target;
+  }
+
+  const scanEndRow = Math.min(range.endRow, range.startRow + LEADING_BLANK_SORT_SCAN_ROW_LIMIT);
+  for (let row = range.startRow + 1; row <= scanEndRow; row++) {
+    if (hasSortKeySignal(await ws.getCell(row, sortColumn))) {
+      // Compute resolves the sort column through the first row's CellId.
+      // A leading blank title/header key would otherwise make the sort a no-op.
+      return {
+        ...target,
+        range: { ...range, startRow: row },
+      };
+    }
+  }
+
+  return target;
 }
 
 /**
@@ -742,19 +793,21 @@ async function sortInDirection(
     const resolvedTarget = autoFilterTarget ?? (await resolveDataCommandTarget(ws, range));
     const target: SortCommandTarget | null = resolvedTarget ? { ...resolvedTarget } : null;
     if (!target) continue;
+    const sortColumn = getRelativeCommandColumn(activeCell, target.range);
+    const sortTarget = await trimLeadingBlankSortKeyRows(ws, target, activeCell, sortColumn);
 
     // E4: Excel refuses to sort ranges containing merged cells.
     const allMerges = await ws.structure.getMergedRegions();
-    const hasMergesInRange = allMerges.some(
+    const overlappingMerges = allMerges.filter(
       (m) =>
         !(
-          m.endRow < target.range.startRow ||
-          m.startRow > target.range.endRow ||
-          m.endCol < target.range.startCol ||
-          m.startCol > target.range.endCol
+          m.endRow < sortTarget.range.startRow ||
+          m.startRow > sortTarget.range.endRow ||
+          m.endCol < sortTarget.range.startCol ||
+          m.startCol > sortTarget.range.endCol
         ),
     );
-    if (hasMergesInRange) {
+    if (overlappingMerges.length > 0) {
       return {
         handled: false,
         reason: 'blocked' as const,
@@ -762,10 +815,10 @@ async function sortInDirection(
       };
     }
 
-    await ws.sortRange(target.range, {
-      columns: [{ column: getRelativeCommandColumn(activeCell, target.range), direction }],
-      hasHeaders: target.hasHeaders,
-      visibleRowsOnly: target.visibleRowsOnly,
+    await ws.sortRange(sortTarget.range, {
+      columns: [{ column: sortColumn, direction }],
+      hasHeaders: sortTarget.hasHeaders,
+      visibleRowsOnly: sortTarget.visibleRowsOnly,
     });
     sorted = true;
   }

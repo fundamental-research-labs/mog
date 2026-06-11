@@ -24,6 +24,7 @@ import type {
   AsyncActionHandler,
   ThesaurusInsertPayload,
 } from '@mog-sdk/contracts/actions';
+import type { FilterSummaryInfo, Worksheet } from '@mog-sdk/contracts/api';
 import type {
   CellFormat,
   CellRange,
@@ -143,6 +144,55 @@ function getSelectionContext(deps: ActionDependencies): {
   return {
     activeCell: deps.accessors.selection.getActiveCell() ?? null,
     ranges: deps.accessors.selection.getRanges() ?? [],
+  };
+}
+
+function rangeContainsCell(range: CellRange, cell: { row: number; col: number }): boolean {
+  return (
+    cell.row >= range.startRow &&
+    cell.row <= range.endRow &&
+    cell.col >= range.startCol &&
+    cell.col <= range.endCol
+  );
+}
+
+function rangeArea(range: CellRange): number {
+  return (range.endRow - range.startRow + 1) * (range.endCol - range.startCol + 1);
+}
+
+async function resolveAutoFilterDialogTarget(
+  ws: Worksheet,
+  activeCell: { row: number; col: number } | null,
+): Promise<{ range: CellRange; hasHeaders: boolean; visibleRowsOnly: boolean } | null> {
+  if (!activeCell) return null;
+
+  let filters: FilterSummaryInfo[];
+  try {
+    filters = await ws.filters.listSummaries({ scope: 'available' });
+  } catch {
+    return null;
+  }
+
+  const matchingFilter = filters
+    .filter(
+      (filter) =>
+        filter.filterKind === 'autoFilter' &&
+        !filter.tableId &&
+        rangeContainsCell(filter.range, activeCell),
+    )
+    .sort((left, right) => rangeArea(left.range) - rangeArea(right.range))[0];
+
+  if (!matchingFilter) return null;
+
+  return {
+    range: {
+      startRow: matchingFilter.range.startRow,
+      startCol: matchingFilter.range.startCol,
+      endRow: matchingFilter.range.endRow,
+      endCol: matchingFilter.range.endCol,
+    },
+    hasHeaders: true,
+    visibleRowsOnly: true,
   };
 }
 
@@ -684,18 +734,26 @@ export const OPEN_CUSTOM_SORT_DIALOG: AsyncActionHandler = async (deps): Promise
   }
 
   const ws = deps.workbook.getSheetById(deps.getActiveSheetId());
-  const target = await resolveDataDialogTarget(ws, ranges[0]);
+  const target = (await resolveAutoFilterDialogTarget(ws, activeCell)) ?? {
+    ...(await resolveDataDialogTarget(ws, ranges[0])),
+    visibleRowsOnly: false,
+  };
 
   getUIStore(deps)
     .getState()
-    .openSortDialog(target.range, target.hasHeaders, {
-      type: 'custom',
-      criterion: {
-        sortBy: 'value',
-        columnIndex: getRelativeCommandColumn(activeCell, target.range),
-        direction: 'asc',
+    .openSortDialog(
+      target.range,
+      target.hasHeaders,
+      {
+        type: 'custom',
+        criterion: {
+          sortBy: 'value',
+          columnIndex: getRelativeCommandColumn(activeCell, target.range),
+          direction: 'asc',
+        },
       },
-    });
+      target.visibleRowsOnly,
+    );
   return handled();
 };
 

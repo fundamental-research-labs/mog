@@ -130,7 +130,7 @@ export function SortDialog() {
   const closeSortDialog = useUIStore((s) => s.closeSortDialog);
   const setSortDialogHasHeaders = useUIStore((s) => s.setSortDialogHasHeaders);
 
-  const { isOpen, range, hasHeaders, initialKind } = sortDialog;
+  const { isOpen, range, hasHeaders, visibleRowsOnly, initialKind } = sortDialog;
 
   // Local state for sort levels
   const [levels, setLevels] = useState<SortLevelUI[]>([
@@ -337,12 +337,12 @@ export function SortDialog() {
 
       // Execute sort through Worksheet API
       const rangeA1 = cellRangeToA1(range);
-      void ws.sortRange(rangeA1, { columns, hasHeaders });
+      void ws.sortRange(rangeA1, { columns, hasHeaders, visibleRowsOnly });
 
       setErrorMessage(null);
       closeSortDialog();
     })();
-  }, [range, levels, hasHeaders, wb, activeSheetId, closeSortDialog, customLists]);
+  }, [range, levels, hasHeaders, visibleRowsOnly, wb, activeSheetId, closeSortDialog, customLists]);
 
   // Handle cancel
   const handleCancel = useCallback(() => {

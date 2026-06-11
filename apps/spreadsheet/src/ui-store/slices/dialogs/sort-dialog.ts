@@ -46,6 +46,8 @@ export interface SortDialogState {
   range: CellRange | null;
   /** Whether the range has headers (auto-detected, user can override) */
   hasHeaders: boolean;
+  /** Whether sorting should preserve hidden row slots */
+  visibleRowsOnly: boolean;
   /** Initial sort level captured by the opener action */
   initialKind: SortDialogInitialKind;
 }
@@ -63,6 +65,7 @@ export interface SortDialogSlice {
     range: CellRange,
     hasHeaders?: boolean,
     initialKind?: SortDialogInitialKind,
+    visibleRowsOnly?: boolean,
   ) => void;
 
   /** Close the sort dialog */
@@ -80,6 +83,7 @@ const initialSortDialogState: SortDialogState = {
   isOpen: false,
   range: null,
   hasHeaders: false,
+  visibleRowsOnly: false,
   initialKind: {
     type: 'custom',
     criterion: { sortBy: 'value', columnIndex: 0, direction: 'asc' },
@@ -99,12 +103,14 @@ export const createSortDialogSlice: StateCreator<SortDialogSlice, [], [], SortDi
     range: CellRange,
     hasHeaders: boolean = false,
     initialKind: SortDialogInitialKind = initialSortDialogState.initialKind,
+    visibleRowsOnly: boolean = false,
   ) => {
     set({
       sortDialog: {
         isOpen: true,
         range,
         hasHeaders,
+        visibleRowsOnly,
         initialKind,
       },
     });

@@ -14,6 +14,14 @@ function makeDeps(opts: {
   activeCell?: CellCoord;
   currentRegion?: CellRange;
   values?: Record<string, unknown>;
+  filterSummaries?: Array<{
+    id: string;
+    filterKind: 'autoFilter';
+    range: CellRange;
+    tableId?: string;
+    activeColumnCount: number;
+    hasActiveCriteria: boolean;
+  }>;
 }) {
   const activeCell = opts.activeCell ?? {
     row: opts.selectionRange.startRow,
@@ -25,6 +33,7 @@ function makeDeps(opts: {
   const getCell = jest.fn((row: number, col: number) =>
     Promise.resolve({ value: opts.values?.[`${row},${col}`] ?? null }),
   );
+  const listSummaries = jest.fn().mockResolvedValue((opts.filterSummaries ?? []) as never);
   const openSortDialog = jest.fn();
   const openRemoveDuplicatesDialog = jest.fn();
   const openSubtotalDialog = jest.fn();
@@ -32,7 +41,11 @@ function makeDeps(opts: {
 
   const deps = {
     workbook: {
-      getSheetById: jest.fn().mockReturnValue({ getCurrentRegion, getCell }),
+      getSheetById: jest.fn().mockReturnValue({
+        getCurrentRegion,
+        getCell,
+        filters: { listSummaries },
+      }),
     },
     uiStore: {
       getState: () => ({
@@ -54,6 +67,7 @@ function makeDeps(opts: {
   return {
     deps,
     getCurrentRegion,
+    listSummaries,
     openSortDialog,
     openRemoveDuplicatesDialog,
     openSubtotalDialog,
@@ -82,7 +96,34 @@ describe('data dialog openers capture resolved command targets', () => {
     expect(setup.openSortDialog).toHaveBeenCalledWith(range, true, {
       type: 'custom',
       criterion: { sortBy: 'value', columnIndex: 1, direction: 'asc' },
+    }, false);
+  });
+
+  test('custom sort opened inside an active AutoFilter stores visible-row sorting', async () => {
+    const filterRange = { startRow: 2, startCol: 11, endRow: 20, endCol: 27 };
+    const setup = makeDeps({
+      selectionRange: filterRange,
+      activeCell: { row: 2, col: 11 },
+      currentRegion: { startRow: 0, startCol: 0, endRow: 99, endCol: 30 },
+      filterSummaries: [
+        {
+          id: 'filter-1',
+          filterKind: 'autoFilter',
+          range: filterRange,
+          activeColumnCount: 1,
+          hasActiveCriteria: true,
+        },
+      ],
     });
+
+    await OPEN_CUSTOM_SORT_DIALOG(setup.deps);
+
+    expect(setup.listSummaries).toHaveBeenCalledWith({ scope: 'available' });
+    expect(setup.getCurrentRegion).not.toHaveBeenCalled();
+    expect(setup.openSortDialog).toHaveBeenCalledWith(filterRange, true, {
+      type: 'custom',
+      criterion: { sortBy: 'value', columnIndex: 0, direction: 'asc' },
+    }, true);
   });
 
   test('remove duplicates stores the captured range and header hint', async () => {
@@ -139,7 +180,7 @@ describe('data dialog openers capture resolved command targets', () => {
     expect(setup.openSortDialog).toHaveBeenCalledWith(single, false, {
       type: 'custom',
       criterion: { sortBy: 'value', columnIndex: 0, direction: 'asc' },
-    });
+    }, false);
   });
 
   test('subtotal opens on an empty selected cell using the raw selection', async () => {

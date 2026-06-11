@@ -11,6 +11,8 @@ use compute_document::schema::{KEY_COL_ORDER, KEY_HIDDEN_ROWS, KEY_ROW_ORDER, KE
 use value_types::{CellValue, FiniteF64};
 use yrs::{Any, Array, ArrayPrelim, Map, MapPrelim, Out, Transact};
 
+mod navigation_outline;
+
 // -------------------------------------------------------------------
 // Helpers
 // -------------------------------------------------------------------

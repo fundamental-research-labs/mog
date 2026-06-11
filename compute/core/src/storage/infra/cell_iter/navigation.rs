@@ -18,6 +18,11 @@ use super::read::has_data_at;
 ///
 /// Hidden rows/columns act as boundaries; merged cells are treated as single
 /// blocks and navigation always lands on the merge origin (top-left).
+///
+/// Horizontally collapsed outline columns are not data-edge boundaries. Excel
+/// lets Ctrl+Left/Right traverse the collapsed detail span and land on the
+/// nearest visible column at the other side of the outline group. Manually
+/// hidden columns still remain hard boundaries.
 pub fn find_data_edge(
     doc: &Doc,
     sheets: &MapRef,
@@ -44,18 +49,32 @@ pub fn find_data_edge(
         return fallback;
     };
 
-    // Pre-fetch hidden sets for efficiency
+    // Pre-fetch hidden sets for efficiency. `dimensions::get_hidden_columns`
+    // contains manually hidden columns, but imported collapsed outlines can
+    // also hydrate their detail columns into the same map. Treat columns also
+    // owned by an outline group as structural for horizontal navigation.
     let hidden_rows: HashSet<u32> = dimensions::get_hidden_rows(doc, sheets, &sheet_id)
         .into_iter()
         .chain(grouping::get_rows_hidden_by_structural_groups(
             doc, sheets, &sheet_id,
         ))
         .collect();
-    let hidden_cols: HashSet<u32> = dimensions::get_hidden_columns(doc, sheets, &sheet_id)
+    let dimension_hidden_cols: HashSet<u32> =
+        dimensions::get_hidden_columns(doc, sheets, &sheet_id)
+            .into_iter()
+            .collect();
+    let structural_hidden_cols: HashSet<u32> =
+        grouping::get_columns_hidden_by_structural_groups(doc, sheets, &sheet_id)
+            .into_iter()
+            .collect();
+    let rendered_hidden_cols: HashSet<u32> = dimension_hidden_cols
+        .iter()
+        .copied()
+        .chain(structural_hidden_cols.iter().copied())
+        .collect();
+    let blocking_hidden_cols: HashSet<u32> = dimension_hidden_cols
         .into_iter()
-        .chain(grouping::get_columns_hidden_by_structural_groups(
-            doc, sheets, &sheet_id,
-        ))
+        .filter(|col| !structural_hidden_cols.contains(col))
         .collect();
 
     // Direction deltas
@@ -77,15 +96,26 @@ pub fn find_data_edge(
     let in_bounds =
         |r: i64, c: i64| -> bool { r >= 0 && r <= MAX_ROW as i64 && c >= 0 && c <= MAX_COL as i64 };
 
-    let is_hidden =
-        |r: u32, c: u32| -> bool { hidden_rows.contains(&r) || hidden_cols.contains(&c) };
+    let col_is_boundary = |c: u32| -> bool {
+        if dc != 0 {
+            blocking_hidden_cols.contains(&c)
+        } else {
+            rendered_hidden_cols.contains(&c)
+        }
+    };
+
+    let is_hidden = |r: u32, c: u32| -> bool { hidden_rows.contains(&r) || col_is_boundary(c) };
+
+    let is_traversable_structural_col = |c: u32| -> bool {
+        dc != 0 && structural_hidden_cols.contains(&c) && !blocking_hidden_cols.contains(&c)
+    };
 
     let relevant_filter_ids = relevant_vertical_filter_ids(
         doc, sheets, &sheet_id, grid, start_row, start_col, direction,
     );
 
     let is_filter_skipped_row = |r: u32, c: u32| -> bool {
-        if dc != 0 || hidden_cols.contains(&c) || !hidden_rows.contains(&r) {
+        if dc != 0 || rendered_hidden_cols.contains(&c) || !hidden_rows.contains(&r) {
             return false;
         }
         let ownership =
@@ -104,14 +134,31 @@ pub fn find_data_edge(
     let is_hidden_boundary =
         |r: u32, c: u32| -> bool { is_hidden(r, c) && !is_filter_skipped_row(r, c) };
 
-    let advance_skipped_rows = |ri: &mut i64, ci: &mut i64| -> bool {
+    #[derive(Default)]
+    struct SkipResult {
+        filter_rows: bool,
+        structural_cols: bool,
+    }
+
+    let advance_skipped_cells = |ri: &mut i64, ci: &mut i64| -> SkipResult {
+        let mut result = SkipResult::default();
         let mut skipped = false;
         while in_bounds(*ri, *ci) && is_filter_skipped_row(*ri as u32, *ci as u32) {
             skipped = true;
             *ri += dr;
             *ci += dc;
         }
-        skipped
+        result.filter_rows = skipped;
+
+        let mut skipped = false;
+        while in_bounds(*ri, *ci) && is_traversable_structural_col(*ci as u32) {
+            skipped = true;
+            *ri += dr;
+            *ci += dc;
+        }
+        result.structural_cols = skipped;
+
+        result
     };
 
     let check_data = |r: u32, c: u32| -> bool { has_data_at(&txn, grid, &cells_map, r, c) };
@@ -171,7 +218,7 @@ pub fn find_data_edge(
 
     // --- algorithm ---
 
-    if hidden_cols.contains(&start_col) {
+    if col_is_boundary(start_col) {
         return start_pos;
     }
     let start_filter_skipped = is_filter_skipped_row(start_row, start_col);
@@ -187,7 +234,7 @@ pub fn find_data_edge(
     if !in_bounds(ri, ci) {
         return start_pos;
     }
-    advance_skipped_rows(&mut ri, &mut ci);
+    let initial_skip = advance_skipped_cells(&mut ri, &mut ci);
     if !in_bounds(ri, ci) {
         return start_pos;
     }
@@ -198,6 +245,10 @@ pub fn find_data_edge(
     // Stop at hidden boundary
     if is_hidden_boundary(r, c) {
         return start_pos;
+    }
+
+    if initial_skip.structural_cols && current_has_data {
+        return to_merge_origin(r, c);
     }
 
     let next_has_data = cell_has_data(r, c);
@@ -211,7 +262,7 @@ pub fn find_data_edge(
         // Case 1: both empty → find first non-empty
         let mut last_visible_landing = start_pos;
         while in_bounds(ri, ci) {
-            if advance_skipped_rows(&mut ri, &mut ci) && !in_bounds(ri, ci) {
+            if advance_skipped_cells(&mut ri, &mut ci).filter_rows && !in_bounds(ri, ci) {
                 return last_visible_landing;
             }
             if !in_bounds(ri, ci) {
@@ -238,7 +289,7 @@ pub fn find_data_edge(
         // Case 3: next empty → jump over empties to next data
         let mut last_visible_landing = start_pos;
         while in_bounds(ri, ci) {
-            if advance_skipped_rows(&mut ri, &mut ci) && !in_bounds(ri, ci) {
+            if advance_skipped_cells(&mut ri, &mut ci).filter_rows && !in_bounds(ri, ci) {
                 return last_visible_landing;
             }
             if !in_bounds(ri, ci) {
@@ -263,12 +314,15 @@ pub fn find_data_edge(
     let mut prev_r = start_row;
     let mut prev_c = start_col;
     while in_bounds(ri, ci) {
-        advance_skipped_rows(&mut ri, &mut ci);
+        let skip = advance_skipped_cells(&mut ri, &mut ci);
         if !in_bounds(ri, ci) {
             break;
         }
         let rr = ri as u32;
         let cc = ci as u32;
+        if skip.structural_cols {
+            return to_merge_origin(rr, cc);
+        }
         if is_hidden_boundary(rr, cc) {
             return to_merge_origin(prev_r, prev_c);
         }

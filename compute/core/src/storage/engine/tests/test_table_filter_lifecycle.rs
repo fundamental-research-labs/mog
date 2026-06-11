@@ -118,6 +118,17 @@ fn create_filtered_table(engine: &mut YrsComputeEngine) -> String {
     filter_id
 }
 
+fn visible_filter_columns(engine: &YrsComputeEngine, sheet_id: &SheetId) -> Vec<u32> {
+    let mut cols: Vec<u32> = engine
+        .get_filter_header_info(sheet_id)
+        .into_iter()
+        .filter(|entry| entry.button_visible)
+        .map(|entry| entry.col)
+        .collect();
+    cols.sort_unstable();
+    cols
+}
+
 #[test]
 fn delete_table_clears_owned_table_filter_visibility() {
     let (mut engine, _) = YrsComputeEngine::from_snapshot(table_filter_snapshot()).unwrap();
@@ -182,6 +193,69 @@ fn redo_delete_table_emits_sheet_scoped_table_removal() {
     assert!(
         engine.get_filters_in_sheet(&sheet_id).is_empty(),
         "redoing the table delete must remove the owned table filter"
+    );
+}
+
+#[test]
+fn table_delete_undo_redo_restores_owned_filter_headers_atomically() {
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(table_filter_snapshot()).unwrap();
+    let sheet_id = sid();
+
+    engine
+        .create_table_lifecycle(
+            &sheet_id,
+            Some("Left".into()),
+            0,
+            0,
+            3,
+            1,
+            vec!["Name".into(), "Dept".into()],
+            true,
+            None,
+        )
+        .expect("create left table");
+    engine
+        .create_table_lifecycle(
+            &sheet_id,
+            Some("Right".into()),
+            0,
+            3,
+            3,
+            4,
+            vec!["Product".into(), "Units".into()],
+            true,
+            None,
+        )
+        .expect("create right table");
+
+    assert_eq!(visible_filter_columns(&engine, &sheet_id), vec![0, 1, 3, 4]);
+
+    engine.begin_undo_group().expect("begin delete group");
+    engine.delete_table("Left").expect("delete left table");
+    engine.end_undo_group().expect("end delete group");
+
+    assert_eq!(visible_filter_columns(&engine, &sheet_id), vec![3, 4]);
+
+    engine.undo().expect("undo delete table");
+    assert!(
+        engine.get_table_by_name("Left").is_some(),
+        "undo must restore the deleted table"
+    );
+    assert_eq!(
+        visible_filter_columns(&engine, &sheet_id),
+        vec![0, 1, 3, 4],
+        "undo must restore the table-owned filter headers with the table"
+    );
+
+    engine.redo().expect("redo delete table");
+    assert!(
+        engine.get_table_by_name("Left").is_none(),
+        "redo must remove the table again"
+    );
+    assert_eq!(
+        visible_filter_columns(&engine, &sheet_id),
+        vec![3, 4],
+        "redo must remove only the deleted table's filter headers"
     );
 }
 

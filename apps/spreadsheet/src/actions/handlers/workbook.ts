@@ -242,6 +242,7 @@ function selectionMatchesRowGroupForDetail(
   bounds: SelectionBounds,
   settings: OutlineSummarySettings,
   groups: readonly GroupRecord[] = [group],
+  includeVisibleSiblingGroupContext = false,
 ): boolean {
   if (rangesOverlap(group.start, group.end, bounds.startRow, bounds.endRow)) {
     return true;
@@ -265,6 +266,7 @@ function selectionMatchesRowGroupForDetail(
     bounds.startRow,
     bounds.endRow,
     settings.summaryRowsBelow,
+    isImportedHiddenGroup(group) || includeVisibleSiblingGroupContext,
   );
 }
 
@@ -273,6 +275,7 @@ function selectionMatchesColumnGroupForDetail(
   bounds: SelectionBounds,
   settings: OutlineSummarySettings,
   groups: readonly GroupRecord[] = [group],
+  includeVisibleSiblingGroupContext = false,
 ): boolean {
   if (rangesOverlap(group.start, group.end, bounds.startCol, bounds.endCol)) {
     return true;
@@ -296,6 +299,7 @@ function selectionMatchesColumnGroupForDetail(
     bounds.startCol,
     bounds.endCol,
     settings.summaryColumnsRight,
+    isImportedHiddenGroup(group) || includeVisibleSiblingGroupContext,
   );
 }
 
@@ -325,6 +329,7 @@ function selectionMatchesAdjacentOutlineContext(
   selectionStart: number,
   selectionEnd: number,
   summaryAfter: boolean,
+  includeVisibleSiblingGroup = false,
 ): boolean {
   const sameLevelGroups = groups
     .filter((candidate) => candidate.level === group.level)
@@ -335,16 +340,34 @@ function selectionMatchesAdjacentOutlineContext(
   if (summaryAfter) {
     const previous = sameLevelGroups[groupIndex - 1];
     if (!previous) return false;
-    return selectionStart >= previous.end + 1 && selectionEnd < group.start;
+    const includePreviousGroup = includeVisibleSiblingGroup && isVisibleSingletonGroup(previous);
+    const contextStart = includePreviousGroup ? previous.start : previous.end + 1;
+    return selectionStart >= contextStart && selectionEnd < group.start;
   }
 
   const next = sameLevelGroups[groupIndex + 1];
   if (!next) return false;
-  return selectionStart > group.end && selectionEnd <= next.start - 1;
+  const includeNextGroup = includeVisibleSiblingGroup && isVisibleSingletonGroup(next);
+  const contextEnd = includeNextGroup ? next.end : next.start - 1;
+  return selectionStart > group.end && selectionEnd <= contextEnd;
+}
+
+function isVisibleSingletonGroup(group: GroupRecord): boolean {
+  return !group.collapsed && group.hidden !== true && group.start === group.end;
 }
 
 function isImportedHiddenGroup(group: GroupRecord): boolean {
   return group.collapsedOnMember === true || group.hidden === true;
+}
+
+function compareDetailGroupCollapsePriority(a: GroupRecord, b: GroupRecord): number {
+  const levelDelta = b.level - a.level;
+  if (levelDelta !== 0) return levelDelta;
+
+  const importedDelta = Number(isImportedHiddenGroup(b)) - Number(isImportedHiddenGroup(a));
+  if (importedDelta !== 0) return importedDelta;
+
+  return b.end - b.start - (a.end - a.start);
 }
 
 function detailIndexes(group: GroupRecord): number[] {
@@ -629,9 +652,10 @@ export const HIDE_DETAIL: AsyncActionHandler = async (deps) => {
   // Find the innermost expanded row group containing the selection.
   const rowGroupsContaining = rowGroups
     .filter(
-      (g) => !g.collapsed && selectionMatchesRowGroupForDetail(g, bounds, settings, rowGroups),
+      (g) =>
+        !g.collapsed && selectionMatchesRowGroupForDetail(g, bounds, settings, rowGroups, true),
     )
-    .sort((a, b) => b.level - a.level);
+    .sort(compareDetailGroupCollapsePriority);
 
   let toggled = false;
   if (rowGroupsContaining.length > 0) {
@@ -647,9 +671,10 @@ export const HIDE_DETAIL: AsyncActionHandler = async (deps) => {
   const colGroupsContaining = columnGroups
     .filter(
       (g) =>
-        !g.collapsed && selectionMatchesColumnGroupForDetail(g, bounds, settings, columnGroups),
+        !g.collapsed &&
+        selectionMatchesColumnGroupForDetail(g, bounds, settings, columnGroups, true),
     )
-    .sort((a, b) => b.level - a.level);
+    .sort(compareDetailGroupCollapsePriority);
 
   if (colGroupsContaining.length > 0) {
     const group = colGroupsContaining[0];

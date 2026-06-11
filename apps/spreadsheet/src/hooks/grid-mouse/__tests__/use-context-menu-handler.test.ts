@@ -112,7 +112,14 @@ function createMockHitTest(hitResult: ReturnType<typeof createHitResult>) {
  * Create hit test results for different scenarios.
  */
 function createHitResult(
-  type: 'cell' | 'column-header' | 'row-header' | 'empty' | 'floating-object',
+  type:
+    | 'cell'
+    | 'column-header'
+    | 'column-resize-handle'
+    | 'row-header'
+    | 'row-resize-handle'
+    | 'empty'
+    | 'floating-object',
   options?: { row?: number; col?: number; objectId?: string; region?: string },
 ) {
   switch (type) {
@@ -120,8 +127,12 @@ function createHitResult(
       return { type: 'cell' as const, row: options?.row ?? 5, col: options?.col ?? 3 };
     case 'column-header':
       return { type: 'column-header' as const, col: options?.col ?? 3 };
+    case 'column-resize-handle':
+      return { type: 'column-resize-handle' as const, col: options?.col ?? 3 };
     case 'row-header':
       return { type: 'row-header' as const, row: options?.row ?? 5 };
+    case 'row-resize-handle':
+      return { type: 'row-resize-handle' as const, row: options?.row ?? 5 };
     case 'floating-object':
       return {
         type: 'floating-object' as const,
@@ -571,6 +582,35 @@ describe('useContextMenuHandler', () => {
 
       expect(selection.selectColumn).not.toHaveBeenCalled();
     });
+
+    it('treats column resize-handle right-clicks as column-header context menus', () => {
+      const hitResult = createHitResult('column-resize-handle', { col: 5 });
+      const hitTest = createMockHitTest(hitResult);
+      const selection = createMockSelectionApi();
+      const onContextMenu = jest.fn();
+
+      const deps = createTestDeps({
+        getHitTest: () => hitTest,
+        selection,
+        onContextMenu,
+      });
+
+      const { result } = renderHook(() => useContextMenuHandler(deps));
+      const event = createContextMenuEvent({ clientX: 200, clientY: 15 });
+
+      act(() => {
+        result.current.handleContextMenu(event);
+      });
+
+      expect(selection.selectColumn).toHaveBeenCalledWith(5, false, false);
+      expect(onContextMenu).toHaveBeenCalledWith({
+        x: 200,
+        y: 15,
+        target: 'column-header',
+        targetRow: undefined,
+        targetCol: 5,
+      });
+    });
   });
 
   describe('row header context menu', () => {
@@ -642,6 +682,35 @@ describe('useContextMenuHandler', () => {
       });
 
       expect(selection.selectRow).not.toHaveBeenCalled();
+    });
+
+    it('treats row resize-handle right-clicks as row-header context menus', () => {
+      const hitResult = createHitResult('row-resize-handle', { row: 7 });
+      const hitTest = createMockHitTest(hitResult);
+      const selection = createMockSelectionApi();
+      const onContextMenu = jest.fn();
+
+      const deps = createTestDeps({
+        getHitTest: () => hitTest,
+        selection,
+        onContextMenu,
+      });
+
+      const { result } = renderHook(() => useContextMenuHandler(deps));
+      const event = createContextMenuEvent({ clientX: 25, clientY: 200 });
+
+      act(() => {
+        result.current.handleContextMenu(event);
+      });
+
+      expect(selection.selectRow).toHaveBeenCalledWith(7, false, false);
+      expect(onContextMenu).toHaveBeenCalledWith({
+        x: 25,
+        y: 200,
+        target: 'row-header',
+        targetRow: 7,
+        targetCol: undefined,
+      });
     });
   });
 

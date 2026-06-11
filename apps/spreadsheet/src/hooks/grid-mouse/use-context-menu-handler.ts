@@ -230,6 +230,17 @@ export function useContextMenuHandler(
           break;
         }
 
+        case 'column-resize-handle': {
+          targetCol = hit.col;
+          target = 'column-header';
+
+          const hasFullColumnSelection = selection.ranges.some((r) => r.isFullColumn);
+          if (!hasFullColumnSelection || !isColumnInSelection(hit.col, selection.ranges)) {
+            selection.selectColumn(hit.col, false, false);
+          }
+          break;
+        }
+
         case 'row-header': {
           targetRow = hit.row;
           target = 'row-header';
@@ -239,6 +250,17 @@ export function useContextMenuHandler(
           // (e.g. A1:B5 left by a chart insert) must be replaced with just the
           // right-clicked row so that INSERT_ROW_ABOVE inserts at the correct row
           // rather than at rows[0] of the partial selection.
+          const hasFullRowSelection = selection.ranges.some((r) => r.isFullRow);
+          if (!hasFullRowSelection || !isRowInSelection(hit.row, selection.ranges)) {
+            selection.selectRow(hit.row, false, false);
+          }
+          break;
+        }
+
+        case 'row-resize-handle': {
+          targetRow = hit.row;
+          target = 'row-header';
+
           const hasFullRowSelection = selection.ranges.some((r) => r.isFullRow);
           if (!hasFullRowSelection || !isRowInSelection(hit.row, selection.ranges)) {
             selection.selectRow(hit.row, false, false);

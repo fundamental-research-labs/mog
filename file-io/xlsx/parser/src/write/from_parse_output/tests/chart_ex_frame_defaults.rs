@@ -1,7 +1,7 @@
 use super::*;
 
 #[test]
-fn chart_ex_zero_graphic_frame_extents_fall_back_to_chart_size() {
+fn imported_chart_ex_zero_graphic_frame_extents_are_preserved() {
     let mut chart_ex = make_chart(ChartType::Waterfall, "");
     chart_ex.title = None;
     chart_ex.data_range = None;
@@ -43,8 +43,8 @@ fn chart_ex_zero_graphic_frame_extents_fall_back_to_chart_size() {
 
     assert!(archive.contains("xl/charts/chartEx1.xml"));
     assert!(drawing_xml.contains("ChartEx Zero Extent"), "{drawing_xml}");
-    assert!(!drawing_xml.contains(r#"<a:ext cx="0" cy="0"/>"#));
-    assert!(drawing_xml.contains(r#"<a:ext cx="6096000" cy="2857500"/>"#));
+    assert!(drawing_xml.contains(r#"<a:ext cx="0" cy="0"/>"#));
+    assert!(!drawing_xml.contains(r#"<a:ext cx="6096000" cy="2857500"/>"#));
     validate_archive_package_integrity(&archive).expect("exported package should be valid");
 }
 

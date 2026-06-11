@@ -849,11 +849,9 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
                             .unwrap_or(chart_spec.position.anchor_row_offset),
                         xfrm_ext_cx: chart_frame
                             .map(|frame| frame.graphic_frame.xfrm.ext_cx() as i64)
-                            .filter(|cx| *cx > 0)
                             .unwrap_or(frame_extent.cx),
                         xfrm_ext_cy: chart_frame
                             .map(|frame| frame.graphic_frame.xfrm.ext_cy() as i64)
-                            .filter(|cy| *cy > 0)
                             .unwrap_or(frame_extent.cy),
                         xfrm_rot: chart_frame
                             .and_then(|frame| frame.graphic_frame.xfrm.rotation)
@@ -1016,11 +1014,9 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
                             .unwrap_or(chart_spec.xfrm_off_y),
                         xfrm_ext_cx: chart_frame
                             .map(|frame| frame.graphic_frame.xfrm.ext_cx() as i64)
-                            .filter(|cx| *cx > 0)
                             .unwrap_or(frame_extent.cx),
                         xfrm_ext_cy: chart_frame
                             .map(|frame| frame.graphic_frame.xfrm.ext_cy() as i64)
-                            .filter(|cy| *cy > 0)
                             .unwrap_or(frame_extent.cy),
                         xfrm_rot: chart_frame
                             .and_then(|frame| frame.graphic_frame.xfrm.rotation)

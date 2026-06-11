@@ -593,6 +593,21 @@ describe('InputCoordinator', () => {
       }
     });
 
+    it('should cancel pending wheel momentum before forwarding left-click', () => {
+      coordinator.handleWheel(createWheelEvent({ deltaX: 150 }));
+      expect(coordinator.getMachineState()).toBe('scrolling');
+
+      coordinator.handlePointerDown(createPointerEvent({ clientX: 150, clientY: 50 }));
+
+      expect(coordinator.getMachineState()).toBe('idle');
+      expect(forwardedEvents[0].type).toBe('CELL_POINTER_DOWN');
+
+      jest.advanceTimersByTime(200);
+
+      expect(coordinator.getMachineState()).toBe('idle');
+      expect(coordinator.getScrollState().x).toBe(150);
+    });
+
     it('should start panning on middle-click', () => {
       const event = createPointerEvent({ button: 1, clientX: 500, clientY: 400 });
       coordinator.handlePointerDown(event);

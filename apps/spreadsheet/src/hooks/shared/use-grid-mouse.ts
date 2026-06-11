@@ -1925,6 +1925,8 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
 
       if (e.button !== 0) return;
 
+      coordinator.input.inputCoordinator.interrupt();
+
       if (e.detail === 2) {
         const geometry = getGeometry();
         const hitTest = getHitTest();

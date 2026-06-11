@@ -444,6 +444,7 @@ export class InputCoordinator {
 
     // Left-click: hit test and route to sheet
     if (event.button === 0) {
+      this.interrupt();
       const hit = this.hitTest(event.clientX, event.clientY);
       this.routePointerToSheet(hit, event);
     }
@@ -1146,6 +1147,7 @@ export class InputCoordinator {
   interrupt(): void {
     this.assertNotDisposed();
     this.stopAllAnimations();
+    this.isMomentumScroll = false;
     this.inputActor.send({ type: 'INTERRUPT' });
   }
 

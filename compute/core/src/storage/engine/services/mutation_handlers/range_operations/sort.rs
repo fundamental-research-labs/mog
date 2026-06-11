@@ -35,15 +35,11 @@ pub(in crate::storage::engine) fn mutation_sort_range(
     let range = sorting::CellRange::new(start_row, start_col, end_row, end_col);
     let has_headers = options.has_headers;
 
-    // Build sort criteria
-    let header_row = start_row;
+    // Bridge sort criteria are absolute sheet columns. Keep them positional so
+    // imported Range-backed columns without sparse CellIds can still drive the
+    // comparator through CellMirror reads.
     let mut criteria = Vec::new();
     for criterion in &options.criteria {
-        let cell_id = stores
-            .grid_indexes
-            .get(sheet_id)
-            .and_then(|g| g.cell_id_at(header_row, criterion.column))
-            .unwrap_or_else(|| CellId::from_raw(0));
         let mode = match &criterion.mode {
             BridgeSortMode::Value { custom_list } => sorting::SortMode::Value {
                 custom_list: custom_list.clone(),
@@ -57,17 +53,13 @@ pub(in crate::storage::engine) fn mutation_sort_range(
                 position: *position,
             },
         };
-        criteria.push(sorting::SortCriterion {
-            header_cell_id: cell_id,
+        criteria.push(sorting::SortColumnCriterion {
+            column: criterion.column,
             direction: Some(criterion.direction),
             case_sensitive: criterion.case_sensitive,
             mode,
         });
     }
-    let opts = sorting::SortOptions {
-        criteria,
-        has_headers,
-    };
 
     let grid_for_compute =
         stores
@@ -77,59 +69,57 @@ pub(in crate::storage::engine) fn mutation_sort_range(
                 sheet_id: id_to_hex(sheet_id.as_u128()).to_string(),
             })?;
 
-    // Build the (row, col) → CellFormat accessor used by color-mode
-    // criteria. Mirrors the format cascade the renderer uses.
-    // TODO(consolidate-with-apply-filter): services/features.rs::apply_filter
-    // has a similar closure; once both paths are stable,
-    // hoist into a shared `make_format_accessor` helper.
-    let storage = &stores.storage;
-    let sid = *sheet_id;
-    let grid_for_format = grid_for_compute;
-    let get_cell_format = |row: u32, col: u32| -> domain_types::CellFormat {
-        let table_fmt =
-            super::super::super::tables::resolve_table_format_at_cell(mirror, &sid, row, col);
-        match grid_for_format.cell_id_at(row, col) {
-            Some(id) => properties::get_effective_format(
-                storage,
-                &sid,
-                &id_to_hex(id.as_u128()),
-                row,
-                col,
-                table_fmt.as_ref(),
-                Some(grid_for_format),
-                mirror.get_sheet(&sid),
-            ),
-            None => properties::get_positional_format(
-                storage,
-                &sid,
-                row,
-                col,
-                Some(grid_for_format),
-                mirror.get_sheet(&sid),
-            ),
-        }
-    };
+    let sort_result = {
+        // Build the (row, col) → CellFormat accessor used by color-mode
+        // criteria. Mirrors the format cascade the renderer uses.
+        // TODO(consolidate-with-apply-filter): services/features.rs::apply_filter
+        // has a similar closure; once both paths are stable,
+        // hoist into a shared `make_format_accessor` helper.
+        let storage = &stores.storage;
+        let sid = *sheet_id;
+        let grid_for_format = grid_for_compute;
+        let get_cell_format = |row: u32, col: u32| -> domain_types::CellFormat {
+            let table_fmt =
+                super::super::super::tables::resolve_table_format_at_cell(mirror, &sid, row, col);
+            match grid_for_format.cell_id_at(row, col) {
+                Some(id) => properties::get_effective_format(
+                    storage,
+                    &sid,
+                    &id_to_hex(id.as_u128()),
+                    row,
+                    col,
+                    table_fmt.as_ref(),
+                    Some(grid_for_format),
+                    mirror.get_sheet(&sid),
+                ),
+                None => properties::get_positional_format(
+                    storage,
+                    &sid,
+                    row,
+                    col,
+                    Some(grid_for_format),
+                    mirror.get_sheet(&sid),
+                ),
+            }
+        };
 
-    let sort_result = if options.visible_rows_only {
-        sorting::compute_sorted_row_order_with_scope(
+        let get_cell_value = |row: u32, col: u32| -> CellValue {
+            mirror
+                .get_cell_value_at(&sid, SheetPos::new(row, col))
+                .cloned()
+                .unwrap_or(CellValue::Null)
+        };
+
+        sorting::compute_sorted_row_order_by_columns_with_scope(
             stores.storage.doc(),
             stores.storage.sheets(),
             *sheet_id,
             &range,
-            &opts,
-            grid_for_compute,
+            &criteria,
+            has_headers,
+            get_cell_value,
             get_cell_format,
-            true,
-        )
-    } else {
-        sorting::compute_sorted_row_order(
-            stores.storage.doc(),
-            stores.storage.sheets(),
-            *sheet_id,
-            &range,
-            &opts,
-            grid_for_compute,
-            get_cell_format,
+            options.visible_rows_only,
         )
     };
 

@@ -65,6 +65,23 @@ pub(crate) struct SortCriterion {
     pub mode: SortMode,
 }
 
+/// A single sort criterion referencing a column by absolute sheet position.
+///
+/// Bridge/API callers specify sort keys by column coordinate, so this planner
+/// input cannot depend on sparse CellIds existing in the target column.
+#[derive(Debug, Clone)]
+pub(crate) struct SortColumnCriterion {
+    /// Absolute zero-based sheet column index for the sort key.
+    pub column: u32,
+    /// Sort direction for this column. `None` means no-op.
+    pub direction: Option<SortOrder>,
+    /// Whether string comparison is case-sensitive for this criterion.
+    pub case_sensitive: bool,
+    /// What this criterion sorts on (value / cell color / font color)
+    /// plus the per-mode auxiliary data.
+    pub mode: SortMode,
+}
+
 /// Options for a sort operation.
 #[derive(Debug, Clone)]
 pub(crate) struct SortOptions {

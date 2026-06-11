@@ -28,7 +28,12 @@ pub(crate) use compare::{
 };
 #[allow(unused_imports)]
 pub use mutations::{reorder_rows_in_range, sort_by_column, sort_range};
-pub use planner::{compute_sorted_row_order, compute_sorted_row_order_with_scope};
+pub use planner::{
+    compute_sorted_row_order, compute_sorted_row_order_by_columns_with_scope,
+    compute_sorted_row_order_with_scope,
+};
 #[allow(unused_imports)]
-pub(crate) use types::{CellRange, SortConfig, SortCriterion, SortMode, SortOptions, SortResult};
+pub(crate) use types::{
+    CellRange, SortColumnCriterion, SortConfig, SortCriterion, SortMode, SortOptions, SortResult,
+};
 pub use validation::check_sort_range_merges;

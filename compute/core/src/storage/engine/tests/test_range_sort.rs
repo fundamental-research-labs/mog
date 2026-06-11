@@ -12,14 +12,11 @@
 //! `index_to_row`/`index_to_col` maps align with the range's
 //! `row_offset_by_id`/`col_offset_by_id`.
 //!
-//! **Sort criterion resolution:** The sort engine resolves sort criteria
-//! by looking up CellIds in the GridIndex. Pure range-only columns
-//! have no GridIndex entries, so per-cell data must coexist at the
-//! sort-criterion column for the sort to resolve. Tests provide
-//! per-cell data in col 0 (sort key) alongside range data spanning
-//! cols 0-1 — the range sort path triggers when `has_ranges` is true.
-//! Range-backed columns (col 1) are correctly reordered via the
-//! `rowOrder` permutation.
+//! **Sort criterion resolution:** Bridge sort criteria are absolute columns.
+//! The production planner must read values positionally so pure range-backed
+//! columns with no sparse CellIds can drive the sort comparator. Tests provide
+//! per-cell data in col 0 alongside range data spanning cols 0-1, and include
+//! a regression that sorts directly by pure range-backed col 1.
 
 use super::super::*;
 use super::helpers::*;
@@ -238,7 +235,52 @@ fn range_sort_reorders_roworder() {
 }
 
 // ===================================================================
-// Test 2: range_sort_mixed_sheet
+// Test 2: range_sort_uses_range_backed_sort_key_column
+// ===================================================================
+
+/// Sort ascending directly on a pure Range-backed column. Col 1 has no
+/// per-cell data in the GridIndex/Yrs cells map, so this catches regressions
+/// where bridge criteria are resolved only through sparse CellIds.
+#[test]
+fn range_sort_uses_range_backed_sort_key_column() {
+    let snap = sort_range_snapshot();
+    let (mut engine, _recalc) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let sid = test_sheet_id();
+
+    for (row, expected) in [(0, 50.0), (1, 30.0), (2, 10.0), (3, 40.0), (4, 20.0)] {
+        assert_eq!(
+            as_f64(
+                engine
+                    .mirror()
+                    .get_cell_value_at(&sid, SheetPos::new(row, 1))
+            ),
+            Some(expected),
+            "Pre-sort range-backed col 1 row {} should be {}",
+            row,
+            expected
+        );
+    }
+
+    let options = ascending_sort_options(1);
+    engine.sort_range(&sid, 0, 0, 4, 1, options).unwrap();
+
+    for (row, expected) in [(0, 10.0), (1, 20.0), (2, 30.0), (3, 40.0), (4, 50.0)] {
+        assert_eq!(
+            as_f64(
+                engine
+                    .mirror()
+                    .get_cell_value_at(&sid, SheetPos::new(row, 1))
+            ),
+            Some(expected),
+            "Post-sort range-backed col 1 row {} should be {}",
+            row,
+            expected
+        );
+    }
+}
+
+// ===================================================================
+// Test 3: range_sort_mixed_sheet
 // ===================================================================
 
 /// Create a sheet with Range data in cols 0-1 and per-cell data in col 2.
@@ -307,7 +349,7 @@ fn range_sort_mixed_sheet() {
 }
 
 // ===================================================================
-// Test 3: range_sort_gridindex_coherence
+// Test 4: range_sort_gridindex_coherence
 // ===================================================================
 
 /// After sorting a Range-backed sheet, verify that `grid_index.row_ids_dense()`
@@ -363,7 +405,7 @@ fn range_sort_gridindex_coherence() {
 }
 
 // ===================================================================
-// Test 4: range_sort_formula_survives
+// Test 5: range_sort_formula_survives
 // ===================================================================
 
 /// Create a Range-backed sheet with a per-cell formula in col 2 that
@@ -429,7 +471,7 @@ fn range_sort_formula_survives() {
 }
 
 // ===================================================================
-// Test 5: range_sort_undo
+// Test 6: range_sort_undo
 // ===================================================================
 
 /// Sort a Range-backed sheet, then undo. Verify that `row_ids_dense()`
@@ -493,7 +535,7 @@ fn range_sort_undo() {
 }
 
 // ===================================================================
-// Test 6: xlsx_sort_roundtrip
+// Test 7: xlsx_sort_roundtrip
 // ===================================================================
 
 /// Sort a Range-backed sheet, verify range-backed column values are in

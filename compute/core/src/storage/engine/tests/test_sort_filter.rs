@@ -126,3 +126,56 @@ fn sort_range_visible_rows_only_preserves_hidden_slots() {
     assert_eq!(text_at(&engine, 3, 2), "85");
     assert_eq!(text_at(&engine, 5, 2), "90");
 }
+
+#[test]
+fn headered_sort_resolves_blank_header_column_from_body_cells() {
+    let cells = vec![
+        cell(0, 0, text("Section Title")),
+        cell(1, 0, text("Large")),
+        cell(1, 1, num(30.0)),
+        cell(2, 0, text("Small")),
+        cell(2, 1, num(10.0)),
+        cell(3, 0, text("Medium")),
+        cell(3, 1, num(20.0)),
+    ];
+    let snapshot = WorkbookSnapshot {
+        sheets: vec![SheetSnapshot {
+            id: SHEET_UUID.to_string(),
+            name: "Sheet1".to_string(),
+            rows: 100,
+            cols: 26,
+            cells,
+            ranges: vec![],
+        }],
+        named_ranges: vec![],
+        tables: vec![],
+        pivot_tables: vec![],
+        data_table_regions: vec![],
+        iterative_calc: false,
+        max_iterations: 100,
+        max_change: FiniteF64::must(0.001),
+        calculation_settings: None,
+    };
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot).unwrap();
+    let sheet_id = sid();
+
+    let options = mutation::BridgeSortOptions {
+        criteria: vec![mutation::BridgeSortCriterion {
+            column: 1,
+            direction: domain_types::domain::filter::SortOrder::Asc,
+            case_sensitive: false,
+            mode: mutation::BridgeSortMode::Value { custom_list: None },
+        }],
+        has_headers: true,
+        visible_rows_only: false,
+    };
+
+    engine
+        .sort_range(&sheet_id, 0, 0, 3, 1, options)
+        .expect("sort with blank criterion header cell");
+
+    assert_eq!(text_at(&engine, 0, 0), "Section Title");
+    assert_eq!(text_at(&engine, 1, 0), "Small");
+    assert_eq!(text_at(&engine, 2, 0), "Medium");
+    assert_eq!(text_at(&engine, 3, 0), "Large");
+}

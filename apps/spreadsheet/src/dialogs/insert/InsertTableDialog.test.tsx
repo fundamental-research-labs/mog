@@ -1,12 +1,8 @@
 import { jest } from '@jest/globals';
 
 import React from 'react';
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import '@testing-library/jest-dom';
-import {
-  clearPendingDialogActionForTest,
-  getPendingDialogActionForTest,
-} from './dialog-action-scheduler';
 
 const closeInsertTableDialog = jest.fn();
 const tablesAdd = jest.fn(async () => undefined);
@@ -149,20 +145,20 @@ const { InsertTableDialog } = await import('./InsertTableDialog');
 
 describe('InsertTableDialog', () => {
   beforeEach(() => {
-    jest.useFakeTimers();
     closeInsertTableDialog.mockClear();
     workbook.getSheetById.mockClear();
     undoGroup.mockClear();
     tablesAdd.mockClear();
-    clearPendingDialogActionForTest();
   });
 
-  afterEach(() => {
-    jest.runOnlyPendingTimers();
-    jest.useRealTimers();
-  });
-
-  it('closes before creating the table on a later macrotask', async () => {
+  it('creates the table before closing', async () => {
+    let resolveTableAdd: (() => void) | undefined;
+    tablesAdd.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveTableAdd = resolve;
+        }),
+    );
     render(<InsertTableDialog />);
 
     const dialog = screen.getByRole('dialog');
@@ -170,24 +166,16 @@ describe('InsertTableDialog', () => {
 
     fireEvent.click(within(dialog).getByRole('button', { name: /^OK$/ }));
 
-    expect(closeInsertTableDialog).toHaveBeenCalledTimes(1);
-    expect(undoGroup).not.toHaveBeenCalled();
-    expect(tablesAdd).not.toHaveBeenCalled();
-    const pendingAction = getPendingDialogActionForTest();
-    expect(pendingAction).toBeInstanceOf(Promise);
-
-    jest.advanceTimersByTime(99);
-    expect(undoGroup).not.toHaveBeenCalled();
-
-    jest.advanceTimersByTime(1);
-    await pendingAction;
-
     expect(workbook.getSheetById).toHaveBeenCalledWith('sheet-1');
     expect(undoGroup).toHaveBeenCalledTimes(1);
     expect(tablesAdd).toHaveBeenCalledWith('A458:K480', {
       hasHeaders: false,
       style: 'medium2',
     });
-    expect(getPendingDialogActionForTest()).toBeUndefined();
+    expect(closeInsertTableDialog).not.toHaveBeenCalled();
+
+    resolveTableAdd?.();
+
+    await waitFor(() => expect(closeInsertTableDialog).toHaveBeenCalledTimes(1));
   });
 });

@@ -200,20 +200,28 @@ async function createCopyCutDeps(deps: ActionDependencies, sheetId: SheetId, ran
     for (let c = 0; c < rangeData2D[r].length; c++) {
       const cell = rangeData2D[r][c];
       const key = `${minRow + r},${minCol + c}`;
+      const legacyCell = cell as
+        | (typeof cell & {
+            raw?: unknown;
+            computed?: unknown;
+          })
+        | undefined;
       if (cell) {
-        const legacyCell = cell as typeof cell & {
-          raw?: unknown;
-          computed?: unknown;
-        };
         // Map ws.getRange() shape → StoreCellData-compatible shape
         cellDataLookup.set(key, {
-          raw: cell.value ?? legacyCell.raw,
-          computed: cell.formatted ?? legacyCell.computed ?? cell.value,
+          raw: cell.value ?? legacyCell?.raw,
+          computed: cell.formatted ?? legacyCell?.computed ?? cell.value,
           formula: cell.formula,
           hyperlink: cell.hyperlink,
         });
       }
-      displayLookup.set(key, cell?.value != null ? String(cell.value) : '');
+      displayLookup.set(
+        key,
+        cell?.formatted ??
+          (legacyCell?.computed != null ? String(legacyCell.computed) : undefined) ??
+          (legacyCell?.raw != null ? String(legacyCell.raw) : undefined) ??
+          (cell?.value != null ? String(cell.value) : ''),
+      );
     }
   }
 

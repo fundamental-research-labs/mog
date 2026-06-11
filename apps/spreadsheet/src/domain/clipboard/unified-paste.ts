@@ -98,6 +98,13 @@ function normalizeClipboardSignature(text: string): string {
   return text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\n$/, '');
 }
 
+function htmlHasClipboardPayload(html: string | undefined): boolean {
+  if (!html?.trim()) return false;
+  if (/<(?:td|th)\b/i.test(html)) return true;
+  const text = html.replace(/<[^>]*>/g, '').replace(/&nbsp;/gi, ' ');
+  return normalizeClipboardSignature(text).trim() !== '';
+}
+
 function resolveNormalPasteOptions(
   deps: UnifiedPasteDeps,
   context: PasteDefaultContext,
@@ -282,11 +289,11 @@ export async function unifiedPaste(
     : '';
   const systemSignature = normalizeClipboardSignature(systemText);
   const hasFreshInternalClipboard =
-    Boolean(clipboardData?.textSignature) &&
+    Boolean(clipboardData) &&
     clipboardData?.sourceSheetId !== EXTERNAL_SOURCE_SHEET_ID &&
     clipboardState.context.isStale !== true;
   const hasExternalSystemPayload =
-    systemSignature !== '' || Boolean(systemHTML) || Boolean(imageBlob);
+    systemSignature !== '' || htmlHasClipboardPayload(systemHTML) || Boolean(imageBlob);
   const isOurClipboard =
     (internalSignature === systemSignature && systemSignature !== '') ||
     (!hasExternalSystemPayload && hasFreshInternalClipboard);

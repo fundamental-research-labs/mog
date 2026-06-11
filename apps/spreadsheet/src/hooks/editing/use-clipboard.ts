@@ -94,6 +94,13 @@ function normalizeClipboardSignature(text: string): string {
   return text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\n$/, '');
 }
 
+function htmlHasClipboardPayload(html: string | undefined): boolean {
+  if (!html?.trim()) return false;
+  if (/<(?:td|th)\b/i.test(html)) return true;
+  const text = html.replace(/<[^>]*>/g, '').replace(/&nbsp;/gi, ' ');
+  return normalizeClipboardSignature(text).trim() !== '';
+}
+
 function isOurClipboardData(
   clipboardState: ClipboardState,
   clipboardData: ClipboardData | null,
@@ -105,7 +112,7 @@ function isOurClipboardData(
     : '';
   const systemSignature = normalizeClipboardSignature(systemText);
   const hasFreshInternalClipboard =
-    Boolean(clipboardData?.textSignature) &&
+    Boolean(clipboardData) &&
     clipboardData?.sourceSheetId !== EXTERNAL_SOURCE_SHEET_ID &&
     clipboardState.context.isStale !== true;
 
@@ -1205,7 +1212,7 @@ export function useClipboardEvents(options: UseClipboardEventsOptions): UseClipb
         const files = event.clipboardData?.files;
         const hasExternalSystemPayload =
           normalizeClipboardSignature(systemText) !== '' ||
-          html !== '' ||
+          htmlHasClipboardPayload(html) ||
           Boolean(files && Array.from(files).some((file) => file.type.startsWith('image/')));
 
         // Actor Access Layer: Point-in-time read (similar to action handler pattern)

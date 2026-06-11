@@ -61,6 +61,8 @@ export const GLOBAL_SHORTCUTS: readonly KeyboardShortcut[] = [
   { meta: true, key: 'f1' },
 ] as const;
 
+const EDITABLE_NAVIGATION_KEYS = new Set(['Enter', 'Tab', 'Escape']);
+
 /**
  * Check if a keyboard event is a global shortcut.
  * Global shortcuts (Cmd+S, Ctrl+Z, etc.) work regardless of focus state.
@@ -78,6 +80,42 @@ export function isGlobalShortcut(e: KeyboardEvent): boolean {
 
     return ctrlMatch && shiftMatch && keyMatch;
   });
+}
+
+export function keyboardEventTargetElement(e: KeyboardEvent): HTMLElement | null {
+  if (typeof HTMLElement === 'undefined') return null;
+  if (e.target instanceof HTMLElement) return e.target;
+  const path = e.composedPath?.() ?? [];
+  return (
+    path.find((target): target is HTMLElement => target instanceof HTMLElement) ?? null
+  );
+}
+
+export function isEditableKeyboardTarget(target: HTMLElement | null): boolean {
+  if (!target) return false;
+  return Boolean(
+    target.closest('input, textarea, select, [contenteditable="true"], [role="textbox"]'),
+  );
+}
+
+export function isDialogKeyboardTarget(target: HTMLElement | null): boolean {
+  if (!target) return false;
+  return Boolean(target.closest('[role="dialog"]'));
+}
+
+export function isSpreadsheetEditorKeyboardTarget(target: HTMLElement | null): boolean {
+  if (!target) return false;
+  return Boolean(
+    target.closest('[data-testid="inline-cell-editor"], [data-testid="formula-bar-input"]'),
+  );
+}
+
+export function shouldDeferNavigationKeyToEditableTarget(
+  e: KeyboardEvent,
+  target = keyboardEventTargetElement(e),
+): boolean {
+  if (!EDITABLE_NAVIGATION_KEYS.has(e.key)) return false;
+  return isEditableKeyboardTarget(target) && !isSpreadsheetEditorKeyboardTarget(target);
 }
 
 /**

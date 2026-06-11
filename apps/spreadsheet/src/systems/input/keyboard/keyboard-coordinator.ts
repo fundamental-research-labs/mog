@@ -41,6 +41,7 @@ import {
 } from '@mog-sdk/kernel/keyboard';
 import { sheetId as toSheetId } from '@mog-sdk/contracts/core';
 import { KEYBOARD_SHORTCUTS, type KeyboardShortcut, type ShortcutContext } from '../../../keyboard';
+import { shouldDeferNavigationKeyToEditableTarget } from '../../shared/utils/focus-utils';
 
 import type { ActionDependencies, ActionType } from '@mog-sdk/contracts/actions';
 import type { ActorAccessors, ActorCommands } from '@mog-sdk/contracts/actors';
@@ -1071,6 +1072,10 @@ export class KeyboardCoordinator {
     // This catches edge cases where browser events might be missed
     if (this.deps?.editorActor.getSnapshot().matches('imeComposing') && e.key !== 'Escape') {
       return { handled: false, reason: 'ime_composing' };
+    }
+
+    if (shouldDeferNavigationKeyToEditableTarget(e)) {
+      return { handled: false, reason: 'not_found' };
     }
 
     // =========================================================================

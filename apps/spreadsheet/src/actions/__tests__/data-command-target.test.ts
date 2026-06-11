@@ -86,6 +86,65 @@ describe('resolveDataCommandTarget', () => {
     expect(ws.getCurrentRegion).not.toHaveBeenCalled();
   });
 
+  test('explicit multi-row dialog target infers sparse text title row as headers', async () => {
+    const ws = makeWorksheet({
+      values: {
+        '457,0': 'Consolidated Report',
+        '458,0': 'Current items',
+        '458,1': 156332,
+        '467,0': 'Total items',
+        '467,9': 486344,
+      },
+    });
+    const range = { startRow: 457, startCol: 0, endRow: 479, endCol: 10 };
+
+    await expect(resolveDataDialogTarget(ws as Worksheet, range)).resolves.toEqual({
+      range,
+      hasHeaders: true,
+      wasExpanded: false,
+    });
+    expect(ws.getCurrentRegion).not.toHaveBeenCalled();
+  });
+
+  test('explicit multi-row dialog target can opt out of sparse text title row headers', async () => {
+    const ws = makeWorksheet({
+      values: {
+        '457,0': 'Consolidated Report',
+        '458,0': 'Current items',
+        '458,1': 156332,
+      },
+    });
+    const range = { startRow: 457, startCol: 0, endRow: 479, endCol: 10 };
+
+    await expect(
+      resolveDataDialogTarget(ws as Worksheet, range, { allowSparseHeaderRows: false }),
+    ).resolves.toEqual({
+      range,
+      hasHeaders: false,
+      wasExpanded: false,
+    });
+    expect(ws.getCurrentRegion).not.toHaveBeenCalled();
+  });
+
+  test('explicit multi-row dialog target does not infer headers from numeric first row', async () => {
+    const ws = makeWorksheet({
+      values: {
+        '0,0': 'Current items',
+        '0,1': 156332,
+        '1,0': 'Cash',
+        '1,1': 100,
+      },
+    });
+    const range = { startRow: 0, startCol: 0, endRow: 3, endCol: 1 };
+
+    await expect(resolveDataDialogTarget(ws as Worksheet, range)).resolves.toEqual({
+      range,
+      hasHeaders: false,
+      wasExpanded: false,
+    });
+    expect(ws.getCurrentRegion).not.toHaveBeenCalled();
+  });
+
   test('single-cell selection expands through getCurrentRegion', async () => {
     const expanded = { startRow: 0, startCol: 0, endRow: 9, endCol: 3 };
     const ws = makeWorksheet({ currentRegion: expanded });

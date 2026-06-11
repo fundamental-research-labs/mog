@@ -210,7 +210,10 @@ export const APPLY_PROTECTION_FORMAT: AsyncActionHandler = async (deps) => {
  */
 export const INSERT_TABLE: AsyncActionHandler = async (
   deps,
-  payload?: { stylePreset?: import('@mog-sdk/contracts/tables').TableStylePreset },
+  payload?: {
+    stylePreset?: import('@mog-sdk/contracts/tables').TableStylePreset;
+    allowSparseHeaderRows?: boolean;
+  },
 ) => {
   const sheetId = deps.getActiveSheetId();
   const { ranges } = getSelectionContext(deps);
@@ -219,7 +222,9 @@ export const INSERT_TABLE: AsyncActionHandler = async (
   }
 
   const ws = deps.workbook.getSheetById(sheetId);
-  const target = await resolveDataDialogTarget(ws, ranges[0]);
+  const target = await resolveDataDialogTarget(ws, ranges[0], {
+    allowSparseHeaderRows: payload?.allowSparseHeaderRows,
+  });
 
   const uiState = getUIStore(deps).getState();
   if (uiState?.openInsertTableDialog) {

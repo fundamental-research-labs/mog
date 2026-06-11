@@ -102,6 +102,10 @@ export interface ToolbarGroupProps {
    * If not provided, children are rendered inside the dropdown.
    */
   dropdownContent?: ReactNode;
+  /** Optional controlled open state for the collapsed group dropdown. */
+  dropdownOpen?: boolean;
+  /** Called when the collapsed group dropdown opens or closes. */
+  onDropdownOpenChange?: (open: boolean) => void;
   /** Optional typed ribbon visibility key. Defaults to a normalized label. */
   visibilityKey?: string;
 }
@@ -115,6 +119,8 @@ export const ToolbarGroup = React.memo(function ToolbarGroup({
   collapseConfig,
   dropdownIcon,
   dropdownContent,
+  dropdownOpen,
+  onDropdownOpenChange,
   visibilityKey,
 }: ToolbarGroupProps) {
   const groupVisibility = useRibbonGroupVisibility(label, visibilityKey);
@@ -138,7 +144,13 @@ export const ToolbarGroup = React.memo(function ToolbarGroup({
   if (renderMode === 'dropdown') {
     return (
       <RibbonVisibilityGroup group={groupVisibility.groupKey}>
-        <CollapsedGroupDropdown label={label} icon={dropdownIcon} isLast={isLast}>
+        <CollapsedGroupDropdown
+          label={label}
+          icon={dropdownIcon}
+          isLast={isLast}
+          open={dropdownOpen}
+          onOpenChange={onDropdownOpenChange}
+        >
           {dropdownContent ?? children}
         </CollapsedGroupDropdown>
       </RibbonVisibilityGroup>

@@ -11,7 +11,7 @@
  * Ribbon Polish (V1, V2, V3, V4, V5)
  */
 
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { dispatch, useActiveSheetId, useUIStore } from '../../../internal-api';
 import type { SpreadsheetDisplayMode } from '../../../ui-store/slices/core/display-mode';
 
@@ -447,12 +447,26 @@ export function ViewRibbon({
   const isDropdownOpen = useUIStore((s) => s.ribbonDropdowns['view.freeze-panes'] ?? false);
   const openRibbonDropdown = useUIStore((s) => s.openRibbonDropdown);
   const closeRibbonDropdown = useUIStore((s) => s.closeRibbonDropdown);
+  const [isWindowGroupOpen, setIsWindowGroupOpen] = useState(false);
   const displayMode = useUIStore((s) => s.spreadsheetDisplayMode);
   const setDisplayMode = useUIStore((s) => s.setSpreadsheetDisplayMode);
   const setIsDropdownOpen = useCallback(
     (open: boolean) =>
       open ? openRibbonDropdown('view.freeze-panes') : closeRibbonDropdown('view.freeze-panes'),
     [openRibbonDropdown, closeRibbonDropdown],
+  );
+  const setWindowGroupOpen = useCallback(
+    (open: boolean) => {
+      if (open) {
+        setIsWindowGroupOpen(true);
+        return;
+      }
+      setIsWindowGroupOpen(open);
+      if (!isDropdownOpen) {
+        setIsDropdownOpen(false);
+      }
+    },
+    [isDropdownOpen, setIsDropdownOpen],
   );
   const isAppearanceOpen = useUIStore((s) => s.ribbonDropdowns['view.appearance-mode'] ?? false);
   const setAppearanceOpen = useCallback(
@@ -492,8 +506,71 @@ export function ViewRibbon({
     (action: () => void) => {
       action();
       setIsDropdownOpen(false);
+      setIsWindowGroupOpen(false);
+      window.requestAnimationFrame(() => deps.coordinator.input.focusGrid());
     },
-    [setIsDropdownOpen],
+    [deps.coordinator.input, setIsDropdownOpen],
+  );
+
+  useEffect(() => {
+    if (!isDropdownOpen) return;
+    const handle = window.setTimeout(() => {
+      const firstItem = document.querySelector<HTMLElement>(
+        '[data-testid="ribbon-dropdown-menu-freeze-panes"] [role="menuitem"]:not([aria-disabled="true"])',
+      );
+      firstItem?.focus({ preventScroll: true });
+    }, 0);
+    return () => window.clearTimeout(handle);
+  }, [isDropdownOpen]);
+
+  const freezePanesMenu = (
+    <div
+      data-testid="ribbon-dropdown-menu-freeze-panes"
+      className="bg-ss-surface rounded shadow-ss-md border border-ss-border min-w-[180px] py-1"
+      role="menu"
+      aria-label="Freeze Panes Options"
+    >
+      {/* Freeze Panes (at selection) */}
+      <RibbonDropdownItem
+        dataValue="freeze-panes"
+        icon={
+          isFrozen && frozenRows > 1 && frozenCols > 0 ? <CheckIcon /> : <span className="w-4" />
+        }
+        onClick={() => handleMenuItemClick(onFreezePanes!)}
+      >
+        Freeze Panes
+      </RibbonDropdownItem>
+
+      {/* Freeze Top Row */}
+      <RibbonDropdownItem
+        dataValue="freeze-top-row"
+        icon={frozenRows === 1 && frozenCols === 0 ? <CheckIcon /> : <span className="w-4" />}
+        onClick={() => handleMenuItemClick(onFreezeTopRow!)}
+      >
+        Freeze Top Row
+      </RibbonDropdownItem>
+
+      {/* Freeze First Column */}
+      <RibbonDropdownItem
+        dataValue="freeze-first-column"
+        icon={frozenRows === 0 && frozenCols === 1 ? <CheckIcon /> : <span className="w-4" />}
+        onClick={() => handleMenuItemClick(onFreezeFirstColumn!)}
+      >
+        Freeze First Column
+      </RibbonDropdownItem>
+
+      <RibbonDropdownDivider />
+
+      {/* Unfreeze Panes */}
+      <RibbonDropdownItem
+        dataValue="unfreeze"
+        icon={<span className="w-4" />}
+        onClick={() => handleMenuItemClick(onUnfreeze!)}
+        disabled={!isFrozen}
+      >
+        Unfreeze Panes
+      </RibbonDropdownItem>
+    </div>
   );
 
   // ===========================================================================
@@ -835,6 +912,9 @@ export function ViewRibbon({
         label="Window"
         collapseConfig={WINDOW_COLLAPSE_CONFIG}
         dropdownIcon={<FreezePanesIcon />}
+        dropdownOpen={isWindowGroupOpen || isDropdownOpen}
+        onDropdownOpenChange={setWindowGroupOpen}
+        dropdownContent={isDropdownOpen ? freezePanesMenu : undefined}
       >
         <div className="flex items-center gap-1">
           {/* New Window Button - Disabled stub */}
@@ -886,61 +966,7 @@ export function ViewRibbon({
               open={isDropdownOpen && isFreezeEnabled}
               onClose={() => setIsDropdownOpen(false)}
             >
-              <div
-                data-testid="ribbon-dropdown-menu-freeze-panes"
-                className="bg-ss-surface rounded shadow-ss-md border border-ss-border min-w-[180px] py-1"
-                role="menu"
-                aria-label="Freeze Panes Options"
-              >
-                {/* Freeze Panes (at selection) */}
-                <RibbonDropdownItem
-                  dataValue="freeze-panes"
-                  icon={
-                    isFrozen && frozenRows > 1 && frozenCols > 0 ? (
-                      <CheckIcon />
-                    ) : (
-                      <span className="w-4" />
-                    )
-                  }
-                  onClick={() => handleMenuItemClick(onFreezePanes!)}
-                >
-                  Freeze Panes
-                </RibbonDropdownItem>
-
-                {/* Freeze Top Row */}
-                <RibbonDropdownItem
-                  dataValue="freeze-top-row"
-                  icon={
-                    frozenRows === 1 && frozenCols === 0 ? <CheckIcon /> : <span className="w-4" />
-                  }
-                  onClick={() => handleMenuItemClick(onFreezeTopRow!)}
-                >
-                  Freeze Top Row
-                </RibbonDropdownItem>
-
-                {/* Freeze First Column */}
-                <RibbonDropdownItem
-                  dataValue="freeze-first-column"
-                  icon={
-                    frozenRows === 0 && frozenCols === 1 ? <CheckIcon /> : <span className="w-4" />
-                  }
-                  onClick={() => handleMenuItemClick(onFreezeFirstColumn!)}
-                >
-                  Freeze First Column
-                </RibbonDropdownItem>
-
-                <RibbonDropdownDivider />
-
-                {/* Unfreeze Panes */}
-                <RibbonDropdownItem
-                  dataValue="unfreeze"
-                  icon={<span className="w-4" />}
-                  onClick={() => handleMenuItemClick(onUnfreeze!)}
-                  disabled={!isFrozen}
-                >
-                  Unfreeze Panes
-                </RibbonDropdownItem>
-              </div>
+              {freezePanesMenu}
             </RibbonDropdownPanel>
           </div>
 

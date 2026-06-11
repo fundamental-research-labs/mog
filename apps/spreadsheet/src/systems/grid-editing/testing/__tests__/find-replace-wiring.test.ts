@@ -36,7 +36,10 @@ import { setupFindReplaceCoordination } from '../../features/find-replace/find-r
 function createMockWorkbook(
   sheetId: SheetId,
   cells: Array<{ row: number; col: number; value: string; cellId: string }>,
+  options: { hiddenRows?: number[]; hiddenCols?: number[] } = {},
 ): WorkbookInternal {
+  const hiddenRows = new Set(options.hiddenRows ?? []);
+  const hiddenCols = new Set(options.hiddenCols ?? []);
   const mockWorksheet = {
     getSheetId: () => sheetId,
     getUsedRange: async () =>
@@ -68,8 +71,8 @@ function createMockWorkbook(
       return cells.find((c) => c.row === row && c.col === col)?.value ?? '';
     }),
     layout: {
-      getHiddenRowsBitmap: jest.fn().mockResolvedValue(new Set<number>()),
-      getHiddenColumnsBitmap: jest.fn().mockResolvedValue(new Set<number>()),
+      getHiddenRowsBitmap: jest.fn().mockResolvedValue(hiddenRows),
+      getHiddenColumnsBitmap: jest.fn().mockResolvedValue(hiddenCols),
     },
     structure: {
       getMergedRegions: jest.fn().mockResolvedValue([]),
@@ -158,6 +161,10 @@ async function waitForFindReplace(
   throw new Error(
     `Timed out waiting for find/replace condition. Current context: ${JSON.stringify(finalSnap.context)}`,
   );
+}
+
+function getActiveCell(system: GridEditingSystem): { row: number; col: number } {
+  return system.access.actors.selection.getSnapshot().context.activeCell;
 }
 
 // =============================================================================
@@ -339,7 +346,80 @@ describe('Find-Replace Wiring (Bug #28)', () => {
   });
 
   // ---------------------------------------------------------------------------
-  // Test 5: Without coordination wired, search hangs (documents the dep)
+  // Test 5: Hidden rows/columns are skipped by search navigation
+  // ---------------------------------------------------------------------------
+
+  it('skips hidden-column matches and keeps Enter on the first visible live-search result', async () => {
+    const mockWorkbook = createMockWorkbook(
+      sheetId('sheet-1'),
+      [
+        { row: 2, col: 15, value: '1Q', cellId: 'hidden-p3' },
+        { row: 2, col: 19, value: '1Q', cellId: 'hidden-t3' },
+        { row: 2, col: 23, value: '1Q', cellId: 'hidden-x3' },
+        { row: 2, col: 27, value: '1Q', cellId: 'visible-ab3' },
+        { row: 2, col: 31, value: '1Q', cellId: 'visible-af3' },
+      ],
+      { hiddenCols: [15, 19, 23] },
+    );
+
+    system = new GridEditingSystem({
+      initialSheetId: 'sheet-1',
+      workbook: mockWorkbook,
+    });
+    system.start();
+
+    cleanupFindReplace = wireFindReplace(system, mockWorkbook, 'sheet-1');
+
+    system.access.actors.selection.send({
+      type: 'SET_SELECTION',
+      ranges: [{ startRow: 20, startCol: 15, endRow: 20, endCol: 15 }],
+      activeCell: { row: 20, col: 15 },
+    });
+
+    const actor = system.access.actors.findReplace;
+
+    actor.send({ type: 'OPEN' });
+    actor.send({ type: 'SET_QUERY', query: '1Q' });
+    actor.send({ type: 'SEARCH' });
+
+    await waitForFindReplace(
+      system,
+      (snap) =>
+        snap.matches('hasResults' as any) &&
+        snap.context.results.length === 2 &&
+        getActiveCell(system).row === 2 &&
+        getActiveCell(system).col === 27,
+    );
+
+    expect(actor.getSnapshot().context.results.map((result) => result.cellId)).toEqual([
+      'visible-ab3',
+      'visible-af3',
+    ]);
+    expect(actor.getSnapshot().context.currentIndex).toBe(-1);
+
+    actor.send({ type: 'FIND_NEXT' });
+
+    await waitForFindReplace(
+      system,
+      (snap) =>
+        snap.context.currentIndex === 0 &&
+        getActiveCell(system).row === 2 &&
+        getActiveCell(system).col === 27,
+    );
+
+    actor.send({ type: 'FIND_NEXT' });
+
+    await waitForFindReplace(
+      system,
+      (snap) =>
+        snap.context.currentIndex === 1 &&
+        getActiveCell(system).row === 2 &&
+        getActiveCell(system).col === 31,
+    );
+  });
+
+  // ---------------------------------------------------------------------------
+  // Test 6: Without coordination wired, search hangs (documents the dep)
   // ---------------------------------------------------------------------------
 
   it('without coordination wired, search stays in searching', async () => {

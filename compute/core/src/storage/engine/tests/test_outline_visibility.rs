@@ -11,6 +11,7 @@
 use super::super::*;
 use super::helpers::*;
 use compute_wire::constants::{CELL_STRIDE, DIM_STRIDE, MERGE_STRIDE, VIEWPORT_HEADER_SIZE};
+use domain_types::{ColDimension, OutlineGroup, ParseOutput, SheetData, SheetDimensions};
 
 #[derive(serde::Deserialize)]
 struct GroupDefId {
@@ -172,6 +173,107 @@ fn collapsed_outline_column_group_returns_zero_col_width() {
         engine.get_col_width_query(&sid, 7) > 0.0,
         "col 7 (outside group) should keep its width"
     );
+}
+
+#[test]
+fn imported_hidden_outline_columns_expand_to_visible_columns() {
+    let mut col_widths: Vec<ColDimension> = (3..=6)
+        .map(|col| ColDimension {
+            col,
+            width: 8.43,
+            width_present: Some(true),
+            hidden: true,
+            hidden_attr: Some(true),
+            ..Default::default()
+        })
+        .collect();
+    col_widths.push(ColDimension {
+        col: 7,
+        width: 8.43,
+        width_present: Some(true),
+        collapsed: true,
+        collapsed_attr: Some(true),
+        ..Default::default()
+    });
+
+    let input = ParseOutput {
+        sheets: vec![SheetData {
+            name: "Imported".to_string(),
+            rows: 20,
+            cols: 12,
+            dimensions: SheetDimensions {
+                col_widths,
+                ..Default::default()
+            },
+            outline_groups: vec![OutlineGroup {
+                is_row: false,
+                start: 3,
+                end: 6,
+                level: 1,
+                collapsed: true,
+                hidden: true,
+                collapsed_on_member: false,
+            }],
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    let mut engine = engine_from_parse_output_normal(&input);
+    let sid = *engine.mirror().sheet_ids().next().expect("sheet id");
+
+    assert_eq!(engine.get_col_width_query(&sid, 3), 0.0);
+    assert!(
+        engine.is_col_hidden_query(&sid, 3),
+        "imported collapsed outline columns should report hidden before expansion"
+    );
+    let exported_before_expand = engine
+        .export_to_parse_output()
+        .expect("export before expand")
+        .parse_output;
+    assert!(
+        exported_before_expand.sheets[0]
+            .dimensions
+            .col_widths
+            .iter()
+            .any(|col| col.col == 7 && col.collapsed),
+        "imported collapsed summary column marker should be present before expansion"
+    );
+
+    let group_id = engine
+        .get_groups(&sid, "column")
+        .first()
+        .expect("column group")
+        .id
+        .clone();
+    engine
+        .set_group_collapsed(&sid, &group_id, false)
+        .expect("expand group");
+
+    assert!(engine.get_col_width_query(&sid, 3) > 0.0);
+    assert!(!engine.is_col_hidden_query(&sid, 3));
+    let group = engine
+        .get_group_in_sheet(&sid, &group_id)
+        .expect("expanded group");
+    assert!(!group.collapsed);
+    assert!(!group.hidden);
+    let exported_after_expand = engine
+        .export_to_parse_output()
+        .expect("export after expand")
+        .parse_output;
+    assert!(
+        !exported_after_expand.sheets[0]
+            .dimensions
+            .col_widths
+            .iter()
+            .any(|col| col.col == 7 && col.collapsed),
+        "expanded outline export must not keep the stale collapsed summary column marker"
+    );
+
+    engine
+        .set_group_collapsed(&sid, &group_id, true)
+        .expect("collapse group");
+    assert_eq!(engine.get_col_width_query(&sid, 3), 0.0);
+    assert!(engine.is_col_hidden_query(&sid, 3));
 }
 
 #[test]

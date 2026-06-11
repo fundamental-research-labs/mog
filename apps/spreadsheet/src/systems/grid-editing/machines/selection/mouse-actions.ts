@@ -53,17 +53,14 @@ const setAnchorAndSelect = assign(
 
 /**
  * Extend selection to clicked cell (shift+click).
- * Mouse Shift+click keeps the original anchor for subsequent Shift+clicks,
- * while the clicked cell becomes the active edge.
+ * Mouse Shift+click keeps the original anchor active, matching keyboard
+ * extend and drag selection behavior. The moving edge lives in range geometry.
  */
 const extendToCell = assign(
   ({ context, event }: { context: SelectionContext; event: SelectionEvent }) => {
     if (event.type !== 'MOUSE_DOWN') return {};
     const anchor = context.anchor ?? context.activeCell;
-    return {
-      ...buildExtendUpdate(anchor, event.cell),
-      activeCell: event.cell,
-    };
+    return buildExtendUpdate(anchor, event.cell);
   },
 );
 

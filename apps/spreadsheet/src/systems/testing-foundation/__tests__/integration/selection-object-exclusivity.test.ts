@@ -62,6 +62,19 @@ describe('Selection-Object mutual exclusion', () => {
     expect(objSnap.selectedIds).toEqual([]);
   });
 
+  test('programmatic user setSelection deselects objects', () => {
+    sim.objects!.handleObjectMouseDown('obj-1', 'body', { x: 150, y: 150 }, false, false);
+    sim.objects!.handleObjectMouseUp({ x: 150, y: 150 });
+    expect(sim.objects!.getObjectInteractionSnapshot().selectedIds).toContain('obj-1');
+
+    sim.grid.access.commands.selection.setSelection(
+      [{ startRow: 2, startCol: 11, endRow: 20, endCol: 27 }],
+      { row: 2, col: 11 },
+    );
+
+    expect(sim.objects!.getObjectInteractionSnapshot().selectedIds).toEqual([]);
+  });
+
   test('objects.onObjectSelectionActive deselects grid via notifyExternalSelectionActive', () => {
     // Trigger a grid selection first
     sim.grid.access.commands.selection.mouseDown({ row: 0, col: 0 }, false, false);

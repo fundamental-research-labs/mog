@@ -80,6 +80,57 @@ describe('CoordinateSystem.isCellVisible — viewport-follow contract', () => {
       expect(visible).toBe(scrollTo === null);
       expect(visible).toBe(false);
     });
+
+    it('frozen-row cells can still request horizontal scrolling', () => {
+      coords.setFrozenPanes({ rows: 3, cols: 1 });
+      coords.setViewport({
+        scrollTop: 250,
+        scrollLeft: 50 * DEFAULT_COL_WIDTH,
+        width: 800,
+        height: 600,
+      });
+
+      const cell = { row: 2, col: 10 };
+      const scrollTo = coords.getScrollToCell(TEST_SHEET_ID, cell);
+
+      expect(coords.isCellVisible(TEST_SHEET_ID, cell)).toBe(false);
+      expect(scrollTo).not.toBeNull();
+      expect(scrollTo?.top).toBe(250);
+      expect(scrollTo?.left).toBeLessThan(50 * DEFAULT_COL_WIDTH);
+    });
+
+    it('frozen-column cells can still request vertical scrolling', () => {
+      coords.setFrozenPanes({ rows: 3, cols: 1 });
+      coords.setViewport({
+        scrollTop: 50 * DEFAULT_ROW_HEIGHT,
+        scrollLeft: 250,
+        width: 800,
+        height: 600,
+      });
+
+      const cell = { row: 10, col: 0 };
+      const scrollTo = coords.getScrollToCell(TEST_SHEET_ID, cell);
+
+      expect(coords.isCellVisible(TEST_SHEET_ID, cell)).toBe(false);
+      expect(scrollTo).not.toBeNull();
+      expect(scrollTo?.top).toBeLessThan(50 * DEFAULT_ROW_HEIGHT);
+      expect(scrollTo?.left).toBe(250);
+    });
+
+    it('cells in both frozen axes need no scroll target', () => {
+      coords.setFrozenPanes({ rows: 3, cols: 1 });
+      coords.setViewport({
+        scrollTop: 50 * DEFAULT_ROW_HEIGHT,
+        scrollLeft: 50 * DEFAULT_COL_WIDTH,
+        width: 800,
+        height: 600,
+      });
+
+      const cell = { row: 2, col: 0 };
+
+      expect(coords.isCellVisible(TEST_SHEET_ID, cell)).toBe(true);
+      expect(coords.getScrollToCell(TEST_SHEET_ID, cell)).toBeNull();
+    });
   });
 
   describe('visibility reads live scroll state', () => {

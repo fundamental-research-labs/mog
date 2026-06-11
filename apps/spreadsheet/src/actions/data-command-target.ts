@@ -12,6 +12,8 @@ interface ResolveDataTargetOptions {
   readonly inferHeadersForExplicitMultiRow: boolean;
 }
 
+const HEADER_BODY_SCAN_ROW_LIMIT = 100;
+
 export function normalizeCommandRange(range: CellRange): CellRange {
   return {
     startRow: range.startRow,
@@ -44,22 +46,30 @@ async function rangeLooksLikeHeaderTable(ws: Worksheet, range: CellRange): Promi
   const firstRow = await Promise.all(
     Array.from({ length: width }, (_, i) => ws.getCell(range.startRow, range.startCol + i)),
   );
-  const secondRow = await Promise.all(
-    Array.from({ length: width }, (_, i) => ws.getCell(range.startRow + 1, range.startCol + i)),
-  );
 
   const firstRowAllText = firstRow.every((cell) => {
     const value = cell?.value;
     return typeof value === 'string' && value.trim().length > 0;
   });
-  const secondRowHasDataSignal = secondRow.some((cell) => {
-    const value = cell?.value;
-    if (value == null || value === '') return false;
-    if (typeof value !== 'string') return true;
-    return value.trim() !== '' && Number.isFinite(Number(value));
-  });
+  if (!firstRowAllText) return false;
 
-  return firstRowAllText && secondRowHasDataSignal;
+  const rowHasDataSignal = (row: Array<{ value?: unknown } | null | undefined>): boolean =>
+    row.some((cell) => {
+      const value = cell?.value;
+      if (value == null || value === '') return false;
+      if (typeof value !== 'string') return true;
+      return value.trim() !== '' && Number.isFinite(Number(value));
+    });
+
+  const scanEndRow = Math.min(range.endRow, range.startRow + HEADER_BODY_SCAN_ROW_LIMIT);
+  for (let row = range.startRow + 1; row <= scanEndRow; row++) {
+    const bodyRow = await Promise.all(
+      Array.from({ length: width }, (_, i) => ws.getCell(row, range.startCol + i)),
+    );
+    if (rowHasDataSignal(bodyRow)) return true;
+  }
+
+  return false;
 }
 
 export async function resolveDataCommandTarget(
@@ -68,7 +78,7 @@ export async function resolveDataCommandTarget(
 ): Promise<DataCommandTarget | null> {
   return resolveDataTarget(ws, userRange, {
     allowEmptySingleCell: false,
-    inferHeadersForExplicitMultiRow: false,
+    inferHeadersForExplicitMultiRow: true,
   });
 }
 

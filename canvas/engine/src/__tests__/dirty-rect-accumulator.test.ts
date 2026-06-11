@@ -106,6 +106,14 @@ describe('DirtyRectAccumulator', () => {
     expect(union.height).toBe(5);
   });
 
+  it('large rects hints coalesce without spreading the array into the call stack', () => {
+    const bounds = Array.from({ length: 200_000 }, (_, i) => rect(i, i % 7, 1, 2));
+
+    expect(() => acc.add({ type: 'rects', bounds })).not.toThrow();
+    expect(acc.isFull()).toBe(false);
+    expect(acc.getRects()).toEqual([rect(0, 0, 200_000, 8)]);
+  });
+
   // ---------------------------------------------------------------------------
   // Area threshold promotes to full
   // ---------------------------------------------------------------------------

@@ -140,6 +140,24 @@ describe('setScrollPosition callback', () => {
     expect(positions).toHaveLength(0);
   });
 
+  it('resetScrollPosition adopts renderer-owned positions beyond current dynamic bounds', () => {
+    const positions: Array<{ x: number; y: number }> = [];
+    const scrollStates: Array<{ x: number; y: number }> = [];
+    coordinator.setDependencies(
+      createMinimalDeps({
+        setScrollPosition: (pos) => positions.push({ x: pos.x, y: pos.y }),
+      }),
+    );
+    coordinator.onScrollChange((state) => scrollStates.push({ x: state.x, y: state.y }));
+
+    coordinator.setContentScrollBounds(2000, 2000);
+    coordinator.resetScrollPosition(601, 6270);
+
+    expect(coordinator.getScrollState()).toMatchObject({ x: 601, y: 6270 });
+    expect(positions).toHaveLength(0);
+    expect(scrollStates).toEqual([{ x: 601, y: 6270 }]);
+  });
+
   it('works when setScrollPosition is not provided (optional)', () => {
     coordinator.setDependencies(createMinimalDeps());
 

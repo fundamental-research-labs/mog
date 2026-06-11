@@ -113,6 +113,8 @@ export interface UseContextMenuActionsReturn {
 
   // Insert Cells Dialog
   insertCells: () => void;
+  insertCutCells: () => void;
+  hasCutClipboard: boolean;
 
   // Delete actions
   deleteRows: () => void;
@@ -538,6 +540,14 @@ export function useContextMenuActions(
       dispatch('OPEN_INSERT_CELLS_DIALOG', actionDeps);
     });
   }, [actionDeps, closeContextMenu]);
+
+  const insertCutCells = useCallback(() => {
+    selectResolvedContextCell();
+    closeContextMenu();
+    setTimeout(() => {
+      dispatch('INSERT_CUT_CELLS_SHIFT_DOWN', actionDeps);
+    }, 0);
+  }, [actionDeps, closeContextMenu, selectResolvedContextCell]);
 
   // ==========================================================================
   // Delete Actions
@@ -1422,6 +1432,8 @@ export function useContextMenuActions(
 
       // Insert Cells Dialog
       insertCells,
+      insertCutCells,
+      hasCutClipboard: clipboard.hasCut,
 
       // Delete
       deleteRows,
@@ -1580,6 +1592,8 @@ export function useContextMenuActions(
       insertColumnLeft,
       insertColumnRight,
       insertCells,
+      insertCutCells,
+      clipboard.hasCut,
       deleteRows,
       deleteColumns,
       deleteCells,

@@ -42,6 +42,7 @@ import {
   computePrefetchBounds,
   getPrefetchConfigForViewport,
   isWithinPrefetch,
+  normalizeViewportBounds,
 } from '../wire/viewport-prefetch';
 
 // ---------------------------------------------------------------------------
@@ -189,12 +190,12 @@ export class ViewportFetchManager {
   }
 
   private stripSheetId(bounds: ViewportBounds): PrefetchBounds {
-    return {
+    return normalizeViewportBounds({
       startRow: bounds.startRow,
       startCol: bounds.startCol,
       endRow: bounds.endRow,
       endCol: bounds.endCol,
-    };
+    });
   }
 
   private setVisibleWindow(viewportId: string, sheetId: string, bounds: PrefetchBounds): number {

@@ -632,7 +632,7 @@ export function CommentPopover() {
           )}
         </div>
         <div className="flex gap-1">
-          {comments.length > 0 && !isNoteBacked && (
+          {comments.length > 0 && (
             <button
               type="button"
               data-testid="resolve-thread"

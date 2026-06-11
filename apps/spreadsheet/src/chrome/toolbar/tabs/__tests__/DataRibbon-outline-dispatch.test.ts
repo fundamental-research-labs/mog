@@ -7,10 +7,11 @@ describe('DataRibbon outline wiring', () => {
     expect(source).toContain('onClick={handleGroupClick}');
     expect(source).toContain('onClick={handleGroupRows}');
     expect(source).toContain('onClick={handleGroupColumns}');
+    expect(source).toContain('onClick={handleUngroupClick}');
     expect(source).toContain('Rows');
     expect(source).toContain('Columns');
     expect(source).not.toContain("onClick={() => dispatch('GROUP')}");
-    expect(source).toContain("onClick={() => dispatch('UNGROUP')}");
+    expect(source).toContain("dispatch('UNGROUP')");
     expect(source).toContain("onClick={() => dispatch('SHOW_DETAIL')}");
     expect(source).toContain("onClick={() => dispatch('HIDE_DETAIL')}");
 

@@ -510,6 +510,7 @@ export type StructureActionType =
   // Insert/delete cells with shift (not entire rows/columns)
   | 'INSERT_CELLS'
   | 'INSERT_CELLS_SHIFT_DOWN'
+  | 'INSERT_CUT_CELLS_SHIFT_DOWN'
   | 'DELETE_CELLS'
   | 'HIDE_ROW'
   | 'UNHIDE_ROW'

@@ -745,7 +745,11 @@ export async function readDisplayedFormatsViaBridge(
   return out;
 }
 
-function hasLinkedUnlabeledCheckboxOverlay(row: number, col: number): boolean {
+function shouldMaskLinkedUnlabeledCheckboxDisplay(
+  row: number,
+  col: number,
+  cell: { valueType?: unknown; displayText?: unknown },
+): boolean {
   if (typeof document === 'undefined') return false;
 
   const selector = [
@@ -759,7 +763,12 @@ function hasLinkedUnlabeledCheckboxOverlay(row: number, col: number): boolean {
   const overlay = wrapper.querySelector<HTMLElement>('[data-testid^="form-control-checkbox-"]');
   if (!overlay) return false;
 
-  return (overlay.textContent ?? '').trim().length === 0;
+  if ((overlay.textContent ?? '').trim().length > 0) return false;
+
+  if (cell.valueType === 3) return true;
+  const displayText =
+    typeof cell.displayText === 'string' ? cell.displayText.trim().toUpperCase() : '';
+  return displayText === 'TRUE' || displayText === 'FALSE';
 }
 
 /**
@@ -785,7 +794,7 @@ export function readCellValue(
         accessor.mergeBounds ?? accessor.mergeRegion ?? accessor.mergedRegion ?? null,
       );
     if (isCoveredCell(row, col, mergeRegion)) return emptyCellReadback(row, col, vpId);
-    const displayText = hasLinkedUnlabeledCheckboxOverlay(row, col)
+    const displayText = shouldMaskLinkedUnlabeledCheckboxDisplay(row, col, accessor)
       ? ''
       : (accessor.displayText ?? null);
     return {

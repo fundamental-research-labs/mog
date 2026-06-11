@@ -23,7 +23,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
-import type { CellRange } from '@mog-sdk/contracts/core';
+import { MAX_COLS, MAX_ROWS, type CellRange } from '@mog-sdk/contracts/core';
 import type { GroupDefinition, SheetGroupingConfig } from '@mog-sdk/contracts/grouping';
 
 import { useActiveSheetId, useWorkbook } from '../../infra/context';
@@ -39,6 +39,16 @@ interface SelectionBounds {
   endRow: number;
   startCol: number;
   endCol: number;
+}
+
+type GroupingAxis = 'rows' | 'columns';
+
+interface GroupingSelectionSnapshot {
+  ranges: readonly CellRange[];
+  activeCell: { row: number; col: number };
+  anchor?: { row: number; col: number } | null;
+  anchorCol?: number | null;
+  anchorRow?: number | null;
 }
 
 // =============================================================================
@@ -65,6 +75,59 @@ function computeSelectionBounds(ranges: readonly CellRange[]): SelectionBounds |
   }
 
   return { startRow, endRow, startCol, endCol };
+}
+
+function isSingleFullRowRange(range: CellRange): boolean {
+  return (
+    range.startRow === range.endRow &&
+    (range.isFullRow === true || (range.startCol === 0 && range.endCol === MAX_COLS - 1))
+  );
+}
+
+function isSingleFullColumnRange(range: CellRange): boolean {
+  return (
+    range.startCol === range.endCol &&
+    (range.isFullColumn === true || (range.startRow === 0 && range.endRow === MAX_ROWS - 1))
+  );
+}
+
+function getGroupingCommandRanges(snapshot: GroupingSelectionSnapshot): readonly CellRange[] {
+  if (snapshot.ranges.length !== 1) return snapshot.ranges;
+
+  const range = snapshot.ranges[0];
+  if (isSingleFullRowRange(range)) {
+    const anchorRow = snapshot.anchorRow ?? snapshot.anchor?.row ?? null;
+    if (anchorRow !== null && anchorRow !== range.startRow) {
+      return [
+        {
+          ...range,
+          startRow: Math.min(anchorRow, snapshot.activeCell.row, range.startRow, range.endRow),
+          endRow: Math.max(anchorRow, snapshot.activeCell.row, range.startRow, range.endRow),
+          startCol: 0,
+          endCol: MAX_COLS - 1,
+          isFullRow: true,
+        },
+      ];
+    }
+  }
+
+  if (isSingleFullColumnRange(range)) {
+    const anchorCol = snapshot.anchorCol ?? snapshot.anchor?.col ?? null;
+    if (anchorCol !== null && anchorCol !== range.startCol) {
+      return [
+        {
+          ...range,
+          startRow: 0,
+          endRow: MAX_ROWS - 1,
+          startCol: Math.min(anchorCol, snapshot.activeCell.col, range.startCol, range.endCol),
+          endCol: Math.max(anchorCol, snapshot.activeCell.col, range.startCol, range.endCol),
+          isFullColumn: true,
+        },
+      ];
+    }
+  }
+
+  return snapshot.ranges;
 }
 
 interface OutlineSummarySettings {
@@ -103,8 +166,12 @@ function summaryIndex(
   return index >= 0 ? index : null;
 }
 
+function selectionContainsIndex(start: number, end: number, index: number): boolean {
+  return start <= index && end >= index;
+}
+
 function selectionMatchesRowGroupForDetail(
-  group: Pick<GroupDefinition, 'start' | 'end'>,
+  group: Pick<GroupDefinition, 'start' | 'end' | 'hidden' | 'collapsedOnMember'>,
   bounds: SelectionBounds,
   settings: OutlineSummarySettings,
 ): boolean {
@@ -112,11 +179,20 @@ function selectionMatchesRowGroupForDetail(
     return true;
   }
   const summary = summaryIndex(group, settings.summaryRowsBelow);
-  return summary !== null && bounds.startRow === summary && bounds.endRow === summary;
+  if (summary !== null && bounds.startRow === summary && bounds.endRow === summary) {
+    return true;
+  }
+  const importedMemberSummary = isImportedHiddenGroup(group)
+    ? summaryIndex(group, !settings.summaryRowsBelow)
+    : null;
+  return (
+    importedMemberSummary !== null &&
+    selectionContainsIndex(bounds.startRow, bounds.endRow, importedMemberSummary)
+  );
 }
 
 function selectionMatchesColumnGroupForDetail(
-  group: Pick<GroupDefinition, 'start' | 'end'>,
+  group: Pick<GroupDefinition, 'start' | 'end' | 'hidden' | 'collapsedOnMember'>,
   bounds: SelectionBounds,
   settings: OutlineSummarySettings,
 ): boolean {
@@ -124,7 +200,53 @@ function selectionMatchesColumnGroupForDetail(
     return true;
   }
   const summary = summaryIndex(group, settings.summaryColumnsRight);
-  return summary !== null && bounds.startCol === summary && bounds.endCol === summary;
+  if (summary !== null && bounds.startCol === summary && bounds.endCol === summary) {
+    return true;
+  }
+  const importedMemberSummary = isImportedHiddenGroup(group)
+    ? summaryIndex(group, !settings.summaryColumnsRight)
+    : null;
+  return (
+    importedMemberSummary !== null &&
+    selectionContainsIndex(bounds.startCol, bounds.endCol, importedMemberSummary)
+  );
+}
+
+function isImportedHiddenGroup(
+  group: Pick<GroupDefinition, 'hidden' | 'collapsedOnMember'>,
+): boolean {
+  return group.collapsedOnMember === true || group.hidden === true;
+}
+
+function detailIndexes(group: Pick<GroupDefinition, 'start' | 'end'>): number[] {
+  return Array.from(
+    { length: group.end - group.start + 1 },
+    (_value, index) => group.start + index,
+  );
+}
+
+async function setImportedDetailVisibility(
+  ws: import('@mog-sdk/contracts/api').WorksheetWithInternals,
+  group: GroupDefinition,
+  axis: GroupingAxis,
+  visible: boolean,
+): Promise<void> {
+  if (group.hidden !== true) return;
+
+  if (axis === 'rows') {
+    if (visible) {
+      await ws.layout.unhideRows(group.start, group.end);
+    } else {
+      await ws.layout.hideRows(detailIndexes(group));
+    }
+    return;
+  }
+
+  if (visible) {
+    await ws.layout.unhideColumns(group.start, group.end);
+  } else {
+    await ws.layout.hideColumns(detailIndexes(group));
+  }
 }
 
 // =============================================================================
@@ -273,7 +395,7 @@ export function useGroupingActions(): UseGroupingActionsReturn {
   // ==========================================================================
   const getSelectionBoundsOnDemand = useCallback((): SelectionBounds | null => {
     const snapshot = coordinator.grid.getSelectionSnapshot();
-    return computeSelectionBounds(snapshot.ranges);
+    return computeSelectionBounds(getGroupingCommandRanges(snapshot));
   }, [coordinator]);
 
   // ==========================================================================
@@ -456,12 +578,14 @@ export function useGroupingActions(): UseGroupingActionsReturn {
         if (group.collapsed && selectionMatchesRowGroupForDetail(group, bounds, settings)) {
           // Toggle to expand (collapsed -> expanded)
           await ws.outline.toggleCollapsed(group.id);
+          await setImportedDetailVisibility(ws, group, 'rows', true);
         }
       }
 
       for (const group of currentColumnGroups) {
         if (group.collapsed && selectionMatchesColumnGroupForDetail(group, bounds, settings)) {
           await ws.outline.toggleCollapsed(group.id);
+          await setImportedDetailVisibility(ws, group, 'columns', true);
         }
       }
     })();
@@ -488,7 +612,12 @@ export function useGroupingActions(): UseGroupingActionsReturn {
 
       if (rowGroupsContaining.length > 0) {
         // Toggle to collapse (expanded -> collapsed)
-        await ws.outline.toggleCollapsed(rowGroupsContaining[0].id);
+        const group = rowGroupsContaining[0];
+        if (group.hidden === true) {
+          await setImportedDetailVisibility(ws, group, 'rows', false);
+        } else {
+          await ws.outline.toggleCollapsed(group.id);
+        }
       }
 
       const colGroupsContaining = currentColumnGroups
@@ -499,7 +628,12 @@ export function useGroupingActions(): UseGroupingActionsReturn {
         .sort((a: GroupDefinition, b: GroupDefinition) => b.level - a.level);
 
       if (colGroupsContaining.length > 0) {
-        await ws.outline.toggleCollapsed(colGroupsContaining[0].id);
+        const group = colGroupsContaining[0];
+        if (group.hidden === true) {
+          await setImportedDetailVisibility(ws, group, 'columns', false);
+        } else {
+          await ws.outline.toggleCollapsed(group.id);
+        }
       }
     })();
   }, [wb, activeSheetId, getSelectionBoundsOnDemand]);

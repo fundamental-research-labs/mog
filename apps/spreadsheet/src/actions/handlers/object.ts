@@ -170,6 +170,25 @@ function getSelectedCellPosition(deps: ActionDependencies): { row: number; col: 
   return { row: 0, col: 0 };
 }
 
+function isBlankCellForCheckboxInitialization(cell: unknown): boolean {
+  if (cell == null) return true;
+  if (typeof cell !== 'object') return false;
+
+  const data = cell as {
+    value?: unknown;
+    formula?: unknown;
+    displayText?: unknown;
+  };
+
+  const hasValue = data.value !== undefined && data.value !== null && data.value !== '';
+  const hasFormula =
+    typeof data.formula === 'string' ? data.formula.length > 0 : data.formula != null;
+  const hasDisplayText =
+    typeof data.displayText === 'string' ? data.displayText.length > 0 : data.displayText != null;
+
+  return !hasValue && !hasFormula && !hasDisplayText;
+}
+
 // =============================================================================
 // Object Deletion/Selection Actions
 // These actions route to chart actor when a chart is selected.
@@ -849,10 +868,14 @@ export const INSERT_FORM_CONTROL_CHECKBOX: AsyncActionHandler = async (
       width: DEFAULT_CHECKBOX_WIDTH,
       height: DEFAULT_CHECKBOX_HEIGHT,
     });
-    await ws.setCell(position.row, position.col, false);
-    await ws.formats.set(position.row, position.col, {
-      numberFormat: CHECKBOX_LINKED_CELL_HIDDEN_FORMAT,
-    });
+
+    const targetCell = await ws.getCell(position.row, position.col);
+    if (isBlankCellForCheckboxInitialization(targetCell)) {
+      await ws.setCell(position.row, position.col, false);
+      await ws.formats.set(position.row, position.col, {
+        numberFormat: CHECKBOX_LINKED_CELL_HIDDEN_FORMAT,
+      });
+    }
     return handled();
   } catch (err) {
     if (isProtectionRejection(err)) {

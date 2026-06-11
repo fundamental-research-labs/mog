@@ -150,6 +150,10 @@ export interface TabbedToolbarProps extends Partial<ToolbarProps> {
   showFormulaBar?: boolean;
   /** Called when formula bar toggle is clicked */
   onToggleFormulaBar?: () => void;
+  /** Whether the status bar is shown */
+  showStatusBar?: boolean;
+  /** Called when status bar toggle is clicked */
+  onToggleStatusBar?: () => void;
   // Scrollbar visibility (Issue 7: View Options)
   /** Whether horizontal scrollbar is shown */
   showHorizontalScrollbar?: boolean;
@@ -275,6 +279,8 @@ export const TabbedToolbar = React.memo(function TabbedToolbar({
   onToggleHeadings,
   showFormulaBar,
   onToggleFormulaBar,
+  showStatusBar,
+  onToggleStatusBar,
   // Scrollbar visibility (Issue 7: View Options)
   showHorizontalScrollbar,
   onToggleHorizontalScrollbar,
@@ -521,6 +527,8 @@ export const TabbedToolbar = React.memo(function TabbedToolbar({
                     onToggleHeadings={onToggleHeadings}
                     showFormulaBar={showFormulaBar}
                     onToggleFormulaBar={onToggleFormulaBar}
+                    showStatusBar={showStatusBar}
+                    onToggleStatusBar={onToggleStatusBar}
                     // Scrollbar visibility (Issue 7: View Options)
                     showHorizontalScrollbar={showHorizontalScrollbar}
                     onToggleHorizontalScrollbar={onToggleHorizontalScrollbar}

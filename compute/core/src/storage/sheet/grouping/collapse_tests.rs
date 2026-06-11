@@ -34,6 +34,44 @@ fn test_toggle_collapsed() {
 }
 
 #[test]
+fn test_expanding_imported_hidden_group_clears_hidden_flag() {
+    let (s, id) = storage_with_sheet();
+    let mut config = get_sheet_grouping_config(s.doc(), &s.sheets_ref(), &id);
+    config.column_groups.push(GroupDefinition {
+        id: "imported-hidden-column-group".to_string(),
+        sheet_id: id.to_uuid_string(),
+        axis: GroupAxis::Column,
+        start: 2,
+        end: 5,
+        level: 1,
+        collapsed: true,
+        parent_id: None,
+        hidden: true,
+        collapsed_on_member: false,
+    });
+    set_sheet_grouping_config(s.doc(), &s.sheets_ref(), &id, &config);
+
+    set_group_collapsed(
+        s.doc(),
+        &s.sheets_ref(),
+        &id,
+        "imported-hidden-column-group",
+        false,
+    );
+
+    let group = get_group_in_sheet(
+        s.doc(),
+        &s.sheets_ref(),
+        &id,
+        "imported-hidden-column-group",
+    )
+    .unwrap();
+    assert!(!group.collapsed);
+    assert!(!group.hidden);
+    assert!(is_column_visible_by_groups(s.doc(), &s.sheets_ref(), &id, 3));
+}
+
+#[test]
 fn test_set_level_collapsed() {
     let (s, id) = storage_with_sheet();
     group_rows(s.doc(), &s.sheets_ref(), &id, 1, 10).unwrap();

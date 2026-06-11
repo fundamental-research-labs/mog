@@ -8,7 +8,8 @@
  *
  * Behavior (matches Excel):
  * - Single cell → expand via `ws.getCurrentRegion`
- * - Single row → expand via `ws.getCurrentRegion` (treated as header row)
+ * - Single row → expand via `ws.getCurrentRegion` (treated as header row),
+ *   preserving any explicit rows/columns the user already selected
  * - Multi-row range → return as-is (user explicitly chose the range)
  * - Empty cell (no adjacent data) → return `null`
  *
@@ -37,5 +38,10 @@ export async function expandToDataRegion(
   if (expanded.startRow === expanded.endRow && expanded.startCol === expanded.endCol) {
     return null;
   }
-  return expanded;
+  return {
+    startRow: Math.min(expanded.startRow, range.startRow),
+    startCol: Math.min(expanded.startCol, range.startCol),
+    endRow: Math.max(expanded.endRow, range.endRow),
+    endCol: Math.max(expanded.endCol, range.endCol),
+  };
 }

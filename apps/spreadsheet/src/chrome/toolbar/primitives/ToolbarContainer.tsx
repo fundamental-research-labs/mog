@@ -97,6 +97,8 @@ export const ToolbarContainer = React.memo(function ToolbarContainer({
   const closeUndoDropdown = useUIStore((s) => s.closeUndoDropdown);
   const formulaBarVisible = useUIStore((s) => s.formulaBarVisible);
   const toggleFormulaBarVisible = useUIStore((s) => s.toggleFormulaBarVisible);
+  const statusBarVisible = useUIStore((s) => s.statusBarVisible);
+  const toggleStatusBarVisible = useUIStore((s) => s.toggleStatusBarVisible);
   const pageBreakPreviewMode = useUIStore((s) => s.pageBreakPreviewMode);
   const togglePageBreakPreviewMode = useUIStore((s) => s.togglePageBreakPreviewMode);
   const { setZoom } = useRendererActions();
@@ -408,6 +410,8 @@ export const ToolbarContainer = React.memo(function ToolbarContainer({
       onToggleHeadings={toggleHeadings}
       showFormulaBar={formulaBarVisible}
       onToggleFormulaBar={toggleFormulaBarVisible}
+      showStatusBar={statusBarVisible}
+      onToggleStatusBar={toggleStatusBarVisible}
       // Scrollbar visibility (Issue 7: View Options)
       showHorizontalScrollbar={workbookSettings.showHorizontalScrollbar}
       onToggleHorizontalScrollbar={handleToggleHorizontalScrollbar}

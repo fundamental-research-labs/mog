@@ -17,7 +17,10 @@ import type { SheetId } from '@mog-sdk/contracts/core';
 import type { RenderScheduler } from '@mog-sdk/contracts/rendering';
 import { DisposableBase, type DisposableStore } from '@mog/spreadsheet-utils/disposable';
 import type { ComputeBridge } from '../../bridges/compute/compute-bridge';
-import type { ViewportScrollBehavior } from '../../bridges/wire/viewport-prefetch';
+import {
+  normalizeViewportBounds,
+  type ViewportScrollBehavior,
+} from '../../bridges/wire/viewport-prefetch';
 
 type ViewportBounds = WorkbookViewportBounds;
 
@@ -55,12 +58,12 @@ export class ViewportRegionImpl extends DisposableBase implements ViewportRegion
     this.id = viewportId ?? `vp-${++regionCounter}`;
     this.sheetId = sheetId;
     this.computeBridge = computeBridge;
-    this.bounds = bounds;
+    this.bounds = normalizeViewportBounds(bounds);
 
     // Register with the Rust engine. Refresh/dispose are ordered against this
     // promise so a newly-created region cannot fetch before Rust knows its
     // viewport ID, and disposal cannot reorder unregister before register.
-    this.registration = this.computeBridge.registerViewportRegion(this.id, sheetId, bounds);
+    this.registration = this.computeBridge.registerViewportRegion(this.id, sheetId, this.bounds);
     this.registrationSucceeded = this.registration.then(
       () => true,
       (err) => {
@@ -90,8 +93,8 @@ export class ViewportRegionImpl extends DisposableBase implements ViewportRegion
    */
   updateBounds(bounds: ViewportBounds): void {
     this.throwIfDisposed();
-    this.bounds = bounds;
-    this.computeBridge.updateViewportVisibleWindow(this.id, this.sheetId, bounds);
+    this.bounds = normalizeViewportBounds(bounds);
+    this.computeBridge.updateViewportVisibleWindow(this.id, this.sheetId, this.bounds);
   }
 
   async refresh(scrollBehavior?: unknown): Promise<void> {

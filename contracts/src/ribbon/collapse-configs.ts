@@ -570,15 +570,18 @@ export const WORKBOOK_VIEWS_COLLAPSE_CONFIG: GroupCollapseConfig = {
 
 /**
  * Show group (View tab) collapse configuration.
- * Priority 4 - gridlines, headings, formula bar.
+ * Priority 4 - gridlines, headings, formula bar, status bar.
+ * Keep the checkbox grid mounted through desktop dense/minimal levels so
+ * View > Show controls remain directly reachable instead of hiding behind a
+ * collapsed group menu.
  */
 export const SHOW_COLLAPSE_CONFIG: GroupCollapseConfig = {
   priority: 4,
   levels: {
     0: 'full',
     1: 'compact',
-    2: 'dropdown',
-    3: 'dropdown',
+    2: 'compact',
+    3: 'compact',
     4: 'hidden',
   },
 };

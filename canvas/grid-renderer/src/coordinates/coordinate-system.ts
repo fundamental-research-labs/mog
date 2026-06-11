@@ -190,7 +190,7 @@ export class CoordinateSystemImpl implements CoordinateSystem {
     if (cached === undefined) {
       const pi = this.positionIndex;
       cached = pi
-        ? pi.getRowTop(this.frozenPanes.rows)
+        ? (pi.getRowTop(this.frozenPanes.rows) ?? this.frozenPanes.rows * DEFAULT_ROW_HEIGHT)
         : this.frozenPanes.rows * DEFAULT_ROW_HEIGHT;
       this.frozenRowsHeightCache.set(sheetId, cached);
     }
@@ -208,7 +208,7 @@ export class CoordinateSystemImpl implements CoordinateSystem {
     if (cached === undefined) {
       const pi = this.positionIndex;
       cached = pi
-        ? pi.getColLeft(this.frozenPanes.cols)
+        ? (pi.getColLeft(this.frozenPanes.cols) ?? this.frozenPanes.cols * DEFAULT_COL_WIDTH)
         : this.frozenPanes.cols * DEFAULT_COL_WIDTH;
       this.frozenColsWidthCache.set(sheetId, cached);
     }
@@ -1031,8 +1031,12 @@ export class CoordinateSystemImpl implements CoordinateSystem {
     const frozenRowsHeight = this.getFrozenRowsHeight(sheetId);
     const frozenColsWidth = this.getFrozenColsWidth(sheetId);
 
-    // If cell is frozen, it's always visible
-    if (this.isCellFrozen(sheetId, cell)) return null;
+    const isFrozenRow = cell.row < this.frozenPanes.rows;
+    const isFrozenCol = cell.col < this.frozenPanes.cols;
+
+    // A cell in both frozen axes is always visible. A cell in only one
+    // frozen axis can still need scrolling along the other axis.
+    if (isFrozenRow && isFrozenCol) return null;
 
     const cellRect = this.cellToDocument(sheetId, cell);
 
@@ -1057,18 +1061,24 @@ export class CoordinateSystemImpl implements CoordinateSystem {
     let newScrollTop = this.viewport.scrollTop;
     let newScrollLeft = this.viewport.scrollLeft;
 
-    // Check vertical
-    if (cellTop < visibleTop) {
-      newScrollTop = Math.max(0, cellTop - padding);
-    } else if (cellBottom > visibleBottom) {
-      newScrollTop = cellBottom - scrollableHeight + padding;
+    // Check vertical. Frozen rows are already fixed vertically, but may
+    // still require horizontal scrolling.
+    if (!isFrozenRow) {
+      if (cellTop < visibleTop) {
+        newScrollTop = Math.max(0, cellTop - padding);
+      } else if (cellBottom > visibleBottom) {
+        newScrollTop = cellBottom - scrollableHeight + padding;
+      }
     }
 
-    // Check horizontal
-    if (cellLeft < visibleLeft) {
-      newScrollLeft = Math.max(0, cellLeft - padding);
-    } else if (cellRight > visibleRight) {
-      newScrollLeft = cellRight - scrollableWidth + padding;
+    // Check horizontal. Frozen columns are already fixed horizontally, but
+    // may still require vertical scrolling.
+    if (!isFrozenCol) {
+      if (cellLeft < visibleLeft) {
+        newScrollLeft = Math.max(0, cellLeft - padding);
+      } else if (cellRight > visibleRight) {
+        newScrollLeft = cellRight - scrollableWidth + padding;
+      }
     }
 
     // Clamp to bounds

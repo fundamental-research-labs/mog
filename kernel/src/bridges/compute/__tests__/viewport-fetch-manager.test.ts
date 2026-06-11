@@ -270,6 +270,53 @@ describe('ViewportFetchManager', () => {
       expect(args.endCol).toBeGreaterThanOrEqual(bounds.endCol);
     });
 
+    it('does not send negative degenerate frozen-corner bounds to Rust', async () => {
+      const transport = makeMockTransport();
+      const { manager } = createManager(transport);
+
+      await manager.refresh(
+        'frozen-corner:sheet-1',
+        'sheet-1',
+        {
+          startRow: 0,
+          startCol: 0,
+          endRow: 1,
+          endCol: -1,
+        },
+        'none',
+      );
+
+      const registerCall = transport.call.mock.calls.find(
+        ([cmd]: [string]) => cmd === 'compute_register_viewport',
+      );
+      expect(registerCall).toBeDefined();
+      const [, registerArgs] = registerCall!;
+      expect(registerArgs).toEqual(
+        expect.objectContaining({
+          viewportId: 'frozen-corner:sheet-1',
+          sheetId: 'sheet-1',
+          startRow: 0,
+          startCol: 0,
+          endRow: 1,
+          endCol: 0,
+        }),
+      );
+
+      const fetchCall = transport.call.mock.calls.find(
+        ([cmd]: [string]) => cmd === 'compute_get_viewport_binary',
+      );
+      expect(fetchCall).toBeDefined();
+      const [, fetchArgs] = fetchCall!;
+      expect(fetchArgs).toEqual(
+        expect.objectContaining({
+          startRow: 0,
+          startCol: 0,
+          endRow: 2,
+          endCol: 1,
+        }),
+      );
+    });
+
     it('re-registers compute viewport on prefetch hit without fetching', async () => {
       const transport = makeMockTransport();
       const { manager } = createManager(transport);
@@ -514,6 +561,55 @@ describe('ViewportFetchManager', () => {
       expect(state.lastVisibleBounds).toEqual(expectedVisibleBounds);
       expect(state.prefetchDirtyState.dirtyRegion).toBeNull();
       expect(state.prefetchDirtyState.staleCells.size).toBe(0);
+    });
+
+    it('normalizes zero-column buffer bounds before force-refresh registration', async () => {
+      const transport = {
+        call: jest.fn(async (cmd: string) => {
+          if (cmd === 'compute_get_viewport_binary') {
+            return makeBuffer(0, 0, 2, 0);
+          }
+          return undefined;
+        }) as any,
+      } as BridgeTransport & { call: jest.Mock };
+      const { manager } = createManager(transport);
+
+      await manager.refresh(
+        'frozen-corner:sheet-1',
+        'sheet-1',
+        {
+          startRow: 0,
+          startCol: 0,
+          endRow: 1,
+          endCol: -1,
+        },
+        'none',
+      );
+      transport.call.mockClear();
+
+      await manager.forceRefreshAllViewports();
+
+      const registerCall = transport.call.mock.calls.find(
+        ([cmd]: [string]) => cmd === 'compute_register_viewport',
+      );
+      expect(registerCall).toBeDefined();
+      const [, registerArgs] = registerCall!;
+      expect(registerArgs).toEqual(
+        expect.objectContaining({
+          viewportId: 'frozen-corner:sheet-1',
+          sheetId: 'sheet-1',
+          startRow: 0,
+          startCol: 0,
+          endRow: 1,
+          endCol: 0,
+        }),
+      );
+      expect(manager.getPerViewportStates().get('frozen-corner:sheet-1')!.prefetchBounds).toEqual({
+        startRow: 0,
+        startCol: 0,
+        endRow: 1,
+        endCol: 0,
+      });
     });
 
     it('fetches registered viewports that have a visible window but no buffer yet', async () => {

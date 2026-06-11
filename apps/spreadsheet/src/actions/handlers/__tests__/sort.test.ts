@@ -7,7 +7,7 @@
  * selection to the contiguous data block before running Sort, and the sort
  * key is the *active cell's* column within the resolved range (clicking C3
  * in A1:D10 sorts by C, not A). Multi-row selections pass through unchanged
- * and never infer headers unless a dialog/user option says so.
+ * but still infer headers when the selected first row has a header signal.
  *
  */
 
@@ -206,7 +206,7 @@ describe('SORT_ASCENDING — current-region auto-expansion', () => {
     });
   });
 
-  test('explicit A2:A6 mixed data selection is headerless even when first item is text', async () => {
+  test('explicit A2:A6 mixed data selection preserves a detected header row', async () => {
     const setup = makeMockDeps({
       selectionRanges: [{ startRow: 1, startCol: 0, endRow: 5, endCol: 0 }],
       activeCell: { row: 1, col: 0 },
@@ -224,7 +224,7 @@ describe('SORT_ASCENDING — current-region auto-expansion', () => {
     expect(rangeArg).toEqual({ startRow: 1, startCol: 0, endRow: 5, endCol: 0 });
     expect(optionsArg).toEqual({
       columns: [{ column: 0, direction: 'asc' }],
-      hasHeaders: false,
+      hasHeaders: true,
     });
   });
 

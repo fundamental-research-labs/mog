@@ -1,14 +1,58 @@
 use crate::snapshot::{Axis, ChangeKind, GroupingChange, MutationResult};
 use crate::storage::engine::stores::EngineStores;
-use crate::storage::sheet::{dimensions, grouping};
+use crate::storage::sheet::{dimensions, get_meta_for_export, grouping};
 use cell_types::SheetId;
+use compute_document::undo::ORIGIN_USER_EDIT;
+use domain_types::yrs_schema;
 use value_types::ComputeError;
+use yrs::{Origin, Transact};
 
 fn group_bounds(groups: &[grouping::GroupDefinition]) -> Option<(u32, u32)> {
     groups.iter().fold(None, |acc, group| match acc {
         Some((start, end)) => Some((start.min(group.start), end.max(group.end))),
         None => Some((group.start, group.end)),
     })
+}
+
+fn unhide_expanded_column_group(
+    stores: &mut EngineStores,
+    sheet_id: &SheetId,
+    start: u32,
+    end: u32,
+) {
+    clear_expanded_column_group_collapsed_markers(stores, sheet_id, start, end);
+
+    let cols: Vec<u32> = (start..=end).collect();
+    dimensions::unhide_columns(
+        stores.storage.doc(),
+        stores.storage.sheets(),
+        sheet_id,
+        &cols,
+    );
+}
+
+fn clear_expanded_column_group_collapsed_markers(
+    stores: &mut EngineStores,
+    sheet_id: &SheetId,
+    start: u32,
+    end: u32,
+) {
+    let mut txn = stores
+        .storage
+        .doc()
+        .transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
+    let Some(meta) = get_meta_for_export(&txn, stores.storage.sheets(), sheet_id) else {
+        return;
+    };
+
+    let mut collapsed_cols =
+        yrs_schema::helpers::read_json_vec::<_, u32>(&meta, &txn, "colCollapsed");
+    let marker_end = end.saturating_add(1);
+    let original_len = collapsed_cols.len();
+    collapsed_cols.retain(|col| *col < start || *col > marker_end);
+    if collapsed_cols.len() != original_len {
+        yrs_schema::helpers::write_json_vec(&meta, &mut txn, "colCollapsed", &collapsed_cols);
+    }
 }
 
 fn row_containing_group_bounds(
@@ -314,7 +358,12 @@ pub(in crate::storage::engine) fn set_group_collapsed(
     if let Some((axis, start, end)) = affected {
         match axis {
             grouping::GroupAxis::Row => sync_row_layout_range(stores, sheet_id, start, end),
-            grouping::GroupAxis::Column => sync_column_layout_range(stores, sheet_id, start, end),
+            grouping::GroupAxis::Column => {
+                if !collapsed {
+                    unhide_expanded_column_group(stores, sheet_id, start, end);
+                }
+                sync_column_layout_range(stores, sheet_id, start, end);
+            }
         }
     }
     let mut result = MutationResult::empty();
@@ -353,7 +402,12 @@ pub(in crate::storage::engine) fn toggle_group_collapsed(
     if let Some((axis, start, end)) = affected {
         match axis {
             grouping::GroupAxis::Row => sync_row_layout_range(stores, sheet_id, start, end),
-            grouping::GroupAxis::Column => sync_column_layout_range(stores, sheet_id, start, end),
+            grouping::GroupAxis::Column => {
+                if matches!(toggled, Some(false)) {
+                    unhide_expanded_column_group(stores, sheet_id, start, end);
+                }
+                sync_column_layout_range(stores, sheet_id, start, end);
+            }
         }
     }
     let mut result = MutationResult::empty();
@@ -381,6 +435,7 @@ pub(in crate::storage::engine) fn expand_all_groups(
         sync_row_layout_range(stores, sheet_id, start, end);
     }
     if let Some((start, end)) = col_bounds {
+        unhide_expanded_column_group(stores, sheet_id, start, end);
         sync_column_layout_range(stores, sheet_id, start, end);
     }
     let mut result = MutationResult::empty();
@@ -641,7 +696,12 @@ pub(in crate::storage::engine) fn set_level_collapsed(
     if let Some((start, end)) = affected {
         match group_axis {
             grouping::GroupAxis::Row => sync_row_layout_range(stores, sheet_id, start, end),
-            grouping::GroupAxis::Column => sync_column_layout_range(stores, sheet_id, start, end),
+            grouping::GroupAxis::Column => {
+                if !collapsed {
+                    unhide_expanded_column_group(stores, sheet_id, start, end);
+                }
+                sync_column_layout_range(stores, sheet_id, start, end);
+            }
         }
     }
     Ok(MutationResult::empty())

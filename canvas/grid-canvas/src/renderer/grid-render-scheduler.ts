@@ -27,6 +27,13 @@ import type { ViewportPositionIndex } from '@mog/grid-renderer';
 /** Layer IDs that need invalidation for cell content/format changes */
 const CELL_LAYERS: readonly LayerName[] = ['cells'];
 
+/**
+ * Large structural edits can emit hundreds of thousands of cell patches.
+ * Resolving each to a precise dirty rect blocks the main thread longer than a
+ * full repaint and the accumulator coalesces large rect sets anyway.
+ */
+const MAX_PRECISE_DIRTY_CELLS = 10_000;
+
 /** Layer IDs for geometry changes (row/col dimensions) */
 const GEOMETRY_LAYERS: readonly LayerName[] = [
   'cells',
@@ -62,18 +69,31 @@ export class GridRenderScheduler implements RenderScheduler {
     this._cellExpander = expander;
   }
 
+  private markCellLayersFullDirty(): void {
+    for (const layerId of CELL_LAYERS) {
+      this.engine.markDirty(layerId);
+    }
+    this.engine.requestFrame();
+  }
+
   markCellsDirty(cells?: { row: number; col: number }[]): void {
     if (!cells || cells.length === 0 || !this._positionIndex) {
       // No cells specified or no position index — fall back to full dirty
-      for (const layerId of CELL_LAYERS) {
-        this.engine.markDirty(layerId);
-      }
-      this.engine.requestFrame();
+      this.markCellLayersFullDirty();
+      return;
+    }
+
+    if (cells.length > MAX_PRECISE_DIRTY_CELLS) {
+      this.markCellLayersFullDirty();
       return;
     }
 
     // Step 1: dependency expansion (render-derived)
     const expandedCells = this._cellExpander ? this._cellExpander.expandDirtyCells(cells) : cells;
+    if (expandedCells.length > MAX_PRECISE_DIRTY_CELLS) {
+      this.markCellLayersFullDirty();
+      return;
+    }
 
     // Step 2: coordinate resolution (data-derived)
     const pi = this._positionIndex;

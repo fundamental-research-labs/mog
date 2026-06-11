@@ -16,15 +16,29 @@ interface MockSetup {
     getState: jest.Mock;
     getSettings: jest.Mock;
   };
+  layout: {
+    hideRows: jest.Mock;
+    hideColumns: jest.Mock;
+    unhideRows: jest.Mock;
+    unhideColumns: jest.Mock;
+  };
   workbook: {
     setPendingUndoDescription: jest.Mock;
   };
+}
+
+interface MockSelectionOptions {
+  activeCell?: { row: number; col: number };
+  anchor?: { row: number; col: number } | null;
+  anchorCol?: number | null;
+  anchorRow?: number | null;
 }
 
 function createMockDeps(
   ranges: CellRange[],
   outlineState = { rowGroups: [], columnGroups: [] },
   outlineSettings = { summaryRowsBelow: true, summaryColumnsRight: true },
+  selectionOptions: MockSelectionOptions = {},
 ): MockSetup {
   const activeSheetId = sheetId('sheet1');
   const outline = {
@@ -36,7 +50,13 @@ function createMockDeps(
     getState: jest.fn().mockResolvedValue(outlineState),
     getSettings: jest.fn().mockResolvedValue(outlineSettings),
   };
-  const worksheet = { outline };
+  const layout = {
+    hideRows: jest.fn().mockResolvedValue(undefined),
+    hideColumns: jest.fn().mockResolvedValue(undefined),
+    unhideRows: jest.fn().mockResolvedValue(undefined),
+    unhideColumns: jest.fn().mockResolvedValue(undefined),
+  };
+  const worksheet = { outline, layout };
   const workbook = {
     getActiveSheetId: jest.fn().mockReturnValue(activeSheetId),
     getSheetById: jest.fn().mockReturnValue(worksheet),
@@ -48,11 +68,15 @@ function createMockDeps(
     accessors: {
       selection: {
         getRanges: jest.fn().mockReturnValue(ranges),
+        getActiveCell: jest.fn().mockReturnValue(selectionOptions.activeCell ?? { row: 0, col: 0 }),
+        getAnchor: jest.fn().mockReturnValue(selectionOptions.anchor ?? null),
+        getAnchorCol: jest.fn().mockReturnValue(selectionOptions.anchorCol ?? null),
+        getAnchorRow: jest.fn().mockReturnValue(selectionOptions.anchorRow ?? null),
       },
     },
   } as unknown as ActionDependencies;
 
-  return { deps, outline, workbook };
+  return { deps, outline, layout, workbook };
 }
 
 function fullColumnRange(startCol: number, endCol: number): CellRange {
@@ -117,6 +141,38 @@ describe('Workbook GROUP/UNGROUP axis inference', () => {
     expect(workbook.setPendingUndoDescription).toHaveBeenCalledWith('Ungroup rows 2-4');
   });
 
+  it('ungroups the containing row group for a single full-row selection', async () => {
+    const { deps, outline, workbook } = createMockDeps([fullRowRange(3, 3)], {
+      rowGroups: [{ id: 'rows-2-4', start: 1, end: 3, level: 1, collapsed: false }],
+      columnGroups: [],
+    });
+
+    const result = await UNGROUP(deps);
+
+    expect(result.handled).toBe(true);
+    expect(outline.getState).toHaveBeenCalledTimes(1);
+    expect(outline.ungroupRows).toHaveBeenCalledTimes(1);
+    expect(outline.ungroupRows).toHaveBeenCalledWith(1, 3);
+    expect(outline.ungroupColumns).not.toHaveBeenCalled();
+    expect(workbook.setPendingUndoDescription).toHaveBeenCalledWith('Ungroup rows 2-4');
+  });
+
+  it('ungroups the containing column group for a single full-column selection', async () => {
+    const { deps, outline, workbook } = createMockDeps([fullColumnRange(4, 4)], {
+      rowGroups: [],
+      columnGroups: [{ id: 'cols-3-5', start: 2, end: 4, level: 1, collapsed: false }],
+    });
+
+    const result = await UNGROUP(deps);
+
+    expect(result.handled).toBe(true);
+    expect(outline.getState).toHaveBeenCalledTimes(1);
+    expect(outline.ungroupColumns).toHaveBeenCalledTimes(1);
+    expect(outline.ungroupColumns).toHaveBeenCalledWith(2, 4);
+    expect(outline.ungroupRows).not.toHaveBeenCalled();
+    expect(workbook.setPendingUndoDescription).toHaveBeenCalledWith('Ungroup columns 3-5');
+  });
+
   it('routes full-row selections to row grouping', async () => {
     const { deps, outline, workbook } = createMockDeps([fullRowRange(3, 5)]);
 
@@ -127,6 +183,41 @@ describe('Workbook GROUP/UNGROUP axis inference', () => {
     expect(outline.groupRows).toHaveBeenCalledWith(3, 5);
     expect(outline.groupColumns).not.toHaveBeenCalled();
     expect(workbook.setPendingUndoDescription).toHaveBeenCalledWith('Group rows 4-6');
+  });
+
+  it('recovers a collapsed full-row GROUP selection from the preserved anchor', async () => {
+    const { deps, outline, workbook } = createMockDeps(
+      [fullRowRange(5, 5)],
+      { rowGroups: [], columnGroups: [] },
+      { summaryRowsBelow: true, summaryColumnsRight: true },
+      { activeCell: { row: 5, col: 0 }, anchor: { row: 3, col: 0 } },
+    );
+
+    const result = await GROUP(deps);
+
+    expect(result.handled).toBe(true);
+    expect(outline.groupRows).toHaveBeenCalledTimes(1);
+    expect(outline.groupRows).toHaveBeenCalledWith(3, 5);
+    expect(workbook.setPendingUndoDescription).toHaveBeenCalledWith('Group rows 4-6');
+  });
+
+  it('recovers a collapsed full-row UNGROUP selection from the preserved anchor', async () => {
+    const { deps, outline, workbook } = createMockDeps(
+      [fullRowRange(5, 5)],
+      {
+        rowGroups: [{ id: 'rows-4-6', start: 3, end: 5, level: 1, collapsed: false }],
+        columnGroups: [],
+      },
+      { summaryRowsBelow: true, summaryColumnsRight: true },
+      { activeCell: { row: 5, col: 0 }, anchor: { row: 3, col: 0 } },
+    );
+
+    const result = await UNGROUP(deps);
+
+    expect(result.handled).toBe(true);
+    expect(outline.ungroupRows).toHaveBeenCalledTimes(1);
+    expect(outline.ungroupRows).toHaveBeenCalledWith(3, 5);
+    expect(workbook.setPendingUndoDescription).toHaveBeenCalledWith('Ungroup rows 4-6');
   });
 
   it('keeps ordinary 2D selections on the existing row-first route', async () => {
@@ -229,6 +320,119 @@ describe('Workbook SHOW_DETAIL/HIDE_DETAIL summary selections', () => {
     expect(outline.toggleCollapsed).toHaveBeenCalledWith('cols-b-d');
   });
 
+  it('expands a collapsed column group from the visible leading outline context', async () => {
+    const range: CellRange = { startRow: 20, startCol: 13, endRow: 20, endCol: 13 };
+    const { deps, outline } = createMockDeps([range], {
+      rowGroups: [],
+      columnGroups: [
+        { id: 'cols-l', start: 11, end: 11, level: 1, collapsed: false },
+        { id: 'cols-p-aa', start: 15, end: 26, level: 1, collapsed: true },
+      ],
+    });
+
+    const result = await SHOW_DETAIL(deps);
+
+    expect(result.handled).toBe(true);
+    expect(outline.toggleCollapsed).toHaveBeenCalledTimes(1);
+    expect(outline.toggleCollapsed).toHaveBeenCalledWith('cols-p-aa');
+  });
+
+  it('expands an imported collapsed-on-member column group from the adjacent column on the left', async () => {
+    const range: CellRange = { startRow: 12, startCol: 14, endRow: 12, endCol: 14 };
+    const { deps, outline } = createMockDeps([range], {
+      rowGroups: [],
+      columnGroups: [
+        {
+          id: 'kewpie-fiscal-cols',
+          start: 15,
+          end: 26,
+          level: 1,
+          collapsed: true,
+          collapsedOnMember: true,
+        },
+      ],
+    });
+
+    const result = await SHOW_DETAIL(deps);
+
+    expect(result.handled).toBe(true);
+    expect(outline.toggleCollapsed).toHaveBeenCalledTimes(1);
+    expect(outline.toggleCollapsed).toHaveBeenCalledWith('kewpie-fiscal-cols');
+  });
+
+  it('expands an imported hidden column group from the adjacent column on the left', async () => {
+    const range: CellRange = { startRow: 12, startCol: 14, endRow: 12, endCol: 14 };
+    const { deps, outline, layout } = createMockDeps([range], {
+      rowGroups: [],
+      columnGroups: [
+        {
+          id: 'kewpie-fiscal-cols',
+          start: 15,
+          end: 26,
+          level: 1,
+          collapsed: true,
+          hidden: true,
+        },
+      ],
+    });
+
+    const result = await SHOW_DETAIL(deps);
+
+    expect(result.handled).toBe(true);
+    expect(outline.toggleCollapsed).toHaveBeenCalledTimes(1);
+    expect(outline.toggleCollapsed).toHaveBeenCalledWith('kewpie-fiscal-cols');
+    expect(layout.unhideColumns).toHaveBeenCalledTimes(1);
+    expect(layout.unhideColumns).toHaveBeenCalledWith(15, 26);
+  });
+
+  it('expands a collapsed column group when the selection overlaps hidden detail columns', async () => {
+    const range: CellRange = { startRow: 2, startCol: 11, endRow: 20, endCol: 27 };
+    const { deps, outline } = createMockDeps([range], {
+      rowGroups: [],
+      columnGroups: [{ id: 'cols-p-aa', start: 15, end: 26, level: 1, collapsed: true }],
+    });
+
+    const result = await SHOW_DETAIL(deps);
+
+    expect(result.handled).toBe(true);
+    expect(outline.toggleCollapsed).toHaveBeenCalledTimes(1);
+    expect(outline.toggleCollapsed).toHaveBeenCalledWith('cols-p-aa');
+  });
+
+  it('does not expand an ordinary collapsed column group from the opposite summary edge', async () => {
+    const range: CellRange = { startRow: 12, startCol: 14, endRow: 12, endCol: 14 };
+    const { deps, outline } = createMockDeps([range], {
+      rowGroups: [],
+      columnGroups: [
+        {
+          id: 'ordinary-fiscal-cols',
+          start: 15,
+          end: 26,
+          level: 1,
+          collapsed: true,
+        },
+      ],
+    });
+
+    const result = await SHOW_DETAIL(deps);
+
+    expect(result.handled).toBe(false);
+    expect(outline.toggleCollapsed).not.toHaveBeenCalled();
+  });
+
+  it('does not expand a distant collapsed column group without an outline context', async () => {
+    const range: CellRange = { startRow: 0, startCol: 2, endRow: 0, endCol: 2 };
+    const { deps, outline } = createMockDeps([range], {
+      rowGroups: [],
+      columnGroups: [{ id: 'cols-p-aa', start: 15, end: 26, level: 1, collapsed: true }],
+    });
+
+    const result = await SHOW_DETAIL(deps);
+
+    expect(result.handled).toBe(false);
+    expect(outline.toggleCollapsed).not.toHaveBeenCalled();
+  });
+
   it('collapses the innermost expanded row group from its adjacent summary row', async () => {
     const range: CellRange = { startRow: 4, startCol: 0, endRow: 4, endCol: 0 };
     const { deps, outline } = createMockDeps([range], {
@@ -244,5 +448,71 @@ describe('Workbook SHOW_DETAIL/HIDE_DETAIL summary selections', () => {
     expect(result.handled).toBe(true);
     expect(outline.toggleCollapsed).toHaveBeenCalledTimes(1);
     expect(outline.toggleCollapsed).toHaveBeenCalledWith('inner');
+  });
+
+  it('collapses an expanded column group from the visible leading outline context', async () => {
+    const range: CellRange = { startRow: 12, startCol: 14, endRow: 12, endCol: 14 };
+    const { deps, outline } = createMockDeps([range], {
+      rowGroups: [],
+      columnGroups: [
+        { id: 'cols-l', start: 11, end: 11, level: 1, collapsed: false },
+        { id: 'cols-p-aa', start: 15, end: 26, level: 1, collapsed: false },
+      ],
+    });
+
+    const result = await HIDE_DETAIL(deps);
+
+    expect(result.handled).toBe(true);
+    expect(outline.toggleCollapsed).toHaveBeenCalledTimes(1);
+    expect(outline.toggleCollapsed).toHaveBeenCalledWith('cols-p-aa');
+  });
+
+  it('collapses an imported expanded column group from the adjacent column on the left', async () => {
+    const range: CellRange = { startRow: 12, startCol: 14, endRow: 12, endCol: 14 };
+    const { deps, outline } = createMockDeps([range], {
+      rowGroups: [],
+      columnGroups: [
+        {
+          id: 'kewpie-fiscal-cols',
+          start: 15,
+          end: 26,
+          level: 1,
+          collapsed: false,
+          collapsedOnMember: true,
+        },
+      ],
+    });
+
+    const result = await HIDE_DETAIL(deps);
+
+    expect(result.handled).toBe(true);
+    expect(outline.toggleCollapsed).toHaveBeenCalledTimes(1);
+    expect(outline.toggleCollapsed).toHaveBeenCalledWith('kewpie-fiscal-cols');
+  });
+
+  it('collapses an imported hidden column group from the adjacent column on the left', async () => {
+    const range: CellRange = { startRow: 12, startCol: 14, endRow: 12, endCol: 14 };
+    const { deps, outline, layout } = createMockDeps([range], {
+      rowGroups: [],
+      columnGroups: [
+        {
+          id: 'kewpie-fiscal-cols',
+          start: 15,
+          end: 26,
+          level: 1,
+          collapsed: false,
+          hidden: true,
+        },
+      ],
+    });
+
+    const result = await HIDE_DETAIL(deps);
+
+    expect(result.handled).toBe(true);
+    expect(outline.toggleCollapsed).not.toHaveBeenCalled();
+    expect(layout.hideColumns).toHaveBeenCalledTimes(1);
+    expect(layout.hideColumns).toHaveBeenCalledWith([
+      15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26,
+    ]);
   });
 });

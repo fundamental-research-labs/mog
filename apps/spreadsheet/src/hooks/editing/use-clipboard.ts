@@ -98,6 +98,7 @@ function isOurClipboardData(
   clipboardState: ClipboardState,
   clipboardData: ClipboardData | null,
   systemText: string,
+  hasExternalSystemPayload = normalizeClipboardSignature(systemText) !== '',
 ): boolean {
   const internalSignature = clipboardData?.textSignature
     ? normalizeClipboardSignature(clipboardData.textSignature)
@@ -109,7 +110,8 @@ function isOurClipboardData(
     clipboardState.context.isStale !== true;
 
   return (
-    (internalSignature === systemSignature && systemSignature !== '') || hasFreshInternalClipboard
+    (internalSignature === systemSignature && systemSignature !== '') ||
+    (!hasExternalSystemPayload && hasFreshInternalClipboard)
   );
 }
 
@@ -1197,8 +1199,14 @@ export function useClipboardEvents(options: UseClipboardEventsOptions): UseClipb
         const activeCell = selectionSnapshot.activeCell;
         const targetRange = cloneRange(selectionSnapshot.ranges[0]);
 
-        // Get system clipboard text for signature comparison
+        // Get system clipboard payload for signature comparison
         const systemText = event.clipboardData?.getData('text/plain') ?? '';
+        const html = event.clipboardData?.getData('text/html') ?? '';
+        const files = event.clipboardData?.files;
+        const hasExternalSystemPayload =
+          normalizeClipboardSignature(systemText) !== '' ||
+          html !== '' ||
+          Boolean(files && Array.from(files).some((file) => file.type.startsWith('image/')));
 
         // Actor Access Layer: Point-in-time read (similar to action handler pattern)
         // This is inside an event handler callback, not a reactive subscription.
@@ -1209,7 +1217,12 @@ export function useClipboardEvents(options: UseClipboardEventsOptions): UseClipb
         // Compare system clipboard with our text signature to detect external copies
         // - If they match: user is pasting our copy → use rich internal data (formulas, formats)
         // - If they differ: user copied from another app → parse external clipboard
-        const isOurClipboard = isOurClipboardData(clipboardState, clipboardData, systemText);
+        const isOurClipboard = isOurClipboardData(
+          clipboardState,
+          clipboardData,
+          systemText,
+          hasExternalSystemPayload,
+        );
 
         if (clipboardData && isOurClipboard) {
           // System clipboard matches what we wrote - use rich internal data
@@ -1244,7 +1257,6 @@ export function useClipboardEvents(options: UseClipboardEventsOptions): UseClipb
         // System clipboard differs from our signature - user copied from external app
         // Use the text we already retrieved for signature comparison
         let text = systemText;
-        const html = event.clipboardData?.getData('text/html');
 
         // If no text from event, try navigator.clipboard
         if (!text) {
@@ -1281,7 +1293,6 @@ export function useClipboardEvents(options: UseClipboardEventsOptions): UseClipb
         // Image-only paste: clipboardData has image files but no cell text/HTML.
         // Routing priority matches unifiedPaste (text/HTML wins when both present).
         if (!text && !html) {
-          const files = event.clipboardData?.files;
           if (files && files.length > 0) {
             const imageFile = Array.from(files).find((f) => f.type.startsWith('image/'));
             if (imageFile) {

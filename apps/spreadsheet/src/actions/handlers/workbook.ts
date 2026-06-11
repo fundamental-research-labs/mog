@@ -20,7 +20,12 @@
  *
  */
 
-import type { ActionHandler, ActionResult, AsyncActionHandler } from '@mog-sdk/contracts/actions';
+import type {
+  ActionDependencies,
+  ActionHandler,
+  ActionResult,
+  AsyncActionHandler,
+} from '@mog-sdk/contracts/actions';
 import { MAX_COLS, MAX_ROWS, type CellRange, type SheetId } from '@mog-sdk/contracts/core';
 
 import { handled, notHandled } from './handler-utils';
@@ -37,6 +42,14 @@ interface SelectionBounds {
 }
 
 type GroupingAxis = 'rows' | 'columns';
+
+interface GroupingSelectionSnapshot {
+  ranges: readonly CellRange[];
+  activeCell: { row: number; col: number };
+  anchor: { row: number; col: number } | null;
+  anchorCol: number | null;
+  anchorRow: number | null;
+}
 
 /**
  * Compute bounding box of all selected ranges. Mirrors
@@ -120,6 +133,64 @@ function inferSpanAxis(bounds: SelectionBounds): GroupingAxis | null {
   return null;
 }
 
+function isSingleFullRowRange(range: CellRange): boolean {
+  return range.startRow === range.endRow && hasFullRowIntent(range);
+}
+
+function isSingleFullColumnRange(range: CellRange): boolean {
+  return range.startCol === range.endCol && hasFullColumnIntent(range);
+}
+
+function getGroupingCommandRanges(snapshot: GroupingSelectionSnapshot): readonly CellRange[] {
+  if (snapshot.ranges.length !== 1) return snapshot.ranges;
+
+  const range = snapshot.ranges[0];
+  if (isSingleFullRowRange(range)) {
+    const anchorRow = snapshot.anchorRow ?? snapshot.anchor?.row ?? null;
+    if (anchorRow !== null && anchorRow !== range.startRow) {
+      return [
+        {
+          ...range,
+          startRow: Math.min(anchorRow, snapshot.activeCell.row, range.startRow, range.endRow),
+          endRow: Math.max(anchorRow, snapshot.activeCell.row, range.startRow, range.endRow),
+          startCol: 0,
+          endCol: MAX_COLS - 1,
+          isFullRow: true,
+        },
+      ];
+    }
+  }
+
+  if (isSingleFullColumnRange(range)) {
+    const anchorCol = snapshot.anchorCol ?? snapshot.anchor?.col ?? null;
+    if (anchorCol !== null && anchorCol !== range.startCol) {
+      return [
+        {
+          ...range,
+          startRow: 0,
+          endRow: MAX_ROWS - 1,
+          startCol: Math.min(anchorCol, snapshot.activeCell.col, range.startCol, range.endCol),
+          endCol: Math.max(anchorCol, snapshot.activeCell.col, range.startCol, range.endCol),
+          isFullColumn: true,
+        },
+      ];
+    }
+  }
+
+  return snapshot.ranges;
+}
+
+function getGroupingCommandRangesFromDeps(deps: ActionDependencies): readonly CellRange[] {
+  const selection = deps.accessors.selection;
+  return getGroupingCommandRanges({
+    ranges: selection.getRanges(),
+    activeCell: selection.getActiveCell(),
+    anchor: selection.getAnchor(),
+    anchorCol: selection.getAnchorCol(),
+    anchorRow: selection.getAnchorRow(),
+  });
+}
+
 function findInnermostContainingGroup(
   groups: GroupRecord[],
   start: number,
@@ -162,28 +233,70 @@ function summaryIndex(group: GroupRecord, summaryAfter: boolean): number | null 
   return index >= 0 ? index : null;
 }
 
+function selectionContainsIndex(start: number, end: number, index: number): boolean {
+  return start <= index && end >= index;
+}
+
 function selectionMatchesRowGroupForDetail(
   group: GroupRecord,
   bounds: SelectionBounds,
   settings: OutlineSummarySettings,
+  groups: readonly GroupRecord[] = [group],
 ): boolean {
-  if (group.start <= bounds.startRow && group.end >= bounds.endRow) {
+  if (rangesOverlap(group.start, group.end, bounds.startRow, bounds.endRow)) {
     return true;
   }
   const summary = summaryIndex(group, settings.summaryRowsBelow);
-  return summary !== null && bounds.startRow === summary && bounds.endRow === summary;
+  if (summary !== null && bounds.startRow <= summary && bounds.endRow >= summary) {
+    return true;
+  }
+  const importedMemberSummary = isImportedHiddenGroup(group)
+    ? summaryIndex(group, !settings.summaryRowsBelow)
+    : null;
+  if (
+    importedMemberSummary !== null &&
+    selectionContainsIndex(bounds.startRow, bounds.endRow, importedMemberSummary)
+  ) {
+    return true;
+  }
+  return selectionMatchesAdjacentOutlineContext(
+    group,
+    groups,
+    bounds.startRow,
+    bounds.endRow,
+    settings.summaryRowsBelow,
+  );
 }
 
 function selectionMatchesColumnGroupForDetail(
   group: GroupRecord,
   bounds: SelectionBounds,
   settings: OutlineSummarySettings,
+  groups: readonly GroupRecord[] = [group],
 ): boolean {
-  if (group.start <= bounds.startCol && group.end >= bounds.endCol) {
+  if (rangesOverlap(group.start, group.end, bounds.startCol, bounds.endCol)) {
     return true;
   }
   const summary = summaryIndex(group, settings.summaryColumnsRight);
-  return summary !== null && bounds.startCol === summary && bounds.endCol === summary;
+  if (summary !== null && bounds.startCol <= summary && bounds.endCol >= summary) {
+    return true;
+  }
+  const importedMemberSummary = isImportedHiddenGroup(group)
+    ? summaryIndex(group, !settings.summaryColumnsRight)
+    : null;
+  if (
+    importedMemberSummary !== null &&
+    selectionContainsIndex(bounds.startCol, bounds.endCol, importedMemberSummary)
+  ) {
+    return true;
+  }
+  return selectionMatchesAdjacentOutlineContext(
+    group,
+    groups,
+    bounds.startCol,
+    bounds.endCol,
+    settings.summaryColumnsRight,
+  );
 }
 
 /** Minimal shape of `GroupDefinition` used by the show/hide detail iterators. */
@@ -193,6 +306,76 @@ interface GroupRecord {
   end: number;
   level: number;
   collapsed: boolean;
+  hidden?: boolean;
+  collapsedOnMember?: boolean;
+}
+
+function rangesOverlap(
+  leftStart: number,
+  leftEnd: number,
+  rightStart: number,
+  rightEnd: number,
+): boolean {
+  return leftStart <= rightEnd && rightStart <= leftEnd;
+}
+
+function selectionMatchesAdjacentOutlineContext(
+  group: GroupRecord,
+  groups: readonly GroupRecord[],
+  selectionStart: number,
+  selectionEnd: number,
+  summaryAfter: boolean,
+): boolean {
+  const sameLevelGroups = groups
+    .filter((candidate) => candidate.level === group.level)
+    .sort((a, b) => a.start - b.start || a.end - b.end);
+  const groupIndex = sameLevelGroups.findIndex((candidate) => candidate.id === group.id);
+  if (groupIndex === -1) return false;
+
+  if (summaryAfter) {
+    const previous = sameLevelGroups[groupIndex - 1];
+    if (!previous) return false;
+    return selectionStart >= previous.end + 1 && selectionEnd < group.start;
+  }
+
+  const next = sameLevelGroups[groupIndex + 1];
+  if (!next) return false;
+  return selectionStart > group.end && selectionEnd <= next.start - 1;
+}
+
+function isImportedHiddenGroup(group: GroupRecord): boolean {
+  return group.collapsedOnMember === true || group.hidden === true;
+}
+
+function detailIndexes(group: GroupRecord): number[] {
+  return Array.from(
+    { length: group.end - group.start + 1 },
+    (_value, index) => group.start + index,
+  );
+}
+
+async function setImportedDetailVisibility(
+  ws: import('@mog-sdk/contracts/api').WorksheetWithInternals,
+  group: GroupRecord,
+  axis: GroupingAxis,
+  visible: boolean,
+): Promise<void> {
+  if (group.hidden !== true) return;
+
+  if (axis === 'rows') {
+    if (visible) {
+      await ws.layout.unhideRows(group.start, group.end);
+    } else {
+      await ws.layout.hideRows(detailIndexes(group));
+    }
+    return;
+  }
+
+  if (visible) {
+    await ws.layout.unhideColumns(group.start, group.end);
+  } else {
+    await ws.layout.hideColumns(detailIndexes(group));
+  }
 }
 
 // =============================================================================
@@ -276,10 +459,9 @@ export const DELETE_SHEET: AsyncActionHandler = async (deps) => {
 // Grouping Actions
 //
 // Ported from apps/spreadsheet/src/hooks/data/use-grouping-actions.ts:269-443.
-// Selection bounds come from `deps.accessors.selection.getRanges()` (the
-// same selection accessor every other handler uses), NOT
-// `coordinator.grid.getSelectionSnapshot`; keeping `coordinator?: unknown`
-// untouched preserves the current handler contract.
+// Selection bounds come from actor accessors at action time. Header selections
+// can visually collapse while focus moves through ribbon popovers, so grouping
+// commands recover row/column spans from the preserved selection anchor.
 // =============================================================================
 
 /**
@@ -290,7 +472,7 @@ export const DELETE_SHEET: AsyncActionHandler = async (deps) => {
  */
 export const GROUP: AsyncActionHandler = async (deps) => {
   const { workbook: wb } = deps;
-  const ranges = deps.accessors.selection.getRanges();
+  const ranges = getGroupingCommandRangesFromDeps(deps);
   const bounds = computeSelectionBounds(ranges);
   if (!bounds) return notHandled('disabled');
 
@@ -319,7 +501,7 @@ export const GROUP: AsyncActionHandler = async (deps) => {
  */
 export const UNGROUP: AsyncActionHandler = async (deps) => {
   const { workbook: wb } = deps;
-  const ranges = deps.accessors.selection.getRanges();
+  const ranges = getGroupingCommandRangesFromDeps(deps);
   const bounds = computeSelectionBounds(ranges);
   if (!bounds) return notHandled('disabled');
 
@@ -327,11 +509,39 @@ export const UNGROUP: AsyncActionHandler = async (deps) => {
 
   const ws = wb.getSheetById(wb.getActiveSheetId());
   if (axis === 'rows') {
+    if (bounds.startRow === bounds.endRow) {
+      const state = await ws.outline.getState();
+      const rowGroup = findInnermostContainingGroup(
+        state.rowGroups as GroupRecord[],
+        bounds.startRow,
+        bounds.endRow,
+      );
+      if (rowGroup) {
+        wb.setPendingUndoDescription(`Ungroup rows ${rowGroup.start + 1}-${rowGroup.end + 1}`);
+        await ws.outline.ungroupRows(rowGroup.start, rowGroup.end);
+        return handled();
+      }
+    }
     wb.setPendingUndoDescription(`Ungroup rows ${bounds.startRow + 1}-${bounds.endRow + 1}`);
     await ws.outline.ungroupRows(bounds.startRow, bounds.endRow);
     return handled();
   }
   if (axis === 'columns') {
+    if (bounds.startCol === bounds.endCol) {
+      const state = await ws.outline.getState();
+      const columnGroup = findInnermostContainingGroup(
+        state.columnGroups as GroupRecord[],
+        bounds.startCol,
+        bounds.endCol,
+      );
+      if (columnGroup) {
+        wb.setPendingUndoDescription(
+          `Ungroup columns ${columnGroup.start + 1}-${columnGroup.end + 1}`,
+        );
+        await ws.outline.ungroupColumns(columnGroup.start, columnGroup.end);
+        return handled();
+      }
+    }
     wb.setPendingUndoDescription(`Ungroup columns ${bounds.startCol + 1}-${bounds.endCol + 1}`);
     await ws.outline.ungroupColumns(bounds.startCol, bounds.endCol);
     return handled();
@@ -370,7 +580,7 @@ export const UNGROUP: AsyncActionHandler = async (deps) => {
  */
 export const SHOW_DETAIL: AsyncActionHandler = async (deps) => {
   const { workbook: wb } = deps;
-  const bounds = computeSelectionBounds(deps.accessors.selection.getRanges());
+  const bounds = computeSelectionBounds(getGroupingCommandRangesFromDeps(deps));
   if (!bounds) return notHandled('disabled');
 
   const ws = wb.getSheetById(wb.getActiveSheetId());
@@ -381,14 +591,19 @@ export const SHOW_DETAIL: AsyncActionHandler = async (deps) => {
 
   let toggled = false;
   for (const group of rowGroups) {
-    if (group.collapsed && selectionMatchesRowGroupForDetail(group, bounds, settings)) {
+    if (group.collapsed && selectionMatchesRowGroupForDetail(group, bounds, settings, rowGroups)) {
       await ws.outline.toggleCollapsed(group.id);
+      await setImportedDetailVisibility(ws, group, 'rows', true);
       toggled = true;
     }
   }
   for (const group of columnGroups) {
-    if (group.collapsed && selectionMatchesColumnGroupForDetail(group, bounds, settings)) {
+    if (
+      group.collapsed &&
+      selectionMatchesColumnGroupForDetail(group, bounds, settings, columnGroups)
+    ) {
       await ws.outline.toggleCollapsed(group.id);
+      await setImportedDetailVisibility(ws, group, 'columns', true);
       toggled = true;
     }
   }
@@ -402,7 +617,7 @@ export const SHOW_DETAIL: AsyncActionHandler = async (deps) => {
  */
 export const HIDE_DETAIL: AsyncActionHandler = async (deps) => {
   const { workbook: wb } = deps;
-  const bounds = computeSelectionBounds(deps.accessors.selection.getRanges());
+  const bounds = computeSelectionBounds(getGroupingCommandRangesFromDeps(deps));
   if (!bounds) return notHandled('disabled');
 
   const ws = wb.getSheetById(wb.getActiveSheetId());
@@ -413,21 +628,36 @@ export const HIDE_DETAIL: AsyncActionHandler = async (deps) => {
 
   // Find the innermost expanded row group containing the selection.
   const rowGroupsContaining = rowGroups
-    .filter((g) => !g.collapsed && selectionMatchesRowGroupForDetail(g, bounds, settings))
+    .filter(
+      (g) => !g.collapsed && selectionMatchesRowGroupForDetail(g, bounds, settings, rowGroups),
+    )
     .sort((a, b) => b.level - a.level);
 
   let toggled = false;
   if (rowGroupsContaining.length > 0) {
-    await ws.outline.toggleCollapsed(rowGroupsContaining[0].id);
+    const group = rowGroupsContaining[0];
+    if (group.hidden === true) {
+      await setImportedDetailVisibility(ws, group, 'rows', false);
+    } else {
+      await ws.outline.toggleCollapsed(group.id);
+    }
     toggled = true;
   }
 
   const colGroupsContaining = columnGroups
-    .filter((g) => !g.collapsed && selectionMatchesColumnGroupForDetail(g, bounds, settings))
+    .filter(
+      (g) =>
+        !g.collapsed && selectionMatchesColumnGroupForDetail(g, bounds, settings, columnGroups),
+    )
     .sort((a, b) => b.level - a.level);
 
   if (colGroupsContaining.length > 0) {
-    await ws.outline.toggleCollapsed(colGroupsContaining[0].id);
+    const group = colGroupsContaining[0];
+    if (group.hidden === true) {
+      await setImportedDetailVisibility(ws, group, 'columns', false);
+    } else {
+      await ws.outline.toggleCollapsed(group.id);
+    }
     toggled = true;
   }
 

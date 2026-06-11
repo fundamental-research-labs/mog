@@ -72,6 +72,7 @@ import {
   type RendererExecutionResult,
 } from './execution/renderer-execution';
 import { resolveCellLevelScrollPosition } from './execution/cell-scroll';
+import { resolvePageScrollPosition } from './execution/page-scroll';
 import {
   PageBreakCoordinator,
   type PageBreakHitResult,
@@ -953,23 +954,15 @@ export class RenderSystem implements IRenderSystem {
     const visibleRange = viewport.getSnapshot().visibleRange;
     const dimensions = geometry.getPositionDimensions();
     const current = viewport.getScrollPosition();
-    let next = { x: current.x, y: current.y };
-
-    if (axis === 'horizontal') {
-      const visibleCols = Math.max(1, visibleRange.endCol - visibleRange.startCol + 1);
-      const targetStartCol =
-        direction === 'previous'
-          ? Math.max(0, visibleRange.startCol - visibleCols)
-          : Math.min(dimensions.totalCols - 1, visibleRange.startCol + visibleCols);
-      next = { ...next, x: dimensions.getColLeft(targetStartCol) };
-    } else {
-      const visibleRows = Math.max(1, visibleRange.endRow - visibleRange.startRow + 1);
-      const targetStartRow =
-        direction === 'previous'
-          ? Math.max(0, visibleRange.startRow - visibleRows)
-          : Math.min(dimensions.totalRows - 1, visibleRange.startRow + visibleRows);
-      next = { ...next, y: dimensions.getRowTop(targetStartRow) };
-    }
+    const layout = this.rendererExecution?.getViewportLayout() ?? null;
+    const next = resolvePageScrollPosition({
+      axis,
+      direction,
+      visibleRange,
+      dimensions,
+      current,
+      layout,
+    });
 
     const clamped = viewport.clampScrollPosition(next);
     this.rendererExecution?.setScrollPosition(clamped);

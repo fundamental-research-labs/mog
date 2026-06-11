@@ -103,6 +103,38 @@ describe('Selection Context Coordination', () => {
       objectInteractionActor.stop();
       chartActor.stop();
     });
+
+    it('clears object selection when a user SET_SELECTION replaces the idle cell range', async () => {
+      const { selectionActor, objectInteractionActor, chartActor } = createTestActors();
+      const { cleanup } = setupCoordination({
+        selectionActor,
+        objectInteractionActor,
+      });
+
+      objectInteractionActor.send({
+        type: 'SELECT_OBJECT',
+        objectId: 'obj1',
+        shiftKey: false,
+        ctrlKey: false,
+      });
+      await waitForProcessing();
+      expect(objectInteractionActor.getSnapshot().matches('selected')).toBe(true);
+
+      selectionActor.send({
+        type: 'SET_SELECTION',
+        ranges: [{ startRow: 2, startCol: 11, endRow: 20, endCol: 27 }],
+        activeCell: { row: 2, col: 11 },
+      });
+      await waitForProcessing();
+
+      expect(objectInteractionActor.getSnapshot().matches('idle')).toBe(true);
+      expect(objectInteractionActor.getSnapshot().context.selectedIds).toEqual([]);
+
+      cleanup();
+      selectionActor.stop();
+      objectInteractionActor.stop();
+      chartActor.stop();
+    });
   });
 
   describe('Object selection clears other contexts', () => {

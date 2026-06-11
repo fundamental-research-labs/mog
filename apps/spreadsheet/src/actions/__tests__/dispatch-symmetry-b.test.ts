@@ -68,6 +68,7 @@ const EDITING_GROUP_ACTIONS: ActionType[] = [
 /** CellsGroup actions: insert/delete + dimension + visibility. */
 const CELLS_GROUP_ACTIONS: ActionType[] = [
   'INSERT_CELLS_SHIFT_DOWN',
+  'INSERT_CUT_CELLS_SHIFT_DOWN',
   'OPEN_INSERT_CELLS_DIALOG',
   'INSERT_ROW_ABOVE',
   'INSERT_COLUMN_LEFT',

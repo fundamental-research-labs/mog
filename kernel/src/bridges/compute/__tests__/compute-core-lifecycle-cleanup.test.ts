@@ -90,6 +90,30 @@ describe('ComputeCore document-scoped cleanup lifecycle', () => {
     await core.destroy();
   });
 
+  it('normalizes degenerate viewport bounds before registering with Rust', async () => {
+    const transport = {
+      call: jest.fn(() => Promise.resolve(undefined)),
+    };
+    const core = createStartedCore(transport as BridgeTransport);
+
+    await core.registerViewportRegion('frozen-corner:sheet-1', 'sheet-1' as any, {
+      startRow: 0,
+      startCol: 0,
+      endRow: 1,
+      endCol: -1,
+    });
+
+    expect(transport.call).toHaveBeenCalledWith('compute_register_viewport', {
+      docId: 'test-doc',
+      viewportId: 'frozen-corner:sheet-1',
+      sheetId: 'sheet-1',
+      startRow: 0,
+      startCol: 0,
+      endRow: 1,
+      endCol: 0,
+    });
+  });
+
   it('viewport release operations no-op during DESTROYING', async () => {
     const destroyDeferred = deferred<void>();
     const transport = {

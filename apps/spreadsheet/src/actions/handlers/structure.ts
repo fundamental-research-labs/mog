@@ -50,6 +50,7 @@ import {
   getAutofitColumnsForSelection,
   getAutofitRowsForSelection,
 } from '../../systems/grid-editing/features/autofit/selection-targets';
+import { PASTE } from './clipboard-paste';
 
 // =============================================================================
 // Type Helpers
@@ -657,6 +658,45 @@ export const INSERT_CELLS_SHIFT_DOWN: AsyncActionHandler = async (deps) => {
       range.endCol,
       'down',
     ),
+  );
+};
+
+/**
+ * Insert cells for an active cut range, then paste the cut data into the
+ * inserted destination. Mirrors Excel's Home > Insert > Insert Cut Cells route.
+ */
+export const INSERT_CUT_CELLS_SHIFT_DOWN: AsyncActionHandler = async (deps) => {
+  const clipboard = deps.accessors.clipboard;
+  if (!clipboard.hasCut() || !clipboard.getIsCut() || clipboard.isExternalClipboard()) {
+    return notHandled('disabled');
+  }
+
+  const { activeCell, ranges } = getSelectionContext(deps);
+  const range = getRangesOrActiveCell(ranges, activeCell)[0];
+
+  return withProtectionFeedback(deps, () =>
+    deps.workbook.batch('Insert Cut Cells', async () => {
+      const ws = deps.workbook.activeSheet;
+
+      if (range.isFullRow) {
+        await INSERT_ROW_ABOVE(deps);
+      } else if (range.isFullColumn) {
+        await INSERT_COLUMN_LEFT(deps);
+      } else {
+        await ws.structure.insertCellsWithShift(
+          range.startRow,
+          range.startCol,
+          range.endRow,
+          range.endCol,
+          'down',
+        );
+      }
+
+      const pasteResult = await PASTE(deps);
+      if (!pasteResult.handled) {
+        throw new Error(pasteResult.error ?? pasteResult.reason ?? 'Insert Cut Cells paste failed');
+      }
+    }),
   );
 };
 

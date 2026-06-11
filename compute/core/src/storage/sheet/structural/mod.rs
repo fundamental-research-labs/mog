@@ -29,9 +29,11 @@ mod deleted_cells;
 mod removed_ranges;
 
 #[cfg(test)]
+mod hidden_metadata_tests;
+#[cfg(test)]
 mod tests;
 
-use yrs::{Doc, Map, MapRef, Origin, Out, Transact};
+use yrs::{Any, Doc, Map, MapRef, Origin, Out, Transact, TransactionMut};
 
 use crate::identity::GridIndex;
 use crate::mirror::CellMirror;
@@ -40,6 +42,7 @@ use formula_types::StructureChange;
 use value_types::ComputeError;
 
 use compute_document::hex::id_to_hex;
+use compute_document::schema::{KEY_HIDDEN_COLS, KEY_HIDDEN_ROWS};
 use compute_document::undo::ORIGIN_STRUCTURAL;
 
 /// Structural operations on yrs-backed storage.
@@ -51,6 +54,64 @@ use compute_document::undo::ORIGIN_STRUCTURAL;
 /// - yrs document is updated in a single transaction with ORIGIN_STRUCTURAL
 /// - CellMirror is updated to reflect new positions
 pub struct StructuralOps;
+
+fn remap_position_keyed_bool_map(
+    txn: &mut TransactionMut,
+    map: &MapRef,
+    at: u32,
+    count: u32,
+    forward: bool,
+) {
+    if count == 0 {
+        return;
+    }
+
+    let mut removals = Vec::new();
+    let mut insertions = Vec::new();
+    let delete_end = at.saturating_add(count);
+
+    for (key, value) in map.iter(txn) {
+        if !matches!(value, Out::Any(Any::Bool(true))) {
+            continue;
+        }
+        let Ok(pos) = key.parse::<u32>() else {
+            continue;
+        };
+
+        if forward {
+            if pos >= at {
+                removals.push(key.to_string());
+                insertions.push(pos + count);
+            }
+        } else if pos >= at && pos < delete_end {
+            removals.push(key.to_string());
+        } else if pos >= delete_end {
+            removals.push(key.to_string());
+            insertions.push(pos - count);
+        }
+    }
+
+    for key in removals {
+        map.remove(txn, &key);
+    }
+    for pos in insertions {
+        let key = pos.to_string();
+        map.insert(txn, &*key, Any::Bool(true));
+    }
+}
+
+fn remap_hidden_cache(
+    txn: &mut TransactionMut,
+    sheet_map: &MapRef,
+    hidden_key: &str,
+    at: u32,
+    count: u32,
+    forward: bool,
+) {
+    if let Some(Out::YMap(map)) = sheet_map.get(txn, hidden_key) {
+        remap_position_keyed_bool_map(txn, &map, at, count, forward);
+    }
+}
 
 impl StructuralOps {
     /// Insert `count` rows starting at `at_row` in the given sheet.
@@ -77,6 +138,7 @@ impl StructuralOps {
             let mut txn = doc.transact_mut_with(Origin::from(ORIGIN_STRUCTURAL));
             if let Some(Out::YMap(sheet_map)) = sheets_map.get(&txn, &sheet_hex) {
                 axis_order::insert_row_ids(&mut txn, &sheet_map, grid_index, at_row, count);
+                remap_hidden_cache(&mut txn, &sheet_map, KEY_HIDDEN_ROWS, at_row, count, true);
             }
         }
 
@@ -121,6 +183,7 @@ impl StructuralOps {
             let mut txn = doc.transact_mut_with(Origin::from(ORIGIN_STRUCTURAL));
             if let Some(Out::YMap(sheet_map)) = sheets_map.get(&txn, &sheet_hex) {
                 axis_order::remove_rows(&mut txn, &sheet_map, at_row, count);
+                remap_hidden_cache(&mut txn, &sheet_map, KEY_HIDDEN_ROWS, at_row, count, false);
                 deleted_cells::remove_deleted_cells(&mut txn, &sheet_map, &deleted_cell_ids);
             }
         }
@@ -170,6 +233,7 @@ impl StructuralOps {
             let mut txn = doc.transact_mut_with(Origin::from(ORIGIN_STRUCTURAL));
             if let Some(Out::YMap(sheet_map)) = sheets_map.get(&txn, &sheet_hex) {
                 axis_order::insert_col_ids(&mut txn, &sheet_map, grid_index, at_col, count);
+                remap_hidden_cache(&mut txn, &sheet_map, KEY_HIDDEN_COLS, at_col, count, true);
             }
         }
 
@@ -214,6 +278,7 @@ impl StructuralOps {
             let mut txn = doc.transact_mut_with(Origin::from(ORIGIN_STRUCTURAL));
             if let Some(Out::YMap(sheet_map)) = sheets_map.get(&txn, &sheet_hex) {
                 axis_order::remove_cols(&mut txn, &sheet_map, at_col, count);
+                remap_hidden_cache(&mut txn, &sheet_map, KEY_HIDDEN_COLS, at_col, count, false);
                 deleted_cells::remove_deleted_cells(&mut txn, &sheet_map, &deleted_cell_ids);
             }
         }

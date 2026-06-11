@@ -10,6 +10,7 @@ export interface DataCommandTarget {
 interface ResolveDataTargetOptions {
   readonly allowEmptySingleCell: boolean;
   readonly inferHeadersForExplicitMultiRow: boolean;
+  readonly trimBlankLeadingCommandRow: boolean;
 }
 
 const HEADER_BODY_SCAN_ROW_LIMIT = 100;
@@ -39,13 +40,40 @@ export function getRelativeCommandColumn(
   return activeCell.col - range.startCol;
 }
 
+function cellHasNonBlankValue(cell: { value?: unknown } | null | undefined): boolean {
+  const value = cell?.value;
+  if (value == null || value === '') return false;
+  if (typeof value !== 'string') return true;
+  return value.trim() !== '';
+}
+
+function rowHasDataSignal(row: Array<{ value?: unknown } | null | undefined>): boolean {
+  return row.some((cell) => {
+    const value = cell?.value;
+    if (value == null || value === '') return false;
+    if (typeof value !== 'string') return true;
+    return value.trim() !== '' && Number.isFinite(Number(value));
+  });
+}
+
+function rowHasNonBlankValue(row: Array<{ value?: unknown } | null | undefined>): boolean {
+  return row.some(cellHasNonBlankValue);
+}
+
+async function readRangeRow(
+  ws: Worksheet,
+  row: number,
+  startCol: number,
+  width: number,
+): Promise<Array<{ value?: unknown } | null | undefined>> {
+  return Promise.all(Array.from({ length: width }, (_, i) => ws.getCell(row, startCol + i)));
+}
+
 async function rangeLooksLikeHeaderTable(ws: Worksheet, range: CellRange): Promise<boolean> {
   if (range.startRow >= range.endRow) return false;
 
   const width = range.endCol - range.startCol + 1;
-  const firstRow = await Promise.all(
-    Array.from({ length: width }, (_, i) => ws.getCell(range.startRow, range.startCol + i)),
-  );
+  const firstRow = await readRangeRow(ws, range.startRow, range.startCol, width);
 
   const firstRowAllText = firstRow.every((cell) => {
     const value = cell?.value;
@@ -53,23 +81,31 @@ async function rangeLooksLikeHeaderTable(ws: Worksheet, range: CellRange): Promi
   });
   if (!firstRowAllText) return false;
 
-  const rowHasDataSignal = (row: Array<{ value?: unknown } | null | undefined>): boolean =>
-    row.some((cell) => {
-      const value = cell?.value;
-      if (value == null || value === '') return false;
-      if (typeof value !== 'string') return true;
-      return value.trim() !== '' && Number.isFinite(Number(value));
-    });
-
   const scanEndRow = Math.min(range.endRow, range.startRow + HEADER_BODY_SCAN_ROW_LIMIT);
   for (let row = range.startRow + 1; row <= scanEndRow; row++) {
-    const bodyRow = await Promise.all(
-      Array.from({ length: width }, (_, i) => ws.getCell(row, range.startCol + i)),
-    );
+    const bodyRow = await readRangeRow(ws, row, range.startCol, width);
     if (rowHasDataSignal(bodyRow)) return true;
   }
 
   return false;
+}
+
+async function trimBlankLeadingCommandRow(ws: Worksheet, range: CellRange): Promise<CellRange> {
+  if (range.startRow >= range.endRow) return range;
+
+  const width = range.endCol - range.startCol + 1;
+  const firstRow = await readRangeRow(ws, range.startRow, range.startCol, width);
+  if (rowHasNonBlankValue(firstRow)) return range;
+
+  const scanEndRow = Math.min(range.endRow, range.startRow + HEADER_BODY_SCAN_ROW_LIMIT);
+  for (let row = range.startRow + 1; row <= scanEndRow; row++) {
+    const bodyRow = await readRangeRow(ws, row, range.startCol, width);
+    if (rowHasNonBlankValue(bodyRow)) {
+      return { ...range, startRow: range.startRow + 1 };
+    }
+  }
+
+  return range;
 }
 
 export async function resolveDataCommandTarget(
@@ -79,6 +115,7 @@ export async function resolveDataCommandTarget(
   return resolveDataTarget(ws, userRange, {
     allowEmptySingleCell: false,
     inferHeadersForExplicitMultiRow: true,
+    trimBlankLeadingCommandRow: true,
   });
 }
 
@@ -91,10 +128,13 @@ async function resolveDataTarget(
   const isMultiRow = range.startRow !== range.endRow;
 
   if (isMultiRow) {
+    const commandRange = options.trimBlankLeadingCommandRow
+      ? await trimBlankLeadingCommandRow(ws, range)
+      : range;
     return {
-      range,
+      range: commandRange,
       hasHeaders: options.inferHeadersForExplicitMultiRow
-        ? await rangeLooksLikeHeaderTable(ws, range)
+        ? await rangeLooksLikeHeaderTable(ws, commandRange)
         : false,
       wasExpanded: false,
     };
@@ -139,6 +179,7 @@ export async function resolveDataDialogTarget(
   const target = await resolveDataTarget(ws, userRange, {
     allowEmptySingleCell: true,
     inferHeadersForExplicitMultiRow: true,
+    trimBlankLeadingCommandRow: false,
   });
   return (
     target ?? {

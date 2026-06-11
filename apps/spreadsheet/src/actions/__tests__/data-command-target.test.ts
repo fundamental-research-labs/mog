@@ -67,6 +67,23 @@ describe('resolveDataCommandTarget', () => {
     expect(ws.getCurrentRegion).not.toHaveBeenCalled();
   });
 
+  test('explicit multi-row command selection trims a blank leading title row over body values', async () => {
+    const ws = makeWorksheet({
+      values: {
+        '458,6': 167726,
+        '459,6': 57825,
+      },
+    });
+    const range = { startRow: 457, startCol: 6, endRow: 479, endCol: 6 };
+
+    await expect(resolveDataCommandTarget(ws as Worksheet, range)).resolves.toEqual({
+      range: { startRow: 458, startCol: 6, endRow: 479, endCol: 6 },
+      hasHeaders: false,
+      wasExpanded: false,
+    });
+    expect(ws.getCurrentRegion).not.toHaveBeenCalled();
+  });
+
   test('explicit multi-row dialog target infers headers from first row without expanding', async () => {
     const ws = makeWorksheet({
       values: {
@@ -81,6 +98,22 @@ describe('resolveDataCommandTarget', () => {
     await expect(resolveDataDialogTarget(ws as Worksheet, range)).resolves.toEqual({
       range,
       hasHeaders: true,
+      wasExpanded: false,
+    });
+    expect(ws.getCurrentRegion).not.toHaveBeenCalled();
+  });
+
+  test('explicit multi-row dialog target preserves a blank leading row', async () => {
+    const ws = makeWorksheet({
+      values: {
+        '458,6': 167726,
+      },
+    });
+    const range = { startRow: 457, startCol: 6, endRow: 479, endCol: 6 };
+
+    await expect(resolveDataDialogTarget(ws as Worksheet, range)).resolves.toEqual({
+      range,
+      hasHeaders: false,
       wasExpanded: false,
     });
     expect(ws.getCurrentRegion).not.toHaveBeenCalled();

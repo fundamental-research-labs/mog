@@ -70,30 +70,45 @@ import {
   tableStyleIdForCompute,
 } from '../../domain/tables/style-normalization';
 
-type PendingClipboardPasteGlobal = typeof globalThis & {
+type PendingTableReadBarrierGlobal = typeof globalThis & {
   __MOG_PENDING_CLIPBOARD_PASTE__?: Promise<unknown>;
   __MOG_ACTIVE_CLIPBOARD_PASTE__?: Promise<unknown>;
+  __MOG_PENDING_DIALOG_ACTION__?: Promise<unknown>;
 };
 
-async function waitForPendingClipboardPaste(): Promise<void> {
+async function waitForPendingTableReadBarriers(): Promise<void> {
   const deadline = Date.now() + 2000;
 
   while (Date.now() < deadline) {
-    const global = globalThis as PendingClipboardPasteGlobal;
-    const pending = global.__MOG_PENDING_CLIPBOARD_PASTE__;
-    const active = global.__MOG_ACTIVE_CLIPBOARD_PASTE__;
-    if (
-      (!pending || typeof pending.then !== 'function') &&
-      (!active || typeof active.then !== 'function')
-    ) {
+    const global = globalThis as PendingTableReadBarrierGlobal;
+    const pendingActions = [
+      global.__MOG_PENDING_CLIPBOARD_PASTE__,
+      global.__MOG_ACTIVE_CLIPBOARD_PASTE__,
+      global.__MOG_PENDING_DIALOG_ACTION__,
+    ].filter((promise): promise is Promise<unknown> => typeof promise?.then === 'function');
+
+    if (pendingActions.length === 0) {
       return;
     }
 
     await Promise.race([
-      Promise.all([pending?.catch(() => undefined), active?.catch(() => undefined)]),
+      Promise.all(pendingActions.map((promise) => promise.catch(() => undefined))),
       new Promise<void>((resolve) => setTimeout(resolve, 16)),
     ]);
   }
+}
+
+function tableContainsCell(
+  table: { range: { startRow: number; startCol: number; endRow: number; endCol: number } },
+  row: number,
+  col: number,
+): boolean {
+  return (
+    row >= table.range.startRow &&
+    row <= table.range.endRow &&
+    col >= table.range.startCol &&
+    col <= table.range.endCol
+  );
 }
 
 // FIX-001-tables-hotcheck-v1
@@ -373,7 +388,7 @@ export class WorksheetTablesImpl implements WorksheetTables {
   }
 
   async list(): Promise<TableInfo[]> {
-    await waitForPendingClipboardPaste();
+    await waitForPendingTableReadBarriers();
     const tables = await this.ctx.computeBridge.getAllTablesInSheet(this.sheetId);
     return tables.map((t) => bridgeTableToTableInfo(t));
   }
@@ -547,8 +562,13 @@ export class WorksheetTablesImpl implements WorksheetTables {
   }
 
   async getAtCell(a: string | number, b?: number): Promise<TableInfo | null> {
+    await waitForPendingTableReadBarriers();
     const { row, col } = resolveCell(a, b);
-    const table = await this.ctx.computeBridge.getTableAtCell(this.sheetId, row, col);
+    const table =
+      (await this.ctx.computeBridge.getTableAtCell(this.sheetId, row, col)) ??
+      (await this.ctx.computeBridge.getAllTablesInSheet(this.sheetId)).find((candidate) =>
+        tableContainsCell(candidate, row, col),
+      );
     if (!table) return null;
     return bridgeTableToTableInfo(table);
   }

@@ -46,4 +46,11 @@ describe('bridgeTableToTableInfo', () => {
   it('normalizes built-in table style casing and zero padding', () => {
     expect(bridgeTableToTableInfo(makeTable('tablestylemedium04')).style).toBe('TableStyleMedium4');
   });
+
+  it('falls back to the table name when the bridge table omits id', () => {
+    const table = makeTable('TableStyleMedium4') as Table & { id?: string };
+    delete table.id;
+
+    expect(bridgeTableToTableInfo(table as Table).id).toBe('Table1');
+  });
 });

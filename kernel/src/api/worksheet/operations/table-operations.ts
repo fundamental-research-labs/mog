@@ -58,6 +58,7 @@ export function bridgeTableToTableInfo(table: Table): TableInfo {
 
   return {
     ...table,
+    id: table.id ?? table.name,
     displayName: table.displayName || table.name,
     columns: table.columns.map((col) => ({ ...col })),
     range,

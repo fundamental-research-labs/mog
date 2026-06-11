@@ -65,6 +65,14 @@ function createTestCoordinator(): KeyboardCoordinator {
   return new KeyboardCoordinator('windows', TEST_SHORTCUTS);
 }
 
+function withTarget(event: KeyboardEvent, target: EventTarget): KeyboardEvent {
+  Object.defineProperty(event, 'target', {
+    configurable: true,
+    value: target,
+  });
+  return event;
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -204,6 +212,56 @@ describe('KeyboardCoordinator full dispatch', () => {
       expect(result.handled).toBe(true);
       expect(result.action).toBe('CANCEL_EDIT');
       expect(deps.dispatch).toHaveBeenCalledWith('CANCEL_EDIT', expect.any(Object), undefined);
+    });
+
+    it('lets focused chrome text inputs own Enter while editing is active', () => {
+      setTestShortcuts([
+        makeShortcut({
+          id: 'commit-enter-mode',
+          action: 'COMMIT_EDIT',
+          matchBy: 'code',
+          contexts: ['enterMode'],
+          bindings: { default: { code: 'Enter' as any, modifiers: [] } },
+        }),
+      ]);
+
+      const coordinator = createTestCoordinator();
+      const deps = createKeyboardDeps({ editorState: 'editing', isEditMode: false });
+      coordinator.setDependencies(deps);
+
+      const input = document.createElement('input');
+      input.setAttribute('data-testid', 'name-box');
+      const event = withTarget(createKeyEvent('Enter', { key: 'Enter' }), input);
+      const result = coordinator.handleKeyboardEvent(event);
+
+      expect(result.handled).toBe(false);
+      expect(result.reason).toBe('not_found');
+      expect(deps.dispatch).not.toHaveBeenCalled();
+    });
+
+    it('keeps routing Enter from the inline cell editor through spreadsheet editing', () => {
+      setTestShortcuts([
+        makeShortcut({
+          id: 'commit-enter-mode',
+          action: 'COMMIT_EDIT',
+          matchBy: 'code',
+          contexts: ['enterMode'],
+          bindings: { default: { code: 'Enter' as any, modifiers: [] } },
+        }),
+      ]);
+
+      const coordinator = createTestCoordinator();
+      const deps = createKeyboardDeps({ editorState: 'editing', isEditMode: false });
+      coordinator.setDependencies(deps);
+
+      const textarea = document.createElement('textarea');
+      textarea.setAttribute('data-testid', 'inline-cell-editor');
+      const event = withTarget(createKeyEvent('Enter', { key: 'Enter' }), textarea);
+      const result = coordinator.handleKeyboardEvent(event);
+
+      expect(result.handled).toBe(true);
+      expect(result.action).toBe('COMMIT_EDIT');
+      expect(deps.dispatch).toHaveBeenCalledWith('COMMIT_EDIT', expect.any(Object), undefined);
     });
   });
 

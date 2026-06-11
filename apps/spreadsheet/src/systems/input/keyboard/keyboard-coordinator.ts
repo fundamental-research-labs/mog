@@ -41,7 +41,11 @@ import {
 } from '@mog-sdk/kernel/keyboard';
 import { sheetId as toSheetId } from '@mog-sdk/contracts/core';
 import { KEYBOARD_SHORTCUTS, type KeyboardShortcut, type ShortcutContext } from '../../../keyboard';
-import { shouldDeferNavigationKeyToEditableTarget } from '../../shared/utils/focus-utils';
+import {
+  isEditableChromeKeyboardTarget,
+  keyboardEventTargetElement,
+  shouldDeferNavigationKeyToEditableTarget,
+} from '../../shared/utils/focus-utils';
 
 import type { ActionDependencies, ActionType } from '@mog-sdk/contracts/actions';
 import type { ActorAccessors, ActorCommands } from '@mog-sdk/contracts/actors';
@@ -164,34 +168,6 @@ export interface KeyboardHandleResult {
   action?: string;
   /** Reason for not handling, if applicable */
   reason?: 'not_found' | 'not_implemented' | 'wrong_context' | 'browser_defer' | 'ime_composing';
-}
-
-// =============================================================================
-// DOM target helpers
-// =============================================================================
-
-function asElement(target: EventTarget | null): Element | null {
-  if (typeof Element === 'undefined') return null;
-  return target instanceof Element ? target : null;
-}
-
-function isInlineCellEditorTarget(element: Element): boolean {
-  return element.closest('[data-testid="inline-cell-editor"]') !== null;
-}
-
-function isEditableChromeTarget(target: EventTarget | null): boolean {
-  const element = asElement(target);
-  if (!element || isInlineCellEditorTarget(element)) return false;
-
-  if (
-    (typeof HTMLInputElement !== 'undefined' && element instanceof HTMLInputElement) ||
-    (typeof HTMLTextAreaElement !== 'undefined' && element instanceof HTMLTextAreaElement)
-  ) {
-    return true;
-  }
-
-  const htmlElement = element as HTMLElement;
-  return htmlElement.isContentEditable || element.closest('[contenteditable="true"]') !== null;
 }
 
 // =============================================================================
@@ -1063,7 +1039,7 @@ export class KeyboardCoordinator {
       return { handled: false, reason: 'ime_composing' };
     }
 
-    if (isEditableChromeTarget(e.target)) {
+    if (isEditableChromeKeyboardTarget(keyboardEventTargetElement(e))) {
       return { handled: false, reason: 'not_found' };
     }
 

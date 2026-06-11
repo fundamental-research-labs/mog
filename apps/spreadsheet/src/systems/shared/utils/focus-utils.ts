@@ -110,12 +110,16 @@ export function isSpreadsheetEditorKeyboardTarget(target: HTMLElement | null): b
   );
 }
 
+export function isEditableChromeKeyboardTarget(target: HTMLElement | null): boolean {
+  return isEditableKeyboardTarget(target) && !isSpreadsheetEditorKeyboardTarget(target);
+}
+
 export function shouldDeferNavigationKeyToEditableTarget(
   e: KeyboardEvent,
   target = keyboardEventTargetElement(e),
 ): boolean {
   if (!EDITABLE_NAVIGATION_KEYS.has(e.key)) return false;
-  return isEditableKeyboardTarget(target) && !isSpreadsheetEditorKeyboardTarget(target);
+  return isEditableChromeKeyboardTarget(target);
 }
 
 /**

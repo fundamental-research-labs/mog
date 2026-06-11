@@ -73,6 +73,7 @@ import {
 type PendingClipboardPasteGlobal = typeof globalThis & {
   __MOG_PENDING_CLIPBOARD_PASTE__?: Promise<unknown>;
   __MOG_ACTIVE_CLIPBOARD_PASTE__?: Promise<unknown>;
+  __MOG_PENDING_FILTER_HEADER_REFRESH__?: Promise<unknown>;
 };
 
 async function waitForPendingClipboardPaste(): Promise<void> {
@@ -94,6 +95,12 @@ async function waitForPendingClipboardPaste(): Promise<void> {
       new Promise<void>((resolve) => setTimeout(resolve, 16)),
     ]);
   }
+}
+
+async function waitForPendingFilterHeaderRefresh(): Promise<void> {
+  const global = globalThis as PendingClipboardPasteGlobal;
+  await Promise.resolve();
+  await Promise.resolve(global.__MOG_PENDING_FILTER_HEADER_REFRESH__);
 }
 
 // FIX-001-tables-hotcheck-v1
@@ -374,6 +381,7 @@ export class WorksheetTablesImpl implements WorksheetTables {
 
   async list(): Promise<TableInfo[]> {
     await waitForPendingClipboardPaste();
+    await waitForPendingFilterHeaderRefresh();
     const tables = await this.ctx.computeBridge.getAllTablesInSheet(this.sheetId);
     return tables.map((t) => bridgeTableToTableInfo(t));
   }

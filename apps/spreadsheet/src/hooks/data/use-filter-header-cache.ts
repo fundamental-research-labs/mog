@@ -29,6 +29,33 @@ interface UseFilterHeaderCacheOptions {
   onCacheUpdate?: () => void;
 }
 
+type FilterHeaderRefreshGlobal = typeof globalThis & {
+  __MOG_PENDING_FILTER_HEADER_REFRESH__?: Promise<void>;
+};
+
+function getFilterHeaderRefreshGlobal(): FilterHeaderRefreshGlobal {
+  return globalThis as FilterHeaderRefreshGlobal;
+}
+
+function waitForFilterHeaderPaint(): Promise<void> {
+  if (typeof requestAnimationFrame !== 'function') return Promise.resolve();
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => resolve());
+    });
+  });
+}
+
+function trackFilterHeaderRefresh(pending: Promise<void>): void {
+  const global = getFilterHeaderRefreshGlobal();
+  const tracked = pending.finally(() => {
+    if (global.__MOG_PENDING_FILTER_HEADER_REFRESH__ === tracked) {
+      delete global.__MOG_PENDING_FILTER_HEADER_REFRESH__;
+    }
+  });
+  global.__MOG_PENDING_FILTER_HEADER_REFRESH__ = tracked;
+}
+
 /**
  * Hook to create and manage a filter header info cache.
  *
@@ -48,55 +75,55 @@ export function useFilterHeaderCache({
 
   // Refresh cache: fetch filter header DTOs via ONE API, build lookup map
   const refresh = useCallback(async () => {
-    const refreshId = ++refreshIdRef.current;
-    const newCache = new Map<string, FilterHeaderInfo>();
-    const newTableColumnActive = new Map<string, boolean>();
+    const pending = (async () => {
+      const refreshId = ++refreshIdRef.current;
+      const newCache = new Map<string, FilterHeaderInfo>();
+      const newTableColumnActive = new Map<string, boolean>();
 
-    if (!activeSheetId) {
-      if (refreshId !== refreshIdRef.current) return;
-      cacheRef.current = newCache;
-      tableColumnActiveRef.current = newTableColumnActive;
-      onCacheUpdate?.();
-      return;
-    }
-
-    try {
-      const ws = wb.getSheetById(activeSheetId);
-      const filterHeaderInfo = await ws.filters.listHeaderInfo({ scope: 'available' });
-
-      if (filterHeaderInfo.length === 0) {
+      if (!activeSheetId) {
         if (refreshId !== refreshIdRef.current) return;
         cacheRef.current = newCache;
         tableColumnActiveRef.current = newTableColumnActive;
         onCacheUpdate?.();
+        await waitForFilterHeaderPaint();
         return;
       }
 
-      for (const entry of filterHeaderInfo) {
-        if (entry.tableId) {
-          newTableColumnActive.set(
-            `${entry.tableId}:${entry.row}:${entry.col}`,
-            entry.hasActiveFilter,
-          );
-        }
-        if (entry.buttonVisible === false) {
-          continue;
-        }
-        newCache.set(`${entry.row},${entry.col}`, entry);
-      }
-    } catch (error) {
-      recordFilterReadinessError({
-        source: 'headerCache',
-        sheetId: activeSheetId,
-        operation: 'filters.listHeaderInfo',
-        error,
-      });
-    }
+      try {
+        const ws = wb.getSheetById(activeSheetId);
+        const filterHeaderInfo = await ws.filters.listHeaderInfo({ scope: 'available' });
 
-    if (refreshId !== refreshIdRef.current) return;
-    cacheRef.current = newCache;
-    tableColumnActiveRef.current = newTableColumnActive;
-    onCacheUpdate?.();
+        if (filterHeaderInfo.length > 0) {
+          for (const entry of filterHeaderInfo) {
+            if (entry.tableId) {
+              newTableColumnActive.set(
+                `${entry.tableId}:${entry.row}:${entry.col}`,
+                entry.hasActiveFilter,
+              );
+            }
+            if (entry.buttonVisible === false) {
+              continue;
+            }
+            newCache.set(`${entry.row},${entry.col}`, entry);
+          }
+        }
+      } catch (error) {
+        recordFilterReadinessError({
+          source: 'headerCache',
+          sheetId: activeSheetId,
+          operation: 'filters.listHeaderInfo',
+          error,
+        });
+      }
+
+      if (refreshId !== refreshIdRef.current) return;
+      cacheRef.current = newCache;
+      tableColumnActiveRef.current = newTableColumnActive;
+      onCacheUpdate?.();
+      await waitForFilterHeaderPaint();
+    })();
+    trackFilterHeaderRefresh(pending);
+    await pending;
   }, [wb, activeSheetId, onCacheUpdate]);
 
   // Fetch on mount and when sheetId changes

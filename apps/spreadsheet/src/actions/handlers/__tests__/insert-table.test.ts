@@ -168,6 +168,29 @@ describe('INSERT_TABLE — current-region auto-expansion', () => {
     });
   });
 
+  test('multi-cell selection with a blank header cell still seeds hasHeaders=true when header evidence is strong', async () => {
+    const multiRange: CellRange = { startRow: 2, startCol: 11, endRow: 20, endCol: 14 };
+    const setup = makeMockDeps({
+      selectionRanges: [multiRange],
+      cellValues: {
+        '2,11': 'FY11/25',
+        '2,12': 'FY11/25',
+        '2,13': null,
+        '2,14': '1Q',
+        '6,14': 100536,
+      },
+    });
+
+    const result = await INSERT_TABLE(setup.deps);
+
+    expect(result.handled).toBe(true);
+    expect(setup.getCurrentRegion).not.toHaveBeenCalled();
+    expect(setup.openInsertTableDialog).toHaveBeenCalledWith({
+      range: multiRange,
+      hasHeaders: true,
+    });
+  });
+
   test('empty selection returns disabled', async () => {
     const setup = makeMockDeps({
       selectionRanges: [],

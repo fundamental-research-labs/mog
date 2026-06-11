@@ -86,6 +86,45 @@ describe('resolveDataCommandTarget', () => {
     expect(ws.getCurrentRegion).not.toHaveBeenCalled();
   });
 
+  test('explicit multi-row dialog target allows blank header cells when row otherwise looks like headers', async () => {
+    const ws = makeWorksheet({
+      values: {
+        '2,11': 'FY11/25',
+        '2,12': 'FY11/25',
+        '2,13': null,
+        '2,14': '1Q',
+        '6,14': 100536,
+      },
+    });
+    const range = { startRow: 2, startCol: 11, endRow: 20, endCol: 14 };
+
+    await expect(resolveDataDialogTarget(ws as Worksheet, range)).resolves.toEqual({
+      range,
+      hasHeaders: true,
+      wasExpanded: false,
+    });
+    expect(ws.getCurrentRegion).not.toHaveBeenCalled();
+  });
+
+  test('explicit multi-row dialog target does not infer headers from one sparse label in a wide range', async () => {
+    const ws = makeWorksheet({
+      values: {
+        '2,11': 'Label',
+        '3,11': 10,
+        '3,12': 20,
+        '3,13': 30,
+        '3,14': 40,
+      },
+    });
+    const range = { startRow: 2, startCol: 11, endRow: 20, endCol: 14 };
+
+    await expect(resolveDataDialogTarget(ws as Worksheet, range)).resolves.toEqual({
+      range,
+      hasHeaders: false,
+      wasExpanded: false,
+    });
+  });
+
   test('single-cell selection expands through getCurrentRegion', async () => {
     const expanded = { startRow: 0, startCol: 0, endRow: 9, endCol: 3 };
     const ws = makeWorksheet({ currentRegion: expanded });

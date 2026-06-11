@@ -29,7 +29,7 @@ describe('resolveDataCommandTarget', () => {
     expect(ws.getCurrentRegion).not.toHaveBeenCalled();
   });
 
-  test('explicit multi-row command selection is treated as headerless even when first row looks like headers', async () => {
+  test('explicit multi-row command selection infers headers when first row looks like headers', async () => {
     const ws = makeWorksheet({
       values: {
         '0,0': 'Name',
@@ -42,13 +42,30 @@ describe('resolveDataCommandTarget', () => {
 
     await expect(resolveDataCommandTarget(ws as Worksheet, range)).resolves.toEqual({
       range,
+      hasHeaders: true,
+      wasExpanded: false,
+    });
+    expect(ws.getCurrentRegion).not.toHaveBeenCalled();
+  });
+
+  test('explicit single-column mixed-data command selection remains headerless', async () => {
+    const ws = makeWorksheet({
+      values: {
+        '1,0': 'Banana',
+        '2,0': 1,
+      },
+    });
+    const range = { startRow: 1, startCol: 0, endRow: 5, endCol: 0 };
+
+    await expect(resolveDataCommandTarget(ws as Worksheet, range)).resolves.toEqual({
+      range,
       hasHeaders: false,
       wasExpanded: false,
     });
     expect(ws.getCurrentRegion).not.toHaveBeenCalled();
   });
 
-  test('explicit multi-row command selection does not infer headers from later body values', async () => {
+  test('explicit fiscal single-column command selection infers a header before spacer rows', async () => {
     const ws = makeWorksheet({
       values: {
         '2,27': '1Q',
@@ -61,7 +78,7 @@ describe('resolveDataCommandTarget', () => {
 
     await expect(resolveDataCommandTarget(ws as Worksheet, range)).resolves.toEqual({
       range,
-      hasHeaders: false,
+      hasHeaders: true,
       wasExpanded: false,
     });
     expect(ws.getCurrentRegion).not.toHaveBeenCalled();

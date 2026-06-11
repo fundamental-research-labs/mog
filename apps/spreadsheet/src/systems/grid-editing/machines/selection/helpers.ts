@@ -130,9 +130,9 @@ export function computeDirection(anchor: CellCoord, active: CellCoord): Selectio
 }
 
 /**
- * Single source of truth for shift-extend on the pending range. activeCell is
- * always the anchor (Excel parity); the moving edge lives in the range
- * geometry. Returns the partial-context update for the assign() function.
+ * Single source of truth for shift-extend on the pending range. Callers choose
+ * the active cell; keyboard-style extension uses the anchor default, while
+ * mouse shift-click passes the clicked edge.
  *
  * `committedRanges` is intentionally not touched here — non-additive flows
  * keep it empty by invariant; additive flows leave it intact while the

@@ -18,6 +18,11 @@ on:
         required: false
         type: string
         default: ''
+      publish-python:
+        description: 'Build and publish Python wheels to PyPI'
+        required: false
+        type: boolean
+        default: false
 
 concurrency:
   group: publish-sdk
@@ -189,6 +194,7 @@ jobs:
           done
 
       - name: Determine Python SDK version
+        if: ${{ inputs.publish-python == true }}
         id: py-version
         run: |
           VERSION="${{ steps.version.outputs.version }}"
@@ -361,7 +367,7 @@ jobs:
   build-python:
     name: Build Python - ${{ matrix.artifact }}
     needs: [version]
-    if: ${{ inputs.source-run-id == '' }}
+    if: ${{ inputs.publish-python == true && inputs.source-run-id == '' }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -902,10 +908,15 @@ jobs:
       - name: Publish Python wheels to PyPI
         id: py-publish
         run: |
-          if [ -z "${MATURIN_PYPI_TOKEN:-}" ]; then
-            echo "PYPI_TOKEN is not configured; skipping Python publish."
+          if [ "$PUBLISH_PYTHON" != "true" ]; then
+            echo "Python publish disabled by workflow input; skipping."
             echo "published=false" >> "$GITHUB_OUTPUT"
             exit 0
+          fi
+          if [ -z "${MATURIN_PYPI_TOKEN:-}" ]; then
+            echo "::error::publish-python=true but PYPI_TOKEN is not configured."
+            echo "published=false" >> "$GITHUB_OUTPUT"
+            exit 1
           fi
           python -m pip install "maturin==$MATURIN_VERSION"
           PY_VERSION="${{ needs.version.outputs.py-version }}"
@@ -916,6 +927,7 @@ jobs:
           maturin upload --skip-existing artifacts/python-*/mog_sdk-*.whl
           echo "published=true" >> "$GITHUB_OUTPUT"
         env:
+          PUBLISH_PYTHON: ${{ inputs.publish-python || false }}
           MATURIN_PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
 
       - name: Summary
@@ -927,6 +939,8 @@ jobs:
           echo "**TypeScript SDK:** \`@mog-sdk/sdk@${VERSION}\`" >> "$GITHUB_STEP_SUMMARY"
           if [ "${{ steps.py-publish.outputs.published }}" = "true" ]; then
             echo "**Python SDK:** \`mog-sdk==${PY_VERSION}\`" >> "$GITHUB_STEP_SUMMARY"
+          elif [ "$PUBLISH_PYTHON" != "true" ]; then
+            echo "**Python SDK:** skipped (\`publish-python=false\`)" >> "$GITHUB_STEP_SUMMARY"
           else
             echo "**Python SDK:** skipped" >> "$GITHUB_STEP_SUMMARY"
           fi
@@ -955,6 +969,8 @@ jobs:
             echo "### Published PyPI packages" >> "$GITHUB_STEP_SUMMARY"
             echo "- \`mog-sdk==${PY_VERSION}\` (macOS arm64, macOS x64, Linux x64, Linux arm64)" >> "$GITHUB_STEP_SUMMARY"
           fi
+        env:
+          PUBLISH_PYTHON: ${{ inputs.publish-python || false }}
 
   release:
     name: Create GitHub Release

@@ -1,4 +1,4 @@
-import { isGlobalShortcut } from '../focus-utils';
+import { isGlobalShortcut, isNameBoxKeyboardTarget } from '../focus-utils';
 
 function keyboardEvent(init: KeyboardEventInit): KeyboardEvent {
   return new KeyboardEvent('keydown', init);
@@ -22,5 +22,23 @@ describe('focus utils global shortcuts', () => {
     expect(isGlobalShortcut(keyboardEvent({ key: 's', ctrlKey: true, shiftKey: true }))).toBe(
       false,
     );
+  });
+});
+
+describe('focus utils chrome keyboard targets', () => {
+  it('identifies name box targets and descendants', () => {
+    document.body.innerHTML = `
+      <div>
+        <input data-testid="name-box" />
+        <button data-testid="other-control"><span id="child">Other</span></button>
+      </div>
+    `;
+
+    const nameBox = document.querySelector('[data-testid="name-box"]');
+    const otherChild = document.getElementById('child');
+
+    expect(isNameBoxKeyboardTarget(nameBox)).toBe(true);
+    expect(isNameBoxKeyboardTarget(otherChild)).toBe(false);
+    expect(isNameBoxKeyboardTarget(null)).toBe(false);
   });
 });

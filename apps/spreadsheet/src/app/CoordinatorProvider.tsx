@@ -60,7 +60,7 @@ import {
 } from '../infra/context';
 import { setupRangeSelectionCoordination } from '../systems/grid-editing/coordination';
 import { setupUndoSelectionCoordination } from '../systems/grid-editing/coordination/undo-selection-coordination';
-import { isGlobalShortcut } from '../systems/shared/utils/focus-utils';
+import { isGlobalShortcut, isNameBoxKeyboardTarget } from '../systems/shared/utils/focus-utils';
 import { useCollabPresence, useSelectionPresenceBroadcast } from '../hooks/collab';
 
 // =============================================================================
@@ -389,6 +389,10 @@ function KeyboardCaptureSetup({
             e.stopPropagation();
           }
         }
+        return;
+      }
+
+      if (isNameBoxKeyboardTarget(target)) {
         return;
       }
 

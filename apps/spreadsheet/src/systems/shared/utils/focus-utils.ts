@@ -81,6 +81,16 @@ export function isGlobalShortcut(e: KeyboardEvent): boolean {
 }
 
 /**
+ * Check whether a keyboard event target belongs to the name box control.
+ * The name box is spreadsheet chrome, not the cell/formula editor, so it
+ * owns navigation keys while its text input is focused.
+ */
+export function isNameBoxKeyboardTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  return Boolean(target.closest('[data-testid="name-box"]'));
+}
+
+/**
  * Get the focus snapshot from the focus state.
  * Composes selectors to build the complete snapshot.
  */

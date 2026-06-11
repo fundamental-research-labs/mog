@@ -16,6 +16,7 @@ function createComputeBridgeMock() {
     getMutationHandler: jest.fn(() => ({
       withPivotUpdateOptions,
     })),
+    forceRefreshAllViewports: jest.fn(async () => undefined),
   };
   return { bridge, withPivotUpdateOptions };
 }
@@ -39,6 +40,7 @@ describe('UndoService pivot history replay metadata', () => {
       { reason: 'historyReplay', refreshPolicy: 'refreshAndMaterialize' },
       expect.any(Function),
     );
+    expect(bridge.forceRefreshAllViewports).toHaveBeenCalledTimes(1);
   });
 
   it('wraps redo in historyReplay pivot update options', async () => {
@@ -54,5 +56,26 @@ describe('UndoService pivot history replay metadata', () => {
       { reason: 'historyReplay', refreshPolicy: 'refreshAndMaterialize' },
       expect.any(Function),
     );
+    expect(bridge.forceRefreshAllViewports).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not fail undo when viewport refresh after replay fails', async () => {
+    const { bridge } = createComputeBridgeMock();
+    bridge.forceRefreshAllViewports.mockRejectedValueOnce(new Error('refresh failed'));
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+    const service = createUndoService(bridge as any);
+    await flushInitialState();
+
+    const result = await service.undo();
+
+    expect(result.ok).toBe(true);
+    expect(bridge.undo).toHaveBeenCalledTimes(1);
+    expect(bridge.forceRefreshAllViewports).toHaveBeenCalledTimes(1);
+    expect(errorSpy).toHaveBeenCalledWith(
+      '[UndoService] viewport refresh after history replay failed:',
+      expect.any(Error),
+    );
+
+    errorSpy.mockRestore();
   });
 });

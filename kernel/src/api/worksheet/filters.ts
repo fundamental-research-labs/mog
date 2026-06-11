@@ -31,6 +31,7 @@ import type {
   ColumnFilter as ComputeColumnFilter,
   FilterHeaderInfo as ComputeFilterHeaderInfo,
   FilterState as ComputeFilterState,
+  Table as ComputeTable,
 } from '../../bridges/compute/compute-types.gen';
 import {
   columnFilterCriteriaToCompute,
@@ -272,6 +273,60 @@ export class WorksheetFiltersImpl implements WorksheetFilters {
       return;
     }
     await this.awaitSheetMaterialized();
+  }
+
+  private isTableBackedHeader(entry: ComputeFilterHeaderInfo): boolean {
+    return entry.filterKind === 'tableFilter' || entry.sourceType === 'tableAutoFilter';
+  }
+
+  private isTableBackedFilter(filter: ComputeFilterState): boolean {
+    return filter.type === 'tableFilter';
+  }
+
+  private async liveTableIdsForCompactFilterRead(
+    filters: ComputeFilterState[],
+    headerEntries: ComputeFilterHeaderInfo[],
+  ): Promise<Set<string> | null> {
+    const needsLiveTables =
+      filters.some((filter) => this.isTableBackedFilter(filter)) ||
+      headerEntries.some((entry) => this.isTableBackedHeader(entry));
+    if (!needsLiveTables) return null;
+
+    const tables = await this.ctx.computeBridge.getAllTablesInSheet(this.sheetId);
+    const ids = new Set<string>();
+    for (const table of tables as ComputeTable[]) {
+      this.addLiveTableAlias(ids, table.id);
+      this.addLiveTableAlias(ids, table.name);
+      this.addLiveTableAlias(ids, table.displayName);
+    }
+    return ids;
+  }
+
+  private addLiveTableAlias(ids: Set<string>, value: string | undefined): void {
+    if (typeof value === 'string') {
+      ids.add(value);
+    }
+  }
+
+  private tableIdIsLive(tableId: string | undefined, liveTableIds: Set<string> | null): boolean {
+    if (liveTableIds === null) return true;
+    return typeof tableId === 'string' && liveTableIds.has(tableId);
+  }
+
+  private filterIsVisibleInCompactRead(
+    filter: ComputeFilterState,
+    liveTableIds: Set<string> | null,
+  ): boolean {
+    if (!this.isTableBackedFilter(filter)) return true;
+    return this.tableIdIsLive(filter.tableId, liveTableIds);
+  }
+
+  private headerIsVisibleInCompactRead(
+    entry: ComputeFilterHeaderInfo,
+    liveTableIds: Set<string> | null,
+  ): boolean {
+    if (!this.isTableBackedHeader(entry)) return true;
+    return this.tableIdIsLive(entry.tableId, liveTableIds);
   }
 
   /**
@@ -698,41 +753,50 @@ export class WorksheetFiltersImpl implements WorksheetFilters {
       this.ctx.computeBridge.getFiltersInSheet(this.sheetId),
       this.ctx.computeBridge.getFilterHeaderInfo(this.sheetId),
     ]);
+    const liveTableIds = await this.liveTableIdsForCompactFilterRead(filters, headerEntries);
+    const visibleHeaderEntries = headerEntries.filter((entry) =>
+      this.headerIsVisibleInCompactRead(entry, liveTableIds),
+    );
     const headerEntriesByFilterId = new Map<string, ComputeFilterHeaderInfo[]>();
-    for (const entry of headerEntries) {
+    for (const entry of visibleHeaderEntries) {
       const entries = headerEntriesByFilterId.get(entry.filterId) ?? [];
       entries.push(entry);
       headerEntriesByFilterId.set(entry.filterId, entries);
     }
     return Promise.all(
-      filters.map((filter) =>
-        toFilterSummary(this.ctx, this.sheetId, filter, headerEntriesByFilterId.get(filter.id)),
-      ),
+      filters
+        .filter((filter) => this.filterIsVisibleInCompactRead(filter, liveTableIds))
+        .map((filter) =>
+          toFilterSummary(this.ctx, this.sheetId, filter, headerEntriesByFilterId.get(filter.id)),
+        ),
     );
   }
 
   async listHeaderInfo(options?: FilterCompactListOptions): Promise<FilterHeaderInfoEntry[]> {
     await this.awaitFilterListScope(options, 'sheetLocal', true);
     const entries = await this.ctx.computeBridge.getFilterHeaderInfo(this.sheetId);
-    return entries.map((entry) => {
-      const mapped: FilterHeaderInfoEntry = {
-        row: entry.row,
-        col: entry.col,
-        filterId: entry.filterId,
-        filterKind: entry.filterKind,
-        range: entry.range,
-        headerCellId: toCellId(entry.headerCellId),
-        hasActiveFilter: entry.hasActiveFilter,
-        sourceType: entry.sourceType,
-        capability: entry.capability,
-        unsupportedReasons: entry.unsupportedReasons,
-        buttonVisible: entry.buttonVisible,
-        hiddenButton: entry.hiddenButton,
-        showButton: entry.showButton,
-      };
-      if (entry.tableId) mapped.tableId = entry.tableId;
-      return mapped;
-    });
+    const liveTableIds = await this.liveTableIdsForCompactFilterRead([], entries);
+    return entries
+      .filter((entry) => this.headerIsVisibleInCompactRead(entry, liveTableIds))
+      .map((entry) => {
+        const mapped: FilterHeaderInfoEntry = {
+          row: entry.row,
+          col: entry.col,
+          filterId: entry.filterId,
+          filterKind: entry.filterKind,
+          range: entry.range,
+          headerCellId: toCellId(entry.headerCellId),
+          hasActiveFilter: entry.hasActiveFilter,
+          sourceType: entry.sourceType,
+          capability: entry.capability,
+          unsupportedReasons: entry.unsupportedReasons,
+          buttonVisible: entry.buttonVisible,
+          hiddenButton: entry.hiddenButton,
+          showButton: entry.showButton,
+        };
+        if (entry.tableId) mapped.tableId = entry.tableId;
+        return mapped;
+      });
   }
 
   async isEnabled(): Promise<boolean> {

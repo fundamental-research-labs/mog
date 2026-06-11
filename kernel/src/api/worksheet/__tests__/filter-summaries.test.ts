@@ -14,6 +14,7 @@ function createMockCtx(): any {
     computeBridge: {
       getFiltersInSheet: jest.fn().mockResolvedValue([]),
       getFilterHeaderInfo: jest.fn().mockResolvedValue([]),
+      getAllTablesInSheet: jest.fn().mockResolvedValue([]),
       getCellPosition: jest.fn().mockResolvedValue(null),
     },
   };
@@ -69,5 +70,87 @@ describe('WorksheetFiltersImpl.listSummaries', () => {
         unsupportedReasons: [],
       },
     ]);
+  });
+
+  it('suppresses stale table filters without a live table owner', async () => {
+    ctx.computeBridge.getAllTablesInSheet.mockResolvedValue([
+      {
+        id: 'Table2',
+        name: 'Table2',
+        displayName: 'Table2',
+        sheetId: SHEET_ID,
+        range: { startRow: 1, startCol: 4, endRow: 3, endCol: 5 },
+      } as any,
+    ]);
+    ctx.computeBridge.getFiltersInSheet.mockResolvedValue([
+      {
+        id: 'left-filter',
+        type: 'tableFilter',
+        tableId: 'Table1',
+        columnFilters: {},
+        startRow: 1,
+        startCol: 1,
+        endRow: 3,
+        endCol: 2,
+      },
+      {
+        id: 'right-filter',
+        type: 'tableFilter',
+        tableId: 'Table2',
+        columnFilters: {},
+        startRow: 1,
+        startCol: 4,
+        endRow: 3,
+        endCol: 5,
+      },
+      {
+        id: 'sheet-filter',
+        type: 'autoFilter',
+        columnFilters: {},
+        startRow: 8,
+        startCol: 0,
+        endRow: 12,
+        endCol: 1,
+      },
+    ]);
+    ctx.computeBridge.getFilterHeaderInfo.mockResolvedValue([
+      {
+        filterId: 'left-filter',
+        filterKind: 'tableFilter',
+        range: { startRow: 1, startCol: 1, endRow: 3, endCol: 2 },
+        row: 1,
+        col: 1,
+        headerCellId: 'left-b',
+        hasActiveFilter: false,
+        tableId: 'Table1',
+        sourceType: 'tableAutoFilter',
+        capability: 'supported',
+        unsupportedReasons: [],
+        buttonVisible: true,
+        hiddenButton: false,
+        showButton: true,
+      },
+      {
+        filterId: 'right-filter',
+        filterKind: 'tableFilter',
+        range: { startRow: 1, startCol: 4, endRow: 3, endCol: 5 },
+        row: 1,
+        col: 4,
+        headerCellId: 'right-e',
+        hasActiveFilter: false,
+        tableId: 'Table2',
+        sourceType: 'tableAutoFilter',
+        capability: 'supported',
+        unsupportedReasons: [],
+        buttonVisible: true,
+        hiddenButton: false,
+        showButton: true,
+      },
+    ]);
+
+    const result = await filters.listSummaries();
+
+    expect(ctx.computeBridge.getAllTablesInSheet).toHaveBeenCalledWith(SHEET_ID);
+    expect(result.map((entry) => entry.id)).toEqual(['right-filter', 'sheet-filter']);
   });
 });

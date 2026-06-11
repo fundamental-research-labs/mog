@@ -100,6 +100,11 @@ function isDialogKeyboardTarget(target: HTMLElement | null): boolean {
   return Boolean(target.closest('[role="dialog"]'));
 }
 
+function isNameBoxKeyboardTarget(target: HTMLElement | null): boolean {
+  if (!target) return false;
+  return Boolean(target.closest('[data-testid="name-box"]'));
+}
+
 function isNativeEditableShortcut(e: KeyboardEvent, target: HTMLElement | null): boolean {
   if (!isEditableKeyboardTarget(target)) return false;
   if (!(e.ctrlKey || e.metaKey) || e.altKey) return false;
@@ -414,6 +419,10 @@ function KeyboardCaptureSetup({
 
       // Only intercept navigation keys during editing
       const isNavigationKey = ['Enter', 'Tab', 'Escape'].includes(e.key);
+      if (isNavigationKey && isNameBoxKeyboardTarget(target)) {
+        return;
+      }
+
       // Sheet switching (Ctrl/Cmd+PageDown/Up) should also be intercepted during editing
       // so NEXT_SHEET/PREVIOUS_SHEET actions can fire while formula editing is active
       const isSheetSwitch =

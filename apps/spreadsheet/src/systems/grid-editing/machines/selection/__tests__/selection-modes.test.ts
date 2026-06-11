@@ -535,6 +535,23 @@ describe('selection-mode lifecycle', () => {
     actor.stop();
   });
 
+  it('14d. set_selection_single_cell_inside_merge_resolves_to_merge_anchor', () => {
+    const actor = startActorAt(0, 0);
+    pushMerge(actor, rng(6, 26, 6, 27)); // AA7:AB7
+
+    actor.send({
+      type: 'SET_SELECTION',
+      ranges: [rng(6, 27, 6, 27)],
+      activeCell: cell(6, 27),
+    });
+
+    const after = actor.getSnapshot().context;
+    expect(after.activeCell).toEqual(cell(6, 26));
+    expect(after.anchor).toEqual(cell(6, 26));
+    expect(after.pendingRange).toEqual(rng(6, 26, 6, 27));
+    actor.stop();
+  });
+
   it('15. additive_mode_arrow_into_merge_enters_origin', () => {
     // Additive on with one committed range. Arrow into merge → pending
     // collapses to the merge origin; committed untouched.

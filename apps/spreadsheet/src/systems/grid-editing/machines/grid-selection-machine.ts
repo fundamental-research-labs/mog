@@ -421,7 +421,7 @@ export const selectionMachine = setup({
         SELECT_COLUMN: [
           {
             guard: 'isShiftColumnClick',
-            actions: ['extendToColumn', 'emitUserSelectionChanged'],
+            actions: 'extendToColumn',
             // Stay in idle for single shift+click (no drag needed)
           },
           {
@@ -432,17 +432,17 @@ export const selectionMachine = setup({
           {
             guard: 'isCtrlColumnClick',
             target: 'selectingColumn',
-            actions: ['addColumnToSelection', 'emitUserSelectionChanged'],
+            actions: 'addColumnToSelection',
           },
           {
             target: 'selectingColumn',
-            actions: ['selectSingleColumn', 'emitUserSelectionChanged'],
+            actions: 'selectSingleColumn',
           },
         ],
         SELECT_ROW: [
           {
             guard: 'isShiftRowClick',
-            actions: ['extendToRow', 'emitUserSelectionChanged'],
+            actions: 'extendToRow',
             // Stay in idle for single shift+click (no drag needed)
           },
           {
@@ -453,11 +453,11 @@ export const selectionMachine = setup({
           {
             guard: 'isCtrlRowClick',
             target: 'selectingRow',
-            actions: ['addRowToSelection', 'emitUserSelectionChanged'],
+            actions: 'addRowToSelection',
           },
           {
             target: 'selectingRow',
-            actions: ['selectSingleRow', 'emitUserSelectionChanged'],
+            actions: 'selectSingleRow',
           },
         ],
         // Header resize events

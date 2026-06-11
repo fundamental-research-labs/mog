@@ -81,6 +81,24 @@ function getSelectionContext(deps: ActionDependencies): {
   };
 }
 
+interface RowVisibilityPayload {
+  rows?: readonly number[];
+}
+
+interface ColumnVisibilityPayload {
+  cols?: readonly number[];
+}
+
+function getExplicitIndexes(payload: unknown, key: 'rows' | 'cols'): number[] | null {
+  if (!payload || typeof payload !== 'object') return null;
+
+  const value = (payload as RowVisibilityPayload & ColumnVisibilityPayload)[key];
+  if (!Array.isArray(value)) return null;
+
+  const indexes = value.filter((index): index is number => Number.isInteger(index) && index >= 0);
+  return indexes.length > 0 ? indexes : null;
+}
+
 function activeCellRange(activeCell: { row: number; col: number }): CellRange {
   return {
     startRow: activeCell.row,
@@ -393,11 +411,11 @@ export const DELETE_COLUMNS: AsyncActionHandler = async (deps) => {
  * Multi-Sheet Support
  * - Broadcasts to all selected sheets when multiple sheets are selected
  */
-export const HIDE_ROW: AsyncActionHandler = async (deps) => {
+export const HIDE_ROW: AsyncActionHandler = async (deps, payload) => {
   const targetSheetIds = getTargetSheetIds(deps);
   const { activeCell, ranges } = getSelectionContext(deps);
 
-  const rows = getSelectedRowsOrActive(ranges, activeCell);
+  const rows = getExplicitIndexes(payload, 'rows') ?? getSelectedRowsOrActive(ranges, activeCell);
   if (rows.length > 0) {
     return withProtectionFeedback(deps, async () => {
       for (const sheetId of targetSheetIds) {
@@ -453,11 +471,11 @@ export const UNHIDE_ROW: AsyncActionHandler = async (deps) => {
  * Multi-Sheet Support
  * - Broadcasts to all selected sheets when multiple sheets are selected
  */
-export const HIDE_COLUMN: AsyncActionHandler = async (deps) => {
+export const HIDE_COLUMN: AsyncActionHandler = async (deps, payload) => {
   const targetSheetIds = getTargetSheetIds(deps);
   const { activeCell, ranges } = getSelectionContext(deps);
 
-  const cols = getSelectedColsOrActive(ranges, activeCell);
+  const cols = getExplicitIndexes(payload, 'cols') ?? getSelectedColsOrActive(ranges, activeCell);
   if (cols.length > 0) {
     return withProtectionFeedback(deps, async () => {
       for (const sheetId of targetSheetIds) {

@@ -45,6 +45,12 @@ import type { CellCoord } from '@mog-sdk/contracts/rendering';
 
 type ContextMenuCell = CellCoord | null;
 
+type ContextMenuActionTarget =
+  | { type: 'cell'; cell: CellCoord }
+  | { type: 'row-header'; row: number }
+  | { type: 'column-header'; col: number }
+  | null;
+
 interface ClipboardActorLike {
   getSnapshot(): ClipboardState;
   subscribe(listener: (state: ClipboardState) => void): { unsubscribe: () => void };
@@ -338,7 +344,7 @@ export interface UseContextMenuActionsReturn {
 // =============================================================================
 
 export function useContextMenuActions(
-  contextMenuCell: ContextMenuCell = null,
+  contextMenuTarget: ContextMenuActionTarget = null,
 ): UseContextMenuActionsReturn {
   const coordinator = useCoordinator();
   const clipboardActor = coordinator.grid.access.actors.clipboard as ClipboardActorLike;
@@ -352,6 +358,10 @@ export function useContextMenuActions(
   const ws = wb.getSheetById(activeSheetId);
   const groupingActions = useGroupingActions();
   const { sparklineManager } = useSparklineManager();
+  const contextMenuCell = contextMenuTarget?.type === 'cell' ? contextMenuTarget.cell : null;
+  const contextMenuRow = contextMenuTarget?.type === 'row-header' ? contextMenuTarget.row : null;
+  const contextMenuCol =
+    contextMenuTarget?.type === 'column-header' ? contextMenuTarget.col : null;
   const resolvedContextCell = contextMenuCell ?? activeCell;
   const selectResolvedContextCell = useCallback(() => {
     setSelection(
@@ -452,6 +462,28 @@ export function useContextMenuActions(
 
   const selectedRowCount = selectionBounds.endRow - selectionBounds.startRow + 1;
   const selectedColCount = selectionBounds.endCol - selectionBounds.startCol + 1;
+
+  const hideRowsPayload = useMemo(() => {
+    if (contextMenuRow === null) return undefined;
+    const isCoveredByFullRowSelection = ranges.some(
+      (range) =>
+        range.isFullRow === true &&
+        contextMenuRow >= Math.min(range.startRow, range.endRow) &&
+        contextMenuRow <= Math.max(range.startRow, range.endRow),
+    );
+    return isCoveredByFullRowSelection ? undefined : { rows: [contextMenuRow] };
+  }, [contextMenuRow, ranges]);
+
+  const hideColumnsPayload = useMemo(() => {
+    if (contextMenuCol === null) return undefined;
+    const isCoveredByFullColumnSelection = ranges.some(
+      (range) =>
+        range.isFullColumn === true &&
+        contextMenuCol >= Math.min(range.startCol, range.endCol) &&
+        contextMenuCol <= Math.max(range.startCol, range.endCol),
+    );
+    return isCoveredByFullColumnSelection ? undefined : { cols: [contextMenuCol] };
+  }, [contextMenuCol, ranges]);
 
   // ==========================================================================
   // Clipboard Actions
@@ -668,14 +700,14 @@ export function useContextMenuActions(
   // Hide/Show Actions
   // ==========================================================================
   const hideRows = useCallback(() => {
-    dispatch('HIDE_ROW', actionDeps);
+    dispatch('HIDE_ROW', actionDeps, hideRowsPayload);
     closeContextMenu();
-  }, [actionDeps, closeContextMenu]);
+  }, [actionDeps, closeContextMenu, hideRowsPayload]);
 
   const hideColumns = useCallback(() => {
-    dispatch('HIDE_COLUMN', actionDeps);
+    dispatch('HIDE_COLUMN', actionDeps, hideColumnsPayload);
     closeContextMenu();
-  }, [actionDeps, closeContextMenu]);
+  }, [actionDeps, closeContextMenu, hideColumnsPayload]);
 
   const unhideRows = useCallback(() => {
     dispatch('UNHIDE_ROW', actionDeps);

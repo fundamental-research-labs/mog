@@ -80,16 +80,23 @@ const READ_ONLY_ALLOWED_IDS = new Set([
 ]);
 
 export function CellContextMenu({ target, targetRow, targetCol, onClose }: CellContextMenuProps) {
-  const contextMenuCell = useMemo(
-    () =>
+  const contextMenuTarget = useMemo(() => {
+    if (
       (target === 'cell' || target === 'selection') &&
       targetRow !== undefined &&
       targetCol !== undefined
-        ? { row: targetRow, col: targetCol }
-        : null,
-    [target, targetRow, targetCol],
-  );
-  const actions = useContextMenuActions(contextMenuCell);
+    ) {
+      return { type: 'cell' as const, cell: { row: targetRow, col: targetCol } };
+    }
+    if (target === 'row-header' && targetRow !== undefined) {
+      return { type: 'row-header' as const, row: targetRow };
+    }
+    if (target === 'column-header' && targetCol !== undefined) {
+      return { type: 'column-header' as const, col: targetCol };
+    }
+    return null;
+  }, [target, targetRow, targetCol]);
+  const actions = useContextMenuActions(contextMenuTarget);
   const readOnly = useReadOnly();
   const platformInfo = usePlatformInfo();
   const keyboardPlatform = useMemo(() => platformFromShellInfo(platformInfo), [platformInfo]);

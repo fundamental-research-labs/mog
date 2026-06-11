@@ -337,6 +337,34 @@ describe('Structure autofit handlers', () => {
     expect(worksheet.layout.setColumnWidths).toHaveBeenCalledWith([[3, 88]]);
   });
 
+  it('HIDE_COLUMN honors an explicit header target over stale selection state', async () => {
+    const deps = createDeps({
+      activeCell: { row: 0, col: 12 },
+      ranges: [{ startRow: 0, startCol: 12, endRow: MAX_ROWS - 1, endCol: 12, isFullColumn: true }],
+    });
+
+    const result = await StructureHandlers.HIDE_COLUMN(deps, { cols: [13] });
+
+    const worksheet = getMockWorksheet(deps);
+    expect(result.handled).toBe(true);
+    expect(worksheet.layout.setColumnVisible).toHaveBeenCalledTimes(1);
+    expect(worksheet.layout.setColumnVisible).toHaveBeenCalledWith(13, false);
+  });
+
+  it('HIDE_ROW honors an explicit header target over stale selection state', async () => {
+    const deps = createDeps({
+      activeCell: { row: 2, col: 0 },
+      ranges: [{ startRow: 2, startCol: 0, endRow: 2, endCol: MAX_COLS - 1, isFullRow: true }],
+    });
+
+    const result = await StructureHandlers.HIDE_ROW(deps, { rows: [4] });
+
+    const worksheet = getMockWorksheet(deps);
+    expect(result.handled).toBe(true);
+    expect(worksheet.layout.setRowVisible).toHaveBeenCalledTimes(1);
+    expect(worksheet.layout.setRowVisible).toHaveBeenCalledWith(4, false);
+  });
+
   it('UNHIDE_COLUMN targets hidden columns inside or adjacent to the selection', async () => {
     const deps = createDeps({
       activeCell: { row: 0, col: 0 },

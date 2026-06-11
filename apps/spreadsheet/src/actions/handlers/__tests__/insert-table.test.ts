@@ -168,6 +168,27 @@ describe('INSERT_TABLE — current-region auto-expansion', () => {
     });
   });
 
+  test('multi-cell selection with sparse text title row seeds dialog with hasHeaders=true', async () => {
+    const multiRange: CellRange = { startRow: 457, startCol: 0, endRow: 479, endCol: 10 };
+    const setup = makeMockDeps({
+      selectionRanges: [multiRange],
+      cellValues: {
+        '457,0': 'Consolidated Balance Sheet',
+        '458,0': 'Current assets',
+        '463,6': 235658,
+      },
+    });
+
+    const result = await INSERT_TABLE(setup.deps);
+
+    expect(result.handled).toBe(true);
+    expect(setup.getCurrentRegion).not.toHaveBeenCalled();
+    expect(setup.openInsertTableDialog).toHaveBeenCalledWith({
+      range: multiRange,
+      hasHeaders: true,
+    });
+  });
+
   test('empty selection returns disabled', async () => {
     const setup = makeMockDeps({
       selectionRanges: [],

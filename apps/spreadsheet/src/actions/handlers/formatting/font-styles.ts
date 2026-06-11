@@ -36,51 +36,32 @@ import { autoFitRowsForBoundedRanges } from './row-autofit';
 const FONT_SIZES = [8, 9, 10, 11, 12, 14, 16, 18, 20, 22, 24, 26, 28, 36, 48, 72];
 const MAX_FONT_SIZE = 409;
 const MIN_FONT_SIZE = 1;
-const MAX_TOGGLE_FORMAT_SCAN_CELLS = 10000;
-
-function rangeCellCount(range: CellRange): number {
-  const rowCount = Math.abs(range.endRow - range.startRow) + 1;
-  const colCount = Math.abs(range.endCol - range.startCol) + 1;
-  return rowCount * colCount;
-}
 
 async function getBooleanToggleValue(
   deps: ActionDependencies,
-  ranges: CellRange[],
+  activeCell: { row: number; col: number },
   property: 'bold' | 'italic' | 'strikethrough' | 'wrapText',
   activeCellFormat: Record<string, unknown> | undefined,
 ): Promise<{ currentValue: boolean; newValue: boolean }> {
-  const totalCells = ranges.reduce((sum, range) => sum + rangeCellCount(range), 0);
-  if (totalCells > 0 && totalCells <= MAX_TOGGLE_FORMAT_SCAN_CELLS) {
+  let currentValue = (activeCellFormat?.[property] as boolean | undefined) ?? false;
+
+  if (activeCellFormat?.[property] === undefined) {
     try {
       const ws = deps.workbook.activeSheet;
-      let sawCell = false;
-      let allSelectedCellsEnabled = true;
-
-      for (const range of ranges) {
-        const formats = await ws.formats.getDisplayedRangeProperties(range);
-        for (const row of formats) {
-          for (const format of row) {
-            sawCell = true;
-            if ((format as Record<string, unknown> | undefined)?.[property] !== true) {
-              allSelectedCellsEnabled = false;
-            }
-          }
-        }
-      }
-
-      if (sawCell) {
-        return {
-          currentValue: allSelectedCellsEnabled,
-          newValue: !allSelectedCellsEnabled,
-        };
-      }
+      const formats = await ws.formats.getDisplayedRangeProperties({
+        startRow: activeCell.row,
+        startCol: activeCell.col,
+        endRow: activeCell.row,
+        endCol: activeCell.col,
+      });
+      currentValue = ((formats[0]?.[0] as Record<string, unknown> | undefined)?.[property] as
+        | boolean
+        | undefined) ?? false;
     } catch {
-      // Fall back to the active cell for very old worksheet mocks or transient read failures.
+      // Keep the viewport-derived default for old worksheet mocks or transient read failures.
     }
   }
 
-  const currentValue = (activeCellFormat?.[property] as boolean) ?? false;
   return { currentValue, newValue: !currentValue };
 }
 
@@ -90,8 +71,8 @@ async function getBooleanToggleValue(
 
 /**
  * Toggle a boolean format property on selected cells.
- * For bounded selections, turns the property on unless every selected cell already has it.
- * Falls back to the active cell for very large ranges.
+ * The new value is determined from the active cell and then applied to every
+ * selected cell, matching spreadsheet shortcut behavior for mixed selections.
  *
  * Rich Text Editing Support
  * - Detects if in rich text editing mode with character selection
@@ -101,7 +82,7 @@ async function getBooleanToggleValue(
  *
  * Multi-Sheet Support
  * - Broadcasts to all selected sheets when multiple sheets are selected
- * - The toggle state is determined from the active sheet's selected range
+ * - The toggle state is determined from the active sheet's active cell
  * - Same new value is applied to all selected sheets
  */
 async function toggleFormatProperty(
@@ -138,7 +119,7 @@ async function toggleFormatProperty(
   // refreshed after format mutations, so we use getCellData(row, col) instead.
   const activeCellData = ws.viewport.getCellData(activeCell.row, activeCell.col);
   const activeCellFormat = activeCellData?.format as Record<string, unknown> | undefined;
-  const { newValue } = await getBooleanToggleValue(deps, ranges, property, activeCellFormat);
+  const { newValue } = await getBooleanToggleValue(deps, activeCell, property, activeCellFormat);
 
   // Apply to all selected ranges on ALL selected sheets
   for (const sheetId of targetSheetIds) {

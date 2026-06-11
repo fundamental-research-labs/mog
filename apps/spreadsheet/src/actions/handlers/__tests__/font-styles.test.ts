@@ -94,7 +94,7 @@ describe('font style formatting actions', () => {
     expect(calls).toEqual(['undoGroup:start', 'setRanges', 'autoFitRows', 'undoGroup:end']);
   });
 
-  it('turns bold on for a mixed selected range even when the active cell is already bold', async () => {
+  it('turns bold off for a mixed selected range when the active cell is already bold', async () => {
     const range: CellRange = { startRow: 0, startCol: 0, endRow: 0, endCol: 1 };
     const { deps, worksheet } = createMockDeps([range], {
       activeFormat: { bold: true },
@@ -104,7 +104,21 @@ describe('font style formatting actions', () => {
     const result = await TOGGLE_BOLD(deps);
 
     expect(result.handled).toBe(true);
-    expect(worksheet.formats.getDisplayedRangeProperties).toHaveBeenCalledWith(range);
+    expect(worksheet.formats.getDisplayedRangeProperties).not.toHaveBeenCalled();
+    expect(worksheet.formats.setRanges).toHaveBeenCalledWith([range], { bold: false });
+  });
+
+  it('turns bold on for a mixed selected range when the active cell is not bold', async () => {
+    const range: CellRange = { startRow: 0, startCol: 0, endRow: 0, endCol: 1 };
+    const { deps, worksheet } = createMockDeps([range], {
+      activeFormat: { bold: false },
+      displayedFormats: [[{ bold: false }, { bold: true }]],
+    });
+
+    const result = await TOGGLE_BOLD(deps);
+
+    expect(result.handled).toBe(true);
+    expect(worksheet.formats.getDisplayedRangeProperties).not.toHaveBeenCalled();
     expect(worksheet.formats.setRanges).toHaveBeenCalledWith([range], { bold: true });
   });
 });

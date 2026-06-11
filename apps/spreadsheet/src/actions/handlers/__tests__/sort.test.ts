@@ -271,6 +271,30 @@ describe('SORT_ASCENDING — current-region auto-expansion', () => {
     });
   });
 
+  test('explicit fiscal column selection keeps the top period header out of the sort body', async () => {
+    const setup = makeMockDeps({
+      selectionRanges: [{ startRow: 2, startCol: 27, endRow: 20, endCol: 27 }],
+      activeCell: { row: 2, col: 27 },
+      cellValues: {
+        '2,27': '1Q',
+        '3,27': '',
+        '4,27': null,
+        '5,27': 100536,
+      },
+    });
+
+    await SORT_ASCENDING(setup.deps);
+
+    expect(setup.getCurrentRegion).not.toHaveBeenCalled();
+    expect(setup.sortRange).toHaveBeenCalledTimes(1);
+    const [rangeArg, optionsArg] = setup.sortRange.mock.calls[0] as [unknown, unknown];
+    expect(rangeArg).toEqual({ startRow: 2, startCol: 27, endRow: 20, endCol: 27 });
+    expect(optionsArg).toEqual({
+      columns: [{ column: 0, direction: 'asc' }],
+      hasHeaders: true,
+    });
+  });
+
   test('expanded single-cell selection with text headers preserves header row', async () => {
     const setup = makeMockDeps({
       selectionRanges: [{ startRow: 1, startCol: 0, endRow: 1, endCol: 0 }],

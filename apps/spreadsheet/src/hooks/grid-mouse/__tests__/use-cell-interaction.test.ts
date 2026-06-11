@@ -10,6 +10,8 @@
 import { jest } from '@jest/globals';
 
 import type { CellClickPosition } from '../use-cell-interaction';
+import { hasValidationDropdownItems } from '../use-cell-interaction';
+import { isClickOnValidationDropdown } from '../helpers/click-detection';
 
 // =============================================================================
 // Word Boundary Helper Tests
@@ -92,6 +94,35 @@ describe('Cell Click Detection Integration', () => {
       };
 
       expect(clickOnArrow.clickInCellX).toBeGreaterThan(85);
+    });
+
+    it('requires dropdown items before a narrow-cell arrow-zone click opens validation editing', async () => {
+      const narrowCellWidth = 24;
+      const narrowCellHeight = 17;
+      const clickX = narrowCellWidth / 2;
+      const clickY = narrowCellHeight / 2;
+
+      expect(isClickOnValidationDropdown(clickX, clickY, narrowCellWidth, narrowCellHeight)).toBe(
+        true,
+      );
+
+      const wsWithoutValidation = {
+        validations: {
+          getDropdownItems: jest.fn(async () => []),
+        },
+      };
+      const wsWithValidation = {
+        validations: {
+          getDropdownItems: jest.fn(async () => ['Yes', 'No']),
+        },
+      };
+
+      await expect(
+        hasValidationDropdownItems(wsWithoutValidation, { row: 0, col: 0 }),
+      ).resolves.toBe(false);
+      await expect(hasValidationDropdownItems(wsWithValidation, { row: 0, col: 0 })).resolves.toBe(
+        true,
+      );
     });
   });
 

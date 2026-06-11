@@ -26,6 +26,7 @@
 
 import { useCallback, useMemo } from 'react';
 
+import type { Worksheet } from '@mog-sdk/contracts/api';
 import { DEFAULT_CELL_STYLE } from '@mog/spreadsheet-utils/cells/cell-style';
 import type { SheetId } from '@mog-sdk/contracts/core';
 import { displayString } from '@mog-sdk/contracts/core';
@@ -89,6 +90,18 @@ export interface CellClickPosition {
   cellWidth: number;
   /** Cell height */
   cellHeight: number;
+}
+
+export async function hasValidationDropdownItems(
+  ws: Pick<Worksheet, 'validations'>,
+  cell: CellCoord,
+): Promise<boolean> {
+  try {
+    const dropdownItems = await ws.validations.getDropdownItems(cell.row, cell.col);
+    return dropdownItems.length > 0;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -308,6 +321,10 @@ export function useCellInteraction(options: UseCellInteractionOptions): UseCellI
       const { clickInCellX, clickInCellY, cellWidth, cellHeight } = clickPosition;
 
       if (!isClickOnValidationDropdown(clickInCellX, clickInCellY, cellWidth, cellHeight)) {
+        return false;
+      }
+
+      if (!(await hasValidationDropdownItems(ws, cell))) {
         return false;
       }
 

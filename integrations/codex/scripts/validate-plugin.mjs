@@ -76,7 +76,11 @@ async function validateManifest() {
   if (!manifest) return;
 
   for (const field of ['name', 'version', 'description', 'homepage', 'repository', 'license']) {
-    if (!manifest[field] || String(manifest[field]).includes('TODO') || String(manifest[field]).includes('example.com')) {
+    if (
+      !manifest[field] ||
+      String(manifest[field]).includes('TODO') ||
+      String(manifest[field]).includes('example.com')
+    ) {
       fail(`plugin.json ${field} is missing or placeholder`);
     }
   }
@@ -135,9 +139,12 @@ async function validateMarketplace() {
     fail('marketplace is missing mog plugin entry');
     return;
   }
-  if (entry.source?.path !== './plugins/mog') fail('marketplace mog source.path must be ./plugins/mog');
-  if (entry.policy?.installation !== 'AVAILABLE') fail('marketplace mog installation policy must be AVAILABLE');
-  if (entry.policy?.authentication !== 'ON_INSTALL') fail('marketplace mog authentication policy must be ON_INSTALL');
+  if (entry.source?.path !== './plugins/mog')
+    fail('marketplace mog source.path must be ./plugins/mog');
+  if (entry.policy?.installation !== 'AVAILABLE')
+    fail('marketplace mog installation policy must be AVAILABLE');
+  if (entry.policy?.authentication !== 'ON_INSTALL')
+    fail('marketplace mog authentication policy must be ON_INSTALL');
 }
 
 async function validateSkill() {
@@ -166,11 +173,15 @@ async function validateDist() {
   const distFiles = await listFiles(resolve(pluginRoot, 'dist'));
   const wasmFiles = distFiles.filter((path) => path.endsWith('.wasm'));
   if (wasmFiles.length > 0) {
-    fail(`plugins/mog/dist must not vendor WASM files; use the published @mog-sdk/wasm package: ${wasmFiles.join(', ')}`);
+    fail(
+      `plugins/mog/dist must not vendor WASM files; use the published @mog-sdk/wasm package: ${wasmFiles.join(', ')}`,
+    );
   }
   const fontFiles = distFiles.filter((path) => /\.(?:ttf|otf|woff2?)$/i.test(path));
   if (fontFiles.length > 0) {
-    fail(`plugins/mog/dist must not vendor font files; use browser/system font fallback: ${fontFiles.join(', ')}`);
+    fail(
+      `plugins/mog/dist must not vendor font files; use browser/system font fallback: ${fontFiles.join(', ')}`,
+    );
   }
 
   const [manifest, wasmPackage, importMap] = await Promise.all([
@@ -179,7 +190,9 @@ async function validateDist() {
     readJson(importMapPath),
   ]);
   if (manifest && wasmPackage && manifest.version !== wasmPackage.version) {
-    fail(`plugin version ${manifest.version} must match @mog-sdk/wasm version ${wasmPackage.version}`);
+    fail(
+      `plugin version ${manifest.version} must match @mog-sdk/wasm version ${wasmPackage.version}`,
+    );
   }
   const expectedWasmModuleUrl = `https://cdn.jsdelivr.net/npm/@mog-sdk/wasm@${manifest?.version ?? wasmPackage?.version}/compute_core_wasm.js`;
   if (importMap?.imports?.['@mog-sdk/wasm'] !== expectedWasmModuleUrl) {

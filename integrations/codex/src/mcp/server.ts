@@ -110,7 +110,11 @@ function contentType(path: string): string {
   return 'application/octet-stream';
 }
 
-async function serveStatic(response: ServerResponse, root: string, relativePath: string): Promise<void> {
+async function serveStatic(
+  response: ServerResponse,
+  root: string,
+  relativePath: string,
+): Promise<void> {
   const filePath = resolve(root, relativePath);
   if (filePath !== root && !filePath.startsWith(`${root}${sep}`)) {
     notFound(response);
@@ -133,7 +137,10 @@ async function serveStatic(response: ServerResponse, root: string, relativePath:
   }
 }
 
-async function readJsonBody(request: IncomingMessage, maxBytes = 100 * 1024 * 1024): Promise<unknown> {
+async function readJsonBody(
+  request: IncomingMessage,
+  maxBytes = 100 * 1024 * 1024,
+): Promise<unknown> {
   const chunks: Buffer[] = [];
   let size = 0;
   for await (const chunk of request) {
@@ -164,7 +171,10 @@ function updateSessionStatus(
   };
 }
 
-async function handleBrowserRequest(request: IncomingMessage, response: ServerResponse): Promise<void> {
+async function handleBrowserRequest(
+  request: IncomingMessage,
+  response: ServerResponse,
+): Promise<void> {
   const url = new URL(request.url ?? '/', `http://${request.headers.host ?? '127.0.0.1'}`);
   const path = decodeURIComponent(url.pathname);
 
@@ -259,7 +269,9 @@ async function ensureHost(): Promise<number> {
     handleBrowserRequest(request, response).catch((error) => {
       console.error('[mog-codex] browser host error', error);
       if (!response.headersSent) {
-        jsonResponse(response, 500, { error: error instanceof Error ? error.message : String(error) });
+        jsonResponse(response, 500, {
+          error: error instanceof Error ? error.message : String(error),
+        });
       } else {
         response.end();
       }
@@ -330,7 +342,10 @@ async function createBrowserSession(args: Record<string, unknown>): Promise<Tool
     sessionId,
     browserUrl: `http://127.0.0.1:${port}/sessions/${encodeURIComponent(sessionId)}?token=${encodeURIComponent(token)}`,
     connectionStatus: session.status,
-    source: source.kind === 'xlsx-bytes' ? { kind: source.kind, fileName: source.fileName, inputPath: source.inputPath } : source,
+    source:
+      source.kind === 'xlsx-bytes'
+        ? { kind: source.kind, fileName: source.fileName, inputPath: source.inputPath }
+        : source,
   };
 }
 
@@ -350,7 +365,11 @@ function sessionStatus(args: Record<string, unknown>): ToolResult {
     server: { listening: Boolean(hostServer), port: hostPort },
     source:
       session.source.kind === 'xlsx-bytes'
-        ? { kind: session.source.kind, fileName: session.source.fileName, inputPath: session.source.inputPath }
+        ? {
+            kind: session.source.kind,
+            fileName: session.source.fileName,
+            inputPath: session.source.inputPath,
+          }
         : session.source,
     status: session.status,
     pendingRequests: session.pending.size,
@@ -478,11 +497,15 @@ async function callTool(name: string, args: Record<string, unknown>): Promise<To
 const toolDefinitions = [
   {
     name: 'mog_browser_start',
-    description: 'Start a localhost Mog browser session with a blank workbook or an explicit XLSX file path.',
+    description:
+      'Start a localhost Mog browser session with a blank workbook or an explicit XLSX file path.',
     inputSchema: {
       type: 'object',
       properties: {
-        xlsxPath: { type: 'string', description: 'Explicit local .xlsx path to import. Omit for a blank workbook.' },
+        xlsxPath: {
+          type: 'string',
+          description: 'Explicit local .xlsx path to import. Omit for a blank workbook.',
+        },
         filePath: { type: 'string', description: 'Alias for xlsxPath.' },
       },
       additionalProperties: false,
@@ -490,7 +513,8 @@ const toolDefinitions = [
   },
   {
     name: 'mog_browser_status',
-    description: 'Inspect server, browser, workbook, canvas, and smoke readiness for a Mog browser session.',
+    description:
+      'Inspect server, browser, workbook, canvas, and smoke readiness for a Mog browser session.',
     inputSchema: {
       type: 'object',
       properties: { sessionId: { type: 'string' } },
@@ -569,10 +593,7 @@ const toolDefinitions = [
 
 function encodeMcpMessage(message: unknown): Buffer {
   const body = Buffer.from(JSON.stringify(message));
-  return Buffer.concat([
-    Buffer.from(`Content-Length: ${body.byteLength}\r\n\r\n`, 'ascii'),
-    body,
-  ]);
+  return Buffer.concat([Buffer.from(`Content-Length: ${body.byteLength}\r\n\r\n`, 'ascii'), body]);
 }
 
 function writeMcp(message: unknown): void {

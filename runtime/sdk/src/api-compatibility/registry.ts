@@ -1,8 +1,7 @@
 import type { ApiCompatibilityEntry } from './types';
 
 const WORKBOOK_API_COMPATIBILITY_REPORT = 'api-compatibility:workbook-api-issues';
-const VERSIONED_API_COMPATIBILITY_PLAN =
-  'api-compatibility:versioned-api-compatibility-layer';
+const VERSIONED_API_COMPATIBILITY_PLAN = 'api-compatibility:versioned-api-compatibility-layer';
 const NAMESPACED_SUB_API_PLAN = 'api-compatibility:namespaced-sub-apis';
 const WORKSHEET_METHOD_GUIDANCE = 'api-compatibility:mog-api/worksheet-method-guidance';
 
@@ -148,8 +147,7 @@ export const apiCompatibilityRegistry = [
     evidence: [
       {
         source: 'source',
-        reference:
-          'api-compatibility:chart/imported-chart-api-discoverability#stale-hint-surface',
+        reference: 'api-compatibility:chart/imported-chart-api-discoverability#stale-hint-surface',
       },
     ],
     behavior:

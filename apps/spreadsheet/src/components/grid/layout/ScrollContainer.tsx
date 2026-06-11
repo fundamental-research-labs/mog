@@ -42,8 +42,7 @@ export interface ScrollContainerProps {
 const MIN_THUMB_SIZE = 24;
 const EDGE_SNAP_PX = 4;
 export const SCROLLBAR_TRACK_COLOR = 'var(--scrollbar-track, rgba(0, 0, 0, 0.04))';
-export const SCROLLBAR_TRACK_BORDER_COLOR =
-  'var(--scrollbar-track-border, rgba(0, 0, 0, 0.08))';
+export const SCROLLBAR_TRACK_BORDER_COLOR = 'var(--scrollbar-track-border, rgba(0, 0, 0, 0.08))';
 
 export function getScrollbarThumbColor(isDragging: boolean): string {
   return isDragging

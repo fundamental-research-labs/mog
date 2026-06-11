@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 
-import type { ShellBootstrapResult } from "@mog/shell";
+import type { ShellBootstrapResult } from '@mog/shell';
 
 declare global {
   interface Window {

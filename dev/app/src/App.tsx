@@ -18,14 +18,14 @@
  *
  */
 
-import { ShellProvider } from "@mog/app-spreadsheet";
-import { registerSpreadsheetTestingPanel } from "@mog/app-spreadsheet/dev/testing-panel";
-import { DocumentFactory, type DocumentHandle } from "@mog-sdk/kernel";
-import type { IAppKernelAPI } from "@mog-sdk/contracts/apps";
-import type { FeatureGates } from "@mog-sdk/contracts/feature-gates";
-import { createAppKernelAPIFromHandle } from "@mog-sdk/kernel/app-api";
-import { hasPersistedSnapshot, readMeta } from "@mog-sdk/kernel/storage";
-import type { ShellBootstrapResult } from "@mog/shell";
+import { ShellProvider } from '@mog/app-spreadsheet';
+import { registerSpreadsheetTestingPanel } from '@mog/app-spreadsheet/dev/testing-panel';
+import { DocumentFactory, type DocumentHandle } from '@mog-sdk/kernel';
+import type { IAppKernelAPI } from '@mog-sdk/contracts/apps';
+import type { FeatureGates } from '@mog-sdk/contracts/feature-gates';
+import { createAppKernelAPIFromHandle } from '@mog-sdk/kernel/app-api';
+import { hasPersistedSnapshot, readMeta } from '@mog-sdk/kernel/storage';
+import type { ShellBootstrapResult } from '@mog/shell';
 import {
   CapabilityProvider,
   createShell,
@@ -34,56 +34,46 @@ import {
   SettingsDialog,
   ShellHost,
   useFileExplorerConfig,
-} from "@mog/shell";
-import { useCollabStore } from "@mog/app-spreadsheet/chrome/collab";
-import React, {
-  Component,
-  ReactNode,
-  useCallback,
-  useEffect,
-  useState,
-} from "react";
-import { nextSearchForActiveDoc } from "./routing/active-doc-route";
+} from '@mog/shell';
+import { useCollabStore } from '@mog/app-spreadsheet/chrome/collab';
+import React, { Component, ReactNode, useCallback, useEffect, useState } from 'react';
+import { nextSearchForActiveDoc } from './routing/active-doc-route';
 
 const disposeSpreadsheetTestingPanel = registerSpreadsheetTestingPanel();
-type DevColorScheme = "light" | "dark" | "system";
-type DevResolvedColorScheme = "light" | "dark";
+type DevColorScheme = 'light' | 'dark' | 'system';
+type DevResolvedColorScheme = 'light' | 'dark';
 
 function getSystemColorScheme(): DevResolvedColorScheme {
   if (
-    typeof window !== "undefined" &&
-    typeof window.matchMedia === "function" &&
-    window.matchMedia("(prefers-color-scheme: dark)").matches
+    typeof window !== 'undefined' &&
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(prefers-color-scheme: dark)').matches
   ) {
-    return "dark";
+    return 'dark';
   }
-  return "light";
+  return 'light';
 }
 
 function readInitialDevColorScheme(): DevColorScheme {
-  if (typeof window === "undefined") return "light";
-  const value = new URLSearchParams(window.location.search).get("mog-theme");
-  if (value === "dark" || value === "system" || value === "light") {
+  if (typeof window === 'undefined') return 'light';
+  const value = new URLSearchParams(window.location.search).get('mog-theme');
+  if (value === 'dark' || value === 'system' || value === 'light') {
     persistDevColorScheme(value);
     return value;
   }
   try {
-    const persisted = window.localStorage.getItem(
-      "mog-spreadsheet-display-mode",
-    );
-    return persisted === "dark" ||
-      persisted === "system" ||
-      persisted === "light"
+    const persisted = window.localStorage.getItem('mog-spreadsheet-display-mode');
+    return persisted === 'dark' || persisted === 'system' || persisted === 'light'
       ? persisted
-      : "light";
+      : 'light';
   } catch {
-    return "light";
+    return 'light';
   }
 }
 
 function persistDevColorScheme(mode: DevColorScheme): void {
   try {
-    window.localStorage.setItem("mog-spreadsheet-display-mode", mode);
+    window.localStorage.setItem('mog-spreadsheet-display-mode', mode);
   } catch {
     // Display preference persistence is best-effort and must not block the app.
   }
@@ -93,25 +83,20 @@ function resolveDevColorScheme(
   colorScheme: DevColorScheme,
   systemColorScheme: DevResolvedColorScheme,
 ): DevResolvedColorScheme {
-  return colorScheme === "system" ? systemColorScheme : colorScheme;
+  return colorScheme === 'system' ? systemColorScheme : colorScheme;
 }
 
 function readDevFeatureGates(): FeatureGates {
-  if (typeof window === "undefined") return {};
-  const raw = new URLSearchParams(window.location.search).get(
-    "mog-feature-gates",
-  );
+  if (typeof window === 'undefined') return {};
+  const raw = new URLSearchParams(window.location.search).get('mog-feature-gates');
   if (!raw) return {};
   try {
     const parsed = JSON.parse(raw);
-    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
       return parsed as FeatureGates;
     }
   } catch (err) {
-    console.warn(
-      "[App] Failed to parse mog-feature-gates query parameter",
-      err,
-    );
+    console.warn('[App] Failed to parse mog-feature-gates query parameter', err);
   }
   return {};
 }
@@ -133,33 +118,23 @@ let currentShell: ShellBootstrapResult | null = null;
  */
 function getShellPromise(): Promise<ShellBootstrapResult> {
   if (!shellPromise) {
-    console.log("[App] Starting shell bootstrap...");
+    console.log('[App] Starting shell bootstrap...');
     const collabUrl =
-      (typeof window !== "undefined" &&
-        (window as any).__MOG_COLLAB_URL_OVERRIDE__) ||
+      (typeof window !== 'undefined' && (window as any).__MOG_COLLAB_URL_OVERRIDE__) ||
       (import.meta.env.VITE_MOG_COLLAB_URL as string | undefined) ||
-      "ws://localhost:4100";
+      'ws://localhost:4100';
     // Seed collab store eagerly so CollaborateButton has the URL before React renders.
     // Use a stable session-scoped identity so different browser contexts
     // (separate tabs, incognito) get distinct user IDs — critical for collab
     // presence to work (the sidecar filters out self by participantId).
-    const DEV_USER_KEY = "mog:dev-user-id";
+    const DEV_USER_KEY = 'mog:dev-user-id';
     let devUserId = sessionStorage.getItem(DEV_USER_KEY);
     if (!devUserId) {
       devUserId = `dev-${crypto.randomUUID().slice(0, 8)}`;
       sessionStorage.setItem(DEV_USER_KEY, devUserId);
     }
-    const DEV_NAME_KEY = "mog:dev-user-name";
-    const DEV_NAMES = [
-      "Alice",
-      "Bob",
-      "Charlie",
-      "Dana",
-      "Eve",
-      "Frank",
-      "Grace",
-      "Heidi",
-    ];
+    const DEV_NAME_KEY = 'mog:dev-user-name';
+    const DEV_NAMES = ['Alice', 'Bob', 'Charlie', 'Dana', 'Eve', 'Frank', 'Grace', 'Heidi'];
     let devUserName = sessionStorage.getItem(DEV_NAME_KEY);
     if (!devUserName) {
       devUserName = DEV_NAMES[Math.floor(Math.random() * DEV_NAMES.length)];
@@ -172,7 +147,7 @@ function getShellPromise(): Promise<ShellBootstrapResult> {
     shellPromise = createShell({ collabUrl }).then(async (shell) => {
       // Start the event dispatcher (wires up Tauri menu listeners)
       await shell.eventDispatcher.start();
-      console.log("[App] Shell bootstrap complete");
+      console.log('[App] Shell bootstrap complete');
       currentShell = shell;
 
       // Expose shell services for devtools/testing (dev mode only)
@@ -189,9 +164,7 @@ function getShellPromise(): Promise<ShellBootstrapResult> {
 // =============================================================================
 if (import.meta.hot) {
   import.meta.hot.dispose(() => {
-    console.log(
-      "[App] HMR: Disposing shell to prevent file descriptor leak...",
-    );
+    console.log('[App] HMR: Disposing shell to prevent file descriptor leak...');
     disposeSpreadsheetTestingPanel();
     // C7: Deactivate collab session before shell dispose to prevent stale sidecar refs
     useCollabStore.getState().deactivateCollabSession();
@@ -228,7 +201,7 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo): void {
-    console.error("App error:", error, errorInfo);
+    console.error('App error:', error, errorInfo);
   }
 
   handleRetry = (): void => {
@@ -248,7 +221,7 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
               Something went wrong
             </h2>
             <p className="m-0 text-sm text-gray-500 font-sans">
-              {this.state.error?.message ?? "An unexpected error occurred"}
+              {this.state.error?.message ?? 'An unexpected error occurred'}
             </p>
             <button
               className="px-6 py-2 bg-blue-600 text-white border-none rounded font-sans text-sm font-medium cursor-pointer hover:bg-blue-700"
@@ -351,9 +324,7 @@ export function App(): React.JSX.Element {
   const [shellLoading, setShellLoading] = useState(true);
 
   // Fallback document/kernel for non-spreadsheet apps
-  const [fallbackHandle, setFallbackHandle] = useState<DocumentHandle | null>(
-    null,
-  );
+  const [fallbackHandle, setFallbackHandle] = useState<DocumentHandle | null>(null);
   const [kernelLoading, setKernelLoading] = useState(true);
 
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -361,28 +332,25 @@ export function App(): React.JSX.Element {
   const [uiColorScheme, setUiColorScheme] = useState<DevColorScheme>(() =>
     readInitialDevColorScheme(),
   );
-  const [systemColorScheme, setSystemColorScheme] =
-    useState<DevResolvedColorScheme>(() => getSystemColorScheme());
+  const [systemColorScheme, setSystemColorScheme] = useState<DevResolvedColorScheme>(() =>
+    getSystemColorScheme(),
+  );
 
   useEffect(() => {
-    if (
-      typeof window === "undefined" ||
-      typeof window.matchMedia !== "function"
-    )
-      return;
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
 
-    const query = window.matchMedia("(prefers-color-scheme: dark)");
-    const update = () => setSystemColorScheme(query.matches ? "dark" : "light");
+    const query = window.matchMedia('(prefers-color-scheme: dark)');
+    const update = () => setSystemColorScheme(query.matches ? 'dark' : 'light');
     update();
-    query.addEventListener?.("change", update);
+    query.addEventListener?.('change', update);
     return () => {
-      query.removeEventListener?.("change", update);
+      query.removeEventListener?.('change', update);
     };
   }, []);
 
   useEffect(() => {
     (window as any).__MOG_SET_COLOR_SCHEME__ = (next: DevColorScheme) => {
-      if (next === "light" || next === "dark" || next === "system") {
+      if (next === 'light' || next === 'dark' || next === 'system') {
         persistDevColorScheme(next);
         setUiColorScheme(next);
       }
@@ -447,7 +415,7 @@ export function App(): React.JSX.Element {
         // IndexedDB on browser regardless of the legacy `providers` shape;
         // `internal: true` is the correct opt-out.)
         const handle = await DocumentFactory.create({
-          documentId: "os-fallback-doc",
+          documentId: 'os-fallback-doc',
           internal: true,
         });
         setFallbackHandle(handle);
@@ -461,9 +429,9 @@ export function App(): React.JSX.Element {
           rootCause = rootCause.cause;
         }
         console.error(
-          "[App] Failed to create fallback document:",
+          '[App] Failed to create fallback document:',
           err,
-          "\n  Root cause:",
+          '\n  Root cause:',
           rootCause,
         );
       } finally {
@@ -475,7 +443,7 @@ export function App(): React.JSX.Element {
 
     return () => {
       void fallbackHandle?.dispose().catch((err) => {
-        console.error("[App] fallback dispose failed:", err);
+        console.error('[App] fallback dispose failed:', err);
       });
     };
   }, [shellLoading]);
@@ -530,13 +498,13 @@ export function App(): React.JSX.Element {
       const params = new URLSearchParams(window.location.search);
 
       // 1. ?new — highest precedence.
-      if (params.has("new")) {
+      if (params.has('new')) {
         const newId = `doc-${Date.now()}`;
         // Drop ?new and surface ?doc=<newId> so refresh re-hydrates instead
         // of minting another blank doc.
-        params.delete("new");
-        params.set("doc", newId);
-        window.history.replaceState({}, "", `?${params.toString()}`);
+        params.delete('new');
+        params.set('doc', newId);
+        window.history.replaceState({}, '', `?${params.toString()}`);
 
         // The boot decision is made here — we're
         // committed to the `?new` branch. `__dt.persistenceEnabled` should
@@ -548,13 +516,13 @@ export function App(): React.JSX.Element {
         try {
           await dm.createDocument(newId, {
             documentId: newId,
-            operation: "create",
+            operation: 'create',
           });
           if (cancelled) return;
           store.getState().addOpenFileId(newId);
           store.getState().setActiveFileId(newId);
         } catch (err) {
-          console.error("[App] ?new boot path failed:", err);
+          console.error('[App] ?new boot path failed:', err);
         } finally {
           finishBootRoute();
         }
@@ -564,19 +532,18 @@ export function App(): React.JSX.Element {
       // 1b. ?collab=<roomId> — join a collab session via invite link.
       // The document manager opens the host-backed room state and sidecar
       // atomically before the workbook is published to shell/app UI.
-      const collabParam = params.get("collab");
+      const collabParam = params.get('collab');
       if (collabParam) {
         markBootResolutionTerminal();
 
         const collabUrl = useCollabStore.getState().config?.baseUrl ?? null;
         if (!collabUrl) {
-          console.error("[App] ?collab boot path: no collabUrl configured");
+          console.error('[App] ?collab boot path: no collabUrl configured');
           finishBootRoute();
           return;
         }
 
-        const participantId =
-          useCollabStore.getState().config?.user.userId ?? crypto.randomUUID();
+        const participantId = useCollabStore.getState().config?.user.userId ?? crypto.randomUUID();
         console.log(
           `[App] ?collab boot path: joining room=${collabParam} collabUrl=${collabUrl} participantId=${participantId}`,
         );
@@ -596,12 +563,10 @@ export function App(): React.JSX.Element {
           // Activate UI subscriptions after shell owns the room-backed sidecar.
           const sidecar = dm.getSidecar(collabParam);
           if (sidecar) {
-            useCollabStore
-              .getState()
-              .activateCollabSession(sidecar as any, collabParam);
+            useCollabStore.getState().activateCollabSession(sidecar as any, collabParam);
           }
         } catch (err) {
-          console.error("[App] ?collab boot path failed:", err);
+          console.error('[App] ?collab boot path failed:', err);
         } finally {
           finishBootRoute();
         }
@@ -609,16 +574,13 @@ export function App(): React.JSX.Element {
       }
 
       // 2. ?doc=<id> — hydrate if id has a persisted snapshot.
-      const docParam = params.get("doc");
+      const docParam = params.get('doc');
       if (docParam) {
         let exists = false;
         try {
           exists = await hasPersistedSnapshot(docParam);
         } catch (err) {
-          console.warn(
-            "[App] hasPersistedSnapshot failed; treating as missing:",
-            err,
-          );
+          console.warn('[App] hasPersistedSnapshot failed; treating as missing:', err);
         }
         if (cancelled) return;
 
@@ -631,13 +593,13 @@ export function App(): React.JSX.Element {
           try {
             await dm.createDocument(docParam, {
               documentId: docParam,
-              operation: "open",
+              operation: 'open',
             });
             if (cancelled) return;
             store.getState().addOpenFileId(docParam);
             store.getState().setActiveFileId(docParam);
           } catch (err) {
-            console.error("[App] ?doc hydration failed:", err);
+            console.error('[App] ?doc hydration failed:', err);
           } finally {
             finishBootRoute();
           }
@@ -646,9 +608,9 @@ export function App(): React.JSX.Element {
           // toast hint. Use ?missing-doc=<id> as the one-shot signal so a
           // refresh-loop is impossible (the WelcomeScreen reads-and-clears
           // it on first paint).
-          params.delete("doc");
-          params.set("missing-doc", docParam);
-          window.history.replaceState({}, "", `?${params.toString()}`);
+          params.delete('doc');
+          params.set('missing-doc', docParam);
+          window.history.replaceState({}, '', `?${params.toString()}`);
           finishBootRoute();
         }
         return;
@@ -660,7 +622,7 @@ export function App(): React.JSX.Element {
         const meta = await readMeta();
         lastActiveDocId = meta.lastActiveDocId;
       } catch (err) {
-        console.warn("[App] readMeta failed; falling back to welcome:", err);
+        console.warn('[App] readMeta failed; falling back to welcome:', err);
       }
       if (cancelled) return;
 
@@ -676,8 +638,8 @@ export function App(): React.JSX.Element {
         if (cancelled) return;
 
         if (exists) {
-          params.set("doc", lastActiveDocId);
-          window.history.replaceState({}, "", `?${params.toString()}`);
+          params.set('doc', lastActiveDocId);
+          window.history.replaceState({}, '', `?${params.toString()}`);
           // Decision is final — we're hydrating `lastActiveDocId`. Mark
           // terminal before the await so a corrupt/incompatible snapshot
           // (e.g. a quota-exceeded scenario seeds a fake `0xa1` byte
@@ -687,13 +649,13 @@ export function App(): React.JSX.Element {
           try {
             await dm.createDocument(lastActiveDocId, {
               documentId: lastActiveDocId,
-              operation: "open",
+              operation: 'open',
             });
             if (cancelled) return;
             store.getState().addOpenFileId(lastActiveDocId);
             store.getState().setActiveFileId(lastActiveDocId);
           } catch (err) {
-            console.error("[App] lastActiveDocId hydration failed:", err);
+            console.error('[App] lastActiveDocId hydration failed:', err);
           } finally {
             finishBootRoute();
           }
@@ -722,18 +684,12 @@ export function App(): React.JSX.Element {
     if (!shell || !bootRouteResolved) return;
 
     const syncRoute = (activeFileId: string | null): void => {
-      const mode = activeFileId
-        ? shell.documentManager.getDocumentMode(activeFileId)
-        : null;
-      const nextSearch = nextSearchForActiveDoc(
-        window.location.search,
-        activeFileId,
-        mode,
-      );
+      const mode = activeFileId ? shell.documentManager.getDocumentMode(activeFileId) : null;
+      const nextSearch = nextSearchForActiveDoc(window.location.search, activeFileId, mode);
       if (nextSearch === window.location.search) return;
       window.history.replaceState(
         {},
-        "",
+        '',
         `${window.location.pathname}${nextSearch}${window.location.hash}`,
       );
     };
@@ -758,7 +714,7 @@ export function App(): React.JSX.Element {
         return;
       }
       const mode = shell.documentManager.getDocumentMode(activeFileId);
-      if (mode?.kind !== "collaboration") {
+      if (mode?.kind !== 'collaboration') {
         useCollabStore.getState().deactivateCollabSession();
         return;
       }
@@ -769,9 +725,7 @@ export function App(): React.JSX.Element {
       }
       const current = useCollabStore.getState();
       if (current.sidecar === sidecar && current.roomId === mode.roomId) return;
-      useCollabStore
-        .getState()
-        .activateCollabSession(sidecar as any, mode.roomId);
+      useCollabStore.getState().activateCollabSession(sidecar as any, mode.roomId);
     };
 
     syncCollabUi(shell.store.getState().activeFileId);
@@ -824,7 +778,7 @@ export function App(): React.JSX.Element {
   // -------------------------------------------------------------------------
   // Debug logging
   // -------------------------------------------------------------------------
-  console.log("[App] State:", {
+  console.log('[App] State:', {
     shellLoading,
     shell: !!shell,
     kernelLoading,
@@ -834,16 +788,13 @@ export function App(): React.JSX.Element {
   // -------------------------------------------------------------------------
   // Render
   // -------------------------------------------------------------------------
-  const resolvedUiColorScheme = resolveDevColorScheme(
-    uiColorScheme,
-    systemColorScheme,
-  );
+  const resolvedUiColorScheme = resolveDevColorScheme(uiColorScheme, systemColorScheme);
   const themeAttributes = {
-    "data-mog-color-scheme": resolvedUiColorScheme,
-    "data-mog-ui-color-scheme": uiColorScheme,
-    "data-mog-ui-resolved-color-scheme": resolvedUiColorScheme,
-    "data-mog-canvas-color-scheme": "light",
-    "data-mog-canvas-resolved-color-scheme": "light",
+    'data-mog-color-scheme': resolvedUiColorScheme,
+    'data-mog-ui-color-scheme': uiColorScheme,
+    'data-mog-ui-resolved-color-scheme': resolvedUiColorScheme,
+    'data-mog-canvas-color-scheme': 'light',
+    'data-mog-canvas-resolved-color-scheme': 'light',
   } as const;
 
   // Shell or kernel loading state
@@ -867,11 +818,7 @@ export function App(): React.JSX.Element {
     <CapabilityProvider registry={shell.capabilityRegistry}>
       <ShellProvider shell={shell}>
         <ErrorBoundary>
-          <div
-            className="h-screen w-screen"
-            data-mog-engine=""
-            {...themeAttributes}
-          >
+          <div className="h-screen w-screen" data-mog-engine="" {...themeAttributes}>
             <PortalContainerProvider>
               <ShellHostWithFileExplorer
                 kernel={appKernelAPI}

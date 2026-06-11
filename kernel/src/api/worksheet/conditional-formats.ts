@@ -353,11 +353,7 @@ export class WorksheetConditionalFormattingImpl implements WorksheetConditionalF
     origin: { row: number; col: number },
     isCut: boolean,
   ): Promise<void> {
-    assertCfRelativeFormatArray(
-      relativeCFs,
-      ['relativeCFs'],
-      'conditionalFormats.cloneForPaste',
-    );
+    assertCfRelativeFormatArray(relativeCFs, ['relativeCFs'], 'conditionalFormats.cloneForPaste');
     relativeCFs.forEach((cf, index) => {
       assertCfRuleArray(
         cf?.rules,

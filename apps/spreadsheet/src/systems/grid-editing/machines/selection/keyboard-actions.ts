@@ -174,7 +174,13 @@ const extendSelection = assign(
       const movingEdge = getMovingEdge(context.pendingRange, anchorCell);
       const targetRow =
         event.direction === 'up' || event.direction === 'down'
-          ? moveCell(movingEdge, event.direction, 1).row
+          ? moveCellSkipHidden(
+              movingEdge,
+              event.direction,
+              1,
+              context.isRowHidden,
+              context.isColHidden,
+            ).row
           : movingEdge.row;
       const activeCell =
         context.modes.extend && !event.shiftKey
@@ -196,7 +202,13 @@ const extendSelection = assign(
       const movingEdge = getMovingEdge(context.pendingRange, anchorCell);
       const targetCol =
         event.direction === 'left' || event.direction === 'right'
-          ? moveCell(movingEdge, event.direction, 1).col
+          ? moveCellSkipHidden(
+              movingEdge,
+              event.direction,
+              1,
+              context.isRowHidden,
+              context.isColHidden,
+            ).col
           : movingEdge.col;
       const activeCell =
         context.modes.extend && !event.shiftKey
@@ -216,28 +228,16 @@ const extendSelection = assign(
     // Get the "moving edge" - the corner opposite the anchor that should move
     // For first extend (single cell), the moving edge is the activeCell itself
     const movingEdge = getMovingEdge(context.pendingRange, anchor);
-    const isSingleCellRange =
-      normalizedRange.startRow === normalizedRange.endRow &&
-      normalizedRange.startCol === normalizedRange.endCol;
-    const hiddenAnchorOnMovingAxis =
-      event.direction === 'left' || event.direction === 'right'
-        ? (context.isColHidden?.(anchor.col) ?? false)
-        : (context.isRowHidden?.(anchor.row) ?? false);
-
-    // Shift+Arrow normally changes range geometry by worksheet coordinates so
-    // hidden rows/columns remain inside the selected rectangle. A hidden single
-    // cell reached via Name Box is the exception: the first extend should land
-    // on the next visible edge while still selecting the hidden span.
-    const stepped =
-      isSingleCellRange && hiddenAnchorOnMovingAxis
-        ? moveCellSkipHidden(
-            movingEdge,
-            event.direction,
-            1,
-            context.isRowHidden,
-            context.isColHidden,
-          )
-        : moveCell(movingEdge, event.direction, 1);
+    // Shift+Arrow moves the range edge by one visible cell. The resulting
+    // rectangular range still includes hidden rows/columns between the anchor
+    // and the visible edge.
+    const stepped = moveCellSkipHidden(
+      movingEdge,
+      event.direction,
+      1,
+      context.isRowHidden,
+      context.isColHidden,
+    );
     // extend past a merge boundary so the moving edge doesn't
     // sit on the merge interior — matches the same machine-internal escape
     // used by `moveActiveCell`.

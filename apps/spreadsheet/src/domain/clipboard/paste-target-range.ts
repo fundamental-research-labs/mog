@@ -63,10 +63,7 @@ export function resolveExecutionTargetRange(
   return normalized;
 }
 
-export function getTileOrigins(
-  targetRange: CellRange,
-  dimensions: PasteDimensions,
-): CellCoord[] {
+export function getTileOrigins(targetRange: CellRange, dimensions: PasteDimensions): CellCoord[] {
   if (dimensions.rows <= 0 || dimensions.cols <= 0) return [];
 
   const origins: CellCoord[] = [];
@@ -78,7 +75,10 @@ export function getTileOrigins(
   return origins;
 }
 
-function getProcessedDimensions(data: ClipboardData, options: PasteSpecialOptions): PasteDimensions {
+function getProcessedDimensions(
+  data: ClipboardData,
+  options: PasteSpecialOptions,
+): PasteDimensions {
   let processedData = data;
   if (options.transpose) {
     processedData = transposeData(processedData);

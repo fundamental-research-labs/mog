@@ -11,18 +11,10 @@
     "baseUrl": ".",
     "paths": {
       "@mog/devtools": ["../../tools/devtools/src/index.ts"],
-      "@mog/devtools/console/api": [
-        "../../tools/devtools/src/console/api.ts"
-      ],
-      "@mog/devtools/invariants-slot": [
-        "../../tools/devtools/src/invariants-slot.ts"
-      ],
-      "@mog/devtools/shell-persistence": [
-        "../../tools/devtools/src/shell-persistence.ts"
-      ],
-      "@mog/devtools/ui/devtools-app": [
-        "../../tools/devtools/src/ui/devtools-app.tsx"
-      ],
+      "@mog/devtools/console/api": ["../../tools/devtools/src/console/api.ts"],
+      "@mog/devtools/invariants-slot": ["../../tools/devtools/src/invariants-slot.ts"],
+      "@mog/devtools/shell-persistence": ["../../tools/devtools/src/shell-persistence.ts"],
+      "@mog/devtools/ui/devtools-app": ["../../tools/devtools/src/ui/devtools-app.tsx"],
       "@mog-sdk/kernel/app-api": ["../../kernel/src/api/app/index.ts"]
     }
   },

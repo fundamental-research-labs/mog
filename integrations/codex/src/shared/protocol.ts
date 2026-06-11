@@ -61,7 +61,12 @@ export type BrowserRpcRequest =
 
 export type BrowserRpcResult =
   | { readonly requestId: string; readonly ok: true; readonly result: JsonValue }
-  | { readonly requestId: string; readonly ok: false; readonly error: string; readonly stack?: string };
+  | {
+      readonly requestId: string;
+      readonly ok: false;
+      readonly error: string;
+      readonly stack?: string;
+    };
 
 export type JsonValue =
   | null
@@ -72,8 +77,9 @@ export type JsonValue =
   | { readonly [key: string]: JsonValue };
 
 export function bytesToBase64(bytes: Uint8Array): string {
-  const maybeBuffer = (globalThis as { Buffer?: { from(input: Uint8Array): { toString(encoding: 'base64'): string } } })
-    .Buffer;
+  const maybeBuffer = (
+    globalThis as { Buffer?: { from(input: Uint8Array): { toString(encoding: 'base64'): string } } }
+  ).Buffer;
   if (maybeBuffer) {
     return maybeBuffer.from(bytes).toString('base64');
   }

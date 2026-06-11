@@ -31,8 +31,8 @@
  *   node --experimental-strip-types --test dev/app/__tests__/wasm-pack-lock.test.ts
  * (Node 24+; uses built-in type stripping — no tsx or package.json needed.)
  */
-import { describe, it } from "node:test";
-import assert from "node:assert/strict";
+import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
 import {
   openSync,
   writeFileSync,
@@ -42,29 +42,26 @@ import {
   readFileSync,
   mkdtempSync,
   rmSync,
-} from "node:fs";
-import { tmpdir } from "node:os";
-import path from "node:path";
-import { Worker } from "node:worker_threads";
-import { fileURLToPath } from "node:url";
+} from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { Worker } from 'node:worker_threads';
+import { fileURLToPath } from 'node:url';
 
 const LOCK_STALE_MS = 10 * 60_000;
 
 /** Mirror of ensureWasmBuilt's `tryAcquireLock`. Keep in sync. */
 function tryAcquireLock(lockFile: string): number | null {
   try {
-    const fd = openSync(lockFile, "wx");
+    const fd = openSync(lockFile, 'wx');
     try {
-      writeFileSync(
-        fd,
-        JSON.stringify({ pid: process.pid, startedAt: Date.now() }),
-      );
+      writeFileSync(fd, JSON.stringify({ pid: process.pid, startedAt: Date.now() }));
     } finally {
       closeSync(fd);
     }
     return process.pid;
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "EEXIST") return null;
+    if ((err as NodeJS.ErrnoException).code === 'EEXIST') return null;
     throw err;
   }
 }
@@ -73,11 +70,11 @@ function tryAcquireLock(lockFile: string): number | null {
 function tryReclaimStaleLock(lockFile: string): boolean {
   let startedAt: number;
   try {
-    startedAt = JSON.parse(readFileSync(lockFile, "utf8")).startedAt;
+    startedAt = JSON.parse(readFileSync(lockFile, 'utf8')).startedAt;
   } catch {
     return tryAcquireLock(lockFile) !== null;
   }
-  if (typeof startedAt !== "number" || Date.now() - startedAt < LOCK_STALE_MS) {
+  if (typeof startedAt !== 'number' || Date.now() - startedAt < LOCK_STALE_MS) {
     return false;
   }
   try {
@@ -89,99 +86,89 @@ function tryReclaimStaleLock(lockFile: string): boolean {
 }
 
 function mkScratch(): string {
-  return mkdtempSync(path.join(tmpdir(), "wasm-pack-lock-test-"));
+  return mkdtempSync(path.join(tmpdir(), 'wasm-pack-lock-test-'));
 }
 
-describe("wasm-pack bootstrap lock", () => {
+describe('wasm-pack bootstrap lock', () => {
   it('openSync with "wx" flag throws EEXIST if the file exists', () => {
     const dir = mkScratch();
     try {
-      const lockFile = path.join(dir, ".wasm-pack.lock");
-      const fd = openSync(lockFile, "wx");
+      const lockFile = path.join(dir, '.wasm-pack.lock');
+      const fd = openSync(lockFile, 'wx');
       closeSync(fd);
       let err: NodeJS.ErrnoException | undefined;
       try {
-        openSync(lockFile, "wx");
+        openSync(lockFile, 'wx');
       } catch (e) {
         err = e as NodeJS.ErrnoException;
       }
-      assert.ok(err, "expected second openSync to throw");
-      assert.equal(err!.code, "EEXIST");
+      assert.ok(err, 'expected second openSync to throw');
+      assert.equal(err!.code, 'EEXIST');
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
   });
 
-  it("tryAcquireLock returns null when the lockfile already exists", () => {
+  it('tryAcquireLock returns null when the lockfile already exists', () => {
     const dir = mkScratch();
     try {
-      const lockFile = path.join(dir, ".wasm-pack.lock");
+      const lockFile = path.join(dir, '.wasm-pack.lock');
       const first = tryAcquireLock(lockFile);
-      assert.equal(
-        typeof first,
-        "number",
-        "first caller should win and get a pid",
-      );
+      assert.equal(typeof first, 'number', 'first caller should win and get a pid');
       const second = tryAcquireLock(lockFile);
-      assert.equal(second, null, "second caller must see EEXIST and get null");
+      assert.equal(second, null, 'second caller must see EEXIST and get null');
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
   });
 
-  it("tryAcquireLock writes valid JSON with pid and startedAt", () => {
+  it('tryAcquireLock writes valid JSON with pid and startedAt', () => {
     const dir = mkScratch();
     try {
-      const lockFile = path.join(dir, ".wasm-pack.lock");
+      const lockFile = path.join(dir, '.wasm-pack.lock');
       tryAcquireLock(lockFile);
-      const parsed = JSON.parse(readFileSync(lockFile, "utf8"));
-      assert.equal(typeof parsed.pid, "number");
-      assert.equal(typeof parsed.startedAt, "number");
-      assert.ok(
-        Date.now() - parsed.startedAt < 5_000,
-        "startedAt should be within the last 5s",
-      );
+      const parsed = JSON.parse(readFileSync(lockFile, 'utf8'));
+      assert.equal(typeof parsed.pid, 'number');
+      assert.equal(typeof parsed.startedAt, 'number');
+      assert.ok(Date.now() - parsed.startedAt < 5_000, 'startedAt should be within the last 5s');
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
   });
 
-  it("tryReclaimStaleLock refuses to clobber a fresh lock", () => {
+  it('tryReclaimStaleLock refuses to clobber a fresh lock', () => {
     const dir = mkScratch();
     try {
-      const lockFile = path.join(dir, ".wasm-pack.lock");
+      const lockFile = path.join(dir, '.wasm-pack.lock');
       tryAcquireLock(lockFile);
       assert.equal(tryReclaimStaleLock(lockFile), false);
-      assert.ok(existsSync(lockFile), "fresh lockfile must remain intact");
+      assert.ok(existsSync(lockFile), 'fresh lockfile must remain intact');
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
   });
 
-  it("tryReclaimStaleLock reclaims a stale lock (startedAt > 10 min ago)", () => {
+  it('tryReclaimStaleLock reclaims a stale lock (startedAt > 10 min ago)', () => {
     const dir = mkScratch();
     try {
-      const lockFile = path.join(dir, ".wasm-pack.lock");
+      const lockFile = path.join(dir, '.wasm-pack.lock');
       // Write a lockfile dated 11 minutes ago.
       const staleAt = Date.now() - 11 * 60_000;
-      writeFileSync(
-        lockFile,
-        JSON.stringify({ pid: 99999, startedAt: staleAt }),
-      );
+      writeFileSync(lockFile, JSON.stringify({ pid: 99999, startedAt: staleAt }));
       const reclaimed = tryReclaimStaleLock(lockFile);
-      assert.equal(reclaimed, true, "stale lock must be reclaimable");
+      assert.equal(reclaimed, true, 'stale lock must be reclaimable');
       // After reclaim we should own the lock (file exists, content is ours).
       assert.ok(existsSync(lockFile));
-      const parsed = JSON.parse(readFileSync(lockFile, "utf8"));
+      const parsed = JSON.parse(readFileSync(lockFile, 'utf8'));
       assert.equal(parsed.pid, process.pid);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
   });
 
-  it("N concurrent workers race: exactly one wins the lock", async () => {
+  it('N concurrent workers race: exactly one wins the lock', async () => {
     const dir = mkScratch();
-    const lockFile = path.join(dir, ".wasm-pack.lock");
+    const lockFile = path.join(dir, '.wasm-pack.lock');
     const N = 16;
     try {
       // Spawn N workers in parallel, each calling tryAcquireLock against the
@@ -210,8 +197,8 @@ describe("wasm-pack bootstrap lock", () => {
               `,
               { eval: true, workerData: { lockFile } },
             );
-            w.once("message", (msg) => resolve(msg));
-            w.once("error", (e) => resolve({ won: false, err: String(e) }));
+            w.once('message', (msg) => resolve(msg));
+            w.once('error', (e) => resolve({ won: false, err: String(e) }));
           }),
         );
       }
@@ -219,21 +206,9 @@ describe("wasm-pack bootstrap lock", () => {
       const winners = results.filter((r) => r.won).length;
       const losers = results.filter((r) => !r.won && !r.err).length;
       const errored = results.filter((r) => r.err);
-      assert.equal(
-        errored.length,
-        0,
-        `no worker should error, got: ${JSON.stringify(errored)}`,
-      );
-      assert.equal(
-        winners,
-        1,
-        `exactly one worker must win the lock, got ${winners}`,
-      );
-      assert.equal(
-        losers,
-        N - 1,
-        `remaining ${N - 1} workers must see EEXIST, got ${losers}`,
-      );
+      assert.equal(errored.length, 0, `no worker should error, got: ${JSON.stringify(errored)}`);
+      assert.equal(winners, 1, `exactly one worker must win the lock, got ${winners}`);
+      assert.equal(losers, N - 1, `remaining ${N - 1} workers must see EEXIST, got ${losers}`);
     } finally {
       try {
         unlinkSync(lockFile);
@@ -244,30 +219,30 @@ describe("wasm-pack bootstrap lock", () => {
     }
   });
 
-  it("@mog/vite-wasm-plugin source still defines both primitives with O_EXCL semantics", () => {
+  it('@mog/vite-wasm-plugin source still defines both primitives with O_EXCL semantics', () => {
     // Canary: if someone refactors the plugin and this test's inline copy drifts
     // from reality, fail loudly here so we remember to update both.
     // The lock primitives live in tools/vite-wasm-plugin/src/index.ts.
     const pluginPath = path.resolve(
       path.dirname(fileURLToPath(import.meta.url)),
-      "..",
-      "..",
-      "..",
-      "tools",
-      "vite-wasm-plugin",
-      "src",
-      "index.ts",
+      '..',
+      '..',
+      '..',
+      'tools',
+      'vite-wasm-plugin',
+      'src',
+      'index.ts',
     );
-    const src = readFileSync(pluginPath, "utf8");
+    const src = readFileSync(pluginPath, 'utf8');
     assert.match(
       src,
       /export function tryAcquireLock\b/,
-      "vite-wasm-plugin must export tryAcquireLock",
+      'vite-wasm-plugin must export tryAcquireLock',
     );
     assert.match(
       src,
       /export function tryReclaimStaleLock\b/,
-      "vite-wasm-plugin must export tryReclaimStaleLock",
+      'vite-wasm-plugin must export tryReclaimStaleLock',
     );
     assert.match(
       src,
@@ -277,17 +252,17 @@ describe("wasm-pack bootstrap lock", () => {
     assert.match(
       src,
       /LOCK_STALE_MS\s*=\s*10\s*\*\s*60_000/,
-      "vite-wasm-plugin must define LOCK_STALE_MS as 10 minutes",
+      'vite-wasm-plugin must define LOCK_STALE_MS as 10 minutes',
     );
     assert.match(
       src,
       /async buildStart\(\)/,
-      "buildStart must be async so it can await the wait loop",
+      'buildStart must be async so it can await the wait loop',
     );
     assert.match(
       src,
       /finally\s*\{[\s\S]*?unlinkSync\(lockFile\)/,
-      "lockfile must be removed in a finally block so build failures do not wedge the lock",
+      'lockfile must be removed in a finally block so build failures do not wedge the lock',
     );
   });
 });

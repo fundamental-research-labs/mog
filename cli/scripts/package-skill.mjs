@@ -101,9 +101,7 @@ function assertNoPinnedInstallVersions(source, label) {
     }
   }
   if (pinned.length > 0) {
-    throw new Error(
-      `${label} must not pin CLI install versions; found ${pinned.join(', ')}`,
-    );
+    throw new Error(`${label} must not pin CLI install versions; found ${pinned.join(', ')}`);
   }
 }
 

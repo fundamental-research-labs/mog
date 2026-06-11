@@ -125,16 +125,18 @@ describe('clearWithMode', () => {
   it('rejects unknown modes before bridge calls', async () => {
     const ctx = createMockCtx();
 
-    await expect(RangeQueryOps.clearWithMode(ctx, SHEET_ID, RANGE, 'values')).rejects.toMatchObject({
-      code: 'API_INVALID_ARGUMENT',
-      path: ['applyTo'],
-      context: {
-        issueCode: 'UNKNOWN_CLEAR_MODE',
-        received: 'values',
-        validValues: ['all', 'contents', 'formats', 'hyperlinks'],
-        suggestion: expect.stringContaining('"contents"'),
+    await expect(RangeQueryOps.clearWithMode(ctx, SHEET_ID, RANGE, 'values')).rejects.toMatchObject(
+      {
+        code: 'API_INVALID_ARGUMENT',
+        path: ['applyTo'],
+        context: {
+          issueCode: 'UNKNOWN_CLEAR_MODE',
+          received: 'values',
+          validValues: ['all', 'contents', 'formats', 'hyperlinks'],
+          suggestion: expect.stringContaining('"contents"'),
+        },
       },
-    });
+    );
 
     expect(ctx.computeBridge.clearRangeByPosition).not.toHaveBeenCalled();
     expect(ctx.computeBridge.clearRange).not.toHaveBeenCalled();

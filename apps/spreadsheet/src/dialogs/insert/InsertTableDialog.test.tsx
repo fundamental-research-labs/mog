@@ -3,6 +3,10 @@ import { jest } from '@jest/globals';
 import React from 'react';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import '@testing-library/jest-dom';
+import {
+  clearPendingDialogActionForTest,
+  getPendingDialogActionForTest,
+} from './dialog-action-scheduler';
 
 const closeInsertTableDialog = jest.fn();
 const tablesAdd = jest.fn(async () => undefined);
@@ -150,8 +154,7 @@ describe('InsertTableDialog', () => {
     workbook.getSheetById.mockClear();
     undoGroup.mockClear();
     tablesAdd.mockClear();
-    delete (window as typeof window & { __MOG_PENDING_DIALOG_ACTION__?: Promise<void> })
-      .__MOG_PENDING_DIALOG_ACTION__;
+    clearPendingDialogActionForTest();
   });
 
   afterEach(() => {
@@ -170,9 +173,7 @@ describe('InsertTableDialog', () => {
     expect(closeInsertTableDialog).toHaveBeenCalledTimes(1);
     expect(undoGroup).not.toHaveBeenCalled();
     expect(tablesAdd).not.toHaveBeenCalled();
-    const pendingAction = (
-      window as typeof window & { __MOG_PENDING_DIALOG_ACTION__?: Promise<void> }
-    ).__MOG_PENDING_DIALOG_ACTION__;
+    const pendingAction = getPendingDialogActionForTest();
     expect(pendingAction).toBeInstanceOf(Promise);
 
     jest.advanceTimersByTime(99);
@@ -187,9 +188,6 @@ describe('InsertTableDialog', () => {
       hasHeaders: false,
       style: 'medium2',
     });
-    expect(
-      (window as typeof window & { __MOG_PENDING_DIALOG_ACTION__?: Promise<void> })
-        .__MOG_PENDING_DIALOG_ACTION__,
-    ).toBeUndefined();
+    expect(getPendingDialogActionForTest()).toBeUndefined();
   });
 });

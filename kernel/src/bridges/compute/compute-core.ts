@@ -92,33 +92,33 @@ function isShowFormulasChange(change: SheetSettingsChange): boolean {
 function historyReplayNeedsFullViewportRefresh(result: MutationResult): boolean {
   return Boolean(
     result.propertyChanges?.length ||
-      result.dimensionChanges?.length ||
-      result.mergeChanges?.length ||
-      result.visibilityChanges?.length ||
-      result.commentChanges?.length ||
-      result.filterChanges?.length ||
-      result.tableChanges?.length ||
-      result.slicerChanges?.length ||
-      result.sheetChanges?.length ||
-      result.settingsChanges?.length ||
-      result.pageBreakChanges?.length ||
-      result.printAreaChanges?.length ||
-      result.printTitlesChanges?.length ||
-      result.printSettingsChanges?.length ||
-      result.splitConfigChanges?.length ||
-      result.scrollPositionChanges?.length ||
-      result.viewSelectionChanges?.length ||
-      result.workbookSettingsChanges?.length ||
-      result.cfChanges?.length ||
-      result.namedRangeChanges?.length ||
-      result.groupingChanges?.length ||
-      result.sparklineChanges?.length ||
-      result.sortingChanges?.length ||
-      result.structureChanges?.length ||
-      result.floatingObjectChanges?.length ||
-      result.floatingObjectGroupChanges?.length ||
-      result.pivotChanges?.length ||
-      result.rangeChanges?.length,
+    result.dimensionChanges?.length ||
+    result.mergeChanges?.length ||
+    result.visibilityChanges?.length ||
+    result.commentChanges?.length ||
+    result.filterChanges?.length ||
+    result.tableChanges?.length ||
+    result.slicerChanges?.length ||
+    result.sheetChanges?.length ||
+    result.settingsChanges?.length ||
+    result.pageBreakChanges?.length ||
+    result.printAreaChanges?.length ||
+    result.printTitlesChanges?.length ||
+    result.printSettingsChanges?.length ||
+    result.splitConfigChanges?.length ||
+    result.scrollPositionChanges?.length ||
+    result.viewSelectionChanges?.length ||
+    result.workbookSettingsChanges?.length ||
+    result.cfChanges?.length ||
+    result.namedRangeChanges?.length ||
+    result.groupingChanges?.length ||
+    result.sparklineChanges?.length ||
+    result.sortingChanges?.length ||
+    result.structureChanges?.length ||
+    result.floatingObjectChanges?.length ||
+    result.floatingObjectGroupChanges?.length ||
+    result.pivotChanges?.length ||
+    result.rangeChanges?.length,
   );
 }
 

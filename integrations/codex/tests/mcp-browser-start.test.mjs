@@ -50,7 +50,14 @@ test('mog_browser_start returns a live localhost browser host and bootstrap payl
     const messages = [];
     readFrames(child.stdout, (message) => messages.push(message));
 
-    child.stdin.write(frame({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2024-11-05' } }));
+    child.stdin.write(
+      frame({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'initialize',
+        params: { protocolVersion: '2024-11-05' },
+      }),
+    );
     child.stdin.write(frame({ jsonrpc: '2.0', method: 'notifications/initialized', params: {} }));
     child.stdin.write(
       frame({
@@ -62,7 +69,10 @@ test('mog_browser_start returns a live localhost browser host and bootstrap payl
     );
 
     await new Promise((resolvePromise, rejectPromise) => {
-      const timeout = setTimeout(() => rejectPromise(new Error('Timed out waiting for mog_browser_start')), 5000);
+      const timeout = setTimeout(
+        () => rejectPromise(new Error('Timed out waiting for mog_browser_start')),
+        5000,
+      );
       const interval = setInterval(() => {
         if (messages.some((message) => message.id === 2)) {
           clearTimeout(timeout);
@@ -81,7 +91,10 @@ test('mog_browser_start returns a live localhost browser host and bootstrap payl
     assert.match(await pageResponse.text(), /Mog Spreadsheet/);
 
     const pageUrl = new URL(start.browserUrl);
-    const bootstrapUrl = new URL(`/api${pageUrl.pathname}/bootstrap${pageUrl.search}`, pageUrl.origin);
+    const bootstrapUrl = new URL(
+      `/api${pageUrl.pathname}/bootstrap${pageUrl.search}`,
+      pageUrl.origin,
+    );
     const bootstrapResponse = await fetch(bootstrapUrl);
     assert.equal(bootstrapResponse.status, 200);
     const bootstrap = await bootstrapResponse.json();

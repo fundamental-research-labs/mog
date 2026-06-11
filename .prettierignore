@@ -14,14 +14,16 @@ pkg/
 # Coverage
 coverage/
 
+# Downloaded VS Code integration test runtime
+integrations/vscode/mog-xlsx-editor/.vscode-test/
+
 # Generated files
 *.gen.ts
 *.gen.js
 infra/rust-bridge/bridge-ts/generated/
 runtime/sdk/src/generated/
-compute/wasm/npm/compute_core_wasm.js
-compute/wasm/npm/compute_core_wasm.d.ts
-compute/wasm/npm/compute_core_wasm_bg.wasm.d.ts
+compute/chart-render-wasm/npm/
+compute/wasm/npm/
 
 # Markdown
 *.md

@@ -78,10 +78,12 @@ describe('Compute mutation admission', () => {
     };
     const core = createStartedCore(ctx, transport);
 
-    const promise = core.mutatePublic('compute_set_cell', () =>
-      transport.call('compute_set_cell', { docId: 'test-doc' }) as Promise<
-        [Uint8Array, MutationResult]
-      >,
+    const promise = core.mutatePublic(
+      'compute_set_cell',
+      () =>
+        transport.call('compute_set_cell', { docId: 'test-doc' }) as Promise<
+          [Uint8Array, MutationResult]
+        >,
     );
 
     await Promise.resolve();
@@ -107,10 +109,12 @@ describe('Compute mutation admission', () => {
     const gate = new WriteGate();
     core.setWriteGate(gate);
 
-    const promise = core.mutatePublic('compute_set_cell', () =>
-      transport.call('compute_set_cell', { docId: 'test-doc' }) as Promise<
-        [Uint8Array, MutationResult]
-      >,
+    const promise = core.mutatePublic(
+      'compute_set_cell',
+      () =>
+        transport.call('compute_set_cell', { docId: 'test-doc' }) as Promise<
+          [Uint8Array, MutationResult]
+        >,
     );
     await Promise.resolve();
 
@@ -132,10 +136,12 @@ describe('Compute mutation admission', () => {
     gate.enterClosing();
     core.setWriteGate(gate);
 
-    await core.mutateSystem('compute_complete_deferred_hydration', () =>
-      transport.call('compute_complete_deferred_hydration', { docId: 'test-doc' }) as Promise<
-        [Uint8Array, MutationResult]
-      >,
+    await core.mutateSystem(
+      'compute_complete_deferred_hydration',
+      () =>
+        transport.call('compute_complete_deferred_hydration', { docId: 'test-doc' }) as Promise<
+          [Uint8Array, MutationResult]
+        >,
     );
 
     expect(awaitMaterialized).not.toHaveBeenCalled();

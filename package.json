@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "pnpm --filter @mog/spreadsheet-dev dev",
     "typecheck": "pnpm typecheck:prepare && tsc -b",
-    "typecheck:prepare": "node infra/icons/scripts/ensure-generated.mjs && pnpm --filter @mog-sdk/contracts build && pnpm --filter @mog-sdk/kernel build",
+    "typecheck:prepare": "node infra/icons/scripts/ensure-generated.mjs && pnpm --filter @mog/types-editor typecheck && pnpm --filter @mog-sdk/contracts build && pnpm --filter @mog-sdk/kernel build",
     "test": "pnpm -r --if-present --filter './apps/spreadsheet' --filter './canvas/drawing-canvas' --filter './canvas/drawing/engine' --filter './canvas/drawing/geometry' --filter './canvas/drawing/ink' --filter './canvas/drawing/shapes' --filter './canvas/drawing/diagram' --filter './canvas/drawing/text-effects' --filter './canvas/engine' --filter './canvas/grid-canvas' --filter './canvas/grid-renderer' --filter './canvas/overlay' --filter './charts' --filter './contracts' --filter './kernel' --filter './shell' --filter './table-engine' --filter './typeset/math-engine' run test",
     "build": "pnpm -r --if-present --filter './charts' --filter './connections' --filter './contracts' --filter './file-io' --filter './print-export' --filter './server' --filter './engine' --filter './testing' --filter './diagram' --filter './table-engine' run build",
     "build:bundle": "pnpm --filter @mog/transport --filter @mog/icons --filter @mog/app-spreadsheet run build",

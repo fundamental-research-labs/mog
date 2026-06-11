@@ -9,10 +9,10 @@
  * so exactly one Vite process builds; others poll for the artifact. Stale locks
  * (>10 min) are reclaimed atomically. See inline comments for details.
  */
-import { execSync } from "child_process";
-import fs from "fs";
-import path from "path";
-import { fileURLToPath } from "url";
+import { execSync } from 'child_process';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
 // Return type is `any[]` rather than `Plugin[]` to avoid @types/node version
 // skew — Vite parameterizes Plugin on @types/node, and different monorepo
@@ -23,7 +23,7 @@ import { fileURLToPath } from "url";
 // ---------------------------------------------------------------------------
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const PUBLIC_ROOT = path.resolve(__dirname, "..", "..", "..");
+const PUBLIC_ROOT = path.resolve(__dirname, '..', '..', '..');
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -33,7 +33,7 @@ const PUBLIC_ROOT = path.resolve(__dirname, "..", "..", "..");
  * WASM crates that must be built before the dev server starts.
  * Each entry: [display name, crate directory relative to the public mog root].
  */
-const REQUIRED_WASM_CRATES = [["@mog-sdk/wasm", "compute/wasm"]] as const;
+const REQUIRED_WASM_CRATES = [['@mog-sdk/wasm', 'compute/wasm']] as const;
 
 /**
  * How long a lockfile may persist before we treat it as abandoned. Covers a cold
@@ -61,18 +61,15 @@ const POLL_MS = 250;
 export function tryAcquireLock(lockFile: string): number | null {
   try {
     // 'wx' = O_WRONLY | O_CREAT | O_EXCL -- fails atomically if the file exists.
-    const fd = fs.openSync(lockFile, "wx");
+    const fd = fs.openSync(lockFile, 'wx');
     try {
-      fs.writeFileSync(
-        fd,
-        JSON.stringify({ pid: process.pid, startedAt: Date.now() }),
-      );
+      fs.writeFileSync(fd, JSON.stringify({ pid: process.pid, startedAt: Date.now() }));
     } finally {
       fs.closeSync(fd);
     }
     return process.pid;
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "EEXIST") return null;
+    if ((err as NodeJS.ErrnoException).code === 'EEXIST') return null;
     throw err;
   }
 }
@@ -86,14 +83,14 @@ export function tryAcquireLock(lockFile: string): number | null {
 export function tryReclaimStaleLock(lockFile: string): boolean {
   let startedAt: number;
   try {
-    const raw = fs.readFileSync(lockFile, "utf8");
+    const raw = fs.readFileSync(lockFile, 'utf8');
     startedAt = JSON.parse(raw).startedAt;
   } catch {
     // Lockfile unreadable or vanished between existence-check and read -- the
     // cleanest response is to let the next tryAcquireLock attempt resolve it.
     return tryAcquireLock(lockFile) !== null;
   }
-  if (typeof startedAt !== "number" || Date.now() - startedAt < LOCK_STALE_MS) {
+  if (typeof startedAt !== 'number' || Date.now() - startedAt < LOCK_STALE_MS) {
     return false;
   }
   try {
@@ -120,35 +117,29 @@ export function tryReclaimStaleLock(lockFile: string): boolean {
  */
 function ensureWasmBuilt() {
   return {
-    name: "ensure-wasm-built",
+    name: 'ensure-wasm-built',
     async buildStart() {
       for (const [name, relDir] of REQUIRED_WASM_CRATES) {
         const crateDir = path.resolve(PUBLIC_ROOT, relDir);
-        const wasmArtifact = path.join(
-          crateDir,
-          "npm",
-          "compute_core_wasm_bg.wasm",
-        );
-        const lockFile = path.join(crateDir, ".wasm-pack.lock");
+        const wasmArtifact = path.join(crateDir, 'npm', 'compute_core_wasm_bg.wasm');
+        const lockFile = path.join(crateDir, '.wasm-pack.lock');
         if (fs.existsSync(wasmArtifact)) continue;
 
         let haveLock = tryAcquireLock(lockFile) !== null;
         if (!haveLock) haveLock = tryReclaimStaleLock(lockFile);
 
         if (haveLock) {
-          console.log(
-            `\n[ensure-wasm-built] ${name} WASM artifact not found, building...`,
-          );
+          console.log(`\n[ensure-wasm-built] ${name} WASM artifact not found, building...`);
           try {
             // Delegate to compute/wasm/build.sh -- single source of truth for
             // profile selection (cargo profile.wasm-dev, skip wasm-opt/brotli).
             // MOG_WASM_PROFILE env var lets a developer override (e.g.
             // `MOG_WASM_PROFILE=release pnpm dev` to test the production blob).
             // build.sh sets CARGO_TARGET_DIR itself.
-            const profile = process.env.MOG_WASM_PROFILE ?? "dev";
+            const profile = process.env.MOG_WASM_PROFILE ?? 'dev';
             execSync(`bash build.sh --profile ${profile}`, {
               cwd: crateDir,
-              stdio: "inherit",
+              stdio: 'inherit',
             });
             console.log(`[ensure-wasm-built] ${name} build complete.\n`);
           } catch {
@@ -180,9 +171,7 @@ function ensureWasmBuilt() {
               `[ensure-wasm-built] Timed out after ${WAIT_MAX_MS}ms waiting for peer to build ${name}`,
             );
           }
-          console.log(
-            `[ensure-wasm-built] ${name} WASM artifact is ready (built by peer).`,
-          );
+          console.log(`[ensure-wasm-built] ${name} WASM artifact is ready (built by peer).`);
         }
       }
     },
@@ -194,15 +183,15 @@ function ensureWasmBuilt() {
  * resolves to `compute/wasm/npm`.
  */
 function wasmAlias() {
-  const wasmNpmDir = path.resolve(PUBLIC_ROOT, "compute", "wasm", "npm");
+  const wasmNpmDir = path.resolve(PUBLIC_ROOT, 'compute', 'wasm', 'npm');
 
   return {
-    name: "mog-wasm-alias",
+    name: 'mog-wasm-alias',
     config() {
       return {
         resolve: {
           alias: {
-            "@mog-sdk/wasm": wasmNpmDir,
+            '@mog-sdk/wasm': wasmNpmDir,
           },
         },
       };

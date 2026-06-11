@@ -205,8 +205,7 @@ export function createPublicPackageCandidate(packageName, options = {}) {
     throw new Error(`${packageName}: workspace package directory not found`);
   }
 
-  const outDir =
-    options.outDir ?? mkdtempSync(resolve(tmpdir(), 'mog-public-package-candidate-'));
+  const outDir = options.outDir ?? mkdtempSync(resolve(tmpdir(), 'mog-public-package-candidate-'));
   if (packageName === '@mog-sdk/cli') {
     return createCliPublicPackageDirectory(workspacePackage.dir, {
       root,
@@ -265,7 +264,9 @@ export function createCliPublicPackageDirectory(cliDir, options = {}) {
     throw new Error(`@mog-sdk/cli bin.mog is ${manifest.bin?.mog}, expected ./dist/mog.cjs`);
   }
   if (!existsSync(distFile)) {
-    throw new Error(`Missing built CLI at ${distFile}. Run pnpm --filter @mog-sdk/cli build first.`);
+    throw new Error(
+      `Missing built CLI at ${distFile}. Run pnpm --filter @mog-sdk/cli build first.`,
+    );
   }
 
   rmSync(outDir, { recursive: true, force: true });
@@ -307,7 +308,8 @@ function buildCliPublicPackageManifest(manifest, sdkVersion) {
     name: '@mog-sdk/cli',
     version: manifest.version,
     description:
-      manifest.description ?? 'Command-line interface for operating Mog workbooks with the headless SDK',
+      manifest.description ??
+      'Command-line interface for operating Mog workbooks with the headless SDK',
     license: manifest.license ?? 'Apache-2.0',
     type: 'commonjs',
     bin: {

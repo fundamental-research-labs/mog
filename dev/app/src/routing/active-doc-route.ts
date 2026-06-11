@@ -10,26 +10,24 @@ export function nextSearchForActiveDoc(
   activeFileId: string | null,
   mode?: { readonly kind: string; readonly roomId?: string } | null,
 ): string {
-  const normalized = currentSearch.startsWith("?")
-    ? currentSearch.slice(1)
-    : currentSearch;
+  const normalized = currentSearch.startsWith('?') ? currentSearch.slice(1) : currentSearch;
   const params = new URLSearchParams(normalized);
 
-  params.delete("new");
-  if (mode?.kind === "collaboration" && mode.roomId) {
-    params.delete("doc");
-    params.set("collab", mode.roomId);
+  params.delete('new');
+  if (mode?.kind === 'collaboration' && mode.roomId) {
+    params.delete('doc');
+    params.set('collab', mode.roomId);
     const next = params.toString();
-    return next ? `?${next}` : "";
+    return next ? `?${next}` : '';
   }
 
-  params.delete("collab");
+  params.delete('collab');
   if (activeFileId) {
-    params.set("doc", activeFileId);
+    params.set('doc', activeFileId);
   } else {
-    params.delete("doc");
+    params.delete('doc');
   }
 
   const next = params.toString();
-  return next ? `?${next}` : "";
+  return next ? `?${next}` : '';
 }

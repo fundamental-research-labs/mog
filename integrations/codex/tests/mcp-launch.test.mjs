@@ -50,14 +50,21 @@ test('bundled MCP server launches relative to the installed plugin root', async 
         jsonrpc: '2.0',
         id: 1,
         method: 'initialize',
-        params: { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'test', version: '0.0.0' } },
+        params: {
+          protocolVersion: '2024-11-05',
+          capabilities: {},
+          clientInfo: { name: 'test', version: '0.0.0' },
+        },
       }),
     );
     child.stdin.write(frame({ jsonrpc: '2.0', method: 'notifications/initialized', params: {} }));
     child.stdin.write(frame({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} }));
 
     await new Promise((resolvePromise, rejectPromise) => {
-      const timeout = setTimeout(() => rejectPromise(new Error('Timed out waiting for MCP responses')), 5000);
+      const timeout = setTimeout(
+        () => rejectPromise(new Error('Timed out waiting for MCP responses')),
+        5000,
+      );
       const interval = setInterval(() => {
         if (messages.length >= 2) {
           clearTimeout(timeout);

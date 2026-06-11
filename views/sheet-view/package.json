@@ -3,9 +3,7 @@
   "version": "0.9.2",
   "license": "Apache-2.0",
   "files": [
-    "dist/index.js",
-    "dist/index.js.map",
-    "dist/index.d.ts"
+    "dist"
   ],
   "type": "module",
   "exports": {
@@ -16,7 +14,7 @@
     }
   },
   "scripts": {
-    "build": "tsup && tsc -p tsconfig.build.json && api-extractor run --local --verbose && find dist -maxdepth 2 -not -path 'dist/.rollup/*' \\( -name '*.d.ts' -o -name '*.d.ts.map' \\) -delete && cp dist/.rollup/index.d.ts dist/index.d.ts && node -e \"const fs=require('node:fs');const p='dist/index.d.ts';const ref='/// <reference lib=\\\"esnext.disposable\\\" />\\n';const s=fs.readFileSync(p,'utf8');if(!s.startsWith(ref))fs.writeFileSync(p,ref+s);\" && rm -rf dist/.rollup",
+    "build": "tsup && tsc -p tsconfig.build.json && api-extractor run --local --verbose && cp dist/.rollup/index.d.ts dist/index.d.ts && node -e \"const fs=require('node:fs');const p='dist/index.d.ts';const ref='/// <reference lib=\\\"esnext.disposable\\\" />\\n';const s=fs.readFileSync(p,'utf8');if(!s.startsWith(ref))fs.writeFileSync(p,ref+s);\" && node ../../tools/fix-dts-extensions.mjs dist && rm -rf dist/.rollup",
     "typecheck": "tsc -b .",
     "check-types": "tsc -b .",
     "test": "jest"

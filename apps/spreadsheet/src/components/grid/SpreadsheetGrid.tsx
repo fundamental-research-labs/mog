@@ -435,7 +435,15 @@ export const SpreadsheetGrid = memo(function SpreadsheetGrid({
     [wb],
   );
 
-  useRendererViewRestore({ wb, activeSheetId, coordinator, isReady, rendererSheetId, uiStoreApi, rendererSkin });
+  useRendererViewRestore({
+    wb,
+    activeSheetId,
+    coordinator,
+    isReady,
+    rendererSheetId,
+    uiStoreApi,
+    rendererSkin,
+  });
 
   // Use extracted hook for renderer dependencies
   useRendererDependencies({

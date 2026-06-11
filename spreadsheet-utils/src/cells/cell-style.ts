@@ -26,9 +26,7 @@ function normalizeFontColor(value: string): string {
       .map((part) => Number.parseInt(part.trim(), 10));
 
     if ([r, g, b].every((component) => Number.isInteger(component))) {
-      return `#${[r, g, b]
-        .map((component) => component.toString(16).padStart(2, '0'))
-        .join('')}`;
+      return `#${[r, g, b].map((component) => component.toString(16).padStart(2, '0')).join('')}`;
     }
   }
 

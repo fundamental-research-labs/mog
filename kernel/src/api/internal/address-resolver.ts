@@ -197,8 +197,7 @@ export function resolveRange(
         validationKind: 'invalidRangeObject',
         message: 'Invalid range argument: null',
         path: ['range'],
-        expected:
-          'range string such as "A1:B2", CellRange object, or numeric start/end bounds',
+        expected: 'range string such as "A1:B2", CellRange object, or numeric start/end bounds',
         received: a,
         suggestion: 'Pass a range string such as "A1:B2" or a CellRange object.',
       });
@@ -263,11 +262,12 @@ export function resolveRange(
       suggestion: 'Call the numeric range overload with startRow, startCol, endRow, and endCol.',
     });
   }
-  validateRangeBounds(
-    { startRow: a, startCol: b, endRow: c, endCol: d },
-    ['range'],
-    { startRow: a, startCol: b, endRow: c, endCol: d },
-  );
+  validateRangeBounds({ startRow: a, startCol: b, endRow: c, endCol: d }, ['range'], {
+    startRow: a,
+    startCol: b,
+    endRow: c,
+    endCol: d,
+  });
   return { startRow: a, startCol: b, endRow: c, endCol: d };
 }
 

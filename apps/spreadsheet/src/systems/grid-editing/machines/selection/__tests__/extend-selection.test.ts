@@ -437,7 +437,7 @@ describe('extendSelection - Shift+Arrow bug tests', () => {
       expect(result.activeCell).toEqual({ row: 12, col: 15 });
     });
 
-    it('repeated Shift+Right extends by worksheet coordinates across hidden columns', () => {
+    it('Shift+Right moves by visible columns while including hidden column spans', () => {
       let context: SelectionContext = {
         ...initialSelectionContext,
         activeCell: { row: 16, col: 12 }, // M17
@@ -446,7 +446,7 @@ describe('extendSelection - Shift+Arrow bug tests', () => {
         isColHidden: (col) => col >= 15 && col <= 26, // P:AA
       };
 
-      for (let col = 12; col < 27; col += 1) {
+      for (let visibleStep = 0; visibleStep < 3; visibleStep += 1) {
         const result = callExtendSelection(context, {
           type: 'KEY_ARROW',
           direction: 'right',
@@ -463,6 +463,31 @@ describe('extendSelection - Shift+Arrow bug tests', () => {
       });
       expect(context.anchor).toEqual({ row: 16, col: 12 });
       expect(context.activeCell).toEqual({ row: 16, col: 12 });
+    });
+
+    it('Shift+Down moves by visible rows while including hidden row spans', () => {
+      const context: SelectionContext = {
+        ...initialSelectionContext,
+        activeCell: { row: 1, col: 0 }, // A2
+        pendingRange: { startRow: 1, startCol: 0, endRow: 1, endCol: 0 },
+        anchor: null,
+        isRowHidden: (row) => row >= 2 && row <= 3, // rows 3:4
+      };
+
+      const result = callExtendSelection(context, {
+        type: 'KEY_ARROW',
+        direction: 'down',
+        shiftKey: true,
+      });
+
+      expect(result.pendingRange).toEqual({
+        startRow: 1,
+        startCol: 0,
+        endRow: 4,
+        endCol: 0,
+      });
+      expect(result.anchor).toEqual({ row: 1, col: 0 });
+      expect(result.activeCell).toEqual({ row: 1, col: 0 });
     });
 
     it('preserves a full-column selection when extending right from Ctrl+Space', () => {

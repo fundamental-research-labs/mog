@@ -6,7 +6,13 @@ import {
   type SpreadsheetWorkbookSession,
 } from '@mog-sdk/spreadsheet-app';
 
-import { base64ToBytes, bytesToBase64, jsonSafe, type BrowserBootstrap, type BrowserRpcRequest } from '../shared/protocol';
+import {
+  base64ToBytes,
+  bytesToBase64,
+  jsonSafe,
+  type BrowserBootstrap,
+  type BrowserRpcRequest,
+} from '../shared/protocol';
 
 const root = requireRoot();
 
@@ -170,7 +176,8 @@ async function initializeWorkbook(config: BrowserBootstrap): Promise<void> {
   const nextWorkbook = await nextRuntime.openWorkbook({
     workbookId: config.sessionId,
     workbookSessionId: config.sessionId,
-    displayName: config.source.kind === 'xlsx-bytes' ? config.source.fileName : 'Untitled Mog workbook',
+    displayName:
+      config.source.kind === 'xlsx-bytes' ? config.source.fileName : 'Untitled Mog workbook',
     source,
   });
   await nextWorkbook.whenReady();

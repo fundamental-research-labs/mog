@@ -1,9 +1,4 @@
-import type {
-  Chart,
-  ChartConfig,
-  ChartReadOptions,
-  SheetId,
-} from '@mog-sdk/contracts/api';
+import type { Chart, ChartConfig, ChartReadOptions, SheetId } from '@mog-sdk/contracts/api';
 import type { SeriesConfig } from '@mog-sdk/contracts/data/charts';
 
 import type { ChartFloatingObject } from '../../bridges/compute/compute-bridge';

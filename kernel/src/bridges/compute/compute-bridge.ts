@@ -1253,22 +1253,19 @@ export class ComputeBridge extends GeneratedBridgeBase {
     >(
       'compute_add_comment',
       () =>
-        this.core.transport.call<[Uint8Array, MutationResult] | Uint8Array>(
-          'compute_add_comment',
-          {
-            docId: this.core.docId,
-            sheetId,
-            cellId,
-            text,
-            author,
-            authorId: options?.authorId ?? null,
-            parentId: options?.parentId ?? null,
-            // Replies inherit thread membership; default to 'threadedComment'
-            // since a reply on a noted cell is impossible by construction (the
-            // cell-level XOR invariant rejects it before this call lands).
-            commentType: options?.commentType ?? 'threadedComment',
-          },
-        ),
+        this.core.transport.call<[Uint8Array, MutationResult] | Uint8Array>('compute_add_comment', {
+          docId: this.core.docId,
+          sheetId,
+          cellId,
+          text,
+          author,
+          authorId: options?.authorId ?? null,
+          parentId: options?.parentId ?? null,
+          // Replies inherit thread membership; default to 'threadedComment'
+          // since a reply on a noted cell is impossible by construction (the
+          // cell-level XOR invariant rejects it before this call lands).
+          commentType: options?.commentType ?? 'threadedComment',
+        }),
       (raw) => normalizeBytesTuple(raw as [Uint8Array, MutationResult] | Uint8Array),
     );
     const comment = extractMutationData<Comment>(result);

@@ -19,10 +19,15 @@ export async function admitPublicMutation(
 ): Promise<void> {
   ensureInitialized();
   writeGate?.assertWritable(operation);
-  await (ctx as IKernelContext & PublicWriteMaterializationContext).awaitMaterialized?.('allSheets');
+  await (ctx as IKernelContext & PublicWriteMaterializationContext).awaitMaterialized?.(
+    'allSheets',
+  );
   writeGate?.assertWritable(operation);
 }
 
-export function runSystemMutation<T>(writeGate: WriteGate | null, run: () => Promise<T>): Promise<T> {
+export function runSystemMutation<T>(
+  writeGate: WriteGate | null,
+  run: () => Promise<T>,
+): Promise<T> {
   return writeGate ? writeGate.withBypass(run) : run();
 }

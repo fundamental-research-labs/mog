@@ -37,7 +37,10 @@ function readFrames(stream, onMessage) {
 
 function waitForMessage(messages, id, timeoutMs = 30000) {
   return new Promise((resolvePromise, rejectPromise) => {
-    const timeout = setTimeout(() => rejectPromise(new Error(`Timed out waiting for MCP id ${id}`)), timeoutMs);
+    const timeout = setTimeout(
+      () => rejectPromise(new Error(`Timed out waiting for MCP id ${id}`)),
+      timeoutMs,
+    );
     const interval = setInterval(() => {
       const match = messages.find((message) => message.id === id);
       if (match) {
@@ -133,7 +136,10 @@ async function main() {
     assert.ok(exported.bytesWritten > 0);
     assert.equal((await readFile(outputPath)).subarray(0, 2).toString('utf8'), 'PK');
 
-    const fixturePath = resolve(repoRoot, 'integrations/vscode/mog-xlsx-editor/fixtures/simple-values.xlsx');
+    const fixturePath = resolve(
+      repoRoot,
+      'integrations/vscode/mog-xlsx-editor/fixtures/simple-values.xlsx',
+    );
     const importStartId = send('tools/call', {
       name: 'mog_browser_start',
       arguments: { xlsxPath: fixturePath },

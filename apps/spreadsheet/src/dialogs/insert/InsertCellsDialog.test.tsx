@@ -3,6 +3,7 @@ import { jest } from '@jest/globals';
 import React from 'react';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import '@testing-library/jest-dom';
+import { getPendingDialogActionForTest } from './dialog-action-scheduler';
 
 const dispatchMock = jest.fn();
 const closeInsertCellsDialog = jest.fn();
@@ -119,9 +120,7 @@ describe('InsertCellsDialog', () => {
 
     expect(closeInsertCellsDialog).toHaveBeenCalledTimes(1);
     expect(dispatchMock).not.toHaveBeenCalled();
-    const pendingAction = (
-      window as typeof window & { __MOG_PENDING_DIALOG_ACTION__?: Promise<void> }
-    ).__MOG_PENDING_DIALOG_ACTION__;
+    const pendingAction = getPendingDialogActionForTest();
     expect(pendingAction).toBeInstanceOf(Promise);
 
     jest.advanceTimersByTime(99);
@@ -132,9 +131,6 @@ describe('InsertCellsDialog', () => {
 
     expect(dispatchMock).toHaveBeenCalledTimes(1);
     expect(dispatchMock).toHaveBeenCalledWith('DELETE_ROWS', deps);
-    expect(
-      (window as typeof window & { __MOG_PENDING_DIALOG_ACTION__?: Promise<void> })
-        .__MOG_PENDING_DIALOG_ACTION__,
-    ).toBeUndefined();
+    expect(getPendingDialogActionForTest()).toBeUndefined();
   });
 });

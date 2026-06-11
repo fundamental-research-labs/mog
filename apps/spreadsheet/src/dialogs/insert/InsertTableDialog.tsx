@@ -34,6 +34,7 @@ import {
   FormField,
   Label,
 } from '@mog/shell';
+import { scheduleDialogAction } from './dialog-action-scheduler';
 
 // =============================================================================
 // Types
@@ -46,37 +47,6 @@ interface InsertTableDialogProps {
     hasHeaders: boolean;
     stylePreset: TableStylePreset;
   }) => void;
-}
-
-const APPLY_AFTER_CLOSE_DELAY_MS = 100;
-
-type DialogActionWindow = typeof window & {
-  __MOG_PENDING_DIALOG_ACTION__?: Promise<void>;
-};
-
-function scheduleDialogAction(action: () => unknown): void {
-  const global = window as DialogActionWindow;
-  const pending = new Promise<void>((resolve, reject) => {
-    window.setTimeout(() => {
-      Promise.resolve()
-        .then(action)
-        .then(
-          () => {
-            if (global.__MOG_PENDING_DIALOG_ACTION__ === pending) {
-              delete global.__MOG_PENDING_DIALOG_ACTION__;
-            }
-            resolve();
-          },
-          (error) => {
-            if (global.__MOG_PENDING_DIALOG_ACTION__ === pending) {
-              delete global.__MOG_PENDING_DIALOG_ACTION__;
-            }
-            reject(error);
-          },
-        );
-    }, APPLY_AFTER_CLOSE_DELAY_MS);
-  });
-  global.__MOG_PENDING_DIALOG_ACTION__ = pending;
 }
 
 // =============================================================================

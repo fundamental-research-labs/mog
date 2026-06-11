@@ -59,11 +59,7 @@ export const emitUserSelectionChanged = emit(
     const followCell =
       event.type === 'SET_SELECTION' && event.anchor === undefined
         ? context.activeCell
-        : getSelectionViewportFollowCell(
-            context.pendingRange,
-            context.activeCell,
-            context.anchor,
-          );
+        : getSelectionViewportFollowCell(context.pendingRange, context.activeCell, context.anchor);
     const scrollIntent = getSelectionScrollIntent(event);
 
     return {

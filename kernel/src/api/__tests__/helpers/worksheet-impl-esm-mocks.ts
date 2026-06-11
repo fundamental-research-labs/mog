@@ -1,4 +1,45 @@
 import { jest } from '@jest/globals';
+import { KernelError } from '../../../errors';
+
+const VALID_CLEAR_MODES = ['all', 'contents', 'formats', 'hyperlinks'] as const;
+const VALID_CLEAR_MODE_SET: ReadonlySet<string> = new Set(VALID_CLEAR_MODES);
+
+function clearModeSuggestion(applyTo: unknown): string {
+  if (applyTo === 'value' || applyTo === 'values' || applyTo === 'content') {
+    return 'Use "contents" to clear values and formulas while preserving formats and hyperlinks.';
+  }
+
+  if (applyTo === 'valuesAndFormats') {
+    return [
+      '"valuesAndFormats" is ambiguous and is not the same as "all", because "all" also clears hyperlinks.',
+      'Use "contents", "formats", or "all" explicitly.',
+    ].join(' ');
+  }
+
+  return `Use one of: ${VALID_CLEAR_MODES.join(', ')}.`;
+}
+
+function validateClearApplyTo(applyTo: unknown) {
+  if (typeof applyTo === 'string' && VALID_CLEAR_MODE_SET.has(applyTo)) {
+    return applyTo;
+  }
+
+  const suggestion = clearModeSuggestion(applyTo);
+  throw new KernelError(
+    'API_INVALID_ARGUMENT',
+    `Invalid clear mode for applyTo: ${JSON.stringify(applyTo)}.`,
+    {
+      path: ['applyTo'],
+      suggestion,
+      context: {
+        issueCode: 'UNKNOWN_CLEAR_MODE',
+        received: applyTo,
+        validValues: [...VALID_CLEAR_MODES],
+        suggestion,
+      },
+    },
+  );
+}
 
 export const worksheetCellOpsMock = {
   getCell: jest.fn(),
@@ -21,6 +62,7 @@ export const worksheetCellOpsMock = {
 
 export const worksheetRangeQueryOpsMock = {
   clearWithMode: jest.fn(),
+  validateClearApplyTo: jest.fn(validateClearApplyTo),
 };
 
 export const worksheetFillOpsMock = {

@@ -18,6 +18,7 @@ import { dispatch, useUIStore } from '../../internal-api';
 
 import { Button, Dialog, DialogBody, DialogFooter, DialogHeader, RadioGroup } from '@mog/shell';
 import { useActionDependencies } from '../../hooks/toolbar/use-action-dependencies';
+import { scheduleDialogAction } from './dialog-action-scheduler';
 
 // =============================================================================
 // Options Data
@@ -41,37 +42,6 @@ const DELETE_OPTIONS: ShiftOption[] = [
   { value: 'row', label: 'Entire row' },
   { value: 'column', label: 'Entire column' },
 ];
-
-const APPLY_AFTER_CLOSE_DELAY_MS = 100;
-
-type DialogActionWindow = typeof window & {
-  __MOG_PENDING_DIALOG_ACTION__?: Promise<void>;
-};
-
-function scheduleDialogAction(action: () => unknown): void {
-  const global = window as DialogActionWindow;
-  const pending = new Promise<void>((resolve, reject) => {
-    window.setTimeout(() => {
-      Promise.resolve()
-        .then(action)
-        .then(
-          () => {
-            if (global.__MOG_PENDING_DIALOG_ACTION__ === pending) {
-              delete global.__MOG_PENDING_DIALOG_ACTION__;
-            }
-            resolve();
-          },
-          (error) => {
-            if (global.__MOG_PENDING_DIALOG_ACTION__ === pending) {
-              delete global.__MOG_PENDING_DIALOG_ACTION__;
-            }
-            reject(error);
-          },
-        );
-    }, APPLY_AFTER_CLOSE_DELAY_MS);
-  });
-  global.__MOG_PENDING_DIALOG_ACTION__ = pending;
-}
 
 // =============================================================================
 // Component

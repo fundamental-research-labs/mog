@@ -58,6 +58,8 @@ export interface CollapsedGroupDropdownProps {
   icon?: ReactNode;
   /** Whether this is the last group (no right separator) */
   isLast?: boolean;
+  /** Open the collapsed group while a child dropdown is open from keytip state. */
+  forceOpen?: boolean;
   /** Group content - rendered inside the dropdown panel */
   children: ReactNode;
 }
@@ -82,9 +84,11 @@ export const CollapsedGroupDropdown = React.memo(function CollapsedGroupDropdown
   label,
   icon,
   isLast = false,
+  forceOpen = false,
   children,
 }: CollapsedGroupDropdownProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const popoverOpen = isOpen || forceOpen;
   const { level } = useRibbonCollapseLevel();
   const isDense = level >= 3;
   const labelClassName = isDense
@@ -96,7 +100,7 @@ export const CollapsedGroupDropdown = React.memo(function CollapsedGroupDropdown
       className={`relative flex flex-col ${isDense ? 'px-1' : 'px-[var(--ribbon-group-padding-x)]'}`}
     >
       {/* Collapsed button with Radix Popover */}
-      <Popover open={isOpen} onOpenChange={setIsOpen}>
+      <Popover open={popoverOpen} onOpenChange={setIsOpen}>
         <div className="flex items-center justify-center h-[var(--ribbon-content-height)]">
           <Tooltip title={label}>
             <PopoverTrigger asChild>
@@ -105,7 +109,7 @@ export const CollapsedGroupDropdown = React.memo(function CollapsedGroupDropdown
                 className={`flex flex-col items-center justify-center rounded hover:bg-ss-surface-hover transition-colors duration-ss-fast ${
                   isDense ? 'gap-0.5 px-1 py-1 min-w-[42px]' : 'gap-1 px-2 py-1'
                 }`}
-                aria-expanded={isOpen}
+                aria-expanded={popoverOpen}
                 aria-haspopup="true"
                 aria-label={`${label} group`}
               >

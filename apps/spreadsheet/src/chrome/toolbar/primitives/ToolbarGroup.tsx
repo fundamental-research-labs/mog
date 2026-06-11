@@ -20,7 +20,9 @@ import type { ReactNode } from 'react';
 import React from 'react';
 
 import { Tooltip } from '@mog/shell';
+import type { RibbonDropdownId } from '@mog-sdk/contracts/actions';
 import type { GroupCollapseConfig, GroupRenderMode } from '@mog-sdk/contracts/ribbon';
+import { useUIStore } from '../../../internal-api';
 import { GroupRenderModeProvider, useRibbonCollapseLevel } from '../collapse';
 import {
   RibbonVisibilityGroup,
@@ -102,6 +104,12 @@ export interface ToolbarGroupProps {
    * If not provided, children are rendered inside the dropdown.
    */
   dropdownContent?: ReactNode;
+  /**
+   * Store-controlled child dropdown ids that should open this collapsed group
+   * before the child can mount. This preserves keytip-opened dropdowns when
+   * responsive ribbon collapse has moved the trigger into a group menu.
+   */
+  openWhenRibbonDropdowns?: readonly RibbonDropdownId[];
   /** Optional typed ribbon visibility key. Defaults to a normalized label. */
   visibilityKey?: string;
 }
@@ -115,9 +123,16 @@ export const ToolbarGroup = React.memo(function ToolbarGroup({
   collapseConfig,
   dropdownIcon,
   dropdownContent,
+  openWhenRibbonDropdowns,
   visibilityKey,
 }: ToolbarGroupProps) {
   const groupVisibility = useRibbonGroupVisibility(label, visibilityKey);
+  const forceDropdownOpen = useUIStore((state) => {
+    if (!openWhenRibbonDropdowns || openWhenRibbonDropdowns.length === 0) {
+      return false;
+    }
+    return openWhenRibbonDropdowns.some((dropdownId) => state.ribbonDropdowns[dropdownId] === true);
+  });
   // Get current collapse level from context (provided by TabbedToolbar)
   const { level } = useRibbonCollapseLevel();
 
@@ -138,7 +153,12 @@ export const ToolbarGroup = React.memo(function ToolbarGroup({
   if (renderMode === 'dropdown') {
     return (
       <RibbonVisibilityGroup group={groupVisibility.groupKey}>
-        <CollapsedGroupDropdown label={label} icon={dropdownIcon} isLast={isLast}>
+        <CollapsedGroupDropdown
+          label={label}
+          icon={dropdownIcon}
+          isLast={isLast}
+          forceOpen={forceDropdownOpen}
+        >
           {dropdownContent ?? children}
         </CollapsedGroupDropdown>
       </RibbonVisibilityGroup>

@@ -17,4 +17,30 @@ describe('CollapsedGroupDropdown dense layout', () => {
     expect(source).toContain('text-ribbon-compact text-ss-text-secondary');
     expect(source).toContain('<span className={labelClassName}>{label}</span>');
   });
+
+  it('can be forced open by store-controlled child dropdown state', () => {
+    const source = readFileSync(
+      nodePath.resolve(APP_ROOT, 'src/chrome/toolbar/primitives/CollapsedGroupDropdown.tsx'),
+      'utf8',
+    );
+    const toolbarGroupSource = readFileSync(
+      nodePath.resolve(APP_ROOT, 'src/chrome/toolbar/primitives/ToolbarGroup.tsx'),
+      'utf8',
+    );
+    const viewRibbonSource = readFileSync(
+      nodePath.resolve(APP_ROOT, 'src/chrome/toolbar/tabs/ViewRibbon.tsx'),
+      'utf8',
+    );
+
+    expect(source).toContain('forceOpen?: boolean');
+    expect(source).toContain('const popoverOpen = isOpen || forceOpen');
+    expect(toolbarGroupSource).toContain('openWhenRibbonDropdowns?: readonly RibbonDropdownId[]');
+    expect(toolbarGroupSource).toContain('state.ribbonDropdowns[dropdownId] === true');
+    expect(viewRibbonSource).toContain("openWhenRibbonDropdowns={['view.freeze-panes']}");
+    expect(viewRibbonSource).toContain("const renderFreezeMenuInline = windowGroupRenderMode === 'dropdown'");
+    expect(viewRibbonSource).toContain('const freezePanesMenu = (');
+    expect(viewRibbonSource).toContain('firstItem?.focus()');
+    expect(viewRibbonSource).toContain('restoreGridFocusAfterMenuClose');
+    expect(viewRibbonSource).toContain('coordinatorInput?.focusGrid?.()');
+  });
 });

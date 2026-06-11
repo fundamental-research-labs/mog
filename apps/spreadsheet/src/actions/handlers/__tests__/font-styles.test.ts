@@ -3,21 +3,28 @@ import { jest } from '@jest/globals';
 import type { ActionDependencies } from '@mog-sdk/contracts/actions';
 import type { CellRange, SheetId } from '@mog-sdk/contracts/core';
 
-import { SET_FONT_SIZE, TOGGLE_WRAP_TEXT } from '../formatting/font-styles';
+import { SET_FONT_SIZE, TOGGLE_BOLD, TOGGLE_WRAP_TEXT } from '../formatting/font-styles';
 
 const activeSheetId = 'sheet1' as SheetId;
 
-function createMockDeps(ranges: CellRange[]) {
+function createMockDeps(
+  ranges: CellRange[],
+  opts: {
+    activeFormat?: Record<string, unknown>;
+    displayedFormats?: Array<Array<Record<string, unknown>>>;
+  } = {},
+) {
   const calls: string[] = [];
 
   const worksheet = {
     viewport: {
       getCellData: jest.fn(() => ({
         displayText: 'wrapped text',
-        format: { wrapText: false },
+        format: opts.activeFormat ?? { wrapText: false },
       })),
     },
     formats: {
+      getDisplayedRangeProperties: jest.fn(async () => opts.displayedFormats ?? [[{}]]),
       setRanges: jest.fn(async () => {
         calls.push('setRanges');
       }),
@@ -85,5 +92,19 @@ describe('font style formatting actions', () => {
     expect(worksheet.formats.setRanges).toHaveBeenCalledWith([range], { wrapText: true });
     expect(worksheet.layout.autoFitRows).toHaveBeenCalledWith([0]);
     expect(calls).toEqual(['undoGroup:start', 'setRanges', 'autoFitRows', 'undoGroup:end']);
+  });
+
+  it('turns bold on for a mixed selected range even when the active cell is already bold', async () => {
+    const range: CellRange = { startRow: 0, startCol: 0, endRow: 0, endCol: 1 };
+    const { deps, worksheet } = createMockDeps([range], {
+      activeFormat: { bold: true },
+      displayedFormats: [[{ bold: true }, { bold: false }]],
+    });
+
+    const result = await TOGGLE_BOLD(deps);
+
+    expect(result.handled).toBe(true);
+    expect(worksheet.formats.getDisplayedRangeProperties).toHaveBeenCalledWith(range);
+    expect(worksheet.formats.setRanges).toHaveBeenCalledWith([range], { bold: true });
   });
 });

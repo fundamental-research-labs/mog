@@ -35,11 +35,17 @@ interface MockSetup {
   setLastUsedBorderFormatMock: jest.Mock;
 }
 
-function createMockDeps(opts: { ranges: CellRange[] }): MockSetup {
+function createMockDeps(opts: {
+  ranges: CellRange[];
+  hiddenCols?: number[];
+  bitmapHiddenCols?: number[];
+}): MockSetup {
   const activeSheetId = makeSheetId('sheet1');
 
   const setRangesMock = jest.fn().mockResolvedValue(undefined);
   const setLastUsedBorderFormatMock = jest.fn();
+  const hiddenCols = new Set(opts.hiddenCols ?? []);
+  const bitmapHiddenCols = new Set(opts.bitmapHiddenCols ?? opts.hiddenCols ?? []);
 
   // The outline branch clamps full-row/column selections to data bounds.
   // For unit testing we return the range unchanged so we can assert on
@@ -48,6 +54,12 @@ function createMockDeps(opts: { ranges: CellRange[] }): MockSetup {
 
   const mockWorksheet = {
     formats: { setRanges: setRangesMock },
+    layout: {
+      getHiddenRowsBitmap: jest.fn(async () => new Set<number>()),
+      getHiddenColumnsBitmap: jest.fn(async () => bitmapHiddenCols),
+      isRowHidden: jest.fn(async () => false),
+      isColumnHidden: jest.fn(async (col: number) => hiddenCols.has(col)),
+    },
     _internal: { clampRangeToDataBounds: clampMock },
   };
 
@@ -137,6 +149,31 @@ describe('APPLY_BORDERS — direct-mode preset routing', () => {
       const isFullRange = r.startRow === 0 && r.startCol === 0 && r.endRow === 2 && r.endCol === 2;
       expect(isFullRange && Object.keys(call.payload.borders ?? {}).length === 4).toBe(false);
     }
+  });
+
+  it("preset 'outline' treats hidden-column gaps as visible perimeter boundaries", async () => {
+    const range: CellRange = { startRow: 0, startCol: 0, endRow: 2, endCol: 4 };
+    const { deps, setRangesMock } = createMockDeps({
+      ranges: [range],
+      hiddenCols: [2, 3],
+      bitmapHiddenCols: [],
+    });
+
+    await APPLY_BORDERS(deps, { borders: outlineBorders, preset: 'outline' });
+
+    const calls = setRangesMock.mock.calls.map((c: unknown[]) => ({
+      ranges: c[0] as CellRange[],
+      payload: c[1] as { borders?: CellBorders },
+    }));
+
+    expect(calls).toContainEqual({
+      ranges: [{ startRow: 0, startCol: 1, endRow: 2, endCol: 1 }],
+      payload: { borders: { right: thinBlack } },
+    });
+    expect(calls).toContainEqual({
+      ranges: [{ startRow: 0, startCol: 4, endRow: 2, endCol: 4 }],
+      payload: { borders: { left: thinBlack } },
+    });
   });
 
   it('preset null (no preset) on a multi-cell range applies borders per-cell', async () => {

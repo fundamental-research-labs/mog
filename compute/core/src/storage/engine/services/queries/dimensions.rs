@@ -30,14 +30,30 @@ pub(in crate::storage::engine) fn get_hidden_rows(
     stores: &EngineStores,
     sheet_id: &SheetId,
 ) -> Vec<u32> {
-    sheet_dimensions::get_hidden_rows(stores.storage.doc(), stores.storage.sheets(), sheet_id)
+    let doc = stores.storage.doc();
+    let sheets = stores.storage.sheets();
+    let mut hidden = sheet_dimensions::get_hidden_rows(doc, sheets, sheet_id);
+    hidden.extend(sheet_grouping::get_rows_hidden_by_structural_groups(
+        doc, sheets, sheet_id,
+    ));
+    hidden.sort_unstable();
+    hidden.dedup();
+    hidden
 }
 
 pub(in crate::storage::engine) fn get_hidden_columns(
     stores: &EngineStores,
     sheet_id: &SheetId,
 ) -> Vec<u32> {
-    sheet_dimensions::get_hidden_columns(stores.storage.doc(), stores.storage.sheets(), sheet_id)
+    let doc = stores.storage.doc();
+    let sheets = stores.storage.sheets();
+    let mut hidden = sheet_dimensions::get_hidden_columns(doc, sheets, sheet_id);
+    hidden.extend(sheet_grouping::get_columns_hidden_by_structural_groups(
+        doc, sheets, sheet_id,
+    ));
+    hidden.sort_unstable();
+    hidden.dedup();
+    hidden
 }
 
 pub(in crate::storage::engine) fn get_data_bounds(

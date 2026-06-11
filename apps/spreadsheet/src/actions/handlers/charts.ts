@@ -39,7 +39,7 @@ import { type SheetId, sheetId } from '@mog-sdk/contracts/core';
 import { normalizeChartConfig } from '../../adapters/charts/chart-config-adapter';
 import { pasteChartFromClipboard } from './chart-clipboard';
 import { deselectChartObjects, selectChartObject } from './chart-selection';
-import { expandToDataRegion } from './expand-to-data-region';
+import { resolveChartSourceRange } from './chart-source-range';
 import { getUIStore, handled, notHandled } from './handler-utils';
 
 // =============================================================================
@@ -849,8 +849,7 @@ export const CREATE_CHART_SHEET: AsyncActionHandler = async (deps): Promise<Acti
     // Excel parity: expand single-cell / single-row selections to the
     // surrounding data region. expandToDataRegion is a no-op for multi-row
     // selections and returns null for empty cells (we keep ranges[0] then).
-    const expanded = await expandToDataRegion(ws, ranges[0]);
-    const range = expanded ?? ranges[0];
+    const range = await resolveChartSourceRange(ws, ranges[0]);
     // Include sheet reference in data range for cross-sheet reference
     const sheetName = (await ws.getName()) || 'Sheet1';
     dataRange = `'${sheetName}'!${rangeToA1Notation(range)}`;
@@ -925,8 +924,7 @@ export const CREATE_EMBEDDED_CHART: AsyncActionHandler = async (
 
     // Excel parity: expand single-cell / single-row selections to the
     // surrounding data region. Multi-row selections pass through unchanged.
-    const expanded = await expandToDataRegion(ws, ranges[0]);
-    const range = expanded ?? ranges[0];
+    const range = await resolveChartSourceRange(ws, ranges[0]);
     const dataRange = rangeToA1Notation(range);
 
     // Use smart positioning to ensure chart is visible
@@ -1011,8 +1009,7 @@ export const OPEN_INSERT_CHART_WIZARD_DIALOG: AsyncActionHandler = async (
     // Excel parity: expand single-cell / single-row selections to the
     // surrounding data region before seeding the wizard.
     const ws = deps.workbook.getSheetById(sheetId);
-    const expanded = await expandToDataRegion(ws, ranges[0]);
-    const range = expanded ?? ranges[0];
+    const range = await resolveChartSourceRange(ws, ranges[0]);
     initialDataRange = rangeToA1Notation(range);
   }
 

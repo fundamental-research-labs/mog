@@ -110,6 +110,12 @@ fn collapsed_outline_group_returns_zero_row_height() {
         .set_group_collapsed(&sid, &group_id, true)
         .expect("set_group_collapsed");
 
+    assert_eq!(
+        engine.get_hidden_rows(&sid),
+        vec![2, 3, 4],
+        "bulk hidden-row query must include rows hidden by collapsed outline groups"
+    );
+
     // Excel collapse semantics: group.start..=group.end are detail rows.
     // With `summary_rows_below=true` (the default), the summary row is the
     // adjacent row after the group and every grouped detail row is hidden.
@@ -154,6 +160,12 @@ fn collapsed_outline_column_group_returns_zero_col_width() {
     engine
         .set_group_collapsed(&sid, &group_id, true)
         .expect("set_group_collapsed");
+
+    assert_eq!(
+        engine.get_hidden_columns(&sid),
+        vec![3, 4, 5, 6],
+        "bulk hidden-column query must include columns hidden by collapsed outline groups"
+    );
 
     // With `summary_columns_right=true` (default), the summary column is the
     // adjacent column after the group and every grouped detail column is hidden.

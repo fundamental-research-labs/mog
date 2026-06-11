@@ -61,6 +61,14 @@ type ChartSourceRange = {
   endCol: number;
 };
 
+type VisibilityAwareWorksheet = {
+  getValue?: (row: number, col: number) => Promise<unknown>;
+  layout?: {
+    isRowHidden?: (row: number) => Promise<boolean>;
+    isColumnHidden?: (col: number) => Promise<boolean>;
+  };
+};
+
 /**
  * Type guard to check if coordinator exposes renderer capabilities.
  */
@@ -102,6 +110,125 @@ function getChartSourceRanges(deps: ActionDependencies, sheetId: SheetId): Chart
   }
 
   return deps.accessors.selection.getDataBoundedRanges(sheetId);
+}
+
+async function isChartSourceRowHidden(
+  ws: VisibilityAwareWorksheet,
+  row: number,
+): Promise<boolean> {
+  try {
+    return (await ws.layout?.isRowHidden?.(row)) === true;
+  } catch {
+    return false;
+  }
+}
+
+async function isChartSourceColumnHidden(
+  ws: VisibilityAwareWorksheet,
+  col: number,
+): Promise<boolean> {
+  try {
+    return (await ws.layout?.isColumnHidden?.(col)) === true;
+  } catch {
+    return false;
+  }
+}
+
+function isBlankChartSourceValue(value: unknown): boolean {
+  return value == null || (typeof value === 'string' && value.trim() === '');
+}
+
+async function isChartSourceColumnBlank(
+  ws: VisibilityAwareWorksheet,
+  range: ChartSourceRange,
+  col: number,
+): Promise<boolean> {
+  if (typeof ws.getValue !== 'function') return false;
+  for (let row = range.startRow; row <= range.endRow; row++) {
+    if (await isChartSourceRowHidden(ws, row)) continue;
+    try {
+      if (!isBlankChartSourceValue(await ws.getValue(row, col))) return false;
+    } catch {
+      return false;
+    }
+  }
+  return true;
+}
+
+async function isChartSourceRowBlank(
+  ws: VisibilityAwareWorksheet,
+  range: ChartSourceRange,
+  row: number,
+): Promise<boolean> {
+  if (typeof ws.getValue !== 'function') return false;
+  for (let col = range.startCol; col <= range.endCol; col++) {
+    if (await isChartSourceColumnHidden(ws, col)) continue;
+    try {
+      if (!isBlankChartSourceValue(await ws.getValue(row, col))) return false;
+    } catch {
+      return false;
+    }
+  }
+  return true;
+}
+
+async function normalizeShortcutChartSourceRange(
+  ws: VisibilityAwareWorksheet,
+  range: ChartSourceRange,
+): Promise<ChartSourceRange> {
+  let startRow = range.startRow;
+  while (
+    startRow <= range.endRow &&
+    (await isChartSourceRowHidden(ws, startRow))
+  ) {
+    startRow++;
+  }
+
+  let startCol = range.startCol;
+  while (
+    startCol <= range.endCol &&
+    (await isChartSourceColumnHidden(ws, startCol))
+  ) {
+    startCol++;
+  }
+
+  if (startRow > range.endRow || startCol > range.endCol) {
+    return range;
+  }
+
+  let endRow = startRow;
+  while (
+    endRow + 1 <= range.endRow &&
+    !(await isChartSourceRowHidden(ws, endRow + 1))
+  ) {
+    endRow++;
+  }
+
+  let endCol = startCol;
+  while (
+    endCol + 1 <= range.endCol &&
+    !(await isChartSourceColumnHidden(ws, endCol + 1))
+  ) {
+    endCol++;
+  }
+
+  let normalized = { startRow, startCol, endRow, endCol };
+
+  while (
+    normalized.endCol > normalized.startCol &&
+    (await isChartSourceColumnBlank(ws, normalized, normalized.endCol))
+  ) {
+    normalized = { ...normalized, endCol: normalized.endCol - 1 };
+  }
+
+  while (
+    normalized.endRow > normalized.startRow &&
+    (await isChartSourceRowBlank(ws, normalized, normalized.endRow))
+  ) {
+    normalized = { ...normalized, endRow: normalized.endRow - 1 };
+  }
+
+  return normalized;
 }
 
 /**
@@ -925,8 +1052,13 @@ export const CREATE_EMBEDDED_CHART: AsyncActionHandler = async (
 
     // Excel parity: expand single-cell / single-row selections to the
     // surrounding data region. Multi-row selections pass through unchanged.
-    const expanded = await expandToDataRegion(ws, ranges[0]);
-    const range = expanded ?? ranges[0];
+    const sourceRange = ranges[0];
+    const expanded = await expandToDataRegion(ws, sourceRange);
+    const expandedRange = expanded ?? sourceRange;
+    const range =
+      !payload?.type && sourceRange.startRow === sourceRange.endRow
+        ? await normalizeShortcutChartSourceRange(ws, expandedRange)
+        : expandedRange;
     const dataRange = rangeToA1Notation(range);
 
     // Use smart positioning to ensure chart is visible

@@ -73,6 +73,10 @@ function createMockDeps(overrides?: Partial<ActionDependencies>): ActionDependen
       bringForward: jest.fn().mockResolvedValue(undefined),
       sendBackward: jest.fn().mockResolvedValue(undefined),
     },
+    layout: {
+      isRowHidden: jest.fn().mockResolvedValue(false),
+      isColumnHidden: jest.fn().mockResolvedValue(false),
+    },
     // Legacy flat aliases for backward-compatible test assertions
     getChart: jest.fn().mockResolvedValue(null),
     listCharts: jest.fn().mockResolvedValue([]),
@@ -1318,6 +1322,48 @@ describe('Chart Handlers - Current-Region Auto-Expansion', () => {
       expect(ws.getCurrentRegion).toHaveBeenCalled();
       const addedConfig = ws.charts.add.mock.calls[0][0];
       expect(addedConfig.dataRange).toBe('A1:D10');
+    });
+
+    it('uses the first contiguous visible nonblank block for one-row shortcut chart creation', async () => {
+      const deps = createDepsWithSelection({
+        ranges: [{ startRow: 20, startCol: 11, endRow: 20, endCol: 27 }],
+      });
+      const ws = (deps.workbook as any).activeSheet;
+      const values = new Map<string, unknown>([
+        ['20,12', 34500],
+        ['20,13', 45000],
+        ['20,15', 6026],
+        ['20,27', 6732],
+      ]);
+      ws.getValue = jest.fn(
+        async (row: number, col: number) => values.get(`${row},${col}`) ?? null,
+      );
+      ws.layout.isColumnHidden = jest.fn(
+        async (col: number) => col >= 15 && col <= 26,
+      );
+
+      const result = await ChartHandlers.CREATE_EMBEDDED_CHART(deps);
+
+      expect(result.handled).toBe(true);
+      expect(ws.layout.isColumnHidden).toHaveBeenCalledWith(15);
+      const addedConfig = ws.charts.add.mock.calls[0][0];
+      expect(addedConfig.dataRange).toBe('L21:N21');
+    });
+
+    it('preserves explicit typed chart ranges even when columns are hidden', async () => {
+      const deps = createDepsWithSelection({
+        ranges: [{ startRow: 20, startCol: 11, endRow: 20, endCol: 27 }],
+      });
+      const ws = (deps.workbook as any).activeSheet;
+      ws.layout.isColumnHidden = jest.fn(
+        async (col: number) => col >= 15 && col <= 26,
+      );
+
+      const result = await ChartHandlers.CREATE_EMBEDDED_CHART(deps, { type: 'column' });
+
+      expect(result.handled).toBe(true);
+      const addedConfig = ws.charts.add.mock.calls[0][0];
+      expect(addedConfig.dataRange).toBe('L21:AB21');
     });
   });
 

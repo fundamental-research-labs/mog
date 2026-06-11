@@ -74,7 +74,8 @@ function getCellsWithDataInRange(
 /**
  * Merge cells across each row separately.
  * Creates separate horizontal merges for each row in the selection.
- * Shows warning dialog if non-first-column cells contain data.
+ * Merges immediately, keeping each row's first selected value. Covered cell
+ * values are cleared by the structural merge operation.
  *
  * Example: Selection A1:C3 creates:
  * - Merge A1:C1
@@ -99,28 +100,6 @@ export const MERGE_ACROSS: AsyncActionHandler = async (deps) => {
     return { handled: true }; // Valid action but nothing to do
   }
 
-  // Check for cells with data in non-first-column positions (per row)
-  // Uses viewport for sync viewport-scoped reads
-  const cellsWithData: CellCoord[] = [];
-  const viewport = ws.viewport;
-  for (let row = startRow; row <= endRow; row++) {
-    for (let col = startCol + 1; col <= endCol; col++) {
-      const cellData = viewport.getCellData(row, col);
-      if (cellData?.value != null && cellData.value !== '') {
-        cellsWithData.push({ row, col });
-      }
-    }
-  }
-
-  // If there are cells with data, show warning dialog
-  if (cellsWithData.length > 0) {
-    callUIStoreAction(deps, (state) => {
-      state.openMergeWarningDialog(sheetId, range, cellsWithData, 'mergeAcross');
-    });
-    return { handled: true };
-  }
-
-  // No data loss - proceed with merge across directly via Worksheet API.
   deps.workbook.setPendingUndoDescription(
     `Merge across ${describeRange(startRow, startCol, endRow, endCol)}`,
   );

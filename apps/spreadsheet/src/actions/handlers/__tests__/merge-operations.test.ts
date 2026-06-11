@@ -167,6 +167,24 @@ describe('merge operation action handlers', () => {
     expect(worksheet.structure.merge).toHaveBeenNthCalledWith(3, 2, 0, 2, 1);
   });
 
+  it('Merge Across immediately merges populated covered cells', async () => {
+    const { deps, workbook, worksheet, uiState } = createMockDeps([
+      { startRow: 0, startCol: 0, endRow: 2, endCol: 2 },
+    ]);
+    worksheet.viewport.getCellData.mockReturnValue({ value: 'covered' });
+
+    const result = await MERGE_ACROSS(deps);
+
+    expect(result.handled).toBe(true);
+    expect(uiState.openMergeWarningDialog).not.toHaveBeenCalled();
+    expect(workbook.setPendingUndoDescription).toHaveBeenCalledWith('Merge across A1:C3');
+    expect(workbook.undoGroup).toHaveBeenCalledTimes(1);
+    expect(worksheet.structure.merge).toHaveBeenCalledTimes(3);
+    expect(worksheet.structure.merge).toHaveBeenNthCalledWith(1, 0, 0, 0, 2);
+    expect(worksheet.structure.merge).toHaveBeenNthCalledWith(2, 1, 0, 1, 2);
+    expect(worksheet.structure.merge).toHaveBeenNthCalledWith(3, 2, 0, 2, 2);
+  });
+
   it('wraps multi-range Unmerge Cells writes in one undo group', async () => {
     const { deps, workbook, worksheet } = createMockDeps([
       { startRow: 0, startCol: 0, endRow: 1, endCol: 1 },

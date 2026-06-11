@@ -12,6 +12,7 @@ import type {
   ISheetViewGeometry,
   ISheetViewHitTest,
   ISheetViewViewport,
+  PositionDimensions,
   SheetHitResult,
   SheetPoint,
   SheetViewCommand,
@@ -251,6 +252,28 @@ function createMockInputDependencies(
   return { hitTest, viewport, geometry, commands };
 }
 
+function createPositionDimensions(colWidths: number[], defaultColWidth = 100): PositionDimensions {
+  const colLefts: number[] = [];
+  let left = 0;
+  for (const width of colWidths) {
+    colLefts.push(left);
+    left += width;
+  }
+
+  return {
+    totalRows: 100,
+    totalCols: colWidths.length,
+    getRowTop: (row: number) => row * 25,
+    getRowHeight: () => 25,
+    getColLeft: (col: number) => {
+      if (col < 0) return col * defaultColWidth;
+      if (col < colLefts.length) return colLefts[col];
+      return left + (col - colLefts.length) * defaultColWidth;
+    },
+    getColWidth: (col: number) => colWidths[col] ?? defaultColWidth,
+  };
+}
+
 // =============================================================================
 // TEST HELPERS
 // =============================================================================
@@ -419,6 +442,67 @@ describe('InputCoordinator', () => {
 
       const scrollState = coordinator.getScrollState();
       expect(scrollState.x).toBe(50);
+    });
+
+    it('should keep geometry-backed horizontal pixel scroll raw when no collapsed columns are crossed', () => {
+      const deps = createMockInputDependencies(mockCoordinateSystem);
+      const dims = createPositionDimensions(Array.from({ length: 40 }, () => 69), 69);
+      const visibleStartCol = 13;
+      const startX = dims.getColLeft(visibleStartCol);
+      const coordinatorWithGeometry = createInputCoordinator({ momentumEnabled: false });
+      coordinatorWithGeometry.setDependencies({
+        ...deps,
+        viewport: {
+          ...deps.viewport,
+          getSnapshot: jest.fn(() => ({
+            visibleRange: { startRow: 0, startCol: visibleStartCol, endRow: 30, endCol: 30 },
+          })),
+        } as unknown as ISheetViewViewport,
+        geometry: {
+          ...deps.geometry,
+          getPositionDimensions: jest.fn(() => dims),
+        } as unknown as ISheetViewGeometry,
+        forwardToSheet: jest.fn(),
+      });
+
+      coordinatorWithGeometry.resetScrollPosition(startX, 0);
+      coordinatorWithGeometry.handleWheel(createWheelEvent({ deltaX: 700, deltaY: 0 }));
+
+      expect(coordinatorWithGeometry.getScrollState().x).toBe(startX + 700);
+      coordinatorWithGeometry.dispose();
+    });
+
+    it('should cap large horizontal wheel scroll at the visible edge after collapsed columns', () => {
+      const deps = createMockInputDependencies(mockCoordinateSystem);
+      const colWidths = Array.from({ length: 40 }, () => 69);
+      for (let col = 15; col <= 26; col += 1) {
+        colWidths[col] = 0;
+      }
+      const dims = createPositionDimensions(colWidths, 69);
+      const visibleStartCol = 13;
+      const latestVisibleCol = 27;
+      const startX = dims.getColLeft(visibleStartCol);
+      const coordinatorWithGeometry = createInputCoordinator({ momentumEnabled: false });
+      coordinatorWithGeometry.setDependencies({
+        ...deps,
+        viewport: {
+          ...deps.viewport,
+          getSnapshot: jest.fn(() => ({
+            visibleRange: { startRow: 0, startCol: visibleStartCol, endRow: 30, endCol: 30 },
+          })),
+        } as unknown as ISheetViewViewport,
+        geometry: {
+          ...deps.geometry,
+          getPositionDimensions: jest.fn(() => dims),
+        } as unknown as ISheetViewGeometry,
+        forwardToSheet: jest.fn(),
+      });
+
+      coordinatorWithGeometry.resetScrollPosition(startX, 0);
+      coordinatorWithGeometry.handleWheel(createWheelEvent({ deltaX: 700, deltaY: 0 }));
+
+      expect(coordinatorWithGeometry.getScrollState().x).toBe(dims.getColLeft(latestVisibleCol));
+      coordinatorWithGeometry.dispose();
     });
 
     it('should handle diagonal wheel scroll', () => {

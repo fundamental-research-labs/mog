@@ -20,6 +20,7 @@ import type {
   ISheetViewGeometry,
   ISheetViewHitTest,
   ISheetViewViewport,
+  PositionDimensions,
   SheetHitResult,
 } from '@mog-sdk/sheet-view';
 import type { Point } from '@mog-sdk/contracts/viewport';
@@ -45,6 +46,9 @@ import {
 } from '../machines/input-types';
 import { ScrollPhysics } from '../physics/scroll-physics';
 import { ZoomPhysics } from '../physics/zoom-physics';
+
+const COLLAPSED_DIMENSION_EPSILON = 0.5;
+const MAX_COLLAPSED_COLUMN_SCAN = 512;
 
 // =============================================================================
 // TYPE EXPORTS
@@ -832,10 +836,118 @@ export class InputCoordinator {
     // Shift+Wheel Horizontal Scroll
     // When Shift is held and there's only vertical scroll, swap to horizontal
     if (event.shiftKey && deltaY !== 0 && deltaX === 0) {
-      return { deltaX: deltaY, deltaY: 0 };
+      return this.adjustHorizontalWheelDeltaForCollapsedColumns(deltaY, 0);
     }
 
-    return { deltaX, deltaY };
+    return this.adjustHorizontalWheelDeltaForCollapsedColumns(deltaX, deltaY);
+  }
+
+  private adjustHorizontalWheelDeltaForCollapsedColumns(
+    deltaX: number,
+    deltaY: number,
+  ): { deltaX: number; deltaY: number } {
+    if (!Number.isFinite(deltaX) || deltaX === 0 || !this.geometry || !this.viewport) {
+      return { deltaX, deltaY };
+    }
+
+    const dims = this.geometry.getPositionDimensions?.();
+    if (!dims || dims.totalCols <= 0) return { deltaX, deltaY };
+
+    const viewportSnapshot = (
+      this.viewport as unknown as {
+        getSnapshot?: () => { visibleRange?: { startCol?: number } };
+      }
+    ).getSnapshot?.();
+    const visibleStartCol = viewportSnapshot?.visibleRange?.startCol;
+    if (typeof visibleStartCol !== 'number' || !Number.isFinite(visibleStartCol)) {
+      return { deltaX, deltaY };
+    }
+
+    const direction = deltaX > 0 ? 1 : -1;
+    const referenceWidth = this.inferScrollableColumnWidth(dims, visibleStartCol);
+    if (!referenceWidth) return { deltaX, deltaY };
+
+    const logicalSteps = Math.max(1, Math.round(Math.abs(deltaX) / referenceWidth));
+    const logicalTargetCol = clampInteger(
+      visibleStartCol + direction * logicalSteps,
+      0,
+      dims.totalCols - 1,
+    );
+
+    if (!this.crossesCollapsedColumns(dims, visibleStartCol, logicalTargetCol, direction)) {
+      return { deltaX, deltaY };
+    }
+
+    const targetCol = this.nearestScrollableColumn(dims, logicalTargetCol, direction);
+    if (targetCol == null) return { deltaX, deltaY };
+
+    const currentX = this.scrollPhysics.position.x;
+    const originOffset = dims.getColLeft(visibleStartCol) - currentX;
+    const targetX = dims.getColLeft(targetCol) - originOffset;
+    if (!Number.isFinite(currentX) || !Number.isFinite(targetX)) {
+      return { deltaX, deltaY };
+    }
+
+    const rawNextX = currentX + deltaX;
+    const cappedNextX =
+      direction > 0
+        ? Math.min(rawNextX, Math.max(currentX, targetX))
+        : Math.max(rawNextX, Math.min(currentX, targetX));
+
+    return { deltaX: cappedNextX - currentX, deltaY };
+  }
+
+  private inferScrollableColumnWidth(dims: PositionDimensions, startCol: number): number | null {
+    const boundedStart = clampInteger(startCol, 0, Math.max(0, dims.totalCols - 1));
+    for (let offset = 0; offset < MAX_COLLAPSED_COLUMN_SCAN; offset += 1) {
+      const right = boundedStart + offset;
+      if (right < dims.totalCols) {
+        const rightWidth = dims.getColWidth(right);
+        if (isScrollableDimension(rightWidth)) return rightWidth;
+      }
+
+      const left = boundedStart - offset;
+      if (left >= 0 && left !== right) {
+        const leftWidth = dims.getColWidth(left);
+        if (isScrollableDimension(leftWidth)) return leftWidth;
+      }
+    }
+    return null;
+  }
+
+  private crossesCollapsedColumns(
+    dims: PositionDimensions,
+    fromCol: number,
+    toCol: number,
+    direction: 1 | -1,
+  ): boolean {
+    let scanned = 0;
+    let col = fromCol + direction;
+    while (
+      scanned < MAX_COLLAPSED_COLUMN_SCAN &&
+      col >= 0 &&
+      col < dims.totalCols &&
+      (direction > 0 ? col <= toCol : col >= toCol)
+    ) {
+      if (!isScrollableDimension(dims.getColWidth(col))) return true;
+      col += direction;
+      scanned += 1;
+    }
+    return false;
+  }
+
+  private nearestScrollableColumn(
+    dims: PositionDimensions,
+    startCol: number,
+    direction: 1 | -1,
+  ): number | null {
+    let col = clampInteger(startCol, 0, Math.max(0, dims.totalCols - 1));
+    for (let scanned = 0; scanned < MAX_COLLAPSED_COLUMN_SCAN; scanned += 1) {
+      if (isScrollableDimension(dims.getColWidth(col))) return col;
+      col += direction;
+      if (col < 0 || col >= dims.totalCols) return null;
+    }
+    return null;
   }
 
   /**
@@ -1273,4 +1385,13 @@ function adaptPositionDimensions(
  */
 export function createInputCoordinator(config?: Partial<InputCoordinatorConfig>): InputCoordinator {
   return new InputCoordinator(config);
+}
+
+function isScrollableDimension(width: number): boolean {
+  return Number.isFinite(width) && width > COLLAPSED_DIMENSION_EPSILON;
+}
+
+function clampInteger(value: number, min: number, max: number): number {
+  if (max < min) return min;
+  return Math.max(min, Math.min(max, Math.trunc(value)));
 }

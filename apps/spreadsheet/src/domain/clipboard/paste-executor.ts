@@ -149,7 +149,12 @@ export interface PasteStoreOperations {
     skipBlanks: boolean,
     transpose: boolean,
   ): Promise<void>;
-  setCellFormat(sheetId: SheetId, row: number, col: number, format: Partial<CellFormat>): void;
+  setCellFormat(
+    sheetId: SheetId,
+    row: number,
+    col: number,
+    format: Partial<CellFormat>,
+  ): Promise<void> | void;
   /**
    * Batch set cell formats. Groups updates by identical format to minimize IPC calls.
    * Falls back to per-cell setCellFormat if not implemented.
@@ -157,7 +162,7 @@ export interface PasteStoreOperations {
   setCellFormatBatch?(
     sheetId: SheetId,
     updates: Array<{ row: number; col: number; format: Partial<CellFormat> }>,
-  ): void;
+  ): Promise<void> | void;
   getCellData(
     sheetId: SheetId,
     row: number,
@@ -799,6 +804,23 @@ function pasteWouldSkipHiddenTargetRows(
   return false;
 }
 
+async function applyCellFormatUpdates(
+  store: PasteStoreOperations,
+  sheetId: SheetId,
+  updates: Array<{ row: number; col: number; format: Partial<CellFormat> }>,
+): Promise<void> {
+  if (updates.length === 0) return;
+
+  if (store.setCellFormatBatch) {
+    await store.setCellFormatBatch(sheetId, updates);
+    return;
+  }
+
+  for (const { row, col, format } of updates) {
+    await store.setCellFormat(sheetId, row, col, format);
+  }
+}
+
 // =============================================================================
 // Main Executor
 // =============================================================================
@@ -851,6 +873,7 @@ export async function executePaste(
     const { values: valuesOnly, formulas: formulasOnly, formats: formatsOnly, pasteLink } = options;
     const pasteAll = !valuesOnly && !formulasOnly && !formatsOnly && !pasteLink;
     const operation = options.operation ?? 'none';
+    const isExternalSource = data.sourceSheetId === EXTERNAL_SOURCE_SHEET_ID;
 
     // Fast path: when the clipboard source is an internal in-document range,
     // route values/formulas/formats through compute-core's copy_range.
@@ -925,6 +948,11 @@ export async function executePaste(
       row: number;
       col: number;
       value: string | number | boolean | null;
+    }> = [];
+    const preValueFormatUpdates: Array<{
+      row: number;
+      col: number;
+      format: Partial<CellFormat>;
     }> = [];
     const formatUpdates: Array<{ row: number; col: number; format: Partial<CellFormat> }> = [];
     // Collect comments for pasting
@@ -1067,6 +1095,7 @@ export async function executePaste(
       // Handle value/formula paste
       // Skipped for the core copy_range fast path (engine owns the write).
       if (!useCoreCopyRange && (pasteAll || valuesOnly || formulasOnly)) {
+        let pastedRawValue = false;
         if (cellData.formula && !valuesOnly) {
           // Paste formula
           const formulaStr = cellData.formula;
@@ -1085,6 +1114,15 @@ export async function executePaste(
               value: rawValue as string | number | boolean,
             });
           }
+          pastedRawValue = true;
+        }
+
+        if (pastedRawValue && isExternalSource && pasteAll && !cellData.format) {
+          preValueFormatUpdates.push({
+            row: targetRow,
+            col: targetCol,
+            format: { numberFormat: 'General' },
+          });
         }
       }
 
@@ -1148,6 +1186,10 @@ export async function executePaste(
     // atomically — it also adjusts formula references, which the TS cell-by-cell
     // synthesis above cannot do. Secondary payloads (comments, hyperlinks, etc.)
     // still go through TS below.
+    if (!useCoreCopyRange && preValueFormatUpdates.length > 0) {
+      await applyCellFormatUpdates(store, sheetId, preValueFormatUpdates);
+    }
+
     if (useCoreCopyRange && store.copyRange) {
       // copy_range owns the full-rectangle write atomically — including
       // clearing target cells whose source position is blank. For All /
@@ -1178,15 +1220,7 @@ export async function executePaste(
     }
 
     if (!useCoreCopyRange && formatUpdates.length > 0) {
-      if (store.setCellFormatBatch) {
-        // Batch path: groups by identical format internally, one IPC call per distinct format
-        store.setCellFormatBatch(sheetId, formatUpdates);
-      } else {
-        // Fallback: per-cell writes
-        for (const { row, col, format } of formatUpdates) {
-          store.setCellFormat(sheetId, row, col, format);
-        }
-      }
+      await applyCellFormatUpdates(store, sheetId, formatUpdates);
     }
 
     // Step 7: Recreate merges from clipboard

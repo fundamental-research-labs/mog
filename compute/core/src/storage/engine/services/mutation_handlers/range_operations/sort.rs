@@ -11,6 +11,25 @@ use crate::storage::engine::stores::EngineStores;
 use super::patches::{merge_recalc_results, synthetic_null_change};
 use super::range_sort::sort_range_backed_rows;
 
+fn sort_range_intersects_range_view(
+    mirror: &CellMirror,
+    sheet_id: &SheetId,
+    start_row: u32,
+    start_col: u32,
+    end_row: u32,
+    end_col: u32,
+) -> bool {
+    mirror
+        .get_sheet(sheet_id)
+        .map(|sheet| {
+            !sheet
+                .range_spatial_index
+                .query_range(start_row, start_col, end_row, end_col)
+                .is_empty()
+        })
+        .unwrap_or(false)
+}
+
 // ---------------------------------------------------------------------------
 // mutation_sort_range
 // ---------------------------------------------------------------------------
@@ -150,10 +169,8 @@ pub(in crate::storage::engine) fn mutation_sort_range(
     // path which reorders `rowOrder` directly and leaves payload bytes in
     // place. Otherwise, fall through to the existing per-cell sort path.
     // -----------------------------------------------------------------------
-    let has_ranges = mirror
-        .get_sheet(sheet_id)
-        .map(|s| !s.range_views_is_empty())
-        .unwrap_or(false);
+    let has_ranges =
+        sort_range_intersects_range_view(mirror, sheet_id, start_row, start_col, end_row, end_col);
 
     if has_ranges {
         return sort_range_backed_rows(stores, mirror, mutation, sheet_id, &permutation);

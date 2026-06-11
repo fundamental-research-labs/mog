@@ -280,7 +280,77 @@ fn range_sort_uses_range_backed_sort_key_column() {
 }
 
 // ===================================================================
-// Test 3: range_sort_mixed_sheet
+// Test 3: sparse_sort_on_sheet_with_unrelated_range_uses_per_cell_path
+// ===================================================================
+
+/// A sheet can contain imported Range data outside the user's explicit sort
+/// range. Sorting a sparse-only range must not reorder the sheet's rowOrder;
+/// otherwise unrelated Range-backed values move even though they were outside
+/// the requested sort target.
+#[test]
+fn sparse_sort_on_sheet_with_unrelated_range_uses_per_cell_path() {
+    let mut snap = sort_range_snapshot();
+
+    let sort_cell_uuids = [
+        "f3000000-0000-4000-8000-000000000001",
+        "f3000000-0000-4000-8000-000000000002",
+        "f3000000-0000-4000-8000-000000000003",
+        "f3000000-0000-4000-8000-000000000004",
+        "f3000000-0000-4000-8000-000000000005",
+    ];
+    for (i, (&uuid, value)) in sort_cell_uuids
+        .iter()
+        .zip([5.0, 3.0, 1.0, 4.0, 2.0])
+        .enumerate()
+    {
+        snap.sheets[0].cells.push(CellData {
+            cell_id: uuid.to_string(),
+            row: i as u32,
+            col: 3,
+            value: CellValue::Number(FiniteF64::must(value)),
+            formula: None,
+            identity_formula: None,
+            array_ref: None,
+        });
+    }
+
+    let (mut engine, _recalc) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let sid = test_sheet_id();
+
+    let options = ascending_sort_options(3);
+    engine.sort_range(&sid, 0, 3, 4, 3, options).unwrap();
+
+    for (row, expected) in [(0, 1.0), (1, 2.0), (2, 3.0), (3, 4.0), (4, 5.0)] {
+        assert_eq!(
+            as_f64(
+                engine
+                    .mirror()
+                    .get_cell_value_at(&sid, SheetPos::new(row, 3))
+            ),
+            Some(expected),
+            "Sparse sort col 3 row {} should be {}",
+            row,
+            expected
+        );
+    }
+
+    for (row, expected) in [(0, 50.0), (1, 30.0), (2, 10.0), (3, 40.0), (4, 20.0)] {
+        assert_eq!(
+            as_f64(
+                engine
+                    .mirror()
+                    .get_cell_value_at(&sid, SheetPos::new(row, 1))
+            ),
+            Some(expected),
+            "Unrelated range-backed col 1 row {} should remain {}",
+            row,
+            expected
+        );
+    }
+}
+
+// ===================================================================
+// Test 4: range_sort_mixed_sheet
 // ===================================================================
 
 /// Create a sheet with Range data in cols 0-1 and per-cell data in col 2.
@@ -349,7 +419,7 @@ fn range_sort_mixed_sheet() {
 }
 
 // ===================================================================
-// Test 4: range_sort_gridindex_coherence
+// Test 5: range_sort_gridindex_coherence
 // ===================================================================
 
 /// After sorting a Range-backed sheet, verify that `grid_index.row_ids_dense()`
@@ -405,7 +475,7 @@ fn range_sort_gridindex_coherence() {
 }
 
 // ===================================================================
-// Test 5: range_sort_formula_survives
+// Test 6: range_sort_formula_survives
 // ===================================================================
 
 /// Create a Range-backed sheet with a per-cell formula in col 2 that
@@ -471,7 +541,7 @@ fn range_sort_formula_survives() {
 }
 
 // ===================================================================
-// Test 6: range_sort_undo
+// Test 7: range_sort_undo
 // ===================================================================
 
 /// Sort a Range-backed sheet, then undo. Verify that `row_ids_dense()`
@@ -535,7 +605,7 @@ fn range_sort_undo() {
 }
 
 // ===================================================================
-// Test 7: xlsx_sort_roundtrip
+// Test 8: xlsx_sort_roundtrip
 // ===================================================================
 
 /// Sort a Range-backed sheet, verify range-backed column values are in

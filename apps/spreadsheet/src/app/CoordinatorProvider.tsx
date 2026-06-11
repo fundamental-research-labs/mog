@@ -339,6 +339,10 @@ function KeyboardCaptureSetup({
         editorSnapshot.matches('imeComposing');
       const target = keyboardEventTargetElement(e);
 
+      if (target?.closest('[data-testid="name-box"]')) {
+        return;
+      }
+
       if (
         isGlobalShortcut(e) &&
         !isDialogKeyboardTarget(target) &&

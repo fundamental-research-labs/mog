@@ -440,18 +440,36 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
         selectionCommands.setSelection([range], nextActiveCell, nextActiveCell);
       };
 
-      if (trimmedAddress.includes(':')) {
-        const parsedRange = parseCellRange(trimmedAddress);
-        if (parsedRange) {
-          if (parsedRange.sheetName) {
-            await activateSheetByName(parsedRange.sheetName);
-          }
-          setCellSelection(rangeFromParsedCellRange(parsedRange), {
-            row: parsedRange.startRow,
-            col: parsedRange.startCol,
-          });
+      const parsedReference = parseCellRange(trimmedAddress);
+      if (parsedReference) {
+        const currentRange = ranges[0];
+        const isSingleCellRef =
+          !trimmedAddress.includes(':') &&
+          parsedReference.startRow === parsedReference.endRow &&
+          parsedReference.startCol === parsedReference.endCol;
+        const isNoOpSelection =
+          ranges.length === 1 &&
+          currentRange != null &&
+          currentRange.startRow === parsedReference.startRow &&
+          currentRange.startCol === parsedReference.startCol &&
+          currentRange.endRow === parsedReference.endRow &&
+          currentRange.endCol === parsedReference.endCol &&
+          activeCell.row === parsedReference.startRow &&
+          activeCell.col === parsedReference.startCol;
+
+        if (isSingleCellRef && isNoOpSelection) {
+          setValidationError(INVALID_NAME_MESSAGE);
           return;
         }
+
+        if (parsedReference.sheetName) {
+          await activateSheetByName(parsedReference.sheetName);
+        }
+        setCellSelection(rangeFromParsedCellRange(parsedReference), {
+          row: parsedReference.startRow,
+          col: parsedReference.startCol,
+        });
+        return;
       }
 
       // Look up defined names (case-insensitive)
@@ -520,44 +538,6 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
             { row: parsed.row, col: parsed.col },
           );
         }
-        return;
-      }
-
-      // Fall back to A1 notation parsing (handles both single cells "A1" and
-      // ranges "A1:A100" — parseCellRange is a superset of parseCellAddress).
-      const parsed = parseCellRange(address);
-      if (parsed) {
-        const currentRange = ranges[0];
-        const isSingleCellRef =
-          !trimmedAddress.includes(':') &&
-          parsed.startRow === parsed.endRow &&
-          parsed.startCol === parsed.endCol;
-        const isNoOpSelection =
-          ranges.length === 1 &&
-          currentRange != null &&
-          currentRange.startRow === parsed.startRow &&
-          currentRange.startCol === parsed.startCol &&
-          currentRange.endRow === parsed.endRow &&
-          currentRange.endCol === parsed.endCol &&
-          activeCell.row === parsed.startRow &&
-          activeCell.col === parsed.startCol;
-
-        if (isSingleCellRef && isNoOpSelection) {
-          setValidationError(INVALID_NAME_MESSAGE);
-          return;
-        }
-
-        // If sheet is specified and different, switch sheets first
-        if (parsed.sheetName) {
-          await activateSheetByName(parsed.sheetName);
-        }
-
-        // Set selection to the range (or single cell when start === end);
-        // the viewport-follow coordinator scrolls into view via the SET_SELECTION emit.
-        setCellSelection(rangeFromParsedCellRange(parsed), {
-          row: parsed.startRow,
-          col: parsed.startCol,
-        });
         return;
       }
 
@@ -647,11 +627,11 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
     (e: React.KeyboardEvent<HTMLInputElement>) => {
       if (e.key === 'Enter') {
         e.preventDefault();
+        e.stopPropagation();
         // Read straight from the DOM so test harnesses (Playwright `fill`)
         // and rapid user input both commit the actual typed value, even if
         // the `inputValue` state hasn't flushed yet.
         const typed = e.currentTarget.value ?? inputValue;
-        void navigateToAddress(typed);
         setIsEditing(false);
         // Radix's PopoverTrigger toggle fires on the initial button click and
         // sets isOpen=true even though we immediately override with setIsOpen(false)
@@ -660,14 +640,14 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
         // isEditing goes false (open = isOpen && !isEditing). Force-close here so
         // the dropdown doesn't open after the user commits the name-box value.
         setIsOpen(false);
-        // Return focus to the grid canvas. Without this, the just-unmounted
-        // input drops focus to <body>, and subsequent typing is consumed by
-        // whatever default-focus target the browser picks (often nothing).
-        // Excel/Sheets parity: a navigator owns the focus contract — it both
-        // moves the selection AND returns focus to the destination.
+        // Return focus to the grid canvas before applying the Name Box jump.
+        // The focus transition can reconcile grid edit state, so the selection
+        // command must run after it to remain the final committed state.
         coordinator.input.focusGrid();
+        void navigateToAddress(typed);
       } else if (e.key === 'Escape') {
         e.preventDefault();
+        e.stopPropagation();
         setValidationError(null);
         setIsEditing(false);
         setIsOpen(false);

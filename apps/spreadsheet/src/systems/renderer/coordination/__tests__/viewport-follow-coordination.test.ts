@@ -8,6 +8,7 @@ type SelectionEvent = {
   type: 'userSelectionChanged';
   activeCell: { row: number; col: number };
   followCell: { row: number; col: number };
+  suppressViewportFollow?: boolean;
   range: CellRange;
   scrollIntent?:
     | {
@@ -98,6 +99,30 @@ describe('viewport-follow coordination', () => {
       direction: 'previous',
       cell: { row: 0, col: 23 },
     });
+  });
+
+  it('does not request active-cell scroll when the selection event suppresses follow', () => {
+    const selectionActor = createSelectionActor();
+    const rendererActor = { send: jest.fn() };
+    const viewport = {
+      getScrollToCell: jest.fn(() => ({ x: 0, y: 100 })),
+    };
+
+    setupViewportFollowCoordination({
+      selectionActor: selectionActor as any,
+      rendererActor: rendererActor as any,
+      getViewport: () => viewport as any,
+    });
+
+    selectionActor.emit({
+      type: 'userSelectionChanged',
+      activeCell: { row: 7, col: 0 },
+      followCell: { row: 7, col: 0 },
+      suppressViewportFollow: true,
+    });
+
+    expect(viewport.getScrollToCell).not.toHaveBeenCalled();
+    expect(rendererActor.send).not.toHaveBeenCalled();
   });
 
   it('requests origin scroll for Home navigation even when the target is visible', () => {

@@ -47,6 +47,12 @@ function getSelectionScrollIntent(event: SelectionEvent): SelectionScrollIntent 
   }
 }
 
+function shouldSuppressViewportFollow(event: SelectionEvent): boolean {
+  return (
+    (event.type === 'SELECT_ROW' || event.type === 'SELECT_COLUMN') && event.fromKeyboard !== true
+  );
+}
+
 /**
  * Emit `userSelectionChanged` carrying the post-transition active cell and
  * explicit viewport-follow target.
@@ -61,6 +67,7 @@ export const emitUserSelectionChanged = emit(
         ? context.activeCell
         : getSelectionViewportFollowCell(context.pendingRange, context.activeCell, context.anchor);
     const scrollIntent = getSelectionScrollIntent(event);
+    const suppressViewportFollow = shouldSuppressViewportFollow(event);
 
     return {
       type: 'userSelectionChanged' as const,
@@ -68,6 +75,7 @@ export const emitUserSelectionChanged = emit(
       followCell,
       range: context.pendingRange,
       ...(scrollIntent ? { scrollIntent } : {}),
+      ...(suppressViewportFollow ? { suppressViewportFollow } : {}),
     };
   },
 );

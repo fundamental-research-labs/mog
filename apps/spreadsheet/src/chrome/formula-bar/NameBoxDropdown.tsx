@@ -401,12 +401,12 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
 
   /**
    * Navigate to a cell address or named range.
-   * Name Box Direct Name Typing - looks up named ranges before A1 parsing.
+   * Name Box Direct Name Typing - resolves cell references before named ranges.
    *
    * Priority:
-   * 1. Check for matching defined name (case-insensitive)
-   * 2. Check for matching table name (case-insensitive)
-   * 3. Parse as A1 notation
+   * 1. Parse as A1 notation
+   * 2. Check for matching defined name (case-insensitive)
+   * 3. Check for matching table name (case-insensitive)
    */
   const navigateToAddress = useCallback(
     async (address: string) => {
@@ -440,18 +440,36 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
         selectionCommands.setSelection([range], nextActiveCell, nextActiveCell);
       };
 
-      if (trimmedAddress.includes(':')) {
-        const parsedRange = parseCellRange(trimmedAddress);
-        if (parsedRange) {
-          if (parsedRange.sheetName) {
-            await activateSheetByName(parsedRange.sheetName);
-          }
-          setCellSelection(rangeFromParsedCellRange(parsedRange), {
-            row: parsedRange.startRow,
-            col: parsedRange.startCol,
-          });
+      const parsedAddressRange = parseCellRange(trimmedAddress);
+      if (parsedAddressRange) {
+        const currentRange = ranges[0];
+        const isSingleCellRef =
+          !trimmedAddress.includes(':') &&
+          parsedAddressRange.startRow === parsedAddressRange.endRow &&
+          parsedAddressRange.startCol === parsedAddressRange.endCol;
+        const isNoOpSelection =
+          ranges.length === 1 &&
+          currentRange != null &&
+          currentRange.startRow === parsedAddressRange.startRow &&
+          currentRange.startCol === parsedAddressRange.startCol &&
+          currentRange.endRow === parsedAddressRange.endRow &&
+          currentRange.endCol === parsedAddressRange.endCol &&
+          activeCell.row === parsedAddressRange.startRow &&
+          activeCell.col === parsedAddressRange.startCol;
+
+        if (isSingleCellRef && isNoOpSelection) {
+          setValidationError(INVALID_NAME_MESSAGE);
           return;
         }
+
+        if (parsedAddressRange.sheetName) {
+          await activateSheetByName(parsedAddressRange.sheetName);
+        }
+        setCellSelection(rangeFromParsedCellRange(parsedAddressRange), {
+          row: parsedAddressRange.startRow,
+          col: parsedAddressRange.startCol,
+        });
+        return;
       }
 
       // Look up defined names (case-insensitive)
@@ -647,6 +665,7 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
     (e: React.KeyboardEvent<HTMLInputElement>) => {
       if (e.key === 'Enter') {
         e.preventDefault();
+        e.stopPropagation();
         // Read straight from the DOM so test harnesses (Playwright `fill`)
         // and rapid user input both commit the actual typed value, even if
         // the `inputValue` state hasn't flushed yet.
@@ -668,6 +687,7 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
         coordinator.input.focusGrid();
       } else if (e.key === 'Escape') {
         e.preventDefault();
+        e.stopPropagation();
         setValidationError(null);
         setIsEditing(false);
         setIsOpen(false);

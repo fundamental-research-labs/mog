@@ -100,6 +100,11 @@ function isDialogKeyboardTarget(target: HTMLElement | null): boolean {
   return Boolean(target.closest('[role="dialog"]'));
 }
 
+function isNameBoxKeyboardTarget(target: HTMLElement | null): boolean {
+  if (!target) return false;
+  return Boolean(target.closest('[data-testid="name-box"]'));
+}
+
 function isNativeEditableShortcut(e: KeyboardEvent, target: HTMLElement | null): boolean {
   if (!isEditableKeyboardTarget(target)) return false;
   if (!(e.ctrlKey || e.metaKey) || e.altKey) return false;
@@ -394,6 +399,10 @@ function KeyboardCaptureSetup({
 
       // Check focus machine to exclude dialog inputs
       // When a dialog has focus, its inputs handle their own keyboard events.
+      if (isNameBoxKeyboardTarget(target)) {
+        return;
+      }
+
       // The focus machine tracks what layer has focus (grid, formulaBar, dialog, etc.)
       const focusActor = coordinator.input.access.actors.focus;
       if (!focusActor) return; // Focus not wired yet

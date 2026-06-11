@@ -156,6 +156,8 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
   const [validationError, setValidationError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const editStartValueRef = useRef('');
+  const commitInFlightRef = useRef(false);
 
   // Load named ranges, tables, sheets from Workbook/Worksheet API (async) for dropdown
   const [cachedNamedRanges, setCachedNamedRanges] = useState<any[]>([]);
@@ -372,6 +374,7 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
       setValidationError(null);
       setIsEditing(true);
       setInputValue(cellAddress);
+      editStartValueRef.current = cellAddress;
       setIsOpen(false);
       requestAnimationFrame(() => {
         inputRef.current?.focus();
@@ -385,6 +388,7 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
     setValidationError(null);
     setIsEditing(true);
     setInputValue(cellAddress);
+    editStartValueRef.current = cellAddress;
     setIsOpen(false);
     // Focus input on next tick
     requestAnimationFrame(() => {
@@ -420,6 +424,10 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
       // and resolve directly. This makes range navigation via the Name Box
       // synchronous so callers don't have to race against an async dispatch.
       const activateSheetByName = async (sheetName: string): Promise<void> => {
+        if (sheetName.toLowerCase() === activeSheetName.toLowerCase()) {
+          return;
+        }
+
         try {
           const targetSheet = await wb.getSheet(sheetName);
           const targetSheetId = targetSheet.getSheetId();
@@ -611,6 +619,35 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
     ],
   );
 
+  const commitNameBoxValue = useCallback(
+    async (value: string, options: { restoreGridFocus?: boolean } = {}) => {
+      if (commitInFlightRef.current) return;
+      commitInFlightRef.current = true;
+      try {
+        await navigateToAddress(value);
+      } catch {
+        setValidationError(INVALID_NAME_MESSAGE);
+      } finally {
+        setIsEditing(false);
+        // Radix's PopoverTrigger toggle fires on the initial button click and
+        // sets isOpen=true even though we immediately override with setIsOpen(false)
+        // in handleNameBoxClick. The toggle survives because Radix fires after the
+        // child's onClick handler. That latent isOpen=true becomes visible once
+        // isEditing goes false (open = isOpen && !isEditing). Force-close here so
+        // the dropdown doesn't open after the user commits the name-box value.
+        setIsOpen(false);
+        // Return focus to the grid canvas after navigation has updated the
+        // selection so subsequent keystrokes target the destination range.
+        if (options.restoreGridFocus) {
+          coordinator.input.focusGrid();
+        }
+        editStartValueRef.current = '';
+        commitInFlightRef.current = false;
+      }
+    },
+    [navigateToAddress, coordinator],
+  );
+
   // Navigate to a named range
   const navigateToName = useCallback(
     (suggestion: NameSuggestion) => {
@@ -651,37 +688,32 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
         // and rapid user input both commit the actual typed value, even if
         // the `inputValue` state hasn't flushed yet.
         const typed = e.currentTarget.value ?? inputValue;
-        void navigateToAddress(typed);
-        setIsEditing(false);
-        // Radix's PopoverTrigger toggle fires on the initial button click and
-        // sets isOpen=true even though we immediately override with setIsOpen(false)
-        // in handleNameBoxClick. The toggle survives because Radix fires after the
-        // child's onClick handler. That latent isOpen=true becomes visible once
-        // isEditing goes false (open = isOpen && !isEditing). Force-close here so
-        // the dropdown doesn't open after the user commits the name-box value.
-        setIsOpen(false);
-        // Return focus to the grid canvas. Without this, the just-unmounted
-        // input drops focus to <body>, and subsequent typing is consumed by
-        // whatever default-focus target the browser picks (often nothing).
-        // Excel/Sheets parity: a navigator owns the focus contract — it both
-        // moves the selection AND returns focus to the destination.
-        coordinator.input.focusGrid();
+        void commitNameBoxValue(typed, { restoreGridFocus: true });
       } else if (e.key === 'Escape') {
         e.preventDefault();
         setValidationError(null);
         setIsEditing(false);
         setIsOpen(false);
+        editStartValueRef.current = '';
         coordinator.input.focusGrid();
       }
     },
-    [inputValue, navigateToAddress, coordinator],
+    [inputValue, commitNameBoxValue, coordinator],
   );
 
   // Handle input blur
   const handleInputBlur = useCallback(() => {
+    if (commitInFlightRef.current) return;
+    const typed = inputRef.current?.value ?? inputValue;
+    const valueChanged = typed.trim() !== editStartValueRef.current.trim();
+    if (valueChanged) {
+      void commitNameBoxValue(typed);
+      return;
+    }
     setIsEditing(false);
     setIsOpen(false);
-  }, []);
+    editStartValueRef.current = '';
+  }, [inputValue, commitNameBoxValue]);
 
   // Handle dropdown filter change
   const handleFilterChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {

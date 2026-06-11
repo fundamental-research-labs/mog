@@ -35,6 +35,7 @@ import { useActionDependencies } from './use-action-dependencies';
 import { isPickerBackedValidation } from '../../systems/grid-editing/coordination/editor-validation-resolution';
 import { clipboardSelectors } from '../../selectors';
 import { useCoordinator } from '../shared/use-coordinator';
+import { trackPendingClipboardPaste } from '../../systems/grid-editing/coordination/pending-clipboard-paste';
 import type { ClipboardState } from '@mog-sdk/contracts/actors';
 import type { CellCoord } from '@mog-sdk/contracts/rendering';
 
@@ -83,6 +84,20 @@ function waitForClipboardPasteIdle(actor: ClipboardActorLike, signal?: AbortSign
     if (!isClipboardPastePending(actor.getSnapshot())) {
       finish();
     }
+  });
+}
+
+const CONTEXT_MENU_ACTION_DELAY_MS = 50;
+
+function runAfterInputClick<T>(callback: () => T | Promise<T>): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    setTimeout(() => {
+      try {
+        resolve(callback());
+      } catch (error) {
+        reject(error);
+      }
+    }, CONTEXT_MENU_ACTION_DELAY_MS);
   });
 }
 
@@ -542,11 +557,13 @@ export function useContextMenuActions(
   }, [actionDeps, closeContextMenu]);
 
   const insertCutCells = useCallback(() => {
-    selectResolvedContextCell();
     closeContextMenu();
-    setTimeout(() => {
-      dispatch('INSERT_CUT_CELLS_SHIFT_DOWN', actionDeps);
-    }, 0);
+    trackPendingClipboardPaste(
+      runAfterInputClick(() => {
+        selectResolvedContextCell();
+        return dispatch('INSERT_CUT_CELLS_SHIFT_DOWN', actionDeps);
+      }),
+    );
   }, [actionDeps, closeContextMenu, selectResolvedContextCell]);
 
   // ==========================================================================

@@ -13,6 +13,15 @@ import type { DocumentContext } from '../../context';
 import { KernelError } from '../../errors';
 import * as SheetMgmtOps from './operations/sheet-management-operations';
 
+const EXCEL_DEFAULT_PRINT_MARGINS: PageMargins = {
+  top: 0.75,
+  bottom: 0.75,
+  left: 0.7,
+  right: 0.7,
+  header: 0.3,
+  footer: 0.3,
+};
+
 /** Inline unwrap: throws KernelError on failure, returns data on success. */
 function unwrapResult<T>(result: { success: boolean; data?: T; error?: any }): T {
   if (!result.success) {
@@ -37,8 +46,15 @@ export class WorksheetPrintImpl implements WorksheetPrint {
   }
 
   async getSettings(): Promise<PrintSettings> {
-    // route through `ctx.mirror` — no Rust IPC.
-    return this.ctx.mirror.getPrintSettings(this.sheetId);
+    // Route through `ctx.mirror` — no Rust IPC. The mirror keeps the
+    // canonical stored shape where `margins: null` means "use defaults";
+    // the public worksheet API exposes the effective Excel defaults.
+    const settings = this.ctx.mirror.getPrintSettings(this.sheetId);
+    if (settings.margins) return settings;
+    return {
+      ...settings,
+      margins: { ...EXCEL_DEFAULT_PRINT_MARGINS },
+    };
   }
 
   async setSettings(settings: Partial<PrintSettings>): Promise<void> {

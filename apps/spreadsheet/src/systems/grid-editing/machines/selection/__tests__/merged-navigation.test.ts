@@ -497,7 +497,7 @@ describe('Hidden Cell Skipping - Machine Level', () => {
     expect(result.activeCell).toEqual(cell(12, 27)); // AB13
   });
 
-  it('extendSelection moves to the next visible edge while including hidden rows', () => {
+  it('extendSelection moves to the next worksheet row while including hidden rows', () => {
     const isRowHidden = (row: number) => row === 2; // Row 3 is hidden
 
     const context = createContext({
@@ -513,10 +513,10 @@ describe('Hidden Cell Skipping - Machine Level', () => {
       shiftKey: true,
     });
 
-    // Shift+Arrow moves the edge to the next visible row while the hidden row
-    // remains inside the selected rectangle.
+    // Shift+Arrow moves the edge by one worksheet row; hidden rows remain
+    // inside the selected rectangle as the span grows.
     expect(result.anchor).toEqual(cell(1, 0)); // A2 (anchor)
-    expect(result.pendingRange).toEqual(range(1, 0, 3, 0)); // A2:A4
+    expect(result.pendingRange).toEqual(range(1, 0, 2, 0)); // A2:A3
   });
 });
 

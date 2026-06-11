@@ -410,13 +410,13 @@ describe('extendSelection - Shift+Arrow bug tests', () => {
       expect(result.activeCell).toEqual({ row: 4, col: 1 });
     });
 
-    it('first Shift+Right from a hidden single-cell target jumps to the next visible column', () => {
+    it('first Shift+Right from a hidden single-cell target extends by one column', () => {
       const context: SelectionContext = {
         ...initialSelectionContext,
-        activeCell: { row: 12, col: 15 }, // P13
-        pendingRange: { startRow: 12, startCol: 15, endRow: 12, endCol: 15 },
+        activeCell: { row: 4, col: 4 },
+        pendingRange: { startRow: 4, startCol: 4, endRow: 4, endCol: 4 },
         anchor: null,
-        isColHidden: (col) => col >= 15 && col <= 26, // P:AA
+        isColHidden: (col) => col >= 4 && col <= 6,
       };
 
       const event: SelectionEvent = {
@@ -428,25 +428,25 @@ describe('extendSelection - Shift+Arrow bug tests', () => {
       const result = callExtendSelection(context, event);
 
       expect(result.pendingRange).toEqual({
-        startRow: 12,
-        startCol: 15,
-        endRow: 12,
-        endCol: 27,
+        startRow: 4,
+        startCol: 4,
+        endRow: 4,
+        endCol: 5,
       });
-      expect(result.anchor).toEqual({ row: 12, col: 15 });
-      expect(result.activeCell).toEqual({ row: 12, col: 15 });
+      expect(result.anchor).toEqual({ row: 4, col: 4 });
+      expect(result.activeCell).toEqual({ row: 4, col: 4 });
     });
 
-    it('Shift+Right moves by visible columns while including hidden column spans', () => {
+    it('Shift+Right moves by worksheet columns while including hidden column spans', () => {
       let context: SelectionContext = {
         ...initialSelectionContext,
-        activeCell: { row: 16, col: 12 }, // M17
-        pendingRange: { startRow: 16, startCol: 12, endRow: 16, endCol: 12 },
+        activeCell: { row: 4, col: 1 },
+        pendingRange: { startRow: 4, startCol: 1, endRow: 4, endCol: 1 },
         anchor: null,
-        isColHidden: (col) => col >= 15 && col <= 26, // P:AA
+        isColHidden: (col) => col >= 4 && col <= 6,
       };
 
-      for (let visibleStep = 0; visibleStep < 3; visibleStep += 1) {
+      for (let step = 0; step < 7; step += 1) {
         const result = callExtendSelection(context, {
           type: 'KEY_ARROW',
           direction: 'right',
@@ -456,16 +456,16 @@ describe('extendSelection - Shift+Arrow bug tests', () => {
       }
 
       expect(context.pendingRange).toEqual({
-        startRow: 16,
-        startCol: 12,
-        endRow: 16,
-        endCol: 27,
+        startRow: 4,
+        startCol: 1,
+        endRow: 4,
+        endCol: 8,
       });
-      expect(context.anchor).toEqual({ row: 16, col: 12 });
-      expect(context.activeCell).toEqual({ row: 16, col: 12 });
+      expect(context.anchor).toEqual({ row: 4, col: 1 });
+      expect(context.activeCell).toEqual({ row: 4, col: 1 });
     });
 
-    it('Shift+Down moves by visible rows while including hidden row spans', () => {
+    it('Shift+Down moves by worksheet rows while including hidden row spans', () => {
       const context: SelectionContext = {
         ...initialSelectionContext,
         activeCell: { row: 1, col: 0 }, // A2
@@ -483,7 +483,7 @@ describe('extendSelection - Shift+Arrow bug tests', () => {
       expect(result.pendingRange).toEqual({
         startRow: 1,
         startCol: 0,
-        endRow: 4,
+        endRow: 2,
         endCol: 0,
       });
       expect(result.anchor).toEqual({ row: 1, col: 0 });

@@ -50,19 +50,17 @@ describe('Arrow keys skip hidden rows', () => {
     expect(sim.activeCell()).toEqual({ row: 1, col: 0 });
   });
 
-  it('Shift+ArrowDown extends selection through hidden rows', () => {
+  it('Shift+ArrowDown extends selection by one worksheet row', () => {
     sim = createIntegrationSimulator({
       hiddenRows: [2, 3],
       activeCell: { row: 1, col: 0 },
     });
 
-    // Shift+ArrowDown should extend selection, skipping hidden rows
     sim.pressKey('ArrowDown', { shift: true });
 
     const ranges = sim.selectionRanges();
     expect(ranges).toHaveLength(1);
-    // The selection extends to row 4 (skipping 2,3)
-    expect(ranges[0].endRow).toBe(4);
+    expect(ranges[0].endRow).toBe(2);
   });
 });
 

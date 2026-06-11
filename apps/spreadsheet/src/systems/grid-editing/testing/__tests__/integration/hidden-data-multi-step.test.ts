@@ -209,16 +209,10 @@ describe('Tab cycling with hidden rows in selection', () => {
       activeCell: { row: 0, col: 0 },
     });
 
-    // Create a multi-cell selection spanning rows 0-4, col 0
-    // by using Shift+ArrowDown multiple times.
-    // Shift+Down from row 0 should skip hidden rows:
-    // first press → extend to row 1
-    // second press → skip 2,3, extend to row 4
-    // But let's set the selection explicitly via the system
-    // Actually, let's build it with shift+arrows:
-    sim.pressKey('ArrowDown', { shift: true }); // extends to row 1
-    // Row 1 → next visible is row 4 (skips 2,3)
-    sim.pressKey('ArrowDown', { shift: true }); // extends to row 4
+    // Create a multi-cell selection spanning rows 0-4, col 0.
+    for (let i = 0; i < 4; i += 1) {
+      sim.pressKey('ArrowDown', { shift: true });
+    }
 
     const ranges = sim.selectionRanges();
     expect(ranges).toHaveLength(1);
@@ -259,30 +253,29 @@ describe('Shift+Arrow extend then collapse with hidden rows', () => {
       activeCell: { row: 1, col: 0 },
     });
 
-    // Shift+Down x3 to extend selection downward through hidden rows
-    // First Shift+Down: extends to row 4 (skips 2,3)
+    // Shift+Down x3 extends by worksheet row, including hidden rows.
     sim.pressKey('ArrowDown', { shift: true });
     let ranges = sim.selectionRanges();
+    expect(ranges[0].endRow).toBe(2);
+
+    // Second Shift+Down: extends to row 3.
+    sim.pressKey('ArrowDown', { shift: true });
+    ranges = sim.selectionRanges();
+    expect(ranges[0].endRow).toBe(3);
+
+    // Third Shift+Down: extends to row 4.
+    sim.pressKey('ArrowDown', { shift: true });
+    ranges = sim.selectionRanges();
     expect(ranges[0].endRow).toBe(4);
 
-    // Second Shift+Down: extends to row 5
-    sim.pressKey('ArrowDown', { shift: true });
-    ranges = sim.selectionRanges();
-    expect(ranges[0].endRow).toBe(5);
-
-    // Third Shift+Down: extends to row 6
-    sim.pressKey('ArrowDown', { shift: true });
-    ranges = sim.selectionRanges();
-    expect(ranges[0].endRow).toBe(6);
-
-    // Selection is now rows 1-6, with rows 2-3 hidden
+    // Selection is now rows 1-4, with rows 2-3 hidden.
     // Active cell is at row 1 (the anchor)
     expect(sim.activeCell()).toEqual({ row: 1, col: 0 });
 
-    // Plain ArrowDown to collapse: collapses to bottom edge (row 6)
+    // Plain ArrowDown to collapse: collapses to bottom edge.
     sim.pressKey('ArrowDown');
 
-    expect(sim.activeCell()).toEqual({ row: 6, col: 0 });
+    expect(sim.activeCell()).toEqual({ row: 4, col: 0 });
     ranges = sim.selectionRanges();
     // Should be single-cell selection
     expect(ranges[0].startRow).toBe(ranges[0].endRow);

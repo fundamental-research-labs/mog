@@ -70,30 +70,66 @@ import {
   tableStyleIdForCompute,
 } from '../../domain/tables/style-normalization';
 
-type PendingClipboardPasteGlobal = typeof globalThis & {
+type PendingTableReadBarrierGlobal = typeof globalThis & {
   __MOG_PENDING_CLIPBOARD_PASTE__?: Promise<unknown>;
   __MOG_ACTIVE_CLIPBOARD_PASTE__?: Promise<unknown>;
+  __MOG_PENDING_DIALOG_ACTION__?: Promise<unknown>;
+  __MOG_PENDING_FILTER_HEADER_CACHE__?: Promise<unknown>;
 };
 
-async function waitForPendingClipboardPaste(): Promise<void> {
+function isThenable(value: unknown): value is PromiseLike<unknown> {
+  return (
+    value !== null &&
+    (typeof value === 'object' || typeof value === 'function') &&
+    typeof (value as { then?: unknown }).then === 'function'
+  );
+}
+
+async function waitForPendingTableReadBarriers(): Promise<void> {
   const deadline = Date.now() + 2000;
+  let sawPendingUiBarrier = false;
 
   while (Date.now() < deadline) {
-    const global = globalThis as PendingClipboardPasteGlobal;
-    const pending = global.__MOG_PENDING_CLIPBOARD_PASTE__;
-    const active = global.__MOG_ACTIVE_CLIPBOARD_PASTE__;
-    if (
-      (!pending || typeof pending.then !== 'function') &&
-      (!active || typeof active.then !== 'function')
-    ) {
+    const global = globalThis as PendingTableReadBarrierGlobal;
+    const pending = [
+      global.__MOG_PENDING_CLIPBOARD_PASTE__,
+      global.__MOG_ACTIVE_CLIPBOARD_PASTE__,
+      global.__MOG_PENDING_DIALOG_ACTION__,
+      global.__MOG_PENDING_FILTER_HEADER_CACHE__,
+    ].filter(isThenable);
+
+    if (pending.length === 0) {
+      if (sawPendingUiBarrier) {
+        await waitForBrowserRenderFlush();
+      }
       return;
     }
+    sawPendingUiBarrier = true;
 
     await Promise.race([
-      Promise.all([pending?.catch(() => undefined), active?.catch(() => undefined)]),
+      Promise.all(pending.map((promise) => Promise.resolve(promise).catch(() => undefined))),
       new Promise<void>((resolve) => setTimeout(resolve, 16)),
     ]);
   }
+
+  if (sawPendingUiBarrier) {
+    await waitForBrowserRenderFlush();
+  }
+}
+
+async function waitForBrowserRenderFlush(): Promise<void> {
+  const global = globalThis as {
+    requestAnimationFrame?: (callback: () => void) => number;
+  };
+  if (typeof global.requestAnimationFrame !== 'function') {
+    return;
+  }
+
+  await new Promise<void>((resolve) => {
+    global.requestAnimationFrame?.(() => {
+      global.requestAnimationFrame?.(() => resolve());
+    });
+  });
 }
 
 // FIX-001-tables-hotcheck-v1
@@ -373,7 +409,7 @@ export class WorksheetTablesImpl implements WorksheetTables {
   }
 
   async list(): Promise<TableInfo[]> {
-    await waitForPendingClipboardPaste();
+    await waitForPendingTableReadBarriers();
     const tables = await this.ctx.computeBridge.getAllTablesInSheet(this.sheetId);
     return tables.map((t) => bridgeTableToTableInfo(t));
   }

@@ -29,6 +29,23 @@ interface UseFilterHeaderCacheOptions {
   onCacheUpdate?: () => void;
 }
 
+type PendingFilterHeaderCacheGlobal = typeof globalThis & {
+  __MOG_PENDING_FILTER_HEADER_CACHE__?: Promise<unknown>;
+};
+
+function trackPendingFilterHeaderCache<T>(promise: Promise<T>): Promise<T> {
+  const global = globalThis as PendingFilterHeaderCacheGlobal;
+  global.__MOG_PENDING_FILTER_HEADER_CACHE__ = promise;
+  void promise
+    .finally(() => {
+      if (global.__MOG_PENDING_FILTER_HEADER_CACHE__ === promise) {
+        delete global.__MOG_PENDING_FILTER_HEADER_CACHE__;
+      }
+    })
+    .catch(() => undefined);
+  return promise;
+}
+
 /**
  * Hook to create and manage a filter header info cache.
  *
@@ -47,57 +64,63 @@ export function useFilterHeaderCache({
   const refreshIdRef = useRef(0);
 
   // Refresh cache: fetch filter header DTOs via ONE API, build lookup map
-  const refresh = useCallback(async () => {
-    const refreshId = ++refreshIdRef.current;
-    const newCache = new Map<string, FilterHeaderInfo>();
-    const newTableColumnActive = new Map<string, boolean>();
+  const refresh = useCallback(
+    () =>
+      trackPendingFilterHeaderCache(
+        (async () => {
+          const refreshId = ++refreshIdRef.current;
+          const newCache = new Map<string, FilterHeaderInfo>();
+          const newTableColumnActive = new Map<string, boolean>();
 
-    if (!activeSheetId) {
-      if (refreshId !== refreshIdRef.current) return;
-      cacheRef.current = newCache;
-      tableColumnActiveRef.current = newTableColumnActive;
-      onCacheUpdate?.();
-      return;
-    }
+          if (!activeSheetId) {
+            if (refreshId !== refreshIdRef.current) return;
+            cacheRef.current = newCache;
+            tableColumnActiveRef.current = newTableColumnActive;
+            onCacheUpdate?.();
+            return;
+          }
 
-    try {
-      const ws = wb.getSheetById(activeSheetId);
-      const filterHeaderInfo = await ws.filters.listHeaderInfo({ scope: 'available' });
+          try {
+            const ws = wb.getSheetById(activeSheetId);
+            const filterHeaderInfo = await ws.filters.listHeaderInfo({ scope: 'available' });
 
-      if (filterHeaderInfo.length === 0) {
-        if (refreshId !== refreshIdRef.current) return;
-        cacheRef.current = newCache;
-        tableColumnActiveRef.current = newTableColumnActive;
-        onCacheUpdate?.();
-        return;
-      }
+            if (filterHeaderInfo.length === 0) {
+              if (refreshId !== refreshIdRef.current) return;
+              cacheRef.current = newCache;
+              tableColumnActiveRef.current = newTableColumnActive;
+              onCacheUpdate?.();
+              return;
+            }
 
-      for (const entry of filterHeaderInfo) {
-        if (entry.tableId) {
-          newTableColumnActive.set(
-            `${entry.tableId}:${entry.row}:${entry.col}`,
-            entry.hasActiveFilter,
-          );
-        }
-        if (entry.buttonVisible === false) {
-          continue;
-        }
-        newCache.set(`${entry.row},${entry.col}`, entry);
-      }
-    } catch (error) {
-      recordFilterReadinessError({
-        source: 'headerCache',
-        sheetId: activeSheetId,
-        operation: 'filters.listHeaderInfo',
-        error,
-      });
-    }
+            for (const entry of filterHeaderInfo) {
+              if (entry.tableId) {
+                newTableColumnActive.set(
+                  `${entry.tableId}:${entry.row}:${entry.col}`,
+                  entry.hasActiveFilter,
+                );
+              }
+              if (entry.buttonVisible === false) {
+                continue;
+              }
+              newCache.set(`${entry.row},${entry.col}`, entry);
+            }
+          } catch (error) {
+            recordFilterReadinessError({
+              source: 'headerCache',
+              sheetId: activeSheetId,
+              operation: 'filters.listHeaderInfo',
+              error,
+            });
+          }
 
-    if (refreshId !== refreshIdRef.current) return;
-    cacheRef.current = newCache;
-    tableColumnActiveRef.current = newTableColumnActive;
-    onCacheUpdate?.();
-  }, [wb, activeSheetId, onCacheUpdate]);
+          if (refreshId !== refreshIdRef.current) return;
+          cacheRef.current = newCache;
+          tableColumnActiveRef.current = newTableColumnActive;
+          onCacheUpdate?.();
+        })(),
+      ),
+    [wb, activeSheetId, onCacheUpdate],
+  );
 
   // Fetch on mount and when sheetId changes
   useEffect(() => {

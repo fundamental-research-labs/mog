@@ -359,6 +359,9 @@ describe('WorksheetImpl Extended Methods', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    delete (globalThis as { __MOG_PENDING_DIALOG_ACTION__?: unknown }).__MOG_PENDING_DIALOG_ACTION__;
+    delete (globalThis as { __MOG_PENDING_FILTER_HEADER_CACHE__?: unknown })
+      .__MOG_PENDING_FILTER_HEADER_CACHE__;
     ctx = createMockCtx();
     ctx.computeBridge.getTableByName.mockResolvedValue({ raw: 'bridge-table' });
     (TableOps.bridgeTableToTableInfo as jest.Mock).mockReturnValue({
@@ -912,6 +915,66 @@ describe('WorksheetImpl Extended Methods', () => {
       const result = await ws.tables.getAtCell(50, 50);
 
       expect(result).toBeNull();
+    });
+
+    it('list waits for pending dialog actions before reading table metadata', async () => {
+      const global = globalThis as { __MOG_PENDING_DIALOG_ACTION__?: Promise<void> };
+      let resolveDialogAction!: () => void;
+      global.__MOG_PENDING_DIALOG_ACTION__ = new Promise<void>((resolve) => {
+        resolveDialogAction = () => {
+          delete global.__MOG_PENDING_DIALOG_ACTION__;
+          resolve();
+        };
+      });
+
+      ctx.computeBridge.getAllTablesInSheet.mockResolvedValue([{ raw: 'bridge-table' }]);
+
+      const listPromise = ws.tables.list();
+      await Promise.resolve();
+
+      expect(ctx.computeBridge.getAllTablesInSheet).not.toHaveBeenCalled();
+
+      resolveDialogAction();
+      const result = await listPromise;
+
+      expect(ctx.computeBridge.getAllTablesInSheet).toHaveBeenCalledWith(SHEET_ID);
+      expect(result).toEqual([
+        {
+          id: 'Table1',
+          name: 'Table1',
+          range: 'A1:D10',
+          hasHeaderRow: true,
+          hasTotalsRow: false,
+          columns: [
+            { id: '1', name: 'A', index: 0 },
+            { id: '2', name: 'B', index: 1 },
+            { id: '3', name: 'Price', index: 2 },
+          ],
+        },
+      ]);
+    });
+
+    it('list waits for pending filter header cache refreshes before reading table metadata', async () => {
+      const global = globalThis as { __MOG_PENDING_FILTER_HEADER_CACHE__?: Promise<void> };
+      let resolveFilterRefresh!: () => void;
+      global.__MOG_PENDING_FILTER_HEADER_CACHE__ = new Promise<void>((resolve) => {
+        resolveFilterRefresh = () => {
+          delete global.__MOG_PENDING_FILTER_HEADER_CACHE__;
+          resolve();
+        };
+      });
+
+      ctx.computeBridge.getAllTablesInSheet.mockResolvedValue([{ raw: 'bridge-table' }]);
+
+      const listPromise = ws.tables.list();
+      await Promise.resolve();
+
+      expect(ctx.computeBridge.getAllTablesInSheet).not.toHaveBeenCalled();
+
+      resolveFilterRefresh();
+      await listPromise;
+
+      expect(ctx.computeBridge.getAllTablesInSheet).toHaveBeenCalledWith(SHEET_ID);
     });
 
     it('renameTable validates before delegating to computeBridge.renameTable', async () => {

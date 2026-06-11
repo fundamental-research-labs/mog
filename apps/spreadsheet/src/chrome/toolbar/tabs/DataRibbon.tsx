@@ -249,8 +249,16 @@ export function DataRibbon({
   onImportJson,
   onImportFromWeb,
 }: DataRibbonProps) {
-  const { groupRows, groupColumns, canGroup, canUngroup, canShowDetail, canHideDetail } =
-    useGroupingActions();
+  const {
+    groupRows,
+    groupColumns,
+    ungroupRows,
+    ungroupColumns,
+    canGroup,
+    canUngroup,
+    canShowDetail,
+    canHideDetail,
+  } = useGroupingActions();
   const { canClearFilters, canReapplyFilters } = useFilterActions();
 
   // Get dispatch for action handling
@@ -442,13 +450,24 @@ export function DataRibbon({
     setIsGroupDropdownOpen(false);
     groupColumns();
   }, [groupColumns]);
+  const [isUngroupDropdownOpen, setIsUngroupDropdownOpen] = useState(false);
   const handleUngroupClick = useCallback(() => {
-    window.setTimeout(() => dispatch('UNGROUP'), 0);
-  }, [dispatch]);
+    if (!canUngroup) return;
+    setIsUngroupDropdownOpen((open) => !open);
+  }, [canUngroup]);
+  const handleUngroupRows = useCallback(() => {
+    setIsUngroupDropdownOpen(false);
+    ungroupRows();
+  }, [ungroupRows]);
+  const handleUngroupColumns = useCallback(() => {
+    setIsUngroupDropdownOpen(false);
+    ungroupColumns();
+  }, [ungroupColumns]);
 
   useEffect(() => {
     if (!canGroup) setIsGroupDropdownOpen(false);
-  }, [canGroup]);
+    if (!canUngroup) setIsUngroupDropdownOpen(false);
+  }, [canGroup, canUngroup]);
 
   // ===========================================================================
   // KeyTip Registration (display-only — keytip overlay reads `key`,
@@ -928,18 +947,48 @@ export function DataRibbon({
               </div>
             </RibbonDropdownPanel>
           </div>
-          <RibbonButton
-            id="data-ungroup"
-            layout="vertical"
-            height="full"
-            width="narrow"
-            icon={<UngroupIcon />}
-            label="Ungroup"
-            onClick={handleUngroupClick}
-            disabled={!canUngroup}
-            title="Ungroup selected rows (Alt+Shift+Left)"
-            aria-label="Ungroup"
-          />
+          <div className="relative">
+            <RibbonButton
+              id="data-ungroup"
+              layout="vertical"
+              height="full"
+              width="narrow"
+              icon={<UngroupIcon />}
+              label="Ungroup"
+              onClick={handleUngroupClick}
+              disabled={!canUngroup}
+              isOpen={isUngroupDropdownOpen}
+              title="Ungroup selected rows or columns"
+              aria-label="Ungroup"
+              aria-expanded={isUngroupDropdownOpen}
+              aria-haspopup="menu"
+            />
+            <RibbonDropdownPanel
+              open={isUngroupDropdownOpen}
+              onClose={() => setIsUngroupDropdownOpen(false)}
+            >
+              <div
+                className="bg-ss-surface rounded shadow-ss-md border border-ss-border min-w-[120px] py-1"
+                role="menu"
+                aria-label="Ungroup rows or columns"
+              >
+                <RibbonDropdownItem
+                  dataValue="rows"
+                  icon={<UngroupIcon />}
+                  onClick={handleUngroupRows}
+                >
+                  Rows
+                </RibbonDropdownItem>
+                <RibbonDropdownItem
+                  dataValue="columns"
+                  icon={<UngroupIcon />}
+                  onClick={handleUngroupColumns}
+                >
+                  Columns
+                </RibbonDropdownItem>
+              </div>
+            </RibbonDropdownPanel>
+          </div>
           <RibbonButton
             id="data-show-detail"
             layout="vertical"

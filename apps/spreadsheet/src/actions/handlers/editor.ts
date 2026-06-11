@@ -30,7 +30,7 @@ import type { CellRange, SheetId } from '@mog-sdk/contracts/core';
 import { MAX_COLS, MAX_ROWS } from '@mog-sdk/contracts/core';
 import type { Direction } from '@mog-sdk/contracts/machines';
 import type { CellCoord } from '@mog-sdk/contracts/rendering';
-import type { Worksheet, WorksheetWithInternals } from '@mog-sdk/contracts/api';
+import type { FilterSummaryInfo, Worksheet, WorksheetWithInternals } from '@mog-sdk/contracts/api';
 // Fill operations - use executeFillViaWorksheet for proper formula adjustment
 import type { FillDirection } from '../../domain/fill/types';
 import { executeFillViaWorksheet } from './fill/types';
@@ -46,7 +46,12 @@ import {
 
 import { letterToCol, parseA1Range as parseA1RangeNotation } from '@mog/spreadsheet-utils/a1';
 
-import { getRelativeCommandColumn, resolveDataCommandTarget } from '../data-command-target';
+import {
+  getRelativeCommandColumn,
+  normalizeCommandRange,
+  resolveDataCommandTarget,
+  type DataCommandTarget,
+} from '../data-command-target';
 import { guardBridgeMutation } from './bridge-error-guard';
 import { beginEditSessionFromAction } from './edit-entry';
 import { requestFormulaBarRefresh } from '../../infra/events/formula-bar-refresh';
@@ -99,6 +104,60 @@ function getSelectionContext(deps: ActionDependencies): {
   return {
     activeCell: deps.accessors.selection.getActiveCell(),
     ranges: deps.accessors.selection.getRanges(),
+  };
+}
+
+type SortCommandTarget = DataCommandTarget & {
+  readonly visibleRowsOnly?: boolean;
+};
+
+function isSingleCellRange(range: CellRange): boolean {
+  return range.startRow === range.endRow && range.startCol === range.endCol;
+}
+
+function rangeContainsCell(range: CellRange, cell: CellCoord): boolean {
+  return (
+    cell.row >= range.startRow &&
+    cell.row <= range.endRow &&
+    cell.col >= range.startCol &&
+    cell.col <= range.endCol
+  );
+}
+
+function rangeArea(range: CellRange): number {
+  return (range.endRow - range.startRow + 1) * (range.endCol - range.startCol + 1);
+}
+
+async function resolveAutoFilterSortTarget(
+  ws: Worksheet,
+  activeCell: CellCoord,
+  userRange: CellRange,
+): Promise<SortCommandTarget | null> {
+  if (!isSingleCellRange(userRange)) return null;
+
+  let filters: FilterSummaryInfo[];
+  try {
+    filters = await ws.filters.listSummaries({ scope: 'available' });
+  } catch {
+    return null;
+  }
+
+  const matchingFilter = filters
+    .filter(
+      (filter) =>
+        filter.filterKind === 'autoFilter' &&
+        !filter.tableId &&
+        rangeContainsCell(filter.range, activeCell),
+    )
+    .sort((left, right) => rangeArea(left.range) - rangeArea(right.range))[0];
+
+  if (!matchingFilter) return null;
+
+  return {
+    range: normalizeCommandRange(matchingFilter.range),
+    hasHeaders: true,
+    wasExpanded: false,
+    visibleRowsOnly: true,
   };
 }
 
@@ -679,7 +738,9 @@ async function sortInDirection(
 
   let sorted = false;
   for (const range of ranges) {
-    const target = await resolveDataCommandTarget(ws, range);
+    const autoFilterTarget = await resolveAutoFilterSortTarget(ws, activeCell, range);
+    const resolvedTarget = autoFilterTarget ?? (await resolveDataCommandTarget(ws, range));
+    const target: SortCommandTarget | null = resolvedTarget ? { ...resolvedTarget } : null;
     if (!target) continue;
 
     // E4: Excel refuses to sort ranges containing merged cells.
@@ -704,6 +765,7 @@ async function sortInDirection(
     await ws.sortRange(target.range, {
       columns: [{ column: getRelativeCommandColumn(activeCell, target.range), direction }],
       hasHeaders: target.hasHeaders,
+      visibleRowsOnly: target.visibleRowsOnly,
     });
     sorted = true;
   }

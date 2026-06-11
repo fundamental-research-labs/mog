@@ -359,6 +359,12 @@ describe('WorksheetImpl Extended Methods', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    delete (globalThis as typeof globalThis & {
+      __MOG_PENDING_DIALOG_ACTION__?: Promise<unknown>;
+    }).__MOG_PENDING_DIALOG_ACTION__;
+    delete (globalThis as typeof globalThis & {
+      __MOG_ACTIVE_DIALOG_ACTION__?: Promise<unknown>;
+    }).__MOG_ACTIVE_DIALOG_ACTION__;
     ctx = createMockCtx();
     ctx.computeBridge.getTableByName.mockResolvedValue({ raw: 'bridge-table' });
     (TableOps.bridgeTableToTableInfo as jest.Mock).mockReturnValue({
@@ -892,6 +898,49 @@ describe('WorksheetImpl Extended Methods', () => {
   // Group 6: Table Metadata Operations
   // =========================================================================
   describe('Group 6: Table Metadata Operations', () => {
+    it('list waits for pending dialog actions before reading table metadata', async () => {
+      let resolveDialogAction!: () => void;
+      (globalThis as typeof globalThis & {
+        __MOG_PENDING_DIALOG_ACTION__?: Promise<unknown>;
+      }).__MOG_PENDING_DIALOG_ACTION__ = new Promise<void>((resolve) => {
+        resolveDialogAction = resolve;
+      });
+
+      ctx.computeBridge.getAllTablesInSheet.mockResolvedValue([{ raw: 'created-table' }]);
+      (TableOps.bridgeTableToTableInfo as jest.Mock).mockReturnValue({
+        id: 'Table1',
+        name: 'Table1',
+        range: 'A1:B2',
+      });
+
+      const listPromise = ws.tables.list();
+      await Promise.resolve();
+
+      expect(ctx.computeBridge.getAllTablesInSheet).not.toHaveBeenCalled();
+
+      resolveDialogAction();
+      const result = await listPromise;
+
+      expect(ctx.computeBridge.getAllTablesInSheet).toHaveBeenCalledWith(SHEET_ID);
+      expect(result).toEqual([{ id: 'Table1', name: 'Table1', range: 'A1:B2' }]);
+    });
+
+    it('list skips its dialog-action wait while the same action is active', async () => {
+      const activeAction = new Promise<void>(() => {});
+      (globalThis as typeof globalThis & {
+        __MOG_PENDING_DIALOG_ACTION__?: Promise<unknown>;
+        __MOG_ACTIVE_DIALOG_ACTION__?: Promise<unknown>;
+      }).__MOG_PENDING_DIALOG_ACTION__ = activeAction;
+      (globalThis as typeof globalThis & {
+        __MOG_ACTIVE_DIALOG_ACTION__?: Promise<unknown>;
+      }).__MOG_ACTIVE_DIALOG_ACTION__ = activeAction;
+      ctx.computeBridge.getAllTablesInSheet.mockResolvedValue([]);
+
+      await expect(ws.tables.list()).resolves.toEqual([]);
+
+      expect(ctx.computeBridge.getAllTablesInSheet).toHaveBeenCalledWith(SHEET_ID);
+    });
+
     it('getTableAtCell delegates to computeBridge.getTableAtCell', async () => {
       // The bridge returns raw table data; bridgeTableToTableInfo converts it.
       // We mock bridgeTableToTableInfo via the table-operations mock.

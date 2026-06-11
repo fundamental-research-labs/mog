@@ -70,27 +70,38 @@ import {
   tableStyleIdForCompute,
 } from '../../domain/tables/style-normalization';
 
-type PendingClipboardPasteGlobal = typeof globalThis & {
+type PendingTableReadBarrierGlobal = typeof globalThis & {
   __MOG_PENDING_CLIPBOARD_PASTE__?: Promise<unknown>;
   __MOG_ACTIVE_CLIPBOARD_PASTE__?: Promise<unknown>;
+  __MOG_PENDING_DIALOG_ACTION__?: Promise<unknown>;
+  __MOG_ACTIVE_DIALOG_ACTION__?: Promise<unknown>;
 };
 
-async function waitForPendingClipboardPaste(): Promise<void> {
+async function waitForPendingTableReadBarriers(): Promise<void> {
   const deadline = Date.now() + 2000;
 
   while (Date.now() < deadline) {
-    const global = globalThis as PendingClipboardPasteGlobal;
-    const pending = global.__MOG_PENDING_CLIPBOARD_PASTE__;
-    const active = global.__MOG_ACTIVE_CLIPBOARD_PASTE__;
+    const global = globalThis as PendingTableReadBarrierGlobal;
+    const pendingClipboard = global.__MOG_PENDING_CLIPBOARD_PASTE__;
+    const activeClipboard = global.__MOG_ACTIVE_CLIPBOARD_PASTE__;
+    const pendingDialog =
+      global.__MOG_ACTIVE_DIALOG_ACTION__ === global.__MOG_PENDING_DIALOG_ACTION__
+        ? undefined
+        : global.__MOG_PENDING_DIALOG_ACTION__;
     if (
-      (!pending || typeof pending.then !== 'function') &&
-      (!active || typeof active.then !== 'function')
+      (!pendingClipboard || typeof pendingClipboard.then !== 'function') &&
+      (!activeClipboard || typeof activeClipboard.then !== 'function') &&
+      (!pendingDialog || typeof pendingDialog.then !== 'function')
     ) {
       return;
     }
 
     await Promise.race([
-      Promise.all([pending?.catch(() => undefined), active?.catch(() => undefined)]),
+      Promise.all([
+        pendingClipboard?.catch(() => undefined),
+        activeClipboard?.catch(() => undefined),
+        pendingDialog?.catch(() => undefined),
+      ]),
       new Promise<void>((resolve) => setTimeout(resolve, 16)),
     ]);
   }
@@ -373,7 +384,7 @@ export class WorksheetTablesImpl implements WorksheetTables {
   }
 
   async list(): Promise<TableInfo[]> {
-    await waitForPendingClipboardPaste();
+    await waitForPendingTableReadBarriers();
     const tables = await this.ctx.computeBridge.getAllTablesInSheet(this.sheetId);
     return tables.map((t) => bridgeTableToTableInfo(t));
   }

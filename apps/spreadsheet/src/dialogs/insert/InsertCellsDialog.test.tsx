@@ -111,7 +111,7 @@ describe('InsertCellsDialog', () => {
     jest.useRealTimers();
   });
 
-  it('closes before dispatching the OK action on the next macrotask', async () => {
+  it('closes before dispatching the OK action after the dialog action delay', async () => {
     render(<InsertCellsDialog />);
 
     const dialog = screen.getByRole('dialog');
@@ -123,7 +123,10 @@ describe('InsertCellsDialog', () => {
     const pendingAction = getPendingDialogActionForTest();
     expect(pendingAction).toBeInstanceOf(Promise);
 
-    jest.advanceTimersByTime(0);
+    jest.advanceTimersByTime(49);
+    expect(dispatchMock).not.toHaveBeenCalled();
+
+    jest.advanceTimersByTime(1);
     await pendingAction;
 
     expect(dispatchMock).toHaveBeenCalledTimes(1);

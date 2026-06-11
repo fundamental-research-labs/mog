@@ -68,7 +68,12 @@ fn test_expanding_imported_hidden_group_clears_hidden_flag() {
     .unwrap();
     assert!(!group.collapsed);
     assert!(!group.hidden);
-    assert!(is_column_visible_by_groups(s.doc(), &s.sheets_ref(), &id, 3));
+    assert!(is_column_visible_by_groups(
+        s.doc(),
+        &s.sheets_ref(),
+        &id,
+        3
+    ));
 }
 
 #[test]

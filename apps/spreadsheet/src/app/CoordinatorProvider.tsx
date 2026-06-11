@@ -33,6 +33,7 @@ import type { CellRange } from '@mog-sdk/contracts/core';
 import type { SelectionCheckpoint } from '@mog-sdk/contracts/selection';
 import { dispatch } from '../actions/dispatcher';
 import { createActorAccessLayerFromBundle } from '../coordinator/actor-access';
+import { shouldDeferKeyboardCaptureToTarget } from './coordinator-keyboard-targets';
 import { createKeyUpCapture } from './coordinator-keyup-capture';
 import type { EditorDependencies } from '../coordinator/types';
 import { checkCalculatedColumnAutoFill } from '../coordinator/mutations/tables';
@@ -349,6 +350,10 @@ function KeyboardCaptureSetup({
           e.preventDefault();
           e.stopPropagation();
         }
+        return;
+      }
+
+      if (shouldDeferKeyboardCaptureToTarget(target)) {
         return;
       }
 

@@ -737,6 +737,7 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
             ref={inputRef}
             type="text"
             data-testid="name-box"
+            data-keyboard-capture="defer"
             value={inputValue}
             onChange={handleInputChange}
             onKeyDown={handleInputKeyDown}
@@ -750,6 +751,7 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
             <button
               type="button"
               data-testid="name-box"
+              data-keyboard-capture="defer"
               value={cellAddress}
               onClick={handleNameBoxClick}
               onDoubleClick={handleDoubleClick}

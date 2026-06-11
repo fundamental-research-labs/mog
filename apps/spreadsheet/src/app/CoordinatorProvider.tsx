@@ -31,6 +31,7 @@ import { objectSelectors } from '../selectors';
 import type { WorkbookInternal } from '@mog-sdk/contracts/api';
 import type { CellRange } from '@mog-sdk/contracts/core';
 import type { SelectionCheckpoint } from '@mog-sdk/contracts/selection';
+import { detectFormatType } from '@mog/spreadsheet-utils/number-formats';
 import { dispatch } from '../actions/dispatcher';
 import { createActorAccessLayerFromBundle } from '../coordinator/actor-access';
 import { createKeyUpCapture } from './coordinator-keyup-capture';
@@ -62,6 +63,21 @@ import { setupRangeSelectionCoordination } from '../systems/grid-editing/coordin
 import { setupUndoSelectionCoordination } from '../systems/grid-editing/coordination/undo-selection-coordination';
 import { isGlobalShortcut } from '../systems/shared/utils/focus-utils';
 import { useCollabPresence, useSelectionPresenceBroadcast } from '../hooks/collab';
+
+const ZERO_VISIBLE_FORMAT_TYPES = new Set([
+  'number',
+  'currency',
+  'accounting',
+  'percentage',
+  'fraction',
+  'scientific',
+  'custom',
+]);
+
+function shouldApplyGeneralFormatForBareZeroCommit(value: string, numberFormat: unknown): boolean {
+  if (value.trim() !== '0' || typeof numberFormat !== 'string') return false;
+  return ZERO_VISIBLE_FORMAT_TYPES.has(detectFormatType(numberFormat));
+}
 
 // =============================================================================
 // Pane Navigation Context (E1: F6 Pane Navigation)
@@ -722,9 +738,13 @@ export function SpreadsheetCoordinatorProvider({
           return;
         }
 
-        await withSelectionCheckpoint(cellCheckpoint(sheetId, row, col), () =>
-          ws.setCell(row, col, value),
-        );
+        await withSelectionCheckpoint(cellCheckpoint(sheetId, row, col), async () => {
+          const formatBeforeEdit = await ws.formats.get(row, col).catch(() => null);
+          await ws.setCell(row, col, value);
+          if (shouldApplyGeneralFormatForBareZeroCommit(value, formatBeforeEdit?.numberFormat)) {
+            await ws.formats.set(row, col, { numberFormat: 'General' });
+          }
+        });
         if (value.startsWith('=')) {
           const autoFill = await checkCalculatedColumnAutoFill(sheetId, row, col, value, workbook);
           if (autoFill) {

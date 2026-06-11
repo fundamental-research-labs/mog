@@ -410,7 +410,7 @@ describe('extendSelection - Shift+Arrow bug tests', () => {
       expect(result.activeCell).toEqual({ row: 4, col: 1 });
     });
 
-    it('first Shift+Right from a hidden single-cell target jumps to the next visible column', () => {
+    it('first Shift+Right from a hidden single-cell target advances one physical column', () => {
       const context: SelectionContext = {
         ...initialSelectionContext,
         activeCell: { row: 12, col: 15 }, // P13
@@ -431,13 +431,13 @@ describe('extendSelection - Shift+Arrow bug tests', () => {
         startRow: 12,
         startCol: 15,
         endRow: 12,
-        endCol: 27,
+        endCol: 16,
       });
       expect(result.anchor).toEqual({ row: 12, col: 15 });
       expect(result.activeCell).toEqual({ row: 12, col: 15 });
     });
 
-    it('Shift+Right moves by visible columns while including hidden column spans', () => {
+    it('Shift+Right moves by physical columns while including hidden column spans', () => {
       let context: SelectionContext = {
         ...initialSelectionContext,
         activeCell: { row: 16, col: 12 }, // M17
@@ -446,7 +446,7 @@ describe('extendSelection - Shift+Arrow bug tests', () => {
         isColHidden: (col) => col >= 15 && col <= 26, // P:AA
       };
 
-      for (let visibleStep = 0; visibleStep < 3; visibleStep += 1) {
+      for (let physicalStep = 0; physicalStep < 15; physicalStep += 1) {
         const result = callExtendSelection(context, {
           type: 'KEY_ARROW',
           direction: 'right',
@@ -465,7 +465,7 @@ describe('extendSelection - Shift+Arrow bug tests', () => {
       expect(context.activeCell).toEqual({ row: 16, col: 12 });
     });
 
-    it('Shift+Down moves by visible rows while including hidden row spans', () => {
+    it('Shift+Down moves by physical rows while including hidden row spans', () => {
       const context: SelectionContext = {
         ...initialSelectionContext,
         activeCell: { row: 1, col: 0 }, // A2
@@ -483,7 +483,7 @@ describe('extendSelection - Shift+Arrow bug tests', () => {
       expect(result.pendingRange).toEqual({
         startRow: 1,
         startCol: 0,
-        endRow: 4,
+        endRow: 2,
         endCol: 0,
       });
       expect(result.anchor).toEqual({ row: 1, col: 0 });

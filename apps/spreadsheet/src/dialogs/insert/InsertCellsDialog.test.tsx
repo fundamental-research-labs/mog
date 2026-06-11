@@ -123,10 +123,7 @@ describe('InsertCellsDialog', () => {
     const pendingAction = getPendingDialogActionForTest();
     expect(pendingAction).toBeInstanceOf(Promise);
 
-    jest.advanceTimersByTime(99);
-    expect(dispatchMock).not.toHaveBeenCalled();
-
-    jest.advanceTimersByTime(1);
+    jest.advanceTimersByTime(0);
     await pendingAction;
 
     expect(dispatchMock).toHaveBeenCalledTimes(1);

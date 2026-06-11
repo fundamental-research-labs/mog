@@ -536,7 +536,7 @@ describe('useContextMenuHandler', () => {
         result.current.handleContextMenu(event);
       });
 
-      expect(selection.selectColumn).toHaveBeenCalledWith(5, false, false);
+      expect(selection.selectColumn).toHaveBeenCalledWith(5, false, false, true);
     });
 
     it('selects column when a partial cell selection contains the column', () => {
@@ -558,7 +558,7 @@ describe('useContextMenuHandler', () => {
         result.current.handleContextMenu(event);
       });
 
-      expect(selection.selectColumn).toHaveBeenCalledWith(5, false, false);
+      expect(selection.selectColumn).toHaveBeenCalledWith(5, false, false, true);
     });
 
     it('does not select column when column is in a full-column selection', () => {
@@ -566,6 +566,28 @@ describe('useContextMenuHandler', () => {
       const hitTest = createMockHitTest(hitResult);
       const selection = createMockSelectionApi([
         { startRow: 0, endRow: 1048575, startCol: 0, endCol: 10, isFullColumn: true },
+      ]);
+
+      const deps = createTestDeps({
+        getHitTest: () => hitTest,
+        selection,
+      });
+
+      const { result } = renderHook(() => useContextMenuHandler(deps));
+      const event = createContextMenuEvent({ clientX: 200, clientY: 15 });
+
+      act(() => {
+        result.current.handleContextMenu(event);
+      });
+
+      expect(selection.selectColumn).not.toHaveBeenCalled();
+    });
+
+    it('does not retarget an adjacent full-column selection while opening its menu', () => {
+      const hitResult = createHitResult('column-header', { col: 12 });
+      const hitTest = createMockHitTest(hitResult);
+      const selection = createMockSelectionApi([
+        { startRow: 0, endRow: 1048575, startCol: 13, endCol: 13, isFullColumn: true },
       ]);
 
       const deps = createTestDeps({
@@ -602,7 +624,7 @@ describe('useContextMenuHandler', () => {
         result.current.handleContextMenu(event);
       });
 
-      expect(selection.selectColumn).toHaveBeenCalledWith(5, false, false);
+      expect(selection.selectColumn).toHaveBeenCalledWith(5, false, false, true);
       expect(onContextMenu).toHaveBeenCalledWith({
         x: 200,
         y: 15,
@@ -659,7 +681,7 @@ describe('useContextMenuHandler', () => {
         result.current.handleContextMenu(event);
       });
 
-      expect(selection.selectRow).toHaveBeenCalledWith(7, false, false);
+      expect(selection.selectRow).toHaveBeenCalledWith(7, false, false, true);
     });
 
     it('does not select row when row is in current selection', () => {
@@ -667,6 +689,28 @@ describe('useContextMenuHandler', () => {
       const hitTest = createMockHitTest(hitResult);
       const selection = createMockSelectionApi([
         { startRow: 0, endRow: 10, startCol: 0, endCol: 100, isFullRow: true },
+      ]);
+
+      const deps = createTestDeps({
+        getHitTest: () => hitTest,
+        selection,
+      });
+
+      const { result } = renderHook(() => useContextMenuHandler(deps));
+      const event = createContextMenuEvent({ clientX: 25, clientY: 200 });
+
+      act(() => {
+        result.current.handleContextMenu(event);
+      });
+
+      expect(selection.selectRow).not.toHaveBeenCalled();
+    });
+
+    it('does not retarget an adjacent full-row selection while opening its menu', () => {
+      const hitResult = createHitResult('row-header', { row: 6 });
+      const hitTest = createMockHitTest(hitResult);
+      const selection = createMockSelectionApi([
+        { startRow: 7, endRow: 7, startCol: 0, endCol: 16383, isFullRow: true },
       ]);
 
       const deps = createTestDeps({
@@ -703,7 +747,7 @@ describe('useContextMenuHandler', () => {
         result.current.handleContextMenu(event);
       });
 
-      expect(selection.selectRow).toHaveBeenCalledWith(7, false, false);
+      expect(selection.selectRow).toHaveBeenCalledWith(7, false, false, true);
       expect(onContextMenu).toHaveBeenCalledWith({
         x: 25,
         y: 200,

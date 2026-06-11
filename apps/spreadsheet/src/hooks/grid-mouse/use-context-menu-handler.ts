@@ -106,11 +106,24 @@ export function isColumnInSelection(col: number, ranges: readonly CellRange[]): 
   return ranges.some((range) => col >= range.startCol && col <= range.endCol);
 }
 
+function isColumnAdjacentToFullColumnSelection(col: number, ranges: readonly CellRange[]): boolean {
+  return ranges.some(
+    (range) =>
+      range.isFullColumn === true && (col === range.startCol - 1 || col === range.endCol + 1),
+  );
+}
+
 /**
  * Check if a row is within any of the selection ranges.
  */
 export function isRowInSelection(row: number, ranges: readonly CellRange[]): boolean {
   return ranges.some((range) => row >= range.startRow && row <= range.endRow);
+}
+
+function isRowAdjacentToFullRowSelection(row: number, ranges: readonly CellRange[]): boolean {
+  return ranges.some(
+    (range) => range.isFullRow === true && (row === range.startRow - 1 || row === range.endRow + 1),
+  );
 }
 
 /**
@@ -224,8 +237,12 @@ export function useContextMenuHandler(
           // that includes the right-clicked column. A single cell like A1 contains
           // column A, but should not satisfy a column-header context-menu target.
           const hasFullColumnSelection = selection.ranges.some((r) => r.isFullColumn);
-          if (!hasFullColumnSelection || !isColumnInSelection(hit.col, selection.ranges)) {
-            selection.selectColumn(hit.col, false, false);
+          const keepExistingFullColumnSelection =
+            hasFullColumnSelection &&
+            (isColumnInSelection(hit.col, selection.ranges) ||
+              isColumnAdjacentToFullColumnSelection(hit.col, selection.ranges));
+          if (!keepExistingFullColumnSelection) {
+            selection.selectColumn(hit.col, false, false, true);
           }
           break;
         }
@@ -235,8 +252,12 @@ export function useContextMenuHandler(
           target = 'column-header';
 
           const hasFullColumnSelection = selection.ranges.some((r) => r.isFullColumn);
-          if (!hasFullColumnSelection || !isColumnInSelection(hit.col, selection.ranges)) {
-            selection.selectColumn(hit.col, false, false);
+          const keepExistingFullColumnSelection =
+            hasFullColumnSelection &&
+            (isColumnInSelection(hit.col, selection.ranges) ||
+              isColumnAdjacentToFullColumnSelection(hit.col, selection.ranges));
+          if (!keepExistingFullColumnSelection) {
+            selection.selectColumn(hit.col, false, false, true);
           }
           break;
         }
@@ -251,8 +272,12 @@ export function useContextMenuHandler(
           // right-clicked row so that INSERT_ROW_ABOVE inserts at the correct row
           // rather than at rows[0] of the partial selection.
           const hasFullRowSelection = selection.ranges.some((r) => r.isFullRow);
-          if (!hasFullRowSelection || !isRowInSelection(hit.row, selection.ranges)) {
-            selection.selectRow(hit.row, false, false);
+          const keepExistingFullRowSelection =
+            hasFullRowSelection &&
+            (isRowInSelection(hit.row, selection.ranges) ||
+              isRowAdjacentToFullRowSelection(hit.row, selection.ranges));
+          if (!keepExistingFullRowSelection) {
+            selection.selectRow(hit.row, false, false, true);
           }
           break;
         }
@@ -262,8 +287,12 @@ export function useContextMenuHandler(
           target = 'row-header';
 
           const hasFullRowSelection = selection.ranges.some((r) => r.isFullRow);
-          if (!hasFullRowSelection || !isRowInSelection(hit.row, selection.ranges)) {
-            selection.selectRow(hit.row, false, false);
+          const keepExistingFullRowSelection =
+            hasFullRowSelection &&
+            (isRowInSelection(hit.row, selection.ranges) ||
+              isRowAdjacentToFullRowSelection(hit.row, selection.ranges));
+          if (!keepExistingFullRowSelection) {
+            selection.selectRow(hit.row, false, false, true);
           }
           break;
         }

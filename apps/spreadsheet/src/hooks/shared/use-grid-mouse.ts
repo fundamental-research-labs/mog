@@ -579,6 +579,9 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
   const handleMouseDown = useCallback(
     (e: GridMouseEvent): void => {
       void (async () => {
+        const button = (e as { button?: number }).button;
+        if (button !== undefined && button !== 0) return;
+
         const container = containerRef.current;
         if (!container) return;
 

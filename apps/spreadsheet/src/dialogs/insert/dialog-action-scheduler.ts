@@ -1,4 +1,4 @@
-const APPLY_AFTER_CLOSE_DELAY_MS = 100;
+const APPLY_AFTER_CLOSE_DELAY_MS = 0;
 
 type DialogActionGlobal = typeof globalThis & {
   __MOG_PENDING_DIALOG_ACTION__?: Promise<void>;

@@ -1287,6 +1287,50 @@ describe('Chart Handlers - Current-Region Auto-Expansion', () => {
       expect(addedConfig.dataRange).toBe('A1:D6');
     });
 
+    it('creates explicit series for row-labeled numeric source blocks', async () => {
+      const deps = createDepsWithSelection({
+        ranges: [{ startRow: 0, startCol: 0, endRow: 2, endCol: 3 }],
+      });
+      const values = [
+        ['Revenue', 100, 110, 120],
+        ['Margin', 0.1, 0.12, 0.14],
+        ['Units', 20, 25, 30],
+      ];
+      const ws = (deps.workbook as any).activeSheet;
+      ws.getValue = jest.fn(async (row: number, col: number) => values[row]?.[col] ?? null);
+
+      const result = await ChartHandlers.CREATE_EMBEDDED_CHART(deps);
+      expect(result.handled).toBe(true);
+
+      const addedConfig = ws.charts.add.mock.calls[0][0];
+      expect(addedConfig.dataRange).toBe('A1:D3');
+      expect(addedConfig.series).toEqual([
+        { name: 'Revenue', nameRef: 'A1', values: 'B1:D1' },
+        { name: 'Margin', nameRef: 'A2', values: 'B2:D2' },
+        { name: 'Units', nameRef: 'A3', values: 'B3:D3' },
+      ]);
+    });
+
+    it('keeps header-row source blocks data-range driven', async () => {
+      const deps = createDepsWithSelection({
+        ranges: [{ startRow: 0, startCol: 0, endRow: 2, endCol: 3 }],
+      });
+      const values = [
+        ['Metric', 'Q1', 'Q2', 'Q3'],
+        ['Revenue', 100, 110, 120],
+        ['Units', 20, 25, 30],
+      ];
+      const ws = (deps.workbook as any).activeSheet;
+      ws.getValue = jest.fn(async (row: number, col: number) => values[row]?.[col] ?? null);
+
+      const result = await ChartHandlers.CREATE_EMBEDDED_CHART(deps);
+      expect(result.handled).toBe(true);
+
+      const addedConfig = ws.charts.add.mock.calls[0][0];
+      expect(addedConfig.dataRange).toBe('A1:D3');
+      expect(addedConfig.series).toBeUndefined();
+    });
+
     it('uses edit-start multi-cell selection when active selection collapsed during enter-mode', async () => {
       const deps = createDepsWithSelection({
         ranges: [{ startRow: 2, startCol: 12, endRow: 2, endCol: 12 }],

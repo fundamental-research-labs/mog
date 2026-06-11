@@ -61,6 +61,8 @@ type ChartSourceRange = {
   endCol: number;
 };
 
+type ChartSeriesConfig = NonNullable<ChartConfig['series']>[number];
+
 /**
  * Type guard to check if coordinator exposes renderer capabilities.
  */
@@ -93,6 +95,60 @@ function getChartIdFromPayloadOrSelectedObject(
 
 function isMultiCellRange(range: ChartSourceRange): boolean {
   return range.startRow !== range.endRow || range.startCol !== range.endCol;
+}
+
+function isTextChartLabel(value: unknown): value is string {
+  return typeof value === 'string' && value.trim() !== '' && Number.isNaN(Number(value));
+}
+
+function isNumericChartValue(value: unknown): boolean {
+  if (typeof value === 'number') return Number.isFinite(value);
+  if (typeof value !== 'string' || value.trim() === '') return false;
+  return Number.isFinite(Number(value));
+}
+
+async function inferRowLabelSeries(
+  ws: { getValue?: (row: number, col: number) => Promise<unknown> | unknown },
+  range: ChartSourceRange,
+): Promise<ChartSeriesConfig[] | undefined> {
+  if (typeof ws.getValue !== 'function') return undefined;
+  if (range.endCol <= range.startCol) return undefined;
+
+  for (let col = range.startCol + 1; col <= range.endCol; col += 1) {
+    const value = await ws.getValue(range.startRow, col);
+    if (isTextChartLabel(value)) return undefined;
+  }
+
+  const series: ChartSeriesConfig[] = [];
+  for (let row = range.startRow; row <= range.endRow; row += 1) {
+    const label = await ws.getValue(row, range.startCol);
+    if (!isTextChartLabel(label)) continue;
+
+    let numericValues = 0;
+    for (let col = range.startCol + 1; col <= range.endCol; col += 1) {
+      const value = await ws.getValue(row, col);
+      if (isNumericChartValue(value)) numericValues += 1;
+    }
+    if (numericValues === 0) continue;
+
+    series.push({
+      name: label,
+      nameRef: rangeToA1Notation({
+        startRow: row,
+        startCol: range.startCol,
+        endRow: row,
+        endCol: range.startCol,
+      }),
+      values: rangeToA1Notation({
+        startRow: row,
+        startCol: range.startCol + 1,
+        endRow: row,
+        endCol: range.endCol,
+      }),
+    });
+  }
+
+  return series.length > 0 ? series : undefined;
 }
 
 function getChartSourceRanges(deps: ActionDependencies, sheetId: SheetId): ChartSourceRange[] {
@@ -926,6 +982,7 @@ export const CREATE_EMBEDDED_CHART: AsyncActionHandler = async (
     // surrounding data region. Multi-row selections pass through unchanged.
     const range = await resolveChartSourceRange(ws, ranges[0], { trimHiddenDetail: true });
     const dataRange = rangeToA1Notation(range);
+    const series = await inferRowLabelSeries(ws, range);
 
     // Use smart positioning to ensure chart is visible
     const position = await getSmartChartPosition(deps, range, DEFAULT_POSITION, sheetId);
@@ -938,6 +995,7 @@ export const CREATE_EMBEDDED_CHART: AsyncActionHandler = async (
       anchorCol: position.anchorCol,
       width: DEFAULT_WIDTH_CELLS,
       height: DEFAULT_HEIGHT_CELLS,
+      series,
     });
     if (newChart?.id) {
       selectChartObject(deps, newChart.id);

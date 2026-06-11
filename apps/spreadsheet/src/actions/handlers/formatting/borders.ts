@@ -29,7 +29,7 @@
  */
 
 import type { AsyncActionHandler } from '@mog-sdk/contracts/actions';
-import type { BorderPresetMode, CellBorders } from '@mog-sdk/contracts/core';
+import type { BorderPresetMode, CellBorders, CellRange } from '@mog-sdk/contracts/core';
 
 import {
   callUIStoreAction,
@@ -45,6 +45,122 @@ const thinBorder = { style: 'thin' as const, color: '#000000' };
 const thickBorder = { style: 'thick' as const, color: '#000000' };
 const doubleBorder = { style: 'double' as const, color: '#000000' };
 const noBorders: CellBorders = {};
+const MAX_VISIBILITY_SCAN_INDEXES = 1000;
+
+type HiddenLayout = {
+  getHiddenRowsBitmap?: () => Promise<Set<number>>;
+  getHiddenColumnsBitmap?: () => Promise<Set<number>>;
+  isRowHidden?: (row: number) => Promise<boolean>;
+  isColumnHidden?: (col: number) => Promise<boolean>;
+};
+
+type WorksheetWithLayout = {
+  layout?: HiddenLayout;
+};
+
+function contiguousVisibleSpans(
+  start: number,
+  end: number,
+  hiddenIndexes: Set<number>,
+): Array<{ start: number; end: number }> {
+  const spans: Array<{ start: number; end: number }> = [];
+  let spanStart: number | null = null;
+
+  for (let index = start; index <= end; index++) {
+    if (hiddenIndexes.has(index)) {
+      if (spanStart != null) {
+        spans.push({ start: spanStart, end: index - 1 });
+        spanStart = null;
+      }
+      continue;
+    }
+
+    spanStart ??= index;
+  }
+
+  if (spanStart != null) {
+    spans.push({ start: spanStart, end });
+  }
+
+  return spans;
+}
+
+async function readHiddenBitmap(
+  layout: HiddenLayout | undefined,
+  method: 'getHiddenRowsBitmap' | 'getHiddenColumnsBitmap',
+): Promise<Set<number>> {
+  const read = layout?.[method];
+  return typeof read === 'function' ? read.call(layout) : new Set<number>();
+}
+
+async function readHiddenIndexesInRange(
+  layout: HiddenLayout | undefined,
+  bitmapMethod: 'getHiddenRowsBitmap' | 'getHiddenColumnsBitmap',
+  itemMethod: 'isRowHidden' | 'isColumnHidden',
+  start: number,
+  end: number,
+): Promise<Set<number>> {
+  const hidden = new Set(await readHiddenBitmap(layout, bitmapMethod));
+  const count = end - start + 1;
+  const readItem = layout?.[itemMethod];
+  if (typeof readItem !== 'function' || count <= 0 || count > MAX_VISIBILITY_SCAN_INDEXES) {
+    return hidden;
+  }
+
+  const visibility = await Promise.all(
+    Array.from({ length: count }, async (_, offset) => {
+      const index = start + offset;
+      return [index, await readItem.call(layout, index)] as const;
+    }),
+  );
+  for (const [index, isHidden] of visibility) {
+    if (isHidden) hidden.add(index);
+  }
+
+  return hidden;
+}
+
+async function splitRangeByVisibleDimensions(
+  worksheet: WorksheetWithLayout,
+  range: CellRange,
+): Promise<CellRange[]> {
+  const [hiddenRows, hiddenCols] = await Promise.all([
+    readHiddenIndexesInRange(
+      worksheet.layout,
+      'getHiddenRowsBitmap',
+      'isRowHidden',
+      range.startRow,
+      range.endRow,
+    ),
+    readHiddenIndexesInRange(
+      worksheet.layout,
+      'getHiddenColumnsBitmap',
+      'isColumnHidden',
+      range.startCol,
+      range.endCol,
+    ),
+  ]);
+  if (hiddenRows.size === 0 && hiddenCols.size === 0) {
+    return [range];
+  }
+
+  const rowSpans = contiguousVisibleSpans(range.startRow, range.endRow, hiddenRows);
+  const colSpans = contiguousVisibleSpans(range.startCol, range.endCol, hiddenCols);
+  const visibleRanges: CellRange[] = [];
+
+  for (const rowSpan of rowSpans) {
+    for (const colSpan of colSpans) {
+      visibleRanges.push({
+        startRow: rowSpan.start,
+        startCol: colSpan.start,
+        endRow: rowSpan.end,
+        endCol: colSpan.end,
+      });
+    }
+  }
+
+  return visibleRanges;
+}
 
 // =============================================================================
 // Border Handlers
@@ -71,24 +187,28 @@ export const APPLY_OUTLINE_BORDER: AsyncActionHandler = async (deps) => {
     for (const range of ranges) {
       // Performance: Clamp full row/column selections to data bounds
       const clampedRange = await ws._internal.clampRangeToDataBounds(range);
-      const { startRow, startCol, endRow, endCol } = clampedRange;
+      const outlineRanges = await splitRangeByVisibleDimensions(ws, clampedRange);
 
-      // Decompose outline into 4 edge ranges — 4 IPC calls instead of N*M
-      // Top edge: apply top border to first row
-      const topRange = { startRow, startCol, endRow: startRow, endCol };
-      await ws.formats.setRanges([topRange], { borders: { top: thinBorder } });
+      for (const outlineRange of outlineRanges) {
+        const { startRow, startCol, endRow, endCol } = outlineRange;
 
-      // Bottom edge: apply bottom border to last row
-      const bottomRange = { startRow: endRow, startCol, endRow, endCol };
-      await ws.formats.setRanges([bottomRange], { borders: { bottom: thinBorder } });
+        // Decompose outline into 4 edge ranges — 4 IPC calls instead of N*M
+        // Top edge: apply top border to first row
+        const topRange = { startRow, startCol, endRow: startRow, endCol };
+        await ws.formats.setRanges([topRange], { borders: { top: thinBorder } });
 
-      // Left edge: apply left border to first column
-      const leftRange = { startRow, startCol, endRow, endCol: startCol };
-      await ws.formats.setRanges([leftRange], { borders: { left: thinBorder } });
+        // Bottom edge: apply bottom border to last row
+        const bottomRange = { startRow: endRow, startCol, endRow, endCol };
+        await ws.formats.setRanges([bottomRange], { borders: { bottom: thinBorder } });
 
-      // Right edge: apply right border to last column
-      const rightRange = { startRow, startCol: endCol, endRow, endCol };
-      await ws.formats.setRanges([rightRange], { borders: { right: thinBorder } });
+        // Left edge: apply left border to first column
+        const leftRange = { startRow, startCol, endRow, endCol: startCol };
+        await ws.formats.setRanges([leftRange], { borders: { left: thinBorder } });
+
+        // Right edge: apply right border to last column
+        const rightRange = { startRow, startCol: endCol, endRow, endCol };
+        await ws.formats.setRanges([rightRange], { borders: { right: thinBorder } });
+      }
     }
   }
 
@@ -223,27 +343,35 @@ export const APPLY_BORDERS: AsyncActionHandler = async (
     for (const range of ranges) {
       // Performance: Clamp full row/column selections to data bounds
       const clampedRange = await ws._internal.clampRangeToDataBounds(range);
-      const { startRow, startCol, endRow, endCol } = clampedRange;
 
       if (borderPreset === 'outline') {
-        // Outline preset: 4 edge ranges instead of N*M per-cell writes
-        if (borderFormat.top) {
-          const topRange = { startRow, startCol, endRow: startRow, endCol };
-          await ws.formats.setRanges([topRange], { borders: { top: borderFormat.top } });
-        }
-        if (borderFormat.bottom) {
-          const bottomRange = { startRow: endRow, startCol, endRow, endCol };
-          await ws.formats.setRanges([bottomRange], { borders: { bottom: borderFormat.bottom } });
-        }
-        if (borderFormat.left) {
-          const leftRange = { startRow, startCol, endRow, endCol: startCol };
-          await ws.formats.setRanges([leftRange], { borders: { left: borderFormat.left } });
-        }
-        if (borderFormat.right) {
-          const rightRange = { startRow, startCol: endCol, endRow, endCol };
-          await ws.formats.setRanges([rightRange], { borders: { right: borderFormat.right } });
+        // Outline preset: 4 edge ranges per visible rectangle. Hidden rows/columns
+        // split the rectangle because users see each visible block as its own perimeter.
+        const outlineRanges = await splitRangeByVisibleDimensions(ws, clampedRange);
+        for (const outlineRange of outlineRanges) {
+          const { startRow, startCol, endRow, endCol } = outlineRange;
+
+          if (borderFormat.top) {
+            const topRange = { startRow, startCol, endRow: startRow, endCol };
+            await ws.formats.setRanges([topRange], { borders: { top: borderFormat.top } });
+          }
+          if (borderFormat.bottom) {
+            const bottomRange = { startRow: endRow, startCol, endRow, endCol };
+            await ws.formats.setRanges([bottomRange], {
+              borders: { bottom: borderFormat.bottom },
+            });
+          }
+          if (borderFormat.left) {
+            const leftRange = { startRow, startCol, endRow, endCol: startCol };
+            await ws.formats.setRanges([leftRange], { borders: { left: borderFormat.left } });
+          }
+          if (borderFormat.right) {
+            const rightRange = { startRow, startCol: endCol, endRow, endCol };
+            await ws.formats.setRanges([rightRange], { borders: { right: borderFormat.right } });
+          }
         }
       } else if (borderPreset === 'inside') {
+        const { startRow, startCol, endRow, endCol } = clampedRange;
         // Inside preset: internal horizontal + vertical dividers
         // Bottom border on all rows except the last (horizontal dividers)
         if (endRow > startRow && borderFormat.bottom) {

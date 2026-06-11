@@ -146,6 +146,10 @@ async function splitRangeByVisibleDimensions(
 
   const rowSpans = contiguousVisibleSpans(range.startRow, range.endRow, hiddenRows);
   const colSpans = contiguousVisibleSpans(range.startCol, range.endCol, hiddenCols);
+  if (rowSpans.length === 0 || colSpans.length === 0) {
+    return [range];
+  }
+
   const visibleRanges: CellRange[] = [];
 
   for (const rowSpan of rowSpans) {

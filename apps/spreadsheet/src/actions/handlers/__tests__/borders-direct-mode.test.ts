@@ -37,6 +37,8 @@ interface MockSetup {
 
 function createMockDeps(opts: {
   ranges: CellRange[];
+  hiddenRows?: number[];
+  bitmapHiddenRows?: number[];
   hiddenCols?: number[];
   bitmapHiddenCols?: number[];
 }): MockSetup {
@@ -44,6 +46,8 @@ function createMockDeps(opts: {
 
   const setRangesMock = jest.fn().mockResolvedValue(undefined);
   const setLastUsedBorderFormatMock = jest.fn();
+  const hiddenRows = new Set(opts.hiddenRows ?? []);
+  const bitmapHiddenRows = new Set(opts.bitmapHiddenRows ?? opts.hiddenRows ?? []);
   const hiddenCols = new Set(opts.hiddenCols ?? []);
   const bitmapHiddenCols = new Set(opts.bitmapHiddenCols ?? opts.hiddenCols ?? []);
 
@@ -55,9 +59,9 @@ function createMockDeps(opts: {
   const mockWorksheet = {
     formats: { setRanges: setRangesMock },
     layout: {
-      getHiddenRowsBitmap: jest.fn(async () => new Set<number>()),
+      getHiddenRowsBitmap: jest.fn(async () => bitmapHiddenRows),
       getHiddenColumnsBitmap: jest.fn(async () => bitmapHiddenCols),
-      isRowHidden: jest.fn(async () => false),
+      isRowHidden: jest.fn(async (row: number) => hiddenRows.has(row)),
       isColumnHidden: jest.fn(async (col: number) => hiddenCols.has(col)),
     },
     _internal: { clampRangeToDataBounds: clampMock },
@@ -173,6 +177,38 @@ describe('APPLY_BORDERS — direct-mode preset routing', () => {
     expect(calls).toContainEqual({
       ranges: [{ startRow: 0, startCol: 4, endRow: 2, endCol: 4 }],
       payload: { borders: { left: thinBlack } },
+    });
+  });
+
+  it("preset 'outline' formats a selected range even when all rows are hidden", async () => {
+    const range: CellRange = { startRow: 10, startCol: 0, endRow: 12, endCol: 2 };
+    const { deps, setRangesMock } = createMockDeps({
+      ranges: [range],
+      hiddenRows: [10, 11, 12],
+    });
+
+    await APPLY_BORDERS(deps, { borders: outlineBorders, preset: 'outline' });
+
+    const calls = setRangesMock.mock.calls.map((c: unknown[]) => ({
+      ranges: c[0] as CellRange[],
+      payload: c[1] as { borders?: CellBorders },
+    }));
+
+    expect(calls).toContainEqual({
+      ranges: [{ startRow: 10, startCol: 0, endRow: 10, endCol: 2 }],
+      payload: { borders: { top: thinBlack } },
+    });
+    expect(calls).toContainEqual({
+      ranges: [{ startRow: 12, startCol: 0, endRow: 12, endCol: 2 }],
+      payload: { borders: { bottom: thinBlack } },
+    });
+    expect(calls).toContainEqual({
+      ranges: [{ startRow: 10, startCol: 0, endRow: 12, endCol: 0 }],
+      payload: { borders: { left: thinBlack } },
+    });
+    expect(calls).toContainEqual({
+      ranges: [{ startRow: 10, startCol: 2, endRow: 12, endCol: 2 }],
+      payload: { borders: { right: thinBlack } },
     });
   });
 

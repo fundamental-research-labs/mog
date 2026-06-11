@@ -46,6 +46,11 @@ import {
 import { ScrollPhysics } from '../physics/scroll-physics';
 import { ZoomPhysics } from '../physics/zoom-physics';
 
+// Large synthetic/browser-accelerated horizontal pixel deltas can otherwise
+// advance nearly a full viewport in one event, which makes nearby target columns
+// disappear under frozen labels before the user can click them.
+const MAX_PIXEL_MODE_HORIZONTAL_WHEEL_DELTA = 600;
+
 // =============================================================================
 // TYPE EXPORTS
 // =============================================================================
@@ -294,9 +299,16 @@ export class InputCoordinator {
     }
 
     // Scroll gesture — detect input source BEFORE normalization (raw event data)
-    this.isTrackpadInput = this.detectTrackpadInput(event);
+    const isTrackpadInput = this.detectTrackpadInput(event);
 
+    const rawHorizontalDelta =
+      event.shiftKey && event.deltaX === 0 && event.deltaY !== 0 ? event.deltaY : event.deltaX;
     const { deltaX, deltaY } = this.normalizeDelta(event);
+    this.isTrackpadInput =
+      isTrackpadInput ||
+      (event.deltaMode === 0 &&
+        Math.abs(deltaX) >= MAX_PIXEL_MODE_HORIZONTAL_WHEEL_DELTA &&
+        Math.abs(rawHorizontalDelta) > MAX_PIXEL_MODE_HORIZONTAL_WHEEL_DELTA);
 
     // Apply scroll immediately to physics
     this.scrollPhysics.applyDelta(deltaX, deltaY);
@@ -329,6 +341,8 @@ export class InputCoordinator {
       // on top causes double-momentum (floaty overshoot).
       if (this.config.momentumEnabled && !this.isTrackpadInput) {
         this.inputActor.send({ type: 'SCROLL_END' });
+      } else {
+        this.inputActor.send({ type: 'INTERRUPT' });
       }
       this.wheelVelocityX = 0;
       this.wheelVelocityY = 0;
@@ -832,7 +846,12 @@ export class InputCoordinator {
     // Shift+Wheel Horizontal Scroll
     // When Shift is held and there's only vertical scroll, swap to horizontal
     if (event.shiftKey && deltaY !== 0 && deltaX === 0) {
-      return { deltaX: deltaY, deltaY: 0 };
+      deltaX = deltaY;
+      deltaY = 0;
+    }
+
+    if (event.deltaMode === 0 && Math.abs(deltaX) > MAX_PIXEL_MODE_HORIZONTAL_WHEEL_DELTA) {
+      deltaX = Math.sign(deltaX) * MAX_PIXEL_MODE_HORIZONTAL_WHEEL_DELTA;
     }
 
     return { deltaX, deltaY };

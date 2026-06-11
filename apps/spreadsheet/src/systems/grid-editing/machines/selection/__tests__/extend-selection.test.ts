@@ -490,6 +490,34 @@ describe('extendSelection - Shift+Arrow bug tests', () => {
       expect(result.activeCell).toEqual({ row: 1, col: 0 });
     });
 
+    it('Shift+Down from a hidden column advances activeCell to the vertical moving edge', () => {
+      let context: SelectionContext = {
+        ...initialSelectionContext,
+        activeCell: { row: 20, col: 26 }, // AA21
+        pendingRange: { startRow: 20, startCol: 26, endRow: 20, endCol: 26 },
+        anchor: null,
+        isColHidden: (col) => col === 26,
+      };
+
+      for (let visibleStep = 0; visibleStep < 2; visibleStep += 1) {
+        const result = callExtendSelection(context, {
+          type: 'KEY_ARROW',
+          direction: 'down',
+          shiftKey: true,
+        });
+        context = { ...context, ...result };
+      }
+
+      expect(context.pendingRange).toEqual({
+        startRow: 20,
+        startCol: 26,
+        endRow: 22,
+        endCol: 26,
+      });
+      expect(context.anchor).toEqual({ row: 20, col: 26 });
+      expect(context.activeCell).toEqual({ row: 22, col: 26 });
+    });
+
     it('preserves a full-column selection when extending right from Ctrl+Space', () => {
       const context: SelectionContext = {
         ...initialSelectionContext,

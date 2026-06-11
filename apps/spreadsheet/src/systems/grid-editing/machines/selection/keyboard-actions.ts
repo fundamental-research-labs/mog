@@ -147,8 +147,11 @@ const moveActiveCell = assign(
 
 /**
  * Extend selection in direction (shift+arrow).
- * activeCell stays at the anchor (Excel parity); the range geometry tracks
- * the moving edge via getMovingEdge(range, anchor).
+ * activeCell normally stays at the anchor; the range geometry tracks the
+ * moving edge via getMovingEdge(range, anchor). When extending vertically from
+ * a hidden column, keep activeCell on the vertical moving edge so active-cell
+ * row state advances with the keyboard gesture even though the column remains
+ * hidden.
  *
  * writes only to `pendingRange`. `committedRanges` is untouched
  * (empty in non-additive flows by invariant; preserved verbatim in additive).
@@ -242,7 +245,15 @@ const extendSelection = assign(
     // sit on the merge interior — matches the same machine-internal escape
     // used by `moveActiveCell`.
     const newEnd = escapeMergeOnMove(stepped, event.direction, context.getMergedRegionAt);
-    const activeCell = context.modes.extend && !event.shiftKey ? newEnd : anchor;
+    const verticalHiddenColumnExtend =
+      (event.direction === 'up' || event.direction === 'down') &&
+      context.isColHidden?.(anchor.col) === true;
+    const activeCell =
+      context.modes.extend && !event.shiftKey
+        ? newEnd
+        : verticalHiddenColumnExtend
+          ? newEnd
+          : anchor;
     return buildExtendUpdate(anchor, newEnd, activeCell);
   },
 );

@@ -419,7 +419,14 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
       // table name (identifiers don't contain colons). Skip the async name-lookup
       // and resolve directly. This makes range navigation via the Name Box
       // synchronous so callers don't have to race against an async dispatch.
+      const isActiveSheetReference = (sheetName: string): boolean =>
+        sheetName.trim().toLowerCase() === activeSheetName.trim().toLowerCase();
+
       const activateSheetByName = async (sheetName: string): Promise<void> => {
+        if (isActiveSheetReference(sheetName)) {
+          return;
+        }
+
         try {
           const targetSheet = await wb.getSheet(sheetName);
           const targetSheetId = targetSheet.getSheetId();
@@ -443,7 +450,7 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
       if (trimmedAddress.includes(':')) {
         const parsedRange = parseCellRange(trimmedAddress);
         if (parsedRange) {
-          if (parsedRange.sheetName) {
+          if (parsedRange.sheetName && !isActiveSheetReference(parsedRange.sheetName)) {
             await activateSheetByName(parsedRange.sheetName);
           }
           setCellSelection(rangeFromParsedCellRange(parsedRange), {
@@ -466,7 +473,7 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
         const ref = refersTo.replace(/^=/, '').replace(/\$/g, '');
         const parsedRange = parseCellRange(ref);
         if (!parsedRange) return false;
-        if (parsedRange.sheetName) {
+        if (parsedRange.sheetName && !isActiveSheetReference(parsedRange.sheetName)) {
           await activateSheetByName(parsedRange.sheetName);
         }
         setCellSelection(rangeFromParsedCellRange(parsedRange), {
@@ -548,7 +555,7 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
         }
 
         // If sheet is specified and different, switch sheets first
-        if (parsed.sheetName) {
+        if (parsed.sheetName && !isActiveSheetReference(parsed.sheetName)) {
           await activateSheetByName(parsed.sheetName);
         }
 
@@ -609,6 +616,28 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
       deps.commands.object,
       deps.commands.chart,
     ],
+  );
+
+  const shouldCommitNavigationOnBlur = useCallback(
+    (value: string): boolean => {
+      const trimmedValue = value.trim();
+      if (!trimmedValue || trimmedValue === cellAddress) {
+        return false;
+      }
+
+      if (parseCellRange(trimmedValue)) {
+        return true;
+      }
+
+      const lowerValue = trimmedValue.toLowerCase();
+      const definedNames = storeAdapter.getDefinedNames();
+      if (Object.keys(definedNames).some((name) => name.toLowerCase() === lowerValue)) {
+        return true;
+      }
+
+      return storeAdapter.getTables().some((table) => table.name.toLowerCase() === lowerValue);
+    },
+    [cellAddress, storeAdapter],
   );
 
   // Navigate to a named range
@@ -678,10 +707,17 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
   );
 
   // Handle input blur
-  const handleInputBlur = useCallback(() => {
-    setIsEditing(false);
-    setIsOpen(false);
-  }, []);
+  const handleInputBlur = useCallback(
+    (e: React.FocusEvent<HTMLInputElement>) => {
+      const typed = e.currentTarget.value ?? inputValue;
+      if (shouldCommitNavigationOnBlur(typed)) {
+        void navigateToAddress(typed);
+      }
+      setIsEditing(false);
+      setIsOpen(false);
+    },
+    [inputValue, navigateToAddress, shouldCommitNavigationOnBlur],
+  );
 
   // Handle dropdown filter change
   const handleFilterChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {

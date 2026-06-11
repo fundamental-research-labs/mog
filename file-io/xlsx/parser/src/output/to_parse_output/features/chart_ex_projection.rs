@@ -1103,6 +1103,7 @@ fn project_chart_ex_axis(axis: &ChartExAxis, axis_type: &str) -> SingleAxisData 
     SingleAxisData {
         title: axis.title.as_ref().and_then(chart_ex_title_text),
         visible: !axis.hidden.unwrap_or(false),
+        visible_explicit: axis.hidden.is_some(),
         min,
         max,
         axis_type: Some(axis_type.to_string()),

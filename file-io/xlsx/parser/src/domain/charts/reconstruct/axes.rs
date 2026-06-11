@@ -207,15 +207,12 @@ fn apply_imported_axis_fidelity(
     original: &ChartAxis,
     sad: &SingleAxisData,
 ) {
-    rebuilt.delete_explicit = original.delete_explicit || !sad.visible;
-    rebuilt.major_tick_mark_explicit =
-        original.major_tick_mark_explicit || sad.tick_marks.is_some();
-    rebuilt.minor_tick_mark_explicit =
-        original.minor_tick_mark_explicit || sad.minor_tick_marks.is_some();
-    rebuilt.tick_lbl_pos_explicit =
-        original.tick_lbl_pos_explicit || sad.tick_label_position.is_some();
-    rebuilt.crosses_explicit = original.crosses_explicit
-        || matches!(sad.crosses_at.as_deref(), Some("min" | "max" | "automatic"));
+    rebuilt.delete_explicit = sad.visible_explicit || !sad.visible;
+    rebuilt.major_tick_mark_explicit = sad.tick_marks.is_some();
+    rebuilt.minor_tick_mark_explicit = sad.minor_tick_marks.is_some();
+    rebuilt.tick_lbl_pos_explicit = sad.tick_label_position.is_some();
+    rebuilt.crosses_explicit =
+        matches!(sad.crosses_at.as_deref(), Some("min" | "max" | "automatic"));
     rebuilt.raw_axis_type_attr = original.raw_axis_type_attr.clone();
 }
 

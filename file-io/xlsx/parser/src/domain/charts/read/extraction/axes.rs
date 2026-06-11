@@ -280,6 +280,7 @@ mod tests {
         AxisCrosses, AxisType, BarChartConfig, Chart, ChartAxis, ChartAxisPosition, ChartGroup,
         ChartSpace, ChartText, ChartType, ChartTypeConfig, CrossBetween, DisplayUnitKind,
         DisplayUnits, DisplayUnitsLabel, LineChartConfig, ManualLayout, NumFmt, PlotArea, Scaling,
+        TickLabelPosition, TickMark,
     };
     use ooxml_types::drawings::{StAngle, TextBody, TextBodyProperties};
 
@@ -314,6 +315,76 @@ mod tests {
             raw_chart_element_name: None,
             raw_chart_group_xml: None,
         }
+    }
+
+    #[test]
+    fn extraction_projects_explicit_axis_defaults_into_domain_model() {
+        let cs = ChartSpace {
+            chart: Chart {
+                plot_area: PlotArea {
+                    axes: vec![ChartAxis {
+                        axis_type: AxisType::Category,
+                        ax_id: 10,
+                        cross_ax: 20,
+                        ax_pos: ChartAxisPosition::Bottom,
+                        delete: false,
+                        delete_explicit: true,
+                        major_tick_mark: TickMark::Cross,
+                        major_tick_mark_explicit: true,
+                        minor_tick_mark: TickMark::Cross,
+                        minor_tick_mark_explicit: true,
+                        tick_lbl_pos: TickLabelPosition::NextTo,
+                        tick_lbl_pos_explicit: true,
+                        crosses: AxisCrosses::AutoZero,
+                        crosses_explicit: true,
+                        ..Default::default()
+                    }],
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let axes = extract_axes_from_chart_space(&cs).expect("axes");
+        let category = axes.category_axis.expect("category axis");
+
+        assert!(category.visible);
+        assert!(category.visible_explicit);
+        assert_eq!(category.tick_marks.as_deref(), Some("cross"));
+        assert_eq!(category.minor_tick_marks.as_deref(), Some("cross"));
+        assert_eq!(category.tick_label_position.as_deref(), Some("nextTo"));
+        assert_eq!(category.crosses_at.as_deref(), Some("automatic"));
+    }
+
+    #[test]
+    fn extraction_preserves_omitted_axis_defaults_as_domain_none() {
+        let cs = ChartSpace {
+            chart: Chart {
+                plot_area: PlotArea {
+                    axes: vec![ChartAxis {
+                        axis_type: AxisType::Category,
+                        ax_id: 10,
+                        cross_ax: 20,
+                        ax_pos: ChartAxisPosition::Bottom,
+                        ..Default::default()
+                    }],
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let axes = extract_axes_from_chart_space(&cs).expect("axes");
+        let category = axes.category_axis.expect("category axis");
+
+        assert!(category.visible);
+        assert!(!category.visible_explicit);
+        assert_eq!(category.tick_marks, None);
+        assert_eq!(category.minor_tick_marks, None);
+        assert_eq!(category.tick_label_position, None);
+        assert_eq!(category.crosses_at, None);
     }
 
     #[test]
@@ -727,6 +798,7 @@ fn extract_single_axis(ax: &ooxml_types::charts::ChartAxis) -> domain_types::cha
     domain_types::chart::SingleAxisData {
         title,
         visible,
+        visible_explicit: ax.delete_explicit,
         min,
         max,
         axis_type,

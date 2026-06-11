@@ -287,6 +287,7 @@ pub(in crate::domain::charts::read) fn extract_axes(
             .as_ref()
             .and_then(crate::domain::charts::axes::extract_title_text),
         visible: !ax.delete,
+        visible_explicit: ax.delete_explicit,
         ..Default::default()
     });
 
@@ -296,6 +297,7 @@ pub(in crate::domain::charts::read) fn extract_axes(
             .as_ref()
             .and_then(crate::domain::charts::axes::extract_title_text),
         visible: !ax.delete,
+        visible_explicit: ax.delete_explicit,
         min: ax.scaling.min,
         max: ax.scaling.max,
         ..Default::default()

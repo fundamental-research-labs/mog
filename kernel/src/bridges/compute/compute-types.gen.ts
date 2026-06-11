@@ -4742,6 +4742,7 @@ export interface SignNeighbor {
 export interface SingleAxisData {
   title?: string;
   visible: boolean;
+  visibleExplicit?: boolean;
   min?: number;
   max?: number;
   axisType?: string;

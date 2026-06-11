@@ -83,6 +83,7 @@ fn imported_explicit_next_to_tick_label_position_is_preserved() {
     spec.axes = Some(AxisData {
         category_axis: Some(SingleAxisData {
             visible: true,
+            tick_label_position: Some("nextTo".to_string()),
             ..Default::default()
         }),
         value_axis: Some(SingleAxisData {
@@ -94,11 +95,12 @@ fn imported_explicit_next_to_tick_label_position_is_preserved() {
         series_axis: None,
     });
 
-    let mut category_axis = imported_left_axis(AxisType::Category, 10, 100);
-    category_axis.tick_lbl_pos_explicit = true;
     let spec = with_original_axes(
         spec,
-        vec![category_axis, imported_left_axis(AxisType::Value, 100, 10)],
+        vec![
+            imported_left_axis(AxisType::Category, 10, 100),
+            imported_left_axis(AxisType::Value, 100, 10),
+        ],
     );
 
     let xml = chart_xml(&spec);
@@ -106,6 +108,36 @@ fn imported_explicit_next_to_tick_label_position_is_preserved() {
     assert_eq!(xml.matches("<c:tickLblPos val=\"nextTo\"/>").count(), 1);
     assert!(!xml.contains("<c:delete val=\"0\"/>"), "{xml}");
     assert!(!xml.contains("<c:crosses val=\"autoZero\"/>"), "{xml}");
+}
+
+#[test]
+fn imported_explicit_visible_axis_serializes_delete_false_from_domain() {
+    let mut spec = minimal_chart_spec(DomainChartType::Column, None);
+    spec.axes = Some(AxisData {
+        category_axis: Some(SingleAxisData {
+            visible: true,
+            visible_explicit: true,
+            ..Default::default()
+        }),
+        value_axis: Some(SingleAxisData {
+            visible: true,
+            ..Default::default()
+        }),
+        secondary_category_axis: None,
+        secondary_value_axis: None,
+        series_axis: None,
+    });
+    let spec = with_original_axes(
+        spec,
+        vec![
+            imported_left_axis(AxisType::Category, 10, 100),
+            imported_left_axis(AxisType::Value, 100, 10),
+        ],
+    );
+
+    let xml = chart_xml(&spec);
+
+    assert_eq!(xml.matches("<c:delete val=\"0\"/>").count(), 1);
 }
 
 #[test]
@@ -172,9 +204,9 @@ fn imported_left_axis(axis_type: AxisType, ax_id: u32, cross_ax: u32) -> ChartAx
         cross_ax,
         ax_pos: ChartAxisPosition::Left,
         major_tick_mark: TickMark::None,
-        major_tick_mark_explicit: true,
+        major_tick_mark_explicit: false,
         minor_tick_mark: TickMark::None,
-        minor_tick_mark_explicit: true,
+        minor_tick_mark_explicit: false,
         tick_lbl_pos: TickLabelPosition::NextTo,
         tick_lbl_pos_explicit: false,
         crosses: AxisCrosses::AutoZero,

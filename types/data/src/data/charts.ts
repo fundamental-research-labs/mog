@@ -619,6 +619,11 @@ export interface LegendEntryConfig {
 export interface SingleAxisConfig {
   title?: string;
   visible: boolean;
+  /**
+   * Whether axis visibility was explicitly authored. Distinguishes omitted
+   * visibility defaults from explicit visible axes.
+   */
+  visibleExplicit?: boolean;
   min?: number;
   max?: number;
   axisType?: string;

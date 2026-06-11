@@ -114,6 +114,7 @@ export function wireToSingleAxisConfig(w: SingleAxisData): SingleAxisConfig {
     // structural fields (no narrowing needed)
     title: w.title,
     visible: w.visible,
+    visibleExplicit: w.visibleExplicit,
     min: w.min,
     max: w.max,
     axisType: w.axisType,
@@ -186,6 +187,7 @@ export function singleAxisConfigToWire(c: SingleAxisConfig): SingleAxisData {
   return {
     title: c.title,
     visible: c.visible,
+    visibleExplicit: c.visibleExplicit,
     min: c.min,
     max: c.max,
     axisType: c.axisType,

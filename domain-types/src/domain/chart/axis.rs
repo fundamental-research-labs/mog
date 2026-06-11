@@ -27,6 +27,10 @@ pub struct SingleAxisData {
     pub title: Option<String>,
     #[serde(default)]
     pub visible: bool,
+    /// Whether axis visibility was explicitly authored. This distinguishes an
+    /// omitted OOXML `<c:delete>` default from an explicit `delete val="0"`.
+    #[serde(default, skip_serializing_if = "crate::is_false")]
+    pub visible_explicit: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub min: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]

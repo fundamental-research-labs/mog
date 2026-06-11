@@ -369,6 +369,9 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
   // Handle clicking on the name box to open dropdown
   const handleNameBoxClick = useCallback(() => {
     if (!isEditing) {
+      if (deps.accessors.editor.isEditing()) {
+        deps.commands.editor.cancel();
+      }
       setValidationError(null);
       setIsEditing(true);
       setInputValue(cellAddress);
@@ -378,10 +381,13 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
         inputRef.current?.select();
       });
     }
-  }, [isEditing, cellAddress]);
+  }, [deps.accessors.editor, deps.commands.editor, isEditing, cellAddress]);
 
   // Handle double-click to edit (navigate by typing)
   const handleDoubleClick = useCallback(() => {
+    if (deps.accessors.editor.isEditing()) {
+      deps.commands.editor.cancel();
+    }
     setValidationError(null);
     setIsEditing(true);
     setInputValue(cellAddress);
@@ -391,7 +397,7 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
       inputRef.current?.focus();
       inputRef.current?.select();
     });
-  }, [cellAddress]);
+  }, [deps.accessors.editor, deps.commands.editor, cellAddress]);
 
   // Handle input change while editing
   const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -435,6 +441,9 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
         range: CellRange,
         nextActiveCell: { row: number; col: number },
       ): void => {
+        if (deps.accessors.editor.isEditing()) {
+          deps.commands.editor.cancel();
+        }
         deps.commands.object.deselectAll();
         deps.commands.chart.deselectAll();
         selectionCommands.setSelection([range], nextActiveCell, nextActiveCell);
@@ -606,6 +615,8 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
       openDefineNameDialog,
       wb,
       refreshNamedRanges,
+      deps.accessors.editor,
+      deps.commands.editor,
       deps.commands.object,
       deps.commands.chart,
     ],
@@ -644,14 +655,15 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
 
   // Handle input key events
   const handleInputKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLInputElement>) => {
+    async (e: React.KeyboardEvent<HTMLInputElement>) => {
       if (e.key === 'Enter') {
         e.preventDefault();
+        e.stopPropagation();
         // Read straight from the DOM so test harnesses (Playwright `fill`)
         // and rapid user input both commit the actual typed value, even if
         // the `inputValue` state hasn't flushed yet.
         const typed = e.currentTarget.value ?? inputValue;
-        void navigateToAddress(typed);
+        await navigateToAddress(typed);
         setIsEditing(false);
         // Radix's PopoverTrigger toggle fires on the initial button click and
         // sets isOpen=true even though we immediately override with setIsOpen(false)
@@ -668,6 +680,7 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
         coordinator.input.focusGrid();
       } else if (e.key === 'Escape') {
         e.preventDefault();
+        e.stopPropagation();
         setValidationError(null);
         setIsEditing(false);
         setIsOpen(false);

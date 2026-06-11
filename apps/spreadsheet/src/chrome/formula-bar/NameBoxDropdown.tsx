@@ -28,7 +28,6 @@ import {
 
 import { parseCellAddress, parseCellRange } from '@mog-sdk/kernel';
 import type { CellRange, SheetId } from '@mog-sdk/contracts/core';
-import type { ParsedCellRange } from '@mog-sdk/contracts/utils';
 import {
   createVirtualRef,
   MenuItem,
@@ -50,6 +49,7 @@ import {
 } from '../../domain/editor/name-completion';
 import { useDebouncedSelection } from '../../hooks';
 import { formatNameBoxSelection } from './name-box-display';
+import { parseNameBoxReference, rangeFromParsedCellRange } from './name-box-navigation';
 
 // =============================================================================
 // Types
@@ -64,17 +64,6 @@ const INVALID_NAME_MESSAGE = 'The name you entered is not valid.';
 // =============================================================================
 // Store Adapter
 // =============================================================================
-
-function rangeFromParsedCellRange(parsedRange: ParsedCellRange): CellRange {
-  return {
-    startRow: parsedRange.startRow,
-    startCol: parsedRange.startCol,
-    endRow: parsedRange.endRow,
-    endCol: parsedRange.endCol,
-    ...(parsedRange.isFullColumn ? { isFullColumn: true } : {}),
-    ...(parsedRange.isFullRow ? { isFullRow: true } : {}),
-  };
-}
 
 /**
  * Create a NameCompletionStoreLike adapter from cached async data.
@@ -401,24 +390,17 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
 
   /**
    * Navigate to a cell address or named range.
-   * Name Box Direct Name Typing - looks up named ranges before A1 parsing.
+   * Name Box Direct Name Typing - direct references are resolved before names.
    *
    * Priority:
-   * 1. Check for matching defined name (case-insensitive)
-   * 2. Check for matching table name (case-insensitive)
-   * 3. Parse as A1 notation
+   * 1. Parse direct A1 notation
+   * 2. Check for matching defined name (case-insensitive)
+   * 3. Check for matching table name (case-insensitive)
    */
   const navigateToAddress = useCallback(
     async (address: string) => {
-      // First check for named ranges (defined names and tables)
-      // This enables typing a name directly to navigate to it
       const trimmedAddress = address.trim();
 
-      // Fast synchronous path: if the address contains a colon it is a cell
-      // range ("A1:A100", "Sheet1!A1:C10") and can never be a defined name or
-      // table name (identifiers don't contain colons). Skip the async name-lookup
-      // and resolve directly. This makes range navigation via the Name Box
-      // synchronous so callers don't have to race against an async dispatch.
       const activateSheetByName = async (sheetName: string): Promise<void> => {
         try {
           const targetSheet = await wb.getSheet(sheetName);
@@ -440,18 +422,33 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
         selectionCommands.setSelection([range], nextActiveCell, nextActiveCell);
       };
 
-      if (trimmedAddress.includes(':')) {
-        const parsedRange = parseCellRange(trimmedAddress);
-        if (parsedRange) {
-          if (parsedRange.sheetName) {
-            await activateSheetByName(parsedRange.sheetName);
-          }
-          setCellSelection(rangeFromParsedCellRange(parsedRange), {
-            row: parsedRange.startRow,
-            col: parsedRange.startCol,
-          });
+      const directReference = parseNameBoxReference(trimmedAddress);
+      if (directReference) {
+        const currentRange = ranges[0];
+        const isSingleCellRef =
+          !trimmedAddress.includes(':') &&
+          directReference.range.startRow === directReference.range.endRow &&
+          directReference.range.startCol === directReference.range.endCol;
+        const isNoOpSelection =
+          ranges.length === 1 &&
+          currentRange != null &&
+          currentRange.startRow === directReference.range.startRow &&
+          currentRange.startCol === directReference.range.startCol &&
+          currentRange.endRow === directReference.range.endRow &&
+          currentRange.endCol === directReference.range.endCol &&
+          activeCell.row === directReference.activeCell.row &&
+          activeCell.col === directReference.activeCell.col;
+
+        if (isSingleCellRef && isNoOpSelection) {
+          setValidationError(INVALID_NAME_MESSAGE);
           return;
         }
+
+        if (directReference.sheetName) {
+          await activateSheetByName(directReference.sheetName);
+        }
+        setCellSelection(directReference.range, directReference.activeCell);
+        return;
       }
 
       // Look up defined names (case-insensitive)
@@ -520,44 +517,6 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
             { row: parsed.row, col: parsed.col },
           );
         }
-        return;
-      }
-
-      // Fall back to A1 notation parsing (handles both single cells "A1" and
-      // ranges "A1:A100" — parseCellRange is a superset of parseCellAddress).
-      const parsed = parseCellRange(address);
-      if (parsed) {
-        const currentRange = ranges[0];
-        const isSingleCellRef =
-          !trimmedAddress.includes(':') &&
-          parsed.startRow === parsed.endRow &&
-          parsed.startCol === parsed.endCol;
-        const isNoOpSelection =
-          ranges.length === 1 &&
-          currentRange != null &&
-          currentRange.startRow === parsed.startRow &&
-          currentRange.startCol === parsed.startCol &&
-          currentRange.endRow === parsed.endRow &&
-          currentRange.endCol === parsed.endCol &&
-          activeCell.row === parsed.startRow &&
-          activeCell.col === parsed.startCol;
-
-        if (isSingleCellRef && isNoOpSelection) {
-          setValidationError(INVALID_NAME_MESSAGE);
-          return;
-        }
-
-        // If sheet is specified and different, switch sheets first
-        if (parsed.sheetName) {
-          await activateSheetByName(parsed.sheetName);
-        }
-
-        // Set selection to the range (or single cell when start === end);
-        // the viewport-follow coordinator scrolls into view via the SET_SELECTION emit.
-        setCellSelection(rangeFromParsedCellRange(parsed), {
-          row: parsed.startRow,
-          col: parsed.startCol,
-        });
         return;
       }
 
@@ -645,6 +604,7 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
   // Handle input key events
   const handleInputKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>) => {
+      e.stopPropagation();
       if (e.key === 'Enter') {
         e.preventDefault();
         // Read straight from the DOM so test harnesses (Playwright `fill`)

@@ -31,7 +31,7 @@
  *
  */
 
-import React, { useCallback, useEffect } from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
 import { useFeatureGate, useUIStore } from '../../../internal-api';
 
 import { Tooltip } from '@mog/shell';
@@ -160,6 +160,7 @@ function StylePreviewChip({
  */
 export const StylesGroup = React.memo(function StylesGroup() {
   const isEnabled = useFeatureGate('groups', 'styles');
+  const tableStyleGalleryOpenSource = useRef<'button' | 'external'>('external');
 
   // ===========================================================================
   // Dispatch (unified action system - hook form per ArrangeGroup convention)
@@ -175,8 +176,8 @@ export const StylesGroup = React.memo(function StylesGroup() {
   const { handleApplyStyle } = useToolbarActions();
 
   const formatAsTable = useCallback(
-    (styleId: TableStylePreset) => {
-      void dispatch('INSERT_TABLE', { stylePreset: styleId });
+    (styleId: TableStylePreset, allowSparseHeaderRows?: boolean) => {
+      void dispatch('INSERT_TABLE', { stylePreset: styleId, allowSparseHeaderRows });
     },
     [dispatch],
   );
@@ -220,6 +221,12 @@ export const StylesGroup = React.memo(function StylesGroup() {
       open ? openRibbonDropdown('home.cell-styles') : closeRibbonDropdown('home.cell-styles'),
     [openRibbonDropdown, closeRibbonDropdown],
   );
+
+  useEffect(() => {
+    if (!tableStyleGalleryOpen) {
+      tableStyleGalleryOpenSource.current = 'external';
+    }
+  }, [tableStyleGalleryOpen]);
 
   // ===========================================================================
   // KeyTip Registration (display-only)
@@ -281,7 +288,10 @@ export const StylesGroup = React.memo(function StylesGroup() {
               hasDropdown
               dropdownPosition="inline"
               isOpen={tableStyleGalleryOpen}
-              onClick={() => setTableStyleGalleryOpen(!tableStyleGalleryOpen)}
+              onClick={() => {
+                tableStyleGalleryOpenSource.current = 'button';
+                setTableStyleGalleryOpen(!tableStyleGalleryOpen);
+              }}
               aria-label="Format as Table"
             />
           </Tooltip>
@@ -293,7 +303,7 @@ export const StylesGroup = React.memo(function StylesGroup() {
             <div data-testid="ribbon-dropdown-menu-format-as-table">
               <TableStyleGallery
                 onSelectStyle={(styleId) => {
-                  formatAsTable(styleId);
+                  formatAsTable(styleId, tableStyleGalleryOpenSource.current === 'button');
                   setTableStyleGalleryOpen(false);
                 }}
                 onClose={() => setTableStyleGalleryOpen(false)}

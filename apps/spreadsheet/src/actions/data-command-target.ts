@@ -10,9 +10,14 @@ export interface DataCommandTarget {
 interface ResolveDataTargetOptions {
   readonly allowEmptySingleCell: boolean;
   readonly inferHeadersForExplicitMultiRow: boolean;
+  readonly allowSparseHeaderRows: boolean;
 }
 
 const HEADER_BODY_SCAN_ROW_LIMIT = 100;
+
+interface HeaderInferenceOptions {
+  readonly allowSparseHeaderRows: boolean;
+}
 
 export function normalizeCommandRange(range: CellRange): CellRange {
   return {
@@ -39,7 +44,11 @@ export function getRelativeCommandColumn(
   return activeCell.col - range.startCol;
 }
 
-async function rangeLooksLikeHeaderTable(ws: Worksheet, range: CellRange): Promise<boolean> {
+async function rangeLooksLikeHeaderTable(
+  ws: Worksheet,
+  range: CellRange,
+  options: HeaderInferenceOptions,
+): Promise<boolean> {
   if (range.startRow >= range.endRow) return false;
 
   const width = range.endCol - range.startCol + 1;
@@ -47,11 +56,29 @@ async function rangeLooksLikeHeaderTable(ws: Worksheet, range: CellRange): Promi
     Array.from({ length: width }, (_, i) => ws.getCell(range.startRow, range.startCol + i)),
   );
 
-  const firstRowAllText = firstRow.every((cell) => {
+  let firstRowHasText = false;
+  let firstRowAllPopulatedText = true;
+  const firstRowHasOnlyTextOrBlanks = firstRow.every((cell) => {
     const value = cell?.value;
-    return typeof value === 'string' && value.trim().length > 0;
+    if (value == null || value === '') {
+      firstRowAllPopulatedText = false;
+      return true;
+    }
+    if (typeof value !== 'string') {
+      firstRowAllPopulatedText = false;
+      return false;
+    }
+    if (value.trim().length === 0) {
+      firstRowAllPopulatedText = false;
+      return true;
+    }
+    firstRowHasText = true;
+    return true;
   });
-  if (!firstRowAllText) return false;
+  const firstRowLooksLikeHeaders = options.allowSparseHeaderRows
+    ? firstRowHasOnlyTextOrBlanks
+    : firstRowAllPopulatedText;
+  if (!firstRowHasText || !firstRowLooksLikeHeaders) return false;
 
   const rowHasDataSignal = (row: Array<{ value?: unknown } | null | undefined>): boolean =>
     row.some((cell) => {
@@ -79,6 +106,7 @@ export async function resolveDataCommandTarget(
   return resolveDataTarget(ws, userRange, {
     allowEmptySingleCell: false,
     inferHeadersForExplicitMultiRow: false,
+    allowSparseHeaderRows: false,
   });
 }
 
@@ -94,7 +122,7 @@ async function resolveDataTarget(
     return {
       range,
       hasHeaders: options.inferHeadersForExplicitMultiRow
-        ? await rangeLooksLikeHeaderTable(ws, range)
+        ? await rangeLooksLikeHeaderTable(ws, range, options)
         : false,
       wasExpanded: false,
     };
@@ -118,7 +146,7 @@ async function resolveDataTarget(
 
   return {
     range: expanded,
-    hasHeaders: await rangeLooksLikeHeaderTable(ws, expanded),
+    hasHeaders: await rangeLooksLikeHeaderTable(ws, expanded, options),
     wasExpanded: true,
   };
 }
@@ -135,10 +163,12 @@ async function resolveDataTarget(
 export async function resolveDataDialogTarget(
   ws: Worksheet,
   userRange: CellRange,
+  options: { allowSparseHeaderRows?: boolean } = {},
 ): Promise<DataCommandTarget> {
   const target = await resolveDataTarget(ws, userRange, {
     allowEmptySingleCell: true,
     inferHeadersForExplicitMultiRow: true,
+    allowSparseHeaderRows: options.allowSparseHeaderRows ?? true,
   });
   return (
     target ?? {

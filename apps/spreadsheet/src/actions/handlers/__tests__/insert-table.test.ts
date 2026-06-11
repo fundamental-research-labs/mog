@@ -168,6 +168,27 @@ describe('INSERT_TABLE — current-region auto-expansion', () => {
     });
   });
 
+  test('multi-cell selection can opt out of sparse title-row header inference', async () => {
+    const multiRange: CellRange = { startRow: 457, startCol: 0, endRow: 479, endCol: 10 };
+    const setup = makeMockDeps({
+      selectionRanges: [multiRange],
+      cellValues: {
+        '457,0': 'Consolidated Balance Sheet',
+        '458,0': 'Current assets',
+        '458,1': 156332,
+      },
+    });
+
+    const result = await INSERT_TABLE(setup.deps, { allowSparseHeaderRows: false });
+
+    expect(result.handled).toBe(true);
+    expect(setup.getCurrentRegion).not.toHaveBeenCalled();
+    expect(setup.openInsertTableDialog).toHaveBeenCalledWith({
+      range: multiRange,
+      hasHeaders: false,
+    });
+  });
+
   test('empty selection returns disabled', async () => {
     const setup = makeMockDeps({
       selectionRanges: [],

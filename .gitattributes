@@ -1,0 +1,4 @@
+plugins/mog/dist/** linguist-generated=true
+runtime/sdk/src/generated/** linguist-generated=true
+compute/pyo3/python/mog/_generated/** linguist-generated=true
+cli/skill/references/api-spec.json linguist-generated=true

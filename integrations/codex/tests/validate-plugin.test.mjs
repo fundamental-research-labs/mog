@@ -5,7 +5,7 @@ import test from 'node:test';
 
 const repoRoot = resolve(import.meta.dirname, '../../..');
 
-test('plugin validator passes for the checked-in Mog plugin bundle', () => {
+test('plugin validator passes for the checked-in Mog plugin source', () => {
   const result = spawnSync('node', ['integrations/codex/scripts/validate-plugin.mjs'], {
     cwd: repoRoot,
     encoding: 'utf8',

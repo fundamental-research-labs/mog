@@ -4,6 +4,7 @@ import { join, resolve, sep } from 'node:path';
 const repoRoot = resolve(import.meta.dirname, '../../..');
 const pluginRoot = resolve(repoRoot, 'plugins/mog');
 const marketplacePath = resolve(repoRoot, '.agents/plugins/marketplace.json');
+const requireDist = process.argv.includes('--require-dist');
 
 const failures = [];
 const privateReferenceNeedles = [
@@ -126,7 +127,7 @@ async function validateMcp() {
   for (const forbidden of ['npx', '${PLUGIN_ROOT}', '${CLAUDE_PLUGIN_ROOT}']) {
     if (serialized.includes(forbidden)) fail(`.mcp.json must not contain ${forbidden}`);
   }
-  if (!(await exists(resolve(pluginRoot, 'dist/mcp/server.mjs')))) {
+  if (requireDist && !(await exists(resolve(pluginRoot, 'dist/mcp/server.mjs')))) {
     fail('dist/mcp/server.mjs is missing; run pnpm --dir integrations/codex build');
   }
 }
@@ -161,16 +162,23 @@ async function validateSkill() {
 }
 
 async function validateDist() {
+  const distRoot = resolve(pluginRoot, 'dist');
   const browserIndex = resolve(pluginRoot, 'dist/browser/index.html');
   const browserJs = resolve(pluginRoot, 'dist/browser/assets/browser.js');
   const importMapPath = resolve(pluginRoot, 'dist/browser/assets/import-map.json');
-  for (const path of [browserIndex, browserJs, importMapPath]) {
-    if (!(await exists(path))) fail(`Missing browser runtime artifact ${path}`);
+  const distStats = await stat(distRoot).catch(() => null);
+  if (!distStats?.isDirectory()) {
+    if (requireDist) fail('plugins/mog/dist must be a directory');
+    return;
   }
-  const distStats = await stat(resolve(pluginRoot, 'dist')).catch(() => null);
-  if (!distStats?.isDirectory()) fail('plugins/mog/dist must be a directory');
 
-  const distFiles = await listFiles(resolve(pluginRoot, 'dist'));
+  if (requireDist) {
+    for (const path of [browserIndex, browserJs, importMapPath]) {
+      if (!(await exists(path))) fail(`Missing browser runtime artifact ${path}`);
+    }
+  }
+
+  const distFiles = await listFiles(distRoot);
   const wasmFiles = distFiles.filter((path) => path.endsWith('.wasm'));
   if (wasmFiles.length > 0) {
     fail(
@@ -183,6 +191,8 @@ async function validateDist() {
       `plugins/mog/dist must not vendor font files; use browser/system font fallback: ${fontFiles.join(', ')}`,
     );
   }
+
+  if (!requireDist) return;
 
   const [manifest, wasmPackage, importMap] = await Promise.all([
     readJson(resolve(pluginRoot, '.codex-plugin/plugin.json')),

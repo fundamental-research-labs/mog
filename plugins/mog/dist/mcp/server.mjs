@@ -235,7 +235,9 @@ async function ensureHost() {
     handleBrowserRequest(request, response).catch((error) => {
       console.error("[mog-codex] browser host error", error);
       if (!response.headersSent) {
-        jsonResponse(response, 500, { error: error instanceof Error ? error.message : String(error) });
+        jsonResponse(response, 500, {
+          error: error instanceof Error ? error.message : String(error)
+        });
       } else {
         response.end();
       }
@@ -320,7 +322,11 @@ function sessionStatus(args) {
     sessionId,
     exists: true,
     server: { listening: Boolean(hostServer), port: hostPort },
-    source: session.source.kind === "xlsx-bytes" ? { kind: session.source.kind, fileName: session.source.fileName, inputPath: session.source.inputPath } : session.source,
+    source: session.source.kind === "xlsx-bytes" ? {
+      kind: session.source.kind,
+      fileName: session.source.fileName,
+      inputPath: session.source.inputPath
+    } : session.source,
     status: session.status,
     pendingRequests: session.pending.size
   };
@@ -438,7 +444,10 @@ var toolDefinitions = [
     inputSchema: {
       type: "object",
       properties: {
-        xlsxPath: { type: "string", description: "Explicit local .xlsx path to import. Omit for a blank workbook." },
+        xlsxPath: {
+          type: "string",
+          description: "Explicit local .xlsx path to import. Omit for a blank workbook."
+        },
         filePath: { type: "string", description: "Alias for xlsxPath." }
       },
       additionalProperties: false
@@ -524,12 +533,9 @@ var toolDefinitions = [
 ];
 function encodeMcpMessage(message) {
   const body = Buffer.from(JSON.stringify(message));
-  return Buffer.concat([
-    Buffer.from(`Content-Length: ${body.byteLength}\r
+  return Buffer.concat([Buffer.from(`Content-Length: ${body.byteLength}\r
 \r
-`, "ascii"),
-    body
-  ]);
+`, "ascii"), body]);
 }
 function writeMcp(message) {
   process.stdout.write(encodeMcpMessage(message));

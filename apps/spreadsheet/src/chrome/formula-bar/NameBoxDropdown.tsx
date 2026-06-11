@@ -156,6 +156,7 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
   const [validationError, setValidationError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const suppressBlurCommitRef = useRef(false);
 
   // Load named ranges, tables, sheets from Workbook/Worksheet API (async) for dropdown
   const [cachedNamedRanges, setCachedNamedRanges] = useState<any[]>([]);
@@ -420,6 +421,9 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
       // and resolve directly. This makes range navigation via the Name Box
       // synchronous so callers don't have to race against an async dispatch.
       const activateSheetByName = async (sheetName: string): Promise<void> => {
+        if (sheetName.toLowerCase() === activeSheetName.toLowerCase()) {
+          return;
+        }
         try {
           const targetSheet = await wb.getSheet(sheetName);
           const targetSheetId = targetSheet.getSheetId();
@@ -611,6 +615,25 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
     ],
   );
 
+  const closeNameBoxEditor = useCallback(() => {
+    setIsEditing(false);
+    // Radix's PopoverTrigger toggle fires on the initial button click and
+    // sets isOpen=true even though we immediately override with setIsOpen(false)
+    // in handleNameBoxClick. The toggle survives because Radix fires after the
+    // child's onClick handler. That latent isOpen=true becomes visible once
+    // isEditing goes false (open = isOpen && !isEditing). Force-close here so
+    // the dropdown doesn't open after the user commits the name-box value.
+    setIsOpen(false);
+  }, []);
+
+  const commitNameBoxValue = useCallback(
+    async (value: string) => {
+      await navigateToAddress(value);
+      closeNameBoxEditor();
+    },
+    [navigateToAddress, closeNameBoxEditor],
+  );
+
   // Navigate to a named range
   const navigateToName = useCallback(
     (suggestion: NameSuggestion) => {
@@ -644,44 +667,54 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
 
   // Handle input key events
   const handleInputKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLInputElement>) => {
+    async (e: React.KeyboardEvent<HTMLInputElement>) => {
       if (e.key === 'Enter') {
         e.preventDefault();
+        e.stopPropagation();
+        e.nativeEvent.stopImmediatePropagation();
         // Read straight from the DOM so test harnesses (Playwright `fill`)
         // and rapid user input both commit the actual typed value, even if
         // the `inputValue` state hasn't flushed yet.
         const typed = e.currentTarget.value ?? inputValue;
-        void navigateToAddress(typed);
-        setIsEditing(false);
-        // Radix's PopoverTrigger toggle fires on the initial button click and
-        // sets isOpen=true even though we immediately override with setIsOpen(false)
-        // in handleNameBoxClick. The toggle survives because Radix fires after the
-        // child's onClick handler. That latent isOpen=true becomes visible once
-        // isEditing goes false (open = isOpen && !isEditing). Force-close here so
-        // the dropdown doesn't open after the user commits the name-box value.
-        setIsOpen(false);
-        // Return focus to the grid canvas. Without this, the just-unmounted
-        // input drops focus to <body>, and subsequent typing is consumed by
-        // whatever default-focus target the browser picks (often nothing).
-        // Excel/Sheets parity: a navigator owns the focus contract — it both
-        // moves the selection AND returns focus to the destination.
-        coordinator.input.focusGrid();
+        try {
+          await commitNameBoxValue(typed);
+        } finally {
+          // Return focus to the grid canvas. Without this, the just-unmounted
+          // input drops focus to <body>, and subsequent typing is consumed by
+          // whatever default-focus target the browser picks (often nothing).
+          // Excel/Sheets parity: a navigator owns the focus contract — it both
+          // moves the selection AND returns focus to the destination.
+          coordinator.input.focusGrid();
+        }
       } else if (e.key === 'Escape') {
         e.preventDefault();
+        e.stopPropagation();
+        e.nativeEvent.stopImmediatePropagation();
+        suppressBlurCommitRef.current = true;
         setValidationError(null);
-        setIsEditing(false);
-        setIsOpen(false);
+        closeNameBoxEditor();
         coordinator.input.focusGrid();
       }
     },
-    [inputValue, navigateToAddress, coordinator],
+    [inputValue, commitNameBoxValue, closeNameBoxEditor, coordinator],
   );
 
   // Handle input blur
   const handleInputBlur = useCallback(() => {
-    setIsEditing(false);
-    setIsOpen(false);
-  }, []);
+    if (suppressBlurCommitRef.current) {
+      suppressBlurCommitRef.current = false;
+      closeNameBoxEditor();
+      return;
+    }
+
+    const typed = inputRef.current?.value ?? inputValue;
+    if (typed.trim() === cellAddress.trim() || typed.trim() === '') {
+      closeNameBoxEditor();
+      return;
+    }
+
+    void commitNameBoxValue(typed);
+  }, [cellAddress, closeNameBoxEditor, commitNameBoxValue, inputValue]);
 
   // Handle dropdown filter change
   const handleFilterChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -739,7 +772,7 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
             data-testid="name-box"
             value={inputValue}
             onChange={handleInputChange}
-            onKeyDown={handleInputKeyDown}
+            onKeyDownCapture={handleInputKeyDown}
             onBlur={handleInputBlur}
             className="w-[80px] h-[22px] px-2 border border-ss-primary rounded bg-ss-surface text-ribbon font-medium text-text focus:outline-none focus:ring-2 focus:ring-ss-primary/20"
             spellCheck={false}

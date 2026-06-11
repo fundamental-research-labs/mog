@@ -100,6 +100,11 @@ function isDialogKeyboardTarget(target: HTMLElement | null): boolean {
   return Boolean(target.closest('[role="dialog"]'));
 }
 
+function isNameBoxKeyboardTarget(target: HTMLElement | null): boolean {
+  if (!target) return false;
+  return Boolean(target.closest('[data-testid="name-box"]'));
+}
+
 function isNativeEditableShortcut(e: KeyboardEvent, target: HTMLElement | null): boolean {
   if (!isEditableKeyboardTarget(target)) return false;
   if (!(e.ctrlKey || e.metaKey) || e.altKey) return false;
@@ -328,6 +333,12 @@ function KeyboardCaptureSetup({
         return;
       }
 
+      const target = keyboardEventTargetElement(e);
+
+      if (isNameBoxKeyboardTarget(target)) {
+        return;
+      }
+
       // Check editor machine state - THE SOURCE OF TRUTH for editing state
       // This replaces the DOM-based check (data-spreadsheet-container) which failed
       // for formula bar since it's outside the grid container.
@@ -337,8 +348,6 @@ function KeyboardCaptureSetup({
         editorSnapshot.matches('formulaEditing') ||
         editorSnapshot.matches('richTextEditing') ||
         editorSnapshot.matches('imeComposing');
-      const target = keyboardEventTargetElement(e);
-
       if (
         isGlobalShortcut(e) &&
         !isDialogKeyboardTarget(target) &&

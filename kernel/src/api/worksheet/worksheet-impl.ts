@@ -1965,6 +1965,7 @@ export class WorksheetImpl implements Worksheet {
     await SortOps.sortRange(this.ctx, this.sheetId, cellRange, {
       sortBy,
       hasHeaders: options.hasHeaders,
+      visibleRowsOnly: options.visibleRowsOnly,
     });
   }
 
@@ -2003,6 +2004,7 @@ export class WorksheetImpl implements Worksheet {
     await SortOps.sortRange(this.ctx, this.sheetId, cellRange, {
       sortBy: [criterion],
       hasHeaders: opts.hasHeaders ?? false,
+      visibleRowsOnly: opts.visibleRowsOnly,
     });
   }
 

@@ -23,8 +23,8 @@
  *
  */
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { useActiveSheetId, useUIStore, useWorkbook } from '../../../internal-api';
+import React, { useCallback, useEffect, useMemo } from 'react';
+import { useActiveSheetId, useUIStore } from '../../../internal-api';
 
 import type { ChartType } from '@mog/charts';
 import {
@@ -40,7 +40,6 @@ import {
 import { ChartsGroup } from '../../../components/charts/ChartsGroup';
 import { useDispatch } from '../../../hooks/toolbar/use-action-dependencies';
 import { useSheetProtectionPermissions } from '../../../hooks/structure/use-sheet-protection';
-import { useActiveCell } from '../../../hooks/selection/use-active-cell';
 import { useSelectionRanges } from '../../../hooks/selection/use-granular-selection';
 import { PRODUCT_VOCABULARY } from '../../../ux/product-vocabulary';
 import { keyTipRegistry } from '../keytips';
@@ -89,10 +88,9 @@ export function InsertRibbon() {
 
   const dispatchAction = useDispatch();
   const activeSheetId = useActiveSheetId();
-  const wb = useWorkbook();
-  const { row: activeRow, col: activeCol } = useActiveCell();
   const ranges = useSelectionRanges();
   const sheetPermissions = useSheetProtectionPermissions(activeSheetId);
+  const selectedTableId = useUIStore((s) => s.tableDesign.selectedTableId);
 
   // UIStore action for the inline shapes menu (anchored popover, not a
   // dialog). The visible ribbon click records an anchor; keytips open the
@@ -101,30 +99,10 @@ export function InsertRibbon() {
   const openRibbonDropdown = useUIStore((s) => s.openRibbonDropdown);
   const closeRibbonDropdown = useUIStore((s) => s.closeRibbonDropdown);
 
-  // Slicer is enabled only when the active cell is inside a table. This
-  // mirrors the prior `useInsertActions` derivation; it stays here as a
-  // granular state read at the call site.
-  const [selectionIsInTable, setSelectionIsInTable] = useState(false);
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      try {
-        const ws = wb.getSheetById(activeSheetId);
-        const table = await ws.tables.getAtCell(activeRow, activeCol);
-        if (!cancelled) setSelectionIsInTable(table != null);
-      } catch {
-        if (!cancelled) setSelectionIsInTable(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [wb, activeSheetId, activeRow, activeCol]);
-
   // Chart is disabled if there's no selection range
   const chartDisabled = useMemo(() => ranges.length === 0, [ranges]);
   // Slicer is disabled if not in a table
-  const slicerDisabled = !selectionIsInTable;
+  const slicerDisabled = selectedTableId == null;
 
   // Bound action callbacks
   const insertTable = useCallback(() => dispatchAction('INSERT_TABLE'), [dispatchAction]);

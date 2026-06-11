@@ -574,6 +574,68 @@ describe('CellsLayer', () => {
       ]);
       expect(collector.clear).toHaveBeenCalledTimes(1);
     });
+
+    it('keeps filter button overlays outside dirty cells in partial frames', () => {
+      const sheetId = 'sheet-filter-buttons';
+      const collector = createInteractiveElementCollector();
+      const cellData: CellDataSource = {
+        ...NULL_CELL_DATA_SOURCE,
+        getFilterHeaderInfo: (_sheetId, cell) =>
+          cell.row === 0 && [0, 1, 3, 4].includes(cell.col)
+            ? {
+                filterId: `table-filter-${cell.col < 2 ? 'left' : 'right'}`,
+                headerCellId: toCellId(`header-${cell.col}`),
+                hasActiveFilter: false,
+              }
+            : undefined,
+      };
+      const layer = createCellsLayer(
+        createLayerConfig({
+          binaryCellReader: undefined,
+          cellData,
+          interactiveElements: collector,
+          positionIndex: createPositionIndex(),
+        }),
+      );
+      const ctx = createMockContext();
+      const region = makeMainRegion({
+        sheetId,
+        cellRange: { startRow: 0, startCol: 0, endRow: 0, endCol: 4 },
+      });
+
+      layer.render(ctx, region, createFrame());
+      expect(
+        collector
+          .getAll()
+          .filter((element) => element.type === 'filter-button')
+          .map((element) => element.id)
+          .sort(),
+      ).toEqual([
+        `filter-button:${sheetId}:0,0`,
+        `filter-button:${sheetId}:0,1`,
+        `filter-button:${sheetId}:0,3`,
+        `filter-button:${sheetId}:0,4`,
+      ]);
+
+      layer.render(ctx, region, {
+        ...createFrame(),
+        frameNumber: 2,
+        dirtyRects: [{ x: 350, y: 21, width: 200, height: 25 } as any],
+      });
+
+      expect(
+        collector
+          .getAll()
+          .filter((element) => element.type === 'filter-button')
+          .map((element) => element.id)
+          .sort(),
+      ).toEqual([
+        `filter-button:${sheetId}:0,0`,
+        `filter-button:${sheetId}:0,1`,
+        `filter-button:${sheetId}:0,3`,
+        `filter-button:${sheetId}:0,4`,
+      ]);
+    });
   });
 
   // ===========================================================================

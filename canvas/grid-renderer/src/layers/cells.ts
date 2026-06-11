@@ -56,6 +56,7 @@ import {
   collectInteractiveElements,
   type InteractiveCellInfo,
 } from '../cells/interactive-elements';
+import { collectVisibleInteractiveElements } from '../cells/visible-interactive-elements';
 import { renderRichText, renderRichTextWrapped } from '../cells/rich-text';
 import { renderRotatedText } from '../cells/rotated-text';
 import { renderShrinkToFit } from '../cells/shrink-to-fit';
@@ -381,6 +382,19 @@ export class CellsLayer extends BaseLayer implements DirtyCellExpander {
     // forEachVisibleCell compares against doc-space cell positions from ViewportPositionIndex,
     // so we must convert frame.dirtyRects (canvas-space) to doc-space using the region transform.
     const dirtyRectsDoc = frame.dirtyRects?.map((r) => canvasToDoc(r, region));
+    if (dirtyRectsDoc && dirtyRectsDoc.length > 0 && this.interactiveElements) {
+      collectVisibleInteractiveElements(
+        sheetId,
+        meta.cellRange,
+        region,
+        cellData,
+        positionIndex,
+        mergeIndex,
+        reader,
+        editorState,
+        this.interactiveElements,
+      );
+    }
 
     const renderFilterOnlyCell = (
       cell: VisibleCellInfo,

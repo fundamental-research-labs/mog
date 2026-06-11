@@ -10,6 +10,74 @@ use value_types::{CellValue, ComputeError};
 use super::{YrsComputeEngine, mutation, services};
 
 impl YrsComputeEngine {
+    pub(in crate::storage::engine) fn cell_has_formula_at(
+        &self,
+        sheet_id: &SheetId,
+        row: u32,
+        col: u32,
+    ) -> bool {
+        let Some(cell_id) = self
+            .mirror
+            .resolve_cell_id(sheet_id, SheetPos::new(row, col))
+        else {
+            return false;
+        };
+
+        self.mirror.get_formula(&cell_id).is_some()
+            || self.stores.compute.get_formula(&cell_id).is_some()
+    }
+
+    pub(in crate::storage::engine) fn apply_formula_replacement_zero_number_formats(
+        &mut self,
+        candidates: &[(SheetId, u32, u32)],
+    ) -> Result<MutationResult, ComputeError> {
+        if candidates.is_empty() {
+            return Ok(MutationResult::empty());
+        }
+
+        let mut to_apply = Vec::new();
+        for (sheet_id, row, col) in candidates {
+            let Some(CellValue::Number(value)) = self
+                .mirror
+                .get_cell_value_at(sheet_id, SheetPos::new(*row, *col))
+            else {
+                continue;
+            };
+            if value.get() != 0.0 {
+                continue;
+            }
+            if self.cell_has_formula_at(sheet_id, *row, *col) {
+                continue;
+            }
+            to_apply.push((*sheet_id, *row, *col));
+        }
+
+        if to_apply.is_empty() {
+            return Ok(MutationResult::empty());
+        }
+
+        let _guard = self.mutation.suppress_guard();
+        let mut result = MutationResult::empty();
+        for (sheet_id, row, col) in to_apply {
+            let format = CellFormat {
+                number_format: Some("General".to_string()),
+                ..Default::default()
+            };
+            let (_affected, format_result) = services::formatting::set_format_for_ranges(
+                &mut self.stores,
+                &self.mirror,
+                &sheet_id,
+                &[(row, col, row, col)],
+                &format,
+            )?;
+            result
+                .property_changes
+                .extend(format_result.property_changes);
+        }
+
+        Ok(result)
+    }
+
     /// cell does not already have a date format applied, write the
     /// suggested format code (e.g. `"M/d/yyyy"`, `"yyyy-mm-dd"`) into the
     /// per-cell number_format. This is the Rust-side replacement for the
@@ -714,4 +782,29 @@ fn is_simple_identity_ref(value: &str) -> bool {
 
 pub(in crate::storage::engine) fn is_formula_parse_input(input: &mutation::CellInput) -> bool {
     matches!(input, mutation::CellInput::Parse { text } if text.trim().starts_with('='))
+}
+
+pub(in crate::storage::engine) fn is_plain_zero_parse_input(
+    input: &mutation::CellInput,
+) -> bool {
+    let mutation::CellInput::Parse { text } = input else {
+        return false;
+    };
+    is_plain_zero_text(text)
+}
+
+fn is_plain_zero_text(text: &str) -> bool {
+    let trimmed = text.trim();
+    if trimmed.is_empty() || trimmed.starts_with('=') || trimmed.starts_with('\'') {
+        return false;
+    }
+    if !trimmed
+        .chars()
+        .all(|ch| ch.is_ascii_digit() || matches!(ch, '+' | '-' | '.'))
+    {
+        return false;
+    }
+    trimmed
+        .parse::<f64>()
+        .is_ok_and(|value| value.is_finite() && value == 0.0)
 }

@@ -7,7 +7,7 @@ use crate::snapshot::{
     ChangeKind, MutationResult, RecalcResult, SheetLifecycleRuntimeHint, SortingChange,
 };
 
-use super::format_inference::is_formula_parse_input;
+use super::format_inference::{is_formula_parse_input, is_plain_zero_parse_input};
 use super::mutation::{self, EngineMutation, MutationOutput};
 use super::mutation_coordinator::SheetLifecycleHistoryHint;
 use super::stores::EngineStores;
@@ -106,6 +106,14 @@ impl YrsComputeEngine {
                 edits,
                 skip_cycle_check,
             } => {
+                let zero_replacement_format_candidates: Vec<(SheetId, u32, u32)> = edits
+                    .iter()
+                    .filter_map(|(sid, _cid, row, col, input)| {
+                        (is_plain_zero_parse_input(input)
+                            && self.cell_has_formula_at(sid, *row, *col))
+                        .then_some((*sid, *row, *col))
+                    })
+                    .collect();
                 let formula_format_candidates: Vec<(SheetId, u32, u32)> = edits
                     .iter()
                     .filter_map(|(sid, _cid, row, col, input)| {
@@ -119,10 +127,17 @@ impl YrsComputeEngine {
                     edits,
                     skip_cycle_check,
                 )?;
+                let zero_replacement_format_result = self
+                    .apply_formula_replacement_zero_number_formats(
+                        &zero_replacement_format_candidates,
+                    )?;
                 let format_result =
                     self.apply_formula_inherited_number_formats(&formula_format_candidates)?;
                 self.prepare_recalc_for_flush(&mut recalc);
                 let mut result = MutationResult::from_recalc(recalc);
+                result
+                    .property_changes
+                    .extend(zero_replacement_format_result.property_changes);
                 result
                     .property_changes
                     .extend(format_result.property_changes);
@@ -157,6 +172,14 @@ impl YrsComputeEngine {
                         _ => None,
                     })
                     .collect();
+                let zero_replacement_format_candidates: Vec<(SheetId, u32, u32)> = edits
+                    .iter()
+                    .filter_map(|(sid, row, col, input)| {
+                        (is_plain_zero_parse_input(input)
+                            && self.cell_has_formula_at(sid, *row, *col))
+                        .then_some((*sid, *row, *col))
+                    })
+                    .collect();
                 let formula_format_candidates: Vec<(SheetId, u32, u32)> = edits
                     .iter()
                     .filter_map(|(sid, row, col, input)| {
@@ -171,6 +194,10 @@ impl YrsComputeEngine {
                     edits,
                     skip_cycle_check,
                 )?;
+                let zero_replacement_format_result = self
+                    .apply_formula_replacement_zero_number_formats(
+                        &zero_replacement_format_candidates,
+                    )?;
                 let format_result =
                     self.apply_formula_inherited_number_formats(&formula_format_candidates)?;
                 self.prepare_recalc_for_flush(&mut recalc);
@@ -183,6 +210,9 @@ impl YrsComputeEngine {
                 }
 
                 let mut result = MutationResult::from_recalc(recalc);
+                result
+                    .property_changes
+                    .extend(zero_replacement_format_result.property_changes);
                 result
                     .property_changes
                     .extend(format_result.property_changes);

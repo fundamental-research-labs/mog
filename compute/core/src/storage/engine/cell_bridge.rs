@@ -1,6 +1,10 @@
 use bridge_core as bridge;
 
-use super::{YrsComputeEngine, format_inference::is_formula_parse_input, mutation, services};
+use super::{
+    YrsComputeEngine,
+    format_inference::{is_formula_parse_input, is_plain_zero_parse_input},
+    mutation, services,
+};
 use crate::snapshot::MutationResult;
 use cell_types::{CellId, SheetId};
 use value_types::{CellValue, ComputeError};
@@ -28,6 +32,12 @@ impl YrsComputeEngine {
         col: u32,
         input: mutation::CellInput,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+        let zero_replacement_format_candidates =
+            if is_plain_zero_parse_input(&input) && self.cell_has_formula_at(sheet_id, row, col) {
+                vec![(*sheet_id, row, col)]
+            } else {
+                Vec::new()
+            };
         let mut recalc = services::cell_editing::set_cell(
             &mut self.stores,
             &mut self.mirror,
@@ -38,6 +48,8 @@ impl YrsComputeEngine {
             col,
             &input,
         )?;
+        let zero_replacement_format_result = self
+            .apply_formula_replacement_zero_number_formats(&zero_replacement_format_candidates)?;
         let format_result = if is_formula_parse_input(&input) {
             self.apply_formula_inherited_number_formats(&[(*sheet_id, row, col)])?
         } else {
@@ -46,6 +58,9 @@ impl YrsComputeEngine {
         self.prepare_recalc_for_flush(&mut recalc);
         let patches = self.flush_viewport_patches();
         let mut result = MutationResult::from_recalc(recalc);
+        result
+            .property_changes
+            .extend(zero_replacement_format_result.property_changes);
         result
             .property_changes
             .extend(format_result.property_changes);
@@ -121,6 +136,15 @@ impl YrsComputeEngine {
         col: u32,
         raw_input: &str,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+        let input = mutation::CellInput::Parse {
+            text: raw_input.to_string(),
+        };
+        let zero_replacement_format_candidates =
+            if is_plain_zero_parse_input(&input) && self.cell_has_formula_at(sheet_id, row, col) {
+                vec![(*sheet_id, row, col)]
+            } else {
+                Vec::new()
+            };
         let mut recalc = services::cell_editing::set_cell_value_parsed(
             &mut self.stores,
             &mut self.mirror,
@@ -130,6 +154,8 @@ impl YrsComputeEngine {
             col,
             raw_input,
         )?;
+        let zero_replacement_format_result = self
+            .apply_formula_replacement_zero_number_formats(&zero_replacement_format_candidates)?;
         let format_result = if raw_input.trim().starts_with('=') {
             self.apply_formula_inherited_number_formats(&[(*sheet_id, row, col)])?
         } else {
@@ -138,6 +164,9 @@ impl YrsComputeEngine {
         self.prepare_recalc_for_flush(&mut recalc);
         let patches = self.flush_viewport_patches();
         let mut result = MutationResult::from_recalc(recalc);
+        result
+            .property_changes
+            .extend(zero_replacement_format_result.property_changes);
         result
             .property_changes
             .extend(format_result.property_changes);
@@ -174,6 +203,14 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         updates: Vec<(u32, u32, String)>,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+        let zero_replacement_format_candidates: Vec<(SheetId, u32, u32)> = updates
+            .iter()
+            .filter_map(|(row, col, text)| {
+                let input = mutation::CellInput::Parse { text: text.clone() };
+                (is_plain_zero_parse_input(&input) && self.cell_has_formula_at(sheet_id, *row, *col))
+                    .then_some((*sheet_id, *row, *col))
+            })
+            .collect();
         let group_undo = !updates.is_empty();
         let mut recalc = self.with_undo_group_if(group_undo, |engine| {
             services::cell_editing::set_cell_values_parsed(
@@ -184,9 +221,15 @@ impl YrsComputeEngine {
                 &updates,
             )
         })?;
+        let zero_replacement_format_result = self
+            .apply_formula_replacement_zero_number_formats(&zero_replacement_format_candidates)?;
         self.prepare_recalc_for_flush(&mut recalc);
         let patches = self.flush_viewport_patches();
-        Ok((patches, MutationResult::from_recalc(recalc)))
+        let mut result = MutationResult::from_recalc(recalc);
+        result
+            .property_changes
+            .extend(zero_replacement_format_result.property_changes);
+        Ok((patches, result))
     }
 
     /// Import pre-parsed cell values in bulk.

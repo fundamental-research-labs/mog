@@ -715,6 +715,42 @@ fn formula_display_respects_cells_own_explicit_format() {
 }
 
 #[test]
+fn plain_zero_replacing_formula_displays_as_zero_and_recalculates_dependents() {
+    use domain_types::CellFormat;
+
+    let snap = simple_snapshot();
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let sid = sheet_id();
+
+    engine
+        .set_format_for_ranges(
+            &sid,
+            &[(1, 0, 1, 0)],
+            &CellFormat {
+                number_format: Some(r#"_(* #,##0.0_);_(* \(#,##0.0\);_(* "-"??_);_(@_)"#.into()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    engine.set_cell_value_parsed(&sid, 1, 0, "=A1-B1").unwrap();
+    engine.set_cell_value_parsed(&sid, 0, 2, "=A1/A2").unwrap();
+
+    engine.set_cell_value_parsed(&sid, 1, 0, "0").unwrap();
+
+    let value = engine
+        .mirror()
+        .get_cell_value_at(&sid, cell_types::SheetPos::new(1, 0));
+    match value {
+        Some(CellValue::Number(n)) => assert_eq!(n.get(), 0.0),
+        other => panic!("expected numeric zero, got {:?}", other),
+    }
+    assert_eq!(engine.get_raw_value(&sid, 0, 2), "=A1/A2");
+    assert_eq!(engine.get_resolved_format(&sid, 1, 0).number_format.as_deref(), Some("General"));
+    assert_eq!(engine.format_cell_display(&sid, 1, 0), "0");
+    assert_eq!(engine.format_cell_display(&sid, 0, 2), "#DIV/0!");
+}
+
+#[test]
 fn test_format_value_at_cell_directly() {
     let snap = simple_snapshot();
     let (engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();

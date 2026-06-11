@@ -95,6 +95,17 @@ function isEditableKeyboardTarget(target: HTMLElement | null): boolean {
   );
 }
 
+function isSpreadsheetEditorKeyboardTarget(target: HTMLElement | null): boolean {
+  if (!target) return false;
+  return Boolean(
+    target.closest('[data-testid="inline-cell-editor"], [data-testid="formula-bar-input"]'),
+  );
+}
+
+function shouldChromeEditableHandleKey(target: HTMLElement | null): boolean {
+  return isEditableKeyboardTarget(target) && !isSpreadsheetEditorKeyboardTarget(target);
+}
+
 function isDialogKeyboardTarget(target: HTMLElement | null): boolean {
   if (!target) return false;
   return Boolean(target.closest('[role="dialog"]'));
@@ -409,6 +420,10 @@ function KeyboardCaptureSetup({
         currentLayerType !== 'editor' &&
         currentLayerType !== 'formulaBar'
       ) {
+        return;
+      }
+
+      if (shouldChromeEditableHandleKey(target)) {
         return;
       }
 

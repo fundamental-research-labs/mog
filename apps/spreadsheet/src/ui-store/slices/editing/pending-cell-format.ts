@@ -23,6 +23,7 @@
  */
 
 import type { CellFormat } from '@mog-sdk/contracts/core';
+import type { Direction } from '@mog-sdk/contracts/machines';
 import type { StateCreator } from 'zustand';
 
 // =============================================================================
@@ -43,6 +44,21 @@ export interface PendingCellFormatEntry {
   sheetId: string;
 }
 
+/**
+ * The cell most recently written by an edit commit.
+ *
+ * This is used as a one-shot formatting target for the common flow where Enter
+ * commits a value and moves selection to the adjacent cell before a Format
+ * Cells dialog command finishes applying the user's pending number format.
+ */
+export interface LastCommittedCellForFormatting {
+  sheetId: string;
+  row: number;
+  col: number;
+  direction: Direction | 'none' | null;
+  committedAt: number;
+}
+
 export interface PendingCellFormatSlice {
   /**
    * A pending cell format to re-apply after editing commits.
@@ -50,6 +66,12 @@ export interface PendingCellFormatSlice {
    * null when no pending format is queued.
    */
   pendingCellFormat: PendingCellFormatEntry | null;
+
+  /**
+   * Most recent edit-commit target for one-shot post-commit formatting.
+   * null when no post-commit formatting target is available.
+   */
+  lastCommittedCellForFormatting: LastCommittedCellForFormatting | null;
 
   /**
    * Set or merge a pending cell format.
@@ -60,6 +82,12 @@ export interface PendingCellFormatSlice {
 
   /** Clear the pending cell format (called after application or cancellation). */
   clearPendingCellFormat: () => void;
+
+  /** Record the cell that was just written by an edit commit. */
+  setLastCommittedCellForFormatting: (entry: LastCommittedCellForFormatting) => void;
+
+  /** Clear the remembered edit-commit formatting target. */
+  clearLastCommittedCellForFormatting: () => void;
 }
 
 // =============================================================================
@@ -73,6 +101,7 @@ export const createPendingCellFormatSlice: StateCreator<
   PendingCellFormatSlice
 > = (set) => ({
   pendingCellFormat: null,
+  lastCommittedCellForFormatting: null,
 
   setPendingCellFormat: (entry) => {
     set((state) => {
@@ -97,5 +126,13 @@ export const createPendingCellFormatSlice: StateCreator<
 
   clearPendingCellFormat: () => {
     set({ pendingCellFormat: null });
+  },
+
+  setLastCommittedCellForFormatting: (entry) => {
+    set({ lastCommittedCellForFormatting: entry });
+  },
+
+  clearLastCommittedCellForFormatting: () => {
+    set({ lastCommittedCellForFormatting: null });
   },
 });

@@ -56,6 +56,54 @@ function getAppliedFormat(deps: ActionDependencies): string {
   return call[1].numberFormat;
 }
 
+function getAppliedRanges(deps: ActionDependencies) {
+  const ws = (deps.workbook as any).getSheetById();
+  const call = ws.formats.setRanges.mock.calls[0];
+  return call[0];
+}
+
+function createMockDepsForApplyNumberFormat(options: {
+  activeCell: { row: number; col: number };
+  ranges: Array<{ startRow: number; startCol: number; endRow: number; endCol: number }>;
+  cells: Record<string, { value: unknown; formula?: string }>;
+  lastCommittedCellForFormatting: {
+    sheetId: string;
+    row: number;
+    col: number;
+    direction: 'up' | 'down' | 'left' | 'right' | 'none' | null;
+    committedAt: number;
+  } | null;
+  pendingNumberFormat: string | null;
+}) {
+  const deps = createMockDeps() as any;
+  const ws = deps.workbook.getSheetById();
+  ws.getCell = jest.fn(async (row: number, col: number) => {
+    return options.cells[`${row},${col}`] ?? { value: null };
+  });
+  deps.accessors.selection.getActiveCell = jest.fn().mockReturnValue(options.activeCell);
+  deps.accessors.selection.getRanges = jest.fn().mockReturnValue(options.ranges);
+
+  const clearPendingNumberFormat = jest.fn();
+  const clearLastCommittedCellForFormatting = jest.fn();
+  const addRecentNumberFormat = jest.fn();
+  deps.uiStore = {
+    getState: jest.fn().mockReturnValue({
+      pendingNumberFormat: options.pendingNumberFormat,
+      lastCommittedCellForFormatting: options.lastCommittedCellForFormatting,
+      clearPendingNumberFormat,
+      clearLastCommittedCellForFormatting,
+      addRecentNumberFormat,
+    }),
+  };
+
+  return {
+    deps: deps as ActionDependencies,
+    clearPendingNumberFormat,
+    clearLastCommittedCellForFormatting,
+    addRecentNumberFormat,
+  };
+}
+
 // =============================================================================
 // TESTS
 // =============================================================================
@@ -109,6 +157,65 @@ describe('Number Format Handlers — preset format strings', () => {
     const deps = createMockDeps();
     await NumberFormatHandlers.FORMAT_COMMA(deps);
     expect(getAppliedFormat(deps)).toBe('#,##0.00');
+  });
+});
+
+describe('Number Format Handlers — Format Cells dialog apply target', () => {
+  it('APPLY_NUMBER_FORMAT targets the just-committed cell when Enter moved selection to a blank adjacent cell', async () => {
+    const activeSheetId = makeSheetId('sheet1');
+    const { deps, clearLastCommittedCellForFormatting } = createMockDepsForApplyNumberFormat({
+      activeCell: { row: 459, col: 10 },
+      ranges: [{ startRow: 459, startCol: 10, endRow: 459, endCol: 10 }],
+      cells: {
+        '458,10': { value: 1234.56 },
+        '459,10': { value: null },
+      },
+      lastCommittedCellForFormatting: {
+        sheetId: activeSheetId,
+        row: 458,
+        col: 10,
+        direction: 'down',
+        committedAt: Date.now(),
+      },
+      pendingNumberFormat: '#,##0.0',
+    });
+
+    const result = await NumberFormatHandlers.APPLY_NUMBER_FORMAT(deps);
+
+    expect(result.handled).toBe(true);
+    expect(getAppliedRanges(deps)).toEqual([
+      { startRow: 458, startCol: 10, endRow: 458, endCol: 10 },
+    ]);
+    expect(getAppliedFormat(deps)).toBe('#,##0.0');
+    expect(clearLastCommittedCellForFormatting).toHaveBeenCalledTimes(1);
+  });
+
+  it('APPLY_NUMBER_FORMAT keeps the active selection when the post-Enter cell has content', async () => {
+    const activeSheetId = makeSheetId('sheet1');
+    const { deps } = createMockDepsForApplyNumberFormat({
+      activeCell: { row: 459, col: 10 },
+      ranges: [{ startRow: 459, startCol: 10, endRow: 459, endCol: 10 }],
+      cells: {
+        '458,10': { value: 1234.56 },
+        '459,10': { value: 99 },
+      },
+      lastCommittedCellForFormatting: {
+        sheetId: activeSheetId,
+        row: 458,
+        col: 10,
+        direction: 'down',
+        committedAt: Date.now(),
+      },
+      pendingNumberFormat: '#,##0.0',
+    });
+
+    const result = await NumberFormatHandlers.APPLY_NUMBER_FORMAT(deps);
+
+    expect(result.handled).toBe(true);
+    expect(getAppliedRanges(deps)).toEqual([
+      { startRow: 459, startCol: 10, endRow: 459, endCol: 10 },
+    ]);
+    expect(getAppliedFormat(deps)).toBe('#,##0.0');
   });
 });
 

@@ -1309,10 +1309,17 @@ export interface SheetViewMountOptions {
     readonly scrollbars?: boolean;
     readonly zoomControls?: boolean;
   };
+  /** Host-owned chrome inset that should be excluded from the renderer viewport. */
+  viewportInset?: SheetViewViewportInset | (() => SheetViewViewportInset);
   /** Initial non-persistent visual skin. */
   skin?: SheetViewSkin | null;
   /** Override device pixel ratio. Default: window.devicePixelRatio. */
   dpr?: number;
+}
+
+export interface SheetViewViewportInset {
+  readonly right?: number;
+  readonly bottom?: number;
 }
 
 /**

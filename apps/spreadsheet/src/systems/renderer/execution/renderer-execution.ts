@@ -257,6 +257,7 @@ export function setupRendererExecution(config: RendererExecutionConfig): Rendere
           showHeaders: viewOptions.showRowHeaders || viewOptions.showColumnHeaders,
           showGridlines: viewOptions.showGridlines,
           scrollable: false,
+          viewportInset: deps.getViewportInset,
           // Viewport reader resolution is handled internally by SheetView
           // after attach(workbook) — resolves from the attached workbook's
           // per-sheet viewport automatically on each event.

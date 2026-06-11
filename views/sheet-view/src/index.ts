@@ -159,6 +159,7 @@ export type {
   SheetViewportLayout,
   // Mount options
   SheetViewMountOptions,
+  SheetViewViewportInset,
   // Visible bounds
   SheetViewVisibleBounds,
 } from './public-types';

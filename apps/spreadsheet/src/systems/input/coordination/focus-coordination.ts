@@ -190,6 +190,10 @@ export class FocusCoordination {
   focusGrid(): void {
     this.focusActor.send({ type: 'FOCUS_GRID' });
     requestAnimationFrame(() => {
+      if (this.activeElementRequestsFocusRetention()) {
+        return;
+      }
+
       // If a chrome-input focus layer was pushed between `focusGrid()` being
       // called and this rAF firing (e.g. the sheet-tab rename input mounted
       // and pushed a `sheetTabs` layer in the same React commit cycle as the
@@ -376,6 +380,13 @@ export class FocusCoordination {
     }
   }
 
+  private activeElementRequestsFocusRetention(): boolean {
+    const activeElement = document.activeElement;
+    return (
+      activeElement instanceof HTMLElement && activeElement.dataset.mogRetainFocus === 'true'
+    );
+  }
+
   // ===========================================================================
   // PRIVATE: SUBSCRIPTIONS
   // ===========================================================================
@@ -392,6 +403,9 @@ export class FocusCoordination {
         const poppedLayer = this.previousStack[this.previousStack.length - 1];
         // Delay to allow DOM to update after dialog unmounts
         requestAnimationFrame(() => {
+          if (this.activeElementRequestsFocusRetention()) {
+            return;
+          }
           this.restoreFocus(poppedLayer.returnFocusTarget);
         });
       }
@@ -399,6 +413,9 @@ export class FocusCoordination {
       // Focus grid when returning to grid state with only base layer
       if (state.matches('grid') && currentStack.length === 1 && this.previousStack.length > 1) {
         requestAnimationFrame(() => {
+          if (this.activeElementRequestsFocusRetention()) {
+            return;
+          }
           this.focusGridContainer();
         });
       }

@@ -63,6 +63,35 @@ describe('focusGrid DOM restore', () => {
     expect(document.activeElement).toBe(gridContainer);
   });
 
+  it('does not steal DOM focus from a guarded chrome input', async () => {
+    system.setGridContainer(gridContainer);
+    const input = document.createElement('input');
+    input.dataset.mogRetainFocus = 'true';
+    document.body.appendChild(input);
+    input.focus();
+
+    system.focusGrid();
+    await flushRaf();
+
+    expect(document.activeElement).toBe(input);
+    document.body.removeChild(input);
+  });
+
+  it('does not steal DOM focus from a guarded chrome input when returning from editor focus', async () => {
+    system.setGridContainer(gridContainer);
+    const input = document.createElement('input');
+    input.dataset.mogRetainFocus = 'true';
+    document.body.appendChild(input);
+
+    system.focusEditor();
+    input.focus();
+    system.focusGrid();
+    await flushRaf();
+
+    expect(document.activeElement).toBe(input);
+    document.body.removeChild(input);
+  });
+
   it('is a no-op on DOM (and does not throw) when no grid container is registered', async () => {
     // Note: setGridContainer is intentionally NOT called here.
     expect(document.activeElement).toBe(document.body);

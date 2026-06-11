@@ -647,6 +647,7 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
     (e: React.KeyboardEvent<HTMLInputElement>) => {
       if (e.key === 'Enter') {
         e.preventDefault();
+        e.currentTarget.removeAttribute('data-mog-retain-focus');
         // Read straight from the DOM so test harnesses (Playwright `fill`)
         // and rapid user input both commit the actual typed value, even if
         // the `inputValue` state hasn't flushed yet.
@@ -668,6 +669,7 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
         coordinator.input.focusGrid();
       } else if (e.key === 'Escape') {
         e.preventDefault();
+        e.currentTarget.removeAttribute('data-mog-retain-focus');
         setValidationError(null);
         setIsEditing(false);
         setIsOpen(false);
@@ -737,6 +739,7 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
             ref={inputRef}
             type="text"
             data-testid="name-box"
+            data-mog-retain-focus="true"
             value={inputValue}
             onChange={handleInputChange}
             onKeyDown={handleInputKeyDown}

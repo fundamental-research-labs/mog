@@ -321,6 +321,7 @@ export function FormulaBar({
             value={value}
             size="ribbon"
             data-testid="formula-bar-input"
+            data-spreadsheet-keyboard-editor
             aria-label="Formula bar"
             readOnly={readOnly}
             onChange={readOnly ? undefined : handleTextareaChange}
@@ -358,6 +359,7 @@ export function FormulaBar({
             value={value}
             size="ribbon"
             data-testid="formula-bar-input"
+            data-spreadsheet-keyboard-editor
             aria-label="Formula bar"
             readOnly={readOnly}
             onChange={readOnly ? undefined : handleChange}

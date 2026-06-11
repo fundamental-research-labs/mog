@@ -108,6 +108,10 @@ function isNativeEditableShortcut(e: KeyboardEvent, target: HTMLElement | null):
   return key === 'c' || key === 'x' || key === 'v' || key === 'z' || key === 'y';
 }
 
+function isNameBoxKeyboardTarget(target: HTMLElement | null): boolean {
+  return Boolean(target?.closest('[data-testid="name-box"]'));
+}
+
 /**
  * Hook to access pane navigation element registration.
  * Used by components to register their DOM elements for F6 navigation.
@@ -349,6 +353,10 @@ function KeyboardCaptureSetup({
           e.preventDefault();
           e.stopPropagation();
         }
+        return;
+      }
+
+      if (isNameBoxKeyboardTarget(target)) {
         return;
       }
 

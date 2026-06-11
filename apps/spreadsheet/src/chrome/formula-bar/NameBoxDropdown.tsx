@@ -419,15 +419,25 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
       // table name (identifiers don't contain colons). Skip the async name-lookup
       // and resolve directly. This makes range navigation via the Name Box
       // synchronous so callers don't have to race against an async dispatch.
-      const activateSheetByName = async (sheetName: string): Promise<void> => {
+      const activateSheetByName = (sheetName: string): Promise<void> | undefined => {
+        if (sheetName.toLowerCase() === activeSheetName.toLowerCase()) {
+          return undefined;
+        }
         try {
-          const targetSheet = await wb.getSheet(sheetName);
-          const targetSheetId = targetSheet.getSheetId();
-          if (targetSheetId !== activeSheetId) {
-            setActiveSheetId(targetSheetId);
-          }
+          return wb
+            .getSheet(sheetName)
+            .then((targetSheet) => {
+              const targetSheetId = targetSheet.getSheetId();
+              if (targetSheetId !== activeSheetId) {
+                setActiveSheetId(targetSheetId);
+              }
+            })
+            .catch(() => {
+              // Ignore unresolved sheet names; parsing still resolves the active-sheet coordinates.
+            });
         } catch {
           // Ignore unresolved sheet names; parsing still resolves the active-sheet coordinates.
+          return undefined;
         }
       };
 
@@ -444,7 +454,8 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
         const parsedRange = parseCellRange(trimmedAddress);
         if (parsedRange) {
           if (parsedRange.sheetName) {
-            await activateSheetByName(parsedRange.sheetName);
+            const activation = activateSheetByName(parsedRange.sheetName);
+            if (activation) await activation;
           }
           setCellSelection(rangeFromParsedCellRange(parsedRange), {
             row: parsedRange.startRow,
@@ -467,7 +478,8 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
         const parsedRange = parseCellRange(ref);
         if (!parsedRange) return false;
         if (parsedRange.sheetName) {
-          await activateSheetByName(parsedRange.sheetName);
+          const activation = activateSheetByName(parsedRange.sheetName);
+          if (activation) await activation;
         }
         setCellSelection(rangeFromParsedCellRange(parsedRange), {
           row: parsedRange.startRow,
@@ -509,7 +521,8 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
         const parsed = parseCellAddress(`${matchingTable.sheetName}!${refStart}`);
         if (parsed) {
           // Switch to table's sheet if different
-          await activateSheetByName(matchingTable.sheetName);
+          const activation = activateSheetByName(matchingTable.sheetName);
+          if (activation) await activation;
           setCellSelection(
             {
               startRow: parsed.row,
@@ -549,7 +562,8 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
 
         // If sheet is specified and different, switch sheets first
         if (parsed.sheetName) {
-          await activateSheetByName(parsed.sheetName);
+          const activation = activateSheetByName(parsed.sheetName);
+          if (activation) await activation;
         }
 
         // Set selection to the range (or single cell when start === end);
@@ -651,21 +665,24 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
         // and rapid user input both commit the actual typed value, even if
         // the `inputValue` state hasn't flushed yet.
         const typed = e.currentTarget.value ?? inputValue;
-        void navigateToAddress(typed);
-        setIsEditing(false);
-        // Radix's PopoverTrigger toggle fires on the initial button click and
-        // sets isOpen=true even though we immediately override with setIsOpen(false)
-        // in handleNameBoxClick. The toggle survives because Radix fires after the
-        // child's onClick handler. That latent isOpen=true becomes visible once
-        // isEditing goes false (open = isOpen && !isEditing). Force-close here so
-        // the dropdown doesn't open after the user commits the name-box value.
-        setIsOpen(false);
-        // Return focus to the grid canvas. Without this, the just-unmounted
-        // input drops focus to <body>, and subsequent typing is consumed by
-        // whatever default-focus target the browser picks (often nothing).
-        // Excel/Sheets parity: a navigator owns the focus contract — it both
-        // moves the selection AND returns focus to the destination.
-        coordinator.input.focusGrid();
+        void (async () => {
+          await navigateToAddress(typed);
+          if (!isMountedRef.current) return;
+          setIsEditing(false);
+          // Radix's PopoverTrigger toggle fires on the initial button click and
+          // sets isOpen=true even though we immediately override with setIsOpen(false)
+          // in handleNameBoxClick. The toggle survives because Radix fires after the
+          // child's onClick handler. That latent isOpen=true becomes visible once
+          // isEditing goes false (open = isOpen && !isEditing). Force-close here so
+          // the dropdown doesn't open after the user commits the name-box value.
+          setIsOpen(false);
+          // Return focus to the grid canvas. Without this, the just-unmounted
+          // input drops focus to <body>, and subsequent typing is consumed by
+          // whatever default-focus target the browser picks (often nothing).
+          // Excel/Sheets parity: a navigator owns the focus contract — it both
+          // moves the selection AND returns focus to the destination.
+          coordinator.input.focusGrid();
+        })();
       } else if (e.key === 'Escape') {
         e.preventDefault();
         setValidationError(null);
@@ -679,9 +696,13 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
 
   // Handle input blur
   const handleInputBlur = useCallback(() => {
+    const typed = (inputRef.current?.value ?? inputValue).trim();
+    if (typed && typed !== cellAddress && (parseCellAddress(typed) || parseCellRange(typed))) {
+      void navigateToAddress(typed);
+    }
     setIsEditing(false);
     setIsOpen(false);
-  }, []);
+  }, [cellAddress, inputValue, navigateToAddress]);
 
   // Handle dropdown filter change
   const handleFilterChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {

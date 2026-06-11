@@ -36,9 +36,10 @@ export interface ScrollCommitCoordinationResult {
 /**
  * Set up scroll-commit coordination.
  *
- * When the grid scrolls while the editor is active, commit the current edit
- * with direction 'none' (no cursor movement). This matches Excel behavior
- * where scrolling commits the edit and closes the editor.
+ * When the grid scrolls while a regular editor is active, commit the current
+ * edit with direction 'none' (no cursor movement). Formula point-mode edits
+ * stay open because sheet switches restore scroll position while the user is
+ * building cross-sheet references.
  *
  * Uses a cached subscription to editor state instead of polling getSnapshot().
  *
@@ -55,18 +56,17 @@ export function setupScrollCommitCoordination(
   const { editorActor, onScrollChange } = config;
 
   // M6 fix: Cache editing state via subscription instead of polling getSnapshot()
-  let isEditing = false;
+  let shouldCommitOnScroll = false;
   const editorSubscription = editorActor.subscribe((state) => {
-    isEditing =
-      state.matches('editing') ||
-      state.matches('formulaEditing') ||
-      state.matches('richTextEditing');
+    shouldCommitOnScroll = state.matches('editing') || state.matches('richTextEditing');
   });
 
   const handleScroll = (): void => {
-    // Only commit if actively editing text, formula, or rich text.
+    // Only commit if actively editing text or rich text.
+    // Formula point-mode is excluded because cross-sheet navigation restores
+    // scroll and must not validate/commit an incomplete formula.
     // imeComposing, validating, committing, inactive, etc. are all excluded.
-    if (!isEditing) return;
+    if (!shouldCommitOnScroll) return;
 
     editorActor.send({ type: 'COMMIT', direction: 'none' });
   };

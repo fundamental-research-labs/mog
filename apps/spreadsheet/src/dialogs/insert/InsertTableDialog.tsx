@@ -48,6 +48,37 @@ interface InsertTableDialogProps {
   }) => void;
 }
 
+const APPLY_AFTER_CLOSE_DELAY_MS = 100;
+
+type DialogActionWindow = typeof window & {
+  __MOG_PENDING_DIALOG_ACTION__?: Promise<void>;
+};
+
+function scheduleDialogAction(action: () => unknown): void {
+  const global = window as DialogActionWindow;
+  const pending = new Promise<void>((resolve, reject) => {
+    window.setTimeout(() => {
+      Promise.resolve()
+        .then(action)
+        .then(
+          () => {
+            if (global.__MOG_PENDING_DIALOG_ACTION__ === pending) {
+              delete global.__MOG_PENDING_DIALOG_ACTION__;
+            }
+            resolve();
+          },
+          (error) => {
+            if (global.__MOG_PENDING_DIALOG_ACTION__ === pending) {
+              delete global.__MOG_PENDING_DIALOG_ACTION__;
+            }
+            reject(error);
+          },
+        );
+    }, APPLY_AFTER_CLOSE_DELAY_MS);
+  });
+  global.__MOG_PENDING_DIALOG_ACTION__ = pending;
+}
+
 // =============================================================================
 // Style Presets for Preview
 // =============================================================================
@@ -281,28 +312,29 @@ export function InsertTableDialog({ onInsertTable }: InsertTableDialogProps) {
       return;
     }
 
-    // Create the table
-    if (onInsertTable) {
-      onInsertTable({
-        range: parsedRange,
-        hasHeaders,
-        stylePreset: selectedStyle,
-      });
-    } else {
+    closeDialog();
+    scheduleDialogAction(() => {
+      // Create the table
+      if (onInsertTable) {
+        return onInsertTable({
+          range: parsedRange,
+          hasHeaders,
+          stylePreset: selectedStyle,
+        });
+      }
+
       // Wrap table creation in an undo group so Cmd+Z reverts the entire
       // operation (table creation + style) in a single step.
       const ws = wb.getSheetById(activeSheetId);
       const rangeA1 = formatA1Range(parsedRange);
-      void wb
+      return wb
         .undoGroup(async () => {
           await ws.tables.add(rangeA1, { hasHeaders, style: selectedStyle });
         })
         .catch((err: unknown) => {
           console.error('Failed to create table:', err);
         });
-    }
-
-    closeDialog();
+    });
   }, [
     rangeInput,
     parsedRange,

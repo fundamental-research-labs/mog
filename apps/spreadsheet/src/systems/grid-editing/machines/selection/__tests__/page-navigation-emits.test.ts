@@ -51,6 +51,50 @@ describe('page navigation emits', () => {
     actor.stop();
   });
 
+  it('marks mouse header selection as already visible for viewport-follow', () => {
+    const actor = createActor(selectionMachine);
+    const emitted: SelectionEmitted[] = [];
+    const subscription = actor.on('userSelectionChanged', (event) => emitted.push(event));
+
+    actor.start();
+    actor.send({ type: 'SELECT_ROW', row: 7, shiftKey: false, ctrlKey: false });
+
+    expect(emitted).toHaveLength(1);
+    expect(emitted[0]).toMatchObject({
+      activeCell: { row: 7, col: 0 },
+      followCell: { row: 7, col: 0 },
+      suppressViewportFollow: true,
+    });
+
+    subscription.unsubscribe();
+    actor.stop();
+  });
+
+  it('keeps keyboard header selection on normal viewport-follow', () => {
+    const actor = createActor(selectionMachine);
+    const emitted: SelectionEmitted[] = [];
+    const subscription = actor.on('userSelectionChanged', (event) => emitted.push(event));
+
+    actor.start();
+    actor.send({
+      type: 'SELECT_ROW',
+      row: 7,
+      shiftKey: false,
+      ctrlKey: false,
+      fromKeyboard: true,
+    });
+
+    expect(emitted).toHaveLength(1);
+    expect(emitted[0]).toMatchObject({
+      activeCell: { row: 7, col: 0 },
+      followCell: { row: 7, col: 0 },
+    });
+    expect(emitted[0].suppressViewportFollow).toBeUndefined();
+
+    subscription.unsubscribe();
+    actor.stop();
+  });
+
   it('direct range selection follows the active cell rather than the opposite corner', () => {
     const actor = createActor(selectionMachine);
     const emitted: SelectionEmitted[] = [];

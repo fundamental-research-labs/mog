@@ -123,6 +123,8 @@ export function setupViewportFollowCoordination(
       return;
     }
 
+    if (event.suppressViewportFollow) return;
+
     // getScrollToCell returns null when the cell is already visible
     const scrollTarget = viewport.getScrollToCell(followCell);
     if (!scrollTarget) return;

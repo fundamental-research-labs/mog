@@ -40,6 +40,7 @@ import {
   shouldNoopExternalFormatsPaste,
 } from '../../domain/clipboard/paste-defaults';
 import { readPasteDefaultsPreference } from '../../infra/state/paste-defaults-store';
+import { expandFreshFullTableCornerCutRange } from '../../domain/clipboard/table-corner-cut-range';
 
 import {
   EXTERNAL_SOURCE_SHEET_ID,
@@ -57,7 +58,7 @@ import type { CellCoord } from '@mog-sdk/contracts/rendering';
 import { ensureFormulaA1 } from '@mog/spreadsheet-utils/cells/formula-string';
 import { blobToDataUrl } from '../../utils/blob-to-data-url';
 import { withHandlerErrors } from '../../devtools/handler-error-boundary';
-import { useActiveSheetId, useReadOnly, useWorkbook } from '../../infra/context';
+import { useActiveSheetId, useReadOnly, useUIStoreApi, useWorkbook } from '../../infra/context';
 import { rangeToHTML, rangeToTSV } from '../../infra/utils/clipboard-utils';
 import { waitForPendingClipboardPaste } from '../../systems/grid-editing/coordination/pending-clipboard-paste';
 import {
@@ -662,6 +663,7 @@ export function useClipboard(): UseClipboardReturn {
   const activeSheetId = useActiveSheetId();
   const wb = useWorkbook();
   const readOnly = useReadOnly();
+  const uiStoreApi = useUIStoreApi();
 
   // Get pre-created commands from the grid system (stable references)
   const commands = coordinator.grid.access.commands.clipboard;
@@ -805,8 +807,14 @@ export function useClipboard(): UseClipboardReturn {
       if (!ranges || ranges.length === 0) return;
 
       const mutableRanges = [...ranges] as CellRange[];
+      const cutRanges = await expandFreshFullTableCornerCutRange(
+        wb,
+        activeSheetId,
+        uiStoreApi.getState(),
+        mutableRanges,
+      );
       // Pre-fetch all data via ONE API — proper async, zero casts
-      const prefetched = await prefetchClipboardData(wb, activeSheetId, ranges);
+      const prefetched = await prefetchClipboardData(wb, activeSheetId, cutRanges);
 
       const deps: UnifiedCopyCutDeps = {
         commands,
@@ -815,9 +823,9 @@ export function useClipboard(): UseClipboardReturn {
         generateHTML: prefetched.generateHTML,
       };
 
-      await unifiedCut(mutableRanges, deps);
+      await unifiedCut(cutRanges, deps);
     });
-  }, [coordinator, activeSheetId, wb, commands, readOnly]);
+  }, [coordinator, activeSheetId, wb, commands, readOnly, uiStoreApi]);
 
   // Paste callbacks use unified paste logic that reads the system clipboard
   // to detect external copies. This ensures consistent behavior across all paste methods.
@@ -1029,6 +1037,7 @@ export function useClipboardEvents(options: UseClipboardEventsOptions): UseClipb
   const activeSheetId = useActiveSheetId();
   const wb = useWorkbook();
   const readOnly = useReadOnly();
+  const uiStoreApi = useUIStoreApi();
 
   // Get pre-created commands from the grid system (stable references)
   const commands = coordinator.grid.access.commands.clipboard;
@@ -1147,21 +1156,27 @@ export function useClipboardEvents(options: UseClipboardEventsOptions): UseClipb
         if (!ranges || ranges.length === 0) return;
 
         const mutableRanges = [...ranges] as CellRange[];
+        const cutRanges = await expandFreshFullTableCornerCutRange(
+          wb,
+          activeSheetId,
+          uiStoreApi.getState(),
+          mutableRanges,
+        );
         // Pre-fetch all data via ONE API — proper async, zero casts
-        const prefetched = await prefetchClipboardData(wb, activeSheetId, ranges);
+        const prefetched = await prefetchClipboardData(wb, activeSheetId, cutRanges);
 
         // Build clipboard data from pre-fetched lookups (sync)
-        const data = prefetched.buildData(mutableRanges);
+        const data = prefetched.buildData(cutRanges);
 
         // Generate clipboard formats from pre-fetched lookups (sync)
-        const tsv = prefetched.generateTSV(mutableRanges);
-        const html = prefetched.generateHTML(mutableRanges);
+        const tsv = prefetched.generateTSV(cutRanges);
+        const html = prefetched.generateHTML(cutRanges);
 
         // Store text signature for external clipboard detection
         data.textSignature = tsv;
 
         // Update XState clipboard machine using commands
-        commands.cut(mutableRanges, data);
+        commands.cut(cutRanges, data);
         onCut?.();
 
         // Write to system clipboard after internal state is available so an
@@ -1174,7 +1189,7 @@ export function useClipboardEvents(options: UseClipboardEventsOptions): UseClipb
         onError?.(err instanceof Error ? err : new Error(String(err)));
       }
     },
-    [coordinator, activeSheetId, wb, commands, onCut, onError, readOnly],
+    [coordinator, activeSheetId, wb, commands, onCut, onError, readOnly, uiStoreApi],
   );
 
   // ═══════════════════════════════════════════════════════════════════════════

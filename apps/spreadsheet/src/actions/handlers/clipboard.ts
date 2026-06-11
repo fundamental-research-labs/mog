@@ -45,6 +45,7 @@ import {
   type ClipboardStoreReader,
   type SparseClipboardCellEntry,
 } from '../../domain/clipboard';
+import { expandFreshFullTableCornerCutRange } from '../../domain/clipboard/table-corner-cut-range';
 
 import { getUIStore, handled } from './handler-utils';
 import { trackPendingClipboardCapture } from '../../systems/grid-editing/coordination/pending-clipboard-capture';
@@ -652,11 +653,17 @@ export const CUT: ActionHandler = (deps) => {
 
   // ASYNC: Bridge work runs in background via .then/.catch chain.
   // Handler returns handled() synchronously below.
-  const capturePromise = createCopyCutDeps(deps, sheetId, mutableRanges)
-    .then((copyCutDeps) => {
-      const data = copyCutDeps.buildData(mutableRanges);
-      const tsv = copyCutDeps.generateTSV(mutableRanges);
-      const html = copyCutDeps.generateHTML(mutableRanges);
+  const capturePromise = expandFreshFullTableCornerCutRange(
+    deps.workbook,
+    sheetId,
+    getUIStore(deps).getState(),
+    mutableRanges,
+  )
+    .then(async (cutRanges) => {
+      const copyCutDeps = await createCopyCutDeps(deps, sheetId, cutRanges);
+      const data = copyCutDeps.buildData(cutRanges);
+      const tsv = copyCutDeps.generateTSV(cutRanges);
+      const html = copyCutDeps.generateHTML(cutRanges);
 
       // Store text signature for external clipboard detection
       data.textSignature = tsv;
@@ -667,7 +674,7 @@ export const CUT: ActionHandler = (deps) => {
       // Update XState clipboard machine with rich data BEFORE awaiting the
       // system clipboard write. The internal state must be set even if the
       // system clipboard write fails (e.g., headless browsers, Playwright).
-      copyCutDeps.commands.cut(mutableRanges, data);
+      copyCutDeps.commands.cut(cutRanges, data);
 
       // Await the clipboard write — best-effort, failure is non-fatal.
       void clipboardWritePromise

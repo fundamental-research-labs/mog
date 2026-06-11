@@ -212,10 +212,12 @@ export function InsertTableDialog({ onInsertTable }: InsertTableDialogProps) {
     () => initialStylePreset ?? 'medium2',
   );
   const [rangeError, setRangeError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Initialize range when dialog opens from the action-captured snapshot.
   useEffect(() => {
     if (!isOpen) return;
+    setIsSubmitting(false);
     const seedRange = initialRange;
     if (!seedRange) return;
     const formatted = formatA1Range({
@@ -276,34 +278,42 @@ export function InsertTableDialog({ onInsertTable }: InsertTableDialogProps) {
 
   // Handle OK click
   const handleOk = useCallback(() => {
+    if (isSubmitting) return;
     const error = validateRange(rangeInput);
     if (error || !parsedRange) {
       setRangeError(error || 'Invalid range');
       return;
     }
 
-    closeDialog();
-    scheduleDialogAction(() => {
-      // Create the table
-      if (onInsertTable) {
-        return onInsertTable({
-          range: parsedRange,
-          hasHeaders,
-          stylePreset: selectedStyle,
-        });
-      }
+    setIsSubmitting(true);
+    scheduleDialogAction(async () => {
+      // Create the table before closing so callers that wait for dialog
+      // teardown observe the completed table state.
+      try {
+        if (onInsertTable) {
+          await onInsertTable({
+            range: parsedRange,
+            hasHeaders,
+            stylePreset: selectedStyle,
+          });
+          return;
+        }
 
-      // Wrap table creation in an undo group so Cmd+Z reverts the entire
-      // operation (table creation + style) in a single step.
-      const ws = wb.getSheetById(activeSheetId);
-      const rangeA1 = formatA1Range(parsedRange);
-      return wb
-        .undoGroup(async () => {
-          await ws.tables.add(rangeA1, { hasHeaders, style: selectedStyle });
-        })
-        .catch((err: unknown) => {
-          console.error('Failed to create table:', err);
-        });
+        // Wrap table creation in an undo group so Cmd+Z reverts the entire
+        // operation (table creation + style) in a single step.
+        const ws = wb.getSheetById(activeSheetId);
+        const rangeA1 = formatA1Range(parsedRange);
+        await wb
+          .undoGroup(async () => {
+            await ws.tables.add(rangeA1, { hasHeaders, style: selectedStyle });
+          })
+          .catch((err: unknown) => {
+            console.error('Failed to create table:', err);
+          });
+      } finally {
+        setIsSubmitting(false);
+        closeDialog();
+      }
     });
   }, [
     rangeInput,
@@ -311,6 +321,7 @@ export function InsertTableDialog({ onInsertTable }: InsertTableDialogProps) {
     hasHeaders,
     selectedStyle,
     validateRange,
+    isSubmitting,
     onInsertTable,
     wb,
     activeSheetId,
@@ -319,8 +330,9 @@ export function InsertTableDialog({ onInsertTable }: InsertTableDialogProps) {
 
   // Handle Cancel/Close
   const handleClose = useCallback(() => {
+    if (isSubmitting) return;
     closeDialog();
-  }, [closeDialog]);
+  }, [closeDialog, isSubmitting]);
 
   if (!isOpen) return null;
 
@@ -382,13 +394,13 @@ export function InsertTableDialog({ onInsertTable }: InsertTableDialogProps) {
       </DialogBody>
 
       <DialogFooter>
-        <Button variant="secondary" onClick={handleClose}>
+        <Button variant="secondary" onClick={handleClose} disabled={isSubmitting}>
           Cancel
         </Button>
         <Button
           variant="primary"
           onClick={handleOk}
-          disabled={!!rangeError}
+          disabled={!!rangeError || isSubmitting}
           data-testid="insert-table-ok"
         >
           OK

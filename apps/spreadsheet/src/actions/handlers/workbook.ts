@@ -203,6 +203,24 @@ function findInnermostContainingGroup(
   );
 }
 
+function resolveUngroupAxis(
+  axis: GroupingAxis | null,
+  bounds: SelectionBounds,
+  rowGroups: GroupRecord[],
+  columnGroups: GroupRecord[],
+): GroupingAxis | null {
+  const rowGroup = findInnermostContainingGroup(rowGroups, bounds.startRow, bounds.endRow);
+  const columnGroup = findInnermostContainingGroup(
+    columnGroups,
+    bounds.startCol,
+    bounds.endCol,
+  );
+
+  if (axis === 'rows' && !rowGroup && columnGroup) return 'columns';
+  if (axis === 'columns' && !columnGroup && rowGroup) return 'rows';
+  return axis;
+}
+
 interface OutlineSummarySettings {
   summaryRowsBelow: boolean;
   summaryColumnsRight: boolean;
@@ -528,14 +546,31 @@ export const UNGROUP: AsyncActionHandler = async (deps) => {
   const bounds = computeSelectionBounds(ranges);
   if (!bounds) return notHandled('disabled');
 
-  const axis = inferGroupingAxis(ranges, bounds);
+  const fullSelectionAxis = inferFullSelectionAxis(ranges);
+  let axis = fullSelectionAxis ?? inferSpanAxis(bounds);
 
   const ws = wb.getSheetById(wb.getActiveSheetId());
+  let outlineGroups: { rowGroups: GroupRecord[]; columnGroups: GroupRecord[] } | null = null;
+  const getOutlineGroups = async () => {
+    if (outlineGroups) return outlineGroups;
+    const state = await ws.outline.getState();
+    outlineGroups = {
+      rowGroups: state.rowGroups as GroupRecord[],
+      columnGroups: state.columnGroups as GroupRecord[],
+    };
+    return outlineGroups;
+  };
+
+  if (!fullSelectionAxis) {
+    const groups = await getOutlineGroups();
+    axis = resolveUngroupAxis(axis, bounds, groups.rowGroups, groups.columnGroups);
+  }
+
   if (axis === 'rows') {
     if (bounds.startRow === bounds.endRow) {
-      const state = await ws.outline.getState();
+      const groups = await getOutlineGroups();
       const rowGroup = findInnermostContainingGroup(
-        state.rowGroups as GroupRecord[],
+        groups.rowGroups,
         bounds.startRow,
         bounds.endRow,
       );
@@ -551,9 +586,9 @@ export const UNGROUP: AsyncActionHandler = async (deps) => {
   }
   if (axis === 'columns') {
     if (bounds.startCol === bounds.endCol) {
-      const state = await ws.outline.getState();
+      const groups = await getOutlineGroups();
       const columnGroup = findInnermostContainingGroup(
-        state.columnGroups as GroupRecord[],
+        groups.columnGroups,
         bounds.startCol,
         bounds.endCol,
       );
@@ -570,9 +605,9 @@ export const UNGROUP: AsyncActionHandler = async (deps) => {
     return handled();
   }
 
-  const state = await ws.outline.getState();
+  const state = await getOutlineGroups();
   const rowGroup = findInnermostContainingGroup(
-    state.rowGroups as GroupRecord[],
+    state.rowGroups,
     bounds.startRow,
     bounds.endRow,
   );
@@ -583,7 +618,7 @@ export const UNGROUP: AsyncActionHandler = async (deps) => {
   }
 
   const columnGroup = findInnermostContainingGroup(
-    state.columnGroups as GroupRecord[],
+    state.columnGroups,
     bounds.startCol,
     bounds.endCol,
   );

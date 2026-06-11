@@ -100,12 +100,18 @@ export function InsertRibbon() {
   const openInsertShapeMenu = useUIStore((s) => s.openInsertShapeMenu);
   const openRibbonDropdown = useUIStore((s) => s.openRibbonDropdown);
   const closeRibbonDropdown = useUIStore((s) => s.closeRibbonDropdown);
+  const selectedTableId = useUIStore((s) => s.tableDesign.selectedTableId);
 
   // Slicer is enabled only when the active cell is inside a table. This
   // mirrors the prior `useInsertActions` derivation; it stays here as a
   // granular state read at the call site.
   const [selectionIsInTable, setSelectionIsInTable] = useState(false);
   useEffect(() => {
+    if (selectedTableId) {
+      setSelectionIsInTable(true);
+      return;
+    }
+
     let cancelled = false;
     void (async () => {
       try {
@@ -119,7 +125,7 @@ export function InsertRibbon() {
     return () => {
       cancelled = true;
     };
-  }, [wb, activeSheetId, activeRow, activeCol]);
+  }, [wb, activeSheetId, activeRow, activeCol, selectedTableId]);
 
   // Chart is disabled if there's no selection range
   const chartDisabled = useMemo(() => ranges.length === 0, [ranges]);

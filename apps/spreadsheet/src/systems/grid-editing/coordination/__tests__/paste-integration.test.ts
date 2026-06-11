@@ -3,7 +3,7 @@ import { createActor } from 'xstate';
 
 import type { SheetId } from '@mog-sdk/contracts/core';
 import type { ClipboardData } from '../../shared/types';
-import type { PasteStoreOperations } from '../../../domain/clipboard';
+import { createDefaultPasteOptions, type PasteStoreOperations } from '../../../../domain/clipboard';
 import { clipboardMachine } from '../../machines/clipboard-machine';
 import { setupClipboardPasteIntegration } from '../paste-integration';
 import { waitForPendingClipboardPaste } from '../pending-clipboard-paste';
@@ -272,6 +272,53 @@ describe('Clipboard Paste Integration', () => {
 
     expect(copyRange).not.toHaveBeenCalled();
     expect(store.setCellValues).toHaveBeenCalledWith(sheetId, [{ row: 21, col: 27, value: 'src' }]);
+
+    cleanup();
+    clipboardActor.stop();
+  });
+
+  it('pastes external data into an explicitly targeted hidden single cell', async () => {
+    const sheetId = 'sheet-1' as SheetId;
+    const targetRange = { startRow: 20, startCol: 27, endRow: 20, endCol: 27 };
+    const setCellValues = jest.fn();
+    const setCellFormat = jest.fn();
+    const store: PasteStoreOperations = {
+      setCellValues,
+      setCellFormat,
+      getCellData: jest.fn(),
+    };
+
+    const clipboardActor = createActor(clipboardMachine);
+    clipboardActor.start();
+
+    const onPasteComplete = jest.fn();
+    const updateSelectionAfterPaste = jest.fn();
+    const cleanup = setupClipboardPasteIntegration({
+      clipboardActor,
+      store,
+      getActiveSheetId: () => sheetId,
+      getHiddenRows: async () => new Set([20]),
+      onPasteComplete,
+      updateSelectionAfterPaste,
+    });
+
+    clipboardActor.send({
+      type: 'EXTERNAL_PASTE',
+      text: '123',
+      targetCell: { row: 20, col: 27 },
+      targetRange,
+      options: createDefaultPasteOptions(),
+    });
+    await waitForPendingClipboardPaste();
+
+    expect(setCellFormat).toHaveBeenCalledWith(sheetId, 20, 27, { numberFormat: 'General' });
+    expect(setCellValues).toHaveBeenCalledWith(sheetId, [{ row: 20, col: 27, value: '123' }]);
+    expect(setCellValues).not.toHaveBeenCalledWith(sheetId, [{ row: 21, col: 27, value: '123' }]);
+    expect(setCellFormat.mock.invocationCallOrder[0]).toBeLessThan(
+      setCellValues.mock.invocationCallOrder[0],
+    );
+    expect(onPasteComplete).toHaveBeenCalledWith(targetRange, 1);
+    expect(updateSelectionAfterPaste).toHaveBeenCalledWith(targetRange);
 
     cleanup();
     clipboardActor.stop();

@@ -75,6 +75,22 @@ export function getTileOrigins(targetRange: CellRange, dimensions: PasteDimensio
   return origins;
 }
 
+function isExplicitHiddenSingleCellTarget(
+  target: CellCoord,
+  targetRange: CellRange,
+  sheetId: SheetId,
+  store: PasteStoreOperations,
+): boolean {
+  if (!store.isRowHidden?.(sheetId, target.row)) return false;
+  const normalized = normalizeRange(targetRange);
+  return (
+    normalized.startRow === target.row &&
+    normalized.endRow === target.row &&
+    normalized.startCol === target.col &&
+    normalized.endCol === target.col
+  );
+}
+
 function getProcessedDimensions(
   data: ClipboardData,
   options: PasteSpecialOptions,
@@ -97,25 +113,36 @@ export async function executePasteIntoTargetRange(
   options: PasteSpecialOptions,
   store: PasteStoreOperations,
   targetRange: CellRange,
+  targetRangeIsExplicit = false,
 ): Promise<PasteResult> {
   const dimensions = getProcessedDimensions(data, options);
+  const skipHiddenRows =
+    !!(options.skipHiddenRows && store.isRowHidden) &&
+    !(
+      targetRangeIsExplicit &&
+      isExplicitHiddenSingleCellTarget(target, targetRange, sheetId, store)
+    );
+  const executionOptions =
+    skipHiddenRows === Boolean(options.skipHiddenRows)
+      ? options
+      : { ...options, skipHiddenRows };
   const executionTargetRange = resolveExecutionTargetRange(
     target,
     dimensions,
     targetRange,
-    !!(options.skipHiddenRows && store.isRowHidden),
+    skipHiddenRows,
   );
   const tileOrigins = getTileOrigins(executionTargetRange, dimensions);
 
   if (tileOrigins.length <= 1) {
-    return executePaste(data, tileOrigins[0] ?? target, sheetId, options, store);
+    return executePaste(data, tileOrigins[0] ?? target, sheetId, executionOptions, store);
   }
 
   let cellCount = 0;
   const validationViolations: PasteValidationViolation[] = [];
 
   for (const tileOrigin of tileOrigins) {
-    const result = await executePaste(data, tileOrigin, sheetId, options, store);
+    const result = await executePaste(data, tileOrigin, sheetId, executionOptions, store);
     if (!result.success) {
       return {
         ...result,

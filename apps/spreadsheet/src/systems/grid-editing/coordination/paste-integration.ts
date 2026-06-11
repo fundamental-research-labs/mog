@@ -578,6 +578,7 @@ export function setupClipboardPasteIntegration(
           executionOptions,
           effectiveStore,
           targetRange,
+          capturedTargetRange !== null,
         );
 
         if (result.success) {

@@ -1496,10 +1496,12 @@ export class GridEditingSystem implements IGridEditingSystem {
           await workbook.getSheetById(sheetId).setCells(updates);
         });
       },
-      setCellFormat: (sheetId, row, col, format) => {
-        void workbook
-          .getSheetById(sheetId)
-          .formats.set(row, col, format as import('@mog-sdk/contracts/core').CellFormat);
+      setCellFormat: async (sheetId, row, col, format) => {
+        await guardBridgeMutation(async () => {
+          await workbook
+            .getSheetById(sheetId)
+            .formats.set(row, col, format as import('@mog-sdk/contracts/core').CellFormat);
+        });
       },
       getCellData: (_sheetId, row, col) => {
         const ws = workbook.getSheetById(_sheetId);

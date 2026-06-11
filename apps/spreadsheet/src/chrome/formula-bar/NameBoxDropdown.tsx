@@ -437,7 +437,9 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
       ): void => {
         deps.commands.object.deselectAll();
         deps.commands.chart.deselectAll();
-        selectionCommands.setSelection([range], nextActiveCell);
+        // Name Box range navigation should reveal the selected range, while
+        // keeping the active cell anchored at the range start.
+        selectionCommands.setSelection([range], nextActiveCell, nextActiveCell);
       };
 
       if (trimmedAddress.includes(':')) {

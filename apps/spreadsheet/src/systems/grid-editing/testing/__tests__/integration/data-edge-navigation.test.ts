@@ -114,6 +114,30 @@ describe('Ctrl+Arrow data-edge navigation', () => {
     await sim.pressKey('ArrowRight', { ctrl: true });
     expect(sim.activeCell()).toEqual({ row: 0, col: 2 });
   });
+
+  it('returns to the prior origin on an immediate inverse horizontal edge jump', async () => {
+    sim = createIntegrationSimulator({
+      cells: {
+        '0,0': 'label',
+        '0,1': '2019',
+        '0,2': '2020',
+        '0,3': '2021',
+        '0,4': '2022',
+        '0,5': '2023',
+        '0,6': 'q1',
+        '0,7': 'q2',
+        '0,8': 'q3',
+        '0,9': 'q4',
+      },
+      activeCell: { row: 0, col: 6 },
+    });
+
+    await sim.pressKey('ArrowRight', { ctrl: true });
+    expect(sim.activeCell()).toEqual({ row: 0, col: 9 });
+
+    await sim.pressKey('ArrowLeft', { ctrl: true });
+    expect(sim.activeCell()).toEqual({ row: 0, col: 6 });
+  });
 });
 
 // =============================================================================

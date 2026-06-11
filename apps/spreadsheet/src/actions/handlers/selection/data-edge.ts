@@ -19,6 +19,32 @@ import type {
 } from './helpers';
 import { handled } from './helpers';
 
+type DataEdgeJump = {
+  sheetId: string;
+  from: CellCoord;
+  to: CellCoord;
+  direction: Direction;
+};
+
+const lastDataEdgeJumpByWorkbook = new WeakMap<object, DataEdgeJump>();
+
+function oppositeDirection(direction: Direction): Direction {
+  switch (direction) {
+    case 'up':
+      return 'down';
+    case 'down':
+      return 'up';
+    case 'left':
+      return 'right';
+    case 'right':
+      return 'left';
+  }
+}
+
+function sameCell(a: CellCoord, b: CellCoord): boolean {
+  return a.row === b.row && a.col === b.col;
+}
+
 // =============================================================================
 // Data-Edge Navigation Handlers (Ctrl+Arrow)
 // =============================================================================
@@ -34,8 +60,27 @@ async function moveToDataEdge(
 ): Promise<ActionResult> {
   const activeCell = deps.accessors.selection.getActiveCell();
   const ws = deps.workbook.activeSheet;
+  const sheetId = String(deps.getActiveSheetId());
 
-  const targetCell = await ws.findDataEdge(activeCell.row, activeCell.col, direction);
+  const previousJump = lastDataEdgeJumpByWorkbook.get(deps.workbook);
+  const targetCell =
+    previousJump &&
+    previousJump.sheetId === sheetId &&
+    previousJump.direction === oppositeDirection(direction) &&
+    sameCell(previousJump.to, activeCell)
+      ? previousJump.from
+      : await ws.findDataEdge(activeCell.row, activeCell.col, direction);
+
+  if (sameCell(targetCell, activeCell)) {
+    lastDataEdgeJumpByWorkbook.delete(deps.workbook);
+  } else {
+    lastDataEdgeJumpByWorkbook.set(deps.workbook, {
+      sheetId,
+      from: activeCell,
+      to: targetCell,
+      direction,
+    });
+  }
 
   deps.commands.selection.goTo(targetCell);
   return handled();

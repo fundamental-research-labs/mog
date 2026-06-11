@@ -3,7 +3,10 @@ import { jest } from '@jest/globals';
 import React from 'react';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import '@testing-library/jest-dom';
-import { getPendingDialogActionForTest } from './dialog-action-scheduler';
+import {
+  DIALOG_ACTION_APPLY_DELAY_MS,
+  getPendingDialogActionForTest,
+} from './dialog-action-scheduler';
 
 const dispatchMock = jest.fn();
 const closeInsertCellsDialog = jest.fn();
@@ -111,7 +114,7 @@ describe('InsertCellsDialog', () => {
     jest.useRealTimers();
   });
 
-  it('closes before dispatching the OK action on the next macrotask', async () => {
+  it('closes before dispatching the OK action after the dialog close delay', async () => {
     render(<InsertCellsDialog />);
 
     const dialog = screen.getByRole('dialog');
@@ -123,7 +126,10 @@ describe('InsertCellsDialog', () => {
     const pendingAction = getPendingDialogActionForTest();
     expect(pendingAction).toBeInstanceOf(Promise);
 
-    jest.advanceTimersByTime(0);
+    jest.advanceTimersByTime(DIALOG_ACTION_APPLY_DELAY_MS - 1);
+    expect(dispatchMock).not.toHaveBeenCalled();
+
+    jest.advanceTimersByTime(1);
     await pendingAction;
 
     expect(dispatchMock).toHaveBeenCalledTimes(1);

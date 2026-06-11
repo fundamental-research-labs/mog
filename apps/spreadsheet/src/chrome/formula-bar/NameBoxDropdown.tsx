@@ -644,30 +644,35 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
 
   // Handle input key events
   const handleInputKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLInputElement>) => {
+    async (e: React.KeyboardEvent<HTMLInputElement>) => {
       if (e.key === 'Enter') {
         e.preventDefault();
+        e.stopPropagation();
         // Read straight from the DOM so test harnesses (Playwright `fill`)
         // and rapid user input both commit the actual typed value, even if
         // the `inputValue` state hasn't flushed yet.
         const typed = e.currentTarget.value ?? inputValue;
-        void navigateToAddress(typed);
-        setIsEditing(false);
-        // Radix's PopoverTrigger toggle fires on the initial button click and
-        // sets isOpen=true even though we immediately override with setIsOpen(false)
-        // in handleNameBoxClick. The toggle survives because Radix fires after the
-        // child's onClick handler. That latent isOpen=true becomes visible once
-        // isEditing goes false (open = isOpen && !isEditing). Force-close here so
-        // the dropdown doesn't open after the user commits the name-box value.
-        setIsOpen(false);
-        // Return focus to the grid canvas. Without this, the just-unmounted
-        // input drops focus to <body>, and subsequent typing is consumed by
-        // whatever default-focus target the browser picks (often nothing).
-        // Excel/Sheets parity: a navigator owns the focus contract — it both
-        // moves the selection AND returns focus to the destination.
-        coordinator.input.focusGrid();
+        try {
+          await navigateToAddress(typed);
+        } finally {
+          setIsEditing(false);
+          // Radix's PopoverTrigger toggle fires on the initial button click and
+          // sets isOpen=true even though we immediately override with setIsOpen(false)
+          // in handleNameBoxClick. The toggle survives because Radix fires after the
+          // child's onClick handler. That latent isOpen=true becomes visible once
+          // isEditing goes false (open = isOpen && !isEditing). Force-close here so
+          // the dropdown doesn't open after the user commits the name-box value.
+          setIsOpen(false);
+          // Return focus to the grid canvas. Without this, the just-unmounted
+          // input drops focus to <body>, and subsequent typing is consumed by
+          // whatever default-focus target the browser picks (often nothing).
+          // Excel/Sheets parity: a navigator owns the focus contract — it both
+          // moves the selection AND returns focus to the destination.
+          coordinator.input.focusGrid();
+        }
       } else if (e.key === 'Escape') {
         e.preventDefault();
+        e.stopPropagation();
         setValidationError(null);
         setIsEditing(false);
         setIsOpen(false);

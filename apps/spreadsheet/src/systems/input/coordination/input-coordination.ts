@@ -16,6 +16,7 @@
  */
 
 import type {
+  ColDimensionInfo,
   ISheetViewCommands,
   ISheetViewGeometry,
   ISheetViewHitTest,
@@ -299,7 +300,13 @@ export class InputCoordinator {
     // Scroll gesture — detect input source BEFORE normalization (raw event data)
     this.isTrackpadInput = this.detectTrackpadInput(event);
 
-    const { deltaX, deltaY } = this.normalizeDelta(event);
+    let { deltaX, deltaY } = this.normalizeDelta(event);
+    const constrained = this.constrainHorizontalWheelDeltaForHiddenColumns(deltaX, deltaY);
+    deltaX = constrained.deltaX;
+    deltaY = constrained.deltaY;
+    if (constrained.suppressMomentum) {
+      this.isTrackpadInput = true;
+    }
 
     // Apply scroll immediately to physics
     this.scrollPhysics.applyDelta(deltaX, deltaY);
@@ -847,6 +854,77 @@ export class InputCoordinator {
     return { deltaX, deltaY };
   }
 
+  private constrainHorizontalWheelDeltaForHiddenColumns(
+    deltaX: number,
+    deltaY: number,
+  ): { deltaX: number; deltaY: number; suppressMomentum: boolean } {
+    if (deltaX === 0 || !this.geometry || !this.viewport) {
+      return { deltaX, deltaY, suppressMomentum: false };
+    }
+
+    const currentX = this.scrollPhysics.position.x;
+    const requestedX = currentX + deltaX;
+    if (!Number.isFinite(currentX) || !Number.isFinite(requestedX)) {
+      return { deltaX, deltaY, suppressMomentum: false };
+    }
+
+    const snapshot = this.viewport.getSnapshot?.();
+    const visibleRange = snapshot?.visibleRange;
+    if (!visibleRange) {
+      return { deltaX, deltaY, suppressMomentum: false };
+    }
+    const startCol = Math.max(0, Math.floor(visibleRange.startCol));
+    const endCol = Math.max(startCol, Math.floor(visibleRange.endCol));
+    const viewportOriginX = this.getFrozenColumnsWidth(snapshot.frozenPanes?.cols ?? 0);
+    const currentDocumentX = currentX + viewportOriginX;
+    const requestedDocumentX = requestedX + viewportOriginX;
+
+    let sawHiddenRun = false;
+    for (let col = startCol; col <= endCol; col += 1) {
+      const dimension = this.readColumnDimension(col);
+      if (!dimension) continue;
+
+      if (dimension.hidden || dimension.width <= 0) {
+        sawHiddenRun = true;
+        continue;
+      }
+
+      if (sawHiddenRun) {
+        const anchorX = dimension.left;
+        if (crossesScrollAnchor(currentDocumentX, requestedDocumentX, anchorX)) {
+          const targetDocumentX = stopBeforeScrollAnchor(currentDocumentX, anchorX);
+          return {
+            deltaX: Math.max(0, targetDocumentX - viewportOriginX) - currentX,
+            deltaY,
+            suppressMomentum: true,
+          };
+        }
+        sawHiddenRun = false;
+      }
+    }
+
+    return { deltaX, deltaY, suppressMomentum: false };
+  }
+
+  private getFrozenColumnsWidth(frozenCols: number): number {
+    if (!Number.isFinite(frozenCols) || frozenCols <= 0) return 0;
+
+    let width = 0;
+    for (let col = 0; col < frozenCols; col += 1) {
+      const dimension = this.readColumnDimension(col);
+      if (!dimension || dimension.hidden || dimension.width <= 0) continue;
+      width += dimension.width;
+    }
+    return width;
+  }
+
+  private readColumnDimension(col: number): ColDimensionInfo | null {
+    const dimensions = this.geometry?.getDimensions({ row: 0, col }) ?? [];
+    return (
+      dimensions.find((dimension): dimension is ColDimensionInfo => 'col' in dimension) ?? null
+    );
+  }
+
   /**
    * Palm Rejection Threshold.
    * Touch radius in pixels above which a touch is considered a palm.
@@ -1272,6 +1350,18 @@ function adaptPositionDimensions(
       return null;
     },
   };
+}
+
+function crossesScrollAnchor(fromX: number, toX: number, anchorX: number): boolean {
+  if (!Number.isFinite(anchorX) || fromX === toX) return false;
+  const minX = Math.min(fromX, toX);
+  const maxX = Math.max(fromX, toX);
+  return anchorX > minX && anchorX <= maxX;
+}
+
+function stopBeforeScrollAnchor(fromX: number, anchorX: number): number {
+  const inset = Math.min(1, Math.abs(anchorX - fromX) / 2);
+  return anchorX > fromX ? anchorX - inset : anchorX + inset;
 }
 
 // =============================================================================

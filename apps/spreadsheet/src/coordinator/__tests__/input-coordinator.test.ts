@@ -421,6 +421,87 @@ describe('InputCoordinator', () => {
       expect(scrollState.x).toBe(50);
     });
 
+    it('keeps the first visible column after a hidden run reachable during one horizontal wheel', () => {
+      const positions: Array<{ x: number; y: number }> = [];
+      const baseDeps = createMockInputDependencies(mockCoordinateSystem);
+      const columnDimensions = new Map<number, { left: number; width: number; hidden: boolean }>();
+      columnDimensions.set(0, { left: 0, width: 171, hidden: false });
+      for (let col = 13; col <= 41; col += 1) {
+        if (col < 15) {
+          columnDimensions.set(col, {
+            left: 1048 + (col - 13) * 69,
+            width: 69,
+            hidden: false,
+          });
+        } else if (col <= 26) {
+          columnDimensions.set(col, {
+            left: 1186,
+            width: 0,
+            hidden: true,
+          });
+        } else {
+          columnDimensions.set(col, {
+            left: 1186 + (col - 27) * 69,
+            width: 69,
+            hidden: false,
+          });
+        }
+      }
+
+      const viewport = {
+        ...baseDeps.viewport,
+        getSnapshot: jest.fn(() => ({
+          scrollPositions: new Map(),
+          visibleRange: { startRow: 10, startCol: 13, endRow: 46, endCol: 41 },
+          frozenPanes: { rows: 0, cols: 1 },
+          splitConfig: null,
+          sheetId: 'sheet-1',
+          zoom: 1,
+        })),
+      } as unknown as ISheetViewViewport;
+      const geometry = {
+        ...baseDeps.geometry,
+        getDimensions: jest.fn((anchor: { row: number; col: number }) => {
+          const col = columnDimensions.get(anchor.col) ?? {
+            left: anchor.col * 69,
+            width: 69,
+            hidden: false,
+          };
+          return [
+            { row: anchor.row, top: anchor.row * 20, height: 20, hidden: false },
+            { col: anchor.col, ...col },
+          ];
+        }),
+      } as unknown as ISheetViewGeometry;
+
+      coordinator.setDependencies({
+        ...baseDeps,
+        viewport,
+        geometry,
+        forwardToSheet: (event) => forwardedEvents.push(event),
+        requestRender: () => renderRequests++,
+        setScrollPosition: (pos) => {
+          positions.push({ x: pos.x, y: pos.y });
+          const viewportState = mockCoordinateSystem.getViewport();
+          mockCoordinateSystem.setViewport({
+            ...viewportState,
+            scrollLeft: pos.x,
+            scrollTop: pos.y,
+          });
+        },
+      });
+
+      coordinator.resetScrollPosition(877, 133);
+      coordinator.handleWheel(createWheelEvent({ deltaX: 700, deltaY: 0 }));
+
+      expect(positions.at(-1)).toEqual({ x: 1014, y: 133 });
+      expect(coordinator.getScrollState()).toMatchObject({ x: 1014, y: 133 });
+
+      jest.advanceTimersByTime(200);
+
+      expect(coordinator.getScrollState()).toMatchObject({ x: 1014, y: 133 });
+    });
+
     it('should handle diagonal wheel scroll', () => {
       const event = createWheelEvent({ deltaX: 30, deltaY: 40 });
       coordinator.handleWheel(event);

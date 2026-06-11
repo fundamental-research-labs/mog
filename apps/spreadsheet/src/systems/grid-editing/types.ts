@@ -97,6 +97,14 @@ export interface GridEditingUIStore {
   setActiveCellFormat: (format: import('@mog-sdk/contracts/core').CellFormat | null) => void;
   /** Set toolbar selection ranges */
   setToolbarRanges: (ranges: import('@mog-sdk/contracts/core').CellRange[]) => void;
+  /** Record the cell that was just written by an edit commit. */
+  setLastCommittedCellForFormatting?: (entry: {
+    sheetId: string;
+    row: number;
+    col: number;
+    direction: Direction | 'none' | null;
+    committedAt: number;
+  }) => void;
 
   // --- Table selection coordination ---
   /** Table design state */

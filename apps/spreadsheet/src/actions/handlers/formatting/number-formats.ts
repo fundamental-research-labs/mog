@@ -14,7 +14,8 @@ import type {
   ActionResult,
   AsyncActionHandler,
 } from '@mog-sdk/contracts/actions';
-import { displayStringOrNull } from '@mog-sdk/contracts/core';
+import { displayStringOrNull, type CellData, type CellRange } from '@mog-sdk/contracts/core';
+import type { Direction } from '@mog-sdk/contracts/machines';
 
 import {
   callUIStoreAction,
@@ -28,6 +29,87 @@ import {
 // Number Format Handlers
 // =============================================================================
 
+const POST_COMMIT_FORMAT_TARGET_TTL_MS = 10_000;
+
+interface LastCommittedCellForFormatting {
+  sheetId: string;
+  row: number;
+  col: number;
+  direction: Direction | 'none' | null;
+  committedAt: number;
+}
+
+interface CellCoordinate {
+  row: number;
+  col: number;
+}
+
+function isSingleCellRange(range: CellRange, cell: CellCoordinate): boolean {
+  return (
+    range.startRow === cell.row &&
+    range.endRow === cell.row &&
+    range.startCol === cell.col &&
+    range.endCol === cell.col
+  );
+}
+
+function cellAfterCommitNavigation(target: LastCommittedCellForFormatting): CellCoordinate | null {
+  switch (target.direction) {
+    case 'up':
+      return target.row > 0 ? { row: target.row - 1, col: target.col } : null;
+    case 'down':
+      return { row: target.row + 1, col: target.col };
+    case 'left':
+      return target.col > 0 ? { row: target.row, col: target.col - 1 } : null;
+    case 'right':
+      return { row: target.row, col: target.col + 1 };
+    case 'none':
+    case null:
+      return null;
+  }
+}
+
+function cellHasContent(cell: CellData | null | undefined): boolean {
+  if (!cell) return false;
+  return (
+    cell.formula !== undefined ||
+    (cell.value !== null && cell.value !== undefined && cell.value !== '')
+  );
+}
+
+async function getPostCommitNumberFormatRanges(
+  deps: ActionDependencies,
+  target: LastCommittedCellForFormatting | null,
+): Promise<CellRange[] | null> {
+  if (!target) return null;
+  if (Date.now() - target.committedAt > POST_COMMIT_FORMAT_TARGET_TTL_MS) return null;
+
+  const activeSheetId = deps.getActiveSheetId();
+  if (target.sheetId !== activeSheetId) return null;
+
+  const movedCell = cellAfterCommitNavigation(target);
+  if (!movedCell) return null;
+
+  const { ranges } = getSelectionContext(deps);
+  if (ranges.length !== 1 || !isSingleCellRange(ranges[0], movedCell)) return null;
+
+  const ws = deps.workbook.getSheetById(activeSheetId);
+  const [committedCell, selectedCell] = await Promise.all([
+    ws.getCell(target.row, target.col),
+    ws.getCell(movedCell.row, movedCell.col),
+  ]);
+  if (!cellHasContent(committedCell) || cellHasContent(selectedCell)) return null;
+
+  return [
+    {
+      startRow: target.row,
+      startCol: target.col,
+      endRow: target.row,
+      endCol: target.col,
+    },
+  ];
+}
+
 /**
  * Apply a number format to selected cells.
  *
@@ -36,9 +118,14 @@ import {
  *
  * Performance: Uses setFormatForRanges for O(1) full row/column formatting.
  */
-async function applyNumberFormat(deps: ActionDependencies, format: string): Promise<ActionResult> {
+async function applyNumberFormat(
+  deps: ActionDependencies,
+  format: string,
+  rangesOverride?: CellRange[],
+): Promise<ActionResult> {
   const targetSheetIds = getTargetSheetIds(deps);
-  const { ranges } = getSelectionContext(deps);
+  const { ranges: selectedRanges } = getSelectionContext(deps);
+  const ranges = rangesOverride ?? selectedRanges;
 
   // Apply to all selected ranges on ALL selected sheets
   for (const sheetId of targetSheetIds) {
@@ -109,17 +196,22 @@ export const FORMAT_COMMA: AsyncActionHandler = async (deps) => applyNumberForma
  */
 export const APPLY_NUMBER_FORMAT: AsyncActionHandler = async (deps) => {
   // Read pending format from UIStore
-  const { pendingNumberFormat } = getUIStore(deps).getState();
+  const { lastCommittedCellForFormatting, pendingNumberFormat } = getUIStore(deps).getState();
 
   if (!pendingNumberFormat) {
     return handled(); // Nothing to apply
   }
 
   // Apply the pending format using the shared helper
-  const result = await applyNumberFormat(deps, pendingNumberFormat);
+  const postCommitRanges = await getPostCommitNumberFormatRanges(
+    deps,
+    lastCommittedCellForFormatting,
+  );
+  const result = await applyNumberFormat(deps, pendingNumberFormat, postCommitRanges ?? undefined);
 
   // Clear pending format after applying
   callUIStoreAction(deps, (state) => state.clearPendingNumberFormat());
+  callUIStoreAction(deps, (state) => state.clearLastCommittedCellForFormatting());
 
   // Update recent formats list (ephemeral UI state - OK in handler)
   callUIStoreAction(deps, (state) => state.addRecentNumberFormat(pendingNumberFormat));

@@ -22,6 +22,7 @@ import {
   useActionDependencies,
   useActiveSheetId,
   useCoordinator,
+  useFocus,
   useUIStore,
   useWorkbook,
 } from '../../internal-api';
@@ -60,6 +61,7 @@ export interface NameBoxDropdownProps {
 }
 
 const INVALID_NAME_MESSAGE = 'The name you entered is not valid.';
+const NAME_BOX_FOCUS_LAYER_ID = 'name-box';
 
 // =============================================================================
 // Store Adapter
@@ -144,6 +146,7 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
     () => createSelectionCommands(coordinator.grid.access.actors.selection),
     [coordinator],
   );
+  const { pushLayer: pushFocusLayer, popLayer: popFocusLayer } = useFocus();
   const setActiveSheetId = useUIStore((s) => s.setActiveSheet);
   // Define New Name from Name Box
   const openDefineNameDialog = useUIStore((s) => s.openDefineNameDialog);
@@ -156,6 +159,7 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
   const [validationError, setValidationError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const ownsNameBoxFocusLayerRef = useRef(false);
 
   // Load named ranges, tables, sheets from Workbook/Worksheet API (async) for dropdown
   const [cachedNamedRanges, setCachedNamedRanges] = useState<any[]>([]);
@@ -346,6 +350,26 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
     return formatNameBoxSelection(ranges, activeCell);
   }, [ranges, activeCell.row, activeCell.col, cachedNamedRanges, activeSheetName]);
 
+  const pushNameBoxFocusLayer = useCallback(() => {
+    if (ownsNameBoxFocusLayerRef.current) return;
+    pushFocusLayer('formulaBar', NAME_BOX_FOCUS_LAYER_ID);
+    ownsNameBoxFocusLayerRef.current = true;
+  }, [pushFocusLayer]);
+
+  const popNameBoxFocusLayer = useCallback(() => {
+    if (!ownsNameBoxFocusLayerRef.current) return;
+    popFocusLayer();
+    ownsNameBoxFocusLayerRef.current = false;
+  }, [popFocusLayer]);
+
+  useEffect(() => {
+    return () => {
+      if (!ownsNameBoxFocusLayerRef.current) return;
+      popFocusLayer();
+      ownsNameBoxFocusLayerRef.current = false;
+    };
+  }, [popFocusLayer]);
+
   // Create store adapter for name suggestions (all data from cached async loads)
   const storeAdapter = useMemo(
     () => createStoreAdapter(cachedNamedRanges, cachedTables, cachedSheets),
@@ -369,6 +393,7 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
   // Handle clicking on the name box to open dropdown
   const handleNameBoxClick = useCallback(() => {
     if (!isEditing) {
+      pushNameBoxFocusLayer();
       setValidationError(null);
       setIsEditing(true);
       setInputValue(cellAddress);
@@ -378,10 +403,11 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
         inputRef.current?.select();
       });
     }
-  }, [isEditing, cellAddress]);
+  }, [isEditing, cellAddress, pushNameBoxFocusLayer]);
 
   // Handle double-click to edit (navigate by typing)
   const handleDoubleClick = useCallback(() => {
+    pushNameBoxFocusLayer();
     setValidationError(null);
     setIsEditing(true);
     setInputValue(cellAddress);
@@ -391,7 +417,7 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
       inputRef.current?.focus();
       inputRef.current?.select();
     });
-  }, [cellAddress]);
+  }, [cellAddress, pushNameBoxFocusLayer]);
 
   // Handle input change while editing
   const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -660,6 +686,7 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
         // isEditing goes false (open = isOpen && !isEditing). Force-close here so
         // the dropdown doesn't open after the user commits the name-box value.
         setIsOpen(false);
+        popNameBoxFocusLayer();
         // Return focus to the grid canvas. Without this, the just-unmounted
         // input drops focus to <body>, and subsequent typing is consumed by
         // whatever default-focus target the browser picks (often nothing).
@@ -671,17 +698,19 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
         setValidationError(null);
         setIsEditing(false);
         setIsOpen(false);
+        popNameBoxFocusLayer();
         coordinator.input.focusGrid();
       }
     },
-    [inputValue, navigateToAddress, coordinator],
+    [inputValue, navigateToAddress, popNameBoxFocusLayer, coordinator],
   );
 
   // Handle input blur
   const handleInputBlur = useCallback(() => {
     setIsEditing(false);
     setIsOpen(false);
-  }, []);
+    popNameBoxFocusLayer();
+  }, [popNameBoxFocusLayer]);
 
   // Handle dropdown filter change
   const handleFilterChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {

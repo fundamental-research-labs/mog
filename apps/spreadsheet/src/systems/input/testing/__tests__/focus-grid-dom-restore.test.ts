@@ -84,4 +84,20 @@ describe('focusGrid DOM restore', () => {
     expect(snapshot.state).toBe('grid');
     expect(snapshot.shouldGridHandle).toBe(true);
   });
+
+  it('does not steal DOM focus when another focus layer appears before the delayed restore', async () => {
+    system.setGridContainer(gridContainer);
+
+    const input = document.createElement('input');
+    document.body.appendChild(input);
+
+    system.focusGrid();
+    system.pushFocusLayer('formulaBar', 'name-box');
+    input.focus();
+    await flushRaf();
+
+    expect(document.activeElement).toBe(input);
+
+    document.body.removeChild(input);
+  });
 });

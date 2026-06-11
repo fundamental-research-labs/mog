@@ -185,27 +185,18 @@ export class FocusCoordination {
    *
    * Documented contract: a navigator (Name Box, formula bar, etc.) owns
    * the focus contract — it both moves the selection AND returns DOM
-   * focus to the destination. See `NameBoxDropdown.tsx` lines 625-630.
+   * focus to the destination.
    */
   focusGrid(): void {
     this.focusActor.send({ type: 'FOCUS_GRID' });
     requestAnimationFrame(() => {
       // If a chrome-input focus layer was pushed between `focusGrid()` being
-      // called and this rAF firing (e.g. the sheet-tab rename input mounted
-      // and pushed a `sheetTabs` layer in the same React commit cycle as the
-      // sheet switch that triggered this call), the layer's owner owns the
-      // focus contract. Skip the DOM focus steal — otherwise the rAF would
-      // steal DOM focus from the just-mounted input on its first frame,
-      // fire onBlur, and unmount the input before the user can type.
-      // Covered by the sheet-rename double-click repro.
-      //
-      // This is the layer-aware version of the stop-gap added in 017f0b73e
-      // (which checked `instanceof HTMLInputElement` — too broad, at the
-      // wrong abstraction level). The layer-stack check speaks the same
-      // language as the rest of the focus state machine.
+      // called and this rAF firing, the layer's owner owns the focus contract.
+      // Skip the DOM focus steal; otherwise this delayed restore can blur a
+      // just-mounted chrome input on its first frame.
       const stack = this.focusActor.getSnapshot().context.stack;
       const top = stack[stack.length - 1];
-      if (top && top.type === 'sheetTabs') {
+      if (top && top.type !== 'grid') {
         return;
       }
       this.focusGridContainer();

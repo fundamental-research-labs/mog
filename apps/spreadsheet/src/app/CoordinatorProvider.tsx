@@ -62,6 +62,14 @@ import { setupRangeSelectionCoordination } from '../systems/grid-editing/coordin
 import { setupUndoSelectionCoordination } from '../systems/grid-editing/coordination/undo-selection-coordination';
 import { isGlobalShortcut } from '../systems/shared/utils/focus-utils';
 import { useCollabPresence, useSelectionPresenceBroadcast } from '../hooks/collab';
+import {
+  isDialogKeyboardTarget,
+  isEditableKeyboardTarget,
+  isNativeEditableShortcut,
+  keyboardEventTargetElement,
+  shouldDeferEditingKeyboardCapture,
+  shouldDeferNonEditingKeyboardCapture,
+} from './keyboard-capture-targets';
 
 // =============================================================================
 // Pane Navigation Context (E1: F6 Pane Navigation)
@@ -83,30 +91,6 @@ interface PaneNavigationContextValue {
 }
 
 const PaneNavigationContext = createContext<PaneNavigationContextValue | null>(null);
-
-function keyboardEventTargetElement(e: KeyboardEvent): HTMLElement | null {
-  return e.target instanceof HTMLElement ? e.target : null;
-}
-
-function isEditableKeyboardTarget(target: HTMLElement | null): boolean {
-  if (!target) return false;
-  return Boolean(
-    target.closest('input, textarea, select, [contenteditable="true"], [role="textbox"]'),
-  );
-}
-
-function isDialogKeyboardTarget(target: HTMLElement | null): boolean {
-  if (!target) return false;
-  return Boolean(target.closest('[role="dialog"]'));
-}
-
-function isNativeEditableShortcut(e: KeyboardEvent, target: HTMLElement | null): boolean {
-  if (!isEditableKeyboardTarget(target)) return false;
-  if (!(e.ctrlKey || e.metaKey) || e.altKey) return false;
-
-  const key = e.key.toLowerCase();
-  return key === 'c' || key === 'x' || key === 'v' || key === 'z' || key === 'y';
-}
 
 /**
  * Hook to access pane navigation element registration.
@@ -353,6 +337,10 @@ function KeyboardCaptureSetup({
       }
 
       if (!isEditing) {
+        if (shouldDeferNonEditingKeyboardCapture(target)) {
+          return;
+        }
+
         // Not editing — normally grid's onKeyDown handles shortcuts via bubbling.
         // But if focus is on BODY (e.g., after context menu close), the grid never
         // receives the event. Route through the coordinator directly in that case.
@@ -409,6 +397,10 @@ function KeyboardCaptureSetup({
         currentLayerType !== 'editor' &&
         currentLayerType !== 'formulaBar'
       ) {
+        return;
+      }
+
+      if (shouldDeferEditingKeyboardCapture(target)) {
         return;
       }
 

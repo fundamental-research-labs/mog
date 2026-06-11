@@ -95,6 +95,11 @@ function isEditableKeyboardTarget(target: HTMLElement | null): boolean {
   );
 }
 
+function isNoGridKeyboardTarget(target: HTMLElement | null): boolean {
+  if (!target) return false;
+  return Boolean(target.closest('[data-no-grid-keyboard]'));
+}
+
 function isDialogKeyboardTarget(target: HTMLElement | null): boolean {
   if (!target) return false;
   return Boolean(target.closest('[role="dialog"]'));
@@ -349,6 +354,10 @@ function KeyboardCaptureSetup({
           e.preventDefault();
           e.stopPropagation();
         }
+        return;
+      }
+
+      if (isEditing && isNoGridKeyboardTarget(target)) {
         return;
       }
 

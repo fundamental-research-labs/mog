@@ -281,9 +281,17 @@ export interface ActionDependencies {
    * site MUST provide this. Web/desktop differences live behind the
    * implementation; handlers code against the capability surface.
    *
-   * @see types/document/src/platform/types.ts for `IPlatform`.
+   * @see contracts/src/platform/index.ts for `IPlatform`.
    */
-  platform: import('@mog-sdk/types-document/platform/types').IPlatform;
+  platform: import('../platform').IPlatform;
+
+  /**
+   * Platform-owned wall clock in Unix milliseconds.
+   *
+   * Production dependency builders should provide this instead of letting action
+   * handlers read host wall time directly.
+   */
+  wallClockNow?: () => number;
 
   /**
    * Shell-level document lifecycle facade. Provides bytes-based

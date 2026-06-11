@@ -478,7 +478,7 @@ export class GridEditingSystem implements IGridEditingSystem {
       row: cell.row,
       col: cell.col,
       direction,
-      committedAt: Date.now(),
+      committedAt: this.config.wallClockNow?.() ?? 0,
     });
   }
 

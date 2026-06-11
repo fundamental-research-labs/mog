@@ -365,6 +365,8 @@ export interface SheetCoordinatorConfig {
   clipboardDependencies?: _ClipboardDeps;
   /** Dependencies for editor operations (commit, validation, schema lookup) */
   editorDependencies?: _EditorDeps;
+  /** Platform-owned wall clock in Unix milliseconds. */
+  wallClockNow?: () => number;
   /** Dependencies for sheet switch coordination (per-sheet view state) */
   sheetSwitchDependencies?: SheetSwitchDependencies;
   /** Dependencies for toolbar format sync (Bold/Italic active state) */

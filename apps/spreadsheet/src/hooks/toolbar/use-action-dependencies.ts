@@ -29,6 +29,7 @@ import type { ActionDependencies, ActionType } from '@mog-sdk/contracts/actions'
 import type { ActorAccessors, ActorCommands } from '@mog-sdk/contracts/actors';
 import { objectSelectors, selectionSelectors } from '../../selectors';
 import type { WorkbookInternal } from '@mog-sdk/contracts/api';
+import { wallClockNow } from '@mog/platform';
 import { usePlatform, useShellService } from '@mog/shell';
 
 import { dispatch } from '../../actions';
@@ -172,6 +173,7 @@ export function useActionDependencies(): UseActionDependenciesReturn {
       getSelection,
       uiStore,
       platform,
+      wallClockNow,
       shellService,
       hostCommands,
       featureGates,

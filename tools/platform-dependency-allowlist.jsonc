@@ -2194,6 +2194,14 @@
       "owner": "platform-contract-migration",
     },
     {
+      "path": "infra/platform/index.ts",
+      "ruleId": "ts-date-now",
+      "category": "host-wall-time",
+      "match": "Date.now(",
+      "allowedCount": 1,
+      "owner": "platform-contract-migration",
+    },
+    {
       "path": "infra/platform/tauri/detection.ts",
       "ruleId": "ts-runtime-global-detection",
       "category": "runtime-detection",

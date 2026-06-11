@@ -63,6 +63,7 @@ function getAppliedRanges(deps: ActionDependencies) {
 }
 
 function createMockDepsForApplyNumberFormat(options: {
+  now?: number;
   activeCell: { row: number; col: number };
   ranges: Array<{ startRow: number; startCol: number; endRow: number; endCol: number }>;
   cells: Record<string, { value: unknown; formula?: string }>;
@@ -76,6 +77,8 @@ function createMockDepsForApplyNumberFormat(options: {
   pendingNumberFormat: string | null;
 }) {
   const deps = createMockDeps() as any;
+  const now = options.now ?? 1_000_000;
+  deps.wallClockNow = jest.fn(() => now);
   const ws = deps.workbook.getSheetById();
   ws.getCell = jest.fn(async (row: number, col: number) => {
     return options.cells[`${row},${col}`] ?? { value: null };
@@ -163,7 +166,9 @@ describe('Number Format Handlers — preset format strings', () => {
 describe('Number Format Handlers — Format Cells dialog apply target', () => {
   it('APPLY_NUMBER_FORMAT targets the just-committed cell when Enter moved selection to a blank adjacent cell', async () => {
     const activeSheetId = makeSheetId('sheet1');
+    const now = 1_000_000;
     const { deps, clearLastCommittedCellForFormatting } = createMockDepsForApplyNumberFormat({
+      now,
       activeCell: { row: 459, col: 10 },
       ranges: [{ startRow: 459, startCol: 10, endRow: 459, endCol: 10 }],
       cells: {
@@ -175,7 +180,7 @@ describe('Number Format Handlers — Format Cells dialog apply target', () => {
         row: 458,
         col: 10,
         direction: 'down',
-        committedAt: Date.now(),
+        committedAt: now,
       },
       pendingNumberFormat: '#,##0.0',
     });
@@ -192,7 +197,9 @@ describe('Number Format Handlers — Format Cells dialog apply target', () => {
 
   it('APPLY_NUMBER_FORMAT keeps the active selection when the post-Enter cell has content', async () => {
     const activeSheetId = makeSheetId('sheet1');
+    const now = 1_000_000;
     const { deps } = createMockDepsForApplyNumberFormat({
+      now,
       activeCell: { row: 459, col: 10 },
       ranges: [{ startRow: 459, startCol: 10, endRow: 459, endCol: 10 }],
       cells: {
@@ -204,7 +211,7 @@ describe('Number Format Handlers — Format Cells dialog apply target', () => {
         row: 458,
         col: 10,
         direction: 'down',
-        committedAt: Date.now(),
+        committedAt: now,
       },
       pendingNumberFormat: '#,##0.0',
     });

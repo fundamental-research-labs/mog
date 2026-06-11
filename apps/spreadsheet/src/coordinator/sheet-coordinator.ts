@@ -19,6 +19,7 @@ import type { MutationReceipt } from '@mog-sdk/contracts/api';
 import { sheetId as toSheetId, type SheetId, type CellFormat } from '@mog-sdk/contracts/core';
 import type { FloatingObject } from '@mog-sdk/contracts/floating-objects';
 import type { FloatingObjectPatch, HitTestService } from '@mog-sdk/contracts/rendering';
+import { wallClockNow as defaultWallClockNow } from '@mog/platform';
 import { focusMachine, type FocusActor } from '@mog/shell';
 import {
   createFloatingObjectCache,
@@ -149,6 +150,7 @@ export class SheetCoordinator {
         : undefined,
       editorDeps: config.editorDependencies,
       clipboardDeps: config.clipboardDependencies,
+      wallClockNow: config.wallClockNow ?? defaultWallClockNow,
       workbook: this.workbook,
       // UIState is a superset of GridEditingUIStore — safe cast
       uiStoreApi: config.sheetSwitchDependencies?.uiStoreApi,

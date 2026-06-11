@@ -334,6 +334,9 @@ export interface GridEditingConfig {
   /** Dependencies for clipboard paste operations */
   clipboardDeps?: ClipboardDependencies;
 
+  /** Platform-owned wall clock in Unix milliseconds. */
+  wallClockNow?: () => number;
+
   /**
    * Workbook for unified API access.
    * Used by coordinators that need access to spreadsheet data (resize, merged cells, etc.)

@@ -82,7 +82,10 @@ async function getPostCommitNumberFormatRanges(
   target: LastCommittedCellForFormatting | null,
 ): Promise<CellRange[] | null> {
   if (!target) return null;
-  if (Date.now() - target.committedAt > POST_COMMIT_FORMAT_TARGET_TTL_MS) return null;
+  const now = deps.wallClockNow?.();
+  if (now === undefined || now - target.committedAt > POST_COMMIT_FORMAT_TARGET_TTL_MS) {
+    return null;
+  }
 
   const activeSheetId = deps.getActiveSheetId();
   if (target.sheetId !== activeSheetId) return null;

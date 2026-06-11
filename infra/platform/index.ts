@@ -77,6 +77,16 @@ export function getPlatformName(): 'desktop' | 'web' {
   return isTauri() ? 'desktop' : 'web';
 }
 
+/**
+ * Platform-owned wall-clock source for production code that needs Unix ms.
+ *
+ * Keep direct wall-clock reads at platform boundaries; application and domain
+ * modules should receive this as an injected dependency.
+ */
+export function wallClockNow(): number {
+  return Date.now();
+}
+
 // Re-exports for convenience
 export type { IPlatform } from '@mog-sdk/contracts/platform';
 export { isTauri, isWeb } from './tauri/detection';

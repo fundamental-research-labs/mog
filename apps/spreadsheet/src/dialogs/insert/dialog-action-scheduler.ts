@@ -1,4 +1,6 @@
-const APPLY_AFTER_CLOSE_DELAY_MS = 0;
+// Give the browser a frame budget to acknowledge the activating click and paint
+// the closed dialog before a structural apply can monopolize the main thread.
+const APPLY_AFTER_CLOSE_DELAY_MS = 50;
 
 type DialogActionGlobal = typeof globalThis & {
   __MOG_PENDING_DIALOG_ACTION__?: Promise<void>;

@@ -123,10 +123,15 @@ async function trimTrailingBlankEdges(ws: Worksheet, range: CellRange): Promise<
 export async function resolveChartSourceRange(
   ws: Worksheet,
   sourceRange: CellRange,
+  options: { trimHiddenDetail?: boolean } = {},
 ): Promise<CellRange> {
   const expanded = await expandToDataRegion(ws, sourceRange);
   const range = expanded ?? sourceRange;
   if (!expanded) {
+    return range;
+  }
+
+  if (!options.trimHiddenDetail) {
     return range;
   }
 

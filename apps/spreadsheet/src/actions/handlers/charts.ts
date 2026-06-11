@@ -849,7 +849,7 @@ export const CREATE_CHART_SHEET: AsyncActionHandler = async (deps): Promise<Acti
     // Excel parity: expand single-cell / single-row selections to the
     // surrounding data region. expandToDataRegion is a no-op for multi-row
     // selections and returns null for empty cells (we keep ranges[0] then).
-    const range = await resolveChartSourceRange(ws, ranges[0]);
+    const range = await resolveChartSourceRange(ws, ranges[0], { trimHiddenDetail: true });
     // Include sheet reference in data range for cross-sheet reference
     const sheetName = (await ws.getName()) || 'Sheet1';
     dataRange = `'${sheetName}'!${rangeToA1Notation(range)}`;
@@ -924,7 +924,7 @@ export const CREATE_EMBEDDED_CHART: AsyncActionHandler = async (
 
     // Excel parity: expand single-cell / single-row selections to the
     // surrounding data region. Multi-row selections pass through unchanged.
-    const range = await resolveChartSourceRange(ws, ranges[0]);
+    const range = await resolveChartSourceRange(ws, ranges[0], { trimHiddenDetail: true });
     const dataRange = rangeToA1Notation(range);
 
     // Use smart positioning to ensure chart is visible

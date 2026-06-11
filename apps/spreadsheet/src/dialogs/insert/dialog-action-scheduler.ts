@@ -1,4 +1,6 @@
-const APPLY_AFTER_CLOSE_DELAY_MS = 0;
+// Give the browser a short window to complete the input event and paint the
+// closed dialog before heavyweight apply work starts on the main thread.
+const APPLY_AFTER_CLOSE_DELAY_MS = 50;
 
 type DialogActionGlobal = typeof globalThis & {
   __MOG_PENDING_DIALOG_ACTION__?: Promise<void>;

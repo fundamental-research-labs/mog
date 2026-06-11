@@ -424,7 +424,6 @@ export function CommentPopover() {
   const handleResolve = useCallback(async () => {
     const rootComment = comments[0];
     if (!rootComment) return;
-    if (rootComment.commentType === 'note') return;
 
     const nextResolved = !(rootComment.resolved ?? false);
     const threadId = rootComment.threadId ?? rootComment.id;
@@ -497,7 +496,7 @@ export function CommentPopover() {
 
   const primaryComment = comments[0] ?? null;
   const isNoteBacked = primaryComment?.commentType === 'note';
-  const canResolveThread = comments.length > 0 && !isNoteBacked;
+  const canResolveThread = comments.length > 0;
   const isResolved = canResolveThread && comments[0].resolved;
 
   // Memoize the virtual ref object for stability
@@ -613,8 +612,8 @@ export function CommentPopover() {
   );
 
   // ===========================================================================
-  // Comment popover body. Notes share the popover shell, but thread-only
-  // controls stay hidden until a note is promoted by replying.
+  // Comment popover body. Notes keep their note-specific compose behavior, but
+  // use the same Resolve toggle as threaded comments.
   // ===========================================================================
   const CommentBody = (
     <>

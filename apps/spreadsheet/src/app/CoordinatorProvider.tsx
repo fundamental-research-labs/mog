@@ -60,7 +60,13 @@ import {
 } from '../infra/context';
 import { setupRangeSelectionCoordination } from '../systems/grid-editing/coordination';
 import { setupUndoSelectionCoordination } from '../systems/grid-editing/coordination/undo-selection-coordination';
-import { isGlobalShortcut } from '../systems/shared/utils/focus-utils';
+import {
+  isDialogKeyboardTarget,
+  isEditableKeyboardTarget,
+  isGlobalShortcut,
+  isNativeEditableShortcut,
+  isSpreadsheetEditorKeyboardTarget,
+} from '../systems/shared/utils/focus-utils';
 import { useCollabPresence, useSelectionPresenceBroadcast } from '../hooks/collab';
 
 // =============================================================================
@@ -86,26 +92,6 @@ const PaneNavigationContext = createContext<PaneNavigationContextValue | null>(n
 
 function keyboardEventTargetElement(e: KeyboardEvent): HTMLElement | null {
   return e.target instanceof HTMLElement ? e.target : null;
-}
-
-function isEditableKeyboardTarget(target: HTMLElement | null): boolean {
-  if (!target) return false;
-  return Boolean(
-    target.closest('input, textarea, select, [contenteditable="true"], [role="textbox"]'),
-  );
-}
-
-function isDialogKeyboardTarget(target: HTMLElement | null): boolean {
-  if (!target) return false;
-  return Boolean(target.closest('[role="dialog"]'));
-}
-
-function isNativeEditableShortcut(e: KeyboardEvent, target: HTMLElement | null): boolean {
-  if (!isEditableKeyboardTarget(target)) return false;
-  if (!(e.ctrlKey || e.metaKey) || e.altKey) return false;
-
-  const key = e.key.toLowerCase();
-  return key === 'c' || key === 'x' || key === 'v' || key === 'z' || key === 'y';
 }
 
 /**
@@ -412,7 +398,6 @@ function KeyboardCaptureSetup({
         return;
       }
 
-      // Only intercept navigation keys during editing
       const isNavigationKey = ['Enter', 'Tab', 'Escape'].includes(e.key);
       // Sheet switching (Ctrl/Cmd+PageDown/Up) should also be intercepted during editing
       // so NEXT_SHEET/PREVIOUS_SHEET actions can fire while formula editing is active
@@ -420,6 +405,15 @@ function KeyboardCaptureSetup({
         (e.key === 'PageDown' || e.key === 'PageUp') && (e.ctrlKey || e.metaKey);
       const isPickerDropdownShortcut =
         e.altKey && !e.ctrlKey && !e.metaKey && e.key === 'ArrowDown';
+
+      if (
+        isNavigationKey &&
+        isEditableKeyboardTarget(target) &&
+        !isSpreadsheetEditorKeyboardTarget(target)
+      ) {
+        return;
+      }
+
       if (!isNavigationKey && !isSheetSwitch) {
         const isFormattingShortcut =
           (e.ctrlKey || e.metaKey) && !e.altKey && ['b', 'i', 'u'].includes(e.key.toLowerCase());

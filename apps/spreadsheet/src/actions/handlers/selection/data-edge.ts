@@ -19,9 +19,127 @@ import type {
 } from './helpers';
 import { handled } from './helpers';
 
+type ColumnGroup = {
+  start?: number;
+  end?: number;
+  level?: number;
+  collapsed?: boolean;
+  hidden?: boolean;
+};
+
+type OutlineAwareWorksheet = {
+  getCell?: (row: number, col: number) => Promise<{ value?: unknown; formula?: unknown }>;
+  outline?: {
+    getState?: () => Promise<{ columnGroups?: ColumnGroup[] }>;
+    getSettings?: () => Promise<{ summaryColumnsRight?: boolean }>;
+  };
+};
+
 // =============================================================================
 // Data-Edge Navigation Handlers (Ctrl+Arrow)
 // =============================================================================
+
+function isNonEmptyCell(cell: { value?: unknown; formula?: unknown } | null | undefined): boolean {
+  return (
+    (cell?.value !== null && cell?.value !== undefined && cell.value !== '') ||
+    (typeof cell?.formula === 'string' && cell.formula.length > 0)
+  );
+}
+
+function toValidColumnGroup(
+  group: ColumnGroup,
+): (Required<Pick<ColumnGroup, 'start' | 'end'>> & ColumnGroup) | null {
+  const { start, end } = group;
+  if (!Number.isInteger(start) || !Number.isInteger(end)) return null;
+  if (start === undefined || end === undefined || start < 0 || end < start) return null;
+  return group as Required<Pick<ColumnGroup, 'start' | 'end'>> & ColumnGroup;
+}
+
+function findPreviousPeerGroup(
+  groups: Array<Required<Pick<ColumnGroup, 'start' | 'end'>> & ColumnGroup>,
+  group: Required<Pick<ColumnGroup, 'start' | 'end'>> & ColumnGroup,
+): (Required<Pick<ColumnGroup, 'start' | 'end'>> & ColumnGroup) | null {
+  const sameLevel = (candidate: ColumnGroup) => (candidate.level ?? 1) === (group.level ?? 1);
+  let previous: (Required<Pick<ColumnGroup, 'start' | 'end'>> & ColumnGroup) | null = null;
+  for (const candidate of groups) {
+    if (candidate.end >= group.start || !sameLevel(candidate)) continue;
+    if (!previous || candidate.end > previous.end) previous = candidate;
+  }
+  return previous;
+}
+
+async function hasRowDataAt(ws: OutlineAwareWorksheet, row: number, col: number): Promise<boolean> {
+  if (typeof ws.getCell !== 'function') return false;
+  try {
+    return isNonEmptyCell(await ws.getCell(row, col));
+  } catch {
+    return false;
+  }
+}
+
+async function getCollapsedColumnSummaryTarget(
+  deps: ActionDependencies,
+  activeCell: CellCoord,
+  targetCell: CellCoord,
+  direction: Direction,
+): Promise<CellCoord | null> {
+  if (direction !== 'left' && direction !== 'right') return null;
+
+  const ws = deps.workbook.activeSheet as OutlineAwareWorksheet;
+  if (typeof ws.outline?.getState !== 'function') return null;
+
+  let summaryColumnsRight = true;
+  try {
+    summaryColumnsRight = (await ws.outline.getSettings?.())?.summaryColumnsRight ?? true;
+  } catch {
+    summaryColumnsRight = true;
+  }
+  if (!summaryColumnsRight) return null;
+
+  let groups: Array<Required<Pick<ColumnGroup, 'start' | 'end'>> & ColumnGroup> = [];
+  try {
+    groups = ((await ws.outline.getState())?.columnGroups ?? [])
+      .map(toValidColumnGroup)
+      .filter(
+        (group): group is Required<Pick<ColumnGroup, 'start' | 'end'>> & ColumnGroup =>
+          group !== null,
+      )
+      .sort((a, b) => a.start - b.start || a.end - b.end);
+  } catch {
+    return null;
+  }
+
+  const collapsedGroups = groups.filter(
+    (group) => group.collapsed === true || group.hidden === true,
+  );
+
+  if (direction === 'right') {
+    for (const group of collapsedGroups) {
+      const summaryCol = group.end + 1;
+      if (summaryCol <= activeCell.col || summaryCol <= targetCell.col) continue;
+
+      const previousGroup = findPreviousPeerGroup(groups, group);
+      if (!previousGroup) continue;
+      if (activeCell.col < previousGroup.start || activeCell.col > previousGroup.end) continue;
+      if (!(await hasRowDataAt(ws, activeCell.row, summaryCol))) continue;
+
+      return { row: activeCell.row, col: summaryCol };
+    }
+  } else {
+    for (const group of collapsedGroups) {
+      const summaryCol = group.end + 1;
+      if (activeCell.col !== summaryCol || targetCell.col < summaryCol) continue;
+
+      const previousGroup = findPreviousPeerGroup(groups, group);
+      if (!previousGroup) continue;
+      if (!(await hasRowDataAt(ws, activeCell.row, summaryCol))) continue;
+
+      return { row: activeCell.row, col: previousGroup.start };
+    }
+  }
+
+  return null;
+}
 
 /**
  * Move to data edge in a direction.
@@ -35,7 +153,10 @@ async function moveToDataEdge(
   const activeCell = deps.accessors.selection.getActiveCell();
   const ws = deps.workbook.activeSheet;
 
-  const targetCell = await ws.findDataEdge(activeCell.row, activeCell.col, direction);
+  const rawTargetCell = await ws.findDataEdge(activeCell.row, activeCell.col, direction);
+  const targetCell =
+    (await getCollapsedColumnSummaryTarget(deps, activeCell, rawTargetCell, direction)) ??
+    rawTargetCell;
 
   deps.commands.selection.goTo(targetCell);
   return handled();
@@ -73,7 +194,10 @@ async function extendToDataEdge(
   const currentRange = ranges[ranges.length - 1] as CellRange | undefined;
   const extendFrom: CellCoord = currentRange ? getMovingEdge(currentRange, anchorCell) : activeCell;
 
-  const targetCell = await ws.findDataEdge(extendFrom.row, extendFrom.col, direction);
+  const rawTargetCell = await ws.findDataEdge(extendFrom.row, extendFrom.col, direction);
+  const targetCell =
+    (await getCollapsedColumnSummaryTarget(deps, extendFrom, rawTargetCell, direction)) ??
+    rawTargetCell;
 
   const newRange = rangeFromAnchorAndCell(anchorCell, targetCell);
 

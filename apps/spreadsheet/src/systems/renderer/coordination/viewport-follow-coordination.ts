@@ -37,6 +37,8 @@
 
 import type { ActorRefFrom } from 'xstate';
 
+import type { CellRange } from '@mog-sdk/contracts/core';
+import type { CellCoord } from '@mog-sdk/contracts/rendering';
 import type { ISheetViewViewport } from '@mog-sdk/sheet-view';
 
 import type { selectionMachine } from '../../grid-editing/machines/grid-selection-machine';
@@ -67,6 +69,33 @@ export interface ViewportFollowCoordinationConfig {
 export interface ViewportFollowCoordinationResult {
   /** Cleanup function to unsubscribe from the selection actor. */
   cleanup: () => void;
+}
+
+function sameCell(left: CellCoord, right: CellCoord): boolean {
+  return left.row === right.row && left.col === right.col;
+}
+
+function normalizeRange(range: CellRange): CellRange {
+  return {
+    ...range,
+    startRow: Math.min(range.startRow, range.endRow),
+    startCol: Math.min(range.startCol, range.endCol),
+    endRow: Math.max(range.startRow, range.endRow),
+    endCol: Math.max(range.startCol, range.endCol),
+  };
+}
+
+function rangeFitsVisibleCellSpan(range: CellRange, viewport: ISheetViewViewport): boolean {
+  const visibleRange = viewport.getSnapshot?.().visibleRange;
+  if (!visibleRange) return false;
+
+  const normalized = normalizeRange(range);
+  const rangeRows = normalized.endRow - normalized.startRow + 1;
+  const rangeCols = normalized.endCol - normalized.startCol + 1;
+  const visibleRows = visibleRange.endRow - visibleRange.startRow + 1;
+  const visibleCols = visibleRange.endCol - visibleRange.startCol + 1;
+
+  return rangeRows <= visibleRows && rangeCols <= visibleCols;
 }
 
 // =============================================================================
@@ -125,6 +154,18 @@ export function setupViewportFollowCoordination(
 
     // getScrollToCell returns null when the cell is already visible
     const scrollTarget = viewport.getScrollToCell(followCell);
+    if (
+      event.range &&
+      !sameCell(event.activeCell, followCell) &&
+      rangeFitsVisibleCellSpan(event.range, viewport)
+    ) {
+      const activeScrollTarget = viewport.getScrollToCell(event.activeCell);
+      if (activeScrollTarget) {
+        rendererActor.send({ type: 'SCROLL_TO_ACTIVE_CELL', cell: event.activeCell });
+        return;
+      }
+    }
+
     if (!scrollTarget) return;
 
     rendererActor.send({ type: 'SCROLL_TO_ACTIVE_CELL', cell: followCell });

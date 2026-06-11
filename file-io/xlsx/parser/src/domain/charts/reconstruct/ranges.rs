@@ -1,6 +1,6 @@
 //! Data-range to series synthesis for reconstructed charts.
 
-use domain_types::chart::{ChartSeriesData, ChartSpec};
+use domain_types::chart::{ChartSeriesData, ChartSeriesXRoleData, ChartSpec, ChartType};
 
 pub(super) fn series_for_export(spec: &ChartSpec) -> Vec<ChartSeriesData> {
     if !spec.series.is_empty() {
@@ -9,11 +9,16 @@ pub(super) fn series_for_export(spec: &ChartSpec) -> Vec<ChartSeriesData> {
 
     spec.data_range
         .as_deref()
-        .and_then(synthesize_series_from_data_range)
+        .and_then(|data_range| {
+            synthesize_series_from_data_range_for_chart_type(&spec.chart_type, data_range)
+        })
         .unwrap_or_default()
 }
 
-pub(super) fn synthesize_series_from_data_range(data_range: &str) -> Option<Vec<ChartSeriesData>> {
+fn synthesize_series_from_data_range_for_chart_type(
+    chart_type: &ChartType,
+    data_range: &str,
+) -> Option<Vec<ChartSeriesData>> {
     let parsed = ParsedA1Range::parse(data_range)?;
     if parsed.start_row > parsed.end_row || parsed.start_col > parsed.end_col {
         return None;
@@ -22,6 +27,29 @@ pub(super) fn synthesize_series_from_data_range(data_range: &str) -> Option<Vec<
         return None;
     }
 
+    if matches!(chart_type, ChartType::Bubble) {
+        return synthesize_bubble_series_from_parsed_range(&parsed);
+    }
+    if matches!(chart_type, ChartType::Scatter) {
+        return synthesize_xy_series_from_parsed_range(&parsed);
+    }
+    if is_single_category_value_chart(chart_type) {
+        return synthesize_single_category_value_series_from_parsed_range(&parsed);
+    }
+
+    synthesize_category_value_series_from_parsed_range(&parsed)
+}
+
+fn is_single_category_value_chart(chart_type: &ChartType) -> bool {
+    matches!(
+        chart_type,
+        ChartType::Pie | ChartType::Pie3D | ChartType::Doughnut | ChartType::OfPie
+    )
+}
+
+fn synthesize_category_value_series_from_parsed_range(
+    parsed: &ParsedA1Range,
+) -> Option<Vec<ChartSeriesData>> {
     let has_header_row = parsed.start_row < parsed.end_row;
     let has_category_col = parsed.start_col < parsed.end_col;
     let first_value_col = if has_category_col {
@@ -57,7 +85,7 @@ pub(super) fn synthesize_series_from_data_range(data_range: &str) -> Option<Vec<
         } else {
             None
         };
-        series.push(chart_series_data(
+        series.push(chart_series_data_from_refs(
             name,
             categories.clone(),
             Some(parsed.sub_range(col, first_value_row, col, parsed.end_row)),
@@ -66,6 +94,117 @@ pub(super) fn synthesize_series_from_data_range(data_range: &str) -> Option<Vec<
     }
 
     Some(series)
+}
+
+fn synthesize_single_category_value_series_from_parsed_range(
+    parsed: &ParsedA1Range,
+) -> Option<Vec<ChartSeriesData>> {
+    let has_header_row = parsed.start_row < parsed.end_row;
+    let has_category_col = parsed.start_col < parsed.end_col;
+    let value_col = if has_category_col {
+        parsed.start_col + 1
+    } else {
+        parsed.start_col
+    };
+    let first_value_row = if has_header_row {
+        parsed.start_row + 1
+    } else {
+        parsed.start_row
+    };
+
+    if value_col > parsed.end_col || first_value_row > parsed.end_row {
+        return None;
+    }
+
+    let categories = if has_category_col {
+        Some(parsed.sub_range(
+            parsed.start_col,
+            first_value_row,
+            parsed.start_col,
+            parsed.end_row,
+        ))
+    } else {
+        None
+    };
+    let name = if has_header_row {
+        Some(parsed.cell_ref(value_col, parsed.start_row))
+    } else {
+        None
+    };
+
+    Some(vec![chart_series_data_from_refs(
+        name,
+        categories,
+        Some(parsed.sub_range(value_col, first_value_row, value_col, parsed.end_row)),
+        0,
+    )])
+}
+
+fn synthesize_xy_series_from_parsed_range(parsed: &ParsedA1Range) -> Option<Vec<ChartSeriesData>> {
+    if parsed.start_col + 1 > parsed.end_col || parsed.start_row >= parsed.end_row {
+        return None;
+    }
+
+    let first_value_row = parsed.start_row + 1;
+    let x_values = parsed.sub_range(
+        parsed.start_col,
+        first_value_row,
+        parsed.start_col,
+        parsed.end_row,
+    );
+
+    let mut series = Vec::new();
+    for (order, y_col) in (parsed.start_col + 1..=parsed.end_col).enumerate() {
+        let mut sd = chart_series_data_from_refs(
+            Some(parsed.cell_ref(y_col, parsed.start_row)),
+            Some(x_values.clone()),
+            Some(parsed.sub_range(y_col, first_value_row, y_col, parsed.end_row)),
+            order as u32,
+        );
+        sd.x_role = Some(ChartSeriesXRoleData::Quantitative);
+        series.push(sd);
+    }
+
+    Some(series)
+}
+
+fn synthesize_bubble_series_from_parsed_range(
+    parsed: &ParsedA1Range,
+) -> Option<Vec<ChartSeriesData>> {
+    if parsed.start_col + 2 > parsed.end_col || parsed.start_row >= parsed.end_row {
+        return None;
+    }
+
+    let first_value_row = parsed.start_row + 1;
+    let mut series = Vec::new();
+    let mut order = 0;
+    let mut col = parsed.start_col;
+    while col + 2 <= parsed.end_col {
+        let mut sd = chart_series_data_from_refs(
+            Some(parsed.cell_ref(col + 1, parsed.start_row)),
+            Some(parsed.sub_range(col, first_value_row, col, parsed.end_row)),
+            Some(parsed.sub_range(col + 1, first_value_row, col + 1, parsed.end_row)),
+            order,
+        );
+        sd.x_role = Some(ChartSeriesXRoleData::Quantitative);
+        sd.bubble_size = Some(parsed.sub_range(col + 2, first_value_row, col + 2, parsed.end_row));
+        series.push(sd);
+        order += 1;
+        col += 3;
+    }
+
+    (!series.is_empty()).then_some(series)
+}
+
+fn chart_series_data_from_refs(
+    name_ref: Option<String>,
+    categories: Option<String>,
+    values: Option<String>,
+    idx: u32,
+) -> ChartSeriesData {
+    let mut series = chart_series_data(None, categories, values, idx);
+    series.name_ref = name_ref;
+    series
 }
 
 pub(super) fn chart_series_data(

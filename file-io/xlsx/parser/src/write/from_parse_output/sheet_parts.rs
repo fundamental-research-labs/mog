@@ -344,7 +344,10 @@ pub(super) fn build_sheet_parts(
             // are not overridden by stale preserved ChartSpace XML.
             let chart_xml = if chart_replay::should_reconstruct_chart_space(chart_spec) {
                 let chart_space =
-                    crate::domain::charts::reconstruct::reconstruct_chart_space(chart_spec);
+                    crate::domain::charts::reconstruct::reconstruct_chart_space_for_sheet(
+                        chart_spec,
+                        &sheet_data.name,
+                    );
                 serialize_chart_space(&chart_space)
             } else {
                 match &chart_spec.definition {

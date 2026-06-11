@@ -23,7 +23,7 @@ use super::{
 pub(super) fn build_chart_groups(spec: &ChartSpec) -> Vec<ChartGroup> {
     if let Some(ChartDefinition::Chart(chart_space)) = spec.definition.as_ref() {
         if !chart_space.chart.plot_area.chart_groups.is_empty() {
-            return chart_space
+            let chart_groups: Vec<_> = chart_space
                 .chart
                 .plot_area
                 .chart_groups
@@ -36,7 +36,7 @@ pub(super) fn build_chart_groups(spec: &ChartSpec) -> Vec<ChartGroup> {
                         .filter_map(|idx| spec.series.iter().find(|s| s.idx == Some(idx)))
                         .enumerate()
                         .map(|(fallback_idx, sd)| {
-                            build_series(sd, &spec.chart_type, fallback_idx as u32)
+                            build_series(sd, &spec.chart_type, fallback_idx as u32, false)
                         })
                         .collect();
 
@@ -64,6 +64,11 @@ pub(super) fn build_chart_groups(spec: &ChartSpec) -> Vec<ChartGroup> {
                     }
                 })
                 .collect();
+            if chart_groups.iter().all(|group| !group.series.is_empty())
+                || series_for_export(spec).is_empty()
+            {
+                return chart_groups;
+            }
         }
     }
 
@@ -294,7 +299,7 @@ fn build_modeled_chart_group(
     let ooxml_ct = domain_to_ooxml_chart_type(chart_type, spec.sub_type.as_ref());
     let series: Vec<_> = series_data
         .iter()
-        .map(|(fallback_idx, sd)| build_series(sd, chart_type, *fallback_idx as u32))
+        .map(|(fallback_idx, sd)| build_series(sd, chart_type, *fallback_idx as u32, true))
         .collect();
     let config = build_default_config(ooxml_ct, chart_type, spec, &series);
     let d_lbls = spec.data_labels.as_ref().map(build_data_labels);
@@ -329,6 +334,15 @@ pub(super) fn sub_type_to_grouping(sub: Option<&ChartSubType>) -> Grouping {
     }
 }
 
+fn sub_type_to_path_grouping(sub: Option<&ChartSubType>) -> Grouping {
+    match sub {
+        Some(ChartSubType::Clustered) => Grouping::Clustered,
+        Some(ChartSubType::Stacked) => Grouping::Stacked,
+        Some(ChartSubType::PercentStacked) => Grouping::PercentStacked,
+        _ => Grouping::Standard,
+    }
+}
+
 fn radar_style_for_sub_type(sub: Option<&ChartSubType>) -> Option<charts::RadarStyle> {
     match sub {
         Some(ChartSubType::Filled) => Some(charts::RadarStyle::Filled),
@@ -348,7 +362,10 @@ pub(super) fn bar_direction_for(ct: &DomainChartType) -> BarDirection {
 /// Default axis IDs based on chart type.
 pub(super) fn default_axis_ids(ct: OoxmlChartType) -> Vec<u32> {
     match ct {
-        OoxmlChartType::Pie | OoxmlChartType::Pie3D | OoxmlChartType::Doughnut => vec![],
+        OoxmlChartType::Pie
+        | OoxmlChartType::Pie3D
+        | OoxmlChartType::Doughnut
+        | OoxmlChartType::OfPie => vec![],
         _ => vec![111111111, 222222222],
     }
 }
@@ -379,6 +396,7 @@ pub(super) fn build_default_config(
     _series: &[charts::ChartSeries],
 ) -> ChartTypeConfig {
     let grouping = sub_type_to_grouping(spec.sub_type.as_ref());
+    let path_grouping = sub_type_to_path_grouping(spec.sub_type.as_ref());
     match ct {
         OoxmlChartType::Bar => {
             let bar_dir = bar_direction_for(chart_type);
@@ -407,35 +425,40 @@ pub(super) fn build_default_config(
             })
         }
         OoxmlChartType::Line => ChartTypeConfig::Line(charts::LineChartConfig {
-            grouping,
+            grouping: path_grouping,
             drop_lines: spec.drop_lines.as_ref().map(build_chart_lines),
             hi_low_lines: spec.high_low_lines.as_ref().map(build_chart_lines),
             up_down_bars: spec.up_down_bars.as_ref().map(build_up_down_bars),
             ..Default::default()
         }),
         OoxmlChartType::Line3D => ChartTypeConfig::Line3D(charts::Line3DChartConfig {
-            grouping,
+            grouping: path_grouping,
             drop_lines: spec.drop_lines.as_ref().map(build_chart_lines),
             gap_depth: spec.gap_depth,
             ..Default::default()
         }),
         OoxmlChartType::Pie => ChartTypeConfig::Pie(charts::PieChartConfig {
+            vary_colors: spec.vary_by_categories.or(Some(true)),
             first_slice_ang: spec.first_slice_angle,
             ..Default::default()
         }),
-        OoxmlChartType::Pie3D => ChartTypeConfig::Pie3D(charts::Pie3DChartConfig::default()),
+        OoxmlChartType::Pie3D => ChartTypeConfig::Pie3D(charts::Pie3DChartConfig {
+            vary_colors: spec.vary_by_categories.or(Some(true)),
+            ..Default::default()
+        }),
         OoxmlChartType::Doughnut => ChartTypeConfig::Doughnut(charts::DoughnutChartConfig {
+            vary_colors: spec.vary_by_categories.or(Some(true)),
             hole_size: spec.doughnut_hole_size,
             first_slice_ang: spec.first_slice_angle,
             ..Default::default()
         }),
         OoxmlChartType::Area => ChartTypeConfig::Area(charts::AreaChartConfig {
-            grouping: Some(grouping),
+            grouping: Some(path_grouping),
             drop_lines: spec.drop_lines.as_ref().map(build_chart_lines),
             ..Default::default()
         }),
         OoxmlChartType::Area3D => ChartTypeConfig::Area3D(charts::Area3DChartConfig {
-            grouping: Some(grouping),
+            grouping: Some(path_grouping),
             drop_lines: spec.drop_lines.as_ref().map(build_chart_lines),
             gap_depth: spec.gap_depth,
             ..Default::default()
@@ -470,6 +493,7 @@ pub(super) fn build_default_config(
             ..Default::default()
         }),
         OoxmlChartType::OfPie => ChartTypeConfig::OfPie(charts::OfPieChartConfig {
+            vary_colors: spec.vary_by_categories.or(Some(true)),
             split_type: spec
                 .split_type
                 .as_deref()

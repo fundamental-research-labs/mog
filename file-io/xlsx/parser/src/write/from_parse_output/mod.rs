@@ -11,6 +11,7 @@
 
 mod assembly;
 mod chart_auxiliary;
+mod chart_extents;
 mod chart_replay;
 mod differential_formats;
 mod doc_props;
@@ -40,6 +41,7 @@ mod sheet_rows;
 mod sheet_views;
 mod style_remap;
 mod styles;
+mod theme_parts;
 mod threaded_comments;
 mod vml_merge;
 mod workbook_parts;
@@ -823,6 +825,8 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
                     let no_change_aspect_explicit = frame_nv
                         .and_then(|nv| nv.no_change_aspect_explicit)
                         .or(chart_spec.no_change_aspect);
+                    let frame_extent = chart_extents::frame_extent(chart_spec);
+                    let anchor_extent = chart_extents::anchor_extent(chart_spec);
                     let cx_ref = ChartExRef {
                         r_id: cx_r_id,
                         name: frame_cnv
@@ -845,10 +849,12 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
                             .unwrap_or(chart_spec.position.anchor_row_offset),
                         xfrm_ext_cx: chart_frame
                             .map(|frame| frame.graphic_frame.xfrm.ext_cx() as i64)
-                            .unwrap_or((chart_spec.size.width as i64) * 9525),
+                            .filter(|cx| *cx > 0)
+                            .unwrap_or(frame_extent.cx),
                         xfrm_ext_cy: chart_frame
                             .map(|frame| frame.graphic_frame.xfrm.ext_cy() as i64)
-                            .unwrap_or((chart_spec.size.height as i64) * 9525),
+                            .filter(|cy| *cy > 0)
+                            .unwrap_or(frame_extent.cy),
                         xfrm_rot: chart_frame
                             .and_then(|frame| frame.graphic_frame.xfrm.rotation)
                             .map(|rot| rot.value()),
@@ -890,18 +896,10 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
                         chart_spec.position.absolute_x,
                         chart_spec.position.absolute_y,
                     ) {
-                        let cx = chart_spec
-                            .position
-                            .extent_cx
-                            .unwrap_or((chart_spec.size.width as i64) * 9525);
-                        let cy = chart_spec
-                            .position
-                            .extent_cy
-                            .unwrap_or((chart_spec.size.height as i64) * 9525);
                         DrawingAnchor::Absolute(
                             AbsoluteAnchor {
                                 pos: Position { x, y },
-                                extent: Extent { cx, cy },
+                                extent: anchor_extent,
                                 client_data,
                             },
                             chart_object,
@@ -980,6 +978,8 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
                     let no_change_aspect_explicit = frame_nv
                         .and_then(|nv| nv.no_change_aspect_explicit)
                         .or(chart_spec.no_change_aspect);
+                    let frame_extent = chart_extents::frame_extent(chart_spec);
+                    let anchor_extent = chart_extents::anchor_extent(chart_spec);
 
                     let chart_ref = ChartRef {
                         original_id: Some(chart_id),
@@ -1016,10 +1016,12 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
                             .unwrap_or(chart_spec.xfrm_off_y),
                         xfrm_ext_cx: chart_frame
                             .map(|frame| frame.graphic_frame.xfrm.ext_cx() as i64)
-                            .unwrap_or(chart_spec.xfrm_ext_cx),
+                            .filter(|cx| *cx > 0)
+                            .unwrap_or(frame_extent.cx),
                         xfrm_ext_cy: chart_frame
                             .map(|frame| frame.graphic_frame.xfrm.ext_cy() as i64)
-                            .unwrap_or(chart_spec.xfrm_ext_cy),
+                            .filter(|cy| *cy > 0)
+                            .unwrap_or(frame_extent.cy),
                         xfrm_rot: chart_frame
                             .and_then(|frame| frame.graphic_frame.xfrm.rotation)
                             .map(|rot| rot.value()),
@@ -1030,20 +1032,12 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
                         chart_spec.position.absolute_x,
                         chart_spec.position.absolute_y,
                     ) {
-                        let cx = chart_spec
-                            .position
-                            .extent_cx
-                            .unwrap_or((chart_spec.size.width as i64) * 9525);
-                        let cy = chart_spec
-                            .position
-                            .extent_cy
-                            .unwrap_or((chart_spec.size.height as i64) * 9525);
                         deferred_chart_anchors.push((
                             anchor_index,
                             DrawingAnchor::Absolute(
                                 AbsoluteAnchor {
                                     pos: Position { x, y },
-                                    extent: Extent { cx, cy },
+                                    extent: anchor_extent,
                                     client_data,
                                 },
                                 DrawingObject::Chart(chart_ref),
@@ -1052,6 +1046,8 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
                     } else if let (Some(cx), Some(cy)) =
                         (chart_spec.position.extent_cx, chart_spec.position.extent_cy)
                     {
+                        let cx = chart_extents::positive_i64(cx).unwrap_or(anchor_extent.cx);
+                        let cy = chart_extents::positive_i64(cy).unwrap_or(anchor_extent.cy);
                         deferred_chart_anchors.push((
                             anchor_index,
                             DrawingAnchor::OneCell(
@@ -1180,10 +1176,7 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
     // ── 3. Build package graph facts needed before workbook.xml ─────────
     // Theme and properties are computed before workbook XML so relationship IDs
     // come from a resolved graph instead of workbook-local guesses.
-    let theme_xml = output
-        .theme
-        .as_ref()
-        .map(crate::domain::themes::write::theme_writer_from_domain);
+    let theme_xml = Some(theme_parts::theme_xml_for_export(output));
     let has_theme = theme_xml.is_some();
     let doc_props_xml = doc_props::build_doc_props_xml(output);
     let core_props_xml = doc_props_xml.core;

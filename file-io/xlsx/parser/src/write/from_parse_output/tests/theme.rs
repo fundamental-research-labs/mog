@@ -26,6 +26,39 @@ fn exported_theme_xml(output: &ParseOutput) -> String {
 }
 
 #[test]
+fn modeled_export_without_theme_emits_default_office_theme() {
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        ..Default::default()
+    }]);
+
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let content_types =
+        String::from_utf8(archive.read_file("[Content_Types].xml").unwrap()).unwrap();
+    let workbook_rels =
+        String::from_utf8(archive.read_file("xl/_rels/workbook.xml.rels").unwrap()).unwrap();
+    let theme_xml = String::from_utf8(archive.read_file("xl/theme/theme1.xml").unwrap()).unwrap();
+
+    assert!(archive.contains("xl/theme/theme1.xml"));
+    assert!(
+        content_types.contains(
+            r#"PartName="/xl/theme/theme1.xml" ContentType="application/vnd.openxmlformats-officedocument.theme+xml""#
+        ),
+        "{content_types}"
+    );
+    assert!(
+        workbook_rels.contains(
+            r#"Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme""#
+        ),
+        "{workbook_rels}"
+    );
+    assert!(theme_xml.contains(r#"<a:clrScheme name="Office">"#));
+    assert!(theme_xml.contains(r#"<a:srgbClr val="4472C4"/>"#));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
 fn theme_roundtrip_context_does_not_preserve_raw_sidecars() {
     let output = output_with_theme(matching_theme());
 

@@ -13,6 +13,8 @@ use ooxml_types::charts::{AxisType, Chart, ChartAxis, ChartAxisPosition, ChartSp
 
 use super::{ranges, reconstruct_chart_space};
 
+mod imported_series_fallback;
+
 fn minimal_chart_spec(chart_type: DomainChartType, data_range: Option<&str>) -> ChartSpec {
     ChartSpec {
         chart_type,
@@ -172,12 +174,15 @@ fn data_range_chart_reconstructs_series_and_axes() {
     let xml = chart_xml(&spec);
 
     assert_eq!(xml.matches("<c:ser>").count(), 2);
+    assert_eq!(xml.matches(r#"<a:srgbClr val="4472C4"/>"#).count(), 1);
+    assert_eq!(xml.matches(r#"<a:srgbClr val="ED7D31"/>"#).count(), 1);
     assert!(xml.contains("<c:cat>"));
     assert!(xml.contains("<c:f>Data!A2:A4</c:f>"));
     assert!(xml.contains("<c:f>Data!B2:B4</c:f>"));
     assert!(xml.contains("<c:f>Data!C2:C4</c:f>"));
     assert!(xml.contains("<c:catAx>"));
     assert!(xml.contains("<c:valAx>"));
+    assert!(!xml.contains(r#"<c:delete val="1"/>"#), "{xml}");
     assert!(xml.contains("<c:crossAx val=\"222222222\"/>"));
     assert!(xml.contains("<c:crossAx val=\"111111111\"/>"));
 }
@@ -577,7 +582,7 @@ fn cache_fallback_series_sources_reconstruct_ref_caches() {
         format_code: None,
         points: vec![ChartSeriesPointCachePointData {
             idx: 0,
-            value: "Fallback category".to_string(),
+            value: "10".to_string(),
             format_code: None,
         }],
     });
@@ -597,8 +602,8 @@ fn cache_fallback_series_sources_reconstruct_ref_caches() {
     let xml = chart_xml(&spec);
 
     assert!(xml.contains("<c:numCache>"), "{xml}");
-    assert!(xml.contains("<c:strCache>"), "{xml}");
-    assert!(xml.contains("<c:v>Fallback category</c:v>"), "{xml}");
+    assert!(!xml.contains("<c:strCache>"), "{xml}");
+    assert!(xml.contains("<c:v>10</c:v>"), "{xml}");
     assert!(xml.contains("<c:v>30</c:v>"), "{xml}");
     assert!(xml.contains(r#"<c:pt idx="1">"#), "{xml}");
 }

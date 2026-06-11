@@ -1,7 +1,8 @@
 use domain_types::chart::{
-    ChartSeriesCategoryLevelsCacheData, ChartSeriesData, ChartSeriesDimensionSourceKindData,
-    ChartSeriesPointCacheData, ChartSeriesXRoleData, ChartType as DomainChartType, ErrorBarData,
-    ErrorBarSourceData, PointFormatData, TrendlineData, TrendlineLabelData,
+    ChartColorData, ChartLineData, ChartSeriesCategoryLevelsCacheData, ChartSeriesData,
+    ChartSeriesDimensionSourceKindData, ChartSeriesPointCacheData, ChartSeriesXRoleData,
+    ChartType as DomainChartType, ErrorBarData, ErrorBarSourceData, PointFormatData, TrendlineData,
+    TrendlineLabelData,
 };
 use ooxml_types::charts::{
     self, CatDataSource, DataPointOverride, ErrorBarDirection, ErrorBarType, ErrorBars,
@@ -23,6 +24,7 @@ pub(super) fn build_series(
     sd: &ChartSeriesData,
     fallback_chart_type: &DomainChartType,
     fallback_idx: u32,
+    synthesize_modeled_defaults: bool,
 ) -> charts::ChartSeries {
     let effective_chart_type = sd.r#type.as_ref().unwrap_or(fallback_chart_type);
     let uses_xy = matches!(
@@ -58,6 +60,7 @@ pub(super) fn build_series(
         sd.category_levels.as_ref(),
         sd.category_label_format.as_ref(),
         sd.category_source_kind,
+        uses_xy,
     );
     let (cat, x_val) = if has_x_val {
         (None, cat_ref)
@@ -125,8 +128,17 @@ pub(super) fn build_series(
             .extend(point_labels);
     }
 
-    // Shape properties from format
-    let sp_pr = sd.format.as_ref().and_then(build_shape_properties);
+    // Shape properties from explicit format, legacy color, or modeled chart defaults.
+    let sp_pr = sd
+        .format
+        .as_ref()
+        .and_then(build_shape_properties)
+        .or_else(|| build_legacy_series_color_shape_properties(sd, effective_chart_type))
+        .or_else(|| {
+            synthesize_modeled_defaults
+                .then(|| default_series_shape_properties(sd, effective_chart_type, fallback_idx))
+                .flatten()
+        });
 
     // Bar shape
     let shape = sd.bar_shape.as_deref().map(charts::BarShape::from_ooxml);
@@ -150,6 +162,89 @@ pub(super) fn build_series(
         trendline,
         err_bars,
         shape,
+        ..Default::default()
+    }
+}
+
+fn build_legacy_series_color_shape_properties(
+    sd: &ChartSeriesData,
+    chart_type: &DomainChartType,
+) -> Option<ShapeProperties> {
+    sd.color.as_ref().map(|hex| {
+        if chart_type_uses_default_line(chart_type) || sd.show_lines == Some(true) {
+            series_line_shape_properties(hex, sd.line_width)
+        } else {
+            series_fill_shape_properties(hex)
+        }
+    })
+}
+
+fn default_series_shape_properties(
+    sd: &ChartSeriesData,
+    chart_type: &DomainChartType,
+    fallback_idx: u32,
+) -> Option<ShapeProperties> {
+    let color = EXCEL_ACCENT_PALETTE[fallback_idx as usize % EXCEL_ACCENT_PALETTE.len()];
+    if chart_type_uses_default_fill(chart_type) {
+        return Some(series_fill_shape_properties(color));
+    }
+    if chart_type_uses_default_line(chart_type) || sd.show_lines == Some(true) {
+        return Some(series_line_shape_properties(color, sd.line_width));
+    }
+    None
+}
+
+const EXCEL_ACCENT_PALETTE: [&str; 6] =
+    ["4472C4", "ED7D31", "A5A5A5", "FFC000", "5B9BD5", "70AD47"];
+
+fn chart_type_uses_default_fill(chart_type: &DomainChartType) -> bool {
+    matches!(
+        chart_type,
+        DomainChartType::Bar
+            | DomainChartType::Bar3D
+            | DomainChartType::Column
+            | DomainChartType::Column3D
+            | DomainChartType::Area
+            | DomainChartType::Area3D
+            | DomainChartType::Pie
+            | DomainChartType::Pie3D
+            | DomainChartType::Doughnut
+            | DomainChartType::OfPie
+            | DomainChartType::Bubble
+    )
+}
+
+fn chart_type_uses_default_line(chart_type: &DomainChartType) -> bool {
+    matches!(
+        chart_type,
+        DomainChartType::Line
+            | DomainChartType::Line3D
+            | DomainChartType::Radar
+            | DomainChartType::Stock
+    )
+}
+
+fn series_fill_shape_properties(hex: &str) -> ShapeProperties {
+    ShapeProperties {
+        fill: Some(DrawingFill::Solid(SolidFill {
+            color: DrawingColor::SrgbClr {
+                val: hex.trim_start_matches('#').to_string(),
+                transforms: Vec::new(),
+            },
+        })),
+        ..Default::default()
+    }
+}
+
+fn series_line_shape_properties(hex: &str, width: Option<f64>) -> ShapeProperties {
+    ShapeProperties {
+        ln: Some(build_outline(&ChartLineData {
+            color: Some(ChartColorData::Hex(hex.to_string())),
+            width: Some(width.unwrap_or(2.25)),
+            dash_style: None,
+            transparency: None,
+            no_fill: None,
+        })),
         ..Default::default()
     }
 }
@@ -220,8 +315,9 @@ fn build_cat_data_source(
     category_levels: Option<&ChartSeriesCategoryLevelsCacheData>,
     category_label_format: Option<&domain_types::chart::CategoryLabelFormatData>,
     source_kind: Option<ChartSeriesDimensionSourceKindData>,
+    force_numeric: bool,
 ) -> Option<CatDataSource> {
-    let numeric_category = category_cache_is_numeric(cache, category_label_format);
+    let numeric_category = force_numeric || category_cache_is_numeric(cache, category_label_format);
 
     if source_kind == Some(ChartSeriesDimensionSourceKindData::Literal) {
         return cache

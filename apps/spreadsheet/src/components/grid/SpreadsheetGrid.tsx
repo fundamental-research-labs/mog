@@ -452,6 +452,7 @@ export const SpreadsheetGrid = memo(function SpreadsheetGrid({
     getCellValue,
     getCellFormat,
     activeSheetId,
+    workbookSettings,
     sheetStateProvider,
     rendererSkin,
     uiStoreApi,

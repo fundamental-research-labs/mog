@@ -18,14 +18,7 @@ import { useEffect } from 'react';
 
 import type { SheetCoordinator } from '../../../coordinator/sheet-coordinator';
 import { lifecycleDebug } from '../../../systems/renderer/debug/debug-lifecycle';
-
-/**
- * Workbook settings for scrollbar visibility.
- */
-interface WorkbookSettings {
-  showHorizontalScrollbar: boolean;
-  showVerticalScrollbar: boolean;
-}
+import type { GridScrollbarSettings } from '../layout/viewport-size';
 
 /**
  * Options for the useRendererSync hook.
@@ -42,7 +35,7 @@ export interface UseRendererSyncOptions {
   /** Current zoom level for the active sheet (already resolved from UIStore) */
   currentZoom: number;
   /** Workbook settings for scrollbar visibility */
-  workbookSettings: WorkbookSettings;
+  workbookSettings: GridScrollbarSettings;
   /** The sheet coordinator instance */
   coordinator: SheetCoordinator;
   /** Resize callback from renderer hook */

@@ -27,6 +27,7 @@ import type { ResolvedSheetViewSkin } from '@mog-sdk/contracts/rendering/sheet-v
 import type { SheetCoordinator } from '../../../coordinator/sheet-coordinator';
 import type { SheetStateProvider } from '../../../coordinator/types';
 import { lifecycleDebug } from '../../../systems/renderer/debug/debug-lifecycle';
+import { getGridViewportInset, type GridScrollbarSettings } from '../layout/viewport-size';
 
 /**
  * Options for the useRendererDependencies hook.
@@ -42,6 +43,8 @@ export interface UseRendererDependenciesOptions {
   getCellFormat: (sheetId: SheetId, cell: CellCoord) => CellFormat | undefined;
   /** The active sheet ID */
   activeSheetId: string;
+  /** Workbook settings for host-owned scrollbar visibility */
+  workbookSettings: GridScrollbarSettings;
   /** Provider for sheet state (frozen panes, view options) */
   sheetStateProvider: SheetStateProvider;
   /** Initial renderer skin for first paint. */
@@ -84,6 +87,7 @@ export function useRendererDependencies(options: UseRendererDependenciesOptions)
       getCellFormat: (sheetId: string, cell: CellCoord) =>
         optionsRef.current.getCellFormat(sheetId as SheetId, cell),
       initialSheetId: activeSheetId,
+      getViewportInset: () => getGridViewportInset(optionsRef.current.workbookSettings),
       totalRows: MAX_ROWS,
       totalCols: MAX_COLS,
       sheetStateProvider: optionsRef.current.sheetStateProvider,

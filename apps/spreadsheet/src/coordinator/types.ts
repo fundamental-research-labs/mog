@@ -9,7 +9,7 @@
 
 import type { ActorRefFrom, SnapshotFrom } from 'xstate';
 
-import type { SheetViewHandle } from '@mog-sdk/sheet-view';
+import type { SheetViewHandle, SheetViewViewportInset } from '@mog-sdk/sheet-view';
 import type { focusMachine } from '@mog/shell';
 import type { CellFormat, SheetId, SheetViewOptions } from '@mog-sdk/contracts/core';
 import type { ViewportReader } from '@mog-sdk/contracts/api';
@@ -172,6 +172,8 @@ export interface RendererDependencies {
   getCellFormat: (sheetId: string, cell: CellCoord) => CellFormat | undefined;
   /** Initial sheet ID */
   initialSheetId: string;
+  /** Host-owned chrome inset to exclude from the SheetView renderer viewport. */
+  getViewportInset?: () => SheetViewViewportInset;
   /** Total rows */
   totalRows?: number;
   /** Total cols */

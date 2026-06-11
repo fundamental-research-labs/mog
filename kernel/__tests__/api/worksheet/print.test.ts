@@ -8,9 +8,14 @@
 
 import { jest } from '@jest/globals';
 
-import { sheetId, type SheetId } from '@mog-sdk/contracts/core';
+import {
+  sheetId,
+  type PrintSettings,
+  type SheetId,
+} from '@mog-sdk/contracts/core';
 import { WorksheetPrintImpl } from '../../../src/api/worksheet/print';
 import type { DocumentContext } from '../../../src/context/types';
+import { DEFAULT_SHEET_PRINT_SETTINGS } from '../../../src/domain/workbook/core-defaults';
 
 // =============================================================================
 // Mock helpers
@@ -24,6 +29,10 @@ type PrintTitles = {
 /** In-memory stores keyed by sheetId. */
 const printTitlesStore = new Map<string, PrintTitles>();
 const printSettingsStore = new Map<string, Record<string, any>>();
+
+function makePrintSettings(overrides?: Record<string, any>): PrintSettings {
+  return { ...DEFAULT_SHEET_PRINT_SETTINGS, ...(overrides ?? {}) } as PrintSettings;
+}
 
 function applyPrintTitlesPatch(sheetId: SheetId, patch: PrintTitles): void {
   const next = { ...(printTitlesStore.get(sheetId) ?? {}) };
@@ -60,6 +69,14 @@ function createMockContext(): DocumentContext {
         applyPrintTitlesPatch(sheetId, titles);
       }),
       getPrintArea: jest.fn().mockResolvedValue(null),
+      getPrintSettings: jest.fn(async (sheetId: SheetId) =>
+        makePrintSettings(printSettingsStore.get(sheetId)),
+      ),
+      setPrintSettings: jest.fn(
+        async (sheetId: SheetId, settings: Record<string, any>) => {
+          printSettingsStore.set(sheetId, settings);
+        },
+      ),
       setPrintArea: jest.fn().mockResolvedValue(undefined),
       getPageBreaks: jest.fn().mockResolvedValue({ rowBreaks: [], colBreaks: [] }),
       addHorizontalPageBreak: jest.fn().mockResolvedValue(undefined),
@@ -70,6 +87,9 @@ function createMockContext(): DocumentContext {
     },
     mirror: {
       getPrintTitles: jest.fn((sheetId: SheetId) => printTitlesStore.get(sheetId) ?? null),
+      getPrintSettings: jest.fn((sheetId: SheetId) =>
+        makePrintSettings(printSettingsStore.get(sheetId)),
+      ),
     },
   } as unknown as DocumentContext;
 }
@@ -101,6 +121,33 @@ describe('WorksheetPrintImpl — print title methods', () => {
 
   it('getPrintTitleColumns returns null when no print titles are set', async () => {
     expect(await print.getPrintTitleColumns()).toBeNull();
+  });
+
+  it('getSettings exposes Excel default margins when stored margins are unset', async () => {
+    const settings = await print.getSettings();
+
+    expect(settings.margins).toEqual({
+      top: 0.75,
+      bottom: 0.75,
+      left: 0.7,
+      right: 0.7,
+      header: 0.3,
+      footer: 0.3,
+    });
+  });
+
+  it('getSettings preserves explicit margins from the mirror', async () => {
+    const margins = {
+      top: 1,
+      bottom: 1.25,
+      left: 0.5,
+      right: 0.6,
+      header: 0.4,
+      footer: 0.45,
+    };
+    printSettingsStore.set(SHEET_ID, { margins });
+
+    expect((await print.getSettings()).margins).toEqual(margins);
   });
 
   // ---------------------------------------------------------------------------

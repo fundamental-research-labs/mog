@@ -786,6 +786,19 @@ function checkPastedValuesAgainstValidation(
   return violations;
 }
 
+function pasteWouldSkipHiddenTargetRows(
+  sheetId: SheetId,
+  targetRow: number,
+  rowCount: number,
+  store: PasteStoreOperations,
+): boolean {
+  if (!store.isRowHidden || rowCount <= 0) return false;
+  for (let relRow = 0; relRow < rowCount; relRow++) {
+    if (store.isRowHidden(sheetId, targetRow + relRow)) return true;
+  }
+  return false;
+}
+
 // =============================================================================
 // Main Executor
 // =============================================================================
@@ -894,13 +907,17 @@ export async function executePaste(
     // no-op was NOT the engine read failing; it was a redundant TS blank-clear
     // pass that read the source through the active-only viewport (see the
     // copy_range call below).
+    const dimensions = getClipboardDimensions(processedData);
+    const hiddenRowsWouldChangeTargetMapping =
+      options.skipHiddenRows === true &&
+      pasteWouldSkipHiddenTargetRows(sheetId, target.row, dimensions.rows, store);
     const useCoreCopyRange =
       isInternalSource &&
       clipboardHasCorePayload &&
       !!store.copyRange &&
       coreCopyType !== null &&
       operation === 'none' &&
-      !(options.skipHiddenRows && store.isRowHidden) &&
+      !hiddenRowsWouldChangeTargetMapping &&
       !options.skipCells &&
       !isDenseCoreCopyUnsafeForSource(data.sourceRanges);
 
@@ -927,7 +944,6 @@ export async function executePaste(
     // Build a mapping from relative clipboard row index to actual target row
     // when skipHiddenRows is enabled. This allows pasting to skip hidden rows in the target.
     const skipHiddenRows = options.skipHiddenRows && store.isRowHidden;
-    const dimensions = getClipboardDimensions(processedData);
     const relativeRowToTargetRow = new Map<number, number>();
 
     if (skipHiddenRows) {

@@ -4,6 +4,7 @@ use super::super::*;
 use super::helpers::*;
 use crate::snapshot::{CellData, SheetSnapshot};
 use crate::storage::engine::mutation::CellInput;
+use formula_types::StructureChange;
 use value_types::{CellValue, FiniteF64};
 
 // -------------------------------------------------------------------
@@ -114,6 +115,97 @@ fn test_copy_range_formulas() {
         c2_val.unwrap(),
         CellValue::Number(FiniteF64::must(70.0)),
         "C2 should be 70 (=A2+B2, adjusted from =A1+B1)"
+    );
+}
+
+#[test]
+fn copy_range_rebases_formula_after_column_insert() {
+    let sid = sheet_id();
+    let snap = WorkbookSnapshot {
+        sheets: vec![SheetSnapshot {
+            id: sid.to_uuid_string(),
+            name: "Sheet1".to_string(),
+            rows: 100,
+            cols: 40,
+            cells: vec![
+                CellData {
+                    cell_id: "550e8400-e29b-41d4-a716-446655440026".to_string(),
+                    row: 20,
+                    col: 26,
+                    value: CellValue::Number(FiniteF64::must(6058.0)),
+                    formula: None,
+                    identity_formula: None,
+                    array_ref: None,
+                },
+                CellData {
+                    cell_id: "550e8400-e29b-41d4-a716-446655440027".to_string(),
+                    row: 20,
+                    col: 27,
+                    value: CellValue::Number(FiniteF64::must(6732.0)),
+                    formula: None,
+                    identity_formula: None,
+                    array_ref: None,
+                },
+                CellData {
+                    cell_id: "550e8400-e29b-41d4-a716-446655440028".to_string(),
+                    row: 20,
+                    col: 28,
+                    value: CellValue::Number(FiniteF64::must(7509.0)),
+                    formula: Some("=14241-AB21".to_string()),
+                    identity_formula: None,
+                    array_ref: None,
+                },
+            ],
+            ranges: vec![],
+        }],
+        named_ranges: vec![],
+        tables: vec![],
+        pivot_tables: vec![],
+        data_table_regions: vec![],
+        iterative_calc: false,
+        max_iterations: 100,
+        max_change: FiniteF64::must(0.001),
+        calculation_settings: None,
+    };
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+
+    engine
+        .structure_change(
+            &sid,
+            &StructureChange::InsertCols {
+                at: 27,
+                count: 1,
+                new_col_ids: vec![],
+            },
+        )
+        .unwrap();
+
+    assert_eq!(
+        formula_text_at(&engine, &sid, 20, 29).as_deref(),
+        Some("=14241-AC21"),
+        "structural insert should shift the source formula from AC21 to AD21"
+    );
+
+    engine
+        .apply_mutation(EngineMutation::CopyRange {
+            source_sheet_id: sid,
+            src_start_row: 20,
+            src_start_col: 29,
+            src_end_row: 20,
+            src_end_col: 29,
+            target_sheet_id: sid,
+            target_row: 20,
+            target_col: 27,
+            copy_type: domain_types::CopyType::All,
+            skip_blanks: false,
+            transpose: false,
+        })
+        .unwrap();
+
+    assert_eq!(
+        formula_text_at(&engine, &sid, 20, 27).as_deref(),
+        Some("=14241-AA21"),
+        "copying AD21 two columns left into AB21 must rebase the relative AC21 reference"
     );
 }
 

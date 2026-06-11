@@ -187,6 +187,98 @@ describe('Clipboard Paste Integration', () => {
     clipboardActor.stop();
   });
 
+  it('keeps formula-aware core copy when hidden rows exist outside the paste target', async () => {
+    const sheetId = 'sheet-1' as SheetId;
+    const sourceRange = { startRow: 20, startCol: 29, endRow: 20, endCol: 29 };
+    const clipboardData: ClipboardData = {
+      sourceSheetId: sheetId,
+      sourceRanges: [sourceRange],
+      cells: {
+        '0,0': { raw: 7509, formula: '=14241-AC21', format: { numberFormat: '#,##0 ' } },
+      },
+      textSignature: '7509',
+    };
+    const copyRange = jest.fn(async () => {});
+    const store: PasteStoreOperations = {
+      setCellValues: jest.fn(),
+      setCellFormat: jest.fn(),
+      getCellData: jest.fn(),
+      copyRange,
+    };
+
+    const clipboardActor = createActor(clipboardMachine);
+    clipboardActor.start();
+
+    const cleanup = setupClipboardPasteIntegration({
+      clipboardActor,
+      store,
+      getActiveSheetId: () => sheetId,
+      getHiddenRows: async () => new Set([4, 5]),
+    });
+
+    clipboardActor.send({ type: 'COPY', ranges: [sourceRange], data: clipboardData });
+    clipboardActor.send({ type: 'PASTE', targetCell: { row: 20, col: 27 } });
+    await waitForPendingClipboardPaste();
+
+    expect(copyRange).toHaveBeenCalledTimes(1);
+    expect(copyRange).toHaveBeenCalledWith(
+      sheetId,
+      sourceRange,
+      sheetId,
+      20,
+      27,
+      'all',
+      false,
+      false,
+    );
+    expect(store.setCellValues).not.toHaveBeenCalled();
+
+    cleanup();
+    clipboardActor.stop();
+  });
+
+  it('uses the hidden-row-skipping fallback when the paste target row is hidden', async () => {
+    const sheetId = 'sheet-1' as SheetId;
+    const sourceRange = { startRow: 20, startCol: 29, endRow: 20, endCol: 29 };
+    const clipboardData: ClipboardData = {
+      sourceSheetId: sheetId,
+      sourceRanges: [sourceRange],
+      cells: {
+        '0,0': { raw: 'src' },
+      },
+      textSignature: 'src',
+    };
+    const copyRange = jest.fn(async () => {});
+    const store: PasteStoreOperations = {
+      setCellValues: jest.fn(),
+      setCellFormat: jest.fn(),
+      getCellData: jest.fn(),
+      copyRange,
+    };
+
+    const clipboardActor = createActor(clipboardMachine);
+    clipboardActor.start();
+
+    const cleanup = setupClipboardPasteIntegration({
+      clipboardActor,
+      store,
+      getActiveSheetId: () => sheetId,
+      getHiddenRows: async () => new Set([20]),
+    });
+
+    clipboardActor.send({ type: 'COPY', ranges: [sourceRange], data: clipboardData });
+    clipboardActor.send({ type: 'PASTE', targetCell: { row: 20, col: 27 } });
+    await waitForPendingClipboardPaste();
+
+    expect(copyRange).not.toHaveBeenCalled();
+    expect(store.setCellValues).toHaveBeenCalledWith(sheetId, [
+      { row: 21, col: 27, value: 'src' },
+    ]);
+
+    cleanup();
+    clipboardActor.stop();
+  });
+
   it('tiles normal copy paste across an exact-multiple selected target range', async () => {
     const sheetId = 'sheet-1' as SheetId;
     const sourceRange = { startRow: 0, startCol: 0, endRow: 1, endCol: 2 };

@@ -421,6 +421,21 @@ describe('InputCoordinator', () => {
       expect(scrollState.x).toBe(50);
     });
 
+    it('should cap oversized pixel-mode horizontal wheel scroll without app momentum', () => {
+      const event = createWheelEvent({ deltaX: 900, deltaY: 0, deltaMode: 0 });
+      coordinator.handleWheel(event);
+
+      let scrollState = coordinator.getScrollState();
+      expect(scrollState.x).toBe(600);
+      expect(coordinator.getMachineState()).toBe('scrolling');
+
+      jest.advanceTimersByTime(200);
+
+      scrollState = coordinator.getScrollState();
+      expect(scrollState.x).toBe(600);
+      expect(coordinator.getMachineState()).toBe('idle');
+    });
+
     it('should handle diagonal wheel scroll', () => {
       const event = createWheelEvent({ deltaX: 30, deltaY: 40 });
       coordinator.handleWheel(event);

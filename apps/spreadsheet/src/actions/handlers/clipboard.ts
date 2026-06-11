@@ -105,8 +105,7 @@ function toCellRawValue(value: CellValue | null | undefined): CellRawValue {
  * Create clipboard data builder dependencies from action dependencies.
  * Used by COPY and CUT handlers to call unifiedCopy/unifiedCut.
  *
- * Pre-fetches data via Worksheet API (ws.getRange, ws.getMergedRegions,
- * ws.layout.isRowHidden, ws.layout.isColumnHidden) so that buildClipboardData and rangeToTSV/rangeToHTML
+ * Pre-fetches data via Worksheet API so buildClipboardData and rangeToTSV/rangeToHTML
  * can consume it synchronously via lookup maps.
  */
 async function createCopyCutDeps(deps: ActionDependencies, sheetId: SheetId, ranges: CellRange[]) {
@@ -253,10 +252,11 @@ async function createCopyCutDeps(deps: ActionDependencies, sheetId: SheetId, ran
     getCommentsForCellAt: (_sid, row, col) => commentsByPosition.get(`${row},${col}`) ?? [],
   };
 
-  // Export options using pre-fetched data
+  // Normal copy serializes the selected range exactly. Hidden-row/column
+  // predicates are intentionally not passed here; otherwise an explicitly
+  // selected hidden row can produce an empty system clipboard while the rich
+  // in-app clipboard still contains cells.
   const exportOptions = {
-    isRowHidden: (_sid: string, row: number) => hiddenRowsMap.get(row) ?? false,
-    isColHidden: (_sid: string, col: number) => hiddenColsMap.get(col) ?? false,
     getMergeInfo: (_sid: string, row: number, col: number) => {
       const merge = mergeLookup.get(`${row},${col}`);
       if (!merge) return undefined;

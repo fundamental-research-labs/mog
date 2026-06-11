@@ -442,9 +442,11 @@ async function prefetchClipboardData(
     getCommentsForCellAt: (_sid, row, col) => commentsByPosition.get(`${row},${col}`) ?? [],
   };
 
+  // Normal copy serializes the selected range exactly. Hidden-row/column
+  // predicates are intentionally not passed here; otherwise an explicitly
+  // selected hidden row can produce an empty system clipboard while the rich
+  // in-app clipboard still contains cells.
   const exportOptions = {
-    isRowHidden: (_sid: string, row: number) => hiddenRowSet.has(row),
-    isColHidden: (_sid: string, col: number) => hiddenColSet.has(col),
     getMergeInfo: (_sid: string, row: number, col: number) => mergeLookup.get(`${row},${col}`),
   };
 

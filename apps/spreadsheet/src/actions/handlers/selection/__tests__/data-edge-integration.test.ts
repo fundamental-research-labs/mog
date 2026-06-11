@@ -21,6 +21,8 @@ import {
   EXTEND_TO_EDGE_LEFT,
   EXTEND_TO_EDGE_RIGHT,
   EXTEND_TO_EDGE_UP,
+  MOVE_TO_EDGE_LEFT,
+  MOVE_TO_EDGE_RIGHT,
 } from '../data-edge';
 import type { ActionDependencies, CellCoord, CellRange } from '../helpers';
 import { createMockPlatform, createMockShellService } from '../../__tests__/test-helpers';
@@ -117,11 +119,102 @@ function createMockDeps(
   };
 }
 
+function createCollapsedColumnMoveDeps(
+  activeCell: CellCoord,
+  rawTarget: CellCoord,
+  summaryValue: unknown = 100536,
+): { deps: ActionDependencies; goTo: jest.Mock } {
+  const goTo = jest.fn();
+
+  const deps: ActionDependencies = {
+    workbook: {
+      activeSheet: {
+        findDataEdge: jest.fn(async () => rawTarget),
+        getCell: jest.fn(async (_row: number, col: number) => ({
+          value: col === 27 ? summaryValue : null,
+        })),
+        outline: {
+          getSettings: jest.fn(async () => ({ summaryColumnsRight: true })),
+          getState: jest.fn(async () => ({
+            rowGroups: [],
+            columnGroups: [
+              {
+                id: 'group-left',
+                axis: 'column',
+                start: 11,
+                end: 11,
+                level: 1,
+                collapsed: false,
+              },
+              {
+                id: 'group-collapsed',
+                axis: 'column',
+                start: 15,
+                end: 26,
+                level: 1,
+                collapsed: true,
+                hidden: true,
+              },
+            ],
+            maxRowLevel: 0,
+            maxColLevel: 1,
+          })),
+        },
+      },
+      setPendingUndoDescription: jest.fn(),
+    } as any,
+    uiStore: {} as any,
+    coordinator: {} as any,
+    getActiveSheetId: () => sheetId('sheet-1'),
+    onUIAction: jest.fn(),
+    accessors: {
+      selection: {
+        getActiveCell: () => activeCell,
+      },
+    } as any,
+    commands: {
+      selection: {
+        goTo,
+      },
+    } as any,
+    platform: createMockPlatform(),
+    shellService: createMockShellService(),
+  };
+
+  return { deps, goTo };
+}
+
 // =============================================================================
 // ACTUAL BUG REPRODUCTION TESTS
 // =============================================================================
 
 describe('extendToDataEdge - Integration tests with ACTUAL handlers', () => {
+  describe('MOVE_TO_EDGE with collapsed column groups', () => {
+    it('jumps right from the previous outline group to the collapsed group summary column', async () => {
+      const { deps, goTo } = createCollapsedColumnMoveDeps(
+        { row: 6, col: 11 },
+        { row: 6, col: 12 },
+      );
+
+      const result = await MOVE_TO_EDGE_RIGHT(deps);
+
+      expect(result.handled).toBe(true);
+      expect(goTo).toHaveBeenCalledWith({ row: 6, col: 27 });
+    });
+
+    it('jumps left from the collapsed group summary column to the previous outline group start', async () => {
+      const { deps, goTo } = createCollapsedColumnMoveDeps(
+        { row: 6, col: 27 },
+        { row: 6, col: 27 },
+      );
+
+      const result = await MOVE_TO_EDGE_LEFT(deps);
+
+      expect(result.handled).toBe(true);
+      expect(goTo).toHaveBeenCalledWith({ row: 6, col: 11 });
+    });
+  });
+
   describe('Cmd+Shift+Left then Cmd+Shift+Up creates rectangular selection', () => {
     const testData = createTestData();
 

@@ -100,6 +100,11 @@ function isDialogKeyboardTarget(target: HTMLElement | null): boolean {
   return Boolean(target.closest('[role="dialog"]'));
 }
 
+function isNameBoxKeyboardTarget(target: HTMLElement | null): boolean {
+  if (!target) return false;
+  return Boolean(target.closest('[data-testid="name-box"]'));
+}
+
 function isNativeEditableShortcut(e: KeyboardEvent, target: HTMLElement | null): boolean {
   if (!isEditableKeyboardTarget(target)) return false;
   if (!(e.ctrlKey || e.metaKey) || e.altKey) return false;
@@ -389,6 +394,10 @@ function KeyboardCaptureSetup({
             e.stopPropagation();
           }
         }
+        return;
+      }
+
+      if (isNameBoxKeyboardTarget(target)) {
         return;
       }
 

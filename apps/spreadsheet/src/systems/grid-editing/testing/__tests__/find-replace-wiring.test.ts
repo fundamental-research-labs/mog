@@ -418,6 +418,60 @@ describe('Find-Replace Wiring (Bug #28)', () => {
     );
   });
 
+  it('prefers exact whole-cell matches over substring header matches on a fresh find', async () => {
+    const mockWorkbook = createMockWorkbook(sheetId('sheet-1'), [
+      { row: 2, col: 9, value: 'FY11/25E', cellId: 'partial-j3' },
+      { row: 2, col: 11, value: 'FY11/25', cellId: 'exact-l3' },
+      { row: 2, col: 12, value: 'FY11/25', cellId: 'exact-m3' },
+    ]);
+
+    system = new GridEditingSystem({
+      initialSheetId: 'sheet-1',
+      workbook: mockWorkbook,
+    });
+    system.start();
+
+    cleanupFindReplace = wireFindReplace(system, mockWorkbook, 'sheet-1');
+
+    system.access.actors.selection.send({
+      type: 'SET_SELECTION',
+      ranges: [{ startRow: 6, startCol: 12, endRow: 6, endCol: 12 }],
+      activeCell: { row: 6, col: 12 },
+    });
+
+    const actor = system.access.actors.findReplace;
+
+    actor.send({ type: 'OPEN' });
+    actor.send({ type: 'SET_QUERY', query: 'FY11/25' });
+    actor.send({ type: 'SEARCH' });
+
+    await waitForFindReplace(
+      system,
+      (snap) =>
+        snap.matches('hasResults' as any) &&
+        snap.context.results.length === 3 &&
+        getActiveCell(system).row === 2 &&
+        getActiveCell(system).col === 11,
+    );
+
+    expect(actor.getSnapshot().context.results.map((result) => result.cellId)).toEqual([
+      'exact-l3',
+      'exact-m3',
+      'partial-j3',
+    ]);
+    expect(actor.getSnapshot().context.currentIndex).toBe(-1);
+
+    actor.send({ type: 'FIND_NEXT' });
+
+    await waitForFindReplace(
+      system,
+      (snap) =>
+        snap.context.currentIndex === 0 &&
+        getActiveCell(system).row === 2 &&
+        getActiveCell(system).col === 11,
+    );
+  });
+
   // ---------------------------------------------------------------------------
   // Test 6: Without coordination wired, search hangs (documents the dep)
   // ---------------------------------------------------------------------------

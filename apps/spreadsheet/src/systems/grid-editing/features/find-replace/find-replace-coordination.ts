@@ -28,7 +28,11 @@ import { toCellId, type CellId } from '@mog-sdk/contracts/cell-identity';
 import type { CellValue, SheetId } from '@mog-sdk/contracts/core';
 import type { SearchOptions, SearchResult } from '@mog-sdk/contracts/search';
 import { guardBridgeMutation } from '../../../../actions/handlers/bridge-error-guard';
-import { searchInScope, type SearchDataProvider } from '../../../../domain/search';
+import {
+  formatDisplayValue,
+  searchInScope,
+  type SearchDataProvider,
+} from '../../../../domain/search';
 import type {
   FindReplaceActor,
   FindReplaceState,
@@ -382,7 +386,8 @@ export class FindReplaceCoordinator {
       const activeSheetId = this.deps.getActiveSheetId();
 
       // Execute search (sync -- backed by cached data)
-      const results = searchInScope(provider, query, options, activeSheetId);
+      const rawResults = searchInScope(provider, query, options, activeSheetId);
+      const results = this.prioritizeWholeCellValueMatches(rawResults, query, options);
 
       const isReplacementQuery =
         this.lastExecutedQuery.trim() !== '' && this.lastExecutedQuery !== query;
@@ -654,6 +659,57 @@ export class FindReplaceCoordinator {
   ): { row: number; col: number; sheet: SheetId } | null {
     const cached = this.searchCache?.sheets.get(result.sheetId)?.cellIndex.get(result.cellId);
     return cached ? { row: cached.row, col: cached.col, sheet: result.sheetId } : null;
+  }
+
+  private prioritizeWholeCellValueMatches(
+    results: SearchResult[],
+    query: string,
+    options: SearchOptions,
+  ): SearchResult[] {
+    if (results.length <= 1 || options.matchEntireCell || options.useRegex) {
+      return results;
+    }
+
+    const exact: SearchResult[] = [];
+    const partial: SearchResult[] = [];
+
+    for (const result of results) {
+      if (this.isWholeCellValueMatch(result, query, options)) {
+        exact.push(result);
+      } else {
+        partial.push(result);
+      }
+    }
+
+    return exact.length > 0 ? [...exact, ...partial] : results;
+  }
+
+  private isWholeCellValueMatch(
+    result: SearchResult,
+    query: string,
+    options: SearchOptions,
+  ): boolean {
+    if (result.isInFormula) {
+      return this.textEqualsQuery(
+        this.searchCache?.sheets.get(result.sheetId)?.cellIndex.get(result.cellId)?.formulaText ??
+          '',
+        query,
+        options.caseSensitive,
+      );
+    }
+
+    const cached = this.searchCache?.sheets.get(result.sheetId)?.cellIndex.get(result.cellId);
+    if (!cached) return false;
+
+    return this.textEqualsQuery(
+      formatDisplayValue(cached.displayValue),
+      query,
+      options.caseSensitive,
+    );
+  }
+
+  private textEqualsQuery(text: string, query: string, caseSensitive: boolean): boolean {
+    return caseSensitive ? text === query : text.toLocaleLowerCase() === query.toLocaleLowerCase();
   }
 
   private getActiveCell(): { row: number; col: number } | null {

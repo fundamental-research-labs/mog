@@ -10,6 +10,8 @@ describe('focus utils global shortcuts', () => {
     ['Ctrl+Shift+F1', { key: 'F1', ctrlKey: true, shiftKey: true }],
     ['Meta+F1', { key: 'F1', metaKey: true }],
     ['Meta+Shift+F1', { key: 'F1', metaKey: true, shiftKey: true }],
+    ['Ctrl+G', { key: 'g', ctrlKey: true }],
+    ['Meta+G', { key: 'g', metaKey: true }],
   ] satisfies Array<[string, KeyboardEventInit]>)('routes %s globally', (_name, init) => {
     expect(isGlobalShortcut(keyboardEvent(init))).toBe(true);
   });

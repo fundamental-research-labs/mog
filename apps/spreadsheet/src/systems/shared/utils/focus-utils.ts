@@ -48,6 +48,9 @@ export const GLOBAL_SHORTCUTS: readonly KeyboardShortcut[] = [
   // Find and replace
   { ctrl: true, key: 'h' },
   { meta: true, key: 'h' },
+  // Go To
+  { ctrl: true, key: 'g' },
+  { meta: true, key: 'g' },
   // Formula view
   { ctrl: true, key: '`' },
   { meta: true, key: '`' },

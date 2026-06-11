@@ -30,6 +30,7 @@ import type {
   AsyncActionHandler,
 } from '@mog-sdk/contracts/actions';
 
+import type { ClipboardData } from '@mog-sdk/contracts/actors';
 import type { CellRange, SheetId } from '@mog-sdk/contracts/core';
 
 import { requestFormulaBarRefresh } from '../../infra/events/formula-bar-refresh';
@@ -94,6 +95,112 @@ function getRangesOrActiveCell(
   activeCell: { row: number; col: number },
 ): CellRange[] {
   return ranges.length > 0 ? ranges : [activeCellRange(activeCell)];
+}
+
+function rangeHeight(range: CellRange): number {
+  return Math.abs(range.endRow - range.startRow) + 1;
+}
+
+function rangeWidth(range: CellRange): number {
+  return Math.abs(range.endCol - range.startCol) + 1;
+}
+
+function intervalsOverlap(aStart: number, aEnd: number, bStart: number, bEnd: number): boolean {
+  return Math.max(aStart, bStart) <= Math.min(aEnd, bEnd);
+}
+
+function getCutSourceRanges(deps: ActionDependencies): CellRange[] | null {
+  const clipboard = deps.accessors.clipboard;
+  return (
+    clipboard.getCutSource() ??
+    clipboard.getSourceRanges() ??
+    clipboard.getData()?.sourceRanges ??
+    null
+  );
+}
+
+function getInsertRangeForCutSource(targetRange: CellRange, sourceRange: CellRange): CellRange {
+  return {
+    startRow: targetRange.startRow,
+    startCol: targetRange.startCol,
+    endRow: targetRange.startRow + rangeHeight(sourceRange) - 1,
+    endCol: targetRange.startCol + rangeWidth(sourceRange) - 1,
+  };
+}
+
+function adjustCutSourceRangeAfterInsert(
+  sourceRange: CellRange,
+  insertedRange: CellRange,
+  direction: 'right' | 'down',
+): CellRange {
+  if (direction === 'right') {
+    const sourceMinRow = Math.min(sourceRange.startRow, sourceRange.endRow);
+    const sourceMaxRow = Math.max(sourceRange.startRow, sourceRange.endRow);
+    const insertedMinRow = Math.min(insertedRange.startRow, insertedRange.endRow);
+    const insertedMaxRow = Math.max(insertedRange.startRow, insertedRange.endRow);
+    if (
+      intervalsOverlap(sourceMinRow, sourceMaxRow, insertedMinRow, insertedMaxRow) &&
+      Math.min(sourceRange.startCol, sourceRange.endCol) >= insertedRange.startCol
+    ) {
+      const delta = rangeWidth(insertedRange);
+      return {
+        ...sourceRange,
+        startCol: sourceRange.startCol + delta,
+        endCol: sourceRange.endCol + delta,
+      };
+    }
+    return sourceRange;
+  }
+
+  const sourceMinCol = Math.min(sourceRange.startCol, sourceRange.endCol);
+  const sourceMaxCol = Math.max(sourceRange.startCol, sourceRange.endCol);
+  const insertedMinCol = Math.min(insertedRange.startCol, insertedRange.endCol);
+  const insertedMaxCol = Math.max(insertedRange.startCol, insertedRange.endCol);
+  if (
+    intervalsOverlap(sourceMinCol, sourceMaxCol, insertedMinCol, insertedMaxCol) &&
+    Math.min(sourceRange.startRow, sourceRange.endRow) >= insertedRange.startRow
+  ) {
+    const delta = rangeHeight(insertedRange);
+    return {
+      ...sourceRange,
+      startRow: sourceRange.startRow + delta,
+      endRow: sourceRange.endRow + delta,
+    };
+  }
+  return sourceRange;
+}
+
+function rangesEqual(a: CellRange, b: CellRange): boolean {
+  return (
+    a.startRow === b.startRow &&
+    a.startCol === b.startCol &&
+    a.endRow === b.endRow &&
+    a.endCol === b.endCol
+  );
+}
+
+function updateCutSourceRangesAfterInsert(
+  deps: ActionDependencies,
+  sourceRanges: CellRange[],
+  insertedRange: CellRange,
+  direction: 'right' | 'down',
+): void {
+  const adjustedRanges = sourceRanges.map((sourceRange) =>
+    adjustCutSourceRangeAfterInsert(sourceRange, insertedRange, direction),
+  );
+  const changed =
+    adjustedRanges.length !== sourceRanges.length ||
+    adjustedRanges.some((range, index) => !rangesEqual(range, sourceRanges[index]));
+  if (!changed) return;
+
+  const data = deps.accessors.clipboard.getData();
+  if (!data) return;
+
+  const adjustedData: ClipboardData = {
+    ...data,
+    sourceRanges: adjustedRanges,
+  };
+  deps.commands.clipboard.cut(adjustedRanges, adjustedData);
 }
 
 async function withProtectionFeedback<T>(
@@ -678,6 +785,9 @@ export const INSERT_CUT_CELLS: AsyncActionHandler = async (deps, payload) => {
   };
   const range = payloadRange ?? getRangesOrActiveCell(ranges, activeCell)[0];
   const direction = payloadDirection === 'right' ? 'right' : 'down';
+  const cutSourceRanges = getCutSourceRanges(deps);
+  const cutSourceRange = cutSourceRanges?.[0];
+  const insertRange = cutSourceRange ? getInsertRangeForCutSource(range, cutSourceRange) : range;
 
   return withProtectionFeedback(deps, () =>
     deps.workbook.batch('Insert Cut Cells', async () => {
@@ -689,12 +799,15 @@ export const INSERT_CUT_CELLS: AsyncActionHandler = async (deps, payload) => {
         await INSERT_COLUMN_LEFT(deps);
       } else {
         await ws.structure.insertCellsWithShift(
-          range.startRow,
-          range.startCol,
-          range.endRow,
-          range.endCol,
+          insertRange.startRow,
+          insertRange.startCol,
+          insertRange.endRow,
+          insertRange.endCol,
           direction,
         );
+        if (cutSourceRanges) {
+          updateCutSourceRangesAfterInsert(deps, cutSourceRanges, insertRange, direction);
+        }
       }
 
       const pasteResult = await PASTE(deps);

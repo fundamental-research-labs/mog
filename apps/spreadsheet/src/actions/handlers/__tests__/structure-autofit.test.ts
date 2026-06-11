@@ -42,6 +42,13 @@ function createDeps(
     usedRange?: CellRange | null;
     hiddenRows?: number[];
     hiddenCols?: number[];
+    cutSourceRanges?: CellRange[] | null;
+    clipboardData?: {
+      sourceRanges: CellRange[];
+      cells: Record<string, unknown>;
+      sourceSheetId: string;
+      textSignature?: string;
+    } | null;
   } = {},
 ): ActionDependencies {
   const activeSheetId = makeSheetId('sheet1');
@@ -82,11 +89,17 @@ function createDeps(
         hasCut: jest.fn(() => true),
         getIsCut: jest.fn(() => true),
         isExternalClipboard: jest.fn(() => false),
+        getCutSource: jest.fn(() => options.cutSourceRanges ?? null),
+        getSourceRanges: jest.fn(() => options.cutSourceRanges ?? null),
+        getData: jest.fn(() => options.clipboardData ?? null),
       },
     },
     commands: {
       selection: {
         setSelection: jest.fn(),
+      },
+      clipboard: {
+        cut: jest.fn(),
       },
     },
   } as unknown as ActionDependencies;
@@ -225,6 +238,82 @@ describe('Structure autofit handlers', () => {
     expect(result.handled).toBe(true);
     expect(deps.workbook.batch).toHaveBeenCalledWith('Insert Cut Cells', expect.any(Function));
     expect(worksheet.structure.insertCellsWithShift).toHaveBeenCalledWith(6, 11, 6, 12, 'right');
+    expect(pasteHandler).toHaveBeenCalledWith(deps);
+  });
+
+  it('INSERT_CUT_CELLS sizes a shift-right insertion from the cut source and repoints shifted source cells before paste', async () => {
+    const sourceRange = { startRow: 6, startCol: 11, endRow: 6, endCol: 12 };
+    const clipboardData = {
+      sourceRanges: [sourceRange],
+      cells: {
+        '0,0': { raw: 'left' },
+        '0,1': { raw: 'right' },
+      },
+      sourceSheetId: 'sheet1',
+      textSignature: 'left\tright',
+    };
+    const deps = createDeps({
+      activeCell: { row: 6, col: 3 },
+      ranges: [],
+      cutSourceRanges: [sourceRange],
+      clipboardData,
+    });
+
+    const result = await StructureHandlers.INSERT_CUT_CELLS(deps, {
+      range: { startRow: 6, startCol: 3, endRow: 6, endCol: 3 },
+      direction: 'right',
+    });
+
+    const worksheet = deps.workbook.activeSheet as any;
+    const adjustedSourceRange = { startRow: 6, startCol: 13, endRow: 6, endCol: 14 };
+    expect(result.handled).toBe(true);
+    expect(worksheet.structure.insertCellsWithShift).toHaveBeenCalledWith(6, 3, 6, 4, 'right');
+    expect(deps.commands.clipboard.cut).toHaveBeenCalledWith([adjustedSourceRange], {
+      ...clipboardData,
+      sourceRanges: [adjustedSourceRange],
+    });
+    expect(
+      (worksheet.structure.insertCellsWithShift as jest.Mock).mock.invocationCallOrder[0],
+    ).toBeLessThan(
+      (deps.commands.clipboard.cut as unknown as jest.Mock).mock.invocationCallOrder[0],
+    );
+    expect(
+      (deps.commands.clipboard.cut as unknown as jest.Mock).mock.invocationCallOrder[0],
+    ).toBeLessThan(pasteHandler.mock.invocationCallOrder[0]);
+  });
+
+  it('INSERT_CUT_CELLS sizes a shift-down insertion from the cut source and repoints shifted source cells before paste', async () => {
+    const sourceRange = { startRow: 8, startCol: 3, endRow: 10, endCol: 3 };
+    const clipboardData = {
+      sourceRanges: [sourceRange],
+      cells: {
+        '0,0': { raw: 'top' },
+        '1,0': { raw: 'middle' },
+        '2,0': { raw: 'bottom' },
+      },
+      sourceSheetId: 'sheet1',
+      textSignature: 'top\nmiddle\nbottom',
+    };
+    const deps = createDeps({
+      activeCell: { row: 4, col: 3 },
+      ranges: [],
+      cutSourceRanges: [sourceRange],
+      clipboardData,
+    });
+
+    const result = await StructureHandlers.INSERT_CUT_CELLS(deps, {
+      range: { startRow: 4, startCol: 3, endRow: 4, endCol: 3 },
+      direction: 'down',
+    });
+
+    const worksheet = deps.workbook.activeSheet as any;
+    const adjustedSourceRange = { startRow: 11, startCol: 3, endRow: 13, endCol: 3 };
+    expect(result.handled).toBe(true);
+    expect(worksheet.structure.insertCellsWithShift).toHaveBeenCalledWith(4, 3, 6, 3, 'down');
+    expect(deps.commands.clipboard.cut).toHaveBeenCalledWith([adjustedSourceRange], {
+      ...clipboardData,
+      sourceRanges: [adjustedSourceRange],
+    });
     expect(pasteHandler).toHaveBeenCalledWith(deps);
   });
 

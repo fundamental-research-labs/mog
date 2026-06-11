@@ -343,7 +343,7 @@ describe('Workbook SHOW_DETAIL/HIDE_DETAIL summary selections', () => {
       rowGroups: [],
       columnGroups: [
         {
-          id: 'kewpie-fiscal-cols',
+          id: 'imported-cols-p-aa',
           start: 15,
           end: 26,
           level: 1,
@@ -357,7 +357,7 @@ describe('Workbook SHOW_DETAIL/HIDE_DETAIL summary selections', () => {
 
     expect(result.handled).toBe(true);
     expect(outline.toggleCollapsed).toHaveBeenCalledTimes(1);
-    expect(outline.toggleCollapsed).toHaveBeenCalledWith('kewpie-fiscal-cols');
+    expect(outline.toggleCollapsed).toHaveBeenCalledWith('imported-cols-p-aa');
   });
 
   it('expands an imported hidden column group from the adjacent column on the left', async () => {
@@ -366,7 +366,7 @@ describe('Workbook SHOW_DETAIL/HIDE_DETAIL summary selections', () => {
       rowGroups: [],
       columnGroups: [
         {
-          id: 'kewpie-fiscal-cols',
+          id: 'imported-cols-p-aa',
           start: 15,
           end: 26,
           level: 1,
@@ -380,7 +380,7 @@ describe('Workbook SHOW_DETAIL/HIDE_DETAIL summary selections', () => {
 
     expect(result.handled).toBe(true);
     expect(outline.toggleCollapsed).toHaveBeenCalledTimes(1);
-    expect(outline.toggleCollapsed).toHaveBeenCalledWith('kewpie-fiscal-cols');
+    expect(outline.toggleCollapsed).toHaveBeenCalledWith('imported-cols-p-aa');
     expect(layout.unhideColumns).toHaveBeenCalledTimes(1);
     expect(layout.unhideColumns).toHaveBeenCalledWith(15, 26);
   });
@@ -392,7 +392,7 @@ describe('Workbook SHOW_DETAIL/HIDE_DETAIL summary selections', () => {
       columnGroups: [
         { id: 'cols-l', start: 11, end: 11, level: 1, collapsed: false },
         {
-          id: 'kewpie-fiscal-cols',
+          id: 'imported-cols-p-aa',
           start: 15,
           end: 26,
           level: 1,
@@ -406,7 +406,7 @@ describe('Workbook SHOW_DETAIL/HIDE_DETAIL summary selections', () => {
 
     expect(result.handled).toBe(true);
     expect(outline.toggleCollapsed).toHaveBeenCalledTimes(1);
-    expect(outline.toggleCollapsed).toHaveBeenCalledWith('kewpie-fiscal-cols');
+    expect(outline.toggleCollapsed).toHaveBeenCalledWith('imported-cols-p-aa');
     expect(layout.unhideColumns).toHaveBeenCalledTimes(1);
     expect(layout.unhideColumns).toHaveBeenCalledWith(15, 26);
   });
@@ -431,7 +431,7 @@ describe('Workbook SHOW_DETAIL/HIDE_DETAIL summary selections', () => {
       rowGroups: [],
       columnGroups: [
         {
-          id: 'ordinary-fiscal-cols',
+          id: 'ordinary-cols-p-aa',
           start: 15,
           end: 26,
           level: 1,
@@ -499,7 +499,7 @@ describe('Workbook SHOW_DETAIL/HIDE_DETAIL summary selections', () => {
       rowGroups: [],
       columnGroups: [
         {
-          id: 'kewpie-fiscal-cols',
+          id: 'imported-cols-p-aa',
           start: 15,
           end: 26,
           level: 1,
@@ -513,7 +513,7 @@ describe('Workbook SHOW_DETAIL/HIDE_DETAIL summary selections', () => {
 
     expect(result.handled).toBe(true);
     expect(outline.toggleCollapsed).toHaveBeenCalledTimes(1);
-    expect(outline.toggleCollapsed).toHaveBeenCalledWith('kewpie-fiscal-cols');
+    expect(outline.toggleCollapsed).toHaveBeenCalledWith('imported-cols-p-aa');
   });
 
   it('collapses an imported hidden column group from the adjacent column on the left', async () => {
@@ -522,7 +522,7 @@ describe('Workbook SHOW_DETAIL/HIDE_DETAIL summary selections', () => {
       rowGroups: [],
       columnGroups: [
         {
-          id: 'kewpie-fiscal-cols',
+          id: 'imported-cols-p-aa',
           start: 15,
           end: 26,
           level: 1,
@@ -549,7 +549,7 @@ describe('Workbook SHOW_DETAIL/HIDE_DETAIL summary selections', () => {
       columnGroups: [
         { id: 'cols-l', start: 11, end: 11, level: 1, collapsed: false },
         {
-          id: 'kewpie-fiscal-cols',
+          id: 'imported-cols-p-aa',
           start: 15,
           end: 26,
           level: 1,
@@ -562,7 +562,7 @@ describe('Workbook SHOW_DETAIL/HIDE_DETAIL summary selections', () => {
 
     expect(result.handled).toBe(true);
     expect(outline.toggleCollapsed).toHaveBeenCalledTimes(1);
-    expect(outline.toggleCollapsed).toHaveBeenCalledWith('kewpie-fiscal-cols');
+    expect(outline.toggleCollapsed).toHaveBeenCalledWith('imported-cols-p-aa');
     expect(layout.hideColumns).not.toHaveBeenCalled();
   });
 });

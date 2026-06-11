@@ -8,7 +8,7 @@
  * every cell instead of the 12-edge perimeter on 3×3).
  *
  * This test locks the handler-level routing contract independently of
- * the BorderPicker UI and the app-eval scenarios. The picker→handler
+ * the BorderPicker UI and end-to-end scenarios. The picker→handler
  * boundary is where the latent "drop the preset" bug lived; a handler
  * unit test survives picker rewrites and runs in milliseconds.
  *

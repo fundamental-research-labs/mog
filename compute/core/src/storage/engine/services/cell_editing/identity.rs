@@ -40,11 +40,8 @@ pub(in crate::storage::engine) fn cell_id_for_region_guard(
 
 /// Mirror-aware variant of [`find_cell_id_at`].
 ///
-/// When the GridIndex has no CellId at `(row, col)`, checks the mirror's
-/// Range spatial index. If the position falls inside a Range, derives and
-/// pre-registers the virtual CellId so that the caller (and any subsequent
-/// `ensure_cell_id`) returns the deterministic virtual ID instead of
-/// minting a fresh random one.
+/// When the GridIndex has no CellId at `(row, col)`, checks identities that
+/// the mirror already owns before falling back to Range virtual identities.
 pub(in crate::storage::engine) fn find_cell_id_at_mirrored(
     stores: &mut EngineStores,
     mirror: &crate::mirror::CellMirror,
@@ -57,9 +54,10 @@ pub(in crate::storage::engine) fn find_cell_id_at_mirrored(
         return Some(cid);
     }
 
-    // Check the mirror for Range coverage and pre-register if found.
     let grid = stores.grid_indexes.get_mut(sheet_id)?;
-    crate::storage::cells::values::maybe_register_virtual_cell_id(mirror, sheet_id, grid, row, col);
+    crate::storage::cells::values::maybe_register_mirrored_cell_id(
+        mirror, sheet_id, grid, row, col,
+    );
 
     // Re-check — will succeed if a virtual CellId was just registered.
     stores.grid_indexes.get(sheet_id)?.cell_id_at(row, col)
@@ -78,11 +76,9 @@ pub(in crate::storage::engine) fn ensure_cell_id_mirrored(
         .get(sheet_id)
         .and_then(|grid| grid.cell_id_at(row, col));
 
-    // For Range-resident positions, pre-register the virtual CellId so
-    // ensure_cell_id returns it instead of minting a fresh random one.
     let grid = stores.grid_indexes.get_mut(sheet_id)?;
     if already_registered.is_none() {
-        cell_values::maybe_register_virtual_cell_id(mirror, sheet_id, grid, row, col);
+        cell_values::maybe_register_mirrored_cell_id(mirror, sheet_id, grid, row, col);
     }
 
     let cell_id = mirror_cell_position_to_yrs(

@@ -35,7 +35,7 @@ use yrs::{Any, Doc, Map, MapPrelim, MapRef, Origin, Out, Transact};
 use crate::mirror::{CellMirror, SheetMirror};
 use crate::scheduler::input::CellWrite;
 use crate::storage::engine::mutation::CellInput;
-use cell_types::{CellId, SheetId};
+use cell_types::{CellId, SheetId, SheetPos};
 use compute_document::cell_serde::{cell_value_to_any, yrs_any_to_cell_value};
 use compute_document::hex::id_to_hex;
 use compute_document::schema::{
@@ -509,6 +509,36 @@ pub(crate) fn maybe_register_virtual_cell_id(
     }
 }
 
+/// Reuse mirror-owned identities for positions whose CellId was allocated
+/// while parsing formulas against blank cells, then fall back to Range virtuals.
+pub(crate) fn maybe_register_mirrored_cell_id(
+    mirror: &CellMirror,
+    sheet_id: &SheetId,
+    grid_index: &mut crate::identity::GridIndex,
+    row: u32,
+    col: u32,
+) {
+    if grid_index.cell_id_at(row, col).is_some() {
+        return;
+    }
+    if let Some(cell_id) = mirror.resolve_cell_id(sheet_id, SheetPos::new(row, col)) {
+        grid_index.register_cell(cell_id, row, col);
+        return;
+    }
+    maybe_register_virtual_cell_id(mirror, sheet_id, grid_index, row, col);
+}
+
+fn should_register_mirrored_identity_for_write(input: &CellInput) -> bool {
+    match input {
+        CellInput::Clear => false,
+        CellInput::Value {
+            value: CellValue::Null,
+        } => false,
+        CellInput::Parse { text } if text.trim().is_empty() => false,
+        _ => true,
+    }
+}
+
 /// Resolve the effective format category for a single cell *before* the
 /// write transaction opens. Used by `set_cell_value` / `set_cell_values`
 /// so the read-side cascade (which opens its own `transact()`) never
@@ -607,9 +637,9 @@ pub(crate) fn set_cell_value(
     _id_alloc: &cell_types::IdAllocator,
     grid_index: &mut crate::identity::GridIndex,
 ) {
-    // For Range-resident positions, pre-register the virtual CellId so
-    // ensure_cell_id returns it instead of minting a new one.
-    maybe_register_virtual_cell_id(mirror, sheet_id, grid_index, row, col);
+    if should_register_mirrored_identity_for_write(&input) {
+        maybe_register_mirrored_cell_id(mirror, sheet_id, grid_index, row, col);
+    }
 
     // Resolve the format hint BEFORE opening the write txn so the read-side
     // cascade in `properties::get_effective_format` doesn't try to open a
@@ -666,8 +696,10 @@ pub(crate) fn set_cell_values(
     _id_alloc: &cell_types::IdAllocator,
     grid_index: &mut crate::identity::GridIndex,
 ) {
-    for &(r, c, _) in &updates {
-        maybe_register_virtual_cell_id(mirror, sheet_id, grid_index, r, c);
+    for (r, c, input) in &updates {
+        if should_register_mirrored_identity_for_write(input) {
+            maybe_register_mirrored_cell_id(mirror, sheet_id, grid_index, *r, *c);
+        }
     }
 
     let sheet_hex = id_to_hex(sheet_id.as_u128());
@@ -779,9 +811,7 @@ pub fn import_values(
         };
 
         for (row, col, value, formula) in updates {
-            // For Range-resident positions, pre-register the virtual CellId so
-            // ensure_cell_id returns it instead of minting a new one.
-            maybe_register_virtual_cell_id(mirror, sheet_id, grid_index, *row, *col);
+            maybe_register_mirrored_cell_id(mirror, sheet_id, grid_index, *row, *col);
 
             let cell_id = grid_index.ensure_cell_id(*row, *col);
             let cell_hex = id_to_hex(cell_id.as_u128());

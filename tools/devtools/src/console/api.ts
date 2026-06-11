@@ -666,6 +666,12 @@ export function createConsoleAPI(
     }
   }
 
+  async function waitForPendingUiAction(): Promise<void> {
+    const pending = (window as typeof window & { __MOG_PENDING_DIALOG_ACTION__?: Promise<void> })
+      .__MOG_PENDING_DIALOG_ACTION__;
+    if (pending) await pending;
+  }
+
   /**
    * Read the current selection ranges.
    * Primary path: __COORDINATOR__.grid selection snapshot (sync, reliable).
@@ -1915,12 +1921,14 @@ export function createConsoleAPI(
     },
 
     async isRowHidden(row: number): Promise<boolean | null> {
+      await waitForPendingUiAction();
       const wb = getActiveWorkbook();
       if (!wb) return null;
       return await wb.activeSheet.layout.isRowHidden(row);
     },
 
     async isColumnHidden(col: number): Promise<boolean | null> {
+      await waitForPendingUiAction();
       const wb = getActiveWorkbook();
       if (!wb) return null;
       return await wb.activeSheet.layout.isColumnHidden(col);

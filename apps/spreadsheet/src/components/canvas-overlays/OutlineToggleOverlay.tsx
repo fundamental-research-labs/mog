@@ -22,12 +22,10 @@
  *
  * ## Behavior parity
  *
- * Click handlers dispatch the *same* actions the canvas hit-tester
- * (`use-grid-mouse.ts`, `coordinator.objects.hitTestOutline()`) currently
- * dispatches: `groupingState.setLevelCollapsed(axis, level, collapsed)` for
- * level buttons and `groupingState.toggleGroupCollapsed(groupId)` for
- * toggles. No business logic is duplicated here — the overlay is a thin
- * input shim.
+ * Click handlers apply the same collapsed-state transition as the canvas
+ * hit-tester (`use-grid-mouse.ts`, `coordinator.objects.hitTestOutline()`):
+ * level buttons expand groups at or below the target level and collapse
+ * deeper groups, while per-group toggles call `toggleGroupCollapsed(groupId)`.
  *
  * The canvas hit-tester remains active. If both layers fire on a single
  * click, that's a future cleanup (decommission the canvas-side outline
@@ -62,7 +60,7 @@
  * @module @mog/spreadsheet/components/canvas-overlays
  */
 
-import { memo, useCallback, useEffect, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { getEffectiveHeaderDimensions } from '@mog/spreadsheet-utils/rendering/constants';
 import type { GroupDefinition } from '@mog-sdk/contracts/grouping';
@@ -106,8 +104,39 @@ interface LevelButtonRect {
   size: number;
 }
 
+type PendingUiActionGlobal = typeof globalThis & {
+  __MOG_PENDING_DIALOG_ACTION__?: Promise<void>;
+};
+
+const OUTLINE_ACTION_DELAY_MS = 0;
+
 function getSummaryIndex(start: number, end: number, summaryAfter: boolean): number {
   return summaryAfter ? end + 1 : start - 1;
+}
+
+function schedulePendingUiAction(action: () => Promise<unknown> | unknown): void {
+  const global = globalThis as PendingUiActionGlobal;
+  const pending = new Promise<void>((resolve, reject) => {
+    window.setTimeout(() => {
+      Promise.resolve()
+        .then(action)
+        .then(
+          () => {
+            if (global.__MOG_PENDING_DIALOG_ACTION__ === pending) {
+              delete global.__MOG_PENDING_DIALOG_ACTION__;
+            }
+            resolve();
+          },
+          (error) => {
+            if (global.__MOG_PENDING_DIALOG_ACTION__ === pending) {
+              delete global.__MOG_PENDING_DIALOG_ACTION__;
+            }
+            reject(error);
+          },
+        );
+    }, OUTLINE_ACTION_DELAY_MS);
+  });
+  global.__MOG_PENDING_DIALOG_ACTION__ = pending;
 }
 
 // =============================================================================
@@ -145,6 +174,7 @@ export const OutlineToggleOverlay = memo(function OutlineToggleOverlay() {
   const geometry = isReady ? getGeometry() : null;
 
   const { maxRowLevel, maxColLevel, rowGroups, columnGroups, groupingConfig } = groupingState;
+  const mouseScheduledActionRef = useRef<string | null>(null);
 
   // Compute all button rects. Re-derived whenever grouping data, viewport,
   // header visibility, or the scroll tick changes.
@@ -181,26 +211,46 @@ export const OutlineToggleOverlay = memo(function OutlineToggleOverlay() {
     scrollTick,
   ]);
 
-  // Click handlers — reuse the same actions the canvas hit-tester dispatches.
+  // Click handlers — mirror the collapsed states the canvas hit-tester applies.
   const handleLevelClick = useCallback(
-    (axis: 'row' | 'col', targetLevel: number) => {
-      // Mirror use-grid-mouse.ts:528-537 — collapse all levels above the
-      // target, expand levels at and below it.
-      const stateAxis: 'row' | 'column' = axis === 'row' ? 'row' : 'column';
-      const maxLevel = axis === 'row' ? maxRowLevel : maxColLevel;
-      for (let level = 1; level <= maxLevel; level++) {
-        groupingState.setLevelCollapsed(stateAxis, level, level > targetLevel);
+    async (axis: 'row' | 'col', targetLevel: number) => {
+      const groups = axis === 'row' ? rowGroups : columnGroups;
+      for (const group of groups) {
+        const collapsed = group.level > targetLevel;
+        if (group.collapsed !== collapsed) {
+          await groupingState.toggleGroupCollapsed(group.id);
+        }
       }
     },
-    [groupingState, maxRowLevel, maxColLevel],
+    [groupingState, rowGroups, columnGroups],
   );
 
   const handleToggleClick = useCallback(
     (groupId: string) => {
-      groupingState.toggleGroupCollapsed(groupId);
+      return groupingState.toggleGroupCollapsed(groupId);
     },
     [groupingState],
   );
+
+  const scheduleLevelClick = useCallback(
+    (axis: 'row' | 'col', level: number) => {
+      schedulePendingUiAction(() => handleLevelClick(axis, level));
+    },
+    [handleLevelClick],
+  );
+
+  const scheduleToggleClick = useCallback(
+    (groupId: string) => {
+      schedulePendingUiAction(() => handleToggleClick(groupId));
+    },
+    [handleToggleClick],
+  );
+
+  const consumeMouseScheduledAction = useCallback((actionKey: string) => {
+    if (mouseScheduledActionRef.current !== actionKey) return false;
+    mouseScheduledActionRef.current = null;
+    return true;
+  }, []);
 
   if (!isReady || !geometry || !groupingConfig) {
     return null;
@@ -219,57 +269,79 @@ export const OutlineToggleOverlay = memo(function OutlineToggleOverlay() {
       aria-hidden="true"
       data-testid="outline-toggle-overlay"
     >
-      {levelButtons.map((btn) => (
-        <button
-          key={`level-${btn.axis}-${btn.level}`}
-          type="button"
-          style={{
-            position: 'absolute',
-            left: btn.x - btn.size / 2,
-            top: btn.y - btn.size / 2,
-            width: btn.size,
-            height: btn.size,
-            opacity: 0,
-            cursor: 'pointer',
-            pointerEvents: 'auto',
-            border: 'none',
-            background: 'transparent',
-            padding: 0,
-            margin: 0,
-          }}
-          aria-label={`Outline ${btn.axis} level ${btn.level}`}
-          data-no-grid-pointer="true"
-          data-testid={`outline-${btn.axis}-level-${btn.level}`}
-          onClick={() => handleLevelClick(btn.axis, btn.level)}
-          className="focus:outline focus:outline-2 focus:outline-ss-primary focus:outline-offset-1"
-        />
-      ))}
-      {toggles.map((tgl) => (
-        <button
-          key={`toggle-${tgl.axis}-${tgl.groupId}`}
-          type="button"
-          style={{
-            position: 'absolute',
-            left: tgl.x - tgl.size / 2,
-            top: tgl.y - tgl.size / 2,
-            width: tgl.size,
-            height: tgl.size,
-            opacity: 0,
-            cursor: 'pointer',
-            pointerEvents: 'auto',
-            border: 'none',
-            background: 'transparent',
-            padding: 0,
-            margin: 0,
-          }}
-          aria-label={`Outline ${tgl.axis} group ${tgl.collapsed ? 'expand' : 'collapse'}`}
-          aria-expanded={!tgl.collapsed}
-          data-no-grid-pointer="true"
-          data-testid={`outline-${tgl.axis}-toggle-${tgl.index}`}
-          onClick={() => handleToggleClick(tgl.groupId)}
-          className="focus:outline focus:outline-2 focus:outline-ss-primary focus:outline-offset-1"
-        />
-      ))}
+      {levelButtons.map((btn) => {
+        const actionKey = `level-${btn.axis}-${btn.level}`;
+        return (
+          <button
+            key={actionKey}
+            type="button"
+            style={{
+              position: 'absolute',
+              left: btn.x - btn.size / 2,
+              top: btn.y - btn.size / 2,
+              width: btn.size,
+              height: btn.size,
+              opacity: 0,
+              cursor: 'pointer',
+              pointerEvents: 'auto',
+              border: 'none',
+              background: 'transparent',
+              padding: 0,
+              margin: 0,
+            }}
+            aria-label={`Outline ${btn.axis} level ${btn.level}`}
+            data-no-grid-pointer="true"
+            data-testid={`outline-${btn.axis}-level-${btn.level}`}
+            onMouseDown={(event) => {
+              if (event.button !== 0) return;
+              mouseScheduledActionRef.current = actionKey;
+              scheduleLevelClick(btn.axis, btn.level);
+            }}
+            onClick={() => {
+              if (consumeMouseScheduledAction(actionKey)) return;
+              scheduleLevelClick(btn.axis, btn.level);
+            }}
+            className="focus:outline focus:outline-2 focus:outline-ss-primary focus:outline-offset-1"
+          />
+        );
+      })}
+      {toggles.map((tgl) => {
+        const actionKey = `toggle-${tgl.axis}-${tgl.groupId}`;
+        return (
+          <button
+            key={actionKey}
+            type="button"
+            style={{
+              position: 'absolute',
+              left: tgl.x - tgl.size / 2,
+              top: tgl.y - tgl.size / 2,
+              width: tgl.size,
+              height: tgl.size,
+              opacity: 0,
+              cursor: 'pointer',
+              pointerEvents: 'auto',
+              border: 'none',
+              background: 'transparent',
+              padding: 0,
+              margin: 0,
+            }}
+            aria-label={`Outline ${tgl.axis} group ${tgl.collapsed ? 'expand' : 'collapse'}`}
+            aria-expanded={!tgl.collapsed}
+            data-no-grid-pointer="true"
+            data-testid={`outline-${tgl.axis}-toggle-${tgl.index}`}
+            onMouseDown={(event) => {
+              if (event.button !== 0) return;
+              mouseScheduledActionRef.current = actionKey;
+              scheduleToggleClick(tgl.groupId);
+            }}
+            onClick={() => {
+              if (consumeMouseScheduledAction(actionKey)) return;
+              scheduleToggleClick(tgl.groupId);
+            }}
+            className="focus:outline focus:outline-2 focus:outline-ss-primary focus:outline-offset-1"
+          />
+        );
+      })}
     </div>
   );
 });
@@ -333,15 +405,43 @@ function computeOutlineRects(args: ComputeOutlineRectsArgs): {
     const y = colGutterHeight > 0 ? colGutterHeight / 2 : colHeaderHeight / 2;
     for (let level = 1; level <= maxRowLevel + 1; level++) {
       const x = (level - 1) * OUTLINE_LEVEL_WIDTH + OUTLINE_LEVEL_WIDTH / 2;
-      levelButtons.push({ axis: 'row', level, x, y, size: OUTLINE_BUTTON_SIZE });
+      const rect = {
+        axis: 'row' as const,
+        level,
+        x,
+        y,
+        size: OUTLINE_BUTTON_SIZE,
+      };
+      levelButtons.push(rect);
     }
+    levelButtons.push({
+      axis: 'row' as const,
+      level: maxRowLevel + 2,
+      x: (maxRowLevel + 1) * OUTLINE_LEVEL_WIDTH + OUTLINE_LEVEL_WIDTH / 2,
+      y,
+      size: OUTLINE_BUTTON_SIZE,
+    });
   }
   if (showOutlineLevelButtons && maxColLevel > 0) {
     const x = rowGutterWidth > 0 ? rowGutterWidth / 2 : rowHeaderWidth / 2;
     for (let level = 1; level <= maxColLevel + 1; level++) {
       const y = (level - 1) * OUTLINE_LEVEL_HEIGHT + OUTLINE_LEVEL_HEIGHT / 2;
-      levelButtons.push({ axis: 'col', level, x, y, size: OUTLINE_BUTTON_SIZE });
+      const rect = {
+        axis: 'col' as const,
+        level,
+        x,
+        y,
+        size: OUTLINE_BUTTON_SIZE,
+      };
+      levelButtons.push(rect);
     }
+    levelButtons.push({
+      axis: 'col' as const,
+      level: maxColLevel + 2,
+      x,
+      y: (maxColLevel + 1) * OUTLINE_LEVEL_HEIGHT + OUTLINE_LEVEL_HEIGHT / 2,
+      size: OUTLINE_BUTTON_SIZE,
+    });
   }
 
   // ── Row collapse buttons ────────────────────────────────────────────────

@@ -43,9 +43,9 @@ export interface UseGroupingStateReturn {
 
   // Stable callbacks (NO selection dependency)
   /** Set all groups at a level to collapsed/expanded */
-  setLevelCollapsed: (axis: 'row' | 'column', level: number, collapsed: boolean) => void;
+  setLevelCollapsed: (axis: 'row' | 'column', level: number, collapsed: boolean) => Promise<void>;
   /** Toggle collapse state of a specific group by ID */
-  toggleGroupCollapsed: (groupId: string) => boolean;
+  toggleGroupCollapsed: (groupId: string) => Promise<boolean>;
 }
 
 // =============================================================================
@@ -130,31 +130,29 @@ export function useGroupingState(): UseGroupingStateReturn {
   // ==========================================================================
 
   const setLevelCollapsed = useCallback(
-    (axis: 'row' | 'column', level: number, collapsed: boolean) => {
+    async (axis: 'row' | 'column', level: number, collapsed: boolean) => {
       const action = collapsed ? 'Collapse' : 'Expand';
       wb.setPendingUndoDescription(`${action} ${axis} level ${level}`);
       const ws = wb.getSheetById(activeSheetId);
-      void (async () => {
-        const state = await ws.outline.getState();
-        const groups = axis === 'row' ? state.rowGroups : state.columnGroups;
-        for (const group of groups) {
-          if (
-            (group as GroupDefinition).level >= level &&
-            (group as GroupDefinition).collapsed !== collapsed
-          ) {
-            await ws.outline.toggleCollapsed((group as GroupDefinition).id);
-          }
+      const state = await ws.outline.getState();
+      const groups = axis === 'row' ? state.rowGroups : state.columnGroups;
+      for (const group of groups) {
+        if (
+          (group as GroupDefinition).level >= level &&
+          (group as GroupDefinition).collapsed !== collapsed
+        ) {
+          await ws.outline.toggleCollapsed((group as GroupDefinition).id);
         }
-      })();
+      }
     },
     [wb, activeSheetId],
   );
 
   const toggleGroupCollapsed = useCallback(
-    (groupId: string) => {
+    async (groupId: string) => {
       const ws = wb.getSheetById(activeSheetId);
-      void ws.outline.toggleCollapsed(groupId);
-      return true; // Optimistic return; API is async
+      await ws.outline.toggleCollapsed(groupId);
+      return true;
     },
     [wb, activeSheetId],
   );

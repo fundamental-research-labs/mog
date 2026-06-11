@@ -156,6 +156,7 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
   const [validationError, setValidationError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const skipBlurCommitRef = useRef(false);
 
   // Load named ranges, tables, sheets from Workbook/Worksheet API (async) for dropdown
   const [cachedNamedRanges, setCachedNamedRanges] = useState<any[]>([]);
@@ -366,6 +367,22 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
     return { definedNames, tables, sheets };
   }, [suggestions]);
 
+  const shouldCommitBlurValue = useCallback(
+    (value: string): boolean => {
+      const trimmed = value.trim();
+      if (!trimmed || trimmed === cellAddress) return false;
+      if (parseCellRange(trimmed)) return true;
+
+      const lower = trimmed.toLowerCase();
+      const definedNames = storeAdapter.getDefinedNames();
+      if (Object.keys(definedNames).some((name) => name.toLowerCase() === lower)) {
+        return true;
+      }
+      return storeAdapter.getTables().some((table) => table.name.toLowerCase() === lower);
+    },
+    [cellAddress, storeAdapter],
+  );
+
   // Handle clicking on the name box to open dropdown
   const handleNameBoxClick = useCallback(() => {
     if (!isEditing) {
@@ -430,6 +447,10 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
           // Ignore unresolved sheet names; parsing still resolves the active-sheet coordinates.
         }
       };
+      const shouldActivateSheet = (sheetName: string | undefined): sheetName is string =>
+        sheetName != null &&
+        sheetName !== '' &&
+        sheetName.toLowerCase() !== activeSheetName.toLowerCase();
 
       const setCellSelection = (
         range: CellRange,
@@ -443,7 +464,7 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
       if (trimmedAddress.includes(':')) {
         const parsedRange = parseCellRange(trimmedAddress);
         if (parsedRange) {
-          if (parsedRange.sheetName) {
+          if (shouldActivateSheet(parsedRange.sheetName)) {
             await activateSheetByName(parsedRange.sheetName);
           }
           setCellSelection(rangeFromParsedCellRange(parsedRange), {
@@ -466,7 +487,7 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
         const ref = refersTo.replace(/^=/, '').replace(/\$/g, '');
         const parsedRange = parseCellRange(ref);
         if (!parsedRange) return false;
-        if (parsedRange.sheetName) {
+        if (shouldActivateSheet(parsedRange.sheetName)) {
           await activateSheetByName(parsedRange.sheetName);
         }
         setCellSelection(rangeFromParsedCellRange(parsedRange), {
@@ -548,7 +569,7 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
         }
 
         // If sheet is specified and different, switch sheets first
-        if (parsed.sheetName) {
+        if (shouldActivateSheet(parsed.sheetName)) {
           await activateSheetByName(parsed.sheetName);
         }
 
@@ -647,31 +668,42 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
     (e: React.KeyboardEvent<HTMLInputElement>) => {
       if (e.key === 'Enter') {
         e.preventDefault();
+        skipBlurCommitRef.current = true;
         // Read straight from the DOM so test harnesses (Playwright `fill`)
         // and rapid user input both commit the actual typed value, even if
         // the `inputValue` state hasn't flushed yet.
         const typed = e.currentTarget.value ?? inputValue;
-        void navigateToAddress(typed);
-        setIsEditing(false);
-        // Radix's PopoverTrigger toggle fires on the initial button click and
-        // sets isOpen=true even though we immediately override with setIsOpen(false)
-        // in handleNameBoxClick. The toggle survives because Radix fires after the
-        // child's onClick handler. That latent isOpen=true becomes visible once
-        // isEditing goes false (open = isOpen && !isEditing). Force-close here so
-        // the dropdown doesn't open after the user commits the name-box value.
-        setIsOpen(false);
-        // Return focus to the grid canvas. Without this, the just-unmounted
-        // input drops focus to <body>, and subsequent typing is consumed by
-        // whatever default-focus target the browser picks (often nothing).
-        // Excel/Sheets parity: a navigator owns the focus contract — it both
-        // moves the selection AND returns focus to the destination.
-        coordinator.input.focusGrid();
+        void (async () => {
+          try {
+            await navigateToAddress(typed);
+          } finally {
+            setIsEditing(false);
+            // Radix's PopoverTrigger toggle fires on the initial button click and
+            // sets isOpen=true even though we immediately override with setIsOpen(false)
+            // in handleNameBoxClick. The toggle survives because Radix fires after the
+            // child's onClick handler. That latent isOpen=true becomes visible once
+            // isEditing goes false (open = isOpen && !isEditing). Force-close here so
+            // the dropdown doesn't open after the user commits the name-box value.
+            setIsOpen(false);
+            // Return focus to the grid canvas. Without this, the just-unmounted
+            // input drops focus to <body>, and subsequent typing is consumed by
+            // whatever default-focus target the browser picks (often nothing).
+            // Excel/Sheets parity: a navigator owns the focus contract — it both
+            // moves the selection AND returns focus to the destination.
+            coordinator.input.focusGrid();
+            skipBlurCommitRef.current = false;
+          }
+        })();
       } else if (e.key === 'Escape') {
         e.preventDefault();
+        skipBlurCommitRef.current = true;
         setValidationError(null);
         setIsEditing(false);
         setIsOpen(false);
         coordinator.input.focusGrid();
+        requestAnimationFrame(() => {
+          skipBlurCommitRef.current = false;
+        });
       }
     },
     [inputValue, navigateToAddress, coordinator],
@@ -679,9 +711,20 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
 
   // Handle input blur
   const handleInputBlur = useCallback(() => {
+    if (skipBlurCommitRef.current) {
+      skipBlurCommitRef.current = false;
+      setIsEditing(false);
+      setIsOpen(false);
+      return;
+    }
+
+    const typed = inputRef.current?.value ?? inputValue;
+    if (shouldCommitBlurValue(typed)) {
+      void navigateToAddress(typed);
+    }
     setIsEditing(false);
     setIsOpen(false);
-  }, []);
+  }, [inputValue, navigateToAddress, shouldCommitBlurValue]);
 
   // Handle dropdown filter change
   const handleFilterChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {

@@ -65,6 +65,26 @@ function cellDataValue(value: string | number | boolean | null): unknown {
   return { value: { type, value } };
 }
 
+function undefinedPaths(value: unknown, path = '$'): string[] {
+  if (Array.isArray(value)) {
+    return value.flatMap((child, index) => undefinedPaths(child, `${path}[${index}]`));
+  }
+  if (!value || typeof value !== 'object') {
+    return [];
+  }
+
+  const paths: string[] = [];
+  for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+    const childPath = `${path}.${key}`;
+    if (child === undefined) {
+      paths.push(childPath);
+    } else {
+      paths.push(...undefinedPaths(child, childPath));
+    }
+  }
+  return paths;
+}
+
 function createPieChartAddApi(cells: Record<string, string | number | boolean | null> = {}) {
   let createdConfig: ChartFloatingObject | null = null;
   const ctx = {
@@ -305,6 +325,36 @@ describe('WorksheetChartsImpl chart title inference', () => {
 
     expect(getCreatedConfig()).toEqual(expect.objectContaining({ title: 'Custom title' }));
     expect(ctx.computeBridge.getCellData).not.toHaveBeenCalled();
+  });
+});
+
+describe('WorksheetChartsImpl chart create payloads', () => {
+  it('omits undefined optional chart fields before sending payloads to compute', async () => {
+    const { charts, getCreatedConfig } = createPieChartAddApi();
+
+    await charts.add({
+      type: 'column',
+      subType: 'clustered',
+      dataRange: 'A1:B5',
+      seriesOrientation: 'columns',
+      anchorRow: 2,
+      anchorCol: 2,
+      width: 8,
+      height: 15,
+      title: 'Sales',
+      axis: {
+        xAxis: { type: 'category', visible: true, title: undefined, gridLines: false },
+        yAxis: { type: 'value', visible: true, title: undefined, gridLines: true },
+      },
+      legend: { show: true, position: 'right', visible: true },
+      dataLabels: { show: false },
+    });
+
+    const createdConfig = getCreatedConfig();
+
+    expect(createdConfig).not.toHaveProperty('showLines');
+    expect(createdConfig).not.toHaveProperty('plotVisibleOnly');
+    expect(undefinedPaths(createdConfig)).toEqual([]);
   });
 });
 

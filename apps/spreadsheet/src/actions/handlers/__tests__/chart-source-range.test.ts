@@ -58,6 +58,22 @@ describe('resolveChartSourceRange', () => {
     ).resolves.toEqual({ startRow: 20, startCol: 11, endRow: 20, endCol: 13 });
   });
 
+  it('preserves explicit multi-row chart sources even when hidden detail columns split the range', async () => {
+    const range = { startRow: 2, startCol: 11, endRow: 6, endCol: 27 };
+    const ws = createWorksheet({
+      expandedRegion: range,
+      hiddenCols: [15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26],
+      cellValues: {
+        '6,11': 'Total',
+        '6,12': 505000,
+        '6,13': 600000,
+        '6,27': 100536,
+      },
+    });
+
+    await expect(resolveChartSourceRange(ws, range)).resolves.toEqual(range);
+  });
+
   it('falls back to point visibility checks when the bulk hidden-column bitmap is stale', async () => {
     const ws = createWorksheet({
       expandedRegion: { startRow: 20, startCol: 11, endRow: 20, endCol: 27 },

@@ -72,6 +72,20 @@ function numericField(fields: Record<string, unknown>, key: string): number | un
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
 
+function omitUndefinedDeep<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return value.map((item) => omitUndefinedDeep(item)) as T;
+  }
+  if (value && typeof value === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+      if (child !== undefined) out[key] = omitUndefinedDeep(child);
+    }
+    return out as T;
+  }
+  return value;
+}
+
 export function unsupportedNativeXlsxChartType(
   config: Partial<Pick<ChartConfig, 'type'>>,
 ): ChartType | undefined {
@@ -212,7 +226,7 @@ export function chartConfigToInternal(config: ChartConfig): ChartFloatingObject 
     ? legendConfigToWire(syncLegendEntriesToInternal(config.legend) as typeof config.legend)
     : undefined;
 
-  return {
+  return omitUndefinedDeep({
     // FloatingObjectCommon fields
     id: (config as { id?: string }).id || `chart-${now}`,
     sheetId: '',
@@ -310,7 +324,7 @@ export function chartConfigToInternal(config: ChartConfig): ChartFloatingObject 
     floorFormat: chartFormatToWire(config.floorFormat),
     sideWallFormat: chartFormatToWire(config.sideWallFormat),
     backWallFormat: chartFormatToWire(config.backWallFormat),
-  };
+  });
 }
 
 /**
@@ -467,7 +481,7 @@ export function chartUpdatesToInternal(updates: Partial<ChartConfig>): ChartUpda
   if (updates.backWallFormat !== undefined)
     result.backWallFormat = chartFormatToWire(updates.backWallFormat);
 
-  return result;
+  return omitUndefinedDeep(result);
 }
 
 /**

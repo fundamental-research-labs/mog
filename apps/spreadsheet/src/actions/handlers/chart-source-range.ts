@@ -130,6 +130,10 @@ export async function resolveChartSourceRange(
     return range;
   }
 
+  if (sourceRange.startRow !== sourceRange.endRow) {
+    return range;
+  }
+
   const [hiddenRows, hiddenCols] = await Promise.all([
     getHiddenInSpan(ws, 'getHiddenRowsBitmap', 'isRowHidden', range.startRow, range.endRow),
     getHiddenInSpan(ws, 'getHiddenColumnsBitmap', 'isColumnHidden', range.startCol, range.endCol),

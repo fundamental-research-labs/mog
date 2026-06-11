@@ -4370,24 +4370,6 @@ export interface ScrollPositionChange {
   leftCol: number;
 }
 
-export interface SheetViewCell {
-  row: number;
-  col: number;
-}
-
-export interface SheetViewRange {
-  startRow: number;
-  startCol: number;
-  endRow: number;
-  endCol: number;
-}
-
-export interface ViewSelectionChange {
-  sheetId: string;
-  activeCell: SheetViewCell;
-  ranges?: SheetViewRange[];
-}
-
 export interface SelectionAggregates {
   sum: number | null;
   count: number;
@@ -4685,6 +4667,11 @@ export interface SheetSnapshotBin {
   ranges: RangeDataBin[];
 }
 
+export interface SheetViewCell {
+  row: number;
+  col: number;
+}
+
 export interface SheetViewOptions {
   showGridlines: boolean;
   showRowHeaders: boolean;
@@ -4693,6 +4680,13 @@ export interface SheetViewOptions {
   showFormulas: boolean;
   showZeros: boolean;
   zoomScale?: number;
+}
+
+export interface SheetViewRange {
+  startRow: number;
+  startCol: number;
+  endRow: number;
+  endCol: number;
 }
 
 export type ShowValuesAs = "noCalculation" | "percentOfGrandTotal" | "percentOfColumnTotal" | "percentOfRowTotal" | "percentOfParentRowTotal" | "percentOfParentColumnTotal" | "difference" | "percentDifference" | "runningTotal" | "percentRunningTotal" | "rankAscending" | "rankDescending" | "index";
@@ -5884,6 +5878,12 @@ export interface ValueFilter {
 }
 
 export type VerticalAlign = "top" | "middle" | "bottom" | "justified" | "distributed";
+
+export interface ViewSelectionChange {
+  sheetId: string;
+  activeCell: SheetViewCell;
+  ranges?: SheetViewRange[];
+}
 
 export interface Viewport {
   startRow: number;

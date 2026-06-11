@@ -29,6 +29,7 @@ import type {
   ActionResult,
   AsyncActionHandler,
 } from '@mog-sdk/contracts/actions';
+import type { ClipboardData } from '@mog-sdk/contracts/actors';
 
 import type { CellRange, SheetId } from '@mog-sdk/contracts/core';
 
@@ -87,6 +88,101 @@ function activeCellRange(activeCell: { row: number; col: number }): CellRange {
     endRow: activeCell.row,
     endCol: activeCell.col,
   };
+}
+
+function getRangeHeight(range: CellRange): number {
+  return Math.abs(range.endRow - range.startRow) + 1;
+}
+
+function getRangeWidth(range: CellRange): number {
+  return Math.abs(range.endCol - range.startCol) + 1;
+}
+
+function getSingleCutSourceRange(ranges: CellRange[] | readonly CellRange[] | null): CellRange | null {
+  if (!ranges || ranges.length !== 1) return null;
+  return ranges[0];
+}
+
+function expandInsertionRangeForCutSource(range: CellRange, cutSourceRange: CellRange | null): CellRange {
+  if (!cutSourceRange || range.isFullRow || range.isFullColumn) return range;
+
+  const height = Math.max(getRangeHeight(range), getRangeHeight(cutSourceRange));
+  const width = Math.max(getRangeWidth(range), getRangeWidth(cutSourceRange));
+
+  return {
+    ...range,
+    endRow: range.startRow + height - 1,
+    endCol: range.startCol + width - 1,
+  };
+}
+
+function rangesEqual(a: CellRange, b: CellRange): boolean {
+  return (
+    a.startRow === b.startRow &&
+    a.startCol === b.startCol &&
+    a.endRow === b.endRow &&
+    a.endCol === b.endCol &&
+    a.isFullRow === b.isFullRow &&
+    a.isFullColumn === b.isFullColumn
+  );
+}
+
+function shiftCutSourceRangeAfterInsertCells(
+  sourceRange: CellRange,
+  insertionRange: CellRange,
+  direction: 'right' | 'down',
+): CellRange {
+  if (direction === 'right') {
+    const sourceRowsFullyShifted =
+      sourceRange.startRow >= insertionRange.startRow && sourceRange.endRow <= insertionRange.endRow;
+    if (!sourceRowsFullyShifted || sourceRange.startCol < insertionRange.startCol) {
+      return sourceRange;
+    }
+
+    const delta = getRangeWidth(insertionRange);
+    return {
+      ...sourceRange,
+      startCol: sourceRange.startCol + delta,
+      endCol: sourceRange.endCol + delta,
+    };
+  }
+
+  const sourceColsFullyShifted =
+    sourceRange.startCol >= insertionRange.startCol && sourceRange.endCol <= insertionRange.endCol;
+  if (!sourceColsFullyShifted || sourceRange.startRow < insertionRange.startRow) {
+    return sourceRange;
+  }
+
+  const delta = getRangeHeight(insertionRange);
+  return {
+    ...sourceRange,
+    startRow: sourceRange.startRow + delta,
+    endRow: sourceRange.endRow + delta,
+  };
+}
+
+function retargetCutSourceAfterInsertCells(
+  deps: ActionDependencies,
+  sourceRanges: readonly CellRange[] | null,
+  data: ClipboardData | null,
+  insertionRange: CellRange,
+  direction: 'right' | 'down',
+): void {
+  if (!sourceRanges || sourceRanges.length === 0 || !data) return;
+  if (String(data.sourceSheetId) !== String(deps.getActiveSheetId())) return;
+
+  const shiftedSourceRanges = sourceRanges.map((sourceRange) =>
+    shiftCutSourceRangeAfterInsertCells(sourceRange, insertionRange, direction),
+  );
+  const changed = shiftedSourceRanges.some(
+    (sourceRange, index) => !rangesEqual(sourceRange, sourceRanges[index]),
+  );
+  if (!changed) return;
+
+  deps.commands.clipboard.cut(shiftedSourceRanges, {
+    ...data,
+    sourceRanges: shiftedSourceRanges,
+  });
 }
 
 function getRangesOrActiveCell(
@@ -670,6 +766,8 @@ export const INSERT_CUT_CELLS: AsyncActionHandler = async (deps, payload) => {
   if (!clipboard.hasCut() || !clipboard.getIsCut() || clipboard.isExternalClipboard()) {
     return notHandled('disabled');
   }
+  const cutSourceRanges = clipboard.getCutSource();
+  const clipboardData = clipboard.getData();
 
   const { activeCell, ranges } = getSelectionContext(deps);
   const { range: payloadRange, direction: payloadDirection } = (payload ?? {}) as {
@@ -678,21 +776,32 @@ export const INSERT_CUT_CELLS: AsyncActionHandler = async (deps, payload) => {
   };
   const range = payloadRange ?? getRangesOrActiveCell(ranges, activeCell)[0];
   const direction = payloadDirection === 'right' ? 'right' : 'down';
+  const insertionRange = expandInsertionRangeForCutSource(
+    range,
+    getSingleCutSourceRange(cutSourceRanges),
+  );
 
   return withProtectionFeedback(deps, () =>
     deps.workbook.batch('Insert Cut Cells', async () => {
       const ws = deps.workbook.activeSheet;
 
-      if (range.isFullRow) {
+      if (insertionRange.isFullRow) {
         await INSERT_ROW_ABOVE(deps);
-      } else if (range.isFullColumn) {
+      } else if (insertionRange.isFullColumn) {
         await INSERT_COLUMN_LEFT(deps);
       } else {
         await ws.structure.insertCellsWithShift(
-          range.startRow,
-          range.startCol,
-          range.endRow,
-          range.endCol,
+          insertionRange.startRow,
+          insertionRange.startCol,
+          insertionRange.endRow,
+          insertionRange.endCol,
+          direction,
+        );
+        retargetCutSourceAfterInsertCells(
+          deps,
+          cutSourceRanges,
+          clipboardData,
+          insertionRange,
           direction,
         );
       }

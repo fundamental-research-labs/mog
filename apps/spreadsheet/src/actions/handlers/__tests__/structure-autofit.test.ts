@@ -1,6 +1,7 @@
 import { jest } from '@jest/globals';
 
 import type { ActionDependencies } from '@mog-sdk/contracts/actions';
+import type { ClipboardData } from '@mog-sdk/contracts/actors';
 import {
   MAX_COLS,
   MAX_ROWS,
@@ -42,9 +43,18 @@ function createDeps(
     usedRange?: CellRange | null;
     hiddenRows?: number[];
     hiddenCols?: number[];
+    cutSourceRanges?: CellRange[] | null;
+    clipboardData?: ClipboardData | null;
   } = {},
 ): ActionDependencies {
   const activeSheetId = makeSheetId('sheet1');
+  const clipboardData =
+    options.clipboardData ??
+    ({
+      sourceSheetId: activeSheetId,
+      sourceRanges: options.cutSourceRanges ?? [],
+      cells: {},
+    } as unknown as ClipboardData);
   const worksheet = {
     formatValues: jest.fn(async () => []),
     getUsedRange: jest.fn(async () => options.usedRange ?? null),
@@ -82,9 +92,15 @@ function createDeps(
         hasCut: jest.fn(() => true),
         getIsCut: jest.fn(() => true),
         isExternalClipboard: jest.fn(() => false),
+        getSourceRanges: jest.fn(() => options.cutSourceRanges ?? null),
+        getCutSource: jest.fn(() => options.cutSourceRanges ?? null),
+        getData: jest.fn(() => clipboardData),
       },
     },
     commands: {
+      clipboard: {
+        cut: jest.fn(),
+      },
       selection: {
         setSelection: jest.fn(),
       },
@@ -225,6 +241,72 @@ describe('Structure autofit handlers', () => {
     expect(result.handled).toBe(true);
     expect(deps.workbook.batch).toHaveBeenCalledWith('Insert Cut Cells', expect.any(Function));
     expect(worksheet.structure.insertCellsWithShift).toHaveBeenCalledWith(6, 11, 6, 12, 'right');
+    expect(pasteHandler).toHaveBeenCalledWith(deps);
+  });
+
+  it('INSERT_CUT_CELLS expands a single-cell target to a wider cut source before shifting right', async () => {
+    const deps = createDeps({
+      activeCell: { row: 20, col: 15 },
+      ranges: [],
+      cutSourceRanges: [{ startRow: 20, startCol: 27, endRow: 20, endCol: 28 }],
+    });
+    const range = { startRow: 20, startCol: 15, endRow: 20, endCol: 15 };
+
+    const result = await StructureHandlers.INSERT_CUT_CELLS(deps, {
+      range,
+      direction: 'right',
+    });
+
+    const worksheet = deps.workbook.activeSheet as any;
+    expect(result.handled).toBe(true);
+    expect(worksheet.structure.insertCellsWithShift).toHaveBeenCalledWith(20, 15, 20, 16, 'right');
+    expect(pasteHandler).toHaveBeenCalledWith(deps);
+  });
+
+  it('INSERT_CUT_CELLS retargets same-sheet cut source ranges moved by a right shift before paste', async () => {
+    const sourceRange = { startRow: 20, startCol: 27, endRow: 20, endCol: 28 };
+    const deps = createDeps({
+      activeCell: { row: 20, col: 15 },
+      ranges: [],
+      cutSourceRanges: [sourceRange],
+    });
+    const range = { startRow: 20, startCol: 15, endRow: 20, endCol: 15 };
+
+    const result = await StructureHandlers.INSERT_CUT_CELLS(deps, {
+      range,
+      direction: 'right',
+    });
+
+    const worksheet = deps.workbook.activeSheet as any;
+    const clipboardCut = deps.commands.clipboard.cut as unknown as jest.Mock;
+    const retargetedRange = { startRow: 20, startCol: 29, endRow: 20, endCol: 30 };
+    expect(result.handled).toBe(true);
+    expect(worksheet.structure.insertCellsWithShift).toHaveBeenCalledWith(20, 15, 20, 16, 'right');
+    expect(clipboardCut).toHaveBeenCalledWith(
+      [retargetedRange],
+      expect.objectContaining({ sourceRanges: [retargetedRange] }),
+    );
+    expect(clipboardCut.mock.invocationCallOrder[0]).toBeLessThan(
+      pasteHandler.mock.invocationCallOrder[0],
+    );
+  });
+
+  it('INSERT_CUT_CELLS expands a target anchor to the full cut source footprint before shifting down', async () => {
+    const deps = createDeps({
+      activeCell: { row: 10, col: 7 },
+      ranges: [],
+      cutSourceRanges: [{ startRow: 2, startCol: 4, endRow: 4, endCol: 5 }],
+    });
+    const range = { startRow: 10, startCol: 7, endRow: 10, endCol: 7 };
+
+    const result = await StructureHandlers.INSERT_CUT_CELLS(deps, {
+      range,
+      direction: 'down',
+    });
+
+    const worksheet = deps.workbook.activeSheet as any;
+    expect(result.handled).toBe(true);
+    expect(worksheet.structure.insertCellsWithShift).toHaveBeenCalledWith(10, 7, 12, 8, 'down');
     expect(pasteHandler).toHaveBeenCalledWith(deps);
   });
 

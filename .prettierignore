@@ -22,6 +22,8 @@ integrations/vscode/mog-xlsx-editor/.vscode-test/
 *.gen.js
 infra/rust-bridge/bridge-ts/generated/
 runtime/sdk/src/generated/
+compute/pyo3/python/mog/_generated/
+compute/pyo3/python/mog/api_dispositions.json
 compute/chart-render-wasm/npm/
 compute/wasm/npm/
 

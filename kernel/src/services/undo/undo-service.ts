@@ -204,17 +204,9 @@ class UndoService extends Subscribable<UndoStateChangeEvent> implements IUndoSer
 
   private async runHistoryReplayMutation<T>(fn: () => Promise<T>): Promise<T> {
     const mutationHandler = this.computeBridge.getMutationHandler();
-    const result = mutationHandler
+    return mutationHandler
       ? await mutationHandler.withPivotUpdateOptions(UndoService.HISTORY_REPLAY_PIVOT_UPDATE, fn)
       : await fn();
-
-    try {
-      await this.computeBridge.forceRefreshAllViewports();
-    } catch (error) {
-      console.error('[UndoService] viewport refresh after history replay failed:', error);
-    }
-
-    return result;
   }
 
   setNextDescription(description: string): void {

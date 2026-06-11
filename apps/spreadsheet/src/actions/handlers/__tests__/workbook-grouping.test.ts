@@ -233,6 +233,23 @@ describe('Workbook GROUP/UNGROUP axis inference', () => {
     expect(workbook.setPendingUndoDescription).toHaveBeenCalledWith('Group rows 3-5');
   });
 
+  it('routes ordinary 2D UNGROUP selections to columns when only a column group contains them', async () => {
+    const range: CellRange = { startRow: 2, startCol: 11, endRow: 20, endCol: 13 };
+    const { deps, outline, workbook } = createMockDeps([range], {
+      rowGroups: [],
+      columnGroups: [{ id: 'cols-l-n', start: 11, end: 13, level: 2, collapsed: false }],
+    });
+
+    const result = await UNGROUP(deps);
+
+    expect(result.handled).toBe(true);
+    expect(outline.getState).toHaveBeenCalledTimes(1);
+    expect(outline.ungroupColumns).toHaveBeenCalledTimes(1);
+    expect(outline.ungroupColumns).toHaveBeenCalledWith(11, 13);
+    expect(outline.ungroupRows).not.toHaveBeenCalled();
+    expect(workbook.setPendingUndoDescription).toHaveBeenCalledWith('Ungroup columns 12-14');
+  });
+
   it('treats canonical max-bound column ranges as full-column selections', async () => {
     const range: CellRange = {
       startRow: 0,

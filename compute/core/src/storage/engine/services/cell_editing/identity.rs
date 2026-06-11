@@ -1,4 +1,4 @@
-use cell_types::{CellId, SheetId};
+use cell_types::{CellId, SheetId, SheetPos};
 use yrs::{Array, Map, Origin, Out, Transact};
 
 use crate::mirror::CellMirror;
@@ -54,6 +54,12 @@ pub(in crate::storage::engine) fn find_cell_id_at_mirrored(
 ) -> Option<CellId> {
     // Fast path: already registered.
     if let Some(cid) = stores.grid_indexes.get(sheet_id)?.cell_id_at(row, col) {
+        return Some(cid);
+    }
+
+    // The mirror can know an identity for a referenced cell before the grid
+    // index is hydrated. Reuse it so writes dirty the existing dependency.
+    if let Some(cid) = mirror.resolve_cell_id(sheet_id, SheetPos::new(row, col)) {
         return Some(cid);
     }
 

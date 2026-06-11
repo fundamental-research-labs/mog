@@ -356,6 +356,7 @@ export class GridEditingSystem implements IGridEditingSystem {
                   datePickerCommit.kind,
                 );
                 if (result instanceof Promise) await result;
+                await this.config.workbook?.calculate();
                 this.rememberLastCommittedCellForFormatting(
                   toSheetId(sheetId),
                   editingCell,
@@ -405,6 +406,7 @@ export class GridEditingSystem implements IGridEditingSystem {
                 );
                 if (result instanceof Promise) await result;
               }
+              await this.config.workbook?.calculate();
               this.rememberLastCommittedCellForFormatting(
                 toSheetId(sheetId),
                 editingCell,
@@ -1494,6 +1496,7 @@ export class GridEditingSystem implements IGridEditingSystem {
       setCellValues: async (sheetId, updates) => {
         await guardBridgeMutation(async () => {
           await workbook.getSheetById(sheetId).setCells(updates);
+          await workbook.calculate();
         });
       },
       setCellFormat: (sheetId, row, col, format) => {

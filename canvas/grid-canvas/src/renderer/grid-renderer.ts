@@ -200,6 +200,8 @@ type ViewportLayoutUpdateOptions = {
   readonly invalidation?: 'structural' | 'scroll';
 };
 
+const MIN_ADDRESSABLE_CELL_PAGE_BOUND_SIZE = 4;
+
 // =============================================================================
 // Data Source Adapters
 // =============================================================================
@@ -2458,14 +2460,25 @@ export class GridRendererImpl implements GridRenderer {
         origin.y + height,
         layoutViewport.bounds.y + layoutViewport.bounds.height,
       );
-      if (clippedRight < clippedX || clippedBottom < clippedY) return null;
+      const clippedWidth = clippedRight - clippedX;
+      const clippedHeight = clippedBottom - clippedY;
+      if (clippedWidth <= 0 || clippedHeight <= 0) return null;
+
+      const isWidthClipped = clippedWidth < width;
+      const isHeightClipped = clippedHeight < height;
+      if (
+        (isWidthClipped && clippedWidth < MIN_ADDRESSABLE_CELL_PAGE_BOUND_SIZE) ||
+        (isHeightClipped && clippedHeight < MIN_ADDRESSABLE_CELL_PAGE_BOUND_SIZE)
+      ) {
+        return null;
+      }
 
       const containerRect = this.container.getBoundingClientRect();
       return {
         x: containerRect.x + clippedX,
         y: containerRect.y + clippedY,
-        width: clippedRight - clippedX,
-        height: clippedBottom - clippedY,
+        width: clippedWidth,
+        height: clippedHeight,
       };
     }
 

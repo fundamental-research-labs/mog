@@ -5,6 +5,7 @@
 mod helpers;
 mod sync_helpers;
 mod test_advanced_filter;
+mod test_batch_recalc;
 mod test_binary_patches;
 mod test_bootstrap_hydration;
 mod test_cell_input_value;

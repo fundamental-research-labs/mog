@@ -792,12 +792,14 @@ describe('WorkbookImpl - Undo/Redo', () => {
     const { wb, ctx } = await createWorkbook();
     await wb.history.undo();
     expect(ctx.services.undo.undo).toHaveBeenCalled();
+    expect(ctx.computeBridge.fullRecalc).toHaveBeenCalledWith({});
   });
 
   it('redo() delegates to services.undo.redo()', async () => {
     const { wb, ctx } = await createWorkbook();
     await wb.history.redo();
     expect(ctx.services.undo.redo).toHaveBeenCalled();
+    expect(ctx.computeBridge.fullRecalc).toHaveBeenCalledWith({});
   });
 
   it('canUndo() delegates to services.undo.canUndo()', async () => {

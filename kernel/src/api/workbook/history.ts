@@ -40,13 +40,32 @@ export class WorkbookHistoryImpl implements WorkbookHistory {
     this.ctx.writeGate.assertWritable(op);
   }
 
+  private async recalculateAfterHistoryMutation(): Promise<void> {
+    try {
+      await this.ctx.computeBridge.fullRecalc({});
+    } catch (error) {
+      const msg = String(error);
+      if (
+        msg.includes('Unknown napi method') ||
+        msg.includes('not a function') ||
+        msg.includes('not found')
+      ) {
+        return;
+      }
+      throw new KernelError('COMPUTE_ERROR', `Recalculation after history update failed: ${msg}`);
+    }
+  }
+
   async undo(): Promise<UndoReceipt> {
     this._ensureWritable('history.undo');
     const result = await this.ctx.services!.undo.undo();
     if (!result.ok && result.error.type === 'rust-failed') {
       throw new KernelError('COMPUTE_ERROR', `Undo failed: ${result.error.reason}`);
     }
-    if (result.ok) await this.refreshSheetMetadata?.();
+    if (result.ok) {
+      await this.recalculateAfterHistoryMutation();
+      await this.refreshSheetMetadata?.();
+    }
     return { kind: 'undo', success: result.ok };
   }
 
@@ -56,7 +75,10 @@ export class WorkbookHistoryImpl implements WorkbookHistory {
     if (!result.ok && result.error.type === 'rust-failed') {
       throw new KernelError('COMPUTE_ERROR', `Redo failed: ${result.error.reason}`);
     }
-    if (result.ok) await this.refreshSheetMetadata?.();
+    if (result.ok) {
+      await this.recalculateAfterHistoryMutation();
+      await this.refreshSheetMetadata?.();
+    }
     return { kind: 'redo', success: result.ok };
   }
 
@@ -75,6 +97,7 @@ export class WorkbookHistoryImpl implements WorkbookHistory {
   async goToIndex(index: number): Promise<void> {
     try {
       await Undo.undoToIndex(this.ctx, index);
+      await this.recalculateAfterHistoryMutation();
       await this.refreshSheetMetadata?.();
     } catch (error) {
       throw new KernelError(

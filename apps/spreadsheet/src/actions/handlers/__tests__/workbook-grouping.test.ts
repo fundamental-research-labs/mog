@@ -493,6 +493,45 @@ describe('Workbook SHOW_DETAIL/HIDE_DETAIL summary selections', () => {
     expect(outline.toggleCollapsed).toHaveBeenCalledWith('inner');
   });
 
+  it('collapses a recovered full-row selection without also collapsing visible column groups', async () => {
+    const { deps, outline } = createMockDeps(
+      [fullRowRange(8, 8)],
+      {
+        rowGroups: [{ id: 'rows-7-9', start: 6, end: 8, level: 1, collapsed: false }],
+        columnGroups: [
+          { id: 'cols-l', start: 11, end: 11, level: 1, collapsed: false },
+          { id: 'cols-p-aa', start: 15, end: 26, level: 1, collapsed: true },
+        ],
+      },
+      { summaryRowsBelow: true, summaryColumnsRight: true },
+      { activeCell: { row: 8, col: 0 }, anchor: { row: 6, col: 14 } },
+    );
+
+    const result = await HIDE_DETAIL(deps);
+
+    expect(result.handled).toBe(true);
+    expect(outline.toggleCollapsed).toHaveBeenCalledTimes(1);
+    expect(outline.toggleCollapsed).toHaveBeenCalledWith('rows-7-9');
+  });
+
+  it('expands a recovered full-row selection without also expanding collapsed column groups', async () => {
+    const { deps, outline } = createMockDeps(
+      [fullRowRange(8, 8)],
+      {
+        rowGroups: [{ id: 'rows-7-9', start: 6, end: 8, level: 1, collapsed: true }],
+        columnGroups: [{ id: 'cols-p-aa', start: 15, end: 26, level: 1, collapsed: true }],
+      },
+      { summaryRowsBelow: true, summaryColumnsRight: true },
+      { activeCell: { row: 8, col: 0 }, anchor: { row: 6, col: 14 } },
+    );
+
+    const result = await SHOW_DETAIL(deps);
+
+    expect(result.handled).toBe(true);
+    expect(outline.toggleCollapsed).toHaveBeenCalledTimes(1);
+    expect(outline.toggleCollapsed).toHaveBeenCalledWith('rows-7-9');
+  });
+
   it('collapses an expanded column group from the visible leading outline context', async () => {
     const range: CellRange = { startRow: 12, startCol: 14, endRow: 12, endCol: 14 };
     const { deps, outline } = createMockDeps([range], {

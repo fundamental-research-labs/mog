@@ -20,6 +20,44 @@ fn test_group_rows_reversed() {
 }
 
 #[test]
+fn test_group_creation_avoids_existing_ids_across_axes() {
+    let (s, id) = storage_with_sheet();
+    let mut config = SheetGroupingConfig::default();
+    for n in 1..=8 {
+        let group_id = format!("group-{n}");
+        if n % 2 == 0 {
+            config
+                .column_groups
+                .push(test_group(&group_id, GroupAxis::Column, 100 + n, 100 + n));
+        } else {
+            config
+                .row_groups
+                .push(test_group(&group_id, GroupAxis::Row, 100 + n, 100 + n));
+        }
+    }
+    let existing_ids: std::collections::HashSet<String> = config
+        .row_groups
+        .iter()
+        .chain(config.column_groups.iter())
+        .map(|group| group.id.clone())
+        .collect();
+    set_sheet_grouping_config(s.doc(), &s.sheets_ref(), &id, &config);
+
+    let row = group_rows(s.doc(), &s.sheets_ref(), &id, 2, 5).unwrap();
+    let column = group_columns(s.doc(), &s.sheets_ref(), &id, 1, 3).unwrap();
+
+    assert!(!existing_ids.contains(&row.id));
+    assert!(!existing_ids.contains(&column.id));
+    assert_ne!(row.id, column.id);
+
+    set_group_collapsed(s.doc(), &s.sheets_ref(), &id, &row.id, true);
+    let toggled = get_group_in_sheet(s.doc(), &s.sheets_ref(), &id, &row.id).unwrap();
+    assert_eq!(toggled.axis, GroupAxis::Row);
+    assert_eq!((toggled.start, toggled.end), (2, 5));
+    assert!(toggled.collapsed);
+}
+
+#[test]
 fn test_nested_groups() {
     let (s, id) = storage_with_sheet();
     let o = group_rows(s.doc(), &s.sheets_ref(), &id, 1, 10).unwrap();
@@ -50,6 +88,42 @@ fn test_ungroup_rows() {
             .len(),
         1
     );
+}
+
+#[test]
+fn test_ungroup_rows_split_allocates_unique_residual_ids() {
+    let (s, id) = storage_with_sheet();
+    let config = SheetGroupingConfig {
+        row_groups: vec![test_group("group-1", GroupAxis::Row, 1, 10)],
+        column_groups: vec![test_group("group-2", GroupAxis::Column, 2, 4)],
+        ..SheetGroupingConfig::default()
+    };
+    set_sheet_grouping_config(s.doc(), &s.sheets_ref(), &id, &config);
+
+    ungroup_rows(s.doc(), &s.sheets_ref(), &id, 4, 6);
+
+    let config = get_sheet_grouping_config(s.doc(), &s.sheets_ref(), &id);
+    assert!(
+        config
+            .row_groups
+            .iter()
+            .any(|group| (group.start, group.end) == (1, 3))
+    );
+    assert!(
+        config
+            .row_groups
+            .iter()
+            .any(|group| (group.start, group.end) == (7, 10))
+    );
+
+    let mut ids = std::collections::HashSet::new();
+    for group in config.row_groups.iter().chain(config.column_groups.iter()) {
+        assert!(
+            ids.insert(group.id.clone()),
+            "duplicate group id {}",
+            group.id
+        );
+    }
 }
 
 #[test]
@@ -142,4 +216,19 @@ fn test_find_parent() {
     }];
     assert_eq!(find_parent_group(&e, 2, 8, 2), Some("p".into()));
     assert_eq!(find_parent_group(&e, 2, 8, 1), None);
+}
+
+fn test_group(id: &str, axis: GroupAxis, start: u32, end: u32) -> GroupDefinition {
+    GroupDefinition {
+        id: id.to_string(),
+        sheet_id: "s".into(),
+        axis,
+        start,
+        end,
+        level: 1,
+        collapsed: false,
+        parent_id: None,
+        hidden: false,
+        collapsed_on_member: false,
+    }
 }

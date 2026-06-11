@@ -638,8 +638,10 @@ export const UNGROUP: AsyncActionHandler = async (deps) => {
  */
 export const SHOW_DETAIL: AsyncActionHandler = async (deps) => {
   const { workbook: wb } = deps;
-  const bounds = computeSelectionBounds(getGroupingCommandRangesFromDeps(deps));
+  const ranges = getGroupingCommandRangesFromDeps(deps);
+  const bounds = computeSelectionBounds(ranges);
   if (!bounds) return notHandled('disabled');
+  const explicitAxis = inferFullSelectionAxis(ranges);
 
   const ws = wb.getSheetById(wb.getActiveSheetId());
   const state = await ws.outline.getState();
@@ -648,21 +650,28 @@ export const SHOW_DETAIL: AsyncActionHandler = async (deps) => {
   const columnGroups = state.columnGroups as GroupRecord[];
 
   let toggled = false;
-  for (const group of rowGroups) {
-    if (group.collapsed && selectionMatchesRowGroupForDetail(group, bounds, settings, rowGroups)) {
-      await ws.outline.toggleCollapsed(group.id);
-      await setImportedDetailVisibility(ws, group, 'rows', true);
-      toggled = true;
+  if (explicitAxis !== 'columns') {
+    for (const group of rowGroups) {
+      if (
+        group.collapsed &&
+        selectionMatchesRowGroupForDetail(group, bounds, settings, rowGroups)
+      ) {
+        await ws.outline.toggleCollapsed(group.id);
+        await setImportedDetailVisibility(ws, group, 'rows', true);
+        toggled = true;
+      }
     }
   }
-  for (const group of columnGroups) {
-    if (
-      group.collapsed &&
-      selectionMatchesColumnGroupForDetail(group, bounds, settings, columnGroups)
-    ) {
-      await ws.outline.toggleCollapsed(group.id);
-      await setImportedDetailVisibility(ws, group, 'columns', true);
-      toggled = true;
+  if (explicitAxis !== 'rows') {
+    for (const group of columnGroups) {
+      if (
+        group.collapsed &&
+        selectionMatchesColumnGroupForDetail(group, bounds, settings, columnGroups)
+      ) {
+        await ws.outline.toggleCollapsed(group.id);
+        await setImportedDetailVisibility(ws, group, 'columns', true);
+        toggled = true;
+      }
     }
   }
   return toggled ? handled() : notHandled('disabled');
@@ -675,8 +684,10 @@ export const SHOW_DETAIL: AsyncActionHandler = async (deps) => {
  */
 export const HIDE_DETAIL: AsyncActionHandler = async (deps) => {
   const { workbook: wb } = deps;
-  const bounds = computeSelectionBounds(getGroupingCommandRangesFromDeps(deps));
+  const ranges = getGroupingCommandRangesFromDeps(deps);
+  const bounds = computeSelectionBounds(ranges);
   if (!bounds) return notHandled('disabled');
+  const explicitAxis = inferFullSelectionAxis(ranges);
 
   const ws = wb.getSheetById(wb.getActiveSheetId());
   const state = await ws.outline.getState();
@@ -685,12 +696,15 @@ export const HIDE_DETAIL: AsyncActionHandler = async (deps) => {
   const columnGroups = state.columnGroups as GroupRecord[];
 
   // Find the innermost expanded row group containing the selection.
-  const rowGroupsContaining = rowGroups
-    .filter(
-      (g) =>
-        !g.collapsed && selectionMatchesRowGroupForDetail(g, bounds, settings, rowGroups, true),
-    )
-    .sort(compareDetailGroupCollapsePriority);
+  const rowGroupsContaining =
+    explicitAxis === 'columns'
+      ? []
+      : rowGroups
+          .filter(
+            (g) =>
+              !g.collapsed && selectionMatchesRowGroupForDetail(g, bounds, settings, rowGroups, true),
+          )
+          .sort(compareDetailGroupCollapsePriority);
 
   let toggled = false;
   if (rowGroupsContaining.length > 0) {
@@ -703,13 +717,16 @@ export const HIDE_DETAIL: AsyncActionHandler = async (deps) => {
     toggled = true;
   }
 
-  const colGroupsContaining = columnGroups
-    .filter(
-      (g) =>
-        !g.collapsed &&
-        selectionMatchesColumnGroupForDetail(g, bounds, settings, columnGroups, true),
-    )
-    .sort(compareDetailGroupCollapsePriority);
+  const colGroupsContaining =
+    explicitAxis === 'rows'
+      ? []
+      : columnGroups
+          .filter(
+            (g) =>
+              !g.collapsed &&
+              selectionMatchesColumnGroupForDetail(g, bounds, settings, columnGroups, true),
+          )
+          .sort(compareDetailGroupCollapsePriority);
 
   if (colGroupsContaining.length > 0) {
     const group = colGroupsContaining[0];

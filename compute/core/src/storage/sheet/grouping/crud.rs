@@ -2,7 +2,7 @@ use cell_types::SheetId;
 use yrs::{Doc, MapRef};
 
 use super::hierarchy::{calculate_group_level, find_parent_group};
-use super::ids::{generate_group_id, sheet_id_to_hex};
+use super::ids::{generate_unique_group_id, sheet_id_to_hex};
 use super::types::{GroupAxis, GroupDefinition, SheetGroupingConfig};
 use super::yrs_io::{get_sheet_grouping_config, set_sheet_grouping_config};
 
@@ -22,7 +22,7 @@ pub fn group_rows(
     let level = calculate_group_level(&config.row_groups, start, end)?;
     let parent_id = find_parent_group(&config.row_groups, start, end, level);
     let group = GroupDefinition {
-        id: generate_group_id(),
+        id: generate_unique_group_id(&config),
         sheet_id: sheet_id_to_hex(sheet_id),
         axis: GroupAxis::Row,
         start,
@@ -67,7 +67,7 @@ pub fn ungroup_rows(doc: &Doc, sheets: &MapRef, sheet_id: &SheetId, start_row: u
         } else {
             // Middle removal — split into two residual groups
             let left = GroupDefinition {
-                id: generate_group_id(),
+                id: generate_unique_group_id(&config),
                 sheet_id: group.sheet_id.clone(),
                 axis: group.axis,
                 start: group.start,
@@ -79,7 +79,7 @@ pub fn ungroup_rows(doc: &Doc, sheets: &MapRef, sheet_id: &SheetId, start_row: u
                 collapsed_on_member: false,
             };
             let right = GroupDefinition {
-                id: generate_group_id(),
+                id: generate_unique_group_id(&config),
                 sheet_id: group.sheet_id.clone(),
                 axis: group.axis,
                 start: end + 1,
@@ -135,7 +135,7 @@ pub fn group_columns(
     let level = calculate_group_level(&config.column_groups, start, end)?;
     let parent_id = find_parent_group(&config.column_groups, start, end, level);
     let group = GroupDefinition {
-        id: generate_group_id(),
+        id: generate_unique_group_id(&config),
         sheet_id: sheet_id_to_hex(sheet_id),
         axis: GroupAxis::Column,
         start,
@@ -186,7 +186,7 @@ pub fn ungroup_columns(
         } else {
             // Middle removal — split into two residual groups
             let left = GroupDefinition {
-                id: generate_group_id(),
+                id: generate_unique_group_id(&config),
                 sheet_id: group.sheet_id.clone(),
                 axis: group.axis,
                 start: group.start,
@@ -198,7 +198,7 @@ pub fn ungroup_columns(
                 collapsed_on_member: false,
             };
             let right = GroupDefinition {
-                id: generate_group_id(),
+                id: generate_unique_group_id(&config),
                 sheet_id: group.sheet_id.clone(),
                 axis: group.axis,
                 start: end + 1,

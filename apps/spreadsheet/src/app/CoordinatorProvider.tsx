@@ -95,6 +95,20 @@ function isEditableKeyboardTarget(target: HTMLElement | null): boolean {
   );
 }
 
+function isSpreadsheetEditorKeyboardTarget(target: HTMLElement | null): boolean {
+  if (!target) return false;
+  return Boolean(
+    target.closest(
+      [
+        '[data-testid="inline-cell-editor"]',
+        '[data-testid="formula-bar-input"]',
+        '[data-testid="formula-edit-overlay"]',
+        '[aria-label="Rich text editor"]',
+      ].join(', '),
+    ),
+  );
+}
+
 function isDialogKeyboardTarget(target: HTMLElement | null): boolean {
   if (!target) return false;
   return Boolean(target.closest('[role="dialog"]'));
@@ -409,6 +423,10 @@ function KeyboardCaptureSetup({
         currentLayerType !== 'editor' &&
         currentLayerType !== 'formulaBar'
       ) {
+        return;
+      }
+
+      if (isEditableKeyboardTarget(target) && !isSpreadsheetEditorKeyboardTarget(target)) {
         return;
       }
 

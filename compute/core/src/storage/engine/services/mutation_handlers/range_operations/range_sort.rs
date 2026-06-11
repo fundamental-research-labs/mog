@@ -1,5 +1,5 @@
 use cell_types::interval_tree::IntervalTree;
-use cell_types::{ColId, RowId, SheetId};
+use cell_types::{CellId, ColId, RowId, SheetId, SheetPos};
 use compute_document::hex::id_to_hex;
 use compute_document::undo::ORIGIN_USER_EDIT;
 use value_types::ComputeError;
@@ -63,9 +63,52 @@ pub(super) fn sort_range_backed_rows(
         grid.reorder_row_ids(permutation);
     }
 
+    let cells_to_remap: Vec<(CellId, u32, u32)> = stores
+        .grid_indexes
+        .get(sheet_id)
+        .map(|grid| {
+            let affected_rows: rustc_hash::FxHashSet<u32> =
+                permutation.iter().map(|&(old_row, _)| old_row).collect();
+            grid.cells()
+                .filter(|(_, row, _)| affected_rows.contains(row))
+                .collect()
+        })
+        .unwrap_or_default();
+
     // (c) Update per-cell identity-to-position mappings (needed for mixed sheets).
     if let Some(grid) = stores.grid_indexes.get_mut(sheet_id) {
         grid.sort_rows(permutation);
+    }
+
+    let moved_cells: Vec<(CellId, SheetPos, SheetPos)> = stores
+        .grid_indexes
+        .get(sheet_id)
+        .map(|grid| {
+            cells_to_remap
+                .iter()
+                .filter_map(|(cell_id, old_row, old_col)| {
+                    let (new_row, new_col) = grid.cell_position(cell_id)?;
+                    if (*old_row, *old_col) == (new_row, new_col) {
+                        return None;
+                    }
+                    Some((
+                        *cell_id,
+                        SheetPos::new(*old_row, *old_col),
+                        SheetPos::new(new_row, new_col),
+                    ))
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
+    // Keep the live CellMirror's position maps aligned with GridIndex. Yrs
+    // persistence is already identity-based through rowOrder: a cell remains
+    // bound to the same RowId, which now resolves to the new visible row.
+    for (_, old_pos, _) in &moved_cells {
+        mirror.vacate_position(sheet_id, *old_pos);
+    }
+    for (cell_id, _, new_pos) in &moved_cells {
+        mirror.sync_cell_position_mapping(sheet_id, *cell_id, *new_pos);
     }
 
     // (d) Update mirror row_to_index / index_to_row from the reordered GridIndex.

@@ -21,7 +21,9 @@
 use super::super::*;
 use super::helpers::*;
 use crate::snapshot::{CellData, RangeData, SheetSnapshot};
-use cell_types::{ColId, PayloadEncoding, RangeAnchor, RangeId, RangeKind, RowId, SheetPos};
+use cell_types::{
+    CellId, ColId, PayloadEncoding, RangeAnchor, RangeId, RangeKind, RowId, SheetPos,
+};
 use value_types::{CellValue, FiniteF64};
 
 // -------------------------------------------------------------------
@@ -475,7 +477,68 @@ fn range_sort_gridindex_coherence() {
 }
 
 // ===================================================================
-// Test 6: range_sort_formula_survives
+// Test 6: range_sort_remaps_formula_cell_positions_in_mirror
+// ===================================================================
+
+/// Range-backed sorts update rowOrder instead of rewriting payload bytes.
+/// Sparse/formula cells still move with their RowIds, so the live CellMirror
+/// must remap their numeric positions before formula recalc.
+#[test]
+fn range_sort_remaps_formula_cell_positions_in_mirror() {
+    let mut snap = sort_range_snapshot();
+
+    let formula_cell_uuid = "f4000000-0000-4000-8000-000000000001";
+    let formula_cell_id = CellId::from_uuid_str(formula_cell_uuid).unwrap();
+    snap.sheets[0].cells.push(CellData {
+        cell_id: formula_cell_uuid.to_string(),
+        row: 0,
+        col: 2,
+        value: CellValue::Number(FiniteF64::must(50.0)),
+        formula: Some("=A1*10".to_string()),
+        identity_formula: None,
+        array_ref: None,
+    });
+
+    let (mut engine, _recalc) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let sid = test_sheet_id();
+
+    assert_eq!(
+        engine
+            .grid_index(&sid)
+            .unwrap()
+            .cell_position(&formula_cell_id),
+        Some((0, 2))
+    );
+    assert_eq!(
+        engine
+            .mirror()
+            .get_sheet(&sid)
+            .and_then(|sheet| sheet.position_for_diagnostics(&formula_cell_id)),
+        Some(SheetPos::new(0, 2))
+    );
+
+    // Sorting ascending by col 0 moves old row 0 (value 5) to row 4.
+    let options = ascending_sort_options(0);
+    engine.sort_range(&sid, 0, 0, 4, 1, options).unwrap();
+
+    assert_eq!(
+        engine
+            .grid_index(&sid)
+            .unwrap()
+            .cell_position(&formula_cell_id),
+        Some((4, 2))
+    );
+    assert_eq!(
+        engine
+            .mirror()
+            .get_sheet(&sid)
+            .and_then(|sheet| sheet.position_for_diagnostics(&formula_cell_id)),
+        Some(SheetPos::new(4, 2))
+    );
+}
+
+// ===================================================================
+// Test 7: range_sort_formula_survives
 // ===================================================================
 
 /// Create a Range-backed sheet with a per-cell formula in col 2 that
@@ -541,7 +604,7 @@ fn range_sort_formula_survives() {
 }
 
 // ===================================================================
-// Test 7: range_sort_undo
+// Test 8: range_sort_undo
 // ===================================================================
 
 /// Sort a Range-backed sheet, then undo. Verify that `row_ids_dense()`
@@ -605,7 +668,7 @@ fn range_sort_undo() {
 }
 
 // ===================================================================
-// Test 8: xlsx_sort_roundtrip
+// Test 9: xlsx_sort_roundtrip
 // ===================================================================
 
 /// Sort a Range-backed sheet, verify range-backed column values are in

@@ -13,6 +13,7 @@ interface ResolveDataTargetOptions {
 }
 
 const HEADER_BODY_SCAN_ROW_LIMIT = 100;
+const MIN_HEADER_TEXT_DENSITY = 0.6;
 
 export function normalizeCommandRange(range: CellRange): CellRange {
   return {
@@ -47,11 +48,16 @@ async function rangeLooksLikeHeaderTable(ws: Worksheet, range: CellRange): Promi
     Array.from({ length: width }, (_, i) => ws.getCell(range.startRow, range.startCol + i)),
   );
 
-  const firstRowAllText = firstRow.every((cell) => {
+  let firstRowTextCount = 0;
+  for (const cell of firstRow) {
     const value = cell?.value;
-    return typeof value === 'string' && value.trim().length > 0;
-  });
-  if (!firstRowAllText) return false;
+    if (value == null) continue;
+    if (typeof value !== 'string') return false;
+    if (value.trim().length === 0) continue;
+    firstRowTextCount += 1;
+  }
+  const minTextHeaders = Math.max(1, Math.ceil(width * MIN_HEADER_TEXT_DENSITY));
+  if (firstRowTextCount < minTextHeaders) return false;
 
   const rowHasDataSignal = (row: Array<{ value?: unknown } | null | undefined>): boolean =>
     row.some((cell) => {

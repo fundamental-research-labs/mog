@@ -2,7 +2,7 @@ use cell_types::{CellId, SheetId, SheetPos};
 use compute_core::bridge_types::CellInput;
 use compute_core::engine_types::fill::{BridgeAutoFillRequest, BridgeFillRangeSpec};
 use compute_core::storage::engine::YrsComputeEngine;
-use snapshot_types::{RecalcOptions, WorkbookSnapshot};
+use snapshot_types::{RecalcOptions, SheetSnapshot, WorkbookSnapshot};
 use value_types::{CellError, CellValue};
 use xlsx_parser::write::ZipWriter;
 
@@ -222,4 +222,123 @@ fn imported_data_table_recalc_mutation_preserves_cached_table_values() {
 
     assert_eq!(value_at(&engine, &sheet_id, 2, 3), CellValue::number(16.5));
     assert_eq!(value_at(&engine, &sheet_id, 3, 3), CellValue::number(18.5));
+}
+
+#[test]
+fn batch_position_writes_reuse_formula_reference_identities() {
+    let snapshot = WorkbookSnapshot {
+        sheets: vec![SheetSnapshot {
+            id: "550e8400-e29b-41d4-a716-446655440000".to_string(),
+            name: "Dependencies".to_string(),
+            rows: 100,
+            cols: 26,
+            cells: vec![],
+            ranges: vec![],
+        }],
+        ..Default::default()
+    };
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot).expect("bootstrap engine");
+    let sheet_id = first_sheet_id(&engine);
+
+    engine
+        .batch_set_cells_by_position(
+            vec![
+                (
+                    sheet_id,
+                    6,
+                    2,
+                    CellInput::Value {
+                        value: CellValue::number(599.9),
+                    },
+                ),
+                (
+                    sheet_id,
+                    20,
+                    2,
+                    CellInput::Parse {
+                        text: "=C7/C14".to_string(),
+                    },
+                ),
+                (
+                    sheet_id,
+                    34,
+                    3,
+                    CellInput::Parse {
+                        text: "=D14/C14-1".to_string(),
+                    },
+                ),
+            ],
+            true,
+        )
+        .expect("seed formulas before their referenced value cells exist");
+
+    engine
+        .batch_set_cells_by_position(
+            vec![
+                (
+                    sheet_id,
+                    13,
+                    2,
+                    CellInput::Value {
+                        value: CellValue::number(13.3),
+                    },
+                ),
+                (
+                    sheet_id,
+                    13,
+                    3,
+                    CellInput::Value {
+                        value: CellValue::number(14.3),
+                    },
+                ),
+            ],
+            true,
+        )
+        .expect("write referenced value cells by position");
+
+    assert_number_close(
+        value_at(&engine, &sheet_id, 20, 2),
+        599.9 / 13.3,
+        "C21",
+    );
+    assert_number_close(
+        value_at(&engine, &sheet_id, 34, 3),
+        14.3 / 13.3 - 1.0,
+        "D35",
+    );
+
+    engine
+        .batch_set_cells_by_position(
+            vec![(
+                sheet_id,
+                13,
+                2,
+                CellInput::Value {
+                    value: CellValue::number(14.3),
+                },
+            )],
+            true,
+        )
+        .expect("edit referenced value cell by position");
+
+    assert_number_close(
+        value_at(&engine, &sheet_id, 20, 2),
+        599.9 / 14.3,
+        "C21",
+    );
+    assert_number_close(value_at(&engine, &sheet_id, 34, 3), 0.0, "D35");
+}
+
+fn assert_number_close(actual: CellValue, expected: f64, label: &str) {
+    match actual {
+        CellValue::Number(n) => {
+            let delta = (n.get() - expected).abs();
+            assert!(
+                delta < 1e-9,
+                "{label} expected {expected}, got {} (delta {delta})",
+                n.get()
+            );
+        }
+        other => panic!("{label} expected number {expected}, got {other:?}"),
+    }
 }

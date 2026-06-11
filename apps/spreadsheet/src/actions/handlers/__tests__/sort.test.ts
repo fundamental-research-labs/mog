@@ -206,7 +206,7 @@ describe('SORT_ASCENDING — current-region auto-expansion', () => {
     });
   });
 
-  test('explicit A2:A6 mixed data selection preserves a detected header row', async () => {
+  test('explicit A2:A6 mixed data selection is sorted as headerless', async () => {
     const setup = makeMockDeps({
       selectionRanges: [{ startRow: 1, startCol: 0, endRow: 5, endCol: 0 }],
       activeCell: { row: 1, col: 0 },
@@ -224,7 +224,7 @@ describe('SORT_ASCENDING — current-region auto-expansion', () => {
     expect(rangeArg).toEqual({ startRow: 1, startCol: 0, endRow: 5, endCol: 0 });
     expect(optionsArg).toEqual({
       columns: [{ column: 0, direction: 'asc' }],
-      hasHeaders: true,
+      hasHeaders: false,
     });
   });
 

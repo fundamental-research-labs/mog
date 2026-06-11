@@ -108,6 +108,13 @@ function isNativeEditableShortcut(e: KeyboardEvent, target: HTMLElement | null):
   return key === 'c' || key === 'x' || key === 'v' || key === 'z' || key === 'y';
 }
 
+function isSpreadsheetEditorKeyboardTarget(target: HTMLElement | null): boolean {
+  if (!target) return false;
+  return Boolean(
+    target.closest('[data-testid="inline-cell-editor"], [data-testid="formula-bar-input"]'),
+  );
+}
+
 /**
  * Hook to access pane navigation element registration.
  * Used by components to register their DOM elements for F6 navigation.
@@ -389,6 +396,13 @@ function KeyboardCaptureSetup({
             e.stopPropagation();
           }
         }
+        return;
+      }
+
+      // Editable chrome/control inputs own their own Enter/Tab/Escape handling.
+      // The inline cell editor and formula bar input still rely on this capture
+      // path for spreadsheet edit commits, so keep routing those targets.
+      if (isEditableKeyboardTarget(target) && !isSpreadsheetEditorKeyboardTarget(target)) {
         return;
       }
 

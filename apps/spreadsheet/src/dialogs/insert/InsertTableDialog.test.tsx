@@ -5,6 +5,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import {
   clearPendingDialogActionForTest,
+  DIALOG_ACTION_APPLY_DELAY_MS,
   getPendingDialogActionForTest,
 } from './dialog-action-scheduler';
 
@@ -162,7 +163,7 @@ describe('InsertTableDialog', () => {
     jest.useRealTimers();
   });
 
-  it('closes before creating the table on the next macrotask', async () => {
+  it('closes before creating the table after the dialog close delay', async () => {
     render(<InsertTableDialog />);
 
     const dialog = screen.getByRole('dialog');
@@ -176,7 +177,11 @@ describe('InsertTableDialog', () => {
     const pendingAction = getPendingDialogActionForTest();
     expect(pendingAction).toBeInstanceOf(Promise);
 
-    jest.advanceTimersByTime(0);
+    jest.advanceTimersByTime(DIALOG_ACTION_APPLY_DELAY_MS - 1);
+    expect(undoGroup).not.toHaveBeenCalled();
+    expect(tablesAdd).not.toHaveBeenCalled();
+
+    jest.advanceTimersByTime(1);
     await pendingAction;
 
     expect(workbook.getSheetById).toHaveBeenCalledWith('sheet-1');

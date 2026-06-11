@@ -437,7 +437,13 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
       ): void => {
         deps.commands.object.deselectAll();
         deps.commands.chart.deselectAll();
-        selectionCommands.setSelection([range], nextActiveCell);
+        const isSingleCell =
+          range.startRow === range.endRow && range.startCol === range.endCol;
+        selectionCommands.setSelection(
+          [range],
+          nextActiveCell,
+          isSingleCell ? undefined : null,
+        );
       };
 
       if (trimmedAddress.includes(':')) {

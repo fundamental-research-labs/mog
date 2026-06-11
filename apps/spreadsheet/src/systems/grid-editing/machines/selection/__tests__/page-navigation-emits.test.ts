@@ -51,6 +51,31 @@ describe('page navigation emits', () => {
     actor.stop();
   });
 
+  it('follows the active cell for direct range selection when anchor is explicitly null', () => {
+    const actor = createActor(selectionMachine);
+    const emitted: SelectionEmitted[] = [];
+    const subscription = actor.on('userSelectionChanged', (event) => emitted.push(event));
+
+    actor.start();
+    actor.send({
+      type: 'SET_SELECTION',
+      ranges: [{ startRow: 2, startCol: 11, endRow: 7, endCol: 13 }],
+      activeCell: { row: 2, col: 11 },
+      anchor: null,
+      source: 'user',
+    });
+
+    expect(emitted).toHaveLength(1);
+    expect(emitted[0]).toMatchObject({
+      activeCell: { row: 2, col: 11 },
+      followCell: { row: 2, col: 11 },
+    });
+    expect(emitted[0].scrollIntent).toBeUndefined();
+
+    subscription.unsubscribe();
+    actor.stop();
+  });
+
   it('annotates Ctrl+Home with a top-left origin scroll intent', () => {
     const actor = createActor(selectionMachine);
     const emitted: SelectionEmitted[] = [];

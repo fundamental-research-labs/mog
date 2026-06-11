@@ -262,6 +262,55 @@ impl ComputeCore {
         Ok(result)
     }
 
+    /// Apply internal merge-discard clears without propagating dependent formula
+    /// recalculation. The merge operation itself preserves the origin cell's
+    /// current value/formula while discarding covered child cells; any formulas
+    /// that reference those discarded children update on the next explicit
+    /// workbook recalculation.
+    pub(crate) fn set_cells_preserving_dependents(
+        &mut self,
+        mirror: &mut CellMirror,
+        edits: &[(SheetId, CellId, u32, u32, CellInput)],
+        skip_cycle_check: bool,
+    ) -> Result<RecalcResult, ComputeError> {
+        self.validate_region_partial_writes(mirror, edits)?;
+        self.ensure_graph_built(mirror)?;
+
+        let mut changed = Vec::with_capacity(edits.len());
+        let mut teardown_pcs: Vec<ProjectionChange> = Vec::new();
+        for (sheet_id, cell_id, row, col, input) in edits {
+            check_region_partial_write(mirror, sheet_id, *cell_id, *row, *col, input)?;
+            let (_extra, pcs) = self.process_input(
+                mirror,
+                sheet_id,
+                *cell_id,
+                *row,
+                *col,
+                input,
+                skip_cycle_check,
+            );
+            changed.push(*cell_id);
+            teardown_pcs.extend(pcs);
+        }
+
+        self.mark_dirty();
+
+        let mut result = RecalcResult::empty();
+        let mut seen = FxHashSet::default();
+        for cell_id in changed {
+            if !seen.insert(cell_id) || self.ast_cache.contains_key(&cell_id) {
+                continue;
+            }
+            if let Some(value) = mirror.get_cell_value(&cell_id).cloned()
+                && let Some((_sid, change)) = self.make_cell_change(mirror, &cell_id, &value)
+            {
+                result.changed_cells.push(change);
+            }
+        }
+        super::spill::append_filtered_teardowns(&mut result, teardown_pcs);
+        Ok(result)
+    }
+
     /// Format-aware variant of [`set_cells`].
     ///
     /// Threads a per-edit `Option<FormatType>` hint through `process_input`

@@ -2,7 +2,9 @@
 
 use super::super::*;
 use super::helpers::*;
+use crate::snapshot::{CellData, SheetSnapshot, WorkbookSnapshot};
 use value_types::CellValue;
+use value_types::FiniteF64;
 
 #[test]
 fn test_undo_merge_produces_merge_changes() {
@@ -43,6 +45,66 @@ fn test_merge_range_discards_non_origin_values_after_explicit_unmerge() {
     assert_eq!(cell_value_at(&engine, &sid, 0, 1), CellValue::Null);
     assert_eq!(cell_value_at(&engine, &sid, 1, 0), CellValue::Null);
     assert_eq!(cell_value_at(&engine, &sid, 1, 1), CellValue::Null);
+}
+
+#[test]
+fn test_merge_preserves_origin_formula_value_when_child_is_precedent() {
+    let sid = sheet_id();
+    let snap = WorkbookSnapshot {
+        sheets: vec![SheetSnapshot {
+            id: sid.to_uuid_string(),
+            name: "Sheet1".to_string(),
+            rows: 10,
+            cols: 10,
+            cells: vec![
+                CellData {
+                    cell_id: cell_id_a1().to_uuid_string(),
+                    row: 0,
+                    col: 0,
+                    value: num(3.0),
+                    formula: Some("=B1+C1".to_string()),
+                    identity_formula: None,
+                    array_ref: None,
+                },
+                CellData {
+                    cell_id: cell_id_b1().to_uuid_string(),
+                    row: 0,
+                    col: 1,
+                    value: num(2.0),
+                    formula: None,
+                    identity_formula: None,
+                    array_ref: None,
+                },
+                CellData {
+                    cell_id: "550e8400-e29b-41d4-a716-446655440004".to_string(),
+                    row: 0,
+                    col: 2,
+                    value: num(1.0),
+                    formula: None,
+                    identity_formula: None,
+                    array_ref: None,
+                },
+            ],
+            ranges: vec![],
+        }],
+        named_ranges: vec![],
+        tables: vec![],
+        pivot_tables: vec![],
+        data_table_regions: vec![],
+        iterative_calc: false,
+        max_iterations: 100,
+        max_change: FiniteF64::must(0.001),
+        calculation_settings: None,
+    };
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+
+    assert_eq!(cell_value_at(&engine, &sid, 0, 0), num(3.0));
+
+    engine.merge_range(&sid, 0, 0, 0, 1).unwrap();
+
+    assert_eq!(cell_value_at(&engine, &sid, 0, 0), num(3.0));
+    assert_eq!(engine.get_formula(&cell_id_a1()).as_deref(), Some("=B1+C1"));
+    assert_eq!(cell_value_at(&engine, &sid, 0, 1), CellValue::Null);
 }
 
 #[test]

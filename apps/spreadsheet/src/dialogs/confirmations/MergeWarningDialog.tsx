@@ -12,7 +12,7 @@
  * Merge Data Loss Warning Dialog
  */
 
-import { useCallback } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { dispatch, useUIStore } from '../../internal-api';
 
 import { Button, Dialog, DialogBody, DialogFooter, DialogHeader } from '@mog/shell';
@@ -30,14 +30,33 @@ import { useActionDependencies } from '../../hooks/toolbar/use-action-dependenci
  */
 export function MergeWarningDialog() {
   const deps = useActionDependencies();
+  const confirmScheduledRef = useRef(false);
 
   // Get dialog state from UIStore
   const isOpen = useUIStore((s) => s.mergeWarningDialog.isOpen);
   const cellsWithData = useUIStore((s) => s.mergeWarningDialog.cellsWithData);
 
+  useEffect(() => {
+    if (!isOpen) {
+      confirmScheduledRef.current = false;
+    }
+  }, [isOpen]);
+
   // Handle OK button - confirm merge (data will be lost)
   const handleConfirm = useCallback(() => {
-    dispatch('CONFIRM_MERGE_WITH_DATA_LOSS', deps);
+    if (confirmScheduledRef.current) return;
+    confirmScheduledRef.current = true;
+
+    window.setTimeout(() => {
+      const result = dispatch('CONFIRM_MERGE_WITH_DATA_LOSS', deps);
+      if (result && typeof (result as Promise<unknown>).finally === 'function') {
+        void (result as Promise<unknown>).finally(() => {
+          confirmScheduledRef.current = false;
+        });
+      } else {
+        confirmScheduledRef.current = false;
+      }
+    }, 0);
   }, [deps]);
 
   // Handle Cancel button

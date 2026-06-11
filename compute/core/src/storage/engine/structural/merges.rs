@@ -67,7 +67,7 @@ impl YrsComputeEngine {
         let mut result = self
             .stores
             .compute
-            .set_cells(&mut self.mirror, &edits, true)?;
+            .set_cells_preserving_dependents(&mut self.mirror, &edits, true)?;
         for change in &mut result.changed_cells {
             if change.old_value.is_none()
                 && let Ok(cell_id) = CellId::from_uuid_str(&change.cell_id)

@@ -76,6 +76,7 @@ import { forEachVisibleCell } from '../layout/for-each-visible-cell';
 import { docToRegionXY, getCellBounds } from '../shared/cell-bounds';
 import { OverflowIndex } from '../overflow-index';
 import { BaseLayer } from './base-layer';
+import type { VisibleCellInfo } from '../layout/types';
 
 // =============================================================================
 // Binary Cell Reader (duck-typed interface matching CellAccessor)
@@ -376,17 +377,66 @@ export class CellsLayer extends BaseLayer implements DirtyCellExpander {
         ? this.binaryCellReaderForViewport(viewportId)
         : this.binaryCellReader;
 
-    // Binary buffer is the single source of truth for cell rendering.
-    // Skip cell rendering until the buffer arrives (typically 1-2 frames on sheet switch).
-    // Grid lines, selection, and headers render independently.
-    if (!reader) {
-      return;
-    }
-
     // Convert canvas-space dirty rects to doc-space for forEachVisibleCell filtering.
     // forEachVisibleCell compares against doc-space cell positions from ViewportPositionIndex,
     // so we must convert frame.dirtyRects (canvas-space) to doc-space using the region transform.
     const dirtyRectsDoc = frame.dirtyRects?.map((r) => canvasToDoc(r, region));
+
+    const renderFilterOnlyCell = (
+      cell: VisibleCellInfo,
+      filterInfo: NonNullable<CellRenderInfoExtended['filterInfo']>,
+    ) => {
+      const local = docToRegionXY(cell.x, cell.y, region);
+      const mergeLocal = cell.merge
+        ? docToRegionXY(cell.merge.mergeX, cell.merge.mergeY, region)
+        : undefined;
+      const fallbackCellInfo: CellRenderInfo = {
+        row: cell.row,
+        col: cell.col,
+        x: local.x,
+        y: local.y,
+        width: cell.width,
+        height: cell.height,
+        value: null,
+        format: undefined,
+        displayText: '',
+        isEditing: false,
+        merge: cell.merge
+          ? {
+              originRow: cell.merge.originRow,
+              originCol: cell.merge.originCol,
+              mergeWidth: cell.merge.mergeWidth,
+              mergeHeight: cell.merge.mergeHeight,
+              mergeX: mergeLocal!.x,
+              mergeY: mergeLocal!.y,
+            }
+          : undefined,
+      };
+      const contentBounds = getCellBounds(fallbackCellInfo);
+      const controlSkin = this.sheetData.sheetViewSkin.controls;
+      renderFilterButton(
+        ctx,
+        contentBounds.x,
+        contentBounds.y,
+        contentBounds.width,
+        contentBounds.height,
+        filterInfo.hasActiveFilter,
+        controlSkin,
+      );
+      if (this.interactiveElements) {
+        collectInteractiveElements(
+          fallbackCellInfo,
+          {
+            hasComment: false,
+            isCheckbox: false,
+            isChecked: false,
+            filterInfo,
+            sheetId,
+          },
+          this.interactiveElements,
+        );
+      }
+    };
 
     forEachVisibleCell(
       meta.cellRange,
@@ -413,12 +463,35 @@ export class CellsLayer extends BaseLayer implements DirtyCellExpander {
         // value, display text, CF overrides. CellDataSource is only used for
         // metadata not yet in the binary buffer (sparklines, filters, bindings).
         // -----------------------------------------------------------------------
+        const filterHeaderInfo = cellData.getFilterHeaderInfo(sheetId, coord);
+        const filterInfo = filterHeaderInfo
+          ? {
+              filterId: filterHeaderInfo.filterId,
+              headerCellId: filterHeaderInfo.headerCellId,
+              hasActiveFilter: filterHeaderInfo.hasActiveFilter,
+            }
+          : undefined;
 
-        // Binary buffer is guaranteed available by the renderer guard.
+        const local = docToRegionXY(cell.x, cell.y, region);
+        const mergeLocal = cell.merge
+          ? docToRegionXY(cell.merge.mergeX, cell.merge.mergeY, region)
+          : undefined;
+
+        // Binary buffer is the single source of truth for value/format rendering.
         // moveTo returns false when the cell is outside the binary buffer's prefetch
         // bounds (rapid scroll). A new viewport fetch is in-flight. Skipping for 1-2
         // frames is correct — showing data from a different source would risk divergence.
-        if (!reader.moveTo(cell.row, cell.col)) return;
+        //
+        // Filter buttons are different: their metadata is provided by the synchronous
+        // filter-header cache, not the binary value buffer. Frozen panes can briefly
+        // have a visible header cell whose viewport reader cannot move to that cell;
+        // still render/collect the filter affordance so DOM overlays stay usable.
+        if (!reader?.moveTo(cell.row, cell.col)) {
+          if (filterInfo) {
+            renderFilterOnlyCell(cell, filterInfo);
+          }
+          return;
+        }
 
         // Flag-based booleans from binary reader
         const hasHyperlink = reader.hasHyperlink;
@@ -457,7 +530,6 @@ export class CellsLayer extends BaseLayer implements DirtyCellExpander {
         const sparklineData = reader.hasSparkline
           ? cellData.getSparklineRenderData(sheetId, coord)
           : undefined;
-        const filterHeaderInfo = cellData.getFilterHeaderInfo(sheetId, coord);
         const bindingStatus = cellData.getCellBindingStatus(sheetId, coord);
 
         // Detect rich text segments (rich text is never in the binary buffer)
@@ -465,20 +537,7 @@ export class CellsLayer extends BaseLayer implements DirtyCellExpander {
           ? (value as { segments: readonly RichTextSegment[] }).segments
           : undefined;
 
-        // Filter info
-        const filterInfo = filterHeaderInfo
-          ? {
-              filterId: filterHeaderInfo.filterId,
-              headerCellId: filterHeaderInfo.headerCellId,
-              hasActiveFilter: filterHeaderInfo.hasActiveFilter,
-            }
-          : undefined;
-
         // Build CellRenderInfo (document coords → region-local UNZOOMED via canonical helper)
-        const local = docToRegionXY(cell.x, cell.y, region);
-        const mergeLocal = cell.merge
-          ? docToRegionXY(cell.merge.mergeX, cell.merge.mergeY, region)
-          : undefined;
         const cellInfo: CellRenderInfoExtended = {
           row: cell.row,
           col: cell.col,
@@ -548,18 +607,45 @@ export class CellsLayer extends BaseLayer implements DirtyCellExpander {
       dirtyRectsDoc,
     );
 
+    const { startRow, startCol, endRow, endCol } = meta.cellRange;
+    const filterFringeRange = {
+      startRow,
+      startCol: Math.max(0, startCol - 1),
+      endRow,
+      endCol: endCol + 1,
+    };
+    if (filterFringeRange.startCol < startCol || filterFringeRange.endCol > endCol) {
+      forEachVisibleCell(filterFringeRange, positionIndex, mergeIndex, (cell) => {
+        if (
+          cell.row >= startRow &&
+          cell.row <= endRow &&
+          cell.col >= startCol &&
+          cell.col <= endCol
+        ) {
+          return;
+        }
+
+        const filterHeaderInfo = cellData.getFilterHeaderInfo(sheetId, {
+          row: cell.row,
+          col: cell.col,
+        });
+        if (!filterHeaderInfo) return;
+
+        renderFilterOnlyCell(cell, {
+          filterId: filterHeaderInfo.filterId,
+          headerCellId: filterHeaderInfo.headerCellId,
+          hasActiveFilter: filterHeaderInfo.hasActiveFilter,
+        });
+      });
+    }
+
     // =========================================================================
     // PASS 2: Text, icons, indicators, sparklines
     // =========================================================================
 
-    const centerAcrossPaintedSources = this.renderCenterAcrossSpans(
-      ctx,
-      meta,
-      region,
-      cellInfoCache,
-      reader,
-      frame,
-    );
+    const centerAcrossPaintedSources = reader
+      ? this.renderCenterAcrossSpans(ctx, meta, region, cellInfoCache, reader, frame)
+      : new Set<string>();
 
     for (const cellInfo of cellInfoCache) {
       const {
@@ -662,7 +748,7 @@ export class CellsLayer extends BaseLayer implements DirtyCellExpander {
           fontColorOverride,
           meta,
           frame,
-          reader,
+          reader!,
         );
       }
 

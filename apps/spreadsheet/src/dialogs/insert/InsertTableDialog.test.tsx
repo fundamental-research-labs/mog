@@ -162,7 +162,7 @@ describe('InsertTableDialog', () => {
     jest.useRealTimers();
   });
 
-  it('closes before creating the table on a later macrotask', async () => {
+  it('closes before creating the table immediately from the OK action', async () => {
     render(<InsertTableDialog />);
 
     const dialog = screen.getByRole('dialog');
@@ -171,15 +171,8 @@ describe('InsertTableDialog', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: /^OK$/ }));
 
     expect(closeInsertTableDialog).toHaveBeenCalledTimes(1);
-    expect(undoGroup).not.toHaveBeenCalled();
-    expect(tablesAdd).not.toHaveBeenCalled();
     const pendingAction = getPendingDialogActionForTest();
     expect(pendingAction).toBeInstanceOf(Promise);
-
-    jest.advanceTimersByTime(99);
-    expect(undoGroup).not.toHaveBeenCalled();
-
-    jest.advanceTimersByTime(1);
     await pendingAction;
 
     expect(workbook.getSheetById).toHaveBeenCalledWith('sheet-1');

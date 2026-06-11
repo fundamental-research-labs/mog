@@ -33,6 +33,37 @@ export function scheduleDialogAction(action: () => unknown): void {
   global.__MOG_PENDING_DIALOG_ACTION__ = pending;
 }
 
+export function runDialogActionNow(action: () => unknown): void {
+  const global = getDialogActionGlobal();
+  let resolvePending!: () => void;
+  let rejectPending!: (error: unknown) => void;
+  const pending = new Promise<void>((resolve, reject) => {
+    resolvePending = resolve;
+    rejectPending = reject;
+  });
+  const complete = () => {
+    if (global.__MOG_PENDING_DIALOG_ACTION__ === pending) {
+      delete global.__MOG_PENDING_DIALOG_ACTION__;
+    }
+  };
+  global.__MOG_PENDING_DIALOG_ACTION__ = pending;
+  try {
+    Promise.resolve(action()).then(
+      () => {
+        complete();
+        resolvePending();
+      },
+      (error) => {
+        complete();
+        rejectPending(error);
+      },
+    );
+  } catch (error) {
+    complete();
+    rejectPending(error);
+  }
+}
+
 export function getPendingDialogActionForTest(): Promise<void> | undefined {
   return getDialogActionGlobal().__MOG_PENDING_DIALOG_ACTION__;
 }

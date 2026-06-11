@@ -34,7 +34,7 @@ import {
   FormField,
   Label,
 } from '@mog/shell';
-import { scheduleDialogAction } from './dialog-action-scheduler';
+import { runDialogActionNow } from './dialog-action-scheduler';
 
 // =============================================================================
 // Types
@@ -283,7 +283,7 @@ export function InsertTableDialog({ onInsertTable }: InsertTableDialogProps) {
     }
 
     closeDialog();
-    scheduleDialogAction(() => {
+    runDialogActionNow(() => {
       // Create the table
       if (onInsertTable) {
         return onInsertTable({

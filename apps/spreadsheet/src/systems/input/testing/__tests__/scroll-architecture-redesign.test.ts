@@ -110,6 +110,31 @@ describe('setScrollPosition callback', () => {
     expect(renderRequests).toBe(2);
   });
 
+  it('large horizontal pixel wheel deltas stay controllable', () => {
+    const positions: Array<{ x: number; y: number }> = [];
+    coordinator.setDependencies(
+      createMinimalDeps({
+        setScrollPosition: (pos) => positions.push({ x: pos.x, y: pos.y }),
+      }),
+    );
+    coordinator.setContentScrollBounds(2000, 2000);
+
+    coordinator.handleWheel({
+      deltaX: 900,
+      deltaY: 0,
+      deltaMode: 0,
+      ctrlKey: false,
+      metaKey: false,
+      shiftKey: false,
+      clientX: 0,
+      clientY: 0,
+      preventDefault: () => {},
+    } as unknown as WheelEvent);
+
+    expect(coordinator.getScrollState()).toMatchObject({ x: 450, y: 0 });
+    expect(positions).toEqual([{ x: 450, y: 0 }]);
+  });
+
   it('setContentScrollBounds does not republish when position remains in bounds', () => {
     const positions: Array<{ x: number; y: number }> = [];
     let renderRequests = 0;
@@ -273,7 +298,7 @@ describe('Trackpad vs discrete wheel detection', () => {
   });
 
   it('deltaMode === 0 + large horizontal pixel delta → direct pixel scroll', () => {
-    const event = createWheelEvent({ deltaMode: 0, deltaX: -3000, deltaY: 0 });
+    const event = createWheelEvent({ deltaMode: 0, deltaX: -900, deltaY: 0 });
     expect(coordinator.detectTrackpadInput(event)).toBe(true);
   });
 

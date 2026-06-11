@@ -424,12 +424,14 @@ export function CommentPopover() {
   const handleResolve = useCallback(async () => {
     const rootComment = comments[0];
     if (!rootComment) return;
-    if (rootComment.commentType === 'note') return;
 
     const nextResolved = !(rootComment.resolved ?? false);
     const threadId = rootComment.threadId ?? rootComment.id;
+    if (rootComment.commentType === 'note') {
+      await convertNoteToThread(rootComment.id);
+    }
     resolveThread(threadId, nextResolved);
-  }, [comments, resolveThread]);
+  }, [comments, convertNoteToThread, resolveThread]);
 
   const handleDelete = useCallback(
     async (commentId: string) => {
@@ -497,8 +499,8 @@ export function CommentPopover() {
 
   const primaryComment = comments[0] ?? null;
   const isNoteBacked = primaryComment?.commentType === 'note';
-  const canResolveThread = comments.length > 0 && !isNoteBacked;
-  const isResolved = canResolveThread && comments[0].resolved;
+  const canResolveThread = comments.length > 0;
+  const isResolved = comments.length > 0 && comments[0].resolved;
 
   // Memoize the virtual ref object for stability
   const virtualRefObject = useMemo(() => virtualRef, []);
@@ -613,8 +615,8 @@ export function CommentPopover() {
   );
 
   // ===========================================================================
-  // Comment popover body. Notes share the popover shell, but thread-only
-  // controls stay hidden until a note is promoted by replying.
+  // Comment popover body. Notes share the popover shell and are promoted by
+  // thread actions that require threaded storage.
   // ===========================================================================
   const CommentBody = (
     <>

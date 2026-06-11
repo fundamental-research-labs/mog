@@ -52,6 +52,9 @@ import { ZoomPhysics } from '../physics/zoom-physics';
 
 export type InputActor = InputMachineActor;
 
+const DIRECT_PIXEL_SCROLL_THRESHOLD = 500;
+const LARGE_HORIZONTAL_PIXEL_SCROLL_SCALE = 0.5;
+
 // =============================================================================
 // DEPENDENCIES
 // =============================================================================
@@ -786,7 +789,7 @@ export class InputCoordinator {
    *
    * Heuristic (applied to RAW event data before normalization):
    * - deltaMode !== 0 → discrete wheel (line/page mode; trackpads always send pixel mode)
-   * - deltaMode === 0 + very large pixel delta → direct pixel scroll / trackpad-like
+   * - deltaMode === 0 + large pixel delta → direct pixel scroll / trackpad-like
    * (programmatic pixel scrolls have already supplied the full distance,
    * so app-generated mouse-wheel momentum must not amplify them)
    * - deltaMode === 0 + fractional deltas → trackpad (discrete wheels produce integers)
@@ -799,7 +802,8 @@ export class InputCoordinator {
     if (event.deltaMode !== 0) return false;
 
     // Large pixel-mode deltas are direct scroll distances, not physical wheel ticks.
-    if (Math.max(Math.abs(event.deltaX), Math.abs(event.deltaY)) >= 1000) return true;
+    if (Math.max(Math.abs(event.deltaX), Math.abs(event.deltaY)) >= DIRECT_PIXEL_SCROLL_THRESHOLD)
+      return true;
 
     // Fractional deltas are a strong trackpad signal — discrete wheels produce integers
     if (event.deltaX % 1 !== 0 || event.deltaY % 1 !== 0) return true;
@@ -827,6 +831,10 @@ export class InputCoordinator {
       // Page mode - scroll by 90% of viewport
       deltaX *= window.innerWidth * 0.9;
       deltaY *= window.innerHeight * 0.9;
+    }
+
+    if (event.deltaMode === 0 && Math.abs(event.deltaX) >= DIRECT_PIXEL_SCROLL_THRESHOLD) {
+      deltaX *= LARGE_HORIZONTAL_PIXEL_SCROLL_SCALE;
     }
 
     // Shift+Wheel Horizontal Scroll

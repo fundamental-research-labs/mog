@@ -252,6 +252,7 @@ export type SelectionEmitted = {
   type: 'userSelectionChanged';
   activeCell: CellCoord;
   followCell: CellCoord;
+  range: CellRange;
   scrollIntent?: SelectionScrollIntent;
   suppressViewportFollow?: boolean;
 };

@@ -271,4 +271,17 @@ describe('Formula editing mode', () => {
     expect(sim.isEditing()).toBe(false);
     expect(sim.activeCell()).toEqual({ row: 1, col: 0 });
   });
+
+  it('formula edit committed with Enter keeps the edited cell selected', async () => {
+    sim = createIntegrationSimulator({
+      activeCell: { row: 4, col: 2 },
+    });
+
+    sim.startEditing('=A1+B1');
+    await sim.system.commitWithKey('enter');
+    await sim.flush();
+
+    expect(sim.isEditing()).toBe(false);
+    expect(sim.activeCell()).toEqual({ row: 4, col: 2 });
+  });
 });

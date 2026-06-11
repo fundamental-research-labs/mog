@@ -34,6 +34,7 @@ import type { SelectionCheckpoint } from '@mog-sdk/contracts/selection';
 import { dispatch } from '../actions/dispatcher';
 import { createActorAccessLayerFromBundle } from '../coordinator/actor-access';
 import { createKeyUpCapture } from './coordinator-keyup-capture';
+import { isNameBoxKeyboardTarget } from './coordinator-keyboard-targets';
 import type { EditorDependencies } from '../coordinator/types';
 import { checkCalculatedColumnAutoFill } from '../coordinator/mutations/tables';
 import {
@@ -338,6 +339,12 @@ function KeyboardCaptureSetup({
         editorSnapshot.matches('richTextEditing') ||
         editorSnapshot.matches('imeComposing');
       const target = keyboardEventTargetElement(e);
+
+      // The Name Box is a navigation input with its own Enter/Escape handling.
+      // Let it receive keys even while the grid editor machine is active.
+      if (isNameBoxKeyboardTarget(target)) {
+        return;
+      }
 
       if (
         isGlobalShortcut(e) &&

@@ -525,7 +525,34 @@ describe('refreshViewportForRegion — sheet-scoped viewport IDs', () => {
     expect(refreshOrder).toBeLessThan(emitOrder);
   });
 
-  it('undo refreshes registered viewports after history replay', async () => {
+  it('undo skips full viewport refresh for cell-only history replay', async () => {
+    const transport = {
+      call: jest.fn(async (command: string): Promise<any> => {
+        if (command === 'compute_undo') {
+          return [
+            new Uint8Array(),
+            {
+              recalc: makeRecalcResult({
+                changedCells: [{ sheetId: 'sheet-1', row: 0, col: 0 }],
+              }),
+            },
+          ];
+        }
+        return undefined;
+      }) as any,
+    } as BridgeTransport & { call: jest.Mock };
+    const core = createStartedCore(transport);
+
+    await core.undo();
+
+    expect(transport.call).toHaveBeenCalledWith('compute_undo', { docId: 'test-doc' });
+    expect(transport.call).not.toHaveBeenCalledWith(
+      'compute_get_viewport_binary',
+      expect.anything(),
+    );
+  });
+
+  it('undo refreshes registered viewports for table history replay', async () => {
     const initialBuffer = buildTestViewportBuffer({
       rows: 100,
       cols: 40,
@@ -548,7 +575,13 @@ describe('refreshViewportForRegion — sheet-scoped viewport IDs', () => {
           return viewportFetchCount === 1 ? initialBuffer : undoBuffer;
         }
         if (command === 'compute_undo') {
-          return [new Uint8Array(), {}];
+          return [
+            new Uint8Array(),
+            {
+              recalc: makeRecalcResult(),
+              tableChanges: [{ name: 'Table1', sheetId: 'sheet-1', kind: 'Removed' }],
+            },
+          ];
         }
         return undefined;
       }) as any,

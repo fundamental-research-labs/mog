@@ -410,6 +410,33 @@ describe('extendSelection - Shift+Arrow bug tests', () => {
       expect(result.activeCell).toEqual({ row: 4, col: 1 });
     });
 
+    it('first Shift+Right from a hidden single-cell target jumps to the next visible column', () => {
+      const context: SelectionContext = {
+        ...initialSelectionContext,
+        activeCell: { row: 12, col: 15 }, // P13
+        pendingRange: { startRow: 12, startCol: 15, endRow: 12, endCol: 15 },
+        anchor: null,
+        isColHidden: (col) => col >= 15 && col <= 26, // P:AA
+      };
+
+      const event: SelectionEvent = {
+        type: 'KEY_ARROW',
+        direction: 'right',
+        shiftKey: true,
+      };
+
+      const result = callExtendSelection(context, event);
+
+      expect(result.pendingRange).toEqual({
+        startRow: 12,
+        startCol: 15,
+        endRow: 12,
+        endCol: 27,
+      });
+      expect(result.anchor).toEqual({ row: 12, col: 15 });
+      expect(result.activeCell).toEqual({ row: 12, col: 15 });
+    });
+
     it('repeated Shift+Right extends by worksheet coordinates across hidden columns', () => {
       let context: SelectionContext = {
         ...initialSelectionContext,

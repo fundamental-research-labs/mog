@@ -2360,6 +2360,26 @@
       "unsupportedUntil": "round-2"
     },
     {
+      "aliasOf": "wb.activeSheet",
+      "aliases": [
+        "wb.activeSheet"
+      ],
+      "apiPath": "wb.activeSheet",
+      "interface": "Workbook",
+      "nameTransform": "snake_case",
+      "notes": null,
+      "ownerModule": "mog.workbook",
+      "ownerPackage": "compute/pyo3",
+      "pythonName": "active_sheet",
+      "pythonPath": "wb.active_sheet",
+      "reason": null,
+      "stableId": "Workbook.activeSheet",
+      "status": "renamed",
+      "syncModel": "sync",
+      "targetPath": "wb.active_sheet",
+      "unsupportedUntil": null
+    },
+    {
       "aliasOf": null,
       "aliases": [],
       "apiPath": "wb.addCustomList",
@@ -2379,7 +2399,9 @@
     },
     {
       "aliasOf": "wb.addressToIndex",
-      "aliases": ["wb.addressToIndex"],
+      "aliases": [
+        "wb.addressToIndex"
+      ],
       "apiPath": "wb.addressToIndex",
       "interface": "Workbook",
       "nameTransform": "snake_case",
@@ -2757,7 +2779,9 @@
     },
     {
       "aliasOf": "wb.describeRanges",
-      "aliases": ["wb.describeRanges"],
+      "aliases": [
+        "wb.describeRanges"
+      ],
       "apiPath": "wb.describeRanges",
       "interface": "Workbook",
       "nameTransform": "snake_case",
@@ -2822,6 +2846,60 @@
       "pythonPath": null,
       "reason": "release_deferred",
       "stableId": "WorkbookDiagnostics.getResolvedChartSpec",
+      "status": "omitted",
+      "syncModel": "sync-wrapper-for-async-ts",
+      "targetPath": null,
+      "unsupportedUntil": "round-2"
+    },
+    {
+      "aliasOf": null,
+      "aliases": [],
+      "apiPath": "wb.diagnostics.import",
+      "interface": "WorkbookDiagnostics",
+      "nameTransform": "none",
+      "notes": null,
+      "ownerModule": "mog",
+      "ownerPackage": "compute/pyo3",
+      "pythonName": null,
+      "pythonPath": null,
+      "reason": "release_deferred",
+      "stableId": "WorkbookDiagnostics.import",
+      "status": "omitted",
+      "syncModel": "sync-wrapper-for-async-ts",
+      "targetPath": null,
+      "unsupportedUntil": "round-2"
+    },
+    {
+      "aliasOf": null,
+      "aliases": [],
+      "apiPath": "wb.diagnostics.materialization",
+      "interface": "WorkbookDiagnostics",
+      "nameTransform": "none",
+      "notes": null,
+      "ownerModule": "mog",
+      "ownerPackage": "compute/pyo3",
+      "pythonName": null,
+      "pythonPath": null,
+      "reason": "release_deferred",
+      "stableId": "WorkbookDiagnostics.materialization",
+      "status": "omitted",
+      "syncModel": "sync-wrapper-for-async-ts",
+      "targetPath": null,
+      "unsupportedUntil": "round-2"
+    },
+    {
+      "aliasOf": null,
+      "aliases": [],
+      "apiPath": "wb.diagnostics.runtime",
+      "interface": "WorkbookDiagnostics",
+      "nameTransform": "none",
+      "notes": null,
+      "ownerModule": "mog",
+      "ownerPackage": "compute/pyo3",
+      "pythonName": null,
+      "pythonPath": null,
+      "reason": "release_deferred",
+      "stableId": "WorkbookDiagnostics.runtime",
       "status": "omitted",
       "syncModel": "sync-wrapper-for-async-ts",
       "targetPath": null,
@@ -3297,7 +3375,9 @@
     },
     {
       "aliasOf": "wb.getOrCreateSheet",
-      "aliases": ["wb.getOrCreateSheet"],
+      "aliases": [
+        "wb.getOrCreateSheet"
+      ],
       "apiPath": "wb.getOrCreateSheet",
       "interface": "Workbook",
       "nameTransform": "snake_case",
@@ -3351,7 +3431,9 @@
     },
     {
       "aliasOf": "wb.getSettings",
-      "aliases": ["wb.getSettings"],
+      "aliases": [
+        "wb.getSettings"
+      ],
       "apiPath": "wb.getSettings",
       "interface": "Workbook",
       "nameTransform": "snake_case",
@@ -3369,7 +3451,9 @@
     },
     {
       "aliasOf": "wb.getSheet",
-      "aliases": ["wb.getSheet"],
+      "aliases": [
+        "wb.getSheet"
+      ],
       "apiPath": "wb.getSheet",
       "interface": "Workbook",
       "nameTransform": "snake_case",
@@ -3387,7 +3471,9 @@
     },
     {
       "aliasOf": "wb.getSheetById",
-      "aliases": ["wb.getSheetById"],
+      "aliases": [
+        "wb.getSheetById"
+      ],
       "apiPath": "wb.getSheetById",
       "interface": "Workbook",
       "nameTransform": "snake_case",
@@ -3405,7 +3491,9 @@
     },
     {
       "aliasOf": "wb.getSheetByIndex",
-      "aliases": ["wb.getSheetByIndex"],
+      "aliases": [
+        "wb.getSheetByIndex"
+      ],
       "apiPath": "wb.getSheetByIndex",
       "interface": "Workbook",
       "nameTransform": "snake_case",
@@ -3423,7 +3511,9 @@
     },
     {
       "aliasOf": "wb.getSheetCount",
-      "aliases": ["wb.getSheetCount"],
+      "aliases": [
+        "wb.getSheetCount"
+      ],
       "apiPath": "wb.getSheetCount",
       "interface": "Workbook",
       "nameTransform": "snake_case",
@@ -3441,7 +3531,9 @@
     },
     {
       "aliasOf": "wb.getSheetNames",
-      "aliases": ["wb.getSheetNames"],
+      "aliases": [
+        "wb.getSheetNames"
+      ],
       "apiPath": "wb.getSheetNames",
       "interface": "Workbook",
       "nameTransform": "snake_case",
@@ -3513,7 +3605,9 @@
     },
     {
       "aliasOf": "wb.getWorkbookSnapshot",
-      "aliases": ["wb.getWorkbookSnapshot"],
+      "aliases": [
+        "wb.getWorkbookSnapshot"
+      ],
       "apiPath": "wb.getWorkbookSnapshot",
       "interface": "Workbook",
       "nameTransform": "snake_case",
@@ -3549,7 +3643,9 @@
     },
     {
       "aliasOf": "wb.history.canRedo",
-      "aliases": ["wb.history.canRedo"],
+      "aliases": [
+        "wb.history.canRedo"
+      ],
       "apiPath": "wb.history.canRedo",
       "interface": "WorkbookHistory",
       "nameTransform": "snake_case",
@@ -3567,7 +3663,9 @@
     },
     {
       "aliasOf": "wb.history.canUndo",
-      "aliases": ["wb.history.canUndo"],
+      "aliases": [
+        "wb.history.canUndo"
+      ],
       "apiPath": "wb.history.canUndo",
       "interface": "WorkbookHistory",
       "nameTransform": "snake_case",
@@ -3585,7 +3683,9 @@
     },
     {
       "aliasOf": "wb.history.getState",
-      "aliases": ["wb.history.getState"],
+      "aliases": [
+        "wb.history.getState"
+      ],
       "apiPath": "wb.history.getState",
       "interface": "WorkbookHistory",
       "nameTransform": "snake_case",
@@ -3657,7 +3757,9 @@
     },
     {
       "aliasOf": "wb.history.setNextDescription",
-      "aliases": ["wb.history.setNextDescription"],
+      "aliases": [
+        "wb.history.setNextDescription"
+      ],
       "apiPath": "wb.history.setNextDescription",
       "interface": "WorkbookHistory",
       "nameTransform": "snake_case",
@@ -3729,7 +3831,9 @@
     },
     {
       "aliasOf": "wb.indexToAddress",
-      "aliases": ["wb.indexToAddress"],
+      "aliases": [
+        "wb.indexToAddress"
+      ],
       "apiPath": "wb.indexToAddress",
       "interface": "Workbook",
       "nameTransform": "snake_case",
@@ -4125,7 +4229,9 @@
     },
     {
       "aliasOf": "wb.makePrincipal",
-      "aliases": ["wb.makePrincipal"],
+      "aliases": [
+        "wb.makePrincipal"
+      ],
       "apiPath": "wb.makePrincipal",
       "interface": "Workbook",
       "nameTransform": "snake_case",
@@ -4521,7 +4627,9 @@
     },
     {
       "aliasOf": "wb.notifications.dismissAll",
-      "aliases": ["wb.notifications.dismissAll"],
+      "aliases": [
+        "wb.notifications.dismissAll"
+      ],
       "apiPath": "wb.notifications.dismissAll",
       "interface": "WorkbookNotifications",
       "nameTransform": "snake_case",
@@ -4557,7 +4665,9 @@
     },
     {
       "aliasOf": "wb.notifications.getAll",
-      "aliases": ["wb.notifications.getAll"],
+      "aliases": [
+        "wb.notifications.getAll"
+      ],
       "apiPath": "wb.notifications.getAll",
       "interface": "WorkbookNotifications",
       "nameTransform": "snake_case",
@@ -5295,7 +5405,9 @@
     },
     {
       "aliasOf": "wb.security.addPolicy",
-      "aliases": ["wb.security.addPolicy"],
+      "aliases": [
+        "wb.security.addPolicy"
+      ],
       "apiPath": "wb.security.addPolicy",
       "interface": "WorkbookSecurity",
       "nameTransform": "snake_case",
@@ -5313,7 +5425,9 @@
     },
     {
       "aliasOf": "wb.security.applyTemplate",
-      "aliases": ["wb.security.applyTemplate"],
+      "aliases": [
+        "wb.security.applyTemplate"
+      ],
       "apiPath": "wb.security.applyTemplate",
       "interface": "WorkbookSecurity",
       "nameTransform": "snake_case",
@@ -5331,7 +5445,9 @@
     },
     {
       "aliasOf": "wb.security.explainAccess",
-      "aliases": ["wb.security.explainAccess"],
+      "aliases": [
+        "wb.security.explainAccess"
+      ],
       "apiPath": "wb.security.explainAccess",
       "interface": "WorkbookSecurity",
       "nameTransform": "snake_case",
@@ -5385,7 +5501,9 @@
     },
     {
       "aliasOf": "wb.security.removePolicy",
-      "aliases": ["wb.security.removePolicy"],
+      "aliases": [
+        "wb.security.removePolicy"
+      ],
       "apiPath": "wb.security.removePolicy",
       "interface": "WorkbookSecurity",
       "nameTransform": "snake_case",
@@ -5403,7 +5521,9 @@
     },
     {
       "aliasOf": "wb.security.removeTemplate",
-      "aliases": ["wb.security.removeTemplate"],
+      "aliases": [
+        "wb.security.removeTemplate"
+      ],
       "apiPath": "wb.security.removeTemplate",
       "interface": "WorkbookSecurity",
       "nameTransform": "snake_case",
@@ -5421,7 +5541,9 @@
     },
     {
       "aliasOf": "wb.security.updatePolicy",
-      "aliases": ["wb.security.updatePolicy"],
+      "aliases": [
+        "wb.security.updatePolicy"
+      ],
       "apiPath": "wb.security.updatePolicy",
       "interface": "WorkbookSecurity",
       "nameTransform": "snake_case",
@@ -5439,7 +5561,9 @@
     },
     {
       "aliasOf": "wb.securityActive",
-      "aliases": ["wb.securityActive"],
+      "aliases": [
+        "wb.securityActive"
+      ],
       "apiPath": "wb.securityActive",
       "interface": "Workbook",
       "nameTransform": "snake_case",
@@ -5457,7 +5581,9 @@
     },
     {
       "aliasOf": "wb.setActivePrincipal",
-      "aliases": ["wb.setActivePrincipal"],
+      "aliases": [
+        "wb.setActivePrincipal"
+      ],
       "apiPath": "wb.setActivePrincipal",
       "interface": "Workbook",
       "nameTransform": "snake_case",
@@ -5547,7 +5673,9 @@
     },
     {
       "aliasOf": "wb.setSettings",
-      "aliases": ["wb.setSettings"],
+      "aliases": [
+        "wb.setSettings"
+      ],
       "apiPath": "wb.setSettings",
       "interface": "Workbook",
       "nameTransform": "snake_case",
@@ -5583,7 +5711,9 @@
     },
     {
       "aliasOf": "wb.sheetCount",
-      "aliases": ["wb.sheetCount"],
+      "aliases": [
+        "wb.sheetCount"
+      ],
       "apiPath": "wb.sheetCount",
       "interface": "Workbook",
       "nameTransform": "snake_case",
@@ -5601,7 +5731,9 @@
     },
     {
       "aliasOf": "wb.sheetNames",
-      "aliases": ["wb.sheetNames"],
+      "aliases": [
+        "wb.sheetNames"
+      ],
       "apiPath": "wb.sheetNames",
       "interface": "Workbook",
       "nameTransform": "snake_case",
@@ -5763,7 +5895,9 @@
     },
     {
       "aliasOf": "wb.sheets.setActive",
-      "aliases": ["wb.sheets.setActive"],
+      "aliases": [
+        "wb.sheets.setActive"
+      ],
       "apiPath": "wb.sheets.setActive",
       "interface": "WorkbookSheets",
       "nameTransform": "snake_case",
@@ -6573,7 +6707,9 @@
     },
     {
       "aliasOf": "wb.toXlsx",
-      "aliases": ["wb.toXlsx"],
+      "aliases": [
+        "wb.toXlsx"
+      ],
       "apiPath": "wb.toXlsx",
       "interface": "Workbook",
       "nameTransform": "manual",
@@ -6768,6 +6904,24 @@
       "syncModel": "sync",
       "targetPath": "wb.viewport.subscribe",
       "unsupportedUntil": "round-2"
+    },
+    {
+      "aliasOf": null,
+      "aliases": [],
+      "apiPath": "ws.addPivotTable",
+      "interface": "Worksheet",
+      "nameTransform": "none",
+      "notes": "Deprecated TypeScript API; Python parity does not expose it as implemented.",
+      "ownerModule": "mog",
+      "ownerPackage": "compute/pyo3",
+      "pythonName": null,
+      "pythonPath": null,
+      "reason": "deprecated_ts_api",
+      "stableId": "Worksheet.addPivotTable",
+      "status": "omitted",
+      "syncModel": "sync-wrapper-for-async-ts",
+      "targetPath": null,
+      "unsupportedUntil": "never"
     },
     {
       "aliasOf": null,
@@ -8121,7 +8275,9 @@
     },
     {
       "aliasOf": "ws.clearData",
-      "aliases": ["ws.clearData"],
+      "aliases": [
+        "ws.clearData"
+      ],
       "apiPath": "ws.clearData",
       "interface": "Worksheet",
       "nameTransform": "snake_case",
@@ -8193,7 +8349,9 @@
     },
     {
       "aliasOf": "ws.comments.addNote",
-      "aliases": ["ws.comments.addNote"],
+      "aliases": [
+        "ws.comments.addNote"
+      ],
       "apiPath": "ws.comments.addNote",
       "interface": "WorksheetComments",
       "nameTransform": "snake_case",
@@ -8211,7 +8369,9 @@
     },
     {
       "aliasOf": "ws.comments.addReply",
-      "aliases": ["ws.comments.addReply"],
+      "aliases": [
+        "ws.comments.addReply"
+      ],
       "apiPath": "ws.comments.addReply",
       "interface": "WorksheetComments",
       "nameTransform": "snake_case",
@@ -8319,7 +8479,9 @@
     },
     {
       "aliasOf": "ws.comments.getForCell",
-      "aliases": ["ws.comments.getForCell"],
+      "aliases": [
+        "ws.comments.getForCell"
+      ],
       "apiPath": "ws.comments.getForCell",
       "interface": "WorksheetComments",
       "nameTransform": "snake_case",
@@ -8355,7 +8517,9 @@
     },
     {
       "aliasOf": "ws.comments.getNote",
-      "aliases": ["ws.comments.getNote"],
+      "aliases": [
+        "ws.comments.getNote"
+      ],
       "apiPath": "ws.comments.getNote",
       "interface": "WorksheetComments",
       "nameTransform": "snake_case",
@@ -8589,7 +8753,9 @@
     },
     {
       "aliasOf": "ws.comments.removeNote",
-      "aliases": ["ws.comments.removeNote"],
+      "aliases": [
+        "ws.comments.removeNote"
+      ],
       "apiPath": "ws.comments.removeNote",
       "interface": "WorksheetComments",
       "nameTransform": "snake_case",
@@ -8715,7 +8881,9 @@
     },
     {
       "aliasOf": "ws.conditionalFormats",
-      "aliases": ["ws.conditionalFormats"],
+      "aliases": [
+        "ws.conditionalFormats"
+      ],
       "apiPath": "ws.conditionalFormats",
       "interface": "WorksheetConditionalFormatting",
       "nameTransform": "snake_case",
@@ -8733,7 +8901,9 @@
     },
     {
       "aliasOf": "ws.conditionalFormats.add",
-      "aliases": ["ws.conditionalFormats.add"],
+      "aliases": [
+        "ws.conditionalFormats.add"
+      ],
       "apiPath": "ws.conditionalFormats.add",
       "interface": "WorksheetConditionalFormatting",
       "nameTransform": "none",
@@ -8769,7 +8939,9 @@
     },
     {
       "aliasOf": "ws.conditionalFormats.clear",
-      "aliases": ["ws.conditionalFormats.clear"],
+      "aliases": [
+        "ws.conditionalFormats.clear"
+      ],
       "apiPath": "ws.conditionalFormats.clear",
       "interface": "WorksheetConditionalFormatting",
       "nameTransform": "none",
@@ -8787,7 +8959,9 @@
     },
     {
       "aliasOf": "ws.conditionalFormats.clearInRanges",
-      "aliases": ["ws.conditionalFormats.clearInRanges"],
+      "aliases": [
+        "ws.conditionalFormats.clearInRanges"
+      ],
       "apiPath": "ws.conditionalFormats.clearInRanges",
       "interface": "WorksheetConditionalFormatting",
       "nameTransform": "snake_case",
@@ -8805,7 +8979,9 @@
     },
     {
       "aliasOf": "ws.conditionalFormats.clearRuleStyle",
-      "aliases": ["ws.conditionalFormats.clearRuleStyle"],
+      "aliases": [
+        "ws.conditionalFormats.clearRuleStyle"
+      ],
       "apiPath": "ws.conditionalFormats.clearRuleStyle",
       "interface": "WorksheetConditionalFormatting",
       "nameTransform": "snake_case",
@@ -8823,7 +8999,9 @@
     },
     {
       "aliasOf": "ws.conditionalFormats.cloneForPaste",
-      "aliases": ["ws.conditionalFormats.cloneForPaste"],
+      "aliases": [
+        "ws.conditionalFormats.cloneForPaste"
+      ],
       "apiPath": "ws.conditionalFormats.cloneForPaste",
       "interface": "WorksheetConditionalFormatting",
       "nameTransform": "snake_case",
@@ -8841,7 +9019,9 @@
     },
     {
       "aliasOf": "ws.conditionalFormats.get",
-      "aliases": ["ws.conditionalFormats.get"],
+      "aliases": [
+        "ws.conditionalFormats.get"
+      ],
       "apiPath": "ws.conditionalFormats.get",
       "interface": "WorksheetConditionalFormatting",
       "nameTransform": "none",
@@ -8913,7 +9093,9 @@
     },
     {
       "aliasOf": "ws.conditionalFormats.list",
-      "aliases": ["ws.conditionalFormats.list"],
+      "aliases": [
+        "ws.conditionalFormats.list"
+      ],
       "apiPath": "ws.conditionalFormats.list",
       "interface": "WorksheetConditionalFormatting",
       "nameTransform": "none",
@@ -8931,7 +9113,9 @@
     },
     {
       "aliasOf": "ws.conditionalFormats.remove",
-      "aliases": ["ws.conditionalFormats.remove"],
+      "aliases": [
+        "ws.conditionalFormats.remove"
+      ],
       "apiPath": "ws.conditionalFormats.remove",
       "interface": "WorksheetConditionalFormatting",
       "nameTransform": "none",
@@ -8967,7 +9151,9 @@
     },
     {
       "aliasOf": "ws.conditionalFormats.reorder",
-      "aliases": ["ws.conditionalFormats.reorder"],
+      "aliases": [
+        "ws.conditionalFormats.reorder"
+      ],
       "apiPath": "ws.conditionalFormats.reorder",
       "interface": "WorksheetConditionalFormatting",
       "nameTransform": "none",
@@ -8985,7 +9171,9 @@
     },
     {
       "aliasOf": "ws.conditionalFormats.update",
-      "aliases": ["ws.conditionalFormats.update"],
+      "aliases": [
+        "ws.conditionalFormats.update"
+      ],
       "apiPath": "ws.conditionalFormats.update",
       "interface": "WorksheetConditionalFormatting",
       "nameTransform": "none",
@@ -9201,7 +9389,9 @@
     },
     {
       "aliasOf": "ws.describeRange",
-      "aliases": ["ws.describeRange"],
+      "aliases": [
+        "ws.describeRange"
+      ],
       "apiPath": "ws.describeRange",
       "interface": "Worksheet",
       "nameTransform": "snake_case",
@@ -9975,7 +10165,9 @@
     },
     {
       "aliasOf": "ws.filters.clearAllCriteria",
-      "aliases": ["ws.filters.clearAllCriteria"],
+      "aliases": [
+        "ws.filters.clearAllCriteria"
+      ],
       "apiPath": "ws.filters.clearAllCriteria",
       "interface": "WorksheetFilters",
       "nameTransform": "snake_case",
@@ -10011,7 +10203,9 @@
     },
     {
       "aliasOf": "ws.filters.clearColumnFilter",
-      "aliases": ["ws.filters.clearColumnFilter"],
+      "aliases": [
+        "ws.filters.clearColumnFilter"
+      ],
       "apiPath": "ws.filters.clearColumnFilter",
       "interface": "WorksheetFilters",
       "nameTransform": "snake_case",
@@ -10119,7 +10313,9 @@
     },
     {
       "aliasOf": "ws.filters.getForRange",
-      "aliases": ["ws.filters.getForRange"],
+      "aliases": [
+        "ws.filters.getForRange"
+      ],
       "apiPath": "ws.filters.getForRange",
       "interface": "WorksheetFilters",
       "nameTransform": "snake_case",
@@ -10137,7 +10333,9 @@
     },
     {
       "aliasOf": "ws.filters.getInfo",
-      "aliases": ["ws.filters.getInfo"],
+      "aliases": [
+        "ws.filters.getInfo"
+      ],
       "apiPath": "ws.filters.getInfo",
       "interface": "WorksheetFilters",
       "nameTransform": "snake_case",
@@ -10155,7 +10353,9 @@
     },
     {
       "aliasOf": "ws.filters.getSortState",
-      "aliases": ["ws.filters.getSortState"],
+      "aliases": [
+        "ws.filters.getSortState"
+      ],
       "apiPath": "ws.filters.getSortState",
       "interface": "WorksheetFilters",
       "nameTransform": "snake_case",
@@ -10173,7 +10373,9 @@
     },
     {
       "aliasOf": "ws.filters.getUniqueValues",
-      "aliases": ["ws.filters.getUniqueValues"],
+      "aliases": [
+        "ws.filters.getUniqueValues"
+      ],
       "apiPath": "ws.filters.getUniqueValues",
       "interface": "WorksheetFilters",
       "nameTransform": "snake_case",
@@ -10264,6 +10466,60 @@
     {
       "aliasOf": null,
       "aliases": [],
+      "apiPath": "ws.filters.listHeaderInfo",
+      "interface": "WorksheetFilters",
+      "nameTransform": "none",
+      "notes": null,
+      "ownerModule": "mog",
+      "ownerPackage": "compute/pyo3",
+      "pythonName": null,
+      "pythonPath": null,
+      "reason": "release_deferred",
+      "stableId": "WorksheetFilters.listHeaderInfo",
+      "status": "omitted",
+      "syncModel": "sync-wrapper-for-async-ts",
+      "targetPath": null,
+      "unsupportedUntil": "round-2"
+    },
+    {
+      "aliasOf": null,
+      "aliases": [],
+      "apiPath": "ws.filters.listSummaries",
+      "interface": "WorksheetFilters",
+      "nameTransform": "none",
+      "notes": null,
+      "ownerModule": "mog",
+      "ownerPackage": "compute/pyo3",
+      "pythonName": null,
+      "pythonPath": null,
+      "reason": "release_deferred",
+      "stableId": "WorksheetFilters.listSummaries",
+      "status": "omitted",
+      "syncModel": "sync-wrapper-for-async-ts",
+      "targetPath": null,
+      "unsupportedUntil": "round-2"
+    },
+    {
+      "aliasOf": null,
+      "aliases": [],
+      "apiPath": "ws.filters.reapply",
+      "interface": "WorksheetFilters",
+      "nameTransform": "none",
+      "notes": null,
+      "ownerModule": "mog.sub_apis.filters",
+      "ownerPackage": "compute/pyo3",
+      "pythonName": "reapply",
+      "pythonPath": "ws.filters.reapply",
+      "reason": null,
+      "stableId": "WorksheetFilters.reapply",
+      "status": "implemented",
+      "syncModel": "sync-wrapper-for-async-ts",
+      "targetPath": "ws.filters.reapply",
+      "unsupportedUntil": null
+    },
+    {
+      "aliasOf": null,
+      "aliases": [],
       "apiPath": "ws.filters.remove",
       "interface": "WorksheetFilters",
       "nameTransform": "none",
@@ -10299,7 +10555,9 @@
     },
     {
       "aliasOf": "ws.filters.setColumnFilter",
-      "aliases": ["ws.filters.setColumnFilter"],
+      "aliases": [
+        "ws.filters.setColumnFilter"
+      ],
       "apiPath": "ws.filters.setColumnFilter",
       "interface": "WorksheetFilters",
       "nameTransform": "snake_case",
@@ -10335,7 +10593,9 @@
     },
     {
       "aliasOf": "ws.filters.setSortState",
-      "aliases": ["ws.filters.setSortState"],
+      "aliases": [
+        "ws.filters.setSortState"
+      ],
       "apiPath": "ws.filters.setSortState",
       "interface": "WorksheetFilters",
       "nameTransform": "snake_case",
@@ -10353,7 +10613,9 @@
     },
     {
       "aliasOf": "ws.findByFormula",
-      "aliases": ["ws.findByFormula"],
+      "aliases": [
+        "ws.findByFormula"
+      ],
       "apiPath": "ws.findByFormula",
       "interface": "Worksheet",
       "nameTransform": "snake_case",
@@ -10371,7 +10633,9 @@
     },
     {
       "aliasOf": "ws.findByValue",
-      "aliases": ["ws.findByValue"],
+      "aliases": [
+        "ws.findByValue"
+      ],
       "apiPath": "ws.findByValue",
       "interface": "Worksheet",
       "nameTransform": "snake_case",
@@ -10407,7 +10671,9 @@
     },
     {
       "aliasOf": "ws.findDataEdge",
-      "aliases": ["ws.findDataEdge"],
+      "aliases": [
+        "ws.findDataEdge"
+      ],
       "apiPath": "ws.findDataEdge",
       "interface": "Worksheet",
       "nameTransform": "snake_case",
@@ -10479,7 +10745,9 @@
     },
     {
       "aliasOf": "ws.formControls",
-      "aliases": ["ws.formControls"],
+      "aliases": [
+        "ws.formControls"
+      ],
       "apiPath": "ws.formControls",
       "interface": "WorksheetFormControls",
       "nameTransform": "snake_case",
@@ -10713,7 +10981,9 @@
     },
     {
       "aliasOf": "ws.formats.adjustIndent",
-      "aliases": ["ws.formats.adjustIndent"],
+      "aliases": [
+        "ws.formats.adjustIndent"
+      ],
       "apiPath": "ws.formats.adjustIndent",
       "interface": "WorksheetFormats",
       "nameTransform": "snake_case",
@@ -10731,7 +11001,9 @@
     },
     {
       "aliasOf": "ws.formats.applyPattern",
-      "aliases": ["ws.formats.applyPattern"],
+      "aliases": [
+        "ws.formats.applyPattern"
+      ],
       "apiPath": "ws.formats.applyPattern",
       "interface": "WorksheetFormats",
       "nameTransform": "snake_case",
@@ -10767,7 +11039,9 @@
     },
     {
       "aliasOf": "ws.formats.clearCell",
-      "aliases": ["ws.formats.clearCell"],
+      "aliases": [
+        "ws.formats.clearCell"
+      ],
       "apiPath": "ws.formats.clearCell",
       "interface": "WorksheetFormats",
       "nameTransform": "snake_case",
@@ -10785,7 +11059,9 @@
     },
     {
       "aliasOf": "ws.formats.clearFill",
-      "aliases": ["ws.formats.clearFill"],
+      "aliases": [
+        "ws.formats.clearFill"
+      ],
       "apiPath": "ws.formats.clearFill",
       "interface": "WorksheetFormats",
       "nameTransform": "snake_case",
@@ -10947,7 +11223,9 @@
     },
     {
       "aliasOf": "ws.formats.getNumberFormatCategory",
-      "aliases": ["ws.formats.getNumberFormatCategory"],
+      "aliases": [
+        "ws.formats.getNumberFormatCategory"
+      ],
       "apiPath": "ws.formats.getNumberFormatCategory",
       "interface": "WorksheetFormats",
       "nameTransform": "snake_case",
@@ -11091,7 +11369,9 @@
     },
     {
       "aliasOf": "ws.formats.setRange",
-      "aliases": ["ws.formats.setRange"],
+      "aliases": [
+        "ws.formats.setRange"
+      ],
       "apiPath": "ws.formats.setRange",
       "interface": "WorksheetFormats",
       "nameTransform": "snake_case",
@@ -11109,7 +11389,9 @@
     },
     {
       "aliasOf": "ws.formats.setRanges",
-      "aliases": ["ws.formats.setRanges"],
+      "aliases": [
+        "ws.formats.setRanges"
+      ],
       "apiPath": "ws.formats.setRanges",
       "interface": "WorksheetFormats",
       "nameTransform": "snake_case",
@@ -11163,7 +11445,9 @@
     },
     {
       "aliasOf": "ws.getCell",
-      "aliases": ["ws.getCell"],
+      "aliases": [
+        "ws.getCell"
+      ],
       "apiPath": "ws.getCell",
       "interface": "Worksheet",
       "nameTransform": "snake_case",
@@ -11178,6 +11462,42 @@
       "syncModel": "sync-wrapper-for-async-ts",
       "targetPath": "ws.get_cell",
       "unsupportedUntil": null
+    },
+    {
+      "aliasOf": null,
+      "aliases": [],
+      "apiPath": "ws.getChart",
+      "interface": "Worksheet",
+      "nameTransform": "none",
+      "notes": "Deprecated TypeScript API; Python parity does not expose it as implemented.",
+      "ownerModule": "mog",
+      "ownerPackage": "compute/pyo3",
+      "pythonName": null,
+      "pythonPath": null,
+      "reason": "deprecated_ts_api",
+      "stableId": "Worksheet.getChart",
+      "status": "omitted",
+      "syncModel": "sync-wrapper-for-async-ts",
+      "targetPath": null,
+      "unsupportedUntil": "never"
+    },
+    {
+      "aliasOf": null,
+      "aliases": [],
+      "apiPath": "ws.getCharts",
+      "interface": "Worksheet",
+      "nameTransform": "none",
+      "notes": null,
+      "ownerModule": "mog",
+      "ownerPackage": "compute/pyo3",
+      "pythonName": null,
+      "pythonPath": null,
+      "reason": "release_deferred",
+      "stableId": "Worksheet.getCharts",
+      "status": "omitted",
+      "syncModel": "sync-wrapper-for-async-ts",
+      "targetPath": null,
+      "unsupportedUntil": "round-2"
     },
     {
       "aliasOf": null,
@@ -11199,7 +11519,9 @@
     },
     {
       "aliasOf": "ws.getCurrentRegion",
-      "aliases": ["ws.getCurrentRegion"],
+      "aliases": [
+        "ws.getCurrentRegion"
+      ],
       "apiPath": "ws.getCurrentRegion",
       "interface": "Worksheet",
       "nameTransform": "snake_case",
@@ -11217,7 +11539,9 @@
     },
     {
       "aliasOf": "ws.getData",
-      "aliases": ["ws.getData"],
+      "aliases": [
+        "ws.getData"
+      ],
       "apiPath": "ws.getData",
       "interface": "Worksheet",
       "nameTransform": "snake_case",
@@ -11235,7 +11559,9 @@
     },
     {
       "aliasOf": "ws.getDependents",
-      "aliases": ["ws.getDependents"],
+      "aliases": [
+        "ws.getDependents"
+      ],
       "apiPath": "ws.getDependents",
       "interface": "Worksheet",
       "nameTransform": "snake_case",
@@ -11253,7 +11579,9 @@
     },
     {
       "aliasOf": "ws.getDisplayValue",
-      "aliases": ["ws.getDisplayValue"],
+      "aliases": [
+        "ws.getDisplayValue"
+      ],
       "apiPath": "ws.getDisplayValue",
       "interface": "Worksheet",
       "nameTransform": "snake_case",
@@ -11307,7 +11635,9 @@
     },
     {
       "aliasOf": "ws.getFormula",
-      "aliases": ["ws.getFormula"],
+      "aliases": [
+        "ws.getFormula"
+      ],
       "apiPath": "ws.getFormula",
       "interface": "Worksheet",
       "nameTransform": "snake_case",
@@ -11343,7 +11673,9 @@
     },
     {
       "aliasOf": "ws.getFormulas",
-      "aliases": ["ws.getFormulas"],
+      "aliases": [
+        "ws.getFormulas"
+      ],
       "apiPath": "ws.getFormulas",
       "interface": "Worksheet",
       "nameTransform": "snake_case",
@@ -11379,7 +11711,9 @@
     },
     {
       "aliasOf": "ws.getIndex",
-      "aliases": ["ws.getIndex"],
+      "aliases": [
+        "ws.getIndex"
+      ],
       "apiPath": "ws.getIndex",
       "interface": "Worksheet",
       "nameTransform": "snake_case",
@@ -11397,7 +11731,9 @@
     },
     {
       "aliasOf": "ws.getName",
-      "aliases": ["ws.getName"],
+      "aliases": [
+        "ws.getName"
+      ],
       "apiPath": "ws.getName",
       "interface": "Worksheet",
       "nameTransform": "snake_case",
@@ -11468,8 +11804,28 @@
       "unsupportedUntil": "round-2"
     },
     {
+      "aliasOf": null,
+      "aliases": [],
+      "apiPath": "ws.getPivotTable",
+      "interface": "Worksheet",
+      "nameTransform": "none",
+      "notes": "Deprecated TypeScript API; Python parity does not expose it as implemented.",
+      "ownerModule": "mog",
+      "ownerPackage": "compute/pyo3",
+      "pythonName": null,
+      "pythonPath": null,
+      "reason": "deprecated_ts_api",
+      "stableId": "Worksheet.getPivotTable",
+      "status": "omitted",
+      "syncModel": "sync-wrapper-for-async-ts",
+      "targetPath": null,
+      "unsupportedUntil": "never"
+    },
+    {
       "aliasOf": "ws.getPrecedents",
-      "aliases": ["ws.getPrecedents"],
+      "aliases": [
+        "ws.getPrecedents"
+      ],
       "apiPath": "ws.getPrecedents",
       "interface": "Worksheet",
       "nameTransform": "snake_case",
@@ -11523,7 +11879,9 @@
     },
     {
       "aliasOf": "ws.getRange",
-      "aliases": ["ws.getRange"],
+      "aliases": [
+        "ws.getRange"
+      ],
       "apiPath": "ws.getRange",
       "interface": "Worksheet",
       "nameTransform": "snake_case",
@@ -11541,7 +11899,9 @@
     },
     {
       "aliasOf": "ws.getRangeWithIdentity",
-      "aliases": ["ws.getRangeWithIdentity"],
+      "aliases": [
+        "ws.getRangeWithIdentity"
+      ],
       "apiPath": "ws.getRangeWithIdentity",
       "interface": "Worksheet",
       "nameTransform": "snake_case",
@@ -11577,7 +11937,9 @@
     },
     {
       "aliasOf": "ws.getRawCellData",
-      "aliases": ["ws.getRawCellData"],
+      "aliases": [
+        "ws.getRawCellData"
+      ],
       "apiPath": "ws.getRawCellData",
       "interface": "Worksheet",
       "nameTransform": "snake_case",
@@ -11595,7 +11957,9 @@
     },
     {
       "aliasOf": "ws.getRawRangeData",
-      "aliases": ["ws.getRawRangeData"],
+      "aliases": [
+        "ws.getRawRangeData"
+      ],
       "apiPath": "ws.getRawRangeData",
       "interface": "Worksheet",
       "nameTransform": "snake_case",
@@ -11667,7 +12031,9 @@
     },
     {
       "aliasOf": "ws.getUsedRange",
-      "aliases": ["ws.getUsedRange"],
+      "aliases": [
+        "ws.getUsedRange"
+      ],
       "apiPath": "ws.getUsedRange",
       "interface": "Worksheet",
       "nameTransform": "snake_case",
@@ -11685,7 +12051,9 @@
     },
     {
       "aliasOf": "ws.getValue",
-      "aliases": ["ws.getValue"],
+      "aliases": [
+        "ws.getValue"
+      ],
       "apiPath": "ws.getValue",
       "interface": "Worksheet",
       "nameTransform": "snake_case",
@@ -11757,7 +12125,9 @@
     },
     {
       "aliasOf": "ws.getVisibility",
-      "aliases": ["ws.getVisibility"],
+      "aliases": [
+        "ws.getVisibility"
+      ],
       "apiPath": "ws.getVisibility",
       "interface": "Worksheet",
       "nameTransform": "snake_case",
@@ -11991,7 +12361,9 @@
     },
     {
       "aliasOf": "ws.layout.autoFitColumn",
-      "aliases": ["ws.layout.autoFitColumn"],
+      "aliases": [
+        "ws.layout.autoFitColumn"
+      ],
       "apiPath": "ws.layout.autoFitColumn",
       "interface": "WorksheetLayout",
       "nameTransform": "snake_case",
@@ -12009,7 +12381,9 @@
     },
     {
       "aliasOf": "ws.layout.autoFitColumns",
-      "aliases": ["ws.layout.autoFitColumns"],
+      "aliases": [
+        "ws.layout.autoFitColumns"
+      ],
       "apiPath": "ws.layout.autoFitColumns",
       "interface": "WorksheetLayout",
       "nameTransform": "snake_case",
@@ -12027,7 +12401,9 @@
     },
     {
       "aliasOf": "ws.layout.autoFitRow",
-      "aliases": ["ws.layout.autoFitRow"],
+      "aliases": [
+        "ws.layout.autoFitRow"
+      ],
       "apiPath": "ws.layout.autoFitRow",
       "interface": "WorksheetLayout",
       "nameTransform": "snake_case",
@@ -12045,7 +12421,9 @@
     },
     {
       "aliasOf": "ws.layout.autoFitRows",
-      "aliases": ["ws.layout.autoFitRows"],
+      "aliases": [
+        "ws.layout.autoFitRows"
+      ],
       "apiPath": "ws.layout.autoFitRows",
       "interface": "WorksheetLayout",
       "nameTransform": "snake_case",
@@ -12081,7 +12459,9 @@
     },
     {
       "aliasOf": "ws.layout.getColWidthsBatch",
-      "aliases": ["ws.layout.getColWidthsBatch"],
+      "aliases": [
+        "ws.layout.getColWidthsBatch"
+      ],
       "apiPath": "ws.layout.getColWidthsBatch",
       "interface": "WorksheetLayout",
       "nameTransform": "snake_case",
@@ -12117,7 +12497,9 @@
     },
     {
       "aliasOf": "ws.layout.getColumnWidth",
-      "aliases": ["ws.layout.getColumnWidth"],
+      "aliases": [
+        "ws.layout.getColumnWidth"
+      ],
       "apiPath": "ws.layout.getColumnWidth",
       "interface": "WorksheetLayout",
       "nameTransform": "snake_case",
@@ -12153,7 +12535,9 @@
     },
     {
       "aliasOf": "ws.layout.getHiddenColumnsBitmap",
-      "aliases": ["ws.layout.getHiddenColumnsBitmap"],
+      "aliases": [
+        "ws.layout.getHiddenColumnsBitmap"
+      ],
       "apiPath": "ws.layout.getHiddenColumnsBitmap",
       "interface": "WorksheetLayout",
       "nameTransform": "snake_case",
@@ -12171,7 +12555,9 @@
     },
     {
       "aliasOf": "ws.layout.getHiddenRowsBitmap",
-      "aliases": ["ws.layout.getHiddenRowsBitmap"],
+      "aliases": [
+        "ws.layout.getHiddenRowsBitmap"
+      ],
       "apiPath": "ws.layout.getHiddenRowsBitmap",
       "interface": "WorksheetLayout",
       "nameTransform": "snake_case",
@@ -12207,7 +12593,9 @@
     },
     {
       "aliasOf": "ws.layout.getRowHeight",
-      "aliases": ["ws.layout.getRowHeight"],
+      "aliases": [
+        "ws.layout.getRowHeight"
+      ],
       "apiPath": "ws.layout.getRowHeight",
       "interface": "WorksheetLayout",
       "nameTransform": "snake_case",
@@ -12225,7 +12613,9 @@
     },
     {
       "aliasOf": "ws.layout.getRowHeightsBatch",
-      "aliases": ["ws.layout.getRowHeightsBatch"],
+      "aliases": [
+        "ws.layout.getRowHeightsBatch"
+      ],
       "apiPath": "ws.layout.getRowHeightsBatch",
       "interface": "WorksheetLayout",
       "nameTransform": "snake_case",
@@ -12261,7 +12651,9 @@
     },
     {
       "aliasOf": "ws.layout.hideColumns",
-      "aliases": ["ws.layout.hideColumns"],
+      "aliases": [
+        "ws.layout.hideColumns"
+      ],
       "apiPath": "ws.layout.hideColumns",
       "interface": "WorksheetLayout",
       "nameTransform": "snake_case",
@@ -12279,7 +12671,9 @@
     },
     {
       "aliasOf": "ws.layout.hideRows",
-      "aliases": ["ws.layout.hideRows"],
+      "aliases": [
+        "ws.layout.hideRows"
+      ],
       "apiPath": "ws.layout.hideRows",
       "interface": "WorksheetLayout",
       "nameTransform": "snake_case",
@@ -12297,7 +12691,9 @@
     },
     {
       "aliasOf": "ws.layout.isColumnHidden",
-      "aliases": ["ws.layout.isColumnHidden"],
+      "aliases": [
+        "ws.layout.isColumnHidden"
+      ],
       "apiPath": "ws.layout.isColumnHidden",
       "interface": "WorksheetLayout",
       "nameTransform": "snake_case",
@@ -12315,7 +12711,9 @@
     },
     {
       "aliasOf": "ws.layout.isRowHidden",
-      "aliases": ["ws.layout.isRowHidden"],
+      "aliases": [
+        "ws.layout.isRowHidden"
+      ],
       "apiPath": "ws.layout.isRowHidden",
       "interface": "WorksheetLayout",
       "nameTransform": "snake_case",
@@ -12333,7 +12731,9 @@
     },
     {
       "aliasOf": "ws.layout.resetColumnWidth",
-      "aliases": ["ws.layout.resetColumnWidth"],
+      "aliases": [
+        "ws.layout.resetColumnWidth"
+      ],
       "apiPath": "ws.layout.resetColumnWidth",
       "interface": "WorksheetLayout",
       "nameTransform": "snake_case",
@@ -12351,7 +12751,9 @@
     },
     {
       "aliasOf": "ws.layout.resetRowHeight",
-      "aliases": ["ws.layout.resetRowHeight"],
+      "aliases": [
+        "ws.layout.resetRowHeight"
+      ],
       "apiPath": "ws.layout.resetRowHeight",
       "interface": "WorksheetLayout",
       "nameTransform": "snake_case",
@@ -12369,7 +12771,9 @@
     },
     {
       "aliasOf": "ws.layout.setColumnVisible",
-      "aliases": ["ws.layout.setColumnVisible"],
+      "aliases": [
+        "ws.layout.setColumnVisible"
+      ],
       "apiPath": "ws.layout.setColumnVisible",
       "interface": "WorksheetLayout",
       "nameTransform": "snake_case",
@@ -12387,7 +12791,9 @@
     },
     {
       "aliasOf": "ws.layout.setColumnWidth",
-      "aliases": ["ws.layout.setColumnWidth"],
+      "aliases": [
+        "ws.layout.setColumnWidth"
+      ],
       "apiPath": "ws.layout.setColumnWidth",
       "interface": "WorksheetLayout",
       "nameTransform": "snake_case",
@@ -12459,7 +12865,9 @@
     },
     {
       "aliasOf": "ws.layout.setRowHeight",
-      "aliases": ["ws.layout.setRowHeight"],
+      "aliases": [
+        "ws.layout.setRowHeight"
+      ],
       "apiPath": "ws.layout.setRowHeight",
       "interface": "WorksheetLayout",
       "nameTransform": "snake_case",
@@ -12477,7 +12885,9 @@
     },
     {
       "aliasOf": "ws.layout.setRowVisible",
-      "aliases": ["ws.layout.setRowVisible"],
+      "aliases": [
+        "ws.layout.setRowVisible"
+      ],
       "apiPath": "ws.layout.setRowVisible",
       "interface": "WorksheetLayout",
       "nameTransform": "snake_case",
@@ -12495,7 +12905,9 @@
     },
     {
       "aliasOf": "ws.layout.unhideColumns",
-      "aliases": ["ws.layout.unhideColumns"],
+      "aliases": [
+        "ws.layout.unhideColumns"
+      ],
       "apiPath": "ws.layout.unhideColumns",
       "interface": "WorksheetLayout",
       "nameTransform": "snake_case",
@@ -12513,7 +12925,9 @@
     },
     {
       "aliasOf": "ws.layout.unhideRows",
-      "aliases": ["ws.layout.unhideRows"],
+      "aliases": [
+        "ws.layout.unhideRows"
+      ],
       "apiPath": "ws.layout.unhideRows",
       "interface": "WorksheetLayout",
       "nameTransform": "snake_case",
@@ -12528,6 +12942,42 @@
       "syncModel": "sync-wrapper-for-async-ts",
       "targetPath": "ws.layout.unhide_rows",
       "unsupportedUntil": null
+    },
+    {
+      "aliasOf": null,
+      "aliases": [],
+      "apiPath": "ws.listCharts",
+      "interface": "Worksheet",
+      "nameTransform": "none",
+      "notes": "Deprecated TypeScript API; Python parity does not expose it as implemented.",
+      "ownerModule": "mog",
+      "ownerPackage": "compute/pyo3",
+      "pythonName": null,
+      "pythonPath": null,
+      "reason": "deprecated_ts_api",
+      "stableId": "Worksheet.listCharts",
+      "status": "omitted",
+      "syncModel": "sync-wrapper-for-async-ts",
+      "targetPath": null,
+      "unsupportedUntil": "never"
+    },
+    {
+      "aliasOf": null,
+      "aliases": [],
+      "apiPath": "ws.listPivotTables",
+      "interface": "Worksheet",
+      "nameTransform": "none",
+      "notes": "Deprecated TypeScript API; Python parity does not expose it as implemented.",
+      "ownerModule": "mog",
+      "ownerPackage": "compute/pyo3",
+      "pythonName": null,
+      "pythonPath": null,
+      "reason": "deprecated_ts_api",
+      "stableId": "Worksheet.listPivotTables",
+      "status": "omitted",
+      "syncModel": "sync-wrapper-for-async-ts",
+      "targetPath": null,
+      "unsupportedUntil": "never"
     },
     {
       "aliasOf": null,
@@ -12892,6 +13342,24 @@
     {
       "aliasOf": null,
       "aliases": [],
+      "apiPath": "ws.objects.getFullObject",
+      "interface": "WorksheetObjectCollection",
+      "nameTransform": "snake_case",
+      "notes": null,
+      "ownerModule": "mog.sub_apis.objects",
+      "ownerPackage": "compute/pyo3",
+      "pythonName": "get_full_object",
+      "pythonPath": "ws.objects.get_full_object",
+      "reason": "release_deferred",
+      "stableId": "WorksheetObjectCollection.getFullObject",
+      "status": "unsupported",
+      "syncModel": "sync-wrapper-for-async-ts",
+      "targetPath": "ws.objects.get_full_object",
+      "unsupportedUntil": "round-2"
+    },
+    {
+      "aliasOf": null,
+      "aliases": [],
       "apiPath": "ws.objects.getInfo",
       "interface": "WorksheetObjectCollection",
       "nameTransform": "snake_case",
@@ -13089,7 +13557,9 @@
     },
     {
       "aliasOf": "ws.outline.collapseAll",
-      "aliases": ["ws.outline.collapseAll"],
+      "aliases": [
+        "ws.outline.collapseAll"
+      ],
       "apiPath": "ws.outline.collapseAll",
       "interface": "WorksheetOutline",
       "nameTransform": "snake_case",
@@ -13107,7 +13577,9 @@
     },
     {
       "aliasOf": "ws.outline.expandAll",
-      "aliases": ["ws.outline.expandAll"],
+      "aliases": [
+        "ws.outline.expandAll"
+      ],
       "apiPath": "ws.outline.expandAll",
       "interface": "WorksheetOutline",
       "nameTransform": "snake_case",
@@ -13125,7 +13597,9 @@
     },
     {
       "aliasOf": "ws.outline.getLevel",
-      "aliases": ["ws.outline.getLevel"],
+      "aliases": [
+        "ws.outline.getLevel"
+      ],
       "apiPath": "ws.outline.getLevel",
       "interface": "WorksheetOutline",
       "nameTransform": "snake_case",
@@ -13143,7 +13617,9 @@
     },
     {
       "aliasOf": "ws.outline.getMaxLevel",
-      "aliases": ["ws.outline.getMaxLevel"],
+      "aliases": [
+        "ws.outline.getMaxLevel"
+      ],
       "apiPath": "ws.outline.getMaxLevel",
       "interface": "WorksheetOutline",
       "nameTransform": "snake_case",
@@ -13161,7 +13637,9 @@
     },
     {
       "aliasOf": "ws.outline.getSettings",
-      "aliases": ["ws.outline.getSettings"],
+      "aliases": [
+        "ws.outline.getSettings"
+      ],
       "apiPath": "ws.outline.getSettings",
       "interface": "WorksheetOutline",
       "nameTransform": "snake_case",
@@ -13179,7 +13657,9 @@
     },
     {
       "aliasOf": "ws.outline.getState",
-      "aliases": ["ws.outline.getState"],
+      "aliases": [
+        "ws.outline.getState"
+      ],
       "apiPath": "ws.outline.getState",
       "interface": "WorksheetOutline",
       "nameTransform": "snake_case",
@@ -13197,7 +13677,9 @@
     },
     {
       "aliasOf": "ws.outline.groupColumns",
-      "aliases": ["ws.outline.groupColumns"],
+      "aliases": [
+        "ws.outline.groupColumns"
+      ],
       "apiPath": "ws.outline.groupColumns",
       "interface": "WorksheetOutline",
       "nameTransform": "snake_case",
@@ -13215,7 +13697,9 @@
     },
     {
       "aliasOf": "ws.outline.groupRows",
-      "aliases": ["ws.outline.groupRows"],
+      "aliases": [
+        "ws.outline.groupRows"
+      ],
       "apiPath": "ws.outline.groupRows",
       "interface": "WorksheetOutline",
       "nameTransform": "snake_case",
@@ -13233,7 +13717,9 @@
     },
     {
       "aliasOf": "ws.outline.setSettings",
-      "aliases": ["ws.outline.setSettings"],
+      "aliases": [
+        "ws.outline.setSettings"
+      ],
       "apiPath": "ws.outline.setSettings",
       "interface": "WorksheetOutline",
       "nameTransform": "snake_case",
@@ -13251,7 +13737,9 @@
     },
     {
       "aliasOf": "ws.outline.showOutlineLevels",
-      "aliases": ["ws.outline.showOutlineLevels"],
+      "aliases": [
+        "ws.outline.showOutlineLevels"
+      ],
       "apiPath": "ws.outline.showOutlineLevels",
       "interface": "WorksheetOutline",
       "nameTransform": "snake_case",
@@ -13287,7 +13775,9 @@
     },
     {
       "aliasOf": "ws.outline.toggleCollapsed",
-      "aliases": ["ws.outline.toggleCollapsed"],
+      "aliases": [
+        "ws.outline.toggleCollapsed"
+      ],
       "apiPath": "ws.outline.toggleCollapsed",
       "interface": "WorksheetOutline",
       "nameTransform": "snake_case",
@@ -13305,7 +13795,9 @@
     },
     {
       "aliasOf": "ws.outline.ungroupColumns",
-      "aliases": ["ws.outline.ungroupColumns"],
+      "aliases": [
+        "ws.outline.ungroupColumns"
+      ],
       "apiPath": "ws.outline.ungroupColumns",
       "interface": "WorksheetOutline",
       "nameTransform": "snake_case",
@@ -13323,7 +13815,9 @@
     },
     {
       "aliasOf": "ws.outline.ungroupRows",
-      "aliases": ["ws.outline.ungroupRows"],
+      "aliases": [
+        "ws.outline.ungroupRows"
+      ],
       "apiPath": "ws.outline.ungroupRows",
       "interface": "WorksheetOutline",
       "nameTransform": "snake_case",
@@ -13449,7 +13943,9 @@
     },
     {
       "aliasOf": "ws.pivots.addCalculatedField",
-      "aliases": ["ws.pivots.addCalculatedField"],
+      "aliases": [
+        "ws.pivots.addCalculatedField"
+      ],
       "apiPath": "ws.pivots.addCalculatedField",
       "interface": "WorksheetPivots",
       "nameTransform": "snake_case",
@@ -13464,42 +13960,6 @@
       "syncModel": "sync-wrapper-for-async-ts",
       "targetPath": "ws.pivots.add_calculated_field",
       "unsupportedUntil": null
-    },
-    {
-      "aliasOf": null,
-      "aliases": [],
-      "apiPath": "ws.pivots.addCalculatedFieldAndPlace",
-      "interface": "WorksheetPivots",
-      "nameTransform": "none",
-      "notes": null,
-      "ownerModule": "mog",
-      "ownerPackage": "compute/pyo3",
-      "pythonName": null,
-      "pythonPath": null,
-      "reason": "release_deferred",
-      "stableId": "WorksheetPivots.addCalculatedFieldAndPlace",
-      "status": "omitted",
-      "syncModel": "sync-wrapper-for-async-ts",
-      "targetPath": null,
-      "unsupportedUntil": "round-2"
-    },
-    {
-      "aliasOf": null,
-      "aliases": [],
-      "apiPath": "ws.pivots.addCalculatedFieldLegacy",
-      "interface": "WorksheetPivots",
-      "nameTransform": "none",
-      "notes": "Deprecated TypeScript API; Python parity does not expose it as implemented.",
-      "ownerModule": "mog",
-      "ownerPackage": "compute/pyo3",
-      "pythonName": null,
-      "pythonPath": null,
-      "reason": "deprecated_ts_api",
-      "stableId": "WorksheetPivots.addCalculatedFieldLegacy",
-      "status": "omitted",
-      "syncModel": "sync-wrapper-for-async-ts",
-      "targetPath": null,
-      "unsupportedUntil": "never"
     },
     {
       "aliasOf": null,
@@ -13520,26 +13980,10 @@
       "unsupportedUntil": "never"
     },
     {
-      "aliasOf": null,
-      "aliases": [],
-      "apiPath": "ws.pivots.addPlacement",
-      "interface": "WorksheetPivots",
-      "nameTransform": "none",
-      "notes": null,
-      "ownerModule": "mog",
-      "ownerPackage": "compute/pyo3",
-      "pythonName": null,
-      "pythonPath": null,
-      "reason": "release_deferred",
-      "stableId": "WorksheetPivots.addPlacement",
-      "status": "omitted",
-      "syncModel": "sync-wrapper-for-async-ts",
-      "targetPath": null,
-      "unsupportedUntil": "round-2"
-    },
-    {
       "aliasOf": "ws.pivots.addWithSheet",
-      "aliases": ["ws.pivots.addWithSheet"],
+      "aliases": [
+        "ws.pivots.addWithSheet"
+      ],
       "apiPath": "ws.pivots.addWithSheet",
       "interface": "WorksheetPivots",
       "nameTransform": "snake_case",
@@ -13593,7 +14037,9 @@
     },
     {
       "aliasOf": "ws.pivots.detectFields",
-      "aliases": ["ws.pivots.detectFields"],
+      "aliases": [
+        "ws.pivots.detectFields"
+      ],
       "apiPath": "ws.pivots.detectFields",
       "interface": "WorksheetPivots",
       "nameTransform": "snake_case",
@@ -13626,6 +14072,24 @@
       "syncModel": "sync-wrapper-for-async-ts",
       "targetPath": "ws.pivots.get",
       "unsupportedUntil": null
+    },
+    {
+      "aliasOf": null,
+      "aliases": [],
+      "apiPath": "ws.pivots.getAll",
+      "interface": "WorksheetPivots",
+      "nameTransform": "none",
+      "notes": null,
+      "ownerModule": "mog",
+      "ownerPackage": "compute/pyo3",
+      "pythonName": null,
+      "pythonPath": null,
+      "reason": "release_deferred",
+      "stableId": "WorksheetPivots.getAll",
+      "status": "omitted",
+      "syncModel": "sync-wrapper-for-async-ts",
+      "targetPath": null,
+      "unsupportedUntil": "round-2"
     },
     {
       "aliasOf": null,
@@ -13683,7 +14147,9 @@
     },
     {
       "aliasOf": "ws.pivots.getColumnLabelRange",
-      "aliases": ["ws.pivots.getColumnLabelRange"],
+      "aliases": [
+        "ws.pivots.getColumnLabelRange"
+      ],
       "apiPath": "ws.pivots.getColumnLabelRange",
       "interface": "WorksheetPivots",
       "nameTransform": "snake_case",
@@ -13719,7 +14185,9 @@
     },
     {
       "aliasOf": "ws.pivots.getDataBodyRange",
-      "aliases": ["ws.pivots.getDataBodyRange"],
+      "aliases": [
+        "ws.pivots.getDataBodyRange"
+      ],
       "apiPath": "ws.pivots.getDataBodyRange",
       "interface": "WorksheetPivots",
       "nameTransform": "snake_case",
@@ -13773,7 +14241,9 @@
     },
     {
       "aliasOf": "ws.pivots.getDrillDownData",
-      "aliases": ["ws.pivots.getDrillDownData"],
+      "aliases": [
+        "ws.pivots.getDrillDownData"
+      ],
       "apiPath": "ws.pivots.getDrillDownData",
       "interface": "WorksheetPivots",
       "nameTransform": "snake_case",
@@ -13809,7 +14279,9 @@
     },
     {
       "aliasOf": "ws.pivots.getExpansionState",
-      "aliases": ["ws.pivots.getExpansionState"],
+      "aliases": [
+        "ws.pivots.getExpansionState"
+      ],
       "apiPath": "ws.pivots.getExpansionState",
       "interface": "WorksheetPivots",
       "nameTransform": "snake_case",
@@ -13827,7 +14299,9 @@
     },
     {
       "aliasOf": "ws.pivots.getFilterAxisRange",
-      "aliases": ["ws.pivots.getFilterAxisRange"],
+      "aliases": [
+        "ws.pivots.getFilterAxisRange"
+      ],
       "apiPath": "ws.pivots.getFilterAxisRange",
       "interface": "WorksheetPivots",
       "nameTransform": "snake_case",
@@ -13842,6 +14316,24 @@
       "syncModel": "sync-wrapper-for-async-ts",
       "targetPath": "ws.pivots.get_filter_axis_range",
       "unsupportedUntil": null
+    },
+    {
+      "aliasOf": null,
+      "aliases": [],
+      "apiPath": "ws.pivots.getImportedViewRecords",
+      "interface": "WorksheetPivots",
+      "nameTransform": "none",
+      "notes": null,
+      "ownerModule": "mog",
+      "ownerPackage": "compute/pyo3",
+      "pythonName": null,
+      "pythonPath": null,
+      "reason": "release_deferred",
+      "stableId": "WorksheetPivots.getImportedViewRecords",
+      "status": "omitted",
+      "syncModel": "sync-wrapper-for-async-ts",
+      "targetPath": null,
+      "unsupportedUntil": "round-2"
     },
     {
       "aliasOf": null,
@@ -13899,7 +14391,9 @@
     },
     {
       "aliasOf": "ws.pivots.getRange",
-      "aliases": ["ws.pivots.getRange"],
+      "aliases": [
+        "ws.pivots.getRange"
+      ],
       "apiPath": "ws.pivots.getRange",
       "interface": "WorksheetPivots",
       "nameTransform": "snake_case",
@@ -13917,7 +14411,9 @@
     },
     {
       "aliasOf": "ws.pivots.getRowLabelRange",
-      "aliases": ["ws.pivots.getRowLabelRange"],
+      "aliases": [
+        "ws.pivots.getRowLabelRange"
+      ],
       "apiPath": "ws.pivots.getRowLabelRange",
       "interface": "WorksheetPivots",
       "nameTransform": "snake_case",
@@ -13988,26 +14484,10 @@
       "unsupportedUntil": "never"
     },
     {
-      "aliasOf": null,
-      "aliases": [],
-      "apiPath": "ws.pivots.movePlacement",
-      "interface": "WorksheetPivots",
-      "nameTransform": "none",
-      "notes": null,
-      "ownerModule": "mog",
-      "ownerPackage": "compute/pyo3",
-      "pythonName": null,
-      "pythonPath": null,
-      "reason": "release_deferred",
-      "stableId": "WorksheetPivots.movePlacement",
-      "status": "omitted",
-      "syncModel": "sync-wrapper-for-async-ts",
-      "targetPath": null,
-      "unsupportedUntil": "round-2"
-    },
-    {
       "aliasOf": "ws.pivots.queryPivot",
-      "aliases": ["ws.pivots.queryPivot"],
+      "aliases": [
+        "ws.pivots.queryPivot"
+      ],
       "apiPath": "ws.pivots.queryPivot",
       "interface": "WorksheetPivots",
       "nameTransform": "snake_case",
@@ -14079,7 +14559,9 @@
     },
     {
       "aliasOf": "ws.pivots.removeCalculatedField",
-      "aliases": ["ws.pivots.removeCalculatedField"],
+      "aliases": [
+        "ws.pivots.removeCalculatedField"
+      ],
       "apiPath": "ws.pivots.removeCalculatedField",
       "interface": "WorksheetPivots",
       "nameTransform": "snake_case",
@@ -14094,24 +14576,6 @@
       "syncModel": "sync-wrapper-for-async-ts",
       "targetPath": "ws.pivots.remove_calculated_field",
       "unsupportedUntil": null
-    },
-    {
-      "aliasOf": null,
-      "aliases": [],
-      "apiPath": "ws.pivots.removeCalculatedFieldLegacy",
-      "interface": "WorksheetPivots",
-      "nameTransform": "none",
-      "notes": "Deprecated TypeScript API; Python parity does not expose it as implemented.",
-      "ownerModule": "mog",
-      "ownerPackage": "compute/pyo3",
-      "pythonName": null,
-      "pythonPath": null,
-      "reason": "deprecated_ts_api",
-      "stableId": "WorksheetPivots.removeCalculatedFieldLegacy",
-      "status": "omitted",
-      "syncModel": "sync-wrapper-for-async-ts",
-      "targetPath": null,
-      "unsupportedUntil": "never"
     },
     {
       "aliasOf": null,
@@ -14133,7 +14597,9 @@
     },
     {
       "aliasOf": "ws.pivots.removeFilter",
-      "aliases": ["ws.pivots.removeFilter"],
+      "aliases": [
+        "ws.pivots.removeFilter"
+      ],
       "apiPath": "ws.pivots.removeFilter",
       "interface": "WorksheetPivots",
       "nameTransform": "snake_case",
@@ -14152,24 +14618,6 @@
     {
       "aliasOf": null,
       "aliases": [],
-      "apiPath": "ws.pivots.removePlacement",
-      "interface": "WorksheetPivots",
-      "nameTransform": "none",
-      "notes": null,
-      "ownerModule": "mog",
-      "ownerPackage": "compute/pyo3",
-      "pythonName": null,
-      "pythonPath": null,
-      "reason": "release_deferred",
-      "stableId": "WorksheetPivots.removePlacement",
-      "status": "omitted",
-      "syncModel": "sync-wrapper-for-async-ts",
-      "targetPath": null,
-      "unsupportedUntil": "round-2"
-    },
-    {
-      "aliasOf": null,
-      "aliases": [],
       "apiPath": "ws.pivots.rename",
       "interface": "WorksheetPivots",
       "nameTransform": "none",
@@ -14180,24 +14628,6 @@
       "pythonPath": null,
       "reason": "release_deferred",
       "stableId": "WorksheetPivots.rename",
-      "status": "omitted",
-      "syncModel": "sync-wrapper-for-async-ts",
-      "targetPath": null,
-      "unsupportedUntil": "round-2"
-    },
-    {
-      "aliasOf": null,
-      "aliases": [],
-      "apiPath": "ws.pivots.renameValuePlacement",
-      "interface": "WorksheetPivots",
-      "nameTransform": "none",
-      "notes": null,
-      "ownerModule": "mog",
-      "ownerPackage": "compute/pyo3",
-      "pythonName": null,
-      "pythonPath": null,
-      "reason": "release_deferred",
-      "stableId": "WorksheetPivots.renameValuePlacement",
       "status": "omitted",
       "syncModel": "sync-wrapper-for-async-ts",
       "targetPath": null,
@@ -14222,26 +14652,10 @@
       "unsupportedUntil": "never"
     },
     {
-      "aliasOf": null,
-      "aliases": [],
-      "apiPath": "ws.pivots.resetPlacement",
-      "interface": "WorksheetPivots",
-      "nameTransform": "none",
-      "notes": null,
-      "ownerModule": "mog",
-      "ownerPackage": "compute/pyo3",
-      "pythonName": null,
-      "pythonPath": null,
-      "reason": "release_deferred",
-      "stableId": "WorksheetPivots.resetPlacement",
-      "status": "omitted",
-      "syncModel": "sync-wrapper-for-async-ts",
-      "targetPath": null,
-      "unsupportedUntil": "round-2"
-    },
-    {
       "aliasOf": "ws.pivots.setAggregateFunction",
-      "aliases": ["ws.pivots.setAggregateFunction"],
+      "aliases": [
+        "ws.pivots.setAggregateFunction"
+      ],
       "apiPath": "ws.pivots.setAggregateFunction",
       "interface": "WorksheetPivots",
       "nameTransform": "snake_case",
@@ -14258,26 +14672,10 @@
       "unsupportedUntil": null
     },
     {
-      "aliasOf": null,
-      "aliases": [],
-      "apiPath": "ws.pivots.setAggregateFunctionLegacy",
-      "interface": "WorksheetPivots",
-      "nameTransform": "none",
-      "notes": "Deprecated TypeScript API; Python parity does not expose it as implemented.",
-      "ownerModule": "mog",
-      "ownerPackage": "compute/pyo3",
-      "pythonName": null,
-      "pythonPath": null,
-      "reason": "deprecated_ts_api",
-      "stableId": "WorksheetPivots.setAggregateFunctionLegacy",
-      "status": "omitted",
-      "syncModel": "sync-wrapper-for-async-ts",
-      "targetPath": null,
-      "unsupportedUntil": "never"
-    },
-    {
       "aliasOf": "ws.pivots.setAllExpanded",
-      "aliases": ["ws.pivots.setAllExpanded"],
+      "aliases": [
+        "ws.pivots.setAllExpanded"
+      ],
       "apiPath": "ws.pivots.setAllExpanded",
       "interface": "WorksheetPivots",
       "nameTransform": "snake_case",
@@ -14367,7 +14765,9 @@
     },
     {
       "aliasOf": "ws.pivots.setFilter",
-      "aliases": ["ws.pivots.setFilter"],
+      "aliases": [
+        "ws.pivots.setFilter"
+      ],
       "apiPath": "ws.pivots.setFilter",
       "interface": "WorksheetPivots",
       "nameTransform": "snake_case",
@@ -14384,8 +14784,28 @@
       "unsupportedUntil": null
     },
     {
+      "aliasOf": null,
+      "aliases": [],
+      "apiPath": "ws.pivots.setItemVisibility",
+      "interface": "WorksheetPivots",
+      "nameTransform": "none",
+      "notes": null,
+      "ownerModule": "mog",
+      "ownerPackage": "compute/pyo3",
+      "pythonName": null,
+      "pythonPath": null,
+      "reason": "release_deferred",
+      "stableId": "WorksheetPivots.setItemVisibility",
+      "status": "omitted",
+      "syncModel": "sync-wrapper-for-async-ts",
+      "targetPath": null,
+      "unsupportedUntil": "round-2"
+    },
+    {
       "aliasOf": "ws.pivots.setLayout",
-      "aliases": ["ws.pivots.setLayout"],
+      "aliases": [
+        "ws.pivots.setLayout"
+      ],
       "apiPath": "ws.pivots.setLayout",
       "interface": "WorksheetPivots",
       "nameTransform": "snake_case",
@@ -14456,44 +14876,10 @@
       "unsupportedUntil": "round-2"
     },
     {
-      "aliasOf": null,
-      "aliases": [],
-      "apiPath": "ws.pivots.setShowValuesAsLegacy",
-      "interface": "WorksheetPivots",
-      "nameTransform": "none",
-      "notes": "Deprecated TypeScript API; Python parity does not expose it as implemented.",
-      "ownerModule": "mog",
-      "ownerPackage": "compute/pyo3",
-      "pythonName": null,
-      "pythonPath": null,
-      "reason": "deprecated_ts_api",
-      "stableId": "WorksheetPivots.setShowValuesAsLegacy",
-      "status": "omitted",
-      "syncModel": "sync-wrapper-for-async-ts",
-      "targetPath": null,
-      "unsupportedUntil": "never"
-    },
-    {
-      "aliasOf": null,
-      "aliases": [],
-      "apiPath": "ws.pivots.setSortByValue",
-      "interface": "WorksheetPivots",
-      "nameTransform": "none",
-      "notes": null,
-      "ownerModule": "mog",
-      "ownerPackage": "compute/pyo3",
-      "pythonName": null,
-      "pythonPath": null,
-      "reason": "release_deferred",
-      "stableId": "WorksheetPivots.setSortByValue",
-      "status": "omitted",
-      "syncModel": "sync-wrapper-for-async-ts",
-      "targetPath": null,
-      "unsupportedUntil": "round-2"
-    },
-    {
       "aliasOf": "ws.pivots.setSortOrder",
-      "aliases": ["ws.pivots.setSortOrder"],
+      "aliases": [
+        "ws.pivots.setSortOrder"
+      ],
       "apiPath": "ws.pivots.setSortOrder",
       "interface": "WorksheetPivots",
       "nameTransform": "snake_case",
@@ -14510,26 +14896,10 @@
       "unsupportedUntil": null
     },
     {
-      "aliasOf": null,
-      "aliases": [],
-      "apiPath": "ws.pivots.setSortOrderLegacy",
-      "interface": "WorksheetPivots",
-      "nameTransform": "none",
-      "notes": "Deprecated TypeScript API; Python parity does not expose it as implemented.",
-      "ownerModule": "mog",
-      "ownerPackage": "compute/pyo3",
-      "pythonName": null,
-      "pythonPath": null,
-      "reason": "deprecated_ts_api",
-      "stableId": "WorksheetPivots.setSortOrderLegacy",
-      "status": "omitted",
-      "syncModel": "sync-wrapper-for-async-ts",
-      "targetPath": null,
-      "unsupportedUntil": "never"
-    },
-    {
       "aliasOf": "ws.pivots.setStyle",
-      "aliases": ["ws.pivots.setStyle"],
+      "aliases": [
+        "ws.pivots.setStyle"
+      ],
       "apiPath": "ws.pivots.setStyle",
       "interface": "WorksheetPivots",
       "nameTransform": "snake_case",
@@ -14547,7 +14917,9 @@
     },
     {
       "aliasOf": "ws.pivots.toggleExpanded",
-      "aliases": ["ws.pivots.toggleExpanded"],
+      "aliases": [
+        "ws.pivots.toggleExpanded"
+      ],
       "apiPath": "ws.pivots.toggleExpanded",
       "interface": "WorksheetPivots",
       "nameTransform": "snake_case",
@@ -14565,7 +14937,9 @@
     },
     {
       "aliasOf": "ws.pivots.updateCalculatedField",
-      "aliases": ["ws.pivots.updateCalculatedField"],
+      "aliases": [
+        "ws.pivots.updateCalculatedField"
+      ],
       "apiPath": "ws.pivots.updateCalculatedField",
       "interface": "WorksheetPivots",
       "nameTransform": "snake_case",
@@ -14582,44 +14956,10 @@
       "unsupportedUntil": null
     },
     {
-      "aliasOf": null,
-      "aliases": [],
-      "apiPath": "ws.pivots.updateCalculatedFieldLegacy",
-      "interface": "WorksheetPivots",
-      "nameTransform": "none",
-      "notes": "Deprecated TypeScript API; Python parity does not expose it as implemented.",
-      "ownerModule": "mog",
-      "ownerPackage": "compute/pyo3",
-      "pythonName": null,
-      "pythonPath": null,
-      "reason": "deprecated_ts_api",
-      "stableId": "WorksheetPivots.updateCalculatedFieldLegacy",
-      "status": "omitted",
-      "syncModel": "sync-wrapper-for-async-ts",
-      "targetPath": null,
-      "unsupportedUntil": "never"
-    },
-    {
-      "aliasOf": null,
-      "aliases": [],
-      "apiPath": "ws.pivots.updatePlacement",
-      "interface": "WorksheetPivots",
-      "nameTransform": "none",
-      "notes": null,
-      "ownerModule": "mog",
-      "ownerPackage": "compute/pyo3",
-      "pythonName": null,
-      "pythonPath": null,
-      "reason": "release_deferred",
-      "stableId": "WorksheetPivots.updatePlacement",
-      "status": "omitted",
-      "syncModel": "sync-wrapper-for-async-ts",
-      "targetPath": null,
-      "unsupportedUntil": "round-2"
-    },
-    {
       "aliasOf": "ws.print",
-      "aliases": ["ws.print"],
+      "aliases": [
+        "ws.print"
+      ],
       "apiPath": "ws.print",
       "interface": "WorksheetPrint",
       "nameTransform": "manual",
@@ -14997,7 +15337,9 @@
     },
     {
       "aliasOf": "ws.protection.allowEditRanges",
-      "aliases": ["ws.protection.allowEditRanges"],
+      "aliases": [
+        "ws.protection.allowEditRanges"
+      ],
       "apiPath": "ws.protection.allowEditRanges",
       "interface": "WorksheetProtection",
       "nameTransform": "snake_case",
@@ -15429,7 +15771,9 @@
     },
     {
       "aliasOf": "ws.regexSearch",
-      "aliases": ["ws.regexSearch"],
+      "aliases": [
+        "ws.regexSearch"
+      ],
       "apiPath": "ws.regexSearch",
       "interface": "Worksheet",
       "nameTransform": "snake_case",
@@ -15444,6 +15788,42 @@
       "syncModel": "sync-wrapper-for-async-ts",
       "targetPath": "ws.regex_search",
       "unsupportedUntil": null
+    },
+    {
+      "aliasOf": null,
+      "aliases": [],
+      "apiPath": "ws.removeChart",
+      "interface": "Worksheet",
+      "nameTransform": "none",
+      "notes": "Deprecated TypeScript API; Python parity does not expose it as implemented.",
+      "ownerModule": "mog",
+      "ownerPackage": "compute/pyo3",
+      "pythonName": null,
+      "pythonPath": null,
+      "reason": "deprecated_ts_api",
+      "stableId": "Worksheet.removeChart",
+      "status": "omitted",
+      "syncModel": "sync-wrapper-for-async-ts",
+      "targetPath": null,
+      "unsupportedUntil": "never"
+    },
+    {
+      "aliasOf": null,
+      "aliases": [],
+      "apiPath": "ws.removePivotTable",
+      "interface": "Worksheet",
+      "nameTransform": "none",
+      "notes": "Deprecated TypeScript API; Python parity does not expose it as implemented.",
+      "ownerModule": "mog",
+      "ownerPackage": "compute/pyo3",
+      "pythonName": null,
+      "pythonPath": null,
+      "reason": "deprecated_ts_api",
+      "stableId": "Worksheet.removePivotTable",
+      "status": "omitted",
+      "syncModel": "sync-wrapper-for-async-ts",
+      "targetPath": null,
+      "unsupportedUntil": "never"
     },
     {
       "aliasOf": null,
@@ -15501,7 +15881,9 @@
     },
     {
       "aliasOf": "ws.setCell",
-      "aliases": ["ws.setCell"],
+      "aliases": [
+        "ws.setCell"
+      ],
       "apiPath": "ws.setCell",
       "interface": "Worksheet",
       "nameTransform": "snake_case",
@@ -15519,7 +15901,9 @@
     },
     {
       "aliasOf": "ws.setCells",
-      "aliases": ["ws.setCells"],
+      "aliases": [
+        "ws.setCells"
+      ],
       "apiPath": "ws.setCells",
       "interface": "Worksheet",
       "nameTransform": "snake_case",
@@ -15573,7 +15957,9 @@
     },
     {
       "aliasOf": "ws.setName",
-      "aliases": ["ws.setName"],
+      "aliases": [
+        "ws.setName"
+      ],
       "apiPath": "ws.setName",
       "interface": "Worksheet",
       "nameTransform": "snake_case",
@@ -15591,7 +15977,9 @@
     },
     {
       "aliasOf": "ws.setRange",
-      "aliases": ["ws.setRange"],
+      "aliases": [
+        "ws.setRange"
+      ],
       "apiPath": "ws.setRange",
       "interface": "Worksheet",
       "nameTransform": "snake_case",
@@ -15627,7 +16015,9 @@
     },
     {
       "aliasOf": "ws.setVisibility",
-      "aliases": ["ws.setVisibility"],
+      "aliases": [
+        "ws.setVisibility"
+      ],
       "apiPath": "ws.setVisibility",
       "interface": "Worksheet",
       "nameTransform": "snake_case",
@@ -15843,7 +16233,9 @@
     },
     {
       "aliasOf": "ws.sheetId",
-      "aliases": ["ws.sheetId"],
+      "aliases": [
+        "ws.sheetId"
+      ],
       "apiPath": "ws.sheetId",
       "interface": "Worksheet",
       "nameTransform": "snake_case",
@@ -15933,7 +16325,9 @@
     },
     {
       "aliasOf": "ws.slicers.clearSelection",
-      "aliases": ["ws.slicers.clearSelection"],
+      "aliases": [
+        "ws.slicers.clearSelection"
+      ],
       "apiPath": "ws.slicers.clearSelection",
       "interface": "WorksheetSlicers",
       "nameTransform": "snake_case",
@@ -16023,7 +16417,9 @@
     },
     {
       "aliasOf": "ws.slicers.getItem",
-      "aliases": ["ws.slicers.getItem"],
+      "aliases": [
+        "ws.slicers.getItem"
+      ],
       "apiPath": "ws.slicers.getItem",
       "interface": "WorksheetSlicers",
       "nameTransform": "snake_case",
@@ -16059,7 +16455,9 @@
     },
     {
       "aliasOf": "ws.slicers.getItemOrNullObject",
-      "aliases": ["ws.slicers.getItemOrNullObject"],
+      "aliases": [
+        "ws.slicers.getItemOrNullObject"
+      ],
       "apiPath": "ws.slicers.getItemOrNullObject",
       "interface": "WorksheetSlicers",
       "nameTransform": "snake_case",
@@ -16077,7 +16475,9 @@
     },
     {
       "aliasOf": "ws.slicers.getItems",
-      "aliases": ["ws.slicers.getItems"],
+      "aliases": [
+        "ws.slicers.getItems"
+      ],
       "apiPath": "ws.slicers.getItems",
       "interface": "WorksheetSlicers",
       "nameTransform": "snake_case",
@@ -16095,7 +16495,9 @@
     },
     {
       "aliasOf": "ws.slicers.getState",
-      "aliases": ["ws.slicers.getState"],
+      "aliases": [
+        "ws.slicers.getState"
+      ],
       "apiPath": "ws.slicers.getState",
       "interface": "WorksheetSlicers",
       "nameTransform": "snake_case",
@@ -16167,7 +16569,9 @@
     },
     {
       "aliasOf": "ws.slicers.setSelection",
-      "aliases": ["ws.slicers.setSelection"],
+      "aliases": [
+        "ws.slicers.setSelection"
+      ],
       "apiPath": "ws.slicers.setSelection",
       "interface": "WorksheetSlicers",
       "nameTransform": "snake_case",
@@ -16221,7 +16625,9 @@
     },
     {
       "aliasOf": "ws.sortRange",
-      "aliases": ["ws.sortRange"],
+      "aliases": [
+        "ws.sortRange"
+      ],
       "apiPath": "ws.sortRange",
       "interface": "Worksheet",
       "nameTransform": "snake_case",
@@ -16347,7 +16753,9 @@
     },
     {
       "aliasOf": "ws.sparklines.clearInRange",
-      "aliases": ["ws.sparklines.clearInRange"],
+      "aliases": [
+        "ws.sparklines.clearInRange"
+      ],
       "apiPath": "ws.sparklines.clearInRange",
       "interface": "WorksheetSparklines",
       "nameTransform": "snake_case",
@@ -16491,7 +16899,9 @@
     },
     {
       "aliasOf": "ws.sparklines.listGroups",
-      "aliases": ["ws.sparklines.listGroups"],
+      "aliases": [
+        "ws.sparklines.listGroups"
+      ],
       "apiPath": "ws.sparklines.listGroups",
       "interface": "WorksheetSparklines",
       "nameTransform": "snake_case",
@@ -16635,7 +17045,9 @@
     },
     {
       "aliasOf": "ws.structure.deleteCellsWithShift",
-      "aliases": ["ws.structure.deleteCellsWithShift"],
+      "aliases": [
+        "ws.structure.deleteCellsWithShift"
+      ],
       "apiPath": "ws.structure.deleteCellsWithShift",
       "interface": "WorksheetStructure",
       "nameTransform": "snake_case",
@@ -16653,7 +17065,9 @@
     },
     {
       "aliasOf": "ws.structure.deleteColumns",
-      "aliases": ["ws.structure.deleteColumns"],
+      "aliases": [
+        "ws.structure.deleteColumns"
+      ],
       "apiPath": "ws.structure.deleteColumns",
       "interface": "WorksheetStructure",
       "nameTransform": "snake_case",
@@ -16671,7 +17085,9 @@
     },
     {
       "aliasOf": "ws.structure.deleteRows",
-      "aliases": ["ws.structure.deleteRows"],
+      "aliases": [
+        "ws.structure.deleteRows"
+      ],
       "apiPath": "ws.structure.deleteRows",
       "interface": "WorksheetStructure",
       "nameTransform": "snake_case",
@@ -16689,7 +17105,9 @@
     },
     {
       "aliasOf": "ws.structure.getColumnCount",
-      "aliases": ["ws.structure.getColumnCount"],
+      "aliases": [
+        "ws.structure.getColumnCount"
+      ],
       "apiPath": "ws.structure.getColumnCount",
       "interface": "WorksheetStructure",
       "nameTransform": "snake_case",
@@ -16707,7 +17125,9 @@
     },
     {
       "aliasOf": "ws.structure.getMergeAtCell",
-      "aliases": ["ws.structure.getMergeAtCell"],
+      "aliases": [
+        "ws.structure.getMergeAtCell"
+      ],
       "apiPath": "ws.structure.getMergeAtCell",
       "interface": "WorksheetStructure",
       "nameTransform": "snake_case",
@@ -16725,7 +17145,9 @@
     },
     {
       "aliasOf": "ws.structure.getMergedRegions",
-      "aliases": ["ws.structure.getMergedRegions"],
+      "aliases": [
+        "ws.structure.getMergedRegions"
+      ],
       "apiPath": "ws.structure.getMergedRegions",
       "interface": "WorksheetStructure",
       "nameTransform": "snake_case",
@@ -16743,7 +17165,9 @@
     },
     {
       "aliasOf": "ws.structure.getRowCount",
-      "aliases": ["ws.structure.getRowCount"],
+      "aliases": [
+        "ws.structure.getRowCount"
+      ],
       "apiPath": "ws.structure.getRowCount",
       "interface": "WorksheetStructure",
       "nameTransform": "snake_case",
@@ -16761,7 +17185,9 @@
     },
     {
       "aliasOf": "ws.structure.insertCellsWithShift",
-      "aliases": ["ws.structure.insertCellsWithShift"],
+      "aliases": [
+        "ws.structure.insertCellsWithShift"
+      ],
       "apiPath": "ws.structure.insertCellsWithShift",
       "interface": "WorksheetStructure",
       "nameTransform": "snake_case",
@@ -16779,7 +17205,9 @@
     },
     {
       "aliasOf": "ws.structure.insertColumns",
-      "aliases": ["ws.structure.insertColumns"],
+      "aliases": [
+        "ws.structure.insertColumns"
+      ],
       "apiPath": "ws.structure.insertColumns",
       "interface": "WorksheetStructure",
       "nameTransform": "snake_case",
@@ -16797,7 +17225,9 @@
     },
     {
       "aliasOf": "ws.structure.insertRows",
-      "aliases": ["ws.structure.insertRows"],
+      "aliases": [
+        "ws.structure.insertRows"
+      ],
       "apiPath": "ws.structure.insertRows",
       "interface": "WorksheetStructure",
       "nameTransform": "snake_case",
@@ -16833,7 +17263,9 @@
     },
     {
       "aliasOf": "ws.structure.removeDuplicates",
-      "aliases": ["ws.structure.removeDuplicates"],
+      "aliases": [
+        "ws.structure.removeDuplicates"
+      ],
       "apiPath": "ws.structure.removeDuplicates",
       "interface": "WorksheetStructure",
       "nameTransform": "snake_case",
@@ -17734,6 +18166,24 @@
     {
       "aliasOf": null,
       "aliases": [],
+      "apiPath": "ws.tables.renameColumn",
+      "interface": "WorksheetTables",
+      "nameTransform": "snake_case",
+      "notes": null,
+      "ownerModule": "mog.sub_apis.tables",
+      "ownerPackage": "compute/pyo3",
+      "pythonName": "rename_column",
+      "pythonPath": "ws.tables.rename_column",
+      "reason": "release_deferred",
+      "stableId": "WorksheetTables.renameColumn",
+      "status": "unsupported",
+      "syncModel": "sync-wrapper-for-async-ts",
+      "targetPath": "ws.tables.rename_column",
+      "unsupportedUntil": "round-2"
+    },
+    {
+      "aliasOf": null,
+      "aliases": [],
       "apiPath": "ws.tables.resize",
       "interface": "WorksheetTables",
       "nameTransform": "none",
@@ -18075,7 +18525,9 @@
     },
     {
       "aliasOf": "ws.textBoxes",
-      "aliases": ["ws.textBoxes"],
+      "aliases": [
+        "ws.textBoxes"
+      ],
       "apiPath": "ws.textBoxes",
       "interface": "WorksheetTextBoxCollection",
       "nameTransform": "snake_case",
@@ -18255,7 +18707,9 @@
     },
     {
       "aliasOf": "ws.toCSV",
-      "aliases": ["ws.toCSV"],
+      "aliases": [
+        "ws.toCSV"
+      ],
       "apiPath": "ws.toCSV",
       "interface": "Worksheet",
       "nameTransform": "snake_case",
@@ -18273,7 +18727,9 @@
     },
     {
       "aliasOf": "ws.toJSON",
-      "aliases": ["ws.toJSON"],
+      "aliases": [
+        "ws.toJSON"
+      ],
       "apiPath": "ws.toJSON",
       "interface": "Worksheet",
       "nameTransform": "snake_case",
@@ -18288,6 +18744,24 @@
       "syncModel": "sync-wrapper-for-async-ts",
       "targetPath": "ws.to_json",
       "unsupportedUntil": null
+    },
+    {
+      "aliasOf": null,
+      "aliases": [],
+      "apiPath": "ws.updateChart",
+      "interface": "Worksheet",
+      "nameTransform": "none",
+      "notes": "Deprecated TypeScript API; Python parity does not expose it as implemented.",
+      "ownerModule": "mog",
+      "ownerPackage": "compute/pyo3",
+      "pythonName": null,
+      "pythonPath": null,
+      "reason": "deprecated_ts_api",
+      "stableId": "Worksheet.updateChart",
+      "status": "omitted",
+      "syncModel": "sync-wrapper-for-async-ts",
+      "targetPath": null,
+      "unsupportedUntil": "never"
     },
     {
       "aliasOf": null,
@@ -18327,7 +18801,9 @@
     },
     {
       "aliasOf": "ws.validations",
-      "aliases": ["ws.validations"],
+      "aliases": [
+        "ws.validations"
+      ],
       "apiPath": "ws.validations",
       "interface": "WorksheetValidation",
       "nameTransform": "manual",

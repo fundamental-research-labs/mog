@@ -13,6 +13,7 @@ interface ResolveDataTargetOptions {
 }
 
 const HEADER_BODY_SCAN_ROW_LIMIT = 100;
+const HEADER_ROW_SCAN_LIMIT = 25;
 
 export function normalizeCommandRange(range: CellRange): CellRange {
   return {
@@ -80,6 +81,62 @@ export async function resolveDataCommandTarget(
     allowEmptySingleCell: false,
     inferHeadersForExplicitMultiRow: false,
   });
+}
+
+export async function resolveAutoFilterCommandTarget(
+  ws: Worksheet,
+  userRange: CellRange,
+): Promise<DataCommandTarget | null> {
+  const target = await resolveDataTarget(ws, userRange, {
+    allowEmptySingleCell: false,
+    inferHeadersForExplicitMultiRow: false,
+  });
+  if (!target || target.hasHeaders || !target.wasExpanded) {
+    return target;
+  }
+
+  const liftedRange = await findNearbyHeaderRange(
+    ws,
+    target.range,
+    normalizeCommandRange(userRange),
+  );
+  if (!liftedRange) {
+    return target;
+  }
+
+  return {
+    range: liftedRange,
+    hasHeaders: true,
+    wasExpanded: target.wasExpanded,
+  };
+}
+
+async function findNearbyHeaderRange(
+  ws: Worksheet,
+  expandedRange: CellRange,
+  userRange: CellRange,
+): Promise<CellRange | null> {
+  if (expandedRange.startRow <= 0) return null;
+
+  const activeCol = userRange.startCol;
+  if (activeCol < expandedRange.startCol || activeCol > expandedRange.endCol) {
+    return null;
+  }
+
+  const minHeaderRow = Math.max(0, expandedRange.startRow - HEADER_ROW_SCAN_LIMIT);
+  for (let headerRow = expandedRange.startRow - 1; headerRow >= minHeaderRow; headerRow--) {
+    const candidate = {
+      startRow: headerRow,
+      startCol: expandedRange.startCol,
+      endRow: expandedRange.endRow,
+      endCol: expandedRange.endCol,
+    };
+    if (await rangeLooksLikeHeaderTable(ws, candidate)) {
+      return candidate;
+    }
+  }
+
+  return null;
 }
 
 async function resolveDataTarget(

@@ -24,7 +24,7 @@ import type { CellRange, SheetId } from '@mog-sdk/contracts/core';
 // G5: Zoom utilities
 import { clampZoom, getZoomLevel, zoomIn, zoomOut } from '../../../infra/utils/zoom-utils';
 import { DEFAULT_ZOOM } from '@mog-sdk/contracts/rendering';
-import { resolveDataCommandTarget } from '../../data-command-target';
+import { resolveAutoFilterCommandTarget } from '../../data-command-target';
 import { getUIStore, handled, notHandled } from '../handler-utils';
 import { useExtensionStore } from '../../../infra/state/extension-store';
 
@@ -115,7 +115,7 @@ export const TOGGLE_AUTO_FILTER: AsyncActionHandler = async (deps): Promise<Acti
   }
 
   // No existing filter - resolve the Data-tab tabular command target and create.
-  const target = await resolveDataCommandTarget(ws, userRange);
+  const target = await resolveAutoFilterCommandTarget(ws, userRange);
 
   if (!target) {
     // No data region found (empty cell selected)

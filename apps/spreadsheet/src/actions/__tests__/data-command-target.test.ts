@@ -2,7 +2,11 @@ import { jest } from '@jest/globals';
 
 import type { Worksheet } from '@mog-sdk/contracts/api';
 import type { CellRange } from '@mog-sdk/contracts/core';
-import { resolveDataCommandTarget, resolveDataDialogTarget } from '../data-command-target';
+import {
+  resolveAutoFilterCommandTarget,
+  resolveDataCommandTarget,
+  resolveDataDialogTarget,
+} from '../data-command-target';
 
 function makeWorksheet(opts: {
   currentRegion?: CellRange;
@@ -99,6 +103,31 @@ describe('resolveDataCommandTarget', () => {
       }),
     ).resolves.toMatchObject({ range: expanded, wasExpanded: true });
     expect(ws.getCurrentRegion).toHaveBeenCalledWith(4, 2);
+  });
+
+  test('AutoFilter single-cell selection can lift a body-only region to a nearby header row', async () => {
+    const expanded = { startRow: 6, startCol: 15, endRow: 37, endCol: 42 };
+    const values: Record<string, unknown> = {};
+    for (let col = expanded.startCol; col <= expanded.endCol; col++) {
+      values[`2,${col}`] = '1Q';
+    }
+    values['6,27'] = 100536;
+
+    const ws = makeWorksheet({ currentRegion: expanded, values });
+
+    await expect(
+      resolveAutoFilterCommandTarget(ws as Worksheet, {
+        startRow: 12,
+        startCol: 27,
+        endRow: 12,
+        endCol: 27,
+      }),
+    ).resolves.toEqual({
+      range: { startRow: 2, startCol: 15, endRow: 37, endCol: 42 },
+      hasHeaders: true,
+      wasExpanded: true,
+    });
+    expect(ws.getCurrentRegion).toHaveBeenCalledWith(12, 27);
   });
 
   test('single-row selection expands through getCurrentRegion', async () => {

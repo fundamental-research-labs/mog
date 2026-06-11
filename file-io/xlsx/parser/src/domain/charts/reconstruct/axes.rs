@@ -195,9 +195,28 @@ pub(super) fn build_axes_from_original(
                         .collect::<Vec<_>>(),
                 )
             };
-            build_single_axis_with_ids(sad, axis.axis_type, axis.ax_id, cross_ax)
+            let mut rebuilt = build_single_axis_with_ids(sad, axis.axis_type, axis.ax_id, cross_ax);
+            apply_imported_axis_fidelity(&mut rebuilt, axis, sad);
+            rebuilt
         })
         .collect()
+}
+
+fn apply_imported_axis_fidelity(
+    rebuilt: &mut ChartAxis,
+    original: &ChartAxis,
+    sad: &SingleAxisData,
+) {
+    rebuilt.delete_explicit = original.delete_explicit || !sad.visible;
+    rebuilt.major_tick_mark_explicit =
+        original.major_tick_mark_explicit || sad.tick_marks.is_some();
+    rebuilt.minor_tick_mark_explicit =
+        original.minor_tick_mark_explicit || sad.minor_tick_marks.is_some();
+    rebuilt.tick_lbl_pos_explicit =
+        original.tick_lbl_pos_explicit || sad.tick_label_position.is_some();
+    rebuilt.crosses_explicit = original.crosses_explicit
+        || matches!(sad.crosses_at.as_deref(), Some("min" | "max" | "automatic"));
+    rebuilt.raw_axis_type_attr = original.raw_axis_type_attr.clone();
 }
 
 #[derive(Default)]
@@ -461,18 +480,23 @@ pub(super) fn build_single_axis_with_ids(
         ax_id,
         scaling,
         delete: !sad.visible,
+        delete_explicit: true,
         ax_pos,
         major_gridlines,
         minor_gridlines,
         title,
         num_fmt,
         major_tick_mark,
+        major_tick_mark_explicit: true,
         minor_tick_mark,
+        minor_tick_mark_explicit: true,
         tick_lbl_pos,
+        tick_lbl_pos_explicit: true,
         sp_pr,
         tx_pr,
         cross_ax,
         crosses,
+        crosses_explicit: true,
         crosses_at,
         cross_between,
         tick_lbl_skip: sad.tick_label_spacing,

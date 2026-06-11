@@ -61,6 +61,7 @@ pub fn parse_axis(xml: &[u8]) -> ChartAxis {
 
     // Parse delete
     if let Some(delete_start) = find_tag_simd(xml, b"delete", 0) {
+        axis.delete_explicit = true;
         axis.delete = parse_bool_val(&xml[delete_start..]);
     }
 
@@ -94,6 +95,7 @@ pub fn parse_axis(xml: &[u8]) -> ChartAxis {
 
     // Parse majorTickMark
     if let Some(major_start) = find_tag_simd(xml, b"majorTickMark", 0) {
+        axis.major_tick_mark_explicit = true;
         if let Some(attr_pos) = find_attr_simd(&xml[major_start..], b"val=\"", 0) {
             let value_start = major_start + attr_pos + 5;
             if let Some((start, end)) = extract_quoted_value(xml, value_start) {
@@ -105,6 +107,7 @@ pub fn parse_axis(xml: &[u8]) -> ChartAxis {
 
     // Parse minorTickMark
     if let Some(minor_start) = find_tag_simd(xml, b"minorTickMark", 0) {
+        axis.minor_tick_mark_explicit = true;
         if let Some(attr_pos) = find_attr_simd(&xml[minor_start..], b"val=\"", 0) {
             let value_start = minor_start + attr_pos + 5;
             if let Some((start, end)) = extract_quoted_value(xml, value_start) {
@@ -116,6 +119,7 @@ pub fn parse_axis(xml: &[u8]) -> ChartAxis {
 
     // Parse tickLblPos
     if let Some(lblpos_start) = find_tag_simd(xml, b"tickLblPos", 0) {
+        axis.tick_lbl_pos_explicit = true;
         if let Some(attr_pos) = find_attr_simd(&xml[lblpos_start..], b"val=\"", 0) {
             let value_start = lblpos_start + attr_pos + 5;
             if let Some((start, end)) = extract_quoted_value(xml, value_start) {
@@ -153,6 +157,7 @@ pub fn parse_axis(xml: &[u8]) -> ChartAxis {
 
     // Parse crosses
     if let Some(crosses_start) = find_tag_simd(xml, b"crosses", 0) {
+        axis.crosses_explicit = true;
         if let Some(attr_pos) = find_attr_simd(&xml[crosses_start..], b"val=\"", 0) {
             let value_start = crosses_start + attr_pos + 5;
             if let Some((start, end)) = extract_quoted_value(xml, value_start) {

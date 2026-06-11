@@ -601,11 +601,11 @@ fn extract_single_axis(ax: &ooxml_types::charts::ChartAxis) -> domain_types::cha
     let position = Some(ax.ax_pos.to_ooxml().to_string());
 
     let tick_marks = match ax.major_tick_mark {
-        TickMark::Cross => None, // default
+        TickMark::Cross if !ax.major_tick_mark_explicit => None, // default
         other => Some(other.to_ooxml().to_string()),
     };
     let minor_tick_marks = match ax.minor_tick_mark {
-        TickMark::Cross => None,
+        TickMark::Cross if !ax.minor_tick_mark_explicit => None,
         other => Some(other.to_ooxml().to_string()),
     };
 
@@ -690,13 +690,15 @@ fn extract_single_axis(ax: &ooxml_types::charts::ChartAxis) -> domain_types::cha
 
     let (crosses_at, crosses_at_value) = if let Some(value) = ax.crosses_at {
         (Some("custom".to_string()), Some(value))
-    } else {
+    } else if ax.crosses_explicit || ax.crosses != AxisCrosses::AutoZero {
         let crosses = match ax.crosses {
             AxisCrosses::AutoZero => "automatic",
             AxisCrosses::Min => "min",
             AxisCrosses::Max => "max",
         };
         (Some(crosses.to_string()), None)
+    } else {
+        (None, None)
     };
 
     let scale_type = log_base
@@ -707,7 +709,7 @@ fn extract_single_axis(ax: &ooxml_types::charts::ChartAxis) -> domain_types::cha
     let tick_label_position = {
         let tlp = ax.tick_lbl_pos;
         match tlp {
-            ooxml_types::charts::TickLabelPosition::NextTo => None, // default
+            ooxml_types::charts::TickLabelPosition::NextTo if !ax.tick_lbl_pos_explicit => None,
             other => Some(other.to_ooxml().to_string()),
         }
     };

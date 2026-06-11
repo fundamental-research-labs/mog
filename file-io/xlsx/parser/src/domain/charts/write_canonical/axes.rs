@@ -1,7 +1,8 @@
 use crate::write::xml_writer::XmlWriter;
 
 use ooxml_types::charts::{
-    AxisType, ChartAxis, DisplayUnitKind, DisplayUnits, DisplayUnitsLabel, Marker, Scaling,
+    AxisCrosses, AxisType, ChartAxis, DisplayUnitKind, DisplayUnits, DisplayUnitsLabel, Marker,
+    Scaling, TickLabelPosition, TickMark,
 };
 
 use super::layout::{emit_chart_lines, emit_chart_text, emit_layout, emit_num_fmt};
@@ -33,9 +34,11 @@ pub(super) fn emit_axis(w: &mut XmlWriter, axis: &ChartAxis) {
 
     emit_scaling(w, &axis.scaling);
 
-    w.start_element("c:delete")
-        .attr("val", if axis.delete { "1" } else { "0" })
-        .self_close();
+    if axis.delete || axis.delete_explicit {
+        w.start_element("c:delete")
+            .attr("val", if axis.delete { "1" } else { "0" })
+            .self_close();
+    }
 
     w.start_element("c:axPos")
         .attr("val", axis.ax_pos.to_ooxml())
@@ -56,15 +59,21 @@ pub(super) fn emit_axis(w: &mut XmlWriter, axis: &ChartAxis) {
         emit_num_fmt(w, nf);
     }
 
-    w.start_element("c:majorTickMark")
-        .attr("val", axis.major_tick_mark.to_ooxml())
-        .self_close();
-    w.start_element("c:minorTickMark")
-        .attr("val", axis.minor_tick_mark.to_ooxml())
-        .self_close();
-    w.start_element("c:tickLblPos")
-        .attr("val", axis.tick_lbl_pos.to_ooxml())
-        .self_close();
+    if axis.major_tick_mark_explicit || axis.major_tick_mark != TickMark::Cross {
+        w.start_element("c:majorTickMark")
+            .attr("val", axis.major_tick_mark.to_ooxml())
+            .self_close();
+    }
+    if axis.minor_tick_mark_explicit || axis.minor_tick_mark != TickMark::Cross {
+        w.start_element("c:minorTickMark")
+            .attr("val", axis.minor_tick_mark.to_ooxml())
+            .self_close();
+    }
+    if axis.tick_lbl_pos_explicit || axis.tick_lbl_pos != TickLabelPosition::NextTo {
+        w.start_element("c:tickLblPos")
+            .attr("val", axis.tick_lbl_pos.to_ooxml())
+            .self_close();
+    }
 
     if let Some(ref sp) = axis.sp_pr {
         emit_shape_properties(w, sp, "c:spPr");
@@ -77,17 +86,19 @@ pub(super) fn emit_axis(w: &mut XmlWriter, axis: &ChartAxis) {
         .attr("val", &axis.cross_ax.to_string())
         .self_close();
 
-    match axis.crosses {
-        ooxml_types::charts::AxisCrosses::AutoZero => {
-            w.start_element("c:crosses")
-                .attr("val", "autoZero")
-                .self_close();
-        }
-        ooxml_types::charts::AxisCrosses::Min => {
-            w.start_element("c:crosses").attr("val", "min").self_close();
-        }
-        ooxml_types::charts::AxisCrosses::Max => {
-            w.start_element("c:crosses").attr("val", "max").self_close();
+    if axis.crosses_explicit || axis.crosses != AxisCrosses::AutoZero {
+        match axis.crosses {
+            ooxml_types::charts::AxisCrosses::AutoZero => {
+                w.start_element("c:crosses")
+                    .attr("val", "autoZero")
+                    .self_close();
+            }
+            ooxml_types::charts::AxisCrosses::Min => {
+                w.start_element("c:crosses").attr("val", "min").self_close();
+            }
+            ooxml_types::charts::AxisCrosses::Max => {
+                w.start_element("c:crosses").attr("val", "max").self_close();
+            }
         }
     }
 

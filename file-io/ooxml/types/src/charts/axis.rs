@@ -33,6 +33,9 @@ pub struct ChartAxis {
     pub scaling: Scaling,
     /// Whether to delete (hide) the axis
     pub delete: bool,
+    /// Whether the source axis explicitly contained a `<c:delete>` element.
+    #[serde(default)]
+    pub delete_explicit: bool,
     /// Axis position (bottom, top, left, right)
     pub ax_pos: ChartAxisPosition,
     /// Show major gridlines
@@ -45,10 +48,19 @@ pub struct ChartAxis {
     pub num_fmt: Option<NumFmt>,
     /// Major tick mark style
     pub major_tick_mark: TickMark,
+    /// Whether the source axis explicitly contained `<c:majorTickMark>`.
+    #[serde(default)]
+    pub major_tick_mark_explicit: bool,
     /// Minor tick mark style
     pub minor_tick_mark: TickMark,
+    /// Whether the source axis explicitly contained `<c:minorTickMark>`.
+    #[serde(default)]
+    pub minor_tick_mark_explicit: bool,
     /// Tick label position
     pub tick_lbl_pos: TickLabelPosition,
+    /// Whether the source axis explicitly contained `<c:tickLblPos>`.
+    #[serde(default)]
+    pub tick_lbl_pos_explicit: bool,
     /// Shape properties (axis line)
     pub sp_pr: Option<ShapeProperties>,
     /// Text body properties (axis labels)
@@ -57,6 +69,9 @@ pub struct ChartAxis {
     pub cross_ax: u32,
     /// Where the axis crosses
     pub crosses: AxisCrosses,
+    /// Whether the source axis explicitly contained `<c:crosses>`.
+    #[serde(default)]
+    pub crosses_explicit: bool,
     /// Specific crossing value (when crosses=autoZero is overridden)
     pub crosses_at: Option<f64>,
 

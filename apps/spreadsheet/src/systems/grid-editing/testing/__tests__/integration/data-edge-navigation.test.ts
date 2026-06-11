@@ -114,6 +114,56 @@ describe('Ctrl+Arrow data-edge navigation', () => {
     await sim.pressKey('ArrowRight', { ctrl: true });
     expect(sim.activeCell()).toEqual({ row: 0, col: 2 });
   });
+
+  it('reverses an immediate visible edge jump back to its origin', async () => {
+    sim = createIntegrationSimulator({
+      cells: {
+        '0,0': 'label',
+        '0,1': 1,
+        '0,2': 2,
+        '0,3': 3,
+        '0,4': 4,
+        '0,5': 5,
+        '0,6': 6,
+        '0,7': 7,
+        '0,8': 8,
+        '0,9': 9,
+      },
+      activeCell: { row: 0, col: 6 },
+    });
+
+    await sim.pressKey('ArrowRight', { ctrl: true });
+    expect(sim.activeCell()).toEqual({ row: 0, col: 9 });
+
+    await sim.pressKey('ArrowLeft', { ctrl: true });
+    expect(sim.activeCell()).toEqual({ row: 0, col: 6 });
+  });
+
+  it('scopes immediate reverse memory to the current workbook', async () => {
+    const cells = {
+      '0,0': 'a',
+      '0,1': 'b',
+      '0,2': 'c',
+      '0,3': 'd',
+    };
+
+    sim = createIntegrationSimulator({
+      cells,
+      activeCell: { row: 0, col: 1 },
+    });
+
+    await sim.pressKey('ArrowRight', { ctrl: true });
+    expect(sim.activeCell()).toEqual({ row: 0, col: 3 });
+    sim.destroy();
+
+    sim = createIntegrationSimulator({
+      cells,
+      activeCell: { row: 0, col: 3 },
+    });
+
+    await sim.pressKey('ArrowLeft', { ctrl: true });
+    expect(sim.activeCell()).toEqual({ row: 0, col: 0 });
+  });
 });
 
 // =============================================================================

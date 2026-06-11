@@ -23,6 +23,56 @@ import { handled } from './helpers';
 // Data-Edge Navigation Handlers (Ctrl+Arrow)
 // =============================================================================
 
+type DataEdgeJump = {
+  sheetId: string;
+  from: CellCoord;
+  to: CellCoord;
+  direction: Direction;
+};
+
+const dataEdgeJumpsByWorkbook = new WeakMap<object, DataEdgeJump>();
+
+function sameCell(a: CellCoord, b: CellCoord): boolean {
+  return a.row === b.row && a.col === b.col;
+}
+
+function oppositeDirection(direction: Direction): Direction {
+  switch (direction) {
+    case 'up':
+      return 'down';
+    case 'down':
+      return 'up';
+    case 'left':
+      return 'right';
+    case 'right':
+      return 'left';
+  }
+}
+
+async function isCellHidden(deps: ActionDependencies, cell: CellCoord): Promise<boolean> {
+  const sheetId = deps.getActiveSheetId();
+  const ws = deps.workbook.getSheetById(sheetId);
+  const [hiddenRows, hiddenCols, rowHidden, colHidden] = await Promise.all([
+    Promise.resolve(ws.layout.getHiddenRowsBitmap()).catch(() => new Set<number>()),
+    Promise.resolve(ws.layout.getHiddenColumnsBitmap()).catch(() => new Set<number>()),
+    Promise.resolve(ws.layout.isRowHidden(cell.row)).catch(() => false),
+    Promise.resolve(ws.layout.isColumnHidden(cell.col)).catch(() => false),
+  ]);
+  return rowHidden || colHidden || hiddenRows.has(cell.row) || hiddenCols.has(cell.col);
+}
+
+function getLastDataEdgeJump(deps: ActionDependencies): DataEdgeJump | undefined {
+  return dataEdgeJumpsByWorkbook.get(deps.workbook as object);
+}
+
+function setLastDataEdgeJump(deps: ActionDependencies, jump: DataEdgeJump): void {
+  dataEdgeJumpsByWorkbook.set(deps.workbook as object, jump);
+}
+
+function clearLastDataEdgeJump(deps: ActionDependencies): void {
+  dataEdgeJumpsByWorkbook.delete(deps.workbook as object);
+}
+
 /**
  * Move to data edge in a direction.
  * Uses Rust bridge findDataEdge to find target cell, then dispatches GO_TO.
@@ -34,8 +84,39 @@ async function moveToDataEdge(
 ): Promise<ActionResult> {
   const activeCell = deps.accessors.selection.getActiveCell();
   const ws = deps.workbook.activeSheet;
+  const sheetId = String(deps.getActiveSheetId());
+  const lastMoveToDataEdge = getLastDataEdgeJump(deps);
+
+  if (
+    lastMoveToDataEdge &&
+    lastMoveToDataEdge.sheetId === sheetId &&
+    sameCell(activeCell, lastMoveToDataEdge.to) &&
+    direction === oppositeDirection(lastMoveToDataEdge.direction)
+  ) {
+    const targetCell = lastMoveToDataEdge.from;
+    clearLastDataEdgeJump(deps);
+    deps.commands.selection.goTo(targetCell);
+    return handled();
+  }
+
+  clearLastDataEdgeJump(deps);
 
   const targetCell = await ws.findDataEdge(activeCell.row, activeCell.col, direction);
+  if (!sameCell(activeCell, targetCell)) {
+    const [fromHidden, toHidden] = await Promise.all([
+      isCellHidden(deps, activeCell),
+      isCellHidden(deps, targetCell),
+    ]);
+
+    if (!fromHidden && !toHidden) {
+      setLastDataEdgeJump(deps, {
+        sheetId,
+        from: activeCell,
+        to: targetCell,
+        direction,
+      });
+    }
+  }
 
   deps.commands.selection.goTo(targetCell);
   return handled();

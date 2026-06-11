@@ -109,10 +109,7 @@ async function rangeLooksLikeHeaderTable(
     const firstText = typeof firstValue === 'string' ? firstValue : '';
     const hasSpacerBeforeBody =
       firstNonEmptyBodyRow != null && firstNonEmptyBodyRow > range.startRow + 1;
-    return (
-      !hasTextBodySignal &&
-      (hasSpacerBeforeBody || isStructuredSingleColumnHeader(firstText))
-    );
+    return !hasTextBodySignal && (hasSpacerBeforeBody || isStructuredSingleColumnHeader(firstText));
   }
 
   return true;

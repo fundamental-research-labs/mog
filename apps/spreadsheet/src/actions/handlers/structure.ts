@@ -98,12 +98,17 @@ function getRangeWidth(range: CellRange): number {
   return Math.abs(range.endCol - range.startCol) + 1;
 }
 
-function getSingleCutSourceRange(ranges: CellRange[] | readonly CellRange[] | null): CellRange | null {
+function getSingleCutSourceRange(
+  ranges: CellRange[] | readonly CellRange[] | null,
+): CellRange | null {
   if (!ranges || ranges.length !== 1) return null;
   return ranges[0];
 }
 
-function expandInsertionRangeForCutSource(range: CellRange, cutSourceRange: CellRange | null): CellRange {
+function expandInsertionRangeForCutSource(
+  range: CellRange,
+  cutSourceRange: CellRange | null,
+): CellRange {
   if (!cutSourceRange || range.isFullRow || range.isFullColumn) return range;
 
   const height = Math.max(getRangeHeight(range), getRangeHeight(cutSourceRange));
@@ -134,7 +139,8 @@ function shiftCutSourceRangeAfterInsertCells(
 ): CellRange {
   if (direction === 'right') {
     const sourceRowsFullyShifted =
-      sourceRange.startRow >= insertionRange.startRow && sourceRange.endRow <= insertionRange.endRow;
+      sourceRange.startRow >= insertionRange.startRow &&
+      sourceRange.endRow <= insertionRange.endRow;
     if (!sourceRowsFullyShifted || sourceRange.startCol < insertionRange.startCol) {
       return sourceRange;
     }

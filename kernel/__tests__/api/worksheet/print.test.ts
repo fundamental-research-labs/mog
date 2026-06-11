@@ -8,11 +8,7 @@
 
 import { jest } from '@jest/globals';
 
-import {
-  sheetId,
-  type PrintSettings,
-  type SheetId,
-} from '@mog-sdk/contracts/core';
+import { sheetId, type PrintSettings, type SheetId } from '@mog-sdk/contracts/core';
 import { WorksheetPrintImpl } from '../../../src/api/worksheet/print';
 import type { DocumentContext } from '../../../src/context/types';
 import { DEFAULT_SHEET_PRINT_SETTINGS } from '../../../src/domain/workbook/core-defaults';
@@ -72,11 +68,9 @@ function createMockContext(): DocumentContext {
       getPrintSettings: jest.fn(async (sheetId: SheetId) =>
         makePrintSettings(printSettingsStore.get(sheetId)),
       ),
-      setPrintSettings: jest.fn(
-        async (sheetId: SheetId, settings: Record<string, any>) => {
-          printSettingsStore.set(sheetId, settings);
-        },
-      ),
+      setPrintSettings: jest.fn(async (sheetId: SheetId, settings: Record<string, any>) => {
+        printSettingsStore.set(sheetId, settings);
+      }),
       setPrintArea: jest.fn().mockResolvedValue(undefined),
       getPageBreaks: jest.fn().mockResolvedValue({ rowBreaks: [], colBreaks: [] }),
       addHorizontalPageBreak: jest.fn().mockResolvedValue(undefined),

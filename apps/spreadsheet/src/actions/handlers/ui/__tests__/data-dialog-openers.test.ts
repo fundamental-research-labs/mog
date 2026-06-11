@@ -93,10 +93,15 @@ describe('data dialog openers capture resolved command targets', () => {
 
     await OPEN_CUSTOM_SORT_DIALOG(setup.deps);
 
-    expect(setup.openSortDialog).toHaveBeenCalledWith(range, true, {
-      type: 'custom',
-      criterion: { sortBy: 'value', columnIndex: 1, direction: 'asc' },
-    }, false);
+    expect(setup.openSortDialog).toHaveBeenCalledWith(
+      range,
+      true,
+      {
+        type: 'custom',
+        criterion: { sortBy: 'value', columnIndex: 1, direction: 'asc' },
+      },
+      false,
+    );
   });
 
   test('custom sort opened inside an active AutoFilter stores visible-row sorting', async () => {
@@ -120,10 +125,15 @@ describe('data dialog openers capture resolved command targets', () => {
 
     expect(setup.listSummaries).toHaveBeenCalledWith({ scope: 'available' });
     expect(setup.getCurrentRegion).not.toHaveBeenCalled();
-    expect(setup.openSortDialog).toHaveBeenCalledWith(filterRange, true, {
-      type: 'custom',
-      criterion: { sortBy: 'value', columnIndex: 0, direction: 'asc' },
-    }, true);
+    expect(setup.openSortDialog).toHaveBeenCalledWith(
+      filterRange,
+      true,
+      {
+        type: 'custom',
+        criterion: { sortBy: 'value', columnIndex: 0, direction: 'asc' },
+      },
+      true,
+    );
   });
 
   test('remove duplicates stores the captured range and header hint', async () => {
@@ -177,10 +187,15 @@ describe('data dialog openers capture resolved command targets', () => {
 
     await expect(OPEN_CUSTOM_SORT_DIALOG(setup.deps)).resolves.toMatchObject({ handled: true });
 
-    expect(setup.openSortDialog).toHaveBeenCalledWith(single, false, {
-      type: 'custom',
-      criterion: { sortBy: 'value', columnIndex: 0, direction: 'asc' },
-    }, false);
+    expect(setup.openSortDialog).toHaveBeenCalledWith(
+      single,
+      false,
+      {
+        type: 'custom',
+        criterion: { sortBy: 'value', columnIndex: 0, direction: 'asc' },
+      },
+      false,
+    );
   });
 
   test('subtotal opens on an empty selected cell using the raw selection', async () => {

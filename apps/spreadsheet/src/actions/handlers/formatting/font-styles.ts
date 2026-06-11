@@ -54,9 +54,10 @@ async function getBooleanToggleValue(
         endRow: activeCell.row,
         endCol: activeCell.col,
       });
-      currentValue = ((formats[0]?.[0] as Record<string, unknown> | undefined)?.[property] as
-        | boolean
-        | undefined) ?? false;
+      currentValue =
+        ((formats[0]?.[0] as Record<string, unknown> | undefined)?.[property] as
+          | boolean
+          | undefined) ?? false;
     } catch {
       // Keep the viewport-derived default for old worksheet mocks or transient read failures.
     }

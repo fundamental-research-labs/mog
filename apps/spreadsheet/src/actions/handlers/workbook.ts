@@ -210,11 +210,7 @@ function resolveUngroupAxis(
   columnGroups: GroupRecord[],
 ): GroupingAxis | null {
   const rowGroup = findInnermostContainingGroup(rowGroups, bounds.startRow, bounds.endRow);
-  const columnGroup = findInnermostContainingGroup(
-    columnGroups,
-    bounds.startCol,
-    bounds.endCol,
-  );
+  const columnGroup = findInnermostContainingGroup(columnGroups, bounds.startCol, bounds.endCol);
 
   if (axis === 'rows' && !rowGroup && columnGroup) return 'columns';
   if (axis === 'columns' && !columnGroup && rowGroup) return 'rows';
@@ -606,11 +602,7 @@ export const UNGROUP: AsyncActionHandler = async (deps) => {
   }
 
   const state = await getOutlineGroups();
-  const rowGroup = findInnermostContainingGroup(
-    state.rowGroups,
-    bounds.startRow,
-    bounds.endRow,
-  );
+  const rowGroup = findInnermostContainingGroup(state.rowGroups, bounds.startRow, bounds.endRow);
   if (rowGroup) {
     wb.setPendingUndoDescription(`Ungroup rows ${rowGroup.start + 1}-${rowGroup.end + 1}`);
     await ws.outline.ungroupRows(rowGroup.start, rowGroup.end);
@@ -702,7 +694,8 @@ export const HIDE_DETAIL: AsyncActionHandler = async (deps) => {
       : rowGroups
           .filter(
             (g) =>
-              !g.collapsed && selectionMatchesRowGroupForDetail(g, bounds, settings, rowGroups, true),
+              !g.collapsed &&
+              selectionMatchesRowGroupForDetail(g, bounds, settings, rowGroups, true),
           )
           .sort(compareDetailGroupCollapsePriority);
 

@@ -271,9 +271,7 @@ describe('Clipboard Paste Integration', () => {
     await waitForPendingClipboardPaste();
 
     expect(copyRange).not.toHaveBeenCalled();
-    expect(store.setCellValues).toHaveBeenCalledWith(sheetId, [
-      { row: 21, col: 27, value: 'src' },
-    ]);
+    expect(store.setCellValues).toHaveBeenCalledWith(sheetId, [{ row: 21, col: 27, value: 'src' }]);
 
     cleanup();
     clipboardActor.stop();

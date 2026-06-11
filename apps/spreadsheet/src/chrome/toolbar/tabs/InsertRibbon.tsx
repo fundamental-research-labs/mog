@@ -107,7 +107,7 @@ export function InsertRibbon() {
   const [selectionIsInTable, setSelectionIsInTable] = useState(false);
   useEffect(() => {
     let cancelled = false;
-    void (async () => {
+    const refreshSelectionIsInTable = async () => {
       try {
         const ws = wb.getSheetById(activeSheetId);
         const table = await ws.tables.getAtCell(activeRow, activeCol);
@@ -115,9 +115,31 @@ export function InsertRibbon() {
       } catch {
         if (!cancelled) setSelectionIsInTable(false);
       }
-    })();
+    };
+
+    void refreshSelectionIsInTable();
+
+    let unsubs: Array<() => void> = [];
+    try {
+      const ws = wb.getSheetById(activeSheetId);
+      const refresh = () => {
+        void refreshSelectionIsInTable();
+      };
+      unsubs = [
+        ws.on('table:created', refresh),
+        ws.on('table:updated', refresh),
+        ws.on('table:resized', refresh),
+        ws.on('table:total-row-changed', refresh),
+        ws.on('table:converted-to-range', refresh),
+        ws.on('table:deleted', refresh),
+      ];
+    } catch {
+      unsubs = [];
+    }
+
     return () => {
       cancelled = true;
+      for (const unsub of unsubs) unsub();
     };
   }, [wb, activeSheetId, activeRow, activeCol]);
 

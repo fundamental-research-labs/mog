@@ -35,6 +35,12 @@ import {
   getAutofitRowsForResize,
 } from '../../systems/grid-editing/features/autofit/selection-targets';
 import {
+  createFillHandleDragAnchor,
+  getRangeBottomRightCell,
+  resolveFillHandleDragCell,
+  type FillHandleDragAnchor,
+} from './fill-handle-drag-cell';
+import {
   getCachedTableHitRegion,
   resolvePendingTableClickSelection,
   getTableCornerDoubleClickRange,
@@ -362,6 +368,7 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
   const pendingTableClickSelectionRef = useRef<PendingTableClickSelection | null>(null);
   const pendingTableClickStartRef = useRef<{ x: number; y: number } | null>(null);
   const pendingTableClickMovedRef = useRef(false);
+  const fillHandleDragAnchorRef = useRef<FillHandleDragAnchor | null>(null);
 
   // Page break dragging state
   const isPageBreakDraggingRef = useRef(false);
@@ -1064,6 +1071,13 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
               const selectionViewportRect = geometry.getRangeRects(lastRange)[0];
 
               if (selectionViewportRect && isOnFillHandle({ x, y }, selectionViewportRect)) {
+                const handleCell = getRangeBottomRightCell(lastRange);
+                fillHandleDragAnchorRef.current = createFillHandleDragAnchor(
+                  lastRange,
+                  { x, y },
+                  selectionViewportRect,
+                  geometry.getCellRect(handleCell),
+                );
                 selection.startFillHandleDrag();
                 return;
               }
@@ -1505,8 +1519,12 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
         cursorManager.updateCursor(
           getCursorForHitType('fillHandle', { ctrlKey: e.ctrlKey, metaKey: e.metaKey }),
         );
-        const cell = geometry.fromViewportPoint({ x, y });
-        if (cell) {
+        const rawCell = geometry.fromViewportPoint({ x, y });
+        if (rawCell) {
+          const cell = resolveFillHandleDragCell(rawCell, fillHandleDragAnchorRef.current, {
+            x,
+            y,
+          });
           selection.onFillHandleDrag(cell);
         }
         return;
@@ -1517,8 +1535,12 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
         cursorManager.updateCursor(
           getCursorForHitType('fillHandle', { ctrlKey: e.ctrlKey, metaKey: e.metaKey }),
         );
-        const cell = geometry.fromViewportPoint({ x, y });
-        if (cell) {
+        const rawCell = geometry.fromViewportPoint({ x, y });
+        if (rawCell) {
+          const cell = resolveFillHandleDragCell(rawCell, fillHandleDragAnchorRef.current, {
+            x,
+            y,
+          });
           selection.onRightFillHandleDrag(cell);
         }
         return;
@@ -1916,6 +1938,13 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
           if (selectionViewportRect && isOnFillHandle(pos, selectionViewportRect)) {
             e.preventDefault();
             coordinator.input.setActivePointerId(e.pointerId);
+            const handleCell = getRangeBottomRightCell(lastRange);
+            fillHandleDragAnchorRef.current = createFillHandleDragAnchor(
+              lastRange,
+              pos,
+              selectionViewportRect,
+              geometry.getCellRect(handleCell),
+            );
             selection.startRightFillHandleDrag();
             return;
           }
@@ -2034,6 +2063,7 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
       // Delegate to coordinator for correct state-based event dispatch
       // This queries actual machine state, not potentially-stale React state
       coordinator.handlePointerUp();
+      fillHandleDragAnchorRef.current = null;
       applyPendingFormatPainterTarget();
 
       const pendingTableClick = pendingTableClickSelectionRef.current;

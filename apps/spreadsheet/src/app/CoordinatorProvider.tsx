@@ -49,6 +49,7 @@ import {
   type CoordinatorProviderProps as BaseProviderProps,
 } from '../hooks/shared/use-coordinator';
 import { usePlatform, usePlatformIdentity, useShellService } from '@mog/shell';
+import { detectFormatType } from '@mog/spreadsheet-utils/number-formats';
 import {
   useActiveSheetId,
   useDocumentContext,
@@ -106,6 +107,33 @@ function isNativeEditableShortcut(e: KeyboardEvent, target: HTMLElement | null):
 
   const key = e.key.toLowerCase();
   return key === 'c' || key === 'x' || key === 'v' || key === 'z' || key === 'y';
+}
+
+function isPlainDecimalLiteral(value: string): boolean {
+  return /^[+-]?(?:\d+\.\d+|\.\d+)$/.test(value.trim());
+}
+
+function shouldNormalizeFormulaReplacementFormat(cellData: unknown, value: string): boolean {
+  if (!isPlainDecimalLiteral(value)) return false;
+  const cell = cellData as
+    | {
+        formula?: unknown;
+        hasFormula?: unknown;
+        format?: { numberFormat?: unknown } | null;
+        numberFormat?: unknown;
+      }
+    | null
+    | undefined;
+  const hasFormula =
+    cell?.hasFormula === true || (typeof cell?.formula === 'string' && cell.formula.length > 0);
+  if (!hasFormula) return false;
+  const numberFormat =
+    typeof cell.format?.numberFormat === 'string'
+      ? cell.format.numberFormat
+      : typeof cell.numberFormat === 'string'
+        ? cell.numberFormat
+        : 'General';
+  return detectFormatType(numberFormat) === 'percentage';
 }
 
 /**
@@ -722,9 +750,15 @@ export function SpreadsheetCoordinatorProvider({
           return;
         }
 
-        await withSelectionCheckpoint(cellCheckpoint(sheetId, row, col), () =>
-          ws.setCell(row, col, value),
-        );
+        await withSelectionCheckpoint(cellCheckpoint(sheetId, row, col), async () => {
+          if (shouldNormalizeFormulaReplacementFormat(ws.viewport.getCellData(row, col), value)) {
+            await ws.formats.setRanges(
+              [{ startRow: row, startCol: col, endRow: row, endCol: col }],
+              { numberFormat: 'General' },
+            );
+          }
+          await ws.setCell(row, col, value);
+        });
         if (value.startsWith('=')) {
           const autoFill = await checkCalculatedColumnAutoFill(sheetId, row, col, value, workbook);
           if (autoFill) {

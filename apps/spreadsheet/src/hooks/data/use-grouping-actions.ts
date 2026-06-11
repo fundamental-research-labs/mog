@@ -43,6 +43,18 @@ interface SelectionBounds {
 
 type GroupingAxis = 'rows' | 'columns';
 
+type OutlineActionGlobal = typeof globalThis & {
+  __MOG_PENDING_OUTLINE_ACTION__?: Promise<void>;
+};
+
+type OutlineWithSetLevelCollapsed = {
+  setLevelCollapsed?: (
+    axis: 'row' | 'column',
+    level: number,
+    collapsed: boolean,
+  ) => Promise<void>;
+};
+
 interface GroupingSelectionSnapshot {
   ranges: readonly CellRange[];
   activeCell: { row: number; col: number };
@@ -225,6 +237,38 @@ function detailIndexes(group: Pick<GroupDefinition, 'start' | 'end'>): number[] 
   );
 }
 
+function scheduleOutlineAction(action: () => Promise<void>): void {
+  const global = globalThis as OutlineActionGlobal;
+  const previous = global.__MOG_PENDING_OUTLINE_ACTION__;
+  const pending = new Promise<void>((resolve, reject) => {
+    globalThis.setTimeout(() => {
+      Promise.resolve(previous)
+        .catch(() => undefined)
+        .then(action)
+        .then(resolve, reject)
+        .finally(() => {
+          if (global.__MOG_PENDING_OUTLINE_ACTION__ === pending) {
+            delete global.__MOG_PENDING_OUTLINE_ACTION__;
+          }
+        });
+    }, 0);
+  });
+  global.__MOG_PENDING_OUTLINE_ACTION__ = pending;
+}
+
+async function resetImportedDetailDimensions(
+  ws: import('@mog-sdk/contracts/api').WorksheetWithInternals,
+  axis: GroupingAxis,
+  indexes: number[],
+): Promise<void> {
+  if (axis === 'rows') {
+    await Promise.all(indexes.map((row) => ws.layout.resetRowHeight(row)));
+    return;
+  }
+
+  await Promise.all(indexes.map((col) => ws.layout.resetColumnWidth(col)));
+}
+
 async function setImportedDetailVisibility(
   ws: import('@mog-sdk/contracts/api').WorksheetWithInternals,
   group: GroupDefinition,
@@ -236,6 +280,7 @@ async function setImportedDetailVisibility(
   if (axis === 'rows') {
     if (visible) {
       await ws.layout.unhideRows(group.start, group.end);
+      await resetImportedDetailDimensions(ws, axis, detailIndexes(group));
     } else {
       await ws.layout.hideRows(detailIndexes(group));
     }
@@ -244,6 +289,7 @@ async function setImportedDetailVisibility(
 
   if (visible) {
     await ws.layout.unhideColumns(group.start, group.end);
+    await resetImportedDetailDimensions(ws, axis, detailIndexes(group));
   } else {
     await ws.layout.hideColumns(detailIndexes(group));
   }
@@ -526,18 +572,31 @@ export function useGroupingActions(): UseGroupingActionsReturn {
       const action = collapsed ? 'Collapse' : 'Expand';
       wb.setPendingUndoDescription(`${action} ${axis} level ${level}`);
       const ws = wb.getSheetById(activeSheetId);
-      void (async () => {
+      scheduleOutlineAction(async () => {
         const state = await ws.outline.getState();
-        const groups = axis === 'row' ? state.rowGroups : state.columnGroups;
-        for (const group of groups) {
-          if (
-            (group as GroupDefinition).level >= level &&
-            (group as GroupDefinition).collapsed !== collapsed
-          ) {
-            await ws.outline.toggleCollapsed((group as GroupDefinition).id);
+        const groups = (axis === 'row' ? state.rowGroups : state.columnGroups) as GroupDefinition[];
+        const importedGroups = groups.filter(
+          (group) => group.hidden === true && group.level >= level && group.collapsed !== collapsed,
+        );
+        const groupAxis: GroupingAxis = axis === 'row' ? 'rows' : 'columns';
+
+        if (!collapsed) {
+          for (const group of importedGroups) {
+            await resetImportedDetailDimensions(ws, groupAxis, [group.start]);
           }
         }
-      })();
+
+        const outline = ws.outline as typeof ws.outline & OutlineWithSetLevelCollapsed;
+        if (typeof outline.setLevelCollapsed === 'function') {
+          await outline.setLevelCollapsed(axis, level, collapsed);
+        } else {
+          for (const group of groups) {
+            if (group.level >= level && group.collapsed !== collapsed) {
+              await ws.outline.toggleCollapsed(group.id);
+            }
+          }
+        }
+      });
     },
     [wb, activeSheetId],
   );

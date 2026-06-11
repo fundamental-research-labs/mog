@@ -29,6 +29,68 @@ import { useActiveSheetId, useWorkbook } from '../../infra/context';
 // Types
 // =============================================================================
 
+type OutlineWithSetLevelCollapsed = {
+  setLevelCollapsed?: (
+    axis: 'row' | 'column',
+    level: number,
+    collapsed: boolean,
+  ) => Promise<void>;
+};
+
+type GroupingAxis = 'rows' | 'columns';
+
+type OutlineActionGlobal = typeof globalThis & {
+  __MOG_PENDING_OUTLINE_ACTION__?: Promise<void>;
+};
+
+type WorksheetWithOutlineLayout = {
+  outline: {
+    getState: () => Promise<{
+      rowGroups: GroupDefinition[];
+      columnGroups: GroupDefinition[];
+    }>;
+    toggleCollapsed: (groupId: string) => Promise<void>;
+  } & OutlineWithSetLevelCollapsed;
+  layout: {
+    unhideRows: (startRow: number, endRow: number) => Promise<void>;
+    unhideColumns: (startCol: number, endCol: number) => Promise<void>;
+    resetRowHeight: (row: number) => Promise<void>;
+    resetColumnWidth: (col: number) => Promise<void>;
+  };
+};
+
+function scheduleOutlineAction(action: () => Promise<void>): void {
+  const global = globalThis as OutlineActionGlobal;
+  const previous = global.__MOG_PENDING_OUTLINE_ACTION__;
+  const pending = new Promise<void>((resolve, reject) => {
+    globalThis.setTimeout(() => {
+      Promise.resolve(previous)
+        .catch(() => undefined)
+        .then(action)
+        .then(resolve, reject)
+        .finally(() => {
+          if (global.__MOG_PENDING_OUTLINE_ACTION__ === pending) {
+            delete global.__MOG_PENDING_OUTLINE_ACTION__;
+          }
+        });
+    }, 0);
+  });
+  global.__MOG_PENDING_OUTLINE_ACTION__ = pending;
+}
+
+async function resetImportedDetailDimensions(
+  ws: WorksheetWithOutlineLayout,
+  axis: GroupingAxis,
+  indexes: number[],
+): Promise<void> {
+  if (axis === 'rows') {
+    await Promise.all(indexes.map((row) => ws.layout.resetRowHeight(row)));
+    return;
+  }
+
+  await Promise.all(indexes.map((col) => ws.layout.resetColumnWidth(col)));
+}
+
 export interface UseGroupingStateReturn {
   /** Current grouping configuration */
   groupingConfig: SheetGroupingConfig | undefined;
@@ -133,19 +195,31 @@ export function useGroupingState(): UseGroupingStateReturn {
     (axis: 'row' | 'column', level: number, collapsed: boolean) => {
       const action = collapsed ? 'Collapse' : 'Expand';
       wb.setPendingUndoDescription(`${action} ${axis} level ${level}`);
-      const ws = wb.getSheetById(activeSheetId);
-      void (async () => {
+      const ws = wb.getSheetById(activeSheetId) as unknown as WorksheetWithOutlineLayout;
+      scheduleOutlineAction(async () => {
         const state = await ws.outline.getState();
         const groups = axis === 'row' ? state.rowGroups : state.columnGroups;
-        for (const group of groups) {
-          if (
-            (group as GroupDefinition).level >= level &&
-            (group as GroupDefinition).collapsed !== collapsed
-          ) {
-            await ws.outline.toggleCollapsed((group as GroupDefinition).id);
+        const importedGroups = groups.filter(
+          (group) => group.hidden === true && group.level >= level && group.collapsed !== collapsed,
+        );
+
+        if (!collapsed) {
+          const groupAxis: GroupingAxis = axis === 'row' ? 'rows' : 'columns';
+          for (const group of importedGroups) {
+            await resetImportedDetailDimensions(ws, groupAxis, [group.start]);
           }
         }
-      })();
+
+        for (const group of groups) {
+          if (group.level >= level && group.collapsed !== collapsed) {
+            if (typeof ws.outline.setLevelCollapsed === 'function') {
+              await ws.outline.setLevelCollapsed(axis, level, collapsed);
+              break;
+            }
+            await ws.outline.toggleCollapsed(group.id);
+          }
+        }
+      });
     },
     [wb, activeSheetId],
   );

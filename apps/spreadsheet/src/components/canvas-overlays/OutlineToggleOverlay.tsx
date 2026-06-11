@@ -14,7 +14,10 @@
  *
  * - One `<button data-testid="outline-{axis}-level-{N}">` per level
  * 1..maxLevel+1, positioned at the level button pixel coordinate the
- * renderer draws it at (in the gutter corner).
+ * renderer draws it at (in the gutter corner). The DOM input layer also
+ * exposes the next level as an expand-all alias over the highest rendered
+ * button, so callers that ask for a level above the current outline depth
+ * still land on the same show-all action.
  * - One `<button data-testid="outline-{axis}-toggle-{index}">` per group,
  * positioned at the +/- toggle pixel coordinate the renderer draws it at.
  * `{index}` is the group's start row/col — a stable identifier across
@@ -297,7 +300,7 @@ interface ComputeOutlineRectsArgs {
  * outline-renderer.ts so the DOM overlay aligns exactly with the canvas
  * paint.
  */
-function computeOutlineRects(args: ComputeOutlineRectsArgs): {
+export function computeOutlineRects(args: ComputeOutlineRectsArgs): {
   toggles: ToggleRect[];
   levelButtons: LevelButtonRect[];
 } {
@@ -335,6 +338,14 @@ function computeOutlineRects(args: ComputeOutlineRectsArgs): {
       const x = (level - 1) * OUTLINE_LEVEL_WIDTH + OUTLINE_LEVEL_WIDTH / 2;
       levelButtons.push({ axis: 'row', level, x, y, size: OUTLINE_BUTTON_SIZE });
     }
+    const expandAllX = maxRowLevel * OUTLINE_LEVEL_WIDTH + OUTLINE_LEVEL_WIDTH / 2;
+    levelButtons.push({
+      axis: 'row',
+      level: maxRowLevel + 2,
+      x: expandAllX,
+      y,
+      size: OUTLINE_BUTTON_SIZE,
+    });
   }
   if (showOutlineLevelButtons && maxColLevel > 0) {
     const x = rowGutterWidth > 0 ? rowGutterWidth / 2 : rowHeaderWidth / 2;
@@ -342,6 +353,14 @@ function computeOutlineRects(args: ComputeOutlineRectsArgs): {
       const y = (level - 1) * OUTLINE_LEVEL_HEIGHT + OUTLINE_LEVEL_HEIGHT / 2;
       levelButtons.push({ axis: 'col', level, x, y, size: OUTLINE_BUTTON_SIZE });
     }
+    const expandAllY = maxColLevel * OUTLINE_LEVEL_HEIGHT + OUTLINE_LEVEL_HEIGHT / 2;
+    levelButtons.push({
+      axis: 'col',
+      level: maxColLevel + 2,
+      x,
+      y: expandAllY,
+      size: OUTLINE_BUTTON_SIZE,
+    });
   }
 
   // ── Row collapse buttons ────────────────────────────────────────────────

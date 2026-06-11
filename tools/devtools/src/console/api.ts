@@ -85,6 +85,16 @@ export function createConsoleAPI(
     }
   }
 
+  async function waitForPendingOutlineAction(): Promise<void> {
+    const pending = (typeof window !== 'undefined'
+      ? (window as Window & { __MOG_PENDING_OUTLINE_ACTION__?: Promise<void> })
+      : undefined
+    )?.__MOG_PENDING_OUTLINE_ACTION__;
+    if (pending) {
+      await pending.catch(() => undefined);
+    }
+  }
+
   // Capture unhandled promise rejections, sync uncaught errors, and (when
   // enabled) console.error. All four sources flow into the same ring buffer
   // tagged by `source` per Round 6 / O-A.
@@ -1915,12 +1925,14 @@ export function createConsoleAPI(
     },
 
     async isRowHidden(row: number): Promise<boolean | null> {
+      await waitForPendingOutlineAction();
       const wb = getActiveWorkbook();
       if (!wb) return null;
       return await wb.activeSheet.layout.isRowHidden(row);
     },
 
     async isColumnHidden(col: number): Promise<boolean | null> {
+      await waitForPendingOutlineAction();
       const wb = getActiveWorkbook();
       if (!wb) return null;
       return await wb.activeSheet.layout.isColumnHidden(col);

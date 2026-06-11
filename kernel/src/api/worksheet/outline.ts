@@ -63,6 +63,11 @@ export class WorksheetOutlineImpl implements WorksheetOutline {
     unwrapResult(await GroupingOps.toggleGroupCollapsed(this.ctx, this.sheetId, groupId));
   }
 
+  async setLevelCollapsed(axis: 'row' | 'column', level: number, collapsed: boolean): Promise<void> {
+    this._ensureWritable('outline.setLevelCollapsed');
+    await this.ctx.computeBridge.setLevelCollapsed(this.sheetId, axis, level, collapsed);
+  }
+
   async expandAll(): Promise<void> {
     unwrapResult(await GroupingOps.expandAllGroups(this.ctx, this.sheetId));
   }

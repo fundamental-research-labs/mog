@@ -285,6 +285,15 @@ export function setupLayoutCoordination(
   });
   unsubscribers.push(unsubGroupCollapsed);
 
+  const unsubGroupingChanged = workbook.on('grouping:changed', (event) => {
+    const currentSheetId = getCurrentSheetId();
+    if (currentSheetId && event.sheetId === currentSheetId) {
+      syncOutlineGutter();
+      scheduleImmediateRecompute();
+    }
+  });
+  unsubscribers.push(unsubGroupingChanged);
+
   // ---------------------------------------------------------------------------
   // Outline Level Changed
   // ---------------------------------------------------------------------------

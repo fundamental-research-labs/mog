@@ -71,6 +71,90 @@ fn duplicate_set_cells_by_position_uses_last_write_and_one_identity() {
 }
 
 #[test]
+fn formula_precedent_identities_are_reused_by_later_position_edits() {
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(empty_bulk_snapshot()).unwrap();
+    let sid = sheet_id();
+
+    engine
+        .batch_set_cells_by_position(
+            vec![(
+                sid,
+                31,
+                3,
+                crate::storage::engine::mutation::CellInput::Parse {
+                    text: "=D11/C11-1".into(),
+                },
+            )],
+            false,
+        )
+        .unwrap();
+
+    let c11_id = engine
+        .grid_index(&sid)
+        .expect("grid index")
+        .cell_id_at(10, 2)
+        .expect("formula precedent identity");
+
+    engine
+        .batch_set_cells_by_position(
+            vec![
+                (
+                    sid,
+                    10,
+                    2,
+                    crate::storage::engine::mutation::CellInput::Parse {
+                        text: "899.4".into(),
+                    },
+                ),
+                (
+                    sid,
+                    10,
+                    3,
+                    crate::storage::engine::mutation::CellInput::Parse {
+                        text: "773.8".into(),
+                    },
+                ),
+            ],
+            false,
+        )
+        .unwrap();
+
+    assert_eq!(
+        engine
+            .grid_index(&sid)
+            .expect("grid index")
+            .cell_id_at(10, 2),
+        Some(c11_id)
+    );
+
+    engine
+        .batch_set_cells_by_position(
+            vec![(
+                sid,
+                10,
+                2,
+                crate::storage::engine::mutation::CellInput::Parse {
+                    text: "950.4".into(),
+                },
+            )],
+            false,
+        )
+        .unwrap();
+
+    match cell_value_at(&engine, &sid, 31, 3) {
+        CellValue::Number(actual) => {
+            let expected = 773.8 / 950.4 - 1.0;
+            assert!(
+                (actual.get() - expected).abs() < 1e-12,
+                "expected {expected}, got {}",
+                actual.get()
+            );
+        }
+        other => panic!("expected recalculated number, got {other:?}"),
+    }
+}
+
+#[test]
 fn undo_redo_restores_bulk_dimension_growth() {
     let (mut engine, _) = YrsComputeEngine::from_snapshot(empty_bulk_snapshot()).unwrap();
     let sid = sheet_id();

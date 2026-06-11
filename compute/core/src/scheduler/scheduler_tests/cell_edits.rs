@@ -251,3 +251,63 @@ fn test_set_cells_batch() {
         .collect();
     assert!(changed_ids.contains(&c1_id.to_uuid_string()));
 }
+
+#[test]
+fn formula_entered_before_precedents_recalculates_after_precedent_edit() {
+    let mut core = ComputeCore::new();
+    let mut mirror = CellMirror::new();
+    core.init_from_snapshot(&mut mirror, basic_snapshot())
+        .unwrap();
+
+    let sheet_id = sid(1);
+    let formula_id = cid(0x4000);
+
+    core.set_cell(&mut mirror, &sheet_id, formula_id, 31, 3, "=D11/C11-1")
+        .unwrap();
+
+    let c11_id = mirror
+        .resolve_cell_id(&sheet_id, SheetPos::new(10, 2))
+        .unwrap();
+    let d11_id = mirror
+        .resolve_cell_id(&sheet_id, SheetPos::new(10, 3))
+        .unwrap();
+
+    use crate::storage::engine::mutation::CellInput;
+    let edits = vec![
+        (
+            sheet_id,
+            c11_id,
+            10u32,
+            2u32,
+            CellInput::Parse {
+                text: "899.4".to_string(),
+            },
+        ),
+        (
+            sheet_id,
+            d11_id,
+            10,
+            3,
+            CellInput::Parse {
+                text: "773.8".to_string(),
+            },
+        ),
+    ];
+    core.set_cells(&mut mirror, &edits, false).unwrap();
+
+    core.set_cell(&mut mirror, &sheet_id, c11_id, 10, 2, "950.4")
+        .unwrap();
+
+    let formula_val = core.get_cell_value(&mirror, &formula_id).unwrap();
+    match formula_val {
+        CellValue::Number(n) => {
+            let expected = 773.8 / 950.4 - 1.0;
+            assert!(
+                (n.get() - expected).abs() < 1e-12,
+                "expected {expected}, got {}",
+                n.get()
+            );
+        }
+        other => panic!("expected recalculated number, got {other:?}"),
+    }
+}

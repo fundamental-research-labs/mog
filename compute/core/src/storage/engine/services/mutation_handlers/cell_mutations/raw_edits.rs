@@ -105,6 +105,20 @@ pub(in crate::storage::engine) fn mutation_set_cells_raw_with_trust(
             .compute
             .set_cells_raw_with_trust(mirror, &edits, skip_cycle_check, trust)?;
 
+    let formula_identities: Vec<_> = edits
+        .iter()
+        .filter_map(|(_, cell_id, _, _, _, formula)| {
+            formula
+                .as_ref()
+                .and_then(|_| mirror.get_formula(cell_id).cloned())
+        })
+        .collect();
+    for identity in formula_identities {
+        super::super::super::cell_editing::persist_identity_formula_cell_identities(
+            stores, mirror, &identity,
+        );
+    }
+
     // Patch old_value onto seed changes (direct edits) that don't already have one.
     for change in &mut result.changed_cells {
         if change.old_value.is_none()

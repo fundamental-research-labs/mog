@@ -204,6 +204,21 @@ pub(in crate::storage::engine) fn mutation_set_cells(
         skip_cycle_check,
     )?;
 
+    let formula_identities: Vec<_> = edits
+        .iter()
+        .zip(prepared_values.iter())
+        .filter_map(|((_, cell_id, _, _, _), (_, formula))| {
+            formula
+                .as_ref()
+                .and_then(|_| mirror.get_formula(cell_id).cloned())
+        })
+        .collect();
+    for identity in formula_identities {
+        super::super::super::cell_editing::persist_identity_formula_cell_identities(
+            stores, mirror, &identity,
+        );
+    }
+
     // Patch old_value onto seed changes (direct edits) that don't already have one.
     // Cascade changes already have old_value set by level_eval.rs.
     for change in &mut result.changed_cells {

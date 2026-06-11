@@ -2,7 +2,7 @@ use super::*;
 
 use crate::mirror::CellMirror;
 use crate::projection::ProjectionRegistry;
-use cell_types::SheetId;
+use cell_types::{SheetId, SheetPos};
 use formula_types::CellRef;
 
 pub(super) fn ref_in_sheet_ctx(cell_ref: &CellRef, sheet_ctx: SheetId) -> CellRef {
@@ -67,6 +67,13 @@ pub(super) fn push_cell_ref_dep_targets(
                 RangePos::new(*sheet, *row, *col, *row, *col),
                 RangeAccess::Aggregate,
             ));
+
+            if let Some(cell_id) = mirror.resolve_cell_id(sheet, SheetPos::new(*row, *col)) {
+                let is_self = current_cell.is_some_and(|c| cell_id == *c);
+                if !is_self {
+                    out.push(DepTarget::Cell(cell_id));
+                }
+            }
 
             // If registry is available, check if this position is inside a projection
             if let Some(reg) = registry

@@ -51,6 +51,55 @@ describe('page navigation emits', () => {
     actor.stop();
   });
 
+  it('direct range selection follows the active cell rather than the opposite corner', () => {
+    const actor = createActor(selectionMachine);
+    const emitted: SelectionEmitted[] = [];
+    const subscription = actor.on('userSelectionChanged', (event) => emitted.push(event));
+
+    actor.start();
+    actor.send({
+      type: 'SET_SELECTION',
+      ranges: [{ startRow: 6, startCol: 13, endRow: 6, endCol: 27 }],
+      activeCell: { row: 6, col: 13 },
+      source: 'user',
+    });
+
+    expect(emitted).toHaveLength(1);
+    expect(emitted[0]).toMatchObject({
+      activeCell: { row: 6, col: 13 },
+      followCell: { row: 6, col: 13 },
+    });
+    expect(emitted[0].scrollIntent).toBeUndefined();
+
+    subscription.unsubscribe();
+    actor.stop();
+  });
+
+  it('explicit-anchor range selection still follows the moving edge', () => {
+    const actor = createActor(selectionMachine);
+    const emitted: SelectionEmitted[] = [];
+    const subscription = actor.on('userSelectionChanged', (event) => emitted.push(event));
+
+    actor.start();
+    actor.send({
+      type: 'SET_SELECTION',
+      ranges: [{ startRow: 6, startCol: 13, endRow: 6, endCol: 27 }],
+      activeCell: { row: 6, col: 13 },
+      anchor: { row: 6, col: 13 },
+      source: 'user',
+    });
+
+    expect(emitted).toHaveLength(1);
+    expect(emitted[0]).toMatchObject({
+      activeCell: { row: 6, col: 13 },
+      followCell: { row: 6, col: 27 },
+    });
+    expect(emitted[0].scrollIntent).toBeUndefined();
+
+    subscription.unsubscribe();
+    actor.stop();
+  });
+
   it('annotates Ctrl+Home with a top-left origin scroll intent', () => {
     const actor = createActor(selectionMachine);
     const emitted: SelectionEmitted[] = [];

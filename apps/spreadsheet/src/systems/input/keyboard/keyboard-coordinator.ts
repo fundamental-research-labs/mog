@@ -166,6 +166,34 @@ export interface KeyboardHandleResult {
 }
 
 // =============================================================================
+// DOM target helpers
+// =============================================================================
+
+function asElement(target: EventTarget | null): Element | null {
+  if (typeof Element === 'undefined') return null;
+  return target instanceof Element ? target : null;
+}
+
+function isInlineCellEditorTarget(element: Element): boolean {
+  return element.closest('[data-testid="inline-cell-editor"]') !== null;
+}
+
+function isEditableChromeTarget(target: EventTarget | null): boolean {
+  const element = asElement(target);
+  if (!element || isInlineCellEditorTarget(element)) return false;
+
+  if (
+    (typeof HTMLInputElement !== 'undefined' && element instanceof HTMLInputElement) ||
+    (typeof HTMLTextAreaElement !== 'undefined' && element instanceof HTMLTextAreaElement)
+  ) {
+    return true;
+  }
+
+  const htmlElement = element as HTMLElement;
+  return htmlElement.isContentEditable || element.closest('[contenteditable="true"]') !== null;
+}
+
+// =============================================================================
 // Helper: Extract handled boolean from sync/async result
 // =============================================================================
 
@@ -1032,6 +1060,10 @@ export class KeyboardCoordinator {
     // =========================================================================
     if ((e.isComposing || e.keyCode === 229) && e.key !== 'Escape') {
       return { handled: false, reason: 'ime_composing' };
+    }
+
+    if (isEditableChromeTarget(e.target)) {
+      return { handled: false, reason: 'not_found' };
     }
 
     // Layer 2: Check editor machine state (defensive fallback)

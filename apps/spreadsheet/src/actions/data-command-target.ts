@@ -47,11 +47,17 @@ async function rangeLooksLikeHeaderTable(ws: Worksheet, range: CellRange): Promi
     Array.from({ length: width }, (_, i) => ws.getCell(range.startRow, range.startCol + i)),
   );
 
-  const firstRowAllText = firstRow.every((cell) => {
+  const firstRowHasTextHeader = firstRow.some((cell) => {
     const value = cell?.value;
     return typeof value === 'string' && value.trim().length > 0;
   });
-  if (!firstRowAllText) return false;
+  if (!firstRowHasTextHeader) return false;
+
+  const firstRowOnlyTextOrBlank = firstRow.every((cell) => {
+    const value = cell?.value;
+    return value == null || value === '' || typeof value === 'string';
+  });
+  if (!firstRowOnlyTextOrBlank) return false;
 
   const rowHasDataSignal = (row: Array<{ value?: unknown } | null | undefined>): boolean =>
     row.some((cell) => {

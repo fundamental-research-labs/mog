@@ -48,6 +48,48 @@ describe('resolveDataCommandTarget', () => {
     expect(ws.getCurrentRegion).not.toHaveBeenCalled();
   });
 
+  test('explicit multi-row command selection infers headers with blank header cells', async () => {
+    const ws = makeWorksheet({
+      values: {
+        '2,11': 'FY11/25',
+        '2,12': 'FY11/25',
+        '2,13': 'FY11/28',
+        '2,14': null,
+        '2,15': '1Q',
+        '2,16': '2Q',
+        '6,15': 128319,
+        '6,16': 140667,
+      },
+    });
+    const range = { startRow: 2, startCol: 11, endRow: 20, endCol: 16 };
+
+    await expect(resolveDataCommandTarget(ws as Worksheet, range)).resolves.toEqual({
+      range,
+      hasHeaders: true,
+      wasExpanded: false,
+    });
+    expect(ws.getCurrentRegion).not.toHaveBeenCalled();
+  });
+
+  test('explicit multi-row command selection rejects numeric first-row cells as headers', async () => {
+    const ws = makeWorksheet({
+      values: {
+        '0,0': 'Name',
+        '0,1': 2026,
+        '1,0': 'Ada',
+        '1,1': 10,
+      },
+    });
+    const range = { startRow: 0, startCol: 0, endRow: 3, endCol: 1 };
+
+    await expect(resolveDataCommandTarget(ws as Worksheet, range)).resolves.toEqual({
+      range,
+      hasHeaders: false,
+      wasExpanded: false,
+    });
+    expect(ws.getCurrentRegion).not.toHaveBeenCalled();
+  });
+
   test('explicit multi-row command selection tolerates blank spacer rows before body values', async () => {
     const ws = makeWorksheet({
       values: {

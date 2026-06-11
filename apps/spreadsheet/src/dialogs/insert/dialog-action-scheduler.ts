@@ -1,4 +1,4 @@
-const APPLY_AFTER_CLOSE_DELAY_MS = 0;
+export const DIALOG_ACTION_DELAY_MS = 50;
 
 type DialogActionGlobal = typeof globalThis & {
   __MOG_PENDING_DIALOG_ACTION__?: Promise<void>;
@@ -28,7 +28,7 @@ export function scheduleDialogAction(action: () => unknown): void {
             reject(error);
           },
         );
-    }, APPLY_AFTER_CLOSE_DELAY_MS);
+    }, DIALOG_ACTION_DELAY_MS);
   });
   global.__MOG_PENDING_DIALOG_ACTION__ = pending;
 }

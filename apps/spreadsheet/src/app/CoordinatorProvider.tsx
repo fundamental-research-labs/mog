@@ -34,6 +34,10 @@ import type { SelectionCheckpoint } from '@mog-sdk/contracts/selection';
 import { dispatch } from '../actions/dispatcher';
 import { createActorAccessLayerFromBundle } from '../coordinator/actor-access';
 import { createKeyUpCapture } from './coordinator-keyup-capture';
+import {
+  GENERAL_NUMBER_FORMAT,
+  shouldNormalizeEnteredZeroFormat,
+} from './interactive-format-normalization';
 import type { EditorDependencies } from '../coordinator/types';
 import { checkCalculatedColumnAutoFill } from '../coordinator/mutations/tables';
 import {
@@ -743,9 +747,22 @@ export function SpreadsheetCoordinatorProvider({
           return;
         }
 
-        await withSelectionCheckpoint(cellCheckpoint(sheetId, row, col), () =>
-          ws.setCell(row, col, value),
-        );
+        const previousCell = ws.viewport.getCellData(row, col);
+        const normalizeEnteredZeroFormat = shouldNormalizeEnteredZeroFormat(value, previousCell);
+        const commitValue = () =>
+          withSelectionCheckpoint(cellCheckpoint(sheetId, row, col), async () => {
+            await ws.setCell(row, col, value);
+            if (normalizeEnteredZeroFormat) {
+              await ws.formats.set(row, col, { numberFormat: GENERAL_NUMBER_FORMAT });
+            }
+          });
+
+        if (normalizeEnteredZeroFormat) {
+          await workbook.undoGroup(commitValue);
+        } else {
+          await commitValue();
+        }
+
         if (value.startsWith('=')) {
           const autoFill = await checkCalculatedColumnAutoFill(sheetId, row, col, value, workbook);
           if (autoFill) {

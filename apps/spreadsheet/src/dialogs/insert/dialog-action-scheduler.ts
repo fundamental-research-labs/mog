@@ -1,4 +1,6 @@
-const APPLY_AFTER_CLOSE_DELAY_MS = 0;
+// Keep the apply work out of the same click turn. Some structural actions can
+// hold the main thread long enough to block the browser's click completion.
+const APPLY_AFTER_CLOSE_DELAY_MS = 50;
 
 type DialogActionGlobal = typeof globalThis & {
   __MOG_PENDING_DIALOG_ACTION__?: Promise<void>;

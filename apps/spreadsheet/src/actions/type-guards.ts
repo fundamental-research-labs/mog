@@ -296,6 +296,7 @@ export function isStructureAction(action: string): action is StructureActionType
     'DELETE_COLUMNS',
     'INSERT_CELLS',
     'INSERT_CELLS_SHIFT_DOWN',
+    'INSERT_CUT_CELLS',
     'INSERT_CUT_CELLS_SHIFT_DOWN',
     'DELETE_CELLS',
     'HIDE_ROW',

@@ -212,6 +212,22 @@ describe('Structure autofit handlers', () => {
     expect(pasteHandler).toHaveBeenCalledWith(deps);
   });
 
+  it('INSERT_CUT_CELLS uses the dialog range and selected shift direction', async () => {
+    const deps = createDeps({ activeCell: { row: 4, col: 3 }, ranges: [] });
+    const range = { startRow: 6, startCol: 11, endRow: 6, endCol: 12 };
+
+    const result = await StructureHandlers.INSERT_CUT_CELLS(deps, {
+      range,
+      direction: 'right',
+    });
+
+    const worksheet = deps.workbook.activeSheet as any;
+    expect(result.handled).toBe(true);
+    expect(deps.workbook.batch).toHaveBeenCalledWith('Insert Cut Cells', expect.any(Function));
+    expect(worksheet.structure.insertCellsWithShift).toHaveBeenCalledWith(6, 11, 6, 12, 'right');
+    expect(pasteHandler).toHaveBeenCalledWith(deps);
+  });
+
   it('INSERT_CUT_CELLS_SHIFT_DOWN is disabled without an active cut clipboard', async () => {
     const deps = createDeps({ activeCell: { row: 4, col: 3 }, ranges: [] });
     (deps.accessors.clipboard.hasCut as jest.Mock).mockReturnValue(false);

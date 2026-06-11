@@ -127,7 +127,8 @@ export function InsertCellsDialog() {
         // Shift cells in specified direction
         if (mode === 'insert') {
           if (deps.accessors.clipboard.hasCut()) {
-            return deps.commands.clipboard.paste({ row: range.startRow, col: range.startCol });
+            const direction = selectedOption === 'right' ? 'right' : 'down';
+            return dispatch('INSERT_CUT_CELLS', deps, { range, direction });
           }
 
           // Insert cells - shift existing cells right or down

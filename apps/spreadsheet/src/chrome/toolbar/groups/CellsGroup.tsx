@@ -221,7 +221,7 @@ export const CellsGroup = React.memo(function CellsGroup() {
               onClick={() => {
                 if (hasCutCells) {
                   setInsertDropdownOpen(false);
-                  setTimeout(() => dispatchAction('INSERT_CUT_CELLS_SHIFT_DOWN'), 0);
+                  queueMicrotask(() => dispatchAction('OPEN_INSERT_CELLS_DIALOG'));
                 } else {
                   dispatchAction('OPEN_INSERT_CELLS_DIALOG');
                 }

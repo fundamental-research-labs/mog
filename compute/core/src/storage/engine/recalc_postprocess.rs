@@ -41,12 +41,11 @@ impl YrsComputeEngine {
                     .validate_dirty_cells(&self.mirror, &dirty, schemas);
         }
 
-        // Run data-validation rules (the `dataValidations` Y.Array) on every
-        // changed cell. This is independent of column schemas — a cell can
-        // carry a data-validation rule (Excel-style "Data > Data Validation")
-        // without being part of a typed column. We emit pass/fail annotations
-        // for every covered cell so the TS bridge fires `validation:passed`
-        // when an invalid cell becomes valid (clearing its validation circle)
+        // Run range-backed data-validation rules on every changed cell. This
+        // is independent of column schemas — a cell can carry an Excel-style
+        // "Data > Data Validation" rule without being part of a typed column.
+        // We emit pass/fail annotations for every covered cell so the TS
+        // bridge fires `validation:passed` when an invalid cell becomes valid
         // and `validation:failed` when a valid cell becomes invalid.
         self.append_data_validation_annotations(recalc);
 

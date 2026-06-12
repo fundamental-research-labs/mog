@@ -89,7 +89,7 @@ impl RangeSchema {
     ///
     /// This is the inverse of [`ValidationSpec::to_range_schema`]. It is used
     /// by the runtime schemas API (which still speaks `RangeSchema`) to upsert
-    /// into the single canonical `properties/dataValidations` store.
+    /// into the single canonical range-backed validation store.
     ///
     /// Returns `None` if the schema has no convertible rule or no valid ranges.
     pub fn to_validation_spec(&self) -> Option<ValidationSpec> {

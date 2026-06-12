@@ -24,7 +24,7 @@ use domain_types::{
 };
 use yrs::{Any, Array, Map, Out, Transact};
 
-use crate::storage::sheet::{cf_store, hyperlinks, print};
+use crate::storage::sheet::{cf_store, hyperlinks, print, schemas};
 
 use super::super::super::export::sorted_map_entries;
 use crate::storage::engine::stores::EngineStores;
@@ -162,13 +162,6 @@ pub(in crate::storage::engine) fn export_dv_disable_prompts(
     export_meta_bool(stores, sheet_id, "dvDisablePrompts")
 }
 
-pub(in crate::storage::engine) fn export_x14_dv_disable_prompts(
-    stores: &EngineStores,
-    sheet_id: &SheetId,
-) -> bool {
-    export_meta_bool(stores, sheet_id, "x14DvDisablePrompts")
-}
-
 fn export_meta_bool(stores: &EngineStores, sheet_id: &SheetId, key: &str) -> bool {
     let sheet_hex = id_to_hex(sheet_id.as_u128());
     let doc = stores.storage.doc();
@@ -225,13 +218,6 @@ pub(in crate::storage::engine) fn export_dv_declared_count(
     export_meta_u32(stores, sheet_id, "dvDeclaredCount")
 }
 
-pub(in crate::storage::engine) fn export_x14_dv_declared_count(
-    stores: &EngineStores,
-    sheet_id: &SheetId,
-) -> Option<u32> {
-    export_meta_u32(stores, sheet_id, "x14DvDeclaredCount")
-}
-
 fn export_meta_u32(stores: &EngineStores, sheet_id: &SheetId, key: &str) -> Option<u32> {
     let sheet_hex = id_to_hex(sheet_id.as_u128());
     let doc = stores.storage.doc();
@@ -254,58 +240,12 @@ fn export_meta_u32(stores: &EngineStores, sheet_id: &SheetId, key: &str) -> Opti
     }
 }
 
-/// Export data validations from `properties/dataValidations` (the single
-/// canonical source of truth). Falls back to legacy JSON string.
+/// Export data validations from the canonical range-backed validation store.
 pub(in crate::storage::engine) fn export_data_validations_for_sheet(
     stores: &EngineStores,
     sheet_id: &SheetId,
 ) -> Vec<ValidationSpec> {
-    export_validation_array(stores, sheet_id, "dataValidations")
-}
-
-pub(in crate::storage::engine) fn export_x14_data_validations_for_sheet(
-    stores: &EngineStores,
-    sheet_id: &SheetId,
-) -> Vec<ValidationSpec> {
-    export_validation_array(stores, sheet_id, "x14DataValidations")
-}
-
-fn export_validation_array(
-    stores: &EngineStores,
-    sheet_id: &SheetId,
-    key: &str,
-) -> Vec<ValidationSpec> {
-    let sheet_hex = id_to_hex(sheet_id.as_u128());
-    let doc = stores.storage.doc();
-    let txn = doc.transact();
-    let sheets_root = stores.storage.sheets();
-
-    let sheet_map = match sheets_root.get(&txn, &sheet_hex) {
-        Some(Out::YMap(m)) => m,
-        _ => return vec![],
-    };
-    let meta_map = match sheet_map.get(&txn, KEY_PROPERTIES) {
-        Some(Out::YMap(m)) => m,
-        _ => return vec![],
-    };
-
-    match meta_map.get(&txn, key) {
-        Some(Out::YArray(arr)) => {
-            let mut specs = Vec::new();
-            for item in arr.iter(&txn) {
-                if let Out::YMap(sub_map) = item
-                    && let Some(spec) = yrs_schema::validation::from_yrs_map(&sub_map, &txn)
-                {
-                    specs.push(spec);
-                }
-            }
-            specs
-        }
-        Some(Out::Any(Any::String(s))) => {
-            serde_json::from_str::<Vec<ValidationSpec>>(&s).unwrap_or_default()
-        }
-        _ => Vec::new(),
-    }
+    schemas::get_validation_specs_for_sheet(stores.storage.doc(), stores.storage.sheets(), sheet_id)
 }
 
 // -------------------------------------------------------------------

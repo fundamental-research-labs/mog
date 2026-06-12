@@ -77,6 +77,7 @@ use assembly::{
 pub use export_report::{
     ExportDiagnostic, ExportDiagnosticCode, ExportReport, ExportSemanticImpact,
 };
+pub use sheet_ext_merge::strip_modeled_x14_data_validations_from_ext_lst;
 
 fn worksheet_legacy_vml_path(
     sheet_idx: usize,

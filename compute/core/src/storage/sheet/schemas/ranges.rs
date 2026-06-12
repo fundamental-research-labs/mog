@@ -3,7 +3,7 @@ use cell_types::SheetId;
 use compute_document::schema::KEY_VALIDATION_RULES;
 use compute_document::undo::ORIGIN_USER_EDIT;
 use value_types::ComputeError;
-use yrs::{Doc, Map, MapRef, Origin, Transact};
+use yrs::{Doc, Map, MapRef, Origin, Transact, TransactionMut};
 
 use super::{RangeSchema, range_store, range_view, validation_rules, yrs_io};
 use crate::storage::sheet::yrs_helpers::KEY_DV_DECLARED_COUNT;
@@ -115,7 +115,7 @@ fn upsert_range_schema_by_id(
             sheet_id: sheet_id.to_uuid_string(),
         });
     };
-    meta_map.remove(&mut txn, KEY_DV_DECLARED_COUNT);
+    clear_imported_validation_fidelity(&mut txn, &meta_map);
 
     let priority = yrs_io::get_sheet_sub_map(&txn, sheets, sheet_id, KEY_VALIDATION_RULES)
         .map(|rules_map| {
@@ -139,7 +139,18 @@ pub fn delete_range_schema(doc: &Doc, sheets: &MapRef, sheet_id: &SheetId, schem
     let Some(meta_map) = yrs_io::get_properties_map(&txn, sheets, sheet_id) else {
         return;
     };
-    meta_map.remove(&mut txn, KEY_DV_DECLARED_COUNT);
+    clear_imported_validation_fidelity(&mut txn, &meta_map);
 
     range_store::delete_validation_ranges_for_rule(&mut txn, sheets, sheet_id, schema_id);
+}
+
+fn clear_imported_validation_fidelity(txn: &mut TransactionMut, meta_map: &MapRef) {
+    for key in [
+        "dataValidations",
+        "x14DataValidations",
+        KEY_DV_DECLARED_COUNT,
+        "x14DvDeclaredCount",
+    ] {
+        meta_map.remove(txn, key);
+    }
 }

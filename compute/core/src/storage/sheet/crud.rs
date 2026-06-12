@@ -474,9 +474,9 @@ impl YrsStorage {
 
         // Pass 2: Write the tree into the new sheet. `cells` and `gridIndex`
         // get bespoke handling for CellId-hex remapping; everything else uses
-        // the generic recursive writer, which correctly preserves Y.Array<Y.Map>
-        // structures (e.g. `properties/dataValidations`, CF rules) that the
-        // previous flat-representation path silently dropped.
+        // the generic recursive writer, which correctly preserves structured
+        // Yrs subtrees (e.g. CF rules) that the previous flat-representation
+        // path silently dropped.
         {
             let mut txn = self.doc.transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
 
@@ -645,14 +645,7 @@ impl YrsStorage {
                     ),
                 ),
             ]);
-            let meta_map: MapRef = sheet_map.insert(&mut txn, KEY_PROPERTIES, meta);
-
-            // Pre-create the `dataValidations` Y.Array so its CRDT id is
-            // identical across peers that fork this state. Without this, two
-            // peers each calling `set_range_schema` for the first time would
-            // race on `properties.insert("dataValidations", ...)` and LWW at
-            // the parent-map key would drop one side's entire array.
-            meta_map.insert(&mut txn, "dataValidations", ArrayPrelim::default());
+            sheet_map.insert(&mut txn, KEY_PROPERTIES, meta);
 
             // YArray-based row/column ordering (CRDT-safe, insert_range for O(n) bulk insert)
             let id_alloc = IdAllocator::new();

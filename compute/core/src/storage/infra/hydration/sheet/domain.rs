@@ -38,8 +38,16 @@ pub(crate) fn hydrate_worksheet_import_xml_metadata(
         .worksheet_ext_lst_xml
         .as_deref()
         .filter(|xml| !xml.is_empty())
+        .and_then(
+            xlsx_parser::write::from_parse_output::strip_modeled_x14_data_validations_from_ext_lst,
+        )
+        .filter(|xml| !xml.is_empty())
     {
-        meta_map.insert(txn, "worksheetExtLstXml", Any::String(Arc::from(xml)));
+        meta_map.insert(
+            txn,
+            "worksheetExtLstXml",
+            Any::String(Arc::from(xml.as_str())),
+        );
     }
     if let Some(dimension_ref) = sheet
         .worksheet_dimension_ref

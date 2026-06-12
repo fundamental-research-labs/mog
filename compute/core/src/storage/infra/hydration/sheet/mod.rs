@@ -351,7 +351,7 @@ pub(crate) fn hydrate_sheet(
     // --- Conditional formatting (yrs_schema::conditional_format) ---
     hydrate_conditional_formats(txn, &cf_map, &sheet.conditional_formats);
 
-    // --- Data validations (yrs_schema::validation) ---
+    // --- Data validations ---
     hydrate_data_validations(
         txn,
         sheets_map,

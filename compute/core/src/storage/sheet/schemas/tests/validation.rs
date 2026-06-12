@@ -290,8 +290,8 @@ fn test_validate_range_enforcement_warning() {
 #[test]
 fn test_validate_range_enforcement_info_from_none() {
     // `EnforcementLevel::None` has no OOXML equivalent and round-trips to
-    // `Info` through the canonical `properties/dataValidations` store
-    // (via `EnforcementLevel` → `ErrorStyle::Information` →
+    // `Info` through the canonical range-backed validation store (via
+    // `EnforcementLevel` → `ErrorStyle::Information` →
     // `EnforcementLevel::Info`). This is expected: XLSX `errorStyle` is
     // stop/warning/information only, so None can't survive the trip.
     let (storage, sid, gi) = storage_with_sheet();

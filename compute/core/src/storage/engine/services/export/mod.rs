@@ -31,8 +31,6 @@ pub(in crate::storage::engine) use sheet_metadata::{
     export_dv_window_attr, export_floating_objects_for_sheet, export_hyperlinks_for_sheet,
     export_outline_groups_for_sheet, export_page_breaks_for_sheet, export_sheet_protection,
     export_sort_state_for_sheet, export_sparkline_groups_for_sheet, export_sparklines_for_sheet,
-    export_x14_data_validations_for_sheet, export_x14_dv_declared_count,
-    export_x14_dv_disable_prompts,
 };
 pub(in crate::storage::engine) use workbook::{
     export_workbook_parsed_pivot_tables, export_workbook_protection, export_workbook_slicer_caches,
@@ -500,7 +498,7 @@ fn export_single_sheet(
 
     // --- Data validations ---
     let data_validations = export_data_validations_for_sheet(stores, sheet_id);
-    let x14_data_validations = export_x14_data_validations_for_sheet(stores, sheet_id);
+    let x14_data_validations = Vec::new();
 
     // --- Print settings ---
     let ps = print::get_print_settings(stores.storage.doc(), stores.storage.sheets(), sheet_id);
@@ -785,10 +783,10 @@ fn export_single_sheet(
         data_validations_x_window: export_dv_window_attr(stores, sheet_id, "dvXWindow"),
         data_validations_y_window: export_dv_window_attr(stores, sheet_id, "dvYWindow"),
         x14_data_validations,
-        x14_data_validations_declared_count: export_x14_dv_declared_count(stores, sheet_id),
-        x14_data_validations_disable_prompts: export_x14_dv_disable_prompts(stores, sheet_id),
-        x14_data_validations_x_window: export_dv_window_attr(stores, sheet_id, "x14DvXWindow"),
-        x14_data_validations_y_window: export_dv_window_attr(stores, sheet_id, "x14DvYWindow"),
+        x14_data_validations_declared_count: None,
+        x14_data_validations_disable_prompts: false,
+        x14_data_validations_x_window: None,
+        x14_data_validations_y_window: None,
         print_settings,
         hf_images,
         protection,

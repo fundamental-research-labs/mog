@@ -163,7 +163,7 @@ fn roundtrip_data_validation_declared_count_survives_l2_hydration_export() {
 }
 
 #[test]
-fn roundtrip_x14_data_validation_survives_l2_hydration_export() {
+fn roundtrip_x14_data_validation_hydrates_into_canonical_validation_store() {
     let mut output = make_single_sheet(
         "DV_X14",
         vec![cell(0, 0, CellValue::Number(FiniteF64::new(7.0).unwrap()))],
@@ -187,13 +187,11 @@ fn roundtrip_x14_data_validation_survives_l2_hydration_export() {
         .expect("export_to_parse_output")
         .parse_output;
 
+    assert_eq!(exported.sheets[0].x14_data_validations_declared_count, None);
+    assert!(exported.sheets[0].x14_data_validations.is_empty());
+    assert_eq!(exported.sheets[0].data_validations.len(), 1);
     assert_eq!(
-        exported.sheets[0].x14_data_validations_declared_count,
-        Some(1)
-    );
-    assert_eq!(exported.sheets[0].x14_data_validations.len(), 1);
-    assert_eq!(
-        exported.sheets[0].x14_data_validations[0].ranges,
+        exported.sheets[0].data_validations[0].ranges,
         vec!["A1:A3".to_string()]
     );
 }

@@ -54,3 +54,4 @@ mod test_xlsx_export;
 mod test_xlsx_export_imported_pivots;
 mod test_xlsx_export_protection;
 mod test_xlsx_export_tables;
+mod test_xlsx_export_validations;

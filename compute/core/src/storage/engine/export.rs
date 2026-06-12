@@ -300,8 +300,7 @@ impl YrsComputeEngine {
         super::services::export::export_dv_window_attr(&self.stores, sheet_id, key)
     }
 
-    /// Export data validations from the structured Y.Array<Y.Map> in sheet meta
-    /// using `yrs_schema::validation::from_yrs_map`. Falls back to legacy JSON string.
+    /// Export data validations from the canonical range-backed validation store.
     fn export_data_validations_for_sheet(&self, sheet_id: &SheetId) -> Vec<ValidationSpec> {
         super::services::export::export_data_validations_for_sheet(&self.stores, sheet_id)
     }

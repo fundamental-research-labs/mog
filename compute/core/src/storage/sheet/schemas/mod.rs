@@ -9,6 +9,8 @@
 //! The runtime API translates between [`RangeSchema`] and [`ValidationSpec`]
 //! at the boundary.
 
+use cell_types::SheetId;
+
 mod columns;
 mod range_geometry;
 mod range_store;
@@ -32,6 +34,15 @@ pub(crate) use validator::{
 
 // Re-export pure domain types from domain-types.
 pub use domain_types::domain::validation::*;
+
+pub(crate) fn get_validation_specs_for_sheet(
+    doc: &yrs::Doc,
+    sheets: &yrs::MapRef,
+    sheet_id: &SheetId,
+) -> Vec<ValidationSpec> {
+    let txn = yrs::Transact::transact(doc);
+    range_store::read_range_backed_validation_specs(&txn, sheets, sheet_id)
+}
 
 #[cfg(test)]
 use crate::storage::sheet::yrs_helpers::KEY_DV_DECLARED_COUNT;

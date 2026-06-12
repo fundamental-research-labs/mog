@@ -86,6 +86,83 @@ pub(super) fn merge_ext_lst_entries(
     combine_ext_lst_entries(&merged_entries)
 }
 
+pub fn strip_modeled_x14_data_validations_from_ext_lst(raw_ext_lst: &str) -> Option<String> {
+    if !raw_ext_lst.contains("dataValidations") {
+        return Some(raw_ext_lst.to_string());
+    }
+
+    let mut changed = false;
+    let mut entries = Vec::new();
+    for entry in split_ext_entries(raw_ext_lst) {
+        if !is_x14_dv_cf_ext_uri(entry.uri) {
+            entries.push(entry.xml.to_string());
+            continue;
+        }
+
+        match remove_child_from_ext_entry(entry.xml, "dataValidations") {
+            RemoveChildResult::Unchanged => entries.push(entry.xml.to_string()),
+            RemoveChildResult::Removed(updated) => {
+                changed = true;
+                entries.push(updated);
+            }
+            RemoveChildResult::Empty => {
+                changed = true;
+            }
+        }
+    }
+
+    if !changed {
+        return Some(raw_ext_lst.to_string());
+    }
+    (!entries.is_empty()).then(|| combine_ext_lst_entries(&entries))
+}
+
+enum RemoveChildResult {
+    Unchanged,
+    Removed(String),
+    Empty,
+}
+
+fn remove_child_from_ext_entry(ext_xml: &str, local_name: &str) -> RemoveChildResult {
+    let Some(start) = ext_xml.find('<') else {
+        return RemoveChildResult::Unchanged;
+    };
+    let Some(start_end) = find_tag_end(ext_xml, start) else {
+        return RemoveChildResult::Unchanged;
+    };
+    let Some(tag_name) = tag_name_from_start(&ext_xml[start..start_end]) else {
+        return RemoveChildResult::Unchanged;
+    };
+    if is_self_closing_start_tag(&ext_xml[start..start_end]) {
+        return RemoveChildResult::Unchanged;
+    }
+    let close = format!("</{tag_name}>");
+    let Some(end_start) = ext_xml.rfind(&close) else {
+        return RemoveChildResult::Unchanged;
+    };
+
+    let mut body = ext_xml[start_end..end_start].to_string();
+    let mut changed = false;
+    while let Some((child_start, child_end)) =
+        find_first_child_bounds_by_local_name(&body, local_name)
+    {
+        body.replace_range(child_start..child_end, "");
+        changed = true;
+    }
+    if !changed {
+        return RemoveChildResult::Unchanged;
+    }
+    if body.trim().is_empty() {
+        return RemoveChildResult::Empty;
+    }
+
+    let mut updated = String::new();
+    updated.push_str(&ext_xml[..start_end]);
+    updated.push_str(&body);
+    updated.push_str(&ext_xml[end_start..]);
+    RemoveChildResult::Removed(updated)
+}
+
 fn is_x14_dv_cf_ext_uri(uri: Option<&str>) -> bool {
     uri.is_some_and(|uri| uri.eq_ignore_ascii_case(X14_DV_CF_EXT_URI))
 }
@@ -452,6 +529,46 @@ mod tests {
         assert!(merged.contains("<xm:f>current</xm:f>"));
         assert!(!merged.contains("<xm:f>old-one</xm:f>"));
         assert!(!merged.contains("<xm:f>old-two</xm:f>"));
+    }
+
+    #[test]
+    fn modeled_x14_data_validations_are_removed_from_raw_ext_lst() {
+        let raw = format!(
+            r#"<extLst>{}<ext uri="{{raw}}"><raw:payload xmlns:raw="urn:raw"/></ext></extLst>"#,
+            x14_dv_ext(X14_DV_CF_EXT_URI, "A1", "old")
+        );
+
+        let stripped = strip_modeled_x14_data_validations_from_ext_lst(&raw)
+            .expect("raw extension should keep unknown sibling");
+
+        assert!(!stripped.contains("x14:dataValidations"));
+        assert!(stripped.contains(r#"<raw:payload"#));
+    }
+
+    #[test]
+    fn modeled_x14_data_validation_child_removal_preserves_x14_cf_sibling() {
+        let raw = format!(
+            r#"<extLst><ext uri="{X14_DV_CF_EXT_URI}">{}{} </ext></extLst>"#,
+            r#"<x14:dataValidations xmlns:x14="http://schemas.microsoft.com/office/spreadsheetml/2009/9/main" xmlns:xm="http://schemas.microsoft.com/office/excel/2006/main"/>"#,
+            r#"<x14:conditionalFormattings xmlns:x14="http://schemas.microsoft.com/office/spreadsheetml/2009/9/main"><x14:conditionalFormatting/></x14:conditionalFormattings>"#
+        );
+
+        let stripped = strip_modeled_x14_data_validations_from_ext_lst(&raw)
+            .expect("x14 conditional formatting sibling should remain");
+
+        assert!(!stripped.contains("x14:dataValidations"));
+        assert!(stripped.contains("x14:conditionalFormattings"));
+        assert!(stripped.contains(&format!(r#"uri="{X14_DV_CF_EXT_URI}""#)));
+    }
+
+    #[test]
+    fn modeled_x14_data_validations_only_ext_lst_becomes_none() {
+        let raw = format!(
+            r#"<extLst>{}</extLst>"#,
+            x14_dv_ext(X14_DV_CF_EXT_URI, "A1", "old")
+        );
+
+        assert!(strip_modeled_x14_data_validations_from_ext_lst(&raw).is_none());
     }
 
     #[test]

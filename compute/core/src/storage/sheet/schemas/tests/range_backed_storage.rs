@@ -19,7 +19,10 @@ fn phase5d_set_range_schema_clears_imported_declared_count_metadata() {
     {
         let mut txn = storage.doc().transact_mut();
         let meta = get_properties_map(&txn, storage.sheets(), &sid).expect("sheet meta");
+        meta.insert(&mut txn, "dataValidations", yrs::ArrayPrelim::default());
+        meta.insert(&mut txn, "x14DataValidations", yrs::ArrayPrelim::default());
         meta.insert(&mut txn, KEY_DV_DECLARED_COUNT, 2_i64);
+        meta.insert(&mut txn, "x14DvDeclaredCount", 1_i64);
     }
 
     let rs = make_range_schema("rs-5d-clear-count");
@@ -27,7 +30,10 @@ fn phase5d_set_range_schema_clears_imported_declared_count_metadata() {
 
     let txn = storage.doc().transact();
     let meta = get_properties_map(&txn, storage.sheets(), &sid).expect("sheet meta");
+    assert!(meta.get(&txn, "dataValidations").is_none());
+    assert!(meta.get(&txn, "x14DataValidations").is_none());
     assert!(meta.get(&txn, KEY_DV_DECLARED_COUNT).is_none());
+    assert!(meta.get(&txn, "x14DvDeclaredCount").is_none());
 }
 #[test]
 fn phase5d_delete_range_schema_cleans_up_ranges() {

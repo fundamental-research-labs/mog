@@ -1031,6 +1031,24 @@ export class ComputeCore {
   }
 
   /**
+   * Public UI-state mutation entrypoint.
+   *
+   * UI-only workbook settings are independent of deferred sheet data
+   * materialization, but still need the normal write-gate and mutation-result
+   * pipeline so mirrors, events, undo-state observers, and provider drains stay
+   * consistent.
+   */
+  async mutatePublicUiState(
+    operation: string,
+    call: () => Promise<MutationTuple>,
+    directEdits?: DirectEditPosition[],
+  ): Promise<MutationResult> {
+    this.ensureInitialized();
+    this._writeGate?.assertWritable(operation);
+    return this.mutate(call(), directEdits, operation);
+  }
+
+  /**
    * Public mutation entrypoint for backend calls whose raw return includes
    * caller-visible data next to the MutationResult.
    */

@@ -41,12 +41,14 @@ export function setupFloatingObjectSheetPopulation({
     if (isDisposed()) return;
     const generation = getGeneration();
 
-    if (importDurability) {
+    if (importDurability?.isImportDurabilityPending) {
+      const waitForBackgroundHydration = importDurability.scheduleDeferredHydration?.();
+      if (!waitForBackgroundHydration) return;
       try {
-        await importDurability.awaitImportDurability();
+        await waitForBackgroundHydration;
       } catch (err) {
         console.warn(
-          '[SheetCoordinator] Failed to wait for import durability before floating-object population:',
+          '[SheetCoordinator] Failed to wait for import hydration before floating-object population:',
           err,
         );
       }

@@ -151,6 +151,48 @@ describe('Compute mutation admission', () => {
     expect(gate.bypassDepth).toBe(0);
   });
 
+  it('lets UI-state workbook settings patch without waiting for all sheets', async () => {
+    const materialized = deferred<void>();
+    const awaitMaterialized = jest.fn(() => materialized.promise);
+    const ctx = makeMockContext({ awaitMaterialized } as Partial<IKernelContext>);
+    const transport: BridgeTransport & { call: jest.Mock } = {
+      call: jest.fn(async () => [new Uint8Array(), mutationResult()]),
+    };
+    const bridge = createStartedBridge(ctx, transport);
+
+    await bridge.patchWorkbookSettings({ selectedSheetIds: ['sheet-a'] });
+
+    expect(awaitMaterialized).not.toHaveBeenCalled();
+    expect(transport.call).toHaveBeenCalledWith('compute_patch_workbook_settings', {
+      docId: 'test-doc',
+      patch: { selectedSheetIds: ['sheet-a'] },
+    });
+  });
+
+  it('keeps non-UI workbook settings behind the all-sheet materialization barrier', async () => {
+    const materialized = deferred<void>();
+    const awaitMaterialized = jest.fn(() => materialized.promise);
+    const ctx = makeMockContext({ awaitMaterialized } as Partial<IKernelContext>);
+    const transport: BridgeTransport & { call: jest.Mock } = {
+      call: jest.fn(async () => [new Uint8Array(), mutationResult()]),
+    };
+    const bridge = createStartedBridge(ctx, transport);
+
+    const promise = bridge.patchWorkbookSettings({ culture: 'de-DE' });
+    await Promise.resolve();
+
+    expect(awaitMaterialized).toHaveBeenCalledWith('allSheets');
+    expect(transport.call).not.toHaveBeenCalled();
+
+    materialized.resolve();
+    await promise;
+
+    expect(transport.call).toHaveBeenCalledWith('compute_patch_workbook_settings', {
+      docId: 'test-doc',
+      patch: { culture: 'de-DE' },
+    });
+  });
+
   it('does not begin compound removeSheet mutation before materialization', async () => {
     const materialized = deferred<void>();
     const awaitMaterialized = jest.fn(() => materialized.promise);

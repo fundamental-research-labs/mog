@@ -87,6 +87,36 @@ fn shape_with_ooxml(common: FloatingObjectCommon, ooxml: ShapeOoxmlProps) -> Flo
     }
 }
 
+fn shape_data(shape_type: &str, text: Option<&str>) -> ShapeData {
+    ShapeData {
+        shape_type: shape_type.to_string(),
+        fill: None,
+        outline: None,
+        text: text.map(|content| ShapeText {
+            content: content.to_string(),
+            ..Default::default()
+        }),
+        shadow: None,
+        adjustments: None,
+        scene_3d: None,
+        sp_3d: None,
+        ooxml: None,
+    }
+}
+
+fn textbox_data(text: Option<&str>) -> TextboxData {
+    TextboxData {
+        text: text.map(|content| ShapeText {
+            content: content.to_string(),
+            ..Default::default()
+        }),
+        fill: None,
+        border: None,
+        text_effects: None,
+        ooxml: None,
+    }
+}
+
 #[test]
 fn test_anchor_position_to_two_cell() {
     let pos = AnchorPosition {
@@ -147,18 +177,24 @@ fn test_anchor_position_to_one_cell() {
 #[test]
 fn test_convert_shape_floating_object() {
     let common = make_common("Arrow");
-    let shape = convert_shape(&common);
+    let shape = convert_shape(&common, &shape_data("rightArrow", Some("Go")));
     assert_eq!(shape.name, "Arrow");
-    assert_eq!(shape.preset, ShapePreset::Rect);
-    assert_eq!(shape.text, None);
+    assert_eq!(shape.preset, ShapePreset::RightArrow);
+    assert_eq!(shape.text.as_deref(), Some("Go"));
 }
 
 #[test]
 fn test_convert_text_box_floating_object() {
     let common = make_common("Note");
-    let tb = convert_text_box(&common);
+    let tb = convert_text_box(&common, &textbox_data(Some("Memo")));
     assert_eq!(tb.name, "Note");
     assert!(tb.text_body.is_some());
+    let text_body = tb.text_body.as_ref().unwrap();
+    let first_run = &text_body.paragraphs[0].runs[0];
+    let crate::domain::drawings::write::TextRunContent::Run(run) = first_run else {
+        panic!("expected plain text run");
+    };
+    assert_eq!(run.text, "Memo");
 }
 
 #[test]

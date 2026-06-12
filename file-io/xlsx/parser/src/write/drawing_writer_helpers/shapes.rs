@@ -1,10 +1,12 @@
-use domain_types::domain::floating_object::FloatingObjectCommon;
+use domain_types::domain::floating_object::{
+    FloatingObjectCommon, ShapeData, ShapeText, TextboxData,
+};
 
 use crate::domain::drawings::write::{GroupShapeProps, ShapePreset, ShapeProps, TextBox};
 
 /// Convert a shape-type floating object into `ShapeProps`.
 /// Fallback for API-created shapes (no OOXML props). Produces minimal valid shape.
-pub(super) fn convert_shape(common: &FloatingObjectCommon) -> ShapeProps {
+pub(super) fn convert_shape(common: &FloatingObjectCommon, data: &ShapeData) -> ShapeProps {
     let name = if common.name.is_empty() {
         "Shape".to_string()
     } else {
@@ -14,10 +16,10 @@ pub(super) fn convert_shape(common: &FloatingObjectCommon) -> ShapeProps {
     ShapeProps {
         original_id: None,
         name,
-        preset: ShapePreset::Rect,
+        preset: parse_shape_preset(&data.shape_type),
         fill: None,
         outline: None,
-        text: None,
+        text: plain_text_content(data.text.as_ref()),
         macro_name: None,
         textlink: None,
         nv_ext_lst: None,
@@ -57,13 +59,23 @@ pub(super) fn parse_shape_preset(s: &str) -> ShapePreset {
 
 /// Convert a textbox-type floating object into a `TextBox`.
 /// Fallback for API-created textboxes (no OOXML props). Produces minimal valid textbox.
-pub(super) fn convert_text_box(common: &FloatingObjectCommon) -> TextBox {
+pub(super) fn convert_text_box(common: &FloatingObjectCommon, data: &TextboxData) -> TextBox {
     let name = if common.name.is_empty() {
         "TextBox".to_string()
     } else {
         common.name.clone()
     };
-    TextBox::from_plain(&name, "")
+    TextBox::from_plain(
+        &name,
+        plain_text_content(data.text.as_ref())
+            .as_deref()
+            .unwrap_or(""),
+    )
+}
+
+fn plain_text_content(text: Option<&ShapeText>) -> Option<String> {
+    text.map(|text| text.content.clone())
+        .filter(|content| !content.is_empty())
 }
 
 /// Convert a group shape from its typed CT_GroupShape payload.

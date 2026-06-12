@@ -66,7 +66,7 @@ pub(super) fn convert_floating_object(
             } else if shape_data.shape_type == "group" {
                 DrawingObject::GroupShape(convert_group_fallback(&obj.common))
             } else {
-                DrawingObject::Shape(convert_shape(&obj.common))
+                DrawingObject::Shape(convert_shape(&obj.common, shape_data))
             }
         }
         FloatingObjectData::Textbox(tb_data) => {
@@ -75,7 +75,7 @@ pub(super) fn convert_floating_object(
                     crate::domain::drawings::write::convert::shape_to_text_box(&ooxml.shape);
                 DrawingObject::TextBox(text_box)
             } else {
-                DrawingObject::TextBox(convert_text_box(&obj.common))
+                DrawingObject::TextBox(convert_text_box(&obj.common, tb_data))
             }
         }
         _ => return None,

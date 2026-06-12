@@ -2035,7 +2035,12 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
       const rect = container.getBoundingClientRect();
       const relX = e.clientX - rect.left;
       const relY = e.clientY - rect.top;
-      if (relX >= rect.width - SCROLL_BAR_WIDTH || relY >= rect.height - SCROLL_BAR_WIDTH) return;
+      if (
+        !selection.isResizingHeader &&
+        (relX >= rect.width - SCROLL_BAR_WIDTH || relY >= rect.height - SCROLL_BAR_WIDTH)
+      ) {
+        return;
+      }
 
       handleMouseMove(e);
     };

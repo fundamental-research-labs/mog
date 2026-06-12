@@ -96,7 +96,7 @@ function isInGridArea(clientX: number, clientY: number): boolean {
  * Returns { container, handler } where handler is a jest.fn() that's called
  * only when the pointer event passes the scrollbar guard (i.e., is in the grid area).
  */
-function createGuardedContainer() {
+function createGuardedContainer(options: { isHeaderResizeActive?: () => boolean } = {}) {
   const container = document.createElement('div');
   document.body.appendChild(container);
 
@@ -129,7 +129,13 @@ function createGuardedContainer() {
     const rect = container.getBoundingClientRect();
     const relX = e.clientX - rect.left;
     const relY = e.clientY - rect.top;
-    if (relX >= rect.width - SCROLL_BAR_WIDTH || relY >= rect.height - SCROLL_BAR_WIDTH) return;
+    const isHeaderResizeActive = options.isHeaderResizeActive?.() ?? false;
+    if (
+      !isHeaderResizeActive &&
+      (relX >= rect.width - SCROLL_BAR_WIDTH || relY >= rect.height - SCROLL_BAR_WIDTH)
+    ) {
+      return;
+    }
     handleMouseMove(e);
   });
 
@@ -344,6 +350,19 @@ describe('Scrollbar region guard (handlePointerMove)', () => {
     // Move back into grid area — should be accepted again
     firePointerMove(container, CONTAINER_LEFT + 300, CONTAINER_TOP + 300);
     expect(handleMouseMove).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps header resize active when pointer moves into scrollbar region', () => {
+    document.body.removeChild(container);
+    ({ container, handleMouseDown, handleMouseMove } = createGuardedContainer({
+      isHeaderResizeActive: () => true,
+    }));
+
+    firePointerMove(container, CONTAINER_LEFT + 250, CONTAINER_TOP + CONTAINER_HEIGHT - 3);
+    firePointerMove(container, CONTAINER_LEFT + CONTAINER_WIDTH - 3, CONTAINER_TOP + 250);
+
+    expect(handleMouseMove).toHaveBeenCalledTimes(2);
+    expect(handleMouseDown).not.toHaveBeenCalled();
   });
 });
 

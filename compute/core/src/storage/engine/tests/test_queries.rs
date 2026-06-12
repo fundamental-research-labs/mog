@@ -3,6 +3,7 @@
 use super::super::*;
 use super::helpers::*;
 use crate::snapshot::{SheetSnapshot, WorkbookSnapshot};
+use domain_types::{ParseOutput, RowDimension, SheetData, SheetDimensions};
 use value_types::{CellValue, FiniteF64};
 
 // -------------------------------------------------------------------
@@ -284,5 +285,121 @@ fn batch_column_width_setters_update_queries_and_dimension_changes() {
     assert_eq!(
         engine.get_col_widths_batch_chars(&sid, 6, 7),
         vec![(6, 10.0), (7, 11.0)]
+    );
+}
+
+#[test]
+fn imported_custom_row_height_is_available_to_layout_queries() {
+    let row = 38;
+    let height_pt = 12.75;
+    let input = ParseOutput {
+        sheets: vec![SheetData {
+            name: "Dimensions".to_string(),
+            rows: 1,
+            cols: 1,
+            dimensions: SheetDimensions {
+                default_row_height: Some(15.0),
+                row_heights: vec![RowDimension {
+                    row,
+                    height: height_pt,
+                    custom_height: true,
+                    ..Default::default()
+                }],
+                ..Default::default()
+            },
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    let engine = engine_from_parse_output_normal(&input);
+    let sid = *engine.mirror().sheet_ids().next().expect("sheet present");
+    let expected_px =
+        domain_types::units::points_to_pixels(domain_types::units::Points(height_pt)).0;
+
+    let queried = engine.get_row_height_query(&sid, row);
+    assert!(
+        (queried - expected_px).abs() < 0.01,
+        "expected imported row height {expected_px}px from query, got {queried}px"
+    );
+
+    let indexed = engine.get_row_height_from_index(&sid, row);
+    assert!(
+        (indexed - expected_px).abs() < 0.01,
+        "expected imported row height {expected_px}px from layout index, got {indexed}px"
+    );
+}
+
+#[test]
+fn imported_sheet_default_dimensions_are_available_to_layout_queries() {
+    let row = 38;
+    let col = 11;
+    let default_row_height_pt = 12.75;
+    let default_col_width_cw = 12.0;
+    let input = ParseOutput {
+        sheets: vec![SheetData {
+            name: "Defaults".to_string(),
+            rows: 1,
+            cols: 1,
+            dimensions: SheetDimensions {
+                default_row_height: Some(default_row_height_pt),
+                default_col_width: Some(default_col_width_cw),
+                ..Default::default()
+            },
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    let engine = engine_from_parse_output_normal(&input);
+    let sid = *engine.mirror().sheet_ids().next().expect("sheet present");
+    let expected_row_px = domain_types::units::points_to_pixels(domain_types::units::Points(
+        default_row_height_pt,
+    ))
+    .0;
+    let expected_col_px = domain_types::units::char_width_to_pixels(
+        domain_types::units::CharWidth(default_col_width_cw),
+        domain_types::units::platform_mdw(),
+    )
+    .0;
+
+    let default_row = engine.get_default_row_height(&sid);
+    assert!(
+        (default_row - expected_row_px).abs() < 0.01,
+        "expected imported default row height {expected_row_px}px, got {default_row}px"
+    );
+    let queried_row = engine.get_row_height_query(&sid, row);
+    assert!(
+        (queried_row - expected_row_px).abs() < 0.01,
+        "expected row height query to use imported default {expected_row_px}px, got {queried_row}px"
+    );
+    assert_eq!(
+        engine.get_row_heights_batch(&sid, row, row),
+        vec![(row, queried_row)]
+    );
+    let indexed_row = engine.get_row_height_from_index(&sid, row);
+    assert!(
+        (indexed_row - expected_row_px).abs() < 0.01,
+        "expected layout index to use imported default row height {expected_row_px}px, got {indexed_row}px"
+    );
+
+    let default_col = engine.get_default_col_width(&sid);
+    assert!(
+        (default_col - expected_col_px).abs() < 0.01,
+        "expected imported default column width {expected_col_px}px, got {default_col}px"
+    );
+    let queried_col = engine.get_col_width_query(&sid, col);
+    assert!(
+        (queried_col - expected_col_px).abs() < 0.01,
+        "expected column width query to use imported default {expected_col_px}px, got {queried_col}px"
+    );
+    assert_eq!(
+        engine.get_col_widths_batch(&sid, col, col),
+        vec![(col, queried_col)]
+    );
+    let indexed_col = engine.get_col_width_from_index(&sid, col);
+    assert!(
+        (indexed_col - expected_col_px).abs() < 0.01,
+        "expected layout index to use imported default column width {expected_col_px}px, got {indexed_col}px"
     );
 }

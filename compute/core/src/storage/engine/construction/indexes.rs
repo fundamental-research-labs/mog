@@ -243,10 +243,12 @@ pub(in crate::storage::engine) fn build_layout_indexes_from_parse_output_range(
             .map(|c| c.col as usize)
             .collect();
 
-        let _gi = grid_indexes.get(&sheet_id);
+        let gi = grid_indexes.get(&sheet_id);
+        let row_count = layout_row_count_from_parse_output(sheet_snap.rows, dims, gi);
+        let col_count = layout_col_count_from_parse_output(sheet_snap.cols, dims, gi);
         let li = LayoutIndex::from_sparse(
-            sheet_snap.rows as usize,
-            sheet_snap.cols as usize,
+            row_count,
+            col_count,
             default_row_height_px,
             default_col_width_px,
             custom_row_heights,
@@ -257,6 +259,36 @@ pub(in crate::storage::engine) fn build_layout_indexes_from_parse_output_range(
         indexes.insert(sheet_id, li);
     }
     Ok(indexes)
+}
+
+fn layout_row_count_from_parse_output(
+    snapshot_rows: u32,
+    dims: &domain_types::SheetDimensions,
+    grid_index: Option<&GridIndex>,
+) -> usize {
+    let mut count = snapshot_rows as usize;
+    if let Some(grid) = grid_index {
+        count = count.max(grid.row_count() as usize);
+    }
+    for row in &dims.row_heights {
+        count = count.max(row.row.saturating_add(1) as usize);
+    }
+    count
+}
+
+fn layout_col_count_from_parse_output(
+    snapshot_cols: u32,
+    dims: &domain_types::SheetDimensions,
+    grid_index: Option<&GridIndex>,
+) -> usize {
+    let mut count = snapshot_cols as usize;
+    if let Some(grid) = grid_index {
+        count = count.max(grid.col_count() as usize);
+    }
+    for col in &dims.col_widths {
+        count = count.max(col.col.saturating_add(1) as usize);
+    }
+    count
 }
 
 /// Build merge spatial indexes for every sheet.
@@ -375,9 +407,12 @@ pub(in crate::storage::engine) fn build_layout_index_for_sheet(
     ));
     hidden_cols.sort_unstable();
     hidden_cols.dedup();
+    let row_count = layout_row_count_from_yrs(rows, grid_index, &custom_row_heights, &hidden_rows);
+    let col_count = layout_col_count_from_yrs(cols, grid_index, &custom_col_widths, &hidden_cols);
+
     LayoutIndex::from_sparse(
-        rows as usize,
-        cols as usize,
+        row_count,
+        col_count,
         default_row_height_px,
         default_col_width_px,
         custom_row_heights,
@@ -385,4 +420,42 @@ pub(in crate::storage::engine) fn build_layout_index_for_sheet(
         hidden_rows.into_iter().map(|r| r as usize),
         hidden_cols.into_iter().map(|c| c as usize),
     )
+}
+
+fn layout_row_count_from_yrs(
+    snapshot_rows: u32,
+    grid_index: Option<&GridIndex>,
+    custom_row_heights: &[(usize, domain_types::units::Pixels)],
+    hidden_rows: &[u32],
+) -> usize {
+    let mut count = snapshot_rows as usize;
+    if let Some(grid) = grid_index {
+        count = count.max(grid.row_count() as usize);
+    }
+    for (row, _) in custom_row_heights {
+        count = count.max(row.saturating_add(1));
+    }
+    for row in hidden_rows {
+        count = count.max(row.saturating_add(1) as usize);
+    }
+    count
+}
+
+fn layout_col_count_from_yrs(
+    snapshot_cols: u32,
+    grid_index: Option<&GridIndex>,
+    custom_col_widths: &[(usize, domain_types::units::Pixels)],
+    hidden_cols: &[u32],
+) -> usize {
+    let mut count = snapshot_cols as usize;
+    if let Some(grid) = grid_index {
+        count = count.max(grid.col_count() as usize);
+    }
+    for (col, _) in custom_col_widths {
+        count = count.max(col.saturating_add(1));
+    }
+    for col in hidden_cols {
+        count = count.max(col.saturating_add(1) as usize);
+    }
+    count
 }

@@ -153,12 +153,17 @@ pub(in crate::storage::engine) fn get_data_bounds(
 // -------------------------------------------------------------------
 
 /// Returns row height in **pixels** (for TypeScript bridge).
-/// Reads canonical (points) from Yrs and converts.
+/// Prefer LayoutIndex so readback matches the renderer, including imported
+/// sheet-level defaults.
 pub(in crate::storage::engine) fn get_row_height_query(
     stores: &EngineStores,
     sheet_id: &SheetId,
     row: u32,
 ) -> Pixels {
+    if let Some(layout) = stores.layout_indexes.get(sheet_id) {
+        return layout.get_row_height(row as usize);
+    }
+
     let height_pt = sheet_dimensions::get_row_height(
         stores.storage.doc(),
         stores.storage.sheets(),
@@ -174,12 +179,17 @@ pub(in crate::storage::engine) fn get_row_height_query(
 }
 
 /// Returns column width in **pixels** (for TypeScript bridge).
-/// Reads canonical (char-width) from Yrs and converts.
+/// Prefer LayoutIndex so readback matches the renderer, including imported
+/// sheet-level defaults.
 pub(in crate::storage::engine) fn get_col_width_query(
     stores: &EngineStores,
     sheet_id: &SheetId,
     col: u32,
 ) -> Pixels {
+    if let Some(layout) = stores.layout_indexes.get(sheet_id) {
+        return layout.get_col_width(col as usize);
+    }
+
     let width_cw = sheet_dimensions::get_col_width(
         stores.storage.doc(),
         stores.storage.sheets(),
@@ -222,23 +232,7 @@ pub(in crate::storage::engine) fn get_row_heights_batch(
     end_row: u32,
 ) -> Vec<(u32, Pixels)> {
     (start_row..=end_row)
-        .map(|row| {
-            let pt = sheet_dimensions::get_row_height(
-                stores.storage.doc(),
-                stores.storage.sheets(),
-                sheet_id,
-                row,
-                stores.grid_indexes.get(sheet_id),
-            );
-            (
-                row,
-                if pt.0 == 0.0 {
-                    Pixels(0.0)
-                } else {
-                    domain_types::units::points_to_pixels(pt)
-                },
-            )
-        })
+        .map(|row| (row, get_row_height_query(stores, sheet_id, row)))
         .collect()
 }
 
@@ -286,25 +280,8 @@ pub(in crate::storage::engine) fn get_col_widths_batch(
     start_col: u32,
     end_col: u32,
 ) -> Vec<(u32, Pixels)> {
-    let mdw = domain_types::units::platform_mdw();
     (start_col..=end_col)
-        .map(|col| {
-            let cw = sheet_dimensions::get_col_width(
-                stores.storage.doc(),
-                stores.storage.sheets(),
-                sheet_id,
-                col,
-                stores.grid_indexes.get(sheet_id),
-            );
-            (
-                col,
-                if cw.0 == 0.0 {
-                    Pixels(0.0)
-                } else {
-                    domain_types::units::char_width_to_pixels(cw, mdw)
-                },
-            )
-        })
+        .map(|col| (col, get_col_width_query(stores, sheet_id, col)))
         .collect()
 }
 

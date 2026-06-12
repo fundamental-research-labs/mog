@@ -29,6 +29,19 @@ pub(crate) fn sheet_identity_extent(sheet: &SheetData) -> (u32, u32) {
         cols = cols.max(cell.col.saturating_add(1));
     }
 
+    for row_dimension in &sheet.dimensions.row_heights {
+        rows = rows.max(row_dimension.row.saturating_add(1));
+    }
+    for col_dimension in &sheet.dimensions.col_widths {
+        cols = cols.max(col_dimension.col.saturating_add(1));
+    }
+    for row_style in &sheet.row_styles {
+        rows = rows.max(row_style.row.saturating_add(1));
+    }
+    for col_style in &sheet.col_styles {
+        cols = cols.max(col_style.col.saturating_add(1));
+    }
+
     for &(row, col) in collect_identity_required_anchors(sheet).keys() {
         rows = rows.max(row.saturating_add(1));
         cols = cols.max(col.saturating_add(1));

@@ -7,7 +7,9 @@
 use cell_types::{SheetId, SheetPos};
 use compute_document::hex::id_to_hex;
 use domain_types::CellFormat;
-use domain_types::domain::table::{Table as CanonicalTable, TableColumn};
+use domain_types::domain::table::{
+    TableCatalogColumn as TableColumn, TableCatalogEntry as CanonicalTable,
+};
 use formula_types::TableDef;
 use value_types::ComputeError;
 use yrs::{Map, Origin, Out, Transact};

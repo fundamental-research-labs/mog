@@ -1,27 +1,30 @@
-use super::{Table, TableColumn, TableColumnSpec, TableSpec};
+use super::{TableCatalogColumn, TableCatalogEntry, TableColumnSpec, TableSpec};
 
-/// Convert a TableSpec (OOXML import) to a canonical Table.
+/// Convert a TableSpec (OOXML import) to a canonical catalog entry.
 ///
 /// This compatibility helper must not be used by production import paths,
 /// because production imports allocate stable Mog IDs outside the OOXML DTO.
-pub fn table_spec_to_table(spec: &TableSpec, sheet_id: &str) -> Table {
+pub fn legacy_xlsx_table_spec_to_catalog_entry(
+    spec: &TableSpec,
+    sheet_id: &str,
+) -> TableCatalogEntry {
     let table_id = format!("tbl-ooxml-{}", spec.id);
     let column_ids: Vec<String> = spec
         .columns
         .iter()
         .map(|col| format!("col-ooxml-{}", col.id))
         .collect();
-    table_spec_to_table_with_ids(spec, sheet_id, table_id, column_ids)
+    xlsx_table_spec_to_catalog_entry_with_ids(spec, sheet_id, table_id, column_ids)
 }
 
-/// Convert a TableSpec (OOXML adapter DTO) to the canonical Table domain type
-/// using caller-allocated stable Mog IDs.
-pub fn table_spec_to_table_with_ids<I>(
+/// Convert a TableSpec (OOXML adapter DTO) to the canonical catalog entry using
+/// caller-allocated stable Mog IDs.
+pub fn xlsx_table_spec_to_catalog_entry_with_ids<I>(
     spec: &TableSpec,
     sheet_id: &str,
     table_id: String,
     column_ids: I,
-) -> Table
+) -> TableCatalogEntry
 where
     I: IntoIterator<Item = String>,
 {
@@ -29,7 +32,7 @@ where
         parse_table_range_ref(&spec.range_ref).unwrap_or((0, 0, 0, 0));
     let mut column_ids = column_ids.into_iter();
 
-    Table {
+    TableCatalogEntry {
         id: table_id,
         ooxml_table_id: Some(spec.id),
         name: spec.name.clone(),
@@ -40,7 +43,7 @@ where
             .columns
             .iter()
             .enumerate()
-            .map(|(i, col)| TableColumn {
+            .map(|(i, col)| TableCatalogColumn {
                 id: column_ids
                     .next()
                     .unwrap_or_else(|| format!("col-ooxml-{}", col.id)),
@@ -107,11 +110,14 @@ where
     }
 }
 
-/// Convert a canonical Table back to a TableSpec for XLSX export.
+/// Convert a canonical catalog entry back to a TableSpec for XLSX export.
 ///
 /// OOXML numeric IDs come from preserved package metadata or the export
 /// projection. Stable Mog IDs are never parsed as OOXML IDs.
-pub fn table_to_table_spec(table: &Table, ooxml_columns: Option<&[TableColumnSpec]>) -> TableSpec {
+pub fn catalog_entry_to_xlsx_table_spec(
+    table: &TableCatalogEntry,
+    ooxml_columns: Option<&[TableColumnSpec]>,
+) -> TableSpec {
     let range_ref = format!(
         "{}{}:{}{}",
         col_index_to_letter(table.range.start_col()),
@@ -194,6 +200,36 @@ pub fn table_to_table_spec(table: &Table, ooxml_columns: Option<&[TableColumnSpe
         table_part_path_hint: table.table_part_path_hint.clone(),
         worksheet_relationship_target_hint: table.worksheet_relationship_target_hint.clone(),
     }
+}
+
+/// Compatibility spelling for old call sites. Production import code should use
+/// `xlsx_table_spec_to_catalog_entry_with_ids` so stable IDs come from the
+/// engine allocator, not from OOXML numeric IDs.
+pub fn table_spec_to_table(spec: &TableSpec, sheet_id: &str) -> TableCatalogEntry {
+    legacy_xlsx_table_spec_to_catalog_entry(spec, sheet_id)
+}
+
+/// Compatibility spelling for old call sites. New production code should use
+/// `xlsx_table_spec_to_catalog_entry_with_ids`.
+pub fn table_spec_to_table_with_ids<I>(
+    spec: &TableSpec,
+    sheet_id: &str,
+    table_id: String,
+    column_ids: I,
+) -> TableCatalogEntry
+where
+    I: IntoIterator<Item = String>,
+{
+    xlsx_table_spec_to_catalog_entry_with_ids(spec, sheet_id, table_id, column_ids)
+}
+
+/// Compatibility spelling for old call sites. New production code should use
+/// `catalog_entry_to_xlsx_table_spec`.
+pub fn table_to_table_spec(
+    table: &TableCatalogEntry,
+    ooxml_columns: Option<&[TableColumnSpec]>,
+) -> TableSpec {
+    catalog_entry_to_xlsx_table_spec(table, ooxml_columns)
 }
 
 /// Parse an A1-style range reference like "A1:D20" into zero-based bounds.

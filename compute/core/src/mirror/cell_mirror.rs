@@ -7,7 +7,7 @@ use crate::projection::{
     RegionKind, RegionRef,
 };
 use cell_types::{CellId, ColId, RowId, SheetId};
-use domain_types::domain::table::Table as CanonicalTable;
+use domain_types::domain::table::TableCatalogEntry as CanonicalTable;
 use formula_types::TableDef;
 use snapshot_types::{DataTableRegionDef, PivotTableDef};
 

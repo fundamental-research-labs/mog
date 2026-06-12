@@ -15,7 +15,7 @@ use domain_types::{
             SortState as OoxmlSortState, filter_state_to_auto_filter,
         },
         table::{
-            CustomFilterSpec, FilterColumnSpec, FilterSpec, Table, TableSortCondition,
+            CustomFilterSpec, FilterColumnSpec, FilterSpec, TableCatalogEntry, TableSortCondition,
             TableSortState, TableSpec,
         },
     },
@@ -571,9 +571,9 @@ fn exported_table_spec_for_table(
     stores: &EngineStores,
     mirror: &CellMirror,
     sheet_id: &SheetId,
-    table: &Table,
+    table: &TableCatalogEntry,
 ) -> ExportedTableSpec {
-    let mut spec = domain_types::domain::table::table_to_table_spec(table, None);
+    let mut spec = domain_types::domain::table::catalog_entry_to_xlsx_table_spec(table, None);
     apply_runtime_table_filter_to_spec(stores, mirror, sheet_id, &table.id, &mut spec);
     ExportedTableSpec {
         projection_input: ExportedTableProjectionInput {

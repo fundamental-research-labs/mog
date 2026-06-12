@@ -1,7 +1,7 @@
 //! Workbook-level metadata: named ranges, tables, and dense cache access.
 
 use cell_types::SheetId;
-use domain_types::domain::table::Table as CanonicalTable;
+use domain_types::domain::table::TableCatalogEntry as CanonicalTable;
 use formula_types::{NamedRangeDef, Scope, TableDef};
 use snapshot_types::{DataTableRegionDef, PivotTableDef};
 

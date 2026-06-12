@@ -206,7 +206,7 @@ pub(super) fn hydrate_workbook_tables(
             .columns
             .iter()
             .map(|_| format!("col-{}", allocator.alloc_cell_id().to_uuid_string()));
-        let canonical = domain_types::domain::table::table_spec_to_table_with_ids(
+        let canonical = domain_types::domain::table::xlsx_table_spec_to_catalog_entry_with_ids(
             table, sheet_id, table_id, column_ids,
         );
         if table.id > 0 {

@@ -44,7 +44,7 @@ fn replace_catalog_spec(
     table_id: String,
     column_ids: Vec<String>,
 ) -> domain_types::domain::table::Table {
-    let table = domain_types::domain::table::table_spec_to_table_with_ids(
+    let table = domain_types::domain::table::xlsx_table_spec_to_catalog_entry_with_ids(
         spec,
         &sheet_id.to_uuid_string(),
         table_id,

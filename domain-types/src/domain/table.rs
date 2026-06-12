@@ -9,7 +9,9 @@ mod ooxml;
 #[cfg(feature = "yrs")]
 pub(crate) use ooxml::col_index_to_letter;
 pub use ooxml::{
+    catalog_entry_to_xlsx_table_spec, legacy_xlsx_table_spec_to_catalog_entry,
     parse_table_range_ref, table_spec_to_table, table_spec_to_table_with_ids, table_to_table_spec,
+    xlsx_table_spec_to_catalog_entry_with_ids,
 };
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -567,12 +569,13 @@ pub struct TableColumn {
     pub xr3_uid: Option<String>,
 }
 
-/// Complete table definition — the ONE canonical representation stored in Yrs.
+/// Complete table definition — the one canonical representation stored in Yrs.
 ///
-/// XLSX import transforms TableSpec -> Table.
-/// XLSX export transforms Table -> TableSpec.
-/// Formula engine projects Table -> TableDef (name + range + column names).
-/// compute-table operations consume this type directly.
+/// `TableCatalogEntry` is an alias for this type at storage/engine boundaries.
+/// XLSX import transforms `TableSpec` -> `TableCatalogEntry`.
+/// XLSX export transforms `TableCatalogEntry` -> `TableSpec`.
+/// Formula engine projects `TableCatalogEntry` -> `TableDef`.
+/// `compute-table` operations consume the same canonical shape directly.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Table {
@@ -668,6 +671,15 @@ pub struct Table {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub worksheet_relationship_target_hint: Option<String>,
 }
+
+/// Canonical workbook table catalog entry stored under `workbook.tables`.
+///
+/// `TableSpec` remains the XLSX adapter DTO. Runtime storage, mirror sync,
+/// SDK/events, sidecars, and export projection operate on this catalog type.
+pub type TableCatalogEntry = Table;
+
+/// Canonical workbook table column entry stored inside `TableCatalogEntry`.
+pub type TableCatalogColumn = TableColumn;
 
 impl Default for Table {
     fn default() -> Self {

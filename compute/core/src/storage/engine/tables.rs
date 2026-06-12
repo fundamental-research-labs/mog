@@ -4,7 +4,7 @@ use bridge_core as bridge;
 use cell_types::SheetId;
 use compute_wire::mutation::serialize_multi_viewport_patches;
 use domain_types::CellFormat;
-use domain_types::domain::table::Table as CanonicalTable;
+use domain_types::domain::table::TableCatalogEntry as CanonicalTable;
 use formula_types::{StructureChange, TableDef};
 use value_types::ComputeError;
 

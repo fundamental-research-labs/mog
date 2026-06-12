@@ -18,12 +18,16 @@ fn table_catalog_legacy_path_guardrails() {
         "compute/core/crates/compute-document/src/range.rs",
         "domain-types/src/domain/table.rs",
         "domain-types/src/domain/table/binding.rs",
+        "domain-types/src/domain/table/ooxml.rs",
         "domain-types/src/yrs_schema/table.rs",
     ];
     let denied_patterns = [
         "from_binding_json_standalone",
         "from_binding_to_table",
         "table_to_binding_json",
+        "table_spec_to_table",
+        "table_spec_to_table_with_ids",
+        "table_to_table_spec",
         "TableBinding",
         "table_range_id",
         "table_name_from_range_id",

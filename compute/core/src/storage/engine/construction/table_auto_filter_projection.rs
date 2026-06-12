@@ -11,7 +11,7 @@ use cell_types::{SheetId, SheetPos};
 use compute_document::hex::id_to_hex;
 use compute_document::schema::KEY_TABLES;
 use compute_document::undo::ORIGIN_BOOTSTRAP;
-use domain_types::domain::table::{FilterSpec, Table as CanonicalTable, TableSpec};
+use domain_types::domain::table::{FilterSpec, TableCatalogEntry as CanonicalTable, TableSpec};
 use domain_types::yrs_schema;
 use value_types::CellValue;
 use yrs::{Map, Out, Transact};

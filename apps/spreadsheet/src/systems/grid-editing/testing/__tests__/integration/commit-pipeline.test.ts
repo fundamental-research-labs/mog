@@ -272,7 +272,7 @@ describe('Formula editing mode', () => {
     expect(sim.activeCell()).toEqual({ row: 1, col: 0 });
   });
 
-  it('formula edit committed with Enter keeps the edited cell selected', async () => {
+  it('formula edit committed with Enter advances from the edited cell', async () => {
     sim = createIntegrationSimulator({
       activeCell: { row: 4, col: 2 },
     });
@@ -282,6 +282,6 @@ describe('Formula editing mode', () => {
     await sim.flush();
 
     expect(sim.isEditing()).toBe(false);
-    expect(sim.activeCell()).toEqual({ row: 4, col: 2 });
+    expect(sim.activeCell()).toEqual({ row: 5, col: 2 });
   });
 });

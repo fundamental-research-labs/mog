@@ -86,7 +86,10 @@ pub(super) fn pre_delete_re_anchor_range_refs(
             sheet_mirror
                 .cells_iter()
                 .filter_map(|(cell_id, entry)| {
-                    entry.formula.as_ref().map(|formula| (*cell_id, formula.clone()))
+                    entry
+                        .formula
+                        .as_ref()
+                        .map(|formula| (*cell_id, formula.clone()))
                 })
                 .collect::<Vec<_>>()
         })

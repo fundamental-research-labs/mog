@@ -175,7 +175,12 @@ fn same_row_shared_formula_delete_fixture_xlsx() -> Vec<u8> {
         110.0,
     ));
     for col in 12..=19 {
-        formula_cells.push_str(&shared_follower(13, col, 1, 100.0 + (col - 10) as f64 * 10.0));
+        formula_cells.push_str(&shared_follower(
+            13,
+            col,
+            1,
+            100.0 + (col - 10) as f64 * 10.0,
+        ));
     }
 
     let mut driver_cells = String::new();

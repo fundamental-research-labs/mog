@@ -65,26 +65,22 @@ pub(in crate::storage::engine) fn apply_structure_change(
     // `SUM(#REF!)`. Must run BEFORE the structural op tears down the affected
     // CellIds so their pre-delete positions can still be resolved.
     let reanchored_formula_cells = match change {
-        StructureChange::DeleteRows { at, count, .. } => {
-            pre_delete_re_anchor_range_refs(
-                mirror,
-                sheet_id,
-                &stores.grid_id_alloc,
-                *at,
-                *count,
-                true,
-            )
-        }
-        StructureChange::DeleteCols { at, count, .. } => {
-            pre_delete_re_anchor_range_refs(
-                mirror,
-                sheet_id,
-                &stores.grid_id_alloc,
-                *at,
-                *count,
-                false,
-            )
-        }
+        StructureChange::DeleteRows { at, count, .. } => pre_delete_re_anchor_range_refs(
+            mirror,
+            sheet_id,
+            &stores.grid_id_alloc,
+            *at,
+            *count,
+            true,
+        ),
+        StructureChange::DeleteCols { at, count, .. } => pre_delete_re_anchor_range_refs(
+            mirror,
+            sheet_id,
+            &stores.grid_id_alloc,
+            *at,
+            *count,
+            false,
+        ),
         _ => Vec::new(),
     };
 
@@ -187,13 +183,11 @@ pub(in crate::storage::engine) fn apply_structure_change(
     // persist them to Yrs KEY_FORMULA. The get_cell_data() read path overlays
     // the authoritative formula_strings on top of Yrs data, so callers always
     // see the updated formulas without needing to write back to Yrs.
-    let result = stores
-        .compute
-        .structure_change_with_formula_refresh(
-            mirror,
-            Some((change, *sheet_id)),
-            &reanchored_formula_cells,
-        )?;
+    let result = stores.compute.structure_change_with_formula_refresh(
+        mirror,
+        Some((change, *sheet_id)),
+        &reanchored_formula_cells,
+    )?;
 
     // Refresh stale KEY_FORMULA entries in Yrs for every formula cell whose
     // A1 text changed. Cross-sheet formulas can shift when a different sheet's

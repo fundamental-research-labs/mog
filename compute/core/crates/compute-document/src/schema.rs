@@ -309,7 +309,6 @@ pub fn init_canonical_schema(doc: &Doc) -> (MapRef, MapRef, crate::hex::SmallHex
     workbook.insert(&mut txn, KEY_EXTENDED_DOCUMENT_PROPERTIES, empty());
     workbook.insert(&mut txn, KEY_XLSX_METADATA, empty());
     workbook.insert(&mut txn, KEY_CUSTOM_CELL_STYLES, empty());
-    workbook.insert(&mut txn, KEY_RANGE_BINDINGS, empty());
 
     // ------------------------------------------------------------------
     // Security sub-structures
@@ -510,7 +509,6 @@ mod tests {
             KEY_IMPORTED_PIVOT_ASSOCIATIONS,
             KEY_PIVOT_CACHE_SOURCES,
             KEY_PIVOT_CACHE_RECORDS,
-            KEY_RANGE_BINDINGS,
         ] {
             assert!(
                 matches!(wb.get(&txn, key), Some(Out::YMap(_))),

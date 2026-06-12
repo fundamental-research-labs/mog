@@ -518,7 +518,7 @@ pub(in crate::storage::engine) fn export_tables_for_sheet(
                 .iter(&txn)
                 .filter_map(|(key, value)| match value {
                     Out::YMap(inner) => yrs_schema::table::from_yrs_map_to_table(&inner, &txn)
-                        .filter(|table| table.sheet_id == sheet_hex)
+                        .filter(|table| table.id == key && table.sheet_id == sheet_hex)
                         .map(|table| (key.to_string(), table)),
                     _ => None,
                 })
@@ -541,29 +541,12 @@ pub(in crate::storage::engine) fn export_tables_for_sheet(
             ))
     });
 
-    let mut seen_ids = HashSet::new();
-    let mut seen_names = HashSet::new();
     let mut exported = Vec::new();
-    for (catalog_key, table) in catalog_tables {
-        seen_ids.insert(catalog_key.clone());
-        seen_ids.insert(table.id.clone());
-        seen_names.insert(table.name.clone());
-        if table.id != catalog_key {
-            seen_names.insert(catalog_key);
-        }
+    for (_, table) in catalog_tables {
         exported.push(exported_table_spec_for_table(
             stores, mirror, sheet_id, &table,
         ));
     }
-
-    exported.extend(
-        mirror
-            .all_tables()
-            .iter()
-            .filter(|table| table.sheet_id == sheet_hex)
-            .filter(|table| !seen_ids.contains(&table.id) && !seen_names.contains(&table.name))
-            .map(|table| exported_table_spec_for_table(stores, mirror, sheet_id, table)),
-    );
     exported
 }
 

@@ -13,6 +13,7 @@ mod tests {
     use crate::storage::engine::mutation::CellInput;
     use cell_types::SheetPos;
     use value_types::{CellValue, FiniteF64};
+    use yrs::Any;
 
     mod lifecycle;
     mod persistence_catalog;
@@ -56,21 +57,6 @@ mod tests {
             .get_table_by_name(table_name)
             .unwrap_or_else(|| panic!("table {table_name} must exist"))
             .id
-    }
-
-    fn compact_table_binding(
-        engine: &YrsComputeEngine,
-        table_id: &str,
-    ) -> Option<compute_document::range::TableRangeBinding> {
-        let workbook = engine.stores.storage.workbook_map().clone();
-        let doc = engine.stores.storage.doc().clone();
-        let txn = doc.transact();
-        let json = compute_document::range::read_range_binding_wb(
-            &workbook,
-            &txn,
-            &table_attachment_key(table_id),
-        )?;
-        compute_document::range::TableRangeBinding::from_json(&json)
     }
 
     fn set_people_data(engine: &mut YrsComputeEngine, sid: SheetId) {
@@ -161,12 +147,34 @@ mod tests {
     }
 
     // ================================================================
-    // Compact table attachments
+    // Catalog-only table persistence
     // ================================================================
 
-    /// Creating a table writes a compact table attachment.
+    fn workbook_table_range_binding_entries(engine: &YrsComputeEngine) -> Vec<(String, String)> {
+        let workbook = engine.stores.storage.workbook_map().clone();
+        let doc = engine.stores.storage.doc().clone();
+        let txn = doc.transact();
+        let Some(Out::YMap(bindings_map)) =
+            workbook.get(&txn, compute_document::schema::KEY_RANGE_BINDINGS)
+        else {
+            return Vec::new();
+        };
+        bindings_map
+            .iter(&txn)
+            .filter_map(|(key, value)| {
+                if !key.starts_with("table:") {
+                    return None;
+                }
+                let Out::Any(Any::String(json)) = value else {
+                    return None;
+                };
+                Some((key.to_string(), json.to_string()))
+            })
+            .collect()
+    }
+
     #[test]
-    fn create_table_writes_compact_attachment() {
+    fn create_table_writes_catalog_only() {
         let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
         let sid = sheet_id();
 
@@ -183,74 +191,26 @@ mod tests {
             )
             .expect("create_table");
 
-        let table_id = table_id_by_name(&engine, "Sales");
-        let workbook = engine.stores.storage.workbook_map().clone();
-        let doc = engine.stores.storage.doc().clone();
-        let txn = doc.transact();
-        assert!(
-            compute_document::range::read_range_binding_wb(&workbook, &txn, "table:Sales")
-                .is_none(),
-            "table attachments must not be keyed by mutable table name"
-        );
-        let json = compute_document::range::read_range_binding_wb(
-            &workbook,
-            &txn,
-            &table_attachment_key(&table_id),
-        );
-        assert!(
-            json.is_some(),
-            "compact table attachment must exist after create_table"
-        );
-
-        let binding =
-            compute_document::range::TableRangeBinding::from_json(&json.unwrap()).unwrap();
-        assert_eq!(binding.table_id, table_id);
         let table = engine.get_table_by_name("Sales").expect("table must exist");
+        assert!(table.id.starts_with("tbl-"));
         assert_eq!(table.columns.len(), 3);
+        assert!(
+            table
+                .columns
+                .iter()
+                .all(|column| column.id.starts_with("col-"))
+        );
         assert_eq!(table.columns[0].name, "Name");
         assert!(table.has_header_row);
         assert!(!table.has_totals_row);
-    }
-
-    /// Deleting a table removes its compact attachment.
-    #[test]
-    fn delete_table_removes_compact_attachment() {
-        let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
-        let sid = sheet_id();
-
-        engine
-            .create_table(
-                &sid,
-                "Table1".into(),
-                0,
-                0,
-                2,
-                1,
-                vec!["A".into(), "B".into()],
-                true,
-            )
-            .expect("create_table");
-
-        let table_id = table_id_by_name(&engine, "Table1");
-        engine.delete_table("Table1").expect("delete_table");
-
-        let workbook = engine.stores.storage.workbook_map().clone();
-        let doc = engine.stores.storage.doc().clone();
-        let txn = doc.transact();
-        let json = compute_document::range::read_range_binding_wb(
-            &workbook,
-            &txn,
-            &table_attachment_key(&table_id),
-        );
         assert!(
-            json.is_none(),
-            "compact table attachment must be removed after delete_table"
+            workbook_table_range_binding_entries(&engine).is_empty(),
+            "table catalog writes must not create workbook rangeBindings entries"
         );
     }
 
-    /// Renaming a table keeps the compact attachment keyed by stable ID.
     #[test]
-    fn rename_table_keeps_stable_compact_attachment() {
+    fn rename_table_keeps_stable_catalog_identity_without_range_binding() {
         let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
         let sid = sheet_id();
 
@@ -272,35 +232,15 @@ mod tests {
             .rename_table("OldName", "NewName")
             .expect("rename_table");
 
-        let workbook = engine.stores.storage.workbook_map().clone();
-        let doc = engine.stores.storage.doc().clone();
-        let txn = doc.transact();
-
-        assert!(
-            compute_document::range::read_range_binding_wb(&workbook, &txn, "table:OldName")
-                .is_none(),
-            "name-keyed attachment must not exist"
-        );
-        assert!(
-            compute_document::range::read_range_binding_wb(&workbook, &txn, "table:NewName")
-                .is_none(),
-            "rename must not create a new name-keyed attachment"
-        );
-        let json = compute_document::range::read_range_binding_wb(
-            &workbook,
-            &txn,
-            &table_attachment_key(&table_id),
-        )
-        .expect("stable id attachment must still exist after rename");
-
-        let binding = compute_document::range::TableRangeBinding::from_json(&json).unwrap();
-        assert_eq!(binding.table_id, table_id);
         assert_eq!(engine.get_table_by_name("NewName").unwrap().id, table_id);
+        assert!(
+            workbook_table_range_binding_entries(&engine).is_empty(),
+            "rename must not create table rangeBindings entries"
+        );
     }
 
-    /// Resizing a table keeps the compact attachment.
     #[test]
-    fn resize_table_keeps_compact_attachment() {
+    fn table_mutations_update_catalog_without_range_bindings() {
         let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
         let sid = sheet_id();
 
@@ -317,89 +257,44 @@ mod tests {
             )
             .expect("create_table");
 
-        // Expand columns
         engine
             .resize_table("Table1", 0, 0, 3, 2)
             .expect("resize_table");
-
-        let table = engine
-            .get_table_by_name("Table1")
-            .expect("table must exist");
-        assert_eq!(
-            table.columns.len(),
-            3,
-            "expanding to 3 columns must update the catalog table"
-        );
-        assert!(compact_table_binding(&engine, &table.id).is_some());
-    }
-
-    /// Toggling totals row updates the catalog, not the compact attachment.
-    #[test]
-    fn toggle_totals_keeps_compact_attachment() {
-        let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
-        let sid = sheet_id();
-
-        engine
-            .create_table(
-                &sid,
-                "Table1".into(),
-                0,
-                0,
-                3,
-                1,
-                vec!["A".into(), "B".into()],
-                true,
-            )
-            .expect("create_table");
-
         engine.toggle_totals_row("Table1").expect("toggle_totals");
-
-        let table = engine
-            .get_table_by_name("Table1")
-            .expect("table must exist");
-        assert!(
-            table.has_totals_row,
-            "totals row must be true in catalog after toggle"
-        );
-        assert!(compact_table_binding(&engine, &table.id).is_some());
-    }
-
-    /// Renaming a column updates the catalog, not the compact attachment.
-    #[test]
-    fn rename_column_keeps_compact_attachment() {
-        let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
-        let sid = sheet_id();
-
-        engine
-            .create_table(
-                &sid,
-                "Table1".into(),
-                0,
-                0,
-                3,
-                1,
-                vec!["A".into(), "B".into()],
-                true,
-            )
-            .expect("create_table");
-
         engine
             .rename_table_column("Table1", 0, "Alpha")
             .expect("rename_column");
+        engine
+            .set_table_bool_option("Table1", "bandedColumns", true)
+            .expect("set banded columns");
+        engine
+            .set_table_bool_option("Table1", "bandedRows", false)
+            .expect("set banded rows");
+        engine
+            .set_table_auto_expand("Table1", false)
+            .expect("set auto expand policy");
+        engine
+            .set_table_auto_calculated_columns("Table1", false)
+            .expect("set calculated columns policy");
 
         let table = engine
             .get_table_by_name("Table1")
             .expect("table must exist");
-        assert_eq!(
-            table.columns[0].name, "Alpha",
-            "column name must be updated in catalog"
+        assert_eq!(table.columns.len(), 3);
+        assert_eq!(table.columns[0].name, "Alpha");
+        assert!(table.has_totals_row);
+        assert!(!table.banded_rows);
+        assert!(table.banded_columns);
+        assert!(!table.auto_expand);
+        assert!(!table.auto_calculated_columns);
+        assert!(
+            workbook_table_range_binding_entries(&engine).is_empty(),
+            "table mutations must persist through workbook.tables only"
         );
-        assert!(compact_table_binding(&engine, &table.id).is_some());
     }
 
-    /// sync_tables_from_yrs reads the catalog; compact bindings are attachments only.
     #[test]
-    fn sync_tables_uses_catalog_with_compact_attachment() {
+    fn sync_tables_uses_catalog_only() {
         let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
         let sid = sheet_id();
 
@@ -432,10 +327,14 @@ mod tests {
         assert_eq!(tables[0].name, "Table1");
         assert_eq!(tables[0].columns.len(), 2);
         assert_eq!(tables[0].columns[0].name, "Col1");
+        assert!(
+            workbook_table_range_binding_entries(&engine).is_empty(),
+            "undo/redo sync must not recreate table rangeBindings entries"
+        );
     }
 
     #[test]
-    fn sync_tables_ignores_table_shaped_range_binding_payloads() {
+    fn sync_tables_does_not_create_workbook_range_binding_entries() {
         let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
         let sid = sheet_id();
 
@@ -453,77 +352,18 @@ mod tests {
             .expect("create_table");
 
         let catalog_table_id = engine.get_table_by_name("Table1").unwrap().id.clone();
-        let json = r#"{"id":"not-a-catalog-table","name":"OldName","displayName":"OldName","sheetId":"550e8400-e29b-41d4-a716-446655440000","startRow":0,"startCol":0,"endRow":3,"endCol":1,"columns":[{"id":"c1","name":"Col1","index":0}],"hasHeaderRow":true}"#;
-        let workbook = engine.stores.storage.workbook_map().clone();
-        let doc = engine.stores.storage.doc().clone();
-        let mut txn = doc.transact_mut();
-        compute_document::range::write_range_binding_wb(
-            &workbook,
-            &mut txn,
-            &table_attachment_key("OldName"),
-            &json,
-        );
-        drop(txn);
-
         sync_tables_from_yrs(&mut engine.stores, &mut engine.mirror);
 
         let table = engine.get_table_by_name("Table1").expect("catalog table");
         assert_eq!(table.id, catalog_table_id);
         assert!(
-            engine.get_table_by_name("OldName").is_none(),
-            "range binding payloads must not create table catalog entries"
+            workbook_table_range_binding_entries(&engine).is_empty(),
+            "table sync must not consult or create workbook rangeBindings entries"
         );
     }
 
-    /// table_attachment_key and table_id_from_attachment_key are inverse operations.
     #[test]
-    fn attachment_key_round_trip() {
-        let table_id = "tbl-123";
-        let key = table_attachment_key(table_id);
-        assert_eq!(key, "table:tbl-123");
-        assert_eq!(table_id_from_attachment_key(&key), Some("tbl-123"));
-        assert_eq!(table_id_from_attachment_key("other:stuff"), None);
-    }
-
-    /// Mirror maintains the table attachment-key index.
-    #[test]
-    fn mirror_table_attachment_key_index() {
-        let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
-        let sid = sheet_id();
-
-        engine
-            .create_table(
-                &sid,
-                "Table1".into(),
-                0,
-                0,
-                2,
-                1,
-                vec!["A".into(), "B".into()],
-                true,
-            )
-            .expect("create_table");
-
-        // Check index via mirror
-        let table_id = table_id_by_name(&engine, "Table1");
-        assert_eq!(
-            engine.mirror().table_attachment_key("Table1"),
-            Some(table_attachment_key(&table_id).as_str()),
-        );
-        // Case-insensitive
-        assert_eq!(
-            engine.mirror().table_attachment_key("table1"),
-            Some(table_attachment_key(&table_id).as_str()),
-        );
-
-        // Delete should clean up index
-        engine.delete_table("Table1").expect("delete_table");
-        assert_eq!(engine.mirror().table_attachment_key("Table1"), None);
-    }
-
-    /// Convert table to range also cleans up the compact attachment.
-    #[test]
-    fn convert_to_range_cleans_compact_attachment() {
+    fn convert_to_range_removes_catalog_entry() {
         let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
         let sid = sheet_id();
 
@@ -545,18 +385,69 @@ mod tests {
             .convert_table_to_range("Table1")
             .expect("convert_to_range");
 
+        assert!(
+            engine.get_table_by_name("Table1").is_none(),
+            "convert_to_range must remove the table from the mirror"
+        );
+        assert!(
+            workbook_table_range_binding_entries(&engine).is_empty(),
+            "convert_to_range must not leave table rangeBindings entries"
+        );
         let workbook = engine.stores.storage.workbook_map().clone();
         let doc = engine.stores.storage.doc().clone();
         let txn = doc.transact();
-        assert!(
-            compute_document::range::read_range_binding_wb(
-                &workbook,
-                &txn,
-                &table_attachment_key(&table_id_before_convert)
+        if let Some(Out::YMap(tables_map)) =
+            workbook.get(&txn, compute_document::schema::KEY_TABLES)
+        {
+            assert!(
+                tables_map
+                    .get(&txn, table_id_before_convert.as_str())
+                    .is_none(),
+                "convert_to_range must remove the id-keyed catalog entry"
+            );
+        }
+    }
+
+    #[test]
+    fn delete_table_removes_catalog_entry_without_range_binding() {
+        let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+        let sid = sheet_id();
+
+        engine
+            .create_table(
+                &sid,
+                "Table1".into(),
+                0,
+                0,
+                2,
+                1,
+                vec!["A".into(), "B".into()],
+                true,
             )
-            .is_none(),
-            "compact attachment must be cleaned up after convert_to_range"
+            .expect("create_table");
+
+        let table_id = table_id_by_name(&engine, "Table1");
+        engine.delete_table("Table1").expect("delete_table");
+
+        assert!(
+            engine.get_table_by_name("Table1").is_none(),
+            "delete_table must remove the table from the mirror"
         );
+        assert!(
+            workbook_table_range_binding_entries(&engine).is_empty(),
+            "delete_table must not leave table rangeBindings entries"
+        );
+        let workbook = engine.stores.storage.workbook_map().clone();
+        let doc = engine.stores.storage.doc().clone();
+        let txn = doc.transact();
+        if let Some(Out::YMap(tables_map)) =
+            workbook.get(&txn, compute_document::schema::KEY_TABLES)
+        {
+            assert!(
+                tables_map.get(&txn, table_id.as_str()).is_none(),
+                "delete_table must remove the id-keyed catalog entry"
+            );
+        }
     }
 
     #[test]
@@ -597,77 +488,6 @@ mod tests {
                 .all(|filter| filter.table_id.as_deref() != Some(table_id.as_str())),
             "convert_to_range must remove the table-owned filter"
         );
-    }
-
-    /// Style info persists through the catalog; compact attachment stays identity-only.
-    #[test]
-    fn style_info_persists_with_compact_attachment() {
-        let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
-        let sid = sheet_id();
-
-        engine
-            .create_table(
-                &sid,
-                "Table1".into(),
-                0,
-                0,
-                3,
-                1,
-                vec!["A".into(), "B".into()],
-                true,
-            )
-            .expect("create_table");
-
-        // Change style options
-        engine
-            .set_table_bool_option("Table1", "bandedColumns", true)
-            .expect("set banded columns");
-        engine
-            .set_table_bool_option("Table1", "bandedRows", false)
-            .expect("set banded rows");
-
-        let table = engine
-            .get_table_by_name("Table1")
-            .expect("table must exist");
-        assert!(!table.banded_rows, "banded_rows should be false");
-        assert!(table.banded_columns, "banded_columns should be true");
-        let compact = compact_table_binding(&engine, &table.id).expect("compact binding");
-        assert_eq!(compact.table_id, table.id);
-    }
-
-    #[test]
-    fn table_policy_updates_keep_compact_attachment() {
-        let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
-        let sid = sheet_id();
-
-        engine
-            .create_table(
-                &sid,
-                "Table1".into(),
-                0,
-                0,
-                3,
-                1,
-                vec!["A".into(), "B".into()],
-                true,
-            )
-            .expect("create_table");
-
-        engine
-            .set_table_auto_expand("Table1", false)
-            .expect("set auto expand policy");
-        engine
-            .set_table_auto_calculated_columns("Table1", false)
-            .expect("set calculated columns policy");
-
-        let table = engine
-            .get_table_by_name("Table1")
-            .expect("table must exist");
-        assert!(!table.auto_expand);
-        assert!(!table.auto_calculated_columns);
-
-        let compact = compact_table_binding(&engine, &table.id).expect("compact binding");
-        assert_eq!(compact.table_id, table.id);
     }
 
     #[test]

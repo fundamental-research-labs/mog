@@ -246,7 +246,7 @@ pub(in crate::storage::engine) fn rename_table(
 
     stores.compute.remove_table(mirror, old_name);
     stores.compute.set_table(mirror, renamed.clone());
-    rename_table_in_yrs(stores, old_name, &renamed);
+    rename_table_in_yrs(stores, &renamed);
 
     structured_ref_updater::update_formulas_for_table_rename(
         stores.storage.doc(),

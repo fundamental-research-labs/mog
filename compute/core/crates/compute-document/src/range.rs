@@ -7,7 +7,6 @@ use serde::{Deserialize, Serialize};
 use yrs::{Any, Map, MapRef, Out, ReadTxn, TransactionMut};
 
 use crate::hex::id_to_hex;
-use crate::schema::KEY_RANGE_BINDINGS;
 
 /// Metadata stored in the `ranges` Yrs sub-map (everything except the binary
 /// payload, which lives in `rangePayloads`).
@@ -117,129 +116,6 @@ pub fn read_range_binding(
 pub fn remove_range_binding(txn: &mut TransactionMut, bindings_map: &MapRef, range_id: &RangeId) {
     let range_hex = id_to_hex(range_id.as_u128());
     bindings_map.remove(txn, &range_hex);
-}
-
-// =========================================================================
-// Workbook-level bindings (keyed by string range ID, stores JSON strings)
-// =========================================================================
-
-/// Write a binding (serialized as JSON string) to `workbook.rangeBindings[range_id]`.
-///
-/// Creates the `rangeBindings` sub-map if it doesn't yet exist under `workbook`.
-pub fn write_range_binding_wb(
-    workbook: &MapRef,
-    txn: &mut TransactionMut<'_>,
-    range_id: &str,
-    json_value: &str,
-) {
-    let bindings_map = ensure_range_bindings_map(workbook, txn);
-    bindings_map.insert(txn, range_id, Any::String(Arc::from(json_value)));
-}
-
-/// Read a binding (JSON string) from `workbook.rangeBindings[range_id]`.
-///
-/// Returns `None` if the sub-map or the key doesn't exist.
-pub fn read_range_binding_wb<T: ReadTxn>(
-    workbook: &MapRef,
-    txn: &T,
-    range_id: &str,
-) -> Option<String> {
-    let bindings_map = match workbook.get(txn, KEY_RANGE_BINDINGS) {
-        Some(Out::YMap(m)) => m,
-        _ => return None,
-    };
-    match bindings_map.get(txn, range_id) {
-        Some(Out::Any(Any::String(s))) => Some(s.to_string()),
-        _ => None,
-    }
-}
-
-/// Remove a binding from `workbook.rangeBindings[range_id]`.
-///
-/// No-op if the sub-map or key doesn't exist.
-pub fn remove_range_binding_wb(workbook: &MapRef, txn: &mut TransactionMut<'_>, range_id: &str) {
-    if let Some(Out::YMap(bindings_map)) = workbook.get(txn, KEY_RANGE_BINDINGS) {
-        bindings_map.remove(txn, range_id);
-    }
-}
-
-/// Iterate all bindings in `workbook.rangeBindings` as `(range_id, json_string)` pairs.
-pub fn all_range_bindings_wb<T: ReadTxn>(workbook: &MapRef, txn: &T) -> Vec<(String, String)> {
-    let bindings_map = match workbook.get(txn, KEY_RANGE_BINDINGS) {
-        Some(Out::YMap(m)) => m,
-        _ => return Vec::new(),
-    };
-    bindings_map
-        .iter(txn)
-        .filter_map(|(key, value)| {
-            if let Out::Any(Any::String(s)) = value {
-                Some((key.to_string(), s.to_string()))
-            } else {
-                None
-            }
-        })
-        .collect()
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct TableRangeBinding {
-    #[serde(default = "table_range_binding_kind")]
-    pub kind: String,
-    #[serde(default = "table_range_binding_version")]
-    pub version: u32,
-    pub table_id: String,
-}
-
-impl TableRangeBinding {
-    pub const KIND: &'static str = "table";
-    pub const VERSION: u32 = 1;
-
-    pub fn new(table_id: impl Into<String>) -> Self {
-        Self {
-            kind: Self::KIND.to_string(),
-            version: Self::VERSION,
-            table_id: table_id.into(),
-        }
-    }
-
-    pub fn to_json(&self) -> Option<String> {
-        serde_json::to_string(self).ok()
-    }
-
-    pub fn from_json(json: &str) -> Option<Self> {
-        let binding: Self = serde_json::from_str(json).ok()?;
-        (binding.kind == Self::KIND && binding.version == Self::VERSION).then_some(binding)
-    }
-}
-
-/// Derive the workbook-level compact table attachment key for a stable table ID.
-pub fn table_attachment_key(table_id: &str) -> String {
-    format!("table:{table_id}")
-}
-
-/// Extract the stable table ID from a compact table attachment key.
-pub fn table_id_from_attachment_key(attachment_key: &str) -> Option<&str> {
-    attachment_key.strip_prefix("table:")
-}
-
-fn table_range_binding_kind() -> String {
-    TableRangeBinding::KIND.to_string()
-}
-
-fn table_range_binding_version() -> u32 {
-    TableRangeBinding::VERSION
-}
-
-/// Lazy-create the `rangeBindings` Y.Map under `workbook`.
-fn ensure_range_bindings_map(workbook: &MapRef, txn: &mut TransactionMut<'_>) -> MapRef {
-    match workbook.get(txn, KEY_RANGE_BINDINGS) {
-        Some(Out::YMap(m)) => m,
-        _ => {
-            let empty = yrs::MapPrelim::from([] as [(&str, Any); 0]);
-            workbook.insert(txn, KEY_RANGE_BINDINGS, empty)
-        }
-    }
 }
 
 // =========================================================================
@@ -614,14 +490,6 @@ mod tests {
     }
 
     #[test]
-    fn table_attachment_key_round_trips_stable_table_id() {
-        let key = table_attachment_key("tbl-123");
-        assert_eq!(key, "table:tbl-123");
-        assert_eq!(table_id_from_attachment_key(&key), Some("tbl-123"));
-        assert_eq!(table_id_from_attachment_key("not-table:tbl-123"), None);
-    }
-
-    #[test]
     fn cf_binding_serde_roundtrip() {
         let binding = CfBinding {
             rule_ref: "my-rule-ref".to_string(),
@@ -837,88 +705,5 @@ mod tests {
         assert_eq!(count_bindings_for_rule(&txn, &map, "rule-A"), 2);
         assert_eq!(count_bindings_for_rule(&txn, &map, "rule-B"), 1);
         assert_eq!(count_bindings_for_rule(&txn, &map, "rule-C"), 0);
-    }
-
-    // -- Workbook-level binding tests (Phase 5E) --------------------------
-
-    fn setup_doc() -> (Doc, MapRef) {
-        let doc = Doc::new();
-        let workbook = {
-            let mut txn = doc.transact_mut();
-            txn.get_or_insert_map("workbook")
-        };
-        (doc, workbook)
-    }
-
-    #[test]
-    fn write_and_read_binding_wb_roundtrip() {
-        let (doc, workbook) = setup_doc();
-
-        // Write
-        {
-            let mut txn = doc.transact_mut();
-            write_range_binding_wb(&workbook, &mut txn, "range-001", r#"{"name":"T1"}"#);
-        }
-
-        // Read
-        {
-            let txn = doc.transact();
-            let result = read_range_binding_wb(&workbook, &txn, "range-001");
-            assert_eq!(result, Some(r#"{"name":"T1"}"#.to_string()));
-        }
-    }
-
-    #[test]
-    fn read_missing_binding_wb_returns_none() {
-        let (doc, workbook) = setup_doc();
-        let txn = doc.transact();
-        assert_eq!(read_range_binding_wb(&workbook, &txn, "nonexistent"), None);
-    }
-
-    #[test]
-    fn remove_binding_wb() {
-        let (doc, workbook) = setup_doc();
-
-        {
-            let mut txn = doc.transact_mut();
-            write_range_binding_wb(&workbook, &mut txn, "range-001", r#"{"name":"T1"}"#);
-        }
-        {
-            let mut txn = doc.transact_mut();
-            remove_range_binding_wb(&workbook, &mut txn, "range-001");
-        }
-        {
-            let txn = doc.transact();
-            assert_eq!(read_range_binding_wb(&workbook, &txn, "range-001"), None);
-        }
-    }
-
-    #[test]
-    fn all_bindings_wb_iterates_entries() {
-        let (doc, workbook) = setup_doc();
-
-        {
-            let mut txn = doc.transact_mut();
-            write_range_binding_wb(&workbook, &mut txn, "r1", r#"{"name":"T1"}"#);
-            write_range_binding_wb(&workbook, &mut txn, "r2", r#"{"name":"T2"}"#);
-        }
-        {
-            let txn = doc.transact();
-            let mut entries = all_range_bindings_wb(&workbook, &txn);
-            entries.sort_by(|a, b| a.0.cmp(&b.0));
-            assert_eq!(entries.len(), 2);
-            assert_eq!(entries[0].0, "r1");
-            assert_eq!(entries[1].0, "r2");
-        }
-    }
-
-    #[test]
-    fn remove_nonexistent_binding_wb_is_noop() {
-        let (doc, workbook) = setup_doc();
-        {
-            let mut txn = doc.transact_mut();
-            remove_range_binding_wb(&workbook, &mut txn, "nonexistent");
-        }
-        // No panic = pass
     }
 }

@@ -29,9 +29,6 @@ mod queries;
 #[cfg(test)]
 mod tests;
 
-pub(in crate::storage::engine) use compute_document::range::table_attachment_key;
-#[cfg(test)]
-pub(in crate::storage::engine) use compute_document::range::table_id_from_attachment_key;
 pub(in crate::storage::engine) use filter_delete::*;
 pub(in crate::storage::engine) use mutations::*;
 pub(in crate::storage::engine) use options::*;

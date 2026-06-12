@@ -447,73 +447,24 @@ pub fn from_yrs_map<T: ReadTxn>(map: &MapRef, txn: &T) -> Option<TableSpec> {
 
 /// Read a canonical Table from a Y.Map.
 ///
-/// Storage reads canonical table keys first (startRow/startCol/endRow/endCol,
-/// id as String, columns as Vec<TableColumn>) and falls back only to imported
-/// OOXML catalog fields in the table catalog entry.
+/// Storage reads only canonical runtime table keys. OOXML numeric identities
+/// are preserved as metadata and must not be synthesized into runtime IDs.
 pub fn from_yrs_map_to_table<T: ReadTxn>(map: &MapRef, txn: &T) -> Option<Table> {
-    let ooxml_table_id =
-        read_u32(map, txn, KEY_OOXML_TABLE_ID).or_else(|| read_u32(map, txn, KEY_ID));
-    let id = read_string(map, txn, KEY_ID)
-        .or_else(|| ooxml_table_id.map(|n| format!("tbl-ooxml-{}", n)))
-        .unwrap_or_default();
+    let ooxml_table_id = read_u32(map, txn, KEY_OOXML_TABLE_ID);
+    let id = read_string(map, txn, KEY_ID)?;
 
-    // Range: try canonical keys first, fall back to parsing OOXML rangeRef
-    let range = match (
+    let (Some(start_row), Some(start_col), Some(end_row), Some(end_col)) = (
         read_u32(map, txn, KEY_START_ROW),
         read_u32(map, txn, KEY_START_COL),
         read_u32(map, txn, KEY_END_ROW),
         read_u32(map, txn, KEY_END_COL),
-    ) {
-        (Some(sr), Some(sc), Some(er), Some(ec)) => cell_types::SheetRange::new(sr, sc, er, ec),
-        _ => {
-            // Fallback: parse OOXML rangeRef (A1 string like "A1:D20")
-            let range_ref = read_string(map, txn, KEY_RANGE_REF).unwrap_or_default();
-            crate::domain::table::parse_table_range_ref(&range_ref)
-                .map(|(sr, sc, er, ec)| cell_types::SheetRange::new(sr, sc, er, ec))
-                .unwrap_or_else(|| cell_types::SheetRange::new(0, 0, 0, 0))
-        }
+    ) else {
+        return None;
     };
+    let range = cell_types::SheetRange::new(start_row, start_col, end_row, end_col);
 
-    // Columns: try canonical TableColumn first, fall back to OOXML TableColumnSpec
     let columns: Vec<TableColumn> = read_string(map, txn, KEY_COLUMNS)
-        .and_then(|s| {
-            // Try canonical format first
-            serde_json::from_str::<Vec<TableColumn>>(&s)
-                .ok()
-                .or_else(|| {
-                    // Fallback: parse OOXML TableColumnSpec format and convert
-                    serde_json::from_str::<Vec<TableColumnSpec>>(&s)
-                        .ok()
-                        .map(|ooxml_cols| {
-                            ooxml_cols
-                                .iter()
-                                .enumerate()
-                                .map(|(i, c)| TableColumn {
-                                    id: format!("col-ooxml-{}", c.id),
-                                    ooxml_column_id: Some(c.id),
-                                    name: c.name.clone(),
-                                    index: i as u32,
-                                    totals_function: c.totals_function,
-                                    totals_label: c.totals_label.clone(),
-                                    calculated_formula: c.calculated_formula.clone(),
-                                    calculated_formula_array: c.calculated_formula_array,
-                                    totals_row_formula: c.totals_row_formula.clone(),
-                                    totals_row_formula_array: c.totals_row_formula_array,
-                                    header_row_dxf_id: c.header_row_dxf_id,
-                                    data_dxf_id: c.data_dxf_id,
-                                    totals_row_dxf_id: c.totals_row_dxf_id,
-                                    header_row_cell_style: c.header_row_cell_style.clone(),
-                                    data_cell_style: c.data_cell_style.clone(),
-                                    totals_row_cell_style: c.totals_row_cell_style.clone(),
-                                    unique_name: c.unique_name.clone(),
-                                    query_table_field_id: c.query_table_field_id,
-                                    xml_column_pr: c.xml_column_pr.clone(),
-                                    xr3_uid: c.xr3_uid.clone(),
-                                })
-                                .collect()
-                        })
-                })
-        })
+        .and_then(|s| serde_json::from_str::<Vec<TableColumn>>(&s).ok())
         .unwrap_or_default();
 
     Some(Table {

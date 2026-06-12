@@ -407,12 +407,7 @@ impl YrsComputeEngine {
             if change.name.is_some() && change.sheet_id.is_some() {
                 continue;
             }
-            let table_key = change.key.strip_prefix("table:").unwrap_or(&change.key);
-            let Some(table) = self
-                .mirror
-                .get_table_by_id(table_key)
-                .or_else(|| self.mirror.get_table(table_key))
-            else {
+            let Some(table) = self.mirror.get_table_by_id(&change.key) else {
                 continue;
             };
             if change.name.is_none() {

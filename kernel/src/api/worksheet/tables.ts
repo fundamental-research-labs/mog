@@ -133,8 +133,11 @@ export class WorksheetTablesImpl implements WorksheetTables {
     });
   }
 
-  private tableIdForEvent(table: TableInfo | null | undefined, fallbackName: string): string {
-    return table?.id ?? fallbackName;
+  private tableIdForEvent(table: TableInfo | null | undefined, tableName: string): string {
+    if (!table) {
+      throw new KernelError('COMPUTE_ERROR', `Table not found: ${tableName}`);
+    }
+    return table.id;
   }
 
   private async resolveTableIdForName(tableName: string): Promise<string | null> {

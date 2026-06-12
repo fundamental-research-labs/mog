@@ -56,7 +56,8 @@ Bulk imported or deferred data can live as typed Range payloads in Yrs, not as N
 │   ranges          <── Range metadata (extent, kind, name)        │
 │   rangePayloads   <── opaque typed bytes (f64-le | i64-le | cbor)│
 │   rangeFormats    <── per-Range format Y.Maps                    │
-│   rangeBindings   <── Table schema, CF rule pointers, etc.       │
+│   rangeBindings   <── per-sheet CF/validation attachment refs    │
+│   workbook.tables <── canonical table catalog                    │
 └────────────────────────────────┬─────────────────────────────────┘
                                  │  hydrate / mutation handler
                                  ▼

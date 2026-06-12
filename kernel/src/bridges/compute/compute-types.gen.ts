@@ -2088,6 +2088,7 @@ export interface FilterMetadataBinding {
   headerEndCellId: string;
   dataEndCellId: string;
   colIdToHeaderCellId?: Record<number, string>;
+  tableColumnIdToHeaderCellId?: Record<string, string>;
   shell: FilterShellMetadata;
   sourceFingerprint: string;
 }
@@ -2916,6 +2917,7 @@ export type LineJoin = "bevel" | "miter" | "round";
 
 export interface LosslessCriterionDescriptor {
   filterColId?: number;
+  tableColumnId?: string;
   tableColumnOrdinal?: number;
   kind: string;
   preservedJson: unknown;
@@ -5219,6 +5221,7 @@ export interface SubtotalResult {
 
 export interface Table {
   id: string;
+  ooxmlTableId?: number;
   name: string;
   displayName: string;
   sheetId: string;
@@ -5234,23 +5237,32 @@ export interface Table {
   showFilterButtons: boolean;
   autoExpand: boolean;
   autoCalculatedColumns: boolean;
-}
-
-export interface TableBinding {
-  name: string;
-  displayName?: string;
-  id?: string;
-  sheetId?: string;
-  startRow?: number;
-  startCol?: number;
-  endRow?: number;
-  endCol?: number;
-  columns: TableColumnBinding[];
-  hasHeaderRow: boolean;
-  hasTotalsRow: boolean;
-  autoExpand: boolean;
-  autoCalculatedColumns: boolean;
-  style?: TableStyleInfo;
+  autoFilterRef?: string;
+  autoFilterXrUid?: string;
+  autoFilterExtLstRaw?: string;
+  headerRowDxfId?: number;
+  dataDxfId?: number;
+  totalsRowDxfId?: number;
+  headerRowBorderDxfId?: number;
+  tableBorderDxfId?: number;
+  totalsRowBorderDxfId?: number;
+  headerRowCellStyle?: string;
+  dataCellStyle?: string;
+  totalsRowCellStyle?: string;
+  tableType?: string;
+  totalsRowShown?: boolean;
+  connectionId?: number;
+  comment?: string;
+  insertRow: boolean;
+  insertRowShift: boolean;
+  published: boolean;
+  xrUid?: string;
+  sortState?: TableSortState;
+  filterColumns?: FilterColumnSpec[];
+  queryTable?: QueryTable;
+  worksheetRelationshipIdHint?: string;
+  tablePartPathHint?: string;
+  worksheetRelationshipTargetHint?: string;
 }
 
 export type TableBoolOption = "bandedRows" | "bandedColumns" | "emphasizeFirstColumn" | "emphasizeLastColumn" | "showFilterButtons";
@@ -5279,19 +5291,25 @@ export interface TableColorFilter {
 
 export interface TableColumn {
   id: string;
+  ooxmlColumnId?: number;
   name: string;
   index: number;
   totalsFunction: TotalsFunction | null;
   totalsLabel: string | null;
   calculatedFormula?: string;
-}
-
-export interface TableColumnBinding {
-  name: string;
-  index: number;
-  totalsFunction?: TotalsFunction;
-  totalsLabel?: string;
-  calculatedFormula?: string;
+  calculatedFormulaArray: boolean;
+  totalsRowFormula?: string;
+  totalsRowFormulaArray: boolean;
+  headerRowDxfId?: number;
+  dataDxfId?: number;
+  totalsRowDxfId?: number;
+  headerRowCellStyle?: string;
+  dataCellStyle?: string;
+  totalsRowCellStyle?: string;
+  uniqueName?: string;
+  queryTableFieldId?: number;
+  xmlColumnPr?: unknown;
+  xr3Uid?: string;
 }
 
 export interface TableColumnSpec {
@@ -5461,15 +5479,6 @@ export interface TableStyleDef {
   evenColFill?: [number, number, number, number];
   dataFontColor?: [number, number, number, number];
   borderColor?: [number, number, number, number];
-}
-
-export interface TableStyleInfo {
-  name: string;
-  bandedRows: boolean;
-  bandedColumns: boolean;
-  emphasizeFirstColumn: boolean;
-  emphasizeLastColumn: boolean;
-  showFilterButtons: boolean;
 }
 
 export interface TableTopBottomFilter {

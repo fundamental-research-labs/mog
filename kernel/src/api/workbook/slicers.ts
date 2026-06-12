@@ -47,13 +47,19 @@ export class WorkbookSlicersImpl implements WorkbookSlicers {
 
   async list(): Promise<SlicerInfo[]> {
     const slicers = await this._getAllSlicers();
-    return slicers.map((s) => ({
-      id: s.id,
-      name: s.name ?? s.caption,
-      caption: s.caption,
-      tableName: s.source.type === 'table' ? s.source.tableId : '',
-      columnName: s.source.type === 'table' ? s.source.columnCellId : '',
-    }));
+    return Promise.all(
+      slicers.map(async (s) => {
+        const wsSlicers = this.deps.getWorksheetSlicers(sheetId(s.sheetId));
+        const slicer = await wsSlicers.get(s.id);
+        return {
+          id: s.id,
+          name: slicer?.name ?? s.name ?? s.caption,
+          caption: slicer?.caption ?? s.caption,
+          tableName: slicer?.tableName ?? '',
+          columnName: slicer?.columnName ?? '',
+        };
+      }),
+    );
   }
 
   async getItemAt(index: number): Promise<SlicerInfo | null> {

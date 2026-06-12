@@ -59,7 +59,6 @@ fn replace_catalog_spec(
             &mut txn,
             compute_document::schema::KEY_TABLES,
         );
-        tables_map.remove(&mut txn, table.name.as_str());
         let table_prelim: MapPrelim =
             domain_types::yrs_schema::table::to_yrs_prelim_from_table(&table)
                 .into_iter()
@@ -72,6 +71,24 @@ fn replace_catalog_spec(
         .compute
         .set_table(&mut engine.mirror, table.clone());
     table
+}
+
+fn insert_catalog_table_with_key(
+    engine: &mut YrsComputeEngine,
+    key: &str,
+    table: &domain_types::domain::table::Table,
+) {
+    let workbook = engine.stores.storage.workbook_map().clone();
+    let mut txn = engine.stores.storage.doc().transact_mut();
+    let tables_map = crate::storage::ensure_workbook_child_map(
+        &workbook,
+        &mut txn,
+        compute_document::schema::KEY_TABLES,
+    );
+    let table_prelim: MapPrelim = domain_types::yrs_schema::table::to_yrs_prelim_from_table(table)
+        .into_iter()
+        .collect();
+    tables_map.insert(&mut txn, key, table_prelim);
 }
 
 #[test]
@@ -151,6 +168,43 @@ fn deleting_table_removes_workbook_table_catalog_entry() {
     engine.delete_table("Table1").expect("delete_table");
     assert!(table_catalog_spec_by_key(&engine, "Table1").is_none());
     assert!(table_catalog_spec_by_key(&engine, &table_id).is_none());
+}
+
+#[test]
+fn mismatched_catalog_key_is_ignored_by_sync_and_export() {
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    let sid = sheet_id();
+
+    engine
+        .create_table(
+            &sid,
+            "ValidTable".into(),
+            0,
+            0,
+            2,
+            1,
+            vec!["A".into(), "B".into()],
+            true,
+        )
+        .expect("create valid table");
+
+    let mut invalid = table_catalog_table_by_key(&engine, &table_id_by_name(&engine, "ValidTable"))
+        .expect("valid table");
+    invalid.id = "tbl-invalid".to_string();
+    invalid.name = "InvalidTable".to_string();
+    insert_catalog_table_with_key(&mut engine, "InvalidTable", &invalid);
+
+    sync_tables_from_yrs(&mut engine.stores, &mut engine.mirror);
+
+    assert!(
+        engine.get_table_by_name("InvalidTable").is_none(),
+        "sync must ignore catalog entries whose Y.Map key is not table.id"
+    );
+
+    let exported = engine.build_parse_output_from_yrs();
+    let exported_tables = &exported.sheets[0].tables;
+    assert_eq!(exported_tables.len(), 1);
+    assert_eq!(exported_tables[0].name, "ValidTable");
 }
 
 #[test]

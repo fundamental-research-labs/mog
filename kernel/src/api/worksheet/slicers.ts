@@ -17,10 +17,10 @@ import type {
   FloatingObjectAnchor,
   StoredSlicer,
   StoredSlicerUpdate,
+  Table as CanonicalTable,
 } from '../../bridges/compute/compute-types.gen';
 import type { DocumentContext } from '../../context';
 import * as Filters from '../../domain/sorting/filters';
-import { getTable } from '../../domain/tables/core';
 import { KernelError } from '../../errors';
 import { columnFilterCriteriaToCompute } from '../../bridges/compute/compute-wire-converters';
 import { extractMutationData } from '../../bridges/compute/compute-core';
@@ -119,21 +119,20 @@ function validateSlicerId(slicerId: string, operation: string): void {
 }
 
 type ResolvedTableSlicerColumn = {
+  columnId: string;
   absCol: number;
   tableColumnIndex: number;
+  columnName: string;
 };
 
-type TableSlicerColumnSource = {
-  range: {
-    startRow: number;
-    startCol: number;
-    endCol: number;
-  };
-  columns: Array<{
-    id: string;
-    name: string;
-    index: number;
-  }>;
+type StoredTableSlicerSource = Extract<StoredSlicer['source'], { type: 'table' }>;
+
+type ResolvedTableSlicerSource = {
+  table: CanonicalTable;
+  tableSheetId: SheetId;
+  tableName: string;
+  columnName: string;
+  column: ResolvedTableSlicerColumn | null;
 };
 
 export class WorksheetSlicersImpl implements WorksheetSlicers {
@@ -176,18 +175,39 @@ export class WorksheetSlicersImpl implements WorksheetSlicers {
 
     // Map contract SlicerConfig → Rust StoredSlicer for the bridge.
     const caption = config.caption ?? config.name ?? '';
-    const source = config.source ?? {
+    const sourceInput = config.source ?? {
       type: 'table' as const,
       tableId: config.tableName ?? '',
       columnCellId: config.columnName ?? '',
     };
+    let source: StoredSlicer['source'] = sourceInput;
     let tableColumnIndex: number | undefined;
-    if (source.type === 'table') {
-      const table = await this.ctx.computeBridge.getTableByName(source.tableId);
-      const resolvedColumn = table
-        ? await this.resolveTableSlicerColumn(table, source.columnCellId)
-        : null;
-      tableColumnIndex = resolvedColumn?.tableColumnIndex;
+    let publicTableName = '';
+    let publicColumnName = '';
+    if (sourceInput.type === 'table') {
+      const table = config.source
+        ? await this.resolveTableForSlicerSource(sourceInput.tableId)
+        : await this.resolvePublicTableForSlicerConfig(sourceInput.tableId);
+      if (!table) {
+        throw new KernelError('COMPUTE_ERROR', `Table not found: ${sourceInput.tableId}`);
+      }
+      const resolvedColumn = await this.resolveTableSlicerColumn(table, sourceInput.columnCellId, {
+        allowColumnName: !config.source,
+      });
+      if (!resolvedColumn) {
+        throw new KernelError(
+          'COMPUTE_ERROR',
+          `Column not found in table "${table.name}": ${sourceInput.columnCellId}`,
+        );
+      }
+      source = {
+        type: 'table',
+        tableId: table.id,
+        columnCellId: resolvedColumn.columnId,
+      };
+      tableColumnIndex = resolvedColumn.tableColumnIndex;
+      publicTableName = this.publicTableName(table, sourceInput.tableId);
+      publicColumnName = resolvedColumn.columnName;
     }
     const defaultStyle: StoredSlicer['style'] = {
       columnCount: 1,
@@ -203,9 +223,7 @@ export class WorksheetSlicersImpl implements WorksheetSlicers {
       sheetId: config.sheetId ?? this.sheetId,
       source,
       cacheName:
-        source.type === 'table'
-          ? `Slicer_${source.columnCellId || caption || 'Slicer'}`
-          : undefined,
+        source.type === 'table' ? `Slicer_${publicColumnName || caption || 'Slicer'}` : undefined,
       caption,
       name: config.name,
       style: config.style ?? defaultStyle,
@@ -239,8 +257,8 @@ export class WorksheetSlicersImpl implements WorksheetSlicers {
       id: slicerId,
       name: config.name ?? caption,
       caption,
-      tableName: source.type === 'table' ? source.tableId : '',
-      columnName: source.type === 'table' ? source.columnCellId : '',
+      tableName: publicTableName,
+      columnName: publicColumnName,
       selectedItems: config.selectedValues ?? [],
       position: {
         x: pos?.x ?? 0,
@@ -276,13 +294,7 @@ export class WorksheetSlicersImpl implements WorksheetSlicers {
 
   async list(): Promise<SlicerInfo[]> {
     const slicers = await this.ctx.computeBridge.getAllSlicers(this.sheetId);
-    return slicers.map((s) => ({
-      id: s.id,
-      name: s.name ?? s.caption,
-      caption: s.caption,
-      tableName: s.source.type === 'table' ? s.source.tableId : '',
-      columnName: s.source.type === 'table' ? s.source.columnCellId : '',
-    }));
+    return Promise.all(slicers.map((s) => this.projectSlicerInfo(s)));
   }
 
   async getItemAt(index: number): Promise<SlicerInfo | null> {
@@ -303,12 +315,16 @@ export class WorksheetSlicersImpl implements WorksheetSlicers {
     if (!state) {
       return null;
     }
+    const sourceProjection =
+      state.source.type === 'table'
+        ? await this.resolvePublicTableSource(state.source)
+        : { tableName: '', columnName: '' };
     return {
       id: slicerId,
       name: state.name ?? state.caption,
       caption: state.caption,
-      tableName: state.source.type === 'table' ? state.source.tableId : '',
-      columnName: state.source.type === 'table' ? state.source.columnCellId : '',
+      tableName: sourceProjection.tableName,
+      columnName: sourceProjection.columnName,
       selectedItems: state.selectedValues,
       position: anchorToPixelBounds(state.position),
     };
@@ -328,22 +344,19 @@ export class WorksheetSlicersImpl implements WorksheetSlicers {
 
     if (stored.source.type !== 'table') return [];
 
-    // 2. Get the table to find column position and data range
-    const table = await this.ctx.computeBridge.getTableByName(stored.source.tableId);
-    if (!table) return [];
+    // 2. Resolve the slicer's stable/public table + column source.
+    const resolvedSource = await this.resolveTableSlicerSource(stored.source);
+    if (!resolvedSource?.column) return [];
+    const { table, tableSheetId, column: resolvedColumn } = resolvedSource;
 
-    // 3. Resolve the slicer's stable source reference to a current table column.
-    const resolvedColumn = await this.resolveTableSlicerColumn(table, stored.source.columnCellId);
-    if (!resolvedColumn) return [];
-
-    // 4. Compute data row range (skip header, skip totals)
+    // 3. Compute data row range (skip header, skip totals)
     const dataStartRow = table.range.startRow + (table.hasHeaderRow ? 1 : 0);
     const dataEndRow = table.range.endRow - (table.hasTotalsRow ? 1 : 0);
     if (dataStartRow > dataEndRow) return [];
 
-    // 5. Read column data from Yrs
+    // 4. Read column data from Yrs
     const cellsJson = (await this.ctx.computeBridge.getCellsInRangeYrs(
-      this.sheetId,
+      tableSheetId,
       dataStartRow,
       resolvedColumn.absCol,
       dataEndRow,
@@ -355,7 +368,7 @@ export class WorksheetSlicersImpl implements WorksheetSlicers {
       columnData.push(extractCellValue(cell?.value));
     }
 
-    // 6. Build slicer items from column data
+    // 5. Build slicer items from column data
     const selectedSet = new Set(stored.selectedValues.map((v: CellValue) => String(v ?? '')));
     const hasSelection = selectedSet.size > 0 && !(selectedSet.size === 1 && selectedSet.has(''));
 
@@ -436,13 +449,11 @@ export class WorksheetSlicersImpl implements WorksheetSlicers {
     const stored = await this.ctx.computeBridge.getSlicerState(this.sheetId, slicerId);
     if (!stored || stored.source.type !== 'table') return;
 
-    const tableId = stored.source.tableId;
-    const bridgeTable = await this.ctx.computeBridge.getTableByName(tableId);
-    const table = bridgeTable ?? (await getTable(this.ctx, tableId));
-    if (!table) return;
+    const resolvedSource = await this.resolveTableSlicerSource(stored.source);
+    if (!resolvedSource?.column) return;
+    const { table, tableSheetId, column: resolvedColumn } = resolvedSource;
 
     // Get or create filter for the table
-    const tableSheetId = toSheetId(table.sheetId);
     await this.ctx.awaitMaterialized?.('allSheets');
     let filter = await Filters.getTableFilter(this.ctx, tableSheetId, table.id);
     if (!filter) {
@@ -470,9 +481,6 @@ export class WorksheetSlicersImpl implements WorksheetSlicers {
         table.id,
       );
     }
-
-    const resolvedColumn = await this.resolveTableSlicerColumn(table, stored.source.columnCellId);
-    if (!resolvedColumn) return;
 
     if (selectedValues.length === 0) {
       // Clear filter (show all)
@@ -606,9 +614,8 @@ export class WorksheetSlicersImpl implements WorksheetSlicers {
    */
   private async checkSlicerConnectivity(stored: StoredSlicer): Promise<boolean> {
     if (stored.source.type === 'table') {
-      const table = await this.ctx.computeBridge.getTableByName(stored.source.tableId);
-      if (!table) return false;
-      return (await this.resolveTableSlicerColumn(table, stored.source.columnCellId)) !== null;
+      const resolved = await this.resolveTableSlicerSource(stored.source);
+      return resolved?.column != null;
     }
 
     if (stored.source.type === 'pivot') {
@@ -622,22 +629,101 @@ export class WorksheetSlicersImpl implements WorksheetSlicers {
     return false;
   }
 
-  private async resolveTableSlicerColumn(
-    table: TableSlicerColumnSource,
-    sourceColumnRef: string,
-  ): Promise<ResolvedTableSlicerColumn | null> {
-    const directColumn = table.columns.find(
-      (c) => c.name === sourceColumnRef || c.id === sourceColumnRef,
+  private async projectSlicerInfo(stored: StoredSlicer): Promise<SlicerInfo> {
+    const sourceProjection =
+      stored.source.type === 'table'
+        ? await this.resolvePublicTableSource(stored.source)
+        : { tableName: '', columnName: '' };
+    return {
+      id: stored.id,
+      name: stored.name ?? stored.caption,
+      caption: stored.caption,
+      tableName: sourceProjection.tableName,
+      columnName: sourceProjection.columnName,
+    };
+  }
+
+  private async resolvePublicTableSource(source: StoredTableSlicerSource): Promise<{
+    tableName: string;
+    columnName: string;
+  }> {
+    const resolved = await this.resolveTableSlicerSource(source);
+    return {
+      tableName: resolved?.tableName ?? source.tableId,
+      columnName: resolved?.columnName ?? source.columnCellId,
+    };
+  }
+
+  private async resolveTableSlicerSource(
+    source: StoredTableSlicerSource,
+  ): Promise<ResolvedTableSlicerSource | null> {
+    const table = await this.resolveTableForSlicerSource(source.tableId);
+    if (!table) return null;
+
+    const column = await this.resolveTableSlicerColumn(table, source.columnCellId);
+    return {
+      table,
+      tableSheetId: this.sheetIdForTable(table),
+      tableName: this.publicTableName(table, source.tableId),
+      columnName: column?.columnName ?? source.columnCellId,
+      column,
+    };
+  }
+
+  private async resolveTableForSlicerSource(tableRef: string): Promise<CanonicalTable | null> {
+    const sheetTables = await this.ctx.computeBridge.getAllTablesInSheet(this.sheetId);
+    const sheetMatch = this.findTableByStableId(sheetTables, tableRef);
+    if (sheetMatch) return sheetMatch;
+
+    const workbookTables = await this.ctx.computeBridge.getAllTablesWorkbook();
+    const workbookMatch = this.findTableByStableId(
+      workbookTables.map((entry) => entry.table),
+      tableRef,
     );
+    return workbookMatch;
+  }
+
+  private async resolvePublicTableForSlicerConfig(
+    tableRef: string,
+  ): Promise<CanonicalTable | null> {
+    const byName = await this.ctx.computeBridge.getTableByName(tableRef);
+    if (byName) return byName;
+    return this.resolveTableForSlicerSource(tableRef);
+  }
+
+  private findTableByStableId(tables: CanonicalTable[], tableId: string): CanonicalTable | null {
+    return tables.find((table) => table.id === tableId) ?? null;
+  }
+
+  private publicTableName(table: CanonicalTable, fallback: string): string {
+    return table.name || table.displayName || fallback;
+  }
+
+  private sheetIdForTable(table: CanonicalTable): SheetId {
+    return table.sheetId ? toSheetId(table.sheetId) : this.sheetId;
+  }
+
+  private async resolveTableSlicerColumn(
+    table: CanonicalTable,
+    sourceColumnRef: string,
+    options: { allowColumnName?: boolean } = {},
+  ): Promise<ResolvedTableSlicerColumn | null> {
+    const directColumn =
+      table.columns.find((c) => c.id === sourceColumnRef) ??
+      (options.allowColumnName === true
+        ? table.columns.find((c) => c.name === sourceColumnRef)
+        : undefined);
     if (directColumn) {
       return {
+        columnId: directColumn.id,
         absCol: table.range.startCol + directColumn.index,
         tableColumnIndex: directColumn.index,
+        columnName: directColumn.name,
       };
     }
 
     const headerPosition = await this.ctx.computeBridge.getCellPosition(
-      this.sheetId,
+      this.sheetIdForTable(table),
       sourceColumnRef,
     );
     if (
@@ -653,8 +739,10 @@ export class WorksheetSlicersImpl implements WorksheetSlicers {
         null;
       if (column) {
         return {
+          columnId: column.id,
           absCol: headerPosition.col,
           tableColumnIndex: column.index ?? columnIndex,
+          columnName: column.name,
         };
       }
     }

@@ -62,8 +62,10 @@ fn read_preserved_tables(stores: &EngineStores) -> Vec<CanonicalTable> {
 
     tables_map
         .iter(&txn)
-        .filter_map(|(_, out)| match out {
-            Out::YMap(map) => yrs_schema::table::from_yrs_map_to_table(&map, &txn),
+        .filter_map(|(key, out)| match out {
+            Out::YMap(map) => {
+                yrs_schema::table::from_yrs_map_to_table(&map, &txn).filter(|table| table.id == key)
+            }
             _ => None,
         })
         .collect()

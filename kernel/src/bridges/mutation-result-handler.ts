@@ -1073,7 +1073,8 @@ export class MutationResultHandler {
     const eventSource = source === 'user' ? 'user' : 'remote';
 
     for (const change of changes) {
-      const tableId = change.tableId ?? change.name;
+      const tableId = change.tableId;
+      if (!tableId) continue;
       if (change.kind === 'Set') {
         this.eventBus.emit({
           type: 'table:updated',

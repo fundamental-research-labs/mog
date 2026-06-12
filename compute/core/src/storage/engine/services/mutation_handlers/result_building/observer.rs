@@ -499,10 +499,8 @@ pub(in crate::storage::engine) fn build_mutation_result_from_changes(
             continue;
         }
 
-        let table_key = tch.key.strip_prefix("table:").unwrap_or(&tch.key);
-        let current_table = mirror
-            .get_table_by_id(table_key)
-            .or_else(|| mirror.get_table(table_key));
+        let table_key = tch.key.as_str();
+        let current_table = mirror.get_table_by_id(table_key);
         let kind = if current_table.is_some() {
             ChangeKind::Set
         } else {

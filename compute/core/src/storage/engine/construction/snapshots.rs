@@ -502,8 +502,8 @@ fn pivot_field_indices_for_area(
 
 /// Read table definitions from Yrs.
 ///
-/// The workbook table catalog is the only table source. Range bindings are
-/// compact feature attachments and are never used to reconstruct tables.
+/// The workbook table catalog is the only table source. Workbook-level range
+/// bindings are never used to reconstruct tables.
 ///
 /// This mirrors the read in `services::tables::sync_tables_from_yrs`
 /// but returns lightweight `TableDef`s for the snapshot rather than full

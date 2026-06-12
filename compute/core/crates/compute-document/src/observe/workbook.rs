@@ -4,8 +4,7 @@ use yrs::{Any, Map, Out, ReadTxn, TransactionMut};
 use cell_types::SheetId;
 
 use crate::schema::{
-    KEY_NAMED_RANGES, KEY_RANGE_BINDINGS, KEY_SHEET_ORDER, KEY_SLICERS, KEY_TABLES,
-    KEY_WORKBOOK_SETTINGS,
+    KEY_NAMED_RANGES, KEY_SHEET_ORDER, KEY_SLICERS, KEY_TABLES, KEY_WORKBOOK_SETTINGS,
 };
 
 use super::changes::*;
@@ -260,10 +259,6 @@ pub(super) fn observe_workbook_events(
                                 });
                             }
                         }
-                        k if k == KEY_RANGE_BINDINGS => {
-                            // Range bindings are feature attachments, not a
-                            // table catalog or table observer source.
-                        }
                         k if k == KEY_NAMED_RANGES => {
                             buffer.named_ranges.push(SheetLevelChange {
                                 sheet_id: SheetId::from_raw(0),
@@ -334,11 +329,6 @@ pub(super) fn observe_workbook_events(
                         }
                     }
                 }
-
-                // Range bindings are feature attachments, not table-domain
-                // changes. Tables are observed exclusively through
-                // `workbook.tables`.
-                k if k == KEY_RANGE_BINDINGS => {}
 
                 // --- namedRanges ---
                 k if k == KEY_NAMED_RANGES => {

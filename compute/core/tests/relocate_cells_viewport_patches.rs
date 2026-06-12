@@ -150,17 +150,6 @@ fn table_catalog_table_by_key(engine: &YrsComputeEngine, key: &str) -> Option<Ta
     }
 }
 
-fn compact_table_attachment_table_id(engine: &YrsComputeEngine, table_id: &str) -> Option<String> {
-    let txn = engine.storage().doc().transact();
-    let key = compute_document::range::table_attachment_key(table_id);
-    let json = compute_document::range::read_range_binding_wb(
-        engine.storage().workbook_map(),
-        &txn,
-        &key,
-    )?;
-    compute_document::range::TableRangeBinding::from_json(&json).map(|binding| binding.table_id)
-}
-
 fn viewport_count(patches: &[u8]) -> u16 {
     assert!(patches.len() >= 2);
     u16::from_le_bytes([patches[0], patches[1]])
@@ -429,11 +418,6 @@ fn relocate_whole_table_moves_table_binding() {
         .expect("id-keyed catalog table should move with whole-table relocate");
     assert_eq!(catalog.range.start_col(), 3);
     assert_eq!(catalog.range.end_col(), 4);
-    assert_eq!(
-        compact_table_attachment_table_id(&engine, &table_id).as_deref(),
-        Some(table_id.as_str()),
-        "compact attachment must remain keyed by stable table id after relocate"
-    );
     assert!(
         result
             .table_changes

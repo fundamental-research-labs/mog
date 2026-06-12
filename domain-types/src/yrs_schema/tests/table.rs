@@ -5,7 +5,7 @@ use crate::domain::table::{
 };
 use crate::yrs_schema::table;
 
-use super::support::roundtrip_map;
+use super::support::{roundtrip_map, roundtrip_map_value};
 
 #[test]
 fn table_spec_round_trips_ooxml_metadata() {
@@ -72,6 +72,46 @@ fn canonical_table_round_trips_runtime_entrypoint() {
         roundtrip_map(table::to_yrs_prelim_from_table(&original), |map, txn| {
             table::from_yrs_map_to_table(map, txn)
         },)
+    );
+}
+
+#[test]
+fn canonical_table_requires_stable_runtime_id() {
+    let original = Table {
+        id: "table-runtime-1".to_string(),
+        name: "RuntimeTable".to_string(),
+        display_name: "Runtime Table".to_string(),
+        sheet_id: "sheet-1".to_string(),
+        range: SheetRange::new(0, 0, 9, 2),
+        columns: vec![TableColumn {
+            id: "column-runtime-1".to_string(),
+            name: "Amount".to_string(),
+            index: 0,
+            ..Default::default()
+        }],
+        has_header_row: true,
+        has_totals_row: false,
+        style: "TableStyleMedium2".to_string(),
+        banded_rows: true,
+        banded_columns: false,
+        emphasize_first_column: false,
+        emphasize_last_column: false,
+        show_filter_buttons: true,
+        auto_expand: true,
+        auto_calculated_columns: true,
+        ooxml_table_id: Some(7),
+        ..Default::default()
+    };
+    let entries = table::to_yrs_prelim_from_table(&original)
+        .into_iter()
+        .filter(|(key, _)| *key != table::KEY_ID)
+        .collect();
+
+    let decoded = roundtrip_map_value(entries, |map, txn| table::from_yrs_map_to_table(map, txn));
+
+    assert!(
+        decoded.is_none(),
+        "canonical table hydration must not synthesize runtime IDs from OOXML metadata"
     );
 }
 

@@ -1,7 +1,7 @@
 #![allow(unused_imports, unused_variables)]
 use super::*;
 use domain_types::yrs_schema::table as yrs_table;
-use yrs::{MapPrelim, MapRef, ReadTxn, TransactionMut};
+use yrs::{MapPrelim, MapRef, TransactionMut};
 
 // -------------------------------------------------------------------
 // Table Yrs Persistence
@@ -13,30 +13,12 @@ fn table_catalog_prelim(table: &CanonicalTable) -> MapPrelim {
         .collect()
 }
 
-fn read_table_catalog_entry<T: ReadTxn>(
-    tables_map: &MapRef,
-    txn: &T,
-    key: &str,
-) -> Option<CanonicalTable> {
-    match tables_map.get(txn, key) {
-        Some(Out::YMap(inner)) => yrs_table::from_yrs_map_to_table(&inner, txn),
-        _ => None,
-    }
-}
-
 fn write_table_catalog_entry(
     tables_map: &MapRef,
     txn: &mut TransactionMut,
     table: &CanonicalTable,
 ) {
     tables_map.insert(txn, table.id.as_str(), table_catalog_prelim(table));
-}
-
-fn write_table_attachment(workbook: &MapRef, txn: &mut TransactionMut, table: &CanonicalTable) {
-    let attachment_key = table_attachment_key(&table.id);
-    if let Some(json) = compute_document::range::TableRangeBinding::new(&table.id).to_json() {
-        compute_document::range::write_range_binding_wb(workbook, txn, &attachment_key, &json);
-    }
 }
 
 pub(in crate::storage::engine) fn persist_table_to_yrs_in_txn(
@@ -49,15 +31,12 @@ pub(in crate::storage::engine) fn persist_table_to_yrs_in_txn(
         txn,
         compute_document::schema::KEY_TABLES,
     );
-    tables_map.remove(txn, table.name.as_str());
     write_table_catalog_entry(&tables_map, txn, table);
-    write_table_attachment(workbook, txn, table);
 }
 
 /// Persist a full table definition to the Yrs CRDT document.
 ///
-/// Writes the canonical table catalog entry to `workbook.tables[<table_id>]`
-/// and a compact attachment to `workbook.rangeBindings[table:<table_id>]`.
+/// Writes the canonical table catalog entry to `workbook.tables[<table_id>]`.
 ///
 /// Uses a single `ORIGIN_USER_EDIT` transaction so the change syncs to peers.
 pub(in crate::storage::engine) fn persist_table_to_yrs(
@@ -76,7 +55,6 @@ pub(in crate::storage::engine) fn persist_table_to_yrs(
 /// Persist a table rename without changing its stable catalog identity.
 pub(in crate::storage::engine) fn rename_table_in_yrs(
     stores: &mut EngineStores,
-    old_name: &str,
     table: &CanonicalTable,
 ) {
     let workbook = stores.storage.workbook_map().clone();
@@ -90,12 +68,8 @@ pub(in crate::storage::engine) fn rename_table_in_yrs(
         &mut txn,
         compute_document::schema::KEY_TABLES,
     );
-    tables_map.remove(&mut txn, old_name);
-    let old_attachment_key = table_attachment_key(old_name);
-    compute_document::range::remove_range_binding_wb(&workbook, &mut txn, &old_attachment_key);
 
     write_table_catalog_entry(&tables_map, &mut txn, table);
-    write_table_attachment(&workbook, &mut txn, table);
 }
 
 /// Persist a table definition and its backing table filter in one Yrs transaction.
@@ -158,7 +132,7 @@ pub(in crate::storage::engine) fn remove_table_from_yrs_in_txn(
     workbook: &MapRef,
     sheets: &MapRef,
     txn: &mut TransactionMut,
-    table_name: &str,
+    _table_name: &str,
     table_id: Option<&str>,
     table_filter: Option<&(SheetId, String)>,
     grid_index: Option<&crate::identity::GridIndex>,
@@ -169,36 +143,8 @@ pub(in crate::storage::engine) fn remove_table_from_yrs_in_txn(
         compute_document::schema::KEY_TABLES,
     );
 
-    let mut catalog_keys = vec![table_name.to_string()];
-    let mut table_ids = Vec::new();
     if let Some(table_id) = table_id {
-        catalog_keys.push(table_id.to_string());
-        table_ids.push(table_id.to_string());
-    } else {
-        for (key, value) in tables_map.iter(txn) {
-            if let Out::YMap(inner) = value
-                && let Some(table) =
-                    domain_types::yrs_schema::table::from_yrs_map_to_table(&inner, txn)
-                && table.name.eq_ignore_ascii_case(table_name)
-            {
-                catalog_keys.push(key.to_string());
-                table_ids.push(table.id);
-            }
-        }
-    }
-    catalog_keys.sort();
-    catalog_keys.dedup();
-    for key in catalog_keys {
-        tables_map.remove(txn, key.as_str());
-    }
-
-    let attachment_key = table_attachment_key(table_name);
-    compute_document::range::remove_range_binding_wb(workbook, txn, &attachment_key);
-    table_ids.sort();
-    table_ids.dedup();
-    for table_id in table_ids {
-        let attachment_key = table_attachment_key(&table_id);
-        compute_document::range::remove_range_binding_wb(workbook, txn, &attachment_key);
+        tables_map.remove(txn, table_id);
     }
 
     if let Some((sheet_id, filter_id)) = table_filter {
@@ -215,8 +161,7 @@ pub(in crate::storage::engine) fn remove_table_from_yrs_in_txn(
 
 /// Persist the current table style fields to the Yrs document.
 ///
-/// Updates `workbook.tables[<table_id>]` and the compact table attachment in
-/// a single `ORIGIN_USER_EDIT`
+/// Updates `workbook.tables[<table_id>]` in a single `ORIGIN_USER_EDIT`
 /// transaction.
 pub(in crate::storage::engine) fn persist_table_style_to_yrs(
     stores: &mut EngineStores,
@@ -243,9 +188,8 @@ pub(in crate::storage::engine) fn persist_table_style_to_yrs(
 
 /// Re-read ALL tables from Yrs and sync them into the mirror.
 ///
-/// The id-keyed catalog is the canonical table source. Compact table
-/// attachments are derived markers, and legacy full binding payloads are
-/// compatibility input only when no matching catalog entry exists.
+/// The id-keyed catalog is the canonical table source. Workbook-level range
+/// bindings are not table-domain input.
 ///
 /// Called after undo/redo or remote changes so the mirror stays in sync.
 pub(in crate::storage::engine) fn sync_tables_from_yrs(
@@ -262,8 +206,7 @@ pub(in crate::storage::engine) fn sync_tables_from_yrs(
         let mut names = std::collections::HashSet::new();
         let mut ids = std::collections::HashSet::new();
 
-        // Read canonical catalog entries. Range bindings are compact
-        // attachments only, never table sources.
+        // Read canonical catalog entries. Range bindings are never table sources.
         if let Some(Out::YMap(tables_map)) = stores
             .storage
             .workbook_map()
@@ -273,11 +216,8 @@ pub(in crate::storage::engine) fn sync_tables_from_yrs(
                 if let Out::YMap(inner) = value
                     && let Some(table) =
                         domain_types::yrs_schema::table::from_yrs_map_to_table(&inner, &txn)
+                    && table.id == key
                 {
-                    if table.id != key {
-                        names.insert(key.to_string());
-                    }
-                    ids.insert(key.to_string());
                     ids.insert(table.id.clone());
                     names.insert(table.name.clone());
                     tables.push(table);

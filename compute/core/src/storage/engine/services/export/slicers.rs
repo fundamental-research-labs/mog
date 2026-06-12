@@ -73,7 +73,7 @@ fn reconcile_table_slicer_cache(
     };
 
     table_cache.table_id = table.ooxml_table_id;
-    if let Some(index) = table.columns.iter().position(|column| {
+    if let Some((index, column)) = table.columns.iter().enumerate().find(|(_, column)| {
         column
             .stable_column_id
             .as_deref()
@@ -82,5 +82,6 @@ fn reconcile_table_slicer_cache(
             || column.ooxml_column_id.to_string() == *column_cell_id
     }) {
         table_cache.column = index as u32;
+        cache.source_name.clone_from(&column.name);
     }
 }

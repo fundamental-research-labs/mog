@@ -247,6 +247,7 @@ export class WorksheetInternalImpl implements WorksheetInternal {
         const targetStartRow = targetRow + rowOffset;
         const targetStartCol = targetCol + colOffset;
         return {
+          id: table.id,
           name: table.name,
           sourceRange: table.range,
           targetRange: {
@@ -285,7 +286,7 @@ export class WorksheetInternalImpl implements WorksheetInternal {
         type: 'table:updated',
         timestamp: Date.now(),
         sheetId: this.sheetId,
-        tableId: move.name,
+        tableId: move.id,
         changes: { range: move.targetRange },
         source: 'api',
       });

@@ -299,7 +299,9 @@ fn imported_table_export_uses_one_projection_for_parts_slicers_and_query_tables(
         "{query_table_xml}"
     );
     assert!(
-        slicer_cache_xml.contains(r#"tableId="7""#) && slicer_cache_xml.contains(r#"column="1""#),
+        slicer_cache_xml.contains(r#"sourceName="Region""#)
+            && slicer_cache_xml.contains(r#"tableId="7""#)
+            && slicer_cache_xml.contains(r#"column="1""#),
         "{slicer_cache_xml}"
     );
 }

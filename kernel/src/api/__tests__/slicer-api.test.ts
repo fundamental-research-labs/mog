@@ -41,11 +41,35 @@ import { WorksheetSlicersImpl } from '../worksheet/slicers';
 import { WorkbookSlicerStylesImpl } from '../workbook/slicer-styles';
 import { KernelError } from '../../errors';
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
 const SHEET_ID = sheetId('sheet-1');
+
+function mockTable(id: string, columns: Array<{ name: string; id?: string; index?: number }>) {
+  const mappedColumns = columns.map((col, index) => ({
+    name: col.name,
+    id: col.id ?? col.name,
+    index: col.index ?? index,
+  }));
+  return {
+    id,
+    name: id,
+    displayName: id,
+    sheetId: String(SHEET_ID),
+    columns: mappedColumns,
+    range: { startRow: 0, startCol: 0, endRow: 4, endCol: Math.max(0, mappedColumns.length - 1) },
+    hasHeaderRow: true,
+    hasTotalsRow: false,
+  };
+}
+
+const DEFAULT_TABLES = [
+  mockTable('T1', [{ name: 'C1' }, { name: 'C2' }, { name: 'Col1', index: 0 }]),
+  mockTable('T2', [{ name: 'C2' }]),
+  mockTable('T3', [{ name: 'C3' }]),
+  mockTable('SalesTable', [
+    { name: 'Region', id: 'col-region' },
+    { name: 'Amount', id: 'col-amount' },
+  ]),
+];
 
 function createMockComputeBridge() {
   return {
@@ -62,6 +86,8 @@ function createMockComputeBridge() {
 
     // Table queries (used by getItems/checkSlicerConnectivity)
     getTableByName: jest.fn().mockResolvedValue(null),
+    getAllTablesInSheet: jest.fn().mockResolvedValue([]),
+    getAllTablesWorkbook: jest.fn().mockResolvedValue([]),
     getCellsInRangeYrs: jest.fn().mockResolvedValue([]),
     getCellPosition: jest.fn().mockResolvedValue(null),
     getFiltersInSheet: jest.fn().mockResolvedValue([
@@ -118,6 +144,7 @@ describe('WorksheetSlicersImpl', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     bridge = createMockComputeBridge();
+    bridge.getAllTablesInSheet.mockResolvedValue(DEFAULT_TABLES);
     ctx = createMockCtx(bridge);
     slicers = new WorksheetSlicersImpl(ctx, SHEET_ID);
   });
@@ -233,7 +260,7 @@ describe('WorksheetSlicersImpl', () => {
         sheetId: String(SHEET_ID),
         caption: 'Region',
         name: 'RegionSlicer',
-        source: { type: 'table', tableId: 'SalesTable', columnCellId: 'Region' },
+        source: { type: 'table', tableId: 'SalesTable', columnCellId: 'col-region' },
         style: {
           columnCount: 1,
           buttonHeight: 30,
@@ -381,6 +408,16 @@ describe('WorksheetSlicersImpl', () => {
           source: { type: 'table', tableId: 'T1', columnCellId: 'C1' },
         },
       ]);
+      bridge.getTableByName.mockResolvedValue({
+        id: 'tbl-unique',
+        name: 'T2',
+        displayName: 'T2',
+        sheetId: String(SHEET_ID),
+        columns: [{ name: 'C2', id: 'col-unique', index: 0 }],
+        range: { startRow: 0, startCol: 0, endRow: 4, endCol: 0 },
+        hasHeaderRow: true,
+        hasTotalsRow: false,
+      });
 
       // "NewSlicer" does not conflict
       await expect(
@@ -396,6 +433,16 @@ describe('WorksheetSlicersImpl', () => {
 
     it('creating a slicer without a name succeeds (no uniqueness check)', async () => {
       bridge.getAllSlicersWorkbook.mockResolvedValue([]);
+      bridge.getTableByName.mockResolvedValue({
+        id: 'tbl-no-name',
+        name: 'T1',
+        displayName: 'T1',
+        sheetId: String(SHEET_ID),
+        columns: [{ name: 'C1', id: 'col-no-name', index: 0 }],
+        range: { startRow: 0, startCol: 0, endRow: 4, endCol: 0 },
+        hasHeaderRow: true,
+        hasTotalsRow: false,
+      });
 
       await expect(
         slicers.add({
@@ -406,11 +453,13 @@ describe('WorksheetSlicersImpl', () => {
       expect(bridge.createSlicer).toHaveBeenCalled();
     });
 
-    it('creating a table slicer records the cache name and table column index', async () => {
+    it('creating a table slicer stores canonical source and public cache name', async () => {
       bridge.getAllSlicersWorkbook.mockResolvedValue([]);
       bridge.getTableByName.mockResolvedValue({
-        id: 'SalesTable',
+        id: 'tbl-sales',
         name: 'SalesTable',
+        displayName: 'SalesTable',
+        sheetId: String(SHEET_ID),
         columns: [
           { name: 'Region', id: 'col-region', index: 0 },
           { name: 'Amount', id: 'col-amount', index: 1 },
@@ -423,12 +472,18 @@ describe('WorksheetSlicersImpl', () => {
       await slicers.add({
         name: 'RegionSlicer',
         caption: 'Region',
-        source: { type: 'table', tableId: 'SalesTable', columnCellId: 'Amount' },
+        tableName: 'SalesTable',
+        columnName: 'Amount',
       } as any);
 
       const [, config] = bridge.createSlicer.mock.calls[0];
       expect(config).toEqual(
         expect.objectContaining({
+          source: {
+            type: 'table',
+            tableId: 'tbl-sales',
+            columnCellId: 'col-amount',
+          },
           cacheName: 'Slicer_Amount',
           tableColumnIndex: 1,
         }),
@@ -445,7 +500,7 @@ describe('WorksheetSlicersImpl', () => {
       bridge.getSlicerState.mockResolvedValue({
         id: 'slicer-t1',
         caption: 'Region',
-        source: { type: 'table', tableId: 'SalesTable', columnCellId: 'Region' },
+        source: { type: 'table', tableId: 'SalesTable', columnCellId: 'col-region' },
         selectedValues: [],
         position: { x: 0, y: 0, width: 200, height: 300 },
         style: null,
@@ -498,16 +553,21 @@ describe('WorksheetSlicersImpl', () => {
         locked: false,
         showHeader: true,
       });
-      bridge.getTableByName.mockResolvedValue({
-        id: 'SalesTable',
-        columns: [
-          { name: 'Region', id: 'col-1', index: 0 },
-          { name: 'Amount', id: 'col-2', index: 1 },
-        ],
-        range: { startRow: 0, startCol: 0, endRow: 3, endCol: 1 },
-        hasHeaderRow: true,
-        hasTotalsRow: false,
-      });
+      bridge.getAllTablesInSheet.mockResolvedValue([
+        {
+          id: 'SalesTable',
+          name: 'SalesTable',
+          displayName: 'SalesTable',
+          sheetId: String(SHEET_ID),
+          columns: [
+            { name: 'Region', id: 'col-1', index: 0 },
+            { name: 'Amount', id: 'col-2', index: 1 },
+          ],
+          range: { startRow: 0, startCol: 0, endRow: 3, endCol: 1 },
+          hasHeaderRow: true,
+          hasTotalsRow: false,
+        },
+      ]);
       bridge.getCellPosition.mockResolvedValue({ row: 0, col: 0 });
       bridge.getCellsInRangeYrs.mockResolvedValue([
         { row: 1, col: 0, value: { type: 'text', value: 'East' } },
@@ -541,16 +601,21 @@ describe('WorksheetSlicersImpl', () => {
         locked: false,
         showHeader: true,
       });
-      bridge.getTableByName.mockResolvedValue({
-        id: 'SalesTable',
-        columns: [
-          { name: 'Region', id: 'col-1', index: 0 },
-          { name: 'Amount', id: 'col-2', index: 1 },
-        ],
-        range: { startRow: 0, startCol: 0, endRow: 3, endCol: 1 },
-        hasHeaderRow: true,
-        hasTotalsRow: false,
-      });
+      bridge.getAllTablesInSheet.mockResolvedValue([
+        {
+          id: 'SalesTable',
+          name: 'SalesTable',
+          displayName: 'SalesTable',
+          sheetId: String(SHEET_ID),
+          columns: [
+            { name: 'Region', id: 'col-1', index: 0 },
+            { name: 'Amount', id: 'col-2', index: 1 },
+          ],
+          range: { startRow: 0, startCol: 0, endRow: 3, endCol: 1 },
+          hasHeaderRow: true,
+          hasTotalsRow: false,
+        },
+      ]);
       bridge.getCellPosition.mockResolvedValue({ row: 0, col: 1 });
       bridge.getCellsInRangeYrs.mockResolvedValue([
         { row: 1, col: 1, value: { type: 'number', value: 10 } },
@@ -582,18 +647,21 @@ describe('WorksheetSlicersImpl', () => {
         locked: false,
         showHeader: true,
       });
-      bridge.getTableByName.mockResolvedValue({
-        id: 'SalesTable',
-        name: 'SalesTable',
-        sheetId: SHEET_ID,
-        columns: [
-          { name: 'Region', id: 'col-1', index: 0 },
-          { name: 'Amount', id: 'col-2', index: 1 },
-        ],
-        range: { startRow: 0, startCol: 0, endRow: 3, endCol: 1 },
-        hasHeaderRow: true,
-        hasTotalsRow: false,
-      });
+      bridge.getAllTablesInSheet.mockResolvedValue([
+        {
+          id: 'SalesTable',
+          name: 'SalesTable',
+          displayName: 'SalesTable',
+          sheetId: SHEET_ID,
+          columns: [
+            { name: 'Region', id: 'col-1', index: 0 },
+            { name: 'Amount', id: 'col-2', index: 1 },
+          ],
+          range: { startRow: 0, startCol: 0, endRow: 3, endCol: 1 },
+          hasHeaderRow: true,
+          hasTotalsRow: false,
+        },
+      ]);
       bridge.getCellPosition.mockResolvedValue({ row: 0, col: 0 });
 
       await slicers.setSelection('slicer-cell-id', ['West']);

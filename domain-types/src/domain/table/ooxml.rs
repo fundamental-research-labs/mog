@@ -29,7 +29,7 @@ where
             .map(|(i, col)| TableCatalogColumn {
                 id: column_ids
                     .next()
-                    .unwrap_or_else(|| format!("col-ooxml-{}", col.id)),
+                    .expect("caller must provide stable Mog column ids for every table column"),
                 ooxml_column_id: Some(col.id),
                 name: col.name.clone(),
                 index: i as u32,

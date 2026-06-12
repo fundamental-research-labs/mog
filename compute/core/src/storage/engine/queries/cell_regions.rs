@@ -20,6 +20,7 @@ use crate::snapshot::{
 };
 use crate::storage::cells::values as cell_values;
 use crate::storage::engine::YrsComputeEngine;
+use crate::storage::engine::formula_read;
 use crate::storage::engine::query_serialization::{cell_value_to_json, region_json};
 use crate::storage::engine::{data_table_formula, services};
 use crate::storage::sheet::{hyperlinks, merges, properties as sheets};
@@ -136,19 +137,21 @@ pub(in crate::storage::engine) fn get_cell_data(
     col: u32,
 ) -> Option<serde_json::Value> {
     if let Some(mut data) = services::queries::get_cell_data(&engine.stores, sheet_id, row, col) {
-        if let Some(cell_id_hex) = data.get("cell_id").and_then(|v| v.as_str())
+        let cell_id = if let Some(cell_id_hex) = data.get("cell_id").and_then(|v| v.as_str())
             && let Some(id_u128) = compute_document::hex::hex_to_id(cell_id_hex)
         {
-            let cell_id = cell_types::CellId::from_raw(id_u128);
-            if let Some(formula) = engine.stores.compute.get_formula(&cell_id) {
-                let body = formula.strip_prefix('=').unwrap_or(formula);
-                data["formula"] = serde_json::Value::String(body.to_string());
-            }
-        }
-        if data.get("formula").and_then(|v| v.as_str()).is_none()
-            && let Some(formula) =
-                data_table_formula::formula_at(&engine.mirror, sheet_id, row, col)
-        {
+            Some(cell_types::CellId::from_raw(id_u128))
+        } else {
+            None
+        };
+        if let Some(formula) = formula_read::formula_text_at(
+            &engine.stores,
+            &engine.mirror,
+            sheet_id,
+            row,
+            col,
+            cell_id.as_ref(),
+        ) {
             data["formula"] = serde_json::Value::String(
                 formula.strip_prefix('=').unwrap_or(&formula).to_string(),
             );
@@ -157,8 +160,9 @@ pub(in crate::storage::engine) fn get_cell_data(
         return Some(data);
     }
     let region = region_json(&engine.mirror, sheet_id, row, col);
-    let data_table_formula = data_table_formula::formula_at(&engine.mirror, sheet_id, row, col)
-        .map(|f| f.strip_prefix('=').unwrap_or(&f).to_string());
+    let formula =
+        formula_read::formula_text_at(&engine.stores, &engine.mirror, sheet_id, row, col, None)
+            .map(|f| f.strip_prefix('=').unwrap_or(&f).to_string());
     let value = cell_values::get_effective_value(&engine.mirror, sheet_id, row, col);
     match (value, &region) {
         (Some(v), _) if !v.is_null() => Some(serde_json::json!({
@@ -166,14 +170,14 @@ pub(in crate::storage::engine) fn get_cell_data(
             "row": row,
             "col": col,
             "value": cell_value_to_json(&v),
-            "formula": data_table_formula,
+            "formula": formula,
             "region": region,
         })),
         (_, serde_json::Value::Object(_)) => Some(serde_json::json!({
             "cell_id": serde_json::Value::Null,
             "row": row,
             "col": col,
-            "formula": data_table_formula,
+            "formula": formula,
             "region": region,
         })),
         _ => None,

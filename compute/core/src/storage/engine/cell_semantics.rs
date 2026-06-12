@@ -108,26 +108,20 @@ impl YrsComputeEngine {
     pub fn get_cell_info(&self, sheet_id: &SheetId, row: u32, col: u32) -> Option<CellInfo> {
         let value = self.get_cell_value(sheet_id, row, col);
 
-        // Get formula: prefer ComputeCore's formula_strings (authoritative after
-        // structural changes), falling back to Yrs KEY_FORMULA for cold reads.
+        // Get formula: prefer ComputeCore's formula strings, then identity
+        // formulas, then formula-owning region anchors such as CSE arrays.
         let formula = {
-            let from_compute = self
+            let cell_id = self
                 .mirror
-                .resolve_cell_id(sheet_id, SheetPos::new(row, col))
-                .and_then(|cid| self.stores.compute.get_formula(&cid))
-                .map(|f| {
-                    if f.starts_with('=') {
-                        f.to_string()
-                    } else {
-                        format!("={}", f)
-                    }
-                });
-
-            if from_compute.is_some() {
-                from_compute
-            } else if let Some(formula) =
-                super::data_table_formula::formula_at(&self.mirror, sheet_id, row, col)
-            {
+                .resolve_cell_id(sheet_id, SheetPos::new(row, col));
+            if let Some(formula) = super::formula_read::formula_text_at(
+                &self.stores,
+                &self.mirror,
+                sheet_id,
+                row,
+                col,
+                cell_id.as_ref(),
+            ) {
                 Some(formula)
             } else if let Some(grid_index) = self.stores.grid_indexes.get(sheet_id) {
                 let raw = cell_values::get_raw_value(
@@ -204,19 +198,14 @@ impl YrsComputeEngine {
         let cell_id = self.mirror.resolve_cell_id(sheet_id, pos);
 
         let formula = if include_formula {
-            cell_id
-                .and_then(|cid| {
-                    self.stores
-                        .compute
-                        .get_formula(&cid)
-                        .map(|s| s.to_string())
-                        .or_else(|| {
-                            self.mirror.get_formula(&cid).map(|f| {
-                                self.stores.compute.to_a1_display(&self.mirror, sheet_id, f)
-                            })
-                        })
-                })
-                .or_else(|| super::data_table_formula::formula_at(&self.mirror, sheet_id, row, col))
+            super::formula_read::formula_text_at(
+                &self.stores,
+                &self.mirror,
+                sheet_id,
+                row,
+                col,
+                cell_id.as_ref(),
+            )
         } else {
             None
         };

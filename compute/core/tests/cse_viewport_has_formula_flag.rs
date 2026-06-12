@@ -447,6 +447,26 @@ fn interactive_cse_source_workbook() -> WorkbookSnapshot {
         number_cell(23, 0, 1, 1.0),
         number_cell(24, 1, 1, 2.0),
         number_cell(25, 2, 1, 3.0),
+        // Blank cells in the target CSE range, matching UI-created grids
+        // where covered cells can already have identities before CSE entry.
+        CellData {
+            cell_id: cell_uuid(26),
+            row: 1,
+            col: 3,
+            value: CellValue::Null,
+            formula: None,
+            identity_formula: None,
+            array_ref: None,
+        },
+        CellData {
+            cell_id: cell_uuid(27),
+            row: 2,
+            col: 3,
+            value: CellValue::Null,
+            formula: None,
+            identity_formula: None,
+            array_ref: None,
+        },
     ];
 
     let sheet = SheetSnapshot {
@@ -541,6 +561,59 @@ fn cse_set_array_formula_preserves_array_value_and_projection() {
         0,
         "D3 (CSE projection member) missing HAS_FORMULA: flags=0x{:04x}",
         d3.flags,
+    );
+
+    // Read APIs should expose the formula-owning anchor's formula for covered
+    // CSE members. The formula remains stored on the anchor, but formula-bar
+    // consumers must see the same authored formula at every cell in the CSE
+    // rectangle.
+    let d2_id = cell_types::CellId::from_uuid_str(
+        &engine
+            .get_cell_id_at(&sheet_id, 1, 3)
+            .expect("D2 CSE member should have a cell id"),
+    )
+    .expect("D2 cell id should parse");
+    let d2_active = engine.get_active_cell(&sheet_id, &d2_id);
+    assert_eq!(
+        d2_active.formula.as_deref(),
+        Some("=A1:A3*B1:B3"),
+        "D2 active-cell read should expose the CSE anchor formula"
+    );
+
+    let metadata: snapshot_types::properties::CellMetadata = serde_json::from_value(
+        d2_active
+            .metadata
+            .clone()
+            .expect("D2 active cell should expose CSE metadata"),
+    )
+    .expect("D2 metadata should deserialize");
+    assert!(metadata.is_array_formula);
+    assert!(metadata.is_array_member);
+    assert!(matches!(
+        metadata.region.as_ref().map(|region| region.kind),
+        Some(snapshot_types::properties::RegionKind::CseArray)
+    ));
+
+    let d2_raw = engine
+        .get_raw_cell_data(&sheet_id, 1, 3, true)
+        .expect("D2 raw cell data should exist");
+    assert_eq!(
+        d2_raw.formula.as_deref(),
+        Some("=A1:A3*B1:B3"),
+        "D2 raw-cell-data read should expose the CSE anchor formula"
+    );
+    assert!(matches!(
+        d2_raw.computed,
+        Some(value_types::CellValue::Number(n)) if (n.get() - 40.0).abs() < 1e-9
+    ));
+
+    let d2_cell_data = engine
+        .get_cell_data(&sheet_id, 1, 3)
+        .expect("D2 cell data should exist");
+    assert_eq!(
+        d2_cell_data.get("formula").and_then(|value| value.as_str()),
+        Some("A1:A3*B1:B3"),
+        "D2 cell-data read should expose the CSE anchor formula body"
     );
 
     // 5. Assert partial write to D2 returns PartialArrayWrite error.

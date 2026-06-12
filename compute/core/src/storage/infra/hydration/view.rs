@@ -163,16 +163,6 @@ pub(super) fn hydrate_sheet_protection(
         let entries = yrs_schema::protection::sheet_to_yrs_prelim(prot);
         let prot_prelim: MapPrelim = entries.into_iter().collect();
         meta_map.insert(txn, "protectionDetails", prot_prelim);
-
-        // Also write the top-level convenience keys for existing UI code
-        meta_map.insert(txn, "isProtected", Any::Bool(prot.is_protected));
-        if let Some(ref hash) = prot.password_hash {
-            meta_map.insert(
-                txn,
-                "protectionPasswordHash",
-                Any::String(Arc::from(hash.as_str())),
-            );
-        }
     }
 }
 

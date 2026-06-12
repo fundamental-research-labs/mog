@@ -13,6 +13,7 @@ use yrs::{Any, Doc, Map, MapPrelim, MapRef, Origin, Out, Transact};
 
 use cell_types::SheetId;
 use compute_document::undo::ORIGIN_USER_EDIT;
+use domain_types::domain::protection::SheetProtection;
 use domain_types::domain::sheet::{SheetProtectionOptions, SheetSettings};
 use domain_types::units::{
     CharWidth, Pixels, Points, char_width_to_pixels, pixels_to_char_width, pixels_to_points,
@@ -22,12 +23,12 @@ use domain_types::yrs_schema::protection as protection_schema;
 
 use super::yrs_helpers::{
     KEY_ACTIVE_CELL, KEY_BASE_COL_WIDTH, KEY_CUSTOM_HEIGHT, KEY_DEFAULT_COL_WIDTH,
-    KEY_DEFAULT_ROW_DESCENT, KEY_DEFAULT_ROW_HEIGHT, KEY_GRIDLINE_COLOR, KEY_IS_PROTECTED,
-    KEY_OUTLINE_LEVEL_COL, KEY_OUTLINE_LEVEL_ROW, KEY_PROTECTION_DETAILS,
-    KEY_PROTECTION_PASSWORD_HASH, KEY_RIGHT_TO_LEFT, KEY_SHEET_UID, KEY_SHOW_COLUMN_HEADERS,
-    KEY_SHOW_FORMULAS, KEY_SHOW_GRIDLINES, KEY_SHOW_ROW_HEADERS, KEY_SHOW_ZERO_VALUES, KEY_SQREF,
-    KEY_TAB_SELECTED, KEY_ZERO_HEIGHT, KEY_ZOOM_SCALE, KEY_ZOOM_SCALE_NORMAL, get_meta_map,
-    meta_bool, meta_number, meta_optional_number, meta_optional_u32, meta_string,
+    KEY_DEFAULT_ROW_DESCENT, KEY_DEFAULT_ROW_HEIGHT, KEY_GRIDLINE_COLOR, KEY_OUTLINE_LEVEL_COL,
+    KEY_OUTLINE_LEVEL_ROW, KEY_PROTECTION_DETAILS, KEY_RIGHT_TO_LEFT, KEY_SHEET_UID,
+    KEY_SHOW_COLUMN_HEADERS, KEY_SHOW_FORMULAS, KEY_SHOW_GRIDLINES, KEY_SHOW_ROW_HEADERS,
+    KEY_SHOW_ZERO_VALUES, KEY_SQREF, KEY_TAB_SELECTED, KEY_ZERO_HEIGHT, KEY_ZOOM_SCALE,
+    KEY_ZOOM_SCALE_NORMAL, get_meta_map, meta_bool, meta_number, meta_optional_number,
+    meta_optional_u32, meta_string,
 };
 
 // =========================================================================
@@ -42,10 +43,9 @@ use super::yrs_helpers::{
 /// `SheetSettingsChange` (full settings snapshot) instead of a
 /// discriminator-only `SheetChange`.
 ///
-/// Top-level meta keys only — protection sub-options (e.g.
-/// `selectLockedCells`, `formatCells`, …) live inside the nested
-/// `protectionDetails` Y.Map and surface to the observer at a deeper
-/// path; they are not part of this list.
+/// Top-level meta keys only. `protectionDetails` is the one sheet-protection
+/// storage key; public fields such as `isProtected` and `protectionPasswordHash`
+/// are derived from that domain model in `get_sheet_settings`.
 pub const SHEET_SETTINGS_KEYS: &[&str] = &[
     // SheetViewOptions
     "showGridlines",
@@ -55,9 +55,7 @@ pub const SHEET_SETTINGS_KEYS: &[&str] = &[
     "showFormulas",
     "showZeroValues",
     "zoomScale",
-    // Protection (top-level meta keys)
-    "isProtected",
-    "protectionPasswordHash",
+    // Protection
     "protectionDetails",
     // Other settings stored on the sheet meta map
     "gridlineColor",
@@ -76,38 +74,58 @@ pub fn is_sheet_settings_key(key: &str) -> bool {
 pub(crate) fn get_sheet_settings(doc: &Doc, sheets: &MapRef, sheet_id: &SheetId) -> SheetSettings {
     let txn = doc.transact();
     match get_meta_map(&txn, sheets, sheet_id) {
-        Some(meta) => SheetSettings {
-            show_gridlines: meta_bool(&txn, &meta, KEY_SHOW_GRIDLINES, true),
-            show_row_headers: meta_bool(&txn, &meta, KEY_SHOW_ROW_HEADERS, true),
-            show_column_headers: meta_bool(&txn, &meta, KEY_SHOW_COLUMN_HEADERS, true),
-            is_protected: meta_bool(&txn, &meta, KEY_IS_PROTECTED, false),
-            protection_password_hash: meta_string(&txn, &meta, KEY_PROTECTION_PASSWORD_HASH),
-            show_zero_values: meta_bool(&txn, &meta, KEY_SHOW_ZERO_VALUES, true),
-            gridline_color: meta_string(&txn, &meta, KEY_GRIDLINE_COLOR),
-            right_to_left: meta_bool(&txn, &meta, KEY_RIGHT_TO_LEFT, false),
-            show_formulas: meta_bool(&txn, &meta, KEY_SHOW_FORMULAS, false),
-            zoom_scale: meta_optional_u32(&txn, &meta, KEY_ZOOM_SCALE),
-            protection_options: {
-                match meta.get(&txn, KEY_PROTECTION_DETAILS) {
-                    Some(yrs::Out::YMap(prot_map)) => {
-                        protection_schema::sheet_from_yrs_map(&prot_map, &txn)
-                            .map(|sp| SheetProtectionOptions::from(&sp))
-                    }
-                    _ => None,
-                }
-            },
-            default_row_height: {
-                // Yrs stores canonical (points); convert to pixels for TS bridge
-                let pt = Points(meta_number(&txn, &meta, KEY_DEFAULT_ROW_HEIGHT, 15.0));
-                points_to_pixels(pt).0
-            },
-            default_col_width: {
-                // Yrs stores canonical (char-width); convert to pixels for TS bridge
-                let cw = CharWidth(meta_number(&txn, &meta, KEY_DEFAULT_COL_WIDTH, 8.43));
-                char_width_to_pixels(cw, platform_mdw()).0
-            },
-        },
+        Some(meta) => {
+            let protection = read_sheet_protection(&txn, &meta);
+            SheetSettings {
+                show_gridlines: meta_bool(&txn, &meta, KEY_SHOW_GRIDLINES, true),
+                show_row_headers: meta_bool(&txn, &meta, KEY_SHOW_ROW_HEADERS, true),
+                show_column_headers: meta_bool(&txn, &meta, KEY_SHOW_COLUMN_HEADERS, true),
+                is_protected: protection
+                    .as_ref()
+                    .map(|protection| protection.is_protected)
+                    .unwrap_or(false),
+                protection_password_hash: protection
+                    .as_ref()
+                    .and_then(|protection| protection.password_hash.clone()),
+                show_zero_values: meta_bool(&txn, &meta, KEY_SHOW_ZERO_VALUES, true),
+                gridline_color: meta_string(&txn, &meta, KEY_GRIDLINE_COLOR),
+                right_to_left: meta_bool(&txn, &meta, KEY_RIGHT_TO_LEFT, false),
+                show_formulas: meta_bool(&txn, &meta, KEY_SHOW_FORMULAS, false),
+                zoom_scale: meta_optional_u32(&txn, &meta, KEY_ZOOM_SCALE),
+                protection_options: protection.as_ref().map(SheetProtectionOptions::from),
+                default_row_height: {
+                    // Yrs stores canonical (points); convert to pixels for TS bridge
+                    let pt = Points(meta_number(&txn, &meta, KEY_DEFAULT_ROW_HEIGHT, 15.0));
+                    points_to_pixels(pt).0
+                },
+                default_col_width: {
+                    // Yrs stores canonical (char-width); convert to pixels for TS bridge
+                    let cw = CharWidth(meta_number(&txn, &meta, KEY_DEFAULT_COL_WIDTH, 8.43));
+                    char_width_to_pixels(cw, platform_mdw()).0
+                },
+            }
+        }
         None => SheetSettings::default(),
+    }
+}
+
+fn read_sheet_protection<T: yrs::ReadTxn>(txn: &T, meta: &MapRef) -> Option<SheetProtection> {
+    match meta.get(txn, KEY_PROTECTION_DETAILS) {
+        Some(Out::YMap(prot_map)) => protection_schema::sheet_from_yrs_map(&prot_map, txn),
+        _ => None,
+    }
+}
+
+fn protection_map_for_write(txn: &mut yrs::TransactionMut, meta: &MapRef) -> Option<MapRef> {
+    match meta.get(txn, KEY_PROTECTION_DETAILS) {
+        Some(Out::YMap(existing)) => Some(existing),
+        _ => {
+            meta.insert(txn, KEY_PROTECTION_DETAILS, MapPrelim::default());
+            match meta.get(txn, KEY_PROTECTION_DETAILS) {
+                Some(Out::YMap(m)) => Some(m),
+                _ => None,
+            }
+        }
     }
 }
 
@@ -134,15 +152,19 @@ fn is_protection_option_key(key: &str) -> bool {
     )
 }
 
+fn is_protection_setting_key(key: &str) -> bool {
+    key == "isProtected" || key == "protectionPasswordHash" || is_protection_option_key(key)
+}
+
 /// Set a single sheet setting by key and string value.
 ///
 /// Recognized keys: showGridlines, showRowHeaders, showColumnHeaders,
-/// isProtected, showZeroValues, rightToLeft, gridlineColor,
+/// isProtected, protectionPasswordHash, showZeroValues, rightToLeft, gridlineColor,
 /// defaultRowHeight, defaultColWidth, plus protection option keys
 /// (selectLockedCells, selectUnlockedCells, formatCells, etc.).
 ///
-/// Protection option keys are routed into the nested `protectionDetails` Y.Map
-/// so that `get_sheet_settings` reads them back correctly.
+/// Protection keys are routed into the nested `protectionDetails` Y.Map so
+/// that sheet protection has one storage domain model.
 pub(crate) fn set_sheet_setting(
     doc: &Doc,
     sheets: &MapRef,
@@ -152,23 +174,37 @@ pub(crate) fn set_sheet_setting(
 ) {
     let mut txn = doc.transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
     if let Some(meta) = get_meta_map(&txn, sheets, sheet_id) {
-        if is_protection_option_key(key) {
-            // Protection option keys are stored inside the nested protectionDetails Y.Map.
-            // Keys match directly — no mapping needed.
-            let prot_map = match meta.get(&txn, KEY_PROTECTION_DETAILS) {
-                Some(Out::YMap(existing)) => existing,
-                _ => {
-                    meta.insert(&mut txn, KEY_PROTECTION_DETAILS, MapPrelim::default());
-                    match meta.get(&txn, KEY_PROTECTION_DETAILS) {
-                        Some(Out::YMap(m)) => m,
-                        _ => return,
+        if is_protection_setting_key(key) {
+            let Some(prot_map) = protection_map_for_write(&mut txn, &meta) else {
+                return;
+            };
+
+            match key {
+                "isProtected" => {
+                    if value == "true" || value == "false" {
+                        prot_map.insert(
+                            &mut txn,
+                            protection_schema::KEY_IS_PROTECTED,
+                            Any::Bool(value == "true"),
+                        );
                     }
                 }
-            };
-            if value == "true" || value == "false" {
-                prot_map.insert(&mut txn, key, Any::Bool(value == "true"));
-            } else {
-                prot_map.insert(&mut txn, key, Any::String(Arc::from(value)));
+                "protectionPasswordHash" => {
+                    if value.is_empty() || value == "null" {
+                        prot_map.remove(&mut txn, protection_schema::KEY_PASSWORD_HASH);
+                    } else {
+                        prot_map.insert(
+                            &mut txn,
+                            protection_schema::KEY_PASSWORD_HASH,
+                            Any::String(Arc::from(value)),
+                        );
+                    }
+                }
+                _ => {
+                    if value == "true" || value == "false" {
+                        prot_map.insert(&mut txn, key, Any::Bool(value == "true"));
+                    }
+                }
             }
             return;
         }
@@ -323,5 +359,49 @@ mod tests {
         );
         let settings = get_sheet_settings(storage.doc(), storage.sheets(), &sid);
         assert_eq!(settings.default_row_height, 25.0);
+    }
+
+    #[test]
+    fn test_protection_settings_are_stored_in_protection_details() {
+        let (storage, _mirror, sid) = setup();
+
+        set_sheet_setting(storage.doc(), storage.sheets(), &sid, "isProtected", "true");
+        set_sheet_setting(
+            storage.doc(),
+            storage.sheets(),
+            &sid,
+            "protectionPasswordHash",
+            "hash123",
+        );
+        set_sheet_setting(storage.doc(), storage.sheets(), &sid, "formatCells", "true");
+
+        let settings = get_sheet_settings(storage.doc(), storage.sheets(), &sid);
+        assert!(settings.is_protected);
+        assert_eq!(
+            settings.protection_password_hash,
+            Some("hash123".to_string())
+        );
+        assert_eq!(
+            settings
+                .protection_options
+                .as_ref()
+                .map(|opts| opts.format_cells),
+            Some(true)
+        );
+
+        let txn = storage.doc().transact();
+        let meta = get_meta_map(&txn, storage.sheets(), &sid).expect("sheet meta exists");
+        assert!(meta.get(&txn, "isProtected").is_none());
+        assert!(meta.get(&txn, "protectionPasswordHash").is_none());
+
+        let prot_map = match meta.get(&txn, KEY_PROTECTION_DETAILS) {
+            Some(Out::YMap(map)) => map,
+            _ => panic!("expected protectionDetails map"),
+        };
+        let protection =
+            protection_schema::sheet_from_yrs_map(&prot_map, &txn).expect("valid protection map");
+        assert!(protection.is_protected);
+        assert_eq!(protection.password_hash, Some("hash123".to_string()));
+        assert!(protection.format_cells);
     }
 }

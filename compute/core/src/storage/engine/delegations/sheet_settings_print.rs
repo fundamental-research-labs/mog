@@ -87,7 +87,7 @@ pub(in crate::storage::engine) fn protect_sheet(
     result.settings_changes.push(SheetSettingsChange {
         sheet_id: sheet_id.to_uuid_string(),
         kind: ChangeKind::Set,
-        changed_key: "isProtected".to_string(),
+        changed_key: "protectionDetails".to_string(),
         settings: serde_json::to_value(&settings).expect("SheetSettings must serialize"),
     });
     Ok((serialize_multi_viewport_patches(&[]), result))
@@ -172,7 +172,7 @@ pub(in crate::storage::engine) fn unprotect_sheet(
     result.settings_changes.push(SheetSettingsChange {
         sheet_id: sheet_id.to_uuid_string(),
         kind: ChangeKind::Set,
-        changed_key: "isProtected".to_string(),
+        changed_key: "protectionDetails".to_string(),
         settings: serde_json::to_value(&settings).expect("SheetSettings must serialize"),
     });
     Ok((serialize_multi_viewport_patches(&[]), result))

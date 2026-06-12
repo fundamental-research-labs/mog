@@ -180,7 +180,7 @@ function decodeRangeMeta(data: RangeChange['data']): RangeMeta {
 
 function normalizeSheetSettingsChangedKey(changedKey: string): string {
   // Rust storage uses a nested `protectionDetails` Y.Map, while the public
-  // SheetSettings snapshot exposes those values as `protectionOptions`.
+  // SheetSettings snapshot exposes protection through derived public fields.
   return changedKey === 'protectionDetails' ? 'protectionOptions' : changedKey;
 }
 

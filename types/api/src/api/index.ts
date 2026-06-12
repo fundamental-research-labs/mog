@@ -101,6 +101,7 @@ export type {
   FilterListScope,
   WorksheetFormControls,
   WorksheetFormats,
+  WorksheetHyperlink,
   WorksheetHyperlinks,
   WorksheetInternal,
   WorksheetLayout,

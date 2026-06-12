@@ -11,6 +11,8 @@ mod mutations;
 mod queries;
 
 #[cfg(test)]
+mod mutation_metadata_tests;
+#[cfg(test)]
 mod tests;
 
 pub use mutations::{remove_hyperlink, set_hyperlink};

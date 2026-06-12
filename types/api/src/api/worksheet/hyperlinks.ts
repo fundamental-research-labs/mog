@@ -4,6 +4,20 @@
  * Provides methods to set, get, and remove hyperlinks on cells.
  */
 
+/** Public readback for a worksheet hyperlink. */
+export interface WorksheetHyperlink {
+  /** A1-style cell address or range reference. */
+  address: string;
+  /** A1-style cell address or range reference. Alias for `address`. */
+  ref: string;
+  /** Hyperlink target URL or workbook location. */
+  url: string;
+  /** Optional display text stored with the hyperlink. */
+  display?: string;
+  /** Optional tooltip text stored with the hyperlink. */
+  tooltip?: string;
+}
+
 /** Sub-API for hyperlink operations on a worksheet. */
 export interface WorksheetHyperlinks {
   /**
@@ -71,9 +85,9 @@ export interface WorksheetHyperlinks {
   /**
    * List all hyperlinks in the worksheet.
    *
-   * @returns Array of hyperlink entries with cell address and URL
+   * @returns Array of hyperlink entries with cell address, URL, and metadata
    */
-  list(): Promise<Array<{ address: string; url: string }>>;
+  list(): Promise<WorksheetHyperlink[]>;
 
   /**
    * Remove all hyperlinks from the worksheet.

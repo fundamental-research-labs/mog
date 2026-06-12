@@ -42,7 +42,7 @@ export type {
 } from './filters';
 export type { WorksheetFormControls } from './form-controls';
 export type { WorksheetFormats } from './formats';
-export type { WorksheetHyperlinks } from './hyperlinks';
+export type { WorksheetHyperlink, WorksheetHyperlinks } from './hyperlinks';
 export type { WorksheetInternal } from './internal';
 export type { RangePixelPosition, WorksheetLayout } from './layout';
 export type { WorksheetNames } from './names';

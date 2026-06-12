@@ -597,6 +597,7 @@ export const BRIDGE_METHOD_KIND: Readonly<Record<string, BridgeMethodKind>> = Ob
   setHyperlink: 'write',
   removeHyperlink: 'write',
   getHyperlink: 'read',
+  getHyperlinks: 'read',
   clearHyperlinksInRange: 'write',
   pivotCreate: 'write',
   pivotUpdate: 'write',

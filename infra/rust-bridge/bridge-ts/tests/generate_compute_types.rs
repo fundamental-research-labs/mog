@@ -720,6 +720,7 @@ fn generate_combined() {
         format!("{formats_base}/input.rs"),
         // domain-types crate (external — canonical types moved from compute-core domain_types)
         format!("{manifest_dir}/../../../domain-types/src/domain/comment.rs"),
+        format!("{manifest_dir}/../../../domain-types/src/domain/hyperlink.rs"),
         format!("{manifest_dir}/../../../domain-types/src/domain/sheet.rs"),
         format!("{manifest_dir}/../../../domain-types/src/domain/connections.rs"),
         format!(

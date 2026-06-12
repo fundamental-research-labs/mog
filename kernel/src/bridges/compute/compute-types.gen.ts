@@ -2575,6 +2575,19 @@ export interface HistogramConfigData {
 
 export type HorizontalAlign = "left" | "center" | "right" | "justify" | "distributed";
 
+export interface Hyperlink {
+  cellRef: string;
+  target: string | null;
+  location: string | null;
+  display: string | null;
+  tooltip: string | null;
+  uid?: string;
+  targetKind?: HyperlinkTargetKind;
+  targetMode?: string;
+}
+
+export type HyperlinkTargetKind = "inlineLocation" | "relationship";
+
 export interface IconFilter {
   iconSetName: string;
   iconIndex: number;

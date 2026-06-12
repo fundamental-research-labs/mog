@@ -6,7 +6,7 @@
  * All mutations throw on failure.
  */
 
-import type { SheetId, WorksheetHyperlinks } from '@mog-sdk/contracts/api';
+import type { SheetId, WorksheetHyperlink, WorksheetHyperlinks } from '@mog-sdk/contracts/api';
 
 import type { DocumentContext } from '../../context';
 import { KernelError } from '../../errors';
@@ -54,26 +54,22 @@ export class WorksheetHyperlinksImpl implements WorksheetHyperlinks {
     await HyperlinkOps.removeHyperlink(this.ctx, this.sheetId, row, col);
   }
 
-  async list(): Promise<Array<{ address: string; url: string }>> {
-    const bounds = await this.ctx.computeBridge.getDataBounds(this.sheetId);
-    if (!bounds) return [];
-
-    const rangeData = await this.ctx.computeBridge.queryRange(
-      this.sheetId,
-      bounds.minRow,
-      bounds.minCol,
-      bounds.maxRow,
-      bounds.maxCol,
-    );
-    if (!rangeData?.cells) return [];
-
-    const results: Array<{ address: string; url: string }> = [];
-    for (const cell of rangeData.cells) {
-      if (cell.hyperlinkUrl) {
-        results.push({ address: toA1(cell.row, cell.col), url: cell.hyperlinkUrl });
-      }
-    }
-    return results;
+  async list(): Promise<WorksheetHyperlink[]> {
+    const hyperlinks = await this.ctx.computeBridge.getHyperlinks(this.sheetId);
+    return hyperlinks
+      .map((link) => {
+        const ref = link.cellRef;
+        const url = link.target ?? link.location ?? '';
+        if (!ref || !url) return null;
+        return {
+          address: ref,
+          ref,
+          url,
+          ...(link.display ? { display: link.display } : {}),
+          ...(link.tooltip ? { tooltip: link.tooltip } : {}),
+        };
+      })
+      .filter((link): link is WorksheetHyperlink => link !== null);
   }
 
   async clear(): Promise<void> {

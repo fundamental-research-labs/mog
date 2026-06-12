@@ -205,6 +205,7 @@ fn build_import_config() -> ImportConfig {
                     ti("GradientType"),
                     ti("GroupDefinition"),
                     ti("HorizontalAlign"),
+                    ti("Hyperlink"),
                     ti("IdentityCell"),
                     ti("IdentityMergedRegion"),
                     ti("ImportDiagnostic"),

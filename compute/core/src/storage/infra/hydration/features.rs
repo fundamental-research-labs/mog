@@ -372,12 +372,12 @@ pub(super) fn hydrate_hyperlinks(
             None => continue,
         };
 
-        // Determine URL: prefer target, fall back to location with "#" prefix.
+        // Determine URL: prefer target, fall back to inline location.
         // If neither exists but the hyperlink has a uid, store empty string so
         // the uid-only marker survives the round-trip.
         let url = match (&link.target, &link.location) {
             (Some(t), _) if !t.is_empty() => t.clone(),
-            (_, Some(loc)) if !loc.is_empty() => format!("#{}", loc),
+            (_, Some(loc)) if !loc.is_empty() => loc.clone(),
             _ if link.uid.is_some() => String::new(),
             _ => continue,
         };

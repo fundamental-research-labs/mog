@@ -5,6 +5,7 @@ use crate::storage::engine::services;
 use crate::storage::sheet::hyperlinks;
 use bridge_core as bridge;
 use cell_types::SheetId;
+use domain_types::domain::hyperlink::Hyperlink;
 use value_types::ComputeError;
 
 #[bridge::api(
@@ -58,6 +59,20 @@ impl YrsComputeEngine {
             grid,
             row,
             col,
+        )
+    }
+
+    /// Get full hyperlink metadata for all hyperlinks on a worksheet.
+    #[bridge::read(scope = "sheet")]
+    pub fn get_hyperlinks(&self, sheet_id: &SheetId) -> Vec<Hyperlink> {
+        let Some(grid) = self.stores.grid_indexes.get(sheet_id) else {
+            return Vec::new();
+        };
+        hyperlinks::get_all_hyperlinks(
+            self.stores.storage.doc(),
+            self.stores.storage.sheets(),
+            sheet_id,
+            grid,
         )
     }
 

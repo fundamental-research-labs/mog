@@ -52,6 +52,7 @@ fn canonical_table_round_trips_runtime_entrypoint() {
             totals_function: Some(TotalsFunction::Sum),
             totals_label: Some("Total".to_string()),
             calculated_formula: Some("[@Qty]*[@Price]".to_string()),
+            ..Default::default()
         }],
         has_header_row: true,
         has_totals_row: true,
@@ -63,6 +64,7 @@ fn canonical_table_round_trips_runtime_entrypoint() {
         show_filter_buttons: true,
         auto_expand: true,
         auto_calculated_columns: true,
+        ..Default::default()
     };
 
     assert_eq!(

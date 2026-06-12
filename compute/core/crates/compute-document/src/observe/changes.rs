@@ -108,6 +108,8 @@ pub struct PivotCellChange {
 pub struct TableCellChange {
     /// The table key/ID.
     pub key: String,
+    /// Table name captured from the changed payload, when available.
+    pub name: Option<String>,
     pub sheet_id: Option<SheetId>,
     pub kind: CellChangeKind,
 }

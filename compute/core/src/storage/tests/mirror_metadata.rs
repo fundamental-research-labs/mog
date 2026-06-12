@@ -46,6 +46,7 @@ fn test_tables() {
                 totals_function: None,
                 totals_label: None,
                 calculated_formula: None,
+                ..Default::default()
             },
             domain_types::domain::table::TableColumn {
                 id: "2".into(),
@@ -54,6 +55,7 @@ fn test_tables() {
                 totals_function: None,
                 totals_label: None,
                 calculated_formula: None,
+                ..Default::default()
             },
             domain_types::domain::table::TableColumn {
                 id: "3".into(),
@@ -62,6 +64,7 @@ fn test_tables() {
                 totals_function: None,
                 totals_label: None,
                 calculated_formula: None,
+                ..Default::default()
             },
             domain_types::domain::table::TableColumn {
                 id: "4".into(),
@@ -70,6 +73,7 @@ fn test_tables() {
                 totals_function: None,
                 totals_label: None,
                 calculated_formula: None,
+                ..Default::default()
             },
         ],
         has_header_row: true,
@@ -82,6 +86,7 @@ fn test_tables() {
         show_filter_buttons: false,
         auto_expand: true,
         auto_calculated_columns: true,
+        ..Default::default()
     };
 
     mirror.set_table(table);

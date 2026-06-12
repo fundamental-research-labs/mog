@@ -14,6 +14,7 @@ mod tests {
     use cell_types::SheetPos;
     use value_types::{CellValue, FiniteF64};
 
+    mod lifecycle;
     mod persistence_catalog;
     mod rename_column;
 
@@ -48,6 +49,28 @@ mod tests {
 
     fn sheet_id() -> SheetId {
         SheetId::from_uuid_str("550e8400-e29b-41d4-a716-446655440000").unwrap()
+    }
+
+    fn table_id_by_name(engine: &YrsComputeEngine, table_name: &str) -> String {
+        engine
+            .get_table_by_name(table_name)
+            .unwrap_or_else(|| panic!("table {table_name} must exist"))
+            .id
+    }
+
+    fn compact_table_binding(
+        engine: &YrsComputeEngine,
+        table_id: &str,
+    ) -> Option<compute_document::range::TableRangeBinding> {
+        let workbook = engine.stores.storage.workbook_map().clone();
+        let doc = engine.stores.storage.doc().clone();
+        let txn = doc.transact();
+        let json = compute_document::range::read_range_binding_wb(
+            &workbook,
+            &txn,
+            &table_range_id(table_id),
+        )?;
+        compute_document::range::TableRangeBinding::from_json(&json)
     }
 
     fn set_people_data(engine: &mut YrsComputeEngine, sid: SheetId) {
@@ -88,216 +111,6 @@ mod tests {
             .mirror()
             .get_cell_value_at(&sid, SheetPos::new(row, col))
             .cloned()
-    }
-
-    /// pass 1 regression: creating a table via the production
-    /// `from_snapshot` engine path must push an entry onto the
-    /// undo stack and a subsequent `undo()` must remove it.
-    ///
-    /// Pre-fix symptom: `persist_table_to_yrs` silently returns
-    /// when `KEY_TABLES` sub-map doesn't exist; the txn drops with
-    /// no changes, the undo manager has nothing to push, and
-    /// `can_undo()` stays false.
-    #[test]
-    fn create_table_pushes_undo_entry() {
-        let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
-        let sid = sheet_id();
-        assert!(
-            !engine.can_undo(),
-            "fresh engine must have empty undo stack"
-        );
-
-        engine
-            .create_table(
-                &sid,
-                "Table1".into(),
-                0,
-                0,
-                2,
-                1,
-                vec!["A".into(), "B".into()],
-                true,
-            )
-            .expect("create_table");
-
-        assert!(
-            engine.can_undo(),
-            "create_table must push an undo entry — pre-fix this fails because \
-             persist_table_to_yrs silently returned"
-        );
-
-        engine.undo().expect("undo");
-        assert!(
-            engine.get_all_tables_in_sheet(&sid).is_empty(),
-            "undo must remove the table"
-        );
-    }
-
-    #[test]
-    fn create_table_persists_table_filter_in_rust() {
-        let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
-        let sid = sheet_id();
-
-        let (_, result) = engine
-            .create_table(
-                &sid,
-                "Table1".into(),
-                0,
-                0,
-                2,
-                1,
-                vec!["A".into(), "B".into()],
-                true,
-            )
-            .expect("create_table");
-
-        let sheet_filters = engine.get_filters_in_sheet(&sid);
-        let table_filter = sheet_filters
-            .iter()
-            .find(|filter| filter.table_id.as_deref() == Some("Table1"))
-            .expect("table filter");
-        assert_eq!(table_filter.filter_kind, filters::FilterKind::TableFilter);
-
-        let change = result
-            .filter_changes
-            .iter()
-            .find(|change| change.filter_id == table_filter.id)
-            .expect("table filter creation receipt");
-        assert_eq!(change.filter_kind.as_deref(), Some("tableFilter"));
-        assert_eq!(change.action.as_deref(), Some("created"));
-
-        engine.delete_table("Table1").expect("delete_table");
-        assert!(
-            engine.get_filters_in_sheet(&sid).is_empty(),
-            "deleting a table must remove its owned table filter"
-        );
-    }
-
-    #[test]
-    fn create_table_lifecycle_with_style_undo_redo_is_atomic() {
-        let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
-        let sid = sheet_id();
-        set_people_data(&mut engine, sid);
-        let before_depth = engine.get_undo_state().undo_depth;
-
-        let (_patches, result) = engine
-            .create_table_lifecycle(
-                &sid,
-                Some("StyledPeople".into()),
-                0,
-                0,
-                1,
-                1,
-                vec![],
-                true,
-                Some("TableStyleMedium4".into()),
-            )
-            .expect("create lifecycle");
-
-        assert_eq!(engine.get_undo_state().undo_depth, before_depth + 1);
-        assert!(
-            result.table_changes.iter().any(|change| {
-                change.name == "StyledPeople"
-                    && change.sheet_id == sid.to_uuid_string()
-                    && change.kind == ChangeKind::Set
-            }),
-            "table creation must report a table change so viewport formatting refreshes before repaint"
-        );
-        let table = engine
-            .get_table_by_name("StyledPeople")
-            .expect("styled table");
-        assert_eq!(table.style, "TableStyleMedium4");
-        assert!(
-            engine
-                .get_filters_in_sheet(&sid)
-                .iter()
-                .any(|filter| filter.table_id.as_deref() == Some("StyledPeople")),
-            "table filter should be created with the table"
-        );
-
-        engine.undo().expect("undo lifecycle");
-        assert_eq!(engine.get_undo_state().undo_depth, before_depth);
-        assert!(engine.get_table_by_name("StyledPeople").is_none());
-        assert!(
-            engine
-                .get_filters_in_sheet(&sid)
-                .iter()
-                .all(|filter| filter.table_id.as_deref() != Some("StyledPeople")),
-            "one undo should remove the table-owned filter"
-        );
-
-        engine.redo().expect("redo lifecycle");
-        let redone = engine
-            .get_table_by_name("StyledPeople")
-            .expect("redone table");
-        assert_eq!(redone.style, "TableStyleMedium4");
-        assert!(
-            engine
-                .get_filters_in_sheet(&sid)
-                .iter()
-                .any(|filter| filter.table_id.as_deref() == Some("StyledPeople")),
-            "redo should restore the table-owned filter"
-        );
-    }
-
-    #[test]
-    fn create_table_lifecycle_without_headers_undo_redo_is_atomic() {
-        let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
-        let sid = sheet_id();
-        set_people_data(&mut engine, sid);
-        let before_depth = engine.get_undo_state().undo_depth;
-
-        engine
-            .create_table_lifecycle(
-                &sid,
-                Some("GeneratedHeaders".into()),
-                0,
-                0,
-                1,
-                1,
-                vec![],
-                false,
-                None,
-            )
-            .expect("create no-header lifecycle");
-
-        assert_eq!(engine.get_undo_state().undo_depth, before_depth + 1);
-        assert_eq!(
-            cell_value(&engine, sid, 0, 0),
-            Some(CellValue::Text("Column1".into()))
-        );
-        assert_eq!(
-            cell_value(&engine, sid, 1, 0),
-            Some(CellValue::Text("Name".into()))
-        );
-        assert!(engine.get_table_by_name("GeneratedHeaders").is_some());
-
-        engine.undo().expect("undo no-header lifecycle");
-        assert_eq!(engine.get_undo_state().undo_depth, before_depth);
-        assert!(engine.get_table_by_name("GeneratedHeaders").is_none());
-        assert_eq!(
-            cell_value(&engine, sid, 0, 0),
-            Some(CellValue::Text("Name".into()))
-        );
-        assert_eq!(
-            cell_value(&engine, sid, 1, 0),
-            Some(CellValue::Text("Alice".into()))
-        );
-        assert_eq!(
-            cell_value(&engine, sid, 1, 1),
-            Some(CellValue::Number(FiniteF64::must(30.0)))
-        );
-
-        engine.redo().expect("redo no-header lifecycle");
-        assert_eq!(
-            cell_value(&engine, sid, 0, 0),
-            Some(CellValue::Text("Column1".into()))
-        );
-        assert_eq!(
-            cell_value(&engine, sid, 1, 0),
-            Some(CellValue::Text("Name".into()))
-        );
-        assert!(engine.get_table_by_name("GeneratedHeaders").is_some());
     }
 
     /// pass 1 regression (Edit A behavioural pin): removing a
@@ -352,7 +165,7 @@ mod tests {
     // Phase 5E tests — Range-backed table bindings
     // ================================================================
 
-    /// Creating a table writes a TableBinding to rangeBindings.
+    /// Creating a table writes a compact table attachment to rangeBindings.
     #[test]
     fn create_table_writes_range_binding() {
         let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
@@ -371,26 +184,33 @@ mod tests {
             )
             .expect("create_table");
 
-        // Verify rangeBindings entry exists
+        let table_id = table_id_by_name(&engine, "Sales");
         let workbook = engine.stores.storage.workbook_map().clone();
         let doc = engine.stores.storage.doc().clone();
         let txn = doc.transact();
-        let json = compute_document::range::read_range_binding_wb(&workbook, &txn, "table:Sales");
+        assert!(
+            compute_document::range::read_range_binding_wb(&workbook, &txn, "table:Sales")
+                .is_none(),
+            "rangeBindings must not be keyed by mutable table name"
+        );
+        let json = compute_document::range::read_range_binding_wb(
+            &workbook,
+            &txn,
+            &table_range_id(&table_id),
+        );
         assert!(
             json.is_some(),
-            "rangeBindings[table:Sales] must exist after create_table"
+            "rangeBindings[table:<id>] must exist after create_table"
         );
 
-        // Verify the binding deserializes correctly
-        let binding: domain_types::domain::table::TableBinding =
-            serde_json::from_str(&json.unwrap()).expect("deserialize TableBinding");
-        assert_eq!(binding.name, "Sales");
-        assert_eq!(binding.columns.len(), 3);
-        assert_eq!(binding.columns[0].name, "Name");
-        assert_eq!(binding.columns[1].name, "Amount");
-        assert_eq!(binding.columns[2].name, "Date");
-        assert!(binding.has_header_row);
-        assert!(!binding.has_totals_row);
+        let binding =
+            compute_document::range::TableRangeBinding::from_json(&json.unwrap()).unwrap();
+        assert_eq!(binding.table_id, table_id);
+        let table = engine.get_table_by_name("Sales").expect("table must exist");
+        assert_eq!(table.columns.len(), 3);
+        assert_eq!(table.columns[0].name, "Name");
+        assert!(table.has_header_row);
+        assert!(!table.has_totals_row);
     }
 
     /// Deleting a table removes its rangeBindings entry.
@@ -412,19 +232,24 @@ mod tests {
             )
             .expect("create_table");
 
+        let table_id = table_id_by_name(&engine, "Table1");
         engine.delete_table("Table1").expect("delete_table");
 
         let workbook = engine.stores.storage.workbook_map().clone();
         let doc = engine.stores.storage.doc().clone();
         let txn = doc.transact();
-        let json = compute_document::range::read_range_binding_wb(&workbook, &txn, "table:Table1");
+        let json = compute_document::range::read_range_binding_wb(
+            &workbook,
+            &txn,
+            &table_range_id(&table_id),
+        );
         assert!(
             json.is_none(),
-            "rangeBindings[table:Table1] must be removed after delete_table"
+            "rangeBindings[table:<id>] must be removed after delete_table"
         );
     }
 
-    /// Renaming a table updates the rangeBindings entry (old key removed, new key added).
+    /// Renaming a table keeps the compact rangeBindings attachment keyed by stable ID.
     #[test]
     fn rename_table_updates_range_binding() {
         let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
@@ -443,6 +268,7 @@ mod tests {
             )
             .expect("create_table");
 
+        let table_id = table_id_by_name(&engine, "OldName");
         engine
             .rename_table("OldName", "NewName")
             .expect("rename_table");
@@ -454,15 +280,23 @@ mod tests {
         assert!(
             compute_document::range::read_range_binding_wb(&workbook, &txn, "table:OldName")
                 .is_none(),
-            "old binding key must be removed"
+            "name-keyed binding must not exist"
         );
-        let new_json =
-            compute_document::range::read_range_binding_wb(&workbook, &txn, "table:NewName");
-        assert!(new_json.is_some(), "new binding key must exist");
+        assert!(
+            compute_document::range::read_range_binding_wb(&workbook, &txn, "table:NewName")
+                .is_none(),
+            "rename must not create a new name-keyed binding"
+        );
+        let json = compute_document::range::read_range_binding_wb(
+            &workbook,
+            &txn,
+            &table_range_id(&table_id),
+        )
+        .expect("stable id binding must still exist after rename");
 
-        let binding: domain_types::domain::table::TableBinding =
-            serde_json::from_str(&new_json.unwrap()).unwrap();
-        assert_eq!(binding.name, "NewName");
+        let binding = compute_document::range::TableRangeBinding::from_json(&json).unwrap();
+        assert_eq!(binding.table_id, table_id);
+        assert_eq!(engine.get_table_by_name("NewName").unwrap().id, table_id);
     }
 
     /// Resizing a table updates the rangeBindings (columns may change).
@@ -489,21 +323,18 @@ mod tests {
             .resize_table("Table1", 0, 0, 3, 2)
             .expect("resize_table");
 
-        let workbook = engine.stores.storage.workbook_map().clone();
-        let doc = engine.stores.storage.doc().clone();
-        let txn = doc.transact();
-        let json = compute_document::range::read_range_binding_wb(&workbook, &txn, "table:Table1")
-            .expect("binding must exist");
-        let binding: domain_types::domain::table::TableBinding =
-            serde_json::from_str(&json).unwrap();
+        let table = engine
+            .get_table_by_name("Table1")
+            .expect("table must exist");
         assert_eq!(
-            binding.columns.len(),
+            table.columns.len(),
             3,
-            "expanding to 3 columns must add a column definition"
+            "expanding to 3 columns must update the catalog table"
         );
+        assert!(compact_table_binding(&engine, &table.id).is_some());
     }
 
-    /// Toggling totals row updates the rangeBindings.
+    /// Toggling totals row updates the catalog, not the compact attachment.
     #[test]
     fn toggle_totals_updates_range_binding() {
         let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
@@ -524,20 +355,17 @@ mod tests {
 
         engine.toggle_totals_row("Table1").expect("toggle_totals");
 
-        let workbook = engine.stores.storage.workbook_map().clone();
-        let doc = engine.stores.storage.doc().clone();
-        let txn = doc.transact();
-        let json = compute_document::range::read_range_binding_wb(&workbook, &txn, "table:Table1")
-            .expect("binding must exist");
-        let binding: domain_types::domain::table::TableBinding =
-            serde_json::from_str(&json).unwrap();
+        let table = engine
+            .get_table_by_name("Table1")
+            .expect("table must exist");
         assert!(
-            binding.has_totals_row,
-            "totals row must be true after toggle"
+            table.has_totals_row,
+            "totals row must be true in catalog after toggle"
         );
+        assert!(compact_table_binding(&engine, &table.id).is_some());
     }
 
-    /// Renaming a column updates the rangeBindings.
+    /// Renaming a column updates the catalog, not the compact attachment.
     #[test]
     fn rename_column_updates_range_binding() {
         let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
@@ -560,22 +388,19 @@ mod tests {
             .rename_table_column("Table1", 0, "Alpha")
             .expect("rename_column");
 
-        let workbook = engine.stores.storage.workbook_map().clone();
-        let doc = engine.stores.storage.doc().clone();
-        let txn = doc.transact();
-        let json = compute_document::range::read_range_binding_wb(&workbook, &txn, "table:Table1")
-            .expect("binding must exist");
-        let binding: domain_types::domain::table::TableBinding =
-            serde_json::from_str(&json).unwrap();
+        let table = engine
+            .get_table_by_name("Table1")
+            .expect("table must exist");
         assert_eq!(
-            binding.columns[0].name, "Alpha",
-            "column name must be updated in binding"
+            table.columns[0].name, "Alpha",
+            "column name must be updated in catalog"
         );
+        assert!(compact_table_binding(&engine, &table.id).is_some());
     }
 
-    /// Three-tier read: sync_tables_from_yrs uses rangeBindings (Tier 1) when available.
+    /// sync_tables_from_yrs reads the catalog; compact range bindings are attachments only.
     #[test]
-    fn sync_tables_uses_range_binding_tier1() {
+    fn sync_tables_uses_catalog_with_compact_attachment() {
         let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
         let sid = sheet_id();
 
@@ -610,6 +435,49 @@ mod tests {
         assert_eq!(tables[0].columns[0].name, "Col1");
     }
 
+    #[test]
+    fn sync_tables_ignores_stale_legacy_binding_when_catalog_id_exists() {
+        let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+        let sid = sheet_id();
+
+        engine
+            .create_table(
+                &sid,
+                "Table1".into(),
+                0,
+                0,
+                3,
+                1,
+                vec!["Col1".into(), "Col2".into()],
+                true,
+            )
+            .expect("create_table");
+
+        let mut stale = engine.get_table_by_name("Table1").unwrap().clone();
+        stale.name = "OldName".to_string();
+        stale.display_name = "OldName".to_string();
+        let json = domain_types::yrs_schema::table::table_to_binding_json(&stale).unwrap();
+        let workbook = engine.stores.storage.workbook_map().clone();
+        let doc = engine.stores.storage.doc().clone();
+        let mut txn = doc.transact_mut();
+        compute_document::range::write_range_binding_wb(
+            &workbook,
+            &mut txn,
+            &table_range_id("OldName"),
+            &json,
+        );
+        drop(txn);
+
+        sync_tables_from_yrs(&mut engine.stores, &mut engine.mirror);
+
+        let table = engine.get_table_by_name("Table1").expect("catalog table");
+        assert_eq!(table.id, stale.id);
+        assert!(
+            engine.get_table_by_name("OldName").is_none(),
+            "legacy full binding must not override an id-keyed catalog entry"
+        );
+    }
+
     /// TableBinding roundtrip: from_table -> to_table preserves all fields.
     #[test]
     fn table_binding_roundtrip() {
@@ -629,6 +497,7 @@ mod tests {
                     totals_function: None,
                     totals_label: None,
                     calculated_formula: None,
+                    ..Default::default()
                 },
                 TableColumn {
                     id: "2".into(),
@@ -637,6 +506,7 @@ mod tests {
                     totals_function: Some(TotalsFunction::Sum),
                     totals_label: Some("Total".into()),
                     calculated_formula: None,
+                    ..Default::default()
                 },
                 TableColumn {
                     id: "3".into(),
@@ -645,6 +515,7 @@ mod tests {
                     totals_function: Some(TotalsFunction::Average),
                     totals_label: None,
                     calculated_formula: Some("=[Qty]*[Price]".into()),
+                    ..Default::default()
                 },
                 TableColumn {
                     id: "4".into(),
@@ -653,6 +524,7 @@ mod tests {
                     totals_function: None,
                     totals_label: None,
                     calculated_formula: None,
+                    ..Default::default()
                 },
             ],
             has_header_row: true,
@@ -665,6 +537,7 @@ mod tests {
             show_filter_buttons: false,
             auto_expand: false,
             auto_calculated_columns: false,
+            ..Default::default()
         };
 
         let binding = TableBinding::from_table(&original);
@@ -742,6 +615,7 @@ mod tests {
                     totals_function: None,
                     totals_label: None,
                     calculated_formula: None,
+                    ..Default::default()
                 },
                 TableColumn {
                     id: "2".into(),
@@ -750,6 +624,7 @@ mod tests {
                     totals_function: None,
                     totals_label: None,
                     calculated_formula: None,
+                    ..Default::default()
                 },
             ],
             has_header_row: true,
@@ -762,6 +637,7 @@ mod tests {
             show_filter_buttons: true,
             auto_expand: false,
             auto_calculated_columns: false,
+            ..Default::default()
         };
 
         let json = domain_types::yrs_schema::table::table_to_binding_json(&table)
@@ -778,14 +654,14 @@ mod tests {
         assert!(!reconstructed.auto_calculated_columns);
     }
 
-    /// table_range_id and table_name_from_range_id are inverse operations.
+    /// table_range_id and table_id_from_range_id are inverse operations.
     #[test]
     fn range_id_round_trip() {
-        let name = "MyTable";
-        let rid = table_range_id(name);
-        assert_eq!(rid, "table:MyTable");
-        assert_eq!(table_name_from_range_id(&rid), Some("MyTable"));
-        assert_eq!(table_name_from_range_id("other:stuff"), None);
+        let table_id = "tbl-123";
+        let rid = table_range_id(table_id);
+        assert_eq!(rid, "table:tbl-123");
+        assert_eq!(table_id_from_range_id(&rid), Some("tbl-123"));
+        assert_eq!(table_id_from_range_id("other:stuff"), None);
     }
 
     /// Mirror maintains table_range_ids index.
@@ -808,14 +684,15 @@ mod tests {
             .expect("create_table");
 
         // Check index via mirror
+        let table_id = table_id_by_name(&engine, "Table1");
         assert_eq!(
             engine.mirror().table_range_id("Table1"),
-            Some("table:Table1"),
+            Some(table_range_id(&table_id).as_str()),
         );
         // Case-insensitive
         assert_eq!(
             engine.mirror().table_range_id("table1"),
-            Some("table:Table1"),
+            Some(table_range_id(&table_id).as_str()),
         );
 
         // Delete should clean up index
@@ -841,6 +718,7 @@ mod tests {
                 totals_function: None,
                 totals_label: None,
                 calculated_formula: None,
+                ..Default::default()
             }],
             has_header_row: true,
             has_totals_row: false,
@@ -852,6 +730,7 @@ mod tests {
             show_filter_buttons: true,
             auto_expand: true,
             auto_calculated_columns: true,
+            ..Default::default()
         };
 
         let binding = TableBinding::from_table(&table);
@@ -879,6 +758,7 @@ mod tests {
                 totals_function: None,
                 totals_label: None,
                 calculated_formula: None,
+                ..Default::default()
             }],
             has_header_row: true,
             has_totals_row: false,
@@ -890,6 +770,7 @@ mod tests {
             show_filter_buttons: true,
             auto_expand: true,
             auto_calculated_columns: true,
+            ..Default::default()
         };
 
         let binding = TableBinding::from_table(&table);
@@ -919,6 +800,7 @@ mod tests {
             )
             .expect("create_table");
 
+        let table_id_before_convert = table_id_by_name(&engine, "Table1");
         engine
             .convert_table_to_range("Table1")
             .expect("convert_to_range");
@@ -927,8 +809,12 @@ mod tests {
         let doc = engine.stores.storage.doc().clone();
         let txn = doc.transact();
         assert!(
-            compute_document::range::read_range_binding_wb(&workbook, &txn, "table:Table1")
-                .is_none(),
+            compute_document::range::read_range_binding_wb(
+                &workbook,
+                &txn,
+                &table_range_id(&table_id_before_convert)
+            )
+            .is_none(),
             "binding must be cleaned up after convert_to_range"
         );
     }
@@ -951,11 +837,12 @@ mod tests {
             )
             .expect("create_table");
 
+        let table_id = table_id_by_name(&engine, "Table1");
         assert!(
             engine
                 .get_filters_in_sheet(&sid)
                 .iter()
-                .any(|filter| filter.table_id.as_deref() == Some("Table1")),
+                .any(|filter| filter.table_id.as_deref() == Some(table_id.as_str())),
             "table creation must install an owned table filter"
         );
 
@@ -967,12 +854,12 @@ mod tests {
             engine
                 .get_filters_in_sheet(&sid)
                 .iter()
-                .all(|filter| filter.table_id.as_deref() != Some("Table1")),
+                .all(|filter| filter.table_id.as_deref() != Some(table_id.as_str())),
             "convert_to_range must remove the table-owned filter"
         );
     }
 
-    /// Style info persists through binding.
+    /// Style info persists through the catalog; compact attachment stays identity-only.
     #[test]
     fn style_info_persists_in_binding() {
         let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
@@ -999,16 +886,13 @@ mod tests {
             .set_table_bool_option("Table1", "bandedRows", false)
             .expect("set banded rows");
 
-        let workbook = engine.stores.storage.workbook_map().clone();
-        let doc = engine.stores.storage.doc().clone();
-        let txn = doc.transact();
-        let json = compute_document::range::read_range_binding_wb(&workbook, &txn, "table:Table1")
-            .expect("binding must exist");
-        let binding: domain_types::domain::table::TableBinding =
-            serde_json::from_str(&json).unwrap();
-        let style = binding.style.expect("style must be present");
-        assert!(!style.banded_rows, "banded_rows should be false");
-        assert!(style.banded_columns, "banded_columns should be true");
+        let table = engine
+            .get_table_by_name("Table1")
+            .expect("table must exist");
+        assert!(!table.banded_rows, "banded_rows should be false");
+        assert!(table.banded_columns, "banded_columns should be true");
+        let compact = compact_table_binding(&engine, &table.id).expect("compact binding");
+        assert_eq!(compact.table_id, table.id);
     }
 
     #[test]
@@ -1042,15 +926,8 @@ mod tests {
         assert!(!table.auto_expand);
         assert!(!table.auto_calculated_columns);
 
-        let workbook = engine.stores.storage.workbook_map().clone();
-        let doc = engine.stores.storage.doc().clone();
-        let txn = doc.transact();
-        let json = compute_document::range::read_range_binding_wb(&workbook, &txn, "table:Table1")
-            .expect("binding must exist");
-        let binding: domain_types::domain::table::TableBinding =
-            serde_json::from_str(&json).unwrap();
-        assert!(!binding.auto_expand);
-        assert!(!binding.auto_calculated_columns);
+        let compact = compact_table_binding(&engine, &table.id).expect("compact binding");
+        assert_eq!(compact.table_id, table.id);
     }
 
     #[test]

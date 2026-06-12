@@ -402,11 +402,33 @@ impl YrsComputeEngine {
         }
     }
 
+    fn hydrate_table_change_metadata_from_mirror(&self, doc_changes: &mut DocumentChanges) {
+        for change in &mut doc_changes.tables {
+            if change.name.is_some() && change.sheet_id.is_some() {
+                continue;
+            }
+            let table_key = change.key.strip_prefix("table:").unwrap_or(&change.key);
+            let Some(table) = self
+                .mirror
+                .get_table_by_id(table_key)
+                .or_else(|| self.mirror.get_table(table_key))
+            else {
+                continue;
+            };
+            if change.name.is_none() {
+                change.name = Some(table.name.clone());
+            }
+            if change.sheet_id.is_none() {
+                change.sheet_id = SheetId::from_uuid_str(&table.sheet_id).ok();
+            }
+        }
+    }
+
     /// Drain observer changes, sync mirror + recalc, and return domain changes.
     fn apply_all_observer_changes(
         &mut self,
     ) -> Result<(RecalcResult, DocumentChanges), ComputeError> {
-        let doc_changes = self.mutation.observer.drain_all_changes();
+        let mut doc_changes = self.mutation.observer.drain_all_changes();
 
         if doc_changes.is_empty() {
             return Ok((RecalcResult::empty(), doc_changes));
@@ -720,6 +742,7 @@ impl YrsComputeEngine {
 
         // Sync tables from yrs if tables changed.
         if !doc_changes.tables.is_empty() {
+            self.hydrate_table_change_metadata_from_mirror(&mut doc_changes);
             self.sync_tables_from_yrs();
         }
 

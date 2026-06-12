@@ -520,6 +520,7 @@ mod tests {
                     totals_function: Some(TotalsFunction::Count),
                     totals_label: Some("Total".to_string()),
                     calculated_formula: None,
+                    ..Default::default()
                 },
                 TableColumn {
                     id: "c2".to_string(),
@@ -528,6 +529,7 @@ mod tests {
                     totals_function: None,
                     totals_label: None,
                     calculated_formula: None,
+                    ..Default::default()
                 },
             ],
             has_header_row: true,
@@ -540,6 +542,7 @@ mod tests {
             show_filter_buttons: true,
             auto_expand: true,
             auto_calculated_columns: true,
+            ..Default::default()
         };
         round_trip(&table);
 

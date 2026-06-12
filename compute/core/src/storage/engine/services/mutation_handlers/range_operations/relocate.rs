@@ -375,6 +375,7 @@ fn relocate_whole_tables(
         super::super::super::tables::persist_table_to_yrs(stores, &table);
         changes.push(TableChange {
             name: table.name,
+            table_id: Some(table.id),
             sheet_id: target_sheet_hex.clone(),
             kind: ChangeKind::Set,
         });

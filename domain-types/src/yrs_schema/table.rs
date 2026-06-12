@@ -1,4 +1,5 @@
-//! YrsSchema for TableSpec — flat fields as native keys, columns as JSON.
+//! YrsSchema for canonical table catalog entries — flat fields as native keys,
+//! columns as JSON.
 //!
 //! Most table properties (name, style, toggle flags) are stored as native
 //! Yrs keys for fine-grained collaborative editing. The columns array is
@@ -13,6 +14,7 @@ use crate::domain::table::*;
 
 // ── Canonical Y.Map keys (used by both Table and TableSpec) ─────────
 pub const KEY_ID: &str = "id";
+pub const KEY_OOXML_TABLE_ID: &str = "ooxmlTableId";
 pub const KEY_NAME: &str = "name";
 pub const KEY_DISPLAY_NAME: &str = "displayName";
 pub const KEY_COLUMNS: &str = "columns";
@@ -200,7 +202,7 @@ pub fn to_yrs_prelim(table: &TableSpec) -> Vec<(&str, Any)> {
 pub fn to_yrs_prelim_from_table(table: &Table) -> Vec<(&str, Any)> {
     let cols_json = serde_json::to_string(&table.columns).unwrap_or_default();
 
-    vec![
+    let mut entries = vec![
         (KEY_ID, Any::String(Arc::from(table.id.as_str()))),
         (KEY_NAME, Any::String(Arc::from(table.name.as_str()))),
         (
@@ -245,7 +247,110 @@ pub fn to_yrs_prelim_from_table(table: &Table) -> Vec<(&str, Any)> {
                 .as_str(),
             )),
         ),
-    ]
+    ];
+
+    if let Some(id) = table.ooxml_table_id {
+        entries.push((KEY_OOXML_TABLE_ID, Any::Number(id as f64)));
+    }
+    match &table.auto_filter_ref {
+        Some(s) => entries.push((KEY_AUTO_FILTER_REF, Any::String(Arc::from(s.as_str())))),
+        None => entries.push((KEY_AUTO_FILTER_REF, Any::Null)),
+    }
+    if let Some(s) = &table.auto_filter_xr_uid {
+        entries.push(("autoFilterXrUid", Any::String(Arc::from(s.as_str()))));
+    }
+    if let Some(s) = &table.auto_filter_ext_lst_raw {
+        entries.push(("autoFilterExtLstRaw", Any::String(Arc::from(s.as_str()))));
+    }
+    if let Some(v) = table.header_row_dxf_id {
+        entries.push((KEY_HEADER_ROW_DXF_ID, Any::Number(v as f64)));
+    }
+    if let Some(v) = table.data_dxf_id {
+        entries.push((KEY_DATA_DXF_ID, Any::Number(v as f64)));
+    }
+    if let Some(v) = table.totals_row_dxf_id {
+        entries.push((KEY_TOTALS_ROW_DXF_ID, Any::Number(v as f64)));
+    }
+    if let Some(v) = table.header_row_border_dxf_id {
+        entries.push((KEY_HEADER_ROW_BORDER_DXF_ID, Any::Number(v as f64)));
+    }
+    if let Some(v) = table.table_border_dxf_id {
+        entries.push((KEY_TABLE_BORDER_DXF_ID, Any::Number(v as f64)));
+    }
+    if let Some(v) = table.totals_row_border_dxf_id {
+        entries.push((KEY_TOTALS_ROW_BORDER_DXF_ID, Any::Number(v as f64)));
+    }
+    if let Some(s) = &table.header_row_cell_style {
+        entries.push((
+            KEY_HEADER_ROW_CELL_STYLE,
+            Any::String(Arc::from(s.as_str())),
+        ));
+    }
+    if let Some(s) = &table.data_cell_style {
+        entries.push((KEY_DATA_CELL_STYLE, Any::String(Arc::from(s.as_str()))));
+    }
+    if let Some(s) = &table.totals_row_cell_style {
+        entries.push((
+            KEY_TOTALS_ROW_CELL_STYLE,
+            Any::String(Arc::from(s.as_str())),
+        ));
+    }
+    if let Some(s) = &table.table_type {
+        entries.push((KEY_TABLE_TYPE, Any::String(Arc::from(s.as_str()))));
+    }
+    if let Some(shown) = table.totals_row_shown {
+        entries.push((KEY_TOTALS_ROW_SHOWN, Any::Bool(shown)));
+    }
+    if let Some(v) = table.connection_id {
+        entries.push((KEY_CONNECTION_ID, Any::Number(v as f64)));
+    }
+    if let Some(s) = &table.comment {
+        entries.push((KEY_COMMENT, Any::String(Arc::from(s.as_str()))));
+    }
+    if table.insert_row {
+        entries.push((KEY_INSERT_ROW, Any::Bool(true)));
+    }
+    if table.insert_row_shift {
+        entries.push((KEY_INSERT_ROW_SHIFT, Any::Bool(true)));
+    }
+    if table.published {
+        entries.push((KEY_PUBLISHED, Any::Bool(true)));
+    }
+    if let Some(ref uid) = table.xr_uid {
+        entries.push(("xrUid", Any::String(Arc::from(uid.as_str()))));
+    }
+    if let Some(ref ss) = table.sort_state
+        && let Ok(json) = serde_json::to_string(ss)
+    {
+        entries.push(("sortState", Any::String(Arc::from(json.as_str()))));
+    }
+    if !table.filter_columns.is_empty()
+        && let Ok(json) = serde_json::to_string(&table.filter_columns)
+    {
+        entries.push(("filterColumns", Any::String(Arc::from(json.as_str()))));
+    }
+    if let Some(ref query_table) = table.query_table
+        && let Ok(json) = serde_json::to_string(query_table)
+    {
+        entries.push((KEY_QUERY_TABLE, Any::String(Arc::from(json.as_str()))));
+    }
+    if let Some(s) = &table.worksheet_relationship_id_hint {
+        entries.push((
+            KEY_WORKSHEET_RELATIONSHIP_ID_HINT,
+            Any::String(Arc::from(s.as_str())),
+        ));
+    }
+    if let Some(s) = &table.table_part_path_hint {
+        entries.push((KEY_TABLE_PART_PATH_HINT, Any::String(Arc::from(s.as_str()))));
+    }
+    if let Some(s) = &table.worksheet_relationship_target_hint {
+        entries.push((
+            KEY_WORKSHEET_RELATIONSHIP_TARGET_HINT,
+            Any::String(Arc::from(s.as_str())),
+        ));
+    }
+
+    entries
 }
 
 /// Read a TableSpec from a Y.Map.
@@ -264,12 +369,24 @@ pub fn from_yrs_map<T: ReadTxn>(map: &MapRef, txn: &T) -> Option<TableSpec> {
                         .map(|defs| {
                             defs.iter()
                                 .map(|c| TableColumnSpec {
-                                    id: c.id.parse::<u32>().unwrap_or(0),
+                                    id: c.ooxml_column_id.unwrap_or(c.index + 1),
                                     name: c.name.clone(),
                                     totals_function: c.totals_function,
                                     totals_label: c.totals_label.clone(),
                                     calculated_formula: c.calculated_formula.clone(),
-                                    ..TableColumnSpec::default()
+                                    calculated_formula_array: c.calculated_formula_array,
+                                    totals_row_formula: c.totals_row_formula.clone(),
+                                    totals_row_formula_array: c.totals_row_formula_array,
+                                    header_row_dxf_id: c.header_row_dxf_id,
+                                    data_dxf_id: c.data_dxf_id,
+                                    totals_row_dxf_id: c.totals_row_dxf_id,
+                                    header_row_cell_style: c.header_row_cell_style.clone(),
+                                    data_cell_style: c.data_cell_style.clone(),
+                                    totals_row_cell_style: c.totals_row_cell_style.clone(),
+                                    unique_name: c.unique_name.clone(),
+                                    query_table_field_id: c.query_table_field_id,
+                                    xml_column_pr: c.xml_column_pr.clone(),
+                                    xr3_uid: c.xr3_uid.clone(),
                                 })
                                 .collect()
                         })
@@ -278,8 +395,8 @@ pub fn from_yrs_map<T: ReadTxn>(map: &MapRef, txn: &T) -> Option<TableSpec> {
         .unwrap_or_default();
 
     Some(TableSpec {
-        id: read_u32(map, txn, KEY_ID)
-            .or_else(|| read_string(map, txn, KEY_ID).and_then(|s| s.parse::<u32>().ok()))
+        id: read_u32(map, txn, KEY_OOXML_TABLE_ID)
+            .or_else(|| read_u32(map, txn, KEY_ID))
             .unwrap_or(0),
         name: read_string(map, txn, KEY_NAME).unwrap_or_default(),
         display_name: read_string(map, txn, KEY_DISPLAY_NAME).unwrap_or_default(),
@@ -373,9 +490,10 @@ pub fn from_binding_json_standalone(binding_json: &str) -> Option<Table> {
 /// - Tier 3 (OOXML fallback): Fall back to rangeRef as A1 string, id as Number,
 ///   columns as Vec<TableColumnSpec>.
 pub fn from_yrs_map_to_table<T: ReadTxn>(map: &MapRef, txn: &T) -> Option<Table> {
-    // ID: try String first, fall back to Number→String
+    let ooxml_table_id =
+        read_u32(map, txn, KEY_OOXML_TABLE_ID).or_else(|| read_u32(map, txn, KEY_ID));
     let id = read_string(map, txn, KEY_ID)
-        .or_else(|| read_u32(map, txn, KEY_ID).map(|n| format!("{}", n)))
+        .or_else(|| ooxml_table_id.map(|n| format!("tbl-ooxml-{}", n)))
         .unwrap_or_default();
 
     // Range: try canonical keys first, fall back to parsing OOXML rangeRef
@@ -410,12 +528,26 @@ pub fn from_yrs_map_to_table<T: ReadTxn>(map: &MapRef, txn: &T) -> Option<Table>
                                 .iter()
                                 .enumerate()
                                 .map(|(i, c)| TableColumn {
-                                    id: format!("{}", c.id),
+                                    id: format!("col-ooxml-{}", c.id),
+                                    ooxml_column_id: Some(c.id),
                                     name: c.name.clone(),
                                     index: i as u32,
                                     totals_function: c.totals_function,
                                     totals_label: c.totals_label.clone(),
                                     calculated_formula: c.calculated_formula.clone(),
+                                    calculated_formula_array: c.calculated_formula_array,
+                                    totals_row_formula: c.totals_row_formula.clone(),
+                                    totals_row_formula_array: c.totals_row_formula_array,
+                                    header_row_dxf_id: c.header_row_dxf_id,
+                                    data_dxf_id: c.data_dxf_id,
+                                    totals_row_dxf_id: c.totals_row_dxf_id,
+                                    header_row_cell_style: c.header_row_cell_style.clone(),
+                                    data_cell_style: c.data_cell_style.clone(),
+                                    totals_row_cell_style: c.totals_row_cell_style.clone(),
+                                    unique_name: c.unique_name.clone(),
+                                    query_table_field_id: c.query_table_field_id,
+                                    xml_column_pr: c.xml_column_pr.clone(),
+                                    xr3_uid: c.xr3_uid.clone(),
                                 })
                                 .collect()
                         })
@@ -425,6 +557,7 @@ pub fn from_yrs_map_to_table<T: ReadTxn>(map: &MapRef, txn: &T) -> Option<Table>
 
     Some(Table {
         id,
+        ooxml_table_id,
         name: read_string(map, txn, KEY_NAME).unwrap_or_default(),
         display_name: read_string(map, txn, KEY_DISPLAY_NAME).unwrap_or_default(),
         sheet_id: read_string(map, txn, KEY_SHEET_ID).unwrap_or_default(),
@@ -440,5 +573,38 @@ pub fn from_yrs_map_to_table<T: ReadTxn>(map: &MapRef, txn: &T) -> Option<Table>
         show_filter_buttons: read_bool(map, txn, KEY_SHOW_FILTER_BUTTONS).unwrap_or(true),
         auto_expand: read_bool(map, txn, KEY_AUTO_EXPAND).unwrap_or(true),
         auto_calculated_columns: read_bool(map, txn, KEY_AUTO_CALCULATED_COLUMNS).unwrap_or(true),
+        auto_filter_ref: read_string(map, txn, KEY_AUTO_FILTER_REF),
+        auto_filter_xr_uid: read_string(map, txn, "autoFilterXrUid"),
+        auto_filter_ext_lst_raw: read_string(map, txn, "autoFilterExtLstRaw"),
+        header_row_dxf_id: read_u32(map, txn, KEY_HEADER_ROW_DXF_ID),
+        data_dxf_id: read_u32(map, txn, KEY_DATA_DXF_ID),
+        totals_row_dxf_id: read_u32(map, txn, KEY_TOTALS_ROW_DXF_ID),
+        header_row_border_dxf_id: read_u32(map, txn, KEY_HEADER_ROW_BORDER_DXF_ID),
+        table_border_dxf_id: read_u32(map, txn, KEY_TABLE_BORDER_DXF_ID),
+        totals_row_border_dxf_id: read_u32(map, txn, KEY_TOTALS_ROW_BORDER_DXF_ID),
+        header_row_cell_style: read_string(map, txn, KEY_HEADER_ROW_CELL_STYLE),
+        data_cell_style: read_string(map, txn, KEY_DATA_CELL_STYLE),
+        totals_row_cell_style: read_string(map, txn, KEY_TOTALS_ROW_CELL_STYLE),
+        table_type: read_string(map, txn, KEY_TABLE_TYPE),
+        totals_row_shown: read_bool(map, txn, KEY_TOTALS_ROW_SHOWN),
+        connection_id: read_u32(map, txn, KEY_CONNECTION_ID),
+        comment: read_string(map, txn, KEY_COMMENT),
+        insert_row: read_bool(map, txn, KEY_INSERT_ROW).unwrap_or(false),
+        insert_row_shift: read_bool(map, txn, KEY_INSERT_ROW_SHIFT).unwrap_or(false),
+        published: read_bool(map, txn, KEY_PUBLISHED).unwrap_or(false),
+        xr_uid: read_string(map, txn, "xrUid"),
+        sort_state: read_string(map, txn, "sortState").and_then(|s| serde_json::from_str(&s).ok()),
+        filter_columns: read_string(map, txn, "filterColumns")
+            .and_then(|s| serde_json::from_str(&s).ok())
+            .unwrap_or_default(),
+        query_table: read_string(map, txn, KEY_QUERY_TABLE)
+            .and_then(|s| serde_json::from_str(&s).ok()),
+        worksheet_relationship_id_hint: read_string(map, txn, KEY_WORKSHEET_RELATIONSHIP_ID_HINT),
+        table_part_path_hint: read_string(map, txn, KEY_TABLE_PART_PATH_HINT),
+        worksheet_relationship_target_hint: read_string(
+            map,
+            txn,
+            KEY_WORKSHEET_RELATIONSHIP_TARGET_HINT,
+        ),
     })
 }

@@ -5267,6 +5267,7 @@ export interface TableCellFormat {
 
 export interface TableChange {
   name: string;
+  tableId?: string;
   sheetId: string;
   kind: ChangeKind;
 }

@@ -89,6 +89,7 @@ fn both_first_last_emphasis_single_column() {
             totals_function: None,
             totals_label: None,
             calculated_formula: None,
+            ..Default::default()
         }]),
         has_header_row: Some(true),
         has_totals_row: Some(true),

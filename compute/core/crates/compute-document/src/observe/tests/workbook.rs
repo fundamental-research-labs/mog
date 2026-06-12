@@ -7,6 +7,14 @@ use domain_types::domain::slicer::{
 use std::sync::Arc;
 use yrs::{Any, Map, MapPrelim, MapRef, Out, Transact};
 
+fn compact_table_binding_json(table_id: &str) -> Arc<str> {
+    Arc::from(
+        crate::range::TableRangeBinding::new(table_id)
+            .to_json()
+            .expect("compact table binding json"),
+    )
+}
+
 fn table_slicer(id: &str, sheet_id: &str) -> StoredSlicer {
     StoredSlicer {
         id: id.to_string(),
@@ -100,9 +108,8 @@ fn test_workbook_table_range_binding_change() {
         sheet_id.to_uuid_string()
     );
 
-    // Table metadata is now persisted primarily in workbook.rangeBindings
-    // using table:<name> keys. The observer must route those entries through
-    // the table domain so engines rebuild their table mirror after sync.
+    // Legacy full table bindings are still migration input. The observer routes
+    // those through table-domain changes so old documents can rebuild mirrors.
     {
         let mut txn = doc.transact_mut();
         let _: MapRef = workbook.insert(
@@ -135,6 +142,39 @@ fn test_workbook_table_range_binding_change() {
     assert_eq!(changes.tables[0].key, "table:SalesData");
     assert_eq!(changes.tables[0].sheet_id, Some(sheet_id));
     assert_eq!(changes.tables[0].kind, CellChangeKind::Modified);
+}
+
+#[test]
+fn test_compact_table_range_binding_change_is_not_table_domain_truth() {
+    let (doc, sheets, workbook) = setup_doc();
+
+    {
+        let mut txn = doc.transact_mut();
+        let _: MapRef = workbook.insert(
+            &mut txn,
+            KEY_RANGE_BINDINGS,
+            MapPrelim::from([] as [(&str, Any); 0]),
+        );
+    }
+
+    let observer = new_observer(&sheets, &workbook);
+
+    {
+        let mut txn = doc.transact_mut();
+        if let Some(Out::YMap(bindings)) = workbook.get(&txn, KEY_RANGE_BINDINGS) {
+            bindings.insert(
+                &mut txn,
+                "table:tbl1",
+                Any::String(compact_table_binding_json("tbl1")),
+            );
+        }
+    }
+
+    let changes = observer.drain_all_changes();
+    assert!(
+        changes.tables.is_empty(),
+        "compact table attachments must not emit table-domain changes"
+    );
 }
 
 #[test]
@@ -206,7 +246,30 @@ fn test_workbook_table_range_bindings_map_insert_carries_table_details() {
 }
 
 #[test]
-fn test_workbook_table_range_bindings_map_removal_emits_domain_reset() {
+fn test_compact_table_range_bindings_map_insert_is_ignored_for_tables() {
+    let (doc, sheets, workbook) = setup_doc();
+    let observer = new_observer(&sheets, &workbook);
+
+    {
+        let mut txn = doc.transact_mut();
+        let bindings: MapPrelim = [(
+            "table:tbl1",
+            Any::String(compact_table_binding_json("tbl1")),
+        )]
+        .into_iter()
+        .collect();
+        let _: MapRef = workbook.insert(&mut txn, KEY_RANGE_BINDINGS, bindings);
+    }
+
+    let changes = observer.drain_all_changes();
+    assert!(
+        changes.tables.is_empty(),
+        "compact table attachments must not synthesize a table reset"
+    );
+}
+
+#[test]
+fn test_workbook_table_range_bindings_map_removal_does_not_emit_table_reset() {
     let (doc, sheets, workbook) = setup_doc();
     let sheet_id = make_sheet_id(2);
     let table_json = format!(
@@ -233,10 +296,39 @@ fn test_workbook_table_range_bindings_map_removal_emits_domain_reset() {
     }
 
     let changes = observer.drain_all_changes();
-    assert_eq!(changes.tables.len(), 1);
-    assert_eq!(changes.tables[0].key, "");
-    assert_eq!(changes.tables[0].sheet_id, None);
-    assert_eq!(changes.tables[0].kind, CellChangeKind::Removed);
+    assert!(
+        changes.tables.is_empty(),
+        "rangeBindings map removal is not an authoritative table deletion"
+    );
+}
+
+#[test]
+fn test_compact_table_range_bindings_map_removal_is_ignored_for_tables() {
+    let (doc, sheets, workbook) = setup_doc();
+
+    {
+        let mut txn = doc.transact_mut();
+        let bindings: MapPrelim = [(
+            "table:tbl1",
+            Any::String(compact_table_binding_json("tbl1")),
+        )]
+        .into_iter()
+        .collect();
+        let _: MapRef = workbook.insert(&mut txn, KEY_RANGE_BINDINGS, bindings);
+    }
+
+    let observer = new_observer(&sheets, &workbook);
+
+    {
+        let mut txn = doc.transact_mut();
+        workbook.remove(&mut txn, KEY_RANGE_BINDINGS);
+    }
+
+    let changes = observer.drain_all_changes();
+    assert!(
+        changes.tables.is_empty(),
+        "compact table attachments must not synthesize a table reset"
+    );
 }
 
 #[test]

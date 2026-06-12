@@ -58,6 +58,7 @@ fn make_canonical_table(
                 totals_function: None,
                 totals_label: None,
                 calculated_formula: None,
+                ..Default::default()
             })
             .collect(),
         has_header_row,
@@ -70,6 +71,7 @@ fn make_canonical_table(
         show_filter_buttons: true,
         auto_expand: true,
         auto_calculated_columns: true,
+        ..Default::default()
     }
 }
 

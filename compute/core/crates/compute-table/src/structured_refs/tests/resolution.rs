@@ -250,6 +250,7 @@ mod find_col {
                 totals_function: None,
                 totals_label: None,
                 calculated_formula: None,
+                ..Default::default()
             },
             TableColumn {
                 id: "2".to_string(),
@@ -258,6 +259,7 @@ mod find_col {
                 totals_function: None,
                 totals_label: None,
                 calculated_formula: None,
+                ..Default::default()
             },
         ];
         let (idx, col) = find_column(&cols, "Amount").unwrap();
@@ -274,6 +276,7 @@ mod find_col {
             totals_function: None,
             totals_label: None,
             calculated_formula: None,
+            ..Default::default()
         }];
         assert!(find_column(&cols, "product").is_some());
         assert!(find_column(&cols, "PRODUCT").is_some());
@@ -288,6 +291,7 @@ mod find_col {
             totals_function: None,
             totals_label: None,
             calculated_formula: None,
+            ..Default::default()
         }];
         assert!(find_column(&cols, "NonExistent").is_none());
     }

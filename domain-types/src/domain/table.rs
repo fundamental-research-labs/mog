@@ -3,6 +3,15 @@ use serde::{Deserialize, Deserializer, Serialize};
 
 use super::filter::{SortConditionBy, SortMethod};
 
+mod binding;
+mod ooxml;
+
+#[cfg(feature = "yrs")]
+pub(crate) use ooxml::col_index_to_letter;
+pub use ooxml::{
+    parse_table_range_ref, table_spec_to_table, table_spec_to_table_with_ids, table_to_table_spec,
+};
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TableSpec {
@@ -503,11 +512,15 @@ impl TotalsFunction {
 }
 
 /// A column within a table — the canonical runtime representation.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct TableColumn {
     /// Unique column ID (String, consistent across all systems).
     pub id: String,
+    /// Imported or export-projected OOXML column ID. This is package metadata,
+    /// not the stable Mog column identity.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ooxml_column_id: Option<u32>,
     /// Column display name.
     pub name: String,
     /// Position within table (0-based).
@@ -519,6 +532,39 @@ pub struct TableColumn {
     /// Calculated column formula.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub calculated_formula: Option<String>,
+    /// Whether calculated column formula is an array formula.
+    #[serde(default)]
+    pub calculated_formula_array: bool,
+    /// Totals row formula.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub totals_row_formula: Option<String>,
+    /// Whether totals row formula is an array formula.
+    #[serde(default)]
+    pub totals_row_formula_array: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub header_row_dxf_id: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub data_dxf_id: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub totals_row_dxf_id: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub header_row_cell_style: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub data_cell_style: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub totals_row_cell_style: Option<String>,
+    /// Unique name for query-table columns.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unique_name: Option<String>,
+    /// Query table field ID.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub query_table_field_id: Option<u32>,
+    /// XML column properties for XML-mapped table columns.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub xml_column_pr: Option<ooxml_types::tables::XmlColumnPr>,
+    /// Extension UID for revision tracking.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub xr3_uid: Option<String>,
 }
 
 /// Complete table definition — the ONE canonical representation stored in Yrs.
@@ -532,7 +578,11 @@ pub struct TableColumn {
 pub struct Table {
     /// Unique table ID (String).
     pub id: String,
-    /// Table name (also used as Y.Map key).
+    /// Imported or export-projected OOXML table ID. This is package metadata,
+    /// not the stable Mog table identity.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ooxml_table_id: Option<u32>,
+    /// Table name.
     pub name: String,
     /// Display name (may differ from name for OOXML round-trip).
     pub display_name: String,
@@ -564,104 +614,108 @@ pub struct Table {
     /// Whether formulas entered in table data columns automatically create/fill calculated columns.
     #[serde(default = "default_true")]
     pub auto_calculated_columns: bool,
+    /// Imported OOXML auto-filter range, when distinct metadata must round-trip.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub auto_filter_ref: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub auto_filter_xr_uid: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub auto_filter_ext_lst_raw: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub header_row_dxf_id: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub data_dxf_id: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub totals_row_dxf_id: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub header_row_border_dxf_id: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub table_border_dxf_id: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub totals_row_border_dxf_id: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub header_row_cell_style: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub data_cell_style: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub totals_row_cell_style: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub table_type: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub totals_row_shown: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub connection_id: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub comment: Option<String>,
+    #[serde(default)]
+    pub insert_row: bool,
+    #[serde(default)]
+    pub insert_row_shift: bool,
+    #[serde(default)]
+    pub published: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub xr_uid: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sort_state: Option<TableSortState>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub filter_columns: Vec<FilterColumnSpec>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub query_table: Option<super::connections::QueryTable>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub worksheet_relationship_id_hint: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub table_part_path_hint: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub worksheet_relationship_target_hint: Option<String>,
 }
 
-// =============================================================================
-// Conversion helpers
-// =============================================================================
-
-/// Convert a TableSpec (OOXML import) to a canonical Table.
-///
-/// Requires `sheet_id` since TableSpec is per-sheet and doesn't carry the sheet identity.
-pub fn table_spec_to_table(spec: &TableSpec, sheet_id: &str) -> Table {
-    let (start_row, start_col, end_row, end_col) =
-        parse_table_range_ref(&spec.range_ref).unwrap_or((0, 0, 0, 0));
-
-    Table {
-        id: format!("{}", spec.id),
-        name: spec.name.clone(),
-        display_name: spec.display_name.clone(),
-        sheet_id: sheet_id.to_string(),
-        range: cell_types::SheetRange::new(start_row, start_col, end_row, end_col),
-        columns: spec
-            .columns
-            .iter()
-            .enumerate()
-            .map(|(i, col)| TableColumn {
-                id: format!("{}", col.id),
-                name: col.name.clone(),
-                index: i as u32,
-                totals_function: col.totals_function,
-                totals_label: col.totals_label.clone(),
-                calculated_formula: col.calculated_formula.clone(),
-            })
-            .collect(),
-        has_header_row: spec.has_headers,
-        has_totals_row: spec.has_totals,
-        style: spec
-            .style_name
-            .clone()
-            .unwrap_or_else(|| "TableStyleMedium2".to_string()),
-        banded_rows: spec.row_stripes,
-        banded_columns: spec.col_stripes,
-        emphasize_first_column: spec.first_col_highlight,
-        emphasize_last_column: spec.last_col_highlight,
-        show_filter_buttons: spec.auto_filter_ref.is_some(),
-        auto_expand: true,
-        auto_calculated_columns: true,
-    }
-}
-
-/// Convert a canonical Table back to a TableSpec for XLSX export.
-///
-/// OOXML round-trip metadata (DXF IDs, cell styles, etc.) must be provided
-/// separately since they are not part of the canonical Table type.
-pub fn table_to_table_spec(table: &Table, ooxml_columns: Option<&[TableColumnSpec]>) -> TableSpec {
-    let range_ref = format!(
-        "{}{}:{}{}",
-        col_index_to_letter(table.range.start_col()),
-        table.range.start_row() + 1,
-        col_index_to_letter(table.range.end_col()),
-        table.range.end_row() + 1,
-    );
-
-    let auto_filter_ref = if table.show_filter_buttons {
-        Some(range_ref.clone())
-    } else {
-        None
-    };
-
-    let columns = match ooxml_columns {
-        Some(ooxml_cols) => ooxml_cols.to_vec(),
-        None => table
-            .columns
-            .iter()
-            .map(|col| TableColumnSpec {
-                id: col.id.parse::<u32>().unwrap_or(0),
-                name: col.name.clone(),
-                totals_function: col.totals_function,
-                totals_label: col.totals_label.clone(),
-                calculated_formula: col.calculated_formula.clone(),
-                ..TableColumnSpec::default()
-            })
-            .collect(),
-    };
-
-    TableSpec {
-        id: table.id.parse::<u32>().unwrap_or(0),
-        name: table.name.clone(),
-        display_name: table.display_name.clone(),
-        range_ref,
-        has_headers: table.has_header_row,
-        has_totals: table.has_totals_row,
-        style_name: Some(table.style.clone()),
-        row_stripes: table.banded_rows,
-        col_stripes: table.banded_columns,
-        first_col_highlight: table.emphasize_first_column,
-        last_col_highlight: table.emphasize_last_column,
-        auto_filter_ref,
-        columns,
-        ..TableSpec::default()
+impl Default for Table {
+    fn default() -> Self {
+        Self {
+            id: String::new(),
+            ooxml_table_id: None,
+            name: String::new(),
+            display_name: String::new(),
+            sheet_id: String::new(),
+            range: cell_types::SheetRange::new(0, 0, 0, 0),
+            columns: Vec::new(),
+            has_header_row: true,
+            has_totals_row: false,
+            style: "TableStyleMedium2".to_string(),
+            banded_rows: true,
+            banded_columns: false,
+            emphasize_first_column: false,
+            emphasize_last_column: false,
+            show_filter_buttons: true,
+            auto_expand: true,
+            auto_calculated_columns: true,
+            auto_filter_ref: None,
+            auto_filter_xr_uid: None,
+            auto_filter_ext_lst_raw: None,
+            header_row_dxf_id: None,
+            data_dxf_id: None,
+            totals_row_dxf_id: None,
+            header_row_border_dxf_id: None,
+            table_border_dxf_id: None,
+            totals_row_border_dxf_id: None,
+            header_row_cell_style: None,
+            data_cell_style: None,
+            totals_row_cell_style: None,
+            table_type: None,
+            totals_row_shown: None,
+            connection_id: None,
+            comment: None,
+            insert_row: false,
+            insert_row_shift: false,
+            published: false,
+            xr_uid: None,
+            sort_state: None,
+            filter_columns: Vec::new(),
+            query_table: None,
+            worksheet_relationship_id_hint: None,
+            table_part_path_hint: None,
+            worksheet_relationship_target_hint: None,
+        }
     }
 }
 
@@ -766,175 +820,6 @@ pub struct TableColumnBinding {
     /// Calculated column formula.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub calculated_formula: Option<String>,
-}
-
-// =============================================================================
-// TableBinding <-> Table conversion helpers
-// =============================================================================
-
-impl TableBinding {
-    /// Create a `TableBinding` from a canonical `Table`.
-    ///
-    /// Includes the full table extent (id, sheet_id, row/col bounds) so the
-    /// binding is self-contained in `rangeBindings`.
-    pub fn from_table(table: &Table) -> Self {
-        TableBinding {
-            name: table.name.clone(),
-            display_name: if table.display_name != table.name {
-                Some(table.display_name.clone())
-            } else {
-                None
-            },
-            id: Some(table.id.clone()),
-            sheet_id: Some(table.sheet_id.clone()),
-            start_row: Some(table.range.start_row()),
-            start_col: Some(table.range.start_col()),
-            end_row: Some(table.range.end_row()),
-            end_col: Some(table.range.end_col()),
-            columns: table
-                .columns
-                .iter()
-                .map(|col| TableColumnBinding {
-                    name: col.name.clone(),
-                    index: col.index,
-                    totals_function: col.totals_function,
-                    totals_label: col.totals_label.clone(),
-                    calculated_formula: col.calculated_formula.clone(),
-                })
-                .collect(),
-            has_header_row: table.has_header_row,
-            has_totals_row: table.has_totals_row,
-            auto_expand: table.auto_expand,
-            auto_calculated_columns: table.auto_calculated_columns,
-            style: Some(TableStyleInfo {
-                name: table.style.clone(),
-                banded_rows: table.banded_rows,
-                banded_columns: table.banded_columns,
-                emphasize_first_column: table.emphasize_first_column,
-                emphasize_last_column: table.emphasize_last_column,
-                show_filter_buttons: table.show_filter_buttons,
-            }),
-        }
-    }
-
-    /// Reconstruct a canonical `Table` from a `TableBinding` + Range extent.
-    ///
-    /// The caller provides `table_id`, `sheet_id`, and the `SheetRange` from
-    /// the Range system. The binding provides column schema and style info.
-    pub fn to_table(&self, table_id: &str, sheet_id: &str, range: cell_types::SheetRange) -> Table {
-        let style_info = self.style.as_ref();
-        Table {
-            id: table_id.to_string(),
-            name: self.name.clone(),
-            display_name: self
-                .display_name
-                .clone()
-                .unwrap_or_else(|| self.name.clone()),
-            sheet_id: sheet_id.to_string(),
-            range,
-            columns: self
-                .columns
-                .iter()
-                .enumerate()
-                .map(|(i, col)| TableColumn {
-                    id: format!("{}", i + 1),
-                    name: col.name.clone(),
-                    index: col.index,
-                    totals_function: col.totals_function,
-                    totals_label: col.totals_label.clone(),
-                    calculated_formula: col.calculated_formula.clone(),
-                })
-                .collect(),
-            has_header_row: self.has_header_row,
-            has_totals_row: self.has_totals_row,
-            auto_expand: self.auto_expand,
-            auto_calculated_columns: self.auto_calculated_columns,
-            style: style_info
-                .map(|s| s.name.clone())
-                .unwrap_or_else(|| "TableStyleMedium2".to_string()),
-            banded_rows: style_info.map(|s| s.banded_rows).unwrap_or(true),
-            banded_columns: style_info.map(|s| s.banded_columns).unwrap_or(false),
-            emphasize_first_column: style_info
-                .map(|s| s.emphasize_first_column)
-                .unwrap_or(false),
-            emphasize_last_column: style_info.map(|s| s.emphasize_last_column).unwrap_or(false),
-            show_filter_buttons: style_info.map(|s| s.show_filter_buttons).unwrap_or(true),
-        }
-    }
-
-    /// Reconstruct a canonical `Table` from a self-contained `TableBinding`.
-    ///
-    /// Uses the embedded `id`, `sheet_id`, and range coordinates. Returns
-    /// `None` if any of the required extent fields are missing (e.g., a
-    /// binding serialized before these fields were added).
-    pub fn to_table_standalone(&self) -> Option<Table> {
-        let table_id = self.id.as_deref().unwrap_or(&self.name);
-        let sheet_id = self.sheet_id.as_deref()?;
-        let range = cell_types::SheetRange::new(
-            self.start_row?,
-            self.start_col?,
-            self.end_row?,
-            self.end_col?,
-        );
-        Some(self.to_table(table_id, sheet_id, range))
-    }
-}
-
-// =============================================================================
-// Private helpers for A1-style range parsing / generation
-// =============================================================================
-
-/// Parse an A1-style range reference like "A1:D20" into (start_row, start_col, end_row, end_col).
-/// Returns 0-based indices.
-pub fn parse_table_range_ref(range_ref: &str) -> Option<(u32, u32, u32, u32)> {
-    let parts: Vec<&str> = range_ref.split(':').collect();
-    if parts.len() != 2 {
-        return None;
-    }
-    let (r1, c1) = parse_table_cell_ref(parts[0])?;
-    let (r2, c2) = parse_table_cell_ref(parts[1])?;
-    Some((r1, c1, r2, c2))
-}
-
-/// Parse a cell reference like "A1" or "$D$20" into (row, col) 0-based.
-fn parse_table_cell_ref(cell_ref: &str) -> Option<(u32, u32)> {
-    let cell_ref = cell_ref.replace('$', "");
-    let mut col_str = String::new();
-    let mut row_str = String::new();
-    for ch in cell_ref.chars() {
-        if ch.is_ascii_alphabetic() {
-            col_str.push(ch);
-        } else if ch.is_ascii_digit() {
-            row_str.push(ch);
-        }
-    }
-    if col_str.is_empty() || row_str.is_empty() {
-        return None;
-    }
-    let col = col_letter_to_index(&col_str);
-    let row = row_str.parse::<u32>().ok()?.checked_sub(1)?; // 1-based to 0-based
-    Some((row, col))
-}
-
-/// Convert column letters to 0-based index: "A" -> 0, "B" -> 1, "Z" -> 25, "AA" -> 26.
-fn col_letter_to_index(letters: &str) -> u32 {
-    let mut result: u32 = 0;
-    for ch in letters.to_ascii_uppercase().chars() {
-        result = result * 26 + (ch as u32 - 'A' as u32 + 1);
-    }
-    result.saturating_sub(1)
-}
-
-/// Convert 0-based column index to letter(s): 0 -> "A", 25 -> "Z", 26 -> "AA".
-pub(crate) fn col_index_to_letter(col: u32) -> String {
-    let mut result = String::new();
-    let mut n = col + 1; // 1-based
-    while n > 0 {
-        n -= 1;
-        result.insert(0, (b'A' + (n % 26) as u8) as char);
-        n /= 26;
-    }
-    result
 }
 
 #[cfg(test)]

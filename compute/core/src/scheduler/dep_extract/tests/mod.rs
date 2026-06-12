@@ -910,6 +910,7 @@ fn test_structured_ref_under_selective_context_skips_cell_expansion() {
             totals_function: None,
             totals_label: None,
             calculated_formula: None,
+            ..Default::default()
         }],
         has_header_row: true,
         has_totals_row: false,
@@ -921,6 +922,7 @@ fn test_structured_ref_under_selective_context_skips_cell_expansion() {
         show_filter_buttons: true,
         auto_expand: true,
         auto_calculated_columns: true,
+        ..Default::default()
     });
     let ast = ASTNode::Function {
         name: "INDEX".into(),

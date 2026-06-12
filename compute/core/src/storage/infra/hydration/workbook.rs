@@ -191,32 +191,32 @@ mod tests {
 pub(super) fn hydrate_workbook_tables(
     workbook: &MapRef,
     tables: &[(domain_types::domain::table::TableSpec, String)],
+    allocator: &mut impl IdAllocator,
     txn: &mut yrs::TransactionMut,
-) {
+) -> std::collections::HashMap<u32, String> {
+    let mut table_ids_by_ooxml_id = std::collections::HashMap::new();
     if tables.is_empty() {
-        return;
+        return table_ids_by_ooxml_id;
     }
     // Provider Protocol lifecycle: lazy-create the tables sub-map.
     let tables_map = crate::storage::ensure_workbook_child_map(workbook, txn, KEY_TABLES);
     for (table, sheet_id) in tables {
-        let mut entries = yrs_schema::table::to_yrs_prelim(table);
-
-        // Add canonical-specific keys for from_yrs_map_to_table compatibility
-        entries.push(("sheetId", Any::String(Arc::from(sheet_id.as_str()))));
-
-        // Parse range_ref and add structured range keys
-        if let Some((sr, sc, er, ec)) =
-            domain_types::domain::table::parse_table_range_ref(&table.range_ref)
-        {
-            entries.push(("startRow", Any::Number(sr as f64)));
-            entries.push(("startCol", Any::Number(sc as f64)));
-            entries.push(("endRow", Any::Number(er as f64)));
-            entries.push(("endCol", Any::Number(ec as f64)));
+        let table_id = format!("tbl-{}", allocator.alloc_cell_id().to_uuid_string());
+        let column_ids = table
+            .columns
+            .iter()
+            .map(|_| format!("col-{}", allocator.alloc_cell_id().to_uuid_string()));
+        let canonical = domain_types::domain::table::table_spec_to_table_with_ids(
+            table, sheet_id, table_id, column_ids,
+        );
+        if table.id > 0 {
+            table_ids_by_ooxml_id.insert(table.id, canonical.id.clone());
         }
-
+        let entries = yrs_schema::table::to_yrs_prelim_from_table(&canonical);
         let table_prelim: MapPrelim = entries.into_iter().collect();
-        tables_map.insert(txn, &*table.name, table_prelim);
+        tables_map.insert(txn, &*canonical.id, table_prelim);
     }
+    table_ids_by_ooxml_id
 }
 
 pub(super) fn hydrate_workbook_connections(
@@ -617,6 +617,7 @@ pub(super) fn hydrate_workbook_slicers(
     sheets: &[SheetData],
     sheet_ids: &[SheetId],
     slicer_caches: &[ooxml_types::slicers::SlicerCacheDef],
+    table_ids_by_ooxml_id: &std::collections::HashMap<u32, String>,
     txn: &mut yrs::TransactionMut,
 ) {
     // Build a lookup from cache name → cache def
@@ -658,6 +659,9 @@ pub(super) fn hydrate_workbook_slicers(
             let source_table = cache
                 .and_then(|cache| cache.table_slicer_cache.as_ref())
                 .and_then(|table_cache| table_by_ooxml_id.get(&table_cache.table_id).copied());
+            let source_table_id = cache
+                .and_then(|cache| cache.table_slicer_cache.as_ref())
+                .and_then(|table_cache| table_ids_by_ooxml_id.get(&table_cache.table_id));
             let table_filter_selected_values = cache
                 .and_then(|cache| cache.table_slicer_cache.as_ref())
                 .and_then(|table_cache| {
@@ -678,7 +682,7 @@ pub(super) fn hydrate_workbook_slicers(
                 anchor,
                 domain_types::domain::slicer::XlsxSlicerImportContext {
                     sheet_id: &sheet_hex,
-                    source_table_name: source_table.map(|table| table.name.as_str()),
+                    source_table_id: source_table_id.map(String::as_str),
                     table_filter_selected_values,
                 },
             );

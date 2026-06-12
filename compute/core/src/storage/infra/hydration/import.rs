@@ -211,7 +211,8 @@ impl YrsStorage {
                     .map(move |t| (t.clone(), sheet_hex.to_string()))
             })
             .collect();
-        hydrate_workbook_tables(&self.workbook, &all_tables, &mut txn);
+        let table_ids_by_ooxml_id =
+            hydrate_workbook_tables(&self.workbook, &all_tables, allocator, &mut txn);
         hydrate_workbook_connections(&self.workbook, &output.connections, &mut txn);
         hydrate_workbook_root_namespaces(
             &self.workbook,
@@ -235,6 +236,7 @@ impl YrsStorage {
             &output.sheets,
             &id_map.sheet_ids,
             &output.slicer_caches,
+            &table_ids_by_ooxml_id,
             &mut txn,
         );
         hydrate_workbook_timelines(
@@ -481,7 +483,8 @@ impl YrsStorage {
                     .map(move |t| (t.clone(), sheet_hex.to_string()))
             })
             .collect();
-        hydrate_workbook_tables(&self.workbook, &all_tables, &mut txn);
+        let table_ids_by_ooxml_id =
+            hydrate_workbook_tables(&self.workbook, &all_tables, allocator, &mut txn);
         hydrate_workbook_root_namespaces(
             &self.workbook,
             &output.workbook_root_namespaces,
@@ -494,6 +497,7 @@ impl YrsStorage {
             &output.sheets,
             &id_map.sheet_ids,
             &output.slicer_caches,
+            &table_ids_by_ooxml_id,
             &mut txn,
         );
         hydrate_workbook_timelines(

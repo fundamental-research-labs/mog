@@ -77,13 +77,12 @@ impl CellMirror {
 
     // ── Tables ─────────────────────────────────────────────────────────
 
-    /// Set (or replace) a canonical table (case-insensitive name matching).
+    /// Set (or replace) a canonical table (stable-ID first, name as compatibility lookup).
     /// Also updates the formula engine's TableDef cache and the table_range_ids index.
     pub fn set_table(&mut self, table: CanonicalTable) {
         let table_def = crate::storage::table_format::table_to_table_def(&table);
 
-        // Phase 5E: maintain table_range_ids index
-        let range_id = format!("table:{}", table.name);
+        let range_id = format!("table:{}", table.id);
         self.table_range_ids
             .insert(table.name.to_ascii_lowercase(), range_id);
 
@@ -91,8 +90,16 @@ impl CellMirror {
         if let Some(existing) = self
             .tables
             .iter_mut()
-            .find(|t| t.name.eq_ignore_ascii_case(&table.name))
+            .find(|t| t.id == table.id || t.name.eq_ignore_ascii_case(&table.name))
         {
+            if !existing.name.eq_ignore_ascii_case(&table.name) {
+                self.table_range_ids
+                    .remove(&existing.name.to_ascii_lowercase());
+                self.table_range_ids.insert(
+                    table.name.to_ascii_lowercase(),
+                    format!("table:{}", table.id),
+                );
+            }
             *existing = table;
         } else {
             self.tables.push(table);
@@ -125,6 +132,11 @@ impl CellMirror {
         self.tables
             .iter()
             .find(|t| t.name.eq_ignore_ascii_case(name))
+    }
+
+    /// Get a canonical table by stable ID.
+    pub fn get_table_by_id(&self, table_id: &str) -> Option<&CanonicalTable> {
+        self.tables.iter().find(|t| t.id == table_id)
     }
 
     /// Get all canonical tables.

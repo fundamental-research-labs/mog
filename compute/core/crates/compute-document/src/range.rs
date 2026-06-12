@@ -181,6 +181,46 @@ pub fn all_range_bindings_wb<T: ReadTxn>(workbook: &MapRef, txn: &T) -> Vec<(Str
         .collect()
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TableRangeBinding {
+    #[serde(default = "table_range_binding_kind")]
+    pub kind: String,
+    #[serde(default = "table_range_binding_version")]
+    pub version: u32,
+    pub table_id: String,
+}
+
+impl TableRangeBinding {
+    pub const KIND: &'static str = "table";
+    pub const VERSION: u32 = 1;
+
+    pub fn new(table_id: impl Into<String>) -> Self {
+        Self {
+            kind: Self::KIND.to_string(),
+            version: Self::VERSION,
+            table_id: table_id.into(),
+        }
+    }
+
+    pub fn to_json(&self) -> Option<String> {
+        serde_json::to_string(self).ok()
+    }
+
+    pub fn from_json(json: &str) -> Option<Self> {
+        let binding: Self = serde_json::from_str(json).ok()?;
+        (binding.kind == Self::KIND && binding.version == Self::VERSION).then_some(binding)
+    }
+}
+
+fn table_range_binding_kind() -> String {
+    TableRangeBinding::KIND.to_string()
+}
+
+fn table_range_binding_version() -> u32 {
+    TableRangeBinding::VERSION
+}
+
 /// Lazy-create the `rangeBindings` Y.Map under `workbook`.
 fn ensure_range_bindings_map(workbook: &MapRef, txn: &mut TransactionMut<'_>) -> MapRef {
     match workbook.get(txn, KEY_RANGE_BINDINGS) {

@@ -1,141 +1,25 @@
 #![allow(unused_imports, unused_variables)]
 use super::*;
-use domain_types::domain::table::{TableColumnSpec, TableSpec};
 use domain_types::yrs_schema::table as yrs_table;
-use std::sync::Arc;
-use yrs::{Any, MapPrelim, MapRef, ReadTxn, TransactionMut};
+use yrs::{MapPrelim, MapRef, ReadTxn, TransactionMut};
 
 // -------------------------------------------------------------------
 // Table Yrs Persistence
 // -------------------------------------------------------------------
 
-fn table_catalog_prelim(table: &CanonicalTable, existing_spec: Option<TableSpec>) -> MapPrelim {
-    let spec = merge_table_catalog_spec(table, existing_spec);
-    let mut entries = yrs_table::to_yrs_prelim(&spec);
-    let id_value = if spec.id != 0 && table.id.parse::<u32>().is_err() {
-        Any::Number(spec.id as f64)
-    } else {
-        Any::String(Arc::from(table.id.as_str()))
-    };
-
-    set_entry(&mut entries, yrs_table::KEY_ID, id_value);
-    set_entry(
-        &mut entries,
-        yrs_table::KEY_SHEET_ID,
-        Any::String(Arc::from(table.sheet_id.as_str())),
-    );
-    set_entry(
-        &mut entries,
-        yrs_table::KEY_START_ROW,
-        Any::Number(table.range.start_row() as f64),
-    );
-    set_entry(
-        &mut entries,
-        yrs_table::KEY_START_COL,
-        Any::Number(table.range.start_col() as f64),
-    );
-    set_entry(
-        &mut entries,
-        yrs_table::KEY_END_ROW,
-        Any::Number(table.range.end_row() as f64),
-    );
-    set_entry(
-        &mut entries,
-        yrs_table::KEY_END_COL,
-        Any::Number(table.range.end_col() as f64),
-    );
-    set_entry(
-        &mut entries,
-        yrs_table::KEY_SHOW_FILTER_BUTTONS,
-        Any::Bool(table.show_filter_buttons),
-    );
-    set_entry(
-        &mut entries,
-        yrs_table::KEY_AUTO_EXPAND,
-        Any::Bool(table.auto_expand),
-    );
-    set_entry(
-        &mut entries,
-        yrs_table::KEY_AUTO_CALCULATED_COLUMNS,
-        Any::Bool(table.auto_calculated_columns),
-    );
-
-    entries.into_iter().collect()
-}
-
-fn set_entry(entries: &mut Vec<(&str, Any)>, key: &'static str, value: Any) {
-    if let Some((_, existing)) = entries.iter_mut().find(|(entry_key, _)| *entry_key == key) {
-        *existing = value;
-    } else {
-        entries.push((key, value));
-    }
-}
-
-fn merge_table_catalog_spec(table: &CanonicalTable, existing_spec: Option<TableSpec>) -> TableSpec {
-    let merged_columns = existing_spec
-        .as_ref()
-        .map(|spec| merge_table_catalog_columns(table, &spec.columns));
-    let generated =
-        domain_types::domain::table::table_to_table_spec(table, merged_columns.as_deref());
-    let mut spec = existing_spec.unwrap_or_default();
-
-    spec.id = if generated.id != 0 {
-        generated.id
-    } else {
-        spec.id
-    };
-    spec.name = generated.name;
-    spec.display_name = generated.display_name;
-    spec.range_ref = generated.range_ref;
-    spec.has_headers = generated.has_headers;
-    spec.has_totals = generated.has_totals;
-    spec.style_name = generated.style_name;
-    spec.row_stripes = generated.row_stripes;
-    spec.col_stripes = generated.col_stripes;
-    spec.first_col_highlight = generated.first_col_highlight;
-    spec.last_col_highlight = generated.last_col_highlight;
-    spec.auto_filter_ref = generated.auto_filter_ref;
-    spec.columns = generated.columns;
-
-    spec
-}
-
-fn merge_table_catalog_columns(
-    table: &CanonicalTable,
-    existing_columns: &[TableColumnSpec],
-) -> Vec<TableColumnSpec> {
-    table
-        .columns
-        .iter()
-        .enumerate()
-        .map(|(index, column)| {
-            let mut spec = existing_columns.get(index).cloned().unwrap_or_default();
-            spec.id = column
-                .id
-                .parse::<u32>()
-                .ok()
-                .filter(|id| *id != 0)
-                .or_else(|| (spec.id != 0).then_some(spec.id))
-                .unwrap_or(index as u32 + 1);
-            spec.name = column.name.clone();
-            spec.totals_function = column.totals_function;
-            spec.totals_label = column.totals_label.clone();
-            spec.calculated_formula = column.calculated_formula.clone();
-            if spec.calculated_formula.is_none() {
-                spec.calculated_formula_array = false;
-            }
-            spec
-        })
+fn table_catalog_prelim(table: &CanonicalTable) -> MapPrelim {
+    yrs_table::to_yrs_prelim_from_table(table)
+        .into_iter()
         .collect()
 }
 
-fn read_table_catalog_spec<T: ReadTxn>(
+fn read_table_catalog_entry<T: ReadTxn>(
     tables_map: &MapRef,
     txn: &T,
-    table_name: &str,
-) -> Option<TableSpec> {
-    match tables_map.get(txn, table_name) {
-        Some(Out::YMap(inner)) => yrs_table::from_yrs_map(&inner, txn),
+    key: &str,
+) -> Option<CanonicalTable> {
+    match tables_map.get(txn, key) {
+        Some(Out::YMap(inner)) => yrs_table::from_yrs_map_to_table(&inner, txn),
         _ => None,
     }
 }
@@ -144,26 +28,21 @@ fn write_table_catalog_entry(
     tables_map: &MapRef,
     txn: &mut TransactionMut,
     table: &CanonicalTable,
-    existing_spec: Option<TableSpec>,
 ) {
-    tables_map.insert(
-        txn,
-        table.name.as_str(),
-        table_catalog_prelim(table, existing_spec),
-    );
+    tables_map.insert(txn, table.id.as_str(), table_catalog_prelim(table));
 }
 
 fn write_table_range_binding(workbook: &MapRef, txn: &mut TransactionMut, table: &CanonicalTable) {
-    let range_id = table_range_id(&table.name);
-    if let Some(json) = yrs_table::table_to_binding_json(table) {
+    let range_id = table_range_id(&table.id);
+    if let Some(json) = compute_document::range::TableRangeBinding::new(&table.id).to_json() {
         compute_document::range::write_range_binding_wb(workbook, txn, &range_id, &json);
     }
 }
 
 /// Persist a full table definition to the Yrs CRDT document.
 ///
-/// Writes the canonical table catalog entry to `workbook.tables[<name>]` and
-/// the range-backed runtime binding to `workbook.rangeBindings[table:<name>]`.
+/// Writes the canonical table catalog entry to `workbook.tables[<table_id>]`
+/// and a compact attachment to `workbook.rangeBindings[table:<table_id>]`.
 ///
 /// Uses a single `ORIGIN_USER_EDIT` transaction so the change syncs to peers.
 pub(in crate::storage::engine) fn persist_table_to_yrs(
@@ -181,13 +60,12 @@ pub(in crate::storage::engine) fn persist_table_to_yrs(
         &mut txn,
         compute_document::schema::KEY_TABLES,
     );
-    let existing_spec = read_table_catalog_spec(&tables_map, &txn, &table.name);
-    write_table_catalog_entry(&tables_map, &mut txn, table, existing_spec);
+    tables_map.remove(&mut txn, table.name.as_str());
+    write_table_catalog_entry(&tables_map, &mut txn, table);
     write_table_range_binding(&workbook, &mut txn, table);
 }
 
-/// Persist a table rename while carrying forward any imported OOXML catalog
-/// metadata from the old table name.
+/// Persist a table rename without changing its stable catalog identity.
 pub(in crate::storage::engine) fn rename_table_in_yrs(
     stores: &mut EngineStores,
     old_name: &str,
@@ -204,13 +82,11 @@ pub(in crate::storage::engine) fn rename_table_in_yrs(
         &mut txn,
         compute_document::schema::KEY_TABLES,
     );
-    let existing_spec = read_table_catalog_spec(&tables_map, &txn, old_name)
-        .or_else(|| read_table_catalog_spec(&tables_map, &txn, &table.name));
     tables_map.remove(&mut txn, old_name);
     let old_range_id = table_range_id(old_name);
     compute_document::range::remove_range_binding_wb(&workbook, &mut txn, &old_range_id);
 
-    write_table_catalog_entry(&tables_map, &mut txn, table, existing_spec);
+    write_table_catalog_entry(&tables_map, &mut txn, table);
     write_table_range_binding(&workbook, &mut txn, table);
 }
 
@@ -237,8 +113,8 @@ pub(in crate::storage::engine) fn persist_table_to_yrs_with_table_filter(
         &mut txn,
         compute_document::schema::KEY_TABLES,
     );
-    let existing_spec = read_table_catalog_spec(&tables_map, &txn, &table.name);
-    write_table_catalog_entry(&tables_map, &mut txn, table, existing_spec);
+    tables_map.remove(&mut txn, table.name.as_str());
+    write_table_catalog_entry(&tables_map, &mut txn, table);
     write_table_range_binding(&workbook, &mut txn, table);
 
     filters::create_filter_in_txn(
@@ -262,12 +138,20 @@ pub(in crate::storage::engine) fn remove_table_from_yrs(
     stores: &mut EngineStores,
     table_name: &str,
 ) {
-    remove_table_from_yrs_with_filter(stores, table_name, None);
+    remove_table_from_yrs_with_filter(stores, table_name, None, None);
+}
+
+pub(in crate::storage::engine) fn remove_table_from_yrs_by_table(
+    stores: &mut EngineStores,
+    table: &CanonicalTable,
+) {
+    remove_table_from_yrs_with_filter(stores, &table.name, Some(table.id.as_str()), None);
 }
 
 pub(in crate::storage::engine) fn remove_table_from_yrs_with_filter(
     stores: &mut EngineStores,
     table_name: &str,
+    table_id: Option<&str>,
     table_filter: Option<&(SheetId, String)>,
 ) {
     let workbook = stores.storage.workbook_map().clone();
@@ -280,10 +164,38 @@ pub(in crate::storage::engine) fn remove_table_from_yrs_with_filter(
         &mut txn,
         compute_document::schema::KEY_TABLES,
     );
-    tables_map.remove(&mut txn, table_name);
+
+    let mut catalog_keys = vec![table_name.to_string()];
+    let mut table_ids = Vec::new();
+    if let Some(table_id) = table_id {
+        catalog_keys.push(table_id.to_string());
+        table_ids.push(table_id.to_string());
+    } else {
+        for (key, value) in tables_map.iter(&txn) {
+            if let Out::YMap(inner) = value
+                && let Some(table) =
+                    domain_types::yrs_schema::table::from_yrs_map_to_table(&inner, &txn)
+                && table.name.eq_ignore_ascii_case(table_name)
+            {
+                catalog_keys.push(key.to_string());
+                table_ids.push(table.id);
+            }
+        }
+    }
+    catalog_keys.sort();
+    catalog_keys.dedup();
+    for key in catalog_keys {
+        tables_map.remove(&mut txn, key.as_str());
+    }
 
     let range_id = table_range_id(table_name);
     compute_document::range::remove_range_binding_wb(&workbook, &mut txn, &range_id);
+    table_ids.sort();
+    table_ids.dedup();
+    for table_id in table_ids {
+        let range_id = table_range_id(&table_id);
+        compute_document::range::remove_range_binding_wb(&workbook, &mut txn, &range_id);
+    }
 
     if let Some((sheet_id, filter_id)) = table_filter {
         filters::delete_filter_in_txn(&mut txn, &sheets, sheet_id, filter_id);
@@ -292,8 +204,8 @@ pub(in crate::storage::engine) fn remove_table_from_yrs_with_filter(
 
 /// Persist the current table style fields to the Yrs document.
 ///
-/// Updates both `workbook.tables[<name>]` and
-/// `workbook.rangeBindings[table:<name>]` in a single `ORIGIN_USER_EDIT`
+/// Updates `workbook.tables[<table_id>]` and the compact table attachment in
+/// a single `ORIGIN_USER_EDIT`
 /// transaction.
 pub(in crate::storage::engine) fn persist_table_style_to_yrs(
     stores: &mut EngineStores,
@@ -318,8 +230,8 @@ pub(in crate::storage::engine) fn persist_table_style_to_yrs(
         &mut txn,
         compute_document::schema::KEY_TABLES,
     );
-    let existing_spec = read_table_catalog_spec(&tables_map, &txn, table_name);
-    write_table_catalog_entry(&tables_map, &mut txn, table, existing_spec);
+    tables_map.remove(&mut txn, table_name);
+    write_table_catalog_entry(&tables_map, &mut txn, table);
     write_table_range_binding(&workbook, &mut txn, table);
 
     Ok(())
@@ -336,48 +248,59 @@ pub(in crate::storage::engine) fn sync_tables_from_yrs(
     stores: &mut EngineStores,
     mirror: &mut CellMirror,
 ) {
-    let (yrs_tables, yrs_names): (Vec<CanonicalTable>, std::collections::HashSet<String>) = {
+    let (yrs_tables, yrs_names, yrs_ids): (
+        Vec<CanonicalTable>,
+        std::collections::HashSet<String>,
+        std::collections::HashSet<String>,
+    ) = {
         let txn = stores.storage.doc().transact();
         let mut tables = Vec::new();
         let mut names = std::collections::HashSet::new();
+        let mut ids = std::collections::HashSet::new();
 
-        // Read runtime table bindings first; they carry the live range-backed
-        // table identity used by the compute mirror.
-        let binding_entries =
-            compute_document::range::all_range_bindings_wb(stores.storage.workbook_map(), &txn);
-        for (range_id, json) in &binding_entries {
-            if let Some(_tname) = table_name_from_range_id(range_id)
-                && let Some(table) =
-                    domain_types::yrs_schema::table::from_binding_json_standalone(json)
-            {
-                names.insert(table.name.clone());
-                tables.push(table);
-            }
-        }
-
-        // Read catalog-only tables, including imported documents that do not
-        // yet have range-backed bindings.
+        // Read canonical catalog entries first. Range bindings are compact
+        // attachments; legacy full bindings are migration input only.
         if let Some(Out::YMap(tables_map)) = stores
             .storage
             .workbook_map()
             .get(&txn, compute_document::schema::KEY_TABLES)
         {
             for (key, value) in tables_map.iter(&txn) {
-                // Skip if already found in rangeBindings.
-                if names.contains(key) {
-                    continue;
-                }
                 if let Out::YMap(inner) = value
                     && let Some(table) =
                         domain_types::yrs_schema::table::from_yrs_map_to_table(&inner, &txn)
                 {
+                    if table.id != key {
+                        names.insert(key.to_string());
+                    }
+                    ids.insert(key.to_string());
+                    ids.insert(table.id.clone());
                     names.insert(table.name.clone());
                     tables.push(table);
                 }
             }
         }
 
-        (tables, names)
+        // Legacy documents may still have self-contained full table bindings
+        // and no catalog entry. Read them after catalog entries so compact
+        // attachments never become a second table source.
+        let binding_entries =
+            compute_document::range::all_range_bindings_wb(stores.storage.workbook_map(), &txn);
+        for (range_id, json) in &binding_entries {
+            if table_id_from_range_id(range_id).is_some()
+                && compute_document::range::TableRangeBinding::from_json(json).is_none()
+                && let Some(table) =
+                    domain_types::yrs_schema::table::from_binding_json_standalone(json)
+                && !names.contains(&table.name)
+                && !ids.contains(&table.id)
+            {
+                ids.insert(table.id.clone());
+                names.insert(table.name.clone());
+                tables.push(table);
+            }
+        }
+
+        (tables, names, ids)
     };
 
     // Update or create tables from Yrs
@@ -386,9 +309,13 @@ pub(in crate::storage::engine) fn sync_tables_from_yrs(
     }
 
     // Remove tables that exist in mirror but not in Yrs
-    let mirror_names: Vec<String> = mirror.all_tables().iter().map(|t| t.name.clone()).collect();
-    for name in mirror_names {
-        if !yrs_names.contains(&name) {
+    let mirror_tables: Vec<(String, String)> = mirror
+        .all_tables()
+        .iter()
+        .map(|t| (t.name.clone(), t.id.clone()))
+        .collect();
+    for (name, id) in mirror_tables {
+        if !yrs_names.contains(&name) && !yrs_ids.contains(&id) {
             stores.compute.remove_table(mirror, &name);
         }
     }

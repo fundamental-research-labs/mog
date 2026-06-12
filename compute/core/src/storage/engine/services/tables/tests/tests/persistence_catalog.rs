@@ -1,16 +1,15 @@
 use super::*;
-use std::sync::Arc;
-use yrs::{Any, MapPrelim};
+use yrs::MapPrelim;
 
-fn table_catalog_table(
+fn table_catalog_table_by_key(
     engine: &YrsComputeEngine,
-    name: &str,
+    key: &str,
 ) -> Option<domain_types::domain::table::Table> {
     let workbook = engine.stores.storage.workbook_map().clone();
     let doc = engine.stores.storage.doc().clone();
     let txn = doc.transact();
     match workbook.get(&txn, compute_document::schema::KEY_TABLES) {
-        Some(Out::YMap(tables_map)) => match tables_map.get(&txn, name) {
+        Some(Out::YMap(tables_map)) => match tables_map.get(&txn, key) {
             Some(Out::YMap(table_map)) => {
                 domain_types::yrs_schema::table::from_yrs_map_to_table(&table_map, &txn)
             }
@@ -20,15 +19,15 @@ fn table_catalog_table(
     }
 }
 
-fn table_catalog_spec(
+fn table_catalog_spec_by_key(
     engine: &YrsComputeEngine,
-    name: &str,
+    key: &str,
 ) -> Option<domain_types::domain::table::TableSpec> {
     let workbook = engine.stores.storage.workbook_map().clone();
     let doc = engine.stores.storage.doc().clone();
     let txn = doc.transact();
     match workbook.get(&txn, compute_document::schema::KEY_TABLES) {
-        Some(Out::YMap(tables_map)) => match tables_map.get(&txn, name) {
+        Some(Out::YMap(tables_map)) => match tables_map.get(&txn, key) {
             Some(Out::YMap(table_map)) => {
                 domain_types::yrs_schema::table::from_yrs_map(&table_map, &txn)
             }
@@ -42,38 +41,37 @@ fn replace_catalog_spec(
     engine: &mut YrsComputeEngine,
     spec: &domain_types::domain::table::TableSpec,
     sheet_id: SheetId,
-) {
-    let workbook = engine.stores.storage.workbook_map().clone();
-    let mut txn = engine.stores.storage.doc().transact_mut();
-    let tables_map = crate::storage::ensure_workbook_child_map(
-        &workbook,
-        &mut txn,
-        compute_document::schema::KEY_TABLES,
+    table_id: String,
+    column_ids: Vec<String>,
+) -> domain_types::domain::table::Table {
+    let table = domain_types::domain::table::table_spec_to_table_with_ids(
+        spec,
+        &sheet_id.to_uuid_string(),
+        table_id,
+        column_ids,
     );
-    let mut entries = domain_types::yrs_schema::table::to_yrs_prelim(spec);
-    entries.push((
-        domain_types::yrs_schema::table::KEY_SHEET_ID,
-        Any::String(Arc::from(sheet_id.to_uuid_string().as_str())),
-    ));
-    entries.push((
-        domain_types::yrs_schema::table::KEY_START_ROW,
-        Any::Number(0.0),
-    ));
-    entries.push((
-        domain_types::yrs_schema::table::KEY_START_COL,
-        Any::Number(0.0),
-    ));
-    entries.push((
-        domain_types::yrs_schema::table::KEY_END_ROW,
-        Any::Number(3.0),
-    ));
-    entries.push((
-        domain_types::yrs_schema::table::KEY_END_COL,
-        Any::Number(1.0),
-    ));
 
-    let table_prelim: MapPrelim = entries.into_iter().collect();
-    tables_map.insert(&mut txn, spec.name.as_str(), table_prelim);
+    {
+        let workbook = engine.stores.storage.workbook_map().clone();
+        let mut txn = engine.stores.storage.doc().transact_mut();
+        let tables_map = crate::storage::ensure_workbook_child_map(
+            &workbook,
+            &mut txn,
+            compute_document::schema::KEY_TABLES,
+        );
+        tables_map.remove(&mut txn, table.name.as_str());
+        let table_prelim: MapPrelim =
+            domain_types::yrs_schema::table::to_yrs_prelim_from_table(&table)
+                .into_iter()
+                .collect();
+        tables_map.insert(&mut txn, table.id.as_str(), table_prelim);
+    }
+
+    engine
+        .stores
+        .compute
+        .set_table(&mut engine.mirror, table.clone());
+    table
 }
 
 #[test]
@@ -93,7 +91,10 @@ fn runtime_table_mutations_keep_workbook_table_catalog_in_sync() {
             true,
         )
         .expect("create_table");
-    let created = table_catalog_table(&engine, "Sales").expect("catalog table after create");
+    let table_id = table_id_by_name(&engine, "Sales");
+    assert!(table_catalog_table_by_key(&engine, "Sales").is_none());
+    let created =
+        table_catalog_table_by_key(&engine, &table_id).expect("catalog table after create");
     assert_eq!(created.name, "Sales");
     assert_eq!(created.sheet_id, sid.to_uuid_string());
     assert_eq!(created.range.end_col(), 1);
@@ -101,27 +102,28 @@ fn runtime_table_mutations_keep_workbook_table_catalog_in_sync() {
     engine
         .resize_table("Sales", 0, 0, 3, 2)
         .expect("resize_table");
-    let resized = table_catalog_spec(&engine, "Sales").expect("catalog spec after resize");
+    let resized = table_catalog_spec_by_key(&engine, &table_id).expect("catalog spec after resize");
     assert_eq!(resized.range_ref, "A1:C4");
     assert_eq!(resized.columns.len(), 3);
 
     engine.toggle_totals_row("Sales").expect("toggle_totals");
-    let totals = table_catalog_spec(&engine, "Sales").expect("catalog spec after totals");
+    let totals = table_catalog_spec_by_key(&engine, &table_id).expect("catalog spec after totals");
     assert!(totals.has_totals);
 
     engine
         .rename_table_column("Sales", 0, "Customer")
         .expect("rename_column");
     let renamed_column =
-        table_catalog_spec(&engine, "Sales").expect("catalog spec after column rename");
+        table_catalog_spec_by_key(&engine, &table_id).expect("catalog spec after column rename");
     assert_eq!(renamed_column.columns[0].name, "Customer");
 
     engine
         .rename_table("Sales", "Revenue")
         .expect("rename_table");
-    assert!(table_catalog_spec(&engine, "Sales").is_none());
+    assert!(table_catalog_spec_by_key(&engine, "Sales").is_none());
+    assert!(table_catalog_spec_by_key(&engine, "Revenue").is_none());
     let renamed_table =
-        table_catalog_table(&engine, "Revenue").expect("catalog table after rename");
+        table_catalog_table_by_key(&engine, &table_id).expect("catalog table after rename");
     assert_eq!(renamed_table.name, "Revenue");
 }
 
@@ -142,10 +144,13 @@ fn deleting_table_removes_workbook_table_catalog_entry() {
             true,
         )
         .expect("create_table");
-    assert!(table_catalog_spec(&engine, "Table1").is_some());
+    let table_id = table_id_by_name(&engine, "Table1");
+    assert!(table_catalog_spec_by_key(&engine, "Table1").is_none());
+    assert!(table_catalog_spec_by_key(&engine, &table_id).is_some());
 
     engine.delete_table("Table1").expect("delete_table");
-    assert!(table_catalog_spec(&engine, "Table1").is_none());
+    assert!(table_catalog_spec_by_key(&engine, "Table1").is_none());
+    assert!(table_catalog_spec_by_key(&engine, &table_id).is_none());
 }
 
 #[test]
@@ -165,6 +170,8 @@ fn catalog_updates_preserve_imported_ooxml_metadata() {
             true,
         )
         .expect("create_table");
+    let runtime_table = table_catalog_table_by_key(&engine, &table_id_by_name(&engine, "Table1"))
+        .expect("runtime catalog table");
 
     let imported_spec = domain_types::domain::table::TableSpec {
         id: 7,
@@ -204,11 +211,23 @@ fn catalog_updates_preserve_imported_ooxml_metadata() {
         worksheet_relationship_target_hint: Some("../tables/table7.xml".to_string()),
         ..Default::default()
     };
-    replace_catalog_spec(&mut engine, &imported_spec, sid);
+    let imported_table = replace_catalog_spec(
+        &mut engine,
+        &imported_spec,
+        sid,
+        runtime_table.id.clone(),
+        runtime_table
+            .columns
+            .iter()
+            .map(|column| column.id.clone())
+            .collect(),
+    );
+    assert_eq!(imported_table.ooxml_table_id, Some(7));
 
     engine.toggle_totals_row("Table1").expect("toggle_totals");
 
-    let updated = table_catalog_spec(&engine, "Table1").expect("updated catalog spec");
+    let updated =
+        table_catalog_spec_by_key(&engine, &runtime_table.id).expect("updated catalog spec");
     assert!(updated.has_totals);
     assert_eq!(updated.header_row_dxf_id, Some(2));
     assert_eq!(updated.table_type.as_deref(), Some("worksheet"));

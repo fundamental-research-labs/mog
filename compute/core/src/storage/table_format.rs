@@ -77,6 +77,7 @@ mod tests {
             show_filter_buttons: false,
             auto_expand: true,
             auto_calculated_columns: true,
+            ..Default::default()
         }
     }
 
@@ -88,6 +89,7 @@ mod tests {
             totals_function: None,
             totals_label: None,
             calculated_formula: None,
+            ..Default::default()
         }
     }
 

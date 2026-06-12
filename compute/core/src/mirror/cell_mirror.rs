@@ -67,9 +67,9 @@ pub struct CellMirror {
     /// degenerate case and lives here too — populated via XLSX hydration
     /// and via `set_array_formula` for in-app entries.
     pub(crate) cse_anchors: FxHashSet<CellId>,
-    /// Phase 5E: table name -> range binding ID index.
+    /// Table name -> stable table attachment ID index.
     ///
-    /// Maps lowercased table names to their `rangeBindings` key (e.g., `"table:T1"`).
+    /// Maps lowercased table names to their `rangeBindings` key (e.g., `"table:tbl-..."`).
     /// Used for O(1) lookup of the range binding ID for structured ref resolution.
     /// Updated whenever a table is added/removed/renamed.
     pub(super) table_range_ids: FxHashMap<String, String>,

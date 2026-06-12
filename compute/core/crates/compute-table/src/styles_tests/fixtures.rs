@@ -16,6 +16,7 @@ pub(super) fn make_table(overrides: Option<TableOverrides>) -> Table {
                 totals_function: None,
                 totals_label: None,
                 calculated_formula: None,
+                ..Default::default()
             },
             TableColumn {
                 id: "col-1".to_string(),
@@ -24,6 +25,7 @@ pub(super) fn make_table(overrides: Option<TableOverrides>) -> Table {
                 totals_function: None,
                 totals_label: None,
                 calculated_formula: None,
+                ..Default::default()
             },
             TableColumn {
                 id: "col-2".to_string(),
@@ -32,6 +34,7 @@ pub(super) fn make_table(overrides: Option<TableOverrides>) -> Table {
                 totals_function: None,
                 totals_label: None,
                 calculated_formula: None,
+                ..Default::default()
             },
         ]
     });
@@ -53,6 +56,7 @@ pub(super) fn make_table(overrides: Option<TableOverrides>) -> Table {
         show_filter_buttons: o.show_filter_buttons.unwrap_or(true),
         auto_expand: true,
         auto_calculated_columns: true,
+        ..Default::default()
     }
 }
 
@@ -66,6 +70,7 @@ pub(super) fn make_wide_table(overrides: Option<TableOverrides>) -> Table {
             totals_function: None,
             totals_label: None,
             calculated_formula: None,
+            ..Default::default()
         },
         TableColumn {
             id: "col-1".to_string(),
@@ -74,6 +79,7 @@ pub(super) fn make_wide_table(overrides: Option<TableOverrides>) -> Table {
             totals_function: None,
             totals_label: None,
             calculated_formula: None,
+            ..Default::default()
         },
         TableColumn {
             id: "col-2".to_string(),
@@ -82,6 +88,7 @@ pub(super) fn make_wide_table(overrides: Option<TableOverrides>) -> Table {
             totals_function: None,
             totals_label: None,
             calculated_formula: None,
+            ..Default::default()
         },
         TableColumn {
             id: "col-3".to_string(),
@@ -90,6 +97,7 @@ pub(super) fn make_wide_table(overrides: Option<TableOverrides>) -> Table {
             totals_function: None,
             totals_label: None,
             calculated_formula: None,
+            ..Default::default()
         },
     ];
 
@@ -110,6 +118,7 @@ pub(super) fn make_wide_table(overrides: Option<TableOverrides>) -> Table {
         show_filter_buttons: o.show_filter_buttons.unwrap_or(true),
         auto_expand: true,
         auto_calculated_columns: true,
+        ..Default::default()
     }
 }
 

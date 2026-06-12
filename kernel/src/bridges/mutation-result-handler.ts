@@ -1073,12 +1073,13 @@ export class MutationResultHandler {
     const eventSource = source === 'user' ? 'user' : 'remote';
 
     for (const change of changes) {
+      const tableId = change.tableId ?? change.name;
       if (change.kind === 'Set') {
         this.eventBus.emit({
           type: 'table:updated',
           timestamp,
           sheetId: change.sheetId,
-          tableId: change.name,
+          tableId,
           changes: {},
           source: eventSource,
         });
@@ -1087,7 +1088,7 @@ export class MutationResultHandler {
           type: 'table:deleted',
           timestamp,
           sheetId: change.sheetId,
-          tableId: change.name,
+          tableId,
           source: eventSource,
         });
       }

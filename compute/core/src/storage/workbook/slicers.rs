@@ -154,6 +154,7 @@ mod tests {
             totals_function: None,
             totals_label: None,
             calculated_formula: None,
+            ..Default::default()
         }
     }
 

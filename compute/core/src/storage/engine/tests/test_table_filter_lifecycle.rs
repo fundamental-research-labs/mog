@@ -164,12 +164,18 @@ fn redo_delete_table_emits_sheet_scoped_table_removal() {
     let sheet_id = sid();
     let expected_sheet_id = sheet_id.to_uuid_string();
     create_filtered_table(&mut engine);
+    let expected_table_id = engine
+        .get_table_by_name("People")
+        .expect("created table")
+        .id
+        .clone();
 
     engine.delete_table("People").expect("delete table");
 
     let (_, undo_result) = engine.undo().expect("undo delete table");
     assert!(undo_result.table_changes.iter().any(|change| {
         change.name == "People"
+            && change.table_id.as_deref() == Some(expected_table_id.as_str())
             && change.sheet_id == expected_sheet_id
             && change.kind == ChangeKind::Set
     }));
@@ -180,11 +186,16 @@ fn redo_delete_table_emits_sheet_scoped_table_removal() {
     }));
 
     let (_, redo_result) = engine.redo().expect("redo delete table");
-    assert!(redo_result.table_changes.iter().any(|change| {
-        change.name == "People"
-            && change.sheet_id == expected_sheet_id
-            && change.kind == ChangeKind::Removed
-    }));
+    assert!(
+        redo_result.table_changes.iter().any(|change| {
+            change.name == "People"
+                && change.table_id.as_deref() == Some(expected_table_id.as_str())
+                && change.sheet_id == expected_sheet_id
+                && change.kind == ChangeKind::Removed
+        }),
+        "redo table changes: {:?}",
+        redo_result.table_changes
+    );
     assert!(!redo_result.table_changes.iter().any(|change| {
         change.name == "People"
             && change.sheet_id == expected_sheet_id

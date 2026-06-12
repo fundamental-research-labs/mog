@@ -45,6 +45,7 @@ pub fn add_column(table: &Table, name: &str, position: Option<usize>) -> Table {
         totals_function: None,
         totals_label: None,
         calculated_formula: None,
+        ..Default::default()
     };
 
     let mut cols = table.columns.clone();
@@ -206,6 +207,7 @@ pub fn resize_table(table: &Table, new_range: TableRange) -> Result<Table, Table
                 totals_function: None,
                 totals_label: None,
                 calculated_formula: None,
+                ..Default::default()
             });
             next_suffix += 1;
         }

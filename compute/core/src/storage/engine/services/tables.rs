@@ -79,3 +79,11 @@ fn canonical_builtin_style_id(style_name: &str) -> Option<String> {
     }
     None
 }
+
+fn next_table_id(stores: &EngineStores) -> String {
+    format!("tbl-{}", stores.next_id_uuid_string())
+}
+
+fn next_table_column_id(stores: &EngineStores) -> String {
+    format!("col-{}", stores.next_id_uuid_string())
+}

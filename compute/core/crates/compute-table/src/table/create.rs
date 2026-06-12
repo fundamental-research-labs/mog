@@ -82,6 +82,7 @@ pub fn create_table(
                 totals_function: None,
                 totals_label: None,
                 calculated_formula: None,
+                ..Default::default()
             }
         })
         .collect();
@@ -103,5 +104,6 @@ pub fn create_table(
         show_filter_buttons: true,
         auto_expand: true,
         auto_calculated_columns: true,
+        ..Default::default()
     })
 }

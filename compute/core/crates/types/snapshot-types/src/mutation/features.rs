@@ -102,6 +102,9 @@ pub struct FilterChange {
 pub struct TableChange {
     /// Table name.
     pub name: String,
+    /// Stable Mog table ID.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub table_id: Option<String>,
     /// Sheet ID as UUID string.
     pub sheet_id: String,
     /// Whether the table was created/updated or removed.

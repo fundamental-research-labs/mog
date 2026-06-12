@@ -20,6 +20,27 @@ fn sheet_id_from_table_binding_json(json: &str) -> Option<SheetId> {
         .and_then(|table| parse_table_sheet_id(&table.sheet_id))
 }
 
+fn name_from_table_binding_json(json: &str) -> Option<String> {
+    domain_types::yrs_schema::table::from_binding_json_standalone(json).map(|table| table.name)
+}
+
+fn string_from_scalar_out(out: &Out) -> Option<String> {
+    match out {
+        Out::Any(Any::String(value)) => Some(value.to_string()),
+        _ => None,
+    }
+}
+
+fn string_from_scalar_change(change: &EntryChange) -> Option<String> {
+    match change {
+        EntryChange::Inserted(new) => string_from_scalar_out(new),
+        EntryChange::Updated(old, new) => {
+            string_from_scalar_out(new).or_else(|| string_from_scalar_out(old))
+        }
+        EntryChange::Removed(old) => string_from_scalar_out(old),
+    }
+}
+
 fn sheet_id_from_table_out<T: ReadTxn>(out: &Out, txn: &T) -> Option<SheetId> {
     match out {
         Out::Any(Any::String(json)) => sheet_id_from_table_binding_json(json.as_ref()),
@@ -34,6 +55,41 @@ fn sheet_id_from_table_out<T: ReadTxn>(out: &Out, txn: &T) -> Option<SheetId> {
     }
 }
 
+fn name_from_table_out<T: ReadTxn>(out: &Out, txn: &T) -> Option<String> {
+    match out {
+        Out::Any(Any::String(json)) => name_from_table_binding_json(json.as_ref()),
+        Out::YMap(map) => {
+            let value = map.get(txn, domain_types::yrs_schema::table::KEY_NAME)?;
+            match value {
+                Out::Any(Any::String(name)) => Some(name.to_string()),
+                _ => None,
+            }
+        }
+        _ => None,
+    }
+}
+
+fn is_legacy_table_binding_out<T: ReadTxn>(out: &Out, _txn: &T) -> bool {
+    match out {
+        Out::Any(Any::String(json)) => {
+            crate::range::TableRangeBinding::from_json(json.as_ref()).is_none()
+                && domain_types::yrs_schema::table::from_binding_json_standalone(json.as_ref())
+                    .is_some()
+        }
+        _ => false,
+    }
+}
+
+fn table_range_binding_change_is_legacy<T: ReadTxn>(change: &EntryChange, txn: &T) -> bool {
+    match change {
+        EntryChange::Inserted(new) => is_legacy_table_binding_out(new, txn),
+        EntryChange::Updated(old, new) => {
+            is_legacy_table_binding_out(old, txn) || is_legacy_table_binding_out(new, txn)
+        }
+        EntryChange::Removed(old) => is_legacy_table_binding_out(old, txn),
+    }
+}
+
 fn sheet_id_from_table_change<T: ReadTxn>(change: &EntryChange, txn: &T) -> Option<SheetId> {
     match change {
         EntryChange::Inserted(new) => sheet_id_from_table_out(new, txn),
@@ -44,9 +100,20 @@ fn sheet_id_from_table_change<T: ReadTxn>(change: &EntryChange, txn: &T) -> Opti
     }
 }
 
+fn name_from_table_change<T: ReadTxn>(change: &EntryChange, txn: &T) -> Option<String> {
+    match change {
+        EntryChange::Inserted(new) => name_from_table_out(new, txn),
+        EntryChange::Updated(old, new) => {
+            name_from_table_out(new, txn).or_else(|| name_from_table_out(old, txn))
+        }
+        EntryChange::Removed(old) => name_from_table_out(old, txn),
+    }
+}
+
 #[derive(Clone)]
 struct TableSubmapEntry {
     key: String,
+    name: Option<String>,
     sheet_id: Option<SheetId>,
 }
 
@@ -65,8 +132,12 @@ fn table_submap_entries<T: ReadTxn>(
             if table_range_bindings_only && !key.starts_with("table:") {
                 return None;
             }
+            if table_range_bindings_only && !is_legacy_table_binding_out(&value, txn) {
+                return None;
+            }
             Some(TableSubmapEntry {
                 key,
+                name: name_from_table_out(&value, txn),
                 sheet_id: sheet_id_from_table_out(&value, txn),
             })
         })
@@ -85,6 +156,7 @@ fn push_table_submap_changes<T: ReadTxn>(
             for entry in table_submap_entries(new, txn, table_range_bindings_only) {
                 buffer.tables.push(TableCellChange {
                     key: entry.key,
+                    name: entry.name,
                     sheet_id: entry.sheet_id,
                     kind: CellChangeKind::Modified,
                 });
@@ -94,6 +166,7 @@ fn push_table_submap_changes<T: ReadTxn>(
             for entry in table_submap_entries(old, txn, table_range_bindings_only) {
                 buffer.tables.push(TableCellChange {
                     key: entry.key,
+                    name: entry.name,
                     sheet_id: entry.sheet_id,
                     kind: CellChangeKind::Removed,
                 });
@@ -106,6 +179,7 @@ fn push_table_submap_changes<T: ReadTxn>(
             for entry in &new_entries {
                 buffer.tables.push(TableCellChange {
                     key: entry.key.clone(),
+                    name: entry.name.clone(),
                     sheet_id: entry.sheet_id,
                     kind: CellChangeKind::Modified,
                 });
@@ -119,6 +193,7 @@ fn push_table_submap_changes<T: ReadTxn>(
                 }
                 buffer.tables.push(TableCellChange {
                     key: entry.key,
+                    name: entry.name,
                     sheet_id: entry.sheet_id,
                     kind: CellChangeKind::Removed,
                 });
@@ -222,19 +297,14 @@ pub(super) fn observe_workbook_events(
                             if !push_table_submap_changes(buffer, change, txn, false) {
                                 buffer.tables.push(TableCellChange {
                                     key: String::new(),
+                                    name: None,
                                     sheet_id: None,
                                     kind,
                                 });
                             }
                         }
                         k if k == KEY_RANGE_BINDINGS => {
-                            if !push_table_submap_changes(buffer, change, txn, true) {
-                                buffer.tables.push(TableCellChange {
-                                    key: String::new(),
-                                    sheet_id: None,
-                                    kind,
-                                });
-                            }
+                            push_table_submap_changes(buffer, change, txn, true);
                         }
                         k if k == KEY_NAMED_RANGES => {
                             buffer.named_ranges.push(SheetLevelChange {
@@ -273,6 +343,7 @@ pub(super) fn observe_workbook_events(
                         for (key, change) in keys {
                             buffer.tables.push(TableCellChange {
                                 key: key.to_string(),
+                                name: name_from_table_change(change, txn),
                                 sheet_id: sheet_id_from_table_change(change, txn),
                                 kind: entry_change_kind(change),
                             });
@@ -280,9 +351,26 @@ pub(super) fn observe_workbook_events(
                     } else if path.len() == 2 {
                         // A table's internal map was modified in place.
                         if let Some(PathSegment::Key(k)) = path.get(1) {
+                            let mut name = None;
+                            let mut sheet_id = None;
+                            let keys = map_event.keys(txn);
+                            for (field, change) in keys {
+                                match field.as_ref() {
+                                    domain_types::yrs_schema::table::KEY_NAME => {
+                                        name = string_from_scalar_change(change);
+                                    }
+                                    domain_types::yrs_schema::table::KEY_SHEET_ID => {
+                                        sheet_id = string_from_scalar_change(change)
+                                            .as_deref()
+                                            .and_then(parse_table_sheet_id);
+                                    }
+                                    _ => {}
+                                }
+                            }
                             buffer.tables.push(TableCellChange {
                                 key: k.to_string(),
-                                sheet_id: None,
+                                name,
+                                sheet_id,
                                 kind: CellChangeKind::Modified,
                             });
                         }
@@ -294,9 +382,12 @@ pub(super) fn observe_workbook_events(
                     if path.len() == 1 {
                         let keys = map_event.keys(txn);
                         for (key, change) in keys {
-                            if key.as_ref().starts_with("table:") {
+                            if key.as_ref().starts_with("table:")
+                                && table_range_binding_change_is_legacy(change, txn)
+                            {
                                 buffer.tables.push(TableCellChange {
                                     key: key.to_string(),
+                                    name: name_from_table_change(change, txn),
                                     sheet_id: sheet_id_from_table_change(change, txn),
                                     kind: entry_change_kind(change),
                                 });

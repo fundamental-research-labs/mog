@@ -614,12 +614,14 @@ mod tests {
         // TableChange
         let tc = TableChange {
             name: "Table1".into(),
+            table_id: Some("tbl-1".into()),
             sheet_id: "s1".into(),
             kind: ChangeKind::Set,
         };
         let json = serde_json::to_string(&tc).unwrap();
         let tc2: TableChange = serde_json::from_str(&json).unwrap();
         assert_eq!(tc2.name, "Table1");
+        assert_eq!(tc2.table_id.as_deref(), Some("tbl-1"));
 
         // CfChange
         let cf = CfChange {

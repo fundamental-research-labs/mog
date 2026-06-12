@@ -13,6 +13,7 @@ fn single_cell_table() {
             totals_function: None,
             totals_label: None,
             calculated_formula: None,
+            ..Default::default()
         }]),
         has_header_row: Some(false),
         has_totals_row: Some(false),
@@ -54,6 +55,7 @@ fn one_row_range_with_header_and_totals_returns_none_for_data() {
             totals_function: None,
             totals_label: None,
             calculated_formula: None,
+            ..Default::default()
         }]),
         has_header_row: Some(true),
         has_totals_row: Some(true),

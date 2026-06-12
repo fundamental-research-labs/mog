@@ -66,7 +66,7 @@ fn domain_sort_order_to_ooxml(so: SlicerSortOrder) -> ooxml_types::slicers::Slic
 /// Both hydrate into the same [`StoredSlicer::selected_values`] field.
 pub struct XlsxSlicerImportContext<'a> {
     pub sheet_id: &'a str,
-    pub source_table_name: Option<&'a str>,
+    pub source_table_id: Option<&'a str>,
     pub table_filter_selected_values: Option<&'a [CellValue]>,
 }
 
@@ -119,7 +119,7 @@ pub fn xlsx_import_to_stored_slicer(
             // Table-backed slicer
             SlicerSource::Table {
                 table_id: context
-                    .source_table_name
+                    .source_table_id
                     .map(str::to_string)
                     .unwrap_or_else(|| tsc.table_id.to_string()),
                 column_cell_id: cache_def.source_name.clone(),

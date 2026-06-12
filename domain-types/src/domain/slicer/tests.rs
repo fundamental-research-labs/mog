@@ -414,7 +414,7 @@ fn xlsx_import_table_slicer_conversion() {
         Some(&anchor),
         XlsxSlicerImportContext {
             sheet_id: "sheet-hex-1",
-            source_table_name: Some("SalesTable"),
+            source_table_id: Some("tbl-sales"),
             table_filter_selected_values: Some(&table_filter_selected_values),
         },
     );
@@ -427,7 +427,7 @@ fn xlsx_import_table_slicer_conversion() {
     assert_eq!(stored.style.sort_order, SlicerSortOrder::Descending);
     assert!(
         matches!(stored.source, SlicerSource::Table { ref table_id, ref column_cell_id }
-        if table_id == "SalesTable" && column_cell_id == "Region")
+        if table_id == "tbl-sales" && column_cell_id == "Region")
     );
     assert_eq!(
         stored.selected_values,
@@ -502,7 +502,7 @@ fn xlsx_import_pivot_slicer_conversion() {
         None,
         XlsxSlicerImportContext {
             sheet_id: "sheet-hex-2",
-            source_table_name: None,
+            source_table_id: None,
             table_filter_selected_values: None,
         },
     );
@@ -573,7 +573,7 @@ fn xlsx_import_tabular_slicer_without_pivot_table_refs_stays_pivot_backed() {
         None,
         XlsxSlicerImportContext {
             sheet_id: "sheet-hex-3",
-            source_table_name: None,
+            source_table_id: None,
             table_filter_selected_values: None,
         },
     );

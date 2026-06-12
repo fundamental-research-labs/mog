@@ -25,6 +25,7 @@ pub fn sales_table() -> Table {
                 totals_function: None,
                 totals_label: None,
                 calculated_formula: None,
+                ..Default::default()
             },
             TableColumn {
                 id: "col-2".to_string(),
@@ -33,6 +34,7 @@ pub fn sales_table() -> Table {
                 totals_function: None,
                 totals_label: None,
                 calculated_formula: None,
+                ..Default::default()
             },
             TableColumn {
                 id: "col-3".to_string(),
@@ -41,6 +43,7 @@ pub fn sales_table() -> Table {
                 totals_function: None,
                 totals_label: None,
                 calculated_formula: None,
+                ..Default::default()
             },
             TableColumn {
                 id: "col-4".to_string(),
@@ -49,6 +52,7 @@ pub fn sales_table() -> Table {
                 totals_function: None,
                 totals_label: None,
                 calculated_formula: None,
+                ..Default::default()
             },
         ],
         has_header_row: true,
@@ -61,6 +65,7 @@ pub fn sales_table() -> Table {
         show_filter_buttons: true,
         auto_expand: true,
         auto_calculated_columns: true,
+        ..Default::default()
     }
 }
 
@@ -85,6 +90,7 @@ pub fn bare_table() -> Table {
                 totals_function: None,
                 totals_label: None,
                 calculated_formula: None,
+                ..Default::default()
             },
             TableColumn {
                 id: "col-b".to_string(),
@@ -93,6 +99,7 @@ pub fn bare_table() -> Table {
                 totals_function: None,
                 totals_label: None,
                 calculated_formula: None,
+                ..Default::default()
             },
             TableColumn {
                 id: "col-c".to_string(),
@@ -101,6 +108,7 @@ pub fn bare_table() -> Table {
                 totals_function: None,
                 totals_label: None,
                 calculated_formula: None,
+                ..Default::default()
             },
         ],
         has_header_row: false,
@@ -113,6 +121,7 @@ pub fn bare_table() -> Table {
         show_filter_buttons: false,
         auto_expand: true,
         auto_calculated_columns: true,
+        ..Default::default()
     }
 }
 
@@ -132,6 +141,7 @@ pub fn special_table() -> Table {
                 totals_function: None,
                 totals_label: None,
                 calculated_formula: None,
+                ..Default::default()
             },
             TableColumn {
                 id: "col-s2".to_string(),
@@ -140,6 +150,7 @@ pub fn special_table() -> Table {
                 totals_function: None,
                 totals_label: None,
                 calculated_formula: None,
+                ..Default::default()
             },
             TableColumn {
                 id: "col-s3".to_string(),
@@ -148,6 +159,7 @@ pub fn special_table() -> Table {
                 totals_function: None,
                 totals_label: None,
                 calculated_formula: None,
+                ..Default::default()
             },
         ],
         has_header_row: true,
@@ -160,6 +172,7 @@ pub fn special_table() -> Table {
         show_filter_buttons: false,
         auto_expand: true,
         auto_calculated_columns: true,
+        ..Default::default()
     }
 }
 
@@ -180,6 +193,7 @@ pub fn empty_data_table() -> Table {
                 totals_function: None,
                 totals_label: None,
                 calculated_formula: None,
+                ..Default::default()
             },
             TableColumn {
                 id: "col-e2".to_string(),
@@ -188,6 +202,7 @@ pub fn empty_data_table() -> Table {
                 totals_function: None,
                 totals_label: None,
                 calculated_formula: None,
+                ..Default::default()
             },
             TableColumn {
                 id: "col-e3".to_string(),
@@ -196,6 +211,7 @@ pub fn empty_data_table() -> Table {
                 totals_function: None,
                 totals_label: None,
                 calculated_formula: None,
+                ..Default::default()
             },
         ],
         has_header_row: true,
@@ -208,5 +224,6 @@ pub fn empty_data_table() -> Table {
         show_filter_buttons: false,
         auto_expand: true,
         auto_calculated_columns: true,
+        ..Default::default()
     }
 }

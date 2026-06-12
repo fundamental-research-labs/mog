@@ -52,6 +52,83 @@ export function detectSeriesOrientation(range: CellRange): SeriesOrientation {
   return colCount > rowCount ? 'rows' : 'columns';
 }
 
+type EdgeValueStats = {
+  labels: number;
+  numeric: number;
+};
+
+function collectEdgeStats(values: ChartCellValue[]): EdgeValueStats {
+  let labels = 0;
+  let numeric = 0;
+
+  for (const value of values) {
+    if (!hasCellValue(value)) continue;
+    if (isNumericLike(value)) {
+      numeric += 1;
+    } else {
+      labels += 1;
+    }
+  }
+
+  return { labels, numeric };
+}
+
+function firstColumnValues(
+  accessor: CellDataAccessor,
+  range: CellRange,
+  options?: { skipTopCell?: boolean },
+): ChartCellValue[] {
+  const values: ChartCellValue[] = [];
+  const startRow = options?.skipTopCell ? range.startRow + 1 : range.startRow;
+  for (let row = startRow; row <= range.endRow; row += 1) {
+    values.push(getRangeValue(accessor, range, row, range.startCol));
+  }
+  return values;
+}
+
+function firstRowValues(
+  accessor: CellDataAccessor,
+  range: CellRange,
+  options?: { skipLeftCell?: boolean },
+): ChartCellValue[] {
+  const values: ChartCellValue[] = [];
+  const startCol = options?.skipLeftCell ? range.startCol + 1 : range.startCol;
+  for (let col = startCol; col <= range.endCol; col += 1) {
+    values.push(getRangeValue(accessor, range, range.startRow, col));
+  }
+  return values;
+}
+
+function detectSeriesOrientationFromValues(
+  accessor: CellDataAccessor,
+  range: CellRange,
+): SeriesOrientation {
+  const shapeOrientation = detectSeriesOrientation(range);
+  const rowCount = range.endRow - range.startRow + 1;
+  const colCount = range.endCol - range.startCol + 1;
+  if (rowCount === 1 || colCount === 1) return shapeOrientation;
+
+  const firstColumn = collectEdgeStats(firstColumnValues(accessor, range));
+  const firstColumnBelowTop = collectEdgeStats(
+    firstColumnValues(accessor, range, { skipTopCell: true }),
+  );
+  const firstRow = collectEdgeStats(firstRowValues(accessor, range));
+  const firstRowAfterLeft = collectEdgeStats(
+    firstRowValues(accessor, range, { skipLeftCell: true }),
+  );
+  const firstColumnIsLabels = firstColumn.labels >= 2 && firstColumn.numeric === 0;
+  const firstColumnBelowTopIsNumeric =
+    firstColumnBelowTop.numeric >= 2 && firstColumnBelowTop.labels === 0;
+  const firstRowIsLabels = firstRow.labels >= 2 && firstRow.numeric === 0;
+  const firstRowAfterLeftIsNumeric =
+    firstRowAfterLeft.numeric >= 2 && firstRowAfterLeft.labels === 0;
+
+  if (firstColumnIsLabels && firstRowAfterLeftIsNumeric) return 'rows';
+  if (firstRowIsLabels && firstColumnBelowTopIsNumeric) return 'columns';
+
+  return shapeOrientation;
+}
+
 /**
  * Extract chart data from a pre-resolved CellRange.
  *
@@ -74,7 +151,7 @@ export function extractChartDataFromRange(
     seriesOrientation?: SeriesOrientation;
   },
 ): ChartData {
-  const orientation = options?.seriesOrientation || detectSeriesOrientation(dataRange);
+  const shapeOrientation = options?.seriesOrientation || detectSeriesOrientation(dataRange);
   const hasExplicitLayout = Boolean(
     options?.seriesOrientation || options?.categoryRange || options?.seriesRange,
   );
@@ -120,7 +197,7 @@ export function extractChartDataFromRange(
   if (options?.chartType === 'bubble') {
     const bubbleData = extractBubbleChartDataFromRange(accessor, dataRange, {
       ...options,
-      seriesOrientation: orientation,
+      seriesOrientation: shapeOrientation,
     });
     if (bubbleData) return bubbleData;
   }
@@ -128,6 +205,9 @@ export function extractChartDataFromRange(
   if (!hasExplicitLayout && hasExcelTableShape(accessor, dataRange)) {
     return extractExcelTableData(accessor, dataRange);
   }
+
+  const orientation =
+    options?.seriesOrientation || detectSeriesOrientationFromValues(accessor, dataRange);
 
   // Extract categories
   let categories: (string | number)[] = [];

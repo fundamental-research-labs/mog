@@ -61,6 +61,11 @@ type ChartSourceRange = {
   endCol: number;
 };
 
+type ChartSeriesConfig = NonNullable<ChartConfig['series']>[number];
+type CellValueReader = {
+  getValue?: (row: number, col: number) => unknown | Promise<unknown>;
+};
+
 /**
  * Type guard to check if coordinator exposes renderer capabilities.
  */
@@ -102,6 +107,96 @@ function getChartSourceRanges(deps: ActionDependencies, sheetId: SheetId): Chart
   }
 
   return deps.accessors.selection.getDataBoundedRanges(sheetId);
+}
+
+function isBlankCellValue(value: unknown): boolean {
+  return value === null || value === undefined || value === '';
+}
+
+function isNumericCellValue(value: unknown): boolean {
+  if (typeof value === 'number') return Number.isFinite(value);
+  if (typeof value !== 'string' || value.trim() === '') return false;
+  return Number.isFinite(Number(value));
+}
+
+async function readChartSourceValue(
+  worksheet: unknown,
+  row: number,
+  col: number,
+): Promise<unknown> {
+  const getValue = (worksheet as CellValueReader | null)?.getValue;
+  if (typeof getValue !== 'function') return null;
+  try {
+    return await getValue.call(worksheet, row, col);
+  } catch {
+    return null;
+  }
+}
+
+async function inferFirstColumnLabelSeries(
+  worksheet: unknown,
+  range: ChartSourceRange,
+): Promise<ChartSeriesConfig[] | undefined> {
+  if (range.startRow === range.endRow || range.startCol === range.endCol) return undefined;
+
+  let firstColumnLabels = 0;
+  let firstColumnNumeric = 0;
+  for (let row = range.startRow; row <= range.endRow; row += 1) {
+    const value = await readChartSourceValue(worksheet, row, range.startCol);
+    if (isBlankCellValue(value)) continue;
+    if (isNumericCellValue(value)) {
+      firstColumnNumeric += 1;
+    } else {
+      firstColumnLabels += 1;
+    }
+  }
+
+  let firstRowValueCount = 0;
+  let firstRowLabelCount = 0;
+  for (let col = range.startCol + 1; col <= range.endCol; col += 1) {
+    const value = await readChartSourceValue(worksheet, range.startRow, col);
+    if (isBlankCellValue(value)) continue;
+    if (isNumericCellValue(value)) {
+      firstRowValueCount += 1;
+    } else {
+      firstRowLabelCount += 1;
+    }
+  }
+
+  if (firstColumnLabels < 2 || firstColumnNumeric > 0) return undefined;
+  if (firstRowValueCount === 0 || firstRowLabelCount > 0) return undefined;
+
+  const categories = rangeToA1Notation({
+    startRow: range.startRow,
+    startCol: range.startCol,
+    endRow: range.endRow,
+    endCol: range.startCol,
+  });
+  const series: ChartSeriesConfig[] = [];
+
+  for (let col = range.startCol + 1; col <= range.endCol; col += 1) {
+    let hasNumericValues = false;
+    for (let row = range.startRow; row <= range.endRow; row += 1) {
+      const value = await readChartSourceValue(worksheet, row, col);
+      if (isNumericCellValue(value)) {
+        hasNumericValues = true;
+        break;
+      }
+    }
+    if (!hasNumericValues) continue;
+
+    series.push({
+      values: rangeToA1Notation({
+        startRow: range.startRow,
+        startCol: col,
+        endRow: range.endRow,
+        endCol: col,
+      }),
+      categories,
+    });
+  }
+
+  return series.length > 0 ? series : undefined;
 }
 
 /**
@@ -926,6 +1021,7 @@ export const CREATE_EMBEDDED_CHART: AsyncActionHandler = async (
     // surrounding data region. Multi-row selections pass through unchanged.
     const range = await resolveChartSourceRange(ws, ranges[0], { trimHiddenDetail: true });
     const dataRange = rangeToA1Notation(range);
+    const inferredSeries = await inferFirstColumnLabelSeries(ws, range);
 
     // Use smart positioning to ensure chart is visible
     const position = await getSmartChartPosition(deps, range, DEFAULT_POSITION, sheetId);
@@ -934,6 +1030,12 @@ export const CREATE_EMBEDDED_CHART: AsyncActionHandler = async (
       type: chartType,
       subType: chartSubType,
       dataRange,
+      ...(inferredSeries
+        ? {
+            series: inferredSeries,
+            seriesOrientation: 'rows' as const,
+          }
+        : {}),
       anchorRow: position.anchorRow,
       anchorCol: position.anchorCol,
       width: DEFAULT_WIDTH_CELLS,

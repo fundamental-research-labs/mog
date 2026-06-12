@@ -14,11 +14,12 @@
 mod cells;
 mod chart_sources;
 mod dimensions;
+mod named_ranges;
 mod pivot_cache_reconciliation;
+mod print_defined_names;
 mod sheet_metadata;
+mod slicers;
 mod workbook;
-
-// Re-export everything that's pub(in crate::storage::engine) from submodules
 pub(in crate::storage::engine) use cells::{
     export_authored_style_runs_for_sheet, export_cells_for_sheet, export_row_col_styles_for_sheet,
 };
@@ -32,11 +33,19 @@ pub(in crate::storage::engine) use sheet_metadata::{
     export_outline_groups_for_sheet, export_page_breaks_for_sheet, export_sheet_protection,
     export_sort_state_for_sheet, export_sparkline_groups_for_sheet, export_sparklines_for_sheet,
 };
+pub(in crate::storage::engine) use slicers::export_workbook_slicer_caches;
 pub(in crate::storage::engine) use workbook::{
-    export_workbook_parsed_pivot_tables, export_workbook_protection, export_workbook_slicer_caches,
-    export_workbook_theme, export_workbook_threaded_comment_persons,
+    export_workbook_parsed_pivot_tables, export_workbook_protection, export_workbook_theme,
+    export_workbook_threaded_comment_persons,
 };
 
+use super::super::export::pos_to_a1;
+use super::objects::get_all_comments;
+use super::queries;
+use crate::mirror::CellMirror;
+use crate::storage::engine::stores::EngineStores;
+use crate::storage::sheet::get_meta_for_export;
+use crate::storage::sheet::{dimensions as dims_mod, merges, print};
 use cell_types::SheetId;
 use compute_document::schema::{KEY_COLS, KEY_ROWS};
 use domain_types::{
@@ -48,22 +57,13 @@ use domain_types::{
 };
 use yrs::{Any, Map, Out, Transact};
 
-use crate::mirror::CellMirror;
-use crate::storage::sheet::get_meta_for_export;
-use crate::storage::sheet::{dimensions as dims_mod, merges, print};
-
-use super::super::export::pos_to_a1;
-use super::objects::get_all_comments;
-use super::queries;
-use crate::storage::engine::stores::EngineStores;
-
-// Private imports for submodule functions used in export_single_sheet
+use named_ranges::export_workbook_named_ranges;
 use sheet_metadata::resolve_hydrated_comment_position;
 use workbook::{
     export_calculation_properties, export_custom_workbook_views_xml, export_document_properties,
     export_external_links, export_file_sharing, export_file_version, export_shared_string_hints,
-    export_workbook_named_ranges, export_workbook_properties, export_workbook_style_palette,
-    export_workbook_stylesheet, export_workbook_table_styles, export_workbook_views,
+    export_workbook_properties, export_workbook_style_palette, export_workbook_stylesheet,
+    export_workbook_table_styles, export_workbook_views,
 };
 
 // -------------------------------------------------------------------
@@ -598,7 +598,7 @@ fn export_single_sheet(
 
     // --- Floating objects (unified), slicers ---
     let (all_fobjs, slicers, slicer_anchors, timelines, timeline_anchors) =
-        export_floating_objects_for_sheet(stores, sheet_id);
+        export_floating_objects_for_sheet(stores, mirror, sheet_id);
 
     let (charts, floating_objects) =
         chart_sources::split_charts_for_sheet_export(all_fobjs, mirror, sheet_id, &name);
@@ -927,7 +927,7 @@ pub(in crate::storage::engine) fn build_parse_output_from_yrs(
     // --- Workbook-level ---
     let theme = export_workbook_theme(stores);
     let wb_protection = export_workbook_protection(stores);
-    let slicer_caches = export_workbook_slicer_caches(stores);
+    let slicer_caches = export_workbook_slicer_caches(stores, Some(&output_sheets));
     let timeline_caches = workbook::export_workbook_timeline_caches(stores);
     let (custom_table_styles, default_table_style, default_pivot_style) =
         export_workbook_table_styles(stores);

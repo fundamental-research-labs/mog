@@ -177,7 +177,6 @@ fn slicer_style_wire_names() {
     assert_eq!(json["sortOrder"], "dataSourceOrder");
     assert_eq!(json["preset"], "dark3");
 
-    // Round-trip
     let back: SlicerStyle = serde_json::from_value(json).unwrap();
     assert_eq!(style, back);
 }
@@ -245,7 +244,6 @@ fn apply_update_partial_merge() {
     slicer.apply_update(&update);
     assert_eq!(slicer.caption, "New");
     assert_eq!(slicer.z_index, 10);
-    // Unchanged fields
     assert!(!slicer.locked);
     assert!(slicer.show_header);
     assert_eq!(slicer.selected_values, vec![CellValue::Text("a".into())]);
@@ -253,8 +251,6 @@ fn apply_update_partial_merge() {
 
 #[test]
 fn deserialize_from_existing_stored_json() {
-    // Matches the canonical FloatingObjectAnchor wire shape now that
-    // StoredSlicer.position is typed (typed OOXML preservation / 01-slicer-typing).
     let json = serde_json::json!({
         "id": "slicer-abc",
         "sheetId": "00000000000000000000000000000001",
@@ -294,11 +290,8 @@ fn deserialize_from_existing_stored_json() {
     let pos = slicer.position.as_ref().expect("position present");
     assert_eq!(pos.anchor_mode, AnchorMode::Absolute);
     assert_eq!(pos.extent_cx, Some(1_905_000));
-    // selected_values defaults to empty vec when absent
     assert!(slicer.selected_values.is_empty());
-    // show_header defaults to true
     assert!(slicer.show_header);
-    // multi_select defaults to true when absent
     assert!(slicer.multi_select);
 }
 
@@ -330,7 +323,6 @@ fn multi_select_defaults_to_true() {
         "multi_select should default to true when absent from JSON"
     );
 
-    // Explicit false should be respected
     let json_false = serde_json::json!({
         "id": "slicer-ms2",
         "sheetId": "sheet1",
@@ -415,7 +407,17 @@ fn xlsx_import_table_slicer_conversion() {
         },
     };
 
-    let stored = xlsx_import_to_stored_slicer(&slicer, Some(&cache), Some(&anchor), "sheet-hex-1");
+    let table_filter_selected_values = vec![CellValue::from("West"), CellValue::from("EMEA")];
+    let stored = xlsx_import_to_stored_slicer(
+        &slicer,
+        Some(&cache),
+        Some(&anchor),
+        XlsxSlicerImportContext {
+            sheet_id: "sheet-hex-1",
+            source_table_name: Some("SalesTable"),
+            table_filter_selected_values: Some(&table_filter_selected_values),
+        },
+    );
     assert_eq!(stored.id, "slicer-Region");
     assert_eq!(stored.sheet_id, "sheet-hex-1");
     assert_eq!(stored.caption, "Region Filter");
@@ -425,7 +427,11 @@ fn xlsx_import_table_slicer_conversion() {
     assert_eq!(stored.style.sort_order, SlicerSortOrder::Descending);
     assert!(
         matches!(stored.source, SlicerSource::Table { ref table_id, ref column_cell_id }
-        if table_id == "1" && column_cell_id == "Region")
+        if table_id == "SalesTable" && column_cell_id == "Region")
+    );
+    assert_eq!(
+        stored.selected_values,
+        vec![CellValue::from("West"), CellValue::from("EMEA")]
     );
     let pos = stored.position.as_ref().expect("position is populated");
     assert_eq!(pos.anchor_col, 5);
@@ -490,7 +496,16 @@ fn xlsx_import_pivot_slicer_conversion() {
         ext_lst: None,
     };
 
-    let stored = xlsx_import_to_stored_slicer(&slicer, Some(&cache), None, "sheet-hex-2");
+    let stored = xlsx_import_to_stored_slicer(
+        &slicer,
+        Some(&cache),
+        None,
+        XlsxSlicerImportContext {
+            sheet_id: "sheet-hex-2",
+            source_table_name: None,
+            table_filter_selected_values: None,
+        },
+    );
     assert_eq!(stored.caption, "Category"); // defaults to name when caption is None
     assert!(stored.position.is_none());
     assert_eq!(stored.style.column_count, 1);
@@ -499,7 +514,6 @@ fn xlsx_import_pivot_slicer_conversion() {
         matches!(stored.source, SlicerSource::Pivot { ref pivot_id, .. }
         if pivot_id == "PivotTable1")
     );
-    // Only selected items (indices 0 and 2 have s=true)
     assert_eq!(stored.selected_values.len(), 2);
     assert_eq!(stored.selected_values[0], CellValue::from("0".to_string()));
     assert_eq!(stored.selected_values[1], CellValue::from("2".to_string()));
@@ -553,7 +567,16 @@ fn xlsx_import_tabular_slicer_without_pivot_table_refs_stays_pivot_backed() {
         ext_lst: None,
     };
 
-    let stored = xlsx_import_to_stored_slicer(&slicer, Some(&cache), None, "sheet-hex-3");
+    let stored = xlsx_import_to_stored_slicer(
+        &slicer,
+        Some(&cache),
+        None,
+        XlsxSlicerImportContext {
+            sheet_id: "sheet-hex-3",
+            source_table_name: None,
+            table_filter_selected_values: None,
+        },
+    );
     assert!(
         matches!(stored.source, SlicerSource::Pivot { ref pivot_id, ref field_name, .. }
         if pivot_id.is_empty() && field_name == "Fiscal Year")
@@ -636,19 +659,16 @@ fn stored_slicer_round_trip_to_ooxml_types() {
     assert_eq!(slicer_def.style, Some("SlicerStyleDark2".into()));
     assert_eq!(slicer_def.column_count, 3);
     assert!(slicer_def.locked_position);
-
     let cache_def = stored_slicer_to_cache_def(&stored);
     assert_eq!(cache_def.source_name, "Region");
     assert!(cache_def.table_slicer_cache.is_some());
     assert_eq!(cache_def.table_slicer_cache.as_ref().unwrap().table_id, 1);
-
     let anchor = stored_slicer_to_anchor(&stored).unwrap();
     assert_eq!(anchor.slicer_name, "Region");
     assert_eq!(anchor.from.col, 5);
     assert_eq!(anchor.to.row, 10);
 }
 
-/// Helper to build a minimal StoredSlicer for tests.
 fn make_test_slicer(id: &str, name: Option<&str>) -> StoredSlicer {
     StoredSlicer {
         id: id.into(),
@@ -777,7 +797,7 @@ fn public_facade_exports_representative_slicer_contracts() {
         &OoxmlSlicerDef,
         Option<&OoxmlSlicerCacheDef>,
         Option<&OoxmlSlicerAnchor>,
-        &str,
+        XlsxSlicerImportContext<'_>,
     ) -> StoredSlicer = xlsx_import_to_stored_slicer;
     let _: fn(&StoredSlicer) -> OoxmlSlicerCacheDef = stored_slicer_to_cache_def;
     let _: fn(&StoredSlicer) -> OoxmlSlicerDef = stored_slicer_to_slicer_def;

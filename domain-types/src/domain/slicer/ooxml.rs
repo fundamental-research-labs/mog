@@ -7,6 +7,7 @@ use ooxml_types::slicers::{
 use value_types::CellValue;
 
 use super::super::floating_object::{AnchorMode, FloatingObjectAnchor};
+use super::super::table::{FilterSpec, TableSpec};
 use super::{
     CrossFilterMode, PivotFieldArea, SlicerSortOrder, SlicerSource, SlicerStyle, SlicerStylePreset,
     StoredSlicer,
@@ -58,6 +59,45 @@ fn domain_sort_order_to_ooxml(so: SlicerSortOrder) -> ooxml_types::slicers::Slic
 // ══════════════════════════════════════════════════════════════════
 // XLSX import conversion: old domain-types intermediates → StoredSlicer
 
+/// Additional domain context needed to convert an imported OOXML slicer.
+///
+/// Table slicer selection is represented by the source table's filter criteria,
+/// while pivot slicer selection is represented by slicer cache tabular items.
+/// Both hydrate into the same [`StoredSlicer::selected_values`] field.
+pub struct XlsxSlicerImportContext<'a> {
+    pub sheet_id: &'a str,
+    pub source_table_name: Option<&'a str>,
+    pub table_filter_selected_values: Option<&'a [CellValue]>,
+}
+
+/// Extract explicit selected values from a table filter for a table-backed slicer.
+pub fn table_filter_selected_values_for_slicer(
+    table: &TableSpec,
+    column_index: u32,
+) -> Vec<CellValue> {
+    let Some(column_filter) = table
+        .filter_columns
+        .iter()
+        .find(|column| column.col_id == column_index)
+    else {
+        return Vec::new();
+    };
+
+    let FilterSpec::Values { blank, values, .. } = &column_filter.filter else {
+        return Vec::new();
+    };
+
+    let mut selected = values
+        .iter()
+        .cloned()
+        .map(CellValue::from)
+        .collect::<Vec<_>>();
+    if *blank {
+        selected.push(CellValue::Null);
+    }
+    selected
+}
+
 /// Convert XLSX import types (ooxml-types) to StoredSlicer.
 ///
 /// This bridges the ParseOutput types (`SlicerDef`, `SlicerCacheDef`,
@@ -68,7 +108,7 @@ pub fn xlsx_import_to_stored_slicer(
     slicer: &OoxmlSlicerDef,
     cache: Option<&OoxmlSlicerCacheDef>,
     anchor: Option<&OoxmlSlicerAnchor>,
-    sheet_id: &str,
+    context: XlsxSlicerImportContext<'_>,
 ) -> StoredSlicer {
     // Deterministic ID from slicer name — stable across re-imports of the same file.
     let id = format!("slicer-{}", slicer.name);
@@ -78,7 +118,10 @@ pub fn xlsx_import_to_stored_slicer(
         if let Some(ref tsc) = cache_def.table_slicer_cache {
             // Table-backed slicer
             SlicerSource::Table {
-                table_id: tsc.table_id.to_string(),
+                table_id: context
+                    .source_table_name
+                    .map(str::to_string)
+                    .unwrap_or_else(|| tsc.table_id.to_string()),
                 column_cell_id: cache_def.source_name.clone(),
             }
         } else if cache_def.tabular_data.is_some() || !cache_def.pivot_tables.is_empty() {
@@ -135,17 +178,20 @@ pub fn xlsx_import_to_stored_slicer(
             false,
         ));
 
-    // Selected values from tabular items
-    let selected_values = cache
-        .and_then(|c| c.tabular_data.as_ref())
-        .map(|tab| {
-            tab.items
-                .iter()
-                .filter(|item| item.s)
-                .map(|item| CellValue::from(item.x.to_string()))
-                .collect()
-        })
-        .unwrap_or_default();
+    // Selected values from pivot tabular items or table filter criteria.
+    let selected_values_from_tabular = cache.and_then(|c| c.tabular_data.as_ref()).map(|tab| {
+        tab.items
+            .iter()
+            .filter(|item| item.s)
+            .map(|item| CellValue::from(item.x.to_string()))
+            .collect()
+    });
+    let selected_values = selected_values_from_tabular.unwrap_or_else(|| {
+        context
+            .table_filter_selected_values
+            .map(|values| values.to_vec())
+            .unwrap_or_default()
+    });
     let pivot_tabular_items = cache
         .and_then(|c| c.tabular_data.as_ref())
         .map(|tab| tab.items.clone())
@@ -197,7 +243,7 @@ pub fn xlsx_import_to_stored_slicer(
 
     StoredSlicer {
         id,
-        sheet_id: sheet_id.to_string(),
+        sheet_id: context.sheet_id.to_string(),
         source,
         cache_name: Some(slicer.cache.clone()),
         cache_uid: cache.and_then(|c| c.uid.clone()),

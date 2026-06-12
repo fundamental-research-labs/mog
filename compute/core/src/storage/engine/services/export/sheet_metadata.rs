@@ -6,13 +6,13 @@
 
 use std::collections::{HashMap, HashSet};
 
-use cell_types::SheetId;
-use compute_document::hex::id_to_hex;
+use cell_types::{CellId, SheetId, SheetPos};
+use compute_document::hex::{hex_to_id, id_to_hex};
 use compute_document::schema::*;
 use domain_types::{
     domain::conditional_format::ConditionalFormat as DomainConditionalFormat,
     domain::filter::{AutoFilter, SortState},
-    domain::floating_object::FloatingObject,
+    domain::floating_object::{FloatingObject, FloatingObjectData, FormControlOoxmlProps},
     domain::grouping::SheetGroupingConfig,
     domain::hyperlink::{Hyperlink, HyperlinkTargetKind},
     domain::outline::OutlineGroup,
@@ -22,8 +22,12 @@ use domain_types::{
     domain::validation::ValidationSpec,
     yrs_schema,
 };
+use value_types::CellValue;
 use yrs::{Any, Array, Map, Out, Transact};
 
+use crate::import::phantom::{parse_cell_ref, parse_range_ref};
+use crate::mirror::CellMirror;
+use crate::range_manager::pos_to_a1;
 use crate::storage::sheet::{cf_store, hyperlinks, print, schemas};
 
 use super::super::super::export::sorted_map_entries;
@@ -486,6 +490,7 @@ pub(in crate::storage::engine) fn export_outline_groups_for_sheet(
 /// Export floating objects from the floating objects Y.Map.
 pub(in crate::storage::engine) fn export_floating_objects_for_sheet(
     stores: &EngineStores,
+    mirror: &CellMirror,
     sheet_id: &SheetId,
 ) -> (
     Vec<FloatingObject>,
@@ -575,10 +580,7 @@ pub(in crate::storage::engine) fn export_floating_objects_for_sheet(
         if let Some(Out::YMap(slicers_map)) = workbook.get(&txn, KEY_SLICERS) {
             let mut stored_slicers = Vec::new();
             for (_, value) in slicers_map.iter(&txn) {
-                if let Out::Any(Any::String(json_str)) = value
-                    && let Ok(stored) = serde_json::from_str::<
-                        domain_types::domain::slicer::StoredSlicer,
-                    >(&json_str)
+                if let Some(stored) = yrs_schema::slicer::from_yrs_out(value, &txn)
                     && sheet_hex == stored.sheet_id
                 {
                     stored_slicers.push(stored);
@@ -617,6 +619,8 @@ pub(in crate::storage::engine) fn export_floating_objects_for_sheet(
         }
     }
 
+    project_form_control_references_for_export(&mut floating_objects, stores, mirror, sheet_id);
+
     (
         floating_objects,
         slicers,
@@ -636,6 +640,213 @@ fn take_floating_object_by_order_id(
             .get(object_id)
             .and_then(|key| objects_by_key.remove(key))
     })
+}
+
+fn project_form_control_references_for_export(
+    objects: &mut [FloatingObject],
+    stores: &EngineStores,
+    mirror: &CellMirror,
+    sheet_id: &SheetId,
+) {
+    for obj in objects {
+        let FloatingObjectData::FormControl(control) = &mut obj.data else {
+            continue;
+        };
+
+        let linked_ref = control.cell_link.clone().or_else(|| {
+            control
+                .ooxml
+                .as_ref()
+                .and_then(|props| props.control_pr.as_ref())
+                .and_then(|control_pr| control_pr.linked_cell.clone())
+        });
+        let linked_cell_a1 = linked_ref
+            .as_deref()
+            .and_then(|reference| form_control_cell_ref_to_abs_a1(stores, sheet_id, reference));
+        let checked_state = if is_checkbox_control_type(&control.control_type) {
+            linked_ref
+                .as_deref()
+                .and_then(|reference| form_control_cell_ref_to_pos(stores, sheet_id, reference))
+                .and_then(|(row, col)| mirror.get_cell_value_at(sheet_id, SheetPos::new(row, col)))
+                .and_then(checkbox_state_from_value)
+        } else {
+            None
+        };
+
+        if let Some(a1) = linked_cell_a1 {
+            control.cell_link = Some(a1.clone());
+            if let Some(control_pr) = control
+                .ooxml
+                .as_mut()
+                .and_then(|props| props.control_pr.as_mut())
+            {
+                control_pr.linked_cell = Some(a1);
+            }
+        }
+
+        let input_range = control.input_range.clone().or_else(|| {
+            control
+                .ooxml
+                .as_ref()
+                .and_then(|props| props.control_pr.as_ref())
+                .and_then(|control_pr| control_pr.list_fill_range.clone())
+        });
+        if let Some(range_ref) = input_range
+            .as_deref()
+            .and_then(|reference| form_control_range_ref_to_abs_a1(stores, sheet_id, reference))
+        {
+            control.input_range = Some(range_ref.clone());
+            if let Some(control_pr) = control
+                .ooxml
+                .as_mut()
+                .and_then(|props| props.control_pr.as_mut())
+            {
+                control_pr.list_fill_range = Some(range_ref);
+            }
+        }
+
+        if let Some(state) = checked_state {
+            let props = control
+                .ooxml
+                .get_or_insert_with(FormControlOoxmlProps::default);
+            props.checked = Some(state.to_string());
+        }
+    }
+}
+
+fn form_control_cell_ref_to_abs_a1(
+    stores: &EngineStores,
+    sheet_id: &SheetId,
+    reference: &str,
+) -> Option<String> {
+    let (row, col) = form_control_cell_ref_to_pos(stores, sheet_id, reference)?;
+    Some(absolute_a1(row, col))
+}
+
+fn form_control_cell_ref_to_pos(
+    stores: &EngineStores,
+    sheet_id: &SheetId,
+    reference: &str,
+) -> Option<(u32, u32)> {
+    if let Some(cell_hex) = form_control_cell_id_hex(reference)
+        && let Some(pos) = resolve_cell_position_from_grid_index(stores, sheet_id, &cell_hex)
+    {
+        return Some(pos);
+    }
+    let normalized = normalize_form_control_reference(reference)?;
+    parse_cell_ref(&normalized)
+}
+
+fn form_control_range_ref_to_abs_a1(
+    stores: &EngineStores,
+    sheet_id: &SheetId,
+    reference: &str,
+) -> Option<String> {
+    let (start_row, start_col, end_row, end_col) =
+        form_control_range_ref_to_positions(stores, sheet_id, reference)?;
+    Some(format!(
+        "{}:{}",
+        absolute_a1(start_row, start_col),
+        absolute_a1(end_row, end_col)
+    ))
+}
+
+fn form_control_range_ref_to_positions(
+    stores: &EngineStores,
+    sheet_id: &SheetId,
+    reference: &str,
+) -> Option<(u32, u32, u32, u32)> {
+    let trimmed = reference.trim();
+    if trimmed.starts_with('{') {
+        let value: serde_json::Value = serde_json::from_str(trimmed).ok()?;
+        if value.get("type").and_then(|v| v.as_str()) != Some("range") {
+            return None;
+        }
+        let start_id = value.get("startId").and_then(|v| v.as_str())?;
+        let end_id = value.get("endId").and_then(|v| v.as_str())?;
+        let (start_row, start_col) = form_control_cell_ref_to_pos(stores, sheet_id, start_id)?;
+        let (end_row, end_col) = form_control_cell_ref_to_pos(stores, sheet_id, end_id)?;
+        return Some((start_row, start_col, end_row, end_col));
+    }
+
+    let normalized = normalize_form_control_reference(reference)?;
+    parse_range_ref(&normalized)
+}
+
+fn form_control_cell_id_hex(reference: &str) -> Option<String> {
+    let trimmed = reference.trim();
+    if hex_to_id(trimmed).is_some() {
+        return Some(trimmed.to_ascii_lowercase());
+    }
+    CellId::from_uuid_str(trimmed)
+        .ok()
+        .map(|id| id_to_hex(id.as_u128()).to_string())
+}
+
+fn normalize_form_control_reference(reference: &str) -> Option<String> {
+    let mut normalized = reference.trim();
+    if normalized.is_empty() || normalized.starts_with('{') {
+        return None;
+    }
+    if (normalized.starts_with('"') && normalized.ends_with('"'))
+        || (normalized.starts_with('\'') && normalized.ends_with('\''))
+    {
+        let quote = if normalized.starts_with('"') {
+            '"'
+        } else {
+            '\''
+        };
+        normalized = normalized
+            .strip_prefix(quote)
+            .and_then(|value| value.strip_suffix(quote))
+            .unwrap_or(normalized);
+    }
+    if let Some(rest) = normalized.strip_prefix('=') {
+        normalized = rest.trim();
+    }
+    if let Some((_, local_ref)) = normalized.rsplit_once('!') {
+        normalized = local_ref.trim();
+    }
+    (!normalized.is_empty()).then(|| normalized.to_string())
+}
+
+fn absolute_a1(row: u32, col: u32) -> String {
+    let reference = pos_to_a1(row, col);
+    let split_at = reference
+        .find(|ch: char| ch.is_ascii_digit())
+        .unwrap_or(reference.len());
+    let (col_ref, row_ref) = reference.split_at(split_at);
+    format!("${}${}", col_ref, row_ref)
+}
+
+fn is_checkbox_control_type(control_type: &str) -> bool {
+    matches!(
+        control_type.to_ascii_lowercase().as_str(),
+        "checkbox" | "check_box" | "check box"
+    )
+}
+
+fn checkbox_state_from_value(value: &CellValue) -> Option<&'static str> {
+    match value {
+        CellValue::Boolean(checked) => Some(if *checked { "Checked" } else { "Unchecked" }),
+        CellValue::Number(number) => Some(if number.get() != 0.0 {
+            "Checked"
+        } else {
+            "Unchecked"
+        }),
+        CellValue::Text(text) => match text.trim().to_ascii_lowercase().as_str() {
+            "true" | "checked" | "1" => Some("Checked"),
+            "false" | "unchecked" | "0" | "" => Some("Unchecked"),
+            _ => None,
+        },
+        CellValue::Null => Some("Unchecked"),
+        CellValue::Control(control) => Some(if control.checked {
+            "Checked"
+        } else {
+            "Unchecked"
+        }),
+        CellValue::Error(..) | CellValue::Array(_) | CellValue::Image(_) => None,
+    }
 }
 
 // -------------------------------------------------------------------

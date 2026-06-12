@@ -150,10 +150,9 @@ pub(in crate::storage::engine) fn update_slicer_config(
         .doc()
         .transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
     let slicers_map = crate::storage::ensure_workbook_child_map(&workbook, &mut txn, KEY_SLICERS);
-    let slicer_opt = match slicers_map.get(&txn, slicer_id) {
-        Some(yrs::Out::YMap(nested)) => slicer_yrs::from_yrs_map(&nested, &txn),
-        _ => None,
-    };
+    let slicer_opt = slicers_map
+        .get(&txn, slicer_id)
+        .and_then(|value| slicer_yrs::from_yrs_out(value, &txn));
     let mut result = MutationResult::empty();
     if let Some(mut slicer) = slicer_opt {
         slicer.apply_update(update);
@@ -197,10 +196,7 @@ pub(in crate::storage::engine) fn get_all_slicers(
     let mut results = Vec::new();
     if let Some(yrs::Out::YMap(slicers_map)) = workbook.get(&txn, KEY_SLICERS) {
         for (_key, value) in slicers_map.iter(&txn) {
-            let slicer_opt = match value {
-                yrs::Out::YMap(nested) => slicer_yrs::from_yrs_map(&nested, &txn),
-                _ => None,
-            };
+            let slicer_opt = slicer_yrs::from_yrs_out(value, &txn);
             if let Some(slicer) = slicer_opt
                 && slicer.sheet_id == sheet_hex
             {
@@ -220,10 +216,7 @@ pub(in crate::storage::engine) fn get_all_slicers_workbook(
     let mut results = Vec::new();
     if let Some(yrs::Out::YMap(slicers_map)) = workbook.get(&txn, KEY_SLICERS) {
         for (_key, value) in slicers_map.iter(&txn) {
-            let slicer_opt = match value {
-                yrs::Out::YMap(nested) => slicer_yrs::from_yrs_map(&nested, &txn),
-                _ => None,
-            };
+            let slicer_opt = slicer_yrs::from_yrs_out(value, &txn);
             if let Some(slicer) = slicer_opt {
                 results.push(slicer);
             }
@@ -239,11 +232,9 @@ pub(in crate::storage::engine) fn get_slicer_state(
     let workbook = stores.storage.workbook_map();
     let txn = stores.storage.doc().transact();
     if let Some(yrs::Out::YMap(slicers_map)) = workbook.get(&txn, KEY_SLICERS) {
-        let slicer_opt = match slicers_map.get(&txn, slicer_id) {
-            Some(yrs::Out::YMap(nested)) => slicer_yrs::from_yrs_map(&nested, &txn),
-            _ => None,
-        };
-        return slicer_opt;
+        return slicers_map
+            .get(&txn, slicer_id)
+            .and_then(|value| slicer_yrs::from_yrs_out(value, &txn));
     }
     None
 }
@@ -259,10 +250,9 @@ pub(in crate::storage::engine) fn toggle_slicer_item(
         .doc()
         .transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
     let slicers_map = crate::storage::ensure_workbook_child_map(&workbook, &mut txn, KEY_SLICERS);
-    let slicer_opt = match slicers_map.get(&txn, slicer_id) {
-        Some(yrs::Out::YMap(nested)) => slicer_yrs::from_yrs_map(&nested, &txn),
-        _ => None,
-    };
+    let slicer_opt = slicers_map
+        .get(&txn, slicer_id)
+        .and_then(|value| slicer_yrs::from_yrs_out(value, &txn));
     let mut result = MutationResult::empty();
     if let Some(mut slicer) = slicer_opt {
         if let Some(pos) = slicer.selected_values.iter().position(|v| v == value) {
@@ -295,10 +285,9 @@ pub(in crate::storage::engine) fn clear_slicer_selection(
         .doc()
         .transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
     let slicers_map = crate::storage::ensure_workbook_child_map(&workbook, &mut txn, KEY_SLICERS);
-    let slicer_opt = match slicers_map.get(&txn, slicer_id) {
-        Some(yrs::Out::YMap(nested)) => slicer_yrs::from_yrs_map(&nested, &txn),
-        _ => None,
-    };
+    let slicer_opt = slicers_map
+        .get(&txn, slicer_id)
+        .and_then(|value| slicer_yrs::from_yrs_out(value, &txn));
     let mut result = MutationResult::empty();
     if let Some(mut slicer) = slicer_opt {
         slicer.selected_values.clear();

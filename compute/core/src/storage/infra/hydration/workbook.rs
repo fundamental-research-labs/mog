@@ -2,8 +2,8 @@ use std::sync::Arc;
 
 use yrs::{Any, Map, MapPrelim, MapRef};
 
-use domain_types::SheetData;
 use domain_types::yrs_schema;
+use domain_types::{NamedRange, SheetData};
 
 use compute_document::hex::id_to_hex;
 use compute_document::schema::*;
@@ -11,10 +11,10 @@ use compute_document::schema::*;
 use cell_types::SheetId;
 
 use super::IdAllocator;
+use super::print_defined_names::is_representable_print_defined_name;
 
 const KEY_VOLATILE_DEPENDENCY_PACKAGE_PART: &str = "volatileDependencyPackagePart";
 const KEY_CUSTOM_WORKBOOK_VIEWS_XML: &str = "customWorkbookViewsXml";
-const KEY_THREADED_COMMENT_PERSON_ORDER: &str = "threadedCommentPersonOrder";
 
 // ===========================================================================
 // Workbook-level hydration
@@ -27,7 +27,7 @@ const KEY_THREADED_COMMENT_PERSON_ORDER: &str = "threadedCommentPersonOrder";
 /// into structured entries with allocated IDs and resolved sheet scope.
 pub(super) fn hydrate_workbook_named_ranges(
     workbook: &MapRef,
-    named_ranges: &[domain_types::NamedRange],
+    named_ranges: &[NamedRange],
     sheet_ids: &[SheetId],
     allocator: &mut impl IdAllocator,
     txn: &mut yrs::TransactionMut,
@@ -43,6 +43,10 @@ pub(super) fn hydrate_workbook_named_ranges(
     // round-trip. API/UI consumers can filter stale names at query boundaries;
     // hydration must preserve workbook state for export fidelity.
     for (idx, nr) in named_ranges.iter().enumerate() {
+        if is_representable_print_defined_name(nr, sheet_ids.len()) {
+            continue;
+        }
+
         // Resolve local_sheet_id (index) to a SheetId hex string for scope
         let scope: Option<String> = nr.local_sheet_id.and_then(|idx| {
             sheet_ids
@@ -618,6 +622,12 @@ pub(super) fn hydrate_workbook_slicers(
     // Build a lookup from cache name → cache def
     let cache_by_name: std::collections::HashMap<&str, &ooxml_types::slicers::SlicerCacheDef> =
         slicer_caches.iter().map(|c| (c.name.as_str(), c)).collect();
+    let table_by_ooxml_id: std::collections::HashMap<u32, &domain_types::domain::table::TableSpec> =
+        sheets
+            .iter()
+            .flat_map(|sheet| sheet.tables.iter())
+            .filter_map(|table| (table.id > 0).then_some((table.id, table)))
+            .collect();
 
     // Early-return if no sheet has any slicer to hydrate; avoids creating
     // an empty `slicers` sub-map when there's nothing to write.
@@ -645,15 +655,37 @@ pub(super) fn hydrate_workbook_slicers(
         for slicer in &sheet.slicers {
             let cache = cache_by_name.get(slicer.cache.as_str()).copied();
             let anchor = anchor_by_name.get(slicer.name.as_str()).copied();
+            let source_table = cache
+                .and_then(|cache| cache.table_slicer_cache.as_ref())
+                .and_then(|table_cache| table_by_ooxml_id.get(&table_cache.table_id).copied());
+            let table_filter_selected_values = cache
+                .and_then(|cache| cache.table_slicer_cache.as_ref())
+                .and_then(|table_cache| {
+                    source_table.map(|table| {
+                        domain_types::domain::slicer::table_filter_selected_values_for_slicer(
+                            table,
+                            table_cache.column,
+                        )
+                    })
+                });
+            let table_filter_selected_values = table_filter_selected_values
+                .as_deref()
+                .filter(|values| !values.is_empty());
 
             let stored = domain_types::domain::slicer::xlsx_import_to_stored_slicer(
-                slicer, cache, anchor, &sheet_hex,
+                slicer,
+                cache,
+                anchor,
+                domain_types::domain::slicer::XlsxSlicerImportContext {
+                    sheet_id: &sheet_hex,
+                    source_table_name: source_table.map(|table| table.name.as_str()),
+                    table_filter_selected_values,
+                },
             );
 
-            // SAFETY: serializing a struct with #[derive(Serialize)]; no map keys or non-finite floats.
-            let json =
-                serde_json::to_string(&stored).expect("StoredSlicer serialization should not fail");
-            slicers_map.insert(txn, &*stored.id, Any::String(Arc::from(json.as_str())));
+            let entries = yrs_schema::slicer::to_yrs_prelim(&stored);
+            let nested: MapPrelim = entries.into_iter().collect();
+            slicers_map.insert(txn, &*stored.id, nested);
         }
     }
 }

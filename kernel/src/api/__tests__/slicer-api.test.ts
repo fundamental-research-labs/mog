@@ -405,6 +405,35 @@ describe('WorksheetSlicersImpl', () => {
 
       expect(bridge.createSlicer).toHaveBeenCalled();
     });
+
+    it('creating a table slicer records the cache name and table column index', async () => {
+      bridge.getAllSlicersWorkbook.mockResolvedValue([]);
+      bridge.getTableByName.mockResolvedValue({
+        id: 'SalesTable',
+        name: 'SalesTable',
+        columns: [
+          { name: 'Region', id: 'col-region', index: 0 },
+          { name: 'Amount', id: 'col-amount', index: 1 },
+        ],
+        range: { startRow: 0, startCol: 0, endRow: 4, endCol: 1 },
+        hasHeaderRow: true,
+        hasTotalsRow: false,
+      });
+
+      await slicers.add({
+        name: 'RegionSlicer',
+        caption: 'Region',
+        source: { type: 'table', tableId: 'SalesTable', columnCellId: 'Amount' },
+      } as any);
+
+      const [, config] = bridge.createSlicer.mock.calls[0];
+      expect(config).toEqual(
+        expect.objectContaining({
+          cacheName: 'Slicer_Amount',
+          tableColumnIndex: 1,
+        }),
+      );
+    });
   });
 
   // =========================================================================

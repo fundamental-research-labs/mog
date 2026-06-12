@@ -120,6 +120,7 @@ function validateSlicerId(slicerId: string, operation: string): void {
 
 type ResolvedTableSlicerColumn = {
   absCol: number;
+  tableColumnIndex: number;
 };
 
 type TableSlicerColumnSource = {
@@ -180,6 +181,14 @@ export class WorksheetSlicersImpl implements WorksheetSlicers {
       tableId: config.tableName ?? '',
       columnCellId: config.columnName ?? '',
     };
+    let tableColumnIndex: number | undefined;
+    if (source.type === 'table') {
+      const table = await this.ctx.computeBridge.getTableByName(source.tableId);
+      const resolvedColumn = table
+        ? await this.resolveTableSlicerColumn(table, source.columnCellId)
+        : null;
+      tableColumnIndex = resolvedColumn?.tableColumnIndex;
+    }
     const defaultStyle: StoredSlicer['style'] = {
       columnCount: 1,
       buttonHeight: 30,
@@ -193,9 +202,14 @@ export class WorksheetSlicersImpl implements WorksheetSlicers {
       id: config.id ?? '',
       sheetId: config.sheetId ?? this.sheetId,
       source,
+      cacheName:
+        source.type === 'table'
+          ? `Slicer_${source.columnCellId || caption || 'Slicer'}`
+          : undefined,
       caption,
       name: config.name,
       style: config.style ?? defaultStyle,
+      tableColumnIndex,
       position: config.position ? pixelRectToAnchor(config.position) : undefined,
       level: 0,
       zIndex: config.zIndex ?? 0,
@@ -503,14 +517,28 @@ export class WorksheetSlicersImpl implements WorksheetSlicers {
       id: '',
       sheetId: '',
       source: existing.source,
+      cacheName: existing.cacheName,
+      cacheUid: existing.cacheUid,
       caption: existing.caption,
       name: existing.name,
       style: existing.style,
+      tableColumnIndex: existing.tableColumnIndex,
+      pivotCacheId: existing.pivotCacheId,
+      pivotTableTabId: existing.pivotTableTabId,
+      pivotTabularItems: existing.pivotTabularItems,
+      rowHeight: existing.rowHeight,
       position: newPosition,
       level: existing.level,
+      uid: existing.uid,
+      extLstXml: existing.extLstXml,
+      cacheExtLstXml: existing.cacheExtLstXml,
+      anchorObjectId: existing.anchorObjectId,
+      anchorMacroName: existing.anchorMacroName,
+      anchorNvExtLstXml: existing.anchorNvExtLstXml,
       zIndex: existing.zIndex,
       locked: existing.locked,
       showHeader: existing.showHeader,
+      startItem: existing.startItem,
       multiSelect: true,
       selectedValues: [],
     });
@@ -604,6 +632,7 @@ export class WorksheetSlicersImpl implements WorksheetSlicers {
     if (directColumn) {
       return {
         absCol: table.range.startCol + directColumn.index,
+        tableColumnIndex: directColumn.index,
       };
     }
 
@@ -625,6 +654,7 @@ export class WorksheetSlicersImpl implements WorksheetSlicers {
       if (column) {
         return {
           absCol: headerPosition.col,
+          tableColumnIndex: column.index ?? columnIndex,
         };
       }
     }

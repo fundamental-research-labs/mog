@@ -18,7 +18,8 @@ pub use events::{
 };
 pub use items::{SlicerItem, SlicerItemState, SlicerSelectionChangeType};
 pub use ooxml::{
-    stored_slicer_to_anchor, stored_slicer_to_cache_def, stored_slicer_to_slicer_def,
+    XlsxSlicerImportContext, stored_slicer_to_anchor, stored_slicer_to_cache_def,
+    stored_slicer_to_slicer_def, table_filter_selected_values_for_slicer,
     xlsx_import_to_stored_slicer,
 };
 pub use source::{PivotFieldArea, SlicerSource};

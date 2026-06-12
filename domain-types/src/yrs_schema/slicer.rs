@@ -6,7 +6,7 @@
 
 use std::sync::Arc;
 use yrs::types::map::MapRef;
-use yrs::{Any, ReadTxn};
+use yrs::{Any, Out, ReadTxn};
 
 use super::helpers::*;
 use crate::domain::floating_object::FloatingObjectAnchor;
@@ -239,4 +239,18 @@ pub fn from_yrs_map<T: ReadTxn>(map: &MapRef, txn: &T) -> Option<StoredSlicer> {
         created_at,
         updated_at,
     })
+}
+
+/// Read a [`StoredSlicer`] from a workbook `slicers` map entry.
+///
+/// New runtime state uses the structured Y.Map shape emitted by
+/// [`to_yrs_prelim`]. Older XLSX hydration stored a complete `StoredSlicer`
+/// JSON string at the same map key. Keep the legacy reader here so all callers
+/// consume one domain type while new writers converge on the structured shape.
+pub fn from_yrs_out<T: ReadTxn>(value: Out, txn: &T) -> Option<StoredSlicer> {
+    match value {
+        Out::YMap(map) => from_yrs_map(&map, txn),
+        Out::Any(Any::String(json)) => serde_json::from_str::<StoredSlicer>(&json).ok(),
+        _ => None,
+    }
 }

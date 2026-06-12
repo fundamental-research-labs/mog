@@ -3,10 +3,22 @@
 //! Extracted from `export.rs` — row heights, column widths, hidden
 //! rows/cols, and table specs.
 
-use cell_types::SheetId;
+use cell_types::{CellId, SheetId};
+use compute_document::hex::hex_to_id;
 use compute_document::schema::*;
 use domain_types::{
-    ColDimension, RowDimension, RowXmlHints, SheetDimensions, domain::table::TableSpec, yrs_schema,
+    ColDimension, RowDimension, RowXmlHints, SheetDimensions,
+    domain::{
+        filter::{
+            FilterColumn as OoxmlFilterColumn, OoxmlFilterCondition, OoxmlFilterType,
+            SortState as OoxmlSortState, filter_state_to_auto_filter,
+        },
+        table::{
+            CustomFilterSpec, FilterColumnSpec, FilterSpec, TableSortCondition, TableSortState,
+            TableSpec,
+        },
+    },
+    yrs_schema,
 };
 use std::collections::{HashMap, HashSet};
 use yrs::{Map, Out, Transact};
@@ -15,7 +27,7 @@ use crate::mirror::CellMirror;
 use crate::storage::engine::services::queries;
 use crate::storage::engine::stores::EngineStores;
 use crate::storage::sheet::get_meta_for_export;
-use crate::storage::sheet::{dimensions, settings};
+use crate::storage::sheet::{dimensions, filters as sheet_filters, settings};
 
 // -------------------------------------------------------------------
 // Dimensions export (row heights, col widths, hidden, etc.)
@@ -547,17 +559,187 @@ pub(in crate::storage::engine) fn export_tables_for_sheet(
         .iter()
         .filter_map(|name| {
             let name_key = name.to_ascii_lowercase();
-            if let Some(spec) =
+            let mut spec = if let Some(spec) =
                 catalog_tables_map
                     .as_ref()
                     .and_then(|tm| match tm.get(&txn, name.as_str()) {
                         Some(Out::YMap(inner)) => yrs_schema::table::from_yrs_map(&inner, &txn),
                         _ => None,
-                    })
-            {
-                return Some(spec);
-            }
-            range_binding_tables.remove(&name_key)
+                    }) {
+                spec
+            } else {
+                range_binding_tables.remove(&name_key)?
+            };
+            apply_runtime_table_filter_to_spec(stores, mirror, sheet_id, name, &mut spec);
+            Some(spec)
         })
         .collect()
+}
+
+fn apply_runtime_table_filter_to_spec(
+    stores: &EngineStores,
+    mirror: &CellMirror,
+    sheet_id: &SheetId,
+    table_name: &str,
+    spec: &mut TableSpec,
+) {
+    let Some(table) = mirror.get_table(table_name) else {
+        return;
+    };
+    let filter = sheet_filters::get_table_filter(
+        stores.storage.doc(),
+        stores.storage.sheets(),
+        sheet_id,
+        &table.id,
+    );
+    let filter = if filter.is_none() && table.id != table.name {
+        sheet_filters::get_table_filter(
+            stores.storage.doc(),
+            stores.storage.sheets(),
+            sheet_id,
+            &table.name,
+        )
+    } else {
+        filter
+    };
+    let Some(filter) = filter else {
+        return;
+    };
+    if filter.column_filters.is_empty() && filter.sort_state.is_none() {
+        return;
+    }
+
+    let pos_resolver =
+        |cell_id: &str| resolve_filter_cell_position(stores, mirror, sheet_id, cell_id);
+    let Some(auto_filter) = filter_state_to_auto_filter(&filter, &pos_resolver) else {
+        return;
+    };
+
+    spec.auto_filter_ref = Some(auto_filter.range_ref);
+    spec.auto_filter_xr_uid = auto_filter.xr_uid;
+    spec.auto_filter_ext_lst_raw = auto_filter.ext_lst_raw;
+    let filter_columns: Vec<FilterColumnSpec> = auto_filter
+        .columns
+        .iter()
+        .filter_map(table_filter_column_spec_from_ooxml)
+        .collect();
+    if !filter_columns.is_empty() || !filter.column_filters.is_empty() {
+        spec.filter_columns = filter_columns;
+    }
+    spec.sort_state = auto_filter.sort.map(table_sort_state_from_ooxml);
+}
+
+fn resolve_filter_cell_position(
+    stores: &EngineStores,
+    mirror: &CellMirror,
+    sheet_id: &SheetId,
+    cell_id_hex: &str,
+) -> Option<(u32, u32)> {
+    let id = hex_to_id(cell_id_hex)?;
+    let cell_id = CellId::from_raw(id);
+    if let Some(pos) = mirror.resolve_position(&cell_id) {
+        return Some((pos.row(), pos.col()));
+    }
+    stores
+        .grid_indexes
+        .get(sheet_id)
+        .and_then(|grid| grid.cell_position(&cell_id))
+}
+
+fn table_filter_column_spec_from_ooxml(column: &OoxmlFilterColumn) -> Option<FilterColumnSpec> {
+    Some(FilterColumnSpec {
+        col_id: column.col_index,
+        hidden_button: column.hidden_button,
+        show_button: column.show_button,
+        filter: table_filter_spec_from_ooxml(column.filter_type.as_ref()?)?,
+        ext_lst_raw: column.ext_lst_raw.clone(),
+    })
+}
+
+fn table_filter_spec_from_ooxml(filter: &OoxmlFilterType) -> Option<FilterSpec> {
+    Some(match filter {
+        OoxmlFilterType::Values {
+            values,
+            blanks,
+            calendar_type,
+            date_group_items,
+        } => FilterSpec::Values {
+            blank: *blanks,
+            values: values.clone(),
+            calendar_type: *calendar_type,
+            date_group_items: date_group_items.clone(),
+        },
+        OoxmlFilterType::Custom {
+            conditions,
+            and_logic,
+        } => FilterSpec::Custom {
+            and: *and_logic,
+            filters: conditions
+                .iter()
+                .map(table_custom_filter_from_ooxml)
+                .collect(),
+        },
+        OoxmlFilterType::Top10 {
+            top,
+            percent,
+            value,
+            filter_val,
+        } => FilterSpec::Top10 {
+            top: *top,
+            percent: *percent,
+            val: *value,
+            filter_val: *filter_val,
+        },
+        OoxmlFilterType::Dynamic {
+            dynamic_type,
+            value,
+            max_value,
+            value_iso,
+            max_value_iso,
+        } => FilterSpec::Dynamic {
+            kind: dynamic_type.clone(),
+            val: *value,
+            max_val: *max_value,
+            val_iso: value_iso.clone(),
+            max_val_iso: max_value_iso.clone(),
+        },
+        OoxmlFilterType::Color { dxf_id, cell_color } => FilterSpec::Color {
+            dxf_id: *dxf_id,
+            cell_color: *cell_color,
+        },
+        OoxmlFilterType::Icon { icon_set, icon_id } => FilterSpec::Icon {
+            icon_set: icon_set.clone().unwrap_or_default(),
+            icon_id: Some(*icon_id),
+        },
+    })
+}
+
+fn table_custom_filter_from_ooxml(condition: &OoxmlFilterCondition) -> CustomFilterSpec {
+    CustomFilterSpec {
+        operator: condition.operator.clone(),
+        val: condition.value.to_string(),
+    }
+}
+
+fn table_sort_state_from_ooxml(sort: OoxmlSortState) -> TableSortState {
+    TableSortState {
+        ref_range: sort.range_ref,
+        column_sort: sort.column_sort,
+        case_sensitive: sort.case_sensitive,
+        sort_method: sort.sort_method,
+        conditions: sort
+            .conditions
+            .into_iter()
+            .map(|condition| TableSortCondition {
+                ref_range: condition.range_ref,
+                descending: condition.descending,
+                sort_by: condition.sort_by,
+                custom_list: condition.custom_list,
+                dxf_id: condition.dxf_id,
+                icon_set: condition.icon_set,
+                icon_id: condition.icon_id,
+            })
+            .collect(),
+        ext_lst_raw: sort.ext_lst_raw,
+    }
 }

@@ -595,6 +595,15 @@ impl ComputeCore {
         mirror: &mut CellMirror,
         change: Option<(&formula_types::StructureChange, SheetId)>,
     ) -> Result<RecalcResult, ComputeError> {
+        self.structure_change_with_formula_refresh(mirror, change, &[])
+    }
+
+    pub fn structure_change_with_formula_refresh(
+        &mut self,
+        mirror: &mut CellMirror,
+        change: Option<(&formula_types::StructureChange, SheetId)>,
+        refresh_formula_cells: &[CellId],
+    ) -> Result<RecalcResult, ComputeError> {
         // NOTE: mirror.apply_structure_change() is NOT called here — the caller
         // (StructuralOps) already updated the mirror before delegating to ComputeCore.
         // Calling it again would double-shift cell positions.
@@ -631,6 +640,11 @@ impl ComputeCore {
         //    pointed at deleted cells render as `#REF!` (their backing
         //    CellId / RowId / ColId is unregistered after the structural op).
         self.regenerate_formula_strings_and_cell_formula_text(mirror);
+
+        // 3.5. Reparse formulas whose identity refs were retargeted before
+        //      the delete so evaluation uses the same references that
+        //      structural display text now exposes.
+        self.refresh_ast_cache_from_formula_text(mirror, refresh_formula_cells);
 
         // 4. Rebuild dep graph edges.
         //    Inserting/deleting between range corners changes the range
@@ -669,6 +683,59 @@ impl ComputeCore {
                     is_dynamic_array,
                 },
             );
+        }
+    }
+
+    /// Reparse formula text for selected live cell formulas after structural
+    /// display text has been regenerated.
+    fn refresh_ast_cache_from_formula_text(&mut self, mirror: &CellMirror, cell_ids: &[CellId]) {
+        use crate::eval::GLOBAL_REGISTRY;
+
+        let mut refreshed = Vec::new();
+
+        for cell_id in cell_ids {
+            let Some(sheet_id) = mirror.sheet_for_cell(cell_id) else {
+                continue;
+            };
+            if mirror.get_formula(cell_id).is_none() {
+                continue;
+            }
+
+            let Some(formula_text) = self
+                .cell_formula_text
+                .get(cell_id)
+                .or_else(|| self.formula_strings.get(cell_id))
+                .cloned()
+            else {
+                continue;
+            };
+
+            let resolver = CoreResolver {
+                mirror,
+                current_sheet: sheet_id,
+            };
+            match parse_formula(&formula_text, Some(&resolver)) {
+                Ok(spanned) => {
+                    let ast = spanned.into_inner();
+                    let is_dynamic_array =
+                        Self::ast_contains_array_function(&ast, &GLOBAL_REGISTRY);
+                    refreshed.push((
+                        *cell_id,
+                        AstEntry {
+                            ast,
+                            is_dynamic_array,
+                        },
+                    ));
+                }
+                Err(_) => {
+                    self.ast_cache.remove(cell_id);
+                    self.cell_range_keys.remove(cell_id);
+                }
+            }
+        }
+
+        for (cell_id, entry) in refreshed {
+            self.ast_cache.insert(cell_id, entry);
         }
     }
 

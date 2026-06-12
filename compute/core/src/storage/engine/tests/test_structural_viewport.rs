@@ -2,6 +2,7 @@
 
 use super::super::*;
 use super::helpers::*;
+use cell_types::CellId;
 use formula_types::StructureChange;
 use value_types::{CellValue, FiniteF64};
 
@@ -236,6 +237,100 @@ fn structural_formula_text_preserves_explicit_same_sheet_qualifier() {
     assert_eq!(
         cell_value_at(&engine, &sid, 1, 1),
         CellValue::Number(FiniteF64::must(10.0))
+    );
+}
+
+#[test]
+fn delete_column_retargets_shifted_absolute_formula_text() {
+    let snap = simple_snapshot();
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let sid = sheet_id();
+
+    engine
+        .set_cell_value_parsed(&sid, 13, 10, "100")
+        .expect("seed K14");
+    engine
+        .set_cell_value_parsed(&sid, 13, 11, "200")
+        .expect("seed L14");
+    engine
+        .set_cell_value_parsed(&sid, 34, 12, "0.25")
+        .expect("seed M35");
+    engine
+        .set_cell_value_parsed(&sid, 13, 12, "=$L14*(1+$M$35)")
+        .expect("seed M14 formula");
+
+    engine
+        .structure_change(
+            &sid,
+            &StructureChange::DeleteCols {
+                at: 11,
+                count: 1,
+                deleted_cell_ids: vec![],
+            },
+        )
+        .expect("delete column L");
+
+    let l14 = CellId::from_uuid_str(
+        &engine
+            .get_cell_id_at(&sid, 13, 11)
+            .expect("shifted formula should stay materialized"),
+    )
+    .expect("cell id should parse");
+    assert_eq!(
+        engine.get_formula(&l14).as_deref(),
+        Some("=$K14*(1+$L$35)"),
+        "absolute markers should be preserved when the formula is retargeted"
+    );
+    assert_eq!(
+        cell_value_at(&engine, &sid, 13, 11),
+        CellValue::Number(FiniteF64::must(125.0))
+    );
+}
+
+#[test]
+fn delete_row_retargets_shifted_absolute_formula_text() {
+    let snap = simple_snapshot();
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let sid = sheet_id();
+
+    engine
+        .set_cell_value_parsed(&sid, 9, 0, "100")
+        .expect("seed A10");
+    engine
+        .set_cell_value_parsed(&sid, 10, 0, "200")
+        .expect("seed A11");
+    engine
+        .set_cell_value_parsed(&sid, 11, 1, "0.25")
+        .expect("seed B12");
+    engine
+        .set_cell_value_parsed(&sid, 11, 0, "=$A$11*(1+$B$12)")
+        .expect("seed A12 formula");
+
+    engine
+        .structure_change(
+            &sid,
+            &StructureChange::DeleteRows {
+                at: 10,
+                count: 1,
+                deleted_cell_ids: vec![],
+            },
+        )
+        .expect("delete row 11");
+
+    let a11 = CellId::from_uuid_str(
+        &engine
+            .get_cell_id_at(&sid, 10, 0)
+            .expect("shifted formula should stay materialized"),
+    )
+    .expect("cell id should parse");
+    assert_eq!(
+        engine.get_formula(&a11).as_deref(),
+        Some("=$A$10*(1+$B$11)"),
+        "absolute markers should be preserved when the formula is retargeted"
+    );
+    assert_eq!(
+        cell_value_at(&engine, &sid, 10, 0),
+        CellValue::Number(FiniteF64::must(125.0))
     );
 }
 

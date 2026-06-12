@@ -23,11 +23,11 @@
  * Worksheet API setTabColor (async)
  */
 
-import { useCallback, useEffect, useMemo, useReducer, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useReducer } from 'react';
 
 import type { SheetId } from '@mog-sdk/contracts/core';
 
-import { useActiveSheetId, useDocumentContext, useUIStore, useWorkbook } from '../../infra/context';
+import { useActiveSheetId, useUIStore, useWorkbook } from '../../infra/context';
 
 // =============================================================================
 // Types
@@ -83,17 +83,9 @@ export function useSheetTabActions(
   options: UseSheetTabActionsOptions = {},
 ): UseSheetTabActionsReturn {
   const wb = useWorkbook();
-  const importDurability = useDocumentContext().importDurability;
   const storeActiveSheetId = useActiveSheetId();
   const setActiveSheet = useUIStore((s) => s.setActiveSheet);
   const openDeleteSheetConfirmDialog = useUIStore((s) => s.openDeleteSheetConfirmDialog);
-  const sheetActivationGenerationRef = useRef(0);
-
-  useEffect(() => {
-    return () => {
-      sheetActivationGenerationRef.current += 1;
-    };
-  }, []);
 
   // Allow override for testing or custom use cases
   const activeSheetId = options.sheetId ?? storeActiveSheetId;
@@ -182,33 +174,9 @@ export function useSheetTabActions(
    */
   const handleSelectSheet = useCallback(
     (sheetId: SheetId) => {
-      const generation = ++sheetActivationGenerationRef.current;
-
-      const activateIfLatest = () => {
-        if (sheetActivationGenerationRef.current === generation) {
-          setActiveSheet(sheetId);
-        }
-      };
-
-      if (!importDurability?.isImportDurabilityPending || sheetId === activeSheetId) {
-        activateIfLatest();
-        return;
-      }
-
-      void (async () => {
-        try {
-          if (importDurability.awaitMaterialized) {
-            await importDurability.awaitMaterialized(sheetId);
-          } else {
-            await importDurability.awaitImportDurability();
-          }
-        } catch (error) {
-          console.warn('[SheetTabs] Failed to materialize sheet before activation:', error);
-        }
-        activateIfLatest();
-      })();
+      setActiveSheet(sheetId);
     },
-    [activeSheetId, importDurability, setActiveSheet],
+    [setActiveSheet],
   );
 
   /**

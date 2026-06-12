@@ -1055,10 +1055,7 @@ export class DocumentLifecycleSystem {
     // durability/materialization barriers promote the scheduled run immediately,
     // so close/dispose never waits out the background grace period.
     this.importDurabilityPending = true;
-    const delayMs =
-      !options?.immediate && this.hostLifecycleInput !== undefined && this.environment === 'browser'
-        ? 60_000
-        : 0;
+    const delayMs = !options?.immediate && this.environment === 'browser' ? 60_000 : 0;
     const scheduled = new Promise<void>((resolve, reject) => {
       const start = () => {
         if (this.startDeferredHydrationNow !== start) return;

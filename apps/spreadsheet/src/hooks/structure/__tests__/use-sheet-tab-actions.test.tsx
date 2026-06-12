@@ -64,13 +64,9 @@ describe('useSheetTabActions', () => {
     workbookOnMock.mockReturnValue(jest.fn());
   });
 
-  it('waits for target sheet materialization before activating a pending imported sheet', async () => {
-    let resolveMaterialization!: () => void;
-    const materialization = new Promise<void>((resolve) => {
-      resolveMaterialization = resolve;
-    });
+  it('activates a pending imported sheet without waiting for materialization', () => {
     const awaitMaterialized = jest.fn<Promise<void>, [SheetId | 'allSheets'?]>(
-      () => materialization,
+      () => new Promise(() => {}),
     );
     importDurabilityMock = {
       isImportDurabilityPending: true,
@@ -84,24 +80,14 @@ describe('useSheetTabActions', () => {
       result.current.handleSelectSheet('sheet-2' as SheetId);
     });
 
-    expect(awaitMaterialized).toHaveBeenCalledWith('sheet-2');
-    expect(setActiveSheetMock).not.toHaveBeenCalled();
-
-    await act(async () => {
-      resolveMaterialization();
-      await materialization;
-    });
-
+    expect(awaitMaterialized).not.toHaveBeenCalled();
+    expect(importDurabilityMock.awaitImportDurability).not.toHaveBeenCalled();
     expect(setActiveSheetMock).toHaveBeenCalledWith('sheet-2');
   });
 
-  it('activates only the latest requested sheet after materialization resolves', async () => {
-    let resolveMaterialization!: () => void;
-    const materialization = new Promise<void>((resolve) => {
-      resolveMaterialization = resolve;
-    });
+  it('activates each requested sheet immediately while import durability is pending', () => {
     const awaitMaterialized = jest.fn<Promise<void>, [SheetId | 'allSheets'?]>(
-      () => materialization,
+      () => new Promise(() => {}),
     );
     importDurabilityMock = {
       isImportDurabilityPending: true,
@@ -116,14 +102,10 @@ describe('useSheetTabActions', () => {
       result.current.handleSelectSheet('sheet-3' as SheetId);
     });
 
-    await act(async () => {
-      resolveMaterialization();
-      await materialization;
-    });
-
-    expect(awaitMaterialized).toHaveBeenCalledWith('sheet-2');
-    expect(awaitMaterialized).toHaveBeenCalledWith('sheet-3');
-    expect(setActiveSheetMock).toHaveBeenCalledTimes(1);
+    expect(awaitMaterialized).not.toHaveBeenCalled();
+    expect(importDurabilityMock.awaitImportDurability).not.toHaveBeenCalled();
+    expect(setActiveSheetMock).toHaveBeenCalledTimes(2);
+    expect(setActiveSheetMock).toHaveBeenNthCalledWith(1, 'sheet-2');
     expect(setActiveSheetMock).toHaveBeenCalledWith('sheet-3');
   });
 });

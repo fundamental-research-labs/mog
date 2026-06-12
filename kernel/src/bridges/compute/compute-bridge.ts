@@ -486,6 +486,16 @@ function appendPropertyChanges(result: MutationResult, extra: MutationResult): M
   };
 }
 
+const UI_STATE_WORKBOOK_SETTINGS_KEYS = new Set<keyof RustWorkbookSettingsPatch>([
+  'customSettings',
+  'selectedSheetIds',
+]);
+
+function isUiStateWorkbookSettingsPatch(settings: RustWorkbookSettingsPatch): boolean {
+  const keys = Object.keys(settings) as Array<keyof RustWorkbookSettingsPatch>;
+  return keys.length > 0 && keys.every((key) => UI_STATE_WORKBOOK_SETTINGS_KEYS.has(key));
+}
+
 // =============================================================================
 // ComputeBridge Class — Thin Composition Root
 // =============================================================================
@@ -1696,6 +1706,14 @@ export class ComputeBridge extends GeneratedBridgeBase {
   /** Patch Rust-owned workbook settings through the generated Rust bridge. */
   async patchWorkbookSettings(settings: RustWorkbookSettingsPatch): Promise<MutationResult> {
     this.core.ensureInitialized();
+    if (isUiStateWorkbookSettingsPatch(settings)) {
+      return this.core.mutatePublicUiState('compute_patch_workbook_settings', () =>
+        this.core.transport.call<[Uint8Array, MutationResult]>('compute_patch_workbook_settings', {
+          docId: this.core.docId,
+          patch: settings,
+        }),
+      );
+    }
     return super.patchWorkbookSettings(settings);
   }
 

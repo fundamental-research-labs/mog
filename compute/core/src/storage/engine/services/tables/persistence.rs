@@ -39,6 +39,21 @@ fn write_table_attachment(workbook: &MapRef, txn: &mut TransactionMut, table: &C
     }
 }
 
+pub(in crate::storage::engine) fn persist_table_to_yrs_in_txn(
+    workbook: &MapRef,
+    txn: &mut TransactionMut,
+    table: &CanonicalTable,
+) {
+    let tables_map = crate::storage::ensure_workbook_child_map(
+        workbook,
+        txn,
+        compute_document::schema::KEY_TABLES,
+    );
+    tables_map.remove(txn, table.name.as_str());
+    write_table_catalog_entry(&tables_map, txn, table);
+    write_table_attachment(workbook, txn, table);
+}
+
 /// Persist a full table definition to the Yrs CRDT document.
 ///
 /// Writes the canonical table catalog entry to `workbook.tables[<table_id>]`
@@ -55,14 +70,7 @@ pub(in crate::storage::engine) fn persist_table_to_yrs(
         .doc()
         .transact_mut_with(Origin::from(compute_document::undo::ORIGIN_USER_EDIT));
 
-    let tables_map = crate::storage::ensure_workbook_child_map(
-        &workbook,
-        &mut txn,
-        compute_document::schema::KEY_TABLES,
-    );
-    tables_map.remove(&mut txn, table.name.as_str());
-    write_table_catalog_entry(&tables_map, &mut txn, table);
-    write_table_attachment(&workbook, &mut txn, table);
+    persist_table_to_yrs_in_txn(&workbook, &mut txn, table);
 }
 
 /// Persist a table rename without changing its stable catalog identity.
@@ -108,14 +116,7 @@ pub(in crate::storage::engine) fn persist_table_to_yrs_with_table_filter(
     let doc = stores.storage.doc().clone();
     let mut txn = doc.transact_mut_with(Origin::from(compute_document::undo::ORIGIN_USER_EDIT));
 
-    let tables_map = crate::storage::ensure_workbook_child_map(
-        &workbook,
-        &mut txn,
-        compute_document::schema::KEY_TABLES,
-    );
-    tables_map.remove(&mut txn, table.name.as_str());
-    write_table_catalog_entry(&tables_map, &mut txn, table);
-    write_table_attachment(&workbook, &mut txn, table);
+    persist_table_to_yrs_in_txn(&workbook, &mut txn, table);
 
     filters::create_filter_in_txn(
         &mut txn,
@@ -225,14 +226,7 @@ pub(in crate::storage::engine) fn persist_table_style_to_yrs(
         .doc()
         .transact_mut_with(Origin::from(compute_document::undo::ORIGIN_USER_EDIT));
 
-    let tables_map = crate::storage::ensure_workbook_child_map(
-        &workbook,
-        &mut txn,
-        compute_document::schema::KEY_TABLES,
-    );
-    tables_map.remove(&mut txn, table_name);
-    write_table_catalog_entry(&tables_map, &mut txn, table);
-    write_table_attachment(&workbook, &mut txn, table);
+    persist_table_to_yrs_in_txn(&workbook, &mut txn, table);
 
     Ok(())
 }

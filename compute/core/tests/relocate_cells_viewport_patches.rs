@@ -36,8 +36,10 @@ use cell_types::SheetId;
 use compute_core::storage::engine::YrsComputeEngine;
 use compute_wire::constants::{MUTATION_HEADER_SIZE, PATCH_STRIDE};
 use compute_wire::flags::{VALUE_TYPE_MASK, VALUE_TYPE_NULL, VALUE_TYPE_NUMBER};
+use domain_types::domain::table::Table;
 use snapshot_types::{CellData, SheetSnapshot, WorkbookSnapshot};
 use value_types::{CellValue, FiniteF64};
+use yrs::{Map, Out, Transact};
 
 fn sheet_id_str(suffix: u32) -> String {
     format!("00000000-0000-0000-0000-{:012x}", suffix)
@@ -129,6 +131,34 @@ fn register_viewport(engine: &mut YrsComputeEngine, sheet_id: &SheetId, vp_id: &
     engine
         .register_viewport(vp_id, sheet_id, 0, 0, 9, 5)
         .expect("register_viewport");
+}
+
+fn table_catalog_table_by_key(engine: &YrsComputeEngine, key: &str) -> Option<Table> {
+    let txn = engine.storage().doc().transact();
+    match engine
+        .storage()
+        .workbook_map()
+        .get(&txn, compute_document::schema::KEY_TABLES)
+    {
+        Some(Out::YMap(tables_map)) => match tables_map.get(&txn, key) {
+            Some(Out::YMap(table_map)) => {
+                domain_types::yrs_schema::table::from_yrs_map_to_table(&table_map, &txn)
+            }
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+fn compact_table_attachment_table_id(engine: &YrsComputeEngine, table_id: &str) -> Option<String> {
+    let txn = engine.storage().doc().transact();
+    let key = compute_document::range::table_attachment_key(table_id);
+    let json = compute_document::range::read_range_binding_wb(
+        engine.storage().workbook_map(),
+        &txn,
+        &key,
+    )?;
+    compute_document::range::TableRangeBinding::from_json(&json).map(|binding| binding.table_id)
 }
 
 fn viewport_count(patches: &[u8]) -> u16 {
@@ -374,6 +404,10 @@ fn relocate_whole_table_moves_table_binding() {
             None,
         )
         .expect("create table");
+    let table_id = engine
+        .get_table_by_name("Table1")
+        .expect("table after create")
+        .id;
 
     let (_patches, result) = engine
         .relocate_cells_yrs(&sid, 0, 0, 2, 1, &sid, 0, 3)
@@ -386,6 +420,20 @@ fn relocate_whole_table_moves_table_binding() {
     assert_eq!(table.range.start_col(), 3);
     assert_eq!(table.range.end_row(), 2);
     assert_eq!(table.range.end_col(), 4);
+    assert_eq!(table.id, table_id);
+    assert!(
+        table_catalog_table_by_key(&engine, "Table1").is_none(),
+        "relocate must not recreate a name-keyed catalog entry"
+    );
+    let catalog = table_catalog_table_by_key(&engine, &table_id)
+        .expect("id-keyed catalog table should move with whole-table relocate");
+    assert_eq!(catalog.range.start_col(), 3);
+    assert_eq!(catalog.range.end_col(), 4);
+    assert_eq!(
+        compact_table_attachment_table_id(&engine, &table_id).as_deref(),
+        Some(table_id.as_str()),
+        "compact attachment must remain keyed by stable table id after relocate"
+    );
     assert!(
         result
             .table_changes
@@ -393,6 +441,18 @@ fn relocate_whole_table_moves_table_binding() {
             .any(|change| change.name == "Table1" && change.sheet_id == sid.to_uuid_string()),
         "relocate should report a table change for viewport/object refresh"
     );
+
+    engine.undo().expect("undo relocate");
+    let undone = engine
+        .get_table_by_name("Table1")
+        .expect("table should still exist after undoing relocate");
+    assert_eq!(undone.id, table_id);
+    assert_eq!(undone.range.start_col(), 0);
+    assert_eq!(undone.range.end_col(), 1);
+    let undone_catalog = table_catalog_table_by_key(&engine, &table_id)
+        .expect("id-keyed catalog table should undo with whole-table relocate");
+    assert_eq!(undone_catalog.range.start_col(), 0);
+    assert_eq!(undone_catalog.range.end_col(), 1);
 }
 
 #[test]

@@ -8,6 +8,7 @@ use crate::snapshot::{ChangeKind, PivotTableChange, TableChange};
 use crate::storage::engine::mutation_coordinator::MutationCoordinator;
 use crate::storage::engine::services::metadata_shift;
 use crate::storage::engine::stores::EngineStores;
+use yrs::{Origin, Transact};
 
 use super::patches::{merge_recalc_results, synthetic_null_change};
 
@@ -350,6 +351,7 @@ fn relocate_whole_tables(
         .collect();
 
     let mut changes = Vec::with_capacity(tables_to_move.len());
+    let mut moved_tables = Vec::with_capacity(tables_to_move.len());
     for mut table in tables_to_move {
         let row_offset = table.range.start_row().saturating_sub(src_start_row);
         let col_offset = table.range.start_col().saturating_sub(src_start_col);
@@ -372,13 +374,24 @@ fn relocate_whole_tables(
             target_start_col + table_col_span,
         );
         stores.compute.set_table(mirror, table.clone());
-        super::super::super::tables::persist_table_to_yrs(stores, &table);
+        moved_tables.push(table.clone());
         changes.push(TableChange {
             name: table.name,
             table_id: Some(table.id),
             sheet_id: target_sheet_hex.clone(),
             kind: ChangeKind::Set,
         });
+    }
+
+    if !moved_tables.is_empty() {
+        let workbook = stores.storage.workbook_map().clone();
+        let mut txn = stores
+            .storage
+            .doc()
+            .transact_mut_with(Origin::from(compute_document::undo::ORIGIN_USER_EDIT));
+        for table in &moved_tables {
+            super::super::super::tables::persist_table_to_yrs_in_txn(&workbook, &mut txn, table);
+        }
     }
 
     changes

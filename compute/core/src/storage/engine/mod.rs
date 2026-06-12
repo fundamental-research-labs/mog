@@ -42,6 +42,7 @@ mod features;
 mod filter_import_diagnostics;
 mod format_inference;
 mod formatting;
+mod formula_read;
 mod grid_indexing;
 mod layout;
 mod merge_index;

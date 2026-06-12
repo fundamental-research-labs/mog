@@ -51,6 +51,7 @@ function createHarness(options?: { activeSheetId?: string; durabilityPromise?: P
   };
   const resyncScene = jest.fn();
   const awaitImportDurability = jest.fn(() => options?.durabilityPromise ?? Promise.resolve());
+  const scheduleDeferredHydration = jest.fn(() => options?.durabilityPromise ?? Promise.resolve());
 
   const cleanup = setupFloatingObjectSheetPopulation({
     uiStore,
@@ -60,6 +61,7 @@ function createHarness(options?: { activeSheetId?: string; durabilityPromise?: P
     getActiveSheetId: () => activeSheetId,
     importDurability: {
       isImportDurabilityPending: !!options?.durabilityPromise,
+      scheduleDeferredHydration,
       awaitImportDurability,
     },
     isDisposed: () => false,
@@ -76,6 +78,7 @@ function createHarness(options?: { activeSheetId?: string; durabilityPromise?: P
       activeSheetId = sheetId;
     },
     awaitImportDurability,
+    scheduleDeferredHydration,
     floatingObjects,
     setObjectsForSheet,
     resyncScene,
@@ -85,14 +88,15 @@ function createHarness(options?: { activeSheetId?: string; durabilityPromise?: P
 }
 
 describe('setupFloatingObjectSheetPopulation', () => {
-  it('waits for import durability before populating and resyncing a switched sheet', async () => {
+  it('waits for scheduled import hydration before populating a switched sheet', async () => {
     const gate = deferred();
     const harness = createHarness({ activeSheetId: 'sheet-2', durabilityPromise: gate.promise });
 
     harness.listener({ activeSheetId: 'sheet-2' }, { activeSheetId: 'sheet-1' });
     await Promise.resolve();
 
-    expect(harness.awaitImportDurability).toHaveBeenCalledTimes(1);
+    expect(harness.scheduleDeferredHydration).toHaveBeenCalledTimes(1);
+    expect(harness.awaitImportDurability).not.toHaveBeenCalled();
     expect(harness.floatingObjects.getObjectsInSheet).not.toHaveBeenCalled();
     expect(harness.setObjectsForSheet).not.toHaveBeenCalled();
     expect(harness.resyncScene).not.toHaveBeenCalled();

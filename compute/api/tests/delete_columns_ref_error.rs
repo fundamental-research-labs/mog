@@ -177,3 +177,64 @@ fn delete_column_shifts_surviving_ref() {
     // (deleting an unrelated middle column doesn't change a `=C1` result —
     // C1 just shifts). The point is the test passes either way without #REF!.
 }
+
+#[test]
+fn delete_column_retargets_shifted_formula_to_previous_column() {
+    let (wb, _) = Workbook::from_snapshot(blank_snapshot()).unwrap();
+    let sheet = wb.sheet_by_index(0).unwrap();
+
+    sheet.set_cell("K14", "100").unwrap();
+    sheet.set_cell("L14", "200").unwrap();
+    sheet.set_cell("M35", "0.25").unwrap();
+    sheet.set_cell("M14", "=L14*(1+M35)").unwrap();
+
+    let res = sheet.structure().delete_columns(11, 1).unwrap();
+
+    let l14 = res
+        .recalc
+        .changed_cells
+        .iter()
+        .find(|c| {
+            c.position
+                .as_ref()
+                .map_or(false, |p| p.row == 13 && p.col == 11)
+        })
+        .expect("L14 should be recalculated after deleting column L");
+
+    use value_types::{CellValue, FiniteF64};
+    assert_eq!(
+        l14.value,
+        CellValue::Number(FiniteF64::must(125.0)),
+        "shifted formula should recalculate from the previous surviving column"
+    );
+}
+
+#[test]
+fn delete_column_retargets_shifted_formula_to_empty_previous_column() {
+    let (wb, _) = Workbook::from_snapshot(blank_snapshot()).unwrap();
+    let sheet = wb.sheet_by_index(0).unwrap();
+
+    sheet.set_cell("L14", "200").unwrap();
+    sheet.set_cell("M35", "0.25").unwrap();
+    sheet.set_cell("M14", "=L14*(1+M35)").unwrap();
+
+    let res = sheet.structure().delete_columns(11, 1).unwrap();
+
+    let l14 = res
+        .recalc
+        .changed_cells
+        .iter()
+        .find(|c| {
+            c.position
+                .as_ref()
+                .map_or(false, |p| p.row == 13 && p.col == 11)
+        })
+        .expect("L14 should be recalculated after deleting column L");
+
+    use value_types::{CellValue, FiniteF64};
+    assert_eq!(
+        l14.value,
+        CellValue::Number(FiniteF64::must(0.0)),
+        "shifted formula should reference the empty previous surviving column"
+    );
+}

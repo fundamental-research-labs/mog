@@ -163,6 +163,158 @@ fn shared_formula_delete_fixture_xlsx() -> Vec<u8> {
         .expect("shared formula structural fixture should be writable")
 }
 
+fn same_row_shared_formula_delete_fixture_xlsx() -> Vec<u8> {
+    let mut formula_cells = String::new();
+    formula_cells.push_str(&value_cell(13, 10, 100.0));
+    formula_cells.push_str(&shared_master(
+        13,
+        11,
+        19,
+        1,
+        "K14*(1+L35)".to_string(),
+        110.0,
+    ));
+    for col in 12..=19 {
+        formula_cells.push_str(&shared_follower(13, col, 1, 100.0 + (col - 10) as f64 * 10.0));
+    }
+
+    let mut driver_cells = String::new();
+    for col in 11..=19 {
+        driver_cells.push_str(&value_cell(34, col, (col - 10) as f64 / 10.0));
+    }
+
+    let sheet_data = format!(
+        r#"<sheetData>
+  <row r="14">
+    {formula_cells}
+  </row>
+  <row r="35">
+    {driver_cells}
+  </row>
+</sheetData>"#,
+    );
+
+    let sheet = format!(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <dimension ref="A1:T35"/>
+  {sheet_data}
+</worksheet>"#
+    );
+
+    let mut zip = ZipWriter::new();
+    zip.add_file(
+        "[Content_Types].xml",
+        br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+  <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+</Types>"#
+            .to_vec(),
+    )
+    .add_file(
+        "_rels/.rels",
+        br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+</Relationships>"#
+            .to_vec(),
+    )
+    .add_file(
+        "xl/workbook.xml",
+        br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <sheets><sheet name="Sheet1" sheetId="1" r:id="rId1"/></sheets>
+</workbook>"#
+            .to_vec(),
+    )
+    .add_file(
+        "xl/_rels/workbook.xml.rels",
+        br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+</Relationships>"#
+            .to_vec(),
+    )
+    .add_file("xl/worksheets/sheet1.xml", sheet.into_bytes());
+
+    zip.finish()
+        .expect("same-row shared formula fixture should be writable")
+}
+
+fn same_row_formula_delete_fixture_xlsx() -> Vec<u8> {
+    let mut formula_cells = String::new();
+    formula_cells.push_str(&value_cell(13, 10, 100.0));
+    formula_cells.push_str(&formula_cell(13, 11, "K14*(1+L35)", 110.0));
+    formula_cells.push_str(&formula_cell(13, 12, "L14*(1+M35)", 120.0));
+
+    let mut driver_cells = String::new();
+    driver_cells.push_str(&value_cell(34, 11, 0.10));
+    driver_cells.push_str(&value_cell(34, 12, 0.20));
+
+    let sheet_data = format!(
+        r#"<sheetData>
+  <row r="14">
+    {formula_cells}
+  </row>
+  <row r="35">
+    {driver_cells}
+  </row>
+</sheetData>"#,
+    );
+
+    let sheet = format!(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <dimension ref="A1:M35"/>
+  {sheet_data}
+</worksheet>"#
+    );
+
+    let mut zip = ZipWriter::new();
+    zip.add_file(
+        "[Content_Types].xml",
+        br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+  <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+</Types>"#
+            .to_vec(),
+    )
+    .add_file(
+        "_rels/.rels",
+        br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+</Relationships>"#
+            .to_vec(),
+    )
+    .add_file(
+        "xl/workbook.xml",
+        br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <sheets><sheet name="Sheet1" sheetId="1" r:id="rId1"/></sheets>
+</workbook>"#
+            .to_vec(),
+    )
+    .add_file(
+        "xl/_rels/workbook.xml.rels",
+        br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+</Relationships>"#
+            .to_vec(),
+    )
+    .add_file("xl/worksheets/sheet1.xml", sheet.into_bytes());
+
+    zip.finish()
+        .expect("same-row formula fixture should be writable")
+}
+
 fn import_deferred() -> (YrsComputeEngine, SheetId) {
     let bytes = shared_formula_delete_fixture_xlsx();
     let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
@@ -184,6 +336,46 @@ fn import_deferred_then_complete() -> (YrsComputeEngine, SheetId) {
     engine
         .complete_deferred_hydration()
         .expect("full deferred hydration should succeed");
+    (engine, sheet_id)
+}
+
+fn import_same_row_shared_deferred() -> (YrsComputeEngine, SheetId) {
+    let bytes = same_row_shared_formula_delete_fixture_xlsx();
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    engine
+        .import_from_xlsx_bytes_deferred(&bytes)
+        .expect("deferred XLSX import should succeed");
+    let sheet_id = SheetId::from_uuid_str(
+        engine
+            .get_all_sheet_ids()
+            .first()
+            .expect("imported workbook should have a sheet"),
+    )
+    .expect("sheet id should parse");
+    (engine, sheet_id)
+}
+
+fn import_same_row_shared_deferred_then_complete() -> (YrsComputeEngine, SheetId) {
+    let (mut engine, sheet_id) = import_same_row_shared_deferred();
+    engine
+        .complete_deferred_hydration()
+        .expect("full deferred hydration should succeed");
+    (engine, sheet_id)
+}
+
+fn import_same_row_formula_deferred() -> (YrsComputeEngine, SheetId) {
+    let bytes = same_row_formula_delete_fixture_xlsx();
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    engine
+        .import_from_xlsx_bytes_deferred(&bytes)
+        .expect("deferred XLSX import should succeed");
+    let sheet_id = SheetId::from_uuid_str(
+        engine
+            .get_all_sheet_ids()
+            .first()
+            .expect("imported workbook should have a sheet"),
+    )
+    .expect("sheet id should parse");
     (engine, sheet_id)
 }
 
@@ -269,6 +461,130 @@ fn delete_column_completes_deferred_hydration_before_invalidating_shared_formula
     for row in [9, 19, 99, 195] {
         assert_direct_ref_error(&engine, &sheet_id, row, 4);
     }
+}
+
+#[test]
+fn delete_column_retargets_shifted_imported_same_row_shared_formula() {
+    let (mut engine, sheet_id) = import_same_row_shared_deferred_then_complete();
+
+    engine
+        .structure_change(
+            &sheet_id,
+            &StructureChange::DeleteCols {
+                at: 11,
+                count: 1,
+                deleted_cell_ids: vec![],
+            },
+        )
+        .expect("delete column should succeed");
+
+    let cell_id = CellId::from_uuid_str(
+        &engine
+            .get_cell_id_at(&sheet_id, 13, 11)
+            .expect("shifted formula cell should stay materialized"),
+    )
+    .expect("cell id should parse");
+    assert_eq!(
+        engine.get_formula(&cell_id).as_deref(),
+        Some("=K14*(1+L35)")
+    );
+    assert_eq!(
+        engine.get_cell_value(&sheet_id, 13, 11),
+        CellValue::Number(value_types::FiniteF64::must(120.0))
+    );
+}
+
+#[test]
+fn delete_columns_retarget_shifted_imported_same_row_shared_formula() {
+    let (mut engine, sheet_id) = import_same_row_shared_deferred_then_complete();
+
+    engine
+        .structure_change(
+            &sheet_id,
+            &StructureChange::DeleteCols {
+                at: 11,
+                count: 8,
+                deleted_cell_ids: vec![],
+            },
+        )
+        .expect("delete columns should succeed");
+
+    let cell_id = CellId::from_uuid_str(
+        &engine
+            .get_cell_id_at(&sheet_id, 13, 11)
+            .expect("shifted formula cell should stay materialized"),
+    )
+    .expect("cell id should parse");
+    assert_eq!(
+        engine.get_formula(&cell_id).as_deref(),
+        Some("=K14*(1+L35)")
+    );
+    assert_eq!(
+        engine.get_cell_value(&sheet_id, 13, 11),
+        CellValue::Number(value_types::FiniteF64::must(190.0))
+    );
+}
+
+#[test]
+fn delete_columns_retarget_shifted_deferred_same_row_shared_formula() {
+    let (mut engine, sheet_id) = import_same_row_shared_deferred();
+
+    engine
+        .structure_change(
+            &sheet_id,
+            &StructureChange::DeleteCols {
+                at: 11,
+                count: 8,
+                deleted_cell_ids: vec![],
+            },
+        )
+        .expect("delete columns should complete hydration and succeed");
+
+    let cell_id = CellId::from_uuid_str(
+        &engine
+            .get_cell_id_at(&sheet_id, 13, 11)
+            .expect("shifted formula cell should stay materialized"),
+    )
+    .expect("cell id should parse");
+    assert_eq!(
+        engine.get_formula(&cell_id).as_deref(),
+        Some("=K14*(1+L35)")
+    );
+    assert_eq!(
+        engine.get_cell_value(&sheet_id, 13, 11),
+        CellValue::Number(value_types::FiniteF64::must(190.0))
+    );
+}
+
+#[test]
+fn delete_column_retargets_shifted_imported_same_row_formula() {
+    let (mut engine, sheet_id) = import_same_row_formula_deferred();
+
+    engine
+        .structure_change(
+            &sheet_id,
+            &StructureChange::DeleteCols {
+                at: 11,
+                count: 1,
+                deleted_cell_ids: vec![],
+            },
+        )
+        .expect("delete column should complete hydration and succeed");
+
+    let cell_id = CellId::from_uuid_str(
+        &engine
+            .get_cell_id_at(&sheet_id, 13, 11)
+            .expect("shifted formula cell should stay materialized"),
+    )
+    .expect("cell id should parse");
+    assert_eq!(
+        engine.get_formula(&cell_id).as_deref(),
+        Some("=K14*(1+L35)")
+    );
+    assert_eq!(
+        engine.get_cell_value(&sheet_id, 13, 11),
+        CellValue::Number(value_types::FiniteF64::must(120.0))
+    );
 }
 
 #[test]

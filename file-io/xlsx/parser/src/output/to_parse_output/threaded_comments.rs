@@ -76,7 +76,8 @@ pub(super) fn merge_threaded_comments(
                 .as_deref()
                 .and_then(|id| tc_by_id.get(id).copied())
             {
-                comment.thread_id = Some(tc.id.clone());
+                comment.id = tc.id.clone();
+                comment.thread_id = Some(thread_root_id(tc, &tc_by_id));
                 comment.person_id = Some(tc.person_id.clone());
                 comment.parent_id = tc.parent_id.clone();
                 comment.timestamp = tc.created.clone();
@@ -119,7 +120,16 @@ pub(super) fn merge_threaded_comments(
         let existing_ids: HashSet<String> = sheet_data
             .comments
             .iter()
-            .filter_map(|c| c.thread_id.clone())
+            .filter(|c| {
+                c.comment_type == domain_types::domain::comment::CommentType::ThreadedComment
+            })
+            .filter_map(|c| {
+                if c.id.is_empty() {
+                    c.thread_id.clone()
+                } else {
+                    Some(c.id.clone())
+                }
+            })
             .collect();
 
         let tc_order: HashMap<&str, usize> = threaded
@@ -164,14 +174,14 @@ pub(super) fn merge_threaded_comments(
             };
 
             let comment = Comment {
-                id: String::new(),
+                id: tc.id.clone(),
                 cell_ref: tc.cell_ref.clone(),
                 author,
                 author_id: None,
                 author_email: None,
                 content: Some(tc.text.clone()),
                 runs: Vec::new(),
-                thread_id: Some(tc.id.clone()),
+                thread_id: Some(thread_root_id(tc, &tc_by_id)),
                 parent_id: tc.parent_id.clone(),
                 person_id: Some(tc.person_id.clone()),
                 resolved: Some(tc.done),
@@ -202,10 +212,8 @@ fn insert_threaded_comment_in_original_order(
     comment: Comment,
     tc_order: &HashMap<&str, usize>,
 ) {
-    let Some(new_order) = comment
-        .thread_id
-        .as_deref()
-        .and_then(|tid| tc_order.get(tid).copied())
+    let Some(new_order) =
+        threaded_comment_order_key(&comment).and_then(|id| tc_order.get(id).copied())
     else {
         comments.push(comment);
         return;
@@ -215,10 +223,8 @@ fn insert_threaded_comment_in_original_order(
     let mut insert_before: Option<usize> = None;
 
     for (idx, existing) in comments.iter().enumerate() {
-        let Some(existing_order) = existing
-            .thread_id
-            .as_deref()
-            .and_then(|tid| tc_order.get(tid).copied())
+        let Some(existing_order) =
+            threaded_comment_order_key(existing).and_then(|id| tc_order.get(id).copied())
         else {
             continue;
         };
@@ -236,6 +242,32 @@ fn insert_threaded_comment_in_original_order(
         .or(insert_before)
         .unwrap_or(comments.len());
     comments.insert(insert_idx, comment);
+}
+
+fn threaded_comment_order_key(comment: &Comment) -> Option<&str> {
+    if !comment.id.is_empty() {
+        Some(comment.id.as_str())
+    } else {
+        comment.thread_id.as_deref()
+    }
+}
+
+fn thread_root_id(
+    comment: &crate::domain::comments::read::ThreadedComment,
+    by_id: &HashMap<&str, &crate::domain::comments::read::ThreadedComment>,
+) -> String {
+    let mut current = comment;
+    let mut seen = HashSet::new();
+    while let Some(parent_id) = current.parent_id.as_deref() {
+        if !seen.insert(current.id.as_str()) {
+            break;
+        }
+        let Some(parent) = by_id.get(parent_id).copied() else {
+            break;
+        };
+        current = parent;
+    }
+    current.id.clone()
 }
 
 pub(super) fn threaded_candidate_ids(comment: &Comment) -> impl Iterator<Item = &str> {

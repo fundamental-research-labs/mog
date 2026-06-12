@@ -6,15 +6,120 @@ use crate::storage::engine::stores::EngineStores;
 use crate::storage::sheet::comments;
 use cell_types::{CellId, SheetId};
 use compute_document::hex::id_to_hex;
+use compute_document::schema::{
+    KEY_THREADED_COMMENT_PERSON_ORDER, KEY_THREADED_COMMENT_PERSONS,
+    KEY_THREADED_COMMENT_PERSONS_PART_PRESENT,
+};
+use compute_document::undo::ORIGIN_USER_EDIT;
 use domain_types::domain::comment::{
-    AddCommentOptions, Comment, CommentMention, CommentType, RichTextRun,
+    AddCommentOptions, Comment, CommentMention, CommentType, PersonInfo, RichTextRun,
 };
 use value_types::ComputeError;
+use yrs::{Any, Map, Origin, Out, Transact};
 
 /// Result type for comment deletion: `(MutationResult, Option<(row, col)>, still_has_comments)`.
 type DeleteCommentResult = Result<(MutationResult, Option<(u32, u32)>, bool), ComputeError>;
 
 // -------------------------------------------------------------------
+
+fn threaded_comment_timestamp() -> String {
+    let now = chrono::Utc::now();
+    now.to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
+}
+
+fn read_person_order(value: Option<Out>) -> Vec<String> {
+    match value {
+        Some(Out::Any(Any::String(json))) => {
+            serde_json::from_str::<Vec<String>>(&json).unwrap_or_default()
+        }
+        _ => Vec::new(),
+    }
+}
+
+fn ensure_threaded_comment_person(
+    stores: &EngineStores,
+    author: &str,
+    author_id: Option<&str>,
+) -> String {
+    {
+        let txn = stores.storage.doc().transact();
+        let workbook = stores.storage.workbook_map();
+        if let Some(Out::YMap(persons_map)) = workbook.get(&txn, KEY_THREADED_COMMENT_PERSONS) {
+            for (_, value) in persons_map.iter(&txn) {
+                let Out::Any(Any::String(json)) = value else {
+                    continue;
+                };
+                let Ok(person) = serde_json::from_str::<PersonInfo>(&json) else {
+                    continue;
+                };
+                if person.display_name == author && person.user_id.as_deref() == author_id {
+                    return person.id;
+                }
+            }
+        }
+    }
+
+    let person_id = stores.next_id_uuid_string();
+    let person = PersonInfo {
+        id: person_id.clone(),
+        display_name: author.to_string(),
+        user_id: author_id.map(ToOwned::to_owned),
+        provider_id: None,
+    };
+
+    let mut txn = stores
+        .storage
+        .doc()
+        .transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
+    let workbook = stores.storage.workbook_map();
+    workbook.insert(
+        &mut txn,
+        KEY_THREADED_COMMENT_PERSONS_PART_PRESENT,
+        Any::Bool(true),
+    );
+    let persons_map =
+        crate::storage::ensure_workbook_child_map(workbook, &mut txn, KEY_THREADED_COMMENT_PERSONS);
+    if let Ok(json) = serde_json::to_string(&person) {
+        persons_map.insert(&mut txn, &*person.id, Any::String(json.into()));
+    }
+
+    let mut order = read_person_order(workbook.get(&txn, KEY_THREADED_COMMENT_PERSON_ORDER));
+    if !order.iter().any(|id| id == &person.id) {
+        order.push(person.id.clone());
+    }
+    if let Ok(json) = serde_json::to_string(&order) {
+        workbook.insert(
+            &mut txn,
+            KEY_THREADED_COMMENT_PERSON_ORDER,
+            Any::String(json.into()),
+        );
+    }
+
+    person_id
+}
+
+fn add_comment_options(
+    stores: &EngineStores,
+    text: &str,
+    author: &str,
+    author_id: Option<&str>,
+    parent_id: Option<&str>,
+    comment_type: CommentType,
+) -> AddCommentOptions {
+    let is_threaded = comment_type == CommentType::ThreadedComment;
+    let person_id = is_threaded.then(|| ensure_threaded_comment_person(stores, author, author_id));
+    AddCommentOptions {
+        author_id: author_id.map(ToOwned::to_owned),
+        person_id,
+        parent_id: parent_id.map(ToOwned::to_owned),
+        content: is_threaded.then(|| text.to_string()),
+        resolved: is_threaded.then_some(false),
+        timestamp: is_threaded.then(threaded_comment_timestamp),
+        content_type: None,
+        mentions: None,
+        comment_type,
+    }
+}
 
 /// Core logic for `add_comment`. Returns `(MutationResult, row, col)` so the
 /// bridge can call `produce_comment_viewport_patches` with the position.
@@ -33,13 +138,7 @@ pub(in crate::storage::engine) fn add_comment(
         text: text.to_string(),
         ..Default::default()
     }];
-    let options = AddCommentOptions {
-        author_id: author_id.map(|s| s.to_string()),
-        parent_id: parent_id.map(|s| s.to_string()),
-        content_type: None,
-        mentions: None,
-        comment_type,
-    };
+    let options = add_comment_options(stores, text, author, author_id, parent_id, comment_type);
     let comment = comments::add_comment(
         stores.storage.doc(),
         stores.storage.sheets(),
@@ -217,13 +316,7 @@ pub(in crate::storage::engine) fn add_comment_by_position(
         text: text.to_string(),
         ..Default::default()
     }];
-    let options = AddCommentOptions {
-        author_id: author_id.map(|s| s.to_string()),
-        parent_id: parent_id.map(|s| s.to_string()),
-        content_type: None,
-        mentions: None,
-        comment_type,
-    };
+    let options = add_comment_options(stores, text, author, author_id, parent_id, comment_type);
     let comment = comments::add_comment(
         stores.storage.doc(),
         stores.storage.sheets(),
@@ -316,6 +409,21 @@ pub(in crate::storage::engine) fn convert_note_to_thread(
     .ok_or_else(|| ComputeError::Eval {
         message: format!("comment not found: {}", comment_id),
     })?;
+    let person_id =
+        ensure_threaded_comment_person(stores, &updated.author, updated.author_id.as_deref());
+    let timestamp = updated
+        .timestamp
+        .clone()
+        .unwrap_or_else(threaded_comment_timestamp);
+    let updated = comments::complete_thread_metadata(
+        stores.storage.doc(),
+        stores.storage.sheets(),
+        sheet_id,
+        comment_id,
+        &person_id,
+        &timestamp,
+    )
+    .unwrap_or(updated);
 
     // Resolve the cell position so we can emit a comment-change for viewport
     // refresh (geometry changed; the popover needs to re-render in thread mode).

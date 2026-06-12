@@ -608,3 +608,37 @@ fn test_dispatch_threaded_writes_to_both() {
     let threaded_str = String::from_utf8(threaded).expect("utf8");
     assert!(threaded_str.contains("thread-001"));
 }
+
+#[test]
+fn test_dispatch_threaded_reply_uses_own_comment_id() {
+    let root = domain_types::Comment {
+        id: "thread-root".to_string(),
+        cell_ref: "B2".to_string(),
+        author: "Alice".to_string(),
+        content: Some("Root".to_string()),
+        comment_type: CommentType::ThreadedComment,
+        thread_id: Some("thread-root".to_string()),
+        person_id: Some("person-alice".to_string()),
+        parent_id: None,
+        ..Default::default()
+    };
+    let reply = domain_types::Comment {
+        id: "reply-001".to_string(),
+        cell_ref: "B2".to_string(),
+        author: "Bob".to_string(),
+        content: Some("Reply".to_string()),
+        comment_type: CommentType::ThreadedComment,
+        thread_id: Some("thread-root".to_string()),
+        person_id: Some("person-bob".to_string()),
+        parent_id: Some("thread-root".to_string()),
+        ..Default::default()
+    };
+
+    let threaded = threaded_comments_xml_from_domain(&[root, reply], None)
+        .expect("threaded comments must produce threaded XML");
+    let threaded_str = String::from_utf8(threaded).expect("utf8");
+
+    assert!(threaded_str.contains(r#"id="thread-root""#));
+    assert!(threaded_str.contains(r#"id="reply-001""#));
+    assert!(threaded_str.contains(r#"parentId="thread-root""#));
+}

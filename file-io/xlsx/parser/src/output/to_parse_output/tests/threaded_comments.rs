@@ -133,6 +133,7 @@ fn relationship_backed_threaded_comment_upgrades_legacy_sentinel_and_adds_reply(
 
     let root = &sheets[0].comments[0];
     assert_eq!(root.comment_type, CommentType::ThreadedComment);
+    assert_eq!(root.id, "{THREAD-1}");
     assert_eq!(root.thread_id.as_deref(), Some("{THREAD-1}"));
     assert_eq!(root.xr_uid, None);
     assert_eq!(root.author, "Thread Author");
@@ -151,7 +152,8 @@ fn relationship_backed_threaded_comment_upgrades_legacy_sentinel_and_adds_reply(
 
     let reply = &sheets[0].comments[1];
     assert_eq!(reply.comment_type, CommentType::ThreadedComment);
-    assert_eq!(reply.thread_id.as_deref(), Some("{REPLY-1}"));
+    assert_eq!(reply.id, "{REPLY-1}");
+    assert_eq!(reply.thread_id.as_deref(), Some("{THREAD-1}"));
     assert_eq!(reply.parent_id.as_deref(), Some("{THREAD-1}"));
     assert_eq!(reply.author, "Reply Author");
     assert_eq!(reply.content.as_deref(), Some("reply text"));

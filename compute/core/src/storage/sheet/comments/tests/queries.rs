@@ -25,9 +25,10 @@ fn test_add_comment_and_retrieve() {
     assert!(comment.modified_at.is_none());
     assert_eq!(comment.runs.len(), 1);
     assert_eq!(comment.runs[0].text, "Hello world");
+    assert_eq!(comment.content.as_deref(), Some("Hello world"));
     assert_eq!(comment.thread_id, Some(comment.id.clone()));
     assert!(comment.parent_id.is_none());
-    assert!(comment.resolved.is_none());
+    assert_eq!(comment.resolved, Some(false));
     let fetched = get_comment(doc, sheets, &sheet_id, &comment.id);
     assert!(fetched.is_some());
     assert_eq!(fetched.unwrap(), comment);

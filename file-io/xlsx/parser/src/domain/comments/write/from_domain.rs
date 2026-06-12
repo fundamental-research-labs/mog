@@ -220,8 +220,16 @@ pub fn threaded_comments_xml_from_domain(
         let thread_id = comment
             .thread_id
             .as_deref()
+            .filter(|id| !id.is_empty())
             .unwrap_or(comment.id.as_str())
             .to_string();
+        let comment_id = if comment.parent_id.is_none() {
+            thread_id.clone()
+        } else if comment.id.is_empty() {
+            thread_id.clone()
+        } else {
+            comment.id.clone()
+        };
         let person_id = comment.person_id.clone().unwrap_or_default();
         let timestamp = comment.timestamp.clone().unwrap_or_default();
 
@@ -237,7 +245,7 @@ pub fn threaded_comments_xml_from_domain(
             .collect();
 
         tw.add_comment(ThreadedComment {
-            id: thread_id.clone(),
+            id: comment_id,
             cell_ref: comment.cell_ref.clone(),
             author_id: person_id,
             text: comment.content.as_deref().unwrap_or("").to_string(),

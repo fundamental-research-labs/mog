@@ -12,6 +12,10 @@ use value_types::ComputeError;
 use super::yrs_io::{get_comments_map, read_all_comments};
 use crate::storage::infra::yrs_helpers::now_millis;
 
+fn runs_plain_text(runs: &[RichTextRun]) -> String {
+    runs.iter().map(|run| run.text.as_str()).collect()
+}
+
 /// Add a new comment to a cell.
 ///
 /// `options.comment_type` is the single discriminator that drives both
@@ -63,6 +67,19 @@ pub fn add_comment(
             (Some(tid), options.parent_id.clone())
         }
     };
+    let content = match options.comment_type {
+        CommentType::ThreadedComment => Some(
+            options
+                .content
+                .clone()
+                .unwrap_or_else(|| runs_plain_text(&runs)),
+        ),
+        CommentType::Note => options.content.clone(),
+    };
+    let resolved = match options.comment_type {
+        CommentType::ThreadedComment => Some(options.resolved.unwrap_or(false)),
+        CommentType::Note => options.resolved,
+    };
     let comment = Comment {
         id: id.clone(),
         cell_ref: cell_id.to_string(),
@@ -72,12 +89,12 @@ pub fn add_comment(
         created_at: Some(now),
         modified_at: None,
         runs,
-        content: None,
+        content,
         thread_id,
         parent_id,
-        resolved: None,
-        person_id: None,
-        timestamp: None,
+        resolved,
+        person_id: options.person_id.clone(),
+        timestamp: options.timestamp.clone(),
         xr_uid: None,
         shape_id: None,
         ext_lst_xml: None,
@@ -115,12 +132,24 @@ pub fn update_comment(
     comment.runs = runs.clone();
     let now = now_millis();
     comment.modified_at = Some(now);
+    if comment.comment_type == CommentType::ThreadedComment {
+        comment.content = Some(runs_plain_text(&runs));
+    }
     // Update fields in-place on the existing Y.Map.
     if let Ok(json) = serde_json::to_string(&runs) {
         comment_map.insert(
             &mut txn,
             comment_schema::KEY_RUNS,
             Any::String(Arc::from(json)),
+        );
+    }
+    if comment.comment_type == CommentType::ThreadedComment
+        && let Some(ref content) = comment.content
+    {
+        comment_map.insert(
+            &mut txn,
+            comment_schema::KEY_CONTENT,
+            Any::String(Arc::from(content.as_str())),
         );
     }
     comment_map.insert(
@@ -178,6 +207,67 @@ pub fn update_comment_mentions(
         comment_schema::KEY_MODIFIED_AT,
         Any::Number(now as f64),
     );
+    Some(comment)
+}
+
+/// Complete threaded-comment metadata after a note promotion or legacy import repair.
+///
+/// This updates the same domain fields populated by XLSX threaded-comment import:
+/// `content`, `person_id`, `resolved`, and `timestamp`.
+pub fn complete_thread_metadata(
+    doc: &Doc,
+    sheets: &MapRef,
+    sheet_id: &SheetId,
+    comment_id: &str,
+    person_id: &str,
+    timestamp: &str,
+) -> Option<Comment> {
+    let sheet_hex = id_to_hex(sheet_id.as_u128());
+    let mut txn = doc.transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
+    let comments_map = get_comments_map(&txn, sheets, &sheet_hex)?;
+    let comment_map = match comments_map.get(&txn, comment_id)? {
+        Out::YMap(m) => m,
+        _ => return None,
+    };
+    let mut comment = comment_schema::from_yrs_map(&comment_map, &txn)?;
+    if comment.comment_type != CommentType::ThreadedComment {
+        return Some(comment);
+    }
+
+    let content = comment
+        .content
+        .clone()
+        .unwrap_or_else(|| runs_plain_text(&comment.runs));
+    comment.content = Some(content.clone());
+    comment.person_id = Some(person_id.to_string());
+    if comment.resolved.is_none() {
+        comment.resolved = Some(false);
+    }
+    if comment.timestamp.is_none() {
+        comment.timestamp = Some(timestamp.to_string());
+    }
+
+    comment_map.insert(
+        &mut txn,
+        comment_schema::KEY_CONTENT,
+        Any::String(Arc::from(content.as_str())),
+    );
+    comment_map.insert(
+        &mut txn,
+        comment_schema::KEY_PERSON_ID,
+        Any::String(Arc::from(person_id)),
+    );
+    if let Some(resolved) = comment.resolved {
+        comment_map.insert(&mut txn, comment_schema::KEY_RESOLVED, Any::Bool(resolved));
+    }
+    if let Some(ref timestamp) = comment.timestamp {
+        comment_map.insert(
+            &mut txn,
+            comment_schema::KEY_TIMESTAMP,
+            Any::String(Arc::from(timestamp.as_str())),
+        );
+    }
+
     Some(comment)
 }
 

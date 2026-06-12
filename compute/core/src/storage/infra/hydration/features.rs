@@ -24,6 +24,9 @@ use crate::storage::sheet::schemas;
 use domain_types::domain::hyperlink::HyperlinkTargetKind;
 use formula_types::CellRef;
 
+mod comments;
+pub(super) use comments::hydrate_comments;
+
 // ===========================================================================
 // Cell hydration
 // ===========================================================================
@@ -231,97 +234,6 @@ pub(super) fn hydrate_merges(
         let json =
             serde_json::to_string(&stored).expect("StoredMerge serialization should not fail");
         merges_map.insert(txn, &*tl_hex, Any::String(Arc::from(json.as_str())));
-    }
-}
-
-// ===========================================================================
-// Comment hydration (using yrs_schema::comment)
-// ===========================================================================
-
-/// Hydrate comments using structured Y.Map entries via `yrs_schema::comment`.
-///
-/// Each comment is stored as a Y.Map keyed by a generated comment ID.
-/// All fields are written as native Yrs keys (not a JSON blob).
-///
-/// Clones each `Comment`, assigns a hydration ID (`comment-0`, `comment-1`, …),
-/// resolves `cell_ref` from A1 notation to a CellId hex string via the in-memory
-/// `pos_map`, and ensures `resolved` is always `Some`.
-///
-/// When a comment has a `person_id` that matches a `PersonInfo` entry, attempts
-/// to extract an email address from the `PersonInfo.user_id` field (best-effort).
-pub(super) fn hydrate_comments(
-    txn: &mut yrs::TransactionMut,
-    comments_map: &MapRef,
-    pos_map: &HashMap<String, String>,
-    comments: &[domain_types::domain::comment::Comment],
-    persons: &[domain_types::domain::comment::PersonInfo],
-) {
-    // Build a lookup from person GUID → PersonInfo for email extraction.
-    let person_map: HashMap<&str, &domain_types::domain::comment::PersonInfo> =
-        persons.iter().map(|p| (p.id.as_str(), p)).collect();
-
-    for (i, comment) in comments.iter().enumerate() {
-        let comment_id = format!("comment-{}", i);
-        let mut c = comment.clone();
-        c.id = comment_id.clone();
-        // Resolve A1 cell_ref to a stable CellId hex from the import identity
-        // map. Empty comment-only targets are preallocated as identity-only
-        // gridIndex entries by sheet hydration; this path must not materialize
-        // placeholder Null cells.
-        c.cell_ref =
-            if let Some((row, col)) = crate::import::phantom::parse_cell_ref(&comment.cell_ref) {
-                let pos_key = format!("{}:{}", row, col);
-                match pos_map.get(&pos_key) {
-                    Some(cell_hex) => cell_hex.clone(),
-                    None => {
-                        tracing::warn!(
-                            row,
-                            col,
-                            original_ref = %comment.cell_ref,
-                            "comment anchor missing preallocated cell identity during hydration"
-                        );
-                        comment.cell_ref.clone()
-                    }
-                }
-            } else {
-                comment.cell_ref.clone() // not A1 — already a hex ID or unknown format
-            };
-        c.resolved = Some(comment.resolved.unwrap_or(false));
-
-        // Best-effort email extraction from PersonInfo.user_id.
-        if c.author_email.is_none()
-            && let Some(ref pid) = c.person_id
-            && let Some(person) = person_map.get(pid.as_str())
-            && let Some(ref user_id) = person.user_id
-            && let Some(email) = extract_email_from_user_id(user_id)
-        {
-            c.author_email = Some(email);
-        }
-
-        let entries = yrs_schema::comment::to_yrs_prelim(&c);
-        let comment_prelim: MapPrelim = entries.into_iter().collect();
-        comments_map.insert(txn, &*comment_id, comment_prelim);
-    }
-}
-
-/// Extract an email address from an XLSX PersonInfo `user_id` string.
-///
-/// Common formats:
-/// - `"S::user@org.onmicrosoft.com::8f2e..."` → `"user@org.onmicrosoft.com"`
-/// - `"user@example.com"` → `"user@example.com"`
-///
-/// Returns `None` if no '@' is found in the string.
-fn extract_email_from_user_id(user_id: &str) -> Option<String> {
-    for segment in user_id.split("::") {
-        let trimmed = segment.trim();
-        if trimmed.contains('@') && !trimmed.is_empty() {
-            return Some(trimmed.to_string());
-        }
-    }
-    if user_id.contains('@') {
-        Some(user_id.trim().to_string())
-    } else {
-        None
     }
 }
 

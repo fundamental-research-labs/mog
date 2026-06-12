@@ -250,8 +250,16 @@ pub struct RichTextRun {
 pub struct AddCommentOptions {
     /// Unique identifier of the comment author.
     pub author_id: Option<String>,
+    /// Threaded-comment person GUID stored in workbook-level `PersonInfo`.
+    pub person_id: Option<String>,
     /// Parent comment ID when replying to an existing comment.
     pub parent_id: Option<String>,
+    /// Plain text content for modern threaded comments.
+    pub content: Option<String>,
+    /// Thread resolved state. Threaded comments default to unresolved at callers.
+    pub resolved: Option<bool>,
+    /// ISO 8601 timestamp for modern threaded comments.
+    pub timestamp: Option<String>,
     /// Content type: plain text or mention-containing.
     pub content_type: Option<CommentContentType>,
     /// Mentions embedded within the comment text.

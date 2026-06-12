@@ -9,7 +9,7 @@ pub(super) fn data_table_master_formula_map(
     regions
         .iter()
         .map(|region| {
-            let flags = region.ooxml_flags.clone().unwrap_or_default();
+            let flags = data_table_ooxml_flags_for_export(region);
             let cell_formula = CellFormula {
                 t: CellFormulaType::DataTable,
                 r#ref: Some(format!(
@@ -43,6 +43,16 @@ pub(super) fn data_table_master_formula_map(
             ((region.start_row, region.start_col), cell_formula)
         })
         .collect()
+}
+
+fn data_table_ooxml_flags_for_export(
+    region: &DataTableRegion,
+) -> domain_types::DataTableOoxmlFlags {
+    let mut flags = region.ooxml_flags.clone().unwrap_or_default();
+    if region.row_input_ref.is_some() && region.col_input_ref.is_some() {
+        flags.dt2d = true;
+    }
+    flags
 }
 
 pub(super) fn data_table_formula_text(cell_formula: &CellFormula) -> String {

@@ -70,6 +70,96 @@ fn data_table_regions_drive_ooxml_formula_export_with_flags() {
 }
 
 #[test]
+fn two_variable_data_table_region_without_import_sidecar_exports_dt2d() {
+    let mut output = make_parse_output(vec![SheetData {
+        name: "DataTable".to_string(),
+        cells: vec![make_formula_cell(
+            2,
+            2,
+            "TABLE($A$2,$A$1)",
+            DomainValue::Number(FiniteF64::new(300.0).unwrap()),
+        )],
+        ..Default::default()
+    }]);
+    output.data_table_regions.push(DataTableRegion {
+        sheet_index: 0,
+        start_row: 2,
+        start_col: 2,
+        end_row: 3,
+        end_col: 3,
+        row_input_ref: Some(CellRef::Positional {
+            sheet: cell_types::SheetId::from_raw(0),
+            row: 1,
+            col: 0,
+        }),
+        col_input_ref: Some(CellRef::Positional {
+            sheet: cell_types::SheetId::from_raw(0),
+            row: 0,
+            col: 0,
+        }),
+        ooxml_flags: None,
+    });
+
+    let sheet_xml = sheet_xml_from_output(&output);
+
+    assert!(sheet_xml.contains("<f t=\"dataTable\""));
+    assert!(sheet_xml.contains("ref=\"C3:D4\""));
+    assert!(sheet_xml.contains("r1=\"$A$1\""));
+    assert!(sheet_xml.contains("r2=\"$A$2\""));
+    assert!(sheet_xml.contains("dt2D=\"1\""));
+}
+
+#[test]
+fn one_variable_data_table_regions_without_import_sidecar_do_not_export_dt2d() {
+    for (row_input_ref, col_input_ref, formula) in [
+        (
+            Some(CellRef::Positional {
+                sheet: cell_types::SheetId::from_raw(0),
+                row: 1,
+                col: 0,
+            }),
+            None,
+            "TABLE($A$2,)",
+        ),
+        (
+            None,
+            Some(CellRef::Positional {
+                sheet: cell_types::SheetId::from_raw(0),
+                row: 0,
+                col: 0,
+            }),
+            "TABLE(,$A$1)",
+        ),
+    ] {
+        let mut output = make_parse_output(vec![SheetData {
+            name: "DataTable".to_string(),
+            cells: vec![make_formula_cell(
+                2,
+                2,
+                formula,
+                DomainValue::Number(FiniteF64::new(300.0).unwrap()),
+            )],
+            ..Default::default()
+        }]);
+        output.data_table_regions.push(DataTableRegion {
+            sheet_index: 0,
+            start_row: 2,
+            start_col: 2,
+            end_row: 3,
+            end_col: 2,
+            row_input_ref,
+            col_input_ref,
+            ooxml_flags: None,
+        });
+
+        let sheet_xml = sheet_xml_from_output(&output);
+
+        assert!(sheet_xml.contains("<f t=\"dataTable\""));
+        assert!(!sheet_xml.contains("dt2D=\"1\""));
+    }
+}
+
+#[test]
 fn data_table_regions_preserve_authored_r1_r2_spelling_when_present() {
     let mut output = make_parse_output(vec![SheetData {
         name: "DataTable".to_string(),

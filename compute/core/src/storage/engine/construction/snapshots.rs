@@ -562,9 +562,10 @@ pub(in crate::storage::engine) fn read_tables_from_yrs(
     // contain only tableId and cannot construct a TableDef.
     let binding_entries = compute_document::range::all_range_bindings_wb(workbook, &txn);
     for (range_id, json) in &binding_entries {
-        if crate::storage::engine::services::tables::table_id_from_range_id(range_id).is_some()
-            && compute_document::range::TableRangeBinding::from_json(json).is_none()
-            && let Some(ct) = domain_types::yrs_schema::table::from_binding_json_standalone(json)
+        if let Some(ct) =
+            crate::storage::engine::services::tables::legacy_full_table_from_range_binding_entry(
+                range_id, json,
+            )
             && !seen_names.contains(&ct.name)
             && !seen_ids.contains(&ct.id)
             && let Ok(sheet) = SheetId::from_uuid_str(&ct.sheet_id)

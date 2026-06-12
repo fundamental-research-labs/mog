@@ -132,8 +132,8 @@ pub(in crate::storage::engine) fn persist_table_to_yrs_with_table_filter(
 
 /// Remove a table from the Yrs CRDT document.
 ///
-/// Removes both the `workbook.tables[<name>]` catalog entry and the
-/// `rangeBindings[table:<name>]` runtime binding.
+/// Removes the table catalog entry and any compact or legacy workbook-level
+/// table attachment for the same table.
 pub(in crate::storage::engine) fn remove_table_from_yrs(
     stores: &mut EngineStores,
     table_name: &str,
@@ -239,9 +239,9 @@ pub(in crate::storage::engine) fn persist_table_style_to_yrs(
 
 /// Re-read ALL tables from Yrs and sync them into the mirror.
 ///
-/// Range bindings carry the runtime table identity and extent used by the
-/// mirror. The table catalog is also canonical and is read for imported or
-/// catalog-only documents that do not have range bindings yet.
+/// The id-keyed catalog is the canonical table source. Compact table
+/// attachments are derived markers, and legacy full binding payloads are
+/// compatibility input only when no matching catalog entry exists.
 ///
 /// Called after undo/redo or remote changes so the mirror stays in sync.
 pub(in crate::storage::engine) fn sync_tables_from_yrs(
@@ -287,10 +287,7 @@ pub(in crate::storage::engine) fn sync_tables_from_yrs(
         let binding_entries =
             compute_document::range::all_range_bindings_wb(stores.storage.workbook_map(), &txn);
         for (range_id, json) in &binding_entries {
-            if table_id_from_range_id(range_id).is_some()
-                && compute_document::range::TableRangeBinding::from_json(json).is_none()
-                && let Some(table) =
-                    domain_types::yrs_schema::table::from_binding_json_standalone(json)
+            if let Some(table) = legacy_full_table_from_range_binding_entry(range_id, json)
                 && !names.contains(&table.name)
                 && !ids.contains(&table.id)
             {

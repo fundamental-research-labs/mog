@@ -19,6 +19,7 @@ use crate::storage::cells::structured_ref_updater;
 use crate::storage::engine::stores::EngineStores;
 use crate::storage::sheet::filters;
 
+mod legacy_binding;
 mod mutations;
 mod options;
 mod persistence;
@@ -27,6 +28,7 @@ mod range_ids;
 #[cfg(test)]
 mod tests;
 
+pub(in crate::storage::engine) use legacy_binding::*;
 pub(in crate::storage::engine) use mutations::*;
 pub(in crate::storage::engine) use options::*;
 pub(in crate::storage::engine) use persistence::*;

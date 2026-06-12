@@ -16,12 +16,12 @@ fn parse_table_sheet_id(sheet_id: &str) -> Option<SheetId> {
 }
 
 fn sheet_id_from_table_binding_json(json: &str) -> Option<SheetId> {
-    domain_types::yrs_schema::table::from_binding_json_standalone(json)
+    crate::range::legacy_full_table_from_workbook_binding_json(json)
         .and_then(|table| parse_table_sheet_id(&table.sheet_id))
 }
 
 fn name_from_table_binding_json(json: &str) -> Option<String> {
-    domain_types::yrs_schema::table::from_binding_json_standalone(json).map(|table| table.name)
+    crate::range::legacy_full_table_from_workbook_binding_json(json).map(|table| table.name)
 }
 
 fn string_from_scalar_out(out: &Out) -> Option<String> {
@@ -72,9 +72,7 @@ fn name_from_table_out<T: ReadTxn>(out: &Out, txn: &T) -> Option<String> {
 fn is_legacy_table_binding_out<T: ReadTxn>(out: &Out, _txn: &T) -> bool {
     match out {
         Out::Any(Any::String(json)) => {
-            crate::range::TableRangeBinding::from_json(json.as_ref()).is_none()
-                && domain_types::yrs_schema::table::from_binding_json_standalone(json.as_ref())
-                    .is_some()
+            crate::range::legacy_full_table_from_workbook_binding_json(json.as_ref()).is_some()
         }
         _ => false,
     }

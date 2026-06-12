@@ -27,6 +27,7 @@ use crate::storage::workbook::imported_pivots::{
 
 use super::data_tables::hydrate_data_table_regions_from_parse_output;
 use super::imported_pivot_classification::{ImportedPivotClassification, classify_imported_pivot};
+use super::print_defined_names::hydrate_workbook_print_defined_names;
 use super::sheet::{SheetIdAllocation, hydrate_sheet, hydrate_sheet_with_allocation};
 use super::styles::{ImportedRangeStyle, hydrate_style_palette, hydrate_workbook_stylesheet};
 use super::workbook::{
@@ -185,6 +186,12 @@ impl YrsStorage {
         // every reader already handles `None` gracefully.
 
         // Populate workbook-level data
+        hydrate_workbook_print_defined_names(
+            &self.sheets,
+            &output.named_ranges,
+            &id_map.sheet_ids,
+            &mut txn,
+        );
         hydrate_workbook_named_ranges(
             &self.workbook,
             &output.named_ranges,
@@ -450,6 +457,12 @@ impl YrsStorage {
 
         tracing::info!(target: "deferred_hydration", "hydrate: all sheets done, workbook-level data");
         // Workbook-level data (identical to hydrate_from_parse_output)
+        hydrate_workbook_print_defined_names(
+            &self.sheets,
+            &output.named_ranges,
+            &id_map.sheet_ids,
+            &mut txn,
+        );
         hydrate_workbook_named_ranges(
             &self.workbook,
             &output.named_ranges,

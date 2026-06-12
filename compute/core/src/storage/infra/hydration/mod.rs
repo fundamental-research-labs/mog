@@ -37,6 +37,7 @@ mod form_controls;
 mod helpers;
 mod import;
 mod imported_pivot_classification;
+mod print_defined_names;
 mod sheet;
 mod snapshot;
 mod styles;

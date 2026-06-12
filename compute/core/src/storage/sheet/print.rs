@@ -8,7 +8,9 @@ use yrs::{Any, Doc, Map, MapPrelim, MapRef, Origin, Out, Transact};
 
 use cell_types::SheetId;
 use compute_document::hex::id_to_hex;
-use compute_document::schema::{KEY_RANGE_PAYLOADS, KEY_RANGES};
+use compute_document::schema::{
+    KEY_RANGE_BINDINGS, KEY_RANGE_FORMATS, KEY_RANGE_PAYLOADS, KEY_RANGES,
+};
 use compute_document::undo::ORIGIN_USER_EDIT;
 use domain_types::domain::print::{PageBreakEntry, PageBreaks};
 use domain_types::domain::sheet::{PrintRange, PrintTitles};
@@ -208,13 +210,21 @@ pub(crate) fn set_print_area(
     area: Option<&PrintRange>,
 ) {
     let mut txn = doc.transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
+    set_print_area_in_txn(&mut txn, sheets, sheet_id, area);
+}
 
+pub(crate) fn set_print_area_in_txn(
+    txn: &mut yrs::TransactionMut,
+    sheets: &MapRef,
+    sheet_id: &SheetId,
+    area: Option<&PrintRange>,
+) {
     // Remove all existing PrintArea ranges.
-    remove_all_print_area_ranges(&mut txn, sheets, sheet_id);
+    remove_all_print_area_ranges(txn, sheets, sheet_id);
 
     // Create a new one if area is Some.
     if let Some(range) = area {
-        create_print_area_range(&mut txn, sheets, sheet_id, range);
+        create_print_area_range(txn, sheets, sheet_id, range);
     }
 }
 
@@ -237,6 +247,26 @@ fn get_sheet_sub_map<T: yrs::ReadTxn>(
     match sm.get(txn, key) {
         Some(Out::YMap(m)) => Some(m),
         _ => None,
+    }
+}
+
+fn ensure_sheet_sub_map(
+    txn: &mut yrs::TransactionMut,
+    sheets_root: &MapRef,
+    sheet_id: &SheetId,
+    key: &str,
+) -> Option<MapRef> {
+    let sheet_hex = id_to_hex(sheet_id.as_u128());
+    let sheet_map = match sheets_root.get(txn, &sheet_hex) {
+        Some(Out::YMap(map)) => map,
+        _ => return None,
+    };
+    match sheet_map.get(txn, key) {
+        Some(Out::YMap(map)) => Some(map),
+        _ => {
+            let empty = MapPrelim::from([] as [(&str, Any); 0]);
+            Some(sheet_map.insert(txn, key, empty))
+        }
     }
 }
 
@@ -311,13 +341,15 @@ fn create_print_area_range(
     sheet_id: &SheetId,
     range: &PrintRange,
 ) {
-    let Some(ranges_map) = get_sheet_sub_map(txn, sheets_root, sheet_id, KEY_RANGES) else {
+    let Some(ranges_map) = ensure_sheet_sub_map(txn, sheets_root, sheet_id, KEY_RANGES) else {
         return;
     };
-    let Some(payloads_map) = get_sheet_sub_map(txn, sheets_root, sheet_id, KEY_RANGE_PAYLOADS)
+    let Some(payloads_map) = ensure_sheet_sub_map(txn, sheets_root, sheet_id, KEY_RANGE_PAYLOADS)
     else {
         return;
     };
+    let _ = ensure_sheet_sub_map(txn, sheets_root, sheet_id, KEY_RANGE_FORMATS);
+    let _ = ensure_sheet_sub_map(txn, sheets_root, sheet_id, KEY_RANGE_BINDINGS);
 
     let range_id = cell_types::RangeId::from_raw(uuid::Uuid::new_v4().as_u128());
 
@@ -405,17 +437,22 @@ pub(crate) fn set_print_titles(
     titles: &PrintTitles,
 ) {
     let mut txn = doc.transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
-    if let Some(meta) = get_meta_map(&txn, sheets, sheet_id) {
+    set_print_titles_in_txn(&mut txn, sheets, sheet_id, titles);
+}
+
+pub(crate) fn set_print_titles_in_txn(
+    txn: &mut yrs::TransactionMut,
+    sheets: &MapRef,
+    sheet_id: &SheetId,
+    titles: &PrintTitles,
+) {
+    if let Some(meta) = get_meta_map(txn, sheets, sheet_id) {
         if titles.repeat_rows.is_none() && titles.repeat_cols.is_none() {
-            meta.remove(&mut txn, KEY_PRINT_TITLES);
+            meta.remove(txn, KEY_PRINT_TITLES);
         } else {
             // SAFETY: serializing a struct with #[derive(Serialize)]; no map keys or non-finite floats.
             let json = serde_json::to_string(titles).expect("serialize print titles");
-            meta.insert(
-                &mut txn,
-                KEY_PRINT_TITLES,
-                Any::String(Arc::from(json.as_str())),
-            );
+            meta.insert(txn, KEY_PRINT_TITLES, Any::String(Arc::from(json.as_str())));
         }
     }
 }

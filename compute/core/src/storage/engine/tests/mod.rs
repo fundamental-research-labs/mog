@@ -53,6 +53,7 @@ mod test_workbook_settings;
 mod test_xlsx_export;
 mod test_xlsx_export_form_controls;
 mod test_xlsx_export_imported_pivots;
+mod test_xlsx_export_print;
 mod test_xlsx_export_protection;
 mod test_xlsx_export_tables;
 mod test_xlsx_export_validations;

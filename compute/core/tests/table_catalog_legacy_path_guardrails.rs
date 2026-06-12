@@ -25,6 +25,9 @@ fn table_catalog_legacy_path_guardrails() {
         "from_binding_to_table",
         "table_to_binding_json",
         "TableBinding",
+        "table_range_id",
+        "table_name_from_range_id",
+        "table_id_from_range_id",
     ];
 
     let mut violations = Vec::new();

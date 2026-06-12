@@ -561,10 +561,11 @@ pub(in crate::storage::engine) fn read_tables_from_yrs(
     // Legacy full binding payloads. Compact table attachments intentionally
     // contain only tableId and cannot construct a TableDef.
     let binding_entries = compute_document::range::all_range_bindings_wb(workbook, &txn);
-    for (range_id, json) in &binding_entries {
+    for (attachment_key, json) in &binding_entries {
         if let Some(ct) =
-            crate::storage::engine::services::tables::legacy_full_table_from_range_binding_entry(
-                range_id, json,
+            crate::storage::engine::services::tables::legacy_full_table_from_attachment_entry(
+                attachment_key,
+                json,
             )
             && !seen_names.contains(&ct.name)
             && !seen_ids.contains(&ct.id)

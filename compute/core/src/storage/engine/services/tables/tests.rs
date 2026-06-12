@@ -68,7 +68,7 @@ mod tests {
         let json = compute_document::range::read_range_binding_wb(
             &workbook,
             &txn,
-            &table_range_id(table_id),
+            &table_attachment_key(table_id),
         )?;
         compute_document::range::TableRangeBinding::from_json(&json)
     }
@@ -162,12 +162,12 @@ mod tests {
     }
 
     // ================================================================
-    // Phase 5E tests — Range-backed table bindings
+    // Compact table attachments
     // ================================================================
 
-    /// Creating a table writes a compact table attachment to rangeBindings.
+    /// Creating a table writes a compact table attachment.
     #[test]
-    fn create_table_writes_range_binding() {
+    fn create_table_writes_compact_attachment() {
         let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
         let sid = sheet_id();
 
@@ -191,16 +191,16 @@ mod tests {
         assert!(
             compute_document::range::read_range_binding_wb(&workbook, &txn, "table:Sales")
                 .is_none(),
-            "rangeBindings must not be keyed by mutable table name"
+            "table attachments must not be keyed by mutable table name"
         );
         let json = compute_document::range::read_range_binding_wb(
             &workbook,
             &txn,
-            &table_range_id(&table_id),
+            &table_attachment_key(&table_id),
         );
         assert!(
             json.is_some(),
-            "rangeBindings[table:<id>] must exist after create_table"
+            "compact table attachment must exist after create_table"
         );
 
         let binding =
@@ -213,9 +213,9 @@ mod tests {
         assert!(!table.has_totals_row);
     }
 
-    /// Deleting a table removes its rangeBindings entry.
+    /// Deleting a table removes its compact attachment.
     #[test]
-    fn delete_table_removes_range_binding() {
+    fn delete_table_removes_compact_attachment() {
         let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
         let sid = sheet_id();
 
@@ -241,17 +241,17 @@ mod tests {
         let json = compute_document::range::read_range_binding_wb(
             &workbook,
             &txn,
-            &table_range_id(&table_id),
+            &table_attachment_key(&table_id),
         );
         assert!(
             json.is_none(),
-            "rangeBindings[table:<id>] must be removed after delete_table"
+            "compact table attachment must be removed after delete_table"
         );
     }
 
-    /// Renaming a table keeps the compact rangeBindings attachment keyed by stable ID.
+    /// Renaming a table keeps the compact attachment keyed by stable ID.
     #[test]
-    fn rename_table_updates_range_binding() {
+    fn rename_table_keeps_stable_compact_attachment() {
         let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
         let sid = sheet_id();
 
@@ -280,28 +280,28 @@ mod tests {
         assert!(
             compute_document::range::read_range_binding_wb(&workbook, &txn, "table:OldName")
                 .is_none(),
-            "name-keyed binding must not exist"
+            "name-keyed attachment must not exist"
         );
         assert!(
             compute_document::range::read_range_binding_wb(&workbook, &txn, "table:NewName")
                 .is_none(),
-            "rename must not create a new name-keyed binding"
+            "rename must not create a new name-keyed attachment"
         );
         let json = compute_document::range::read_range_binding_wb(
             &workbook,
             &txn,
-            &table_range_id(&table_id),
+            &table_attachment_key(&table_id),
         )
-        .expect("stable id binding must still exist after rename");
+        .expect("stable id attachment must still exist after rename");
 
         let binding = compute_document::range::TableRangeBinding::from_json(&json).unwrap();
         assert_eq!(binding.table_id, table_id);
         assert_eq!(engine.get_table_by_name("NewName").unwrap().id, table_id);
     }
 
-    /// Resizing a table updates the rangeBindings (columns may change).
+    /// Resizing a table keeps the compact attachment.
     #[test]
-    fn resize_table_updates_range_binding() {
+    fn resize_table_keeps_compact_attachment() {
         let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
         let sid = sheet_id();
 
@@ -336,7 +336,7 @@ mod tests {
 
     /// Toggling totals row updates the catalog, not the compact attachment.
     #[test]
-    fn toggle_totals_updates_range_binding() {
+    fn toggle_totals_keeps_compact_attachment() {
         let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
         let sid = sheet_id();
 
@@ -367,7 +367,7 @@ mod tests {
 
     /// Renaming a column updates the catalog, not the compact attachment.
     #[test]
-    fn rename_column_updates_range_binding() {
+    fn rename_column_keeps_compact_attachment() {
         let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
         let sid = sheet_id();
 
@@ -398,7 +398,7 @@ mod tests {
         assert!(compact_table_binding(&engine, &table.id).is_some());
     }
 
-    /// sync_tables_from_yrs reads the catalog; compact range bindings are attachments only.
+    /// sync_tables_from_yrs reads the catalog; compact bindings are attachments only.
     #[test]
     fn sync_tables_uses_catalog_with_compact_attachment() {
         let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
@@ -463,7 +463,7 @@ mod tests {
         compute_document::range::write_range_binding_wb(
             &workbook,
             &mut txn,
-            &table_range_id("OldName"),
+            &table_attachment_key("OldName"),
             &json,
         );
         drop(txn);
@@ -654,19 +654,19 @@ mod tests {
         assert!(!reconstructed.auto_calculated_columns);
     }
 
-    /// table_range_id and table_id_from_range_id are inverse operations.
+    /// table_attachment_key and table_id_from_attachment_key are inverse operations.
     #[test]
-    fn range_id_round_trip() {
+    fn attachment_key_round_trip() {
         let table_id = "tbl-123";
-        let rid = table_range_id(table_id);
-        assert_eq!(rid, "table:tbl-123");
-        assert_eq!(table_id_from_range_id(&rid), Some("tbl-123"));
-        assert_eq!(table_id_from_range_id("other:stuff"), None);
+        let key = table_attachment_key(table_id);
+        assert_eq!(key, "table:tbl-123");
+        assert_eq!(table_id_from_attachment_key(&key), Some("tbl-123"));
+        assert_eq!(table_id_from_attachment_key("other:stuff"), None);
     }
 
-    /// Mirror maintains table_range_ids index.
+    /// Mirror maintains the table attachment-key index.
     #[test]
-    fn mirror_table_range_id_index() {
+    fn mirror_table_attachment_key_index() {
         let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
         let sid = sheet_id();
 
@@ -686,18 +686,18 @@ mod tests {
         // Check index via mirror
         let table_id = table_id_by_name(&engine, "Table1");
         assert_eq!(
-            engine.mirror().table_range_id("Table1"),
-            Some(table_range_id(&table_id).as_str()),
+            engine.mirror().table_attachment_key("Table1"),
+            Some(table_attachment_key(&table_id).as_str()),
         );
         // Case-insensitive
         assert_eq!(
-            engine.mirror().table_range_id("table1"),
-            Some(table_range_id(&table_id).as_str()),
+            engine.mirror().table_attachment_key("table1"),
+            Some(table_attachment_key(&table_id).as_str()),
         );
 
         // Delete should clean up index
         engine.delete_table("Table1").expect("delete_table");
-        assert_eq!(engine.mirror().table_range_id("Table1"), None);
+        assert_eq!(engine.mirror().table_attachment_key("Table1"), None);
     }
 
     /// Single-row table (header only, no data rows) binding roundtrip.
@@ -781,9 +781,9 @@ mod tests {
         assert_eq!(deserialized.columns[0].name, "Data");
     }
 
-    /// Convert table to range also cleans up binding.
+    /// Convert table to range also cleans up the compact attachment.
     #[test]
-    fn convert_to_range_cleans_binding() {
+    fn convert_to_range_cleans_compact_attachment() {
         let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
         let sid = sheet_id();
 
@@ -812,10 +812,10 @@ mod tests {
             compute_document::range::read_range_binding_wb(
                 &workbook,
                 &txn,
-                &table_range_id(&table_id_before_convert)
+                &table_attachment_key(&table_id_before_convert)
             )
             .is_none(),
-            "binding must be cleaned up after convert_to_range"
+            "compact attachment must be cleaned up after convert_to_range"
         );
     }
 
@@ -861,7 +861,7 @@ mod tests {
 
     /// Style info persists through the catalog; compact attachment stays identity-only.
     #[test]
-    fn style_info_persists_in_binding() {
+    fn style_info_persists_with_compact_attachment() {
         let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
         let sid = sheet_id();
 
@@ -896,7 +896,7 @@ mod tests {
     }
 
     #[test]
-    fn table_policy_updates_persist_in_binding() {
+    fn table_policy_updates_keep_compact_attachment() {
         let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
         let sid = sheet_id();
 

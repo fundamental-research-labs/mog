@@ -67,12 +67,12 @@ pub struct CellMirror {
     /// degenerate case and lives here too — populated via XLSX hydration
     /// and via `set_array_formula` for in-app entries.
     pub(crate) cse_anchors: FxHashSet<CellId>,
-    /// Table name -> stable table attachment ID index.
+    /// Table name -> stable table attachment key index.
     ///
-    /// Maps lowercased table names to their `rangeBindings` key (e.g., `"table:tbl-..."`).
-    /// Used for O(1) lookup of the range binding ID for structured ref resolution.
+    /// Maps lowercased table names to their `workbook.rangeBindings` attachment
+    /// key (e.g., `"table:tbl-..."`).
     /// Updated whenever a table is added/removed/renamed.
-    pub(super) table_range_ids: FxHashMap<String, String>,
+    pub(super) table_attachment_keys: FxHashMap<String, String>,
 }
 
 impl Default for CellMirror {
@@ -105,7 +105,7 @@ impl CellMirror {
             col_versions: FxHashMap::default(),
             cse_single_cell: FxHashSet::default(),
             cse_anchors: FxHashSet::default(),
-            table_range_ids: FxHashMap::default(),
+            table_attachment_keys: FxHashMap::default(),
         }
     }
 

@@ -19,21 +19,21 @@ use crate::storage::cells::structured_ref_updater;
 use crate::storage::engine::stores::EngineStores;
 use crate::storage::sheet::filters;
 
+mod attachment_keys;
 mod legacy_binding;
 mod mutations;
 mod options;
 mod persistence;
 mod queries;
-mod range_ids;
 #[cfg(test)]
 mod tests;
 
+pub(in crate::storage::engine) use attachment_keys::*;
 pub(in crate::storage::engine) use legacy_binding::*;
 pub(in crate::storage::engine) use mutations::*;
 pub(in crate::storage::engine) use options::*;
 pub(in crate::storage::engine) use persistence::*;
 pub(in crate::storage::engine) use queries::*;
-pub(in crate::storage::engine) use range_ids::*;
 
 pub(in crate::storage::engine) fn normalize_table_style_id(
     stores: &EngineStores,

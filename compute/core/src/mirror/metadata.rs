@@ -78,13 +78,13 @@ impl CellMirror {
     // ── Tables ─────────────────────────────────────────────────────────
 
     /// Set (or replace) a canonical table (stable-ID first, name as compatibility lookup).
-    /// Also updates the formula engine's TableDef cache and the table_range_ids index.
+    /// Also updates the formula engine's TableDef cache and the attachment-key index.
     pub fn set_table(&mut self, table: CanonicalTable) {
         let table_def = crate::storage::table_format::table_to_table_def(&table);
 
-        let range_id = format!("table:{}", table.id);
-        self.table_range_ids
-            .insert(table.name.to_ascii_lowercase(), range_id);
+        let attachment_key = format!("table:{}", table.id);
+        self.table_attachment_keys
+            .insert(table.name.to_ascii_lowercase(), attachment_key);
 
         // Update canonical table
         if let Some(existing) = self
@@ -93,9 +93,9 @@ impl CellMirror {
             .find(|t| t.id == table.id || t.name.eq_ignore_ascii_case(&table.name))
         {
             if !existing.name.eq_ignore_ascii_case(&table.name) {
-                self.table_range_ids
+                self.table_attachment_keys
                     .remove(&existing.name.to_ascii_lowercase());
-                self.table_range_ids.insert(
+                self.table_attachment_keys.insert(
                     table.name.to_ascii_lowercase(),
                     format!("table:{}", table.id),
                 );
@@ -118,13 +118,13 @@ impl CellMirror {
     }
 
     /// Remove a table by name (case-insensitive). Removes both canonical and TableDef,
-    /// and cleans up the table_range_ids index.
+    /// and cleans up the attachment-key index.
     pub fn remove_table(&mut self, name: &str) {
         self.tables.retain(|t| !t.name.eq_ignore_ascii_case(name));
         self.table_defs
             .retain(|t| !t.name.eq_ignore_ascii_case(name));
-        // Phase 5E: clean up table_range_ids index
-        self.table_range_ids.remove(&name.to_ascii_lowercase());
+        self.table_attachment_keys
+            .remove(&name.to_ascii_lowercase());
     }
 
     /// Get a canonical table by name (case-insensitive).
@@ -156,11 +156,11 @@ impl CellMirror {
         &self.table_defs
     }
 
-    /// Phase 5E: get the range binding ID for a table name (case-insensitive).
+    /// Get the compact attachment key for a table name (case-insensitive).
     ///
     /// Returns `None` if the table is not registered.
-    pub fn table_range_id(&self, table_name: &str) -> Option<&str> {
-        self.table_range_ids
+    pub fn table_attachment_key(&self, table_name: &str) -> Option<&str> {
+        self.table_attachment_keys
             .get(&table_name.to_ascii_lowercase())
             .map(|s| s.as_str())
     }

@@ -32,10 +32,10 @@ fn write_table_catalog_entry(
     tables_map.insert(txn, table.id.as_str(), table_catalog_prelim(table));
 }
 
-fn write_table_range_binding(workbook: &MapRef, txn: &mut TransactionMut, table: &CanonicalTable) {
-    let range_id = table_range_id(&table.id);
+fn write_table_attachment(workbook: &MapRef, txn: &mut TransactionMut, table: &CanonicalTable) {
+    let attachment_key = table_attachment_key(&table.id);
     if let Some(json) = compute_document::range::TableRangeBinding::new(&table.id).to_json() {
-        compute_document::range::write_range_binding_wb(workbook, txn, &range_id, &json);
+        compute_document::range::write_range_binding_wb(workbook, txn, &attachment_key, &json);
     }
 }
 
@@ -62,7 +62,7 @@ pub(in crate::storage::engine) fn persist_table_to_yrs(
     );
     tables_map.remove(&mut txn, table.name.as_str());
     write_table_catalog_entry(&tables_map, &mut txn, table);
-    write_table_range_binding(&workbook, &mut txn, table);
+    write_table_attachment(&workbook, &mut txn, table);
 }
 
 /// Persist a table rename without changing its stable catalog identity.
@@ -83,11 +83,11 @@ pub(in crate::storage::engine) fn rename_table_in_yrs(
         compute_document::schema::KEY_TABLES,
     );
     tables_map.remove(&mut txn, old_name);
-    let old_range_id = table_range_id(old_name);
-    compute_document::range::remove_range_binding_wb(&workbook, &mut txn, &old_range_id);
+    let old_attachment_key = table_attachment_key(old_name);
+    compute_document::range::remove_range_binding_wb(&workbook, &mut txn, &old_attachment_key);
 
     write_table_catalog_entry(&tables_map, &mut txn, table);
-    write_table_range_binding(&workbook, &mut txn, table);
+    write_table_attachment(&workbook, &mut txn, table);
 }
 
 /// Persist a table definition and its backing table filter in one Yrs transaction.
@@ -115,7 +115,7 @@ pub(in crate::storage::engine) fn persist_table_to_yrs_with_table_filter(
     );
     tables_map.remove(&mut txn, table.name.as_str());
     write_table_catalog_entry(&tables_map, &mut txn, table);
-    write_table_range_binding(&workbook, &mut txn, table);
+    write_table_attachment(&workbook, &mut txn, table);
 
     filters::create_filter_in_txn(
         &mut txn,
@@ -188,13 +188,13 @@ pub(in crate::storage::engine) fn remove_table_from_yrs_with_filter(
         tables_map.remove(&mut txn, key.as_str());
     }
 
-    let range_id = table_range_id(table_name);
-    compute_document::range::remove_range_binding_wb(&workbook, &mut txn, &range_id);
+    let attachment_key = table_attachment_key(table_name);
+    compute_document::range::remove_range_binding_wb(&workbook, &mut txn, &attachment_key);
     table_ids.sort();
     table_ids.dedup();
     for table_id in table_ids {
-        let range_id = table_range_id(&table_id);
-        compute_document::range::remove_range_binding_wb(&workbook, &mut txn, &range_id);
+        let attachment_key = table_attachment_key(&table_id);
+        compute_document::range::remove_range_binding_wb(&workbook, &mut txn, &attachment_key);
     }
 
     if let Some((sheet_id, filter_id)) = table_filter {
@@ -232,7 +232,7 @@ pub(in crate::storage::engine) fn persist_table_style_to_yrs(
     );
     tables_map.remove(&mut txn, table_name);
     write_table_catalog_entry(&tables_map, &mut txn, table);
-    write_table_range_binding(&workbook, &mut txn, table);
+    write_table_attachment(&workbook, &mut txn, table);
 
     Ok(())
 }
@@ -286,8 +286,8 @@ pub(in crate::storage::engine) fn sync_tables_from_yrs(
         // attachments never become a second table source.
         let binding_entries =
             compute_document::range::all_range_bindings_wb(stores.storage.workbook_map(), &txn);
-        for (range_id, json) in &binding_entries {
-            if let Some(table) = legacy_full_table_from_range_binding_entry(range_id, json)
+        for (attachment_key, json) in &binding_entries {
+            if let Some(table) = legacy_full_table_from_attachment_entry(attachment_key, json)
                 && !names.contains(&table.name)
                 && !ids.contains(&table.id)
             {

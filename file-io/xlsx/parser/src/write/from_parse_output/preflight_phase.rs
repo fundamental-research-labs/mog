@@ -10,9 +10,6 @@ pub(super) fn run(output: &ParseOutput) -> WorkbookPreflight {
     let (remapped_output, registry_dxfs) = differential_formats::remap_for_export(output);
     let mut style_export = build_style_export_plan(&remapped_output);
     style_export.writer.dxfs = registry_dxfs;
-    if style_export.writer.dxfs.is_empty() {
-        style_export.writer.dxfs = differential_formats::collect(&remapped_output);
-    }
 
     let mut styles_writer = style_export.writer;
     if styles_writer.table_styles.is_empty() {

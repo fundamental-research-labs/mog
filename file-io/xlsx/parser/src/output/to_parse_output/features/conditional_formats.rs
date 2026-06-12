@@ -1,4 +1,5 @@
 use super::*;
+use crate::domain::styles::types::{BorderDef, BorderSideDef, BorderStyle};
 
 // =============================================================================
 // Domain conversions: Conditional formatting
@@ -193,6 +194,48 @@ fn resolve_color_def_to_hex(
     }
 }
 
+fn resolve_border_side_color(
+    side: Option<&BorderSideDef>,
+    theme_colors: &[String],
+) -> Option<String> {
+    side.and_then(|side| side.color.as_ref())
+        .and_then(|color| resolve_color_def_to_hex(color, theme_colors))
+}
+
+fn resolve_border_side_style(side: Option<&BorderSideDef>) -> Option<String> {
+    side.map(|side| side.style)
+        .filter(|style| *style != BorderStyle::None)
+        .map(|style| style.to_ooxml().to_string())
+}
+
+fn resolve_unified_border_color(
+    border: Option<&BorderDef>,
+    theme_colors: &[String],
+) -> Option<String> {
+    let border = border?;
+    [
+        border.left.as_ref(),
+        border.top.as_ref(),
+        border.right.as_ref(),
+        border.bottom.as_ref(),
+    ]
+    .into_iter()
+    .find_map(|side| resolve_border_side_color(side, theme_colors))
+}
+
+fn resolve_unified_border_style(border: Option<&BorderDef>) -> Option<BorderStyle> {
+    let border = border?;
+    [
+        border.left.as_ref(),
+        border.top.as_ref(),
+        border.right.as_ref(),
+        border.bottom.as_ref(),
+    ]
+    .into_iter()
+    .filter_map(|side| side.map(|side| side.style))
+    .find(|style| *style != BorderStyle::None)
+}
+
 /// Resolve a `DxfDef` (differential formatting record) into a `CFStyle`.
 ///
 /// Extracts font color, background color, bold, italic, strikethrough, underline,
@@ -237,20 +280,28 @@ fn resolve_dxf_to_cf_style(
     let underline_type = dxf.font.as_ref().and_then(|f| f.underline);
     let number_format = dxf.num_fmt.as_ref().map(|nf| nf.format_code.clone());
 
-    // Resolve border colors from DXF
-    let border_color = dxf
-        .border
-        .as_ref()
-        .and_then(|b| {
-            // Use the first non-None side color as unified border color
-            b.left
-                .as_ref()
-                .and_then(|s| s.color.as_ref())
-                .or_else(|| b.top.as_ref().and_then(|s| s.color.as_ref()))
-                .or_else(|| b.right.as_ref().and_then(|s| s.color.as_ref()))
-                .or_else(|| b.bottom.as_ref().and_then(|s| s.color.as_ref()))
-        })
-        .and_then(|c| resolve_color_def_to_hex(c, theme_colors));
+    let border = dxf.border.as_ref();
+    let border_color = resolve_unified_border_color(border, theme_colors);
+    let border_style = resolve_unified_border_style(border);
+    let border_top_color =
+        resolve_border_side_color(border.and_then(|border| border.top.as_ref()), theme_colors);
+    let border_top_style = resolve_border_side_style(border.and_then(|border| border.top.as_ref()));
+    let border_bottom_color = resolve_border_side_color(
+        border.and_then(|border| border.bottom.as_ref()),
+        theme_colors,
+    );
+    let border_bottom_style =
+        resolve_border_side_style(border.and_then(|border| border.bottom.as_ref()));
+    let border_left_color =
+        resolve_border_side_color(border.and_then(|border| border.left.as_ref()), theme_colors);
+    let border_left_style =
+        resolve_border_side_style(border.and_then(|border| border.left.as_ref()));
+    let border_right_color = resolve_border_side_color(
+        border.and_then(|border| border.right.as_ref()),
+        theme_colors,
+    );
+    let border_right_style =
+        resolve_border_side_style(border.and_then(|border| border.right.as_ref()));
 
     CFStyle {
         background_color,
@@ -262,15 +313,15 @@ fn resolve_dxf_to_cf_style(
         strikethrough,
         number_format,
         border_color,
-        border_style: None,
-        border_top_color: None,
-        border_top_style: None,
-        border_bottom_color: None,
-        border_bottom_style: None,
-        border_left_color: None,
-        border_left_style: None,
-        border_right_color: None,
-        border_right_style: None,
+        border_style,
+        border_top_color,
+        border_top_style,
+        border_bottom_color,
+        border_bottom_style,
+        border_left_color,
+        border_left_style,
+        border_right_color,
+        border_right_style,
         dxf_id,
     }
 }

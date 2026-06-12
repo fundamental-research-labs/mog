@@ -1,5 +1,6 @@
 use super::*;
 use crate::write::from_parse_output::styles::build_styles;
+use ooxml_types::styles::{BorderStyle, UnderlineStyle};
 
 #[test]
 fn test_hex_to_color_def() {
@@ -96,7 +97,7 @@ fn workbook_stylesheet_indexed_colors_export_with_regenerated_live_styles() {
 }
 
 #[test]
-fn workbook_stylesheet_dxfs_export_without_sidecar_context() {
+fn conditional_format_dxf_id_without_live_style_fields_is_not_exported() {
     let mut output = make_parse_output(vec![SheetData {
         name: "Sheet1".to_string(),
         conditional_formats: vec![ConditionalFormat {
@@ -143,16 +144,19 @@ fn workbook_stylesheet_dxfs_export_without_sidecar_context() {
     let bytes = write_xlsx_from_parse_output(&output).unwrap();
     let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
     let styles_xml = String::from_utf8(archive.read_file("xl/styles.xml").unwrap()).unwrap();
+    let sheet_xml =
+        String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
 
-    assert!(styles_xml.contains(r#"<dxfs count="1">"#), "{styles_xml}");
+    assert!(styles_xml.contains(r#"<dxfs count="0"/>"#), "{styles_xml}");
     assert!(
-        styles_xml.contains(r#"<color rgb="FFFF0000"/>"#),
+        !styles_xml.contains(r#"<color rgb="FFFF0000"/>"#),
         "{styles_xml}"
     );
+    assert!(!sheet_xml.contains("dxfId="), "{sheet_xml}");
 }
 
 #[test]
-fn imported_workbook_stylesheet_dxf_registry_remaps_to_reachable_live_dxfs() {
+fn conditional_format_live_style_overrides_stale_dxf_id() {
     let mut output = make_parse_output(vec![SheetData {
         name: "Sheet1".to_string(),
         conditional_formats: vec![ConditionalFormat {
@@ -168,6 +172,8 @@ fn imported_workbook_stylesheet_dxf_registry_remaps_to_reachable_live_dxfs() {
                 value2: None,
                 style: CFStyle {
                     dxf_id: Some(5),
+                    font_color: Some("#00FF00".to_string()),
+                    bold: Some(true),
                     ..Default::default()
                 },
                 priority: 1,
@@ -204,7 +210,10 @@ fn imported_workbook_stylesheet_dxf_registry_remaps_to_reachable_live_dxfs() {
         domain_types::DxfDef {
             id: 5,
             font: Some(ooxml_types::styles::FontDef {
-                bold: Some(true),
+                color: Some(ooxml_types::styles::ColorDef::Rgb {
+                    val: "FFFF0000".to_string(),
+                    tint: None,
+                }),
                 ..Default::default()
             }),
             ..Default::default()
@@ -220,9 +229,103 @@ fn imported_workbook_stylesheet_dxf_registry_remaps_to_reachable_live_dxfs() {
 
     assert!(styles_xml.contains(r#"<dxfs count="1">"#), "{styles_xml}");
     assert!(
-        sheet_xml.contains(r#"dxfId="0""#),
-        "reachable imported dxfId must be remapped to regenerated dxf table, got: {sheet_xml}"
+        styles_xml.contains(r#"<color rgb="FF00FF00"/>"#),
+        "{styles_xml}"
     );
+    assert!(
+        !styles_xml.contains(r#"<color rgb="FFFF0000"/>"#),
+        "{styles_xml}"
+    );
+    assert!(
+        sheet_xml.contains(r#"dxfId="0""#),
+        "live conditional format style must get a generated export dxfId, got: {sheet_xml}"
+    );
+}
+
+#[test]
+fn live_conditional_format_styles_allocate_dxfs_and_parse_back() {
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        conditional_formats: vec![ConditionalFormat {
+            id: "cf-1".to_string(),
+            sheet_id: "sheet-1".to_string(),
+            pivot: None,
+            ranges: vec![CFCellRange::single(0, 0)],
+            range_identities: None,
+            rules: vec![CFRule::CellValue {
+                id: "rule-1".to_string(),
+                operator: ooxml_types::cond_format::CfOperator::GreaterThan,
+                value1: serde_json::json!("1"),
+                value2: None,
+                style: CFStyle {
+                    background_color: Some("#FF0000".to_string()),
+                    font_color: Some("#FFFFFF".to_string()),
+                    bold: Some(true),
+                    italic: Some(true),
+                    underline_type: Some(UnderlineStyle::Single),
+                    strikethrough: Some(true),
+                    number_format: Some("$#,##0.00".to_string()),
+                    border_color: Some("#00AAFF".to_string()),
+                    border_style: Some(BorderStyle::Thin),
+                    border_top_color: Some("#123456".to_string()),
+                    border_top_style: Some("thick".to_string()),
+                    border_bottom_color: Some("#654321".to_string()),
+                    border_bottom_style: Some("dashed".to_string()),
+                    ..Default::default()
+                },
+                priority: 1,
+                stop_if_true: Some(false),
+                text: None,
+            }],
+        }],
+        ..Default::default()
+    }]);
+
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let styles_xml = String::from_utf8(archive.read_file("xl/styles.xml").unwrap()).unwrap();
+    let sheet_xml =
+        String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
+
+    assert!(styles_xml.contains(r#"<dxfs count="1">"#), "{styles_xml}");
+    assert!(
+        styles_xml.contains(r#"<color rgb="FFFFFFFF"/>"#),
+        "{styles_xml}"
+    );
+    assert!(
+        styles_xml.contains(r#"<fgColor rgb="FFFF0000"/>"#),
+        "{styles_xml}"
+    );
+    assert!(
+        styles_xml.contains(r#"<color rgb="FF123456"/>"#),
+        "{styles_xml}"
+    );
+    assert!(
+        styles_xml.contains(r#"<color rgb="FF654321"/>"#),
+        "{styles_xml}"
+    );
+    assert!(styles_xml.contains("$#,##0.00"), "{styles_xml}");
+    assert!(sheet_xml.contains(r#"dxfId="0""#), "{sheet_xml}");
+
+    let (parsed, _) = crate::parse_xlsx_to_output(&bytes).expect("parse exported styled CF");
+    let parsed_style = match &parsed.sheets[0].conditional_formats[0].rules[0] {
+        CFRule::CellValue { style, .. } => style,
+        other => panic!("expected cellValue rule, got {other:?}"),
+    };
+
+    assert_eq!(parsed_style.background_color.as_deref(), Some("#ff0000"));
+    assert_eq!(parsed_style.font_color.as_deref(), Some("#ffffff"));
+    assert_eq!(parsed_style.bold, Some(true));
+    assert_eq!(parsed_style.italic, Some(true));
+    assert_eq!(parsed_style.underline_type, Some(UnderlineStyle::Single));
+    assert_eq!(parsed_style.strikethrough, Some(true));
+    assert_eq!(parsed_style.number_format.as_deref(), Some("$#,##0.00"));
+    assert_eq!(parsed_style.border_color.as_deref(), Some("#00aaff"));
+    assert_eq!(parsed_style.border_style, Some(BorderStyle::Thin));
+    assert_eq!(parsed_style.border_top_color.as_deref(), Some("#123456"));
+    assert_eq!(parsed_style.border_top_style.as_deref(), Some("thick"));
+    assert_eq!(parsed_style.border_bottom_color.as_deref(), Some("#654321"));
+    assert_eq!(parsed_style.border_bottom_style.as_deref(), Some("dashed"));
 }
 
 #[test]

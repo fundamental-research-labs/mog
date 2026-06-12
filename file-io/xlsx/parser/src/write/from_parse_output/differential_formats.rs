@@ -17,9 +17,6 @@ pub(super) fn remap_for_export(output: &ParseOutput) -> (ParseOutput, Vec<DxfDef
         .as_ref()
         .map(|stylesheet| stylesheet.dxf_registry.as_slice())
         .unwrap_or(&[]);
-    if registry.is_empty() {
-        return (output.clone(), Vec::new());
-    }
 
     let mut reachable = HashSet::new();
     collect_reachable_ids(output, &mut reachable);
@@ -33,60 +30,26 @@ pub(super) fn remap_for_export(output: &ParseOutput) -> (ParseOutput, Vec<DxfDef
         id_to_export_id.insert(entry.id, dxfs.len() as u32);
         dxfs.push(entry.to_ooxml());
     }
-
-    let mut remapped = output.clone();
-    remap_output_dxf_ids(&mut remapped, &id_to_export_id);
-    (remapped, dxfs)
-}
-
-pub(super) fn collect(output: &ParseOutput) -> Vec<DxfDef> {
-    let max_dxf_id = output
-        .sheets
+    let mut missing_reachable_ids: Vec<u32> = reachable
         .iter()
-        .flat_map(|sheet| sheet.conditional_formats.iter())
-        .flat_map(|cf| cf.rules.iter())
-        .filter_map(rule_style)
-        .filter_map(|style| style.dxf_id)
-        .max();
-
-    let Some(max_dxf_id) = max_dxf_id else {
-        return Vec::new();
-    };
-
-    let mut dxfs = vec![DxfDef::default(); max_dxf_id as usize + 1];
-    let mut populated = vec![false; max_dxf_id as usize + 1];
-
-    for style in output
-        .sheets
-        .iter()
-        .flat_map(|sheet| sheet.conditional_formats.iter())
-        .flat_map(|cf| cf.rules.iter())
-        .filter_map(rule_style)
-    {
-        let Some(dxf_id) = style.dxf_id else {
-            continue;
-        };
-        let idx = dxf_id as usize;
-        if populated[idx] {
-            continue;
-        }
-        dxfs[idx] = cf_style_to_dxf(style);
-        populated[idx] = true;
+        .copied()
+        .filter(|id| !id_to_export_id.contains_key(id))
+        .collect();
+    missing_reachable_ids.sort_unstable();
+    for id in missing_reachable_ids {
+        id_to_export_id.insert(id, dxfs.len() as u32);
+        dxfs.push(DxfDef::default());
     }
 
-    dxfs
+    let mut remapped = output.clone();
+    remap_non_cf_dxf_ids(&mut remapped, &id_to_export_id);
+    clear_cf_dxf_ids(&mut remapped);
+    assign_live_cf_style_dxfs(&mut remapped, &mut dxfs);
+    (remapped, dxfs)
 }
 
 fn collect_reachable_ids(output: &ParseOutput, reachable: &mut HashSet<u32>) {
     for sheet in &output.sheets {
-        for cf in &sheet.conditional_formats {
-            for style in cf.rules.iter().filter_map(rule_style) {
-                if let Some(dxf_id) = style.dxf_id {
-                    reachable.insert(dxf_id);
-                }
-            }
-        }
-
         if let Some(auto_filter) = &sheet.auto_filter {
             for column in &auto_filter.columns {
                 if let Some(domain_types::OoxmlFilterType::Color {
@@ -171,14 +134,8 @@ fn collect_sort_reachable(
     }
 }
 
-fn remap_output_dxf_ids(output: &mut ParseOutput, id_to_export_id: &HashMap<u32, u32>) {
+fn remap_non_cf_dxf_ids(output: &mut ParseOutput, id_to_export_id: &HashMap<u32, u32>) {
     for sheet in &mut output.sheets {
-        for cf in &mut sheet.conditional_formats {
-            for style in cf.rules.iter_mut().filter_map(rule_style_mut) {
-                remap_id(&mut style.dxf_id, id_to_export_id);
-            }
-        }
-
         if let Some(auto_filter) = &mut sheet.auto_filter {
             for column in &mut auto_filter.columns {
                 if let Some(domain_types::OoxmlFilterType::Color { dxf_id, .. }) =
@@ -240,12 +197,59 @@ fn remap_output_dxf_ids(output: &mut ParseOutput, id_to_export_id: &HashMap<u32,
     }
 }
 
+fn clear_cf_dxf_ids(output: &mut ParseOutput) {
+    for sheet in &mut output.sheets {
+        for cf in &mut sheet.conditional_formats {
+            for style in cf.rules.iter_mut().filter_map(rule_style_mut) {
+                style.dxf_id = None;
+            }
+        }
+    }
+}
+
 fn remap_id(id: &mut Option<u32>, id_to_export_id: &HashMap<u32, u32>) {
     if let Some(current) = *id {
         *id = id_to_export_id.get(&current).copied();
     }
 }
 
+fn assign_live_cf_style_dxfs(output: &mut ParseOutput, dxfs: &mut Vec<DxfDef>) {
+    for sheet in &mut output.sheets {
+        for cf in &mut sheet.conditional_formats {
+            for style in cf.rules.iter_mut().filter_map(rule_style_mut) {
+                if !cf_style_has_exportable_properties(style) {
+                    continue;
+                }
+                let dxf_id = dxfs.len() as u32;
+                dxfs.push(cf_style_to_dxf(style));
+                style.dxf_id = Some(dxf_id);
+            }
+        }
+    }
+}
+
+fn cf_style_has_exportable_properties(style: &CFStyle) -> bool {
+    style.background_color.is_some()
+        || style.font_color.is_some()
+        || style.bold.is_some()
+        || style.italic.is_some()
+        || style.underline_type.is_some()
+        || style.underline_legacy == Some(true)
+        || style.strikethrough.is_some()
+        || style.number_format.is_some()
+        || style.border_color.is_some()
+        || style.border_style.is_some()
+        || style.border_top_color.is_some()
+        || style.border_top_style.is_some()
+        || style.border_bottom_color.is_some()
+        || style.border_bottom_style.is_some()
+        || style.border_left_color.is_some()
+        || style.border_left_style.is_some()
+        || style.border_right_color.is_some()
+        || style.border_right_style.is_some()
+}
+
+#[cfg(test)]
 fn rule_style(rule: &CFRule) -> Option<&CFStyle> {
     match rule {
         CFRule::CellValue { style, .. }
@@ -414,9 +418,7 @@ mod tests {
 
     #[test]
     fn remap_for_export_covers_all_table_and_filter_dxf_consumers() {
-        let reachable_ids = [
-            10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150,
-        ];
+        let reachable_ids = [20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150];
         let mut output = ParseOutput {
             workbook_stylesheet: Some(domain_types::WorkbookStylesheet {
                 dxf_registry: std::iter::once(999)
@@ -427,26 +429,6 @@ mod tests {
             }),
             sheets: vec![domain_types::SheetData {
                 name: "Sheet1".to_string(),
-                conditional_formats: vec![domain_types::ConditionalFormat {
-                    id: "cf-1".to_string(),
-                    sheet_id: "sheet-1".to_string(),
-                    pivot: None,
-                    ranges: vec![cell_types::SheetRange::single(0, 0)],
-                    range_identities: None,
-                    rules: vec![CFRule::CellValue {
-                        id: "rule-1".to_string(),
-                        priority: 1,
-                        stop_if_true: None,
-                        operator: ooxml_types::cond_format::CfOperator::GreaterThan,
-                        value1: serde_json::json!(1),
-                        value2: None,
-                        style: CFStyle {
-                            dxf_id: Some(10),
-                            ..Default::default()
-                        },
-                        text: None,
-                    }],
-                }],
                 auto_filter: Some(domain_types::AutoFilter {
                     range_ref: "A1:B5".to_string(),
                     columns: vec![domain_types::FilterColumn {
@@ -542,13 +524,9 @@ mod tests {
         let (remapped, dxfs) = remap_for_export(&output);
 
         assert_eq!(dxfs.len(), reachable_ids.len());
-        assert_eq!(dxfs[0], registry_entry(10).to_ooxml());
+        assert_eq!(dxfs[0], registry_entry(20).to_ooxml());
         assert_eq!(dxfs.last(), Some(&registry_entry(150).to_ooxml()));
         let sheet = &remapped.sheets[0];
-        assert_eq!(
-            rule_style(&sheet.conditional_formats[0].rules[0]).and_then(|style| style.dxf_id),
-            Some(0)
-        );
         assert_eq!(
             sheet.auto_filter.as_ref().and_then(|filter| {
                 filter
@@ -559,7 +537,7 @@ mod tests {
                         _ => None,
                     })
             }),
-            Some(1)
+            Some(0)
         );
         assert_eq!(
             sheet.auto_filter.as_ref().and_then(|filter| {
@@ -569,7 +547,7 @@ mod tests {
                     .and_then(|sort| sort.conditions.first())
                     .and_then(|condition| condition.dxf_id)
             }),
-            Some(2)
+            Some(1)
         );
         assert_eq!(
             sheet
@@ -577,23 +555,23 @@ mod tests {
                 .as_ref()
                 .and_then(|sort| sort.conditions.first())
                 .and_then(|condition| condition.dxf_id),
-            Some(3)
+            Some(2)
         );
 
         let table = &sheet.tables[0];
-        assert_eq!(table.header_row_dxf_id, Some(4));
-        assert_eq!(table.data_dxf_id, Some(5));
-        assert_eq!(table.totals_row_dxf_id, Some(6));
-        assert_eq!(table.header_row_border_dxf_id, Some(7));
-        assert_eq!(table.table_border_dxf_id, Some(8));
-        assert_eq!(table.totals_row_border_dxf_id, Some(9));
-        assert_eq!(table.columns[0].header_row_dxf_id, Some(10));
-        assert_eq!(table.columns[0].data_dxf_id, Some(11));
-        assert_eq!(table.columns[0].totals_row_dxf_id, Some(12));
+        assert_eq!(table.header_row_dxf_id, Some(3));
+        assert_eq!(table.data_dxf_id, Some(4));
+        assert_eq!(table.totals_row_dxf_id, Some(5));
+        assert_eq!(table.header_row_border_dxf_id, Some(6));
+        assert_eq!(table.table_border_dxf_id, Some(7));
+        assert_eq!(table.totals_row_border_dxf_id, Some(8));
+        assert_eq!(table.columns[0].header_row_dxf_id, Some(9));
+        assert_eq!(table.columns[0].data_dxf_id, Some(10));
+        assert_eq!(table.columns[0].totals_row_dxf_id, Some(11));
         assert!(matches!(
             table.filter_columns[0].filter,
             domain_types::FilterSpec::Color {
-                dxf_id: Some(13),
+                dxf_id: Some(12),
                 ..
             }
         ));
@@ -603,9 +581,9 @@ mod tests {
                 .as_ref()
                 .and_then(|sort| sort.conditions.first())
                 .and_then(|condition| condition.dxf_id),
-            Some(14)
+            Some(13)
         );
-        assert_eq!(remapped.custom_table_styles[0].elements[0].dxf_id, Some(14));
+        assert_eq!(remapped.custom_table_styles[0].elements[0].dxf_id, Some(13));
 
         output.sheets[0].tables[0].data_dxf_id = Some(999);
         let (remapped_with_preceding_reachable, dxfs_with_preceding) = remap_for_export(&output);
@@ -613,6 +591,102 @@ mod tests {
         assert_eq!(
             remapped_with_preceding_reachable.sheets[0].tables[0].data_dxf_id,
             Some(0)
+        );
+    }
+
+    #[test]
+    fn conditional_format_export_dxf_comes_from_live_style_not_registry_id() {
+        let output = ParseOutput {
+            workbook_stylesheet: Some(domain_types::WorkbookStylesheet {
+                dxf_registry: vec![registry_entry(10)],
+                ..Default::default()
+            }),
+            sheets: vec![domain_types::SheetData {
+                name: "Sheet1".to_string(),
+                conditional_formats: vec![domain_types::ConditionalFormat {
+                    id: "cf-1".to_string(),
+                    sheet_id: "sheet-1".to_string(),
+                    pivot: None,
+                    ranges: vec![cell_types::SheetRange::single(0, 0)],
+                    range_identities: None,
+                    rules: vec![CFRule::CellValue {
+                        id: "rule-1".to_string(),
+                        priority: 1,
+                        stop_if_true: None,
+                        operator: ooxml_types::cond_format::CfOperator::GreaterThan,
+                        value1: serde_json::json!(1),
+                        value2: None,
+                        style: CFStyle {
+                            dxf_id: Some(10),
+                            font_color: Some("#00FF00".to_string()),
+                            ..Default::default()
+                        },
+                        text: None,
+                    }],
+                }],
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+
+        let (remapped, dxfs) = remap_for_export(&output);
+
+        assert_eq!(dxfs.len(), 1);
+        assert_eq!(
+            dxfs[0].font.as_ref().and_then(|font| font.color.as_ref()),
+            Some(&ColorDef::Rgb {
+                val: "FF00FF00".to_string(),
+                tint: None,
+            })
+        );
+        assert_eq!(
+            rule_style(&remapped.sheets[0].conditional_formats[0].rules[0])
+                .and_then(|style| style.dxf_id),
+            Some(0)
+        );
+    }
+
+    #[test]
+    fn conditional_format_dxf_id_without_live_style_is_cleared() {
+        let output = ParseOutput {
+            workbook_stylesheet: Some(domain_types::WorkbookStylesheet {
+                dxf_registry: vec![registry_entry(10)],
+                ..Default::default()
+            }),
+            sheets: vec![domain_types::SheetData {
+                name: "Sheet1".to_string(),
+                conditional_formats: vec![domain_types::ConditionalFormat {
+                    id: "cf-1".to_string(),
+                    sheet_id: "sheet-1".to_string(),
+                    pivot: None,
+                    ranges: vec![cell_types::SheetRange::single(0, 0)],
+                    range_identities: None,
+                    rules: vec![CFRule::CellValue {
+                        id: "rule-1".to_string(),
+                        priority: 1,
+                        stop_if_true: None,
+                        operator: ooxml_types::cond_format::CfOperator::GreaterThan,
+                        value1: serde_json::json!(1),
+                        value2: None,
+                        style: CFStyle {
+                            dxf_id: Some(10),
+                            ..Default::default()
+                        },
+                        text: None,
+                    }],
+                }],
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+
+        let (remapped, dxfs) = remap_for_export(&output);
+
+        assert!(dxfs.is_empty());
+        assert_eq!(
+            rule_style(&remapped.sheets[0].conditional_formats[0].rules[0])
+                .and_then(|style| style.dxf_id),
+            None
         );
     }
 }

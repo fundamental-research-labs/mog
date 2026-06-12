@@ -62,7 +62,7 @@ function cellDataValue(value: string | number | boolean | null): unknown {
   if (value === null) return null;
   const type =
     typeof value === 'number' ? 'number' : typeof value === 'boolean' ? 'boolean' : 'text';
-  return { value: { type, value } };
+  return { raw: { type, value } };
 }
 
 function undefinedPaths(value: unknown, path = '$'): string[] {

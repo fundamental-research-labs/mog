@@ -35,6 +35,9 @@ pub(super) fn reconstruct_data_range_from_chart_space(
 
     for g in &cs.chart.plot_area.chart_groups {
         for s in &g.series {
+            if let Some(f) = extract_series_text_ref_formula_str(s.tx.as_ref()) {
+                formulas.push(f);
+            }
             if let Some(ref val) = s.val {
                 if let Some(f) = extract_num_ref_formula_str(val) {
                     formulas.push(f);
@@ -81,6 +84,9 @@ pub(super) fn reconstruct_data_range_from_chart_groups(
     let mut formulas: Vec<&str> = Vec::new();
     for g in groups {
         for s in &g.series {
+            if let Some(f) = extract_series_text_ref_formula_str(s.tx.as_ref()) {
+                formulas.push(f);
+            }
             if let Some(ref val) = s.val {
                 if let Some(f) = extract_num_ref_formula_str(val) {
                     formulas.push(f);
@@ -125,6 +131,9 @@ pub(super) fn reconstruct_data_range(
     // Collect all formula references from series
     let mut formulas = Vec::new();
     for s in series {
+        if let Some(f) = extract_legacy_series_text_ref_formula_str(s.tx.as_ref()) {
+            formulas.push(f);
+        }
         if let Some(ref val) = s.val {
             match val {
                 NumDataSource::Ref(nr) => formulas.push(nr.f.as_str()),
@@ -195,7 +204,9 @@ pub(crate) fn synthesize_rectangular_data_range(formulas: &[&str]) -> Option<Str
         }
     }
     let rect_area = (end_row - start_row + 1) as usize * (end_col - start_col + 1) as usize;
-    if cells.len() != rect_area {
+    let missing_only_top_left =
+        cells.len() + 1 == rect_area && !cells.contains(&(start_row, start_col));
+    if cells.len() != rect_area && !missing_only_top_left {
         return None;
     }
 
@@ -325,6 +336,56 @@ fn extract_cat_ref_formula_str(src: &ooxml_types::charts::CatDataSource) -> Opti
         ooxml_types::charts::CatDataSource::MultiLvlStrRef(mr) => Some(&mr.f),
         ooxml_types::charts::CatDataSource::NumLit(_)
         | ooxml_types::charts::CatDataSource::StrLit(_) => None,
+    }
+}
+
+fn extract_series_text_ref_formula_str(
+    src: Option<&ooxml_types::charts::SeriesTextSource>,
+) -> Option<&str> {
+    match src? {
+        ooxml_types::charts::SeriesTextSource::StrRef(sr) => {
+            (!sr.f.trim().is_empty()).then_some(sr.f.as_str())
+        }
+        ooxml_types::charts::SeriesTextSource::Value(_) => None,
+    }
+}
+
+fn extract_legacy_series_text_ref_formula_str(
+    src: Option<&crate::domain::charts::series::SeriesTextSource>,
+) -> Option<&str> {
+    match src? {
+        crate::domain::charts::series::SeriesTextSource::StrRef(sr) => {
+            (!sr.f.trim().is_empty()).then_some(sr.f.as_str())
+        }
+        crate::domain::charts::series::SeriesTextSource::Value(_) => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::synthesize_rectangular_data_range;
+
+    #[test]
+    fn chart_table_range_allows_omitted_top_left_category_header() {
+        assert_eq!(
+            synthesize_rectangular_data_range(&[
+                "Sheet1!B1",
+                "Sheet1!C1",
+                "Sheet1!A2:A4",
+                "Sheet1!B2:B4",
+                "Sheet1!C2:C4",
+            ])
+            .as_deref(),
+            Some("Sheet1!A1:C4"),
+        );
+    }
+
+    #[test]
+    fn sparse_chart_refs_with_other_holes_do_not_synthesize_a_range() {
+        assert_eq!(
+            synthesize_rectangular_data_range(&["Sheet1!B1", "Sheet1!A2:A4", "Sheet1!C2:C4"]),
+            None,
+        );
     }
 }
 

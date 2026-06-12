@@ -12,6 +12,7 @@
 //! - `workbook` — workbook-level exports (theme, protection, properties, etc.)
 
 mod cells;
+mod chart_sources;
 mod dimensions;
 mod pivot_cache_reconciliation;
 mod sheet_metadata;
@@ -42,10 +43,8 @@ use cell_types::SheetId;
 use compute_document::schema::{KEY_COLS, KEY_ROWS};
 use domain_types::{
     DataTableRegion, DocumentFormat, FrozenPane, MergeRegion, ParseOutput, SheetData, SheetView,
-    domain::chart::ChartSpec,
     domain::comment::{Comment, CommentType},
     domain::conditional_format::ConditionalFormat as DomainConditionalFormat,
-    domain::floating_object::{FloatingObject, FloatingObjectData},
     domain::print::PrintSettings,
     domain::table::TableSpec,
 };
@@ -603,18 +602,8 @@ fn export_single_sheet(
     let (all_fobjs, slicers, slicer_anchors, timelines, timeline_anchors) =
         export_floating_objects_for_sheet(stores, sheet_id);
 
-    let mut charts: Vec<ChartSpec> = Vec::new();
-    let mut floating_objects: Vec<FloatingObject> = Vec::new();
-    for fobj in all_fobjs {
-        if matches!(&fobj.data, FloatingObjectData::Chart(_)) {
-            if let Some(spec) = ChartSpec::from_floating_object(&fobj) {
-                charts.push(spec);
-            }
-        } else {
-            floating_objects.push(fobj);
-        }
-    }
-    charts.sort_by_key(|c| c.z_index);
+    let (charts, floating_objects) =
+        chart_sources::split_charts_for_sheet_export(all_fobjs, mirror, sheet_id, &name);
 
     // --- Sheet metadata from Yrs meta map ---
     let (

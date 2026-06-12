@@ -16,6 +16,19 @@ const noteComment: Comment = {
   commentType: 'note',
 };
 
+const threadComment: Comment = {
+  id: 'thread-1',
+  cellRef: 'cell-1' as any,
+  author: 'Alice',
+  createdAt: 1700000000000,
+  content: [{ text: 'Threaded comment' }],
+  threadId: 'thread-1',
+  resolved: false,
+  commentType: 'threadedComment',
+};
+
+let popoverState: typeof basePopoverState;
+
 const basePopoverState = {
   isVisible: true,
   mode: 'view' as const,
@@ -49,7 +62,7 @@ const basePopoverState = {
 };
 
 jest.unstable_mockModule('../../hooks/comments/use-comment-popover', () => ({
-  useCommentPopover: () => basePopoverState,
+  useCommentPopover: () => popoverState,
 }));
 
 jest.unstable_mockModule('../../hooks', () => ({
@@ -104,26 +117,33 @@ describe('CommentPopover', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     convertNoteToThread.mockResolvedValue(undefined);
+    popoverState = { ...basePopoverState, comments: [noteComment] };
   });
 
-  it('shows the resolve action for an imported note', () => {
+  it('does not show the thread resolve action for a note', () => {
     render(<CommentPopover />);
 
     expect(screen.getByText('Note')).toBeInTheDocument();
+    expect(screen.queryByTitle('Resolve')).not.toBeInTheDocument();
+  });
+
+  it('shows the resolve action for a threaded comment', () => {
+    popoverState = { ...basePopoverState, comments: [threadComment] };
+
+    render(<CommentPopover />);
+
+    expect(screen.getByText('Comment')).toBeInTheDocument();
     expect(screen.getByTitle('Resolve')).toBeInTheDocument();
   });
 
-  it('promotes a note before resolving it', async () => {
+  it('promotes a note before replying to it', async () => {
     render(<CommentPopover />);
 
-    fireEvent.click(screen.getByTitle('Resolve'));
+    fireEvent.click(screen.getByTitle('Reply'));
 
     await waitFor(() => {
-      expect(resolveThread).toHaveBeenCalledWith('note-1', true);
+      expect(convertNoteToThread).toHaveBeenCalledWith('note-1');
     });
-    expect(convertNoteToThread).toHaveBeenCalledWith('note-1');
-    expect(convertNoteToThread.mock.invocationCallOrder[0]).toBeLessThan(
-      resolveThread.mock.invocationCallOrder[0],
-    );
+    expect(resolveThread).not.toHaveBeenCalled();
   });
 });

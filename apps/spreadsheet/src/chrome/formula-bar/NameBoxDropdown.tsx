@@ -28,7 +28,7 @@ import {
 
 import { parseCellAddress, parseCellRange } from '@mog-sdk/kernel';
 import type { CellRange, SheetId } from '@mog-sdk/contracts/core';
-import type { ParsedCellRange } from '@mog-sdk/contracts/utils';
+import type { CellCoord } from '@mog-sdk/contracts/rendering';
 import {
   createVirtualRef,
   MenuItem,
@@ -50,6 +50,7 @@ import {
 } from '../../domain/editor/name-completion';
 import { useDebouncedSelection } from '../../hooks';
 import { formatNameBoxSelection } from './name-box-display';
+import { createNameBoxRangeSelection } from './name-box-navigation';
 
 // =============================================================================
 // Types
@@ -64,17 +65,6 @@ const INVALID_NAME_MESSAGE = 'The name you entered is not valid.';
 // =============================================================================
 // Store Adapter
 // =============================================================================
-
-function rangeFromParsedCellRange(parsedRange: ParsedCellRange): CellRange {
-  return {
-    startRow: parsedRange.startRow,
-    startCol: parsedRange.startCol,
-    endRow: parsedRange.endRow,
-    endCol: parsedRange.endCol,
-    ...(parsedRange.isFullColumn ? { isFullColumn: true } : {}),
-    ...(parsedRange.isFullRow ? { isFullRow: true } : {}),
-  };
-}
 
 /**
  * Create a NameCompletionStoreLike adapter from cached async data.
@@ -441,11 +431,12 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
 
       const setCellSelection = (
         range: CellRange,
-        nextActiveCell: { row: number; col: number },
+        nextActiveCell: CellCoord,
+        anchor?: CellCoord | null,
       ): void => {
         deps.commands.object.deselectAll();
         deps.commands.chart.deselectAll();
-        selectionCommands.setSelection([range], nextActiveCell);
+        selectionCommands.setSelection([range], nextActiveCell, anchor);
       };
 
       if (trimmedAddress.includes(':')) {
@@ -454,10 +445,8 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
           if (parsedRange.sheetName) {
             await activateSheetByName(parsedRange.sheetName);
           }
-          setCellSelection(rangeFromParsedCellRange(parsedRange), {
-            row: parsedRange.startRow,
-            col: parsedRange.startCol,
-          });
+          const selection = createNameBoxRangeSelection(parsedRange);
+          setCellSelection(selection.range, selection.activeCell, selection.anchor);
           return;
         }
       }
@@ -477,10 +466,8 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
         if (parsedRange.sheetName) {
           await activateSheetByName(parsedRange.sheetName);
         }
-        setCellSelection(rangeFromParsedCellRange(parsedRange), {
-          row: parsedRange.startRow,
-          col: parsedRange.startCol,
-        });
+        const selection = createNameBoxRangeSelection(parsedRange);
+        setCellSelection(selection.range, selection.activeCell, selection.anchor);
         return true;
       };
 
@@ -562,10 +549,8 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
 
         // Set selection to the range (or single cell when start === end);
         // the viewport-follow coordinator scrolls into view via the SET_SELECTION emit.
-        setCellSelection(rangeFromParsedCellRange(parsed), {
-          row: parsed.startRow,
-          col: parsed.startCol,
-        });
+        const selection = createNameBoxRangeSelection(parsed);
+        setCellSelection(selection.range, selection.activeCell, selection.anchor);
         return;
       }
 

@@ -7,6 +7,8 @@
 
 import type { ActionDependencies, ActionResult } from '@mog-sdk/contracts/actions';
 import type { CellRange, SheetId } from '@mog-sdk/contracts/core';
+import type { CellData, Worksheet } from '@mog-sdk/contracts/api';
+import { toA1 } from '@mog/spreadsheet-utils/a1';
 
 import {
   handled,
@@ -74,6 +76,88 @@ function singleCellRange(cell: { row: number; col: number }): CellRange {
   };
 }
 
+type FormulaSpan = {
+  startCol: number;
+  endCol: number;
+};
+
+function cellHasFormula(cell: CellData | undefined): boolean {
+  return typeof cell?.formula === 'string' && cell.formula.length > 0;
+}
+
+function cellIsEmpty(cell: CellData | undefined): boolean {
+  return cell?.value == null && !cellHasFormula(cell);
+}
+
+function formulaSpansForRow(cells: CellData[], firstCol: number): FormulaSpan[] {
+  const spans: FormulaSpan[] = [];
+  let startCol: number | null = null;
+
+  cells.forEach((cell, offset) => {
+    const col = firstCol + offset;
+    if (cellHasFormula(cell)) {
+      if (startCol == null) startCol = col;
+      return;
+    }
+
+    if (startCol != null) {
+      spans.push({ startCol, endCol: col - 1 });
+      startCol = null;
+    }
+  });
+
+  if (startCol != null) {
+    spans.push({ startCol, endCol: firstCol + cells.length - 1 });
+  }
+
+  return spans;
+}
+
+function rangeA1(row: number, startCol: number, endCol: number): string {
+  const start = toA1(row, startCol);
+  const end = toA1(row, endCol);
+  return start === end ? start : `${start}:${end}`;
+}
+
+async function fillInsertedRowFormulaSpans(
+  ws: Worksheet,
+  insertAt: number,
+  sourceDirection: 'above' | 'below',
+): Promise<void> {
+  const usedRange = await ws.getUsedRange().catch(() => null);
+  if (!usedRange) return;
+
+  const startCol = usedRange.startCol;
+  const endCol = usedRange.endCol;
+  if (startCol > endCol) return;
+
+  const sourceRow = sourceDirection === 'below' ? insertAt + 1 : insertAt - 1;
+  if (sourceRow < usedRange.startRow || sourceRow > usedRange.endRow) return;
+
+  const [sourceCells] = await ws
+    .getRange({ startRow: sourceRow, startCol, endRow: sourceRow, endCol })
+    .catch(() => [[] as CellData[]]);
+  const spans = formulaSpansForRow(sourceCells ?? [], startCol);
+  if (spans.length === 0) return;
+
+  const [targetCells] = await ws
+    .getRange({ startRow: insertAt, startCol, endRow: insertAt, endCol })
+    .catch(() => [[] as CellData[]]);
+
+  for (const span of spans) {
+    const targetStartOffset = span.startCol - startCol;
+    const targetEndOffset = span.endCol - startCol;
+    const targetSpanCells = (targetCells ?? []).slice(targetStartOffset, targetEndOffset + 1);
+    if (!targetSpanCells.every(cellIsEmpty)) continue;
+
+    await ws.autoFill(
+      rangeA1(sourceRow, span.startCol, span.endCol),
+      rangeA1(insertAt, span.startCol, span.endCol),
+      'withoutFormats',
+    );
+  }
+}
+
 export async function insertRowAboveSelection(deps: ActionDependencies): Promise<ActionResult> {
   const targetSheetIds = getTargetSheetIds(deps);
   const { activeCell, ranges } = getSelectionContext(deps);
@@ -84,6 +168,7 @@ export async function insertRowAboveSelection(deps: ActionDependencies): Promise
     for (const sheetId of targetSheetIds) {
       const ws = deps.workbook.getSheetById(sheetId);
       await ws.structure.insertRows(insertAt, 1);
+      await fillInsertedRowFormulaSpans(ws, insertAt, 'below');
     }
   } catch (err) {
     if (isProtectionRejection(err)) {

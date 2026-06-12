@@ -2,6 +2,7 @@ import { jest } from '@jest/globals';
 
 import type { ActionDependencies } from '@mog-sdk/contracts/actions';
 import type { ClipboardData } from '@mog-sdk/contracts/actors';
+import type { CellData } from '@mog-sdk/contracts/api';
 import {
   MAX_COLS,
   MAX_ROWS,
@@ -45,6 +46,7 @@ function createDeps(
     hiddenCols?: number[];
     cutSourceRanges?: CellRange[] | null;
     clipboardData?: ClipboardData | null;
+    cellData?: Record<number, Record<number, CellData>>;
   } = {},
 ): ActionDependencies {
   const activeSheetId = makeSheetId('sheet1');
@@ -58,6 +60,23 @@ function createDeps(
   const worksheet = {
     formatValues: jest.fn(async () => []),
     getUsedRange: jest.fn(async () => options.usedRange ?? null),
+    getRange: jest.fn(async (range: CellRange) => {
+      const rows: CellData[][] = [];
+      for (let row = range.startRow; row <= range.endRow; row++) {
+        const rowCells: CellData[] = [];
+        for (let col = range.startCol; col <= range.endCol; col++) {
+          rowCells.push(options.cellData?.[row]?.[col] ?? { value: null });
+        }
+        rows.push(rowCells);
+      }
+      return rows;
+    }),
+    autoFill: jest.fn(async () => ({
+      patternType: 'copy',
+      filledCellCount: 1,
+      warnings: [],
+      changes: [],
+    })),
     layout: {
       setRowVisible: jest.fn(async () => undefined),
       setColumnVisible: jest.fn(async () => undefined),
@@ -186,6 +205,57 @@ describe('Structure autofit handlers', () => {
       [{ startRow: 4, startCol: 3, endRow: 4, endCol: 3 }],
       { row: 4, col: 3 },
     );
+  });
+
+  it('fills formula spans from the shifted row when inserting a row above', async () => {
+    const deps = createDeps({
+      activeCell: { row: 4, col: 1 },
+      ranges: [],
+      usedRange: { startRow: 0, startCol: 0, endRow: 8, endCol: 4 },
+      cellData: {
+        4: {
+          0: { value: null },
+          1: { value: null },
+          2: { value: null },
+          3: { value: null },
+          4: { value: null },
+        },
+        5: {
+          0: { value: 'Label' },
+          1: { value: 10, formula: '=B3' },
+          2: { value: 11, formula: '=C3' },
+          3: { value: 'note' },
+          4: { value: 12, formula: '=E3' },
+        },
+      },
+    });
+
+    await StructureHandlers.INSERT_ROW_ABOVE(deps);
+
+    const worksheet = getMockWorksheet(deps);
+    expect(worksheet.autoFill).toHaveBeenCalledTimes(2);
+    expect(worksheet.autoFill).toHaveBeenNthCalledWith(1, 'B6:C6', 'B5:C5', 'withoutFormats');
+    expect(worksheet.autoFill).toHaveBeenNthCalledWith(2, 'E6', 'E5', 'withoutFormats');
+  });
+
+  it('does not fill inserted rows from value-only neighbors', async () => {
+    const deps = createDeps({
+      activeCell: { row: 4, col: 1 },
+      ranges: [],
+      usedRange: { startRow: 0, startCol: 0, endRow: 8, endCol: 2 },
+      cellData: {
+        5: {
+          0: { value: 'Label' },
+          1: { value: 10 },
+          2: { value: 11 },
+        },
+      },
+    });
+
+    await StructureHandlers.INSERT_ROW_ABOVE(deps);
+
+    const worksheet = getMockWorksheet(deps);
+    expect(worksheet.autoFill).not.toHaveBeenCalled();
   });
 
   it('command-initiated row and column deletes keep the active cell at the vacated index', async () => {

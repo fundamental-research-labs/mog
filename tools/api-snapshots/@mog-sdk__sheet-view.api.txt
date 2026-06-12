@@ -126,6 +126,7 @@ export interface SheetViewSkinColumnGeometry { readonly index: number; readonly 
 export interface SheetViewSkinGeometry { visibleRows(): Iterable<SheetViewSkinRowGeometry>; visibleColumns(): Iterable<SheetViewSkinColumnGeometry>; getCellRect(row: number, col: number): SheetRect |  ...
 export interface SheetViewSkinRowGeometry { readonly index: number; readonly top: number; readonly bottom: number; readonly height: number; }
 export interface SheetViewSkinValidationError { readonly path: string; readonly code: string; readonly message: string; }
+export interface SheetViewViewportInset { readonly right?: number; readonly bottom?: number; }
 export interface SheetViewVisibleBounds { startRow: number; startCol: number; endRow: number; endCol: number; }
 export interface SheetViewWorkbookSource { readonly activeSheet?: { readonly sheetId?: unknown; }; }
 export interface SheetViewportSize { readonly width: number; readonly height: number; }

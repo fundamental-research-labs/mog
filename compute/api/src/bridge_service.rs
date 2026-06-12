@@ -52,6 +52,7 @@ use domain_types::domain::cell_style::CellStyleDef;
 use domain_types::domain::comment::{Comment, CommentMention, CommentType};
 use domain_types::domain::conditional_format::{CFRule, ConditionalFormat};
 use domain_types::domain::floating_object::FloatingObject;
+use domain_types::domain::hyperlink::Hyperlink;
 use domain_types::domain::merge::{CellMergeInfo, MergeRegion, ResolvedMergedRegion};
 use domain_types::domain::sheet::{
     FrozenPanes, PrintRange, PrintTitles, SheetMeta, SheetScrollPosition, SheetSettings,

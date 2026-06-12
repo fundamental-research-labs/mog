@@ -160,6 +160,13 @@ function FormulaBarContainerImpl() {
     return unsub;
   }, [wb]);
 
+  // Named-range updates can rewrite the active cell's formula without moving
+  // the selection, so the formula bar needs to re-read the current cell.
+  useEffect(() => {
+    const unsub = wb.on('namedRangeChanged', () => setStructureVersion((v) => v + 1));
+    return unsub;
+  }, [wb]);
+
   useEffect(() => {
     const clipboardActor = coordinator.grid.access.actors.clipboard;
     let wasPasting = clipboardActor.getSnapshot().matches('pasting');

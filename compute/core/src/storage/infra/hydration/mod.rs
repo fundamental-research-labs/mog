@@ -33,6 +33,7 @@
 
 mod data_tables;
 mod features;
+mod form_controls;
 mod helpers;
 mod import;
 mod imported_pivot_classification;

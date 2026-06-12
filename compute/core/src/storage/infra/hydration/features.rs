@@ -15,6 +15,7 @@ use compute_document::cell_serde::{
 };
 
 use super::IdAllocator;
+use super::form_controls::normalize_form_control_references_for_hydration;
 use super::helpers::get_or_create_cell_id_for_pos;
 use crate::import::parse_output_to_snapshot::hyperlink_lowering::{
     HyperlinkAnchor, classify_hyperlink_anchor,
@@ -874,6 +875,9 @@ pub(super) fn hydrate_floating_objects(
         let mut obj = obj.clone();
         obj.common.sheet_id = sheet_id.to_uuid_string();
         obj.common.id = sheet_unique_floating_object_id(&obj.common.id, sheet_id);
+        normalize_form_control_references_for_hydration(
+            &mut obj, maps.cells, pos_map, txn, allocator,
+        );
         let anchor = &obj.common.anchor;
         let anchor_hex = get_or_create_cell_id_for_pos(
             maps.cells,

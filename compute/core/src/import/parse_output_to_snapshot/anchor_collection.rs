@@ -19,6 +19,9 @@ pub(crate) enum IdentityAnchorReason {
     /// two-cell anchors, the end anchor so the whole anchored span gets durable
     /// identity even when it falls outside the populated cell extent.
     FloatingObject,
+    /// A worksheet form control points at this cell as its linked value cell
+    /// or list-fill range endpoint.
+    FormControlReference,
 }
 
 /// Collect all (row, col) positions anchored by any feature on a sheet.
@@ -62,6 +65,7 @@ pub(crate) fn collect_identity_required_anchors(
     identity_anchors_from_auto_filter(sheet_data, &mut anchors);
     identity_anchors_from_comments(sheet_data, &mut anchors);
     identity_anchors_from_floating_objects(sheet_data, &mut anchors);
+    identity_anchors_from_form_control_references(sheet_data, &mut anchors);
     anchors
 }
 
@@ -144,6 +148,86 @@ fn identity_anchors_from_floating_objects(
             push(out, (end_row, end_col));
         }
     }
+}
+
+fn identity_anchors_from_form_control_references(
+    sheet_data: &SheetData,
+    out: &mut FxHashMap<(u32, u32), Vec<IdentityAnchorReason>>,
+) {
+    let push = |out: &mut FxHashMap<(u32, u32), Vec<IdentityAnchorReason>>, pos: (u32, u32)| {
+        let reasons = out.entry(pos).or_default();
+        if !reasons.contains(&IdentityAnchorReason::FormControlReference) {
+            reasons.push(IdentityAnchorReason::FormControlReference);
+        }
+    };
+
+    for obj in &sheet_data.floating_objects {
+        let domain_types::domain::floating_object::FloatingObjectData::FormControl(control) =
+            &obj.data
+        else {
+            continue;
+        };
+
+        if let Some(linked_cell) = control
+            .cell_link
+            .as_deref()
+            .or_else(|| {
+                control
+                    .ooxml
+                    .as_ref()
+                    .and_then(|props| props.control_pr.as_ref())
+                    .and_then(|control_pr| control_pr.linked_cell.as_deref())
+            })
+            .and_then(normalize_form_control_reference)
+            .and_then(|reference| parse_cell_ref(&reference))
+        {
+            push(out, linked_cell);
+        }
+
+        if let Some((start_row, start_col, end_row, end_col)) = control
+            .input_range
+            .as_deref()
+            .or_else(|| {
+                control
+                    .ooxml
+                    .as_ref()
+                    .and_then(|props| props.control_pr.as_ref())
+                    .and_then(|control_pr| control_pr.list_fill_range.as_deref())
+            })
+            .and_then(normalize_form_control_reference)
+            .and_then(|reference| parse_range_ref(&reference))
+        {
+            push(out, (start_row, start_col));
+            push(out, (end_row, end_col));
+        }
+    }
+}
+
+fn normalize_form_control_reference(reference: &str) -> Option<String> {
+    let mut normalized = reference.trim();
+    if normalized.is_empty() || normalized.starts_with('{') {
+        return None;
+    }
+    if (normalized.starts_with('"') && normalized.ends_with('"'))
+        || (normalized.starts_with('\'') && normalized.ends_with('\''))
+    {
+        let quote = if normalized.starts_with('"') {
+            '"'
+        } else {
+            '\''
+        };
+        normalized = normalized
+            .strip_prefix(quote)
+            .and_then(|value| value.strip_suffix(quote))
+            .unwrap_or(normalized);
+    }
+    if let Some(rest) = normalized.strip_prefix('=') {
+        normalized = rest.trim();
+    }
+    if let Some((_, local_ref)) = normalized.rsplit_once('!') {
+        normalized = local_ref.trim();
+    }
+    (!normalized.is_empty()).then(|| normalized.to_string())
 }
 
 fn anchors_from_hyperlinks(sheet_data: &SheetData, out: &mut FxHashSet<(u32, u32)>) {

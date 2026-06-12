@@ -55,6 +55,8 @@ export type SelectionActionType =
   | 'TAB_BACKWARD'
   | 'ENTER_NAVIGATE'
   | 'SHIFT_ENTER_NAVIGATE'
+  | 'COMMIT_ENTER'
+  | 'COMMIT_SHIFT_ENTER'
   // Page navigation
   | 'PAGE_UP'
   | 'PAGE_DOWN'

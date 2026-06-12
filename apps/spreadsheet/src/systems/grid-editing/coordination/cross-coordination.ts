@@ -49,10 +49,6 @@ export type EditorState = SnapshotFrom<typeof editorMachine>;
 export type ClipboardState = SnapshotFrom<typeof clipboardMachine>;
 export type RendererState = SnapshotFrom<typeof rendererMachine>;
 
-function isFormulaSourceCommit(state: EditorState): boolean {
-  return !state.context.formulaInputIsLiteral && state.context.value.trimStart().startsWith('=');
-}
-
 /**
  * Callback to notify renderer of layer invalidation.
  */
@@ -190,10 +186,6 @@ export function setupEditorToSelectionCoordination(
     if (wasCommitting && isInactive && previousState?.context.commitDirection) {
       const direction = previousState.context.commitDirection;
       const commitKey = previousState.context.commitKey;
-      const isEnterKeyCommit = commitKey === 'enter' || commitKey === 'shift-enter';
-      const suppressEnterNavigation =
-        isEnterKeyCommit &&
-        (previousState.context.entryMode === 'doubleClick' || isFormulaSourceCommit(previousState));
       const editingSheetId = previousState.context.sheetId;
       const currentSheetId = getCurrentSheetId?.();
       const committedFromDifferentSheet =
@@ -209,7 +201,7 @@ export function setupEditorToSelectionCoordination(
         return;
       }
 
-      if (direction !== 'none' && !suppressEnterNavigation) {
+      if (direction !== 'none') {
         if (commitKey === 'tab' || commitKey === 'shift-tab') {
           // Route through KEY_TAB so selection machine tracks tabOriginCol
           selectionActor.send({ type: 'KEY_TAB', shiftKey: commitKey === 'shift-tab' });

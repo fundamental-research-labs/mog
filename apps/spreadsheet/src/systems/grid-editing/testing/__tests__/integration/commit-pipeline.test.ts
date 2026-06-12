@@ -16,10 +16,35 @@ import { createIntegrationSimulator, type IntegrationSimulator } from '../../int
 // =============================================================================
 
 let sim: IntegrationSimulator;
+const TEST_SHEET_ID = 'sheet-1';
 
 afterEach(() => {
   sim?.destroy();
 });
+
+async function startFormulaEditingWithEntryMode(
+  entryMode: 'F2' | 'doubleClick',
+  formula = '=A1+B1',
+): Promise<void> {
+  const cell = sim.activeCell();
+  const preEditSelectionRanges = sim.selectionRanges().map((range) => ({ ...range }));
+  const rawSystem = sim.system as any;
+
+  rawSystem.selectionActor.send({
+    type: 'BEGIN_CELL_EDIT',
+    cell,
+  });
+  rawSystem.editorActor.send({
+    type: 'START_EDITING',
+    cell,
+    sheetId: TEST_SHEET_ID,
+    initialValue: formula,
+    entryMode,
+    preEditSelectionRanges,
+  });
+
+  await sim.flush();
+}
 
 // =============================================================================
 // Auto-Commit Lifecycle
@@ -272,16 +297,52 @@ describe('Formula editing mode', () => {
     expect(sim.activeCell()).toEqual({ row: 1, col: 0 });
   });
 
-  it('formula edit committed with Enter advances from the edited cell', async () => {
+  it('formula edit committed through the production Enter action advances from the edited cell', async () => {
     sim = createIntegrationSimulator({
       activeCell: { row: 4, col: 2 },
     });
 
     sim.startEditing('=A1+B1');
-    await sim.system.commitWithKey('enter');
+    await sim.dispatch('COMMIT_ENTER');
     await sim.flush();
 
     expect(sim.isEditing()).toBe(false);
     expect(sim.activeCell()).toEqual({ row: 5, col: 2 });
   });
+
+  it('formula edit committed through the production Shift+Enter action moves upward', async () => {
+    sim = createIntegrationSimulator({
+      activeCell: { row: 4, col: 2 },
+    });
+
+    sim.startEditing('=A1+B1');
+    await sim.dispatch('COMMIT_SHIFT_ENTER');
+    await sim.flush();
+
+    expect(sim.isEditing()).toBe(false);
+    expect(sim.activeCell()).toEqual({ row: 3, col: 2 });
+  });
+
+  it.each([
+    ['F2', 'COMMIT_ENTER', { row: 5, col: 2 }],
+    ['doubleClick', 'COMMIT_ENTER', { row: 5, col: 2 }],
+    ['F2', 'COMMIT_SHIFT_ENTER', { row: 3, col: 2 }],
+    ['doubleClick', 'COMMIT_SHIFT_ENTER', { row: 3, col: 2 }],
+  ] as const)(
+    'formula edit started from %s follows production %s navigation',
+    async (entryMode, commitAction, expectedActiveCell) => {
+      sim = createIntegrationSimulator({
+        activeCell: { row: 4, col: 2 },
+      });
+
+      await startFormulaEditingWithEntryMode(entryMode);
+      expect(sim.isEditing()).toBe(true);
+
+      await sim.dispatch(commitAction);
+      await sim.flush();
+
+      expect(sim.isEditing()).toBe(false);
+      expect(sim.activeCell()).toEqual(expectedActiveCell);
+    },
+  );
 });

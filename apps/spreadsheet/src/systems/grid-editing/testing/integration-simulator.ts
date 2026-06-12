@@ -64,6 +64,7 @@ import {
   PAGE_DOWN,
   PAGE_UP,
 } from '../../../actions/handlers/selection/page-navigation';
+import { COMMIT_ENTER, COMMIT_SHIFT_ENTER } from '../../../actions/handlers/editor';
 import {
   ENTER_NAVIGATE,
   SHIFT_ENTER_NAVIGATE,
@@ -156,6 +157,8 @@ const HANDLER_MAP: Record<SelectionActionType, AnyActionHandler> = {
   TAB_BACKWARD,
   ENTER_NAVIGATE,
   SHIFT_ENTER_NAVIGATE,
+  COMMIT_ENTER,
+  COMMIT_SHIFT_ENTER,
 
   // Page navigation
   PAGE_UP,

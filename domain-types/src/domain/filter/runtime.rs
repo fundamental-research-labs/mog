@@ -260,6 +260,8 @@ pub struct LosslessCriterionDescriptor {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub filter_col_id: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub table_column_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub table_column_ordinal: Option<u32>,
     pub kind: String,
     pub preserved_json: serde_json::Value,
@@ -336,6 +338,8 @@ pub struct FilterMetadataBinding {
     pub data_end_cell_id: String,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub col_id_to_header_cell_id: BTreeMap<u32, String>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub table_column_id_to_header_cell_id: BTreeMap<String, String>,
     pub shell: FilterShellMetadata,
     pub source_fingerprint: String,
 }
@@ -428,6 +432,7 @@ mod tests {
             header_end_cell_id: "cell-d".to_string(),
             data_end_cell_id: "cell-d12".to_string(),
             col_id_to_header_cell_id,
+            table_column_id_to_header_cell_id: BTreeMap::new(),
             shell: FilterShellMetadata {
                 capability: FilterCapability::Unsupported,
                 unsupported_reasons: vec![
@@ -438,6 +443,7 @@ mod tests {
                 button_metadata,
                 lossless_criteria: vec![LosslessCriterionDescriptor {
                     filter_col_id: Some(2),
+                    table_column_id: None,
                     table_column_ordinal: None,
                     kind: "icon".to_string(),
                     preserved_json: serde_json::json!({ "iconSet": "3TrafficLights1" }),

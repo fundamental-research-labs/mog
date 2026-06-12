@@ -271,6 +271,7 @@ fn unsupported_import_diagnostic_merges_phases_and_preserves_filter_location() {
         header_end_cell_id: "header-d".to_string(),
         data_end_cell_id: "data-d".to_string(),
         col_id_to_header_cell_id,
+        table_column_id_to_header_cell_id: BTreeMap::new(),
         shell: filters::FilterShellMetadata::default(),
         source_fingerprint: "filterMetadataBindingFingerprintV1:test".to_string(),
     };

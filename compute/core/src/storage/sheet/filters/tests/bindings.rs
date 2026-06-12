@@ -43,6 +43,7 @@ fn binding(filter_id: &str) -> FilterMetadataBinding {
         header_end_cell_id: "header-c".to_string(),
         data_end_cell_id: "cell-c10".to_string(),
         col_id_to_header_cell_id,
+        table_column_id_to_header_cell_id: BTreeMap::new(),
         shell: FilterShellMetadata {
             capability: FilterCapability::Supported,
             unsupported_reasons: Vec::new(),

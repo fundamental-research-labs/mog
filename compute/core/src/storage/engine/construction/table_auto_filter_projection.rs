@@ -11,7 +11,7 @@ use cell_types::{SheetId, SheetPos};
 use compute_document::hex::id_to_hex;
 use compute_document::schema::KEY_TABLES;
 use compute_document::undo::ORIGIN_BOOTSTRAP;
-use domain_types::domain::table::{FilterSpec, TableCatalogEntry as CanonicalTable, TableSpec};
+use domain_types::domain::table::{FilterSpec, TableCatalogEntry as CanonicalTable};
 use domain_types::yrs_schema;
 use value_types::CellValue;
 use yrs::{Map, Out, Transact};
@@ -29,35 +29,32 @@ pub(in crate::storage::engine) fn materialize_table_auto_filters_from_preserved_
     mut import_report: Option<&mut domain_types::ImportReport>,
     import_phase: domain_types::ImportPhase,
 ) {
-    let table_specs = read_preserved_table_specs(stores);
-    for table_spec in table_specs {
-        if table_spec.auto_filter_ref.is_none() && table_spec.filter_columns.is_empty() {
+    let tables = read_preserved_tables(stores);
+    for table in tables {
+        if table.auto_filter_ref.is_none() && table.filter_columns.is_empty() {
             continue;
         }
 
-        let Some(table) = mirror.get_table(&table_spec.name).cloned() else {
-            continue;
-        };
         let Ok(sheet_id) = SheetId::from_uuid_str(&table.sheet_id) else {
             continue;
         };
         if !table.has_header_row {
             continue;
         }
+        stores.compute.set_table(mirror, table.clone());
 
         materialize_table_auto_filter_from_preserved_spec(
             stores,
             mirror,
             &sheet_id,
             &table,
-            &table_spec,
             import_report.as_deref_mut(),
             import_phase,
         );
     }
 }
 
-fn read_preserved_table_specs(stores: &EngineStores) -> Vec<TableSpec> {
+fn read_preserved_tables(stores: &EngineStores) -> Vec<CanonicalTable> {
     let txn = stores.storage.doc().transact();
     let Some(Out::YMap(tables_map)) = stores.storage.workbook_map().get(&txn, KEY_TABLES) else {
         return Vec::new();
@@ -66,7 +63,7 @@ fn read_preserved_table_specs(stores: &EngineStores) -> Vec<TableSpec> {
     tables_map
         .iter(&txn)
         .filter_map(|(_, out)| match out {
-            Out::YMap(map) => yrs_schema::table::from_yrs_map(&map, &txn),
+            Out::YMap(map) => yrs_schema::table::from_yrs_map_to_table(&map, &txn),
             _ => None,
         })
         .collect()
@@ -77,7 +74,6 @@ fn materialize_table_auto_filter_from_preserved_spec(
     mirror: &mut CellMirror,
     sheet_id: &SheetId,
     table: &CanonicalTable,
-    table_spec: &TableSpec,
     import_report: Option<&mut domain_types::ImportReport>,
     import_phase: domain_types::ImportPhase,
 ) {
@@ -93,7 +89,13 @@ fn materialize_table_auto_filter_from_preserved_spec(
         table.range.end_row()
     };
 
-    let (header_start_cell_id, header_end_cell_id, data_end_cell_id, col_id_to_header_cell_id) = {
+    let (
+        header_start_cell_id,
+        header_end_cell_id,
+        data_end_cell_id,
+        col_id_to_header_cell_id,
+        table_column_id_to_header_cell_id,
+    ) = {
         let Some(grid) = stores.grid_indexes.get_mut(sheet_id) else {
             return;
         };
@@ -106,13 +108,17 @@ fn materialize_table_auto_filter_from_preserved_spec(
         mirror.register_identity_only(sheet_id, SheetPos::new(data_end_row, end_col), data_end);
 
         let mut col_id_to_header_cell_id = BTreeMap::new();
+        let mut table_column_id_to_header_cell_id = BTreeMap::new();
         for col in start_col..=end_col {
             let cell_id = grid.ensure_cell_id(start_row, col);
             mirror.register_identity_only(sheet_id, SheetPos::new(start_row, col), cell_id);
-            col_id_to_header_cell_id.insert(
-                col.saturating_sub(start_col),
-                id_to_hex(cell_id.as_u128()).to_string(),
-            );
+            let relative_col = col.saturating_sub(start_col);
+            let header_cell_id = id_to_hex(cell_id.as_u128()).to_string();
+            col_id_to_header_cell_id.insert(relative_col, header_cell_id.clone());
+            if let Some(stable_column_id) = stable_column_id_for_filter_col(table, relative_col) {
+                table_column_id_to_header_cell_id
+                    .insert(stable_column_id.to_string(), header_cell_id);
+            }
         }
 
         (
@@ -120,12 +126,13 @@ fn materialize_table_auto_filter_from_preserved_spec(
             id_to_hex(header_end.as_u128()).to_string(),
             id_to_hex(data_end.as_u128()).to_string(),
             col_id_to_header_cell_id,
+            table_column_id_to_header_cell_id,
         )
     };
 
-    let shell = build_table_filter_shell_metadata(table, table_spec, &col_id_to_header_cell_id);
+    let shell = build_table_filter_shell_metadata(table, &col_id_to_header_cell_id);
     let column_filters = if shell.capability == filters::FilterCapability::Supported {
-        table_spec
+        table
             .filter_columns
             .iter()
             .filter_map(|column| {
@@ -185,9 +192,9 @@ fn materialize_table_auto_filter_from_preserved_spec(
         stores,
         sheet_id,
         table,
-        table_spec,
         &filter_state,
         col_id_to_header_cell_id,
+        table_column_id_to_header_cell_id,
         shell,
     );
     if binding.shell.capability == filters::FilterCapability::Unsupported
@@ -198,7 +205,6 @@ fn materialize_table_auto_filter_from_preserved_spec(
             mirror,
             sheet_id,
             table,
-            table_spec,
             &binding,
             report,
             import_phase,
@@ -210,13 +216,13 @@ fn upsert_table_auto_filter_binding(
     stores: &EngineStores,
     sheet_id: &SheetId,
     table: &CanonicalTable,
-    table_spec: &TableSpec,
     filter_state: &filters::FilterState,
     col_id_to_header_cell_id: BTreeMap<u32, String>,
+    table_column_id_to_header_cell_id: BTreeMap<String, String>,
     shell: filters::FilterShellMetadata,
 ) -> filters::FilterMetadataBinding {
     let sheet_id_text = sheet_id.to_uuid_string();
-    let range_ref = table_spec
+    let range_ref = table
         .auto_filter_ref
         .clone()
         .filter(|range| !range.is_empty())
@@ -248,10 +254,10 @@ fn upsert_table_auto_filter_binding(
         header_end_cell_id: filter_state.header_end_cell_id.clone(),
         data_end_cell_id: filter_state.data_end_cell_id.clone(),
         col_id_to_header_cell_id,
+        table_column_id_to_header_cell_id,
         source_fingerprint: table_filter_binding_fingerprint(
             &sheet_id_text,
             table,
-            table_spec,
             &range_ref,
             &shell,
         ),
@@ -279,7 +285,6 @@ fn record_unsupported_table_filter_import_diagnostics(
     mirror: &CellMirror,
     sheet_id: &SheetId,
     table: &CanonicalTable,
-    table_spec: &TableSpec,
     binding: &filters::FilterMetadataBinding,
     report: &mut domain_types::ImportReport,
     import_phase: domain_types::ImportPhase,
@@ -294,7 +299,7 @@ fn record_unsupported_table_filter_import_diagnostics(
         properties::get_sheet_name(stores.storage.doc(), stores.storage.sheets(), sheet_id);
     let source_key = serde_json::to_string(&binding.source_key).ok();
 
-    if table_spec.auto_filter_ext_lst_raw.is_some() {
+    if table.auto_filter_ext_lst_raw.is_some() {
         let diagnostic = unsupported_filter_import_diagnostic(
             binding,
             sheet_index,
@@ -311,7 +316,7 @@ fn record_unsupported_table_filter_import_diagnostics(
         upsert_import_diagnostic_phase(report, diagnostic, import_phase);
     }
 
-    for column in &table_spec.filter_columns {
+    for column in &table.filter_columns {
         let mut reasons = BTreeSet::new();
         if !binding
             .col_id_to_header_cell_id
@@ -352,19 +357,18 @@ fn record_unsupported_table_filter_import_diagnostics(
 
 fn build_table_filter_shell_metadata(
     table: &CanonicalTable,
-    table_spec: &TableSpec,
     col_id_to_header_cell_id: &BTreeMap<u32, String>,
 ) -> filters::FilterShellMetadata {
     let mut unsupported_reasons = BTreeSet::new();
     let mut button_metadata = BTreeMap::new();
     let mut lossless_criteria = Vec::new();
 
-    if table_spec.auto_filter_ext_lst_raw.is_some() {
+    if table.auto_filter_ext_lst_raw.is_some() {
         unsupported_reasons.insert(filters::ImportFilterUnsupportedReason::UnknownExtension);
     }
 
     for (&col_id, header_cell_id) in col_id_to_header_cell_id {
-        let source_column = table_spec
+        let source_column = table
             .filter_columns
             .iter()
             .find(|column| column.col_id == col_id);
@@ -384,7 +388,7 @@ fn build_table_filter_shell_metadata(
         );
     }
 
-    for column in &table_spec.filter_columns {
+    for column in &table.filter_columns {
         if !col_id_to_header_cell_id.contains_key(&column.col_id) {
             unsupported_reasons
                 .insert(filters::ImportFilterUnsupportedReason::TableFilterShapeUnsupported);
@@ -395,6 +399,8 @@ fn build_table_filter_shell_metadata(
         unsupported_reasons.extend(unsupported_reasons_for_table_filter_spec(&column.filter));
         lossless_criteria.push(filters::LosslessCriterionDescriptor {
             filter_col_id: None,
+            table_column_id: stable_column_id_for_filter_col(table, column.col_id)
+                .map(str::to_string),
             table_column_ordinal: Some(column.col_id),
             kind: table_filter_kind(&column.filter).to_string(),
             preserved_json: serde_json::to_value(&column.filter).unwrap_or(serde_json::Value::Null),
@@ -409,7 +415,7 @@ fn build_table_filter_shell_metadata(
             filters::FilterCapability::Unsupported
         },
         unsupported_reasons,
-        has_active_lossless_criteria: !table_spec.filter_columns.is_empty(),
+        has_active_lossless_criteria: !table.filter_columns.is_empty(),
         button_metadata,
         lossless_criteria,
     }
@@ -578,7 +584,6 @@ fn is_known_dynamic_type(dynamic_type: &str) -> bool {
 fn table_filter_binding_fingerprint(
     sheet_id: &str,
     table: &CanonicalTable,
-    table_spec: &TableSpec,
     range_ref: &str,
     shell: &filters::FilterShellMetadata,
 ) -> String {
@@ -591,9 +596,9 @@ fn table_filter_binding_fingerprint(
         },
         "rangeRef": range_ref,
         "tableName": table.name,
-        "filterColumns": table_spec.filter_columns,
-        "autoFilterXrUid": table_spec.auto_filter_xr_uid,
-        "autoFilterExtLst": table_spec.auto_filter_ext_lst_raw,
+        "filterColumns": table.filter_columns,
+        "autoFilterXrUid": table.auto_filter_xr_uid,
+        "autoFilterExtLst": table.auto_filter_ext_lst_raw,
         "buttonMetadata": &shell.button_metadata,
         "losslessCriteria": &shell.lossless_criteria,
     });
@@ -601,6 +606,15 @@ fn table_filter_binding_fingerprint(
         "filterMetadataBindingFingerprintV1:{}",
         serde_json::to_string(&value).unwrap_or_default()
     )
+}
+
+fn stable_column_id_for_filter_col(table: &CanonicalTable, filter_col_id: u32) -> Option<&str> {
+    table
+        .columns
+        .iter()
+        .find(|column| column.index == filter_col_id)
+        .or_else(|| table.columns.get(filter_col_id as usize))
+        .map(|column| column.id.as_str())
 }
 
 fn range_ref_from_bounds(start_row: u32, start_col: u32, end_row: u32, end_col: u32) -> String {

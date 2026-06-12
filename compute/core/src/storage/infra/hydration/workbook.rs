@@ -16,6 +16,98 @@ use super::print_defined_names::is_representable_print_defined_name;
 const KEY_VOLATILE_DEPENDENCY_PACKAGE_PART: &str = "volatileDependencyPackagePart";
 const KEY_CUSTOM_WORKBOOK_VIEWS_XML: &str = "customWorkbookViewsXml";
 
+#[derive(Debug, Clone, Default)]
+pub(super) struct ImportedTableIdentityMap {
+    tables_by_ooxml_id: std::collections::HashMap<u32, ImportedTableIdentity>,
+}
+
+#[derive(Debug, Clone, Default)]
+struct ImportedTableIdentity {
+    stable_table_id: String,
+    stable_column_ids_by_ooxml_id: std::collections::HashMap<u32, String>,
+    stable_column_ids_by_source_name: std::collections::HashMap<String, String>,
+    stable_column_ids_by_ordinal: std::collections::HashMap<u32, String>,
+}
+
+impl ImportedTableIdentityMap {
+    fn insert_table(
+        &mut self,
+        imported: &domain_types::domain::table::TableSpec,
+        canonical: &domain_types::domain::table::TableCatalogEntry,
+    ) {
+        if imported.id == 0 {
+            return;
+        }
+
+        let mut identity = ImportedTableIdentity {
+            stable_table_id: canonical.id.clone(),
+            ..Default::default()
+        };
+        for (ordinal, (imported_column, canonical_column)) in imported
+            .columns
+            .iter()
+            .zip(canonical.columns.iter())
+            .enumerate()
+        {
+            let stable_column_id = canonical_column.id.clone();
+            if imported_column.id > 0 {
+                identity
+                    .stable_column_ids_by_ooxml_id
+                    .insert(imported_column.id, stable_column_id.clone());
+            }
+            identity
+                .stable_column_ids_by_ordinal
+                .insert(ordinal as u32, stable_column_id.clone());
+            identity.insert_source_name(&imported_column.name, &stable_column_id);
+            if let Some(unique_name) = imported_column.unique_name.as_deref() {
+                identity.insert_source_name(unique_name, &stable_column_id);
+            }
+        }
+
+        self.tables_by_ooxml_id.insert(imported.id, identity);
+    }
+
+    fn stable_table_id_for_ooxml_id(&self, ooxml_table_id: u32) -> Option<&str> {
+        self.tables_by_ooxml_id
+            .get(&ooxml_table_id)
+            .map(|identity| identity.stable_table_id.as_str())
+    }
+
+    fn stable_column_id_for_slicer(
+        &self,
+        table_cache: &ooxml_types::slicers::TableSlicerCache,
+        source_name: &str,
+    ) -> Option<&str> {
+        let identity = self.tables_by_ooxml_id.get(&table_cache.table_id)?;
+        identity
+            .stable_column_ids_by_ordinal
+            .get(&table_cache.column)
+            .or_else(|| {
+                let one_based_ooxml_id = table_cache.column.saturating_add(1);
+                identity
+                    .stable_column_ids_by_ooxml_id
+                    .get(&one_based_ooxml_id)
+            })
+            .or_else(|| {
+                identity
+                    .stable_column_ids_by_source_name
+                    .get(&source_name.to_ascii_lowercase())
+            })
+            .map(String::as_str)
+    }
+}
+
+impl ImportedTableIdentity {
+    fn insert_source_name(&mut self, source_name: &str, stable_column_id: &str) {
+        if source_name.is_empty() {
+            return;
+        }
+        self.stable_column_ids_by_source_name
+            .entry(source_name.to_ascii_lowercase())
+            .or_insert_with(|| stable_column_id.to_string());
+    }
+}
+
 // ===========================================================================
 // Workbook-level hydration
 // ===========================================================================
@@ -193,10 +285,10 @@ pub(super) fn hydrate_workbook_tables(
     tables: &[(domain_types::domain::table::TableSpec, String)],
     allocator: &mut impl IdAllocator,
     txn: &mut yrs::TransactionMut,
-) -> std::collections::HashMap<u32, String> {
-    let mut table_ids_by_ooxml_id = std::collections::HashMap::new();
+) -> ImportedTableIdentityMap {
+    let mut table_identity = ImportedTableIdentityMap::default();
     if tables.is_empty() {
-        return table_ids_by_ooxml_id;
+        return table_identity;
     }
     // Provider Protocol lifecycle: lazy-create the tables sub-map.
     let tables_map = crate::storage::ensure_workbook_child_map(workbook, txn, KEY_TABLES);
@@ -209,14 +301,12 @@ pub(super) fn hydrate_workbook_tables(
         let canonical = domain_types::domain::table::xlsx_table_spec_to_catalog_entry_with_ids(
             table, sheet_id, table_id, column_ids,
         );
-        if table.id > 0 {
-            table_ids_by_ooxml_id.insert(table.id, canonical.id.clone());
-        }
+        table_identity.insert_table(table, &canonical);
         let entries = yrs_schema::table::to_yrs_prelim_from_table(&canonical);
         let table_prelim: MapPrelim = entries.into_iter().collect();
         tables_map.insert(txn, &*canonical.id, table_prelim);
     }
-    table_ids_by_ooxml_id
+    table_identity
 }
 
 pub(super) fn hydrate_workbook_connections(
@@ -617,7 +707,7 @@ pub(super) fn hydrate_workbook_slicers(
     sheets: &[SheetData],
     sheet_ids: &[SheetId],
     slicer_caches: &[ooxml_types::slicers::SlicerCacheDef],
-    table_ids_by_ooxml_id: &std::collections::HashMap<u32, String>,
+    table_identity: &ImportedTableIdentityMap,
     txn: &mut yrs::TransactionMut,
 ) {
     // Build a lookup from cache name → cache def
@@ -661,7 +751,15 @@ pub(super) fn hydrate_workbook_slicers(
                 .and_then(|table_cache| table_by_ooxml_id.get(&table_cache.table_id).copied());
             let source_table_id = cache
                 .and_then(|cache| cache.table_slicer_cache.as_ref())
-                .and_then(|table_cache| table_ids_by_ooxml_id.get(&table_cache.table_id));
+                .and_then(|table_cache| {
+                    table_identity.stable_table_id_for_ooxml_id(table_cache.table_id)
+                });
+            let source_table_column_id = cache.and_then(|cache| {
+                cache.table_slicer_cache.as_ref().and_then(|table_cache| {
+                    table_identity
+                        .stable_column_id_for_slicer(table_cache, cache.source_name.as_str())
+                })
+            });
             let table_filter_selected_values = cache
                 .and_then(|cache| cache.table_slicer_cache.as_ref())
                 .and_then(|table_cache| {
@@ -682,7 +780,8 @@ pub(super) fn hydrate_workbook_slicers(
                 anchor,
                 domain_types::domain::slicer::XlsxSlicerImportContext {
                     sheet_id: &sheet_hex,
-                    source_table_id: source_table_id.map(String::as_str),
+                    source_table_id,
+                    source_table_column_id,
                     table_filter_selected_values,
                 },
             );

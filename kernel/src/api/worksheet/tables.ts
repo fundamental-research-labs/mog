@@ -116,21 +116,30 @@ export class WorksheetTablesImpl implements WorksheetTables {
       type: 'table:created',
       timestamp: Date.now(),
       sheetId: this.sheetId,
-      tableId: table.name,
+      tableId: table.id,
       config: this.tableInfoToEventConfig(table),
       source: 'api',
     });
   }
 
-  private emitTableUpdated(tableName: string, changes: TableUpdatedEvent['changes'] = {}): void {
+  private emitTableUpdated(tableId: string, changes: TableUpdatedEvent['changes'] = {}): void {
     this.ctx.eventBus.emit({
       type: 'table:updated',
       timestamp: Date.now(),
       sheetId: this.sheetId,
-      tableId: tableName,
+      tableId,
       changes,
       source: 'api',
     });
+  }
+
+  private tableIdForEvent(table: TableInfo | null | undefined, fallbackName: string): string {
+    return table?.id ?? fallbackName;
+  }
+
+  private async resolveTableIdForName(tableName: string): Promise<string | null> {
+    const table = await this.get(tableName);
+    return table?.id ?? null;
   }
 
   private tableInfoToEventConfig(table: TableInfo): TableConfig {
@@ -235,12 +244,12 @@ export class WorksheetTablesImpl implements WorksheetTables {
     return changes;
   }
 
-  private emitTableDeleted(tableName: string): void {
+  private emitTableDeleted(tableId: string): void {
     this.ctx.eventBus.emit({
       type: 'table:deleted',
       timestamp: Date.now(),
       sheetId: this.sheetId,
-      tableId: tableName,
+      tableId,
       source: 'api',
     });
   }
@@ -398,10 +407,17 @@ export class WorksheetTablesImpl implements WorksheetTables {
   }
 
   async remove(name: string): Promise<void> {
-    await assertUnprotectedTableDefinition(this.ctx, this.sheetId, 'tables.remove', name);
+    const table = await this.get(name);
+    await assertUnprotectedTableDefinition(
+      this.ctx,
+      this.sheetId,
+      'tables.remove',
+      name,
+      table?.range,
+    );
     await this.ctx.computeBridge.deleteTable(name);
     this.sortSpecCache.delete(name);
-    this.emitTableDeleted(name);
+    this.emitTableDeleted(this.tableIdForEvent(table, name));
   }
 
   async convertToRange(name: string): Promise<number> {
@@ -425,13 +441,13 @@ export class WorksheetTablesImpl implements WorksheetTables {
       type: 'table:converted-to-range',
       timestamp: Date.now(),
       sheetId: this.sheetId,
-      tableId: name,
+      tableId: this.tableIdForEvent(table, name),
       tableName: name,
       range: table ? this.tableRangeFromA1(table.range) : this.tableRangeFromA1('A1:A1'),
       affectedFormulaCount: Number.isFinite(convertedCount) ? convertedCount : 0,
       source: 'api',
     });
-    this.emitTableDeleted(name);
+    this.emitTableDeleted(this.tableIdForEvent(table, name));
     return Number.isFinite(convertedCount) ? convertedCount : 0;
   }
 
@@ -452,7 +468,14 @@ export class WorksheetTablesImpl implements WorksheetTables {
   }
 
   async rename(oldName: string, newName: string): Promise<void> {
-    await assertUnprotectedTableDefinition(this.ctx, this.sheetId, 'tables.rename', oldName);
+    const table = await this.get(oldName);
+    await assertUnprotectedTableDefinition(
+      this.ctx,
+      this.sheetId,
+      'tables.rename',
+      oldName,
+      table?.range,
+    );
     await this.assertValidTableNameForRename(oldName, newName);
     await this.ctx.computeBridge.renameTable(oldName, newName);
     const cached = this.sortSpecCache.get(oldName);
@@ -460,7 +483,7 @@ export class WorksheetTablesImpl implements WorksheetTables {
       this.sortSpecCache.delete(oldName);
       this.sortSpecCache.set(newName, cached);
     }
-    this.emitTableUpdated(newName, { name: newName });
+    this.emitTableUpdated(this.tableIdForEvent(table, newName), { name: newName });
   }
 
   async update(tableName: string, updates: TableUpdateOptions): Promise<void> {
@@ -540,10 +563,7 @@ export class WorksheetTablesImpl implements WorksheetTables {
     if (updates.hasTotalsRow !== undefined) {
       await this.setShowTotals(tableName, updates.hasTotalsRow);
     }
-    this.emitTableUpdated(
-      updates.name ?? tableName,
-      this.tableUpdateOptionsToEventChanges(updates),
-    );
+    this.emitTableUpdated(table.id, this.tableUpdateOptionsToEventChanges(updates));
   }
 
   async getAtCell(a: string | number, b?: number): Promise<TableInfo | null> {
@@ -659,7 +679,7 @@ export class WorksheetTablesImpl implements WorksheetTables {
     await assertTableStyleAllowed(this.ctx, this.sheetId, 'tables.update.style', table);
     const style = tableStyleIdForCompute(preset) ?? preset;
     await this.ctx.computeBridge.setTableStyle(tableName, style);
-    this.emitTableUpdated(tableName, { style: this.tableStyleFromPreset(style) });
+    this.emitTableUpdated(table.id, { style: this.tableStyleFromPreset(style) });
   }
 
   async resize(name: string, newRange: string | CellRange): Promise<TableResizeReceipt> {
@@ -675,7 +695,7 @@ export class WorksheetTablesImpl implements WorksheetTables {
       bounds.endCol,
     );
     const rangeStr = typeof newRange === 'string' ? newRange : resolveRangeToA1(newRange);
-    this.emitTableUpdated(name, { range: bounds });
+    this.emitTableUpdated(table.id, { range: bounds });
     return { kind: 'tableResize', tableName: name, newRange: rangeStr };
   }
 
@@ -703,7 +723,7 @@ export class WorksheetTablesImpl implements WorksheetTables {
       const table = await this.get(name);
       actualPosition = table ? table.columns.length - 1 : 0;
     }
-    this.emitTableUpdated(name);
+    this.emitTableUpdated(table.id);
     return { kind: 'tableAddColumn', tableName: name, columnName, position: actualPosition };
   }
 
@@ -718,7 +738,7 @@ export class WorksheetTablesImpl implements WorksheetTables {
       table.range,
     );
     await this.ctx.computeBridge.renameTableColumn(name, columnIndex, newColumnName);
-    this.emitTableUpdated(name);
+    this.emitTableUpdated(table.id);
   }
 
   async removeColumn(name: string, columnIndex: number): Promise<TableRemoveColumnReceipt> {
@@ -733,7 +753,7 @@ export class WorksheetTablesImpl implements WorksheetTables {
       'deleteColumns',
     );
     await this.ctx.computeBridge.removeTableColumn(name, columnIndex);
-    this.emitTableUpdated(name);
+    this.emitTableUpdated(table.id);
     return { kind: 'tableRemoveColumn', tableName: name, columnIndex };
   }
 
@@ -748,7 +768,7 @@ export class WorksheetTablesImpl implements WorksheetTables {
       table?.range,
     );
     await this.ctx.computeBridge.toggleTotalsRow(name);
-    this.emitTableUpdated(name);
+    this.emitTableUpdated(this.tableIdForEvent(table, name));
   }
 
   /** @deprecated Use {@link setShowHeaders} instead. */
@@ -762,7 +782,7 @@ export class WorksheetTablesImpl implements WorksheetTables {
       table?.range,
     );
     await this.ctx.computeBridge.toggleHeaderRow(name);
-    this.emitTableUpdated(name);
+    this.emitTableUpdated(this.tableIdForEvent(table, name));
   }
 
   async applyAutoExpansion(tableName: string): Promise<void> {
@@ -775,7 +795,7 @@ export class WorksheetTablesImpl implements WorksheetTables {
       table?.range,
     );
     await this.ctx.computeBridge.applyAutoExpansion(this.sheetId, tableName);
-    this.emitTableUpdated(tableName);
+    this.emitTableUpdated(this.tableIdForEvent(table, tableName));
   }
 
   async setCalculatedColumn(tableName: string, colIndex: number, formula: string): Promise<void> {
@@ -828,7 +848,7 @@ export class WorksheetTablesImpl implements WorksheetTables {
     } finally {
       await this.ctx.computeBridge.endUndoGroup();
     }
-    this.emitTableUpdated(tableName);
+    this.emitTableUpdated(table.id);
   }
 
   async clearCalculatedColumn(tableName: string, colIndex: number): Promise<void> {
@@ -879,7 +899,7 @@ export class WorksheetTablesImpl implements WorksheetTables {
     if (!table) throw new KernelError('COMPUTE_ERROR', `Table not found: ${tableName}`);
     await assertTableStyleAllowed(this.ctx, this.sheetId, 'tables.update.style', table);
     await this.ctx.computeBridge.setTableBoolOption(tableName, 'emphasizeFirstColumn', value);
-    this.emitTableUpdated(tableName, { style: { showFirstColumnHighlight: value } });
+    this.emitTableUpdated(table.id, { style: { showFirstColumnHighlight: value } });
   }
 
   async setHighlightLastColumn(tableName: string, value: boolean): Promise<void> {
@@ -887,7 +907,7 @@ export class WorksheetTablesImpl implements WorksheetTables {
     if (!table) throw new KernelError('COMPUTE_ERROR', `Table not found: ${tableName}`);
     await assertTableStyleAllowed(this.ctx, this.sheetId, 'tables.update.style', table);
     await this.ctx.computeBridge.setTableBoolOption(tableName, 'emphasizeLastColumn', value);
-    this.emitTableUpdated(tableName, { style: { showLastColumnHighlight: value } });
+    this.emitTableUpdated(table.id, { style: { showLastColumnHighlight: value } });
   }
 
   async setShowBandedColumns(tableName: string, value: boolean): Promise<void> {
@@ -895,7 +915,7 @@ export class WorksheetTablesImpl implements WorksheetTables {
     if (!table) throw new KernelError('COMPUTE_ERROR', `Table not found: ${tableName}`);
     await assertTableStyleAllowed(this.ctx, this.sheetId, 'tables.update.style', table);
     await this.ctx.computeBridge.setTableBoolOption(tableName, 'bandedColumns', value);
-    this.emitTableUpdated(tableName, { style: { showBandedColumns: value } });
+    this.emitTableUpdated(table.id, { style: { showBandedColumns: value } });
   }
 
   async setShowBandedRows(tableName: string, value: boolean): Promise<void> {
@@ -903,7 +923,7 @@ export class WorksheetTablesImpl implements WorksheetTables {
     if (!table) throw new KernelError('COMPUTE_ERROR', `Table not found: ${tableName}`);
     await assertTableStyleAllowed(this.ctx, this.sheetId, 'tables.update.style', table);
     await this.ctx.computeBridge.setTableBoolOption(tableName, 'bandedRows', value);
-    this.emitTableUpdated(tableName, { style: { showBandedRows: value } });
+    this.emitTableUpdated(table.id, { style: { showBandedRows: value } });
   }
 
   async setShowFilterButton(tableName: string, value: boolean): Promise<void> {
@@ -916,7 +936,7 @@ export class WorksheetTablesImpl implements WorksheetTables {
       table?.range,
     );
     await this.ctx.computeBridge.setTableBoolOption(tableName, 'showFilterButtons', value);
-    this.emitTableUpdated(tableName, { showFilterButtons: value });
+    this.emitTableUpdated(this.tableIdForEvent(table, tableName), { showFilterButtons: value });
   }
 
   // ---------------------------------------------------------------------------
@@ -935,7 +955,7 @@ export class WorksheetTablesImpl implements WorksheetTables {
         table.range,
       );
       await this.ctx.computeBridge.toggleHeaderRow(tableName);
-      this.emitTableUpdated(tableName, { hasHeaderRow: visible });
+      this.emitTableUpdated(table.id, { hasHeaderRow: visible });
     }
   }
 
@@ -951,7 +971,7 @@ export class WorksheetTablesImpl implements WorksheetTables {
         table.range,
       );
       await this.ctx.computeBridge.toggleTotalsRow(tableName);
-      this.emitTableUpdated(tableName, { hasTotalRow: visible });
+      this.emitTableUpdated(table.id, { hasTotalRow: visible });
     }
   }
 
@@ -1123,7 +1143,7 @@ export class WorksheetTablesImpl implements WorksheetTables {
       }
     }
 
-    this.emitTableUpdated(tableName);
+    this.emitTableUpdated(before.id);
 
     // Write values if provided
     if (values && values.length > 0) {
@@ -1165,7 +1185,7 @@ export class WorksheetTablesImpl implements WorksheetTables {
     const removedRow =
       typeof result.data === 'number' ? result.data : parseInt(result.data as string, 10);
     await Structures.deleteRows(this.ctx, this.sheetId, null, removedRow, 1, 'api');
-    this.emitTableUpdated(tableName);
+    this.emitTableUpdated(table.id);
     return { kind: 'tableDeleteRow', tableName, index };
   }
 
@@ -1522,17 +1542,25 @@ export class WorksheetTablesImpl implements WorksheetTables {
     tableName: string,
     callback: (event: TableUpdatedEvent) => void,
   ): CallableDisposable {
-    // Resolve the table name to a tableId once at subscription time.
-    // Cache it so we don't re-resolve on every event.
-    let resolvedTableId: string | undefined;
+    let resolvedTableId: string | null = null;
+    let resolvePromise: Promise<string | null> | null = null;
+    const resolveTargetTableId = async (): Promise<string | null> => {
+      if (resolvedTableId) return resolvedTableId;
+      if (resolvePromise) return resolvePromise;
+      resolvePromise = this.resolveTableIdForName(tableName).then((tableId) => {
+        resolvedTableId = tableId;
+        resolvePromise = null;
+        return tableId;
+      });
+      return resolvePromise;
+    };
+
+    void resolveTargetTableId();
+
     const unsub = this.ctx.eventBus.on('table:updated', async (event: any) => {
       if (event.sheetId && event.sheetId !== this.sheetId) return;
-      // Lazily resolve the tableId from the name on first event
-      if (resolvedTableId === undefined) {
-        const table = await this.get(tableName);
-        resolvedTableId = table?.id ?? '';
-      }
-      if (resolvedTableId && event.tableId !== resolvedTableId) return;
+      const tableId = await resolveTargetTableId();
+      if (!tableId || event.tableId !== tableId) return;
       callback(event as TableUpdatedEvent);
     });
     return toDisposable(unsub);

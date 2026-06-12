@@ -67,6 +67,7 @@ fn domain_sort_order_to_ooxml(so: SlicerSortOrder) -> ooxml_types::slicers::Slic
 pub struct XlsxSlicerImportContext<'a> {
     pub sheet_id: &'a str,
     pub source_table_id: Option<&'a str>,
+    pub source_table_column_id: Option<&'a str>,
     pub table_filter_selected_values: Option<&'a [CellValue]>,
 }
 
@@ -122,7 +123,10 @@ pub fn xlsx_import_to_stored_slicer(
                     .source_table_id
                     .map(str::to_string)
                     .unwrap_or_else(|| tsc.table_id.to_string()),
-                column_cell_id: cache_def.source_name.clone(),
+                column_cell_id: context
+                    .source_table_column_id
+                    .map(str::to_string)
+                    .unwrap_or_else(|| cache_def.source_name.clone()),
             }
         } else if cache_def.tabular_data.is_some() || !cache_def.pivot_tables.is_empty() {
             // Pivot-backed slicer
@@ -307,7 +311,7 @@ pub fn stored_slicer_to_cache_def(stored: &StoredSlicer) -> OoxmlSlicerCacheDef 
         .unwrap_or_else(|| format!("Slicer_{}", stored.caption));
     match &stored.source {
         SlicerSource::Table {
-            table_id,
+            table_id: _,
             column_cell_id,
         } => OoxmlSlicerCacheDef {
             name: cache_name,
@@ -316,8 +320,8 @@ pub fn stored_slicer_to_cache_def(stored: &StoredSlicer) -> OoxmlSlicerCacheDef 
             pivot_tables: vec![],
             tabular_data: None,
             table_slicer_cache: Some(TableSlicerCache {
-                table_id: table_id.parse::<u32>().unwrap_or(0),
-                column: stored.table_column_index.unwrap_or(0),
+                table_id: 0,
+                column: 0,
                 sort_order: domain_sort_order_to_ooxml(stored.style.sort_order),
                 custom_list_sort: stored.style.custom_list_sort,
                 cross_filter: domain_cross_filter_to_ooxml(stored.style.cross_filter),

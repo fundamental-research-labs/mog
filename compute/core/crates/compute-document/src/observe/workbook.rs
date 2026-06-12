@@ -15,15 +15,6 @@ fn parse_table_sheet_id(sheet_id: &str) -> Option<SheetId> {
     SheetId::from_uuid_str(sheet_id).ok()
 }
 
-fn sheet_id_from_table_binding_json(json: &str) -> Option<SheetId> {
-    crate::range::legacy_full_table_from_workbook_binding_json(json)
-        .and_then(|table| parse_table_sheet_id(&table.sheet_id))
-}
-
-fn name_from_table_binding_json(json: &str) -> Option<String> {
-    crate::range::legacy_full_table_from_workbook_binding_json(json).map(|table| table.name)
-}
-
 fn string_from_scalar_out(out: &Out) -> Option<String> {
     match out {
         Out::Any(Any::String(value)) => Some(value.to_string()),
@@ -43,7 +34,6 @@ fn string_from_scalar_change(change: &EntryChange) -> Option<String> {
 
 fn sheet_id_from_table_out<T: ReadTxn>(out: &Out, txn: &T) -> Option<SheetId> {
     match out {
-        Out::Any(Any::String(json)) => sheet_id_from_table_binding_json(json.as_ref()),
         Out::YMap(map) => {
             let value = map.get(txn, domain_types::yrs_schema::table::KEY_SHEET_ID)?;
             match value {
@@ -57,7 +47,6 @@ fn sheet_id_from_table_out<T: ReadTxn>(out: &Out, txn: &T) -> Option<SheetId> {
 
 fn name_from_table_out<T: ReadTxn>(out: &Out, txn: &T) -> Option<String> {
     match out {
-        Out::Any(Any::String(json)) => name_from_table_binding_json(json.as_ref()),
         Out::YMap(map) => {
             let value = map.get(txn, domain_types::yrs_schema::table::KEY_NAME)?;
             match value {
@@ -66,25 +55,6 @@ fn name_from_table_out<T: ReadTxn>(out: &Out, txn: &T) -> Option<String> {
             }
         }
         _ => None,
-    }
-}
-
-fn is_legacy_table_binding_out<T: ReadTxn>(out: &Out, _txn: &T) -> bool {
-    match out {
-        Out::Any(Any::String(json)) => {
-            crate::range::legacy_full_table_from_workbook_binding_json(json.as_ref()).is_some()
-        }
-        _ => false,
-    }
-}
-
-fn table_range_binding_change_is_legacy<T: ReadTxn>(change: &EntryChange, txn: &T) -> bool {
-    match change {
-        EntryChange::Inserted(new) => is_legacy_table_binding_out(new, txn),
-        EntryChange::Updated(old, new) => {
-            is_legacy_table_binding_out(old, txn) || is_legacy_table_binding_out(new, txn)
-        }
-        EntryChange::Removed(old) => is_legacy_table_binding_out(old, txn),
     }
 }
 
@@ -115,29 +85,19 @@ struct TableSubmapEntry {
     sheet_id: Option<SheetId>,
 }
 
-fn table_submap_entries<T: ReadTxn>(
-    out: &Out,
-    txn: &T,
-    table_range_bindings_only: bool,
-) -> Vec<TableSubmapEntry> {
+fn table_submap_entries<T: ReadTxn>(out: &Out, txn: &T) -> Vec<TableSubmapEntry> {
     let Out::YMap(map) = out else {
         return Vec::new();
     };
 
     map.iter(txn)
-        .filter_map(|(key, value)| {
+        .map(|(key, value)| {
             let key = key.to_string();
-            if table_range_bindings_only && !key.starts_with("table:") {
-                return None;
-            }
-            if table_range_bindings_only && !is_legacy_table_binding_out(&value, txn) {
-                return None;
-            }
-            Some(TableSubmapEntry {
+            TableSubmapEntry {
                 key,
                 name: name_from_table_out(&value, txn),
                 sheet_id: sheet_id_from_table_out(&value, txn),
-            })
+            }
         })
         .collect()
 }
@@ -146,12 +106,11 @@ fn push_table_submap_changes<T: ReadTxn>(
     buffer: &mut DocumentChanges,
     change: &EntryChange,
     txn: &T,
-    table_range_bindings_only: bool,
 ) -> bool {
     let before_len = buffer.tables.len();
     match change {
         EntryChange::Inserted(new) => {
-            for entry in table_submap_entries(new, txn, table_range_bindings_only) {
+            for entry in table_submap_entries(new, txn) {
                 buffer.tables.push(TableCellChange {
                     key: entry.key,
                     name: entry.name,
@@ -161,7 +120,7 @@ fn push_table_submap_changes<T: ReadTxn>(
             }
         }
         EntryChange::Removed(old) => {
-            for entry in table_submap_entries(old, txn, table_range_bindings_only) {
+            for entry in table_submap_entries(old, txn) {
                 buffer.tables.push(TableCellChange {
                     key: entry.key,
                     name: entry.name,
@@ -171,8 +130,8 @@ fn push_table_submap_changes<T: ReadTxn>(
             }
         }
         EntryChange::Updated(old, new) => {
-            let old_entries = table_submap_entries(old, txn, table_range_bindings_only);
-            let new_entries = table_submap_entries(new, txn, table_range_bindings_only);
+            let old_entries = table_submap_entries(old, txn);
+            let new_entries = table_submap_entries(new, txn);
 
             for entry in &new_entries {
                 buffer.tables.push(TableCellChange {
@@ -292,7 +251,7 @@ pub(super) fn observe_workbook_events(
                     let kind = entry_change_kind(change);
                     match key.as_ref() {
                         k if k == KEY_TABLES => {
-                            if !push_table_submap_changes(buffer, change, txn, false) {
+                            if !push_table_submap_changes(buffer, change, txn) {
                                 buffer.tables.push(TableCellChange {
                                     key: String::new(),
                                     name: None,
@@ -302,7 +261,8 @@ pub(super) fn observe_workbook_events(
                             }
                         }
                         k if k == KEY_RANGE_BINDINGS => {
-                            push_table_submap_changes(buffer, change, txn, true);
+                            // Range bindings are feature attachments, not a
+                            // table catalog or table observer source.
                         }
                         k if k == KEY_NAMED_RANGES => {
                             buffer.named_ranges.push(SheetLevelChange {
@@ -375,24 +335,10 @@ pub(super) fn observe_workbook_events(
                     }
                 }
 
-                // --- rangeBindings ---
-                k if k == KEY_RANGE_BINDINGS => {
-                    if path.len() == 1 {
-                        let keys = map_event.keys(txn);
-                        for (key, change) in keys {
-                            if key.as_ref().starts_with("table:")
-                                && table_range_binding_change_is_legacy(change, txn)
-                            {
-                                buffer.tables.push(TableCellChange {
-                                    key: key.to_string(),
-                                    name: name_from_table_change(change, txn),
-                                    sheet_id: sheet_id_from_table_change(change, txn),
-                                    kind: entry_change_kind(change),
-                                });
-                            }
-                        }
-                    }
-                }
+                // Range bindings are feature attachments, not table-domain
+                // changes. Tables are observed exclusively through
+                // `workbook.tables`.
+                k if k == KEY_RANGE_BINDINGS => {}
 
                 // --- namedRanges ---
                 k if k == KEY_NAMED_RANGES => {
@@ -431,7 +377,7 @@ pub(super) fn observe_workbook_events(
                         for (key, change) in keys {
                             buffer
                                 .slicers
-                                .push(slicer_change_from_entry(&key, change, txn));
+                                .push(slicer_change_from_entry(key, change, txn));
                         }
                     } else if path.len() == 2
                         && let Some(PathSegment::Key(k)) = path.get(1)

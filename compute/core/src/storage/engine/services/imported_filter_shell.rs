@@ -28,6 +28,7 @@ pub(in crate::storage::engine::services) fn build_filter_shell_metadata(
             unsupported_reasons.extend(unsupported_reasons_for_filter_type(filter_type));
             lossless_criteria.push(filters::LosslessCriterionDescriptor {
                 filter_col_id: Some(column.col_index),
+                table_column_id: None,
                 table_column_ordinal: None,
                 kind: lossless_filter_kind(filter_type).to_string(),
                 preserved_json: serde_json::to_value(filter_type)

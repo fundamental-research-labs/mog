@@ -445,50 +445,11 @@ pub fn from_yrs_map<T: ReadTxn>(map: &MapRef, txn: &T) -> Option<TableSpec> {
     })
 }
 
-/// Reconstruct a canonical Table from a `TableBinding` JSON + external range extent.
-///
-/// This is Tier 1 of the three-tier read path: Range-backed tables store their
-/// schema in `rangeBindings[range_id]` as JSON and their extent in the Range itself.
-///
-/// Returns `None` if the JSON fails to parse.
-pub fn from_binding_to_table(
-    binding_json: &str,
-    table_id: &str,
-    sheet_id: &str,
-    range: cell_types::SheetRange,
-) -> Option<Table> {
-    let binding: crate::domain::table::TableBinding = serde_json::from_str(binding_json).ok()?;
-    Some(binding.to_table(table_id, sheet_id, range))
-}
-
-/// Serialize a canonical Table to a `TableBinding` JSON string.
-///
-/// The binding is self-contained: it includes table ID, sheet ID, and range
-/// coordinates alongside schema metadata.
-pub fn table_to_binding_json(table: &Table) -> Option<String> {
-    let binding = crate::domain::table::TableBinding::from_table(table);
-    serde_json::to_string(&binding).ok()
-}
-
-/// Reconstruct a canonical Table from a self-contained `TableBinding` JSON.
-///
-/// Unlike `from_binding_to_table`, this does not require external `table_id`,
-/// `sheet_id`, or `range` parameters -- they are read from the binding itself.
-/// Returns `None` if the JSON fails to parse or lacks required extent fields.
-pub fn from_binding_json_standalone(binding_json: &str) -> Option<Table> {
-    let binding: crate::domain::table::TableBinding = serde_json::from_str(binding_json).ok()?;
-    binding.to_table_standalone()
-}
-
 /// Read a canonical Table from a Y.Map.
 ///
-/// Three-tier read path:
-/// - Tier 1 (Range-backed): Not checked here — caller should check `rangeBindings`
-///   first and call `from_binding_to_table` if found.
-/// - Tier 2 (Canonical): Check canonical keys (startRow/startCol/endRow/endCol,
-///   id as String, columns as Vec<TableColumn>).
-/// - Tier 3 (OOXML fallback): Fall back to rangeRef as A1 string, id as Number,
-///   columns as Vec<TableColumnSpec>.
+/// Storage reads canonical table keys first (startRow/startCol/endRow/endCol,
+/// id as String, columns as Vec<TableColumn>) and falls back only to imported
+/// OOXML catalog fields in the table catalog entry.
 pub fn from_yrs_map_to_table<T: ReadTxn>(map: &MapRef, txn: &T) -> Option<Table> {
     let ooxml_table_id =
         read_u32(map, txn, KEY_OOXML_TABLE_ID).or_else(|| read_u32(map, txn, KEY_ID));

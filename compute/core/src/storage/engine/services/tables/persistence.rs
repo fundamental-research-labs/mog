@@ -262,8 +262,8 @@ pub(in crate::storage::engine) fn sync_tables_from_yrs(
         let mut names = std::collections::HashSet::new();
         let mut ids = std::collections::HashSet::new();
 
-        // Read canonical catalog entries first. Range bindings are compact
-        // attachments; legacy full bindings are migration input only.
+        // Read canonical catalog entries. Range bindings are compact
+        // attachments only, never table sources.
         if let Some(Out::YMap(tables_map)) = stores
             .storage
             .workbook_map()
@@ -282,22 +282,6 @@ pub(in crate::storage::engine) fn sync_tables_from_yrs(
                     names.insert(table.name.clone());
                     tables.push(table);
                 }
-            }
-        }
-
-        // Legacy documents may still have self-contained full table bindings
-        // and no catalog entry. Read them after catalog entries so compact
-        // attachments never become a second table source.
-        let binding_entries =
-            compute_document::range::all_range_bindings_wb(stores.storage.workbook_map(), &txn);
-        for (attachment_key, json) in &binding_entries {
-            if let Some(table) = legacy_full_table_from_attachment_entry(attachment_key, json)
-                && !names.contains(&table.name)
-                && !ids.contains(&table.id)
-            {
-                ids.insert(table.id.clone());
-                names.insert(table.name.clone());
-                tables.push(table);
             }
         }
 

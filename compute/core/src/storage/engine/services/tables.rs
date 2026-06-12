@@ -22,7 +22,6 @@ use crate::storage::engine::stores::EngineStores;
 use crate::storage::sheet::filters;
 
 mod filter_delete;
-mod legacy_binding;
 mod mutations;
 mod options;
 mod persistence;
@@ -30,11 +29,10 @@ mod queries;
 #[cfg(test)]
 mod tests;
 
-pub(in crate::storage::engine) use compute_document::range::{
-    table_attachment_key, table_id_from_attachment_key,
-};
+pub(in crate::storage::engine) use compute_document::range::table_attachment_key;
+#[cfg(test)]
+pub(in crate::storage::engine) use compute_document::range::table_id_from_attachment_key;
 pub(in crate::storage::engine) use filter_delete::*;
-pub(in crate::storage::engine) use legacy_binding::*;
 pub(in crate::storage::engine) use mutations::*;
 pub(in crate::storage::engine) use options::*;
 pub(in crate::storage::engine) use persistence::*;

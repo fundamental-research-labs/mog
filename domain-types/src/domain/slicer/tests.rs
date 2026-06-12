@@ -10,6 +10,14 @@ use value_types::CellValue;
 
 use super::super::floating_object::{AnchorMode, FloatingObjectAnchor};
 
+fn empty_import_context(sheet_id: &str) -> XlsxSlicerImportContext<'_> {
+    XlsxSlicerImportContext {
+        sheet_id,
+        source_table_id: None,
+        source_table_column_id: None,
+        table_filter_selected_values: None,
+    }
+}
 #[test]
 fn stored_slicer_table_source_round_trip() {
     let slicer = StoredSlicer {
@@ -413,9 +421,10 @@ fn xlsx_import_table_slicer_conversion() {
         Some(&cache),
         Some(&anchor),
         XlsxSlicerImportContext {
-            sheet_id: "sheet-hex-1",
             source_table_id: Some("tbl-sales"),
+            source_table_column_id: Some("col-region"),
             table_filter_selected_values: Some(&table_filter_selected_values),
+            ..empty_import_context("sheet-hex-1")
         },
     );
     assert_eq!(stored.id, "slicer-Region");
@@ -427,7 +436,7 @@ fn xlsx_import_table_slicer_conversion() {
     assert_eq!(stored.style.sort_order, SlicerSortOrder::Descending);
     assert!(
         matches!(stored.source, SlicerSource::Table { ref table_id, ref column_cell_id }
-        if table_id == "tbl-sales" && column_cell_id == "Region")
+        if table_id == "tbl-sales" && column_cell_id == "col-region")
     );
     assert_eq!(
         stored.selected_values,
@@ -500,13 +509,9 @@ fn xlsx_import_pivot_slicer_conversion() {
         &slicer,
         Some(&cache),
         None,
-        XlsxSlicerImportContext {
-            sheet_id: "sheet-hex-2",
-            source_table_id: None,
-            table_filter_selected_values: None,
-        },
+        empty_import_context("sheet-hex-2"),
     );
-    assert_eq!(stored.caption, "Category"); // defaults to name when caption is None
+    assert_eq!(stored.caption, "Category");
     assert!(stored.position.is_none());
     assert_eq!(stored.style.column_count, 1);
     assert!(stored.style.preset.is_none());
@@ -571,11 +576,7 @@ fn xlsx_import_tabular_slicer_without_pivot_table_refs_stays_pivot_backed() {
         &slicer,
         Some(&cache),
         None,
-        XlsxSlicerImportContext {
-            sheet_id: "sheet-hex-3",
-            source_table_id: None,
-            table_filter_selected_values: None,
-        },
+        empty_import_context("sheet-hex-3"),
     );
     assert!(
         matches!(stored.source, SlicerSource::Pivot { ref pivot_id, ref field_name, .. }
@@ -662,7 +663,7 @@ fn stored_slicer_round_trip_to_ooxml_types() {
     let cache_def = stored_slicer_to_cache_def(&stored);
     assert_eq!(cache_def.source_name, "Region");
     assert!(cache_def.table_slicer_cache.is_some());
-    assert_eq!(cache_def.table_slicer_cache.as_ref().unwrap().table_id, 1);
+    assert_eq!(cache_def.table_slicer_cache.as_ref().unwrap().table_id, 0);
     let anchor = stored_slicer_to_anchor(&stored).unwrap();
     assert_eq!(anchor.slicer_name, "Region");
     assert_eq!(anchor.from.col, 5);

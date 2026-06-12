@@ -512,6 +512,7 @@ pub(in crate::storage::engine) fn upsert_sheet_auto_filter_binding(
         header_end_cell_id: filter.header_end_cell_id.clone(),
         data_end_cell_id: filter.data_end_cell_id.clone(),
         col_id_to_header_cell_id,
+        table_column_id_to_header_cell_id: BTreeMap::new(),
         shell,
         source_fingerprint: fingerprint,
     };

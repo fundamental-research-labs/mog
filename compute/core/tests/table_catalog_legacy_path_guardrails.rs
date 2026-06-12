@@ -14,16 +14,11 @@ fn table_catalog_legacy_path_guardrails() {
         "domain-types/src",
         "file-io/xlsx/parser/src",
     ];
-    let allowed_files = [
-        "compute/core/crates/compute-document/src/range.rs",
-        "domain-types/src/domain/table.rs",
-        "domain-types/src/domain/table/binding.rs",
-        "domain-types/src/domain/table/ooxml.rs",
-        "domain-types/src/yrs_schema/table.rs",
-    ];
     let denied_patterns = [
         "from_binding_json_standalone",
         "from_binding_to_table",
+        "legacy_full_table_from_workbook_binding_json",
+        "legacy_full_table_from_attachment_entry",
         "table_to_binding_json",
         "table_spec_to_table",
         "table_spec_to_table_with_ids",
@@ -40,7 +35,7 @@ fn table_catalog_legacy_path_guardrails() {
         collect_rust_files(&root, &mut |path| {
             let rel = path.strip_prefix(repo_root).expect("path under repo root");
             let rel_text = rel.to_string_lossy().replace('\\', "/");
-            if is_test_or_fixture_path(rel) || allowed_files.contains(&rel_text.as_str()) {
+            if is_test_or_fixture_path(rel) {
                 return;
             }
             let Ok(source) = fs::read_to_string(path) else {
@@ -58,7 +53,7 @@ fn table_catalog_legacy_path_guardrails() {
     violations.dedup();
     assert!(
         violations.is_empty(),
-        "legacy table-binding APIs are allowed only in codecs, compatibility helpers, and tests:\n{}",
+        "legacy table-binding APIs are not allowed in production Rust:\n{}",
         violations.join("\n")
     );
 }

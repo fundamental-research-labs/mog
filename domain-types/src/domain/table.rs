@@ -3,14 +3,12 @@ use serde::{Deserialize, Deserializer, Serialize};
 
 use super::filter::{SortConditionBy, SortMethod};
 
-mod binding;
 mod ooxml;
 
 #[cfg(feature = "yrs")]
 pub(crate) use ooxml::col_index_to_letter;
 pub use ooxml::{
-    catalog_entry_to_xlsx_table_spec, legacy_xlsx_table_spec_to_catalog_entry,
-    parse_table_range_ref, table_spec_to_table, table_spec_to_table_with_ids, table_to_table_spec,
+    catalog_entry_to_xlsx_table_spec, parse_table_range_ref,
     xlsx_table_spec_to_catalog_entry_with_ids,
 };
 
@@ -729,109 +727,6 @@ impl Default for Table {
             worksheet_relationship_target_hint: None,
         }
     }
-}
-
-// =============================================================================
-// Range-backed table binding
-// =============================================================================
-
-/// Table schema stored in `rangeBindings[range_id]` for Range-backed tables.
-///
-/// This is the decomposed schema that enables per-field CRDT updates. The table
-/// extent (row/col bounds) is stored separately in the Range itself; the binding
-/// carries only schema metadata.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct TableBinding {
-    /// Table name (also used as lookup key).
-    pub name: String,
-    /// Display name (may differ from name for OOXML round-trip).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub display_name: Option<String>,
-    /// Table identifier (matches canonical Table.id).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub id: Option<String>,
-    /// Sheet identifier (hex UUID string).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub sheet_id: Option<String>,
-    /// Range start row (0-based).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub start_row: Option<u32>,
-    /// Range start column (0-based).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub start_col: Option<u32>,
-    /// Range end row (0-based).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub end_row: Option<u32>,
-    /// Range end column (0-based).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub end_col: Option<u32>,
-    /// Column definitions.
-    pub columns: Vec<TableColumnBinding>,
-    /// Whether the table has a header row.
-    #[serde(default = "default_true_binding")]
-    pub has_header_row: bool,
-    /// Whether the table has a totals row.
-    #[serde(default)]
-    pub has_totals_row: bool,
-    /// Whether this table automatically expands when adjacent user input is entered.
-    #[serde(default = "default_true")]
-    pub auto_expand: bool,
-    /// Whether formulas entered in table data columns automatically create/fill calculated columns.
-    #[serde(default = "default_true")]
-    pub auto_calculated_columns: bool,
-    /// Table style info.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub style: Option<TableStyleInfo>,
-}
-
-fn default_true_binding() -> bool {
-    true
-}
-
-/// Style information for a Range-backed table binding.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct TableStyleInfo {
-    /// Style preset name (e.g., "TableStyleMedium2").
-    pub name: String,
-    /// Show banded row stripes.
-    #[serde(default)]
-    pub banded_rows: bool,
-    /// Show banded column stripes.
-    #[serde(default)]
-    pub banded_columns: bool,
-    /// Emphasize the first column.
-    #[serde(default)]
-    pub emphasize_first_column: bool,
-    /// Emphasize the last column.
-    #[serde(default)]
-    pub emphasize_last_column: bool,
-    /// Show auto-filter buttons.
-    #[serde(default = "default_true_binding")]
-    pub show_filter_buttons: bool,
-}
-
-/// A column within a Range-backed table binding.
-///
-/// Each column is stored as an individual binding field, enabling per-column
-/// CRDT updates (two peers editing different column names merge cleanly).
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct TableColumnBinding {
-    /// Column display name.
-    pub name: String,
-    /// Position within table (0-based).
-    pub index: u32,
-    /// Totals row aggregation function.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub totals_function: Option<TotalsFunction>,
-    /// Custom totals label.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub totals_label: Option<String>,
-    /// Calculated column formula.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub calculated_formula: Option<String>,
 }
 
 #[cfg(test)]

@@ -100,7 +100,7 @@ fn test_workbook_table_change() {
 }
 
 #[test]
-fn test_workbook_table_range_binding_change() {
+fn test_workbook_table_range_binding_change_is_not_table_domain_truth() {
     let (doc, sheets, workbook) = setup_doc();
     let sheet_id = make_sheet_id(1);
     let table_json = format!(
@@ -108,8 +108,8 @@ fn test_workbook_table_range_binding_change() {
         sheet_id.to_uuid_string()
     );
 
-    // Legacy full table bindings are still migration input. The observer routes
-    // those through table-domain changes so old documents can rebuild mirrors.
+    // Table state is observed exclusively through workbook.tables. Even a
+    // full table-shaped payload under rangeBindings is not table-domain truth.
     {
         let mut txn = doc.transact_mut();
         let _: MapRef = workbook.insert(
@@ -138,10 +138,10 @@ fn test_workbook_table_range_binding_change() {
     }
 
     let changes = observer.drain_all_changes();
-    assert_eq!(changes.tables.len(), 1);
-    assert_eq!(changes.tables[0].key, "table:SalesData");
-    assert_eq!(changes.tables[0].sheet_id, Some(sheet_id));
-    assert_eq!(changes.tables[0].kind, CellChangeKind::Modified);
+    assert!(
+        changes.tables.is_empty(),
+        "workbook rangeBindings must not emit table-domain changes"
+    );
 }
 
 #[test]
@@ -178,7 +178,7 @@ fn test_compact_table_range_binding_change_is_not_table_domain_truth() {
 }
 
 #[test]
-fn test_workbook_table_range_binding_removal_carries_sheet_id() {
+fn test_workbook_table_range_binding_removal_is_not_table_domain_truth() {
     let (doc, sheets, workbook) = setup_doc();
     let sheet_id = make_sheet_id(2);
     let table_json = format!(
@@ -210,14 +210,14 @@ fn test_workbook_table_range_binding_removal_carries_sheet_id() {
     }
 
     let changes = observer.drain_all_changes();
-    assert_eq!(changes.tables.len(), 1);
-    assert_eq!(changes.tables[0].key, "table:SalesData");
-    assert_eq!(changes.tables[0].sheet_id, Some(sheet_id));
-    assert_eq!(changes.tables[0].kind, CellChangeKind::Removed);
+    assert!(
+        changes.tables.is_empty(),
+        "workbook rangeBinding removal must not emit table-domain changes"
+    );
 }
 
 #[test]
-fn test_workbook_table_range_bindings_map_insert_carries_table_details() {
+fn test_workbook_table_range_bindings_map_insert_is_not_table_domain_truth() {
     let (doc, sheets, workbook) = setup_doc();
     let sheet_id = make_sheet_id(2);
     let table_json = format!(
@@ -239,10 +239,10 @@ fn test_workbook_table_range_bindings_map_insert_carries_table_details() {
     }
 
     let changes = observer.drain_all_changes();
-    assert_eq!(changes.tables.len(), 1);
-    assert_eq!(changes.tables[0].key, "table:SalesData");
-    assert_eq!(changes.tables[0].sheet_id, Some(sheet_id));
-    assert_eq!(changes.tables[0].kind, CellChangeKind::Modified);
+    assert!(
+        changes.tables.is_empty(),
+        "workbook rangeBindings map insert must not emit table-domain changes"
+    );
 }
 
 #[test]

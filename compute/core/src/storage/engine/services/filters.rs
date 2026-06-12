@@ -1005,6 +1005,7 @@ mod tests {
             header_end_cell_id: "header-d".to_string(),
             data_end_cell_id: "cell-d12".to_string(),
             col_id_to_header_cell_id: BTreeMap::new(),
+            table_column_id_to_header_cell_id: BTreeMap::new(),
             shell: filters::FilterShellMetadata {
                 capability: filters::FilterCapability::Unsupported,
                 unsupported_reasons: vec![
@@ -1014,6 +1015,7 @@ mod tests {
                 button_metadata: BTreeMap::new(),
                 lossless_criteria: vec![filters::LosslessCriterionDescriptor {
                     filter_col_id: Some(relative_col),
+                    table_column_id: None,
                     table_column_ordinal: None,
                     kind: "icon".to_string(),
                     preserved_json: serde_json::json!({ "iconId": 1 }),

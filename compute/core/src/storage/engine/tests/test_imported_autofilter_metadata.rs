@@ -132,8 +132,17 @@ fn imported_table_autofilter_materializes_runtime_table_filter() {
             filter.filter_kind == crate::storage::sheet::filters::FilterKind::TableFilter
         })
         .expect("imported table AutoFilter should materialize as a runtime TableFilter");
+    let table = engine
+        .get_all_tables_in_sheet(&sheet_id)
+        .into_iter()
+        .find(|table| table.name == "People")
+        .expect("hydrated People table");
+    let stable_table_id = table.id.clone();
+    let stable_dept_column_id = table.columns[1].id.clone();
 
-    assert_eq!(filter.table_id.as_deref(), Some("People"));
+    assert!(stable_table_id.starts_with("tbl-"));
+    assert!(stable_dept_column_id.starts_with("col-"));
+    assert_eq!(filter.table_id.as_deref(), Some(stable_table_id.as_str()));
     assert_eq!(filter.column_filters.len(), 1);
     assert_eq!(engine.get_hidden_rows(&sheet_id), vec![2]);
 
@@ -148,14 +157,20 @@ fn imported_table_autofilter_materializes_runtime_table_filter() {
         binding.filter_kind,
         crate::storage::sheet::filters::FilterKind::TableFilter
     );
-    assert_eq!(binding.table_id.as_deref(), Some("People"));
+    assert_eq!(binding.table_id.as_deref(), Some(stable_table_id.as_str()));
     assert_eq!(binding.range_ref, "A1:B4");
     assert_eq!(
         binding.owner_path,
         crate::storage::sheet::filters::FilterMetadataOwnerPath::TableAutoFilter {
             sheet_id: sheet_id.to_uuid_string(),
-            table_id: "People".to_string(),
+            table_id: stable_table_id.clone(),
         }
+    );
+    assert_eq!(
+        binding
+            .table_column_id_to_header_cell_id
+            .get(&stable_dept_column_id),
+        binding.col_id_to_header_cell_id.get(&1)
     );
     assert_eq!(
         binding.shell.capability,
@@ -163,12 +178,22 @@ fn imported_table_autofilter_materializes_runtime_table_filter() {
     );
     assert!(binding.shell.has_active_lossless_criteria);
     assert_eq!(binding.shell.button_metadata.len(), 2);
+    assert_eq!(
+        binding.shell.lossless_criteria[0]
+            .table_column_id
+            .as_deref(),
+        Some(stable_dept_column_id.as_str())
+    );
+    assert_eq!(
+        binding.shell.lossless_criteria[0].table_column_ordinal,
+        Some(1)
+    );
 
     let header_info = engine.get_filter_header_info(&sheet_id);
     assert_eq!(header_info.len(), 2);
     assert!(header_info.iter().all(|info| {
         info.filter_kind == crate::storage::sheet::filters::FilterKind::TableFilter
-            && info.table_id.as_deref() == Some("People")
+            && info.table_id.as_deref() == Some(stable_table_id.as_str())
             && info.source_type
                 == crate::storage::sheet::filters::FilterHeaderSourceType::TableAutoFilter
     }));
@@ -270,6 +295,11 @@ fn unsupported_imported_table_autofilter_records_import_diagnostic() {
             filter.filter_kind == crate::storage::sheet::filters::FilterKind::TableFilter
         })
         .expect("unsupported imported table AutoFilter should still materialize a shell");
+    let stable_table_id = filter
+        .table_id
+        .clone()
+        .expect("unsupported imported table filter should use stable table id");
+    assert!(stable_table_id.starts_with("tbl-"));
     assert!(
         filter.column_filters.is_empty(),
         "unsupported table shell must not fabricate runtime criteria"
@@ -312,7 +342,10 @@ fn unsupported_imported_table_autofilter_records_import_diagnostic() {
         Some("UnsupportedTableFilter")
     );
     assert_eq!(reference.source_range.as_deref(), Some("A1:B4"));
-    assert_eq!(reference.object_id.as_deref(), Some("People"));
+    assert_eq!(
+        reference.object_id.as_deref(),
+        Some(stable_table_id.as_str())
+    );
     assert_eq!(reference.table_column_ordinal, Some(1));
     assert_eq!(reference.cell_ref.as_deref(), Some("B1"));
 
@@ -342,24 +375,27 @@ fn unsupported_imported_table_autofilter_runtime_diagnostics_distinguish_apply_a
     let mut engine = engine_from_parse_output_normal(&input);
     let sheet_id =
         SheetId::from_uuid_str(&engine.get_all_sheet_ids()[0]).expect("valid hydrated sheet id");
-    let filter_id = engine
+    let filter = engine
         .get_filters_in_sheet(&sheet_id)
         .into_iter()
         .find(|filter| {
             filter.filter_kind == crate::storage::sheet::filters::FilterKind::TableFilter
         })
-        .expect("unsupported imported table AutoFilter should still materialize a shell")
-        .id;
+        .expect("unsupported imported table AutoFilter should still materialize a shell");
+    let filter_id = filter.id;
+    let stable_table_id = filter
+        .table_id
+        .expect("unsupported imported table filter should use stable table id");
 
     let (_, apply_result) = engine
         .apply_filter(&sheet_id, &filter_id)
         .expect("apply unsupported imported filter");
-    assert_unsupported_runtime_diagnostic(&apply_result, "applyFilter", "1");
+    assert_unsupported_runtime_diagnostic(&apply_result, "applyFilter", "1", &stable_table_id);
 
     let (_, reapply_result) = engine
         .reapply_filter(&sheet_id, &filter_id)
         .expect("reapply unsupported imported filter");
-    assert_unsupported_runtime_diagnostic(&reapply_result, "reapplyFilter", "2");
+    assert_unsupported_runtime_diagnostic(&reapply_result, "reapplyFilter", "2", &stable_table_id);
 
     let page = engine.get_runtime_diagnostics(RuntimeDiagnosticsOptions::default());
     assert_eq!(
@@ -371,14 +407,19 @@ fn unsupported_imported_table_autofilter_runtime_diagnostics_distinguish_apply_a
     );
 }
 
-fn assert_unsupported_runtime_diagnostic(result: &MutationResult, operation: &str, sequence: &str) {
+fn assert_unsupported_runtime_diagnostic(
+    result: &MutationResult,
+    operation: &str,
+    sequence: &str,
+    stable_table_id: &str,
+) {
     assert_eq!(result.diagnostics.len(), 1);
     let diagnostic = &result.diagnostics[0];
     assert_eq!(diagnostic.code, "unsupported_filter_reapply");
     assert_eq!(diagnostic.operation, operation);
     assert_eq!(diagnostic.sequence, sequence);
     assert_eq!(diagnostic.filter_kind.as_deref(), Some("tableFilter"));
-    assert_eq!(diagnostic.table_id.as_deref(), Some("People"));
+    assert_eq!(diagnostic.table_id.as_deref(), Some(stable_table_id));
     assert_eq!(diagnostic.reason.as_deref(), Some("iconFilterUnsupported"));
 }
 

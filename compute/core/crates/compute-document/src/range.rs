@@ -223,20 +223,6 @@ pub fn table_id_from_attachment_key(attachment_key: &str) -> Option<&str> {
     attachment_key.strip_prefix("table:")
 }
 
-/// Parse a legacy workbook-level table range binding that stored a full table
-/// payload instead of the compact `{ kind, version, tableId }` attachment.
-///
-/// This is compatibility/migration input only. Production table reads should
-/// use the id-keyed `workbook.tables` catalog.
-pub fn legacy_full_table_from_workbook_binding_json(
-    json: &str,
-) -> Option<domain_types::domain::table::Table> {
-    if TableRangeBinding::from_json(json).is_some() {
-        return None;
-    }
-    domain_types::yrs_schema::table::from_binding_json_standalone(json)
-}
-
 fn table_range_binding_kind() -> String {
     TableRangeBinding::KIND.to_string()
 }

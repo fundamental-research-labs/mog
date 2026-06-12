@@ -2,14 +2,17 @@
 
 use super::super::*;
 use super::helpers::*;
+use compute_document::schema::KEY_SLICERS;
 use domain_types::{
     ParseOutput, SheetData, SheetDimensions,
     domain::{
         connections::{QueryTable, QueryTableField},
+        slicer::SlicerSource,
         table::{TableColumnSpec, TableSpec},
     },
 };
 use ooxml_types::slicers::{SlicerCacheDef, SlicerDef, SlicerSortOrder, TableSlicerCache};
+use yrs::{Map, Transact};
 
 fn archive_entry_names(bytes: &[u8]) -> Vec<String> {
     xlsx_parser::zip::XlsxArchive::new(bytes)
@@ -198,6 +201,32 @@ fn imported_table_export_uses_one_projection_for_parts_slicers_and_query_tables(
         ..Default::default()
     };
     let engine = engine_from_parse_output_normal(&input);
+    let sheet_id =
+        cell_types::SheetId::from_uuid_str(&engine.get_all_sheet_ids()[0]).expect("sheet id");
+    let table = engine
+        .get_all_tables_in_sheet(&sheet_id)
+        .into_iter()
+        .find(|table| table.name == "People")
+        .expect("hydrated People table");
+    let stable_table_id = table.id.clone();
+    let stable_region_column_id = table.columns[1].id.clone();
+    let stored_slicer = {
+        let txn = engine.stores.storage.doc().transact();
+        let slicers_map = match engine.stores.storage.workbook_map().get(&txn, KEY_SLICERS) {
+            Some(yrs::Out::YMap(map)) => map,
+            _ => panic!("slicers map should be hydrated"),
+        };
+        slicers_map
+            .iter(&txn)
+            .find_map(|(_, value)| {
+                domain_types::yrs_schema::slicer::from_yrs_out(value.clone(), &txn)
+            })
+            .expect("stored table-backed slicer")
+    };
+    assert!(
+        matches!(stored_slicer.source, SlicerSource::Table { ref table_id, ref column_cell_id }
+            if table_id == &stable_table_id && column_cell_id == &stable_region_column_id)
+    );
 
     let exported = engine
         .export_to_parse_output()

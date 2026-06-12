@@ -502,9 +502,8 @@ fn pivot_field_indices_for_area(
 
 /// Read table definitions from Yrs.
 ///
-/// The workbook table catalog is the canonical table source. Legacy full
-/// range-binding payloads are consulted only as compatibility fallback for old
-/// documents that have no matching catalog entry.
+/// The workbook table catalog is the only table source. Range bindings are
+/// compact feature attachments and are never used to reconstruct tables.
 ///
 /// This mirrors the read in `services::tables::sync_tables_from_yrs`
 /// but returns lightweight `TableDef`s for the snapshot rather than full
@@ -517,73 +516,28 @@ pub(in crate::storage::engine) fn read_tables_from_yrs(
     let workbook = storage.workbook_map();
 
     let mut tables = Vec::new();
-    let mut seen_names = std::collections::HashSet::new();
-    let mut seen_ids = std::collections::HashSet::new();
-
     // Canonical catalog entries, including imported and runtime-created tables.
     if let Some(Out::YMap(tables_map)) = workbook.get(&txn, compute_document::schema::KEY_TABLES) {
         for (key, value) in tables_map.iter(&txn) {
-            match value {
-                Out::Any(Any::String(json_str)) => {
-                    if let Ok(table_def) =
-                        serde_json::from_str::<formula_types::TableDef>(&json_str)
-                    {
-                        seen_names.insert(table_def.name.clone());
-                        tables.push(table_def);
-                    }
-                }
-                Out::YMap(inner) => {
-                    if let Some(ct) =
-                        domain_types::yrs_schema::table::from_yrs_map_to_table(&inner, &txn)
-                        && let Ok(sheet) = SheetId::from_uuid_str(&ct.sheet_id)
-                    {
-                        seen_names.insert(ct.name.clone());
-                        seen_ids.insert(ct.id.clone());
-                        seen_ids.insert(key.to_string());
-                        tables.push(formula_types::TableDef {
-                            name: ct.name,
-                            sheet,
-                            start_row: ct.range.start_row(),
-                            start_col: ct.range.start_col(),
-                            end_row: ct.range.end_row(),
-                            end_col: ct.range.end_col(),
-                            columns: ct.columns.iter().map(|c| c.name.clone()).collect(),
-                            has_headers: ct.has_header_row,
-                            has_totals: ct.has_totals_row,
-                        });
-                    }
-                }
-                _ => {}
+            let Out::YMap(inner) = value else {
+                continue;
+            };
+            if let Some(ct) = domain_types::yrs_schema::table::from_yrs_map_to_table(&inner, &txn)
+                && ct.id == key
+                && let Ok(sheet) = SheetId::from_uuid_str(&ct.sheet_id)
+            {
+                tables.push(formula_types::TableDef {
+                    name: ct.name,
+                    sheet,
+                    start_row: ct.range.start_row(),
+                    start_col: ct.range.start_col(),
+                    end_row: ct.range.end_row(),
+                    end_col: ct.range.end_col(),
+                    columns: ct.columns.iter().map(|c| c.name.clone()).collect(),
+                    has_headers: ct.has_header_row,
+                    has_totals: ct.has_totals_row,
+                });
             }
-        }
-    }
-
-    // Legacy full binding payloads. Compact table attachments intentionally
-    // contain only tableId and cannot construct a TableDef.
-    let binding_entries = compute_document::range::all_range_bindings_wb(workbook, &txn);
-    for (attachment_key, json) in &binding_entries {
-        if let Some(ct) =
-            crate::storage::engine::services::tables::legacy_full_table_from_attachment_entry(
-                attachment_key,
-                json,
-            )
-            && !seen_names.contains(&ct.name)
-            && !seen_ids.contains(&ct.id)
-            && let Ok(sheet) = SheetId::from_uuid_str(&ct.sheet_id)
-        {
-            seen_names.insert(ct.name.clone());
-            seen_ids.insert(ct.id.clone());
-            tables.push(formula_types::TableDef {
-                name: ct.name,
-                sheet,
-                start_row: ct.range.start_row(),
-                start_col: ct.range.start_col(),
-                end_row: ct.range.end_row(),
-                end_col: ct.range.end_col(),
-                columns: ct.columns.iter().map(|c| c.name.clone()).collect(),
-                has_headers: ct.has_header_row,
-                has_totals: ct.has_totals_row,
-            });
         }
     }
 

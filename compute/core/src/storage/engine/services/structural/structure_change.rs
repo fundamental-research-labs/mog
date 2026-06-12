@@ -64,15 +64,25 @@ pub(in crate::storage::engine) fn apply_structure_change(
     // `SUM(A1:A5)` with row 0 deleted becomes `SUM(A1:A4)` instead of
     // `SUM(#REF!)`. Must run BEFORE the structural op tears down the affected
     // CellIds so their pre-delete positions can still be resolved.
-    match change {
-        StructureChange::DeleteRows { at, count, .. } => {
-            pre_delete_re_anchor_range_refs(mirror, sheet_id, *at, *count, true);
-        }
-        StructureChange::DeleteCols { at, count, .. } => {
-            pre_delete_re_anchor_range_refs(mirror, sheet_id, *at, *count, false);
-        }
-        _ => {}
-    }
+    let reanchored_formula_cells = match change {
+        StructureChange::DeleteRows { at, count, .. } => pre_delete_re_anchor_range_refs(
+            mirror,
+            sheet_id,
+            &stores.grid_id_alloc,
+            *at,
+            *count,
+            true,
+        ),
+        StructureChange::DeleteCols { at, count, .. } => pre_delete_re_anchor_range_refs(
+            mirror,
+            sheet_id,
+            &stores.grid_id_alloc,
+            *at,
+            *count,
+            false,
+        ),
+        _ => Vec::new(),
+    };
 
     // Collect virtual CellIds from Range views in the doomed band BEFORE
     // StructuralOps runs. StructuralOps::delete_rows/cols only removes
@@ -173,9 +183,11 @@ pub(in crate::storage::engine) fn apply_structure_change(
     // persist them to Yrs KEY_FORMULA. The get_cell_data() read path overlays
     // the authoritative formula_strings on top of Yrs data, so callers always
     // see the updated formulas without needing to write back to Yrs.
-    let result = stores
-        .compute
-        .structure_change(mirror, Some((change, *sheet_id)))?;
+    let result = stores.compute.structure_change_with_formula_refresh(
+        mirror,
+        Some((change, *sheet_id)),
+        &reanchored_formula_cells,
+    )?;
 
     // Refresh stale KEY_FORMULA entries in Yrs for every formula cell whose
     // A1 text changed. Cross-sheet formulas can shift when a different sheet's
@@ -228,10 +240,65 @@ fn preflight_structure_change(
     // deleted, otherwise references into the deleted band are reparsed against
     // the post-delete sheet and can silently bind to the shifted survivor.
     stores.compute.ensure_graph_built(mirror)?;
+    hydrate_stored_formula_identities_for_structure_change(stores, mirror);
 
     Ok(StructureChangePreflight {
         inherited_insert_row_height,
     })
+}
+
+fn hydrate_stored_formula_identities_for_structure_change(
+    stores: &mut EngineStores,
+    mirror: &mut CellMirror,
+) {
+    enum FormulaSeed {
+        Identity(formula_types::IdentityFormula),
+        A1(String),
+    }
+
+    let sheet_ids: Vec<SheetId> = mirror.sheet_ids().copied().collect();
+    let mut formulas_to_seed: Vec<(SheetId, CellId, FormulaSeed)> = Vec::new();
+
+    for sheet_id in &sheet_ids {
+        let Some(sheet_snap) =
+            construction::build_sheet_snapshot_from_yrs(&stores.storage, sheet_id)
+        else {
+            continue;
+        };
+
+        for cell_data in sheet_snap.cells {
+            let Ok(cell_id) = CellId::from_uuid_str(&cell_data.cell_id) else {
+                continue;
+            };
+            if mirror.get_formula(&cell_id).is_some() {
+                continue;
+            }
+
+            if let Some(identity_formula) = cell_data.identity_formula {
+                formulas_to_seed.push((
+                    *sheet_id,
+                    cell_id,
+                    FormulaSeed::Identity(identity_formula),
+                ));
+            } else if let Some(formula_a1) = cell_data.formula {
+                formulas_to_seed.push((*sheet_id, cell_id, FormulaSeed::A1(formula_a1)));
+            }
+        }
+    }
+
+    for (sheet_id, cell_id, seed) in formulas_to_seed {
+        let identity_formula = match seed {
+            FormulaSeed::Identity(identity_formula) => Some(identity_formula),
+            FormulaSeed::A1(formula_a1) => stores
+                .compute
+                .to_identity_formula(mirror, &sheet_id, &formula_a1)
+                .ok(),
+        };
+
+        if let Some(identity_formula) = identity_formula {
+            mirror.set_formula(&cell_id, Some(identity_formula));
+        }
+    }
 }
 
 fn grid_index<'a>(

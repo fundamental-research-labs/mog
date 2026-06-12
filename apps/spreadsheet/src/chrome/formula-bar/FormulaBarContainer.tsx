@@ -51,6 +51,7 @@ import {
 } from '../../infra/events/formula-bar-refresh';
 import { FormulaBar } from './FormulaBar';
 import { FormulaBarContextMenu } from './FormulaBarContextMenu';
+import { subscribeToFormulaBarWorkbookRefreshes } from './formula-bar-refresh-subscriptions';
 // =============================================================================
 // Component
 // =============================================================================
@@ -150,14 +151,10 @@ function FormulaBarContainerImpl() {
     return unsub;
   }, [wb]);
 
-  // When a sheet is renamed, cross-sheet formula references on the active sheet
-  // are rewritten (e.g. =Sheet2!A1 → =Revenue!A1). The formula bar must re-fetch
-  // the active cell's formula text so it reflects the new sheet prefix, even when
-  // the active cell position hasn't changed (clicking the same cell again doesn't
-  // re-trigger the activeCellRow/activeCellCol useEffect).
+  // When sheet references are rewritten, the formula bar must re-fetch the active
+  // cell's formula text even if the active cell position hasn't changed.
   useEffect(() => {
-    const unsub = wb.on('sheet:renamed', () => setStructureVersion((v) => v + 1));
-    return unsub;
+    return subscribeToFormulaBarWorkbookRefreshes(wb, () => setStructureVersion((v) => v + 1));
   }, [wb]);
 
   useEffect(() => {

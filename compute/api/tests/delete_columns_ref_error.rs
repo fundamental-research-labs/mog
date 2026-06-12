@@ -177,3 +177,187 @@ fn delete_column_shifts_surviving_ref() {
     // (deleting an unrelated middle column doesn't change a `=C1` result —
     // C1 just shifts). The point is the test passes either way without #REF!.
 }
+
+#[test]
+fn delete_column_retargets_shifted_formula_to_previous_column() {
+    let (wb, _) = Workbook::from_snapshot(blank_snapshot()).unwrap();
+    let sheet = wb.sheet_by_index(0).unwrap();
+
+    sheet.set_cell("K14", "100").unwrap();
+    sheet.set_cell("L14", "200").unwrap();
+    sheet.set_cell("M35", "0.25").unwrap();
+    sheet.set_cell("M14", "=L14*(1+M35)").unwrap();
+
+    let res = sheet.structure().delete_columns(11, 1).unwrap();
+
+    let l14 = res
+        .recalc
+        .changed_cells
+        .iter()
+        .find(|c| {
+            c.position
+                .as_ref()
+                .map_or(false, |p| p.row == 13 && p.col == 11)
+        })
+        .expect("L14 should be recalculated after deleting column L");
+
+    use value_types::{CellValue, FiniteF64};
+    assert_eq!(
+        l14.value,
+        CellValue::Number(FiniteF64::must(125.0)),
+        "shifted formula should recalculate from the previous surviving column"
+    );
+}
+
+#[test]
+fn delete_column_retargets_shifted_absolute_formula_to_previous_column() {
+    let (wb, _) = Workbook::from_snapshot(blank_snapshot()).unwrap();
+    let sheet = wb.sheet_by_index(0).unwrap();
+
+    sheet.set_cell("K14", "100").unwrap();
+    sheet.set_cell("L14", "200").unwrap();
+    sheet.set_cell("M35", "0.25").unwrap();
+    sheet.set_cell("M14", "=$L14*(1+$M$35)").unwrap();
+
+    let res = sheet.structure().delete_columns(11, 1).unwrap();
+
+    let l14 = res
+        .recalc
+        .changed_cells
+        .iter()
+        .find(|c| {
+            c.position
+                .as_ref()
+                .map_or(false, |p| p.row == 13 && p.col == 11)
+        })
+        .expect("L14 should be recalculated after deleting column L");
+
+    use value_types::{CellValue, FiniteF64};
+    assert_eq!(
+        l14.value,
+        CellValue::Number(FiniteF64::must(125.0)),
+        "absolute shifted formula should recalculate from the previous surviving column"
+    );
+}
+
+#[test]
+fn delete_column_retargets_shifted_formula_to_empty_previous_column() {
+    let (wb, _) = Workbook::from_snapshot(blank_snapshot()).unwrap();
+    let sheet = wb.sheet_by_index(0).unwrap();
+
+    sheet.set_cell("L14", "200").unwrap();
+    sheet.set_cell("M35", "0.25").unwrap();
+    sheet.set_cell("M14", "=L14*(1+M35)").unwrap();
+
+    let res = sheet.structure().delete_columns(11, 1).unwrap();
+
+    let l14 = res
+        .recalc
+        .changed_cells
+        .iter()
+        .find(|c| {
+            c.position
+                .as_ref()
+                .map_or(false, |p| p.row == 13 && p.col == 11)
+        })
+        .expect("L14 should be recalculated after deleting column L");
+
+    use value_types::{CellValue, FiniteF64};
+    assert_eq!(
+        l14.value,
+        CellValue::Number(FiniteF64::must(0.0)),
+        "shifted formula should reference the empty previous surviving column"
+    );
+}
+
+#[test]
+fn delete_row_retargets_shifted_formula_to_previous_row() {
+    let (wb, _) = Workbook::from_snapshot(blank_snapshot()).unwrap();
+    let sheet = wb.sheet_by_index(0).unwrap();
+
+    sheet.set_cell("A10", "100").unwrap();
+    sheet.set_cell("A11", "200").unwrap();
+    sheet.set_cell("B12", "0.25").unwrap();
+    sheet.set_cell("A12", "=A11*(1+B12)").unwrap();
+
+    let res = sheet.structure().delete_rows(10, 1).unwrap();
+
+    let a11 = res
+        .recalc
+        .changed_cells
+        .iter()
+        .find(|c| {
+            c.position
+                .as_ref()
+                .map_or(false, |p| p.row == 10 && p.col == 0)
+        })
+        .expect("A11 should be recalculated after deleting row 11");
+
+    use value_types::{CellValue, FiniteF64};
+    assert_eq!(
+        a11.value,
+        CellValue::Number(FiniteF64::must(125.0)),
+        "shifted formula should recalculate from the previous surviving row"
+    );
+}
+
+#[test]
+fn delete_row_retargets_shifted_absolute_formula_to_previous_row() {
+    let (wb, _) = Workbook::from_snapshot(blank_snapshot()).unwrap();
+    let sheet = wb.sheet_by_index(0).unwrap();
+
+    sheet.set_cell("A10", "100").unwrap();
+    sheet.set_cell("A11", "200").unwrap();
+    sheet.set_cell("B12", "0.25").unwrap();
+    sheet.set_cell("A12", "=$A$11*(1+$B$12)").unwrap();
+
+    let res = sheet.structure().delete_rows(10, 1).unwrap();
+
+    let a11 = res
+        .recalc
+        .changed_cells
+        .iter()
+        .find(|c| {
+            c.position
+                .as_ref()
+                .map_or(false, |p| p.row == 10 && p.col == 0)
+        })
+        .expect("A11 should be recalculated after deleting row 11");
+
+    use value_types::{CellValue, FiniteF64};
+    assert_eq!(
+        a11.value,
+        CellValue::Number(FiniteF64::must(125.0)),
+        "absolute shifted formula should recalculate from the previous surviving row"
+    );
+}
+
+#[test]
+fn delete_row_retargets_shifted_formula_to_empty_previous_row() {
+    let (wb, _) = Workbook::from_snapshot(blank_snapshot()).unwrap();
+    let sheet = wb.sheet_by_index(0).unwrap();
+
+    sheet.set_cell("A11", "200").unwrap();
+    sheet.set_cell("B12", "0.25").unwrap();
+    sheet.set_cell("A12", "=A11*(1+B12)").unwrap();
+
+    let res = sheet.structure().delete_rows(10, 1).unwrap();
+
+    let a11 = res
+        .recalc
+        .changed_cells
+        .iter()
+        .find(|c| {
+            c.position
+                .as_ref()
+                .map_or(false, |p| p.row == 10 && p.col == 0)
+        })
+        .expect("A11 should be recalculated after deleting row 11");
+
+    use value_types::{CellValue, FiniteF64};
+    assert_eq!(
+        a11.value,
+        CellValue::Number(FiniteF64::must(0.0)),
+        "shifted formula should reference the empty previous surviving row"
+    );
+}

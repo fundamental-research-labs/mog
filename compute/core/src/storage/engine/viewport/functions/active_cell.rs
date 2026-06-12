@@ -55,26 +55,24 @@ pub(in crate::storage::engine::viewport) fn get_active_cell(
                 .unwrap_or(CellValue::Null)
         });
 
-    // Get formula text from ComputeCore (A1-notation string), falling back to
-    // the mirror's identity formula template.
-    let formula = stores
-        .compute
-        .get_formula(&effective_cell_id)
-        .map(|s| s.to_string())
-        .or_else(|| {
-            mirror
-                .get_formula(&effective_cell_id)
-                .map(|f| format!("={}", f.template))
+    let formula = effective_pos
+        .and_then(|p| {
+            crate::storage::engine::formula_read::formula_text_at(
+                stores,
+                mirror,
+                sheet_id,
+                p.row(),
+                p.col(),
+                Some(&effective_cell_id),
+            )
         })
         .or_else(|| {
-            effective_pos.and_then(|p| {
-                crate::storage::engine::data_table_formula::formula_at(
-                    mirror,
-                    sheet_id,
-                    p.row(),
-                    p.col(),
-                )
-            })
+            crate::storage::engine::formula_read::formula_text_for_cell_id(
+                stores,
+                mirror,
+                sheet_id,
+                &effective_cell_id,
+            )
         });
 
     // Resolve format and metadata from properties.

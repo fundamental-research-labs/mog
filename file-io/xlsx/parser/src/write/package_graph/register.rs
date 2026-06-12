@@ -167,18 +167,19 @@ pub fn register_pivot_cache(
 pub fn register_worksheet_table(
     graph: &mut PackageGraphBuilder,
     sheet_idx: usize,
-    global_idx: usize,
+    path: &str,
     relationship_id_hint: Option<&str>,
 ) -> Result<(), WriteError> {
-    let path = format!("xl/tables/table{global_idx}.xml");
-    graph.register_part(modeled_part(&path, CT_TABLE))?;
+    graph.register_part(modeled_part(path, CT_TABLE))?;
     graph.add_relationship(PackageRelationship {
         owner: PackageOwner::Worksheet {
             index: sheet_idx,
             path: format!("xl/worksheets/sheet{}.xml", sheet_idx + 1),
         },
         relationship_type: REL_TABLE.to_string(),
-        target: PackageRelationshipTarget::InternalPart { path },
+        target: PackageRelationshipTarget::InternalPart {
+            path: path.to_string(),
+        },
         identity_hint: relationship_id_hint.map(RelationshipIdentityHint::new),
     });
     Ok(())
@@ -258,18 +259,19 @@ pub fn register_workbook_volatile_dependencies(
 
 pub fn register_table_query_table(
     graph: &mut PackageGraphBuilder,
-    table_global_idx: usize,
-    query_table_global_idx: usize,
+    table_path: &str,
+    query_table_path: &str,
     relationship_id_hint: Option<&str>,
 ) -> Result<(), WriteError> {
-    let path = format!("xl/queryTables/queryTable{query_table_global_idx}.xml");
-    graph.register_part(modeled_part(&path, CT_QUERY_TABLE))?;
+    graph.register_part(modeled_part(query_table_path, CT_QUERY_TABLE))?;
     graph.add_relationship(PackageRelationship {
         owner: PackageOwner::Part {
-            path: format!("xl/tables/table{table_global_idx}.xml"),
+            path: table_path.to_string(),
         },
         relationship_type: REL_QUERY_TABLE.to_string(),
-        target: PackageRelationshipTarget::InternalPart { path },
+        target: PackageRelationshipTarget::InternalPart {
+            path: query_table_path.to_string(),
+        },
         identity_hint: relationship_id_hint.map(RelationshipIdentityHint::new),
     });
     Ok(())

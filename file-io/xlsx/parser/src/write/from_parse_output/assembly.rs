@@ -88,6 +88,13 @@ pub(super) struct WorksheetHyperlinkGraphEntry {
     pub(super) relationship_id_hint: Option<String>,
 }
 
+pub(super) struct WorksheetTableGraphEntry {
+    pub(super) sheet_idx: usize,
+    pub(super) path: String,
+    pub(super) target: String,
+    pub(super) relationship_id_hint: Option<String>,
+}
+
 pub(super) struct WorksheetControlPropertyGraphEntry {
     pub(super) sheet_idx: usize,
     pub(super) global_idx: usize,

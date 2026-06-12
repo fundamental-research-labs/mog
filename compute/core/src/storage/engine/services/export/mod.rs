@@ -1,16 +1,3 @@
-//! Extracted export (read-only) functions.
-//!
-//! Each function takes explicit references to the engine sub-structs it needs
-//! (e.g. `&EngineStores`, `&CellMirror`) instead of `&self`.  The original
-//! methods in `export.rs` delegate to these with one-line calls.
-//!
-//! ## Module structure
-//!
-//! - `cells` — cell-level export (batch Yrs reads, cell data, row/col styles)
-//! - `sheet_metadata` — per-sheet metadata (hyperlinks, validations, sparklines, etc.)
-//! - `dimensions` — row heights, column widths, tables
-//! - `workbook` — workbook-level exports (theme, protection, properties, etc.)
-
 mod cells;
 mod chart_sources;
 mod dimensions;
@@ -24,7 +11,8 @@ pub(in crate::storage::engine) use cells::{
     export_authored_style_runs_for_sheet, export_cells_for_sheet, export_row_col_styles_for_sheet,
 };
 pub(in crate::storage::engine) use dimensions::{
-    export_dimensions_for_sheet, export_tables_for_sheet,
+    ExportedTableProjectionInput, TableExportProjection, export_dimensions_for_sheet,
+    export_tables_for_sheet, finalize_table_export_projection,
 };
 pub(in crate::storage::engine) use sheet_metadata::{
     export_auto_filter_for_sheet, export_conditional_formats_for_sheet,
@@ -70,16 +58,10 @@ use workbook::{
 // Style palette dedup — O(1) lookup via HashMap
 // -------------------------------------------------------------------
 
-/// Trait for O(1) style palette deduplication.
-///
-/// Two implementations:
-/// - `LocalPalette` — single-threaded (WASM / sequential fallback)
-/// - `SharedPalette` — thread-safe via `parking_lot::Mutex` (native parallel export)
 pub(crate) trait PaletteOps {
     fn get_or_insert(&self, fmt: DocumentFormat) -> u32;
 }
 
-/// Single-threaded palette using `RefCell` for interior mutability.
 pub(crate) struct LocalPalette {
     palette: std::cell::RefCell<Vec<DocumentFormat>>,
     index: std::cell::RefCell<rustc_hash::FxHashMap<DocumentFormat, u32>>,
@@ -94,7 +76,6 @@ impl LocalPalette {
         }
     }
 
-    /// Create from an existing palette Vec (for backward-compat wrapper callsites).
     pub(crate) fn from_vec(existing: &mut Vec<DocumentFormat>) -> Self {
         let index = existing
             .iter()
@@ -126,9 +107,6 @@ impl PaletteOps for LocalPalette {
     }
 }
 
-/// Thread-safe palette using `parking_lot::Mutex` for concurrent access.
-/// Lock contention is minimal: unique formats are few (<1000 per workbook),
-/// so most calls are fast HashMap lookups within a short critical section.
 #[cfg(feature = "native")]
 struct SharedPalette {
     inner: parking_lot::Mutex<(
@@ -170,34 +148,27 @@ impl PaletteOps for SharedPalette {
     }
 }
 
-// -------------------------------------------------------------------
-// Per-sheet export orchestrator
-// -------------------------------------------------------------------
+struct ExportedSheetData {
+    sheet: SheetData,
+    table_projection_inputs: Vec<ExportedTableProjectionInput>,
+}
 
-/// Export all data for a single sheet.
-///
-/// Extracted from the per-sheet loop body of `build_parse_output_from_yrs`
-/// to enable parallel execution via rayon. This function is pure read-only
-/// (no mutations to engine state) and thread-safe when `palette` is a
-/// `SharedPalette`.
 fn export_single_sheet(
     stores: &EngineStores,
     mirror: &CellMirror,
     sheet_id: &SheetId,
     sheet_idx: usize,
     palette: &impl PaletteOps,
-) -> Option<SheetData> {
+) -> Option<ExportedSheetData> {
     let mut profile = crate::xlsx_profile::PhaseTimer::new("export", "export_single_sheet");
     profile.counter("sheet_index", sheet_idx as u64);
 
     let name = queries::get_sheet_name(stores, sheet_id)?;
 
-    // --- Cells ---
     let cells = export_cells_for_sheet(stores, mirror, sheet_id, palette);
     let authored_style_runs =
         export_authored_style_runs_for_sheet(stores, mirror, sheet_id, palette);
 
-    // --- Merges ---
     let merges_raw = match stores.grid_indexes.get(sheet_id) {
         Some(grid) => merges::get_all_merges(
             stores.storage.doc(),
@@ -217,7 +188,6 @@ fn export_single_sheet(
         })
         .collect();
 
-    // --- View settings ---
     let view_opts = queries::get_view_options_query(stores, sheet_id);
     let scroll = queries::get_scroll_position_query(stores, sheet_id);
     #[allow(clippy::type_complexity)]
@@ -439,7 +409,6 @@ fn export_single_sheet(
         ext_lst_xml: sheet_view_ext_lst_xml,
     };
 
-    // --- Dimensions (custom row heights, col widths) ---
     let stored_max_col = dims_mod::get_max_materialized_col(
         stores.storage.doc(),
         stores.storage.sheets(),
@@ -448,7 +417,6 @@ fn export_single_sheet(
     );
     let sheet_dimensions = export_dimensions_for_sheet(stores, mirror, sheet_id, stored_max_col);
 
-    // --- Comments ---
     let raw_comments = get_all_comments(stores, sheet_id);
     let comments_out: Vec<Comment> = raw_comments
         .into_iter()
@@ -489,18 +457,14 @@ fn export_single_sheet(
         })
         .collect();
 
-    // --- Hyperlinks ---
     let hyperlinks_out = export_hyperlinks_for_sheet(stores, sheet_id);
 
-    // --- Conditional formats ---
     let conditional_formats: Vec<DomainConditionalFormat> =
         export_conditional_formats_for_sheet(stores, sheet_id);
 
-    // --- Data validations ---
     let data_validations = export_data_validations_for_sheet(stores, sheet_id);
     let x14_data_validations = Vec::new();
 
-    // --- Print settings ---
     let ps = print::get_print_settings(stores.storage.doc(), stores.storage.sheets(), sheet_id);
     let print_settings = if ps == PrintSettings::default() {
         None
@@ -508,13 +472,10 @@ fn export_single_sheet(
         Some(ps)
     };
 
-    // --- Header/footer images ---
     let hf_images = print::get_hf_images(stores.storage.doc(), stores.storage.sheets(), sheet_id);
 
-    // --- Protection ---
     let protection = export_sheet_protection(stores, sheet_id);
 
-    // --- Sheet metadata (rows/cols count) ---
     let data_bounds = queries::get_data_bounds(stores, mirror, sheet_id);
     let max_row = data_bounds.as_ref().map(|b| b.max_row + 1).unwrap_or(0);
     let data_max_col = data_bounds.as_ref().map(|b| b.max_col + 1).unwrap_or(0);
@@ -573,37 +534,37 @@ fn export_single_sheet(
         .max(dims_max_row)
         .max(max_materialized_row_for_styles);
 
-    // --- Row/Col styles ---
     let (row_styles, col_styles) =
         export_row_col_styles_for_sheet(stores, sheet_id, style_max_row, max_col, palette);
 
-    // --- Sparklines ---
     let sparklines = export_sparklines_for_sheet(stores, sheet_id);
     let sparkline_groups = export_sparkline_groups_for_sheet(stores, sheet_id);
 
-    // --- Page breaks ---
     let page_breaks = export_page_breaks_for_sheet(stores, sheet_id);
 
-    // --- Auto filter ---
     let pos_resolver =
         |cell_id: &str| -> Option<(u32, u32)> { resolve_cell_position(mirror, sheet_id, cell_id) };
     let auto_filter = export_auto_filter_for_sheet(stores, sheet_id, &pos_resolver);
     let sort_state = export_sort_state_for_sheet(stores, sheet_id);
 
-    // --- Outline groups ---
     let (outline_groups, outline_properties) = export_outline_groups_for_sheet(stores, sheet_id);
 
-    // --- Tables ---
-    let tables: Vec<TableSpec> = export_tables_for_sheet(stores, mirror, sheet_id);
+    let exported_tables = export_tables_for_sheet(stores, mirror, sheet_id);
+    let table_projection_inputs = exported_tables
+        .iter()
+        .map(|table| table.projection_input.clone())
+        .collect();
+    let tables: Vec<TableSpec> = exported_tables
+        .into_iter()
+        .map(|table| table.spec)
+        .collect();
 
-    // --- Floating objects (unified), slicers ---
     let (all_fobjs, slicers, slicer_anchors, timelines, timeline_anchors) =
         export_floating_objects_for_sheet(stores, mirror, sheet_id);
 
     let (charts, floating_objects) =
         chart_sources::split_charts_for_sheet_export(all_fobjs, mirror, sheet_id, &name);
 
-    // --- Sheet metadata from Yrs meta map ---
     let (
         original_sheet_id,
         visibility,
@@ -814,7 +775,10 @@ fn export_single_sheet(
     profile.counter("cells", sheet.cells.len() as u64);
     profile.counter("ranges", sheet.authored_style_runs.len() as u64);
     profile.counter("merges", sheet.merges.len() as u64);
-    Some(sheet)
+    Some(ExportedSheetData {
+        sheet,
+        table_projection_inputs,
+    })
 }
 
 fn export_data_table_regions(stores: &EngineStores, sheet_ids: &[SheetId]) -> Vec<DataTableRegion> {
@@ -876,10 +840,6 @@ fn tab_color_to_ooxml_color(color: &str) -> ooxml_types::styles::ColorDef {
     }
 }
 
-// -------------------------------------------------------------------
-// Full ParseOutput build (main orchestrator)
-// -------------------------------------------------------------------
-
 /// Build a complete `ParseOutput` from the current Yrs storage state.
 /// This produces the same type that the XLSX parser emits, enabling
 /// the unified XLSX writer to consume it.
@@ -892,42 +852,58 @@ pub(in crate::storage::engine) fn build_parse_output_from_yrs(
 ) -> ParseOutput {
     let sheet_ids = stores.storage.sheet_order();
 
-    // --- Parallel per-sheet export (native) or sequential (WASM) ---
     #[cfg(feature = "native")]
-    let (output_sheets, style_palette) = {
+    let (mut output_sheets, table_projection_inputs, style_palette) = {
         use rayon::prelude::*;
         let palette = SharedPalette::from_vec(export_workbook_style_palette(stores));
-        let sheets: Vec<SheetData> = sheet_ids
+        let exported_sheets: Vec<ExportedSheetData> = sheet_ids
             .par_iter()
             .enumerate()
             .filter_map(|(sheet_idx, sheet_id)| {
                 export_single_sheet(stores, mirror, sheet_id, sheet_idx, &palette)
             })
             .collect();
-        (sheets, palette.into_vec())
+        let table_projection_inputs: Vec<Vec<ExportedTableProjectionInput>> = exported_sheets
+            .iter()
+            .map(|sheet| sheet.table_projection_inputs.clone())
+            .collect();
+        let sheets: Vec<SheetData> = exported_sheets
+            .into_iter()
+            .map(|sheet| sheet.sheet)
+            .collect();
+        (sheets, table_projection_inputs, palette.into_vec())
     };
 
     #[cfg(not(feature = "native"))]
-    let (output_sheets, style_palette) = {
+    let (mut output_sheets, table_projection_inputs, style_palette) = {
         let mut seeded_palette = export_workbook_style_palette(stores);
         let palette = LocalPalette::from_vec(&mut seeded_palette);
-        let sheets: Vec<SheetData> = sheet_ids
+        let exported_sheets: Vec<ExportedSheetData> = sheet_ids
             .iter()
             .enumerate()
             .filter_map(|(sheet_idx, sheet_id)| {
                 export_single_sheet(stores, mirror, sheet_id, sheet_idx, &palette)
             })
             .collect();
-        (sheets, palette.into_vec())
+        let table_projection_inputs: Vec<Vec<ExportedTableProjectionInput>> = exported_sheets
+            .iter()
+            .map(|sheet| sheet.table_projection_inputs.clone())
+            .collect();
+        let sheets: Vec<SheetData> = exported_sheets
+            .into_iter()
+            .map(|sheet| sheet.sheet)
+            .collect();
+        (sheets, table_projection_inputs, palette.into_vec())
     };
 
-    // --- Named ranges ---
+    let table_projection: TableExportProjection =
+        finalize_table_export_projection(&mut output_sheets, &table_projection_inputs);
+
     let named_ranges = export_workbook_named_ranges(stores, mirror, &sheet_ids);
 
-    // --- Workbook-level ---
     let theme = export_workbook_theme(stores);
     let wb_protection = export_workbook_protection(stores);
-    let slicer_caches = export_workbook_slicer_caches(stores, Some(&output_sheets));
+    let slicer_caches = export_workbook_slicer_caches(stores, Some(&table_projection));
     let timeline_caches = workbook::export_workbook_timeline_caches(stores);
     let (custom_table_styles, default_table_style, default_pivot_style) =
         export_workbook_table_styles(stores);

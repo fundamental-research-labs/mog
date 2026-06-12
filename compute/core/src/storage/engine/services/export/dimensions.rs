@@ -7,15 +7,16 @@ use cell_types::{CellId, SheetId};
 use compute_document::hex::hex_to_id;
 use compute_document::schema::*;
 use domain_types::{
-    ColDimension, RowDimension, RowXmlHints, SheetDimensions,
+    ColDimension, RowDimension, RowXmlHints, SheetData, SheetDimensions,
     domain::{
+        connections::QueryTable,
         filter::{
             FilterColumn as OoxmlFilterColumn, OoxmlFilterCondition, OoxmlFilterType,
             SortState as OoxmlSortState, filter_state_to_auto_filter,
         },
         table::{
-            CustomFilterSpec, FilterColumnSpec, FilterSpec, TableSortCondition, TableSortState,
-            TableSpec,
+            CustomFilterSpec, FilterColumnSpec, FilterSpec, Table, TableSortCondition,
+            TableSortState, TableSpec,
         },
     },
     yrs_schema,
@@ -508,62 +509,332 @@ pub(in crate::storage::engine) fn export_tables_for_sheet(
     stores: &EngineStores,
     mirror: &CellMirror,
     sheet_id: &SheetId,
-) -> Vec<TableSpec> {
+) -> Vec<ExportedTableSpec> {
     let sheet_hex = sheet_id.to_uuid_string();
-    let tables: Vec<_> = mirror
-        .all_tables()
-        .iter()
-        .filter(|t| t.sheet_id == sheet_hex)
-        .cloned()
-        .collect();
-    let txn = stores.storage.doc().transact();
-    let catalog_tables_map = stores
-        .storage
-        .workbook_map()
-        .get(&txn, KEY_TABLES)
-        .and_then(|v| match v {
-            Out::YMap(m) => Some(m),
-            _ => None,
-        });
-
-    tables
-        .iter()
-        .map(|table| {
-            let catalog_table = catalog_tables_map.as_ref().and_then(|tm| {
-                match tm
-                    .get(&txn, table.id.as_str())
-                    .or_else(|| tm.get(&txn, table.name.as_str()))
-                {
-                    Some(Out::YMap(inner)) => {
-                        yrs_schema::table::from_yrs_map_to_table(&inner, &txn)
-                    }
+    let mut catalog_tables = {
+        let txn = stores.storage.doc().transact();
+        match stores.storage.workbook_map().get(&txn, KEY_TABLES) {
+            Some(Out::YMap(tables_map)) => tables_map
+                .iter(&txn)
+                .filter_map(|(key, value)| match value {
+                    Out::YMap(inner) => yrs_schema::table::from_yrs_map_to_table(&inner, &txn)
+                        .filter(|table| table.sheet_id == sheet_hex)
+                        .map(|table| (key.to_string(), table)),
                     _ => None,
-                }
-            });
-            let export_table = catalog_table.as_ref().unwrap_or(table);
-            let mut spec = domain_types::domain::table::table_to_table_spec(export_table, None);
-            apply_runtime_table_filter_to_spec(stores, mirror, sheet_id, &table.name, &mut spec);
-            Some(spec)
-        })
-        .flatten()
-        .collect()
+                })
+                .collect::<Vec<_>>(),
+            _ => Vec::new(),
+        }
+    };
+    catalog_tables.sort_by(|(_, left), (_, right)| {
+        (
+            left.range.start_row(),
+            left.range.start_col(),
+            left.name.as_str(),
+            left.id.as_str(),
+        )
+            .cmp(&(
+                right.range.start_row(),
+                right.range.start_col(),
+                right.name.as_str(),
+                right.id.as_str(),
+            ))
+    });
+
+    let mut seen_ids = HashSet::new();
+    let mut seen_names = HashSet::new();
+    let mut exported = Vec::new();
+    for (catalog_key, table) in catalog_tables {
+        seen_ids.insert(catalog_key.clone());
+        seen_ids.insert(table.id.clone());
+        seen_names.insert(table.name.clone());
+        if table.id != catalog_key {
+            seen_names.insert(catalog_key);
+        }
+        exported.push(exported_table_spec_for_table(
+            stores, mirror, sheet_id, &table,
+        ));
+    }
+
+    exported.extend(
+        mirror
+            .all_tables()
+            .iter()
+            .filter(|table| table.sheet_id == sheet_hex)
+            .filter(|table| !seen_ids.contains(&table.id) && !seen_names.contains(&table.name))
+            .map(|table| exported_table_spec_for_table(stores, mirror, sheet_id, table)),
+    );
+    exported
+}
+
+fn exported_table_spec_for_table(
+    stores: &EngineStores,
+    mirror: &CellMirror,
+    sheet_id: &SheetId,
+    table: &Table,
+) -> ExportedTableSpec {
+    let mut spec = domain_types::domain::table::table_to_table_spec(table, None);
+    apply_runtime_table_filter_to_spec(stores, mirror, sheet_id, &table.id, &mut spec);
+    ExportedTableSpec {
+        projection_input: ExportedTableProjectionInput {
+            stable_table_id: table.id.clone(),
+            stable_column_ids: table
+                .columns
+                .iter()
+                .map(|column| column.id.clone())
+                .collect(),
+        },
+        spec,
+    }
+}
+
+pub(in crate::storage::engine) struct ExportedTableSpec {
+    pub(in crate::storage::engine) projection_input: ExportedTableProjectionInput,
+    pub(in crate::storage::engine) spec: TableSpec,
+}
+
+#[derive(Debug, Clone)]
+pub(in crate::storage::engine) struct ExportedTableProjectionInput {
+    pub(in crate::storage::engine) stable_table_id: String,
+    stable_column_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
+pub(in crate::storage::engine) struct TableExportProjection {
+    lookup: HashMap<String, TableExportProjectionEntry>,
+}
+
+#[derive(Debug, Clone)]
+pub(in crate::storage::engine) struct TableExportProjectionEntry {
+    pub(in crate::storage::engine) ooxml_table_id: u32,
+    pub(in crate::storage::engine) columns: Vec<TableExportColumnProjection>,
+}
+
+#[derive(Debug, Clone)]
+pub(in crate::storage::engine) struct TableExportColumnProjection {
+    pub(in crate::storage::engine) stable_column_id: Option<String>,
+    pub(in crate::storage::engine) ooxml_column_id: u32,
+    pub(in crate::storage::engine) name: String,
+}
+
+impl TableExportProjection {
+    pub(in crate::storage::engine) fn empty() -> Self {
+        Self {
+            lookup: HashMap::new(),
+        }
+    }
+
+    pub(in crate::storage::engine) fn get(&self, key: &str) -> Option<&TableExportProjectionEntry> {
+        self.lookup.get(&key.to_ascii_lowercase())
+    }
+
+    fn insert_key(&mut self, key: &str, entry: TableExportProjectionEntry) {
+        if key.is_empty() {
+            return;
+        }
+        self.lookup.entry(key.to_ascii_lowercase()).or_insert(entry);
+    }
+}
+
+/// Finalize the workbook-scoped OOXML table projection for export.
+///
+/// The storage catalog owns stable Mog table IDs. XLSX package parts need a
+/// separate workbook-scoped numeric/table-part projection. This pass stamps the
+/// emitted `TableSpec`s with collision-free OOXML IDs and package paths so table
+/// XML, worksheet relationships, slicer caches, and query-table sidecars all
+/// consume the same projection.
+pub(in crate::storage::engine) fn finalize_table_export_projection(
+    sheets: &mut [SheetData],
+    projection_inputs_by_sheet: &[Vec<ExportedTableProjectionInput>],
+) -> TableExportProjection {
+    let mut used_table_ids = HashSet::new();
+    let mut used_table_paths = HashSet::new();
+    let mut used_query_table_paths = HashSet::new();
+    let mut next_table_id = 1u32;
+    let mut next_table_path = 1usize;
+    let mut next_query_table_path = 1usize;
+    let mut projection = TableExportProjection::empty();
+
+    for (sheet_idx, sheet) in sheets.iter_mut().enumerate() {
+        for (table_idx, table) in sheet.tables.iter_mut().enumerate() {
+            table.id = allocate_table_ooxml_id(table.id, &mut used_table_ids, &mut next_table_id);
+            finalize_table_column_ooxml_projection(table);
+
+            let table_path = allocate_family_path(
+                table.table_part_path_hint.as_deref(),
+                "xl/tables/table",
+                ".xml",
+                &mut used_table_paths,
+                &mut next_table_path,
+            );
+            table.worksheet_relationship_target_hint =
+                Some(worksheet_table_relationship_target(&table_path));
+            table.table_part_path_hint = Some(table_path);
+
+            if let Some(query_table) = table.query_table.as_mut() {
+                let query_path = allocate_family_path(
+                    query_table.path_hint.as_deref(),
+                    "xl/queryTables/queryTable",
+                    ".xml",
+                    &mut used_query_table_paths,
+                    &mut next_query_table_path,
+                );
+                query_table.path_hint = Some(query_path);
+                reconcile_query_table_field_column_ids(query_table, &table.columns);
+            }
+
+            let entry = TableExportProjectionEntry {
+                ooxml_table_id: table.id,
+                columns: table
+                    .columns
+                    .iter()
+                    .enumerate()
+                    .map(|(column_idx, column)| TableExportColumnProjection {
+                        stable_column_id: projection_inputs_by_sheet
+                            .get(sheet_idx)
+                            .and_then(|inputs| inputs.get(table_idx))
+                            .and_then(|input| input.stable_column_ids.get(column_idx))
+                            .cloned(),
+                        ooxml_column_id: column.id,
+                        name: column.name.clone(),
+                    })
+                    .collect(),
+            };
+            if let Some(stable_table_id) = projection_inputs_by_sheet
+                .get(sheet_idx)
+                .and_then(|inputs| inputs.get(table_idx))
+                .map(|input| input.stable_table_id.as_str())
+            {
+                projection.insert_key(stable_table_id, entry.clone());
+            }
+            projection.insert_key(table.name.as_str(), entry.clone());
+            projection.insert_key(table.display_name.as_str(), entry.clone());
+            projection.insert_key(&table.id.to_string(), entry);
+        }
+    }
+    projection
+}
+
+fn allocate_table_ooxml_id(preferred: u32, used: &mut HashSet<u32>, next_id: &mut u32) -> u32 {
+    if preferred > 0 && used.insert(preferred) {
+        *next_id = (*next_id).max(preferred.saturating_add(1));
+        return preferred;
+    }
+
+    loop {
+        let candidate = *next_id;
+        *next_id = (*next_id).saturating_add(1);
+        if candidate > 0 && used.insert(candidate) {
+            return candidate;
+        }
+    }
+}
+
+fn finalize_table_column_ooxml_projection(table: &mut TableSpec) {
+    let mut used = HashSet::new();
+    let mut next_id = 1u32;
+    let mut column_id_by_name = HashMap::new();
+    let mut old_to_new = HashMap::new();
+
+    for column in &mut table.columns {
+        let old_id = column.id;
+        let new_id = allocate_table_ooxml_id(old_id, &mut used, &mut next_id);
+        column.id = new_id;
+        old_to_new.entry(old_id).or_insert(new_id);
+        column_id_by_name
+            .entry(column.name.to_ascii_lowercase())
+            .or_insert(new_id);
+    }
+
+    if let Some(query_table) = table.query_table.as_mut() {
+        for field in &mut query_table.fields {
+            if let Some(name) = field.name.as_ref()
+                && let Some(column_id) = column_id_by_name.get(&name.to_ascii_lowercase())
+            {
+                field.table_column_id = Some(*column_id);
+                continue;
+            }
+            if let Some(old_id) = field.table_column_id
+                && let Some(new_id) = old_to_new.get(&old_id)
+            {
+                field.table_column_id = Some(*new_id);
+            }
+        }
+    }
+}
+
+fn reconcile_query_table_field_column_ids(
+    query_table: &mut QueryTable,
+    columns: &[domain_types::domain::table::TableColumnSpec],
+) {
+    let column_id_by_name: HashMap<_, _> = columns
+        .iter()
+        .map(|column| (column.name.to_ascii_lowercase(), column.id))
+        .collect();
+    for field in &mut query_table.fields {
+        if let Some(name) = field.name.as_ref()
+            && let Some(column_id) = column_id_by_name.get(&name.to_ascii_lowercase())
+        {
+            field.table_column_id = Some(*column_id);
+        }
+    }
+}
+
+fn allocate_family_path(
+    preferred: Option<&str>,
+    prefix: &str,
+    suffix: &str,
+    used: &mut HashSet<String>,
+    next_idx: &mut usize,
+) -> String {
+    if let Some(path) = preferred.and_then(|path| normalized_family_path(path, prefix, suffix))
+        && used.insert(path.clone())
+    {
+        if let Some(index) = family_path_index(&path, prefix, suffix) {
+            *next_idx = (*next_idx).max(index.saturating_add(1));
+        }
+        return path;
+    }
+
+    loop {
+        let path = format!("{prefix}{next_idx}{suffix}");
+        *next_idx = (*next_idx).saturating_add(1);
+        if used.insert(path.clone()) {
+            return path;
+        }
+    }
+}
+
+fn normalized_family_path(path: &str, prefix: &str, suffix: &str) -> Option<String> {
+    let normalized = domain_types::normalize_package_path(path);
+    (normalized.starts_with(prefix) && normalized.ends_with(suffix)).then_some(normalized)
+}
+
+fn family_path_index(path: &str, prefix: &str, suffix: &str) -> Option<usize> {
+    path.strip_prefix(prefix)?
+        .strip_suffix(suffix)?
+        .parse()
+        .ok()
+}
+
+fn worksheet_table_relationship_target(path: &str) -> String {
+    path.strip_prefix("xl/")
+        .map(|path| format!("../{path}"))
+        .unwrap_or_else(|| path.to_string())
 }
 
 fn apply_runtime_table_filter_to_spec(
     stores: &EngineStores,
     mirror: &CellMirror,
     sheet_id: &SheetId,
-    table_name: &str,
+    table_id: &str,
     spec: &mut TableSpec,
 ) {
-    let Some(table) = mirror.get_table(table_name) else {
-        return;
-    };
     let filter = sheet_filters::get_table_filter(
         stores.storage.doc(),
         stores.storage.sheets(),
         sheet_id,
-        &table.id,
+        table_id,
     );
     let Some(filter) = filter else {
         return;

@@ -2,6 +2,14 @@
 
 use super::super::*;
 use super::helpers::*;
+use domain_types::{
+    ParseOutput, SheetData, SheetDimensions,
+    domain::{
+        connections::{QueryTable, QueryTableField},
+        table::{TableColumnSpec, TableSpec},
+    },
+};
+use ooxml_types::slicers::{SlicerCacheDef, SlicerDef, SlicerSortOrder, TableSlicerCache};
 
 fn archive_entry_names(bytes: &[u8]) -> Vec<String> {
     xlsx_parser::zip::XlsxArchive::new(bytes)
@@ -115,4 +123,154 @@ fn runtime_created_range_backed_table_exports_to_xlsx_package() {
     assert!(sheet_xml.contains(r#"<tableParts count="1">"#));
     assert!(sheet_rels.contains(r#"Target="../tables/table1.xml""#));
     assert!(content_types.contains(r#"PartName="/xl/tables/table1.xml""#));
+}
+
+#[test]
+fn imported_table_export_uses_one_projection_for_parts_slicers_and_query_tables() {
+    let input = ParseOutput {
+        sheets: vec![SheetData {
+            name: "Sheet1".to_string(),
+            rows: 4,
+            cols: 2,
+            dimensions: SheetDimensions::default(),
+            tables: vec![TableSpec {
+                id: 7,
+                name: "People".to_string(),
+                display_name: "People".to_string(),
+                range_ref: "A1:B4".to_string(),
+                has_headers: true,
+                has_totals: false,
+                auto_filter_ref: Some("A1:B4".to_string()),
+                table_type: Some("queryTable".to_string()),
+                connection_id: Some(3),
+                table_part_path_hint: Some("xl/tables/table9.xml".to_string()),
+                worksheet_relationship_id_hint: Some("rIdPeopleTable".to_string()),
+                query_table: Some(QueryTable {
+                    connection_id: Some(3),
+                    name: Some("PeopleQuery".to_string()),
+                    relationship_id: Some("rIdPeopleQuery".to_string()),
+                    path_hint: Some("xl/queryTables/queryTable9.xml".to_string()),
+                    fields: vec![QueryTableField {
+                        id: 11,
+                        name: Some("Region".to_string()),
+                        table_column_id: Some(2),
+                        ..Default::default()
+                    }],
+                    ..Default::default()
+                }),
+                columns: vec![
+                    TableColumnSpec {
+                        id: 1,
+                        name: "Name".to_string(),
+                        ..Default::default()
+                    },
+                    TableColumnSpec {
+                        id: 2,
+                        name: "Region".to_string(),
+                        query_table_field_id: Some(11),
+                        ..Default::default()
+                    },
+                ],
+                ..Default::default()
+            }],
+            slicers: vec![SlicerDef {
+                name: "Region".to_string(),
+                cache: "Slicer_Region".to_string(),
+                caption: Some("Region".to_string()),
+                show_caption: true,
+                ..Default::default()
+            }],
+            ..Default::default()
+        }],
+        slicer_caches: vec![SlicerCacheDef {
+            name: "Slicer_Region".to_string(),
+            source_name: "Region".to_string(),
+            table_slicer_cache: Some(TableSlicerCache {
+                table_id: 7,
+                column: 1,
+                sort_order: SlicerSortOrder::Ascending,
+                custom_list_sort: false,
+                cross_filter: ooxml_types::slicers::SlicerCrossFilter::ShowItemsWithDataAtTop,
+                ext_lst: None,
+            }),
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    let engine = engine_from_parse_output_normal(&input);
+
+    let exported = engine
+        .export_to_parse_output()
+        .expect("export_to_parse_output")
+        .parse_output;
+    assert_eq!(exported.sheets[0].tables[0].id, 7);
+    assert_eq!(
+        exported.slicer_caches[0]
+            .table_slicer_cache
+            .as_ref()
+            .expect("table slicer cache")
+            .table_id,
+        7
+    );
+
+    let bytes = engine.export_to_xlsx_bytes().expect("export_to_xlsx_bytes");
+    let archive = xlsx_parser::zip::XlsxArchive::new(&bytes).expect("xlsx archive");
+    let table_xml = String::from_utf8(
+        archive
+            .read_file("xl/tables/table9.xml")
+            .expect("projected table part"),
+    )
+    .unwrap();
+    let sheet_rels = String::from_utf8(
+        archive
+            .read_file("xl/worksheets/_rels/sheet1.xml.rels")
+            .expect("sheet rels"),
+    )
+    .unwrap();
+    let table_rels = String::from_utf8(
+        archive
+            .read_file("xl/tables/_rels/table9.xml.rels")
+            .expect("table rels"),
+    )
+    .unwrap();
+    let query_table_xml = String::from_utf8(
+        archive
+            .read_file("xl/queryTables/queryTable9.xml")
+            .expect("projected query table part"),
+    )
+    .unwrap();
+    let slicer_cache_xml = String::from_utf8(
+        archive
+            .read_file("xl/slicerCaches/slicerCache1.xml")
+            .expect("slicer cache part"),
+    )
+    .unwrap();
+
+    assert!(
+        table_xml.contains(r#"tableType="queryTable""#) && table_xml.contains(r#" id="7""#),
+        "{table_xml}"
+    );
+    assert!(
+        table_xml.contains(r#"connectionId="3""#)
+            && table_xml.contains(r#"queryTableFieldId="11""#),
+        "{table_xml}"
+    );
+    assert!(
+        sheet_rels.contains(r#"Id="rIdPeopleTable""#)
+            && sheet_rels.contains(r#"Target="../tables/table9.xml""#),
+        "{sheet_rels}"
+    );
+    assert!(
+        table_rels.contains(r#"Id="rIdPeopleQuery""#)
+            && table_rels.contains(r#"Target="../queryTables/queryTable9.xml""#),
+        "{table_rels}"
+    );
+    assert!(
+        query_table_xml.contains(r#"tableColumnId="2""#),
+        "{query_table_xml}"
+    );
+    assert!(
+        slicer_cache_xml.contains(r#"tableId="7""#) && slicer_cache_xml.contains(r#"column="1""#),
+        "{slicer_cache_xml}"
+    );
 }

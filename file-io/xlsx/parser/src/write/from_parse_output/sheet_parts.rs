@@ -7,7 +7,7 @@ use super::ole_objects::convert_unified_ole_objects;
 use super::sheet_builder::{apply_outline_groups_rows_only, build_sheet};
 use super::sheet_ext_merge::merge_ext_lst_entries;
 use super::style_remap::StyleExportRemapper;
-use super::{chart_replay, sheet_preservation};
+use super::{chart_replay, sheet_preservation, table_export_plan};
 use crate::domain::charts::chart_ex::write::serialize_chart_ex_space;
 use crate::domain::charts::write_canonical::serialize_chart_space;
 use crate::infra::xml_namespaces::NamespaceMap;
@@ -39,6 +39,7 @@ pub(super) fn build_sheet_parts(
 
     // Global table counter for archive paths (xl/tables/table{N}.xml).
     let mut global_table_idx: u32 = 0;
+    let mut used_table_ooxml_ids = std::collections::HashSet::new();
 
     // Global chart counter for archive paths (xl/charts/chart{N}.xml).
     let mut global_chart_idx: usize = 0;
@@ -315,13 +316,11 @@ pub(super) fn build_sheet_parts(
         let mut table_xmls = Vec::new();
         for table_spec in &sheet_data.tables {
             global_table_idx += 1;
-            // Prefer the original table ID from the parsed file; fall back to
-            // sequential counter for tables created from scratch.
-            let table_id = if table_spec.id > 0 {
-                table_spec.id
-            } else {
-                global_table_idx
-            };
+            let table_id = table_export_plan::table_ooxml_id_for_export(
+                table_spec,
+                global_table_idx,
+                &mut used_table_ooxml_ids,
+            );
             table_xmls.push(
                 crate::domain::tables::write::table_writer_from_domain_with_strict(
                     table_id,

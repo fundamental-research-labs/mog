@@ -5,7 +5,9 @@ use super::assembly::{
     WorksheetFormControlVmlGraphEntry, WorksheetOleVmlGraphEntry,
     WorksheetThreadedCommentsGraphEntry,
 };
-use super::{WriteError, chart_auxiliary, chart_replay, external_links, vml_merge};
+use super::{
+    WriteError, chart_auxiliary, chart_replay, external_links, table_export_plan, vml_merge,
+};
 use crate::domain::content_types::write::ContentTypesManager;
 use crate::write::package_graph::ResolvedPackageGraph;
 use crate::write::pivot_writer::PivotWriteData;
@@ -444,32 +446,29 @@ pub(super) fn write_zip_package(
         for extras in sheet_extras {
             for (local_idx, table_xml) in extras.tables.iter().enumerate() {
                 table_global += 1;
-                add_registered_part(
-                    package_graph,
-                    &mut zip,
-                    &format!("xl/tables/table{}.xml", table_global),
-                    table_xml.clone(),
-                )?;
+                let Some(source_table) = extras.source_tables.get(local_idx) else {
+                    continue;
+                };
+                let table_path =
+                    table_export_plan::table_part_path_for_export(source_table, table_global);
+                add_registered_part(package_graph, &mut zip, &table_path, table_xml.clone())?;
                 let owner = crate::write::package_graph::PackageOwner::Part {
-                    path: format!("xl/tables/table{}.xml", table_global),
+                    path: table_path.clone(),
                 };
                 let table_rels = package_graph.relationship_manager_for_owner(&owner);
                 if !table_rels.is_empty() {
-                    zip.add_file(
-                        &format!("xl/tables/_rels/table{}.xml.rels", table_global),
-                        table_rels.to_xml(),
-                    );
+                    zip.add_file(&table_relationships_path(&table_path), table_rels.to_xml());
                 }
-                if let Some(query_table) = extras
-                    .source_tables
-                    .get(local_idx)
-                    .and_then(|table| table.query_table.as_ref())
-                {
+                if let Some(query_table) = source_table.query_table.as_ref() {
                     query_table_global += 1;
+                    let query_table_path = table_export_plan::query_table_part_path_for_export(
+                        query_table,
+                        query_table_global,
+                    );
                     add_registered_part(
                         package_graph,
                         &mut zip,
-                        &format!("xl/queryTables/queryTable{}.xml", query_table_global),
+                        &query_table_path,
                         crate::domain::connections::write_query_table_xml(query_table),
                     )?;
                 }
@@ -721,6 +720,13 @@ pub(super) fn write_zip_package(
         return Err(WriteError::PackageIntegrity(message));
     }
     Ok(xlsx_bytes)
+}
+
+fn table_relationships_path(table_path: &str) -> String {
+    let Some(file_name) = table_path.rsplit('/').next() else {
+        return format!("{table_path}.rels");
+    };
+    format!("xl/tables/_rels/{file_name}.rels")
 }
 
 fn pivot_cache_rels_path(definition_path: &str) -> String {

@@ -41,6 +41,7 @@ mod sheet_rows;
 mod sheet_views;
 mod style_remap;
 mod styles;
+mod table_export_plan;
 mod theme_parts;
 mod threaded_comments;
 mod vml_merge;
@@ -71,7 +72,8 @@ use assembly::{
     WorksheetControlPropertyGraphEntry, WorksheetDrawingGraphEntry,
     WorksheetFormControlVmlGraphEntry, WorksheetHeaderFooterVmlGraphEntry,
     WorksheetHyperlinkGraphEntry, WorksheetOleObjectGraphEntry, WorksheetOleVmlGraphEntry,
-    WorksheetPrinterSettingsGraphEntry, WorksheetThreadedCommentsGraphEntry,
+    WorksheetPrinterSettingsGraphEntry, WorksheetTableGraphEntry,
+    WorksheetThreadedCommentsGraphEntry,
 };
 
 pub use export_report::{
@@ -256,7 +258,7 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
     let mut worksheet_comments_relationships: Vec<WorksheetCommentsGraphEntry> = Vec::new();
     let mut worksheet_threaded_comments_relationships: Vec<WorksheetThreadedCommentsGraphEntry> =
         Vec::new();
-    let mut worksheet_table_relationships: Vec<(usize, usize, Option<String>)> = Vec::new();
+    let mut worksheet_table_relationships: Vec<WorksheetTableGraphEntry> = Vec::new();
     let mut worksheet_pivot_table_relationships: Vec<(usize, String, String)> = Vec::new();
     let mut worksheet_slicer_relationships: Vec<(usize, usize)> = Vec::new();
     let mut worksheet_timeline_relationships: Vec<(usize, usize)> = Vec::new();
@@ -600,15 +602,22 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
 
             for i in 0..extras.tables.len() {
                 let global_idx = tables_before + i + 1;
-                let target = format!("../tables/table{global_idx}.xml");
-                let relationship_id_hint =
-                    if let Some(hint) = &extras.source_tables[i].worksheet_relationship_id_hint {
-                        rels.add_with_id(hint, REL_TABLE, &target);
-                        Some(hint.clone())
-                    } else {
-                        Some(rels.add(REL_TABLE, &target))
-                    };
-                worksheet_table_relationships.push((sheet_idx, global_idx, relationship_id_hint));
+                let table = &extras.source_tables[i];
+                let path = table_export_plan::table_part_path_for_export(table, global_idx);
+                let target = table_export_plan::worksheet_target_for_table_part(&path);
+                let relationship_id_hint = if let Some(hint) = &table.worksheet_relationship_id_hint
+                {
+                    rels.add_with_id(hint, REL_TABLE, &target);
+                    Some(hint.clone())
+                } else {
+                    Some(rels.add(REL_TABLE, &target))
+                };
+                worksheet_table_relationships.push(WorksheetTableGraphEntry {
+                    sheet_idx,
+                    path,
+                    target,
+                    relationship_id_hint,
+                });
             }
         }
 
@@ -1554,12 +1563,12 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
             entry.relationship_id_hint.as_deref(),
         )?;
     }
-    for (sheet_idx, global_idx, relationship_id_hint) in &worksheet_table_relationships {
+    for entry in &worksheet_table_relationships {
         crate::write::package_graph::register_worksheet_table(
             &mut package_graph_builder,
-            *sheet_idx,
-            *global_idx,
-            relationship_id_hint.as_deref(),
+            entry.sheet_idx,
+            &entry.path,
+            entry.relationship_id_hint.as_deref(),
         )?;
     }
     let mut query_table_global_idx = 0usize;
@@ -1571,10 +1580,17 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
         for (table_idx, table) in extras.source_tables.iter().enumerate() {
             if let Some(query_table) = &table.query_table {
                 query_table_global_idx += 1;
+                let table_global_idx = tables_before + table_idx + 1;
+                let table_path =
+                    table_export_plan::table_part_path_for_export(table, table_global_idx);
+                let query_table_path = table_export_plan::query_table_part_path_for_export(
+                    query_table,
+                    query_table_global_idx,
+                );
                 crate::write::package_graph::register_table_query_table(
                     &mut package_graph_builder,
-                    tables_before + table_idx + 1,
-                    query_table_global_idx,
+                    &table_path,
+                    &query_table_path,
                     query_table.relationship_id.as_deref(),
                 )?;
             }
@@ -1957,22 +1973,19 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
             index: sheet_idx,
             path: format!("xl/worksheets/sheet{}.xml", sheet_idx + 1),
         };
-        let tables_before: usize = sheet_extras[..sheet_idx]
-            .iter()
-            .map(|e| e.tables.len())
-            .sum();
         let mut table_parts_xml = String::new();
         table_parts_xml.push_str(&format!("<tableParts count=\"{}\">", extras.tables.len()));
-        for i in 0..extras.tables.len() {
-            let global_idx = tables_before + i + 1;
-            let target = format!("../tables/table{}.xml", global_idx);
+        for entry in worksheet_table_relationships
+            .iter()
+            .filter(|entry| entry.sheet_idx == sheet_idx)
+        {
             let table_r_id = package_graph
-                .relationship_id(&owner, REL_TABLE, &target)
+                .relationship_id(&owner, REL_TABLE, &entry.target)
                 .ok_or_else(|| {
                     WriteError::PackageIntegrity(format!(
                         "missing worksheet table relationship for sheet {} table {}",
                         sheet_idx + 1,
-                        global_idx
+                        entry.path
                     ))
                 })?;
             table_parts_xml.push_str(&format!("<tablePart r:id=\"{}\"/>", table_r_id));

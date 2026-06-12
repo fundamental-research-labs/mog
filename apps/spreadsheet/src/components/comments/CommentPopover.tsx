@@ -499,8 +499,8 @@ export function CommentPopover() {
 
   const primaryComment = comments[0] ?? null;
   const isNoteBacked = primaryComment?.commentType === 'note';
-  const canResolveThread = comments.length > 0;
-  const isResolved = comments.length > 0 && comments[0].resolved;
+  const canResolveThread = comments.length > 0 && !isNoteBacked;
+  const isResolved = canResolveThread && comments[0].resolved;
 
   // Memoize the virtual ref object for stability
   const virtualRefObject = useMemo(() => virtualRef, []);

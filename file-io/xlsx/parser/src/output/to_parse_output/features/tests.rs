@@ -146,6 +146,49 @@ fn data_bar_x14_numeric_threshold_values_survive_domain_conversion() {
 }
 
 #[test]
+fn imported_top10_absent_false_attrs_canonicalize_to_explicit_false() {
+    let rule = OoxmlCfRule {
+        rule_type: CfRuleType::Top10,
+        priority: 1,
+        rank: Some(3),
+        percent: false,
+        bottom: false,
+        ..Default::default()
+    };
+
+    let converted = convert_cf_rule(&rule, &[], &[]);
+
+    let CFRule::Top10 {
+        rank,
+        percent,
+        bottom,
+        ..
+    } = converted
+    else {
+        panic!("expected top10 rule");
+    };
+    assert_eq!(rank, 3);
+    assert_eq!(percent, Some(false));
+    assert_eq!(bottom, Some(false));
+}
+
+#[test]
+fn imported_duplicate_values_canonicalizes_unique_false() {
+    let rule = OoxmlCfRule {
+        rule_type: CfRuleType::DuplicateValues,
+        priority: 1,
+        ..Default::default()
+    };
+
+    let converted = convert_cf_rule(&rule, &[], &[]);
+
+    let CFRule::DuplicateValues { unique, .. } = converted else {
+        panic!("expected duplicateValues rule");
+    };
+    assert_eq!(unique, Some(false));
+}
+
+#[test]
 fn chart_ref_extent_uses_one_cell_anchor_extent_not_graphic_frame_extent() {
     let mut spec = fallback_chart_spec();
     spec.position = AnchorPosition {

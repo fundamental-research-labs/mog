@@ -1,3 +1,5 @@
+use super::{CFRule, ConditionalFormat};
+
 /// Set of cellValue operators that actually belong on a `containsText` rule.
 /// Callers historically sent `{ type: 'cellValue', operator: 'containsText',
 /// value1: 'foo' }`; the correct shape is `{ type: 'containsText', operator:
@@ -47,10 +49,10 @@ pub const CANONICAL_CF_RULE_TYPES: &[&str] = &[
 /// | `colorScale`          | `colorScale`        | nested `colorScale` payload — no shape change                           |
 /// | `dataBar`             | `dataBar`           | nested `dataBar` payload — no shape change                              |
 /// | `iconSet`             | `iconSet`           | nested `iconSet` payload — no shape change                              |
-/// | `top10`               | `top10`             | `value1` → `rank`, operator → `percent`/`bottom` flags                  |
+/// | `top10`               | `top10`             | `value1` → `rank`, operator → `percent`/`bottom` flags; omitted flags default false |
 /// | `aboveAverage`        | `aboveAverage`      | default `above_average: true` if unset; `belowAverage` flips the flag    |
 /// | `belowAverage`        | `aboveAverage`      | OOXML doesn't have a separate type; this is the negation of aboveAverage |
-/// | `duplicateValues`     | `duplicateValues`   | direct                                                                  |
+/// | `duplicateValues`     | `duplicateValues`   | default `unique: false` if unset                                        |
 /// | `uniqueValues`        | `duplicateValues`   | OOXML semantic: unique = duplicate-style with `unique: true`             |
 /// | `containsText` + `value1` | `containsText`  | `value1` → `text` fallback                                              |
 /// | `containsBlanks`      | `containsBlanks`    | default `blanks: true` if unset                                         |
@@ -127,6 +129,10 @@ pub fn normalize_cf_rule_input(rule: &mut serde_json::Value) {
                 }
             }
             obj.remove("operator");
+            obj.entry("percent")
+                .or_insert(serde_json::Value::Bool(false));
+            obj.entry("bottom")
+                .or_insert(serde_json::Value::Bool(false));
         }
         "containsText" => {
             if !obj.contains_key("text")
@@ -177,7 +183,10 @@ pub fn normalize_cf_rule_input(rule: &mut serde_json::Value) {
             );
             obj.entry("unique").or_insert(serde_json::Value::Bool(true));
         }
-        "duplicateValues" => {}
+        "duplicateValues" => {
+            obj.entry("unique")
+                .or_insert(serde_json::Value::Bool(false));
+        }
         "colorScale" | "dataBar" | "iconSet" | "timePeriod" => {}
         _ => {}
     }
@@ -233,5 +242,33 @@ pub fn normalize_conditional_format_input(value: &mut serde_json::Value) {
     };
     for rule in rules.iter_mut() {
         normalize_cf_rule_input(rule);
+    }
+}
+
+/// Canonicalize defaults on an already-typed CF rule.
+///
+/// `normalize_cf_rule_input` handles public/JSON inputs before serde
+/// deserialization. XLSX import and some internal callers construct the typed
+/// enum directly, so this is the typed counterpart that keeps authored,
+/// imported, edited, and exported rules on the same domain representation.
+pub fn canonicalize_cf_rule_defaults(rule: &mut CFRule) {
+    match rule {
+        CFRule::Top10 {
+            percent, bottom, ..
+        } => {
+            percent.get_or_insert(false);
+            bottom.get_or_insert(false);
+        }
+        CFRule::DuplicateValues { unique, .. } => {
+            unique.get_or_insert(false);
+        }
+        _ => {}
+    }
+}
+
+/// Canonicalize defaults on every rule in a conditional-format container.
+pub fn canonicalize_conditional_format_defaults(format: &mut ConditionalFormat) {
+    for rule in &mut format.rules {
+        canonicalize_cf_rule_defaults(rule);
     }
 }

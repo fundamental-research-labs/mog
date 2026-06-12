@@ -204,7 +204,7 @@ fn normalize_duplicate_values_canonical() {
         "style": {},
     }));
     match rule {
-        CFRule::DuplicateValues { unique, .. } => assert_eq!(unique, None),
+        CFRule::DuplicateValues { unique, .. } => assert_eq!(unique, Some(false)),
         _ => panic!("expected DuplicateValues variant"),
     }
 }

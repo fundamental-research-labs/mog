@@ -1,5 +1,7 @@
 use compute_document::schema::KEY_CONDITIONAL_FORMAT;
-use domain_types::domain::conditional_format::ConditionalFormat;
+use domain_types::domain::conditional_format::{
+    ConditionalFormat, canonicalize_conditional_format_defaults,
+};
 use domain_types::yrs_schema::conditional_format as cf_yrs;
 use yrs::{Array, Map, MapPrelim, MapRef, Out};
 
@@ -47,6 +49,7 @@ pub(super) fn read_cf_from_yrs_map<T: yrs::ReadTxn>(
         }
     }
 
+    canonicalize_conditional_format_defaults(&mut cf);
     Some(cf)
 }
 
@@ -60,7 +63,10 @@ pub(super) fn write_cf_to_yrs(
     cf_map: &MapRef,
     format: &ConditionalFormat,
 ) {
-    let entries = cf_yrs::cf_to_yrs_prelim(format);
+    let mut format = format.clone();
+    canonicalize_conditional_format_defaults(&mut format);
+
+    let entries = cf_yrs::cf_to_yrs_prelim(&format);
     let cf_prelim: MapPrelim = entries.into_iter().collect();
     let cf_entry: MapRef = cf_map.insert(txn, &*format.id, cf_prelim);
 

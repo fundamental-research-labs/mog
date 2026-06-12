@@ -112,6 +112,67 @@ function expectInvalidArrayDiagnostic(
   });
 }
 
+describe('CFOps — public read projection', () => {
+  it('maps Rust/OOXML CF rule fields to the public SDK rule shape', async () => {
+    const actualOps = jest.requireActual('../worksheet/operations/cf-operations') as {
+      getConditionalFormats: (ctx: any, sheetId: typeof SHEET_ID) => Promise<ConditionalFormat[]>;
+    };
+    const bridge = createMockComputeBridge();
+    bridge.getAllCfRules.mockResolvedValue([
+      {
+        id: 'fmt-1',
+        ranges: [{ startRow: 0, startCol: 0, endRow: 9, endCol: 0 }],
+        rules: [
+          {
+            id: 'r-text',
+            priority: 1,
+            type: 'containsText',
+            operator: 'containsText',
+            text: 'alpha',
+            style: {},
+          },
+          {
+            id: 'r-top',
+            priority: 2,
+            type: 'top10',
+            rank: 3,
+            percent: false,
+            bottom: false,
+            style: {},
+          },
+          {
+            id: 'r-duplicate',
+            priority: 3,
+            type: 'duplicateValues',
+            unique: false,
+            style: {},
+          },
+        ],
+      },
+    ] as any);
+
+    const formats = await actualOps.getConditionalFormats(createMockCtx(bridge), SHEET_ID);
+
+    expect(formats[0].rules).toEqual([
+      expect.objectContaining({
+        type: 'containsText',
+        operator: 'contains',
+        text: 'alpha',
+      }),
+      expect.objectContaining({
+        type: 'top10',
+        rank: 3,
+        percent: false,
+        bottom: false,
+      }),
+      expect.objectContaining({
+        type: 'duplicateValues',
+        unique: false,
+      }),
+    ]);
+  });
+});
+
 const formulaRule = {
   type: 'formula',
   formula: '=A1>0',

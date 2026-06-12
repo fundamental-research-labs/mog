@@ -24,7 +24,7 @@ pub(crate) fn convert_conditional_formats(
     cfs.iter()
         .map(|cf| {
             let ranges = parse_sqref_to_cf_ranges(&cf.sqref);
-            ConditionalFormat {
+            let mut format = ConditionalFormat {
                 id: make_cf_id(),
                 sheet_id: String::new(), // Hydration layer sets the real sheet_id
                 pivot: if cf.pivot { Some(true) } else { None },
@@ -35,7 +35,9 @@ pub(crate) fn convert_conditional_formats(
                     .iter()
                     .map(|r| convert_cf_rule(r, dxfs, theme_colors))
                     .collect(),
-            }
+            };
+            domain_types::canonicalize_conditional_format_defaults(&mut format);
+            format
         })
         .collect()
 }
@@ -303,7 +305,7 @@ pub(crate) fn convert_cf_rule(
         None => CFStyle::default(),
     };
 
-    match rule.rule_type {
+    let mut converted = match rule.rule_type {
         CfRuleType::CellIs => CFRule::CellValue {
             id,
             operator: rule.operator.unwrap_or_default(),
@@ -640,7 +642,9 @@ pub(crate) fn convert_cf_rule(
             stop_if_true,
             formula: rule.formulas.first().cloned(),
         },
-    }
+    };
+    domain_types::canonicalize_cf_rule_defaults(&mut converted);
+    converted
 }
 
 /// Extract an RGB hex string from a `CfColor`, falling back to an empty string.

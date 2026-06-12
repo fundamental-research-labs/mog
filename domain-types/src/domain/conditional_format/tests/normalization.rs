@@ -79,7 +79,7 @@ fn normalize_top10_value1_to_rank() {
         } => {
             assert_eq!(rank, 5);
             assert_eq!(percent, Some(true));
-            assert_eq!(bottom, None);
+            assert_eq!(bottom, Some(false));
         }
         _ => panic!("expected Top10 variant"),
     }
@@ -241,5 +241,50 @@ fn normalize_conditional_format_walks_all_rules() {
     match &parsed.rules[1] {
         CFRule::Formula { formula, .. } => assert_eq!(formula, "=TRUE"),
         _ => panic!("expected Formula variant"),
+    }
+}
+
+#[test]
+fn canonicalize_typed_defaults_materializes_false_flags() {
+    let mut format = ConditionalFormat {
+        id: "cf-1".into(),
+        sheet_id: "s1".into(),
+        pivot: None,
+        ranges: vec![],
+        range_identities: None,
+        rules: vec![
+            CFRule::Top10 {
+                id: "r1".into(),
+                priority: 1,
+                stop_if_true: None,
+                rank: 10,
+                percent: None,
+                bottom: None,
+                style: CFStyle::default(),
+            },
+            CFRule::DuplicateValues {
+                id: "r2".into(),
+                priority: 2,
+                stop_if_true: None,
+                unique: None,
+                style: CFStyle::default(),
+            },
+        ],
+    };
+
+    canonicalize_conditional_format_defaults(&mut format);
+
+    match &format.rules[0] {
+        CFRule::Top10 {
+            percent, bottom, ..
+        } => {
+            assert_eq!(*percent, Some(false));
+            assert_eq!(*bottom, Some(false));
+        }
+        _ => panic!("expected Top10 variant"),
+    }
+    match &format.rules[1] {
+        CFRule::DuplicateValues { unique, .. } => assert_eq!(*unique, Some(false)),
+        _ => panic!("expected DuplicateValues variant"),
     }
 }

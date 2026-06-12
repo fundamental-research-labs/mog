@@ -408,7 +408,17 @@ function toPublicFormat(wireRule: any): PublicConditionalFormat {
     endRow: r.endRow,
     endCol: r.endCol,
   }));
-  return { id: wireRule.id, ranges, rules: wireRule.rules ?? [] };
+  return { id: wireRule.id, ranges, rules: (wireRule.rules ?? []).map(toPublicRule) };
+}
+
+function toPublicRule(rule: any): any {
+  if (!rule || typeof rule !== 'object') return rule;
+
+  let out = { ...rule };
+  if (out.type === 'containsText' && out.operator === 'containsText') {
+    out = { ...out, operator: 'contains' };
+  }
+  return out;
 }
 
 /**

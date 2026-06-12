@@ -52,3 +52,4 @@ mod test_viewport;
 mod test_workbook_settings;
 mod test_xlsx_export;
 mod test_xlsx_export_imported_pivots;
+mod test_xlsx_export_tables;

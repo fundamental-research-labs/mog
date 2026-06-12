@@ -8,6 +8,7 @@ use compute_document::schema::*;
 use domain_types::{
     ColDimension, RowDimension, RowXmlHints, SheetDimensions, domain::table::TableSpec, yrs_schema,
 };
+use std::collections::{HashMap, HashSet};
 use yrs::{Map, Out, Transact};
 
 use crate::mirror::CellMirror;
@@ -490,7 +491,7 @@ pub(in crate::storage::engine) fn export_dimensions_for_sheet(
 // Tables (from Yrs schema)
 // -------------------------------------------------------------------
 
-/// Export tables for a sheet, reading lossless data from Yrs schema.
+/// Export tables for a sheet, reading lossless data from the Yrs table catalog.
 /// Takes a list of table names that belong to this sheet (from the compute mirror).
 pub(in crate::storage::engine) fn export_tables_for_sheet(
     stores: &EngineStores,
@@ -503,8 +504,12 @@ pub(in crate::storage::engine) fn export_tables_for_sheet(
         .filter(|t| t.sheet == *sheet_id)
         .map(|t| t.name.clone())
         .collect();
+    let table_name_keys: HashSet<String> = table_names
+        .iter()
+        .map(|name| name.to_ascii_lowercase())
+        .collect();
     let txn = stores.storage.doc().transact();
-    let yrs_tables_map = stores
+    let catalog_tables_map = stores
         .storage
         .workbook_map()
         .get(&txn, KEY_TABLES)
@@ -512,15 +517,47 @@ pub(in crate::storage::engine) fn export_tables_for_sheet(
             Out::YMap(m) => Some(m),
             _ => None,
         });
+
+    let mut range_binding_tables: HashMap<String, TableSpec> = HashMap::new();
+    for (range_id, binding_json) in
+        compute_document::range::all_range_bindings_wb(stores.storage.workbook_map(), &txn)
+    {
+        let Some(table_name) =
+            crate::storage::engine::services::tables::table_name_from_range_id(&range_id)
+        else {
+            continue;
+        };
+        let table_name_key = table_name.to_ascii_lowercase();
+        if !table_name_keys.contains(&table_name_key) {
+            continue;
+        }
+        let Some(table) = yrs_schema::table::from_binding_json_standalone(&binding_json) else {
+            continue;
+        };
+        if table.sheet_id != sheet_id.to_uuid_string() {
+            continue;
+        }
+        range_binding_tables.insert(
+            table.name.to_ascii_lowercase(),
+            domain_types::domain::table::table_to_table_spec(&table, None),
+        );
+    }
+
     table_names
         .iter()
         .filter_map(|name| {
-            yrs_tables_map
-                .as_ref()
-                .and_then(|tm| match tm.get(&txn, name.as_str()) {
-                    Some(Out::YMap(inner)) => yrs_schema::table::from_yrs_map(&inner, &txn),
-                    _ => None,
-                })
+            let name_key = name.to_ascii_lowercase();
+            if let Some(spec) =
+                catalog_tables_map
+                    .as_ref()
+                    .and_then(|tm| match tm.get(&txn, name.as_str()) {
+                        Some(Out::YMap(inner)) => yrs_schema::table::from_yrs_map(&inner, &txn),
+                        _ => None,
+                    })
+            {
+                return Some(spec);
+            }
+            range_binding_tables.remove(&name_key)
         })
         .collect()
 }

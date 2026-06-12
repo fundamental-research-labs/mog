@@ -34,7 +34,7 @@ pub const KEY_END_ROW: &str = "endRow";
 pub const KEY_END_COL: &str = "endCol";
 pub const KEY_SHOW_FILTER_BUTTONS: &str = "showFilterButtons";
 
-// ── OOXML round-trip keys (TableSpec / legacy) ──────────────────────
+// ── OOXML round-trip keys (TableSpec / workbook table catalog) ──────
 pub const KEY_RANGE_REF: &str = "rangeRef";
 pub const KEY_AUTO_FILTER_REF: &str = "autoFilterRef";
 pub const KEY_HEADER_ROW_DXF_ID: &str = "headerRowDxfId";

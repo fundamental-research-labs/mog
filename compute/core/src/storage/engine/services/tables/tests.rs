@@ -14,6 +14,7 @@ mod tests {
     use cell_types::SheetPos;
     use value_types::{CellValue, FiniteF64};
 
+    mod persistence_catalog;
     mod rename_column;
 
     fn simple_snapshot() -> WorkbookSnapshot {

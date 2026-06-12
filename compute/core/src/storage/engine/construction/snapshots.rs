@@ -372,7 +372,8 @@ pub fn build_workbook_snapshot_from_yrs(
     });
 
     // 3. Tables and Data Table regions from Yrs workbook maps.
-    // Tables are stored as JSON strings in the workbook.tables map.
+    // Tables are stored in the workbook table catalog plus range-backed
+    // runtime bindings.
     let tables = read_tables_from_yrs(storage);
     let data_table_regions = crate::storage::workbook::data_tables::get_all_data_table_regions(
         storage.doc(),
@@ -501,13 +502,11 @@ fn pivot_field_indices_for_area(
 
 /// Read table definitions from Yrs.
 ///
-/// Primary path: `rangeBindings[table:<name>]` entries (where runtime-created
-/// tables are persisted by `persist_table_to_yrs`).
+/// Range-backed bindings carry the runtime table identity and extent used by
+/// the compute mirror. The workbook table catalog is also authoritative and is
+/// read for catalog-only/imported documents that do not have range bindings.
 ///
-/// Fallback: the legacy `workbook.tables` map (used by XLSX imports that
-/// haven't migrated to rangeBindings).
-///
-/// This mirrors the two-tier read in `services::tables::sync_tables_from_yrs`
+/// This mirrors the read in `services::tables::sync_tables_from_yrs`
 /// but returns lightweight `TableDef`s for the snapshot rather than full
 /// `CanonicalTable`s.
 pub(in crate::storage::engine) fn read_tables_from_yrs(
@@ -520,7 +519,7 @@ pub(in crate::storage::engine) fn read_tables_from_yrs(
     let mut tables = Vec::new();
     let mut seen_names = std::collections::HashSet::new();
 
-    // Tier 1: rangeBindings (primary path for runtime-created tables).
+    // Range-backed runtime bindings.
     let binding_entries = compute_document::range::all_range_bindings_wb(workbook, &txn);
     for (range_id, json) in &binding_entries {
         if let Some(_tname) =
@@ -543,7 +542,8 @@ pub(in crate::storage::engine) fn read_tables_from_yrs(
         }
     }
 
-    // Tier 2: legacy workbook.tables map (XLSX-imported tables).
+    // Catalog-only tables, including imported documents without range-backed
+    // bindings.
     if let Some(Out::YMap(tables_map)) = workbook.get(&txn, "tables") {
         for (key, value) in tables_map.iter(&txn) {
             if seen_names.contains(key) {

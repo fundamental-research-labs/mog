@@ -5,10 +5,11 @@ use value_types::CellValue;
 
 use super::NEXT_FILTER_ID;
 use super::ooxml::{AutoFilter, FilterColumn, OoxmlFilterCondition, OoxmlFilterType};
+use super::ooxml_sort::{SortCondition, SortConditionBy, SortState};
 use super::range_ref::{build_range_ref, parse_range_ref};
 use super::runtime::{
     ColumnFilter, DynamicFilterRule, FilterCondition, FilterKind, FilterLogic, FilterOperator,
-    FilterState, TopBottomBy, TopBottomDirection,
+    FilterSortState, FilterState, SortBy, SortOrder, TopBottomBy, TopBottomDirection,
 };
 
 /// Convert an OOXML `AutoFilter` to a runtime `FilterState`.
@@ -37,6 +38,11 @@ pub fn auto_filter_to_filter_state(
         }
     }
 
+    let sort_state = auto_filter
+        .sort
+        .as_ref()
+        .and_then(|sort| sort_state_to_filter_sort_state(sort, start_row, &cell_id_resolver));
+
     Some(FilterState {
         id: format!("filter-{}", NEXT_FILTER_ID.fetch_add(1, Ordering::Relaxed)),
         filter_kind: FilterKind::AutoFilter,
@@ -45,7 +51,7 @@ pub fn auto_filter_to_filter_state(
         data_end_cell_id: data_end_id,
         column_filters,
         advanced_filter: None,
-        sort_state: None, // TODO: convert SortState if needed
+        sort_state,
         table_id: None,
         created_at: None,
         updated_at: None,
@@ -194,12 +200,72 @@ pub fn filter_state_to_auto_filter(
     }
     columns.sort_by_key(|c| c.col_index);
 
+    let sort = state.sort_state.as_ref().and_then(|sort| {
+        filter_sort_state_to_sort_state(sort, start_row, start_col, end_row, end_col, pos_resolver)
+    });
+
     Some(AutoFilter {
         range_ref,
         columns,
-        sort: None, // TODO: convert FilterSortState back to SortState
+        sort,
         xr_uid: None,
         ext_lst_raw: None,
+    })
+}
+
+fn sort_state_to_filter_sort_state(
+    sort: &SortState,
+    header_row: u32,
+    cell_id_resolver: &impl Fn(u32, u32) -> Option<String>,
+) -> Option<FilterSortState> {
+    let condition = sort.conditions.first()?;
+    let (_, column, _, _) = parse_range_ref(&condition.range_ref)?;
+    Some(FilterSortState {
+        column_cell_id: cell_id_resolver(header_row, column)?,
+        order: if condition.descending {
+            SortOrder::Desc
+        } else {
+            SortOrder::Asc
+        },
+        sort_by: match condition.sort_by {
+            SortConditionBy::Value => SortBy::Value,
+            SortConditionBy::CellColor | SortConditionBy::FontColor => SortBy::Color,
+            SortConditionBy::Icon => SortBy::Icon,
+        },
+    })
+}
+
+fn filter_sort_state_to_sort_state(
+    sort: &FilterSortState,
+    header_row: u32,
+    start_col: u32,
+    end_row: u32,
+    end_col: u32,
+    pos_resolver: &impl Fn(&str) -> Option<(u32, u32)>,
+) -> Option<SortState> {
+    let (_, sort_col) = pos_resolver(&sort.column_cell_id)?;
+    if sort_col < start_col || sort_col > end_col {
+        return None;
+    }
+
+    let data_start_row = header_row.saturating_add(1).min(end_row);
+    let range_ref = build_range_ref(data_start_row, start_col, end_row, end_col);
+    let condition_ref = build_range_ref(data_start_row, sort_col, end_row, sort_col);
+    Some(SortState {
+        range_ref,
+        conditions: vec![SortCondition {
+            range_ref: condition_ref,
+            descending: sort.order == SortOrder::Desc,
+            sort_by: match sort.sort_by {
+                SortBy::Value => SortConditionBy::Value,
+                // Runtime sort state collapses cell/font color. Export the
+                // common cell-color token until runtime carries that distinction.
+                SortBy::Color => SortConditionBy::CellColor,
+                SortBy::Icon => SortConditionBy::Icon,
+            },
+            ..Default::default()
+        }],
+        ..Default::default()
     })
 }
 

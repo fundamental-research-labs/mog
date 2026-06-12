@@ -277,6 +277,74 @@ fn test_filter_state_to_auto_filter_roundtrip() {
 }
 
 #[test]
+fn test_auto_filter_to_filter_state_preserves_nested_sort_state() {
+    let af = AutoFilter {
+        range_ref: "A1:C6".to_string(),
+        columns: Vec::new(),
+        sort: Some(SortState {
+            range_ref: "A2:C6".to_string(),
+            conditions: vec![SortCondition {
+                range_ref: "B2:B6".to_string(),
+                descending: true,
+                sort_by: SortConditionBy::CellColor,
+                ..Default::default()
+            }],
+            ..Default::default()
+        }),
+        xr_uid: None,
+        ext_lst_raw: None,
+    };
+    let resolver = |row: u32, col: u32| -> Option<String> { Some(format!("cell-{}-{}", row, col)) };
+    let state = auto_filter_to_filter_state(&af, &resolver).unwrap();
+
+    assert_eq!(
+        state.sort_state,
+        Some(FilterSortState {
+            column_cell_id: "cell-0-1".to_string(),
+            order: SortOrder::Desc,
+            sort_by: SortBy::Color,
+        })
+    );
+}
+
+#[test]
+fn test_filter_state_to_auto_filter_exports_nested_sort_state() {
+    let state = FilterState {
+        id: "filter-1".to_string(),
+        filter_kind: FilterKind::AutoFilter,
+        header_start_cell_id: "cell-0-0".to_string(),
+        header_end_cell_id: "cell-0-2".to_string(),
+        data_end_cell_id: "cell-5-2".to_string(),
+        column_filters: HashMap::new(),
+        advanced_filter: None,
+        sort_state: Some(FilterSortState {
+            column_cell_id: "cell-0-1".to_string(),
+            order: SortOrder::Desc,
+            sort_by: SortBy::Value,
+        }),
+        table_id: None,
+        created_at: None,
+        updated_at: None,
+        start_row: None,
+        start_col: None,
+        end_row: None,
+        end_col: None,
+    };
+    let pos_resolver = |cell_id: &str| -> Option<(u32, u32)> {
+        let parts: Vec<&str> = cell_id.strip_prefix("cell-")?.split('-').collect();
+        Some((parts[0].parse().ok()?, parts[1].parse().ok()?))
+    };
+
+    let af = filter_state_to_auto_filter(&state, &pos_resolver).unwrap();
+    let sort = af.sort.expect("runtime filter sort state should export");
+    assert_eq!(sort.range_ref, "A2:C6");
+    assert_eq!(sort.conditions.len(), 1);
+    assert_eq!(sort.conditions[0].range_ref, "B2:B6");
+    assert!(sort.conditions[0].descending);
+    assert_eq!(sort.conditions[0].sort_by, SortConditionBy::Value);
+}
+
+#[test]
 fn ooxml_filter_condition_updated() {
     let cond = OoxmlFilterCondition {
         operator: "greaterThan".to_string(),

@@ -213,6 +213,16 @@ impl TableRangeBinding {
     }
 }
 
+/// Derive the workbook-level compact table attachment key for a stable table ID.
+pub fn table_attachment_key(table_id: &str) -> String {
+    format!("table:{table_id}")
+}
+
+/// Extract the stable table ID from a compact table attachment key.
+pub fn table_id_from_attachment_key(attachment_key: &str) -> Option<&str> {
+    attachment_key.strip_prefix("table:")
+}
+
 /// Parse a legacy workbook-level table range binding that stored a full table
 /// payload instead of the compact `{ kind, version, tableId }` attachment.
 ///
@@ -615,6 +625,14 @@ mod tests {
             read_cf_binding(&txn, &map, &RangeId::from_raw(0xCF99)),
             None
         );
+    }
+
+    #[test]
+    fn table_attachment_key_round_trips_stable_table_id() {
+        let key = table_attachment_key("tbl-123");
+        assert_eq!(key, "table:tbl-123");
+        assert_eq!(table_id_from_attachment_key(&key), Some("tbl-123"));
+        assert_eq!(table_id_from_attachment_key("not-table:tbl-123"), None);
     }
 
     #[test]

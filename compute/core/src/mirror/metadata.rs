@@ -82,7 +82,7 @@ impl CellMirror {
     pub fn set_table(&mut self, table: CanonicalTable) {
         let table_def = crate::storage::table_format::table_to_table_def(&table);
 
-        let attachment_key = format!("table:{}", table.id);
+        let attachment_key = compute_document::range::table_attachment_key(&table.id);
         self.table_attachment_keys
             .insert(table.name.to_ascii_lowercase(), attachment_key);
 
@@ -97,7 +97,7 @@ impl CellMirror {
                     .remove(&existing.name.to_ascii_lowercase());
                 self.table_attachment_keys.insert(
                     table.name.to_ascii_lowercase(),
-                    format!("table:{}", table.id),
+                    compute_document::range::table_attachment_key(&table.id),
                 );
             }
             *existing = table;

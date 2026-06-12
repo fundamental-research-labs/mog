@@ -19,7 +19,6 @@ use crate::storage::cells::structured_ref_updater;
 use crate::storage::engine::stores::EngineStores;
 use crate::storage::sheet::filters;
 
-mod attachment_keys;
 mod legacy_binding;
 mod mutations;
 mod options;
@@ -28,7 +27,9 @@ mod queries;
 #[cfg(test)]
 mod tests;
 
-pub(in crate::storage::engine) use attachment_keys::*;
+pub(in crate::storage::engine) use compute_document::range::{
+    table_attachment_key, table_id_from_attachment_key,
+};
 pub(in crate::storage::engine) use legacy_binding::*;
 pub(in crate::storage::engine) use mutations::*;
 pub(in crate::storage::engine) use options::*;

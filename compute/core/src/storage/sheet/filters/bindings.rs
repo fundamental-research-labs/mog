@@ -158,6 +158,21 @@ pub fn delete_filter_metadata_binding_with_origin(
     existed
 }
 
+pub fn delete_filter_metadata_binding_in_txn(
+    txn: &mut yrs::TransactionMut,
+    sheets: &MapRef,
+    sheet_id: &SheetId,
+    filter_id: &str,
+) -> bool {
+    let sheet_hex = id_to_hex(sheet_id.as_u128());
+    let Some(bindings_map) = get_bindings_map(txn, sheets, &sheet_hex) else {
+        return false;
+    };
+    let existed = bindings_map.get(txn, filter_id).is_some();
+    bindings_map.remove(txn, filter_id);
+    existed
+}
+
 pub fn delete_filter_metadata_binding(
     doc: &Doc,
     sheets: &MapRef,

@@ -127,16 +127,15 @@ mod tests {
         // an Err at the service layer; we drive the persist site
         // directly via a private helper test.
         //
-        // Use the private helper: route through `remove_table_from_yrs`
-        // by exposing it via the same module. The cleanest call shape
-        // from the test is via `delete_table` for a name that exists,
-        // but here we want the *missing-table* path. The bridge call
-        // returns Err for missing name; we instead invoke the persist
-        // site directly so we exercise the lazy-create branch.
+        // Use the private filter-aware helper directly. The cleanest
+        // public call shape is `delete_table` for a name that exists,
+        // but here we want the missing-table path. The bridge call
+        // returns Err for a missing name, so we invoke the persistence
+        // site directly to exercise the lazy-create branch.
         {
             // Reach into stores via crate-private access; the test
             // module lives inside the crate.
-            remove_table_from_yrs(&mut engine.stores, "DoesNotExist");
+            remove_table_from_yrs_with_filter(&mut engine.stores, "DoesNotExist", None, None);
         }
 
         // (a) no panic: reaching this line is the proof.

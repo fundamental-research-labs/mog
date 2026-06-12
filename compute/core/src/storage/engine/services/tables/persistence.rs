@@ -131,38 +131,41 @@ pub(in crate::storage::engine) fn persist_table_to_yrs_with_table_filter(
     )
 }
 
-/// Remove a table from the Yrs CRDT document.
-///
-/// Removes the table catalog entry and any compact or legacy workbook-level
-/// table attachment for the same table.
-pub(in crate::storage::engine) fn remove_table_from_yrs(
-    stores: &mut EngineStores,
-    table_name: &str,
-) {
-    remove_table_from_yrs_with_filter(stores, table_name, None, None);
-}
-
-pub(in crate::storage::engine) fn remove_table_from_yrs_by_table(
-    stores: &mut EngineStores,
-    table: &CanonicalTable,
-) {
-    remove_table_from_yrs_with_filter(stores, &table.name, Some(table.id.as_str()), None);
-}
-
 pub(in crate::storage::engine) fn remove_table_from_yrs_with_filter(
     stores: &mut EngineStores,
     table_name: &str,
     table_id: Option<&str>,
     table_filter: Option<&(SheetId, String)>,
-) {
+) -> Vec<(u32, bool)> {
     let workbook = stores.storage.workbook_map().clone();
     let sheets = stores.storage.sheets().clone();
     let doc = stores.storage.doc().clone();
+    let grid_index = table_filter.and_then(|(sheet_id, _)| stores.grid_indexes.get(sheet_id));
     let mut txn = doc.transact_mut_with(Origin::from(compute_document::undo::ORIGIN_USER_EDIT));
 
-    let tables_map = crate::storage::ensure_workbook_child_map(
+    remove_table_from_yrs_in_txn(
         &workbook,
+        &sheets,
         &mut txn,
+        table_name,
+        table_id,
+        table_filter,
+        grid_index,
+    )
+}
+
+pub(in crate::storage::engine) fn remove_table_from_yrs_in_txn(
+    workbook: &MapRef,
+    sheets: &MapRef,
+    txn: &mut TransactionMut,
+    table_name: &str,
+    table_id: Option<&str>,
+    table_filter: Option<&(SheetId, String)>,
+    grid_index: Option<&crate::identity::GridIndex>,
+) -> Vec<(u32, bool)> {
+    let tables_map = crate::storage::ensure_workbook_child_map(
+        workbook,
+        txn,
         compute_document::schema::KEY_TABLES,
     );
 
@@ -172,10 +175,10 @@ pub(in crate::storage::engine) fn remove_table_from_yrs_with_filter(
         catalog_keys.push(table_id.to_string());
         table_ids.push(table_id.to_string());
     } else {
-        for (key, value) in tables_map.iter(&txn) {
+        for (key, value) in tables_map.iter(txn) {
             if let Out::YMap(inner) = value
                 && let Some(table) =
-                    domain_types::yrs_schema::table::from_yrs_map_to_table(&inner, &txn)
+                    domain_types::yrs_schema::table::from_yrs_map_to_table(&inner, txn)
                 && table.name.eq_ignore_ascii_case(table_name)
             {
                 catalog_keys.push(key.to_string());
@@ -186,20 +189,27 @@ pub(in crate::storage::engine) fn remove_table_from_yrs_with_filter(
     catalog_keys.sort();
     catalog_keys.dedup();
     for key in catalog_keys {
-        tables_map.remove(&mut txn, key.as_str());
+        tables_map.remove(txn, key.as_str());
     }
 
     let attachment_key = table_attachment_key(table_name);
-    compute_document::range::remove_range_binding_wb(&workbook, &mut txn, &attachment_key);
+    compute_document::range::remove_range_binding_wb(workbook, txn, &attachment_key);
     table_ids.sort();
     table_ids.dedup();
     for table_id in table_ids {
         let attachment_key = table_attachment_key(&table_id);
-        compute_document::range::remove_range_binding_wb(&workbook, &mut txn, &attachment_key);
+        compute_document::range::remove_range_binding_wb(workbook, txn, &attachment_key);
     }
 
     if let Some((sheet_id, filter_id)) = table_filter {
-        filters::delete_filter_in_txn(&mut txn, &sheets, sheet_id, filter_id);
+        let transitions = crate::storage::sheet::dimensions::clear_filter_hidden_rows_in_txn(
+            txn, sheets, sheet_id, filter_id, grid_index,
+        );
+        filters::delete_filter_in_txn(txn, sheets, sheet_id, filter_id);
+        filters::delete_filter_metadata_binding_in_txn(txn, sheets, sheet_id, filter_id);
+        transitions
+    } else {
+        Vec::new()
     }
 }
 

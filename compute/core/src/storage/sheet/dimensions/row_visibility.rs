@@ -355,31 +355,30 @@ pub fn finalize_imported_hidden_row_cache(
 }
 
 /// Clear a filter's row-hidden ownership and recompute affected effective rows.
-pub fn clear_filter_hidden_rows(
-    doc: &Doc,
+pub fn clear_filter_hidden_rows_in_txn(
+    txn: &mut yrs::TransactionMut,
     sheets: &MapRef,
     sheet_id: &SheetId,
     filter_id: &str,
     grid_index: Option<&GridIndex>,
 ) -> Vec<(u32, bool)> {
     let mut transitions = Vec::new();
-    let mut txn = doc.transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
-    let hidden_rows_map = match get_sheet_submap(&txn, sheets, sheet_id, KEY_HIDDEN_ROWS) {
+    let hidden_rows_map = match get_sheet_submap(txn, sheets, sheet_id, KEY_HIDDEN_ROWS) {
         Some(m) => m,
         None => return transitions,
     };
-    let manual_hidden_rows_map = get_sheet_submap(&txn, sheets, sheet_id, KEY_MANUAL_HIDDEN_ROWS);
+    let manual_hidden_rows_map = get_sheet_submap(txn, sheets, sheet_id, KEY_MANUAL_HIDDEN_ROWS);
     let filter_hidden_rows_map =
-        match get_sheet_submap(&txn, sheets, sheet_id, KEY_FILTER_HIDDEN_ROWS) {
+        match get_sheet_submap(txn, sheets, sheet_id, KEY_FILTER_HIDDEN_ROWS) {
             Some(m) => m,
             None => return transitions,
         };
-    let owner_map = match filter_hidden_rows_map.get(&txn, filter_id) {
+    let owner_map = match filter_hidden_rows_map.get(txn, filter_id) {
         Some(Out::YMap(m)) => m,
         _ => return transitions,
     };
     let row_ids: Vec<String> = owner_map
-        .iter(&txn)
+        .iter(txn)
         .filter_map(|(key, value)| {
             if matches!(value, Out::Any(Any::Bool(true))) {
                 Some(key.to_string())
@@ -388,26 +387,38 @@ pub fn clear_filter_hidden_rows(
             }
         })
         .collect();
-    filter_hidden_rows_map.remove(&mut txn, filter_id);
+    filter_hidden_rows_map.remove(txn, filter_id);
 
     for row_id in row_ids {
         let Some(row) = grid_index.and_then(|gi| gi.row_index_from_hex(&row_id)) else {
             continue;
         };
-        let before = map_has_true(&hidden_rows_map, &txn, &row.to_string());
+        let before = map_has_true(&hidden_rows_map, txn, &row.to_string());
         let effective = effective_hidden_by_row_id(
             manual_hidden_rows_map.as_ref(),
             Some(&filter_hidden_rows_map),
-            &txn,
+            txn,
             &row_id,
         );
-        write_effective_hidden_cache(&hidden_rows_map, &mut txn, row, effective);
+        write_effective_hidden_cache(&hidden_rows_map, txn, row, effective);
         if before != effective {
             transitions.push((row, effective));
         }
     }
 
     transitions
+}
+
+/// Clear a filter's row-hidden ownership and recompute affected effective rows.
+pub fn clear_filter_hidden_rows(
+    doc: &Doc,
+    sheets: &MapRef,
+    sheet_id: &SheetId,
+    filter_id: &str,
+    grid_index: Option<&GridIndex>,
+) -> Vec<(u32, bool)> {
+    let mut txn = doc.transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
+    clear_filter_hidden_rows_in_txn(&mut txn, sheets, sheet_id, filter_id, grid_index)
 }
 
 pub fn is_row_manually_hidden(

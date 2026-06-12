@@ -1,6 +1,5 @@
 #![allow(unused_imports, unused_variables)]
 use super::*;
-use crate::storage::engine::services::filters as filter_services;
 use crate::storage::engine::table_result_merge::merge_mutation_result;
 use crate::storage::engine::{mutation::CellInput, mutation_coordinator::MutationCoordinator};
 
@@ -175,6 +174,9 @@ pub(in crate::storage::engine) fn delete_table(
         )
         .map(|filter| (sheet_id, filter.id))
     });
+    let prepared_filter_delete = table_filter
+        .as_ref()
+        .map(|(sheet_id, filter_id)| prepare_table_filter_delete(stores, sheet_id, filter_id));
 
     structured_ref_updater::propagate_ref_error_for_table_delete(
         stores.storage.doc(),
@@ -183,22 +185,36 @@ pub(in crate::storage::engine) fn delete_table(
         table_name,
     );
 
-    let mut result = if let Some((sheet_id, filter_id)) = table_filter.as_ref() {
-        filter_services::delete_filter(stores, mirror, sheet_id, filter_id)?
-    } else {
-        MutationResult::empty()
-    };
+    let mut result = MutationResult::empty();
     stores.compute.remove_table(mirror, table_name);
-    if let Some(table) = table {
-        remove_table_from_yrs_by_table(stores, &table);
+    let visibility_transitions = if let Some(table) = table {
+        let visibility_transitions = remove_table_from_yrs_with_filter(
+            stores,
+            &table.name,
+            Some(table.id.as_str()),
+            table_filter.as_ref(),
+        );
         result.table_changes.push(TableChange {
             name: table.name.clone(),
             table_id: Some(table.id),
             sheet_id: table.sheet_id,
             kind: ChangeKind::Removed,
         });
+        visibility_transitions
     } else {
-        remove_table_from_yrs(stores, table_name);
+        remove_table_from_yrs_with_filter(stores, table_name, None, table_filter.as_ref())
+    };
+    if let (Some((sheet_id, _)), Some(prepared_filter_delete)) =
+        (table_filter.as_ref(), prepared_filter_delete)
+    {
+        let filter_result = finish_prepared_table_filter_delete(
+            stores,
+            mirror,
+            sheet_id,
+            prepared_filter_delete,
+            &visibility_transitions,
+        );
+        merge_mutation_result(&mut result, filter_result);
     }
     Ok(result)
 }
@@ -842,6 +858,9 @@ pub(in crate::storage::engine) fn convert_table_to_range(
             )
             .map(|filter| (sheet_id, filter.id))
         });
+    let prepared_filter_delete = table_filter
+        .as_ref()
+        .map(|(sheet_id, filter_id)| prepare_table_filter_delete(stores, sheet_id, filter_id));
 
     let table_info = structured_ref_updater::TableRangeInfo {
         name: table.name.clone(),
@@ -865,13 +884,26 @@ pub(in crate::storage::engine) fn convert_table_to_range(
         &table_info,
     );
 
-    let mut result = if let Some((sheet_id, filter_id)) = table_filter.as_ref() {
-        filter_services::delete_filter(stores, mirror, sheet_id, filter_id)?
-    } else {
-        MutationResult::empty()
-    };
+    let mut result = MutationResult::empty();
     stores.compute.remove_table(mirror, table_name);
-    remove_table_from_yrs_by_table(stores, &table);
+    let visibility_transitions = remove_table_from_yrs_with_filter(
+        stores,
+        &table.name,
+        Some(table.id.as_str()),
+        table_filter.as_ref(),
+    );
+    if let (Some((sheet_id, _)), Some(prepared_filter_delete)) =
+        (table_filter.as_ref(), prepared_filter_delete)
+    {
+        let filter_result = finish_prepared_table_filter_delete(
+            stores,
+            mirror,
+            sheet_id,
+            prepared_filter_delete,
+            &visibility_transitions,
+        );
+        merge_mutation_result(&mut result, filter_result);
+    }
 
     result.table_changes.push(TableChange {
         name: table_name.to_string(),

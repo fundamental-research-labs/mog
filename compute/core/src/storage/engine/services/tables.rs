@@ -19,6 +19,7 @@ use crate::storage::cells::structured_ref_updater;
 use crate::storage::engine::stores::EngineStores;
 use crate::storage::sheet::filters;
 
+mod filter_delete;
 mod legacy_binding;
 mod mutations;
 mod options;
@@ -30,6 +31,7 @@ mod tests;
 pub(in crate::storage::engine) use compute_document::range::{
     table_attachment_key, table_id_from_attachment_key,
 };
+pub(in crate::storage::engine) use filter_delete::*;
 pub(in crate::storage::engine) use legacy_binding::*;
 pub(in crate::storage::engine) use mutations::*;
 pub(in crate::storage::engine) use options::*;

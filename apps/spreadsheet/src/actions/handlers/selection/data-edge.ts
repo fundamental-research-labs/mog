@@ -43,6 +43,10 @@ function sameCell(a: CellCoord, b: CellCoord): boolean {
   return a.row === b.row && a.col === b.col;
 }
 
+function isHorizontalDirection(direction: Direction): boolean {
+  return direction === 'left' || direction === 'right';
+}
+
 async function isVisibleCell(
   deps: ActionDependencies,
   sheetId: string,
@@ -65,8 +69,13 @@ function matchingReturnHint(
   activeCell: CellCoord,
   direction: Direction,
 ): DataEdgeReturnHint | null {
+  if (!isHorizontalDirection(direction)) {
+    return null;
+  }
+
   if (
     lastDataEdgeMove &&
+    isHorizontalDirection(lastDataEdgeMove.direction) &&
     lastDataEdgeMove.sheetId === sheetId &&
     lastDataEdgeMove.direction === OPPOSITE_DIRECTION[direction] &&
     sameCell(lastDataEdgeMove.to, activeCell)
@@ -101,7 +110,7 @@ async function moveToDataEdge(
   }
 
   const targetCell = await ws.findDataEdge(activeCell.row, activeCell.col, direction);
-  lastDataEdgeMove = sameCell(activeCell, targetCell)
+  lastDataEdgeMove = !isHorizontalDirection(direction) || sameCell(activeCell, targetCell)
     ? null
     : {
         sheetId: activeSheetId,

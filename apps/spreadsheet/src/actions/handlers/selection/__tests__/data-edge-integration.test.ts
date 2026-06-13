@@ -22,8 +22,10 @@ import {
   EXTEND_TO_EDGE_LEFT,
   EXTEND_TO_EDGE_RIGHT,
   EXTEND_TO_EDGE_UP,
+  MOVE_TO_EDGE_DOWN,
   MOVE_TO_EDGE_LEFT,
   MOVE_TO_EDGE_RIGHT,
+  MOVE_TO_EDGE_UP,
 } from '../data-edge';
 import type { ActionDependencies, CellCoord, CellRange } from '../helpers';
 import { createMockPlatform, createMockShellService } from '../../__tests__/test-helpers';
@@ -227,6 +229,24 @@ describe('extendToDataEdge - Integration tests with ACTUAL handlers', () => {
 
       expect(goTo).toHaveBeenNthCalledWith(1, { row: 6, col: 27 });
       expect(goTo).toHaveBeenNthCalledWith(2, { row: 6, col: 14 });
+      expect(findEdge).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not apply horizontal return hints to vertical data-edge navigation', async () => {
+      const findEdge = jest.fn(
+        async (_row: number, _col: number, direction: 'up' | 'down' | 'left' | 'right') =>
+          direction === 'down' ? { row: 2, col: 1 } : { row: 0, col: 1 },
+      );
+      const { deps, goTo } = createMoveMockDeps({
+        activeCell: { row: 1, col: 1 },
+        findDataEdge: findEdge,
+      });
+
+      await MOVE_TO_EDGE_DOWN(deps);
+      await MOVE_TO_EDGE_UP(deps);
+
+      expect(goTo).toHaveBeenNthCalledWith(1, { row: 2, col: 1 });
+      expect(goTo).toHaveBeenNthCalledWith(2, { row: 0, col: 1 });
       expect(findEdge).toHaveBeenCalledTimes(2);
     });
   });

@@ -32,6 +32,33 @@ pub fn find_data_edge(
     start_col: u32,
     direction: &str,
 ) -> snapshot_types::queries::CellPosition {
+    find_data_edge_with_extra_data(
+        doc,
+        sheets,
+        sheet_id,
+        grid,
+        start_row,
+        start_col,
+        direction,
+        |_, _| false,
+    )
+}
+
+/// Like [`find_data_edge`], but lets higher layers contribute cell occupancy
+/// from non-Yrs sources such as the compute mirror. This keeps the low-level
+/// storage iterator reusable while matching viewport/query semantics for
+/// deferred imports where formula cells can be mirror-resident before every
+/// formula body has been written into Yrs.
+pub fn find_data_edge_with_extra_data(
+    doc: &Doc,
+    sheets: &MapRef,
+    sheet_id: SheetId,
+    grid: &GridIndex,
+    start_row: u32,
+    start_col: u32,
+    direction: &str,
+    extra_has_data: impl Fn(u32, u32) -> bool,
+) -> snapshot_types::queries::CellPosition {
     use crate::storage::sheet::{dimensions, grouping, merges};
 
     const MAX_ROW: u32 = 1_048_575;
@@ -161,7 +188,9 @@ pub fn find_data_edge(
         result
     };
 
-    let check_data = |r: u32, c: u32| -> bool { has_data_at(&txn, grid, &cells_map, r, c) };
+    let check_data = |r: u32, c: u32| -> bool {
+        has_data_at(&txn, grid, &cells_map, r, c) || extra_has_data(r, c)
+    };
 
     // Check data at a cell, accounting for merges (check merge origin).
     let cell_has_data = |r: u32, c: u32| -> bool {
@@ -211,6 +240,52 @@ pub fn find_data_edge(
         }
     };
 
+    let find_structural_exit_from_empty_lead_in =
+        |mut scan_ri: i64, mut scan_ci: i64| -> Option<snapshot_types::queries::CellPosition> {
+            if dc == 0 {
+                return None;
+            }
+
+            let mut visible_empty_count = 0u8;
+            let mut seen_visible_data = false;
+            while in_bounds(scan_ri, scan_ci) {
+                let skip = advance_skipped_cells(&mut scan_ri, &mut scan_ci);
+                if skip.structural_cols {
+                    if !in_bounds(scan_ri, scan_ci) {
+                        return None;
+                    }
+                    return Some(to_merge_origin(scan_ri as u32, scan_ci as u32));
+                }
+                if !in_bounds(scan_ri, scan_ci) {
+                    return None;
+                }
+
+                let rr = scan_ri as u32;
+                let cc = scan_ci as u32;
+                if is_hidden_boundary(rr, cc) {
+                    return None;
+                }
+
+                if cell_has_data(rr, cc) {
+                    seen_visible_data = true;
+                    visible_empty_count = 0;
+                } else {
+                    if !seen_visible_data {
+                        return None;
+                    }
+                    visible_empty_count = visible_empty_count.saturating_add(1);
+                    if visible_empty_count > 1 {
+                        return None;
+                    }
+                }
+
+                scan_ri += dr;
+                scan_ci += dc;
+            }
+
+            None
+        };
+
     let start_pos = snapshot_types::queries::CellPosition {
         row: start_row,
         col: start_col,
@@ -254,6 +329,10 @@ pub fn find_data_edge(
     let next_has_data = cell_has_data(r, c);
 
     if !current_has_data {
+        if let Some(target) = find_structural_exit_from_empty_lead_in(ri, ci) {
+            return target;
+        }
+
         // Case 2: next has data → stop at adjacent cell
         if next_has_data {
             return to_merge_origin(r, c);

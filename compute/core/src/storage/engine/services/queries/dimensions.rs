@@ -1,4 +1,5 @@
 use super::*;
+use crate::projection::CellRender;
 
 // -------------------------------------------------------------------
 // Dimension Queries
@@ -344,6 +345,7 @@ pub(in crate::storage::engine) fn get_current_region(
 
 pub(in crate::storage::engine) fn find_data_edge(
     stores: &EngineStores,
+    mirror: &CellMirror,
     sheet_id: &SheetId,
     row: u32,
     col: u32,
@@ -352,7 +354,7 @@ pub(in crate::storage::engine) fn find_data_edge(
     let Some(grid) = stores.grid_indexes.get(sheet_id) else {
         return CellPosition { row, col };
     };
-    cell_iter::find_data_edge(
+    cell_iter::find_data_edge_with_extra_data(
         stores.storage.doc(),
         stores.storage.sheets(),
         *sheet_id,
@@ -360,7 +362,74 @@ pub(in crate::storage::engine) fn find_data_edge(
         row,
         col,
         direction,
+        |r, c| mirror_render_has_data(stores, mirror, sheet_id, r, c),
     )
+}
+
+fn mirror_render_has_data(
+    stores: &EngineStores,
+    mirror: &CellMirror,
+    sheet_id: &SheetId,
+    row: u32,
+    col: u32,
+) -> bool {
+    let pos = SheetPos::new(row, col);
+
+    let cell_id = stores
+        .grid_indexes
+        .get(sheet_id)
+        .and_then(|grid| grid.cell_id_at(row, col))
+        .or_else(|| mirror.resolve_cell_id(sheet_id, pos));
+
+    if let Some(cell_id) = cell_id {
+        if stores
+            .compute
+            .get_cell_value(mirror, &cell_id)
+            .is_some_and(|value| !value.is_null())
+        {
+            return true;
+        }
+
+        if mirror
+            .get_cell_value_in_sheet(sheet_id, &cell_id)
+            .is_some_and(|value| !value.is_null())
+        {
+            return true;
+        }
+
+        if stores.compute.get_formula(&cell_id).is_some() || mirror.get_formula(&cell_id).is_some()
+        {
+            return true;
+        }
+    }
+
+    if mirror
+        .get_cell_value_at(sheet_id, pos)
+        .is_some_and(|value| !value.is_null())
+    {
+        return true;
+    }
+
+    if crate::storage::engine::data_table_formula::formula_at(mirror, sheet_id, row, col).is_some()
+    {
+        return true;
+    }
+
+    match mirror.cell_render_at(sheet_id, row, col) {
+        CellRender::Plain(view) => {
+            !view.value.is_null()
+                || stores.compute.get_formula(&view.cell_id).is_some()
+                || mirror.get_formula(&view.cell_id).is_some()
+        }
+        CellRender::Projection(view) => {
+            !view.value.is_null()
+                || view.is_cse
+                || stores.compute.get_formula(&view.anchor_id).is_some()
+                || mirror.get_formula(&view.anchor_id).is_some()
+        }
+        CellRender::Materialized(view) => !view.value.is_null(),
+        CellRender::Empty => false,
+    }
 }
 
 /// Find the last populated row in a column. Returns data and formatting edges.

@@ -17,10 +17,13 @@ import { jest } from '@jest/globals';
 import { sheetId } from '@mog-sdk/contracts/core';
 import { findDataEdge, type CellValueGetter } from '../../../../infra/utils';
 import {
+  __resetDataEdgeReturnHintForTests,
   EXTEND_TO_EDGE_DOWN,
   EXTEND_TO_EDGE_LEFT,
   EXTEND_TO_EDGE_RIGHT,
   EXTEND_TO_EDGE_UP,
+  MOVE_TO_EDGE_LEFT,
+  MOVE_TO_EDGE_RIGHT,
 } from '../data-edge';
 import type { ActionDependencies, CellCoord, CellRange } from '../helpers';
 import { createMockPlatform, createMockShellService } from '../../__tests__/test-helpers';
@@ -58,6 +61,69 @@ function createMockFindDataEdge(testData: Map<string, unknown>) {
   return async (row: number, col: number, direction: 'up' | 'down' | 'left' | 'right') => {
     return findDataEdge({ row, col }, direction, getCellValue, 1048575, 16383);
   };
+}
+
+function createMoveMockDeps(options: {
+  activeCell: CellCoord;
+  hiddenRows?: number[];
+  hiddenCols?: number[];
+  findDataEdge: (
+    row: number,
+    col: number,
+    direction: 'up' | 'down' | 'left' | 'right',
+  ) => Promise<CellCoord>;
+}): {
+  deps: ActionDependencies;
+  goTo: jest.Mock;
+  getActiveCell: () => CellCoord;
+} {
+  let activeCell = options.activeCell;
+  const activeSheet = {
+    findDataEdge: options.findDataEdge,
+    layout: {
+      getHiddenRowsBitmap: jest.fn(async () => new Set(options.hiddenRows ?? [])),
+      getHiddenColumnsBitmap: jest.fn(async () => new Set(options.hiddenCols ?? [])),
+    },
+  };
+  const goTo = jest.fn((cell: CellCoord) => {
+    activeCell = cell;
+  });
+
+  const deps: ActionDependencies = {
+    workbook: {
+      activeSheet,
+      getSheetById: jest.fn(() => activeSheet),
+      setPendingUndoDescription: jest.fn(),
+    } as any,
+    uiStore: {} as any,
+    coordinator: {} as any,
+    getActiveSheetId: () => sheetId('sheet-1'),
+    onUIAction: jest.fn(),
+    accessors: {
+      selection: {
+        getActiveCell: () => activeCell,
+        getRanges: () => [
+          {
+            startRow: activeCell.row,
+            startCol: activeCell.col,
+            endRow: activeCell.row,
+            endCol: activeCell.col,
+          },
+        ],
+        getAnchor: () => activeCell,
+      },
+    } as any,
+    commands: {
+      selection: {
+        goTo,
+        setSelection: jest.fn(),
+      },
+    } as any,
+    platform: createMockPlatform(),
+    shellService: createMockShellService(),
+  };
+
+  return { deps, goTo, getActiveCell: () => activeCell };
 }
 
 /**
@@ -122,6 +188,49 @@ function createMockDeps(
 // =============================================================================
 
 describe('extendToDataEdge - Integration tests with ACTUAL handlers', () => {
+  beforeEach(() => {
+    __resetDataEdgeReturnHintForTests();
+  });
+
+  describe('moveToDataEdge paired return hints', () => {
+    it('returns to the previous visible origin on the opposite data-edge command', async () => {
+      const findEdge = jest.fn(
+        async (_row: number, _col: number, direction: 'up' | 'down' | 'left' | 'right') =>
+          direction === 'right' ? { row: 463, col: 9 } : { row: 463, col: 0 },
+      );
+      const { deps, goTo } = createMoveMockDeps({
+        activeCell: { row: 463, col: 6 },
+        findDataEdge: findEdge,
+      });
+
+      await MOVE_TO_EDGE_RIGHT(deps);
+      await MOVE_TO_EDGE_LEFT(deps);
+
+      expect(goTo).toHaveBeenNthCalledWith(1, { row: 463, col: 9 });
+      expect(goTo).toHaveBeenNthCalledWith(2, { row: 463, col: 6 });
+      expect(findEdge).toHaveBeenCalledTimes(1);
+    });
+
+    it('ignores a previous origin that is hidden and falls back to the compute edge', async () => {
+      const findEdge = jest.fn(
+        async (_row: number, _col: number, direction: 'up' | 'down' | 'left' | 'right') =>
+          direction === 'right' ? { row: 6, col: 27 } : { row: 6, col: 14 },
+      );
+      const { deps, goTo } = createMoveMockDeps({
+        activeCell: { row: 6, col: 15 },
+        hiddenCols: [15],
+        findDataEdge: findEdge,
+      });
+
+      await MOVE_TO_EDGE_RIGHT(deps);
+      await MOVE_TO_EDGE_LEFT(deps);
+
+      expect(goTo).toHaveBeenNthCalledWith(1, { row: 6, col: 27 });
+      expect(goTo).toHaveBeenNthCalledWith(2, { row: 6, col: 14 });
+      expect(findEdge).toHaveBeenCalledTimes(2);
+    });
+  });
+
   describe('Cmd+Shift+Left then Cmd+Shift+Up creates rectangular selection', () => {
     const testData = createTestData();
 

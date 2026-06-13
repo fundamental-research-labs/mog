@@ -256,7 +256,14 @@ pub(in crate::storage::engine) fn find_data_edge(
     col: u32,
     direction: &str,
 ) -> CellPosition {
-    services::queries::find_data_edge(&engine.stores, sheet_id, row, col, direction)
+    services::queries::find_data_edge(
+        &engine.stores,
+        &engine.mirror,
+        sheet_id,
+        row,
+        col,
+        direction,
+    )
 }
 
 pub(in crate::storage::engine) fn find_last_row(

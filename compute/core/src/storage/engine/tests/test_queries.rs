@@ -2,7 +2,8 @@
 
 use super::super::*;
 use super::helpers::*;
-use crate::snapshot::{SheetSnapshot, WorkbookSnapshot};
+use crate::snapshot::{CellData, RangeData, SheetSnapshot, WorkbookSnapshot};
+use cell_types::{ColId, PayloadEncoding, RangeAnchor, RangeId, RangeKind, RowId};
 use value_types::{CellValue, FiniteF64};
 
 // -------------------------------------------------------------------
@@ -210,6 +211,66 @@ fn test_query_range_skips_empty_cells() {
     // Query a 3x3 region -- only 3 cells have data (A1, B1, A2)
     let range = engine.query_range(&sheet_id(), 0, 0, 2, 2);
     assert_eq!(range.cells.len(), 3, "should only have 3 non-empty cells");
+}
+
+#[test]
+fn test_find_data_edge_uses_materialized_range_values() {
+    let sheet_id = SheetId::from_uuid_str("660e8400-e29b-41d4-a716-446655440000").unwrap();
+    let row_id = RowId::from_raw(1);
+    let col_ids: Vec<ColId> = (0..11).map(|i| ColId::from_raw(i + 2)).collect();
+    let mut payload = Vec::new();
+    for value in [235_658.0_f64, 243_926.0, 258_645.0, 259_544.0] {
+        payload.extend_from_slice(&value.to_le_bytes());
+    }
+
+    let snapshot = WorkbookSnapshot {
+        sheets: vec![SheetSnapshot {
+            id: sheet_id.to_uuid_string(),
+            name: "Sheet1".to_string(),
+            rows: 1,
+            cols: 11,
+            cells: vec![CellData {
+                cell_id: "660e8400-e29b-41d4-a716-446655440001".to_string(),
+                row: 0,
+                col: 0,
+                value: CellValue::Text("Long-term assets".into()),
+                formula: None,
+                identity_formula: None,
+                array_ref: None,
+            }],
+            ranges: vec![RangeData {
+                range_id: RangeId::from_uuid_str("660e8400-e29b-41d4-a716-446655440002").unwrap(),
+                kind: RangeKind::Data,
+                anchor: RangeAnchor::Elastic {
+                    start_row: row_id,
+                    end_row: row_id,
+                    start_col: col_ids[6],
+                    end_col: col_ids[9],
+                },
+                encoding: PayloadEncoding::F64Le,
+                payload,
+                row_axis: None,
+                col_axis: None,
+                row_ids: vec![row_id],
+                col_ids: col_ids[6..=9].to_vec(),
+            }],
+        }],
+        named_ranges: vec![],
+        tables: vec![],
+        pivot_tables: vec![],
+        data_table_regions: vec![],
+        iterative_calc: false,
+        max_iterations: 100,
+        max_change: FiniteF64::must(0.001),
+        calculation_settings: None,
+    };
+    let (engine, _) = YrsComputeEngine::from_snapshot(snapshot).unwrap();
+
+    let target_left = engine.find_data_edge(&sheet_id, 0, 9, "left");
+    assert_eq!((target_left.row, target_left.col), (0, 6));
+
+    let target_right = engine.find_data_edge(&sheet_id, 0, 6, "right");
+    assert_eq!((target_right.row, target_right.col), (0, 9));
 }
 
 /// Verify that query_range includes formatted display strings.

@@ -9,7 +9,9 @@ use fixtures::{
     create_xlsx_with_multiple_sheets, create_xlsx_with_shared_strings,
     create_xlsx_with_various_types,
 };
-use xlsx_parser::{LazyWorkbook, SharedStrings, XlsxArchive, parse_xlsx_full_native};
+use std::fs;
+
+use xlsx_parser::{SharedStrings, XlsxArchive, parse_xlsx_full_native, parse_xlsx_to_output};
 
 // =============================================================================
 // Basic Archive Tests
@@ -33,6 +35,32 @@ fn test_parse_minimal_xlsx() {
 
     let worksheet = archive.get_worksheet(1).expect("Failed to read worksheet");
     assert!(!worksheet.is_empty());
+}
+
+#[test]
+fn test_parse_pivot_basic_emits_parse_output_pivot_tables() {
+    let bytes = fs::read("test-corpus/parity/pivots/pivot-basic.xlsx")
+        .expect("pivot-basic fixture should be present");
+    let (output, diagnostics) =
+        parse_xlsx_to_output(&bytes).expect("pivot-basic should parse to ParseOutput");
+
+    assert!(
+        diagnostics.errors.is_empty(),
+        "pivot-basic parse diagnostics should not contain errors: {:?}",
+        diagnostics.errors
+    );
+    assert_eq!(output.pivot_tables.len(), 1);
+    assert_eq!(output.pivot_tables[0].config.name, "PivotTable1");
+    assert_eq!(output.pivot_tables[0].config.output_sheet_name, "Pivot");
+    assert_eq!(output.pivot_cache_sources.len(), 1);
+    assert_eq!(
+        output.pivot_cache_sources[0].source_sheet.as_deref(),
+        Some("Data")
+    );
+    assert_eq!(
+        output.pivot_cache_sources[0].source_range.as_deref(),
+        Some("A1:C5")
+    );
 }
 
 #[test]

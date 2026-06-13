@@ -88,7 +88,9 @@ function createMockUIStore(initialSheetId = 'sheet1') {
 }
 
 function createMockWorkbook(options: {
-  editablePivots?: Array<{ id: string; name: string; refRange?: string }>;
+  editablePivots?:
+    | Array<{ id: string; name: string; refRange?: string }>
+    | (() => Array<{ id: string; name: string; refRange?: string }>);
   editableThrows?: boolean;
   importedRecords?: Array<{
     sourceKind: 'unsupportedImport' | 'promotedImport';
@@ -106,7 +108,9 @@ function createMockWorkbook(options: {
     if (options.editableThrows) {
       throw new Error('editable pivot API unavailable');
     }
-    return options.editablePivots ?? [];
+    return typeof options.editablePivots === 'function'
+      ? options.editablePivots()
+      : (options.editablePivots ?? []);
   });
   const get = jest.fn(async () => ({
     getRange: jest.fn(async () => null),
@@ -116,7 +120,16 @@ function createMockWorkbook(options: {
   return {
     getSheetById: jest.fn(() => ({ pivots: { getAll, get, getImportedViewRecords } })),
     importedPivots: {
-      findRenderedImportedPivotAt: jest.fn(async () => options.sidecarPivot ?? null),
+      findRenderedImportedPivotAt: jest.fn(async (_sheetId: string, row: number, col: number) => {
+        const sidecarPivot = options.sidecarPivot;
+        if (!sidecarPivot) return null;
+        return row >= sidecarPivot.range.startRow &&
+          row <= sidecarPivot.range.endRow &&
+          col >= sidecarPivot.range.startCol &&
+          col <= sidecarPivot.range.endCol
+          ? sidecarPivot
+          : null;
+      }),
     },
     pivot: { getImportedPivotViewRecords: getImportedViewRecords },
     getAll,
@@ -132,6 +145,10 @@ function createCleanupManager() {
 }
 
 async function flushAsyncRefreshes() {
+  for (let i = 0; i < 50; i++) {
+    await Promise.resolve();
+  }
+  await new Promise((resolve) => setTimeout(resolve, 0));
   for (let i = 0; i < 10; i++) {
     await Promise.resolve();
   }
@@ -284,6 +301,52 @@ describe('Pivot Selection Coordination', () => {
     expect(uiStore.getState().pivot).toEqual({
       selectedPivotId: null,
       editingPivotId: null,
+    });
+  });
+
+  it('materializes deferred imported pivots before selecting a raw sidecar id', async () => {
+    const selection = createMockSelectionActor(idleState(0, 0));
+    const uiStore = createMockUIStore('sheet1');
+    let materialized = false;
+    const workbook = createMockWorkbook({
+      editablePivots: () =>
+        materialized
+          ? [{ id: 'pivot-imported-native', name: 'PivotTable1', refRange: 'B2:D4' }]
+          : [],
+      sidecarPivot: {
+        id: 'imported:Pivot:xl/pivotTables/pivotTable1.xml',
+        importIdentity: 'identity-1',
+        range: { startRow: 1, startCol: 1, endRow: 3, endCol: 3 },
+      },
+    });
+    const importDurability = {
+      get isImportDurabilityPending() {
+        return !materialized;
+      },
+      awaitImportDurability: jest.fn(async () => {
+        materialized = true;
+      }),
+    };
+
+    setupPivotSelectionCoordination(
+      {
+        actors: { selection } as any,
+        uiStoreApi: uiStore as any,
+        getActiveSheetId: () => uiStore.getState().activeSheetId,
+        workbook: workbook as any,
+        importDurability,
+      },
+      createCleanupManager() as any,
+    );
+
+    selection.emit(idleState(1, 1));
+    await flushAsyncRefreshes();
+
+    expect(importDurability.awaitImportDurability).toHaveBeenCalledTimes(1);
+    expect(uiStore.getState().startEditingPivot).toHaveBeenCalledWith('pivot-imported-native');
+    expect(uiStore.getState().pivot).toEqual({
+      selectedPivotId: 'pivot-imported-native',
+      editingPivotId: 'pivot-imported-native',
     });
   });
 });

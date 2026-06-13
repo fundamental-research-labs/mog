@@ -16,6 +16,10 @@ export interface PivotSelectionCoordinationConfig {
   uiStoreApi: ReadableStoreApi<GridEditingUIStore>;
   getActiveSheetId: () => string;
   workbook: WorkbookInternal;
+  importDurability?: {
+    readonly isImportDurabilityPending: boolean;
+    awaitImportDurability(): Promise<void>;
+  };
 }
 
 interface PivotSelectionSnapshot {
@@ -27,7 +31,7 @@ export function setupPivotSelectionCoordination(
   config: PivotSelectionCoordinationConfig,
   cleanups: CleanupManager,
 ): { cleanup: () => void } {
-  const { actors, uiStoreApi, getActiveSheetId, workbook } = config;
+  const { actors, uiStoreApi, getActiveSheetId, workbook, importDurability } = config;
   let prevActiveCell = actors.selection.getSnapshot().context.activeCell;
   let hasPendingUpdate = false;
   let disposed = false;
@@ -56,7 +60,19 @@ export function setupPivotSelectionCoordination(
     const sheetId = toSheetId(getActiveSheetId());
 
     void (async () => {
-      const pivotId = await findPivotAtCell(workbook, sheetId, activeCell.row, activeCell.col);
+      let pivotId = await findPivotAtCell(workbook, sheetId, activeCell.row, activeCell.col);
+      if (pivotId?.startsWith('imported:') && importDurability) {
+        const fallbackImportedPivotId = pivotId;
+        try {
+          await importDurability.awaitImportDurability();
+          pivotId =
+            (await findPivotAtCell(workbook, sheetId, activeCell.row, activeCell.col)) ??
+            fallbackImportedPivotId;
+        } catch (error) {
+          console.warn('[PivotSelectionCoordination] Failed to materialize imported pivot', error);
+          pivotId = fallbackImportedPivotId;
+        }
+      }
       if (disposed || generation !== refreshGeneration) return;
       setSelectedPivot(pivotId);
     })();

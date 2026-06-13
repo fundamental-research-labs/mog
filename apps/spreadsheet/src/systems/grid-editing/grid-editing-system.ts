@@ -1941,6 +1941,7 @@ export class GridEditingSystem implements IGridEditingSystem {
         getActiveSheetId: () =>
           (this.config.getActiveSheetId ?? (() => this.config.initialSheetId))(),
         workbook,
+        importDurability: this.config.importDurability,
       },
       cleanups,
     );

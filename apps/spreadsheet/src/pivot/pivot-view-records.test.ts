@@ -3,7 +3,7 @@ import { jest } from '@jest/globals';
 import type { SheetId } from '@mog-sdk/contracts/core';
 import type { PivotTableConfig } from '@mog-sdk/contracts/pivot';
 
-import { loadPivotConfigEntries } from './pivot-view-records';
+import { findPivotAtCell, loadPivotConfigEntries } from './pivot-view-records';
 
 const importIdentity =
   'ooxml:outputWorksheetPartPath=xl/worksheets/sheet2.xml;worksheetRelationshipId=rIdPT1;definitionPartPath=xl/pivotTables/pivotTable1.xml;pivotCacheRelationshipId=;cacheId=1';
@@ -85,5 +85,62 @@ describe('loadPivotConfigEntries', () => {
     expect(entries[0].sourceKind).toBe('promotedImport');
     expect(entries[0].handle).toBe(handle);
     expect(entries[0].alternateIds).toEqual(['imported:Pivot:xl/pivotTables/pivotTable1.xml']);
+  });
+});
+
+describe('findPivotAtCell', () => {
+  it('materializes a raw imported sidecar hit before returning an editable native pivot id', async () => {
+    let materialized = false;
+    const nativeConfig = {
+      ...pivotConfig('pivot-imported-native'),
+      refRange: 'B2:D4',
+    };
+    const getAll = jest.fn(async () => (materialized ? [nativeConfig] : []));
+    const getImportedViewRecords = jest.fn(async () => []);
+    const get = jest.fn(async () => ({ getRange: jest.fn(async () => null) }));
+    const awaitMaterialized = jest.fn(async () => {
+      materialized = true;
+    });
+    const workbook = {
+      ctx: { awaitMaterialized },
+      getSheetById: jest.fn(() => ({ pivots: { getAll, get, getImportedViewRecords } })),
+      importedPivots: {
+        findRenderedImportedPivotAt: jest.fn(async () => ({
+          id: 'imported:Pivot:xl/pivotTables/pivotTable1.xml',
+          importIdentity,
+          range: { startRow: 1, startCol: 1, endRow: 3, endCol: 3 },
+        })),
+      },
+    };
+
+    const hit = await findPivotAtCell(workbook as any, 'sheet-1' as SheetId, 1, 1);
+
+    expect(awaitMaterialized).toHaveBeenCalledWith('allSheets');
+    expect(hit).toBe('pivot-imported-native');
+  });
+
+  it('falls back to the sidecar id when imported-pivot materialization fails', async () => {
+    const getAll = jest.fn(async () => []);
+    const getImportedViewRecords = jest.fn(async () => []);
+    const get = jest.fn(async () => ({ getRange: jest.fn(async () => null) }));
+    const awaitMaterialized = jest.fn(async () => {
+      throw new Error('materialization failed');
+    });
+    const workbook = {
+      ctx: { awaitMaterialized },
+      getSheetById: jest.fn(() => ({ pivots: { getAll, get, getImportedViewRecords } })),
+      importedPivots: {
+        findRenderedImportedPivotAt: jest.fn(async () => ({
+          id: 'imported:Pivot:xl/pivotTables/pivotTable1.xml',
+          importIdentity,
+          range: { startRow: 1, startCol: 1, endRow: 3, endCol: 3 },
+        })),
+      },
+    };
+
+    const hit = await findPivotAtCell(workbook as any, 'sheet-1' as SheetId, 1, 1);
+
+    expect(awaitMaterialized).toHaveBeenCalledWith('allSheets');
+    expect(hit).toBe('imported:Pivot:xl/pivotTables/pivotTable1.xml');
   });
 });

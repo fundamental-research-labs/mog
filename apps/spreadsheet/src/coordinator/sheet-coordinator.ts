@@ -154,6 +154,7 @@ export class SheetCoordinator {
       workbook: this.workbook,
       // UIState is a superset of GridEditingUIStore — safe cast
       uiStoreApi: config.sheetSwitchDependencies?.uiStoreApi,
+      importDurability: config.sheetSwitchDependencies?.importDurability,
       getGeometry: () => this.renderer.getGeometry(),
       getViewport: () => this.renderer.getViewport(),
       getHitTest: () => this.renderer.getHitTest(),

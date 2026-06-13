@@ -45,6 +45,7 @@ import type { SlicerCache } from '@mog-sdk/contracts/slicers';
 import type { DragTerminator } from '../shared/drag-terminator';
 import type { Metric, ReadableStoreApi } from '../shared/types';
 import type { BeginEditSessionRequest } from './edit-entry-service';
+import type { SheetSwitchImportDurabilityGate } from './subscriptions/sheet-switch-coordination';
 
 // =============================================================================
 // NARROW UI STORE INTERFACE (DAG: systems/ must not import ui-store/)
@@ -349,6 +350,9 @@ export interface GridEditingConfig {
    * when UIState is a superset of GridEditingUIStore.
    */
   uiStoreApi?: ReadableStoreApi<GridEditingUIStore>;
+
+  /** Import durability gate for host-backed XLSX documents. */
+  importDurability?: SheetSwitchImportDurabilityGate;
 
   /**
    * Get the geometry capability (for grid-to-screen conversions).

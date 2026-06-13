@@ -26,6 +26,12 @@ export interface PivotConfigEntry {
   result?: PivotTableResult | null;
 }
 
+interface WorkbookWithMaterializationContext extends WorkbookInternal {
+  readonly ctx?: {
+    awaitMaterialized?: (scope?: SheetId | 'allSheets') => Promise<void>;
+  };
+}
+
 function importedPivotIdentityPart(importIdentity: string, key: string): string | null {
   const prefix = `${key}=`;
   const part = importIdentity.split(';').find((candidate) => candidate.startsWith(prefix));
@@ -224,6 +230,27 @@ export async function findImportedPivotAtCell(
     ).importedPivots?.findRenderedImportedPivotAt(sheetId, row, col);
     if (!sidecarPivot) {
       return null;
+    }
+
+    const awaitMaterialized = (workbook as WorkbookWithMaterializationContext).ctx
+      ?.awaitMaterialized;
+    if (typeof awaitMaterialized === 'function') {
+      try {
+        await awaitMaterialized('allSheets');
+        const editablePivotId = await findEditablePivotAtCell(workbook, sheetId, row, col);
+        if (editablePivotId) return editablePivotId;
+
+        const hydratedRecords = await worksheet.pivots.getImportedViewRecords();
+        for (const record of hydratedRecords) {
+          const bounds = pivotBoundsForImportedRecord(record);
+          if (pivotBoundsContain(bounds, row, col)) {
+            return record.config.id;
+          }
+        }
+      } catch {
+        // Keep the sidecar fallback below: unsupported or failed materialization
+        // should still allow the imported PivotTable surface to be selected.
+      }
     }
 
     const isDuplicate =

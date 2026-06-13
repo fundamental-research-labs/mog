@@ -49,6 +49,52 @@ describe('compute wire filter converters', () => {
       includeBlanks: true,
     });
   });
+
+  it('serializes icon filters using Rust enum field names', () => {
+    const criteria: ColumnFilterCriteria = {
+      type: 'icon',
+      iconFilter: {
+        iconSet: '3TrafficLights1',
+        iconIndex: 0,
+      },
+    };
+
+    expect(columnFilterCriteriaToCompute(criteria)).toEqual({
+      type: 'icon',
+      icon_set_name: '3TrafficLights1',
+      icon_index: 0,
+    });
+  });
+
+  it('accepts snake_case and normalized icon filter fields from compute', () => {
+    expect(
+      computeColumnFilterToCriteria({
+        type: 'icon',
+        icon_set_name: '3TrafficLights1',
+        icon_index: 1,
+      } as any),
+    ).toEqual({
+      type: 'icon',
+      iconFilter: {
+        iconSet: '3TrafficLights1',
+        iconIndex: 1,
+      },
+    });
+
+    expect(
+      computeColumnFilterToCriteria({
+        type: 'icon',
+        iconSetName: '4Arrows',
+        iconIndex: 2,
+      } as any),
+    ).toEqual({
+      type: 'icon',
+      iconFilter: {
+        iconSet: '4Arrows',
+        iconIndex: 2,
+      },
+    });
+  });
 });
 
 describe('compute wire identity formula converters', () => {

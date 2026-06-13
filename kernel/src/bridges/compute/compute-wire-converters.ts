@@ -314,11 +314,13 @@ export function columnFilterCriteriaToCompute(criteria: ColumnFilterCriteria): C
           'Icon filter criteria requires iconFilter',
         );
       }
+      // Wire fields are snake_case for this Rust enum variant. The generated TS
+      // type currently exposes camelCase, so cast through unknown as with color.
       return {
         type: 'icon',
-        iconSetName: criteria.iconFilter.iconSet,
-        iconIndex: criteria.iconFilter.iconIndex,
-      };
+        icon_set_name: criteria.iconFilter.iconSet,
+        icon_index: criteria.iconFilter.iconIndex,
+      } as unknown as ColumnFilter;
     }
     default: {
       // Exhaustive check — if contracts adds new types this will fail at compile time
@@ -393,14 +395,21 @@ export function computeColumnFilterToCriteria(filter: ColumnFilter): ColumnFilte
         type: 'dynamic',
         dynamicFilter: { rule: filter.rule as DynamicFilterRule },
       };
-    case 'icon':
+    case 'icon': {
+      const iconFilter = filter as unknown as {
+        iconSetName?: string;
+        iconIndex?: number;
+        icon_set_name?: string;
+        icon_index?: number;
+      };
       return {
         type: 'icon',
         iconFilter: {
-          iconSet: filter.iconSetName,
-          iconIndex: filter.iconIndex,
+          iconSet: iconFilter.iconSetName ?? iconFilter.icon_set_name ?? '',
+          iconIndex: iconFilter.iconIndex ?? iconFilter.icon_index ?? 0,
         },
       };
+    }
     default: {
       const _exhaustive: never = filter;
       throw new BridgeError(

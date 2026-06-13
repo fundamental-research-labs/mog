@@ -532,14 +532,10 @@ export class SheetView {
       getViewportState: () => self.getViewportState(),
       clampScrollPosition: (position) => self.clampScrollPosition(position),
       getScrollBounds: (sheetId: string) => self.coordinateSystem.getScrollBounds(sheetId),
-      getScrollToCell: (sheetId: string, cell: { row: number; col: number }) => {
-        const result = self.coordinateSystem.getScrollToCell?.(sheetId, cell);
-        if (!result) return null;
-        return {
-          x: (result as Record<string, number>).left ?? (result as Record<string, number>).x ?? 0,
-          y: (result as Record<string, number>).top ?? (result as Record<string, number>).y ?? 0,
-        };
-      },
+      getCoordinateScrollToCell: (sheetId: string, cell: { row: number; col: number }) =>
+        self.coordinateSystem.getScrollToCell?.(sheetId, cell) ?? null,
+      getPositionIndex: () => self._positionIndex,
+      getCellPageBounds: (row: number, col: number) => self._renderer.getCellPageBounds(row, col),
       getViewportBounds: (sheetId: string) => {
         const b = self.coordinateSystem.getViewportBounds?.(sheetId);
         if (!b) return { x: 0, y: 0, width: 0, height: 0 };

@@ -8,6 +8,8 @@
  */
 
 import type { ISheetViewViewport } from '../capability-interfaces';
+import type { ViewportPositionIndexLike } from '@mog-sdk/contracts/rendering';
+import type { ViewportLayout } from '@mog-sdk/contracts/viewport';
 import type {
   CellAddress,
   FrozenPanesConfig,
@@ -23,6 +25,9 @@ import type {
   SheetViewportSnapshot,
   SplitConfig,
 } from '../public-types';
+import { getLayoutAwareScrollToCell } from '../viewport-scroll-target';
+
+type CoordinateScrollTarget = { top?: number; left?: number; x?: number; y?: number };
 
 // =============================================================================
 // Internal accessor type
@@ -55,10 +60,12 @@ export interface ViewportInternals {
     viewportId?: string,
   ): { x: number; y: number };
   getScrollBounds(sheetId: string): { maxScrollLeft: number; maxScrollTop: number };
-  getScrollToCell(
+  getCoordinateScrollToCell(
     sheetId: string,
     cell: { row: number; col: number },
-  ): { x: number; y: number } | null;
+  ): CoordinateScrollTarget | null;
+  getPositionIndex(): ViewportPositionIndexLike;
+  getCellPageBounds(row: number, col: number): { width: number; height: number } | null;
   getViewportBounds(sheetId: string): { x: number; y: number; width: number; height: number };
 }
 
@@ -241,7 +248,19 @@ export class SheetViewViewport implements ISheetViewViewport {
 
   getScrollToCell(cell: CellAddress): ScrollPosition | null {
     const sheetId = this._internals.getCurrentSheetId();
-    const result = this._internals.getScrollToCell(sheetId, { row: cell.row, col: cell.col });
+    const state = this._internals.getViewportState();
+    const result = getLayoutAwareScrollToCell({
+      sheetId,
+      cell: { row: cell.row, col: cell.col },
+      layout: this._internals.getViewportLayout() as ViewportLayout | null,
+      positionIndex: this._internals.getPositionIndex(),
+      frozenPanes: this._internals.getFrozenPanes(),
+      currentScroll: this._internals.getScrollPosition('main'),
+      maxScroll: state.maxScroll,
+      getCellPageBounds: (row, col) => this._internals.getCellPageBounds(row, col),
+      getCoordinateScrollTarget: (targetSheetId, targetCell) =>
+        this._internals.getCoordinateScrollToCell(targetSheetId, targetCell),
+    });
     if (!result) return null;
     return { x: result.x, y: result.y };
   }

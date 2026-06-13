@@ -2469,16 +2469,7 @@ export class GridRendererImpl implements GridRenderer {
       };
     }
 
-    const viewportRect = this.coords.cellToViewport(sheetId, { row, col });
-    if (!viewportRect) return null;
-
-    const containerRect = this.container.getBoundingClientRect();
-    return {
-      x: containerRect.x + viewportRect.x,
-      y: containerRect.y + viewportRect.y,
-      width: viewportRect.width,
-      height: viewportRect.height,
-    };
+    return null;
   }
 
   getCellRenderedSize(row: number, col: number): { width: number; height: number } | null {

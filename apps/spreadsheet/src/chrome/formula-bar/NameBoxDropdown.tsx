@@ -437,6 +437,7 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
         deps.commands.object.deselectAll();
         deps.commands.chart.deselectAll();
         selectionCommands.setSelection([range], nextActiveCell, anchor);
+        deps.commands.renderer?.scrollToActiveCell(nextActiveCell);
       };
 
       if (trimmedAddress.includes(':')) {
@@ -547,8 +548,9 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
           await activateSheetByName(parsed.sheetName);
         }
 
-        // Set selection to the range (or single cell when start === end);
-        // the viewport-follow coordinator scrolls into view via the SET_SELECTION emit.
+        // Set selection to the range (or single cell when start === end), then
+        // explicitly align the viewport. Name Box commits are imperative UI
+        // navigation, so they must not rely on selection-change follow timing.
         const selection = createNameBoxRangeSelection(parsed);
         setCellSelection(selection.range, selection.activeCell, selection.anchor);
         return;
@@ -601,6 +603,7 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
       refreshNamedRanges,
       deps.commands.object,
       deps.commands.chart,
+      deps.commands.renderer,
     ],
   );
 

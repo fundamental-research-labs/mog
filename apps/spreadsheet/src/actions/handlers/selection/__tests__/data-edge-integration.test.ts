@@ -138,9 +138,19 @@ function createMockDeps(
   anchor: CellCoord | null,
 ): {
   deps: ActionDependencies;
-  getCapturedSelection: () => { ranges: CellRange[]; activeCell: CellCoord } | null;
+  getCapturedSelection: () => {
+    ranges: CellRange[];
+    activeCell: CellCoord;
+    anchor: CellCoord | null | undefined;
+  } | null;
 } {
-  const captureBox: { value: { ranges: CellRange[]; activeCell: CellCoord } | null } = {
+  const captureBox: {
+    value: {
+      ranges: CellRange[];
+      activeCell: CellCoord;
+      anchor: CellCoord | null | undefined;
+    } | null;
+  } = {
     value: null,
   };
 
@@ -156,8 +166,16 @@ function createMockDeps(
 
   const mockCommands = {
     selection: {
-      setSelection: (newRanges: CellRange[], newActiveCell: CellCoord) => {
-        captureBox.value = { ranges: newRanges, activeCell: newActiveCell };
+      setSelection: (
+        newRanges: CellRange[],
+        newActiveCell: CellCoord,
+        newAnchor?: CellCoord | null,
+      ) => {
+        captureBox.value = {
+          ranges: newRanges,
+          activeCell: newActiveCell,
+          anchor: newAnchor,
+        };
       },
       goTo: jest.fn(),
     },
@@ -275,11 +293,12 @@ describe('extendToDataEdge - Integration tests with ACTUAL handlers', () => {
       expect(range.startCol).toBe(0);
       expect(range.endCol).toBe(1);
 
-      expect(capturedSelection!.activeCell).toEqual({ row: 4, col: 0 });
+      expect(capturedSelection!.activeCell).toEqual({ row: 4, col: 1 });
+      expect(capturedSelection!.anchor).toEqual({ row: 4, col: 1 });
     });
 
     it('Step 2: Cmd+Shift+Up from A5:B5 creates A1:B5 (rectangular)', async () => {
-      const activeCell: CellCoord = { row: 4, col: 0 };
+      const activeCell: CellCoord = { row: 4, col: 1 };
       const ranges: CellRange[] = [{ startRow: 4, startCol: 0, endRow: 4, endCol: 1 }];
       const anchor: CellCoord = { row: 4, col: 1 };
 
@@ -300,7 +319,8 @@ describe('extendToDataEdge - Integration tests with ACTUAL handlers', () => {
       expect(range.startCol).toBe(0);
       expect(range.endCol).toBe(1);
 
-      expect(capturedSelection!.activeCell).toEqual({ row: 0, col: 0 });
+      expect(capturedSelection!.activeCell).toEqual({ row: 4, col: 1 });
+      expect(capturedSelection!.anchor).toEqual({ row: 4, col: 1 });
     });
   });
 
@@ -326,6 +346,8 @@ describe('extendToDataEdge - Integration tests with ACTUAL handlers', () => {
       expect(range.endRow).toBe(4);
       expect(range.startCol).toBe(1);
       expect(range.endCol).toBe(1);
+      expect(capturedSelection!.activeCell).toEqual({ row: 4, col: 1 });
+      expect(capturedSelection!.anchor).toEqual({ row: 4, col: 1 });
     });
 
     it('Step 2: Cmd+Shift+Left from B1:B5 creates A1:B5 (rectangular)', async () => {
@@ -348,6 +370,8 @@ describe('extendToDataEdge - Integration tests with ACTUAL handlers', () => {
       expect(range.endCol).toBe(1);
       expect(range.startRow).toBe(0);
       expect(range.endRow).toBe(4);
+      expect(capturedSelection!.activeCell).toEqual({ row: 4, col: 1 });
+      expect(capturedSelection!.anchor).toEqual({ row: 4, col: 1 });
     });
   });
 
@@ -372,6 +396,8 @@ describe('extendToDataEdge - Integration tests with ACTUAL handlers', () => {
       const rangeAfterRight = captured1!.ranges[0];
       expect(rangeAfterRight.startCol).toBe(0);
       expect(rangeAfterRight.endCol).toBe(1);
+      expect(captured1!.activeCell).toEqual(activeCell);
+      expect(captured1!.anchor).toEqual(activeCell);
 
       ranges = [rangeAfterRight];
       anchor = activeCell;
@@ -392,6 +418,8 @@ describe('extendToDataEdge - Integration tests with ACTUAL handlers', () => {
       expect(finalRange.endRow).toBe(4);
       expect(finalRange.startCol).toBe(0);
       expect(finalRange.endCol).toBe(1);
+      expect(captured2!.activeCell).toEqual(activeCell);
+      expect(captured2!.anchor).toEqual(activeCell);
     });
   });
 });

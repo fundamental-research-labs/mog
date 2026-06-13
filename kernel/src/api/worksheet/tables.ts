@@ -707,24 +707,37 @@ export class WorksheetTablesImpl implements WorksheetTables {
     columnName: string,
     position?: number,
   ): Promise<TableAddColumnReceipt> {
-    // Default to appending at the end by using a large position value
-    const pos = position ?? Number.MAX_SAFE_INTEGER;
     const table = await this.get(name);
     if (!table) throw new KernelError('COMPUTE_ERROR', `Table not found: ${name}`);
+    const bounds = parseCellRange(table.range);
+    if (!bounds) throw new KernelError('COMPUTE_ERROR', `Invalid table range: ${table.range}`);
+    const actualPosition = Math.max(
+      0,
+      Math.min(position ?? table.columns.length, table.columns.length),
+    );
+    const targetCol = bounds.startCol + actualPosition;
     await assertTableColumnDeltaAllowed(
       this.ctx,
       this.sheetId,
       'tables.addColumn',
       table,
-      position ?? table.columns.length,
+      actualPosition,
       'insertColumns',
     );
-    await this.ctx.computeBridge.addTableColumn(name, columnName, pos);
-    // Resolve the actual column position for the receipt (don't leak the sentinel)
-    let actualPosition = pos;
-    if (pos === Number.MAX_SAFE_INTEGER) {
-      const table = await this.get(name);
-      actualPosition = table ? table.columns.length - 1 : 0;
+
+    await this.ctx.computeBridge.beginUndoGroup();
+    try {
+      await Structures.insertColumns(this.ctx, this.sheetId, null, targetCol, 1, 'api');
+      await this.ctx.computeBridge.addTableColumn(name, columnName, actualPosition);
+      await this.ctx.computeBridge.resizeTable(
+        name,
+        bounds.startRow,
+        bounds.startCol,
+        bounds.endRow,
+        bounds.endCol + 1,
+      );
+    } finally {
+      await this.ctx.computeBridge.endUndoGroup();
     }
     this.emitTableUpdated(table.id);
     return { kind: 'tableAddColumn', tableName: name, columnName, position: actualPosition };
@@ -747,6 +760,17 @@ export class WorksheetTablesImpl implements WorksheetTables {
   async removeColumn(name: string, columnIndex: number): Promise<TableRemoveColumnReceipt> {
     const table = await this.get(name);
     if (!table) throw new KernelError('COMPUTE_ERROR', `Table not found: ${name}`);
+    const bounds = parseCellRange(table.range);
+    if (!bounds) throw new KernelError('COMPUTE_ERROR', `Invalid table range: ${table.range}`);
+    if (columnIndex < 0 || columnIndex >= table.columns.length) {
+      throw new KernelError(
+        'COMPUTE_ERROR',
+        `Column index ${columnIndex} out of range (table has ${table.columns.length} columns)`,
+      );
+    }
+    if (table.columns.length <= 1) {
+      throw new KernelError('COMPUTE_ERROR', `Cannot remove the last column from table "${name}"`);
+    }
     await assertTableColumnDeltaAllowed(
       this.ctx,
       this.sheetId,
@@ -755,7 +779,27 @@ export class WorksheetTablesImpl implements WorksheetTables {
       columnIndex,
       'deleteColumns',
     );
-    await this.ctx.computeBridge.removeTableColumn(name, columnIndex);
+    await this.ctx.computeBridge.beginUndoGroup();
+    try {
+      await Structures.deleteColumns(
+        this.ctx,
+        this.sheetId,
+        null,
+        bounds.startCol + columnIndex,
+        1,
+        'api',
+      );
+      await this.ctx.computeBridge.removeTableColumn(name, columnIndex);
+      await this.ctx.computeBridge.resizeTable(
+        name,
+        bounds.startRow,
+        bounds.startCol,
+        bounds.endRow,
+        bounds.endCol - 1,
+      );
+    } finally {
+      await this.ctx.computeBridge.endUndoGroup();
+    }
     this.emitTableUpdated(table.id);
     return { kind: 'tableRemoveColumn', tableName: name, columnIndex };
   }

@@ -2,6 +2,7 @@
 
 use super::super::*;
 use super::helpers::*;
+use cell_types::SheetPos;
 use compute_document::schema::KEY_SLICERS;
 use domain_types::{
     ParseOutput, SheetData, SheetDimensions,
@@ -14,7 +15,9 @@ use domain_types::{
         },
     },
 };
+use formula_types::StructureChange;
 use ooxml_types::slicers::{SlicerCacheDef, SlicerDef, SlicerSortOrder, TableSlicerCache};
+use value_types::CellValue;
 use yrs::{Map, Transact};
 
 fn archive_entry_names(bytes: &[u8]) -> Vec<String> {
@@ -129,6 +132,145 @@ fn runtime_created_range_backed_table_exports_to_xlsx_package() {
     assert!(sheet_xml.contains(r#"<tableParts count="1">"#));
     assert!(sheet_rels.contains(r#"Target="../tables/table1.xml""#));
     assert!(content_types.contains(r#"PartName="/xl/tables/table1.xml""#));
+}
+
+#[test]
+fn table_row_lifecycle_persists_structurally_shifted_range_for_xlsx_export() {
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    let sid = sheet_id();
+
+    engine
+        .set_cell_values_parsed(
+            &sid,
+            vec![
+                (0, 0, "Market".to_string()),
+                (0, 1, "Units".to_string()),
+                (0, 2, "Revenue".to_string()),
+                (1, 0, "West".to_string()),
+                (1, 1, "5".to_string()),
+                (1, 2, "100".to_string()),
+                (2, 0, "East".to_string()),
+                (2, 1, "3".to_string()),
+                (2, 2, "90".to_string()),
+                (3, 0, "EMEA".to_string()),
+                (3, 1, "7".to_string()),
+                (3, 2, "210".to_string()),
+                (4, 0, "APAC".to_string()),
+                (4, 1, "2".to_string()),
+                (4, 2, "80".to_string()),
+            ],
+        )
+        .expect("seed table cells");
+    engine
+        .create_table_lifecycle(
+            &sid,
+            Some("MutationSales".to_string()),
+            0,
+            0,
+            4,
+            2,
+            Vec::new(),
+            true,
+            Some("TableStyleMedium6".to_string()),
+        )
+        .expect("create table");
+
+    engine
+        .add_table_data_row("MutationSales", Some(2))
+        .expect("add table row metadata");
+    engine
+        .structure_change(
+            &sid,
+            &StructureChange::InsertRows {
+                at: 3,
+                count: 1,
+                new_row_ids: Vec::new(),
+            },
+        )
+        .expect("insert worksheet row");
+    engine
+        .remove_table_data_row("MutationSales", 0)
+        .expect("remove table row metadata");
+    engine
+        .structure_change(
+            &sid,
+            &StructureChange::DeleteRows {
+                at: 1,
+                count: 1,
+                deleted_cell_ids: Vec::new(),
+            },
+        )
+        .expect("delete worksheet row");
+
+    let table = engine
+        .get_table_by_name("MutationSales")
+        .expect("table should exist");
+    assert_eq!(table.range.start_row(), 0);
+    assert_eq!(table.range.end_row(), 4);
+
+    let bytes = engine.export_to_xlsx_bytes().expect("export_to_xlsx_bytes");
+    let archive = xlsx_parser::zip::XlsxArchive::new(&bytes).expect("xlsx archive");
+    let table_xml = String::from_utf8(archive.read_file("xl/tables/table1.xml").unwrap()).unwrap();
+
+    assert!(table_xml.contains(r#"ref="A1:C5""#));
+    assert!(!table_xml.contains(r#"ref="A1:C6""#));
+}
+
+#[test]
+fn table_column_add_materializes_header_cell_after_structural_insert() {
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    let sid = sheet_id();
+
+    engine
+        .set_cell_values_parsed(
+            &sid,
+            vec![
+                (0, 0, "Account".to_string()),
+                (0, 1, "Market".to_string()),
+                (0, 2, "Revenue".to_string()),
+                (1, 0, "Contoso".to_string()),
+                (1, 1, "East".to_string()),
+                (1, 2, "90".to_string()),
+            ],
+        )
+        .expect("seed table cells");
+    engine
+        .create_table_lifecycle(
+            &sid,
+            Some("MutationSales".to_string()),
+            0,
+            0,
+            1,
+            2,
+            Vec::new(),
+            true,
+            Some("TableStyleMedium6".to_string()),
+        )
+        .expect("create table");
+    engine
+        .structure_change(
+            &sid,
+            &StructureChange::InsertCols {
+                at: 2,
+                count: 1,
+                new_col_ids: Vec::new(),
+            },
+        )
+        .expect("insert worksheet column");
+    engine
+        .add_table_column("MutationSales", "Units", 2)
+        .expect("add table column metadata and header");
+    engine
+        .resize_table("MutationSales", 0, 0, 1, 3)
+        .expect("normalize table range");
+
+    assert_eq!(
+        engine
+            .mirror()
+            .get_cell_value_at(&sid, SheetPos::new(0, 2))
+            .cloned(),
+        Some(CellValue::Text("Units".into()))
+    );
 }
 
 #[test]

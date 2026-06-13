@@ -14,6 +14,7 @@ use formula_types::StructureChange;
 use yrs::{Map, Out, Transact};
 
 use crate::mirror::CellMirror;
+use crate::storage::engine::services::tables;
 use crate::storage::engine::stores::EngineStores;
 use crate::storage::sheet::{cf_store, grouping, pivots, print as meta, schemas, sparklines};
 
@@ -493,7 +494,8 @@ fn shift_table_ranges(
             Some(new_range) if new_range != table.range => {
                 let mut updated = table;
                 updated.range = new_range;
-                stores.compute.set_table(mirror, updated);
+                stores.compute.set_table(mirror, updated.clone());
+                tables::persist_table_to_yrs(stores, &updated);
             }
             None => {
                 stores.compute.remove_table(mirror, &table.name);

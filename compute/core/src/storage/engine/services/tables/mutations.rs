@@ -388,6 +388,7 @@ pub(in crate::storage::engine) fn toggle_header_row(
 pub(in crate::storage::engine) fn add_table_column(
     stores: &mut EngineStores,
     mirror: &mut CellMirror,
+    mutation: &mut MutationCoordinator,
     table_name: &str,
     column_name: &str,
     position: u32,
@@ -421,9 +422,40 @@ pub(in crate::storage::engine) fn add_table_column(
         updated.range.end_row(),
         updated.range.end_col() + 1,
     );
+
+    let mut result = if updated.has_header_row {
+        let sheet_id =
+            SheetId::from_uuid_str(&updated.sheet_id).map_err(|_| ComputeError::Eval {
+                message: format!("Invalid sheet ID in table: {}", table_name),
+            })?;
+        let row = updated.range.start_row();
+        let col = updated.range.start_col() + pos as u32;
+        let cell_id = super::super::cell_editing::ensure_cell_id_mirrored(
+            stores, mirror, &sheet_id, row, col,
+        )
+        .ok_or_else(|| ComputeError::SheetNotFound {
+            sheet_id: sheet_id.to_uuid_string(),
+        })?;
+        let input = CellInput::Literal {
+            text: column_name.to_string(),
+        };
+        let recalc = super::super::cell_editing::set_cell(
+            stores, mirror, mutation, &sheet_id, cell_id, row, col, &input,
+        )?;
+        MutationResult::from_recalc(recalc)
+    } else {
+        MutationResult::empty()
+    };
+
     stores.compute.set_table(mirror, updated.clone());
     persist_table_to_yrs(stores, &updated);
-    Ok(MutationResult::empty())
+    result.table_changes.push(TableChange {
+        name: updated.name,
+        table_id: Some(updated.id),
+        sheet_id: updated.sheet_id,
+        kind: ChangeKind::Set,
+    });
+    Ok(result)
 }
 
 /// Rename a column in a table.

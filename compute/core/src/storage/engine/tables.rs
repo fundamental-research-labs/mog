@@ -518,14 +518,19 @@ impl YrsComputeEngine {
         column_name: &str,
         position: u32,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        let result = services::tables::add_table_column(
-            &mut self.stores,
-            &mut self.mirror,
-            table_name,
-            column_name,
-            position,
-        )?;
-        Ok((serialize_multi_viewport_patches(&[]), result))
+        let mut result = self.with_undo_group_if(true, |engine| {
+            services::tables::add_table_column(
+                &mut engine.stores,
+                &mut engine.mirror,
+                &mut engine.mutation,
+                table_name,
+                column_name,
+                position,
+            )
+        })?;
+        self.prepare_recalc_for_flush(&mut result.recalc);
+        let patches = self.flush_viewport_patches();
+        Ok((patches, result))
     }
 
     /// Rename a column in a table.

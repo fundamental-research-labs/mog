@@ -245,6 +245,7 @@ function createMockCtx(): any {
       updateSlicerConfig: jest.fn().mockResolvedValue(undefined),
       getSlicerState: jest.fn().mockResolvedValue(null),
       getAllSlicers: jest.fn().mockResolvedValue([]),
+      getAllTablesWorkbook: jest.fn().mockResolvedValue([]),
       resizeTable: jest.fn().mockResolvedValue(undefined),
       addTableColumn: jest.fn().mockResolvedValue(undefined),
       removeTableColumn: jest.fn().mockResolvedValue(undefined),
@@ -276,7 +277,9 @@ function createMockCtx(): any {
         serial: 0.5,
         formatToApply: 'h:mm:ss',
       }),
+      structureChange: jest.fn().mockResolvedValue({ structureChanges: [] }),
       setCell: jest.fn().mockResolvedValue(undefined),
+      setCellValueParsed: jest.fn().mockResolvedValue(undefined),
       setCellFormat: jest.fn().mockResolvedValue(undefined),
       setCells: jest.fn().mockResolvedValue(undefined),
       setCellsByPosition: jest.fn().mockResolvedValue(undefined),
@@ -1097,26 +1100,38 @@ describe('WorksheetImpl Extended Methods', () => {
       expect(ctx.computeBridge.resizeTable).toHaveBeenCalledWith('Table1', 0, 0, 19, 4);
     });
 
-    it('addTableColumn delegates to computeBridge.addTableColumn', async () => {
+    it('addTableColumn inserts a worksheet column and normalizes the table range', async () => {
       await ws.tables.addColumn('Table1', 'NewCol', 2);
 
+      expect(ctx.computeBridge.beginUndoGroup).toHaveBeenCalledTimes(1);
+      expect(ctx.computeBridge.structureChange).toHaveBeenCalledWith(SHEET_ID, {
+        InsertCols: { at: 2, count: 1, new_col_ids: [] },
+      });
       expect(ctx.computeBridge.addTableColumn).toHaveBeenCalledWith('Table1', 'NewCol', 2);
+      expect(ctx.computeBridge.resizeTable).toHaveBeenCalledWith('Table1', 0, 0, 9, 4);
+      expect(ctx.computeBridge.endUndoGroup).toHaveBeenCalledTimes(1);
     });
 
-    it('addTableColumn defaults position to Number.MAX_SAFE_INTEGER', async () => {
+    it('addTableColumn appends at the end by default', async () => {
       await ws.tables.addColumn('Table1', 'NewCol');
 
-      expect(ctx.computeBridge.addTableColumn).toHaveBeenCalledWith(
-        'Table1',
-        'NewCol',
-        Number.MAX_SAFE_INTEGER,
-      );
+      expect(ctx.computeBridge.structureChange).toHaveBeenCalledWith(SHEET_ID, {
+        InsertCols: { at: 3, count: 1, new_col_ids: [] },
+      });
+      expect(ctx.computeBridge.addTableColumn).toHaveBeenCalledWith('Table1', 'NewCol', 3);
+      expect(ctx.computeBridge.resizeTable).toHaveBeenCalledWith('Table1', 0, 0, 9, 4);
     });
 
-    it('removeTableColumn delegates to computeBridge.removeTableColumn', async () => {
-      await ws.tables.removeColumn('Table1', 3);
+    it('removeTableColumn deletes the worksheet column and normalizes the table range', async () => {
+      await ws.tables.removeColumn('Table1', 2);
 
-      expect(ctx.computeBridge.removeTableColumn).toHaveBeenCalledWith('Table1', 3);
+      expect(ctx.computeBridge.beginUndoGroup).toHaveBeenCalledTimes(1);
+      expect(ctx.computeBridge.structureChange).toHaveBeenCalledWith(SHEET_ID, {
+        DeleteCols: { at: 2, count: 1, deleted_cell_ids: [] },
+      });
+      expect(ctx.computeBridge.removeTableColumn).toHaveBeenCalledWith('Table1', 2);
+      expect(ctx.computeBridge.resizeTable).toHaveBeenCalledWith('Table1', 0, 0, 9, 2);
+      expect(ctx.computeBridge.endUndoGroup).toHaveBeenCalledTimes(1);
     });
   });
 

@@ -1,4 +1,4 @@
-use crate::snapshot::{Axis, ChangeKind, GroupingChange, MutationResult};
+use crate::snapshot::{Axis, ChangeKind, GroupingChange, MutationResult, VisibilityChange};
 use crate::storage::engine::stores::EngineStores;
 use crate::storage::sheet::{dimensions, get_meta_for_export, grouping};
 use cell_types::SheetId;
@@ -173,29 +173,34 @@ fn clamp_axis_range(start: u32, end: u32, count: usize) -> Option<(u32, u32)> {
     }
 }
 
-fn sync_row_layout_range(stores: &mut EngineStores, sheet_id: &SheetId, start: u32, end: u32) {
+fn row_layout_states(
+    stores: &EngineStores,
+    sheet_id: &SheetId,
+    start: u32,
+    end: u32,
+) -> Vec<(u32, bool)> {
     let row_count = match stores.layout_indexes.get(sheet_id) {
         Some(layout) => layout.row_count(),
-        None => return,
+        None => return Vec::new(),
     };
     let Some((start, end)) = clamp_axis_range(start, end, row_count) else {
-        return;
+        return Vec::new();
     };
 
-    let states: Vec<(u32, bool)> = {
-        let doc = stores.storage.doc();
-        let sheets = stores.storage.sheets();
-        (start..=end)
-            .map(|row| {
-                let hidden = dimensions::is_row_hidden(doc, sheets, sheet_id, row)
-                    || !grouping::is_row_visible_by_groups(doc, sheets, sheet_id, row);
-                (row, hidden)
-            })
-            .collect()
-    };
+    let doc = stores.storage.doc();
+    let sheets = stores.storage.sheets();
+    (start..=end)
+        .map(|row| {
+            let hidden = dimensions::is_row_hidden(doc, sheets, sheet_id, row)
+                || !grouping::is_row_visible_by_groups(doc, sheets, sheet_id, row);
+            (row, hidden)
+        })
+        .collect()
+}
 
+fn apply_row_layout_states(stores: &mut EngineStores, sheet_id: &SheetId, states: &[(u32, bool)]) {
     if let Some(layout) = stores.layout_indexes.get_mut(sheet_id) {
-        for (row, hidden) in states {
+        for &(row, hidden) in states {
             if hidden {
                 layout.hide_row(row as usize);
             } else {
@@ -205,29 +210,43 @@ fn sync_row_layout_range(stores: &mut EngineStores, sheet_id: &SheetId, start: u
     }
 }
 
-fn sync_column_layout_range(stores: &mut EngineStores, sheet_id: &SheetId, start: u32, end: u32) {
+fn sync_row_layout_range(stores: &mut EngineStores, sheet_id: &SheetId, start: u32, end: u32) {
+    let states = row_layout_states(stores, sheet_id, start, end);
+    apply_row_layout_states(stores, sheet_id, &states);
+}
+
+fn column_layout_states(
+    stores: &EngineStores,
+    sheet_id: &SheetId,
+    start: u32,
+    end: u32,
+) -> Vec<(u32, bool)> {
     let col_count = match stores.layout_indexes.get(sheet_id) {
         Some(layout) => layout.col_count(),
-        None => return,
+        None => return Vec::new(),
     };
     let Some((start, end)) = clamp_axis_range(start, end, col_count) else {
-        return;
+        return Vec::new();
     };
 
-    let states: Vec<(u32, bool)> = {
-        let doc = stores.storage.doc();
-        let sheets = stores.storage.sheets();
-        (start..=end)
-            .map(|col| {
-                let hidden = dimensions::is_column_hidden(doc, sheets, sheet_id, col)
-                    || !grouping::is_column_visible_by_groups(doc, sheets, sheet_id, col);
-                (col, hidden)
-            })
-            .collect()
-    };
+    let doc = stores.storage.doc();
+    let sheets = stores.storage.sheets();
+    (start..=end)
+        .map(|col| {
+            let hidden = dimensions::is_column_hidden(doc, sheets, sheet_id, col)
+                || !grouping::is_column_visible_by_groups(doc, sheets, sheet_id, col);
+            (col, hidden)
+        })
+        .collect()
+}
 
+fn apply_column_layout_states(
+    stores: &mut EngineStores,
+    sheet_id: &SheetId,
+    states: &[(u32, bool)],
+) {
     if let Some(layout) = stores.layout_indexes.get_mut(sheet_id) {
-        for (col, hidden) in states {
+        for &(col, hidden) in states {
             if hidden {
                 layout.hide_col(col as usize);
             } else {
@@ -235,6 +254,57 @@ fn sync_column_layout_range(stores: &mut EngineStores, sheet_id: &SheetId, start
             }
         }
     }
+}
+
+fn sync_column_layout_range(stores: &mut EngineStores, sheet_id: &SheetId, start: u32, end: u32) {
+    let states = column_layout_states(stores, sheet_id, start, end);
+    apply_column_layout_states(stores, sheet_id, &states);
+}
+
+fn append_visibility_transitions(
+    result: &mut MutationResult,
+    sheet_id: &SheetId,
+    axis: Axis,
+    before: &[(u32, bool)],
+    after: &[(u32, bool)],
+) {
+    let sid = sheet_id.to_uuid_string();
+    for (&(before_index, before_hidden), &(after_index, after_hidden)) in before.iter().zip(after) {
+        if before_index == after_index && before_hidden != after_hidden {
+            result.visibility_changes.push(VisibilityChange {
+                sheet_id: sid.clone(),
+                axis,
+                index: after_index,
+                hidden: after_hidden,
+            });
+        }
+    }
+}
+
+fn sync_row_layout_range_recording_visibility(
+    stores: &mut EngineStores,
+    sheet_id: &SheetId,
+    start: u32,
+    end: u32,
+    before: &[(u32, bool)],
+    result: &mut MutationResult,
+) {
+    let after = row_layout_states(stores, sheet_id, start, end);
+    apply_row_layout_states(stores, sheet_id, &after);
+    append_visibility_transitions(result, sheet_id, Axis::Row, before, &after);
+}
+
+fn sync_column_layout_range_recording_visibility(
+    stores: &mut EngineStores,
+    sheet_id: &SheetId,
+    start: u32,
+    end: u32,
+    before: &[(u32, bool)],
+    result: &mut MutationResult,
+) {
+    let after = column_layout_states(stores, sheet_id, start, end);
+    apply_column_layout_states(stores, sheet_id, &after);
+    append_visibility_transitions(result, sheet_id, Axis::Col, before, &after);
 }
 
 pub(in crate::storage::engine) fn group_rows(
@@ -267,6 +337,7 @@ pub(in crate::storage::engine) fn ungroup_rows(
     end_row: u32,
 ) -> Result<MutationResult, ComputeError> {
     let affected = row_containing_group_bounds(stores, sheet_id, start_row, end_row);
+    let before = affected.map(|(start, end)| row_layout_states(stores, sheet_id, start, end));
     grouping::ungroup_rows(
         stores.storage.doc(),
         stores.storage.sheets(),
@@ -274,10 +345,17 @@ pub(in crate::storage::engine) fn ungroup_rows(
         start_row,
         end_row,
     );
-    if let Some((start, end)) = affected {
-        sync_row_layout_range(stores, sheet_id, start, end);
-    }
     let mut result = MutationResult::empty();
+    if let (Some((start, end)), Some(before)) = (affected, before) {
+        sync_row_layout_range_recording_visibility(
+            stores,
+            sheet_id,
+            start,
+            end,
+            &before,
+            &mut result,
+        );
+    }
     result.grouping_changes.push(GroupingChange {
         sheet_id: sheet_id.to_uuid_string(),
         axis: Axis::Row,
@@ -316,6 +394,7 @@ pub(in crate::storage::engine) fn ungroup_columns(
     end_col: u32,
 ) -> Result<MutationResult, ComputeError> {
     let affected = column_containing_group_bounds(stores, sheet_id, start_col, end_col);
+    let before = affected.map(|(start, end)| column_layout_states(stores, sheet_id, start, end));
     grouping::ungroup_columns(
         stores.storage.doc(),
         stores.storage.sheets(),
@@ -323,10 +402,17 @@ pub(in crate::storage::engine) fn ungroup_columns(
         start_col,
         end_col,
     );
-    if let Some((start, end)) = affected {
-        sync_column_layout_range(stores, sheet_id, start, end);
-    }
     let mut result = MutationResult::empty();
+    if let (Some((start, end)), Some(before)) = (affected, before) {
+        sync_column_layout_range_recording_visibility(
+            stores,
+            sheet_id,
+            start,
+            end,
+            &before,
+            &mut result,
+        );
+    }
     result.grouping_changes.push(GroupingChange {
         sheet_id: sheet_id.to_uuid_string(),
         axis: Axis::Col,
@@ -348,6 +434,10 @@ pub(in crate::storage::engine) fn set_group_collapsed(
         group_id,
     )
     .map(|group| (group.axis, group.start, group.end));
+    let before = affected.map(|(axis, start, end)| match axis {
+        grouping::GroupAxis::Row => row_layout_states(stores, sheet_id, start, end),
+        grouping::GroupAxis::Column => column_layout_states(stores, sheet_id, start, end),
+    });
     grouping::set_group_collapsed(
         stores.storage.doc(),
         stores.storage.sheets(),
@@ -355,18 +445,32 @@ pub(in crate::storage::engine) fn set_group_collapsed(
         group_id,
         collapsed,
     );
-    if let Some((axis, start, end)) = affected {
+    let mut result = MutationResult::empty();
+    if let (Some((axis, start, end)), Some(before)) = (affected, before) {
         match axis {
-            grouping::GroupAxis::Row => sync_row_layout_range(stores, sheet_id, start, end),
+            grouping::GroupAxis::Row => sync_row_layout_range_recording_visibility(
+                stores,
+                sheet_id,
+                start,
+                end,
+                &before,
+                &mut result,
+            ),
             grouping::GroupAxis::Column => {
                 if !collapsed {
                     unhide_expanded_column_group(stores, sheet_id, start, end);
                 }
-                sync_column_layout_range(stores, sheet_id, start, end);
+                sync_column_layout_range_recording_visibility(
+                    stores,
+                    sheet_id,
+                    start,
+                    end,
+                    &before,
+                    &mut result,
+                );
             }
         }
     }
-    let mut result = MutationResult::empty();
     let sid = sheet_id.to_uuid_string();
     result.grouping_changes.push(GroupingChange {
         sheet_id: sid.clone(),
@@ -393,24 +497,42 @@ pub(in crate::storage::engine) fn toggle_group_collapsed(
         group_id,
     )
     .map(|group| (group.axis, group.start, group.end));
+    let before = affected.map(|(axis, start, end)| match axis {
+        grouping::GroupAxis::Row => row_layout_states(stores, sheet_id, start, end),
+        grouping::GroupAxis::Column => column_layout_states(stores, sheet_id, start, end),
+    });
     let toggled = grouping::toggle_group_collapsed(
         stores.storage.doc(),
         stores.storage.sheets(),
         sheet_id,
         group_id,
     );
-    if let Some((axis, start, end)) = affected {
+    let mut result = MutationResult::empty();
+    if let (Some((axis, start, end)), Some(before)) = (affected, before) {
         match axis {
-            grouping::GroupAxis::Row => sync_row_layout_range(stores, sheet_id, start, end),
+            grouping::GroupAxis::Row => sync_row_layout_range_recording_visibility(
+                stores,
+                sheet_id,
+                start,
+                end,
+                &before,
+                &mut result,
+            ),
             grouping::GroupAxis::Column => {
                 if matches!(toggled, Some(false)) {
                     unhide_expanded_column_group(stores, sheet_id, start, end);
                 }
-                sync_column_layout_range(stores, sheet_id, start, end);
+                sync_column_layout_range_recording_visibility(
+                    stores,
+                    sheet_id,
+                    start,
+                    end,
+                    &before,
+                    &mut result,
+                );
             }
         }
     }
-    let mut result = MutationResult::empty();
     result.grouping_changes.push(GroupingChange {
         sheet_id: sheet_id.to_uuid_string(),
         axis: Axis::Row,
@@ -425,20 +547,37 @@ pub(in crate::storage::engine) fn expand_all_groups(
 ) -> Result<MutationResult, ComputeError> {
     let row_bounds = grouped_axis_bounds(stores, sheet_id, grouping::GroupAxis::Row);
     let col_bounds = grouped_axis_bounds(stores, sheet_id, grouping::GroupAxis::Column);
+    let row_before = row_bounds.map(|(start, end)| row_layout_states(stores, sheet_id, start, end));
+    let col_before =
+        col_bounds.map(|(start, end)| column_layout_states(stores, sheet_id, start, end));
     grouping::expand_all(
         stores.storage.doc(),
         stores.storage.sheets(),
         sheet_id,
         None,
     );
-    if let Some((start, end)) = row_bounds {
-        sync_row_layout_range(stores, sheet_id, start, end);
-    }
-    if let Some((start, end)) = col_bounds {
-        unhide_expanded_column_group(stores, sheet_id, start, end);
-        sync_column_layout_range(stores, sheet_id, start, end);
-    }
     let mut result = MutationResult::empty();
+    if let (Some((start, end)), Some(before)) = (row_bounds, row_before) {
+        sync_row_layout_range_recording_visibility(
+            stores,
+            sheet_id,
+            start,
+            end,
+            &before,
+            &mut result,
+        );
+    }
+    if let (Some((start, end)), Some(before)) = (col_bounds, col_before) {
+        unhide_expanded_column_group(stores, sheet_id, start, end);
+        sync_column_layout_range_recording_visibility(
+            stores,
+            sheet_id,
+            start,
+            end,
+            &before,
+            &mut result,
+        );
+    }
     let sid = sheet_id.to_uuid_string();
     result.grouping_changes.push(GroupingChange {
         sheet_id: sid.clone(),
@@ -459,19 +598,36 @@ pub(in crate::storage::engine) fn collapse_all_groups(
 ) -> Result<MutationResult, ComputeError> {
     let row_bounds = grouped_axis_bounds(stores, sheet_id, grouping::GroupAxis::Row);
     let col_bounds = grouped_axis_bounds(stores, sheet_id, grouping::GroupAxis::Column);
+    let row_before = row_bounds.map(|(start, end)| row_layout_states(stores, sheet_id, start, end));
+    let col_before =
+        col_bounds.map(|(start, end)| column_layout_states(stores, sheet_id, start, end));
     grouping::collapse_all(
         stores.storage.doc(),
         stores.storage.sheets(),
         sheet_id,
         None,
     );
-    if let Some((start, end)) = row_bounds {
-        sync_row_layout_range(stores, sheet_id, start, end);
-    }
-    if let Some((start, end)) = col_bounds {
-        sync_column_layout_range(stores, sheet_id, start, end);
-    }
     let mut result = MutationResult::empty();
+    if let (Some((start, end)), Some(before)) = (row_bounds, row_before) {
+        sync_row_layout_range_recording_visibility(
+            stores,
+            sheet_id,
+            start,
+            end,
+            &before,
+            &mut result,
+        );
+    }
+    if let (Some((start, end)), Some(before)) = (col_bounds, col_before) {
+        sync_column_layout_range_recording_visibility(
+            stores,
+            sheet_id,
+            start,
+            end,
+            &before,
+            &mut result,
+        );
+    }
     let sid = sheet_id.to_uuid_string();
     result.grouping_changes.push(GroupingChange {
         sheet_id: sid.clone(),
@@ -685,6 +841,10 @@ pub(in crate::storage::engine) fn set_level_collapsed(
         _ => grouping::GroupAxis::Row,
     };
     let affected = grouped_axis_bounds_at_or_above_level(stores, sheet_id, group_axis, level);
+    let before = affected.map(|(start, end)| match group_axis {
+        grouping::GroupAxis::Row => row_layout_states(stores, sheet_id, start, end),
+        grouping::GroupAxis::Column => column_layout_states(stores, sheet_id, start, end),
+    });
     grouping::set_level_collapsed(
         stores.storage.doc(),
         stores.storage.sheets(),
@@ -693,18 +853,33 @@ pub(in crate::storage::engine) fn set_level_collapsed(
         level,
         collapsed,
     );
-    if let Some((start, end)) = affected {
+    let mut result = MutationResult::empty();
+    if let (Some((start, end)), Some(before)) = (affected, before) {
         match group_axis {
-            grouping::GroupAxis::Row => sync_row_layout_range(stores, sheet_id, start, end),
+            grouping::GroupAxis::Row => sync_row_layout_range_recording_visibility(
+                stores,
+                sheet_id,
+                start,
+                end,
+                &before,
+                &mut result,
+            ),
             grouping::GroupAxis::Column => {
                 if !collapsed {
                     unhide_expanded_column_group(stores, sheet_id, start, end);
                 }
-                sync_column_layout_range(stores, sheet_id, start, end);
+                sync_column_layout_range_recording_visibility(
+                    stores,
+                    sheet_id,
+                    start,
+                    end,
+                    &before,
+                    &mut result,
+                );
             }
         }
     }
-    Ok(MutationResult::empty())
+    Ok(result)
 }
 
 pub(in crate::storage::engine) fn set_outline_settings(
@@ -714,19 +889,37 @@ pub(in crate::storage::engine) fn set_outline_settings(
 ) -> Result<MutationResult, ComputeError> {
     let row_bounds = grouped_axis_bounds(stores, sheet_id, grouping::GroupAxis::Row);
     let col_bounds = grouped_axis_bounds(stores, sheet_id, grouping::GroupAxis::Column);
+    let row_before = row_bounds.map(|(start, end)| row_layout_states(stores, sheet_id, start, end));
+    let col_before =
+        col_bounds.map(|(start, end)| column_layout_states(stores, sheet_id, start, end));
     grouping::set_outline_settings(
         stores.storage.doc(),
         stores.storage.sheets(),
         sheet_id,
         settings,
     );
-    if let Some((start, end)) = row_bounds {
-        sync_row_layout_range(stores, sheet_id, start, end);
+    let mut result = MutationResult::empty();
+    if let (Some((start, end)), Some(before)) = (row_bounds, row_before) {
+        sync_row_layout_range_recording_visibility(
+            stores,
+            sheet_id,
+            start,
+            end,
+            &before,
+            &mut result,
+        );
     }
-    if let Some((start, end)) = col_bounds {
-        sync_column_layout_range(stores, sheet_id, start, end);
+    if let (Some((start, end)), Some(before)) = (col_bounds, col_before) {
+        sync_column_layout_range_recording_visibility(
+            stores,
+            sheet_id,
+            start,
+            end,
+            &before,
+            &mut result,
+        );
     }
-    Ok(MutationResult::empty())
+    Ok(result)
 }
 
 pub(in crate::storage::engine) fn clear_row_grouping(

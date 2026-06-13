@@ -10,6 +10,7 @@
 
 use super::super::*;
 use super::helpers::*;
+use crate::snapshot::Axis;
 use compute_wire::constants::{CELL_STRIDE, DIM_STRIDE, MERGE_STRIDE, VIEWPORT_HEADER_SIZE};
 use domain_types::{ColDimension, OutlineGroup, ParseOutput, SheetData, SheetDimensions};
 
@@ -334,9 +335,22 @@ fn collapsed_outline_group_updates_layout_index_and_viewport_rows() {
     let (_, group_result) = engine.group_rows(&sid, 2, 4).expect("group_rows");
     let group_id = created_group_id(group_result);
 
-    let (collapse_patches, _) = engine
+    let (collapse_patches, collapse_result) = engine
         .set_group_collapsed(&sid, &group_id, true)
         .expect("set_group_collapsed");
+    assert_eq!(
+        collapse_result
+            .visibility_changes
+            .iter()
+            .map(|change| (change.axis, change.index, change.hidden))
+            .collect::<Vec<_>>(),
+        vec![
+            (Axis::Row, 2, true),
+            (Axis::Row, 3, true),
+            (Axis::Row, 4, true)
+        ],
+        "outline collapse must surface effective row visibility transitions"
+    );
 
     let layout = engine.layout_index(&sid).expect("layout index");
     assert_eq!(layout.get_row_height(2).0, 0.0);
@@ -358,9 +372,22 @@ fn collapsed_outline_group_updates_layout_index_and_viewport_rows() {
     assert_eq!(viewport_row_height(&viewport_bytes, 3), Some(0.0));
     assert_eq!(viewport_row_height(&viewport_bytes, 4), Some(0.0));
 
-    let (expand_patches, _) = engine
+    let (expand_patches, expand_result) = engine
         .set_group_collapsed(&sid, &group_id, false)
         .expect("set_group_collapsed");
+    assert_eq!(
+        expand_result
+            .visibility_changes
+            .iter()
+            .map(|change| (change.axis, change.index, change.hidden))
+            .collect::<Vec<_>>(),
+        vec![
+            (Axis::Row, 2, false),
+            (Axis::Row, 3, false),
+            (Axis::Row, 4, false)
+        ],
+        "outline expansion must surface effective row visibility transitions"
+    );
     let layout = engine.layout_index(&sid).expect("layout index");
     assert!(layout.get_row_height(2).0 > 0.0);
     assert!(layout.get_row_height(3).0 > 0.0);
@@ -385,9 +412,23 @@ fn collapsed_outline_group_updates_layout_index_and_viewport_columns() {
     let (_, group_result) = engine.group_columns(&sid, 3, 6).expect("group_columns");
     let group_id = created_group_id(group_result);
 
-    let (collapse_patches, _) = engine
+    let (collapse_patches, collapse_result) = engine
         .set_group_collapsed(&sid, &group_id, true)
         .expect("set_group_collapsed");
+    assert_eq!(
+        collapse_result
+            .visibility_changes
+            .iter()
+            .map(|change| (change.axis, change.index, change.hidden))
+            .collect::<Vec<_>>(),
+        vec![
+            (Axis::Col, 3, true),
+            (Axis::Col, 4, true),
+            (Axis::Col, 5, true),
+            (Axis::Col, 6, true)
+        ],
+        "outline collapse must surface effective column visibility transitions"
+    );
 
     let layout = engine.layout_index(&sid).expect("layout index");
     assert_eq!(layout.get_col_width(3).0, 0.0);

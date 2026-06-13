@@ -13,6 +13,23 @@ describe('createNameBoxRangeSelection', () => {
       range: { startRow: 4, startCol: 2, endRow: 4, endCol: 15 },
       activeCell: { row: 4, col: 2 },
       anchor: { row: 4, col: 2 },
+      viewportFollowCell: { row: 4, col: 15 },
+    });
+  });
+
+  it('keeps single-cell navigation follow aligned with the active cell', () => {
+    expect(
+      createNameBoxRangeSelection({
+        startRow: 12,
+        startCol: 6,
+        endRow: 12,
+        endCol: 6,
+      }),
+    ).toEqual({
+      range: { startRow: 12, startCol: 6, endRow: 12, endCol: 6 },
+      activeCell: { row: 12, col: 6 },
+      anchor: { row: 12, col: 6 },
+      viewportFollowCell: { row: 12, col: 6 },
     });
   });
 

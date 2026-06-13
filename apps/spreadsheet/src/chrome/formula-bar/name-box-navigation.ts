@@ -1,11 +1,13 @@
 import type { CellRange } from '@mog-sdk/contracts/core';
 import type { ParsedCellRange } from '@mog-sdk/contracts/utils';
 import type { CellCoord } from '@mog-sdk/contracts/rendering';
+import { getSelectionViewportFollowCell } from '../../systems/shared/types';
 
 export interface NameBoxRangeSelection {
   range: CellRange;
   activeCell: CellCoord;
   anchor: CellCoord;
+  viewportFollowCell: CellCoord;
 }
 
 function rangeFromParsedCellRange(parsedRange: ParsedCellRange): CellRange {
@@ -24,10 +26,13 @@ export function createNameBoxRangeSelection(parsedRange: ParsedCellRange): NameB
     row: parsedRange.startRow,
     col: parsedRange.startCol,
   };
+  const anchor = activeCell;
+  const range = rangeFromParsedCellRange(parsedRange);
 
   return {
-    range: rangeFromParsedCellRange(parsedRange),
+    range,
     activeCell,
-    anchor: activeCell,
+    anchor,
+    viewportFollowCell: getSelectionViewportFollowCell(range, activeCell, anchor),
   };
 }

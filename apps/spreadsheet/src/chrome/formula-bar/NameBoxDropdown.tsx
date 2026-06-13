@@ -433,11 +433,12 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
         range: CellRange,
         nextActiveCell: CellCoord,
         anchor?: CellCoord | null,
+        viewportFollowCell?: CellCoord,
       ): void => {
         deps.commands.object.deselectAll();
         deps.commands.chart.deselectAll();
         selectionCommands.setSelection([range], nextActiveCell, anchor);
-        deps.commands.renderer?.scrollToActiveCell(nextActiveCell);
+        deps.commands.renderer?.scrollToActiveCell(viewportFollowCell ?? nextActiveCell);
       };
 
       if (trimmedAddress.includes(':')) {
@@ -447,7 +448,12 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
             await activateSheetByName(parsedRange.sheetName);
           }
           const selection = createNameBoxRangeSelection(parsedRange);
-          setCellSelection(selection.range, selection.activeCell, selection.anchor);
+          setCellSelection(
+            selection.range,
+            selection.activeCell,
+            selection.anchor,
+            selection.viewportFollowCell,
+          );
           return;
         }
       }
@@ -468,7 +474,12 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
           await activateSheetByName(parsedRange.sheetName);
         }
         const selection = createNameBoxRangeSelection(parsedRange);
-        setCellSelection(selection.range, selection.activeCell, selection.anchor);
+        setCellSelection(
+          selection.range,
+          selection.activeCell,
+          selection.anchor,
+          selection.viewportFollowCell,
+        );
         return true;
       };
 
@@ -552,7 +563,12 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
         // explicitly align the viewport. Name Box commits are imperative UI
         // navigation, so they must not rely on selection-change follow timing.
         const selection = createNameBoxRangeSelection(parsed);
-        setCellSelection(selection.range, selection.activeCell, selection.anchor);
+        setCellSelection(
+          selection.range,
+          selection.activeCell,
+          selection.anchor,
+          selection.viewportFollowCell,
+        );
         return;
       }
 

@@ -6,6 +6,7 @@ mod pivot_cache_reconciliation;
 mod print_defined_names;
 mod sheet_metadata;
 mod slicers;
+mod table_totals;
 mod workbook;
 pub(in crate::storage::engine) use cells::{
     export_authored_style_runs_for_sheet, export_cells_for_sheet, export_row_col_styles_for_sheet,

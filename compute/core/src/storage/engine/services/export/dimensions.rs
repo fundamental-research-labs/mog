@@ -30,6 +30,8 @@ use crate::storage::engine::stores::EngineStores;
 use crate::storage::sheet::get_meta_for_export;
 use crate::storage::sheet::{dimensions, filters as sheet_filters, settings};
 
+use super::table_totals::apply_runtime_table_totals_to_spec;
+
 // -------------------------------------------------------------------
 // Dimensions export (row heights, col widths, hidden, etc.)
 // -------------------------------------------------------------------
@@ -558,6 +560,7 @@ fn exported_table_spec_for_table(
 ) -> ExportedTableSpec {
     let mut spec = domain_types::domain::table::catalog_entry_to_xlsx_table_spec(table, None);
     apply_runtime_table_filter_to_spec(stores, mirror, sheet_id, &table.id, &mut spec);
+    apply_runtime_table_totals_to_spec(stores, mirror, sheet_id, table, &mut spec);
     ExportedTableSpec {
         projection_input: ExportedTableProjectionInput {
             stable_table_id: table.id.clone(),

@@ -132,6 +132,119 @@ fn runtime_created_range_backed_table_exports_to_xlsx_package() {
 }
 
 #[test]
+fn runtime_created_table_exports_totals_row_metadata_from_cells() {
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    let sid = sheet_id();
+
+    engine
+        .set_cell_values_parsed(
+            &sid,
+            vec![
+                (0, 0, "Product".to_string()),
+                (0, 1, "Units".to_string()),
+                (0, 2, "Price".to_string()),
+                (0, 3, "Revenue".to_string()),
+                (1, 0, "Widget".to_string()),
+                (1, 1, "5".to_string()),
+                (1, 2, "20".to_string()),
+                (1, 3, "=B2*C2".to_string()),
+                (2, 0, "Gadget".to_string()),
+                (2, 1, "9".to_string()),
+                (2, 2, "25".to_string()),
+                (2, 3, "=B3*C3".to_string()),
+                (3, 0, "Addon".to_string()),
+                (3, 1, "3".to_string()),
+                (3, 2, "40".to_string()),
+                (3, 3, "=B4*C4".to_string()),
+                (4, 0, "Support".to_string()),
+                (4, 1, "7".to_string()),
+                (4, 2, "30".to_string()),
+                (4, 3, "=B5*C5".to_string()),
+            ],
+        )
+        .expect("seed table cells");
+    engine
+        .create_table_lifecycle(
+            &sid,
+            Some("AdvancedSales".to_string()),
+            0,
+            0,
+            4,
+            3,
+            Vec::new(),
+            true,
+            Some("TableStyleMedium4".to_string()),
+        )
+        .expect("create table");
+    engine
+        .update_calculated_column("AdvancedSales", 3, "=[@Units]*[@Price]")
+        .expect("set calculated column metadata");
+    engine
+        .toggle_totals_row("AdvancedSales")
+        .expect("enable totals row");
+    engine
+        .set_cell_values_parsed(
+            &sid,
+            vec![
+                (5, 0, "Total".to_string()),
+                (5, 3, "=SUM(D2:D5)".to_string()),
+            ],
+        )
+        .expect("seed totals row");
+
+    let exported = engine
+        .export_to_parse_output()
+        .expect("export_to_parse_output")
+        .parse_output;
+    let table = exported.sheets[0]
+        .tables
+        .iter()
+        .find(|table| table.name == "AdvancedSales")
+        .expect("runtime-created table should export as TableSpec");
+
+    assert_eq!(table.range_ref, "A1:D6");
+    assert!(table.has_totals);
+    assert_eq!(table.totals_row_shown, Some(true));
+
+    let product = table
+        .columns
+        .iter()
+        .find(|column| column.name == "Product")
+        .expect("Product column");
+    let revenue = table
+        .columns
+        .iter()
+        .find(|column| column.name == "Revenue")
+        .expect("Revenue column");
+
+    assert_eq!(product.totals_label.as_deref(), Some("Total"));
+    assert_eq!(
+        revenue
+            .calculated_formula
+            .as_deref()
+            .map(|formula| formula.trim_start_matches('=')),
+        Some("[@Units]*[@Price]")
+    );
+    assert_eq!(
+        revenue
+            .totals_row_formula
+            .as_deref()
+            .map(|formula| formula.trim_start_matches('=')),
+        Some("SUM(D2:D5)")
+    );
+
+    let bytes = engine.export_to_xlsx_bytes().expect("export_to_xlsx_bytes");
+    let archive = xlsx_parser::zip::XlsxArchive::new(&bytes).expect("xlsx archive");
+    let table_xml = String::from_utf8(archive.read_file("xl/tables/table1.xml").unwrap()).unwrap();
+
+    assert!(table_xml.contains(r#"totalsRowCount="1""#));
+    assert!(table_xml.contains(r#"totalsRowShown="1""#));
+    assert!(table_xml.contains(r#"totalsRowLabel="Total""#));
+    assert!(table_xml.contains("<totalsRowFormula>"));
+    assert!(table_xml.contains("SUM(D2:D5)"));
+}
+
+#[test]
 fn imported_table_filter_projection_preserves_catalog_sort_state() {
     let input = ParseOutput {
         sheets: vec![SheetData {

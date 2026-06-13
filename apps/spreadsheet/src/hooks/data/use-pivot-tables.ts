@@ -12,7 +12,7 @@
  * @module hooks/use-pivot-tables
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { PivotHandlePlacementSpec, PivotValueSortConfig } from '@mog-sdk/contracts/api';
 import { type CellRange, type SheetId, sheetId as toSheetId } from '@mog-sdk/contracts/core';
@@ -46,6 +46,22 @@ import { getUniqueSheetName } from '../../infra/utils/naming';
 import type { WorkbookWithImportedPivots } from '../../pivot/imported-pivot-runtime';
 import type { PivotViewModel } from '../../pivot/pivot-capabilities';
 import { loadPivotConfigEntries, type PivotConfigEntry } from '../../pivot/pivot-view-records';
+
+interface WorkbookWithPivotMaterialization {
+  readonly ctx?: {
+    awaitMaterialized?: (scope?: SheetId | 'allSheets') => Promise<void>;
+  };
+}
+
+function pivotEntryMatchesId(entry: PivotConfigEntry, pivotId: string): boolean {
+  return entry.config.id === pivotId || entry.alternateIds?.includes(pivotId) === true;
+}
+
+async function awaitPivotMaterialization(workbook: unknown): Promise<void> {
+  const awaitMaterialized = (workbook as WorkbookWithPivotMaterialization).ctx?.awaitMaterialized;
+  if (typeof awaitMaterialized !== 'function') return;
+  await awaitMaterialized('allSheets');
+}
 
 // =============================================================================
 // Types for Location Selection
@@ -286,6 +302,11 @@ export function usePivotTables({ sheetId }: UsePivotTablesOptions): UsePivotTabl
 
   // Local state for pivot configs and results
   const [pivotEntries, setPivotEntries] = useState<PivotConfigEntry[]>([]);
+  const editingMissReloadKeyRef = useRef<string | null>(null);
+  const loadPivotEntries = useCallback(
+    () => loadPivotConfigEntries(wb, sheetId),
+    [wb, sheetId],
+  );
 
   const pivotConfigFromId = useCallback(
     (pivotId: string): PivotTableConfig | null =>
@@ -327,7 +348,7 @@ export function usePivotTables({ sheetId }: UsePivotTablesOptions): UsePivotTabl
     const loadConfigs = async () => {
       try {
         if (cancelled) return;
-        const entries = await loadPivotConfigEntries(wb, sheetId);
+        const entries = await loadPivotEntries();
         if (cancelled) return;
         setPivotEntries(entries);
       } catch {
@@ -364,7 +385,60 @@ export function usePivotTables({ sheetId }: UsePivotTablesOptions): UsePivotTabl
       unsubUpdated();
       unsubDeleted();
     };
-  }, [sheetId, ws, eventBus, wb]);
+  }, [sheetId, ws, eventBus, loadPivotEntries]);
+
+  // Imported PivotTables can be materialized by the active selection path without
+  // emitting a native pivot lifecycle event, so refresh once when the editor is
+  // targeting an id that the current local config list does not yet contain.
+  useEffect(() => {
+    if (!editingPivotId) {
+      editingMissReloadKeyRef.current = null;
+      return;
+    }
+
+    if (pivotEntries.some((entry) => pivotEntryMatchesId(entry, editingPivotId))) {
+      editingMissReloadKeyRef.current = null;
+      return;
+    }
+
+    const reloadKey = `${sheetId}:${editingPivotId}`;
+    if (editingMissReloadKeyRef.current === reloadKey) return;
+    editingMissReloadKeyRef.current = reloadKey;
+
+    let cancelled = false;
+    const refreshMaterializedConfigs = async () => {
+      try {
+        const entries = await loadPivotEntries();
+        if (cancelled) return;
+        setPivotEntries(entries);
+        if (entries.some((entry) => pivotEntryMatchesId(entry, editingPivotId))) {
+          return;
+        }
+      } catch {
+        // Fall through to the materialization-backed retry below.
+      }
+
+      try {
+        await awaitPivotMaterialization(wb);
+      } catch {
+        // Materialization failures should not hide any already-available sidecar
+        // or persisted imported pivot records.
+      }
+
+      try {
+        const entries = await loadPivotEntries();
+        if (!cancelled) setPivotEntries(entries);
+      } catch {
+        if (!cancelled) setPivotEntries([]);
+      }
+    };
+
+    void refreshMaterializedConfigs();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [editingPivotId, loadPivotEntries, pivotEntries, sheetId, wb]);
 
   // Compute results when configs change
   useEffect(() => {

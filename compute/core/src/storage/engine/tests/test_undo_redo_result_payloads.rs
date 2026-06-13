@@ -102,6 +102,60 @@ fn test_undo_format_produces_viewport_patches() {
 }
 
 #[test]
+fn test_undo_row_format_produces_viewport_patches() {
+    use domain_types::CellFormat;
+
+    let snap = simple_snapshot();
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let sid = sheet_id();
+
+    engine
+        .register_viewport("main", &sid, 0, 0, 100, 26)
+        .unwrap();
+
+    let format = CellFormat {
+        bold: Some(true),
+        ..Default::default()
+    };
+    engine.set_row_format(&sid, 0, format).unwrap();
+
+    let (patches, _result) = engine.undo().unwrap();
+
+    assert!(
+        patches.len() > 2,
+        "undo of row format should produce viewport patches, got {} bytes",
+        patches.len(),
+    );
+}
+
+#[test]
+fn test_undo_col_format_produces_viewport_patches() {
+    use domain_types::CellFormat;
+
+    let snap = simple_snapshot();
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let sid = sheet_id();
+
+    engine
+        .register_viewport("main", &sid, 0, 0, 100, 26)
+        .unwrap();
+
+    let format = CellFormat {
+        bold: Some(true),
+        ..Default::default()
+    };
+    engine.set_col_format(&sid, 0, format).unwrap();
+
+    let (patches, _result) = engine.undo().unwrap();
+
+    assert!(
+        patches.len() > 2,
+        "undo of column format should produce viewport patches, got {} bytes",
+        patches.len(),
+    );
+}
+
+#[test]
 fn test_undo_row_height_produces_dimension_changes() {
     let snap = simple_snapshot();
     let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();

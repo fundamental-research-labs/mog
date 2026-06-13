@@ -17,6 +17,54 @@ interface UseRendererViewRestoreOptions {
   wb: WorkbookInternal;
 }
 
+function normalizeRestoredCellIndex(value: number): number {
+  return Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
+}
+
+function isFinitePixel(value: number): boolean {
+  return Number.isFinite(value) && value >= 0;
+}
+
+async function resolvePersistedCellScrollPosition(
+  wb: WorkbookInternal,
+  sheetId: SheetId,
+  topRow: number,
+  leftCol: number,
+  frozenRows: number,
+  frozenCols: number,
+): Promise<{ readonly x: number; readonly y: number } | null> {
+  const worksheet = wb.getSheetById(sheetId);
+  const normalizedTopRow = normalizeRestoredCellIndex(topRow);
+  const normalizedLeftCol = normalizeRestoredCellIndex(leftCol);
+  const normalizedFrozenRows = normalizeRestoredCellIndex(frozenRows);
+  const normalizedFrozenCols = normalizeRestoredCellIndex(frozenCols);
+
+  const [rowTop, colLeft, frozenRowTop, frozenColLeft] = await Promise.all([
+    worksheet.layout.getRowPosition(normalizedTopRow),
+    worksheet.layout.getColPosition(normalizedLeftCol),
+    normalizedFrozenRows > 0
+      ? worksheet.layout.getRowPosition(normalizedFrozenRows)
+      : Promise.resolve(0),
+    normalizedFrozenCols > 0
+      ? worksheet.layout.getColPosition(normalizedFrozenCols)
+      : Promise.resolve(0),
+  ]);
+
+  if (
+    !isFinitePixel(rowTop) ||
+    !isFinitePixel(colLeft) ||
+    !isFinitePixel(frozenRowTop) ||
+    !isFinitePixel(frozenColLeft)
+  ) {
+    return null;
+  }
+
+  return {
+    x: Math.max(0, colLeft - frozenColLeft),
+    y: Math.max(0, rowTop - frozenRowTop),
+  };
+}
+
 export function useRendererViewRestore({
   activeSheetId,
   coordinator,
@@ -34,13 +82,17 @@ export function useRendererViewRestore({
 
   useEffect(() => {
     if (!isReady || rendererSheetId !== activeSheetId) return;
+    let cancelled = false;
     let restoreFrame: number | null = null;
 
     const viewOpts = wb.mirror.getViewOptions(activeSheetId);
     const scrollPos = wb.mirror.getScrollPosition(activeSheetId);
+    const frozenPanes = wb.mirror.getFrozenPanes(activeSheetId);
     const sessionViewState = uiStoreApi.getState().getSheetViewState(activeSheetId);
     const savedSelection = wb.mirror.getViewSelection(activeSheetId);
     const activeCell = coordinator.grid.access.accessors.selection.getActiveCell();
+    const hasPersistedScrollPosition = scrollPos.topRow > 0 || scrollPos.leftCol > 0;
+    const restoredImportedSelection = restoredImportedSelectionSheetsRef.current.has(activeSheetId);
     const savedSelectionIsValid =
       savedSelection != null && isValidRestoredSelection(savedSelection);
     const savedSelectionAlreadyActive =
@@ -48,13 +100,14 @@ export function useRendererViewRestore({
       activeCell?.row === savedSelection.activeCell.row &&
       activeCell?.col === savedSelection.activeCell.col;
     const shouldRestoreSavedSelection =
-      !sessionViewState &&
-      !restoredImportedSelectionSheetsRef.current.has(activeSheetId) &&
-      savedSelectionIsValid;
+      !sessionViewState && !restoredImportedSelection && savedSelectionIsValid;
     const shouldAlignSavedSelectionViewport =
-      !restoredImportedSelectionSheetsRef.current.has(activeSheetId) &&
+      !restoredImportedSelection &&
+      !hasPersistedScrollPosition &&
       savedSelectionIsValid &&
       (!sessionViewState || savedSelectionAlreadyActive);
+    const shouldRestorePersistedCellScroll =
+      !sessionViewState && hasPersistedScrollPosition && !shouldAlignSavedSelectionViewport;
 
     const renderCap = coordinator.renderer.getRenderCapability();
     if (renderCap && renderCap.getCurrentSheetId() === activeSheetId) {
@@ -68,15 +121,32 @@ export function useRendererViewRestore({
       });
     }
 
-    if (
-      !sessionViewState &&
-      !shouldAlignSavedSelectionViewport &&
-      (scrollPos.topRow > 0 || scrollPos.leftCol > 0)
-    ) {
-      coordinator.renderer.applyCellLevelScroll(scrollPos.topRow, scrollPos.leftCol);
+    if (shouldRestorePersistedCellScroll) {
+      void resolvePersistedCellScrollPosition(
+        wb,
+        activeSheetId,
+        scrollPos.topRow,
+        scrollPos.leftCol,
+        frozenPanes.rows,
+        frozenPanes.cols,
+      )
+        .then((scrollTarget) => {
+          if (
+            cancelled ||
+            !scrollTarget ||
+            coordinator.renderer.getRenderCapability()?.getCurrentSheetId() !== activeSheetId
+          ) {
+            return;
+          }
+
+          coordinator.renderer.setScrollPosition(scrollTarget);
+          coordinator.input.inputCoordinator.resetScrollPosition(scrollTarget.x, scrollTarget.y);
+        })
+        .catch(() => undefined);
     }
 
     if (shouldRestoreSavedSelection) {
+      restoredImportedSelectionSheetsRef.current.add(activeSheetId);
       coordinator.grid.access.actors.selection.send({
         type: 'SET_SELECTION',
         ranges: savedSelection.ranges,
@@ -104,6 +174,7 @@ export function useRendererViewRestore({
     }
 
     return () => {
+      cancelled = true;
       if (restoreFrame != null) {
         window.cancelAnimationFrame(restoreFrame);
       }

@@ -1,10 +1,12 @@
 use cell_types::SheetId;
 
+use super::sheet_hydration::parse_saved_view_selection;
 use crate::mirror::CellMirror;
 use crate::snapshot::{
     ChangeKind, FilterChange, FloatingObjectChange, FloatingObjectChangeKind, MergeChange,
-    MutationResult, NamedRangeChange, RecalcResult, SheetChange, SheetChangeField,
-    SheetSettingsChange, WorkbookSettings, WorkbookSettingsChange,
+    MutationResult, NamedRangeChange, RecalcResult, ScrollPositionChange, SheetChange,
+    SheetChangeField, SheetSettingsChange, ViewSelectionChange, WorkbookSettings,
+    WorkbookSettingsChange,
 };
 use crate::storage::engine::stores::EngineStores;
 use crate::storage::sheet::filters;
@@ -223,6 +225,23 @@ pub(in crate::storage::engine) fn build_mutation_result_for_deferred(
             kind: ChangeKind::Set,
             changed_key: "*hydration*".to_string(),
             settings: settings_value,
+        });
+
+        if let Some((active_cell, ranges)) = parse_saved_view_selection(
+            sheet_data.view.active_cell.as_deref(),
+            sheet_data.view.sqref.as_deref(),
+        ) {
+            result.view_selection_changes.push(ViewSelectionChange {
+                sheet_id: sheet_snap.id.clone(),
+                active_cell,
+                ranges,
+            });
+        }
+
+        result.scroll_position_changes.push(ScrollPositionChange {
+            sheet_id: sheet_snap.id.clone(),
+            top_row: sheet_data.view.scroll_row,
+            left_col: sheet_data.view.scroll_col,
         });
     }
 

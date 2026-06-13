@@ -252,6 +252,68 @@ pub(super) fn active_visible_deferred_fixture_xlsx() -> Vec<u8> {
     zip.finish().expect("write active-visible deferred fixture")
 }
 
+pub(super) fn saved_view_deferred_fixture_xlsx() -> Vec<u8> {
+    let workbook = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <bookViews>
+    <workbookView activeTab="0"/>
+  </bookViews>
+  <sheets>
+    <sheet name="Driver" sheetId="1" r:id="rId1"/>
+  </sheets>
+</workbook>"#;
+    let sheet1 = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <dimension ref="A1:AJ454"/>
+  <sheetViews>
+    <sheetView tabSelected="1" workbookViewId="0">
+      <pane xSplit="1" ySplit="3" topLeftCell="I441" activePane="bottomRight" state="frozen"/>
+      <selection activeCell="L9" sqref="L9"/>
+      <selection pane="topRight" activeCell="L9" sqref="L9"/>
+      <selection pane="bottomLeft" activeCell="L9" sqref="L9"/>
+      <selection pane="bottomRight" activeCell="AJ454" sqref="AJ454"/>
+    </sheetView>
+  </sheetViews>
+  <sheetData>
+    <row r="454">
+      <c r="AJ454"><v>1</v></c>
+    </row>
+  </sheetData>
+</worksheet>"#;
+
+    let mut zip = ZipWriter::new();
+    zip.add_file(
+        "[Content_Types].xml",
+        br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+  <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+</Types>"#
+            .to_vec(),
+    )
+    .add_file(
+        "_rels/.rels",
+        br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+</Relationships>"#
+            .to_vec(),
+    )
+    .add_file("xl/workbook.xml", workbook.as_bytes().to_vec())
+    .add_file(
+        "xl/_rels/workbook.xml.rels",
+        br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+</Relationships>"#
+            .to_vec(),
+    )
+    .add_file("xl/worksheets/sheet1.xml", sheet1.as_bytes().to_vec());
+    zip.finish().expect("write saved-view deferred fixture")
+}
+
 pub(super) fn named_range_concat_fixture_xlsx() -> Vec<u8> {
     let workbook = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">

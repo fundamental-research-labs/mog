@@ -204,6 +204,43 @@ fn deferred_xlsx_import_materializes_active_visible_sheet_before_full_hydration(
 }
 
 #[test]
+fn deferred_xlsx_import_emits_saved_view_before_full_hydration() {
+    let bytes = saved_view_deferred_fixture_xlsx();
+
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    let (_, import_result) = engine
+        .import_from_xlsx_bytes_deferred(&bytes)
+        .expect("deferred XLSX import should succeed");
+
+    let sheet_id_hex = engine
+        .get_all_sheet_ids()
+        .first()
+        .cloned()
+        .expect("imported workbook should have a first sheet");
+
+    let scroll = import_result
+        .scroll_position_changes
+        .iter()
+        .find(|change| change.sheet_id == sheet_id_hex)
+        .expect("deferred first-paint result should emit saved scroll");
+    assert_eq!(scroll.top_row, 440);
+    assert_eq!(scroll.left_col, 8);
+
+    let selection = import_result
+        .view_selection_changes
+        .iter()
+        .find(|change| change.sheet_id == sheet_id_hex)
+        .expect("deferred first-paint result should emit saved active selection");
+    assert_eq!(selection.active_cell.row, 453);
+    assert_eq!(selection.active_cell.col, 35);
+    assert_eq!(selection.ranges.len(), 1);
+    assert_eq!(selection.ranges[0].start_row, 453);
+    assert_eq!(selection.ranges[0].start_col, 35);
+    assert_eq!(selection.ranges[0].end_row, 453);
+    assert_eq!(selection.ranges[0].end_col, 35);
+}
+
+#[test]
 fn deferred_xlsx_filter_clear_rejects_before_hydration_without_partial_mutation() {
     let bytes = active_visible_deferred_fixture_xlsx();
 

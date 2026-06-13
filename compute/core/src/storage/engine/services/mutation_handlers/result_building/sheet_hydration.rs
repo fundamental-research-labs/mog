@@ -486,7 +486,7 @@ pub(in crate::storage::engine) fn build_sheet_hydration_changes(
     });
 }
 
-fn parse_saved_view_selection(
+pub(super) fn parse_saved_view_selection(
     active_cell: Option<&str>,
     sqref: Option<&str>,
 ) -> Option<(SheetViewCell, Vec<SheetViewRange>)> {

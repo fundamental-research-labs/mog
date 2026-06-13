@@ -421,7 +421,7 @@ describe('InputCoordinator', () => {
       expect(scrollState.x).toBe(50);
     });
 
-    it('keeps the first visible column after a hidden run reachable during one horizontal wheel', () => {
+    it('only constrains discrete horizontal wheel input at a hidden column run', () => {
       const positions: Array<{ x: number; y: number }> = [];
       const baseDeps = createMockInputDependencies(mockCoordinateSystem);
       const columnDimensions = new Map<number, { left: number; width: number; hidden: boolean }>();
@@ -492,7 +492,7 @@ describe('InputCoordinator', () => {
       });
 
       coordinator.resetScrollPosition(877, 133);
-      coordinator.handleWheel(createWheelEvent({ deltaX: 700, deltaY: 0 }));
+      coordinator.handleWheel(createWheelEvent({ deltaX: 499, deltaY: 0 }));
 
       expect(positions.at(-1)).toEqual({ x: 1014, y: 133 });
       expect(coordinator.getScrollState()).toMatchObject({ x: 1014, y: 133 });
@@ -500,6 +500,12 @@ describe('InputCoordinator', () => {
       jest.advanceTimersByTime(200);
 
       expect(coordinator.getScrollState()).toMatchObject({ x: 1014, y: 133 });
+
+      coordinator.resetScrollPosition(877, 133);
+      coordinator.handleWheel(createWheelEvent({ deltaX: 2400, deltaY: 0 }));
+
+      expect(positions.at(-1)).toEqual({ x: 2077, y: 133 });
+      expect(coordinator.getScrollState()).toMatchObject({ x: 2077, y: 133 });
     });
 
     it('should handle diagonal wheel scroll', () => {

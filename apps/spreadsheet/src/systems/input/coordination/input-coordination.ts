@@ -301,11 +301,13 @@ export class InputCoordinator {
     this.isTrackpadInput = this.detectTrackpadInput(event);
 
     let { deltaX, deltaY } = this.normalizeDelta(event);
-    const constrained = this.constrainHorizontalWheelDeltaForHiddenColumns(deltaX, deltaY);
-    deltaX = constrained.deltaX;
-    deltaY = constrained.deltaY;
-    if (constrained.suppressMomentum) {
-      this.isTrackpadInput = true;
+    if (!this.isTrackpadInput) {
+      const constrained = this.constrainHorizontalWheelDeltaForHiddenColumns(deltaX, deltaY);
+      deltaX = constrained.deltaX;
+      deltaY = constrained.deltaY;
+      if (constrained.suppressMomentum) {
+        this.isTrackpadInput = true;
+      }
     }
 
     // Apply scroll immediately to physics

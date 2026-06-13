@@ -484,7 +484,7 @@ export const OPEN_INSERT_SLICER_DIALOG: AsyncActionHandler = async (
   // Get existing slicers via Worksheet API to check which columns already have slicers
   const allSlicers = await ws.slicers.list();
   const existingSlicers = allSlicers.filter(
-    (s: any) => s.source?.type === 'table' && s.source?.tableId === tableAtSelection.name,
+    (s: any) => s.source?.type === 'table' && s.source?.tableId === tableAtSelection.id,
   );
   const existingColumnCellIds = new Set(
     existingSlicers

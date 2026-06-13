@@ -161,14 +161,53 @@ fn test_color_filter_serde() {
         by_font: false,
     };
 
+    let value = serde_json::to_value(&criteria).unwrap();
+    assert_eq!(value["type"], "color");
+    assert_eq!(value["color"], "#ff0000");
+    assert_eq!(value["byFont"], false);
+    assert!(value.get("by_font").is_none());
+
     let json = serde_json::to_string(&criteria).unwrap();
     let deserialized: ColumnFilter = serde_json::from_str(&json).unwrap();
     assert_eq!(criteria, deserialized);
+    let deserialized_from_camel: ColumnFilter = serde_json::from_value(serde_json::json!({
+        "type": "color",
+        "color": "#ff0000",
+        "byFont": false
+    }))
+    .unwrap();
+    assert_eq!(criteria, deserialized_from_camel);
     if let ColumnFilter::Color { color, .. } = &deserialized {
         assert_eq!(color, "#ff0000");
     } else {
         panic!("Expected ColumnFilter::Color");
     }
+}
+
+#[test]
+fn test_icon_filter_serde() {
+    let criteria = ColumnFilter::Icon {
+        icon_set_name: "3TrafficLights1".to_string(),
+        icon_index: 0,
+    };
+
+    let value = serde_json::to_value(&criteria).unwrap();
+    assert_eq!(value["type"], "icon");
+    assert_eq!(value["iconSetName"], "3TrafficLights1");
+    assert_eq!(value["iconIndex"], 0);
+    assert!(value.get("icon_set_name").is_none());
+    assert!(value.get("icon_index").is_none());
+
+    let json = serde_json::to_string(&criteria).unwrap();
+    let deserialized: ColumnFilter = serde_json::from_str(&json).unwrap();
+    assert_eq!(criteria, deserialized);
+    let deserialized_from_camel: ColumnFilter = serde_json::from_value(serde_json::json!({
+        "type": "icon",
+        "iconSetName": "3TrafficLights1",
+        "iconIndex": 0
+    }))
+    .unwrap();
+    assert_eq!(criteria, deserialized_from_camel);
 }
 
 #[test]

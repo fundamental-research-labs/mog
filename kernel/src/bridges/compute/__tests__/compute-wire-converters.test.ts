@@ -50,7 +50,23 @@ describe('compute wire filter converters', () => {
     });
   });
 
-  it('serializes icon filters using Rust enum field names', () => {
+  it('serializes color filters using generated compute wire fields', () => {
+    const criteria: ColumnFilterCriteria = {
+      type: 'color',
+      colorFilter: {
+        type: 'font',
+        color: '#00ff00',
+      },
+    };
+
+    expect(columnFilterCriteriaToCompute(criteria)).toEqual({
+      type: 'color',
+      color: '#00ff00',
+      byFont: true,
+    });
+  });
+
+  it('serializes icon filters using generated compute wire fields', () => {
     const criteria: ColumnFilterCriteria = {
       type: 'icon',
       iconFilter: {
@@ -61,37 +77,23 @@ describe('compute wire filter converters', () => {
 
     expect(columnFilterCriteriaToCompute(criteria)).toEqual({
       type: 'icon',
-      icon_set_name: '3TrafficLights1',
-      icon_index: 0,
+      iconSetName: '3TrafficLights1',
+      iconIndex: 0,
     });
   });
 
-  it('accepts snake_case and normalized icon filter fields from compute', () => {
+  it('accepts icon filter fields from compute', () => {
     expect(
       computeColumnFilterToCriteria({
         type: 'icon',
-        icon_set_name: '3TrafficLights1',
-        icon_index: 1,
-      } as any),
+        iconSetName: '3TrafficLights1',
+        iconIndex: 1,
+      }),
     ).toEqual({
       type: 'icon',
       iconFilter: {
         iconSet: '3TrafficLights1',
         iconIndex: 1,
-      },
-    });
-
-    expect(
-      computeColumnFilterToCriteria({
-        type: 'icon',
-        iconSetName: '4Arrows',
-        iconIndex: 2,
-      } as any),
-    ).toEqual({
-      type: 'icon',
-      iconFilter: {
-        iconSet: '4Arrows',
-        iconIndex: 2,
       },
     });
   });

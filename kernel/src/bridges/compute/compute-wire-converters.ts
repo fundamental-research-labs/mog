@@ -279,16 +279,11 @@ export function columnFilterCriteriaToCompute(criteria: ColumnFilterCriteria): C
         logic: criteria.conditionLogic ?? 'and',
       };
     case 'color':
-      // Wire field is `by_font` (snake_case) — the Rust ColumnFilter::Color
-      // variant in domain-types/src/domain/filter/runtime.rs declares `by_font: bool`
-      // and serde's `rename_all = "camelCase"` on the enum applies to variant
-      // names only, not to fields within struct variants. The codegen produces
-      // `byFont`; we cast through `unknown` to send the field name Rust expects.
       return {
         type: 'color',
         color: criteria.colorFilter?.color ?? '',
-        by_font: criteria.colorFilter?.type === 'font',
-      } as unknown as ColumnFilter;
+        byFont: criteria.colorFilter?.type === 'font',
+      };
     case 'top10':
       return {
         type: 'topBottom',
@@ -314,13 +309,11 @@ export function columnFilterCriteriaToCompute(criteria: ColumnFilterCriteria): C
           'Icon filter criteria requires iconFilter',
         );
       }
-      // Wire fields are snake_case for this Rust enum variant. The generated TS
-      // type currently exposes camelCase, so cast through unknown as with color.
       return {
         type: 'icon',
-        icon_set_name: criteria.iconFilter.iconSet,
-        icon_index: criteria.iconFilter.iconIndex,
-      } as unknown as ColumnFilter;
+        iconSetName: criteria.iconFilter.iconSet,
+        iconIndex: criteria.iconFilter.iconIndex,
+      };
     }
     default: {
       // Exhaustive check — if contracts adds new types this will fail at compile time
@@ -367,17 +360,13 @@ export function computeColumnFilterToCriteria(filter: ColumnFilter): ColumnFilte
         conditionLogic: filter.logic,
       };
     case 'color': {
-      // Rust serialises the inner-variant field as `by_font` (snake_case),
-      // which both NAPI and WASM transports normalise to `byFont` at the
-      // boundary (see infra/transport/src/case-normalize.ts).
-      const colorFilter = filter as unknown as { color: string; byFont?: boolean };
       return {
         type: 'color',
         colorFilter: {
           // 'fill' / 'font' matches Excel/ECMA-376 vocabulary and the contract
           // discriminator (renamed from 'background' to 'fill').
-          type: colorFilter.byFont ? 'font' : 'fill',
-          color: colorFilter.color,
+          type: filter.byFont ? 'font' : 'fill',
+          color: filter.color,
         },
       };
     }
@@ -395,21 +384,14 @@ export function computeColumnFilterToCriteria(filter: ColumnFilter): ColumnFilte
         type: 'dynamic',
         dynamicFilter: { rule: filter.rule as DynamicFilterRule },
       };
-    case 'icon': {
-      const iconFilter = filter as unknown as {
-        iconSetName?: string;
-        iconIndex?: number;
-        icon_set_name?: string;
-        icon_index?: number;
-      };
+    case 'icon':
       return {
         type: 'icon',
         iconFilter: {
-          iconSet: iconFilter.iconSetName ?? iconFilter.icon_set_name ?? '',
-          iconIndex: iconFilter.iconIndex ?? iconFilter.icon_index ?? 0,
+          iconSet: filter.iconSetName,
+          iconIndex: filter.iconIndex,
         },
       };
-    }
     default: {
       const _exhaustive: never = filter;
       throw new BridgeError(

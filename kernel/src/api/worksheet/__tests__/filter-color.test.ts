@@ -68,7 +68,7 @@ describe('WorksheetFiltersImpl.byColor', () => {
     // Resolved the first filter on the sheet (no filterId passed).
     expect(ctx.computeBridge.getFiltersInSheet).toHaveBeenCalledWith(SHEET_ID);
 
-    // Sent the color predicate to the bridge with by_font=false (fill).
+    // Sent the color predicate to the bridge with byFont=false (fill).
     expect(ctx.computeBridge.setColumnFilter).toHaveBeenCalledWith(
       SHEET_ID,
       FILTER_ID,
@@ -76,7 +76,7 @@ describe('WorksheetFiltersImpl.byColor', () => {
       expect.objectContaining({
         type: 'color',
         color: '#FFFF00',
-        by_font: false,
+        byFont: false,
       }),
     );
 
@@ -84,7 +84,7 @@ describe('WorksheetFiltersImpl.byColor', () => {
     expect(ctx.computeBridge.applyFilter).toHaveBeenCalledWith(SHEET_ID, FILTER_ID);
   });
 
-  it('forwards a font-color criterion with by_font=true', async () => {
+  it('forwards a font-color criterion with byFont=true', async () => {
     await filters.byColor(2, { colorType: 'font', color: '#FF0000' });
 
     expect(ctx.computeBridge.setColumnFilter).toHaveBeenCalledWith(
@@ -94,7 +94,7 @@ describe('WorksheetFiltersImpl.byColor', () => {
       expect.objectContaining({
         type: 'color',
         color: '#FF0000',
-        by_font: true,
+        byFont: true,
       }),
     );
     expect(ctx.computeBridge.applyFilter).toHaveBeenCalledWith(SHEET_ID, FILTER_ID);
@@ -113,7 +113,7 @@ describe('WorksheetFiltersImpl.byColor', () => {
       SHEET_ID,
       'explicit-filter',
       1,
-      expect.objectContaining({ type: 'color', color: '#00FF00', by_font: false }),
+      expect.objectContaining({ type: 'color', color: '#00FF00', byFont: false }),
     );
     expect(ctx.computeBridge.applyFilter).toHaveBeenCalledWith(SHEET_ID, 'explicit-filter');
   });

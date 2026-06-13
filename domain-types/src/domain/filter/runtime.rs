@@ -18,7 +18,11 @@ pub enum FilterKind {
 
 /// Column filter criteria — proper tagged enum replacing the stringly-typed ColumnFilterCriteria.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "camelCase")]
+#[serde(
+    tag = "type",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
 pub enum ColumnFilter {
     /// Filter by a set of allowed values.
     #[serde(rename = "values")]

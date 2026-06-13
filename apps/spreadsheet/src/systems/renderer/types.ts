@@ -13,7 +13,7 @@ import type { rendererSelectors } from '../../selectors';
 import type { PendingAction, RendererAccessor, RendererCommands } from '@mog-sdk/contracts/actors';
 
 import type { SheetId } from '@mog-sdk/contracts/core';
-import type { FrozenPanes, GridRenderer } from '@mog-sdk/contracts/rendering';
+import type { CellCoord, FrozenPanes, GridRenderer } from '@mog-sdk/contracts/rendering';
 import type { ISparklineManager as ContractSparklineManager } from '@mog-sdk/contracts/sparklines';
 import type { Point, ViewportLayout } from '@mog-sdk/contracts/viewport';
 import type {
@@ -359,6 +359,11 @@ export interface IRenderSystem {
    * Get current zoom level (1.0 = 100%).
    */
   getZoom(): number;
+
+  /**
+   * Scroll the viewport just enough to bring a cell into view.
+   */
+  scrollToActiveCell(cell: CellCoord): void;
 
   // ===========================================================================
   // Renderer Access

@@ -400,6 +400,11 @@ export class RenderSystem implements IRenderSystem {
     return this.rendererExecution?.getZoom() ?? 1.0;
   }
 
+  scrollToActiveCell(cell: CellCoord): void {
+    if (this.disposed || !this.started) return;
+    this.rendererActor.send({ type: 'SCROLL_TO_ACTIVE_CELL', cell });
+  }
+
   zoomToSelection(): void {
     if (this.disposed || !this.started) return;
 

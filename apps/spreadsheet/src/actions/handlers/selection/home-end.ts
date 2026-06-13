@@ -13,7 +13,7 @@
  */
 
 import type { AsyncActionHandler } from '@mog-sdk/contracts/actions';
-import { rangeFromAnchorAndCell } from '../../../systems/shared/types';
+import { getMovingEdge, rangeFromAnchorAndCell } from '../../../systems/shared/types';
 import { getActiveSheetId, handled, type ActionHandler, type CellCoord } from './helpers';
 
 // =============================================================================
@@ -87,19 +87,22 @@ export const EXTEND_TO_ROW_START: ActionHandler = (deps) => {
  */
 export const EXTEND_TO_ROW_END: AsyncActionHandler = async (deps) => {
   const activeCell = deps.accessors.selection.getActiveCell();
+  const ranges = deps.accessors.selection.getRanges();
   const anchor = deps.accessors.selection.getAnchor();
   const sheetId = getActiveSheetId(deps);
   const ws = deps.workbook.getSheetById(sheetId);
 
   const anchorCell: CellCoord = anchor ?? activeCell;
+  const currentRange = ranges[ranges.length - 1];
+  const extendFrom: CellCoord = currentRange ? getMovingEdge(currentRange, anchorCell) : activeCell;
 
-  const { lastDataCol } = await ws.findLastColumn(anchorCell.row);
+  const { lastDataCol } = await ws.findLastColumn(extendFrom.row);
   if (lastDataCol === null) return handled();
 
-  const targetCell: CellCoord = { row: anchorCell.row, col: lastDataCol };
+  const targetCell: CellCoord = { row: extendFrom.row, col: lastDataCol };
   const newRange = rangeFromAnchorAndCell(anchorCell, targetCell);
 
-  deps.commands.selection.setSelection([newRange], anchorCell, anchorCell);
+  deps.commands.selection.setSelection([newRange], targetCell, anchorCell);
   return handled();
 };
 
@@ -134,7 +137,6 @@ export const EXTEND_TO_LAST_USED_CELL: AsyncActionHandler = async (deps) => {
   const anchorCell: CellCoord = anchor ?? activeCell;
   const newRange = rangeFromAnchorAndCell(anchorCell, lastUsed);
 
-  // Use SET_SELECTION to set the extended selection
-  deps.commands.selection.setSelection([newRange], anchorCell, anchorCell);
+  deps.commands.selection.setSelection([newRange], lastUsed, anchorCell);
   return handled();
 };

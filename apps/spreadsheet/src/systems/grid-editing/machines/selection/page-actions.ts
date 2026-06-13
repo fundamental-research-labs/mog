@@ -18,9 +18,10 @@ import { getMovingEdge } from '../../../shared/types';
 import { buildExtendUpdate, moveInAdditive, moveTo } from './helpers';
 import type { SelectionContext, SelectionEvent } from './types';
 
-// All Shift+Page extends route through buildExtendUpdate so activeCell stays
-// pinned at the anchor (Excel parity). The moving edge lives in the range
-// geometry; getMovingEdge(range, anchor) finds it without consulting activeCell.
+// All Shift+Page extends route through buildExtendUpdate so the anchor remains
+// fixed while activeCell follows the moving edge. The moving edge lives in the
+// range geometry; getMovingEdge(range, anchor) finds it without relying on
+// activeCell.
 
 // =============================================================================
 // PAGE NAVIGATION ACTIONS (Issue 8 Wave 2B)
@@ -41,7 +42,7 @@ const pageUp = assign(
 
 /**
  * Shift+Page Up: Extend selection up by approximately one viewport height.
- * activeCell stays at the anchor (Excel parity); the range geometry tracks
+ * activeCell follows the moving edge; the range geometry tracks
  * the moving edge via getMovingEdge(range, anchor).
  */
 const pageUpExtend = assign(
@@ -70,7 +71,7 @@ const pageDown = assign(
 
 /**
  * Shift+Page Down: Extend selection down by approximately one viewport height.
- * activeCell stays at the anchor (Excel parity).
+ * activeCell follows the moving edge.
  */
 const pageDownExtend = assign(
   ({ context, event }: { context: SelectionContext; event: SelectionEvent }) => {
@@ -98,7 +99,7 @@ const pageLeft = assign(
 
 /**
  * Shift+Page Left: Extend selection left by approximately one viewport width.
- * activeCell stays at the anchor (Excel parity).
+ * activeCell follows the moving edge.
  */
 const pageLeftExtend = assign(
   ({ context, event }: { context: SelectionContext; event: SelectionEvent }) => {
@@ -126,7 +127,7 @@ const pageRight = assign(
 
 /**
  * Shift+Page Right: Extend selection right by approximately one viewport width.
- * activeCell stays at the anchor (Excel parity).
+ * activeCell follows the moving edge.
  */
 const pageRightExtend = assign(
   ({ context, event }: { context: SelectionContext; event: SelectionEvent }) => {

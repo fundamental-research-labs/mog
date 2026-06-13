@@ -147,8 +147,9 @@ const moveActiveCell = assign(
 
 /**
  * Extend selection in direction (shift+arrow).
- * activeCell stays at the anchor (Excel parity); the range geometry tracks
- * the moving edge via getMovingEdge(range, anchor).
+ * The anchor stays fixed while activeCell follows the moving edge.
+ * getMovingEdge(range, anchor) keeps repeated extends independent from
+ * activeCell, so edge-crossing and perpendicular extends remain stable.
  *
  * writes only to `pendingRange`. `committedRanges` is untouched
  * (empty in non-additive flows by invariant; preserved verbatim in additive).
@@ -182,10 +183,7 @@ const extendSelection = assign(
               context.isColHidden,
             ).row
           : movingEdge.row;
-      const activeCell =
-        context.modes.extend && !event.shiftKey
-          ? { row: targetRow, col: anchorCell.col }
-          : anchorCell;
+      const activeCell = { row: targetRow, col: anchorCell.col };
 
       return {
         pendingRange: createFullRowRangeSpan(anchorCell.row, targetRow),
@@ -210,10 +208,7 @@ const extendSelection = assign(
               context.isColHidden,
             ).col
           : movingEdge.col;
-      const activeCell =
-        context.modes.extend && !event.shiftKey
-          ? { row: anchorCell.row, col: targetCol }
-          : anchorCell;
+      const activeCell = { row: anchorCell.row, col: targetCol };
 
       return {
         pendingRange: createFullColumnRangeSpan(anchorCell.col, targetCol),
@@ -242,8 +237,7 @@ const extendSelection = assign(
     // sit on the merge interior — matches the same machine-internal escape
     // used by `moveActiveCell`.
     const newEnd = escapeMergeOnMove(stepped, event.direction, context.getMergedRegionAt);
-    const activeCell = context.modes.extend && !event.shiftKey ? newEnd : anchor;
-    return buildExtendUpdate(anchor, newEnd, activeCell);
+    return buildExtendUpdate(anchor, newEnd);
   },
 );
 
@@ -348,8 +342,7 @@ const jumpToEdge = assign(
 /**
  * Extend selection to edge in direction (Ctrl+Shift+Arrow).
  * Fallback implementation for unit tests - extends by JUMP_AMOUNT or to boundary.
- * activeCell stays at the anchor (Excel parity); the range geometry tracks
- * the moving edge via getMovingEdge(range, anchor).
+ * The anchor stays fixed while activeCell follows the moving edge.
  */
 const jumpToEdgeExtend = assign(
   ({ context, event }: { context: SelectionContext; event: SelectionEvent }) => {
@@ -441,7 +434,7 @@ const moveToHome = assign(
 /**
  * Shift+Home or Ctrl+Shift+Home: Extend selection to beginning.
  * Shift+Home extends to column 0 on the moving edge's row;
- * Ctrl+Shift+Home extends to A1. activeCell stays at the anchor (Excel parity);
+ * Ctrl+Shift+Home extends to A1. activeCell follows the moving edge;
  * the range geometry tracks the moving edge via getMovingEdge(range, anchor).
  */
 const extendToHome = assign(
@@ -486,7 +479,7 @@ const moveToEnd = assign(
  * NOTE: Ctrl+Shift+End is properly handled by KeyboardCoordinator which dispatches
  * EXTEND_TO_LAST_USED_CELL action. This fallback uses MAX constants for safety.
  * Shift+End (without Ctrl) extends to last column of current row.
- * activeCell stays at the anchor (Excel parity); the range geometry tracks
+ * activeCell follows the moving edge; the range geometry tracks
  * the moving edge via getMovingEdge(range, anchor).
  */
 const extendToEnd = assign(

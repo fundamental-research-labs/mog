@@ -1,11 +1,11 @@
 /**
  * Tests for Shift+Arrow selection extension behavior.
  *
- * Excel parity: anchor stays put, activeCell stays pinned at the anchor, and
- * the range is anchor..movingEdge (normalized). The moving edge is a property
- * of the range geometry — getMovingEdge(range, anchor) finds it without
- * consulting activeCell — so repeated Shift+Arrow keeps extending past the
- * normalized end of the range without snapping back.
+ * Excel parity: anchor stays put, activeCell follows the moving edge, and the
+ * range is anchor..movingEdge (normalized). The moving edge is a property of
+ * the range geometry — getMovingEdge(range, anchor) finds it without consulting
+ * activeCell — so repeated Shift+Arrow keeps extending past the normalized end
+ * of the range without snapping back.
  *
  * @see ../keyboard-actions.ts - extendSelection
  * @see ../helpers.ts - buildExtendUpdate (single source of truth for shift-extend)
@@ -62,8 +62,7 @@ describe('extendSelection - Shift+Arrow bug tests', () => {
       // Anchor should be established at B5
       expect(result.anchor).toEqual({ row: 4, col: 1 });
 
-      // Excel parity: activeCell stays pinned at the anchor (B5)
-      expect(result.activeCell).toEqual({ row: 4, col: 1 });
+      expect(result.activeCell).toEqual({ row: 3, col: 1 });
     });
 
     it('second Shift+Up from B4:B5 extends to B3:B5 (NOT back to B5)', () => {
@@ -95,8 +94,7 @@ describe('extendSelection - Shift+Arrow bug tests', () => {
       // Anchor should remain at B5
       expect(result.anchor).toEqual({ row: 4, col: 1 });
 
-      // Excel parity: activeCell stays pinned at the anchor (B5)
-      expect(result.activeCell).toEqual({ row: 4, col: 1 });
+      expect(result.activeCell).toEqual({ row: 2, col: 1 });
     });
 
     it('third Shift+Up from B3:B5 extends to B2:B5', () => {
@@ -128,8 +126,7 @@ describe('extendSelection - Shift+Arrow bug tests', () => {
       // Anchor should remain at B5
       expect(result.anchor).toEqual({ row: 4, col: 1 });
 
-      // Excel parity: activeCell stays pinned at the anchor (B5)
-      expect(result.activeCell).toEqual({ row: 4, col: 1 });
+      expect(result.activeCell).toEqual({ row: 1, col: 1 });
     });
 
     it('boundary case: Shift+Up at row 0 stays at row 0', () => {
@@ -187,8 +184,7 @@ describe('extendSelection - Shift+Arrow bug tests', () => {
       });
 
       expect(result.anchor).toEqual({ row: 4, col: 1 });
-      // Excel parity: activeCell stays pinned at the anchor (B5)
-      expect(result.activeCell).toEqual({ row: 4, col: 1 });
+      expect(result.activeCell).toEqual({ row: 5, col: 1 });
     });
 
     it('second Shift+Down from B5:B6 extends to B5:B7', () => {
@@ -217,8 +213,7 @@ describe('extendSelection - Shift+Arrow bug tests', () => {
       });
 
       expect(result.anchor).toEqual({ row: 4, col: 1 });
-      // Excel parity: activeCell stays pinned at the anchor (B5)
-      expect(result.activeCell).toEqual({ row: 4, col: 1 });
+      expect(result.activeCell).toEqual({ row: 6, col: 1 });
     });
 
     it('preserves a full-row selection when extending down from Shift+Space', () => {
@@ -253,7 +248,7 @@ describe('extendSelection - Shift+Arrow bug tests', () => {
       });
       expect(result.anchor).toEqual({ row: 2, col: 0 });
       expect(result.anchorRow).toBe(2);
-      expect(result.activeCell).toEqual({ row: 2, col: 0 });
+      expect(result.activeCell).toEqual({ row: 3, col: 0 });
     });
 
     it('keeps extending the moving row edge for an existing full-row span', () => {
@@ -287,7 +282,7 @@ describe('extendSelection - Shift+Arrow bug tests', () => {
         isFullRow: true,
       });
       expect(result.anchor).toEqual({ row: 2, col: 0 });
-      expect(result.activeCell).toEqual({ row: 2, col: 0 });
+      expect(result.activeCell).toEqual({ row: 4, col: 0 });
     });
   });
 
@@ -318,8 +313,7 @@ describe('extendSelection - Shift+Arrow bug tests', () => {
       });
 
       expect(result.anchor).toEqual({ row: 4, col: 1 });
-      // Excel parity: activeCell stays pinned at the anchor (B5)
-      expect(result.activeCell).toEqual({ row: 4, col: 1 });
+      expect(result.activeCell).toEqual({ row: 4, col: 0 });
     });
 
     it('second Shift+Left from A5:B5 stays at A5:B5 (boundary)', () => {
@@ -376,8 +370,7 @@ describe('extendSelection - Shift+Arrow bug tests', () => {
       });
 
       expect(result.anchor).toEqual({ row: 4, col: 1 });
-      // Excel parity: activeCell stays pinned at the anchor (B5)
-      expect(result.activeCell).toEqual({ row: 4, col: 1 });
+      expect(result.activeCell).toEqual({ row: 4, col: 2 });
     });
 
     it('second Shift+Right from B5:C5 extends to B5:D5', () => {
@@ -406,8 +399,7 @@ describe('extendSelection - Shift+Arrow bug tests', () => {
       });
 
       expect(result.anchor).toEqual({ row: 4, col: 1 });
-      // Excel parity: activeCell stays pinned at the anchor (B5)
-      expect(result.activeCell).toEqual({ row: 4, col: 1 });
+      expect(result.activeCell).toEqual({ row: 4, col: 3 });
     });
 
     it('first Shift+Right from a hidden single-cell target jumps to the next visible column', () => {
@@ -434,7 +426,7 @@ describe('extendSelection - Shift+Arrow bug tests', () => {
         endCol: 27,
       });
       expect(result.anchor).toEqual({ row: 12, col: 15 });
-      expect(result.activeCell).toEqual({ row: 12, col: 15 });
+      expect(result.activeCell).toEqual({ row: 12, col: 27 });
     });
 
     it('Shift+Right moves by visible columns while including hidden column spans', () => {
@@ -462,7 +454,7 @@ describe('extendSelection - Shift+Arrow bug tests', () => {
         endCol: 27,
       });
       expect(context.anchor).toEqual({ row: 16, col: 12 });
-      expect(context.activeCell).toEqual({ row: 16, col: 12 });
+      expect(context.activeCell).toEqual({ row: 16, col: 27 });
     });
 
     it('Shift+Down moves by visible rows while including hidden row spans', () => {
@@ -487,7 +479,7 @@ describe('extendSelection - Shift+Arrow bug tests', () => {
         endCol: 0,
       });
       expect(result.anchor).toEqual({ row: 1, col: 0 });
-      expect(result.activeCell).toEqual({ row: 1, col: 0 });
+      expect(result.activeCell).toEqual({ row: 4, col: 0 });
     });
 
     it('preserves a full-column selection when extending right from Ctrl+Space', () => {
@@ -522,7 +514,7 @@ describe('extendSelection - Shift+Arrow bug tests', () => {
       });
       expect(result.anchor).toEqual({ row: 0, col: 1 });
       expect(result.anchorCol).toBe(1);
-      expect(result.activeCell).toEqual({ row: 0, col: 1 });
+      expect(result.activeCell).toEqual({ row: 0, col: 2 });
     });
   });
 
@@ -545,8 +537,7 @@ describe('extendSelection - Shift+Arrow bug tests', () => {
 
       // Anchor should be established at the original activeCell
       expect(result.anchor).toEqual({ row: 10, col: 5 });
-      // Excel parity: activeCell stays pinned at the anchor (F11)
-      expect(result.activeCell).toEqual({ row: 10, col: 5 });
+      expect(result.activeCell).toEqual({ row: 9, col: 5 });
     });
 
     it('subsequent extends use existing anchor', () => {
@@ -567,8 +558,7 @@ describe('extendSelection - Shift+Arrow bug tests', () => {
 
       // Anchor should remain the same
       expect(result.anchor).toEqual({ row: 10, col: 5 });
-      // Excel parity: activeCell stays pinned at the anchor (F11)
-      expect(result.activeCell).toEqual({ row: 10, col: 5 });
+      expect(result.activeCell).toEqual({ row: 8, col: 5 });
     });
   });
 
@@ -671,16 +661,16 @@ describe('extendSelection - Shift+Arrow bug tests', () => {
 // buildExtendUpdate — direct unit tests for the shared helper.
 //
 // Lowest-layer guard: every shift-extend path returns through this helper, so
-// asserting its activeCell-at-anchor invariant here prevents future drift even
+// asserting its activeCell-at-moving-edge invariant here prevents future drift even
 // if a new caller forgets to use the helper.
 // =============================================================================
 
 describe('buildExtendUpdate (single source of truth for shift-extend)', () => {
-  it('extend down: activeCell stays at the anchor', () => {
+  it('extend down: activeCell follows the moving edge', () => {
     const anchor = { row: 4, col: 1 }; // B5
     const newEnd = { row: 6, col: 1 }; // B7
     const result = buildExtendUpdate(anchor, newEnd);
-    expect(result.activeCell).toEqual(anchor);
+    expect(result.activeCell).toEqual(newEnd);
     expect(result.anchor).toEqual(anchor);
     expect(result.pendingRange).toMatchObject({
       startRow: 4,
@@ -691,29 +681,29 @@ describe('buildExtendUpdate (single source of truth for shift-extend)', () => {
     expect(result.direction).toBe('down-right');
   });
 
-  it('extend up: activeCell stays at the anchor', () => {
+  it('extend up: activeCell follows the moving edge', () => {
     const anchor = { row: 4, col: 1 }; // B5
     const newEnd = { row: 2, col: 1 }; // B3
     const result = buildExtendUpdate(anchor, newEnd);
-    expect(result.activeCell).toEqual(anchor);
+    expect(result.activeCell).toEqual(newEnd);
     expect(result.anchor).toEqual(anchor);
     expect(result.direction).toBe('up-right');
   });
 
-  it('extend left: activeCell stays at the anchor', () => {
+  it('extend left: activeCell follows the moving edge', () => {
     const anchor = { row: 4, col: 5 }; // F5
     const newEnd = { row: 4, col: 1 }; // B5
     const result = buildExtendUpdate(anchor, newEnd);
-    expect(result.activeCell).toEqual(anchor);
+    expect(result.activeCell).toEqual(newEnd);
     expect(result.anchor).toEqual(anchor);
     expect(result.direction).toBe('down-left');
   });
 
-  it('extend right: activeCell stays at the anchor', () => {
+  it('extend right: activeCell follows the moving edge', () => {
     const anchor = { row: 4, col: 1 }; // B5
     const newEnd = { row: 4, col: 5 }; // F5
     const result = buildExtendUpdate(anchor, newEnd);
-    expect(result.activeCell).toEqual(anchor);
+    expect(result.activeCell).toEqual(newEnd);
     expect(result.anchor).toEqual(anchor);
     expect(result.direction).toBe('down-right');
   });
@@ -733,11 +723,11 @@ describe('buildExtendUpdate (single source of truth for shift-extend)', () => {
     expect(result.direction).toBe('down-right');
   });
 
-  it('extend diagonally up-left: activeCell stays at the anchor', () => {
+  it('extend diagonally up-left: activeCell follows the moving edge', () => {
     const anchor = { row: 5, col: 5 }; // F6
     const newEnd = { row: 2, col: 1 }; // B3
     const result = buildExtendUpdate(anchor, newEnd);
-    expect(result.activeCell).toEqual(anchor);
+    expect(result.activeCell).toEqual(newEnd);
     expect(result.direction).toBe('up-left');
   });
 });

@@ -150,9 +150,7 @@ async function extendToDataEdge(
 
   const newRange = rangeFromAnchorAndCell(anchorCell, targetCell);
 
-  // activeCell stays at the anchor (Excel parity) — matches EXTEND_TO_ROW_END
-  // and EXTEND_TO_LAST_USED_CELL in home-end.ts.
-  deps.commands.selection.setSelection([newRange], anchorCell, anchorCell);
+  deps.commands.selection.setSelection([newRange], targetCell, anchorCell);
   return handled();
 }
 

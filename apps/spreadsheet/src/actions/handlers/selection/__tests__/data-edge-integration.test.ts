@@ -255,11 +255,11 @@ describe('extendToDataEdge - Integration tests with ACTUAL handlers', () => {
       expect(range.startCol).toBe(0);
       expect(range.endCol).toBe(1);
 
-      expect(capturedSelection!.activeCell).toEqual({ row: 4, col: 1 });
+      expect(capturedSelection!.activeCell).toEqual({ row: 4, col: 0 });
     });
 
     it('Step 2: Cmd+Shift+Up from A5:B5 creates A1:B5 (rectangular)', async () => {
-      const activeCell: CellCoord = { row: 4, col: 1 };
+      const activeCell: CellCoord = { row: 4, col: 0 };
       const ranges: CellRange[] = [{ startRow: 4, startCol: 0, endRow: 4, endCol: 1 }];
       const anchor: CellCoord = { row: 4, col: 1 };
 
@@ -280,7 +280,7 @@ describe('extendToDataEdge - Integration tests with ACTUAL handlers', () => {
       expect(range.startCol).toBe(0);
       expect(range.endCol).toBe(1);
 
-      expect(capturedSelection!.activeCell).toEqual({ row: 4, col: 1 });
+      expect(capturedSelection!.activeCell).toEqual({ row: 0, col: 0 });
     });
   });
 

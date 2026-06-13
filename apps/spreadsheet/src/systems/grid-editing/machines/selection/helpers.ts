@@ -131,8 +131,8 @@ export function computeDirection(anchor: CellCoord, active: CellCoord): Selectio
 
 /**
  * Single source of truth for shift-extend on the pending range. Callers choose
- * the active cell; keyboard-style extension uses the anchor default, while
- * mouse shift-click passes the clicked edge.
+ * the active cell; keyboard-style extension uses the moving edge default, while
+ * callers with custom behavior can pass an explicit active cell.
  *
  * `committedRanges` is intentionally not touched here — non-additive flows
  * keep it empty by invariant; additive flows leave it intact while the
@@ -141,7 +141,7 @@ export function computeDirection(anchor: CellCoord, active: CellCoord): Selectio
 export function buildExtendUpdate(
   anchor: CellCoord,
   newEnd: CellCoord,
-  activeCell: CellCoord = anchor,
+  activeCell: CellCoord = newEnd,
 ): {
   pendingRange: CellRange;
   activeCell: CellCoord;

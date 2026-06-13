@@ -4,7 +4,7 @@ use super::super::*;
 use super::helpers::*;
 use cell_types::CellId;
 use formula_types::StructureChange;
-use value_types::{CellValue, FiniteF64};
+use value_types::{CellError, CellValue, FiniteF64};
 
 // -------------------------------------------------------------------
 // Test: Insert column with formula -- the original bug
@@ -241,7 +241,90 @@ fn structural_formula_text_preserves_explicit_same_sheet_qualifier() {
 }
 
 #[test]
-fn delete_column_retargets_shifted_absolute_formula_text() {
+fn delete_column_invalidates_shifted_direct_cell_reference() {
+    let snap = simple_snapshot();
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let sid = sheet_id();
+
+    engine
+        .set_cell_value_parsed(&sid, 0, 2, "=B1*2")
+        .expect("seed C1 formula");
+
+    engine
+        .structure_change(
+            &sid,
+            &StructureChange::DeleteCols {
+                at: 1,
+                count: 1,
+                deleted_cell_ids: vec![],
+            },
+        )
+        .expect("delete column B");
+
+    let shifted = CellId::from_uuid_str(
+        &engine
+            .get_cell_id_at(&sid, 0, 1)
+            .expect("shifted formula should stay materialized"),
+    )
+    .expect("cell id should parse");
+    let formula = engine
+        .get_formula(&shifted)
+        .expect("shifted formula should keep formula text");
+    assert!(
+        formula.contains("#REF!"),
+        "direct ref to deleted column should render #REF!, got {formula}"
+    );
+    assert_eq!(
+        cell_value_at(&engine, &sid, 0, 1),
+        CellValue::Error(CellError::Ref, None)
+    );
+}
+
+#[test]
+fn delete_row_invalidates_shifted_direct_cell_reference() {
+    let snap = simple_snapshot();
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let sid = sheet_id();
+
+    engine
+        .set_cell_value_parsed(&sid, 2, 0, "10")
+        .expect("seed A3");
+    engine
+        .set_cell_value_parsed(&sid, 3, 0, "=A3*2")
+        .expect("seed A4 formula");
+
+    engine
+        .structure_change(
+            &sid,
+            &StructureChange::DeleteRows {
+                at: 2,
+                count: 1,
+                deleted_cell_ids: vec![],
+            },
+        )
+        .expect("delete row 3");
+
+    let shifted = CellId::from_uuid_str(
+        &engine
+            .get_cell_id_at(&sid, 2, 0)
+            .expect("shifted formula should stay materialized"),
+    )
+    .expect("cell id should parse");
+    let formula = engine
+        .get_formula(&shifted)
+        .expect("shifted formula should keep formula text");
+    assert!(
+        formula.contains("#REF!"),
+        "direct ref to deleted row should render #REF!, got {formula}"
+    );
+    assert_eq!(
+        cell_value_at(&engine, &sid, 2, 0),
+        CellValue::Error(CellError::Ref, None)
+    );
+}
+
+#[test]
+fn delete_column_invalidates_shifted_absolute_direct_ref_text() {
     let snap = simple_snapshot();
     let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
@@ -278,17 +361,17 @@ fn delete_column_retargets_shifted_absolute_formula_text() {
     .expect("cell id should parse");
     assert_eq!(
         engine.get_formula(&l14).as_deref(),
-        Some("=$K14*(1+$L$35)"),
-        "absolute markers should be preserved when the formula is retargeted"
+        Some("=#REF!*(1+$L$35)"),
+        "deleted direct ref should render #REF! while surviving absolute refs keep markers"
     );
     assert_eq!(
         cell_value_at(&engine, &sid, 13, 11),
-        CellValue::Number(FiniteF64::must(125.0))
+        CellValue::Error(CellError::Ref, None)
     );
 }
 
 #[test]
-fn delete_row_retargets_shifted_absolute_formula_text() {
+fn delete_row_invalidates_shifted_absolute_direct_ref_text() {
     let snap = simple_snapshot();
     let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
@@ -325,12 +408,12 @@ fn delete_row_retargets_shifted_absolute_formula_text() {
     .expect("cell id should parse");
     assert_eq!(
         engine.get_formula(&a11).as_deref(),
-        Some("=$A$10*(1+$B$11)"),
-        "absolute markers should be preserved when the formula is retargeted"
+        Some("=#REF!*(1+$B$11)"),
+        "deleted direct ref should render #REF! while surviving absolute refs keep markers"
     );
     assert_eq!(
         cell_value_at(&engine, &sid, 10, 0),
-        CellValue::Number(FiniteF64::must(125.0))
+        CellValue::Error(CellError::Ref, None)
     );
 }
 

@@ -65,22 +65,12 @@ pub(in crate::storage::engine) fn apply_structure_change(
     // `SUM(#REF!)`. Must run BEFORE the structural op tears down the affected
     // CellIds so their pre-delete positions can still be resolved.
     let reanchored_formula_cells = match change {
-        StructureChange::DeleteRows { at, count, .. } => pre_delete_re_anchor_range_refs(
-            mirror,
-            sheet_id,
-            &stores.grid_id_alloc,
-            *at,
-            *count,
-            true,
-        ),
-        StructureChange::DeleteCols { at, count, .. } => pre_delete_re_anchor_range_refs(
-            mirror,
-            sheet_id,
-            &stores.grid_id_alloc,
-            *at,
-            *count,
-            false,
-        ),
+        StructureChange::DeleteRows { at, count, .. } => {
+            pre_delete_re_anchor_range_refs(mirror, sheet_id, *at, *count, true)
+        }
+        StructureChange::DeleteCols { at, count, .. } => {
+            pre_delete_re_anchor_range_refs(mirror, sheet_id, *at, *count, false)
+        }
         _ => Vec::new(),
     };
 
@@ -270,17 +260,22 @@ fn hydrate_stored_formula_identities_for_structure_change(
             let Ok(cell_id) = CellId::from_uuid_str(&cell_data.cell_id) else {
                 continue;
             };
-            if mirror.get_formula(&cell_id).is_some() {
-                continue;
-            }
 
             if let Some(identity_formula) = cell_data.identity_formula {
-                formulas_to_seed.push((
-                    *sheet_id,
-                    cell_id,
-                    FormulaSeed::Identity(identity_formula),
-                ));
+                if mirror.get_formula(&cell_id).is_none() {
+                    formulas_to_seed.push((
+                        *sheet_id,
+                        cell_id,
+                        FormulaSeed::Identity(identity_formula),
+                    ));
+                }
             } else if let Some(formula_a1) = cell_data.formula {
+                // Imported shared-formula followers can have a mirror identity
+                // formula that was derived from the shared master while the
+                // stored A1 text is the expanded per-cell formula. Reparse the
+                // stored formula before structural deletes so surviving shifted
+                // followers keep their own references instead of stale master
+                // edges into the deleted band.
                 formulas_to_seed.push((*sheet_id, cell_id, FormulaSeed::A1(formula_a1)));
             }
         }

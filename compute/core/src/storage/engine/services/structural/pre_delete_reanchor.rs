@@ -1,4 +1,4 @@
-use cell_types::{CellId, IdAllocator, SheetId, SheetPos};
+use cell_types::{CellId, SheetId, SheetPos};
 
 use crate::mirror::CellMirror;
 
@@ -7,15 +7,17 @@ use crate::mirror::CellMirror;
 // -------------------------------------------------------------------
 
 /// Before a `DeleteRows` / `DeleteCols` op tears down the affected CellIds,
-/// re-anchor formula refs that should keep pointing at the surviving adjacent
-/// model cell:
+/// re-anchor range endpoints that should shrink to a surviving adjacent model
+/// cell:
 ///
 /// - Shrink any `IdentityRangeRef` whose endpoint sits inside the doomed band
 ///   to the nearest surviving cell so e.g. `SUM(A1:A5)` with row 0 deleted
 ///   becomes `SUM(A1:A4)` instead of `SUM(#REF!)`.
-/// - For formulas that are themselves shifted by the delete, move same-axis
-///   direct cell refs from the doomed band to the nearest surviving cell before
-///   the band.
+///
+/// Direct cell refs are deliberately not re-anchored. A direct ref into a
+/// deleted row/column must remain attached to the doomed CellId so downstream
+/// display and evaluation surface `#REF!` instead of silently binding to the
+/// adjacent survivor.
 ///
 /// Semantics ("shrink to surviving sub-region"):
 /// - If the Range's START is doomed and the END survives, clamp START to
@@ -34,7 +36,6 @@ use crate::mirror::CellMirror;
 pub(super) fn pre_delete_re_anchor_range_refs(
     mirror: &mut CellMirror,
     sheet_id: &SheetId,
-    id_alloc: &IdAllocator,
     at: u32,
     count: u32,
     is_row: bool,
@@ -67,8 +68,7 @@ pub(super) fn pre_delete_re_anchor_range_refs(
         Some((sid, p.row(), p.col()))
     };
 
-    // Pass 1 — collect formula entries before applying any identity-only
-    // allocations for replacement references.
+    // Pass 1 — collect formula entries before applying any replacement refs.
     struct Update {
         owning_cell: CellId,
         new_refs: Vec<IdentityFormulaRef>,
@@ -99,56 +99,9 @@ pub(super) fn pre_delete_re_anchor_range_refs(
         let mut new_refs: Vec<IdentityFormulaRef> = Vec::with_capacity(formula.refs.len());
         let mut any_change = false;
 
-        let owning_pos = resolve_pos(mirror, cell_id);
-        let owner_shifts_with_delete = matches!(
-            owning_pos,
-            Some((sid, row, col)) if sid == *sheet_id
-                && if is_row { row >= doomed_end } else { col >= doomed_end }
-        );
-
         for r in &formula.refs {
             match r {
-                IdentityFormulaRef::Cell(cell) => {
-                    if !owner_shifts_with_delete {
-                        new_refs.push(r.clone());
-                        continue;
-                    }
-
-                    let Some((ref_sheet, row, col)) = resolve_pos(mirror, &cell.id) else {
-                        new_refs.push(r.clone());
-                        continue;
-                    };
-
-                    if !in_doomed_band(Some((ref_sheet, row, col))) || at == 0 {
-                        new_refs.push(r.clone());
-                        continue;
-                    }
-
-                    let Some((_, owner_row, owner_col)) = owning_pos else {
-                        new_refs.push(r.clone());
-                        continue;
-                    };
-                    if (is_row && col != owner_col) || (!is_row && row != owner_row) {
-                        new_refs.push(r.clone());
-                        continue;
-                    }
-
-                    let replacement_pos = if is_row {
-                        SheetPos::new(at - 1, col)
-                    } else {
-                        SheetPos::new(row, at - 1)
-                    };
-                    if let Some(new_id) =
-                        mirror.ensure_cell_id_identity_only(sheet_id, replacement_pos, id_alloc)
-                    {
-                        let mut new_cell = *cell;
-                        new_cell.id = new_id;
-                        new_refs.push(IdentityFormulaRef::Cell(new_cell));
-                        any_change = true;
-                    } else {
-                        new_refs.push(r.clone());
-                    }
-                }
+                IdentityFormulaRef::Cell(_) => new_refs.push(r.clone()),
                 IdentityFormulaRef::Range(rng) => {
                     let start_pos = resolve_pos(mirror, &rng.start_id);
                     let end_pos = resolve_pos(mirror, &rng.end_id);

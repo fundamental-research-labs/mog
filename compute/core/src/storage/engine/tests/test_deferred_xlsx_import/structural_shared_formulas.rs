@@ -428,6 +428,28 @@ fn assert_direct_ref_error(engine: &YrsComputeEngine, sheet_id: &SheetId, row: u
     );
 }
 
+fn assert_not_ref_error(engine: &YrsComputeEngine, sheet_id: &SheetId, row: u32, col: u32) {
+    assert!(
+        !matches!(
+            engine.get_cell_value(sheet_id, row, col),
+            CellValue::Error(CellError::Ref, _)
+        ),
+        "cell {row},{col} should not evaluate to #REF!"
+    );
+
+    let queried = engine.query_range(sheet_id, row, col, row, col);
+    let cell = queried
+        .cells
+        .iter()
+        .find(|cell| cell.row == row && cell.col == col)
+        .unwrap_or_else(|| panic!("query_range should return cell {row},{col}"));
+    assert!(
+        !matches!(&cell.value, CellValue::Error(CellError::Ref, _)),
+        "query_range cell {row},{col} should not carry #REF!, got {:?}",
+        cell.value
+    );
+}
+
 #[test]
 fn delete_column_invalidates_shifted_imported_shared_formula_followers() {
     let (mut engine, sheet_id) = import_deferred_then_complete();
@@ -469,7 +491,35 @@ fn delete_column_completes_deferred_hydration_before_invalidating_shared_formula
 }
 
 #[test]
-fn delete_column_retargets_shifted_imported_same_row_shared_formula() {
+fn delete_column_preserves_shifted_imported_same_row_shared_formula_followers_beyond_deleted_ref() {
+    let (mut engine, sheet_id) = import_same_row_shared_deferred_then_complete();
+
+    engine
+        .structure_change(
+            &sheet_id,
+            &StructureChange::DeleteCols {
+                at: 11,
+                count: 1,
+                deleted_cell_ids: vec![],
+            },
+        )
+        .expect("delete column should succeed");
+
+    let cell_id = CellId::from_uuid_str(
+        &engine
+            .get_cell_id_at(&sheet_id, 13, 12)
+            .expect("later shifted formula cell should stay materialized"),
+    )
+    .expect("cell id should parse");
+    assert_eq!(
+        engine.get_formula(&cell_id).as_deref(),
+        Some("=L14*(1+M35)")
+    );
+    assert_not_ref_error(&engine, &sheet_id, 13, 12);
+}
+
+#[test]
+fn delete_column_invalidates_shifted_imported_same_row_shared_formula() {
     let (mut engine, sheet_id) = import_same_row_shared_deferred_then_complete();
 
     engine
@@ -491,16 +541,16 @@ fn delete_column_retargets_shifted_imported_same_row_shared_formula() {
     .expect("cell id should parse");
     assert_eq!(
         engine.get_formula(&cell_id).as_deref(),
-        Some("=K14*(1+L35)")
+        Some("=#REF!*(1+L35)")
     );
     assert_eq!(
         engine.get_cell_value(&sheet_id, 13, 11),
-        CellValue::Number(value_types::FiniteF64::must(120.0))
+        CellValue::Error(CellError::Ref, None)
     );
 }
 
 #[test]
-fn delete_columns_retarget_shifted_imported_same_row_shared_formula() {
+fn delete_columns_invalidate_shifted_imported_same_row_shared_formula() {
     let (mut engine, sheet_id) = import_same_row_shared_deferred_then_complete();
 
     engine
@@ -522,16 +572,16 @@ fn delete_columns_retarget_shifted_imported_same_row_shared_formula() {
     .expect("cell id should parse");
     assert_eq!(
         engine.get_formula(&cell_id).as_deref(),
-        Some("=K14*(1+L35)")
+        Some("=#REF!*(1+L35)")
     );
     assert_eq!(
         engine.get_cell_value(&sheet_id, 13, 11),
-        CellValue::Number(value_types::FiniteF64::must(190.0))
+        CellValue::Error(CellError::Ref, None)
     );
 }
 
 #[test]
-fn delete_columns_retarget_shifted_deferred_same_row_shared_formula() {
+fn delete_columns_invalidate_shifted_deferred_same_row_shared_formula() {
     let (mut engine, sheet_id) = import_same_row_shared_deferred();
 
     engine
@@ -553,16 +603,16 @@ fn delete_columns_retarget_shifted_deferred_same_row_shared_formula() {
     .expect("cell id should parse");
     assert_eq!(
         engine.get_formula(&cell_id).as_deref(),
-        Some("=K14*(1+L35)")
+        Some("=#REF!*(1+L35)")
     );
     assert_eq!(
         engine.get_cell_value(&sheet_id, 13, 11),
-        CellValue::Number(value_types::FiniteF64::must(190.0))
+        CellValue::Error(CellError::Ref, None)
     );
 }
 
 #[test]
-fn delete_column_retargets_shifted_imported_same_row_formula() {
+fn delete_column_invalidates_shifted_imported_same_row_formula() {
     let (mut engine, sheet_id) = import_same_row_formula_deferred();
 
     engine
@@ -584,11 +634,11 @@ fn delete_column_retargets_shifted_imported_same_row_formula() {
     .expect("cell id should parse");
     assert_eq!(
         engine.get_formula(&cell_id).as_deref(),
-        Some("=K14*(1+L35)")
+        Some("=#REF!*(1+L35)")
     );
     assert_eq!(
         engine.get_cell_value(&sheet_id, 13, 11),
-        CellValue::Number(value_types::FiniteF64::must(120.0))
+        CellValue::Error(CellError::Ref, None)
     );
 }
 

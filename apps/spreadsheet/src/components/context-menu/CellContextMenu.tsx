@@ -14,12 +14,12 @@
  * - Uses Radix ContextMenu (wraps grid trigger area, positioned from native event)
  *
  * @see docs/renderer/README.md - Architecture principles
- * @module components/context-menu/CellContextMenu
  */
 
 import { useMemo } from 'react';
 
 import { useReadOnly } from '../../infra/context';
+import { dispatch } from '../../actions';
 import {
   ClearFilterIcon,
   ClearIcon,
@@ -60,6 +60,7 @@ import {
 import { ContextMenuContent } from '@mog/shell/components/ui';
 import { usePlatformInfo } from '@mog/shell';
 import { useContextMenuActions } from '../../hooks/toolbar/use-context-menu-actions';
+import { useActionDependencies } from '../../hooks/toolbar/use-action-dependencies';
 import type { CellContextMenuProps, ContextMenuItem as ContextMenuItemType } from './types';
 import { MenuItemRenderer } from './MenuItemRenderer';
 import { getFormatCellsContextMenuShortcut, platformFromShellInfo } from './shortcut-labels';
@@ -90,6 +91,7 @@ export function CellContextMenu({ target, targetRow, targetCol, onClose }: CellC
     [target, targetRow, targetCol],
   );
   const actions = useContextMenuActions(contextMenuCell);
+  const actionDeps = useActionDependencies();
   const readOnly = useReadOnly();
   const platformInfo = usePlatformInfo();
   const keyboardPlatform = useMemo(() => platformFromShellInfo(platformInfo), [platformInfo]);
@@ -101,6 +103,11 @@ export function CellContextMenu({ target, targetRow, targetCol, onClose }: CellC
   // Build menu items based on target type
   const menuItems = useMemo((): ContextMenuItemType[] => {
     const items: ContextMenuItemType[] = [];
+    const dispatchAndClose =
+      (action: 'AUTO_FIT_ROW_HEIGHT' | 'AUTO_FIT_COLUMN_WIDTH') => () => {
+        dispatch(action, actionDeps);
+        onClose();
+      };
 
     // === Open Hyperlink at Top (WCAG accessibility) ===
     // When a hyperlink exists, show "Open Hyperlink" as the first item for quick access
@@ -473,6 +480,13 @@ export function CellContextMenu({ target, targetRow, targetCol, onClose }: CellC
         icon: <ResizeIcon />,
         onClick: actions.openRowHeightDialog,
       });
+
+      items.push({
+        id: 'autoFitRowHeight',
+        label: 'AutoFit Row Height',
+        icon: <ResizeIcon />,
+        onClick: dispatchAndClose('AUTO_FIT_ROW_HEIGHT'),
+      });
     }
 
     if (target === 'column-header' || target === 'cell' || target === 'selection') {
@@ -480,9 +494,18 @@ export function CellContextMenu({ target, targetRow, targetCol, onClose }: CellC
         id: 'columnWidth',
         label: 'Column width...',
         icon: <ResizeIcon />,
-        dividerAfter: true,
         onClick: actions.openColumnWidthDialog,
       });
+
+      items.push({
+        id: 'autoFitColumnWidth',
+        label: 'AutoFit Column Width',
+        icon: <ResizeIcon />,
+        dividerAfter: true,
+        onClick: dispatchAndClose('AUTO_FIT_COLUMN_WIDTH'),
+      });
+    } else if (target === 'row-header') {
+      items[items.length - 1].dividerAfter = true;
     }
 
     // === Page Break Section ===
@@ -962,7 +985,7 @@ export function CellContextMenu({ target, targetRow, targetCol, onClose }: CellC
     }
 
     return items;
-  }, [target, actions, readOnly, formatCellsShortcut]);
+  }, [target, actions, readOnly, formatCellsShortcut, actionDeps, onClose]);
 
   return (
     <ContextMenuContent

@@ -32,7 +32,7 @@ use domain_types::domain::merge::{CellMergeInfo, MergeRegion, ResolvedMergedRegi
 use domain_types::domain::sheet::{FrozenPanes, SheetMeta, SheetScrollPosition, SheetViewOptions};
 use domain_types::domain::slicer::{NamedSlicerStyle, SlicerCustomStyle};
 use domain_types::{DefinedName, NameValidationResult};
-use formula_types::WorkbookLookup;
+use formula_types::{IdentityFormula, WorkbookLookup};
 use value_types::CellValue;
 use value_types::ComputeError;
 
@@ -349,22 +349,12 @@ pub(in crate::storage::engine) fn get_all_named_ranges_wire(
     let mut invalid_refers_to_samples = Vec::new();
 
     for dn in raw {
-        let trimmed_refers_to = dn.refers_to.trim_start();
-        if !trimmed_refers_to.starts_with('{') {
-            invalid_refers_to_count += 1;
-            if invalid_refers_to_samples.len() < 5 {
-                invalid_refers_to_samples.push(format!("{}: expected JSON object", dn.name));
-            }
-            continue;
-        }
-
-        let refers_to = match serde_json::from_str::<formula_types::IdentityFormula>(&dn.refers_to)
-        {
+        let refers_to = match defined_name_wire_identity_formula(&dn) {
             Ok(identity) => identity,
-            Err(e) => {
+            Err(reason) => {
                 invalid_refers_to_count += 1;
                 if invalid_refers_to_samples.len() < 5 {
-                    invalid_refers_to_samples.push(format!("{}: {e}", dn.name));
+                    invalid_refers_to_samples.push(format!("{}: {reason}", dn.name));
                 }
                 continue;
             }
@@ -399,6 +389,30 @@ pub(in crate::storage::engine) fn get_all_named_ranges_wire(
     }
 
     result
+}
+
+fn defined_name_wire_identity_formula(dn: &DefinedName) -> Result<IdentityFormula, String> {
+    let trimmed_refers_to = dn.refers_to.trim_start();
+    if !trimmed_refers_to.starts_with('{') {
+        return preserved_opaque_defined_name_identity_formula(dn)
+            .ok_or_else(|| "expected JSON object".to_string());
+    }
+
+    match serde_json::from_str::<IdentityFormula>(&dn.refers_to) {
+        Ok(identity) => Ok(identity),
+        Err(e) => preserved_opaque_defined_name_identity_formula(dn).ok_or_else(|| e.to_string()),
+    }
+}
+
+fn preserved_opaque_defined_name_identity_formula(dn: &DefinedName) -> Option<IdentityFormula> {
+    let raw = dn.raw_refers_to.as_deref()?;
+    Some(IdentityFormula {
+        template: raw.strip_prefix('=').unwrap_or(raw).to_string(),
+        refs: Vec::new(),
+        is_dynamic_array: false,
+        is_volatile: false,
+        is_aggregate: false,
+    })
 }
 
 pub(in crate::storage::engine) fn get_dependents(

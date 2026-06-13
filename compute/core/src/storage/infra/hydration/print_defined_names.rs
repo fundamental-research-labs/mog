@@ -40,10 +40,6 @@ pub(super) fn hydrate_workbook_print_defined_names(
     }
 }
 
-pub(super) fn is_representable_print_defined_name(nr: &NamedRange, sheet_count: usize) -> bool {
-    parse_representable_print_defined_name(nr, sheet_count).is_some()
-}
-
 #[derive(Debug, Clone, PartialEq)]
 enum ParsedPrintDefinedName {
     Area(PrintRange),

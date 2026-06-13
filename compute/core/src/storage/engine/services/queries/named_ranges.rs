@@ -8,9 +8,6 @@ pub(in crate::storage::engine) fn get_all_named_ranges_wire(
     stores: &EngineStores,
 ) -> Vec<DefinedName> {
     workbook_named_ranges::get_all_named_ranges(stores.storage.doc(), stores.storage.workbook_map())
-        .into_iter()
-        .filter(|dn| dn.visible)
-        .collect()
 }
 
 // Named Ranges (Read Queries)

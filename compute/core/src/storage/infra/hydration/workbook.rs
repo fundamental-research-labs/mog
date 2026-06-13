@@ -11,7 +11,6 @@ use compute_document::schema::*;
 use cell_types::SheetId;
 
 use super::IdAllocator;
-use super::print_defined_names::is_representable_print_defined_name;
 
 const KEY_VOLATILE_DEPENDENCY_PACKAGE_PART: &str = "volatileDependencyPackagePart";
 const KEY_CUSTOM_WORKBOOK_VIEWS_XML: &str = "customWorkbookViewsXml";
@@ -135,10 +134,6 @@ pub(super) fn hydrate_workbook_named_ranges(
     // round-trip. API/UI consumers can filter stale names at query boundaries;
     // hydration must preserve workbook state for export fidelity.
     for (idx, nr) in named_ranges.iter().enumerate() {
-        if is_representable_print_defined_name(nr, sheet_ids.len()) {
-            continue;
-        }
-
         // Resolve local_sheet_id (index) to a SheetId hex string for scope
         let scope: Option<String> = nr.local_sheet_id.and_then(|idx| {
             sheet_ids

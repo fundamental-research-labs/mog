@@ -34,7 +34,11 @@ import { cellId } from '@mog-sdk/contracts/cell-identity';
 import type { CellRange, CellRawValue, CellValue, SheetId } from '@mog-sdk/contracts/core';
 import { ensureFormulaA1 } from '@mog/spreadsheet-utils/cells/formula-string';
 // Cell/merge reads and row/col visibility migrated to Worksheet API.
-import { rangeToHTML, rangeToTSV } from '../../infra/utils/clipboard-utils';
+import {
+  normalCopyRangeExportOptions,
+  rangeToHTML,
+  rangeToTSV,
+} from '../../infra/utils/clipboard-utils';
 
 import {
   buildClipboardData,
@@ -253,11 +257,8 @@ async function createCopyCutDeps(deps: ActionDependencies, sheetId: SheetId, ran
     getCommentsForCellAt: (_sid, row, col) => commentsByPosition.get(`${row},${col}`) ?? [],
   };
 
-  // Export options using pre-fetched data
-  const exportOptions = {
-    isRowHidden: (_sid: string, row: number) => hiddenRowsMap.get(row) ?? false,
-    isColHidden: (_sid: string, col: number) => hiddenColsMap.get(col) ?? false,
-    getMergeInfo: (_sid: string, row: number, col: number) => {
+  const systemClipboardExportOptions = normalCopyRangeExportOptions(
+    (_sid: string, row: number, col: number) => {
       const merge = mergeLookup.get(`${row},${col}`);
       if (!merge) return undefined;
       return {
@@ -267,7 +268,7 @@ async function createCopyCutDeps(deps: ActionDependencies, sheetId: SheetId, ran
         colSpan: merge.endCol - merge.startCol + 1,
       };
     },
-  };
+  );
 
   return {
     commands: deps.commands.clipboard,
@@ -282,7 +283,7 @@ async function createCopyCutDeps(deps: ActionDependencies, sheetId: SheetId, ran
         sheetId,
         range,
         (_sid, row, col) => displayLookup.get(`${row},${col}`) ?? '',
-        exportOptions,
+        systemClipboardExportOptions,
       );
     },
     generateHTML: (clipRanges: CellRange[]): string => {
@@ -293,7 +294,7 @@ async function createCopyCutDeps(deps: ActionDependencies, sheetId: SheetId, ran
         (_sid, row, col) => displayLookup.get(`${row},${col}`) ?? '',
         (_sid, _row, _col) => undefined, // Format embedded in display
         undefined, // getHyperlink - not used here
-        exportOptions,
+        systemClipboardExportOptions,
       );
     },
   };

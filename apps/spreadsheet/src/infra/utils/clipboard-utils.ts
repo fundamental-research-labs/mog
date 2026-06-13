@@ -389,6 +389,19 @@ export interface RangeExportOptions {
 }
 
 /**
+ * Export options for normal spreadsheet copy/cut.
+ *
+ * Normal copy serializes the selected cells exactly, including selected cells
+ * from hidden rows/columns. Hidden predicates are intentionally omitted here;
+ * callers that need a visible-cells-only export must opt into that explicitly.
+ */
+export function normalCopyRangeExportOptions(
+  getMergeInfo?: RangeExportOptions['getMergeInfo'],
+): RangeExportOptions {
+  return getMergeInfo ? { getMergeInfo } : {};
+}
+
+/**
  * Convert range to TSV for system clipboard.
  * Uses proper quoting for values containing tabs/newlines/quotes.
  * Filter-aware copy - supports skipping hidden rows/cols via options.

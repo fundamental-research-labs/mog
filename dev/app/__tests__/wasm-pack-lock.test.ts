@@ -9,8 +9,8 @@
  *      this is the kernel-level atomic primitive that the lock stands on.
  *   2. `tryAcquireLock` returns a pid to exactly one caller when many race for
  *      the same file, and returns null to every other caller.
- *   3. `tryReclaimStaleLock` reclaims a lockfile older than LOCK_STALE_MS but
- *      refuses to clobber a fresh one.
+ *   3. `tryReclaimStaleLock` reclaims a lockfile older than LOCK_STALE_MS or
+ *      owned by a dead PID, but refuses to clobber a fresh live one.
  *
  * We intentionally re-declare `tryAcquireLock` / `tryReclaimStaleLock` in this
  * file rather than importing them from `../vite.config.ts`. Reasons:
@@ -67,14 +67,29 @@ function tryAcquireLock(lockFile: string): number | null {
 }
 
 /** Mirror of ensureWasmBuilt's `tryReclaimStaleLock`. Keep in sync. */
+function isProcessAlive(pid: number): boolean {
+  if (!Number.isInteger(pid) || pid <= 0) return true;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    return (err as NodeJS.ErrnoException).code !== 'ESRCH';
+  }
+}
+
 function tryReclaimStaleLock(lockFile: string): boolean {
   let startedAt: number;
+  let pid: number | undefined;
   try {
-    startedAt = JSON.parse(readFileSync(lockFile, 'utf8')).startedAt;
+    const parsed = JSON.parse(readFileSync(lockFile, 'utf8'));
+    startedAt = parsed.startedAt;
+    pid = parsed.pid;
   } catch {
     return tryAcquireLock(lockFile) !== null;
   }
-  if (typeof startedAt !== 'number' || Date.now() - startedAt < LOCK_STALE_MS) {
+  const lockIsOld = typeof startedAt === 'number' && Date.now() - startedAt >= LOCK_STALE_MS;
+  const ownerIsDead = typeof pid === 'number' && !isProcessAlive(pid);
+  if (!lockIsOld && !ownerIsDead) {
     return false;
   }
   try {
@@ -87,6 +102,19 @@ function tryReclaimStaleLock(lockFile: string): boolean {
 
 function mkScratch(): string {
   return mkdtempSync(path.join(tmpdir(), 'wasm-pack-lock-test-'));
+}
+
+function findDeadPid(): number {
+  let pid = 999_999;
+  while (true) {
+    try {
+      process.kill(pid, 0);
+      pid++;
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'ESRCH') return pid;
+      pid++;
+    }
+  }
 }
 
 describe('wasm-pack bootstrap lock', () => {
@@ -158,6 +186,21 @@ describe('wasm-pack bootstrap lock', () => {
       const reclaimed = tryReclaimStaleLock(lockFile);
       assert.equal(reclaimed, true, 'stale lock must be reclaimable');
       // After reclaim we should own the lock (file exists, content is ours).
+      assert.ok(existsSync(lockFile));
+      const parsed = JSON.parse(readFileSync(lockFile, 'utf8'));
+      assert.equal(parsed.pid, process.pid);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('tryReclaimStaleLock reclaims a fresh lock owned by a dead pid', () => {
+    const dir = mkScratch();
+    try {
+      const lockFile = path.join(dir, '.wasm-pack.lock');
+      writeFileSync(lockFile, JSON.stringify({ pid: findDeadPid(), startedAt: Date.now() }));
+      const reclaimed = tryReclaimStaleLock(lockFile);
+      assert.equal(reclaimed, true, 'dead-owner lock must be reclaimable even before stale age');
       assert.ok(existsSync(lockFile));
       const parsed = JSON.parse(readFileSync(lockFile, 'utf8'));
       assert.equal(parsed.pid, process.pid);
@@ -253,6 +296,11 @@ describe('wasm-pack bootstrap lock', () => {
       src,
       /LOCK_STALE_MS\s*=\s*10\s*\*\s*60_000/,
       'vite-wasm-plugin must define LOCK_STALE_MS as 10 minutes',
+    );
+    assert.match(
+      src,
+      /process\.kill\(pid,\s*0\)/,
+      'vite-wasm-plugin must test lock owner liveness before waiting on a fresh lock',
     );
     assert.match(
       src,

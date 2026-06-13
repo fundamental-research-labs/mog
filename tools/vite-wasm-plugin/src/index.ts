@@ -75,22 +75,38 @@ export function tryAcquireLock(lockFile: string): number | null {
 }
 
 /**
- * If an existing lockfile is older than LOCK_STALE_MS, unlink it and try to re-acquire
- * atomically. If another process beats us to the re-acquire, we return false and the
- * caller falls back to the wait path. Two processes cannot both "win" this race because
- * the re-acquisition still goes through `openSync('wx')`.
+ * If an existing lockfile is older than LOCK_STALE_MS or points at a dead owner
+ * PID, unlink it and try to re-acquire atomically. If another process beats us
+ * to the re-acquire, we return false and the caller falls back to the wait path.
+ * Two processes cannot both "win" this race because the re-acquisition still
+ * goes through `openSync('wx')`.
  */
+function isProcessAlive(pid: number): boolean {
+  if (!Number.isInteger(pid) || pid <= 0) return true;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    return (err as NodeJS.ErrnoException).code !== 'ESRCH';
+  }
+}
+
 export function tryReclaimStaleLock(lockFile: string): boolean {
   let startedAt: number;
+  let pid: number | undefined;
   try {
     const raw = fs.readFileSync(lockFile, 'utf8');
-    startedAt = JSON.parse(raw).startedAt;
+    const parsed = JSON.parse(raw);
+    startedAt = parsed.startedAt;
+    pid = parsed.pid;
   } catch {
     // Lockfile unreadable or vanished between existence-check and read -- the
     // cleanest response is to let the next tryAcquireLock attempt resolve it.
     return tryAcquireLock(lockFile) !== null;
   }
-  if (typeof startedAt !== 'number' || Date.now() - startedAt < LOCK_STALE_MS) {
+  const lockIsOld = typeof startedAt === 'number' && Date.now() - startedAt >= LOCK_STALE_MS;
+  const ownerIsDead = typeof pid === 'number' && !isProcessAlive(pid);
+  if (!lockIsOld && !ownerIsDead) {
     return false;
   }
   try {

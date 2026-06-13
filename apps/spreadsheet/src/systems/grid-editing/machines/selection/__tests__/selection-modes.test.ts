@@ -301,7 +301,7 @@ describe('selection-mode lifecycle', () => {
     expect(after.pendingRange.startCol).toBe(2);
     expect(after.pendingRange.endRow).toBe(2);
     expect(after.pendingRange.endCol).toBe(3); // extended to D3
-    expect(after.activeCell).toEqual(cell(2, 3));
+    expect(after.activeCell).toEqual(cell(2, 2));
     actor.stop();
   });
 

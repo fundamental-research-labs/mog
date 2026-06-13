@@ -147,9 +147,9 @@ const moveActiveCell = assign(
 
 /**
  * Extend selection in direction (shift+arrow).
- * The anchor stays fixed while activeCell follows the moving edge.
- * getMovingEdge(range, anchor) keeps repeated extends independent from
- * activeCell, so edge-crossing and perpendicular extends remain stable.
+ * The anchor stays fixed and remains the active cell. getMovingEdge(range,
+ * anchor) keeps repeated extends independent from activeCell, so edge-crossing
+ * and perpendicular extends remain stable.
  *
  * writes only to `pendingRange`. `committedRanges` is untouched
  * (empty in non-additive flows by invariant; preserved verbatim in additive).
@@ -183,11 +183,9 @@ const extendSelection = assign(
               context.isColHidden,
             ).row
           : movingEdge.row;
-      const activeCell = { row: targetRow, col: anchorCell.col };
-
       return {
         pendingRange: createFullRowRangeSpan(anchorCell.row, targetRow),
-        activeCell,
+        activeCell: anchorCell,
         anchor: anchorCell,
         anchorRow: anchorCell.row,
         anchorCol: null,
@@ -208,11 +206,9 @@ const extendSelection = assign(
               context.isColHidden,
             ).col
           : movingEdge.col;
-      const activeCell = { row: anchorCell.row, col: targetCol };
-
       return {
         pendingRange: createFullColumnRangeSpan(anchorCell.col, targetCol),
-        activeCell,
+        activeCell: anchorCell,
         anchor: anchorCell,
         anchorRow: null,
         anchorCol: anchorCell.col,
@@ -342,7 +338,8 @@ const jumpToEdge = assign(
 /**
  * Extend selection to edge in direction (Ctrl+Shift+Arrow).
  * Fallback implementation for unit tests - extends by JUMP_AMOUNT or to boundary.
- * The anchor stays fixed while activeCell follows the moving edge.
+ * The anchor stays fixed as activeCell while the moving edge lives in range
+ * geometry.
  */
 const jumpToEdgeExtend = assign(
   ({ context, event }: { context: SelectionContext; event: SelectionEvent }) => {
@@ -434,7 +431,7 @@ const moveToHome = assign(
 /**
  * Shift+Home or Ctrl+Shift+Home: Extend selection to beginning.
  * Shift+Home extends to column 0 on the moving edge's row;
- * Ctrl+Shift+Home extends to A1. activeCell follows the moving edge;
+ * Ctrl+Shift+Home extends to A1. activeCell stays at the anchor;
  * the range geometry tracks the moving edge via getMovingEdge(range, anchor).
  */
 const extendToHome = assign(
@@ -479,8 +476,8 @@ const moveToEnd = assign(
  * NOTE: Ctrl+Shift+End is properly handled by KeyboardCoordinator which dispatches
  * EXTEND_TO_LAST_USED_CELL action. This fallback uses MAX constants for safety.
  * Shift+End (without Ctrl) extends to last column of current row.
- * activeCell follows the moving edge; the range geometry tracks
- * the moving edge via getMovingEdge(range, anchor).
+ * activeCell stays at the anchor; the range geometry tracks the moving edge
+ * via getMovingEdge(range, anchor).
  */
 const extendToEnd = assign(
   ({ context, event }: { context: SelectionContext; event: SelectionEvent }) => {

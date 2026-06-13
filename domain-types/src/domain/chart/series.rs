@@ -267,6 +267,10 @@ pub struct ChartSeriesData {
     pub leader_line_format: Option<ChartFormatData>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub show_leader_lines: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub bin_options: Option<HistogramConfigData>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub boxwhisker_options: Option<BoxplotConfigData>,
 }
 
 /// Imported per-point cache for one chart data dimension.
@@ -400,15 +404,24 @@ pub struct HistogramConfigData {
     /// Underflow bin threshold value.
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub underflow_bin_value: Option<f64>,
+    /// Whether to accumulate bins cumulatively.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub cumulative: Option<bool>,
 }
 
 /// Boxplot-specific configuration (box-and-whisker charts).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct BoxplotConfigData {
+    /// Whether to show outliers.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub show_outliers: Option<bool>,
     /// Whether to show outlier points.
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub show_outlier_points: Option<bool>,
+    /// Whether to show mean indicators.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub show_mean: Option<bool>,
     /// Whether to show mean markers.
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub show_mean_markers: Option<bool>,
@@ -418,6 +431,9 @@ pub struct BoxplotConfigData {
     /// Quartile calculation method: "exclusive" or "inclusive".
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub quartile_method: Option<String>,
+    /// Whisker type: "tukey", "minMax", or "percentile".
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub whisker_type: Option<String>,
 }
 
 /// One imported hierarchy row for ChartEx treemap/sunburst projection.

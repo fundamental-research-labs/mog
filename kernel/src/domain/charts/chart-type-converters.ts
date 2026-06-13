@@ -176,8 +176,8 @@ export function wireToSeriesConfig(w: ChartSeriesData): SeriesConfig {
     showConnectorLines: w.showConnectorLines,
     leaderLineFormat: wireToChartFormat(w.leaderLineFormat),
     showLeaderLines: w.showLeaderLines,
-    binOptions: undefined,
-    boxwhiskerOptions: undefined,
+    binOptions: w.binOptions,
+    boxwhiskerOptions: w.boxwhiskerOptions,
   };
   return config;
 }
@@ -245,6 +245,8 @@ export function seriesConfigToWire(c: SeriesConfig): ChartSeriesData {
     showConnectorLines: c.showConnectorLines,
     leaderLineFormat: chartFormatToWire(c.leaderLineFormat),
     showLeaderLines: c.showLeaderLines,
+    binOptions: c.binOptions,
+    boxwhiskerOptions: c.boxwhiskerOptions,
   });
 }
 

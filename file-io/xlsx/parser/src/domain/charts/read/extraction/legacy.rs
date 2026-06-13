@@ -199,6 +199,8 @@ pub(in crate::domain::charts::read) fn extract_chart_series(
                 show_connector_lines: None,
                 leader_line_format: None,
                 show_leader_lines: None,
+                bin_options: None,
+                boxwhisker_options: None,
             }
         })
         .collect()

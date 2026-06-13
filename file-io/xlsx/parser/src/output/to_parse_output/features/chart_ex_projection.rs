@@ -648,6 +648,8 @@ fn project_chart_ex_series(
                     .and_then(|visibility| visibility.connector_lines),
                 leader_line_format: None,
                 show_leader_lines: None,
+                bin_options: project_histogram(region, diagnostics),
+                boxwhisker_options: project_boxplot(region, diagnostics),
             })
         })
         .collect()
@@ -1210,6 +1212,8 @@ fn project_chart_ex_data_labels(labels: &ChartExDataLabels) -> Option<DataLabelD
         link_number_format: labels.num_fmt.as_ref().and_then(|fmt| fmt.source_linked),
         geometric_shape_type: None,
         formula: None,
+        height: None,
+        width: None,
         leader_lines_format: None,
         layout: None,
     })
@@ -1308,6 +1312,7 @@ fn project_histogram_binning(binning: &ChartExBinning) -> HistogramConfigData {
         overflow_bin_value,
         underflow_bin,
         underflow_bin_value,
+        cumulative: None,
     }
 }
 
@@ -1337,16 +1342,22 @@ fn project_boxplot(
         );
     }
     let config = BoxplotConfigData {
+        show_outliers: visibility.and_then(|visibility| visibility.outlier_points),
         show_outlier_points: visibility.and_then(|visibility| visibility.outlier_points),
+        show_mean: visibility.and_then(|visibility| visibility.mean_marker),
         show_mean_markers: visibility.and_then(|visibility| visibility.mean_marker),
         show_mean_line: visibility.and_then(|visibility| visibility.mean_line),
         quartile_method: statistics.and_then(|statistics| statistics.quartile_method.clone()),
+        whisker_type: None,
     };
 
     if config.show_outlier_points.is_none()
+        && config.show_outliers.is_none()
+        && config.show_mean.is_none()
         && config.show_mean_markers.is_none()
         && config.show_mean_line.is_none()
         && config.quartile_method.is_none()
+        && config.whisker_type.is_none()
     {
         return None;
     }
@@ -1743,6 +1754,8 @@ mod tests {
             show_connector_lines: None,
             leader_line_format: None,
             show_leader_lines: None,
+            bin_options: None,
+            boxwhisker_options: None,
         }
     }
 

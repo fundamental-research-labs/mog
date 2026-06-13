@@ -387,6 +387,8 @@ fn extract_single_series_with_semantics(
         show_connector_lines: None,
         leader_line_format: None,
         show_leader_lines: None,
+        bin_options: None,
+        boxwhisker_options: None,
     }
 }
 

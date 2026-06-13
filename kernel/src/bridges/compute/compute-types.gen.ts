@@ -236,10 +236,13 @@ export interface BorderDef {
 export type BorderStyle = "thin" | "medium" | "thick";
 
 export interface BoxplotConfigData {
+  showOutliers?: boolean;
   showOutlierPoints?: boolean;
+  showMean?: boolean;
   showMeanMarkers?: boolean;
   showMeanLine?: boolean;
   quartileMethod?: string;
+  whiskerType?: string;
 }
 
 export interface BridgeAutoFillRequest {
@@ -1139,6 +1142,8 @@ export interface ChartSeriesData {
   showConnectorLines?: boolean;
   leaderLineFormat?: ChartFormatData;
   showLeaderLines?: boolean;
+  binOptions?: HistogramConfigData;
+  boxwhiskerOptions?: BoxplotConfigData;
 }
 
 export type ChartSeriesDimensionSourceKindData = "ref" | "literal" | "cacheFallback";
@@ -1642,6 +1647,8 @@ export interface DataLabelData {
   linkNumberFormat?: boolean;
   geometricShapeType?: string;
   formula?: string;
+  height?: number;
+  width?: number;
   leaderLinesFormat?: ChartLineData;
   layout?: ManualLayout;
 }
@@ -2572,6 +2579,7 @@ export interface HistogramConfigData {
   overflowBinValue?: number;
   underflowBin?: boolean;
   underflowBinValue?: number;
+  cumulative?: boolean;
 }
 
 export type HorizontalAlign = "left" | "center" | "right" | "justify" | "distributed";

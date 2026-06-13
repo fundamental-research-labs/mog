@@ -61,6 +61,10 @@ pub struct DataLabelData {
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub formula: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub height: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub width: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     pub leader_lines_format: Option<ChartLineData>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub layout: Option<ManualLayout>,

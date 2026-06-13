@@ -54,6 +54,8 @@ pub(in crate::domain::charts::read) fn extract_data_label_data(
             .and_then(|format| format.source_linked),
         geometric_shape_type: None,
         formula: None,
+        height: None,
+        width: None,
         leader_lines_format: dl
             .leader_lines
             .as_ref()
@@ -161,6 +163,8 @@ pub(in crate::domain::charts::read) fn extract_individual_data_label_data(
             .or_else(|| defaults.and_then(|dl| dl.num_fmt_obj.as_ref()?.source_linked)),
         geometric_shape_type: None,
         formula,
+        height: None,
+        width: None,
         leader_lines_format: defaults
             .and_then(|dl| dl.leader_lines.as_ref())
             .and_then(|lines| lines.sp_pr.as_ref())

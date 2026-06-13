@@ -115,6 +115,8 @@ export function wireToDataLabelConfig(w: DataLabelData): DataLabelConfig {
     linkNumberFormat: w.linkNumberFormat,
     geometricShapeType: w.geometricShapeType,
     formula: w.formula,
+    height: w.height,
+    width: w.width,
     leaderLinesFormat: w.leaderLinesFormat
       ? wireToLeaderLinesFormat(w.leaderLinesFormat)
       : undefined,
@@ -148,6 +150,8 @@ export function dataLabelConfigToWire(c: DataLabelConfig): DataLabelData {
     linkNumberFormat: c.linkNumberFormat,
     geometricShapeType: c.geometricShapeType,
     formula: c.formula,
+    height: c.height,
+    width: c.width,
     leaderLinesFormat: c.leaderLinesFormat
       ? leaderLinesFormatToWire(c.leaderLinesFormat)
       : undefined,

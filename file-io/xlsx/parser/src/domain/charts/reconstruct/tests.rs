@@ -868,6 +868,8 @@ fn manual_layouts_reconstruct_for_chart_level_surfaces() {
         link_number_format: None,
         geometric_shape_type: None,
         formula: None,
+        height: None,
+        width: None,
         leader_lines_format: None,
         layout: Some(ManualLayout {
             y_mode: Some(LayoutMode::Edge),

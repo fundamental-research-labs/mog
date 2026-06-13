@@ -1703,6 +1703,8 @@ fn chart_ex_projected_series() -> domain_types::chart::ChartSeriesData {
         show_connector_lines: None,
         leader_line_format: None,
         show_leader_lines: None,
+        bin_options: None,
+        boxwhisker_options: None,
     }
 }
 

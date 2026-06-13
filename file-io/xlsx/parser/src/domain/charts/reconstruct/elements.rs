@@ -463,6 +463,8 @@ mod tests {
             link_number_format: None,
             geometric_shape_type: None,
             formula: Some("Sheet1!$A$1".to_string()),
+            height: None,
+            width: None,
             leader_lines_format: None,
             layout: None,
         };

@@ -516,7 +516,7 @@ export const OPEN_INSERT_SLICER_DIALOG: AsyncActionHandler = async (
   );
 
   // Open the dialog via UIStore
-  getUIStore(deps).getState().openInsertSlicerDialog('table', tableAtSelection.name, columns);
+  getUIStore(deps).getState().openInsertSlicerDialog('table', tableAtSelection.id, columns);
 
   return handled();
 };

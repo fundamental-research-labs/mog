@@ -8,7 +8,10 @@ use domain_types::{
     domain::{
         connections::{QueryTable, QueryTableField},
         slicer::SlicerSource,
-        table::{TableColumnSpec, TableSpec},
+        table::{
+            FilterColumnSpec, FilterSpec, TableColumnSpec, TableSortCondition, TableSortState,
+            TableSpec,
+        },
     },
 };
 use ooxml_types::slicers::{SlicerCacheDef, SlicerDef, SlicerSortOrder, TableSlicerCache};
@@ -126,6 +129,91 @@ fn runtime_created_range_backed_table_exports_to_xlsx_package() {
     assert!(sheet_xml.contains(r#"<tableParts count="1">"#));
     assert!(sheet_rels.contains(r#"Target="../tables/table1.xml""#));
     assert!(content_types.contains(r#"PartName="/xl/tables/table1.xml""#));
+}
+
+#[test]
+fn imported_table_filter_projection_preserves_catalog_sort_state() {
+    let input = ParseOutput {
+        sheets: vec![SheetData {
+            name: "Sheet1".to_string(),
+            rows: 3,
+            cols: 2,
+            dimensions: SheetDimensions::default(),
+            tables: vec![TableSpec {
+                id: 7,
+                name: "SalesData".to_string(),
+                display_name: "SalesData".to_string(),
+                range_ref: "A1:B3".to_string(),
+                has_headers: true,
+                has_totals: false,
+                auto_filter_ref: Some("A1:B3".to_string()),
+                columns: vec![
+                    TableColumnSpec {
+                        id: 1,
+                        name: "Account".to_string(),
+                        ..Default::default()
+                    },
+                    TableColumnSpec {
+                        id: 2,
+                        name: "Status".to_string(),
+                        ..Default::default()
+                    },
+                ],
+                filter_columns: vec![FilterColumnSpec {
+                    col_id: 1,
+                    hidden_button: false,
+                    show_button: true,
+                    filter: FilterSpec::Values {
+                        blank: false,
+                        values: vec!["Open".to_string()],
+                        calendar_type: None,
+                        date_group_items: Vec::new(),
+                    },
+                    ext_lst_raw: None,
+                }],
+                sort_state: Some(TableSortState {
+                    ref_range: "A2:B3".to_string(),
+                    column_sort: false,
+                    case_sensitive: false,
+                    sort_method: domain_types::SortMethod::None,
+                    conditions: vec![TableSortCondition {
+                        ref_range: "B1:B3".to_string(),
+                        descending: true,
+                        sort_by: domain_types::SortConditionBy::Value,
+                        custom_list: None,
+                        dxf_id: None,
+                        icon_set: None,
+                        icon_id: None,
+                    }],
+                    ext_lst_raw: None,
+                }),
+                ..Default::default()
+            }],
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    let engine = engine_from_parse_output_normal(&input);
+    let exported = engine
+        .export_to_parse_output()
+        .expect("export_to_parse_output")
+        .parse_output;
+    let table = exported.sheets[0]
+        .tables
+        .iter()
+        .find(|table| table.name == "SalesData")
+        .expect("exported table");
+
+    assert_eq!(table.filter_columns.len(), 1);
+    let sort_state = table
+        .sort_state
+        .as_ref()
+        .expect("table-level sort state should survive filter projection");
+    assert_eq!(sort_state.ref_range, "A2:B3");
+    assert_eq!(sort_state.conditions.len(), 1);
+    assert_eq!(sort_state.conditions[0].ref_range, "B1:B3");
+    assert!(sort_state.conditions[0].descending);
 }
 
 #[test]

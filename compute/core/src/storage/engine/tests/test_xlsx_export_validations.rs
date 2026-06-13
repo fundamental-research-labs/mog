@@ -115,6 +115,7 @@ fn runtime_created_range_backed_validations_export_to_parse_output_and_xlsx() {
     assert!(status.show_prompt);
     assert_eq!(status.prompt_title.as_deref(), Some("Status"));
     assert_eq!(status.error_title.as_deref(), Some("Invalid status"));
+    assert_eq!(status.uid, None);
 
     let priority = validations
         .iter()
@@ -137,6 +138,7 @@ fn runtime_created_range_backed_validations_export_to_parse_output_and_xlsx() {
         priority.error_style,
         domain_types::domain::validation::ErrorStyle::Warning
     );
+    assert_eq!(priority.uid, None);
 
     let bytes = engine
         .export_to_xlsx_bytes()
@@ -165,6 +167,7 @@ fn runtime_created_range_backed_validations_export_to_parse_output_and_xlsx() {
         sheet_xml.contains(r#"<formula2>5</formula2>"#),
         "{sheet_xml}"
     );
+    assert!(!sheet_xml.contains("xr:uid="), "{sheet_xml}");
 }
 
 #[test]
@@ -212,6 +215,7 @@ fn imported_x14_validations_hydrate_to_canonical_store_and_export_as_classic() {
     let validations = &exported.sheets[0].data_validations;
     assert_eq!(validations.len(), 1);
     assert_eq!(validations[0].ranges, vec!["A1:A3".to_string()]);
+    assert_eq!(validations[0].uid, None);
     match &validations[0].rule {
         ValidationRule::WholeNumber {
             operator,
@@ -235,4 +239,5 @@ fn imported_x14_validations_hydrate_to_canonical_store_and_export_as_classic() {
         "{sheet_xml}"
     );
     assert!(!sheet_xml.contains("<x14:dataValidations"), "{sheet_xml}");
+    assert!(!sheet_xml.contains("xr:uid="), "{sheet_xml}");
 }

@@ -843,7 +843,9 @@ fn apply_runtime_table_filter_to_spec(
     if !filter_columns.is_empty() || !filter.column_filters.is_empty() {
         spec.filter_columns = filter_columns;
     }
-    spec.sort_state = auto_filter.sort.map(table_sort_state_from_ooxml);
+    if let Some(sort) = auto_filter.sort {
+        spec.sort_state = Some(table_sort_state_from_ooxml(sort));
+    }
 }
 
 fn resolve_filter_cell_position(

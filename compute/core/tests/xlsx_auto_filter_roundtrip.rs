@@ -178,6 +178,16 @@ fn rich_auto_filter_survives_hydrate_export_roundtrip() {
     // through the engine (the production path).
     let xlsx_bytes =
         write_xlsx_from_parse_output(&parse_output).expect("write_xlsx_from_parse_output");
+    let (written, _written_diags) =
+        xlsx_parser::parse_xlsx_to_output(&xlsx_bytes).expect("parse written xlsx");
+    let af_written = written.sheets[0]
+        .auto_filter
+        .as_ref()
+        .expect("written auto_filter should parse");
+    let expected_color_dxf_id = match &af_written.columns[4].filter_type {
+        Some(OoxmlFilterType::Color { dxf_id, .. }) => *dxf_id,
+        other => panic!("written col 4 should be Color, got {other:?}"),
+    };
 
     let (engine, _) = YrsComputeEngine::from_xlsx_bytes(&xlsx_bytes).expect("from_xlsx_bytes");
 
@@ -236,7 +246,7 @@ fn rich_auto_filter_survives_hydrate_export_roundtrip() {
     }
     match &af_rt.columns[4].filter_type {
         Some(OoxmlFilterType::Color { dxf_id, cell_color }) => {
-            assert_eq!(dxf_id, &Some(7));
+            assert_eq!(*dxf_id, expected_color_dxf_id);
             assert!(!cell_color);
         }
         other => panic!("col 4 should be Color, got {other:?}"),

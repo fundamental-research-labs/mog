@@ -125,16 +125,6 @@ impl RangeSchema {
                 None => (false, None, None),
             };
 
-        // Preserve the RangeSchema id as the ValidationSpec uid so the
-        // runtime view layer can continue to find it by id on subsequent
-        // reads. Empty ids leave uid absent so the XLSX writer won't emit
-        // a blank `xr:uid` attribute.
-        let uid = if self.id.is_empty() {
-            None
-        } else {
-            Some(self.id.clone())
-        };
-
         Some(ValidationSpec {
             ranges: a1_ranges,
             rule,
@@ -147,7 +137,10 @@ impl RangeSchema {
             prompt_message,
             allow_blank,
             ime_mode: ImeMode::NoControl,
-            uid,
+            // RangeSchema ids are runtime metadata, not OOXML revision ids.
+            // The storage map key preserves the runtime id; only imported
+            // XLSX `xr:uid` values should populate this field.
+            uid: None,
         })
     }
 }

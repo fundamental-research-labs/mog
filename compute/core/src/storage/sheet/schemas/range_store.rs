@@ -12,6 +12,12 @@ use super::range_view::range_schema_id_for;
 use super::validation_rules::{read_ordered_validation_rules, validation_spec_to_rule_json};
 use super::yrs_io::{ensure_sheet_sub_map, get_sheet_sub_map};
 
+#[derive(Debug, Clone)]
+pub(super) struct RangeBackedValidationSpec {
+    pub(super) rule_id: String,
+    pub(super) spec: ValidationSpec,
+}
+
 pub(super) fn create_validation_ranges(
     txn: &mut yrs::TransactionMut,
     sheets_root: &MapRef,
@@ -151,6 +157,17 @@ pub(super) fn read_range_backed_validation_specs(
     sheets_root: &MapRef,
     sheet_id: &SheetId,
 ) -> Vec<ValidationSpec> {
+    read_range_backed_validation_entries(txn, sheets_root, sheet_id)
+        .into_iter()
+        .map(|entry| entry.spec)
+        .collect()
+}
+
+pub(super) fn read_range_backed_validation_entries(
+    txn: &impl ReadTxn,
+    sheets_root: &MapRef,
+    sheet_id: &SheetId,
+) -> Vec<RangeBackedValidationSpec> {
     let Some(ranges_map) = get_sheet_sub_map(txn, sheets_root, sheet_id, KEY_RANGES) else {
         return Vec::new();
     };
@@ -187,9 +204,10 @@ pub(super) fn read_range_backed_validation_specs(
     let mut specs = Vec::new();
     for rule in read_ordered_validation_rules(txn, &rules_map) {
         if seen_rules.contains(&rule.rule_id) {
-            let mut spec = rule.spec;
-            spec.uid = Some(rule.rule_id);
-            specs.push(spec);
+            specs.push(RangeBackedValidationSpec {
+                rule_id: rule.rule_id,
+                spec: rule.spec,
+            });
         }
     }
     specs

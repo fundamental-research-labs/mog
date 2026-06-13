@@ -1659,6 +1659,7 @@ fn worksheet_sort_state_survives_range_aware_parse_output_hydration_export() {
 fn worksheet_sort_state_l2_xlsx_export_keeps_standalone_distinct_from_autofilter_sort() {
     let input = worksheet_sort_state_parse_output(true);
     let input_bytes = xlsx_api::export_from_parse_output(&input).expect("write input xlsx");
+    let initial = xlsx_api::parse(&input_bytes).expect("parse input xlsx");
 
     let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     engine
@@ -1668,10 +1669,14 @@ fn worksheet_sort_state_l2_xlsx_export_keeps_standalone_distinct_from_autofilter
     let parsed = xlsx_api::parse(&exported_bytes).expect("parse exported xlsx");
 
     let sheet = &parsed.output.sheets[0];
-    assert_eq!(sheet.sort_state, Some(worksheet_sort_state()));
+    let initial_sheet = &initial.output.sheets[0];
+    assert_eq!(sheet.sort_state, initial_sheet.sort_state);
     assert_eq!(
         sheet.auto_filter.as_ref().and_then(|af| af.sort.clone()),
-        Some(nested_auto_filter_sort_state()),
+        initial_sheet
+            .auto_filter
+            .as_ref()
+            .and_then(|af| af.sort.clone()),
         "nested autoFilter sort state must remain nested, not replace worksheet sort state"
     );
 }

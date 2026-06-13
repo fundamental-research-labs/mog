@@ -26,6 +26,10 @@ import { KernelError } from '../../errors';
 import type { DocumentContext } from '../../context';
 import * as NamedRanges from '../../domain/formulas/named-ranges';
 import { validateName } from '@mog/spreadsheet-utils/data/named-ranges';
+import {
+  isApiVisibleNamedRangeReference,
+  stripFormulaPrefix,
+} from '../named-range-visibility';
 
 /**
  * Dependencies injected from WorkbookImpl.
@@ -58,6 +62,28 @@ export class WorkbookNamesImpl implements WorkbookNames {
     throw new KernelError('API_SHEET_NOT_FOUND', `Sheet not found: ${scope}`, {
       context: { target: scope },
     });
+  }
+
+  private async _getApiVisibleName(
+    name: string,
+    scope?: string,
+  ): Promise<
+    | {
+        defined: NonNullable<Awaited<ReturnType<typeof NamedRanges.getByName>>>;
+        reference: string;
+        scopeSheetId: SheetId | undefined;
+      }
+    | null
+  > {
+    const scopeSheetId = await this._resolveScope(scope);
+    const defined = await NamedRanges.getByName(this.deps.ctx, name, scopeSheetId);
+    if (!defined) return null;
+
+    const a1 = await NamedRanges.getRefersToA1(this.deps.ctx, defined);
+    const reference = stripFormulaPrefix(a1);
+    if (!isApiVisibleNamedRangeReference(reference)) return null;
+
+    return { defined, reference, scopeSheetId };
   }
 
   async add(
@@ -107,55 +133,36 @@ export class WorkbookNamesImpl implements WorkbookNames {
   }
 
   async get(name: string, scope?: string): Promise<NamedRangeInfo | null> {
-    const { ctx, getSheetName } = this.deps;
-
-    const scopeSheetId = await this._resolveScope(scope);
-
-    const defined = await NamedRanges.getByName(ctx, name, scopeSheetId);
-    if (!defined) {
-      return null;
-    }
-
-    // Resolve A1 reference
-    const a1 = await NamedRanges.getRefersToA1(ctx, defined);
-    const reference = a1.startsWith('=') ? a1.slice(1) : a1;
+    const { getSheetName } = this.deps;
+    const item = await this._getApiVisibleName(name, scope);
+    if (!item) return null;
 
     // Resolve scope sheetId to sheet name
     let scopeName: string | undefined;
-    if (defined.scope) {
-      scopeName = (await getSheetName(defined.scope)) ?? undefined;
+    if (item.defined.scope) {
+      scopeName = (await getSheetName(item.defined.scope)) ?? undefined;
     }
 
     return {
-      name: defined.name,
-      reference,
+      name: item.defined.name,
+      reference: item.reference,
       scope: scopeName,
-      comment: defined.comment ?? undefined,
-      visible: defined.visible,
+      comment: item.defined.comment ?? undefined,
+      visible: item.defined.visible,
     };
   }
 
   async getRange(name: string, scope?: string): Promise<NamedRangeReference | null> {
-    const { ctx } = this.deps;
-
-    const scopeSheetId = await this._resolveScope(scope);
-
-    const defined = await NamedRanges.getByName(ctx, name, scopeSheetId);
-    if (!defined) {
-      return null;
-    }
-
-    // Get the A1 reference string
-    const a1 = await NamedRanges.getRefersToA1(ctx, defined);
-    // Strip leading "="
-    const ref = a1.startsWith('=') ? a1.slice(1) : a1;
+    const item = await this._getApiVisibleName(name, scope);
+    if (!item) return null;
+    const ref = item.reference;
 
     // Parse sheet!range format
     const bangIndex = ref.indexOf('!');
     if (bangIndex === -1) {
       // No sheet prefix — try to infer from the named range's scope
-      if (defined.scope) {
-        const scopeSheetName = await this.deps.getSheetName(defined.scope);
+      if (item.defined.scope) {
+        const scopeSheetName = await this.deps.getSheetName(item.defined.scope);
         if (scopeSheetName) {
           return { sheetName: scopeSheetName, range: ref };
         }
@@ -231,7 +238,8 @@ export class WorkbookNamesImpl implements WorkbookNames {
     const results: NamedRangeInfo[] = [];
 
     for (const entry of exported) {
-      const ref = entry.refersToA1.startsWith('=') ? entry.refersToA1.slice(1) : entry.refersToA1;
+      const ref = stripFormulaPrefix(entry.refersToA1);
+      if (!isApiVisibleNamedRangeReference(ref)) continue;
 
       // Resolve scope sheetId to sheet name via Rust
       let scopeName: string | undefined;
@@ -290,26 +298,34 @@ export class WorkbookNamesImpl implements WorkbookNames {
 
   async getValue(name: string, scope?: string): Promise<string | null> {
     const { ctx } = this.deps;
-    const currentSheet = scope ?? null;
+    const item = await this._getApiVisibleName(name, scope);
+    if (!item) return null;
+    const currentSheet = item.scopeSheetId ?? null;
     return ctx.computeBridge.getNamedRangeDisplayValue(name, currentSheet);
   }
 
   async getType(name: string, scope?: string): Promise<NamedItemType | null> {
     const { ctx } = this.deps;
-    const currentSheet = scope ?? null;
+    const item = await this._getApiVisibleName(name, scope);
+    if (!item) return null;
+    const currentSheet = item.scopeSheetId ?? null;
     const type = await ctx.computeBridge.getNamedRangeType(name, currentSheet);
     return type as NamedItemType | null;
   }
 
   async getArrayValues(name: string, scope?: string): Promise<CellValue[][] | null> {
     const { ctx } = this.deps;
-    const currentSheet = scope ?? null;
+    const item = await this._getApiVisibleName(name, scope);
+    if (!item) return null;
+    const currentSheet = item.scopeSheetId ?? null;
     return ctx.computeBridge.getNamedRangeArrayValues(name, currentSheet);
   }
 
   async getArrayTypes(name: string, scope?: string): Promise<RangeValueType[][] | null> {
     const { ctx } = this.deps;
-    const currentSheet = scope ?? null;
+    const item = await this._getApiVisibleName(name, scope);
+    if (!item) return null;
+    const currentSheet = item.scopeSheetId ?? null;
     const values = await ctx.computeBridge.getNamedRangeArrayValues(name, currentSheet);
     if (!values) return null;
 
@@ -329,7 +345,9 @@ export class WorkbookNamesImpl implements WorkbookNames {
 
   async getValueAsJson(name: string, scope?: string): Promise<CellValue | null> {
     const { ctx } = this.deps;
-    const currentSheet = scope ?? null;
+    const item = await this._getApiVisibleName(name, scope);
+    if (!item) return null;
+    const currentSheet = item.scopeSheetId ?? null;
     return ctx.computeBridge.getNamedRangeTypedValue(name, currentSheet);
   }
 

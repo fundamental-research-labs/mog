@@ -14,6 +14,10 @@ import type {
 import type { DocumentContext } from '../../context';
 import * as NamedRanges from '../../domain/formulas/named-ranges';
 import { KernelError } from '../../errors';
+import {
+  isApiVisibleNamedRangeReference,
+  stripFormulaPrefix,
+} from '../named-range-visibility';
 
 export class WorksheetNamesImpl implements WorksheetNames {
   constructor(
@@ -63,7 +67,8 @@ export class WorksheetNamesImpl implements WorksheetNames {
     if (!defined) return null;
 
     const a1 = await NamedRanges.getRefersToA1(this.ctx, defined);
-    const reference = a1.startsWith('=') ? a1.slice(1) : a1;
+    const reference = stripFormulaPrefix(a1);
+    if (!isApiVisibleNamedRangeReference(reference)) return null;
     const sheetName = await this.getSheetName();
 
     return {
@@ -80,7 +85,8 @@ export class WorksheetNamesImpl implements WorksheetNames {
     if (!defined) return null;
 
     const a1 = await NamedRanges.getRefersToA1(this.ctx, defined);
-    const ref = a1.startsWith('=') ? a1.slice(1) : a1;
+    const ref = stripFormulaPrefix(a1);
+    if (!isApiVisibleNamedRangeReference(ref)) return null;
     const bangIndex = ref.indexOf('!');
     if (bangIndex === -1) {
       // No sheet prefix — use the scope's sheet name
@@ -142,14 +148,11 @@ export class WorksheetNamesImpl implements WorksheetNames {
     return exported
       .filter((entry) => {
         if (entry.scope !== this.sheetId) return false;
-        // Filter out #REF! entries (kept in Yrs for XLSX round-trip fidelity, but not for API)
-        const ref = entry.refersToA1.startsWith('=') ? entry.refersToA1.slice(1) : entry.refersToA1;
-        if (ref.includes('#REF!')) return false;
-        return true;
+        return isApiVisibleNamedRangeReference(entry.refersToA1);
       })
       .map((entry) => ({
         name: entry.name,
-        reference: entry.refersToA1.startsWith('=') ? entry.refersToA1.slice(1) : entry.refersToA1,
+        reference: stripFormulaPrefix(entry.refersToA1),
         scope: sheetName,
         comment: entry.comment ?? undefined,
         visible: entry.visible,

@@ -21,6 +21,55 @@ pub(super) fn remap_for_export(output: &ParseOutput) -> (ParseOutput, Vec<DxfDef
     let mut reachable = HashSet::new();
     collect_reachable_ids(output, &mut reachable);
 
+    let (id_to_export_id, mut dxfs) = if registry_has_dense_ooxml_ids(registry) {
+        preserve_dense_ooxml_ids(registry, &reachable)
+    } else {
+        compact_reachable_ids(registry, &reachable)
+    };
+
+    let mut remapped = output.clone();
+    remap_non_cf_dxf_ids(&mut remapped, &id_to_export_id);
+    clear_cf_dxf_ids(&mut remapped);
+    assign_live_cf_style_dxfs(&mut remapped, &mut dxfs);
+    (remapped, dxfs)
+}
+
+fn registry_has_dense_ooxml_ids(registry: &[domain_types::DxfDef]) -> bool {
+    registry
+        .iter()
+        .enumerate()
+        .all(|(index, entry)| entry.id == index as u32)
+}
+
+fn preserve_dense_ooxml_ids(
+    registry: &[domain_types::DxfDef],
+    reachable: &HashSet<u32>,
+) -> (HashMap<u32, u32>, Vec<DxfDef>) {
+    let Some(max_reachable_id) = reachable.iter().copied().max() else {
+        return (HashMap::new(), Vec::new());
+    };
+
+    let registry_by_id: HashMap<u32, &domain_types::DxfDef> =
+        registry.iter().map(|entry| (entry.id, entry)).collect();
+    let mut id_to_export_id = HashMap::new();
+    let mut dxfs = Vec::new();
+    for id in 0..=max_reachable_id {
+        id_to_export_id.insert(id, id);
+        dxfs.push(
+            registry_by_id
+                .get(&id)
+                .map(|entry| entry.to_ooxml())
+                .unwrap_or_default(),
+        );
+    }
+
+    (id_to_export_id, dxfs)
+}
+
+fn compact_reachable_ids(
+    registry: &[domain_types::DxfDef],
+    reachable: &HashSet<u32>,
+) -> (HashMap<u32, u32>, Vec<DxfDef>) {
     let mut id_to_export_id = HashMap::<u32, u32>::new();
     let mut dxfs = Vec::new();
     for entry in registry
@@ -41,11 +90,7 @@ pub(super) fn remap_for_export(output: &ParseOutput) -> (ParseOutput, Vec<DxfDef
         dxfs.push(DxfDef::default());
     }
 
-    let mut remapped = output.clone();
-    remap_non_cf_dxf_ids(&mut remapped, &id_to_export_id);
-    clear_cf_dxf_ids(&mut remapped);
-    assign_live_cf_style_dxfs(&mut remapped, &mut dxfs);
-    (remapped, dxfs)
+    (id_to_export_id, dxfs)
 }
 
 fn collect_reachable_ids(output: &ParseOutput, reachable: &mut HashSet<u32>) {
@@ -591,6 +636,50 @@ mod tests {
         assert_eq!(
             remapped_with_preceding_reachable.sheets[0].tables[0].data_dxf_id,
             Some(0)
+        );
+    }
+
+    #[test]
+    fn remap_for_export_preserves_dense_ooxml_dxf_indexes() {
+        let output = ParseOutput {
+            workbook_stylesheet: Some(domain_types::WorkbookStylesheet {
+                dxf_registry: (0..=7).map(registry_entry).collect(),
+                ..Default::default()
+            }),
+            sheets: vec![domain_types::SheetData {
+                name: "Sheet1".to_string(),
+                auto_filter: Some(domain_types::AutoFilter {
+                    range_ref: "A1:B5".to_string(),
+                    columns: vec![domain_types::FilterColumn {
+                        col_index: 0,
+                        filter_type: Some(domain_types::OoxmlFilterType::Color {
+                            dxf_id: Some(7),
+                            cell_color: true,
+                        }),
+                        ..Default::default()
+                    }],
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+
+        let (remapped, dxfs) = remap_for_export(&output);
+
+        assert_eq!(dxfs.len(), 8);
+        assert_eq!(dxfs[7], registry_entry(7).to_ooxml());
+        assert_eq!(
+            remapped.sheets[0].auto_filter.as_ref().and_then(|filter| {
+                filter
+                    .columns
+                    .first()
+                    .and_then(|column| match &column.filter_type {
+                        Some(domain_types::OoxmlFilterType::Color { dxf_id, .. }) => *dxf_id,
+                        _ => None,
+                    })
+            }),
+            Some(7)
         );
     }
 

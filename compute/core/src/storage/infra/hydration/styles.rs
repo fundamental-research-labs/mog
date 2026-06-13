@@ -17,7 +17,6 @@ const KEY_STYLE_REGISTRY_CELL_STYLE_XFS: &str = "cellStyleXfs";
 const KEY_STYLE_REGISTRY_CELL_XFS: &str = "cellXfs";
 const KEY_STYLE_REGISTRY_NAMED_CELL_STYLES: &str = "namedCellStyles";
 const KEY_STYLE_REGISTRY_DXFS: &str = "differentialFormats";
-const KEY_STYLE_REGISTRY_TABLE_STYLES: &str = "tableStyles";
 const KEY_STYLE_REGISTRY_INDEXED_COLORS: &str = "indexedColors";
 const KEY_STYLE_REGISTRY_DEFAULT_TABLE_STYLE: &str = "defaultTableStyle";
 const KEY_STYLE_REGISTRY_DEFAULT_PIVOT_STYLE: &str = "defaultPivotStyle";
@@ -164,12 +163,6 @@ pub(super) fn hydrate_workbook_stylesheet(
             &map,
             KEY_STYLE_REGISTRY_DXFS,
             &stylesheet.differential_formats,
-        );
-        hydrate_style_registry_vec(
-            txn,
-            &map,
-            KEY_STYLE_REGISTRY_TABLE_STYLES,
-            &stylesheet.table_styles,
         );
         hydrate_style_registry_value(
             txn,

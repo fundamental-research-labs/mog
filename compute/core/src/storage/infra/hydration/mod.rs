@@ -41,6 +41,7 @@ mod print_defined_names;
 mod sheet;
 mod snapshot;
 mod styles;
+mod table_styles;
 mod view;
 mod workbook;
 

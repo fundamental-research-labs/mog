@@ -11,8 +11,9 @@
 //! every previously-dropped attribute.
 
 use domain_types::{
-    AutoFilter, CalendarType, DateGroupItem, DateTimeGrouping, FilterColumn, OoxmlFilterCondition,
-    OoxmlFilterType, ParseOutput, SheetData, SheetDimensions,
+    AutoFilter, CalendarType, DateGroupItem, DateTimeGrouping, DxfDef, FilterColumn,
+    OoxmlFilterCondition, OoxmlFilterType, ParseOutput, SheetData, SheetDimensions,
+    WorkbookStylesheet,
 };
 use xlsx_parser::parse_xlsx_to_output;
 use xlsx_parser::write::write_xlsx_from_parse_output;
@@ -34,6 +35,10 @@ fn make_sheet_with_autofilter(af: AutoFilter) -> ParseOutput {
 
 fn round_trip(af: AutoFilter) -> AutoFilter {
     let po = make_sheet_with_autofilter(af);
+    round_trip_output(po)
+}
+
+fn round_trip_output(po: ParseOutput) -> AutoFilter {
     let bytes = write_xlsx_from_parse_output(&po).expect("write");
     let (rt, _diag) = parse_xlsx_to_output(&bytes).expect("parse");
     rt.sheets[0]
@@ -70,7 +75,17 @@ fn values_with_calendar_type_and_date_group_items_round_trip() {
         xr_uid: None,
         ext_lst_raw: None,
     };
-    let rt = round_trip(original.clone());
+    let mut po = make_sheet_with_autofilter(original.clone());
+    po.workbook_stylesheet = Some(WorkbookStylesheet {
+        dxf_registry: (0..=7)
+            .map(|id| DxfDef {
+                id,
+                ..Default::default()
+            })
+            .collect(),
+        ..Default::default()
+    });
+    let rt = round_trip_output(po);
     assert_eq!(rt, original);
 }
 

@@ -905,8 +905,13 @@ pub(in crate::storage::engine) fn build_parse_output_from_yrs(
     let wb_protection = export_workbook_protection(stores);
     let slicer_caches = export_workbook_slicer_caches(stores, Some(&table_projection));
     let timeline_caches = workbook::export_workbook_timeline_caches(stores);
-    let (custom_table_styles, default_table_style, default_pivot_style) =
+    let (custom_table_styles, default_table_style, default_pivot_style, generated_table_style_dxfs) =
         export_workbook_table_styles(stores);
+    let mut workbook_stylesheet = export_workbook_stylesheet(stores);
+    if !generated_table_style_dxfs.is_empty() {
+        let stylesheet = workbook_stylesheet.get_or_insert_with(Default::default);
+        stylesheet.dxf_registry.extend(generated_table_style_dxfs);
+    }
     let data_table_regions = export_data_table_regions(stores, &sheet_ids);
     let connections = workbook::export_workbook_connections(stores);
 
@@ -922,7 +927,7 @@ pub(in crate::storage::engine) fn build_parse_output_from_yrs(
         workbook_root_namespaces: workbook::export_workbook_root_namespaces(stores),
         workbook_conformance: None,
         style_palette,
-        workbook_stylesheet: export_workbook_stylesheet(stores),
+        workbook_stylesheet,
         package_fidelity: workbook::export_package_fidelity_metadata(stores),
         shared_string_hints: export_shared_string_hints(stores),
         named_ranges,

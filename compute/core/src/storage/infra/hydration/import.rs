@@ -30,6 +30,7 @@ use super::imported_pivot_classification::{ImportedPivotClassification, classify
 use super::print_defined_names::hydrate_workbook_print_defined_names;
 use super::sheet::{SheetIdAllocation, hydrate_sheet, hydrate_sheet_with_allocation};
 use super::styles::{ImportedRangeStyle, hydrate_style_palette, hydrate_workbook_stylesheet};
+use super::table_styles::hydrate_custom_table_styles_from_ooxml;
 use super::workbook::{
     hydrate_custom_workbook_views_xml, hydrate_package_fidelity_metadata,
     hydrate_shared_string_hints, hydrate_volatile_dependency_part, hydrate_workbook_calculation,
@@ -221,9 +222,15 @@ impl YrsStorage {
         );
         hydrate_workbook_table_styles(
             &self.workbook,
-            &output.custom_table_styles,
             &output.default_table_style,
             &output.default_pivot_style,
+            &mut txn,
+        );
+        hydrate_custom_table_styles_from_ooxml(
+            &self.workbook,
+            &output.custom_table_styles,
+            &output.workbook_stylesheet,
+            &output.theme,
             &mut txn,
         );
         hydrate_workbook_theme(&self.workbook, &output.theme, &mut txn);
@@ -488,6 +495,19 @@ impl YrsStorage {
         hydrate_workbook_root_namespaces(
             &self.workbook,
             &output.workbook_root_namespaces,
+            &mut txn,
+        );
+        hydrate_workbook_table_styles(
+            &self.workbook,
+            &output.default_table_style,
+            &output.default_pivot_style,
+            &mut txn,
+        );
+        hydrate_custom_table_styles_from_ooxml(
+            &self.workbook,
+            &output.custom_table_styles,
+            &output.workbook_stylesheet,
+            &output.theme,
             &mut txn,
         );
         hydrate_workbook_theme(&self.workbook, &output.theme, &mut txn);

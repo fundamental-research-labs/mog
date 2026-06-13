@@ -37,7 +37,6 @@ const KEY_STYLE_REGISTRY_CELL_STYLE_XFS: &str = "cellStyleXfs";
 const KEY_STYLE_REGISTRY_CELL_XFS: &str = "cellXfs";
 const KEY_STYLE_REGISTRY_NAMED_CELL_STYLES: &str = "namedCellStyles";
 const KEY_STYLE_REGISTRY_DXFS: &str = "differentialFormats";
-const KEY_STYLE_REGISTRY_TABLE_STYLES: &str = "tableStyles";
 const KEY_STYLE_REGISTRY_INDEXED_COLORS: &str = "indexedColors";
 const KEY_STYLE_REGISTRY_DEFAULT_TABLE_STYLE: &str = "defaultTableStyle";
 const KEY_STYLE_REGISTRY_DEFAULT_PIVOT_STYLE: &str = "defaultPivotStyle";
@@ -288,7 +287,7 @@ pub(super) fn export_workbook_stylesheet(
                 KEY_STYLE_REGISTRY_NAMED_CELL_STYLES,
             ),
             differential_formats: read_style_registry_vec(&txn, &map, KEY_STYLE_REGISTRY_DXFS),
-            table_styles: read_style_registry_vec(&txn, &map, KEY_STYLE_REGISTRY_TABLE_STYLES),
+            table_styles: Vec::new(),
             indexed_colors: read_style_registry_value(
                 &txn,
                 &map,
@@ -420,20 +419,16 @@ pub(super) fn export_workbook_table_styles(
     Vec<ooxml_types::styles::TableStyleDef>,
     Option<String>,
     Option<String>,
+    Vec<domain_types::DxfDef>,
 ) {
     let doc = stores.storage.doc();
     let txn = doc.transact();
     let workbook = stores.storage.workbook_map();
 
-    let mut styles = Vec::<ooxml_types::styles::TableStyleDef>::new();
     let mut default_table_style = None;
     let mut default_pivot_style = None;
 
     if let Some(Out::YMap(styles_map)) = workbook.get(&txn, KEY_XLSX_TABLE_STYLES) {
-        if let Some(Out::Any(Any::String(json))) = styles_map.get(&txn, "styles") {
-            styles = serde_json::from_str::<Vec<ooxml_types::styles::TableStyleDef>>(&json)
-                .unwrap_or_default();
-        }
         if let Some(Out::Any(Any::String(value))) = styles_map.get(&txn, "defaultTableStyle") {
             default_table_style = Some(value.to_string());
         }
@@ -442,25 +437,28 @@ pub(super) fn export_workbook_table_styles(
         }
     }
 
-    let mut existing_names: std::collections::HashSet<String> = styles
+    let existing_dxf_registry = export_dxf_registry_from_txn(&txn, &workbook);
+    let mut next_dxf_id = existing_dxf_registry
         .iter()
-        .map(|style| style.name.to_lowercase())
-        .collect();
-    for style in stores.custom_table_styles.values() {
-        if existing_names.insert(style.name.to_lowercase()) {
-            styles.push(ooxml_types::styles::TableStyleDef {
-                name: style.name.clone(),
-                pivot: Some(false),
-                table: Some(true),
-                count: Some(0),
-                elements: Vec::new(),
-                xr_uid: None,
-            });
-        }
+        .map(|dxf| dxf.id)
+        .max()
+        .map_or(0, |id| id.saturating_add(1));
+    let mut styles = Vec::new();
+    let mut generated_dxfs = Vec::new();
+    let mut custom_styles: Vec<_> = stores.custom_table_styles.values().collect();
+    custom_styles.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    for style in custom_styles {
+        let exported = style.to_ooxml_table_style(&mut next_dxf_id);
+        generated_dxfs.extend(exported.dxfs);
+        styles.push(exported.style);
     }
-    styles.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
 
-    (styles, default_table_style, default_pivot_style)
+    (
+        styles,
+        default_table_style,
+        default_pivot_style,
+        generated_dxfs,
+    )
 }
 
 pub(super) fn export_extended_document_properties(

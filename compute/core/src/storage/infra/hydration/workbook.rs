@@ -340,20 +340,16 @@ pub(super) fn hydrate_workbook_root_namespaces(
 
 pub(super) fn hydrate_workbook_table_styles(
     workbook: &MapRef,
-    table_styles: &[ooxml_types::styles::TableStyleDef],
     default_table_style: &Option<String>,
     default_pivot_style: &Option<String>,
     txn: &mut yrs::TransactionMut,
 ) {
-    if table_styles.is_empty() && default_table_style.is_none() && default_pivot_style.is_none() {
+    if default_table_style.is_none() && default_pivot_style.is_none() {
         return;
     }
 
     let styles_map =
         crate::storage::ensure_workbook_child_map(workbook, txn, KEY_XLSX_TABLE_STYLES);
-    if let Ok(json) = serde_json::to_string(table_styles) {
-        styles_map.insert(txn, "styles", Any::String(Arc::from(json.as_str())));
-    }
     if let Some(style) = default_table_style {
         styles_map.insert(
             txn,

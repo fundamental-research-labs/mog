@@ -58,8 +58,6 @@ pub fn table_writer_from_domain_with_strict(
             }
         }
         tw.auto_filter = Some(af);
-    } else if table.has_headers {
-        tw.auto_filter = Some(AutoFilterDef::new(&table.range_ref));
     }
 
     // Table columns
@@ -197,4 +195,28 @@ fn convert_filter_column_spec_to_writer(
         filter,
         ext_lst_raw: spec.ext_lst_raw.clone(),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn table_without_auto_filter_ref_does_not_emit_default_auto_filter() {
+        let table = domain_types::TableSpec {
+            id: 1,
+            name: "StyledSales".to_string(),
+            display_name: "StyledSales".to_string(),
+            range_ref: "A1:D5".to_string(),
+            has_headers: true,
+            style_name: Some("MogBrandExportStyle".to_string()),
+            auto_filter_ref: None,
+            ..Default::default()
+        };
+
+        let xml = String::from_utf8(table_writer_from_domain(1, &table).to_xml()).unwrap();
+
+        assert!(!xml.contains("<autoFilter"));
+        assert!(xml.contains(r#"<tableStyleInfo name="MogBrandExportStyle""#));
+    }
 }

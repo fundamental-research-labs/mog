@@ -253,6 +253,7 @@ fn assemble_engine_inner(
 
     load_custom_cell_styles(&mut engine.stores);
     load_custom_table_styles(&mut engine.stores);
+    sync_table_catalog_from_yrs_if_present(&mut engine.stores, &mut engine.mirror);
     crate::storage::engine::services::imported_filters::normalize_imported_auto_filter_visibility(
         &mut engine.stores,
         &mut engine.mirror,
@@ -362,6 +363,7 @@ pub(in crate::storage::engine) fn rebuild_engine_from_snapshot(
     );
     hydrate_mirror_format_ranges(&engine.stores.storage, &mut engine.mirror);
     engine.mirror.finalize_range_hydration();
+    sync_table_catalog_from_yrs_if_present(&mut engine.stores, &mut engine.mirror);
 
     crate::storage::engine::services::imported_filters::normalize_imported_auto_filter_visibility(
         &mut engine.stores,

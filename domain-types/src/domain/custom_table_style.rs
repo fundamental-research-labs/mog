@@ -1,8 +1,12 @@
-//! Custom table style types.
+//! Custom table style domain types.
 //!
 //! Consolidated from `compute-table/src/custom_styles.rs` into `domain-types`.
 
 use serde::{Deserialize, Serialize};
+
+mod ooxml;
+
+pub use ooxml::CustomTableStyleOoxmlExport;
 
 /// Stripe pattern configuration for rows or columns.
 /// Excel supports stripe sizes of 1-9 alternating rows/columns.

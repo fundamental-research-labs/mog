@@ -81,6 +81,26 @@ pub(in crate::storage::engine) use table_auto_filter_projection::materialize_tab
 pub(super) use types::{DeferredHydrationCompletion, DeferredHydrationData, XlsxHydrateResult};
 pub(super) use xlsx::{from_xlsx_bytes, import_from_xlsx_bytes};
 
+pub(super) fn sync_table_catalog_from_yrs_if_present(
+    stores: &mut EngineStores,
+    mirror: &mut CellMirror,
+) {
+    let has_table_catalog = {
+        let txn = stores.storage.doc().transact();
+        matches!(
+            stores
+                .storage
+                .workbook_map()
+                .get(&txn, compute_document::schema::KEY_TABLES),
+            Some(Out::YMap(_))
+        )
+    };
+
+    if has_table_catalog {
+        super::services::tables::sync_tables_from_yrs(stores, mirror);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{build_imported_range_style_plan, named_ranges};

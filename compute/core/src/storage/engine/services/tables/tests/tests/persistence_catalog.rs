@@ -208,6 +208,74 @@ fn mismatched_catalog_key_is_ignored_by_sync_and_export() {
 }
 
 #[test]
+fn sync_tables_materializes_imported_custom_style_options_from_catalog() {
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    let sid = sheet_id();
+
+    let imported_spec = domain_types::domain::table::TableSpec {
+        id: 7,
+        name: "StyledSales".to_string(),
+        display_name: "StyledSales".to_string(),
+        range_ref: "A1:D5".to_string(),
+        has_headers: true,
+        has_totals: false,
+        style_name: Some("MogBrandExportStyle".to_string()),
+        row_stripes: true,
+        col_stripes: true,
+        first_col_highlight: true,
+        last_col_highlight: true,
+        auto_filter_ref: None,
+        columns: vec![
+            domain_types::domain::table::TableColumnSpec {
+                id: 1,
+                name: "Region".to_string(),
+                ..Default::default()
+            },
+            domain_types::domain::table::TableColumnSpec {
+                id: 2,
+                name: "Product".to_string(),
+                ..Default::default()
+            },
+            domain_types::domain::table::TableColumnSpec {
+                id: 3,
+                name: "Units".to_string(),
+                ..Default::default()
+            },
+            domain_types::domain::table::TableColumnSpec {
+                id: 4,
+                name: "Revenue".to_string(),
+                ..Default::default()
+            },
+        ],
+        ..Default::default()
+    };
+    let imported_table = domain_types::domain::table::xlsx_table_spec_to_catalog_entry_with_ids(
+        &imported_spec,
+        &sid.to_uuid_string(),
+        "tbl-imported".to_string(),
+        ["col-region", "col-product", "col-units", "col-revenue"]
+            .into_iter()
+            .map(str::to_string),
+    );
+    insert_catalog_table_with_key(&mut engine, &imported_table.id, &imported_table);
+
+    sync_tables_from_yrs(&mut engine.stores, &mut engine.mirror);
+
+    let synced = engine
+        .get_table_by_name("StyledSales")
+        .expect("imported table should sync into mirror");
+    assert_eq!(synced.ooxml_table_id, Some(7));
+    assert_eq!(synced.display_name, "StyledSales");
+    assert_eq!(synced.style, "MogBrandExportStyle");
+    assert!(synced.banded_rows);
+    assert!(synced.banded_columns);
+    assert!(synced.emphasize_first_column);
+    assert!(synced.emphasize_last_column);
+    assert!(!synced.show_filter_buttons);
+    assert!(synced.auto_filter_ref.is_none());
+}
+
+#[test]
 fn catalog_updates_preserve_imported_ooxml_metadata() {
     let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
     let sid = sheet_id();

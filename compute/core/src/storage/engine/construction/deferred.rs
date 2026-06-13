@@ -261,6 +261,7 @@ pub(in crate::storage::engine) fn import_from_xlsx_bytes_deferred(
     );
     hydrate_mirror_format_ranges(&engine.stores.storage, &mut engine.mirror);
     engine.mirror.finalize_range_hydration();
+    sync_table_catalog_from_yrs_if_present(&mut engine.stores, &mut engine.mirror);
 
     crate::storage::engine::services::imported_filters::normalize_imported_auto_filter_visibility(
         &mut engine.stores,
@@ -577,6 +578,7 @@ pub(in crate::storage::engine) fn stage_deferred_hydration(
         };
         load_custom_cell_styles(&mut stores);
         load_custom_table_styles(&mut stores);
+        sync_table_catalog_from_yrs_if_present(&mut stores, &mut new_mirror);
         crate::storage::engine::services::imported_filters::normalize_imported_auto_filter_visibility(
             &mut stores,
             &mut new_mirror,

@@ -406,6 +406,15 @@ fn defined_name_wire_identity_formula(dn: &DefinedName) -> Result<IdentityFormul
 
 fn preserved_opaque_defined_name_identity_formula(dn: &DefinedName) -> Option<IdentityFormula> {
     let raw = dn.raw_refers_to.as_deref()?;
+    if dn.visible
+        && matches!(
+            compute_parser::ParsedExpr::classify(raw),
+            compute_parser::ParsedExpr::BrokenRef { .. } | compute_parser::ParsedExpr::Empty
+        )
+    {
+        return None;
+    }
+
     Some(IdentityFormula {
         template: raw.strip_prefix('=').unwrap_or(raw).to_string(),
         refs: Vec::new(),

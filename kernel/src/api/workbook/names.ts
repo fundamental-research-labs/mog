@@ -64,7 +64,7 @@ export class WorkbookNamesImpl implements WorkbookNames {
     });
   }
 
-  private async _getApiVisibleName(
+  private async _getName(
     name: string,
     scope?: string,
   ): Promise<
@@ -81,7 +81,6 @@ export class WorkbookNamesImpl implements WorkbookNames {
 
     const a1 = await NamedRanges.getRefersToA1(this.deps.ctx, defined);
     const reference = stripFormulaPrefix(a1);
-    if (!isApiVisibleNamedRangeReference(reference)) return null;
 
     return { defined, reference, scopeSheetId };
   }
@@ -134,7 +133,7 @@ export class WorkbookNamesImpl implements WorkbookNames {
 
   async get(name: string, scope?: string): Promise<NamedRangeInfo | null> {
     const { getSheetName } = this.deps;
-    const item = await this._getApiVisibleName(name, scope);
+    const item = await this._getName(name, scope);
     if (!item) return null;
 
     // Resolve scope sheetId to sheet name
@@ -153,9 +152,10 @@ export class WorkbookNamesImpl implements WorkbookNames {
   }
 
   async getRange(name: string, scope?: string): Promise<NamedRangeReference | null> {
-    const item = await this._getApiVisibleName(name, scope);
+    const item = await this._getName(name, scope);
     if (!item) return null;
     const ref = item.reference;
+    if (!isApiVisibleNamedRangeReference(ref)) return null;
 
     // Parse sheet!range format
     const bangIndex = ref.indexOf('!');
@@ -239,7 +239,6 @@ export class WorkbookNamesImpl implements WorkbookNames {
 
     for (const entry of exported) {
       const ref = stripFormulaPrefix(entry.refersToA1);
-      if (!isApiVisibleNamedRangeReference(ref)) continue;
 
       // Resolve scope sheetId to sheet name via Rust
       let scopeName: string | undefined;
@@ -298,7 +297,7 @@ export class WorkbookNamesImpl implements WorkbookNames {
 
   async getValue(name: string, scope?: string): Promise<string | null> {
     const { ctx } = this.deps;
-    const item = await this._getApiVisibleName(name, scope);
+    const item = await this._getName(name, scope);
     if (!item) return null;
     const currentSheet = item.scopeSheetId ?? null;
     return ctx.computeBridge.getNamedRangeDisplayValue(name, currentSheet);
@@ -306,7 +305,7 @@ export class WorkbookNamesImpl implements WorkbookNames {
 
   async getType(name: string, scope?: string): Promise<NamedItemType | null> {
     const { ctx } = this.deps;
-    const item = await this._getApiVisibleName(name, scope);
+    const item = await this._getName(name, scope);
     if (!item) return null;
     const currentSheet = item.scopeSheetId ?? null;
     const type = await ctx.computeBridge.getNamedRangeType(name, currentSheet);
@@ -315,7 +314,7 @@ export class WorkbookNamesImpl implements WorkbookNames {
 
   async getArrayValues(name: string, scope?: string): Promise<CellValue[][] | null> {
     const { ctx } = this.deps;
-    const item = await this._getApiVisibleName(name, scope);
+    const item = await this._getName(name, scope);
     if (!item) return null;
     const currentSheet = item.scopeSheetId ?? null;
     return ctx.computeBridge.getNamedRangeArrayValues(name, currentSheet);
@@ -323,7 +322,7 @@ export class WorkbookNamesImpl implements WorkbookNames {
 
   async getArrayTypes(name: string, scope?: string): Promise<RangeValueType[][] | null> {
     const { ctx } = this.deps;
-    const item = await this._getApiVisibleName(name, scope);
+    const item = await this._getName(name, scope);
     if (!item) return null;
     const currentSheet = item.scopeSheetId ?? null;
     const values = await ctx.computeBridge.getNamedRangeArrayValues(name, currentSheet);
@@ -345,7 +344,7 @@ export class WorkbookNamesImpl implements WorkbookNames {
 
   async getValueAsJson(name: string, scope?: string): Promise<CellValue | null> {
     const { ctx } = this.deps;
-    const item = await this._getApiVisibleName(name, scope);
+    const item = await this._getName(name, scope);
     if (!item) return null;
     const currentSheet = item.scopeSheetId ?? null;
     return ctx.computeBridge.getNamedRangeTypedValue(name, currentSheet);

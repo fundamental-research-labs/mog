@@ -171,7 +171,7 @@ describe('WorkbookNamesImpl', () => {
       expect(result!.visible).toBe(false);
     });
 
-    it('treats imported #REF! names as absent from the public API', async () => {
+    it('exposes #REF! names as defined-name records for diagnosis', async () => {
       mockGetByName.mockResolvedValue({
         id: 'nr-broken',
         name: 'BrokenName',
@@ -182,7 +182,13 @@ describe('WorkbookNamesImpl', () => {
       });
       mockGetRefersToA1.mockResolvedValue('=#REF!');
 
-      await expect(names.get('BrokenName')).resolves.toBeNull();
+      await expect(names.get('BrokenName')).resolves.toEqual({
+        name: 'BrokenName',
+        reference: '#REF!',
+        scope: undefined,
+        comment: undefined,
+        visible: true,
+      });
     });
   });
 
@@ -301,7 +307,7 @@ describe('WorkbookNamesImpl', () => {
       expect(result[1].visible).toBe(false);
     });
 
-    it('filters imported #REF! names while keeping valid sheet-scoped names with the same name', async () => {
+    it('keeps scoped homonyms distinguishable including #REF! workbook entries', async () => {
       mockExportNames.mockResolvedValue([
         {
           id: 'nr-valid',
@@ -339,6 +345,20 @@ describe('WorkbookNamesImpl', () => {
           comment: undefined,
           visible: true,
         },
+        {
+          name: 'Bond_Price',
+          reference: '#REF!',
+          scope: undefined,
+          comment: undefined,
+          visible: true,
+        },
+        {
+          name: 'Discount_Rate',
+          reference: '#REF!',
+          scope: undefined,
+          comment: undefined,
+          visible: true,
+        },
       ]);
     });
   });
@@ -348,7 +368,7 @@ describe('WorkbookNamesImpl', () => {
   // ---------------------------------------------------------------------------
 
   describe('value helpers', () => {
-    it('return null for imported #REF! names without calling compute value queries', async () => {
+    it('delegate #REF! names to compute so callers can inspect error values', async () => {
       const mockBridge = (deps.ctx as any).computeBridge;
       mockGetByName.mockResolvedValue({
         id: 'nr-broken',
@@ -358,17 +378,26 @@ describe('WorkbookNamesImpl', () => {
         visible: true,
       });
       mockGetRefersToA1.mockResolvedValue('=#REF!');
+      mockBridge.getNamedRangeDisplayValue.mockResolvedValue('#REF!');
+      mockBridge.getNamedRangeType.mockResolvedValue('Error');
+      mockBridge.getNamedRangeArrayValues.mockResolvedValue([[{ type: 'error', value: '#REF!' }]]);
+      mockBridge.getNamedRangeTypedValue.mockResolvedValue({ type: 'error', value: '#REF!' });
 
-      await expect(names.getValue('BrokenName')).resolves.toBeNull();
-      await expect(names.getType('BrokenName')).resolves.toBeNull();
-      await expect(names.getArrayValues('BrokenName')).resolves.toBeNull();
-      await expect(names.getArrayTypes('BrokenName')).resolves.toBeNull();
-      await expect(names.getValueAsJson('BrokenName')).resolves.toBeNull();
+      await expect(names.getValue('BrokenName')).resolves.toBe('#REF!');
+      await expect(names.getType('BrokenName')).resolves.toBe('Error');
+      await expect(names.getArrayValues('BrokenName')).resolves.toEqual([
+        [{ type: 'error', value: '#REF!' }],
+      ]);
+      await expect(names.getArrayTypes('BrokenName')).resolves.toEqual([['Error']]);
+      await expect(names.getValueAsJson('BrokenName')).resolves.toEqual({
+        type: 'error',
+        value: '#REF!',
+      });
 
-      expect(mockBridge.getNamedRangeDisplayValue).not.toHaveBeenCalled();
-      expect(mockBridge.getNamedRangeType).not.toHaveBeenCalled();
-      expect(mockBridge.getNamedRangeArrayValues).not.toHaveBeenCalled();
-      expect(mockBridge.getNamedRangeTypedValue).not.toHaveBeenCalled();
+      expect(mockBridge.getNamedRangeDisplayValue).toHaveBeenCalledWith('BrokenName', null);
+      expect(mockBridge.getNamedRangeType).toHaveBeenCalledWith('BrokenName', null);
+      expect(mockBridge.getNamedRangeArrayValues).toHaveBeenCalledTimes(2);
+      expect(mockBridge.getNamedRangeTypedValue).toHaveBeenCalledWith('BrokenName', null);
     });
   });
 

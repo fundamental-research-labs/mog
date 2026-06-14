@@ -211,6 +211,57 @@ fn preserved_opaque_hidden_imported_name_round_trips_to_wire() {
 }
 
 #[test]
+fn visible_preserved_opaque_broken_ref_import_is_omitted_from_wire() {
+    let snap = simple_snapshot();
+    let (engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+
+    plant_defined_name(
+        &engine,
+        0x7357_0002u64,
+        "ImportedBroken",
+        "#REF!".to_string(),
+        Some("#REF!".to_string()),
+        true,
+    );
+
+    let wire = engine.get_all_named_ranges_wire();
+    assert!(
+        wire.iter().all(|dn| dn.name != "ImportedBroken"),
+        "visible preserved opaque #REF! imports should be storage/export metadata, not API wire names"
+    );
+}
+
+#[test]
+fn canonical_json_broken_ref_name_round_trips_to_wire() {
+    let snap = simple_snapshot();
+    let (engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+
+    let identity = IdentityFormula {
+        template: "#REF!".to_string(),
+        refs: vec![],
+        is_dynamic_array: false,
+        is_volatile: false,
+        is_aggregate: false,
+    };
+    plant_defined_name(
+        &engine,
+        0x7357_0003u64,
+        "ApiCreatedBroken",
+        serde_json::to_string(&identity).expect("serialize"),
+        None,
+        true,
+    );
+
+    let wire = engine.get_all_named_ranges_wire();
+    let found = wire
+        .iter()
+        .find(|dn| dn.name == "ApiCreatedBroken")
+        .expect("canonical JSON #REF! names should stay API-visible");
+    assert_eq!(found.refers_to.template, "#REF!");
+    assert!(found.refers_to.refs.is_empty());
+}
+
+#[test]
 fn w5_malformed_json_refers_to_is_rejected() {
     let snap = simple_snapshot();
     let (engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();

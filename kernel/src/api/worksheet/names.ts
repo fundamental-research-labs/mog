@@ -68,7 +68,6 @@ export class WorksheetNamesImpl implements WorksheetNames {
 
     const a1 = await NamedRanges.getRefersToA1(this.ctx, defined);
     const reference = stripFormulaPrefix(a1);
-    if (!isApiVisibleNamedRangeReference(reference)) return null;
     const sheetName = await this.getSheetName();
 
     return {
@@ -146,10 +145,7 @@ export class WorksheetNamesImpl implements WorksheetNames {
     const sheetName = await this.getSheetName();
 
     return exported
-      .filter((entry) => {
-        if (entry.scope !== this.sheetId) return false;
-        return isApiVisibleNamedRangeReference(entry.refersToA1);
-      })
+      .filter((entry) => entry.scope === this.sheetId)
       .map((entry) => ({
         name: entry.name,
         reference: stripFormulaPrefix(entry.refersToA1),

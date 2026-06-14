@@ -6,8 +6,8 @@
  * transport lands by implementing the interface, running this suite, and
  * attaching to the orchestrator. Zero RustDocument changes required.
  *
- * The suite covers all eight persistence rows plus the ordering, reentrancy,
- * and backpressure assertions (eleven cases total). Skipping any is a
+ * The suite covers all nine persistence rows plus the ordering, reentrancy,
+ * and backpressure assertions (twelve cases total). Skipping any is a
  * contract violation.
  *
  * Usage (in a Provider's own `*.test.ts`):
@@ -75,8 +75,7 @@ export interface ConformanceOptions {
 }
 
 /**
- * Run the full conformance suite against `opts.factory()`. Emits one
- * `describe` block with eleven nested `it` cases.
+ * Run the full conformance suite against `opts.factory()`.
  *
  * The function intentionally does not return anything: it side-effects
  * Jest/Vitest's globals (`describe`, `it`, `expect`, `beforeEach`).
@@ -338,6 +337,43 @@ export function runProviderConformance(opts: ConformanceOptions): void {
         // to clear this row before claiming conformance.
       });
     }
+
+    // -----------------------------------------------------------------
+    // Row 9 — createFresh clears previous persisted state
+    // -----------------------------------------------------------------
+    it('row 9: createFresh attach does not replay prior persisted state', async () => {
+      const docId = `${baseDocId}-r9-create-fresh`;
+
+      const session1 = opts.factory();
+      await session1.attach(opts.buildProviderDoc(docId));
+      session1.appendUpdate(makeUpdate(801));
+      session1.appendUpdate(makeUpdate(802));
+      await session1.flush();
+      await session1.detach();
+
+      const session2 = opts.factory();
+      const doc2 = opts.buildProviderDoc(docId);
+      const result = await session2.attach(doc2, {
+        kind: 'createFresh',
+        replaceExisting: true,
+      });
+
+      expect(result).toBeDefined();
+      expect((result as { status: string }).status).toBe('ready');
+      expect((result as { mode: string }).mode).toBe('createFresh');
+
+      const diff = await doc2.encodeDiff(new Uint8Array());
+      expect(flattenBatches([diff]).length).toBe(0);
+
+      await session2.detach();
+
+      const session3 = opts.factory();
+      const doc3 = opts.buildProviderDoc(docId);
+      await session3.attach(doc3);
+      const reopenedDiff = await doc3.encodeDiff(new Uint8Array());
+      expect(flattenBatches([reopenedDiff]).length).toBe(0);
+      await session3.detach();
+    });
 
     // -----------------------------------------------------------------
     // FIFO ordering across 100 appendUpdate calls

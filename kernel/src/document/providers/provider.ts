@@ -167,6 +167,7 @@ export interface Provider {
 
 export type ProviderAttachMode =
   | { kind: 'normal' }
+  | { kind: 'createFresh'; replaceExisting: boolean }
   | { kind: 'importInitialize'; replaceExisting: boolean };
 
 export type ProviderCheckpointMode = { kind: 'normal' } | { kind: 'importInitialize' };

@@ -69,6 +69,8 @@ export interface DocumentLifecycleContext {
   documentContext: DocumentContext | null;
   /** Sheet IDs discovered after bridge start (ordered) */
   initialSheetIds: SheetId[];
+  /** True when provider attach should replace any prior state for this doc id. */
+  createFresh: boolean;
   /** Last error (set on error transitions) */
   error: KernelError | null;
   /**
@@ -97,6 +99,7 @@ const initialContext: DocumentLifecycleContext = {
   rustDocument: null,
   documentContext: null,
   initialSheetIds: [],
+  createFresh: false,
   error: null,
   recoveryYrsState: null,
 };
@@ -310,6 +313,8 @@ export interface AttachProvidersInput {
   skipDefaultSheet: boolean;
   /** XLSX imported base state: attach providers in snapshot-only import mode. */
   importInitialize: boolean;
+  /** True when a create session must replace any prior state for this doc id. */
+  createFresh: boolean;
 }
 
 /**
@@ -419,6 +424,7 @@ export const documentLifecycleMachine = setup({
         xlsxImportOptions: null,
         csvSource: null,
         csvImportOptions: null,
+        createFresh: true,
       };
     }),
 
@@ -432,6 +438,7 @@ export const documentLifecycleMachine = setup({
         xlsxImportOptions: event.importOptions ?? null,
         csvSource: null,
         csvImportOptions: null,
+        createFresh: false,
       };
     }),
 
@@ -445,6 +452,7 @@ export const documentLifecycleMachine = setup({
         xlsxImportOptions: null,
         csvSource: event.csvSource,
         csvImportOptions: event.csvImportOptions,
+        createFresh: false,
       };
     }),
 
@@ -518,6 +526,7 @@ export const documentLifecycleMachine = setup({
       rustDocument: null,
       documentContext: null,
       initialSheetIds: [],
+      createFresh: false,
       error: null,
       recoveryYrsState: null,
     })),
@@ -553,6 +562,7 @@ export const documentLifecycleMachine = setup({
         // picks it up without needing a separate code path.
         options: yrsState ? { ...(context.options ?? {}), yrsState } : (context.options ?? {}),
         recoveryYrsState: yrsState,
+        createFresh: false,
         error: null,
         // Drop dead references — the OLD bridge is bound to the dead
         // WASM instance. The coordinator has already called destroy()
@@ -783,6 +793,7 @@ export const documentLifecycleMachine = setup({
           // let `attaching` decide based on post-replay sheet count.
           skipDefaultSheet: context.options?.skipDefaultSheet ?? false,
           importInitialize: context.xlsxSource !== null || context.csvSource !== null,
+          createFresh: context.createFresh,
         }),
         onDone: {
           target: 'ready',

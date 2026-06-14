@@ -220,7 +220,11 @@ export function CoordinatorProvider({
 
     // Dispose on unmount
     return () => {
-      coordinatorRef.current?.dispose();
+      const coordinator = coordinatorRef.current;
+      coordinator?.dispose();
+      if ((window as any).__COORDINATOR__ === coordinator) {
+        (window as any).__COORDINATOR__ = null;
+      }
       coordinatorRef.current = null;
     };
     // Intentionally mount-only (empty deps). The coordinator is a session companion

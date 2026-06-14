@@ -30,6 +30,7 @@
 
 import type {
   Provider,
+  ProviderAttachMode,
   ProviderAttachResult,
   ProviderCheckpointResult,
   ProviderDoc,
@@ -45,13 +46,15 @@ import type { StorageProviderIdentity } from '@mog-sdk/types-document/storage/pr
  * adapter over `window.__TAURI__.invoke` (or `@tauri-apps/api/core`'s
  * `invoke`) once the corresponding Rust commands are wired.
  *
- * The four methods correspond 1:1 to Tauri commands the runtime would
+ * The five methods correspond 1:1 to Tauri commands the runtime would
  * register:
  *   - `tauri_load_updates(docId)` — return the persisted yrs update log
  *     for the doc, in arrival order. Empty array if first attach.
  *   - `tauri_append_update(docId, update)` — durably append one update
  *     to the doc's log. Resolves once the OS has accepted the bytes for
  *     write (Tauri's tokio fs is the analog of IndexedDB's tx.oncomplete).
+ *   - `tauri_clear_document_state(docId)` — delete any sidecar state for
+ *     a fresh create using an existing document id.
  *   - `tauri_state_vector(docId)` — return the doc's persisted state
  *     vector view (a hash-derived summary of "which updates are stored").
  *     Used for diff requests in future websocket transports.
@@ -67,6 +70,7 @@ import type { StorageProviderIdentity } from '@mog-sdk/types-document/storage/pr
 export interface TauriIpc {
   loadUpdates(docId: string): Promise<Uint8Array[]>;
   appendUpdate(docId: string, update: Uint8Array): Promise<void>;
+  clearDocumentState(docId: string): Promise<void>;
   stateVector(docId: string): Promise<Uint8Array>;
   /**
    * Synchronously dispatch a durable write of `pending`. Implementations
@@ -103,7 +107,7 @@ export interface TauriFileProviderOptions {
 const TAURI_SIDECAR_NOT_WIRED_MSG =
   'Tauri persistence: NOT YET WIRED. ' +
   'TauriFileProvider needs `tauri_load_updates` / `tauri_append_update` / ' +
-  '`tauri_state_vector` / `tauri_flush_sync` Rust commands; xlsx.rs only ' +
+  '`tauri_clear_document_state` / `tauri_state_vector` / `tauri_flush_sync` Rust commands; xlsx.rs only ' +
   'exposes import_xlsx + export_xlsx today. Inject a `TauriIpc` via ' +
   '`new TauriFileProvider(docId, { ipc })` (tests use TauriIpcStub).';
 
@@ -149,6 +153,7 @@ function makeNotYetWiredIpc(): TauriIpc {
   return {
     loadUpdates: () => Promise.reject(new Error(TAURI_SIDECAR_NOT_WIRED_MSG)),
     appendUpdate: () => Promise.reject(new Error(TAURI_SIDECAR_NOT_WIRED_MSG)),
+    clearDocumentState: () => Promise.reject(new Error(TAURI_SIDECAR_NOT_WIRED_MSG)),
     stateVector: () => Promise.reject(new Error(TAURI_SIDECAR_NOT_WIRED_MSG)),
     flushSync: () => {
       // flushSync must not throw per Provider contract; degrade to
@@ -276,11 +281,14 @@ export class TauriFileProvider implements Provider {
     };
   }
 
-  async attach(doc: ProviderDoc): Promise<ProviderAttachResult> {
+  async attach(
+    doc: ProviderDoc,
+    mode: ProviderAttachMode = { kind: 'normal' },
+  ): Promise<ProviderAttachResult> {
     if (this.detached) {
       return {
         status: 'blocked',
-        mode: 'normal',
+        mode: mode.kind,
         reason: 'detached',
         message: 'TauriFileProvider.attach: provider has been detached',
       };
@@ -290,6 +298,17 @@ export class TauriFileProvider implements Provider {
     }
 
     this.doc = doc;
+
+    if (mode.kind === 'importInitialize' || mode.kind === 'createFresh') {
+      this.pendingUpdates = [];
+      if (mode.kind === 'createFresh') {
+        await this.ipc.clearDocumentState(this.docId);
+      }
+      return {
+        status: 'ready',
+        mode: mode.kind,
+      };
+    }
 
     // Replay every persisted update into the doc, in arrival order.
     // Awaited serially — same model as `InMemoryProvider`. yrs's CRDT
@@ -301,7 +320,7 @@ export class TauriFileProvider implements Provider {
     }
     return {
       status: 'ready',
-      mode: 'normal',
+      mode: mode.kind,
     };
   }
 

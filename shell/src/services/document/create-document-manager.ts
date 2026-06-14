@@ -523,8 +523,9 @@ export function createDocumentManager(options: DocumentManagerOptions = {}): Doc
 
     async createDocument(fileId: string, options?: CreateDocumentOptions): Promise<DocumentHandle> {
       throwIfManagerDisposed();
+      const operation = options?.operation ?? 'create';
 
-      // 1. Cache hit: return existing document
+      // 1. Cache hit: opening is idempotent, creating replaces the old normal doc.
       const existingDoc = documents.get(fileId);
       const existingGeneration = documentGenerations.get(fileId);
       if (
@@ -534,7 +535,9 @@ export function createDocumentManager(options: DocumentManagerOptions = {}): Doc
         if (documentModes.get(fileId)?.kind === 'collaboration') {
           throw new DocumentModeConflictError(fileId, 'loaded document is collaboration-backed');
         }
-        return existingDoc;
+        if (operation === 'open') {
+          return existingDoc;
+        }
       }
 
       // 2. Deduplication: return existing loading promise
@@ -580,7 +583,22 @@ export function createDocumentManager(options: DocumentManagerOptions = {}): Doc
                 'loaded document is collaboration-backed',
               );
             }
-            return queuedExistingDoc;
+            if (operation === 'open') {
+              return queuedExistingDoc;
+            }
+
+            const queuedHostAdapter = hostAdapters.get(fileId) ?? null;
+            hostAdapters.delete(fileId);
+            documents.delete(fileId);
+            documentModes.delete(fileId);
+            documentGenerations.delete(fileId);
+            loadingStates.delete(fileId);
+            errors.delete(fileId);
+            notify();
+            await disposeLoadedResources(fileId, {
+              handle: queuedExistingDoc,
+              hostAdapter: queuedHostAdapter,
+            });
           }
 
           const documentId = options?.documentId ?? fileId;
@@ -589,7 +607,7 @@ export function createDocumentManager(options: DocumentManagerOptions = {}): Doc
           hostResult = createStandaloneBrowserShellHost({
             documentId,
             ...runtimeAssetConfig,
-            operation: options?.operation ?? 'create',
+            operation,
             workbookLinkResolver: options?.workbookLinkResolver,
             skipLocalPersistence: options?.skipLocalPersistence,
           });

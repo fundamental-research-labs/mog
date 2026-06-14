@@ -152,9 +152,12 @@ export class DatabaseLogProvider implements Provider {
       };
     }
 
-    if (mode.kind === 'importInitialize') {
+    if (mode.kind === 'importInitialize' || mode.kind === 'createFresh') {
       this.pendingUpdates = [];
       this.flushing = null;
+      if (mode.kind === 'createFresh') {
+        this.storage.delete(this.docId);
+      }
       this.attached = true;
       return { status: 'ready', mode: mode.kind };
     }

@@ -551,6 +551,20 @@ describe('KeyboardCoordinator - Gap Fixes', () => {
       expect(result.reason).not.toBe('wrong_context');
     });
 
+    it('should classify rich text editing through edit-mode shortcut context', () => {
+      const coordinator = createTestCoordinator();
+      const mockEditorSnapshot = {
+        matches: (state: string) => state === 'richTextEditing',
+        context: { isEditMode: true },
+      };
+      coordinator.setDependencies({
+        ...createDispatchableDependencies(),
+        editorActor: { getSnapshot: () => mockEditorSnapshot } as any,
+      });
+
+      expect(coordinator.getContext()).toBe('editMode');
+    });
+
     it("should treat 'any' and 'global' both as wildcards", () => {
       setTestShortcuts([
         makeShortcut({

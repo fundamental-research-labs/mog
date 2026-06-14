@@ -649,7 +649,7 @@ export class KeyboardCoordinator {
    * The cascade order, top-down, is:
    * 1. editing inside object text
    * 2. formulaEditMode / formulaEnterMode
-   * 3. editMode / enterMode
+   * 3. editMode / enterMode, including rich text editing
    * 4. flashFillPreview
    * 5. **keyTipMode** — when a chord is pending and no editing/dialog-like
    * mode is active. Plain object/chart selection does not block Excel
@@ -682,6 +682,10 @@ export class KeyboardCoordinator {
     // Regular editing - check mode first for more specific context
     if (editorState.matches('editing')) {
       // Check isEditMode to distinguish enterMode vs editMode
+      return isEditMode ? 'editMode' : 'enterMode';
+    }
+
+    if (editorState.matches('richTextEditing')) {
       return isEditMode ? 'editMode' : 'enterMode';
     }
 

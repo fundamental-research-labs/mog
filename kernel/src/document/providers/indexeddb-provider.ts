@@ -284,6 +284,10 @@ export class IndexedDBProvider implements Provider {
         if (lock === null) {
           // Another tab owns the write lock — enter read-only mode.
           this._readOnly = true;
+          if (mode.kind === 'importInitialize' || mode.kind === 'createFresh') {
+            resolveAttach();
+            return;
+          }
           // Still replay IDB state so the doc content is visible.
           await this.doAttach(doc, mode);
           resolveAttach();
@@ -301,12 +305,12 @@ export class IndexedDBProvider implements Provider {
       });
     });
 
-    if (mode.kind === 'importInitialize' && this._readOnly) {
+    if ((mode.kind === 'importInitialize' || mode.kind === 'createFresh') && this._readOnly) {
       return {
         status: 'blocked',
         mode: mode.kind,
         reason: 'readOnly',
-        message: `IndexedDBProvider cannot initialize imported document ${this.docId}: provider is read-only`,
+        message: `IndexedDBProvider cannot attach document ${this.docId} with ${mode.kind}: provider is read-only`,
       };
     }
 
@@ -332,6 +336,33 @@ export class IndexedDBProvider implements Provider {
       this.pendingUpdates = [];
       this.pendingDrain = null;
       this.attached = true;
+      return;
+    }
+
+    if (mode.kind === 'createFresh') {
+      await this.clearPersistedState(this.db!, this.docId);
+      this.seqCounter = 0;
+      this.logCount = 0;
+      this.pendingUpdates = [];
+      this.pendingDrain = null;
+      if (!this._readOnly) {
+        try {
+          const fullState = await doc.encodeDiff(new Uint8Array([0]));
+          if (fullState.length > 0) {
+            await this.writeSnapshot(this.db!, this.docId, fullState);
+          }
+        } catch (err) {
+          console.warn('[IndexedDBProvider] Failed to write fresh-create snapshot:', err);
+        }
+      }
+      this.attached = true;
+      if (this.options.enableEviction) {
+        try {
+          await this.evictAged(this.db!, this.docId);
+        } catch (err) {
+          console.error('[IndexedDBProvider] Eviction sweep failed:', err);
+        }
+      }
       return;
     }
 
@@ -820,6 +851,19 @@ export class IndexedDBProvider implements Provider {
         }
       };
       req.onerror = () => reject(req.error ?? new Error('snapshot read failed'));
+    });
+  }
+
+  private async clearPersistedState(db: IDBDatabase, docId: string): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      const tx = db.transaction([SNAPSHOTS_STORE, UPDATES_STORE], 'readwrite');
+      tx.objectStore(SNAPSHOTS_STORE).delete(docId);
+      tx.objectStore(UPDATES_STORE).delete(
+        IDBKeyRange.bound([docId, -Infinity], [docId, Infinity]),
+      );
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error ?? new Error('clear persisted state failed'));
+      tx.onabort = () => reject(tx.error ?? new Error('clear persisted state aborted'));
     });
   }
 

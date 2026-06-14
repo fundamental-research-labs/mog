@@ -183,10 +183,13 @@ export class FilesystemProvider implements Provider {
     await this.cleanupStaleTmpFiles();
     await this.acquireLock();
 
-    if (mode.kind === 'importInitialize') {
+    if (mode.kind === 'importInitialize' || mode.kind === 'createFresh') {
       this.pendingUpdates = [];
       this.flushing = null;
       this.nextUpdateIndex = 1;
+      if (mode.kind === 'createFresh') {
+        await this.clearPersistedState();
+      }
       this.attached = true;
       return { status: 'ready', mode: mode.kind };
     }
@@ -489,6 +492,15 @@ export class FilesystemProvider implements Provider {
     } catch {
       // Updates dir may not exist.
     }
+  }
+
+  private async clearPersistedState(): Promise<void> {
+    try {
+      await this.fsp.unlink(this.snapshotPath);
+    } catch {
+      // No snapshot exists yet.
+    }
+    await this.clearUpdateFiles();
   }
 }
 

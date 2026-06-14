@@ -3,11 +3,12 @@
  *
  * Used by `tauri-file-provider.test.ts` to run the §3.4 conformance
  * suite without spinning up a Tauri runtime. The stub mirrors the
- * shape of the four `tauri_*` IPC commands a future native sidecar implementation
+ * shape of the five `tauri_*` IPC commands a future native sidecar implementation
  * will register on the Rust side:
  *
  *   loadUpdates(docId)        → tauri_load_updates
  *   appendUpdate(docId, u)    → tauri_append_update
+ *   clearDocumentState(docId) → tauri_clear_document_state
  *   stateVector(docId)        → tauri_state_vector
  *   flushSync(docId, pending) → tauri_flush_sync
  *
@@ -71,6 +72,10 @@ export class TauriIpcStub implements TauriIpc {
     const log = this.storage.get(docId) ?? [];
     log.push(new Uint8Array(update));
     this.storage.set(docId, log);
+  }
+
+  async clearDocumentState(docId: string): Promise<void> {
+    this.storage.delete(docId);
   }
 
   /**

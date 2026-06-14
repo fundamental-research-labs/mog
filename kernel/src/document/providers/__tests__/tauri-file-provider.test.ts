@@ -21,7 +21,7 @@ import { TauriIpcStub } from './tauri-ipc-stub';
 import { TauriFileProvider } from '../tauri-file-provider';
 
 // =============================================================================
-// Conformance suite — all 11 rows green via the in-memory IPC stub.
+// Conformance suite — all 12 rows green via the in-memory IPC stub.
 // =============================================================================
 
 // Suite-scoped IPC stub. Two sessions in the same conformance row share

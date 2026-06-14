@@ -56,7 +56,7 @@ export interface ProviderMaterializerHandle {
 
 export interface ProviderMaterializerAttachOptions {
   readonly mode?: {
-    readonly kind: 'normal' | 'importInitialize';
+    readonly kind: 'normal' | 'createFresh' | 'importInitialize';
     readonly replaceExisting?: boolean;
   };
   readonly suppressInitialBaseline?: boolean;

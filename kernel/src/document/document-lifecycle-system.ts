@@ -1367,6 +1367,7 @@ export class DocumentLifecycleSystem {
     if (this.hostLifecycleInput) {
       const lifecycleInput = this.hostLifecycleInput;
       const storageConfig = lifecycleInput.storage.handoff.storage;
+      const createFresh = storageConfig.intent === 'create';
       const durability = storageConfig.durability;
       const requiresProviderAttach =
         durability !== 'ephemeral' || storageConfig.providers.some((p) => p.required);
@@ -1490,7 +1491,11 @@ export class DocumentLifecycleSystem {
                   suppressQueuedUpdates: true,
                   suppressTouch: true,
                 }
-              : undefined,
+              : createFresh
+                ? {
+                    mode: { kind: 'createFresh', replaceExisting: true },
+                  }
+                : undefined,
           );
           this.hostProviderMaterializerHandles.push(handle);
           if (input.importInitialize) {
@@ -1610,6 +1615,10 @@ export class DocumentLifecycleSystem {
                 suppressTouch: true,
               });
               this.recordImportInitializeProviderRefId(instance.config.providerRefId);
+            } else if (createFresh) {
+              await input.rustDocument.attachProvider(instance.provider, {
+                mode: { kind: 'createFresh', replaceExisting: true },
+              });
             } else {
               await input.rustDocument.attachProvider(instance.provider);
             }
@@ -1678,6 +1687,11 @@ export class DocumentLifecycleSystem {
           suppressTouch: true,
         });
         this.recordImportInitializeProviderRefId(provider.getIdentity().providerRefId);
+      } else if (input.createFresh) {
+        await input.rustDocument.captureInitialProviderBaseline();
+        await input.rustDocument.attachProvider(provider, {
+          mode: { kind: 'createFresh', replaceExisting: true },
+        });
       } else {
         await input.rustDocument.captureInitialProviderBaseline();
         await input.rustDocument.attachProvider(provider);

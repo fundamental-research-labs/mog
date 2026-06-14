@@ -1,7 +1,7 @@
 /**
  * IndexedDBProvider × conformance suite + IDB-specific scenarios.
  *
- * Runs the §3.4 + §3.3 conformance suite against `IndexedDBProvider` (11
+ * Runs the §3.4 + §3.3 conformance suite against `IndexedDBProvider` (12
  * cases), then adds two IDB-specific scenarios that the doc-agnostic suite
  * cannot express:
  *
@@ -166,6 +166,26 @@ describe('IndexedDBProvider — IDB-specific scenarios', () => {
       expect.objectContaining({
         status: 'blocked',
         mode: 'importInitialize',
+        reason: 'readOnly',
+      }),
+    );
+    expect(provider.readOnly).toBe(true);
+    await provider.detach();
+  });
+
+  it('returns blocked for read-only createFresh attach', async () => {
+    installUnavailableWebLock();
+    const provider = new IndexedDBProvider('readonly-create-fresh-attach');
+
+    const result = await provider.attach(buildMockProviderDoc('readonly-create-fresh-attach'), {
+      kind: 'createFresh',
+      replaceExisting: true,
+    });
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        status: 'blocked',
+        mode: 'createFresh',
         reason: 'readOnly',
       }),
     );

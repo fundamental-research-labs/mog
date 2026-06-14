@@ -273,6 +273,34 @@ describe('createDocumentManager import identity', () => {
     expect(newHandle.dispose).not.toHaveBeenCalled();
   });
 
+  it('replaces an already loaded normal document on create', async () => {
+    const oldHandle = makeHandle('file-id');
+    const newHandle = makeHandle('file-id');
+    const oldHostResult = {
+      dispose: jest.fn(),
+    };
+    const newHostResult = {
+      dispose: jest.fn(),
+    };
+    jest
+      .mocked(createStandaloneBrowserShellHost)
+      .mockReturnValueOnce(oldHostResult as never)
+      .mockReturnValueOnce(newHostResult as never);
+    jest
+      .mocked(createStandaloneBrowserHostBackedDocument)
+      .mockResolvedValueOnce(oldHandle)
+      .mockResolvedValueOnce(newHandle);
+
+    const manager = createDocumentManager();
+    await expect(manager.createDocument('file-id')).resolves.toBe(oldHandle);
+    await expect(manager.createDocument('file-id')).resolves.toBe(newHandle);
+
+    expect(createStandaloneBrowserShellHost).toHaveBeenCalledTimes(2);
+    expect(oldHostResult.dispose).toHaveBeenCalledTimes(1);
+    expect(oldHandle.dispose).toHaveBeenCalledTimes(1);
+    expect(manager.getDocument('file-id')).toBe(newHandle);
+  });
+
   it('does not publish an in-flight load that is disposed before completion', async () => {
     const loadDeferred = deferred<DocumentHandle>();
     const handle = makeHandle('file-id');

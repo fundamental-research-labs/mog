@@ -424,7 +424,9 @@ describe('refreshViewportForRegion — sheet-scoped viewport IDs', () => {
       Promise.resolve([
         new Uint8Array(),
         {
-          tableChanges: [{ sheetId: 'sheet-1', name: 'Table1', kind: 'Removed' }],
+          tableChanges: [
+            { sheetId: 'sheet-1', name: 'Table1', tableId: 'table-1', kind: 'Removed' },
+          ],
         } as unknown as MutationResult,
       ]),
     );
@@ -445,7 +447,7 @@ describe('refreshViewportForRegion — sheet-scoped viewport IDs', () => {
       expect.objectContaining({
         type: 'table:deleted',
         sheetId: 'sheet-1',
-        tableId: 'Table1',
+        tableId: 'table-1',
       }),
     );
     const refreshOrder = transport.call.mock.invocationCallOrder.find((_, index) => {
@@ -579,7 +581,9 @@ describe('refreshViewportForRegion — sheet-scoped viewport IDs', () => {
             new Uint8Array(),
             {
               recalc: makeRecalcResult(),
-              tableChanges: [{ name: 'Table1', sheetId: 'sheet-1', kind: 'Removed' }],
+              tableChanges: [
+                { name: 'Table1', tableId: 'table-1', sheetId: 'sheet-1', kind: 'Removed' },
+              ],
             },
           ];
         }

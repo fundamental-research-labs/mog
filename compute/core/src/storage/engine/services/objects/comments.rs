@@ -23,7 +23,12 @@ type DeleteCommentResult = Result<(MutationResult, Option<(u32, u32)>, bool), Co
 // -------------------------------------------------------------------
 
 fn threaded_comment_timestamp() -> String {
-    let now = chrono::Utc::now();
+    let now = chrono::DateTime::from_timestamp_millis(
+        crate::storage::infra::yrs_helpers::now_millis() as i64,
+    )
+    .unwrap_or_else(|| {
+        chrono::DateTime::from_timestamp_millis(0).expect("UNIX epoch timestamp is valid")
+    });
     now.to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
 }
 

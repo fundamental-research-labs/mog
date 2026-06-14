@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { cp, mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -8,6 +8,7 @@ import { chromium } from 'playwright-core';
 const repoRoot = resolve(import.meta.dirname, '../../..');
 const pluginRoot = resolve(repoRoot, 'plugins/mog');
 const chromePath = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+const vscodeExtensionRoot = resolve(repoRoot, 'integrations/vscode/mog-xlsx-editor');
 
 function frame(message) {
   const body = Buffer.from(JSON.stringify(message));
@@ -55,6 +56,14 @@ function waitForMessage(messages, id, timeoutMs = 30000) {
 function parseToolContent(message) {
   assert.equal(message.result?.isError, undefined, message.result?.content?.[0]?.text);
   return JSON.parse(message.result.content[0].text);
+}
+
+function ensureXlsxFixtures() {
+  const result = spawnSync('node', ['scripts/generate-fixtures.mjs'], {
+    cwd: vscodeExtensionRoot,
+    encoding: 'utf8',
+  });
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
 }
 
 async function main() {
@@ -136,10 +145,8 @@ async function main() {
     assert.ok(exported.bytesWritten > 0);
     assert.equal((await readFile(outputPath)).subarray(0, 2).toString('utf8'), 'PK');
 
-    const fixturePath = resolve(
-      repoRoot,
-      'integrations/vscode/mog-xlsx-editor/fixtures/simple-values.xlsx',
-    );
+    ensureXlsxFixtures();
+    const fixturePath = resolve(vscodeExtensionRoot, 'fixtures/simple-values.xlsx');
     const importStartId = send('tools/call', {
       name: 'mog_browser_start',
       arguments: { xlsxPath: fixturePath },

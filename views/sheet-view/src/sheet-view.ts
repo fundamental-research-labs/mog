@@ -277,10 +277,7 @@ export class SheetView {
   // ---------------------------------------------------------------------------
 
   private readonly _config: Required<
-    Omit<
-      SheetViewConfig,
-      'initialViewport' | 'dpr' | 'viewportChrome' | 'skin' | 'viewportInset'
-    >
+    Omit<SheetViewConfig, 'initialViewport' | 'dpr' | 'viewportChrome' | 'skin' | 'viewportInset'>
   > & {
     initialViewport?: SheetViewConfig['initialViewport'];
     viewportChrome: Required<SheetViewViewportChromeOptions>;

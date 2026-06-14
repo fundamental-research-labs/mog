@@ -303,10 +303,7 @@ export function usePivotTables({ sheetId }: UsePivotTablesOptions): UsePivotTabl
   // Local state for pivot configs and results
   const [pivotEntries, setPivotEntries] = useState<PivotConfigEntry[]>([]);
   const editingMissReloadKeyRef = useRef<string | null>(null);
-  const loadPivotEntries = useCallback(
-    () => loadPivotConfigEntries(wb, sheetId),
-    [wb, sheetId],
-  );
+  const loadPivotEntries = useCallback(() => loadPivotConfigEntries(wb, sheetId), [wb, sheetId]);
 
   const pivotConfigFromId = useCallback(
     (pivotId: string): PivotTableConfig | null =>

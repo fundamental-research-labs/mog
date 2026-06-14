@@ -80,7 +80,6 @@ Automatic click-to-open `.xlsx` file association is not part of Codex's
 documented plugin API. Users should ask Codex to open an explicit `.xlsx` path
 with Mog until Codex exposes file or link handler contributions.
 
-The first browser load requires network access to
-`https://cdn.jsdelivr.net/npm/@mog-sdk/wasm@0.9.2/` so the browser can load the
-published WASM package. The plugin validator fails if a WASM file is vendored
-under `plugins/mog/dist`.
+The first browser load requires network access to the version-pinned published
+`@mog-sdk/wasm` package on jsDelivr so the browser can load the WASM module. The
+plugin validator fails if a WASM file is vendored under `plugins/mog/dist`.

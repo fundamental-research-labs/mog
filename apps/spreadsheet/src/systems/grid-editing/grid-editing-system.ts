@@ -1504,9 +1504,7 @@ export class GridEditingSystem implements IGridEditingSystem {
       },
       setCellFormat: async (sheetId, row, col, format) => {
         await guardBridgeMutation(async () => {
-          await workbook
-            .getSheetById(sheetId)
-            .formats.set(row, col, format as CellFormat);
+          await workbook.getSheetById(sheetId).formats.set(row, col, format as CellFormat);
         });
       },
       setCellFormatBatch: async (sheetId, updates) => {

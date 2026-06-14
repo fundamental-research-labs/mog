@@ -1,9 +1,6 @@
 import { useCallback, useEffect, type RefObject } from 'react';
 
-import {
-  EXTERNAL_SOURCE_SHEET_ID,
-  type ClipboardData,
-} from '@mog-sdk/contracts/actors';
+import { EXTERNAL_SOURCE_SHEET_ID, type ClipboardData } from '@mog-sdk/contracts/actors';
 import type { ClipboardState } from '@mog-sdk/contracts/actors';
 import type { CellRange } from '@mog-sdk/contracts/core';
 

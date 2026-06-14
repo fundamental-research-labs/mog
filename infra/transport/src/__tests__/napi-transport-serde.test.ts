@@ -91,7 +91,18 @@ describe('DEFAULT_NAPI_SERDE_PARAMS', () => {
     });
 
     expect(calls).toEqual([
-      [JSON.stringify('sheet-1'), 0, 1, 9, 5, 2, true, false, JSON.stringify(640), JSON.stringify(null)],
+      [
+        JSON.stringify('sheet-1'),
+        0,
+        1,
+        9,
+        5,
+        2,
+        true,
+        false,
+        JSON.stringify(640),
+        JSON.stringify(null),
+      ],
     ]);
   });
 

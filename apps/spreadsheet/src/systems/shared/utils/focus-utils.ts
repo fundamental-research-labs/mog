@@ -86,9 +86,7 @@ export function keyboardEventTargetElement(e: KeyboardEvent): HTMLElement | null
   if (typeof HTMLElement === 'undefined') return null;
   if (e.target instanceof HTMLElement) return e.target;
   const path = e.composedPath?.() ?? [];
-  return (
-    path.find((target): target is HTMLElement => target instanceof HTMLElement) ?? null
-  );
+  return path.find((target): target is HTMLElement => target instanceof HTMLElement) ?? null;
 }
 
 export function isEditableKeyboardTarget(target: HTMLElement | null): boolean {

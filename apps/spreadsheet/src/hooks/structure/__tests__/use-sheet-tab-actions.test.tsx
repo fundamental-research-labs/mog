@@ -65,9 +65,9 @@ describe('useSheetTabActions', () => {
   });
 
   it('materializes a pending imported sheet before activating it', async () => {
-    const awaitMaterialized = jest.fn<Promise<void>, [SheetId | 'allSheets'?]>().mockResolvedValue(
-      undefined,
-    );
+    const awaitMaterialized = jest
+      .fn<Promise<void>, [SheetId | 'allSheets'?]>()
+      .mockResolvedValue(undefined);
     importDurabilityMock = {
       isImportDurabilityPending: true,
       awaitMaterialized,

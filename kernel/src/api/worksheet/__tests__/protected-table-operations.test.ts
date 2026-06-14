@@ -184,7 +184,7 @@ describe('protected sheet table operation policy', () => {
       expect.objectContaining({
         type: 'table:updated',
         sheetId: SHEET_ID,
-        tableId: 'Sales',
+        tableId: 'table-1',
       }),
     );
   });

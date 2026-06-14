@@ -10330,8 +10330,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "list(): Promise<Array<{ address: string; url: string }>>;",
-      "typeText": "Promise<Array<{address:string;url:string}>>",
+      "signature": "list(): Promise<WorksheetHyperlink[]>;",
+      "typeText": "Promise<WorksheetHyperlink[]>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/hyperlinks.ts"
@@ -28156,8 +28156,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "list(): Promise<Array<{ address: string; url: string }>>;",
-      "typeText": "Promise<Array<{address:string;url:string}>>",
+      "signature": "list(): Promise<WorksheetHyperlink[]>;",
+      "typeText": "Promise<WorksheetHyperlink[]>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/hyperlinks.ts"

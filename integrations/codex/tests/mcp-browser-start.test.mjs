@@ -1,12 +1,16 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { cp, mkdtemp, rm } from 'node:fs/promises';
+import { cp, mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import test from 'node:test';
 
 const repoRoot = resolve(import.meta.dirname, '../../..');
 const pluginRoot = resolve(repoRoot, 'plugins/mog');
+const wasmPackageJson = JSON.parse(
+  await readFile(resolve(repoRoot, 'compute/wasm/npm/package.json'), 'utf8'),
+);
+const expectedWasmBaseUrl = `https://cdn.jsdelivr.net/npm/@mog-sdk/wasm@${wasmPackageJson.version}/`;
 
 function frame(message) {
   const body = Buffer.from(JSON.stringify(message));
@@ -100,15 +104,12 @@ test('mog_browser_start returns a live localhost browser host and bootstrap payl
     const bootstrap = await bootstrapResponse.json();
     assert.equal(bootstrap.sessionId, start.sessionId);
     assert.equal(bootstrap.source.kind, 'blank');
-    assert.equal(bootstrap.wasmBaseUrl, 'https://cdn.jsdelivr.net/npm/@mog-sdk/wasm@0.9.2/');
+    assert.equal(bootstrap.wasmBaseUrl, expectedWasmBaseUrl);
 
     const importMapResponse = await fetch(new URL('/assets/import-map.json', pageUrl.origin));
     assert.equal(importMapResponse.status, 200);
     const importMap = await importMapResponse.json();
-    assert.equal(
-      importMap.imports['@mog-sdk/wasm'],
-      'https://cdn.jsdelivr.net/npm/@mog-sdk/wasm@0.9.2/compute_core_wasm.js',
-    );
+    assert.equal(importMap.imports['@mog-sdk/wasm'], `${expectedWasmBaseUrl}compute_core_wasm.js`);
   } finally {
     child.kill();
     await rm(installRoot, { recursive: true, force: true });

@@ -64,6 +64,8 @@ const shared = {
   logLevel: 'info',
   define: {
     'process.env.NODE_ENV': '"production"',
+    MOG_PLUGIN_VERSION: JSON.stringify(wasmPackageJson.version),
+    MOG_WASM_PACKAGE_BASE_URL: JSON.stringify(wasmPackageBaseUrl),
   },
 };
 

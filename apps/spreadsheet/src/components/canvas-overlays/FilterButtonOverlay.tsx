@@ -106,16 +106,10 @@ export const FilterButtonOverlay = memo(function FilterButtonOverlay({
 
       const rect = node.getBoundingClientRect();
       const overlayBottom = triggerRef.current?.parentElement?.getBoundingClientRect().bottom;
-      const boundaryBottom = Math.min(
-        overlayBottom ?? window.innerHeight,
-        window.innerHeight,
-      );
+      const boundaryBottom = Math.min(overlayBottom ?? window.innerHeight, window.innerHeight);
       const available = boundaryBottom - FILTER_POPOVER_VIEWPORT_MARGIN - rect.top;
       const nextHeight = Math.floor(
-        Math.min(
-          FILTER_POPOVER_MAX_HEIGHT,
-          Math.max(FILTER_POPOVER_MIN_HEIGHT, available),
-        ),
+        Math.min(FILTER_POPOVER_MAX_HEIGHT, Math.max(FILTER_POPOVER_MIN_HEIGHT, available)),
       );
 
       setPopoverHeight((current) => {

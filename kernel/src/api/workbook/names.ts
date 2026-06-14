@@ -26,10 +26,7 @@ import { KernelError } from '../../errors';
 import type { DocumentContext } from '../../context';
 import * as NamedRanges from '../../domain/formulas/named-ranges';
 import { validateName } from '@mog/spreadsheet-utils/data/named-ranges';
-import {
-  isApiVisibleNamedRangeReference,
-  stripFormulaPrefix,
-} from '../named-range-visibility';
+import { isApiVisibleNamedRangeReference, stripFormulaPrefix } from '../named-range-visibility';
 
 /**
  * Dependencies injected from WorkbookImpl.
@@ -67,14 +64,11 @@ export class WorkbookNamesImpl implements WorkbookNames {
   private async _getName(
     name: string,
     scope?: string,
-  ): Promise<
-    | {
-        defined: NonNullable<Awaited<ReturnType<typeof NamedRanges.getByName>>>;
-        reference: string;
-        scopeSheetId: SheetId | undefined;
-      }
-    | null
-  > {
+  ): Promise<{
+    defined: NonNullable<Awaited<ReturnType<typeof NamedRanges.getByName>>>;
+    reference: string;
+    scopeSheetId: SheetId | undefined;
+  } | null> {
     const scopeSheetId = await this._resolveScope(scope);
     const defined = await NamedRanges.getByName(this.deps.ctx, name, scopeSheetId);
     if (!defined) return null;

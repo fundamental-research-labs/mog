@@ -86,25 +86,13 @@ describe('chart data point value provenance', () => {
 
     expect(data.categories).toEqual(['Revenue', 'yoy', 'OP', 'yoy', 'OPM']);
     expect(data.series[0].data.map((point) => point.y)).toEqual([
-      100500,
-      0,
-      4400,
-      0,
-      0.04378109452736319,
+      100500, 0, 4400, 0, 0.04378109452736319,
     ]);
     expect(data.series[1].data.map((point) => point.y)).toEqual([
-      100900,
-      0.003980099502487455,
-      7800,
-      0.7727272727272727,
-      0.07730426164519326,
+      100900, 0.003980099502487455, 7800, 0.7727272727272727, 0.07730426164519326,
     ]);
     expect(data.series[2].data.map((point) => point.y)).toEqual([
-      100000,
-      -0.008919722497522264,
-      7400,
-      -0.05128205128205132,
-      0.074,
+      100000, -0.008919722497522264, 7400, -0.05128205128205132, 0.074,
     ]);
   });
 

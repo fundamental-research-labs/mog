@@ -119,13 +119,10 @@ export async function executePasteIntoTargetRange(
   const skipHiddenRows =
     !!(options.skipHiddenRows && store.isRowHidden) &&
     !(
-      targetRangeIsExplicit &&
-      isExplicitHiddenSingleCellTarget(target, targetRange, sheetId, store)
+      targetRangeIsExplicit && isExplicitHiddenSingleCellTarget(target, targetRange, sheetId, store)
     );
   const executionOptions =
-    skipHiddenRows === Boolean(options.skipHiddenRows)
-      ? options
-      : { ...options, skipHiddenRows };
+    skipHiddenRows === Boolean(options.skipHiddenRows) ? options : { ...options, skipHiddenRows };
   const executionTargetRange = resolveExecutionTargetRange(
     target,
     dimensions,

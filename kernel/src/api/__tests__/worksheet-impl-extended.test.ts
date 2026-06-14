@@ -213,6 +213,7 @@ function createMockCtx(): any {
   return {
     eventBus,
     mirror: {
+      getSheetSettings: jest.fn().mockReturnValue({ isProtected: false }),
       getFrozenPanes: jest.fn().mockReturnValue({ rows: 0, cols: 0 }),
       getViewOptions: jest.fn().mockReturnValue({
         showGridlines: true,
@@ -886,6 +887,7 @@ describe('WorksheetImpl Extended Methods', () => {
           caption: 'Slicer 1',
           tableName: 'Table1',
           columnName: 'Col1',
+          source: { type: 'table', tableId: 'Table1', columnCellId: 'Col1' },
         },
       ]);
     });

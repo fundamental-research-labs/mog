@@ -172,6 +172,7 @@ describe('WorksheetSlicersImpl', () => {
         caption: 'Region Filter',
         tableName: 'Table1',
         columnName: 'Region',
+        source: { type: 'table', tableId: 'Table1', columnCellId: 'Region' },
       });
     });
 

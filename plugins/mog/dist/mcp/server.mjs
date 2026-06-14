@@ -48,7 +48,8 @@ var hostServer = null;
 var hostPort = null;
 var runtimeRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 var browserRoot = resolve(runtimeRoot, "browser");
-var wasmPackageBaseUrl = "https://cdn.jsdelivr.net/npm/@mog-sdk/wasm@0.9.2/";
+var pluginVersion = true ? "0.9.3" : "0.9.3";
+var wasmPackageBaseUrl = true ? "https://cdn.jsdelivr.net/npm/@mog-sdk/wasm@0.9.3/" : `https://cdn.jsdelivr.net/npm/@mog-sdk/wasm@${pluginVersion}/`;
 function randomToken() {
   return randomBytes(32).toString("base64url");
 }
@@ -565,7 +566,7 @@ async function handleMcpRequest(message) {
           result: {
             protocolVersion: message.params?.protocolVersion ?? "2024-11-05",
             capabilities: { tools: {} },
-            serverInfo: { name: "mog", version: "0.9.2" },
+            serverInfo: { name: "mog", version: pluginVersion },
             instructions: "Use Mog tools to start a localhost browser session, open the returned URL in the Codex in-app browser, wait for readiness, then operate on that visible workbook."
           }
         });

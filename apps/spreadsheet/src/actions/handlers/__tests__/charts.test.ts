@@ -1296,9 +1296,7 @@ describe('Chart Handlers - Current-Region Auto-Expansion', () => {
         ['OPM', 0.04378109452736319, 0.07730426164519326, 0.074],
       ];
       const ws = (deps.workbook as any).activeSheet;
-      ws.getValue = jest.fn(
-        async (row: number, col: number) => sourceValues[row]?.[col] ?? null,
-      );
+      ws.getValue = jest.fn(async (row: number, col: number) => sourceValues[row]?.[col] ?? null);
 
       const result = await ChartHandlers.CREATE_EMBEDDED_CHART(deps);
       expect(result.handled).toBe(true);

@@ -14,10 +14,7 @@ import type {
 import type { DocumentContext } from '../../context';
 import * as NamedRanges from '../../domain/formulas/named-ranges';
 import { KernelError } from '../../errors';
-import {
-  isApiVisibleNamedRangeReference,
-  stripFormulaPrefix,
-} from '../named-range-visibility';
+import { isApiVisibleNamedRangeReference, stripFormulaPrefix } from '../named-range-visibility';
 
 export class WorksheetNamesImpl implements WorksheetNames {
   constructor(

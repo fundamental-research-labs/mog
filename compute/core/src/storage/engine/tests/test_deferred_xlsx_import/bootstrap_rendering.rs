@@ -204,6 +204,74 @@ fn deferred_xlsx_import_materializes_active_visible_sheet_before_full_hydration(
 }
 
 #[test]
+fn deferred_xlsx_import_exposes_metadata_only_sheet_outlines_before_full_hydration() {
+    let bytes = metadata_outline_deferred_fixture_xlsx();
+
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    engine
+        .import_from_xlsx_bytes_deferred(&bytes)
+        .expect("deferred XLSX import should succeed");
+
+    let (active_visible, outlined_metadata) = sheet_ids(&engine);
+    assert_eq!(
+        engine.get_sheet_name(&active_visible).as_deref(),
+        Some("ActiveVisible")
+    );
+    assert_eq!(
+        engine.get_sheet_name(&outlined_metadata).as_deref(),
+        Some("OutlinedMetadata")
+    );
+    assert_eq!(
+        engine.get_cell_value(&active_visible, 0, 0),
+        CellValue::number(21.0),
+        "active visible sheet should still be the materialized first-paint sheet"
+    );
+    assert!(
+        engine.get_cell_id_at(&outlined_metadata, 0, 0).is_none(),
+        "outlined non-critical sheet should remain cell-metadata-only before full hydration"
+    );
+
+    let row_groups = engine.get_groups(&outlined_metadata, "row");
+    assert_eq!(
+        row_groups.len(),
+        1,
+        "metadata-only sheet should hydrate imported row outline groups before full hydration: {row_groups:?}"
+    );
+    assert_eq!(row_groups[0].start, 5);
+    assert_eq!(row_groups[0].end, 6);
+    assert_eq!(row_groups[0].level, 1);
+    assert!(!row_groups[0].collapsed);
+
+    let column_groups = engine.get_groups(&outlined_metadata, "column");
+    assert_eq!(
+        column_groups.len(),
+        1,
+        "metadata-only sheet should hydrate imported column outline groups before full hydration: {column_groups:?}"
+    );
+    assert_eq!(column_groups[0].start, 4);
+    assert_eq!(column_groups[0].end, 8);
+    assert_eq!(column_groups[0].level, 1);
+    assert!(!column_groups[0].collapsed);
+
+    let row_levels = engine.get_row_outline_levels(&outlined_metadata, 4, 7);
+    assert_eq!(
+        row_levels
+            .iter()
+            .map(|level| (level.index, level.level))
+            .collect::<Vec<_>>(),
+        vec![(4, 0), (5, 1), (6, 1), (7, 0)]
+    );
+    let column_levels = engine.get_column_outline_levels(&outlined_metadata, 3, 9);
+    assert_eq!(
+        column_levels
+            .iter()
+            .map(|level| (level.index, level.level))
+            .collect::<Vec<_>>(),
+        vec![(3, 0), (4, 1), (5, 1), (6, 1), (7, 1), (8, 1), (9, 0)]
+    );
+}
+
+#[test]
 fn deferred_xlsx_import_emits_saved_view_before_full_hydration() {
     let bytes = saved_view_deferred_fixture_xlsx();
 

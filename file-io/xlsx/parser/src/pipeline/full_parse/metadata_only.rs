@@ -1,7 +1,7 @@
 use super::helpers::capture_namespaces_from_xml;
 use crate::domain::workbook::read::SheetPackageContext;
 use crate::domain::worksheet::read::{
-    parse_dimension_ref_with_text, parse_frozen_pane, parse_sheet_format_pr,
+    parse_dimension_ref_with_text, parse_dimensions, parse_frozen_pane, parse_sheet_format_pr,
     parse_sheet_properties, parse_sheet_views, parse_sheet_views_ext_lst,
 };
 use crate::infra::xml_namespaces::NamespaceMap;
@@ -71,6 +71,9 @@ fn apply_metadata_xml(empty_sheet: &mut FullParsedSheet, xml: &[u8]) {
     let pre_sd = memchr::memmem::find(xml, b"<sheetData")
         .map(|p| &xml[..p])
         .unwrap_or(xml);
+    let (col_widths, row_heights) = parse_dimensions(xml);
+    empty_sheet.col_widths = col_widths;
+    empty_sheet.row_heights = row_heights;
     empty_sheet.view_options = parse_sheet_views(pre_sd)
         .into_iter()
         .map(crate::output::results::SheetViewOutput::from)
@@ -95,4 +98,48 @@ fn apply_metadata_xml(empty_sheet: &mut FullParsedSheet, xml: &[u8]) {
         .sheet_properties
         .as_ref()
         .and_then(|properties| properties.outline_pr.clone());
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn metadata_only_sheet_preserves_structural_dimensions_for_outlines() {
+        let xml = br#"
+            <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+              <sheetPr><outlinePr summaryBelow="1" summaryRight="0"/></sheetPr>
+              <dimension ref="A1:I12"/>
+              <sheetViews><sheetView workbookViewId="0"/></sheetViews>
+              <sheetFormatPr defaultRowHeight="15" outlineLevelRow="1" outlineLevelCol="1"/>
+              <cols>
+                <col min="5" max="9" width="10.5" hidden="1" outlineLevel="1"/>
+              </cols>
+              <sheetData>
+                <row r="6" outlineLevel="1" hidden="1"/>
+                <row r="7" outlineLevel="1" hidden="1"/>
+                <row r="8" collapsed="1"/>
+              </sheetData>
+            </worksheet>
+        "#;
+        let mut sheet = FullParsedSheet::default();
+
+        apply_metadata_xml(&mut sheet, xml);
+
+        assert_eq!(sheet.col_widths.len(), 1);
+        assert_eq!(sheet.col_widths[0].min, 5);
+        assert_eq!(sheet.col_widths[0].max, 9);
+        assert_eq!(sheet.col_widths[0].outline_level, Some(1));
+        assert!(sheet.col_widths[0].hidden);
+
+        assert_eq!(sheet.row_heights.len(), 3);
+        assert_eq!(sheet.row_heights[0].row, 5);
+        assert_eq!(sheet.row_heights[0].outline_level, Some(1));
+        assert_eq!(sheet.row_heights[0].hidden, Some(true));
+        assert_eq!(sheet.row_heights[2].row, 7);
+        assert_eq!(sheet.row_heights[2].collapsed, Some(true));
+        assert_eq!(sheet.outline_level_row, Some(1));
+        assert_eq!(sheet.outline_level_col, Some(1));
+        assert!(sheet.outline_properties.is_some());
+    }
 }

@@ -233,33 +233,25 @@ describe('Shift+Arrow selection extension (extendSelection)', () => {
     {
       direction: 'down' as const,
       firstRange: { startRow: 4, startCol: 1, endRow: 5, endCol: 1 },
-      firstEdge: { row: 5, col: 1 },
       secondRange: { startRow: 4, startCol: 1, endRow: 6, endCol: 1 },
-      secondEdge: { row: 6, col: 1 },
       desc: 'extends downward',
     },
     {
       direction: 'up' as const,
       firstRange: { startRow: 3, startCol: 1, endRow: 4, endCol: 1 },
-      firstEdge: { row: 3, col: 1 },
       secondRange: { startRow: 2, startCol: 1, endRow: 4, endCol: 1 },
-      secondEdge: { row: 2, col: 1 },
       desc: 'extends upward',
     },
     {
       direction: 'right' as const,
       firstRange: { startRow: 4, startCol: 1, endRow: 4, endCol: 2 },
-      firstEdge: { row: 4, col: 2 },
       secondRange: { startRow: 4, startCol: 1, endRow: 4, endCol: 3 },
-      secondEdge: { row: 4, col: 3 },
       desc: 'extends rightward',
     },
     {
       direction: 'left' as const,
       firstRange: { startRow: 4, startCol: 0, endRow: 4, endCol: 1 },
-      firstEdge: { row: 4, col: 0 },
       secondRange: { startRow: 4, startCol: 0, endRow: 4, endCol: 1 },
-      secondEdge: { row: 4, col: 0 },
       desc: 'extends leftward (hits edge at A)',
     },
   ])(
@@ -267,15 +259,11 @@ describe('Shift+Arrow selection extension (extendSelection)', () => {
     ({
       direction,
       firstRange,
-      firstEdge,
       secondRange,
-      secondEdge,
     }: {
       direction: 'up' | 'down' | 'left' | 'right';
       firstRange: { startRow: number; startCol: number; endRow: number; endCol: number };
-      firstEdge: { row: number; col: number };
       secondRange: { startRow: number; startCol: number; endRow: number; endCol: number };
-      secondEdge: { row: number; col: number };
       desc: string;
     }) => {
       it('first Shift+arrow creates range', () => {
@@ -295,8 +283,8 @@ describe('Shift+Arrow selection extension (extendSelection)', () => {
         const result = callAction('extendSelection', context, event);
 
         expect(result.pendingRange).toEqual(firstRange);
-        expect(result.activeCell).toEqual(firstEdge);
         expect(result.anchor).toEqual({ row: 4, col: 1 });
+        expect(result.activeCell).toEqual({ row: 4, col: 1 });
       });
 
       it('second Shift+arrow extends further', () => {
@@ -316,8 +304,8 @@ describe('Shift+Arrow selection extension (extendSelection)', () => {
         const result = callAction('extendSelection', context, event);
 
         expect(result.pendingRange).toEqual(secondRange);
-        expect(result.activeCell).toEqual(secondEdge);
         expect(result.anchor).toEqual({ row: 4, col: 1 });
+        expect(result.activeCell).toEqual({ row: 4, col: 1 });
       });
     },
   );
@@ -373,7 +361,7 @@ describe('Shift+Arrow selection extension (extendSelection)', () => {
         endRow: 4,
         endCol: 1,
       });
-      expect(result.activeCell).toEqual({ row: 3, col: 1 });
+      expect(result.activeCell).toEqual({ row: 4, col: 1 });
       expect(result.anchor).toEqual({ row: 4, col: 1 });
     });
   });

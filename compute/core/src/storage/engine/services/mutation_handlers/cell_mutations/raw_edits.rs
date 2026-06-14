@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 
 use cell_types::{CellId, SheetId, SheetPos};
-use compute_document::hex::id_to_hex;
 use value_types::{CellValue, ComputeError};
 
 use crate::mirror::CellMirror;
@@ -55,13 +54,20 @@ pub(in crate::storage::engine) fn mutation_set_cells_raw_with_trust(
         HashMap::with_capacity(edits.len());
 
     write_raw_cell_edits_to_yrs(stores, &edits)?;
+    let mut cache_metadata_cells: HashMap<SheetId, Vec<CellId>> = HashMap::new();
     for (sheet_id, cell_id, _, _, _, _) in &edits {
-        crate::storage::properties::clear_formula_cache_metadata(
+        cache_metadata_cells
+            .entry(*sheet_id)
+            .or_default()
+            .push(*cell_id);
+    }
+    for (sheet_id, cell_ids) in cache_metadata_cells {
+        crate::storage::properties::clear_formula_cache_metadata_for_cell_ids(
             stores.storage.doc(),
             stores.storage.workbook_map(),
             stores.storage.sheets(),
-            sheet_id,
-            &id_to_hex(cell_id.as_u128()),
+            &sheet_id,
+            &cell_ids,
         );
     }
 

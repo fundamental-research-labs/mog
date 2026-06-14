@@ -130,9 +130,10 @@ export function computeDirection(anchor: CellCoord, active: CellCoord): Selectio
 }
 
 /**
- * Single source of truth for shift-extend on the pending range. The anchor
- * stays fixed while the active cell follows the moving edge, matching the
- * cell a non-shift arrow would continue from after the extension.
+ * Single source of truth for constructing an anchor-to-edge pending range.
+ * The anchor stays fixed while activeCell follows the moving edge. Formula
+ * and mouse callers may pass an explicit active cell when they need to
+ * preserve an external editing origin.
  *
  * `committedRanges` is intentionally not touched here — non-additive flows
  * keep it empty by invariant; additive flows leave it intact while the

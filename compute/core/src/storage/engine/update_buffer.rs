@@ -14,10 +14,10 @@
 //! true push channel costly: we'd need a long-running threadsafe-function
 //! handle bound to the engine thread. Pull-at-tick is sufficient because:
 //!
-//! - Volume is bounded by transaction count (not cell count) per yrs's
-//!   `observe_update_v1` contract — bulk paste of 10K cells in one txn
-//!   fires once. So a 60Hz drain tick is wildly more than enough for
-//!   user-interaction-rate edits.
+//! - Volume is normally bounded by transaction count. Some transports can still
+//!   surface very large user edits as many small update payloads, so drains are
+//!   chunked under a byte cap instead of requiring the entire pending queue to
+//!   fit in one bridge result.
 //! - Microtask coalescing on the TS side absorbs the per-tick latency.
 //! - If push notifications are needed later, the bridge layer can grow a real
 //!   notification channel without changing the buffer's API — the buffer
@@ -125,44 +125,50 @@ impl UpdateBuffer {
             .collect()
     }
 
-    /// Drain all pending updates after enforcing the bootstrap-leak cap.
+    /// Drain pending updates after enforcing the per-drain cap.
     ///
-    /// On violation the buffer is left intact so diagnostic callers can inspect
-    /// or clear it deliberately; silently dropping a provider update would break
-    /// the no-lost-edits contract.
+    /// A single update larger than the cap is rejected as a likely bootstrap
+    /// leak. Multiple smaller updates are drained as a FIFO prefix whose total
+    /// bytes fit under the cap, leaving the tail queued for the next drain.
     pub(crate) fn drain_checked(&self) -> Result<Vec<Vec<u8>>, ComputeError> {
+        self.drain_checked_with_cap(MAX_PROVIDER_UPDATE_BYTES)
+    }
+
+    fn drain_checked_with_cap(&self, cap_bytes: usize) -> Result<Vec<Vec<u8>>, ComputeError> {
         let mut guard = self.inner.lock().expect("UpdateBuffer poisoned");
         let pending_updates = guard.len();
-        if let Some(oversized) = guard
-            .iter()
-            .find(|pending| pending.bytes.len() > MAX_PROVIDER_UPDATE_BYTES)
-        {
+        if let Some(oversized) = guard.iter().find(|pending| pending.bytes.len() > cap_bytes) {
             return Err(ComputeError::InvalidInput {
                 message: format!(
                     "bootstrap update leaked into provider drain: updateBytes={}, pendingUpdates={}, source={}, capBytes={}",
                     oversized.bytes.len(),
                     pending_updates,
                     oversized.source,
-                    MAX_PROVIDER_UPDATE_BYTES,
+                    cap_bytes,
                 ),
             });
         }
 
-        let total_bytes: usize = guard.iter().map(|pending| pending.bytes.len()).sum();
-        if total_bytes > MAX_PROVIDER_UPDATE_BYTES {
-            let source = guard
-                .first()
-                .map(|pending| pending.source)
-                .unwrap_or(UpdateSource::UserMutation);
-            return Err(ComputeError::InvalidInput {
-                message: format!(
-                    "bootstrap update leaked into provider drain: updateBytes={}, pendingUpdates={}, source={}, capBytes={}",
-                    total_bytes, pending_updates, source, MAX_PROVIDER_UPDATE_BYTES,
-                ),
-            });
+        let mut drain_len = 0usize;
+        let mut total_bytes = 0usize;
+        for pending in guard.iter() {
+            let update_bytes = pending.bytes.len();
+            if drain_len > 0 && total_bytes.saturating_add(update_bytes) > cap_bytes {
+                break;
+            }
+            total_bytes += update_bytes;
+            drain_len += 1;
         }
 
-        Ok(std::mem::take(&mut *guard)
+        if drain_len == guard.len() {
+            return Ok(std::mem::take(&mut *guard)
+                .into_iter()
+                .map(|pending| pending.bytes)
+                .collect());
+        }
+
+        Ok(guard
+            .drain(0..drain_len)
             .into_iter()
             .map(|pending| pending.bytes)
             .collect())
@@ -210,13 +216,10 @@ mod tests {
     #[test]
     fn drain_checked_rejects_bootstrap_sized_payload_with_source_diagnostic() {
         let buffer = UpdateBuffer::default();
-        buffer.push_with_source(
-            UpdateSource::ImportBootstrap,
-            vec![0; MAX_PROVIDER_UPDATE_BYTES + 1],
-        );
+        buffer.push_with_source(UpdateSource::ImportBootstrap, vec![0; 5]);
 
         let err = buffer
-            .drain_checked()
+            .drain_checked_with_cap(4)
             .expect_err("oversized provider drain should be rejected");
         let message = err.to_string();
         assert!(
@@ -224,10 +227,7 @@ mod tests {
             "{message}"
         );
         assert!(message.contains("source=import_bootstrap"), "{message}");
-        assert!(
-            message.contains(&format!("capBytes={MAX_PROVIDER_UPDATE_BYTES}")),
-            "{message}"
-        );
+        assert!(message.contains("capBytes=4"), "{message}");
         assert_eq!(buffer.len(), 1, "diagnostic rejection must not drop bytes");
     }
 
@@ -241,6 +241,26 @@ mod tests {
             .drain_checked()
             .expect("normal provider updates should drain");
         assert_eq!(drained, vec![vec![1, 2, 3], vec![4, 5]]);
+        assert_eq!(buffer.len(), 0);
+    }
+
+    #[test]
+    fn drain_checked_chunks_valid_updates_over_total_cap() {
+        let buffer = UpdateBuffer::default();
+        buffer.push_with_source(UpdateSource::UserMutation, vec![1, 1, 1]);
+        buffer.push_with_source(UpdateSource::UserMutation, vec![2, 2, 2, 2]);
+        buffer.push_with_source(UpdateSource::UserMutation, vec![3]);
+
+        let first = buffer
+            .drain_checked_with_cap(5)
+            .expect("valid provider updates should drain in chunks");
+        assert_eq!(first, vec![vec![1, 1, 1]]);
+        assert_eq!(buffer.len(), 2);
+
+        let second = buffer
+            .drain_checked_with_cap(5)
+            .expect("remaining provider updates should drain in FIFO order");
+        assert_eq!(second, vec![vec![2, 2, 2, 2], vec![3]]);
         assert_eq!(buffer.len(), 0);
     }
 }

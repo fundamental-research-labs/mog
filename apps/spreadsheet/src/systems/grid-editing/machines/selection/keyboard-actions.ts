@@ -147,7 +147,10 @@ const moveActiveCell = assign(
 
 /**
  * Extend selection in direction (shift+arrow).
- * The anchor stays fixed while the active cell follows the moving edge.
+ * In normal Shift+Arrow selection, the anchor stays fixed as the active cell
+ * while the moving edge lives in range geometry and the emitted
+ * viewport-follow target. Sticky/additive extend modes keep their legacy
+ * edge-active behavior for mode bookkeeping.
  * getMovingEdge(range, anchor) keeps repeated extends independent from
  * activeCell, so edge-crossing and perpendicular extends remain stable.
  *
@@ -183,9 +186,13 @@ const extendSelection = assign(
               context.isColHidden,
             ).row
           : movingEdge.row;
+      const activeCell =
+        context.modes.additive || context.modes.extend
+          ? { row: targetRow, col: anchorCell.col }
+          : anchorCell;
       return {
         pendingRange: createFullRowRangeSpan(anchorCell.row, targetRow),
-        activeCell: anchorCell,
+        activeCell,
         anchor: anchorCell,
         anchorRow: anchorCell.row,
         anchorCol: null,
@@ -206,9 +213,13 @@ const extendSelection = assign(
               context.isColHidden,
             ).col
           : movingEdge.col;
+      const activeCell =
+        context.modes.additive || context.modes.extend
+          ? { row: anchorCell.row, col: targetCol }
+          : anchorCell;
       return {
         pendingRange: createFullColumnRangeSpan(anchorCell.col, targetCol),
-        activeCell: anchorCell,
+        activeCell,
         anchor: anchorCell,
         anchorRow: null,
         anchorCol: anchorCell.col,
@@ -233,7 +244,8 @@ const extendSelection = assign(
     // sit on the merge interior — matches the same machine-internal escape
     // used by `moveActiveCell`.
     const newEnd = escapeMergeOnMove(stepped, event.direction, context.getMergedRegionAt);
-    return buildExtendUpdate(anchor, newEnd);
+    const activeCell = context.modes.additive || context.modes.extend ? newEnd : anchor;
+    return buildExtendUpdate(anchor, newEnd, activeCell);
   },
 );
 
@@ -338,8 +350,7 @@ const jumpToEdge = assign(
 /**
  * Extend selection to edge in direction (Ctrl+Shift+Arrow).
  * Fallback implementation for unit tests - extends by JUMP_AMOUNT or to boundary.
- * The anchor stays fixed as activeCell while the moving edge lives in range
- * geometry.
+ * The anchor stays fixed while activeCell follows the moving edge.
  */
 const jumpToEdgeExtend = assign(
   ({ context, event }: { context: SelectionContext; event: SelectionEvent }) => {

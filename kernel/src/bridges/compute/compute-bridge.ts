@@ -895,37 +895,32 @@ export class ComputeBridge extends GeneratedBridgeBase {
     this._updateDispatchInFlight = true;
     const run = (async () => {
       try {
-        let updates: Uint8Array[];
-        try {
-          updates = await this.drainPendingUpdates();
-        } catch (err) {
-          // The underlying engine instance is gone — destroyed by another path
-          // racing this tick (compute_destroy resolves before _phase flips), or
-          // wiped by trap-recovery's resetWasmModule() without going through
-          // our destroy(). In either case the bridge is orphaned and there's
-          // nothing left to drain. Stop the loop permanently; otherwise every
-          // subsequent setTimeout(0) tick re-throws the same error and the
-          // recentErrors ring fills with the same unhandled rejection.
-          if (
-            err instanceof TransportError &&
-            err.message.startsWith('[compute_drain_pending_updates] instance not found')
-          ) {
-            this._updateSubscribers.clear();
-            return;
-          }
-          throw err;
-        }
-        if (updates.length === 0) return;
         // Snapshot subscribers to preserve no-reentrancy: a callback
         // that subscribes/unsubscribes during dispatch must not affect the
-        // current batch's recipient set.
+        // current flush's recipient set.
         const callbacks = Array.from(this._updateSubscribers);
-        for (const update of updates) {
-          for (const cb of callbacks) {
-            try {
-              cb(update);
-            } catch (err) {
-              console.warn('[ComputeBridge] update_v1 subscriber threw:', err);
+        while (true) {
+          let updates: Uint8Array[];
+          try {
+            updates = await this.drainPendingUpdates();
+          } catch (err) {
+            if (
+              err instanceof TransportError &&
+              err.message.startsWith('[compute_drain_pending_updates] instance not found')
+            ) {
+              this._updateSubscribers.clear();
+              return;
+            }
+            throw err;
+          }
+          if (updates.length === 0) return;
+          for (const update of updates) {
+            for (const cb of callbacks) {
+              try {
+                cb(update);
+              } catch (err) {
+                console.warn('[ComputeBridge] update_v1 subscriber threw:', err);
+              }
             }
           }
         }

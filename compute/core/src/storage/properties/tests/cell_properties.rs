@@ -402,6 +402,56 @@ fn test_clear_formula_cache_metadata_deletes_entry_when_empty() {
     assert!(get_properties(doc, workbook, sheets, &sid, "formula-only").is_none());
 }
 
+#[test]
+fn test_clear_formula_cache_metadata_for_cell_ids_batches_one_transaction() {
+    let (storage, sid, _gi) = storage_with_sheet();
+    let (doc, workbook, sheets) = (storage.doc(), storage.workbook_map(), storage.sheets());
+    let keep_id = cell_types::CellId::from_raw(100);
+    let delete_id = cell_types::CellId::from_raw(101);
+    let keep_hex = compute_document::hex::id_to_hex(keep_id.as_u128());
+    let delete_hex = compute_document::hex::id_to_hex(delete_id.as_u128());
+
+    let keep_props = CellProperties {
+        format: Some(CellFormat {
+            bold: Some(true),
+            ..Default::default()
+        }),
+        formula_result_type: Some(2),
+        has_empty_cached_value: true,
+        ..Default::default()
+    };
+    let delete_props = CellProperties {
+        formula_result_type: Some(1),
+        has_empty_cached_value: true,
+        ..Default::default()
+    };
+    set_properties(doc, sheets, &sid, &keep_hex, &keep_props);
+    set_properties(doc, sheets, &sid, &delete_hex, &delete_props);
+
+    let update_count = std::sync::Arc::new(std::sync::Mutex::new(0usize));
+    let subscription = {
+        let update_count = std::sync::Arc::clone(&update_count);
+        compute_collab::subscribe_update_v1(doc, move |_| {
+            *update_count.lock().expect("update count poisoned") += 1;
+        })
+    };
+
+    clear_formula_cache_metadata_for_cell_ids(doc, workbook, sheets, &sid, &[keep_id, delete_id]);
+
+    assert_eq!(
+        *update_count.lock().expect("update count poisoned"),
+        1,
+        "batch metadata cleanup should emit one provider update"
+    );
+    drop(subscription);
+
+    let kept = get_properties(doc, workbook, sheets, &sid, &keep_hex).unwrap();
+    assert_eq!(kept.format.as_ref().unwrap().bold, Some(true));
+    assert_eq!(kept.formula_result_type, None);
+    assert!(!kept.has_empty_cached_value);
+    assert!(get_properties(doc, workbook, sheets, &sid, &delete_hex).is_none());
+}
+
 /// Helper: create a storage with a sheet and get a mutable SheetMirror reference.
 fn storage_with_sheet_and_mirror() -> (
     crate::storage::YrsStorage,

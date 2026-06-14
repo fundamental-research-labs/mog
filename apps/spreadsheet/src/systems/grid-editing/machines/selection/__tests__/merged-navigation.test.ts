@@ -134,7 +134,7 @@ describe('Arrow Keys - Basic Navigation (Machine Level)', () => {
 describe('Extend Selection - Shift+Arrow (Machine Level)', () => {
   it('extendSelection extends from anchor by one cell at a time', () => {
     // Start at B5, extend left with Shift+Left.
-    // anchor stays put while activeCell follows the moving edge.
+    // anchor stays put as activeCell while the range edge moves.
 
     const context = createContext({
       activeCell: cell(4, 1), // B5
@@ -149,14 +149,14 @@ describe('Extend Selection - Shift+Arrow (Machine Level)', () => {
     });
 
     // Anchor at B5; the moving edge is A5.
-    expect(result.activeCell).toEqual(cell(4, 0)); // A5 (moving edge)
+    expect(result.activeCell).toEqual(cell(4, 1)); // B5 (anchor)
     expect(result.anchor).toEqual(cell(4, 1)); // B5
     expect(result.pendingRange).toEqual(range(4, 0, 4, 1)); // A5:B5
   });
 
   it('extendSelection preserves anchor across multiple extends', () => {
     // Scenario: B5, Shift+Left (→A5:B5), then Shift+Up.
-    // The moving edge moves through range geometry; activeCell follows it.
+    // The moving edge moves through range geometry while the anchor stays fixed.
 
     // First extend: B5 → A5
     const context1 = createContext({
@@ -173,7 +173,7 @@ describe('Extend Selection - Shift+Arrow (Machine Level)', () => {
 
     // Second extend: from A5 (moving edge in range) up to A4.
     const context2 = createContext({
-      activeCell: result1.activeCell!, // A5 (moving edge)
+      activeCell: result1.activeCell!, // B5 (anchor)
       pendingRange: result1.pendingRange!, // A5:B5
       anchor: result1.anchor!, // B5
     });
@@ -184,8 +184,8 @@ describe('Extend Selection - Shift+Arrow (Machine Level)', () => {
       shiftKey: true,
     });
 
-    // Anchor stays at B5; activeCell reaches the moving edge at A4.
-    expect(result2.activeCell).toEqual(cell(3, 0)); // A4 (moving edge)
+    // Anchor stays at B5 while the moving edge reaches A4.
+    expect(result2.activeCell).toEqual(cell(4, 1)); // B5 (anchor)
     expect(result2.anchor).toEqual(cell(4, 1)); // B5
     expect(result2.pendingRange).toEqual(range(3, 0, 4, 1)); // A4:B5
   });
@@ -206,8 +206,8 @@ describe('Extend Selection - Shift+Arrow (Machine Level)', () => {
       shiftKey: true,
     });
 
-    // Moving edge moves from B2 to C2.
-    expect(result.activeCell).toEqual(cell(1, 2)); // C2 (moving edge)
+    // Moving edge moves from B2 to C2 while the anchor stays at A1.
+    expect(result.activeCell).toEqual(cell(0, 0)); // A1 (anchor)
     expect(result.pendingRange).toEqual(range(0, 0, 1, 2)); // A1:C2
   });
 });

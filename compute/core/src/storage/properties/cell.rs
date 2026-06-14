@@ -3,7 +3,7 @@ use super::merge::{merge_formats, normalize_format_patch};
 use super::yrs::{get_sheet_submap, resolve_compact_props};
 use crate::engine_types::formatting::*;
 use cell_types::{CellId, SheetId};
-use compute_document::hex::parse_cell_id;
+use compute_document::hex::{id_to_hex, parse_cell_id};
 use compute_document::undo::ORIGIN_USER_EDIT;
 use domain_types::CellFormat;
 use domain_types::yrs_schema::cell_properties as props_schema;
@@ -138,6 +138,59 @@ pub fn clear_formula_cache_metadata(
         clear_properties(doc, sheets, sheet_id, cell_id);
     } else {
         set_properties(doc, sheets, sheet_id, cell_id, &props);
+    }
+}
+
+/// Clear cached formula serialization metadata for many cells in one
+/// user-edit transaction.
+pub fn clear_formula_cache_metadata_for_cell_ids(
+    doc: &Doc,
+    workbook: &MapRef,
+    sheets: &MapRef,
+    sheet_id: &SheetId,
+    cell_ids: &[CellId],
+) {
+    if cell_ids.is_empty() {
+        return;
+    }
+
+    let mut txn = doc.transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
+    let Some(props_map) = get_sheet_submap(&txn, sheets, sheet_id, KEY_CELL_PROPERTIES) else {
+        return;
+    };
+
+    for cell_id in cell_ids {
+        let cell_hex = id_to_hex(cell_id.as_u128());
+        let Some(mut props) = (match props_map.get(&txn, &cell_hex) {
+            Some(Out::YMap(nested)) => props_schema::from_yrs_map(&nested, &txn).map(Into::into),
+            Some(Out::Any(Any::String(ref json_str))) => {
+                resolve_compact_props(json_str, workbook, &txn)
+            }
+            _ => None,
+        }) else {
+            continue;
+        };
+
+        if props.formula_result_type.is_none()
+            && !props.has_empty_cached_value
+            && props.formula_cache_provenance.is_absent_or_unknown()
+        {
+            continue;
+        }
+
+        props.formula_result_type = None;
+        props.has_empty_cached_value = false;
+        props.formula_cache_provenance = Default::default();
+        props_map.remove(&mut txn, &cell_hex);
+        if props.format.is_some() || !props.metadata_is_empty() {
+            if let Some(format) = props.format.as_ref() {
+                props.format = Some(normalize_format_patch(format));
+            }
+            let dt_props: domain_types::CellProperties = props.into();
+            let entries = props_schema::to_yrs_prelim(&dt_props);
+            let nested: MapPrelim = entries.into_iter().collect();
+            props_map.insert(&mut txn, cell_hex, nested);
+        }
     }
 }
 

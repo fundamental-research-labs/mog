@@ -36,6 +36,50 @@ fn bulk_set_cells_by_position_grows_fresh_sheet_to_100k_once() {
 }
 
 #[test]
+fn bulk_set_cells_by_position_emits_one_provider_update() {
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(empty_bulk_snapshot()).unwrap();
+    let sid = sheet_id();
+    engine
+        .drain_pending_updates()
+        .expect("construction updates should drain");
+
+    engine
+        .batch_set_cells_by_position(
+            vec![
+                (
+                    sid,
+                    0,
+                    0,
+                    crate::storage::engine::mutation::CellInput::Parse { text: "1".into() },
+                ),
+                (
+                    sid,
+                    1,
+                    0,
+                    crate::storage::engine::mutation::CellInput::Parse { text: "2".into() },
+                ),
+                (
+                    sid,
+                    2,
+                    0,
+                    crate::storage::engine::mutation::CellInput::Parse { text: "3".into() },
+                ),
+            ],
+            true,
+        )
+        .expect("bulk write");
+
+    let updates = engine
+        .drain_pending_updates()
+        .expect("bulk provider updates should drain");
+    assert_eq!(
+        updates.len(),
+        1,
+        "bulk cell writes must fan out one provider update per user-visible mutation"
+    );
+}
+
+#[test]
 fn duplicate_set_cells_by_position_uses_last_write_and_one_identity() {
     let (mut engine, _) = YrsComputeEngine::from_snapshot(empty_bulk_snapshot()).unwrap();
     let sid = sheet_id();

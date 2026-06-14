@@ -64,6 +64,10 @@ function createMockCtx(): any {
     computeBridge: {
       getMutationHandler: jest.fn(() => null),
       pivotCreate: jest.fn(async (config: unknown) => ({ data: config })),
+      pivotCreateWithSheet: jest.fn(async (_sheetName: string, config: unknown) => ({
+        sheetId: SHEET_ID,
+        config,
+      })),
       pivotGet: jest.fn().mockResolvedValue(null),
       pivotGetAll: jest.fn().mockResolvedValue([]),
       pivotGetImportedViewRecords: jest.fn().mockResolvedValue([]),
@@ -136,6 +140,38 @@ function flushPromises(): Promise<void> {
 }
 
 describe('PivotBridge read vs refresh paths', () => {
+  it('createPivot emits dirty-only config updates because callers own initial materialization', async () => {
+    const ctx = createMockCtx();
+    const withPivotUpdateOptions = jest.fn(async (_options: unknown, fn: () => Promise<unknown>) =>
+      fn(),
+    );
+    ctx.computeBridge.getMutationHandler.mockReturnValue({ withPivotUpdateOptions });
+    const bridge = new PivotBridge(ctx);
+
+    await bridge.createPivot(makePivotConfig());
+
+    expect(withPivotUpdateOptions).toHaveBeenCalledWith(
+      { reason: 'uiConfigChanged', refreshPolicy: 'dirtyOnly' },
+      expect.any(Function),
+    );
+  });
+
+  it('createPivotWithSheet emits dirty-only config updates because callers own initial materialization', async () => {
+    const ctx = createMockCtx();
+    const withPivotUpdateOptions = jest.fn(async (_options: unknown, fn: () => Promise<unknown>) =>
+      fn(),
+    );
+    ctx.computeBridge.getMutationHandler.mockReturnValue({ withPivotUpdateOptions });
+    const bridge = new PivotBridge(ctx);
+
+    await bridge.createPivotWithSheet('PivotSheet', makePivotConfig());
+
+    expect(withPivotUpdateOptions).toHaveBeenCalledWith(
+      { reason: 'uiConfigChanged', refreshPolicy: 'dirtyOnly' },
+      expect.any(Function),
+    );
+  });
+
   it('compute uses the pure source path and does not materialize or notify subscribers', async () => {
     const ctx = createMockCtx();
     const bridge = new PivotBridge(ctx);

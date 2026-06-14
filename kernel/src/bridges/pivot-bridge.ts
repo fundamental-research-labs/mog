@@ -861,7 +861,7 @@ export class PivotBridge implements IPivotBridge {
     const mutationHandler = this.ctx.computeBridge.getMutationHandler();
     const mutationResult = mutationHandler
       ? await mutationHandler.withPivotUpdateOptions(
-          { reason: 'uiConfigChanged', refreshPolicy: 'refreshAndMaterialize' },
+          { reason: 'uiConfigChanged', refreshPolicy: 'dirtyOnly' },
           () => this.ctx.computeBridge.pivotCreate(computeConfig),
         )
       : await this.ctx.computeBridge.pivotCreate(computeConfig);
@@ -1269,7 +1269,7 @@ export class PivotBridge implements IPivotBridge {
     const mutationHandler = this.ctx.computeBridge.getMutationHandler();
     const result = mutationHandler
       ? await mutationHandler.withPivotUpdateOptions(
-          { reason: 'uiConfigChanged', refreshPolicy: 'refreshAndMaterialize' },
+          { reason: 'uiConfigChanged', refreshPolicy: 'dirtyOnly' },
           () => this.ctx.computeBridge.pivotCreateWithSheet(sheetName, computeConfig),
         )
       : await this.ctx.computeBridge.pivotCreateWithSheet(sheetName, computeConfig);

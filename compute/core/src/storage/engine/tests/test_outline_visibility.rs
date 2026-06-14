@@ -12,7 +12,9 @@ use super::super::*;
 use super::helpers::*;
 use crate::snapshot::Axis;
 use compute_wire::constants::{CELL_STRIDE, DIM_STRIDE, MERGE_STRIDE, VIEWPORT_HEADER_SIZE};
-use domain_types::{ColDimension, OutlineGroup, ParseOutput, SheetData, SheetDimensions};
+use domain_types::{
+    ColDimension, OutlineGroup, ParseOutput, RowDimension, SheetData, SheetDimensions,
+};
 
 #[derive(serde::Deserialize)]
 struct GroupDefId {
@@ -287,6 +289,113 @@ fn imported_hidden_outline_columns_expand_to_visible_columns() {
         .expect("collapse group");
     assert_eq!(engine.get_col_width_query(&sid, 3), 0.0);
     assert!(engine.is_col_hidden_query(&sid, 3));
+}
+
+#[test]
+fn imported_hidden_outline_rows_expand_to_visible_rows() {
+    let mut row_heights: Vec<RowDimension> = (3..=6)
+        .map(|row| RowDimension {
+            row,
+            height: 0.0,
+            custom_height: true,
+            hidden: true,
+            explicit_hidden: true,
+            ..Default::default()
+        })
+        .collect();
+    row_heights.push(RowDimension {
+        row: 7,
+        height: 15.0,
+        collapsed: Some(true),
+        ..Default::default()
+    });
+
+    let input = ParseOutput {
+        sheets: vec![SheetData {
+            name: "Imported".to_string(),
+            rows: 20,
+            cols: 12,
+            dimensions: SheetDimensions {
+                row_heights,
+                ..Default::default()
+            },
+            outline_groups: vec![OutlineGroup {
+                is_row: true,
+                start: 3,
+                end: 6,
+                level: 1,
+                collapsed: true,
+                hidden: true,
+                collapsed_on_member: false,
+            }],
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    let mut engine = engine_from_parse_output_normal(&input);
+    let sid = *engine.mirror().sheet_ids().next().expect("sheet id");
+
+    assert_eq!(engine.get_row_height_query(&sid, 3), 0.0);
+    assert!(
+        engine.is_row_hidden_query(&sid, 3),
+        "imported collapsed outline rows should report hidden before expansion"
+    );
+    let exported_before_expand = engine
+        .export_to_parse_output()
+        .expect("export before expand")
+        .parse_output;
+    assert!(
+        exported_before_expand.sheets[0]
+            .dimensions
+            .row_heights
+            .iter()
+            .any(|row| row.row == 7 && row.collapsed == Some(true)),
+        "imported collapsed summary row marker should be present before expansion"
+    );
+
+    let group_id = engine
+        .get_groups(&sid, "row")
+        .first()
+        .expect("row group")
+        .id
+        .clone();
+    engine
+        .set_group_collapsed(&sid, &group_id, false)
+        .expect("expand group");
+
+    assert!(engine.get_row_height_query(&sid, 3) > 0.0);
+    assert!(!engine.is_row_hidden_query(&sid, 3));
+    let group = engine
+        .get_group_in_sheet(&sid, &group_id)
+        .expect("expanded group");
+    assert!(!group.collapsed);
+    assert!(!group.hidden);
+    let exported_after_expand = engine
+        .export_to_parse_output()
+        .expect("export after expand")
+        .parse_output;
+    assert!(
+        !exported_after_expand.sheets[0]
+            .dimensions
+            .row_heights
+            .iter()
+            .any(|row| row.row == 7 && row.collapsed == Some(true)),
+        "expanded outline export must not keep the stale collapsed summary row marker"
+    );
+    assert!(
+        !exported_after_expand.sheets[0]
+            .dimensions
+            .row_heights
+            .iter()
+            .any(|row| row.row == 3 && row.hidden),
+        "expanded outline export must not keep hidden detail rows"
+    );
+
+    engine
+        .set_group_collapsed(&sid, &group_id, true)
+        .expect("collapse group");
+    assert_eq!(engine.get_row_height_query(&sid, 3), 0.0);
+    assert!(engine.is_row_hidden_query(&sid, 3));
 }
 
 #[test]

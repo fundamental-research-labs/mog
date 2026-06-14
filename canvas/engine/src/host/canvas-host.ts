@@ -145,6 +145,11 @@ export class CanvasHost {
       canvas.style.left = '0';
       canvas.style.width = '100%';
       canvas.style.height = '100%';
+      // Canvas layers are visual only. Input is captured on the host
+      // container, while React DOM overlays provide real controls over canvas
+      // affordances; keep canvases out of pointer hit-testing so they cannot
+      // cover those overlays.
+      canvas.style.pointerEvents = 'none';
 
       // Bottom canvas: opaque for performance. Top canvases: transparent.
       const alpha = i > 0;

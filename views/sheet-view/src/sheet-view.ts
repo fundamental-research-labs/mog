@@ -429,6 +429,7 @@ export class SheetView {
     rc.style.position = 'absolute';
     rc.style.top = '0';
     rc.style.left = '0';
+    rc.style.pointerEvents = 'none';
     this._rendererContainer = rc;
     this._syncRendererContainerInset();
     config.container.insertBefore(rc, config.container.firstChild);

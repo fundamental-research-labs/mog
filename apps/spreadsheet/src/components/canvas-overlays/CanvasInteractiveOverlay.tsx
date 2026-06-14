@@ -80,7 +80,7 @@ export const CanvasInteractiveOverlay = memo(function CanvasInteractiveOverlay({
 
   return (
     <div
-      className="absolute inset-0 pointer-events-none overflow-hidden"
+      className="absolute inset-0 pointer-events-none"
       style={{
         // Position relative to grid viewport (after headers)
         left: headerOffset.x,
@@ -88,6 +88,9 @@ export const CanvasInteractiveOverlay = memo(function CanvasInteractiveOverlay({
         // Don't extend beyond the grid viewport
         right: 0,
         bottom: 0,
+        // Canvas layers are appended imperatively after React renders. Keep
+        // DOM input triggers above those canvases for real pointer hit-testing.
+        zIndex: 1,
       }}
       aria-hidden="true" // Container is decorative, children have their own a11y
     >

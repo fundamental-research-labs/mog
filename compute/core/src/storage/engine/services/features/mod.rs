@@ -1,4 +1,5 @@
 mod grouping;
+mod outline_expansion;
 mod slicer_crdt;
 mod slicer_helpers;
 mod sorting;

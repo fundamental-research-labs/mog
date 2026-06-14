@@ -216,6 +216,7 @@ export const OutlineToggleOverlay = memo(function OutlineToggleOverlay() {
       // gutters and level buttons live BEFORE the row/col headers, so we
       // do NOT offset by headerOffset like CanvasInteractiveOverlay does.
       className="absolute inset-0 pointer-events-none overflow-hidden"
+      style={{ zIndex: 1 }}
       aria-hidden="true"
       data-testid="outline-toggle-overlay"
     >

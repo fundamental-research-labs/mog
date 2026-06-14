@@ -49,6 +49,7 @@ import {
 } from '../../domain/charts/chart-public-api-converters';
 import { ensurePointsArray } from '../../domain/charts/chart-series-mutations';
 import { withInferredChartTitle } from '../../domain/charts/chart-title-inference';
+import { sliceChartTitle } from './chart-title-substring';
 import { chartNotFound, invalidChartConfig, operationFailed } from '../../errors/api';
 import { KernelError } from '../../errors';
 import { type CallableDisposable, toDisposable } from '@mog/spreadsheet-utils/disposable';
@@ -942,12 +943,12 @@ export class WorksheetChartsImpl implements WorksheetCharts {
   }
 
   async getTitleSubstring(
-    _chartId: string,
-    _start: number,
-    _length: number,
+    chartId: string,
+    start: number,
+    length: number,
   ): Promise<ChartFormatString> {
-    // Stub: requires rich text model for titles.
-    return { text: '' };
+    const chart = await requireChart(this.ctx, this.sheetId, chartId);
+    return sliceChartTitle(chart, start, length);
   }
 
   // ===========================================================================

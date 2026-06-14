@@ -328,6 +328,33 @@ describe('WorksheetChartsImpl chart title inference', () => {
   });
 });
 
+describe('WorksheetChartsImpl chart title substrings', () => {
+  it('reads substrings from a plain chart title', async () => {
+    const charts = createChartsApi([makeChart({ title: 'Revenue by Month' })]);
+
+    await expect(charts.getTitleSubstring('chart-1', 0, 16)).resolves.toEqual({
+      text: 'Revenue by Month',
+    });
+    await expect(charts.getTitleSubstring('chart-1', 8, 2)).resolves.toEqual({ text: 'by' });
+  });
+
+  it('reads substrings from rich chart title runs', async () => {
+    const charts = createChartsApi([
+      makeChart({
+        titleRichText: [
+          { text: 'Revenue', font: { bold: true } },
+          { text: ' by Month', font: { italic: true } },
+        ],
+      }),
+    ]);
+
+    await expect(charts.getTitleSubstring('chart-1', 2, 8)).resolves.toEqual({
+      text: 'venue by',
+      font: { bold: true },
+    });
+  });
+});
+
 describe('WorksheetChartsImpl chart create payloads', () => {
   it('omits undefined optional chart fields before sending payloads to compute', async () => {
     const { charts, getCreatedConfig } = createPieChartAddApi();

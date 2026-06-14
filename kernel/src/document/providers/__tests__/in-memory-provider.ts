@@ -21,6 +21,7 @@
 
 import type {
   Provider,
+  ProviderAttachMode,
   ProviderAttachResult,
   ProviderCheckpointResult,
   ProviderDoc,
@@ -93,13 +94,28 @@ export class InMemoryProvider implements Provider {
     return this._flushFailed;
   }
 
-  async attach(doc: ProviderDoc): Promise<ProviderAttachResult> {
+  async attach(
+    doc: ProviderDoc,
+    mode: ProviderAttachMode = { kind: 'normal' },
+  ): Promise<ProviderAttachResult> {
     if (this.detached) {
       return {
         status: 'blocked',
-        mode: 'normal',
+        mode: mode.kind,
         reason: 'detached',
         message: 'InMemoryProvider.attach: provider has been detached',
+      };
+    }
+
+    if (mode.kind === 'importInitialize' || mode.kind === 'createFresh') {
+      this.pendingUpdates = [];
+      this.flushing = null;
+      if (mode.kind === 'createFresh') {
+        this.storage.delete(this.docId);
+      }
+      return {
+        status: 'ready',
+        mode: mode.kind,
       };
     }
 
@@ -107,7 +123,7 @@ export class InMemoryProvider implements Provider {
     if (!persisted || persisted.length === 0) {
       return {
         status: 'ready',
-        mode: 'normal',
+        mode: mode.kind,
       };
     }
 
@@ -120,7 +136,7 @@ export class InMemoryProvider implements Provider {
     }
     return {
       status: 'ready',
-      mode: 'normal',
+      mode: mode.kind,
     };
   }
 

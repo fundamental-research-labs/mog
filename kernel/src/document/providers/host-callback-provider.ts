@@ -19,7 +19,7 @@ import type {
   StorageProviderConfig,
   HostCallbackProviderConfig,
 } from '@mog-sdk/types-document/storage/provider-configs';
-import type { Provider, ProviderDoc } from './provider';
+import type { Provider, ProviderAttachMode, ProviderAttachResult, ProviderDoc } from './provider';
 import type { ProviderFactory, ProviderInstance } from './factory';
 
 // =============================================================================
@@ -50,6 +50,12 @@ export interface HostCallbackRegistry {
    * Resolves when the checkpoint is durable.
    */
   checkpoint(docId: string, fullState: Uint8Array): Promise<void>;
+
+  /**
+   * Clear any persisted state for a doc. Used by create-fresh opens to
+   * replace existing host state before the provider becomes live.
+   */
+  clear(docId: string): Promise<void>;
 }
 
 // =============================================================================
@@ -99,15 +105,35 @@ export class HostCallbackProvider implements Provider {
     return this._flushFailed;
   }
 
-  async attach(doc: ProviderDoc): Promise<void> {
+  async attach(
+    doc: ProviderDoc,
+    mode: ProviderAttachMode = { kind: 'normal' },
+  ): Promise<ProviderAttachResult> {
     if (this.detached) {
       throw new Error('HostCallbackProvider.attach: provider has been detached');
+    }
+
+    if (mode.kind === 'importInitialize' || mode.kind === 'createFresh') {
+      this.pendingUpdates = [];
+      this.flushing = null;
+      if (mode.kind === 'createFresh') {
+        await this.registry.clear(this.docId);
+        this.writeCounter = 0;
+      }
+      return {
+        status: 'ready',
+        mode: mode.kind,
+      };
     }
 
     const persisted = await this.registry.load(this.docId);
     for (const update of persisted) {
       await doc.applyUpdate(update);
     }
+    return {
+      status: 'ready',
+      mode: mode.kind,
+    };
   }
 
   appendUpdate(update: Uint8Array): void {

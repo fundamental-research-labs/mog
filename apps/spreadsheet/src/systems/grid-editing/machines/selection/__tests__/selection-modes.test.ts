@@ -347,8 +347,8 @@ describe('selection-mode lifecycle', () => {
 
     actor.send({ type: 'KEY_ARROW', direction: 'right', shiftKey: false });
     const afterArrow = actor.getSnapshot().context;
-    expect(afterArrow.pendingRange).toEqual(rng(2, 4, 2, 4));
-    expect(afterArrow.activeCell).toEqual(cell(2, 4));
+    expect(afterArrow.pendingRange).toEqual(rng(2, 3, 2, 3));
+    expect(afterArrow.activeCell).toEqual(cell(2, 3));
     actor.stop();
   });
 
@@ -547,7 +547,7 @@ describe('selection-mode lifecycle', () => {
     actor.stop();
   });
 
-  it('14c. multi_cell_arrow_collapse_moves_one_cell_from_active_cell', () => {
+  it('14c. multi_cell_arrow_collapse_uses_directional_edge_with_merge_origin', () => {
     const actor = startActorAt(0, 0);
     actor.send({
       type: 'SET_SELECTION',
@@ -559,8 +559,8 @@ describe('selection-mode lifecycle', () => {
     actor.send({ type: 'KEY_ARROW', direction: 'down', shiftKey: false });
 
     const after = actor.getSnapshot().context;
-    expect(after.activeCell).toEqual(cell(1, 0));
-    expect(after.pendingRange).toEqual(rng(1, 0, 1, 0));
+    expect(after.activeCell).toEqual(cell(2, 0));
+    expect(after.pendingRange).toEqual(rng(2, 0, 2, 0));
     actor.stop();
   });
 

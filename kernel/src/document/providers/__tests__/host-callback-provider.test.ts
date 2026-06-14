@@ -40,6 +40,10 @@ function createTestRegistry(): {
     async checkpoint(docId: string, fullState: Uint8Array): Promise<void> {
       checkpoints.set(docId, new Uint8Array(fullState));
     },
+    async clear(docId: string): Promise<void> {
+      storage.delete(docId);
+      checkpoints.delete(docId);
+    },
   };
 
   return { registry, storage, checkpoints };

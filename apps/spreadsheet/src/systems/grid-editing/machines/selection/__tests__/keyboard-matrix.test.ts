@@ -89,30 +89,30 @@ describe('Arrow key movement (moveActiveCell)', () => {
     },
   );
 
-  describe('Arrow keys collapse multi-cell selection from activeCell', () => {
+  describe('Arrow keys collapse multi-cell selection to directional edge', () => {
     it.each([
       {
         direction: 'up' as const,
-        expected: { row: 0, col: 1 },
-        desc: 'moves one row up, same column',
+        expected: { row: 0, col: 2 },
+        desc: 'top edge, same active column',
       },
       {
         direction: 'down' as const,
-        expected: { row: 2, col: 1 },
-        desc: 'moves one row down, same column',
+        expected: { row: 4, col: 2 },
+        desc: 'bottom edge, same active column',
       },
       {
         direction: 'left' as const,
-        expected: { row: 1, col: 0 },
-        desc: 'moves one column left, same row',
+        expected: { row: 2, col: 0 },
+        desc: 'left edge, same active row',
       },
       {
         direction: 'right' as const,
-        expected: { row: 1, col: 2 },
-        desc: 'moves one column right, same row',
+        expected: { row: 2, col: 4 },
+        desc: 'right edge, same active row',
       },
     ])(
-      '$direction from A1:C3 (activeCell B2) - $desc',
+      '$direction from A1:E5 (activeCell C3) - $desc',
       ({
         direction,
         expected,
@@ -123,8 +123,8 @@ describe('Arrow key movement (moveActiveCell)', () => {
       }) => {
         const context: SelectionContext = {
           ...initialSelectionContext,
-          activeCell: { row: 1, col: 1 }, // B2 - middle of range
-          pendingRange: { startRow: 0, startCol: 0, endRow: 2, endCol: 2 }, // A1:C3
+          activeCell: { row: 2, col: 2 }, // C3 - middle of range
+          pendingRange: { startRow: 0, startCol: 0, endRow: 4, endCol: 4 }, // A1:E5
           anchor: { row: 0, col: 0 },
         };
 

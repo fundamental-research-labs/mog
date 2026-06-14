@@ -102,10 +102,12 @@ pub(crate) fn merge_cf_into_format(effective: &mut CellFormat, cf_result: &CellC
     // Background color: color_scale > style.background_color
     if let Some(cs) = &cf_result.color_scale {
         effective.background_color = Some(cs.color.to_string());
+        effective.pattern_type = Some(ooxml_types::styles::PatternType::Solid);
     } else if let Some(style) = &cf_result.style
         && let Some(bg) = &style.background_color
     {
         effective.background_color = Some(bg.to_string());
+        effective.pattern_type = Some(ooxml_types::styles::PatternType::Solid);
     }
 
     // Style property overrides (font, number format, etc.)
@@ -128,6 +130,52 @@ pub(crate) fn merge_cf_into_format(effective: &mut CellFormat, cf_result: &CellC
         if let Some(nf) = &style.number_format {
             effective.number_format = Some(nf.clone());
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use compute_cf::types::{CfRenderStyle, ColorScaleResult};
+    use value_types::Color;
+
+    #[test]
+    fn cf_background_materializes_solid_fill() {
+        let mut effective = CellFormat::default();
+        let cf_result = CellCFResult {
+            style: Some(CfRenderStyle {
+                background_color: Some(Color::from_hex("#FFC7CE").unwrap()),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+
+        merge_cf_into_format(&mut effective, &cf_result);
+
+        assert_eq!(effective.background_color, Some("#ffc7ce".to_string()));
+        assert_eq!(
+            effective.pattern_type,
+            Some(ooxml_types::styles::PatternType::Solid)
+        );
+    }
+
+    #[test]
+    fn color_scale_background_materializes_solid_fill() {
+        let mut effective = CellFormat::default();
+        let cf_result = CellCFResult {
+            color_scale: Some(ColorScaleResult {
+                color: Color::from_hex("#63BE7B").unwrap(),
+            }),
+            ..Default::default()
+        };
+
+        merge_cf_into_format(&mut effective, &cf_result);
+
+        assert_eq!(effective.background_color, Some("#63be7b".to_string()));
+        assert_eq!(
+            effective.pattern_type,
+            Some(ooxml_types::styles::PatternType::Solid)
+        );
     }
 }
 

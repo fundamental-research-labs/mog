@@ -1,3 +1,4 @@
+use super::super::KEY_STYLE_PALETTE;
 use super::cell::get_cell_format;
 use super::defaults::default_format;
 use super::merge::merge_formats;
@@ -7,11 +8,12 @@ use crate::mirror::SheetMirror;
 use crate::storage::YrsStorage;
 use cell_types::SheetId;
 use domain_types::CellFormat;
+use yrs::{Any, Map, Out, Transact};
 
 /// Get the effective (computed) format for a cell.
 ///
 /// Merges from lowest to highest priority:
-/// `default -> column -> row -> Format Range -> table -> cell`
+/// `default -> workbook Normal -> column -> row -> Format Range -> table -> cell`
 ///
 /// Each property is resolved independently -- a cell can inherit font
 /// from row, color from column, and alignment from default.
@@ -29,7 +31,7 @@ pub fn get_effective_format(
     grid_index: Option<&GridIndex>,
     sheet_mirror: Option<&SheetMirror>,
 ) -> CellFormat {
-    let base = default_format();
+    let base = workbook_base_format(storage);
 
     let col_fmt = get_col_format(storage, sheet_id, col, grid_index).unwrap_or_default();
     let after_col = merge_formats(&base, &col_fmt);
@@ -69,7 +71,7 @@ pub fn get_effective_format_preloaded(
     grid_index: Option<&GridIndex>,
     sheet_mirror: Option<&SheetMirror>,
 ) -> CellFormat {
-    let base = default_format();
+    let base = workbook_base_format(storage);
 
     let col_fmt = get_col_format(storage, sheet_id, col, grid_index).unwrap_or_default();
     let after_col = merge_formats(&base, &col_fmt);
@@ -88,7 +90,8 @@ pub fn get_effective_format_preloaded(
     merge_formats(&after_table, cell_format)
 }
 
-/// Positional format for cells with no cell_id: default → column → row → Format Range.
+/// Positional format for cells with no cell_id:
+/// default → workbook Normal → column → row → Format Range.
 ///
 /// This is the same cascade as `get_effective_format` but without the cell and
 /// table layers (which require a cell_id). Used by the viewport render pipeline
@@ -101,7 +104,7 @@ pub fn get_positional_format(
     grid_index: Option<&GridIndex>,
     sheet_mirror: Option<&SheetMirror>,
 ) -> CellFormat {
-    let base = default_format();
+    let base = workbook_base_format(storage);
 
     let col_fmt = get_col_format(storage, sheet_id, col, grid_index).unwrap_or_default();
     let after_col = merge_formats(&base, &col_fmt);
@@ -111,6 +114,31 @@ pub fn get_positional_format(
 
     // Format Range layer: between row and table (no table/cell layer in positional format).
     apply_format_range_layer(&after_row, row, col, sheet_mirror)
+}
+
+/// Workbook Normal style is stored as style palette entry 0 during XLSX
+/// hydration. It sits above Mog's built-in fallback defaults and below every
+/// positional or authored style layer.
+fn workbook_base_format(storage: &YrsStorage) -> CellFormat {
+    let base = default_format();
+    let Some(normal) = workbook_normal_format(storage) else {
+        return base;
+    };
+    merge_formats(&base, &normal)
+}
+
+fn workbook_normal_format(storage: &YrsStorage) -> Option<CellFormat> {
+    let txn = storage.doc().transact();
+    let palette = match storage.workbook_map().get(&txn, KEY_STYLE_PALETTE) {
+        Some(Out::YMap(map)) => map,
+        _ => return None,
+    };
+    match palette.get(&txn, "0") {
+        Some(Out::Any(Any::String(ref fmt_json))) => {
+            serde_json::from_str::<CellFormat>(fmt_json).ok()
+        }
+        _ => None,
+    }
 }
 
 // -------------------------------------------------------------------

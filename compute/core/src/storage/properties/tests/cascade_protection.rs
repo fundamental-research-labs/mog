@@ -72,6 +72,118 @@ fn test_effective_format_no_overrides() {
 }
 
 #[test]
+fn test_workbook_normal_style_overrides_builtin_default_base() {
+    let (storage, sid, gi) = storage_with_sheet();
+    insert_style_palette_entry(
+        storage.doc(),
+        storage.workbook_map(),
+        0,
+        &CellFormat {
+            font_family: Some("Aptos".to_string()),
+            font_size: Some(domain_types::FontSize::from_millipoints(12000)),
+            ..Default::default()
+        },
+    );
+
+    let eff = get_effective_format(&storage, &sid, "no-cell", 0, 0, None, Some(&gi), None);
+
+    assert_eq!(eff.font_family, Some("Aptos".to_string()));
+    assert_eq!(
+        eff.font_size,
+        Some(domain_types::FontSize::from_millipoints(12000))
+    );
+    assert_eq!(eff.bold, Some(false));
+    assert_eq!(eff.locked, Some(true));
+}
+
+#[test]
+fn test_workbook_normal_style_is_below_row_col_and_cell_layers() {
+    let (mut storage, sid, gi) = storage_with_sheet();
+    insert_style_palette_entry(
+        storage.doc(),
+        storage.workbook_map(),
+        0,
+        &CellFormat {
+            font_size: Some(domain_types::FontSize::from_millipoints(12000)),
+            font_color: Some("#111111".to_string()),
+            ..Default::default()
+        },
+    );
+
+    set_col_format(
+        &mut storage,
+        &sid,
+        1,
+        &CellFormat {
+            font_color: Some("#222222".to_string()),
+            ..Default::default()
+        },
+        Some(&gi),
+    )
+    .unwrap();
+    set_row_format(
+        &mut storage,
+        &sid,
+        2,
+        &CellFormat {
+            font_size: Some(domain_types::FontSize::from_millipoints(14000)),
+            ..Default::default()
+        },
+        Some(&gi),
+    )
+    .unwrap();
+    set_cell_format(
+        storage.doc(),
+        storage.workbook_map(),
+        storage.sheets(),
+        &sid,
+        "cell-normal-cascade",
+        &CellFormat {
+            font_color: Some("#333333".to_string()),
+            ..Default::default()
+        },
+    );
+
+    let eff = get_effective_format(
+        &storage,
+        &sid,
+        "cell-normal-cascade",
+        2,
+        1,
+        None,
+        Some(&gi),
+        None,
+    );
+
+    assert_eq!(
+        eff.font_size,
+        Some(domain_types::FontSize::from_millipoints(14000))
+    );
+    assert_eq!(eff.font_color, Some("#333333".to_string()));
+}
+
+#[test]
+fn test_positional_format_uses_workbook_normal_style() {
+    let (storage, sid, gi) = storage_with_sheet();
+    insert_style_palette_entry(
+        storage.doc(),
+        storage.workbook_map(),
+        0,
+        &CellFormat {
+            font_size: Some(domain_types::FontSize::from_millipoints(12000)),
+            ..Default::default()
+        },
+    );
+
+    let eff = get_positional_format(&storage, &sid, 4, 1, Some(&gi), None);
+
+    assert_eq!(
+        eff.font_size,
+        Some(domain_types::FontSize::from_millipoints(12000))
+    );
+}
+
+#[test]
 fn test_effective_format_only_row() {
     let (mut storage, sid, gi) = storage_with_sheet();
 

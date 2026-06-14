@@ -1254,21 +1254,18 @@ describe('Chart Handlers - Current-Region Auto-Expansion', () => {
       expect(addedConfig.dataRange).toBe('A1:D10');
     });
 
-    it('preserves single-cell range when cell is empty (no surrounding data)', async () => {
-      // getCurrentRegion returns same 1x1 cell → expandToDataRegion returns null
-      // → handler keeps original range as-is.
+    it('does not create a chart when the source is a blank single cell', async () => {
       const deps = createDepsWithSelection({
         ranges: [{ startRow: 4, startCol: 4, endRow: 4, endCol: 4 }],
       });
+      const ws = (deps.workbook as any).activeSheet;
+      ws.getValue = jest.fn(async () => null);
 
       const result = await ChartHandlers.CREATE_EMBEDDED_CHART(deps);
       expect(result.handled).toBe(true);
 
-      const ws = (deps.workbook as any).activeSheet;
-      expect(ws.charts.add).toHaveBeenCalledTimes(1);
-      const addedConfig = ws.charts.add.mock.calls[0][0];
-      // Original single cell (E5) preserved
-      expect(addedConfig.dataRange).toBe('E5');
+      expect(ws.getValue).toHaveBeenCalledWith(4, 4);
+      expect(ws.charts.add).not.toHaveBeenCalled();
     });
 
     it('uses multi-cell selection as-is without expansion', async () => {

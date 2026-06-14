@@ -251,7 +251,7 @@ describe('extendToDataEdge - Integration tests with ACTUAL handlers', () => {
       expect(range.startCol).toBe(0);
       expect(range.endCol).toBe(1);
 
-      expect(capturedSelection!.activeCell).toEqual({ row: 4, col: 1 });
+      expect(capturedSelection!.activeCell).toEqual({ row: 4, col: 0 });
       expect(capturedSelection!.anchor).toEqual({ row: 4, col: 1 });
     });
 
@@ -277,7 +277,7 @@ describe('extendToDataEdge - Integration tests with ACTUAL handlers', () => {
       expect(range.startCol).toBe(0);
       expect(range.endCol).toBe(1);
 
-      expect(capturedSelection!.activeCell).toEqual({ row: 4, col: 1 });
+      expect(capturedSelection!.activeCell).toEqual({ row: 0, col: 0 });
       expect(capturedSelection!.anchor).toEqual({ row: 4, col: 1 });
     });
   });
@@ -304,7 +304,7 @@ describe('extendToDataEdge - Integration tests with ACTUAL handlers', () => {
       expect(range.endRow).toBe(4);
       expect(range.startCol).toBe(1);
       expect(range.endCol).toBe(1);
-      expect(capturedSelection!.activeCell).toEqual({ row: 4, col: 1 });
+      expect(capturedSelection!.activeCell).toEqual({ row: 0, col: 1 });
       expect(capturedSelection!.anchor).toEqual({ row: 4, col: 1 });
     });
 
@@ -328,7 +328,7 @@ describe('extendToDataEdge - Integration tests with ACTUAL handlers', () => {
       expect(range.endCol).toBe(1);
       expect(range.startRow).toBe(0);
       expect(range.endRow).toBe(4);
-      expect(capturedSelection!.activeCell).toEqual({ row: 4, col: 1 });
+      expect(capturedSelection!.activeCell).toEqual({ row: 0, col: 0 });
       expect(capturedSelection!.anchor).toEqual({ row: 4, col: 1 });
     });
   });
@@ -354,7 +354,7 @@ describe('extendToDataEdge - Integration tests with ACTUAL handlers', () => {
       const rangeAfterRight = captured1!.ranges[0];
       expect(rangeAfterRight.startCol).toBe(0);
       expect(rangeAfterRight.endCol).toBe(1);
-      expect(captured1!.activeCell).toEqual(activeCell);
+      expect(captured1!.activeCell).toEqual({ row: 0, col: 1 });
       expect(captured1!.anchor).toEqual(activeCell);
 
       ranges = [rangeAfterRight];
@@ -376,7 +376,7 @@ describe('extendToDataEdge - Integration tests with ACTUAL handlers', () => {
       expect(finalRange.endRow).toBe(4);
       expect(finalRange.startCol).toBe(0);
       expect(finalRange.endCol).toBe(1);
-      expect(captured2!.activeCell).toEqual(activeCell);
+      expect(captured2!.activeCell).toEqual({ row: 4, col: 1 });
       expect(captured2!.anchor).toEqual(activeCell);
     });
   });

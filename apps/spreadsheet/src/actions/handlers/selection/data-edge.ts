@@ -71,7 +71,8 @@ async function extendToDataEdge(
 
   const newRange = rangeFromAnchorAndCell(anchorCell, targetCell);
 
-  deps.commands.selection.setSelection([newRange], anchorCell, anchorCell);
+  // Shift-extend keeps the anchor fixed while the active cell follows the moving edge.
+  deps.commands.selection.setSelection([newRange], targetCell, anchorCell);
   return handled();
 }
 

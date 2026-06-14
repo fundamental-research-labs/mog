@@ -78,6 +78,19 @@ function isBlankValue(value: unknown): boolean {
   return value === null || value === undefined || value === '';
 }
 
+function isSingleCellRange(range: CellRange): boolean {
+  return range.startRow === range.endRow && range.startCol === range.endCol;
+}
+
+async function isBlankSingleCellSource(ws: Worksheet, range: CellRange): Promise<boolean> {
+  if (!isSingleCellRange(range)) return false;
+  try {
+    return isBlankValue(await ws.getValue(range.startRow, range.startCol));
+  } catch {
+    return false;
+  }
+}
+
 async function trimTrailingBlankEdges(ws: Worksheet, range: CellRange): Promise<CellRange> {
   try {
     let endCol = range.endCol;
@@ -166,4 +179,17 @@ export async function resolveChartSourceRange(
     startCol: colSpan.start,
     endCol: colSpan.end,
   });
+}
+
+/**
+ * Resolve a source for chart creation. Empty single-cell selections have no
+ * chartable source, while nonblank single cells and expanded data regions do.
+ */
+export async function resolveChartCreationSourceRange(
+  ws: Worksheet,
+  sourceRange: CellRange,
+  options: { trimHiddenDetail?: boolean } = {},
+): Promise<CellRange | null> {
+  const range = await resolveChartSourceRange(ws, sourceRange, options);
+  return (await isBlankSingleCellSource(ws, range)) ? null : range;
 }

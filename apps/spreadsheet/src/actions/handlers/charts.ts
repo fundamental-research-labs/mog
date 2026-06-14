@@ -39,7 +39,7 @@ import { type SheetId, sheetId } from '@mog-sdk/contracts/core';
 import { normalizeChartConfig } from '../../adapters/charts/chart-config-adapter';
 import { pasteChartFromClipboard } from './chart-clipboard';
 import { deselectChartObjects, selectChartObject } from './chart-selection';
-import { resolveChartSourceRange } from './chart-source-range';
+import { resolveChartCreationSourceRange, resolveChartSourceRange } from './chart-source-range';
 import { getUIStore, handled, notHandled } from './handler-utils';
 
 // =============================================================================
@@ -1019,7 +1019,10 @@ export const CREATE_EMBEDDED_CHART: AsyncActionHandler = async (
 
     // Excel parity: expand single-cell / single-row selections to the
     // surrounding data region. Multi-row selections pass through unchanged.
-    const range = await resolveChartSourceRange(ws, ranges[0], { trimHiddenDetail: true });
+    const range = await resolveChartCreationSourceRange(ws, ranges[0], {
+      trimHiddenDetail: true,
+    });
+    if (!range) return handled();
     const dataRange = rangeToA1Notation(range);
     const inferredSeries = await inferFirstColumnLabelSeries(ws, range);
 

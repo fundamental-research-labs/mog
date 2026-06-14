@@ -90,7 +90,7 @@ export async function requireChartWithSeries(
   return { chart, series };
 }
 
-function inferredRangeSeriesCount(chart: Chart): number {
+function inferredRangeSeriesMutationCapacity(chart: Chart): number {
   if (!chart.dataRange) return 0;
   const dataRange = parseCellRange(chart.dataRange);
   if (!dataRange) return 0;
@@ -109,7 +109,12 @@ function inferredRangeSeriesCount(chart: Chart): number {
 }
 
 export function chartSeriesCount(chart: Chart): number {
-  return Math.max(chart.series?.length ?? 0, inferredRangeSeriesCount(chart));
+  return chart.series?.length ?? 0;
+}
+
+function chartSeriesMutationCapacity(chart: Chart): number {
+  const explicitSeriesCount = chartSeriesCount(chart);
+  return explicitSeriesCount > 0 ? explicitSeriesCount : inferredRangeSeriesMutationCapacity(chart);
 }
 
 export async function requireChartSeriesForMutation(
@@ -124,11 +129,11 @@ export async function requireChartSeriesForMutation(
   }
 
   const { chart, series } = await requireChartWithSeries(ctx, sheetId, chartId);
-  const seriesCount = chartSeriesCount(chart);
-  if (seriesIndex >= seriesCount) {
+  const capacity = chartSeriesMutationCapacity(chart);
+  if (seriesIndex >= capacity) {
     throw operationFailed(
       operation,
-      `Series index ${seriesIndex} out of range (0-${seriesCount - 1})`,
+      `Series index ${seriesIndex} out of range (0-${capacity - 1})`,
     );
   }
 

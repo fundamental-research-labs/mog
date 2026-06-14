@@ -431,6 +431,26 @@ describe('WorksheetChartsImpl range-backed series overrides', () => {
       }),
     );
   });
+
+  it('does not expose inferred dataRange series after explicit series are present', async () => {
+    const { charts } = createMutableChartsApi(
+      makeChart({
+        chartType: 'bar',
+        dataRange: 'A1:C5',
+        series: [{ name: 'Revenue', values: 'B2:B5', categories: 'A2:A5' }],
+      }),
+    );
+
+    await expect(charts.getSeriesCount('chart-1')).resolves.toBe(1);
+    await expect(charts.getSeries('chart-1', 1)).rejects.toThrow(
+      'Series index 1 out of range (0-0)',
+    );
+    await expect(
+      charts.setSeriesBinOptions('chart-1', 1, {
+        binCount: 4,
+      }),
+    ).rejects.toThrow('Series index 1 out of range (0-0)');
+  });
 });
 
 describe('WorksheetChartsImpl chart list ordering', () => {

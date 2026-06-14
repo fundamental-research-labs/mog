@@ -23,11 +23,11 @@
  * Worksheet API setTabColor (async)
  */
 
-import { useCallback, useEffect, useMemo, useReducer } from 'react';
+import { useCallback, useEffect, useMemo, useReducer, useRef } from 'react';
 
 import type { SheetId } from '@mog-sdk/contracts/core';
 
-import { useActiveSheetId, useUIStore, useWorkbook } from '../../infra/context';
+import { useActiveSheetId, useDocumentContext, useUIStore, useWorkbook } from '../../infra/context';
 
 // =============================================================================
 // Types
@@ -83,9 +83,11 @@ export function useSheetTabActions(
   options: UseSheetTabActionsOptions = {},
 ): UseSheetTabActionsReturn {
   const wb = useWorkbook();
+  const { importDurability } = useDocumentContext();
   const storeActiveSheetId = useActiveSheetId();
   const setActiveSheet = useUIStore((s) => s.setActiveSheet);
   const openDeleteSheetConfirmDialog = useUIStore((s) => s.openDeleteSheetConfirmDialog);
+  const selectSheetRequestIdRef = useRef(0);
 
   // Allow override for testing or custom use cases
   const activeSheetId = options.sheetId ?? storeActiveSheetId;
@@ -174,9 +176,26 @@ export function useSheetTabActions(
    */
   const handleSelectSheet = useCallback(
     (sheetId: SheetId) => {
-      setActiveSheet(sheetId);
+      const requestId = ++selectSheetRequestIdRef.current;
+
+      void (async () => {
+        if (importDurability?.isImportDurabilityPending) {
+          const awaitMaterialized =
+            importDurability.awaitMaterialized?.bind(importDurability) ??
+            importDurability.awaitImportDurability.bind(importDurability);
+          try {
+            await awaitMaterialized(sheetId);
+          } catch (error) {
+            console.warn('[SheetTabActions] Failed to materialize sheet before activation:', error);
+          }
+        }
+
+        if (requestId === selectSheetRequestIdRef.current) {
+          setActiveSheet(sheetId);
+        }
+      })();
     },
-    [setActiveSheet],
+    [importDurability, setActiveSheet],
   );
 
   /**

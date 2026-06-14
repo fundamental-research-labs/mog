@@ -4,14 +4,22 @@ use super::super::*;
 use super::helpers::*;
 use cell_types::CellId;
 use formula_types::StructureChange;
+use snapshot_types::StructureChangeType;
 use value_types::{CellError, CellValue, FiniteF64};
+
+fn patch_positions_from_packed(packed: &[u8]) -> Vec<(u32, u32)> {
+    extract_first_viewport_mutation(packed)
+        .map(|mutation_bytes| extract_patch_positions(&mutation_bytes))
+        .unwrap_or_default()
+}
 
 // -------------------------------------------------------------------
 // Test: Insert column with formula -- the original bug
 // -------------------------------------------------------------------
 
-/// Reproduces the original bug: B1=A1, insert col between A and B.
-/// C1 should have =A1 with the correct value visible in the viewport.
+/// Structural changes report the row/column delta and leave shifted viewport
+/// buffers to the bridge-level force refresh. Formula/value recalc patches can
+/// still be emitted, but they must not expand to every registered viewport cell.
 #[test]
 fn test_structural_viewport_insert_col_formula_cell_visible() {
     let snap = simple_snapshot(); // A1=10, B1=20, A2=A1+B1
@@ -19,7 +27,7 @@ fn test_structural_viewport_insert_col_formula_cell_visible() {
     let sid = sheet_id();
 
     // Register a viewport covering the relevant area
-    engine.register_viewport("main", &sid, 0, 0, 5, 5);
+    let _ = engine.register_viewport("main", &sid, 0, 0, 5, 5);
 
     // Insert 1 column at col 1 (between A and B).
     // A1 stays at (0,0), B1 moves to (0,2), A2 stays at (1,0)
@@ -28,39 +36,31 @@ fn test_structural_viewport_insert_col_formula_cell_visible() {
         count: 1,
         new_col_ids: vec![],
     };
-    let (patches_packed, _result) = engine.structure_change(&sid, &change).unwrap();
+    let (patches_packed, result) = engine.structure_change(&sid, &change).unwrap();
+    let positions = patch_positions_from_packed(&patches_packed);
 
-    // Unpack multi-viewport blob to get the single viewport's patches
-    let mutation_bytes =
-        extract_first_viewport_mutation(&patches_packed).expect("Should have viewport patches");
-
-    let positions = extract_patch_positions(&mutation_bytes);
-
-    // The viewport is 6x6 (rows 0-5, cols 0-5), so we expect patches
-    // covering all 36 positions. Crucially, position (0,2) must be present
-    // (this is where B1 moved to -- the cell that was invisible before the fix).
     assert!(
-        positions.contains(&(0, 2)),
-        "Viewport patches must include (0,2) -- the moved formula cell. Got: {:?}",
-        positions
+        positions.len() < 36,
+        "structural edits must not emit viewport-wide synthetic patches; got {positions:?}"
     );
-
-    // Also verify the old position (0,1) is patched (should be Null/empty now)
     assert!(
-        positions.contains(&(0, 1)),
-        "Viewport patches must include (0,1) -- the newly inserted empty column"
+        result.structure_changes.iter().any(|change| {
+            change.sheet_id == sid.to_uuid_string()
+                && matches!(&change.change_type, StructureChangeType::InsertCols)
+                && change.count == 1
+        }),
+        "structure_change must report InsertCols so the bridge force-refreshes viewports; got {:?}",
+        result.structure_changes
     );
-
-    // All viewport positions should be covered
     assert_eq!(
-        positions.len(),
-        36, // 6 rows x 6 cols
-        "All viewport positions should have patches after structural change"
+        cell_value_at(&engine, &sid, 0, 2),
+        CellValue::Number(FiniteF64::must(20.0)),
+        "the moved value remains readable from Rust at its new position"
     );
 }
 
 // -------------------------------------------------------------------
-// Test: Insert rows produces viewport patches for all positions
+// Test: Insert rows reports structure change without viewport-wide patches
 // -------------------------------------------------------------------
 
 #[test]
@@ -69,38 +69,33 @@ fn test_structural_viewport_insert_rows() {
     let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
-    engine.register_viewport("main", &sid, 0, 0, 3, 2);
+    let _ = engine.register_viewport("main", &sid, 0, 0, 3, 2);
 
     let change = StructureChange::InsertRows {
         at: 1,
         count: 1,
         new_row_ids: vec![],
     };
-    let (patches_packed, _) = engine.structure_change(&sid, &change).unwrap();
-    let mutation_bytes =
-        extract_first_viewport_mutation(&patches_packed).expect("Should have viewport patches");
-    let positions = extract_patch_positions(&mutation_bytes);
+    let (patches_packed, result) = engine.structure_change(&sid, &change).unwrap();
+    let positions = patch_positions_from_packed(&patches_packed);
 
-    // 4 rows x 3 cols = 12 positions
-    assert_eq!(
-        positions.len(),
-        12,
-        "All viewport positions patched after insert rows"
-    );
-    // A2 moved to (2,0) -- it must be in the patches
     assert!(
-        positions.contains(&(2, 0)),
-        "Moved cell A2 must be patched at new position (2,0)"
+        positions.len() < 12,
+        "insert rows must not emit viewport-wide synthetic patches; got {positions:?}"
     );
-    // Newly inserted row 1 must be patched
     assert!(
-        positions.contains(&(1, 0)),
-        "Inserted empty row must be patched"
+        result.structure_changes.iter().any(|change| {
+            change.sheet_id == sid.to_uuid_string()
+                && matches!(&change.change_type, StructureChangeType::InsertRows)
+                && change.count == 1
+        }),
+        "structure_change must report InsertRows so the bridge force-refreshes viewports; got {:?}",
+        result.structure_changes
     );
 }
 
 // -------------------------------------------------------------------
-// Test: Delete columns produces viewport patches
+// Test: Delete columns reports structure change without viewport-wide patches
 // -------------------------------------------------------------------
 
 #[test]
@@ -109,7 +104,7 @@ fn test_structural_viewport_delete_cols() {
     let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
-    engine.register_viewport("main", &sid, 0, 0, 3, 3);
+    let _ = engine.register_viewport("main", &sid, 0, 0, 3, 3);
 
     // Delete column 0 (A). B1 at (0,1) should move to (0,0).
     let change = StructureChange::DeleteCols {
@@ -117,26 +112,31 @@ fn test_structural_viewport_delete_cols() {
         count: 1,
         deleted_cell_ids: vec![],
     };
-    let (patches_packed, _) = engine.structure_change(&sid, &change).unwrap();
-    let mutation_bytes =
-        extract_first_viewport_mutation(&patches_packed).expect("Should have viewport patches");
-    let positions = extract_patch_positions(&mutation_bytes);
+    let (patches_packed, result) = engine.structure_change(&sid, &change).unwrap();
+    let positions = patch_positions_from_packed(&patches_packed);
 
-    // 4 rows x 4 cols = 16 positions
-    assert_eq!(
-        positions.len(),
-        16,
-        "All viewport positions patched after delete cols"
-    );
-    // B1 (originally at col 1) should now be at (0,0)
     assert!(
-        positions.contains(&(0, 0)),
-        "Shifted cell must be patched at new position"
+        positions.len() < 16,
+        "delete cols must not emit viewport-wide synthetic patches; got {positions:?}"
+    );
+    assert!(
+        result.structure_changes.iter().any(|change| {
+            change.sheet_id == sid.to_uuid_string()
+                && matches!(&change.change_type, StructureChangeType::DeleteCols)
+                && change.count == 1
+        }),
+        "structure_change must report DeleteCols so the bridge force-refreshes viewports; got {:?}",
+        result.structure_changes
+    );
+    assert_eq!(
+        cell_value_at(&engine, &sid, 0, 0),
+        CellValue::Number(FiniteF64::must(20.0)),
+        "the shifted value remains readable from Rust at its new position"
     );
 }
 
 // -------------------------------------------------------------------
-// Test: Delete rows produces viewport patches
+// Test: Delete rows reports structure change without viewport-wide patches
 // -------------------------------------------------------------------
 
 #[test]
@@ -145,7 +145,7 @@ fn test_structural_viewport_delete_rows() {
     let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
 
-    engine.register_viewport("main", &sid, 0, 0, 3, 2);
+    let _ = engine.register_viewport("main", &sid, 0, 0, 3, 2);
 
     // Delete row 0 (A1). A2 at (1,0) should move to (0,0).
     let change = StructureChange::DeleteRows {
@@ -153,20 +153,21 @@ fn test_structural_viewport_delete_rows() {
         count: 1,
         deleted_cell_ids: vec![],
     };
-    let (patches_packed, _) = engine.structure_change(&sid, &change).unwrap();
-    let mutation_bytes =
-        extract_first_viewport_mutation(&patches_packed).expect("Should have viewport patches");
-    let positions = extract_patch_positions(&mutation_bytes);
+    let (patches_packed, result) = engine.structure_change(&sid, &change).unwrap();
+    let positions = patch_positions_from_packed(&patches_packed);
 
-    // 4 rows x 3 cols = 12 positions
-    assert_eq!(
-        positions.len(),
-        12,
-        "All viewport positions patched after delete rows"
+    assert!(
+        positions.len() < 12,
+        "delete rows must not emit viewport-wide synthetic patches; got {positions:?}"
     );
     assert!(
-        positions.contains(&(0, 0)),
-        "Shifted cell must be patched at new position (0,0)"
+        result.structure_changes.iter().any(|change| {
+            change.sheet_id == sid.to_uuid_string()
+                && matches!(&change.change_type, StructureChangeType::DeleteRows)
+                && change.count == 1
+        }),
+        "structure_change must report DeleteRows so the bridge force-refreshes viewports; got {:?}",
+        result.structure_changes
     );
 }
 

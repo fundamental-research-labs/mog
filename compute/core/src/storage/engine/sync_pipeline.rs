@@ -881,16 +881,11 @@ impl YrsComputeEngine {
             services::mutation::sync_mirror_merge_regions(&self.stores, &mut self.mirror, sheet_id);
         }
 
-        // 5. Produce structural viewport patches for ALL viewport positions
-        //    in affected sheets. The recalc only includes formula cells, but
-        //    non-formula cells may have shifted positions and need refresh.
-        for sheet_id in structural_sheets {
-            let structural_patches = self.produce_structural_patches(sheet_id);
-            services::structural::merge_viewport_patches_into_recalc(
-                &mut recalc,
-                structural_patches,
-            );
-        }
+        // 5. Structural sheets do not synthesize shifted-cell viewport
+        //    patches here. The MutationResult carries structure_changes, and
+        //    syncApply/undo/redo force-refresh registered viewports after the
+        //    mutation result returns. Recalc patches still cover formulas and
+        //    value changes that actually changed.
 
         // 6. Merge recalc results (non-structural cells + structural rebuild)
         recalc.changed_cells.extend(cell_recalc.changed_cells);

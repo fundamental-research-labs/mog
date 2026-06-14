@@ -308,7 +308,7 @@ fn grid_index<'a>(
         })
 }
 
-/// Merge structural viewport patches into a recalc result, deduplicating
+/// Merge shifted-cell viewport patches into a recalc result, deduplicating
 /// positions that are already present in `changed_cells`.
 pub(in crate::storage::engine) fn merge_viewport_patches_into_recalc(
     recalc: &mut RecalcResult,
@@ -317,8 +317,6 @@ pub(in crate::storage::engine) fn merge_viewport_patches_into_recalc(
     if structural_patches.is_empty() {
         return;
     }
-    // Dedupe by resolved position. Entries without a resolved position cannot
-    // collide on coordinates, so they are always appended.
     let existing: HashSet<(u32, u32)> = recalc
         .changed_cells
         .iter()

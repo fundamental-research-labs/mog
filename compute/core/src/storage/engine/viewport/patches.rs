@@ -540,15 +540,13 @@ impl YrsComputeEngine {
         )
     }
 
-    /// Produce structural viewport patches after insert/delete rows/cols.
+    /// Produce viewport patches for remap-style partial cell shifts.
     ///
-    /// After a structural change (insert/delete rows/cols), cells move to new
-    /// `(row, col)` positions but the TS viewport buffer is stale. The recalc
-    /// pipeline only emits *value* changes (via `values_equal`), so moved-but-
-    /// unchanged cells are invisible. This produces a full refresh of all viewport
-    /// positions.
-    ///
-    /// Cost: O(viewport_size) per viewport — typically ~1000 cells.
+    /// Row/column structure changes carry `StructureChangeResult` and are
+    /// followed by a bridge-level forced viewport refresh, so they should not
+    /// call this. Partial cell shifts do not carry that structural signal; the
+    /// recalc pipeline only emits *value* changes, so moved-but-unchanged cells
+    /// still need explicit patches.
     pub(crate) fn produce_structural_patches(
         &self,
         sheet_id: &SheetId,

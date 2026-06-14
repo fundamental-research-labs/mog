@@ -1397,9 +1397,8 @@ export class ComputeBridge extends GeneratedBridgeBase {
   //
   // The structural CF re-eval gap (structural dependency gap) — insert/delete
   // rows/cols not re-evaluating CF on shifted ranges — is also now wired
-  // through `YrsComputeEngine::structure_change`, which calls
-  // `produce_cf_viewport_patches` whenever the affected sheet has any CF
-  // format.
+  // through `YrsComputeEngine::structure_change`, which refreshes the CF cache
+  // before the bridge-level structural viewport refresh reads fresh buffers.
   // ===========================================================================
 
   async getCFPresets(): Promise<CFPresetsWire> {

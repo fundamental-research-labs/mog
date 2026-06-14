@@ -547,7 +547,7 @@ describe('selection-mode lifecycle', () => {
     actor.stop();
   });
 
-  it('14c. multi_cell_arrow_collapse_escapes_when_edge_is_inside_merge', () => {
+  it('14c. multi_cell_arrow_collapse_moves_one_cell_from_active_cell', () => {
     const actor = startActorAt(0, 0);
     actor.send({
       type: 'SET_SELECTION',
@@ -559,8 +559,8 @@ describe('selection-mode lifecycle', () => {
     actor.send({ type: 'KEY_ARROW', direction: 'down', shiftKey: false });
 
     const after = actor.getSnapshot().context;
-    expect(after.activeCell).toEqual(cell(4, 0));
-    expect(after.pendingRange).toEqual(rng(4, 0, 4, 0));
+    expect(after.activeCell).toEqual(cell(1, 0));
+    expect(after.pendingRange).toEqual(rng(1, 0, 1, 0));
     actor.stop();
   });
 

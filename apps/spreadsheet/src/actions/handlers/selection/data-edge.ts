@@ -71,8 +71,10 @@ async function extendToDataEdge(
 
   const newRange = rangeFromAnchorAndCell(anchorCell, targetCell);
 
-  // Shift-extend keeps the anchor fixed while the active cell follows the moving edge.
-  deps.commands.selection.setSelection([newRange], targetCell, anchorCell);
+  // Shift-extend keeps the anchor as the active cell. The selection emit derives
+  // viewport-follow from the range's moving edge, so the target still scrolls
+  // into view without changing where typing/formula-bar focus lives.
+  deps.commands.selection.setSelection([newRange], anchorCell, anchorCell);
   return handled();
 }
 

@@ -30,9 +30,12 @@
  */
 
 import type { CellValue } from '@mog-sdk/contracts/core';
+import type { ActionDependencies } from '@mog-sdk/contracts/actions';
+import { jest } from '@jest/globals';
 import { findDataEdge } from '../../../../infra/utils';
 import type { CellCoord, CellRange } from '../../../../systems/shared/types';
 import { getMovingEdge, rangeFromAnchorAndCell } from '../../../../systems/shared/types';
+import { EXTEND_TO_EDGE_RIGHT } from '../data-edge';
 
 // =============================================================================
 // TEST UTILITIES
@@ -336,6 +339,43 @@ describe('extendToDataEdge - Cmd+Shift+Arrow bug reproduction', () => {
       // Range extends to include more rows above
       expect(result.startRow).toBeLessThan(3); // Should have extended further up
     });
+  });
+});
+
+describe('EXTEND_TO_EDGE handler contract', () => {
+  it('keeps activeCell at the anchor while extending to the data edge', async () => {
+    const activeCell: CellCoord = { row: 0, col: 0 };
+    const targetCell: CellCoord = { row: 0, col: 2 };
+    const setSelection = jest.fn();
+
+    const deps = {
+      accessors: {
+        selection: {
+          getActiveCell: () => activeCell,
+          getRanges: () => [{ startRow: 0, startCol: 0, endRow: 0, endCol: 0 }],
+          getAnchor: () => null,
+        },
+      },
+      workbook: {
+        activeSheet: {
+          findDataEdge: jest.fn().mockResolvedValue(targetCell as never),
+        },
+      },
+      commands: {
+        selection: {
+          setSelection,
+        },
+      },
+    } as unknown as ActionDependencies;
+
+    const result = await EXTEND_TO_EDGE_RIGHT(deps);
+
+    expect(result.handled).toBe(true);
+    expect(setSelection).toHaveBeenCalledWith(
+      [{ startRow: 0, startCol: 0, endRow: 0, endCol: 2 }],
+      activeCell,
+      activeCell,
+    );
   });
 });
 

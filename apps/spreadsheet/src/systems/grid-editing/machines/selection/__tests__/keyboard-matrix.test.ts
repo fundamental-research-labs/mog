@@ -89,27 +89,27 @@ describe('Arrow key movement (moveActiveCell)', () => {
     },
   );
 
-  describe('Arrow keys collapse multi-cell selection (Excel parity)', () => {
+  describe('Arrow keys collapse multi-cell selection from activeCell', () => {
     it.each([
       {
         direction: 'up' as const,
         expected: { row: 0, col: 1 },
-        desc: 'collapses to top edge, same column',
+        desc: 'moves one row up, same column',
       },
       {
         direction: 'down' as const,
         expected: { row: 2, col: 1 },
-        desc: 'collapses to bottom edge, same column',
+        desc: 'moves one row down, same column',
       },
       {
         direction: 'left' as const,
         expected: { row: 1, col: 0 },
-        desc: 'collapses to left edge, same row',
+        desc: 'moves one column left, same row',
       },
       {
         direction: 'right' as const,
         expected: { row: 1, col: 2 },
-        desc: 'collapses to right edge, same row',
+        desc: 'moves one column right, same row',
       },
     ])(
       '$direction from A1:C3 (activeCell B2) - $desc',
@@ -533,7 +533,7 @@ describe('Ctrl+Shift+Arrow extend (jumpToEdgeExtend)', () => {
       endRow: 14,
       endCol: 1,
     });
-    expect(result.activeCell).toEqual({ row: 14, col: 1 });
+    expect(result.activeCell).toEqual({ row: 4, col: 1 });
     expect(result.anchor).toEqual({ row: 4, col: 1 });
   });
 
@@ -559,7 +559,7 @@ describe('Ctrl+Shift+Arrow extend (jumpToEdgeExtend)', () => {
       endRow: 14,
       endCol: 1,
     });
-    expect(result.activeCell).toEqual({ row: 4, col: 1 });
+    expect(result.activeCell).toEqual({ row: 14, col: 1 });
     expect(result.anchor).toEqual({ row: 14, col: 1 });
   });
 
@@ -586,7 +586,7 @@ describe('Ctrl+Shift+Arrow extend (jumpToEdgeExtend)', () => {
       endRow: 18,
       endCol: 1,
     });
-    expect(result.activeCell).toEqual({ row: 18, col: 1 });
+    expect(result.activeCell).toEqual({ row: 4, col: 1 });
     expect(result.anchor).toEqual({ row: 4, col: 1 });
   });
 });
@@ -655,7 +655,7 @@ describe('Home/End keys', () => {
         endRow: 4,
         endCol: 5,
       });
-      expect(result.activeCell).toEqual({ row: 4, col: 0 });
+      expect(result.activeCell).toEqual({ row: 4, col: 5 });
     });
 
     it('Ctrl+Shift+Home extends to A1', () => {
@@ -680,7 +680,7 @@ describe('Home/End keys', () => {
         endRow: 10,
         endCol: 10,
       });
-      expect(result.activeCell).toEqual({ row: 0, col: 0 });
+      expect(result.activeCell).toEqual({ row: 10, col: 10 });
     });
 
     it('Shift+Home on multi-cell uses moving edge row, not anchor row', () => {
@@ -707,7 +707,7 @@ describe('Home/End keys', () => {
         endRow: 6,
         endCol: 5,
       });
-      expect(result.activeCell).toEqual({ row: 6, col: 0 });
+      expect(result.activeCell).toEqual({ row: 4, col: 5 });
     });
   });
 
@@ -770,7 +770,7 @@ describe('Home/End keys', () => {
         endRow: 4,
         endCol: MAX_COLS - 1,
       });
-      expect(result.activeCell).toEqual({ row: 4, col: MAX_COLS - 1 });
+      expect(result.activeCell).toEqual({ row: 4, col: 5 });
     });
 
     it('Ctrl+Shift+End extends to last cell (MAX bounds fallback)', () => {
@@ -795,7 +795,7 @@ describe('Home/End keys', () => {
         endRow: MAX_ROWS - 1,
         endCol: MAX_COLS - 1,
       });
-      expect(result.activeCell).toEqual({ row: MAX_ROWS - 1, col: MAX_COLS - 1 });
+      expect(result.activeCell).toEqual({ row: 4, col: 5 });
     });
 
     it('Shift+End on multi-cell uses moving edge row, not anchor row', () => {
@@ -821,7 +821,7 @@ describe('Home/End keys', () => {
         endRow: 6,
         endCol: MAX_COLS - 1,
       });
-      expect(result.activeCell).toEqual({ row: 6, col: MAX_COLS - 1 });
+      expect(result.activeCell).toEqual({ row: 4, col: 5 });
     });
   });
 });
@@ -931,7 +931,7 @@ describe('Page Up/Down/Left/Right (page actions)', () => {
         endRow: 30,
         endCol: 5,
       });
-      expect(result.activeCell).toEqual({ row: 30, col: 5 });
+      expect(result.activeCell).toEqual({ row: 10, col: 5 });
     });
 
     it('Shift+Page Up extends selection', () => {
@@ -956,7 +956,7 @@ describe('Page Up/Down/Left/Right (page actions)', () => {
         endRow: 30,
         endCol: 5,
       });
-      expect(result.activeCell).toEqual({ row: 10, col: 5 });
+      expect(result.activeCell).toEqual({ row: 30, col: 5 });
     });
   });
 
@@ -1057,7 +1057,7 @@ describe('Page Up/Down/Left/Right (page actions)', () => {
         endRow: 5,
         endCol: 20,
       });
-      expect(result.activeCell).toEqual({ row: 5, col: 20 });
+      expect(result.activeCell).toEqual({ row: 5, col: 10 });
     });
 
     it('Shift+Page Left extends selection', () => {
@@ -1082,7 +1082,7 @@ describe('Page Up/Down/Left/Right (page actions)', () => {
         endRow: 5,
         endCol: 20,
       });
-      expect(result.activeCell).toEqual({ row: 5, col: 10 });
+      expect(result.activeCell).toEqual({ row: 5, col: 20 });
     });
   });
 });

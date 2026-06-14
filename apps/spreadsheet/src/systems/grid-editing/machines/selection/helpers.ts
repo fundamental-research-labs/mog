@@ -131,9 +131,9 @@ export function computeDirection(anchor: CellCoord, active: CellCoord): Selectio
 
 /**
  * Single source of truth for constructing an anchor-to-edge pending range.
- * The anchor stays fixed while activeCell follows the moving edge. Formula
- * and mouse callers may pass an explicit active cell when they need to
- * preserve an external editing origin.
+ * Keyboard range extension keeps the anchor fixed as activeCell while emitted
+ * viewport-follow tracks the moving edge. Formula and mouse callers may pass
+ * an explicit active cell when they intentionally need endpoint-active behavior.
  *
  * `committedRanges` is intentionally not touched here — non-additive flows
  * keep it empty by invariant; additive flows leave it intact while the
@@ -142,7 +142,7 @@ export function computeDirection(anchor: CellCoord, active: CellCoord): Selectio
 export function buildExtendUpdate(
   anchor: CellCoord,
   newEnd: CellCoord,
-  activeCell: CellCoord = newEnd,
+  activeCell: CellCoord = anchor,
 ): {
   pendingRange: CellRange;
   activeCell: CellCoord;

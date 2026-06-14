@@ -106,16 +106,13 @@ describe('Arrow Keys - Basic Navigation (Machine Level)', () => {
     expect(result.pendingRange).toEqual(range(1, 0, 1, 0));
   });
 
-  it('moveActiveCell handles multi-cell selection collapse', () => {
-    // When pressing arrow on a multi-cell selection, it collapses to edge
-    // This is Excel parity behavior
-
+  it('moveActiveCell collapses a multi-cell selection by moving from activeCell', () => {
     const context = createContext({
       activeCell: cell(1, 1), // B2
       pendingRange: range(0, 0, 2, 2), // A1:C3
     });
 
-    // Right arrow collapses to rightmost column (C), same row as activeCell (2)
+    // Right arrow collapses to the next visible cell from activeCell.
     const result = callAction('moveActiveCell', context, {
       type: 'KEY_ARROW',
       direction: 'right',
@@ -252,7 +249,7 @@ describe('Home/End Keys - Navigation', () => {
   it('extendToHome extends to column A on moving edge row', () => {
     // Uses moving edge row, not anchor row.
     // Starting at C3, after extend up to C1, Home extends to A1:C3.
-    // activeCell follows the moving edge to A1.
+    // activeCell stays at the anchor while viewport-follow tracks A1.
 
     const context = createContext({
       activeCell: cell(2, 2), // C3 (anchor)
@@ -267,7 +264,7 @@ describe('Home/End Keys - Navigation', () => {
     });
 
     // Moving edge is C1 (row 0), so Home extends to A1 in range geometry.
-    expect(result.activeCell).toEqual(cell(0, 0)); // A1 (moving edge)
+    expect(result.activeCell).toEqual(cell(2, 2)); // C3 (anchor)
     expect(result.pendingRange).toEqual(range(0, 0, 2, 2)); // A1:C3
   });
 
@@ -340,8 +337,8 @@ describe('Page Navigation - With Merged Cells', () => {
       shiftKey: true,
     });
 
-    // Anchor stays at D6; activeCell reaches the moving edge at D16.
-    expect(result.activeCell).toEqual(cell(15, 3)); // D16 (moving edge)
+    // Anchor stays at D6 as activeCell; viewport-follow tracks D16.
+    expect(result.activeCell).toEqual(cell(5, 3)); // D6 (anchor)
     expect(result.pendingRange).toEqual(range(5, 3, 15, 3)); // D6:D16
   });
 

@@ -86,12 +86,14 @@ describe('WorksheetSlicersImpl table source resolution', () => {
         caption: 'Region',
         tableName: 'SdkSlicerSales',
         columnName: 'Region',
+        source,
       },
     ]);
     await expect(slicers.get('slicer-imported')).resolves.toEqual(
       expect.objectContaining({
         tableName: 'SdkSlicerSales',
         columnName: 'Region',
+        source,
         selectedItems: ['West'],
       }),
     );
@@ -234,6 +236,11 @@ describe('WorksheetSlicersImpl table source resolution', () => {
     const items = await slicers.getItems('slicer-collision');
 
     expect(slicer?.columnName).toBe('RealColumn');
+    expect(slicer?.source).toEqual({
+      type: 'table',
+      tableId: 'tbl-collision',
+      columnCellId: 'col-target',
+    });
     expect(bridge.getCellsInRangeYrs).toHaveBeenCalledWith(SHEET_ID, 1, 6, 2, 6);
     expect(items.map((item) => item.value)).toEqual(['A', 'B']);
   });

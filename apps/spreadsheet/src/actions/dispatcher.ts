@@ -788,6 +788,8 @@ export const HANDLER_MAP: Record<ActionType, AnyActionHandler> = {
   SAVE_PICTURE_AS_FILE: ObjectHandlers.SAVE_PICTURE_AS_FILE,
   INSERT_PICTURE: ObjectHandlers.INSERT_PICTURE,
   UPDATE_PICTURE: ObjectHandlers.UPDATE_PICTURE,
+  INSERT_ICON: ObjectHandlers.INSERT_ICON,
+  INSERT_3D_MODEL: ObjectHandlers.INSERT_3D_MODEL,
   // Change/Reset Picture
   CHANGE_PICTURE: ObjectHandlers.CHANGE_PICTURE,
   RESET_PICTURE: ObjectHandlers.RESET_PICTURE,

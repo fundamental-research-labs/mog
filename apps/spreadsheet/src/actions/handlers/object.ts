@@ -32,7 +32,12 @@ import type {
   AsyncActionHandler,
 } from '@mog-sdk/contracts/actions';
 import type { MutationReceipt } from '@mog-sdk/contracts/api';
-import type { ObjectFill, ShapeOutline, ShapeText } from '@mog-sdk/contracts/floating-objects';
+import type {
+  ObjectFill,
+  ShapeOutline,
+  ShapeText,
+  ShapeType,
+} from '@mog-sdk/contracts/floating-objects';
 
 import {
   getUIStore,
@@ -54,6 +59,9 @@ const DEFAULT_PICTURE_WIDTH = 200;
 const DEFAULT_PICTURE_HEIGHT = 150;
 const DEFAULT_TEXTBOX_WIDTH = 150;
 const DEFAULT_TEXTBOX_HEIGHT = 75;
+const DEFAULT_ICON_SIZE = 96;
+const DEFAULT_3D_MODEL_WIDTH = 160;
+const DEFAULT_3D_MODEL_HEIGHT = 120;
 const DEFAULT_CHECKBOX_WIDTH = 16;
 const DEFAULT_CHECKBOX_HEIGHT = 16;
 const CHECKBOX_LINKED_CELL_HIDDEN_FORMAT = ';;;';
@@ -605,6 +613,90 @@ export const INSERT_PICTURE: AsyncActionHandler = async (deps): Promise<ActionRe
   } catch (err) {
     return { handled: false, error: (err as Error).message };
   }
+};
+
+async function insertPresetShapeObject(
+  deps: ActionDependencies,
+  config: {
+    undoDescription: string;
+    shapeType: ShapeType;
+    width: number;
+    height: number;
+    name: string;
+    displayName: string;
+    altTextTitle: string;
+    fill: ObjectFill;
+    outline: ShapeOutline;
+    lockAspectRatio?: boolean;
+    adjustments?: Record<string, number>;
+  },
+): Promise<ActionResult> {
+  const sheetId = deps.getActiveSheetId();
+  const ws = deps.workbook.getSheetById(sheetId);
+  const { anchorRow, anchorCol } = getSmartObjectPosition(deps, sheetId, SHAPE_POSITION_PRESET);
+
+  try {
+    deps.workbook.setPendingUndoDescription(config.undoDescription);
+    const shape = await ws.shapes.add({
+      type: config.shapeType,
+      anchorRow,
+      anchorCol,
+      xOffset: 0,
+      yOffset: 0,
+      width: config.width,
+      height: config.height,
+      name: config.name,
+      displayName: config.displayName,
+      altTextTitle: config.altTextTitle,
+      fill: config.fill,
+      outline: config.outline,
+      lockAspectRatio: config.lockAspectRatio,
+      adjustments: config.adjustments,
+    });
+    deps.commands.object.selectObject(shape.id, false, false);
+    return handled();
+  } catch (err) {
+    return { handled: false, error: (err as Error).message };
+  }
+}
+
+/**
+ * Insert Icon - creates a visible vector-like shape object from the Insert
+ * ribbon. This is the production insertion path used until the richer icon
+ * gallery can choose among multiple symbols.
+ */
+export const INSERT_ICON: AsyncActionHandler = async (deps): Promise<ActionResult> => {
+  return insertPresetShapeObject(deps, {
+    undoDescription: 'Insert icon',
+    shapeType: 'star5',
+    width: DEFAULT_ICON_SIZE,
+    height: DEFAULT_ICON_SIZE,
+    name: 'Icon',
+    displayName: 'Icon',
+    altTextTitle: 'Inserted icon',
+    fill: { type: 'solid', color: '#2563EB', transparency: 0 },
+    outline: { style: 'solid', color: '#1E40AF', width: 1.5 },
+    lockAspectRatio: true,
+  });
+};
+
+/**
+ * Insert 3D Model - creates a visible 3D-model placeholder object backed by
+ * the normal shape persistence/rendering path. A future gallery can replace
+ * the preset payload without changing the ribbon/action contract.
+ */
+export const INSERT_3D_MODEL: AsyncActionHandler = async (deps): Promise<ActionResult> => {
+  return insertPresetShapeObject(deps, {
+    undoDescription: 'Insert 3D model',
+    shapeType: 'hexagon',
+    width: DEFAULT_3D_MODEL_WIDTH,
+    height: DEFAULT_3D_MODEL_HEIGHT,
+    name: '3D Model',
+    displayName: '3D Model',
+    altTextTitle: 'Inserted 3D model',
+    fill: { type: 'solid', color: '#7C3AED', transparency: 0 },
+    outline: { style: 'solid', color: '#4C1D95', width: 1.5 },
+  });
 };
 
 /**

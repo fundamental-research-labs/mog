@@ -826,6 +826,8 @@ export type ObjectActionType =
   | 'SAVE_PICTURE_AS_FILE'
   | 'INSERT_PICTURE'
   | 'UPDATE_PICTURE'
+  | 'INSERT_ICON'
+  | 'INSERT_3D_MODEL'
   // Change/reset picture
   | 'CHANGE_PICTURE'
   | 'RESET_PICTURE'

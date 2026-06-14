@@ -42,6 +42,11 @@ describe('WorkbookSlicersImpl', () => {
         caption: 'Region',
         tableName: 'SdkSlicerSales',
         columnName: 'Region',
+        source: {
+          type: 'table',
+          tableId: 'tbl-stable-sales',
+          columnCellId: 'col-stable-region',
+        },
         selectedItems: ['West'],
         position: { x: 0, y: 0, width: 200, height: 300 },
       }),
@@ -63,6 +68,11 @@ describe('WorkbookSlicersImpl', () => {
         caption: 'Region',
         tableName: 'SdkSlicerSales',
         columnName: 'Region',
+        source: {
+          type: 'table',
+          tableId: 'tbl-stable-sales',
+          columnCellId: 'col-stable-region',
+        },
       },
     ]);
     expect(getWorksheetSlicers).toHaveBeenCalledWith(SHEET_ID);

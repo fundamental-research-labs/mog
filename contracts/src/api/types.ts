@@ -1192,8 +1192,8 @@ export interface SlicerInfo {
   tableName: string;
   /** Connected column name */
   columnName: string;
-  /** Source type — 'table' for table slicers, 'pivot' for pivot table slicers */
-  source?: { type: 'table' | 'pivot' };
+  /** Stable source binding for table/pivot slicers. */
+  source?: SlicerSource;
   /** Discriminator for timeline slicers (matches TimelineSlicerConfig.sourceType) */
   sourceType?: 'timeline';
 }

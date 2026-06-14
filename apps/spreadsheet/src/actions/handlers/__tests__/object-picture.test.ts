@@ -28,6 +28,7 @@ function createMockDeps(picture: PictureOverrides = {}): {
   deps: ActionDependencies;
   pictureAdd: jest.Mock;
   textBoxAdd: jest.Mock;
+  shapeAdd: jest.Mock;
   checkboxAdd: jest.Mock;
   comboBoxAdd: jest.Mock;
   setCell: jest.Mock;
@@ -45,6 +46,7 @@ function createMockDeps(picture: PictureOverrides = {}): {
 
   const pictureAdd = jest.fn(async () => ({ id: 'pic-new-1' }));
   const textBoxAdd = jest.fn(async () => ({ id: 'textbox-new-1' }));
+  const shapeAdd = jest.fn(async () => ({ id: 'shape-new-1' }));
   const checkboxAdd = jest.fn(async () => ({ id: 'checkbox-new-1' }));
   const comboBoxAdd = jest.fn(async () => ({ id: 'combobox-new-1' }));
   const getCell = jest.fn(async () => ({ value: null, displayText: null, formula: null }));
@@ -76,6 +78,9 @@ function createMockDeps(picture: PictureOverrides = {}): {
       },
       textBoxes: {
         add: textBoxAdd,
+      },
+      shapes: {
+        add: shapeAdd,
       },
       formControls: {
         addCheckbox: checkboxAdd,
@@ -132,6 +137,7 @@ function createMockDeps(picture: PictureOverrides = {}): {
     deps,
     pictureAdd,
     textBoxAdd,
+    shapeAdd,
     checkboxAdd,
     comboBoxAdd,
     setCell,
@@ -202,6 +208,46 @@ describe('object picture handlers', () => {
         }),
       );
       expect(deps.commands.object.selectObject).toHaveBeenCalledWith('textbox-new-1', false, false);
+    });
+  });
+
+  describe('INSERT_ICON and INSERT_3D_MODEL', () => {
+    it('inserts a visible icon shape and selects it', async () => {
+      const { deps, shapeAdd } = createMockDeps();
+
+      const result = await ObjectHandlers.INSERT_ICON(deps);
+
+      expect(result.handled).toBe(true);
+      expect(shapeAdd).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'star5',
+          anchorRow: 2,
+          anchorCol: 2,
+          width: 96,
+          height: 96,
+          displayName: 'Icon',
+        }),
+      );
+      expect(deps.commands.object.selectObject).toHaveBeenCalledWith('shape-new-1', false, false);
+    });
+
+    it('inserts a visible 3D model placeholder shape and selects it', async () => {
+      const { deps, shapeAdd } = createMockDeps();
+
+      const result = await ObjectHandlers.INSERT_3D_MODEL(deps);
+
+      expect(result.handled).toBe(true);
+      expect(shapeAdd).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'hexagon',
+          anchorRow: 2,
+          anchorCol: 2,
+          width: 160,
+          height: 120,
+          displayName: '3D Model',
+        }),
+      );
+      expect(deps.commands.object.selectObject).toHaveBeenCalledWith('shape-new-1', false, false);
     });
   });
 

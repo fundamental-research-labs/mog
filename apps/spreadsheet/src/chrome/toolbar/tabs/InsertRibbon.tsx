@@ -110,6 +110,8 @@ export function InsertRibbon() {
   const insertPicture = useCallback(() => {
     dispatchAction('INSERT_PICTURE');
   }, [dispatchAction]);
+  const insertIcon = useCallback(() => dispatchAction('INSERT_ICON'), [dispatchAction]);
+  const insert3dModel = useCallback(() => dispatchAction('INSERT_3D_MODEL'), [dispatchAction]);
   const insertCheckboxFormControl = useCallback(
     () => dispatchAction('INSERT_FORM_CONTROL_CHECKBOX'),
     [dispatchAction],
@@ -349,15 +351,27 @@ export function InsertRibbon() {
           title="Insert Screenshot (coming soon)"
           aria-label="Insert Screenshot"
         />
-        {/* Icons stub - disabled */}
         <RibbonButton
+          id="insert-icons"
           layout="vertical"
           height="full"
           icon={<IconsIcon />}
           label="Icons"
-          disabled
-          title="Insert Icons (coming soon)"
+          onClick={insertIcon}
+          disabled={!sheetPermissions.editObject}
+          title="Insert Icons"
           aria-label="Insert Icons"
+        />
+        <RibbonButton
+          id="insert-3d-model"
+          layout="vertical"
+          height="full"
+          icon={<ObjectIcon />}
+          label="3D Models"
+          onClick={insert3dModel}
+          disabled={!sheetPermissions.editObject}
+          title="Insert 3D Models"
+          aria-label="Insert 3D Models"
         />
       </ToolbarGroup>
 

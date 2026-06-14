@@ -57,6 +57,7 @@ export class WorkbookSlicersImpl implements WorkbookSlicers {
           caption: slicer?.caption ?? s.caption,
           tableName: slicer?.tableName ?? '',
           columnName: slicer?.columnName ?? '',
+          source: slicer?.source ?? s.source,
         };
       }),
     );

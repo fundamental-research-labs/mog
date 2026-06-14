@@ -259,6 +259,7 @@ export class WorksheetSlicersImpl implements WorksheetSlicers {
       caption,
       tableName: publicTableName,
       columnName: publicColumnName,
+      source,
       selectedItems: config.selectedValues ?? [],
       position: {
         x: pos?.x ?? 0,
@@ -325,6 +326,7 @@ export class WorksheetSlicersImpl implements WorksheetSlicers {
       caption: state.caption,
       tableName: sourceProjection.tableName,
       columnName: sourceProjection.columnName,
+      source: state.source,
       selectedItems: state.selectedValues,
       position: anchorToPixelBounds(state.position),
     };
@@ -640,6 +642,7 @@ export class WorksheetSlicersImpl implements WorksheetSlicers {
       caption: stored.caption,
       tableName: sourceProjection.tableName,
       columnName: sourceProjection.columnName,
+      source: stored.source,
     };
   }
 

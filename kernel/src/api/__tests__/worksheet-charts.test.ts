@@ -358,6 +358,81 @@ describe('WorksheetChartsImpl chart create payloads', () => {
   });
 });
 
+describe('WorksheetChartsImpl range-backed series overrides', () => {
+  function createMutableChartsApi(initialChart: ChartFloatingObject) {
+    let chart = initialChart;
+    const updateChart = jest.fn(
+      async (_sheetId: string, _chartId: string, updates: Partial<ChartFloatingObject>) => {
+        chart = {
+          ...chart,
+          ...updates,
+          anchor: updates.anchor ? { ...chart.anchor, ...updates.anchor } : chart.anchor,
+        };
+      },
+    );
+    const charts = new WorksheetChartsImpl(
+      {
+        computeBridge: {
+          getChart: jest.fn(async () => chart),
+          updateChart,
+        },
+      } as any,
+      SHEET_ID,
+    );
+    return { charts, updateChart, getChart: () => chart };
+  }
+
+  it('materializes point data-label dimensions for implicit dataRange series', async () => {
+    const { charts, getChart } = createMutableChartsApi(
+      makeChart({
+        chartType: 'bar',
+        dataRange: 'D1:E3',
+        dataLabels: { show: true },
+      }),
+    );
+
+    await charts.setDataLabelHeight('chart-1', 0, 0, 18);
+    await charts.setDataLabelWidth('chart-1', 0, 0, 48);
+
+    expect(getChart().series?.[0]?.points?.[0]?.dataLabel).toEqual(
+      expect.objectContaining({ show: true, height: 18, width: 48 }),
+    );
+  });
+
+  it('round-trips statistical options on implicit dataRange series', async () => {
+    const { charts } = createMutableChartsApi(
+      makeChart({
+        chartType: 'bar',
+        dataRange: 'A1:B5',
+      }),
+    );
+
+    await charts.setSeriesBinOptions('chart-1', 0, {
+      binCount: 4,
+      overflowBin: true,
+      overflowBinValue: 35,
+    });
+    await charts.setSeriesBoxwhiskerOptions('chart-1', 0, {
+      showMeanMarkers: true,
+      showMeanLine: true,
+      quartileMethod: 'exclusive',
+      whiskerType: 'tukey',
+    });
+
+    await expect(charts.getSeriesBinOptions('chart-1', 0)).resolves.toEqual(
+      expect.objectContaining({ binCount: 4, overflowBin: true, overflowBinValue: 35 }),
+    );
+    await expect(charts.getSeriesBoxwhiskerOptions('chart-1', 0)).resolves.toEqual(
+      expect.objectContaining({
+        showMeanMarkers: true,
+        showMeanLine: true,
+        quartileMethod: 'exclusive',
+        whiskerType: 'tukey',
+      }),
+    );
+  });
+});
+
 describe('WorksheetChartsImpl chart list ordering', () => {
   it('orders imported charts by drawing frame anchorIndex before serialization', async () => {
     const anchor7 = makeChart({

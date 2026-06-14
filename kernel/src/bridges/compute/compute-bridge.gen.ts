@@ -117,6 +117,7 @@ export interface GeneratedBridgeMethods {
   encodeDiff(remoteSv: Uint8Array): Promise<Uint8Array>;
   drainPendingUpdates(): Promise<Uint8Array[]>;
   flushUndoCapture(): Promise<MutationResult>;
+  captureScreenshot(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number, dpr: number, showHeaders: boolean, showGridlines: boolean, maxWidth: number | null, maxHeight: number | null): Promise<Uint8Array>;
   createScenario(input: ScenarioCreateInput): Promise<MutationResult>;
   updateScenario(scenarioId: string, input: ScenarioUpdateInput): Promise<MutationResult>;
   removeScenario(scenarioId: string): Promise<MutationResult>;
@@ -1074,6 +1075,10 @@ export class GeneratedBridgeBase implements GeneratedBridgeMethods {
 
   flushUndoCapture(): Promise<MutationResult> {
     return this.core.mutateSystem('compute_flush_undo_capture', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_flush_undo_capture', { docId: this.core.docId }));
+  }
+
+  captureScreenshot(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number, dpr: number, showHeaders: boolean, showGridlines: boolean, maxWidth: number | null, maxHeight: number | null): Promise<Uint8Array> {
+    return this.core.query(this.core.transport.call<Uint8Array>('compute_capture_screenshot', { docId: this.core.docId, sheetId, startRow, startCol, endRow, endCol, dpr, showHeaders, showGridlines, maxWidth, maxHeight }));
   }
 
   createScenario(input: ScenarioCreateInput): Promise<MutationResult> {

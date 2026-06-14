@@ -7,12 +7,10 @@
  */
 
 import type {
-  BoxplotConfig,
   Chart,
   ChartConfig,
   ChartType,
   HierarchyChartConfig,
-  HistogramConfig,
   RegionMapConfig,
 } from '@mog-sdk/contracts/data/charts';
 
@@ -20,11 +18,13 @@ import { normalizeImportedComboChart } from '../../bridges/compute/chart-import-
 import type { ChartFloatingObject } from '../../bridges/compute/compute-bridge';
 import {
   axisConfigToWire,
+  boxplotConfigToWire,
   chartFormatStringToWire,
   chartFormatToWire,
   chartStyleContextToWire,
   dataLabelConfigToWire,
   dataTableConfigToWire,
+  histogramConfigToWire,
   legendConfigToWire,
   seriesConfigArrayToWire,
   trendlineConfigArrayToWire,
@@ -119,30 +119,6 @@ function waterfallConfigFromWire(waterfall: ChartFloatingObject['waterfall']): C
     ...(waterfall.showConnectorLines !== undefined
       ? { showConnectorLines: waterfall.showConnectorLines }
       : {}),
-  };
-}
-
-function histogramConfigToWire(
-  histogram: HistogramConfig | undefined,
-): ChartFloatingObject['histogram'] {
-  if (!histogram) return undefined;
-  return {
-    binCount: histogram.binCount,
-    binWidth: histogram.binWidth,
-    overflowBin: histogram.overflowBin,
-    overflowBinValue: histogram.overflowBinValue,
-    underflowBin: histogram.underflowBin,
-    underflowBinValue: histogram.underflowBinValue,
-  };
-}
-
-function boxplotConfigToWire(boxplot: BoxplotConfig | undefined): ChartFloatingObject['boxplot'] {
-  if (!boxplot) return undefined;
-  return {
-    showOutlierPoints: boxplot.showOutlierPoints ?? boxplot.showOutliers,
-    showMeanMarkers: boxplot.showMeanMarkers ?? boxplot.showMean,
-    showMeanLine: boxplot.showMeanLine,
-    quartileMethod: boxplot.quartileMethod,
   };
 }
 

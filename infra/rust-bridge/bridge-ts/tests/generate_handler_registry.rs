@@ -128,6 +128,7 @@ fn bridge_source_files() -> Vec<String> {
         format!("{}/compute/core/src/storage/engine/cell_bridge.rs", base),
         format!("{}/compute/core/src/storage/engine/undo_bridge.rs", base),
         format!("{}/compute/core/src/storage/engine/sync_bridge.rs", base),
+        format!("{}/compute/core/src/storage/engine/screenshot.rs", base),
         format!("{}/compute/core/src/storage/engine/delegations.rs", base),
         format!("{}/compute/core/src/storage/engine/viewport/mod.rs", base),
         format!("{}/compute/core/src/storage/engine/queries.rs", base),

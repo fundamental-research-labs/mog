@@ -217,6 +217,7 @@ pub(in crate::storage::engine) fn build_mutation_result_for_deferred(
             protection_options: None,
             default_row_height,
             default_col_width,
+            custom_properties: None,
         };
         let settings_value =
             serde_json::to_value(&sheet_settings).expect("SheetSettings must serialize to JSON");

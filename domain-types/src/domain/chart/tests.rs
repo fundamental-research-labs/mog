@@ -1023,6 +1023,8 @@ fn chart_data_serde_roundtrip() {
             show_connector_lines: None,
             leader_line_format: None,
             show_leader_lines: None,
+            bin_options: None,
+            boxwhisker_options: None,
         }]),
         data_labels: Some(DataLabelData {
             show: true,
@@ -1048,6 +1050,8 @@ fn chart_data_serde_roundtrip() {
             link_number_format: None,
             geometric_shape_type: None,
             formula: None,
+            height: None,
+            width: None,
             leader_lines_format: None,
             layout: None,
         }),

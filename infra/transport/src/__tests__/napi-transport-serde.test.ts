@@ -65,6 +65,36 @@ describe('DEFAULT_NAPI_SERDE_PARAMS', () => {
     ]);
   });
 
+  it('JSON-encodes screenshot sheet and optional max dimensions', async () => {
+    const calls: unknown[][] = [];
+    const engine = {
+      compute_capture_screenshot: (...args: unknown[]) => {
+        calls.push(args);
+        return new Uint8Array();
+      },
+    } as NapiComputeEngine;
+
+    const transport = createNapiTransport(engine, DEFAULT_NAPI_SERDE_PARAMS);
+
+    await transport.call('compute_capture_screenshot', {
+      docId: 'doc-1',
+      sheetId: 'sheet-1',
+      startRow: 0,
+      startCol: 1,
+      endRow: 9,
+      endCol: 5,
+      dpr: 2,
+      showHeaders: true,
+      showGridlines: false,
+      maxWidth: 640,
+      maxHeight: null,
+    });
+
+    expect(calls).toEqual([
+      [JSON.stringify('sheet-1'), 0, 1, 9, 5, 2, true, false, JSON.stringify(640), JSON.stringify(null)],
+    ]);
+  });
+
   it('JSON-encodes serde byte vectors as arrays for table dropdown visibility', async () => {
     const calls: unknown[][] = [];
     const addon = {

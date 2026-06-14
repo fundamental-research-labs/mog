@@ -192,6 +192,8 @@ pub struct SheetSettings {
     pub protection_options: Option<SheetProtectionOptions>,
     pub default_row_height: f64,
     pub default_col_width: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub custom_properties: Option<String>,
 }
 
 impl Default for SheetSettings {
@@ -210,6 +212,7 @@ impl Default for SheetSettings {
             protection_options: None,
             default_row_height: 20.0,
             default_col_width: 64.0,
+            custom_properties: None,
         }
     }
 }

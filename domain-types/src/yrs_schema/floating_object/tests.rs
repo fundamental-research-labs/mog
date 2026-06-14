@@ -521,6 +521,8 @@ fn test_chart_roundtrip() {
                 show_connector_lines: None,
                 leader_line_format: None,
                 show_leader_lines: None,
+                bin_options: None,
+                boxwhisker_options: None,
             }]),
             data_labels: None,
             pie_slice: None,

@@ -62,7 +62,27 @@ export function wireToHistogramConfig(
     overflowBinValue: w.overflowBinValue,
     underflowBin: w.underflowBin,
     underflowBinValue: w.underflowBinValue,
+    cumulative: w.cumulative,
   };
+}
+
+export function histogramConfigToWire(
+  c: HistogramConfig | undefined,
+): HistogramConfigData | undefined {
+  if (!c) return undefined;
+  return {
+    binCount: c.binCount,
+    binWidth: c.binWidth,
+    overflowBin: c.overflowBin,
+    overflowBinValue: c.overflowBinValue,
+    underflowBin: c.underflowBin,
+    underflowBinValue: c.underflowBinValue,
+    cumulative: c.cumulative,
+  };
+}
+
+function wireToWhiskerType(value: string | undefined): BoxplotConfig['whiskerType'] {
+  return value === 'tukey' || value === 'minMax' || value === 'percentile' ? value : undefined;
 }
 
 export function wireToBoxplotConfig(w: BoxplotConfigData | undefined): BoxplotConfig | undefined {
@@ -74,6 +94,18 @@ export function wireToBoxplotConfig(w: BoxplotConfigData | undefined): BoxplotCo
     showMean: w.showMeanMarkers,
     showMeanLine: w.showMeanLine,
     quartileMethod: w.quartileMethod,
+    whiskerType: wireToWhiskerType(w.whiskerType),
+  };
+}
+
+export function boxplotConfigToWire(c: BoxplotConfig | undefined): BoxplotConfigData | undefined {
+  if (!c) return undefined;
+  return {
+    showOutlierPoints: c.showOutlierPoints ?? c.showOutliers,
+    showMeanMarkers: c.showMeanMarkers ?? c.showMean,
+    showMeanLine: c.showMeanLine,
+    quartileMethod: c.quartileMethod,
+    whiskerType: c.whiskerType,
   };
 }
 

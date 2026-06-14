@@ -4663,6 +4663,7 @@ export interface SheetSettings {
   protectionOptions?: SheetProtectionOptions;
   defaultRowHeight: number;
   defaultColWidth: number;
+  customProperties?: string;
 }
 
 export interface SheetSettingsChange {

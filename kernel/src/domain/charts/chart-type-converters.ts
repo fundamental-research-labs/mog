@@ -50,6 +50,13 @@ import {
   wireToTrendlineConfigArray,
 } from './chart-annotation-converters';
 
+import {
+  boxplotConfigToWire,
+  histogramConfigToWire,
+  wireToBoxplotConfig,
+  wireToHistogramConfig,
+} from './chart-option-converters';
+
 export {
   wireChartTypeToConfig,
   wireToSizeRepresents,
@@ -60,6 +67,8 @@ export {
 export { legendConfigToWire, wireToLegendConfig } from './chart-legend-converters';
 
 export {
+  boxplotConfigToWire,
+  histogramConfigToWire,
   upDownBarsConfigToWire,
   wireToBoxplotConfig,
   wireToHierarchyChartConfig,
@@ -176,8 +185,8 @@ export function wireToSeriesConfig(w: ChartSeriesData): SeriesConfig {
     showConnectorLines: w.showConnectorLines,
     leaderLineFormat: wireToChartFormat(w.leaderLineFormat),
     showLeaderLines: w.showLeaderLines,
-    binOptions: w.binOptions,
-    boxwhiskerOptions: w.boxwhiskerOptions,
+    binOptions: wireToHistogramConfig(w.binOptions),
+    boxwhiskerOptions: wireToBoxplotConfig(w.boxwhiskerOptions),
   };
   return config;
 }
@@ -245,8 +254,8 @@ export function seriesConfigToWire(c: SeriesConfig): ChartSeriesData {
     showConnectorLines: c.showConnectorLines,
     leaderLineFormat: chartFormatToWire(c.leaderLineFormat),
     showLeaderLines: c.showLeaderLines,
-    binOptions: c.binOptions,
-    boxwhiskerOptions: c.boxwhiskerOptions,
+    binOptions: histogramConfigToWire(c.binOptions),
+    boxwhiskerOptions: boxplotConfigToWire(c.boxwhiskerOptions),
   });
 }
 

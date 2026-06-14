@@ -1,5 +1,7 @@
 import type { Chart, ChartConfig, ChartReadOptions, SheetId } from '@mog-sdk/contracts/api';
 import type { SeriesConfig } from '@mog-sdk/contracts/data/charts';
+import { detectSeriesOrientation } from '@mog/charts';
+import { parseCellRange } from '@mog/spreadsheet-utils/a1';
 
 import type { ChartFloatingObject } from '../../bridges/compute/compute-bridge';
 import type { DocumentContext } from '../../context';
@@ -8,7 +10,7 @@ import {
   serializedChartToChart,
   unsupportedNativeXlsxChartType,
 } from '../../domain/charts/chart-public-api-converters';
-import { chartNotFound, invalidChartConfig } from '../../errors/api';
+import { chartNotFound, invalidChartConfig, operationFailed } from '../../errors/api';
 
 export function assertSupportedNativeXlsxChartConfig(
   config: Partial<Pick<ChartConfig, 'type'>>,
@@ -85,6 +87,54 @@ export async function requireChartWithSeries(
 ): Promise<{ chart: Chart; series: SeriesConfig[] }> {
   const chart = await requireChart(ctx, sheetId, chartId);
   const series = [...(chart.series ?? [])];
+  return { chart, series };
+}
+
+function inferredRangeSeriesCount(chart: Chart): number {
+  if (!chart.dataRange) return 0;
+  const dataRange = parseCellRange(chart.dataRange);
+  if (!dataRange) return 0;
+
+  const rowCount = dataRange.endRow - dataRange.startRow + 1;
+  const colCount = dataRange.endCol - dataRange.startCol + 1;
+  if (rowCount <= 0 || colCount <= 0) return 0;
+
+  if (rowCount === 1 || colCount === 1) return 1;
+
+  const orientation = chart.seriesOrientation ?? detectSeriesOrientation(dataRange);
+  if (orientation === 'columns') {
+    return Math.max(0, rowCount - (chart.categoryRange ? 0 : 1));
+  }
+  return Math.max(0, colCount - (chart.categoryRange ? 0 : 1));
+}
+
+export function chartSeriesCount(chart: Chart): number {
+  return Math.max(chart.series?.length ?? 0, inferredRangeSeriesCount(chart));
+}
+
+export async function requireChartSeriesForMutation(
+  ctx: DocumentContext,
+  sheetId: SheetId,
+  chartId: string,
+  seriesIndex: number,
+  operation: string,
+): Promise<{ chart: Chart; series: SeriesConfig[] }> {
+  if (!Number.isInteger(seriesIndex) || seriesIndex < 0) {
+    throw operationFailed(operation, `Series index ${seriesIndex} out of range`);
+  }
+
+  const { chart, series } = await requireChartWithSeries(ctx, sheetId, chartId);
+  const seriesCount = chartSeriesCount(chart);
+  if (seriesIndex >= seriesCount) {
+    throw operationFailed(
+      operation,
+      `Series index ${seriesIndex} out of range (0-${seriesCount - 1})`,
+    );
+  }
+
+  while (series.length <= seriesIndex) {
+    series.push({});
+  }
   return { chart, series };
 }
 

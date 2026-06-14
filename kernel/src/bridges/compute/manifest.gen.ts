@@ -110,6 +110,7 @@ export const BRIDGE_METHOD_KIND: Readonly<Record<string, BridgeMethodKind>> = Ob
   encodeDiff: 'read',
   drainPendingUpdates: 'read',
   flushUndoCapture: 'write',
+  captureScreenshot: 'read',
   createScenario: 'write',
   updateScenario: 'write',
   removeScenario: 'write',

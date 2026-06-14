@@ -35,6 +35,8 @@ use super::yrs_helpers::{
 // SheetSettings — aggregate read + string-keyed write for TS bridge
 // =========================================================================
 
+const KEY_CUSTOM_PROPERTIES: &str = "customProperties";
+
 /// Canonical list of camelCase Yrs meta keys that comprise a `SheetSettings`
 /// payload. Mirrors the TS-side `SHEET_SETTINGS_FIELDS` (kernel
 /// `core-defaults.ts`) and is the single source of truth used by the
@@ -61,6 +63,7 @@ pub const SHEET_SETTINGS_KEYS: &[&str] = &[
     "gridlineColor",
     "defaultRowHeight",
     "defaultColWidth",
+    "customProperties",
 ];
 
 /// Returns true if `key` is one of the top-level sheet-meta keys that
@@ -103,6 +106,7 @@ pub(crate) fn get_sheet_settings(doc: &Doc, sheets: &MapRef, sheet_id: &SheetId)
                     let cw = CharWidth(meta_number(&txn, &meta, KEY_DEFAULT_COL_WIDTH, 8.43));
                     char_width_to_pixels(cw, platform_mdw()).0
                 },
+                custom_properties: meta_string(&txn, &meta, KEY_CUSTOM_PROPERTIES),
             }
         }
         None => SheetSettings::default(),

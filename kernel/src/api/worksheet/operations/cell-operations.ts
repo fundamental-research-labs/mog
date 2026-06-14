@@ -279,20 +279,31 @@ interface TableHeaderWrite {
   newName: string;
 }
 
+interface TableHeaderCandidate {
+  name: string;
+  range: { startRow: number; startCol: number; endRow: number; endCol: number };
+  columns?: Array<{ name: string }>;
+  hasHeaderRow: boolean;
+}
+
+interface ResolvedCellWrite {
+  row: number;
+  col: number;
+  value: CellValuePrimitive | Date;
+}
+
 function tableHeaderText(value: CellValuePrimitive | Date): string {
   if (value == null) return '';
   if (value instanceof Date) return value.toISOString();
   return String(value);
 }
 
-async function resolveTableHeaderWrite(
-  ctx: DocumentContext,
-  sheetId: SheetId,
+function tableHeaderWriteFromTable(
+  table: TableHeaderCandidate | null | undefined,
   row: number,
   col: number,
   value: CellValuePrimitive | Date,
-): Promise<TableHeaderWrite | null> {
-  const table = await ctx.computeBridge.getTableAtCell(sheetId, row, col);
+): TableHeaderWrite | null {
   if (!table?.hasHeaderRow) return null;
 
   const { range } = table;
@@ -308,6 +319,43 @@ async function resolveTableHeaderWrite(
     currentName: column.name,
     newName: tableHeaderText(value),
   };
+}
+
+async function resolveTableHeaderWrite(
+  ctx: DocumentContext,
+  sheetId: SheetId,
+  row: number,
+  col: number,
+  value: CellValuePrimitive | Date,
+): Promise<TableHeaderWrite | null> {
+  const table = await ctx.computeBridge.getTableAtCell(sheetId, row, col);
+  return tableHeaderWriteFromTable(table, row, col, value);
+}
+
+async function resolveTableHeaderWrites(
+  ctx: DocumentContext,
+  sheetId: SheetId,
+  cells: ResolvedCellWrite[],
+): Promise<Map<string, TableHeaderWrite>> {
+  const writes = new Map<string, TableHeaderWrite>();
+  if (cells.length === 0) return writes;
+
+  const tables = await ctx.computeBridge.getAllTablesInSheet(sheetId);
+  if (tables.length === 0) return writes;
+
+  for (const cell of cells) {
+    const table = tables.find(
+      (candidate) =>
+        candidate.hasHeaderRow &&
+        cell.row === candidate.range.startRow &&
+        cell.col >= candidate.range.startCol &&
+        cell.col <= candidate.range.endCol,
+    );
+    const write = tableHeaderWriteFromTable(table, cell.row, cell.col, cell.value);
+    if (write) writes.set(`${cell.row},${cell.col}`, write);
+  }
+
+  return writes;
 }
 
 async function applyTableHeaderWrite(
@@ -496,12 +544,12 @@ export async function setCells(
 
   // --- Resolve addresses in TS & normalise values ---
   const errors: Array<{ addr: string; error: string }> = [];
+  const resolvedCells: ResolvedCellWrite[] = [];
   // Use a Map keyed by "row,col" for last-write-wins dedup
   const deduped = new Map<string, { row: number; col: number; input: CellInput }>();
   // Date values take a separate path (bridge.setDateValue) so they get a date
   // serial + date format, not String(Date).
   const dateWrites = new Map<string, { row: number; col: number; date: Date }>();
-  const tableHeaderWrites = new Map<string, TableHeaderWrite>();
 
   for (const c of cells) {
     let row: number | undefined = c.row;
@@ -530,9 +578,14 @@ export async function setCells(
       continue;
     }
 
-    const value = c.value;
+    resolvedCells.push({ row, col, value: c.value });
+  }
+
+  const tableHeaderWrites = await resolveTableHeaderWrites(ctx, sheetId, resolvedCells);
+
+  for (const { row, col, value } of resolvedCells) {
     const key = `${row},${col}`;
-    const tableHeaderWrite = await resolveTableHeaderWrite(ctx, sheetId, row, col, value);
+    const tableHeaderWrite = tableHeaderWrites.get(key);
 
     if (tableHeaderWrite) {
       deduped.delete(key);

@@ -105,7 +105,7 @@ pub(in crate::storage::engine) fn toggle_format_property(
     for &(start_row, start_col, end_row, end_col) in ranges {
         let range_size = (end_row - start_row + 1) as u64 * (end_col - start_col + 1) as u64;
 
-        if range_size > LARGE_RANGE_THRESHOLD {
+        if range_size >= LARGE_RANGE_THRESHOLD {
             eprintln!(
                 "[formatting] toggle_format_property: large range ({} cells), using bulk mode",
                 range_size
@@ -214,7 +214,7 @@ pub(in crate::storage::engine) fn set_format_for_ranges(
     for &(start_row, start_col, end_row, end_col) in ranges {
         let range_size = (end_row - start_row + 1) as u64 * (end_col - start_col + 1) as u64;
 
-        if range_size > LARGE_RANGE_THRESHOLD {
+        if range_size >= LARGE_RANGE_THRESHOLD {
             eprintln!(
                 "[formatting] set_format_for_ranges: large range ({} cells), using bulk mode",
                 range_size
@@ -319,7 +319,7 @@ pub(in crate::storage::engine) fn clear_format_for_ranges(
     for &(start_row, start_col, end_row, end_col) in ranges {
         let range_size = (end_row - start_row + 1) as u64 * (end_col - start_col + 1) as u64;
 
-        if range_size > LARGE_RANGE_THRESHOLD {
+        if range_size >= LARGE_RANGE_THRESHOLD {
             eprintln!(
                 "[formatting] clear_format_for_ranges: large range ({} cells), using bulk mode",
                 range_size

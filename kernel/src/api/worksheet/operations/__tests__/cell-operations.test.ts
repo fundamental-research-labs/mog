@@ -36,6 +36,7 @@ function createMockCtx() {
         },
       })),
       getTableAtCell: jest.fn().mockResolvedValue(null),
+      getAllTablesInSheet: jest.fn().mockResolvedValue([]),
       getSheetProtectionOptions: jest.fn().mockResolvedValue(null),
       renameTableColumn: jest.fn().mockImplementation(async () => {
         order.push('renameTableColumn');
@@ -102,10 +103,7 @@ describe('CellOps filter reapply materialization', () => {
 
   it('splits table header renames from normal cells in batch writes', async () => {
     const ctx = createMockCtx();
-    ctx.computeBridge.getTableAtCell.mockImplementation(async (_sheetId, row, col) => {
-      if (row === 0 && col >= 0 && col <= 1) return createBridgeTable();
-      return null;
-    });
+    ctx.computeBridge.getAllTablesInSheet.mockResolvedValue([createBridgeTable()]);
 
     const result = await CellOps.setCells(ctx, SHEET_ID, [
       { row: 0, col: 1, value: 'Area' },
@@ -113,6 +111,8 @@ describe('CellOps filter reapply materialization', () => {
     ]);
 
     expect(result).toEqual({ cellsWritten: 2, errors: null });
+    expect(ctx.computeBridge.getAllTablesInSheet).toHaveBeenCalledTimes(1);
+    expect(ctx.computeBridge.getTableAtCell).not.toHaveBeenCalled();
     expect(ctx.computeBridge.renameTableColumn).toHaveBeenCalledWith('Sales', 1, 'Area');
     expect(ctx.computeBridge.setCellsByPosition).toHaveBeenCalledWith(SHEET_ID, [
       { row: 1, col: 0, input: { kind: 'parse', text: 'West' } },

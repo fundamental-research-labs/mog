@@ -2152,15 +2152,20 @@ export class WorksheetImpl implements Worksheet {
     }>,
   ): Promise<SetCellsResult> {
     this._ensureWritable('worksheet.setCells');
-    // Protection check: verify all target cells are editable (concurrently)
-    await Promise.all(
-      cells.map((cell) => {
-        const addrStr = cell.addr ?? cell.address;
-        const { row, col } =
-          addrStr !== undefined ? resolveCell(addrStr) : (cell as { row: number; col: number });
-        return this.ensureCellEditable(row, col);
-      }),
-    );
+    // Protection check: an unprotected sheet can skip per-cell bridge checks.
+    // Protected sheets keep the exact sparse-cell semantics instead of using a
+    // bounding rectangle, because unlocked islands inside a protected sheet are
+    // valid edit targets.
+    if (this.protection.canEditCellFast(0, 0) !== true) {
+      await Promise.all(
+        cells.map((cell) => {
+          const addrStr = cell.addr ?? cell.address;
+          const { row, col } =
+            addrStr !== undefined ? resolveCell(addrStr) : (cell as { row: number; col: number });
+          return this.ensureCellEditable(row, col);
+        }),
+      );
+    }
     for (const cell of cells) {
       const addrStr = cell.addr ?? cell.address;
       const { row, col } =

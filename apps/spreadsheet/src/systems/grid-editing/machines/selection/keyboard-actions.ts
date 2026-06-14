@@ -147,9 +147,9 @@ const moveActiveCell = assign(
 
 /**
  * Extend selection in direction (shift+arrow).
- * The anchor stays fixed and remains the active cell. getMovingEdge(range,
- * anchor) keeps repeated extends independent from activeCell, so edge-crossing
- * and perpendicular extends remain stable.
+ * The anchor stays fixed while the active cell follows the moving edge.
+ * getMovingEdge(range, anchor) keeps repeated extends independent from
+ * activeCell, so edge-crossing and perpendicular extends remain stable.
  *
  * writes only to `pendingRange`. `committedRanges` is untouched
  * (empty in non-additive flows by invariant; preserved verbatim in additive).
@@ -431,8 +431,7 @@ const moveToHome = assign(
 /**
  * Shift+Home or Ctrl+Shift+Home: Extend selection to beginning.
  * Shift+Home extends to column 0 on the moving edge's row;
- * Ctrl+Shift+Home extends to A1. activeCell stays at the anchor;
- * the range geometry tracks the moving edge via getMovingEdge(range, anchor).
+ * Ctrl+Shift+Home extends to A1. activeCell follows the moving edge.
  */
 const extendToHome = assign(
   ({ context, event }: { context: SelectionContext; event: SelectionEvent }) => {
@@ -476,8 +475,7 @@ const moveToEnd = assign(
  * NOTE: Ctrl+Shift+End is properly handled by KeyboardCoordinator which dispatches
  * EXTEND_TO_LAST_USED_CELL action. This fallback uses MAX constants for safety.
  * Shift+End (without Ctrl) extends to last column of current row.
- * activeCell stays at the anchor; the range geometry tracks the moving edge
- * via getMovingEdge(range, anchor).
+ * activeCell follows the moving edge.
  */
 const extendToEnd = assign(
   ({ context, event }: { context: SelectionContext; event: SelectionEvent }) => {

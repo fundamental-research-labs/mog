@@ -159,7 +159,7 @@ async function extendToDataEdge(
 
   const newRange = rangeFromAnchorAndCell(anchorCell, targetCell);
 
-  deps.commands.selection.setSelection([newRange], anchorCell, anchorCell);
+  deps.commands.selection.setSelection([newRange], targetCell, anchorCell);
   return handled();
 }
 

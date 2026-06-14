@@ -295,7 +295,7 @@ describe('Shift+Arrow selection extension (extendSelection)', () => {
         const result = callAction('extendSelection', context, event);
 
         expect(result.pendingRange).toEqual(firstRange);
-        expect(result.activeCell).toEqual({ row: 4, col: 1 });
+        expect(result.activeCell).toEqual(firstEdge);
         expect(result.anchor).toEqual({ row: 4, col: 1 });
       });
 
@@ -316,7 +316,7 @@ describe('Shift+Arrow selection extension (extendSelection)', () => {
         const result = callAction('extendSelection', context, event);
 
         expect(result.pendingRange).toEqual(secondRange);
-        expect(result.activeCell).toEqual({ row: 4, col: 1 });
+        expect(result.activeCell).toEqual(secondEdge);
         expect(result.anchor).toEqual({ row: 4, col: 1 });
       });
     },
@@ -373,7 +373,7 @@ describe('Shift+Arrow selection extension (extendSelection)', () => {
         endRow: 4,
         endCol: 1,
       });
-      expect(result.activeCell).toEqual({ row: 4, col: 1 });
+      expect(result.activeCell).toEqual({ row: 3, col: 1 });
       expect(result.anchor).toEqual({ row: 4, col: 1 });
     });
   });
@@ -545,7 +545,7 @@ describe('Ctrl+Shift+Arrow extend (jumpToEdgeExtend)', () => {
       endRow: 14,
       endCol: 1,
     });
-    expect(result.activeCell).toEqual({ row: 4, col: 1 });
+    expect(result.activeCell).toEqual({ row: 14, col: 1 });
     expect(result.anchor).toEqual({ row: 4, col: 1 });
   });
 
@@ -571,7 +571,7 @@ describe('Ctrl+Shift+Arrow extend (jumpToEdgeExtend)', () => {
       endRow: 14,
       endCol: 1,
     });
-    expect(result.activeCell).toEqual({ row: 14, col: 1 });
+    expect(result.activeCell).toEqual({ row: 4, col: 1 });
     expect(result.anchor).toEqual({ row: 14, col: 1 });
   });
 
@@ -598,7 +598,7 @@ describe('Ctrl+Shift+Arrow extend (jumpToEdgeExtend)', () => {
       endRow: 18,
       endCol: 1,
     });
-    expect(result.activeCell).toEqual({ row: 4, col: 1 });
+    expect(result.activeCell).toEqual({ row: 18, col: 1 });
     expect(result.anchor).toEqual({ row: 4, col: 1 });
   });
 });
@@ -667,7 +667,7 @@ describe('Home/End keys', () => {
         endRow: 4,
         endCol: 5,
       });
-      expect(result.activeCell).toEqual({ row: 4, col: 5 });
+      expect(result.activeCell).toEqual({ row: 4, col: 0 });
     });
 
     it('Ctrl+Shift+Home extends to A1', () => {
@@ -692,7 +692,7 @@ describe('Home/End keys', () => {
         endRow: 10,
         endCol: 10,
       });
-      expect(result.activeCell).toEqual({ row: 10, col: 10 });
+      expect(result.activeCell).toEqual({ row: 0, col: 0 });
     });
 
     it('Shift+Home on multi-cell uses moving edge row, not anchor row', () => {
@@ -719,7 +719,7 @@ describe('Home/End keys', () => {
         endRow: 6,
         endCol: 5,
       });
-      expect(result.activeCell).toEqual({ row: 4, col: 5 });
+      expect(result.activeCell).toEqual({ row: 6, col: 0 });
     });
   });
 
@@ -782,7 +782,7 @@ describe('Home/End keys', () => {
         endRow: 4,
         endCol: MAX_COLS - 1,
       });
-      expect(result.activeCell).toEqual({ row: 4, col: 5 });
+      expect(result.activeCell).toEqual({ row: 4, col: MAX_COLS - 1 });
     });
 
     it('Ctrl+Shift+End extends to last cell (MAX bounds fallback)', () => {
@@ -807,7 +807,7 @@ describe('Home/End keys', () => {
         endRow: MAX_ROWS - 1,
         endCol: MAX_COLS - 1,
       });
-      expect(result.activeCell).toEqual({ row: 4, col: 5 });
+      expect(result.activeCell).toEqual({ row: MAX_ROWS - 1, col: MAX_COLS - 1 });
     });
 
     it('Shift+End on multi-cell uses moving edge row, not anchor row', () => {
@@ -833,7 +833,7 @@ describe('Home/End keys', () => {
         endRow: 6,
         endCol: MAX_COLS - 1,
       });
-      expect(result.activeCell).toEqual({ row: 4, col: 5 });
+      expect(result.activeCell).toEqual({ row: 6, col: MAX_COLS - 1 });
     });
   });
 });
@@ -943,7 +943,7 @@ describe('Page Up/Down/Left/Right (page actions)', () => {
         endRow: 30,
         endCol: 5,
       });
-      expect(result.activeCell).toEqual({ row: 10, col: 5 });
+      expect(result.activeCell).toEqual({ row: 30, col: 5 });
     });
 
     it('Shift+Page Up extends selection', () => {
@@ -968,7 +968,7 @@ describe('Page Up/Down/Left/Right (page actions)', () => {
         endRow: 30,
         endCol: 5,
       });
-      expect(result.activeCell).toEqual({ row: 30, col: 5 });
+      expect(result.activeCell).toEqual({ row: 10, col: 5 });
     });
   });
 
@@ -1069,7 +1069,7 @@ describe('Page Up/Down/Left/Right (page actions)', () => {
         endRow: 5,
         endCol: 20,
       });
-      expect(result.activeCell).toEqual({ row: 5, col: 10 });
+      expect(result.activeCell).toEqual({ row: 5, col: 20 });
     });
 
     it('Shift+Page Left extends selection', () => {
@@ -1094,7 +1094,7 @@ describe('Page Up/Down/Left/Right (page actions)', () => {
         endRow: 5,
         endCol: 20,
       });
-      expect(result.activeCell).toEqual({ row: 5, col: 20 });
+      expect(result.activeCell).toEqual({ row: 5, col: 10 });
     });
   });
 });

@@ -236,6 +236,7 @@ impl YrsComputeEngine {
                 }
             }
 
+            let created_table_name = table_name.clone();
             let create_result = services::tables::create_table(
                 &mut self.stores,
                 &mut self.mirror,
@@ -251,7 +252,10 @@ impl YrsComputeEngine {
             )?;
             merge_mutation_result(&mut combined, create_result);
 
-            let patches = if combined.recalc.changed_cells.is_empty()
+            let table_style_patches = self.build_table_style_viewport_patches(&created_table_name);
+            let patches = if !table_style_patches.is_empty() {
+                table_style_patches
+            } else if combined.recalc.changed_cells.is_empty()
                 && combined.recalc.projection_changes.is_empty()
                 && combined.recalc.errors.is_empty()
             {

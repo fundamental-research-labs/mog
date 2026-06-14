@@ -92,7 +92,7 @@ fn create_table_lifecycle_with_style_undo_redo_is_atomic() {
     set_people_data(&mut engine, sid);
     let before_depth = engine.get_undo_state().undo_depth;
 
-    let (_patches, result) = engine
+    let (patches, result) = engine
         .create_table_lifecycle(
             &sid,
             Some("StyledPeople".into()),
@@ -107,6 +107,10 @@ fn create_table_lifecycle_with_style_undo_redo_is_atomic() {
         .expect("create lifecycle");
 
     assert_eq!(engine.get_undo_state().undo_depth, before_depth + 1);
+    assert!(
+        !patches.is_empty(),
+        "creating a styled table over existing cells must emit viewport patches so table-owned formatting paints immediately"
+    );
     assert!(
         result.table_changes.iter().any(|change| {
             change.name == "StyledPeople"

@@ -104,8 +104,8 @@ export function CellContextMenu({ target, targetRow, targetCol, onClose }: CellC
   const menuItems = useMemo((): ContextMenuItemType[] => {
     const items: ContextMenuItemType[] = [];
     const dispatchAndClose =
-      (action: 'AUTO_FIT_ROW_HEIGHT' | 'AUTO_FIT_COLUMN_WIDTH') => () => {
-        dispatch(action, actionDeps);
+      (action: 'AUTO_FIT_ROW_HEIGHT' | 'AUTO_FIT_COLUMN_WIDTH') => async () => {
+        await dispatch(action, actionDeps);
         onClose();
       };
 

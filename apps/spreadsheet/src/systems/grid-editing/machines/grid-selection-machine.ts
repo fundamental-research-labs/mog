@@ -77,6 +77,21 @@ export const selectionMachine = setup({
     EXIT_ALL_MODES: {
       actions: 'exitAllModes',
     },
+    // Programmatic replacements from structural commands, dialogs, or API
+    // callers must break out of transient pointer states such as row-header
+    // drag selection. Otherwise a follow-up plain cell click can be processed
+    // while the machine still believes a header drag is active.
+    SET_SELECTION: [
+      {
+        target: '.idle',
+        guard: 'isUserSelection',
+        actions: ['setSelection', 'emitUserSelectionChanged'],
+      },
+      {
+        target: '.idle',
+        actions: 'setSelection',
+      },
+    ],
     // Cross-Machine Communication
     // When another selection context (objects, chart) takes focus, reset cell selection.
     // Protected states (draggingFillHandle, draggingCells, selectingRangeForFormula)

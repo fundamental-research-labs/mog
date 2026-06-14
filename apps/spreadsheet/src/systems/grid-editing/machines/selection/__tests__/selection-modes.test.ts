@@ -44,6 +44,35 @@ function startActorAt(activeRow = 0, activeCol = 0) {
 // =============================================================================
 
 describe('selection-mode lifecycle', () => {
+  it.each([
+    {
+      name: 'row-header selection',
+      enter: { type: 'SELECT_ROW' as const, row: 4, shiftKey: false, ctrlKey: false },
+    },
+    {
+      name: 'column-header selection',
+      enter: { type: 'SELECT_COLUMN' as const, col: 3, shiftKey: false, ctrlKey: false },
+    },
+  ])('programmatic SET_SELECTION exits transient $name state', ({ enter }) => {
+    const actor = startActorAt(0, 0);
+    actor.send(enter);
+
+    expect(actor.getSnapshot().matches('idle')).toBe(false);
+
+    actor.send({
+      type: 'SET_SELECTION',
+      ranges: [rng(6, 2, 6, 2)],
+      activeCell: cell(6, 2),
+    });
+
+    const after = actor.getSnapshot();
+    expect(after.matches('idle')).toBe(true);
+    expect(after.context.activeCell).toEqual(cell(6, 2));
+    expect(after.context.pendingRange).toEqual(rng(6, 2, 6, 2));
+    expect(after.context.committedRanges).toEqual([]);
+    actor.stop();
+  });
+
   it('1. additive_first_arrow_with_no_committed_collapses_pending_to_new_cell', () => {
     // Reproduces the literal Shift+F8 → arrow bug: with additive on but no
     // committed range yet, an arrow press collapses pendingRange to the new

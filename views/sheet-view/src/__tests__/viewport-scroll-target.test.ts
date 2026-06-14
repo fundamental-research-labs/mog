@@ -137,4 +137,28 @@ describe('getLayoutAwareScrollToCell', () => {
     expect(target?.x).toBe(831);
     expect(target?.y).toBeCloseTo(45.3333333334);
   });
+
+  it('preserves horizontal scroll when only the target row is outside the viewport', () => {
+    const target = getLayoutAwareScrollToCell({
+      sheetId: 'sheet-1',
+      cell: { row: 466, col: 6 },
+      layout: layout([
+        viewport({
+          id: 'main',
+          bounds: { x: 0, y: 0, width: 500, height: 300 },
+          viewportOrigin: { x: 0, y: 0 },
+          scrollOffset: { x: 400, y: 10750 },
+          cellRange: { startRow: 430, startCol: 5, endRow: 465, endCol: 33 },
+        }),
+      ]),
+      positionIndex,
+      frozenPanes: { rows: 0, cols: 0 },
+      currentScroll: { x: 400, y: 10750 },
+      maxScroll: { x: 1000, y: 20000 },
+      getCellPageBounds: () => null,
+      getCoordinateScrollTarget: () => ({ left: 400, top: 10750 }),
+    });
+
+    expect(target).toEqual({ x: 400, y: 11395 });
+  });
 });

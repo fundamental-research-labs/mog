@@ -98,6 +98,7 @@ function deriveScrollToCellFromLayout({
         itemSize: rowHeight,
         viewportOrigin: viewport.viewportOrigin.y,
         viewportSize: viewport.bounds.height,
+        currentScroll: currentScroll.y,
         zoom: viewport.zoom,
         beforeViewport: cell.row < viewport.cellRange.startRow,
       });
@@ -117,6 +118,7 @@ function deriveScrollToCellFromLayout({
         itemSize: colWidth,
         viewportOrigin: viewport.viewportOrigin.x,
         viewportSize: viewport.bounds.width,
+        currentScroll: currentScroll.x,
         zoom: viewport.zoom,
         beforeViewport: cell.col < viewport.cellRange.startCol,
       });
@@ -140,6 +142,7 @@ function deriveAxisScrollTarget({
   itemSize,
   viewportOrigin,
   viewportSize,
+  currentScroll,
   zoom,
   beforeViewport,
 }: {
@@ -147,22 +150,31 @@ function deriveAxisScrollTarget({
   itemSize: number;
   viewportOrigin: number;
   viewportSize: number;
+  currentScroll: number;
   zoom: number;
   beforeViewport: boolean;
 }): number | null {
   const viewportSizeInDocument = viewportSize / zoom;
   if (itemSize <= 0 || viewportSizeInDocument <= 0) return null;
 
+  const itemEnd = itemStart + itemSize;
+  const viewportStart = currentScroll + viewportOrigin;
+  const viewportEnd = viewportStart + viewportSizeInDocument;
+
+  if (itemStart >= viewportStart && itemEnd <= viewportEnd) {
+    return null;
+  }
+
   const paddingInDocument = Math.min(
     SCROLL_PADDING_PX / zoom,
     Math.max(0, (viewportSizeInDocument - itemSize) / 2),
   );
 
-  if (beforeViewport) {
+  if (beforeViewport || itemStart < viewportStart) {
     return itemStart - viewportOrigin - paddingInDocument;
   }
 
-  return itemStart + itemSize - viewportOrigin - viewportSizeInDocument + paddingInDocument;
+  return itemEnd - viewportOrigin - viewportSizeInDocument + paddingInDocument;
 }
 
 function findScrollViewportForCell(

@@ -19,76 +19,6 @@ import type {
 } from './helpers';
 import { handled } from './helpers';
 
-// =============================================================================
-// Data-Edge Navigation Handlers (Ctrl+Arrow)
-// =============================================================================
-
-const OPPOSITE_DIRECTION: Record<Direction, Direction> = {
-  up: 'down',
-  down: 'up',
-  left: 'right',
-  right: 'left',
-};
-
-interface DataEdgeReturnHint {
-  sheetId: string;
-  from: CellCoord;
-  to: CellCoord;
-  direction: Direction;
-}
-
-let lastDataEdgeMove: DataEdgeReturnHint | null = null;
-
-function sameCell(a: CellCoord, b: CellCoord): boolean {
-  return a.row === b.row && a.col === b.col;
-}
-
-function isHorizontalDirection(direction: Direction): boolean {
-  return direction === 'left' || direction === 'right';
-}
-
-async function isVisibleCell(
-  deps: ActionDependencies,
-  sheetId: string,
-  cell: CellCoord,
-): Promise<boolean> {
-  try {
-    const ws = deps.workbook.getSheetById(sheetId as never);
-    const [hiddenRows, hiddenCols] = await Promise.all([
-      ws.layout.getHiddenRowsBitmap(),
-      ws.layout.getHiddenColumnsBitmap(),
-    ]);
-    return !hiddenRows.has(cell.row) && !hiddenCols.has(cell.col);
-  } catch {
-    return false;
-  }
-}
-
-function matchingReturnHint(
-  sheetId: string,
-  activeCell: CellCoord,
-  direction: Direction,
-): DataEdgeReturnHint | null {
-  if (!isHorizontalDirection(direction)) {
-    return null;
-  }
-
-  if (
-    lastDataEdgeMove &&
-    isHorizontalDirection(lastDataEdgeMove.direction) &&
-    lastDataEdgeMove.sheetId === sheetId &&
-    lastDataEdgeMove.direction === OPPOSITE_DIRECTION[direction] &&
-    sameCell(lastDataEdgeMove.to, activeCell)
-  ) {
-    return lastDataEdgeMove;
-  }
-  return null;
-}
-
-export function __resetDataEdgeReturnHintForTests(): void {
-  lastDataEdgeMove = null;
-}
-
 /**
  * Move to data edge in a direction.
  * Uses Rust bridge findDataEdge to find target cell, then dispatches GO_TO.
@@ -100,25 +30,7 @@ async function moveToDataEdge(
 ): Promise<ActionResult> {
   const activeCell = deps.accessors.selection.getActiveCell();
   const ws = deps.workbook.activeSheet;
-  const activeSheetId = String(deps.getActiveSheetId());
-
-  const returnHint = matchingReturnHint(activeSheetId, activeCell, direction);
-  if (returnHint && (await isVisibleCell(deps, activeSheetId, returnHint.from))) {
-    lastDataEdgeMove = null;
-    deps.commands.selection.goTo(returnHint.from);
-    return handled();
-  }
-
   const targetCell = await ws.findDataEdge(activeCell.row, activeCell.col, direction);
-  lastDataEdgeMove = !isHorizontalDirection(direction) || sameCell(activeCell, targetCell)
-    ? null
-    : {
-        sheetId: activeSheetId,
-        from: activeCell,
-        to: targetCell,
-        direction,
-      };
-
   deps.commands.selection.goTo(targetCell);
   return handled();
 }
@@ -159,7 +71,7 @@ async function extendToDataEdge(
 
   const newRange = rangeFromAnchorAndCell(anchorCell, targetCell);
 
-  deps.commands.selection.setSelection([newRange], targetCell, anchorCell);
+  deps.commands.selection.setSelection([newRange], anchorCell, anchorCell);
   return handled();
 }
 

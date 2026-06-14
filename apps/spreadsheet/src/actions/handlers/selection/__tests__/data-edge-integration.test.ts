@@ -17,15 +17,12 @@ import { jest } from '@jest/globals';
 import { sheetId } from '@mog-sdk/contracts/core';
 import { findDataEdge, type CellValueGetter } from '../../../../infra/utils';
 import {
-  __resetDataEdgeReturnHintForTests,
   EXTEND_TO_EDGE_DOWN,
   EXTEND_TO_EDGE_LEFT,
   EXTEND_TO_EDGE_RIGHT,
   EXTEND_TO_EDGE_UP,
-  MOVE_TO_EDGE_DOWN,
   MOVE_TO_EDGE_LEFT,
   MOVE_TO_EDGE_RIGHT,
-  MOVE_TO_EDGE_UP,
 } from '../data-edge';
 import type { ActionDependencies, CellCoord, CellRange } from '../helpers';
 import { createMockPlatform, createMockShellService } from '../../__tests__/test-helpers';
@@ -208,15 +205,11 @@ function createMockDeps(
 // =============================================================================
 
 describe('extendToDataEdge - Integration tests with ACTUAL handlers', () => {
-  beforeEach(() => {
-    __resetDataEdgeReturnHintForTests();
-  });
-
-  describe('moveToDataEdge paired return hints', () => {
-    it('returns to the previous visible origin on the opposite data-edge command', async () => {
+  describe('moveToDataEdge', () => {
+    it('delegates opposite commands to findDataEdge from the current active cell', async () => {
       const findEdge = jest.fn(
         async (_row: number, _col: number, direction: 'up' | 'down' | 'left' | 'right') =>
-          direction === 'right' ? { row: 463, col: 9 } : { row: 463, col: 0 },
+          direction === 'right' ? { row: 463, col: 9 } : { row: 463, col: 4 },
       );
       const { deps, goTo } = createMoveMockDeps({
         activeCell: { row: 463, col: 6 },
@@ -227,45 +220,10 @@ describe('extendToDataEdge - Integration tests with ACTUAL handlers', () => {
       await MOVE_TO_EDGE_LEFT(deps);
 
       expect(goTo).toHaveBeenNthCalledWith(1, { row: 463, col: 9 });
-      expect(goTo).toHaveBeenNthCalledWith(2, { row: 463, col: 6 });
-      expect(findEdge).toHaveBeenCalledTimes(1);
-    });
-
-    it('ignores a previous origin that is hidden and falls back to the compute edge', async () => {
-      const findEdge = jest.fn(
-        async (_row: number, _col: number, direction: 'up' | 'down' | 'left' | 'right') =>
-          direction === 'right' ? { row: 6, col: 27 } : { row: 6, col: 14 },
-      );
-      const { deps, goTo } = createMoveMockDeps({
-        activeCell: { row: 6, col: 15 },
-        hiddenCols: [15],
-        findDataEdge: findEdge,
-      });
-
-      await MOVE_TO_EDGE_RIGHT(deps);
-      await MOVE_TO_EDGE_LEFT(deps);
-
-      expect(goTo).toHaveBeenNthCalledWith(1, { row: 6, col: 27 });
-      expect(goTo).toHaveBeenNthCalledWith(2, { row: 6, col: 14 });
+      expect(goTo).toHaveBeenNthCalledWith(2, { row: 463, col: 4 });
       expect(findEdge).toHaveBeenCalledTimes(2);
-    });
-
-    it('does not apply horizontal return hints to vertical data-edge navigation', async () => {
-      const findEdge = jest.fn(
-        async (_row: number, _col: number, direction: 'up' | 'down' | 'left' | 'right') =>
-          direction === 'down' ? { row: 2, col: 1 } : { row: 0, col: 1 },
-      );
-      const { deps, goTo } = createMoveMockDeps({
-        activeCell: { row: 1, col: 1 },
-        findDataEdge: findEdge,
-      });
-
-      await MOVE_TO_EDGE_DOWN(deps);
-      await MOVE_TO_EDGE_UP(deps);
-
-      expect(goTo).toHaveBeenNthCalledWith(1, { row: 2, col: 1 });
-      expect(goTo).toHaveBeenNthCalledWith(2, { row: 0, col: 1 });
-      expect(findEdge).toHaveBeenCalledTimes(2);
+      expect(findEdge).toHaveBeenNthCalledWith(1, 463, 6, 'right');
+      expect(findEdge).toHaveBeenNthCalledWith(2, 463, 9, 'left');
     });
   });
 

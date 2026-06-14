@@ -249,10 +249,9 @@ export function setupKeyboardScrollCoordination(
         }
       }
     }
-    // Path 2: Shift+extend — activeCell stays at anchor but range grows.
-    // During Shift+Arrow/Shift+PageDown/Shift+Ctrl+Arrow, activeCell remains at the
-    // anchor while the selection range extends. Without this path, the viewport would
-    // never scroll to follow the extending edge, leaving the user blind.
+    // Path 2: range changed without an activeCell move. Ordinary Shift+Arrow
+    // keeps activeCell at the anchor, while the selection edge still needs to
+    // remain visible.
     //
     // IMPORTANT: Only fire when the selection machine is in 'idle' state.
     // During mouse drag operations (selecting/extending/multiSelecting states),

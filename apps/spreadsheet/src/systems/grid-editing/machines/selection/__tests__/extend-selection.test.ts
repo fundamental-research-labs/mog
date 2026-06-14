@@ -659,17 +659,16 @@ describe('extendSelection - Shift+Arrow bug tests', () => {
 // =============================================================================
 // buildExtendUpdate — direct unit tests for the shared helper.
 //
-// Lowest-layer guard: callers that omit the optional activeCell argument keep
-// the anchor-active default used by keyboard extension paths. Viewport-follow
-// tracks the moving edge separately.
+// Lowest-layer guard: callers that omit the optional activeCell argument use
+// the moving-edge default used by Home/Page and edge-jump extension paths.
 // =============================================================================
 
 describe('buildExtendUpdate (range geometry helper)', () => {
-  it('extend down: activeCell stays at the anchor', () => {
+  it('extend down: activeCell follows the moving edge', () => {
     const anchor = { row: 4, col: 1 }; // B5
     const newEnd = { row: 6, col: 1 }; // B7
     const result = buildExtendUpdate(anchor, newEnd);
-    expect(result.activeCell).toEqual(anchor);
+    expect(result.activeCell).toEqual(newEnd);
     expect(result.anchor).toEqual(anchor);
     expect(result.pendingRange).toMatchObject({
       startRow: 4,
@@ -680,29 +679,29 @@ describe('buildExtendUpdate (range geometry helper)', () => {
     expect(result.direction).toBe('down-right');
   });
 
-  it('extend up: activeCell stays at the anchor', () => {
+  it('extend up: activeCell follows the moving edge', () => {
     const anchor = { row: 4, col: 1 }; // B5
     const newEnd = { row: 2, col: 1 }; // B3
     const result = buildExtendUpdate(anchor, newEnd);
-    expect(result.activeCell).toEqual(anchor);
+    expect(result.activeCell).toEqual(newEnd);
     expect(result.anchor).toEqual(anchor);
     expect(result.direction).toBe('up-right');
   });
 
-  it('extend left: activeCell stays at the anchor', () => {
+  it('extend left: activeCell follows the moving edge', () => {
     const anchor = { row: 4, col: 5 }; // F5
     const newEnd = { row: 4, col: 1 }; // B5
     const result = buildExtendUpdate(anchor, newEnd);
-    expect(result.activeCell).toEqual(anchor);
+    expect(result.activeCell).toEqual(newEnd);
     expect(result.anchor).toEqual(anchor);
     expect(result.direction).toBe('down-left');
   });
 
-  it('extend right: activeCell stays at the anchor', () => {
+  it('extend right: activeCell follows the moving edge', () => {
     const anchor = { row: 4, col: 1 }; // B5
     const newEnd = { row: 4, col: 5 }; // F5
     const result = buildExtendUpdate(anchor, newEnd);
-    expect(result.activeCell).toEqual(anchor);
+    expect(result.activeCell).toEqual(newEnd);
     expect(result.anchor).toEqual(anchor);
     expect(result.direction).toBe('down-right');
   });
@@ -722,11 +721,11 @@ describe('buildExtendUpdate (range geometry helper)', () => {
     expect(result.direction).toBe('down-right');
   });
 
-  it('extend diagonally up-left: activeCell stays at the anchor', () => {
+  it('extend diagonally up-left: activeCell follows the moving edge', () => {
     const anchor = { row: 5, col: 5 }; // F6
     const newEnd = { row: 2, col: 1 }; // B3
     const result = buildExtendUpdate(anchor, newEnd);
-    expect(result.activeCell).toEqual(anchor);
+    expect(result.activeCell).toEqual(newEnd);
     expect(result.direction).toBe('up-left');
   });
 });

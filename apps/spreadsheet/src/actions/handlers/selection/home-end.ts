@@ -111,7 +111,13 @@ export const EXTEND_TO_ROW_END: AsyncActionHandler = async (deps) => {
  * Extend selection from anchor to cell A1.
  */
 export const EXTEND_TO_A1: ActionHandler = (deps) => {
-  deps.commands.selection.keyHome(true, true);
+  const activeCell = deps.accessors.selection.getActiveCell();
+  const anchor = deps.accessors.selection.getAnchor();
+  const targetCell: CellCoord = { row: 0, col: 0 };
+  const anchorCell: CellCoord = anchor ?? activeCell;
+  const newRange = rangeFromAnchorAndCell(anchorCell, targetCell);
+
+  deps.commands.selection.setSelection([newRange], targetCell, anchorCell);
   return handled();
 };
 

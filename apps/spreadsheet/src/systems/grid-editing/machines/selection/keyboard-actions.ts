@@ -122,10 +122,10 @@ const moveActiveCell = assign(
 
 /**
  * Extend selection in direction (shift+arrow).
- * In normal Shift+Arrow selection, the anchor stays fixed as the active cell
- * while the moving edge lives in range geometry and the emitted
- * viewport-follow target. Sticky/additive extend modes keep their legacy
- * edge-active behavior for mode bookkeeping.
+ * In normal Shift+Arrow selection, the anchor stays fixed as activeCell while
+ * the moving edge lives in range geometry and the emitted viewport-follow
+ * target. Sticky/additive extend modes keep their legacy edge-active behavior
+ * for mode bookkeeping.
  * getMovingEdge(range, anchor) keeps repeated extends independent from
  * activeCell, so edge-crossing and perpendicular extends remain stable.
  *
@@ -325,7 +325,7 @@ const jumpToEdge = assign(
 /**
  * Extend selection to edge in direction (Ctrl+Shift+Arrow).
  * Fallback implementation for unit tests - extends by JUMP_AMOUNT or to boundary.
- * The anchor stays fixed as activeCell while viewport-follow tracks the moving edge.
+ * The anchor stays fixed while activeCell and viewport-follow track the moving edge.
  */
 const jumpToEdgeExtend = assign(
   ({ context, event }: { context: SelectionContext; event: SelectionEvent }) => {
@@ -417,7 +417,7 @@ const moveToHome = assign(
 /**
  * Shift+Home or Ctrl+Shift+Home: Extend selection to beginning.
  * Shift+Home extends to column 0 on the moving edge's row;
- * Ctrl+Shift+Home extends to A1. activeCell stays at the anchor.
+ * Ctrl+Shift+Home extends to A1. activeCell follows the moving edge.
  */
 const extendToHome = assign(
   ({ context, event }: { context: SelectionContext; event: SelectionEvent }) => {
@@ -461,7 +461,7 @@ const moveToEnd = assign(
  * NOTE: Ctrl+Shift+End is properly handled by KeyboardCoordinator which dispatches
  * EXTEND_TO_LAST_USED_CELL action. This fallback uses MAX constants for safety.
  * Shift+End (without Ctrl) extends to last column of current row.
- * activeCell stays at the anchor.
+ * activeCell follows the moving edge.
  */
 const extendToEnd = assign(
   ({ context, event }: { context: SelectionContext; event: SelectionEvent }) => {

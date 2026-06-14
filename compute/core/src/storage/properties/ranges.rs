@@ -67,6 +67,7 @@ pub fn add_format_range(
         end_row,
         end_col,
     });
+    mirror.rebuild_format_range_spatial_index();
     mirror.range_format_cache.insert(range_id, format);
 }
 
@@ -94,6 +95,7 @@ pub fn remove_format_range(
 
     // Remove from mirror
     mirror.format_ranges.retain(|r| r.id != range_id);
+    mirror.rebuild_format_range_spatial_index();
     mirror.range_format_cache.remove(&range_id);
     mirror.range_xlsx_style_id_cache.remove(&range_id);
 }
@@ -108,6 +110,7 @@ pub fn hydrate_format_ranges(storage: &YrsStorage, sheet_id: &SheetId, mirror: &
     use compute_document::schema::KEY_RANGE_FORMATS;
 
     mirror.format_ranges.clear();
+    mirror.rebuild_format_range_spatial_index();
     mirror.range_format_cache.clear();
     mirror.range_xlsx_style_id_cache.clear();
 
@@ -180,4 +183,5 @@ pub fn hydrate_format_ranges(storage: &YrsStorage, sheet_id: &SheetId, mirror: &
             }
         }
     }
+    mirror.rebuild_format_range_spatial_index();
 }

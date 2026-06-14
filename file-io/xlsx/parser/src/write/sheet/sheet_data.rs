@@ -122,8 +122,7 @@ fn write_row(
     cells: &[CellData],
     authored_style_runs: &[&AuthoredStyleRun],
 ) {
-    let mut authored_style_cells =
-        authored_style_cells_for_row(row_idx, cells, authored_style_runs);
+    let authored_style_cells = authored_style_cells_for_row(row_idx, cells, authored_style_runs);
     if cells.is_empty()
         && authored_style_cells.is_empty()
         && row_def.height.is_none()
@@ -202,14 +201,49 @@ fn write_row(
     } else {
         w.end_attrs();
 
-        let mut row_cells: Vec<CellData> = cells.to_vec();
-        row_cells.append(&mut authored_style_cells);
-        row_cells.sort_by_key(|c| c.col);
-
-        for cell in &row_cells {
-            cell::write_cell(w, cell);
-        }
+        write_ordered_cells(w, cells, &authored_style_cells);
 
         w.end_element("row");
     }
+}
+
+fn write_ordered_cells(w: &mut XmlWriter, cells: &[CellData], authored_style_cells: &[CellData]) {
+    if authored_style_cells.is_empty() && cells_are_sorted_by_col(cells) {
+        for cell in cells {
+            cell::write_cell(w, cell);
+        }
+        return;
+    }
+
+    if !authored_style_cells.is_empty() && cells_are_sorted_by_col(cells) {
+        let mut cell_idx = 0usize;
+        let mut authored_idx = 0usize;
+        while cell_idx < cells.len() || authored_idx < authored_style_cells.len() {
+            if authored_idx >= authored_style_cells.len()
+                || cell_idx < cells.len()
+                    && cells[cell_idx].col <= authored_style_cells[authored_idx].col
+            {
+                cell::write_cell(w, &cells[cell_idx]);
+                cell_idx += 1;
+            } else {
+                cell::write_cell(w, &authored_style_cells[authored_idx]);
+                authored_idx += 1;
+            }
+        }
+        return;
+    }
+
+    let mut row_cells: Vec<&CellData> =
+        Vec::with_capacity(cells.len() + authored_style_cells.len());
+    row_cells.extend(cells.iter());
+    row_cells.extend(authored_style_cells.iter());
+    row_cells.sort_by_key(|cell| cell.col);
+
+    for cell in row_cells {
+        cell::write_cell(w, cell);
+    }
+}
+
+fn cells_are_sorted_by_col(cells: &[CellData]) -> bool {
+    cells.windows(2).all(|pair| pair[0].col <= pair[1].col)
 }

@@ -1,6 +1,6 @@
 //! Core types for the cell mirror.
 
-use cell_types::interval_tree::IntervalTree;
+use cell_types::interval_tree::{IntervalTree, RectLike};
 use cell_types::{CellId, ColId, PayloadEncoding, RangeId, RowId, SheetId, SheetPos};
 use domain_types::CellFormat;
 use formula_types::IdentityFormula;
@@ -20,7 +20,7 @@ use super::range_view::{ColDataState, RangeExtent, RangeView};
 /// Format Ranges sit between row and table. When multiple Format Ranges overlap
 /// at a cell position, they are merged field-by-field with higher `RangeId`
 /// values winning on conflicts (using `merge_formats` semantics).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub(crate) struct FormatRange {
     /// Stable identity for this range.
     pub id: RangeId,
@@ -34,11 +34,25 @@ pub(crate) struct FormatRange {
     pub end_col: u32,
 }
 
-impl FormatRange {
-    /// Check if a cell position falls within this format range.
+impl RectLike for FormatRange {
     #[inline]
-    pub fn contains(&self, row: u32, col: u32) -> bool {
-        row >= self.start_row && row <= self.end_row && col >= self.start_col && col <= self.end_col
+    fn start_row(&self) -> u32 {
+        self.start_row
+    }
+
+    #[inline]
+    fn end_row(&self) -> u32 {
+        self.end_row
+    }
+
+    #[inline]
+    fn start_col(&self) -> u32 {
+        self.start_col
+    }
+
+    #[inline]
+    fn end_col(&self) -> u32 {
+        self.end_col
     }
 }
 
@@ -161,6 +175,7 @@ pub struct SheetMirror {
     /// Spatial index of Format Ranges for this sheet.
     /// Used by the format cascade to find overlapping Format Ranges at a cell position.
     pub(crate) format_ranges: Vec<FormatRange>,
+    pub(crate) format_range_spatial_index: IntervalTree<FormatRange>,
     /// Cached CellFormat per RangeId, populated during hydration from the `rangeFormats` Yrs sub-map.
     pub(crate) range_format_cache: FxHashMap<RangeId, CellFormat>,
     /// Original XLSX cellXfs style id per imported format RangeId.
@@ -199,6 +214,7 @@ impl SheetMirror {
             sparkline_cells: FxHashSet::default(),
             enable_calculation: true,
             format_ranges: Vec::new(),
+            format_range_spatial_index: IntervalTree::new(),
             range_format_cache: FxHashMap::default(),
             range_xlsx_style_id_cache: FxHashMap::default(),
         }
@@ -245,6 +261,7 @@ impl SheetMirror {
             sparkline_cells: FxHashSet::default(),
             enable_calculation: true,
             format_ranges: Vec::new(),
+            format_range_spatial_index: IntervalTree::new(),
             range_format_cache: FxHashMap::default(),
             range_xlsx_style_id_cache: FxHashMap::default(),
         }
@@ -625,14 +642,18 @@ impl SheetMirror {
     /// per-property conflicts.
     pub(crate) fn format_ranges_at(&self, row: u32, col: u32) -> Vec<(RangeId, &CellFormat)> {
         let mut matches: Vec<(RangeId, &CellFormat)> = self
-            .format_ranges
-            .iter()
-            .filter(|r| r.contains(row, col))
+            .format_range_spatial_index
+            .query(row, col)
+            .into_iter()
             .filter_map(|r| self.range_format_cache.get(&r.id).map(|fmt| (r.id, fmt)))
             .collect();
         // Sort by RangeId ascending so we can merge lower-first, higher-wins.
         matches.sort_by_key(|(id, _)| id.as_u128());
         matches
+    }
+
+    pub(crate) fn rebuild_format_range_spatial_index(&mut self) {
+        self.format_range_spatial_index = IntervalTree::build(&self.format_ranges);
     }
 
     /// Get the format ranges spatial index.

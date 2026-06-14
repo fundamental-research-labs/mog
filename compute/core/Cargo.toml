@@ -10,8 +10,15 @@ description = "Native Rust compute engine for spreadsheet formula evaluation"
 
 [features]
 default = ["native"]
-# Native target (desktop via Tauri): includes threading and system clock support
-native = ["dep:rayon", "dep:parking_lot", "dep:dashmap"]
+# Native target (desktop via Tauri): includes threading, system clock support,
+# and parallel XLSX parse/export support.
+native = [
+    "dep:rayon",
+    "dep:parking_lot",
+    "dep:dashmap",
+    "xlsx-api/parallel",
+    "xlsx-parser/parallel",
+]
 # WASM target is implicit via #[cfg(target_arch = "wasm32")] — no explicit feature needed
 # Full Power Query CRUD — gate unwired functions only
 power-query-full = []

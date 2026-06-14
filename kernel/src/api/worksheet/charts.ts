@@ -938,8 +938,10 @@ export class WorksheetChartsImpl implements WorksheetCharts {
   // ===========================================================================
 
   async setTitleFormula(chartId: string, formula: string): Promise<void> {
-    // Store formula as title text. Display value resolution requires compute bridge.
-    await applyUpdate(this.ctx, this.sheetId, chartId, { title: formula });
+    // Keep the formula in the dedicated metadata field. Until chart-title
+    // formula evaluation is available, do not expose the raw formula as
+    // rendered title text.
+    await applyUpdate(this.ctx, this.sheetId, chartId, { title: null, titleFormula: formula });
   }
 
   async getTitleSubstring(

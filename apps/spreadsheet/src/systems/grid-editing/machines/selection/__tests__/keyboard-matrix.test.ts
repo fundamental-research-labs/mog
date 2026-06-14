@@ -89,27 +89,27 @@ describe('Arrow key movement (moveActiveCell)', () => {
     },
   );
 
-  describe('Arrow keys collapse multi-cell selection to directional edge', () => {
+  describe('Arrow keys collapse multi-cell selection after stepping from active cell', () => {
     it.each([
       {
         direction: 'up' as const,
-        expected: { row: 0, col: 2 },
-        desc: 'top edge, same active column',
+        expected: { row: 1, col: 2 },
+        desc: 'one row up from active cell',
       },
       {
         direction: 'down' as const,
-        expected: { row: 4, col: 2 },
-        desc: 'bottom edge, same active column',
+        expected: { row: 3, col: 2 },
+        desc: 'one row down from active cell',
       },
       {
         direction: 'left' as const,
-        expected: { row: 2, col: 0 },
-        desc: 'left edge, same active row',
+        expected: { row: 2, col: 1 },
+        desc: 'one column left from active cell',
       },
       {
         direction: 'right' as const,
-        expected: { row: 2, col: 4 },
-        desc: 'right edge, same active row',
+        expected: { row: 2, col: 3 },
+        desc: 'one column right from active cell',
       },
     ])(
       '$direction from A1:E5 (activeCell C3) - $desc',

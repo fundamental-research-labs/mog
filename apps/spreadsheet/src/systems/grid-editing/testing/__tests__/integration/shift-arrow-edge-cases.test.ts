@@ -115,11 +115,11 @@ describe('Extend then collapse then re-extend', () => {
       endCol: 1,
     });
 
-    // Plain ArrowDown collapses — should go to bottom edge (row 5)
+    // Plain ArrowDown steps one row from the active cell and collapses there.
     sim.pressKey('ArrowDown');
 
     const collapsedCell = sim.activeCell();
-    expect(collapsedCell).toEqual({ row: 5, col: 1 });
+    expect(collapsedCell).toEqual({ row: 3, col: 1 });
     ranges = sim.selectionRanges();
     expect(ranges[0].startRow).toBe(ranges[0].endRow);
     expect(ranges[0].startCol).toBe(ranges[0].endCol);
@@ -130,15 +130,15 @@ describe('Extend then collapse then re-extend', () => {
     ranges = sim.selectionRanges();
     expect(ranges).toHaveLength(1);
     expect(ranges[0]).toMatchObject({
-      startRow: 5,
+      startRow: 3,
       startCol: 1,
-      endRow: 6,
+      endRow: 4,
       endCol: 1,
     });
 
     // Anchor should be at the collapsed position
     const anchor = sim.anchor();
-    expect(anchor).toEqual({ row: 5, col: 1 });
+    expect(anchor).toEqual({ row: 3, col: 1 });
   });
 });
 
@@ -405,7 +405,7 @@ describe('Shift+Arrow after large selection reset', () => {
     expect(ranges[0].endRow).toBe(10);
     expect(ranges[0].endCol).toBe(5);
 
-    // Collapse via plain ArrowDown (goes to bottom-left)
+    // Collapse via plain ArrowDown (steps down from the active cell)
     sim.pressKey('ArrowDown');
 
     // Should be single cell now

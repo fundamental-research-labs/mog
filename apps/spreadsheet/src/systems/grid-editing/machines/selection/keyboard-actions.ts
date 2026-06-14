@@ -69,38 +69,8 @@ const moveActiveCell = assign(
   ({ context, event }: { context: SelectionContext; event: SelectionEvent }) => {
     if (event.type !== 'KEY_ARROW') return {};
 
-    const normalizedRange = normalizeRange(context.pendingRange);
-    const hasMultiCellPendingRange =
-      normalizedRange.startRow !== normalizedRange.endRow ||
-      normalizedRange.startCol !== normalizedRange.endCol;
-
-    if (!context.modes.additive && hasMultiCellPendingRange) {
-      const activeRow = Math.min(
-        Math.max(context.activeCell.row, normalizedRange.startRow),
-        normalizedRange.endRow,
-      );
-      const activeCol = Math.min(
-        Math.max(context.activeCell.col, normalizedRange.startCol),
-        normalizedRange.endCol,
-      );
-      const collapsed =
-        event.direction === 'up'
-          ? { row: normalizedRange.startRow, col: activeCol }
-          : event.direction === 'down'
-            ? { row: normalizedRange.endRow, col: activeCol }
-            : event.direction === 'left'
-              ? { row: activeRow, col: normalizedRange.startCol }
-              : { row: activeRow, col: normalizedRange.endCol };
-      const newCell = resolveActiveCellArrowMove(
-        context.activeCell,
-        collapsed,
-        event.direction,
-        context.getMergedRegionAt,
-      );
-      return moveTo(newCell);
-    }
-
-    // Single-cell plain arrows move one visible cell from the active cell.
+    // Plain arrows move one visible cell from the active cell. If a multi-cell
+    // range is selected, the range collapses at that destination.
     const stepped = moveCellSkipHidden(
       context.activeCell,
       event.direction,

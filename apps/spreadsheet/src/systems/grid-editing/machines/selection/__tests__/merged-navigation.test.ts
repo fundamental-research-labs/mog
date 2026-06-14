@@ -106,21 +106,21 @@ describe('Arrow Keys - Basic Navigation (Machine Level)', () => {
     expect(result.pendingRange).toEqual(range(1, 0, 1, 0));
   });
 
-  it('moveActiveCell collapses a multi-cell selection to the directional edge', () => {
+  it('moveActiveCell collapses a multi-cell selection after stepping from active cell', () => {
     const context = createContext({
       activeCell: cell(2, 2), // C3
       pendingRange: range(0, 0, 4, 4), // A1:E5
     });
 
-    // Right arrow collapses to the right edge at the active row.
+    // Right arrow steps one cell from the active cell and collapses there.
     const result = callAction('moveActiveCell', context, {
       type: 'KEY_ARROW',
       direction: 'right',
       shiftKey: false,
     });
 
-    expect(result.activeCell).toEqual(cell(2, 4)); // E3
-    expect(result.pendingRange).toEqual(range(2, 4, 2, 4)); // Single cell at E3
+    expect(result.activeCell).toEqual(cell(2, 3)); // D3
+    expect(result.pendingRange).toEqual(range(2, 3, 2, 3)); // Single cell at D3
   });
 });
 

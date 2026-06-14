@@ -253,7 +253,7 @@ describe('Tab cycling with hidden rows in selection', () => {
 // =============================================================================
 
 describe('Shift+Arrow extend then collapse with hidden rows', () => {
-  it('extends down through hidden rows, then collapses to bottom edge', () => {
+  it('extends down through hidden rows, then steps from active cell to collapse', () => {
     sim = createIntegrationSimulator({
       hiddenRows: [2, 3],
       activeCell: { row: 1, col: 0 },
@@ -279,10 +279,10 @@ describe('Shift+Arrow extend then collapse with hidden rows', () => {
     // Active cell is at row 1 (the anchor)
     expect(sim.activeCell()).toEqual({ row: 1, col: 0 });
 
-    // Plain ArrowDown to collapse: collapses to bottom edge (row 6)
+    // Plain ArrowDown steps from the active cell, skipping hidden rows.
     sim.pressKey('ArrowDown');
 
-    expect(sim.activeCell()).toEqual({ row: 6, col: 0 });
+    expect(sim.activeCell()).toEqual({ row: 4, col: 0 });
     ranges = sim.selectionRanges();
     // Should be single-cell selection
     expect(ranges[0].startRow).toBe(ranges[0].endRow);

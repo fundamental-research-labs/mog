@@ -138,7 +138,7 @@ describe('Shift+Arrow through merged regions', () => {
     });
   });
 
-  it('plain ArrowDown after extending back out of a merge collapses to the bottom edge', () => {
+  it('plain ArrowDown after extending back out of a merge steps from active cell', () => {
     sim = createIntegrationSimulator({
       merges: [{ startRow: 2, startCol: 0, endRow: 3, endCol: 1 }],
       activeCell: { row: 0, col: 0 },

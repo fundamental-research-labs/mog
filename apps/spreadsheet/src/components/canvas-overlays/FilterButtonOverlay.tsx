@@ -16,13 +16,18 @@
  * @module @mog/spreadsheet/components/canvas-overlays
  */
 
-import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 import type { InteractiveElementInfo } from '@mog-sdk/sheet-view';
 import { FilterDropdownContent } from '../filter/FilterDropdownContent';
 import { Popover, PopoverContent, PopoverTrigger } from '@mog/shell/components/ui';
 
 type FilterButtonElement = Extract<InteractiveElementInfo, { type: 'filter-button' }>;
+
+const FILTER_POPOVER_MAX_HEIGHT = 620;
+const FILTER_POPOVER_MIN_HEIGHT = 180;
+const FILTER_POPOVER_VIEWPORT_MARGIN = 8;
+const FILTER_POPOVER_DEFAULT_HEIGHT = 'min(620px, calc(100vh - 24px))';
 
 interface FilterButtonOverlayProps {
   element: FilterButtonElement;
@@ -45,6 +50,8 @@ export const FilterButtonOverlay = memo(function FilterButtonOverlay({
   // Controlled popover state - we manage open/close to pass onClose to content
   const [isOpen, setIsOpen] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const [popoverHeight, setPopoverHeight] = useState<string>(FILTER_POPOVER_DEFAULT_HEIGHT);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
   const dragStateRef = useRef<{
     pointerId: number;
     startClientX: number;
@@ -53,12 +60,15 @@ export const FilterButtonOverlay = memo(function FilterButtonOverlay({
     originY: number;
     baseLeft: number;
     baseTop: number;
+    width: number;
+    height: number;
   } | null>(null);
   const stopDragTrackingRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     if (!isOpen) {
       setDragOffset({ x: 0, y: 0 });
+      setPopoverHeight(FILTER_POPOVER_DEFAULT_HEIGHT);
       dragStateRef.current = null;
       stopDragTrackingRef.current?.();
       stopDragTrackingRef.current = null;
@@ -70,6 +80,71 @@ export const FilterButtonOverlay = memo(function FilterButtonOverlay({
       stopDragTrackingRef.current?.();
     };
   }, []);
+
+  useLayoutEffect(() => {
+    if (!isOpen) return;
+
+    let disposed = false;
+    let frame: number | null = null;
+
+    const measure = () => {
+      if (disposed) return;
+
+      // Keep the fixed-height flex layout, but cap it to the visible grid viewport.
+      const node = Array.from(
+        document.querySelectorAll<HTMLElement>('[data-testid="filter-dropdown-popover"]'),
+      ).find((candidate) => {
+        const style = window.getComputedStyle(candidate);
+        return (
+          style.display !== 'none' &&
+          style.visibility !== 'hidden' &&
+          candidate.getBoundingClientRect().width > 0 &&
+          candidate.getBoundingClientRect().height > 0
+        );
+      });
+      if (!node) return;
+
+      const rect = node.getBoundingClientRect();
+      const overlayBottom = triggerRef.current?.parentElement?.getBoundingClientRect().bottom;
+      const boundaryBottom = Math.min(
+        overlayBottom ?? window.innerHeight,
+        window.innerHeight,
+      );
+      const available = boundaryBottom - FILTER_POPOVER_VIEWPORT_MARGIN - rect.top;
+      const nextHeight = Math.floor(
+        Math.min(
+          FILTER_POPOVER_MAX_HEIGHT,
+          Math.max(FILTER_POPOVER_MIN_HEIGHT, available),
+        ),
+      );
+
+      setPopoverHeight((current) => {
+        const next = `${nextHeight}px`;
+        return current === next ? current : next;
+      });
+    };
+
+    const scheduleMeasure = () => {
+      if (frame !== null) {
+        window.cancelAnimationFrame(frame);
+      }
+      frame = window.requestAnimationFrame(() => {
+        measure();
+        frame = window.requestAnimationFrame(measure);
+      });
+    };
+
+    scheduleMeasure();
+    window.addEventListener('resize', scheduleMeasure);
+
+    return () => {
+      disposed = true;
+      if (frame !== null) {
+        window.cancelAnimationFrame(frame);
+      }
+      window.removeEventListener('resize', scheduleMeasure);
+    };
+  }, [isOpen, metadata.filterId, metadata.headerCellId, triggerLeft, triggerTop, triggerSize]);
 
   // Close handler passed to FilterDropdownContent
   const handleClose = useCallback(() => {
@@ -85,10 +160,12 @@ export const FilterButtonOverlay = memo(function FilterButtonOverlay({
     const unclampedY = drag.originY + event.clientY - drag.startClientY;
     const minX = margin - drag.baseLeft;
     const minY = margin - drag.baseTop;
+    const maxX = Math.max(minX, window.innerWidth - margin - drag.baseLeft - drag.width);
+    const maxY = Math.max(minY, window.innerHeight - margin - drag.baseTop - drag.height);
 
     setDragOffset({
-      x: Math.max(unclampedX, minX),
-      y: Math.max(unclampedY, minY),
+      x: Math.min(Math.max(unclampedX, minX), maxX),
+      y: Math.min(Math.max(unclampedY, minY), maxY),
     });
   }, []);
 
@@ -112,6 +189,8 @@ export const FilterButtonOverlay = memo(function FilterButtonOverlay({
         originY: dragOffset.y,
         baseLeft: rect ? rect.left - dragOffset.x : 0,
         baseTop: rect ? rect.top - dragOffset.y : 0,
+        width: rect?.width ?? 0,
+        height: rect?.height ?? 0,
       };
 
       const stopTracking = () => {
@@ -184,6 +263,7 @@ export const FilterButtonOverlay = memo(function FilterButtonOverlay({
     <Popover open={isOpen} onOpenChange={setIsOpen}>
       <PopoverTrigger asChild>
         <button
+          ref={triggerRef}
           type="button"
           style={{
             position: 'absolute',
@@ -216,11 +296,10 @@ export const FilterButtonOverlay = memo(function FilterButtonOverlay({
         className="flex flex-col p-0 overflow-hidden"
         style={{
           width: '280px',
-          height: 'min(620px, calc(100vh - 24px))',
-          maxHeight: 'calc(100vh - 24px)',
+          height: popoverHeight,
+          maxHeight: popoverHeight,
           translate: `${dragOffset.x}px ${dragOffset.y}px`,
         }}
-        avoidCollisions={false}
         disableScrollConstraints
         data-no-grid-pointer="true"
         data-testid="filter-dropdown-popover"

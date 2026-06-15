@@ -209,7 +209,10 @@ pub(super) fn create_subtotals(
         end_col,
         options,
     })? {
-        MutationOutput::Recalc(result) => Ok((empty_viewport_patches(), result)),
+        MutationOutput::Recalc(result) => {
+            engine.mutation.pending_recalc = None;
+            Ok((engine.produce_full_viewport_patches(sheet_id), result))
+        }
         _ => Ok((empty_viewport_patches(), MutationResult::empty())),
     }
 }
@@ -227,7 +230,10 @@ pub(super) fn remove_subtotals(
     let sheets_map = doc.get_or_insert_map("sheets");
     let mut accessor = EngineSubtotalAccessor { engine };
     grouping::remove_subtotals(&doc, &sheets_map, &mut accessor, sheet_id, &range);
-    Ok((empty_viewport_patches(), MutationResult::empty()))
+    Ok((
+        engine.produce_full_viewport_patches(sheet_id),
+        MutationResult::empty(),
+    ))
 }
 
 pub(super) fn auto_outline(

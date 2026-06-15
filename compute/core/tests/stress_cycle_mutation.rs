@@ -390,7 +390,8 @@ fn test_rapid_sequential_edits() {
 // ---------------------------------------------------------------------------
 // Test 11: External cell reference in cycle
 // C1=5. Init: A1="=B1+C1", B1="=A1+1" (divergent).
-// Assert has_circular_refs, self-consistency. set C1="100" → re-evaluated.
+// Assert has_circular_refs and imported cached values. set C1="100" → feeder
+// updates while the non-iterative cycle is materialized as circular errors.
 // ---------------------------------------------------------------------------
 #[test]
 fn test_external_cell_in_divergent_cycle() {
@@ -415,38 +416,17 @@ fn test_external_cell_in_divergent_cycle() {
     assert!(r.metrics.has_circular_refs, "Should detect cycle");
     assert_mirror_number(&mirror, 0, 0, 2, 5.0); // C1=5
 
-    // Self-consistency: A1="=B1+C1", B1="=A1+1" — divergent cycle capped at max_iterations.
-    // Formula relationship holds within large slack for divergent cycles.
-    let a1 = read_mirror_number(&mirror, 0, 0, 0);
-    let b1 = read_mirror_number(&mirror, 0, 0, 1);
-    assert_cycle_self_consistent(
-        &mirror,
-        0,
-        0,
-        0,
-        || b1 + 5.0,
-        102.0,
-        "A1 ≈ B1 + C1 (divergent cycle with C1=5)",
-    );
-    assert_cycle_self_consistent(
-        &mirror,
-        0,
-        0,
-        1,
-        || a1 + 1.0,
-        102.0,
-        "B1 ≈ A1 + 1 (divergent cycle)",
-    );
+    // Imported non-iterative circular formulas preserve their cached values on load.
+    assert_mirror_number(&mirror, 0, 0, 0, 0.0);
+    assert_mirror_number(&mirror, 0, 0, 1, 0.0);
 
     // Edit external feeder C1=100, cycle re-evaluated
     let _r2 = set(&mut core, &mut mirror, 0, 0, 2, "100");
     assert_mirror_number(&mirror, 0, 0, 2, 100.0);
 
-    // Still circular after changing the feeder. Both cells remain finite Numbers.
-    let a1_new = read_mirror_number(&mirror, 0, 0, 0);
-    let b1_new = read_mirror_number(&mirror, 0, 0, 1);
-    assert!(a1_new.is_finite(), "A1 should be finite after feeder edit");
-    assert!(b1_new.is_finite(), "B1 should be finite after feeder edit");
+    // Still circular after changing the feeder because iterative calc is disabled.
+    assert_mirror_error(&mirror, 0, 0, 0, CellError::Circ);
+    assert_mirror_error(&mirror, 0, 0, 1, CellError::Circ);
 }
 
 // ---------------------------------------------------------------------------

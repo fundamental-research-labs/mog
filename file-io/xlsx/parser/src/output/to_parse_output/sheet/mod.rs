@@ -35,6 +35,11 @@ fn col_style_range_at(ranges: &[ColStyleRange], col: u32) -> Option<u32> {
         .map(|range| range.style_id)
 }
 
+fn should_materialize_col_dimension(cw: &ooxml_types::worksheet::ColWidth) -> bool {
+    const EXCEL_MAX_COL_1_BASED: u32 = 16_384;
+    cw.max < EXCEL_MAX_COL_1_BASED || cw.min == cw.max
+}
+
 fn authored_run_repeats_positional_default(
     run: &AuthoredStyleRun,
     row_styles: &std::collections::HashMap<u32, u32>,
@@ -141,7 +146,12 @@ pub(super) fn convert_sheet(
         !authored_run_repeats_positional_default(run, &row_style_lookup, &col_style_ranges)
     });
     // --- Dimensions ---
-    let (rows, cols) = compute_sheet_extent(sheet);
+    let (rows, mut cols) = compute_sheet_extent(sheet);
+    for cw in &sheet.col_widths {
+        if should_materialize_col_dimension(cw) {
+            cols = cols.max(cw.max);
+        }
+    }
 
     let mut row_heights: Vec<RowDimension> = sheet
         .row_heights

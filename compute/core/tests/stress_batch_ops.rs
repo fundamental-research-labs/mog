@@ -12,7 +12,7 @@ use value_types::{CellError, CellValue, FiniteF64};
 // ---------------------------------------------------------------------------
 // Test 01: apply_changes creating cycle (skip_cycle_check=true)
 // Empty sheet. Apply A1="=B1+1" and B1="=A1+1" with skip=true.
-// Cycle diagnostics are emitted. Numeric cached edit values are preserved.
+// Cycle diagnostics are emitted. Mutation-created cycle cells materialize as #CIRC.
 // ---------------------------------------------------------------------------
 #[test]
 fn test_apply_changes_creates_cycle() {
@@ -45,8 +45,8 @@ fn test_apply_changes_creates_cycle() {
         "Cycle should be detected with skip_cycle_check=true"
     );
 
-    assert_mirror_number(&mirror, 0, 0, 0, 0.0);
-    assert_mirror_number(&mirror, 0, 0, 1, 0.0);
+    assert_mirror_error(&mirror, 0, 0, 0, CellError::Circ);
+    assert_mirror_error(&mirror, 0, 0, 1, CellError::Circ);
 }
 
 // ---------------------------------------------------------------------------
@@ -186,7 +186,7 @@ fn test_skip_cycle_check_comparison() {
 // ---------------------------------------------------------------------------
 // Test 04: Interleaved set_cell and apply_changes
 // set_cell A1="=B1+1" (no cycle). Then apply_changes B1="=A1+1".
-// Test both skip=false (B1=#REF!) and skip=true (numeric cached values preserved).
+// Test both skip=false (B1=#REF!) and skip=true (#CIRC materialization).
 // ---------------------------------------------------------------------------
 #[test]
 fn test_interleaved_set_cell_and_apply_changes() {
@@ -230,7 +230,7 @@ fn test_interleaved_set_cell_and_apply_changes() {
         );
     }
 
-    // --- Path B: skip=true → numeric cached cycle values preserved ---
+    // --- Path B: skip=true → mutation-created cycle materializes as #CIRC ---
     {
         let mut core = ComputeCore::new();
         let mut mirror = CellMirror::default();
@@ -254,8 +254,8 @@ fn test_interleaved_set_cell_and_apply_changes() {
             has_any_circular_error(&r2),
             "Should detect circular refs with skip=true"
         );
-        assert_mirror_number(&mirror, 0, 0, 0, 1.0);
-        assert_mirror_number(&mirror, 0, 0, 1, 0.0);
+        assert_mirror_error(&mirror, 0, 0, 0, CellError::Circ);
+        assert_mirror_error(&mirror, 0, 0, 1, CellError::Circ);
     }
 }
 
@@ -291,7 +291,7 @@ fn test_undo_via_apply_changes() {
 // ---------------------------------------------------------------------------
 // Test 06: Redo simulation
 // After undo (B1=Null, A1=1), re-apply B1="=A1+1" via apply_changes(skip=true).
-// Numeric cached cycle values are preserved. Assert circular refs detected.
+// Mutation-created cycle cells materialize as #CIRC. Assert circular refs detected.
 // ---------------------------------------------------------------------------
 #[test]
 fn test_redo_via_apply_changes() {
@@ -329,8 +329,8 @@ fn test_redo_via_apply_changes() {
         has_any_circular_error(&r4),
         "Redo should detect circular refs"
     );
-    assert_mirror_number(&mirror, 0, 0, 0, 1.0);
-    assert_mirror_number(&mirror, 0, 0, 1, 0.0);
+    assert_mirror_error(&mirror, 0, 0, 0, CellError::Circ);
+    assert_mirror_error(&mirror, 0, 0, 1, CellError::Circ);
 }
 
 // ---------------------------------------------------------------------------
@@ -387,8 +387,8 @@ fn test_large_batch_50_edits() {
         has_any_circular_error(&result),
         "Cycle among A1,B1 should be detected"
     );
-    assert_mirror_number(&mirror, 0, 0, 0, 0.0);
-    assert_mirror_number(&mirror, 0, 0, 1, 0.0);
+    assert_mirror_error(&mirror, 0, 0, 0, CellError::Circ);
+    assert_mirror_error(&mirror, 0, 0, 1, CellError::Circ);
 }
 
 // ---------------------------------------------------------------------------

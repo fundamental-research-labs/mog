@@ -325,11 +325,10 @@ fn insert_cols_with_cf_emits_full_viewport_patches() {
     );
 }
 
-/// Sheets without CF formats still take the incremental patch path. This
-/// is important — the full-rebuild cost should only be paid when CF
-/// actually needs re-evaluation. (The test asserts the patch is non-empty
-/// because structural patches still emit values for moved cells; we
-/// don't assert the exact size since either path is valid here.)
+/// Sheets without CF formats still take the structural-result path. This is
+/// important: the full-rebuild cost should only be paid when CF actually needs
+/// re-evaluation. The bridge consumes the structure change result to refresh
+/// shifted viewport buffers, so there may be no binary viewport patch payload.
 #[test]
 fn insert_rows_without_cf_falls_back_to_incremental_patches() {
     use formula_types::StructureChange;
@@ -349,12 +348,7 @@ fn insert_rows_without_cf_falls_back_to_incremental_patches() {
     let (patches, _) = engine
         .structure_change(&sid, &change)
         .expect("structure_change");
-    assert_eq!(viewport_count(&patches), 1);
-    // Either path emits a header; the structural-patch path emits a
-    // mutation-result-for-viewport blob (header + patches); the CF-rebuild
-    // path emits a full viewport binary. Both are larger than the empty
-    // sentinel (16-byte header at minimum).
-    assert!(first_viewport_payload_size(&patches) > 0);
+    assert_eq!(viewport_count(&patches), 0);
 }
 
 /// filter viewport finding 13: typed CF priority bumping in `add_cf_rule`

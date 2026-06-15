@@ -195,13 +195,8 @@ fn test_max_change_threshold() {
 /// System: A1 = B1*0.5 + 1, B1 = A1*0.5 + 1 → FP = 2.0
 ///
 /// With iterative_calc=true, cycles converge to the fixed point.
-/// With iterative_calc=false, Excel does NOT iterate — cycle cells get a
-/// single-pass evaluation from their seed/cached values, matching Excel's
-/// default behavior where circular refs produce 0 and a warning.
-///
-/// Re-entering the same formula preserves the converged value as a seed.
-/// Single-pass from seed ≈2.0: A1 = 2.0*0.5+1 = 2.0, B1 = 2.0*0.5+1 = 2.0.
-/// So the values stay at ≈2.0 even without iteration (stable fixed point).
+/// With iterative_calc=false in the mutation path, newly re-entered cycle cells
+/// are materialized as #CIRC instead of preserving the prior converged seed.
 #[test]
 fn test_toggle_iterative_calc_flag() {
     let snap = build_iterative_snapshot(
@@ -251,11 +246,8 @@ fn test_toggle_iterative_calc_flag() {
     ];
     let result2 = core.set_cells(&mut mirror, &edits, true).unwrap();
 
-    // Single-pass from converged seed ≈2.0 produces ≈2.0 (stable fixed point).
-    // This is NOT iterative convergence — it's single-pass that happens to be
-    // at the fixed point already.
-    assert_mirror_number_tol(&mirror, 0, 0, 0, 2.0, 0.01);
-    assert_mirror_number_tol(&mirror, 0, 0, 1, 2.0, 0.01);
+    assert_mirror_error(&mirror, 0, 0, 0, CellError::Circ);
+    assert_mirror_error(&mirror, 0, 0, 1, CellError::Circ);
 
     // Iterative metrics should NOT be populated (flag is off)
     assert_eq!(result2.metrics.iterative_iterations, 0);

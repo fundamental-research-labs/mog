@@ -3,7 +3,6 @@ use super::super::construction;
 use super::super::services;
 use crate::snapshot::{FloatingObjectChange, MutationResult, RecalcResult};
 use cell_types::SheetId;
-use compute_wire::mutation::serialize_multi_viewport_patches;
 use formula_types::StructureChange;
 use value_types::ComputeError;
 
@@ -91,16 +90,16 @@ impl YrsComputeEngine {
         // CF re-eval through structural mutations (filter viewport finding 10):
         // row/column Insert/Delete shifts CF target ranges, while the
         // incremental recalc patch path only covers `recalc.changed_cells`.
-        // Refresh the CF cache at the new positions before returning so the
-        // bridge-level force refresh reads fresh formatting. Partial cell
-        // shifts do not emit a StructureChangeResult, so they still use the
-        // full-viewport patch path when CF is active.
+        // Refresh the CF cache at the new positions and return a full viewport
+        // rebuild when CF is active. Incremental recalc patches only cover
+        // value changes, while structural shifts can move unchanged cells into
+        // or out of a CF range.
         self.prepare_recalc_for_flush(&mut recalc);
         let cf_active = !services::formatting::get_all_cf_rules(&self.stores, sheet_id).is_empty();
         if cf_active {
             self.refresh_cf_cache(sheet_id);
         }
-        let patches = if cf_active && needs_explicit_shift_patches {
+        let patches = if cf_active {
             // Discard the pending incremental recalc — the full-viewport
             // rebuild below subsumes it.
             self.mutation.pending_recalc = None;

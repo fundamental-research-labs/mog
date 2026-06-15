@@ -519,14 +519,22 @@ fn export_single_sheet(
             (None, None, Vec::new(), None, None)
         }
     };
-    let rows = stored_rows.unwrap_or(100).max(max_row);
-    let cols = stored_cols.unwrap_or(26).max(data_max_col);
-
     let dims_max_row = sheet_dimensions
         .row_heights
         .last()
         .map(|rh| rh.row + 1)
         .unwrap_or(0);
+    let dims_max_col = sheet_dimensions
+        .col_widths
+        .last()
+        .map(|cw| cw.col + 1)
+        .unwrap_or(0);
+    let rows = stored_rows.unwrap_or(100).max(max_row).max(dims_max_row);
+    let cols = stored_cols
+        .unwrap_or(26)
+        .max(data_max_col)
+        .max(dims_max_col);
+
     let max_materialized_row_for_styles = stores
         .grid_indexes
         .get(sheet_id)

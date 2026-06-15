@@ -50,7 +50,7 @@ const browserRoot = resolve(runtimeRoot, 'browser');
 declare const MOG_PLUGIN_VERSION: string | undefined;
 declare const MOG_WASM_PACKAGE_BASE_URL: string | undefined;
 
-const pluginVersion = typeof MOG_PLUGIN_VERSION === 'string' ? MOG_PLUGIN_VERSION : '0.9.3';
+const pluginVersion = typeof MOG_PLUGIN_VERSION === 'string' ? MOG_PLUGIN_VERSION : '0.9.4';
 const wasmPackageBaseUrl =
   typeof MOG_WASM_PACKAGE_BASE_URL === 'string'
     ? MOG_WASM_PACKAGE_BASE_URL

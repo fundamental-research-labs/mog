@@ -48,8 +48,8 @@ var hostServer = null;
 var hostPort = null;
 var runtimeRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 var browserRoot = resolve(runtimeRoot, "browser");
-var pluginVersion = true ? "0.9.3" : "0.9.3";
-var wasmPackageBaseUrl = true ? "https://cdn.jsdelivr.net/npm/@mog-sdk/wasm@0.9.3/" : `https://cdn.jsdelivr.net/npm/@mog-sdk/wasm@${pluginVersion}/`;
+var pluginVersion = true ? "0.9.4" : "0.9.4";
+var wasmPackageBaseUrl = true ? "https://cdn.jsdelivr.net/npm/@mog-sdk/wasm@0.9.4/" : `https://cdn.jsdelivr.net/npm/@mog-sdk/wasm@${pluginVersion}/`;
 function randomToken() {
   return randomBytes(32).toString("base64url");
 }

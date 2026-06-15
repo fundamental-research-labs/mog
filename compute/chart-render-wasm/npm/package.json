@@ -1,6 +1,6 @@
 {
   "name": "@mog-sdk/chart-raster-wasm",
-  "version": "0.9.3",
+  "version": "0.9.4",
   "description": "Mog chart raster backend for browsers, edge runtimes, and headless WASM hosts",
   "type": "module",
   "main": "compute_chart_render_wasm.js",

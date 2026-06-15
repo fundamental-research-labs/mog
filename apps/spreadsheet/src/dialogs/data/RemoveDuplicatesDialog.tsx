@@ -28,6 +28,7 @@ import type { CellRange } from '@mog-sdk/contracts/core';
 import { colToLetter } from '@mog/spreadsheet-utils/a1';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useUIStore } from '../../internal-api';
+import { trackDialogAction } from '../dialog-action-scheduler';
 
 /** Options for removing duplicate rows. */
 export interface RemoveDuplicatesOptions {
@@ -138,7 +139,7 @@ export function RemoveDuplicatesDialog({
       caseSensitive,
     };
 
-    const removeResult = await onRemove(options);
+    const removeResult = await trackDialogAction(() => onRemove(options));
     setResult(removeResult);
 
     // Close dialog after showing result briefly if no duplicates found

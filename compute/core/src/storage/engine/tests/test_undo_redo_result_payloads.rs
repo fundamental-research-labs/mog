@@ -156,6 +156,61 @@ fn test_undo_col_format_produces_viewport_patches() {
 }
 
 #[test]
+fn test_undo_structural_replay_provides_viewport_refresh_contract() {
+    use formula_types::StructureChange;
+
+    let snap = simple_snapshot();
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let sid = sheet_id();
+
+    engine
+        .register_viewport("main", &sid, 0, 0, 3, 2)
+        .expect("register viewport");
+
+    engine
+        .structure_change(
+            &sid,
+            &StructureChange::InsertRows {
+                at: 1,
+                count: 1,
+                new_row_ids: vec![],
+            },
+        )
+        .expect("insert row");
+
+    assert_eq!(cell_value_at(&engine, &sid, 2, 0), num(30.0));
+
+    let (patches, result) = engine.undo().expect("undo row insert");
+
+    assert_eq!(cell_value_at(&engine, &sid, 1, 0), num(30.0));
+    assert!(
+        patches.len() > 2 || !result.structure_changes.is_empty(),
+        "structural undo replay must either patch shifted viewport cells or emit structure_changes for bridge refresh; patches={} structure_changes={:?}",
+        patches.len(),
+        result.structure_changes
+    );
+
+    if patches.len() > 2 {
+        let mutation = extract_first_viewport_mutation(&patches).expect("viewport mutation");
+        let positions = extract_patch_positions(&mutation);
+        assert!(
+            positions.contains(&(1, 0)),
+            "undo patches must include the restored A2 position; got {positions:?}"
+        );
+    }
+
+    let (redo_patches, redo_result) = engine.redo().expect("redo row insert");
+
+    assert_eq!(cell_value_at(&engine, &sid, 2, 0), num(30.0));
+    assert!(
+        redo_patches.len() > 2 || !redo_result.structure_changes.is_empty(),
+        "structural redo replay must either patch shifted viewport cells or emit structure_changes for bridge refresh; patches={} structure_changes={:?}",
+        redo_patches.len(),
+        redo_result.structure_changes
+    );
+}
+
+#[test]
 fn test_undo_row_height_produces_dimension_changes() {
     let snap = simple_snapshot();
     let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();

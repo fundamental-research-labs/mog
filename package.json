@@ -18,7 +18,7 @@
     "check:ci:typecheck": "pnpm typecheck",
     "check:ci:public-boundaries": "pnpm validate:packages && pnpm check:private-leaks && pnpm check:codex-plugin && pnpm lint:boundaries && pnpm check:platform-dependencies && pnpm check-cycles && pnpm check:host-surface-disposition",
     "check:private-leaks": "node tools/check-private-leaks.mjs",
-    "check:codex-plugin": "pnpm --dir integrations/codex build && pnpm --dir integrations/codex validate-plugin:dist",
+    "check:codex-plugin": "pnpm --filter @mog-sdk/spreadsheet-app build && pnpm --dir integrations/codex build && pnpm --dir integrations/codex validate-plugin:dist",
     "check:publish-readiness": "pnpm check:ci:format && pnpm check:ci:public-boundaries && pnpm build:public-artifacts && pnpm check:release-readiness-naming && pnpm check:release-version-metadata && pnpm check:binary-wrapper-surfaces && pnpm check:contracts-declaration-identity && pnpm check:declaration-rollups && pnpm check:api-snapshots && node tools/verify-sdk-publish.mjs && pnpm check:external-fixtures -- --skip-build",
     "check:publish-readiness:fast": "pnpm check:ci:public-boundaries && pnpm check:release-readiness-naming && pnpm check:release-version-metadata",
     "check:publish-readiness:public": "pnpm check:ci:public-boundaries",
@@ -82,6 +82,7 @@
     "madge": "^8.0.0",
     "prettier": "^3.8.1",
     "ts-morph": "^24.0.0",
+    "typescript": "^5.7.0",
     "tsx": "^4.19.0",
     "ws": "^8.20.0"
   }

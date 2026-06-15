@@ -113,7 +113,13 @@ describe('font style formatting actions', () => {
     const range: CellRange = { startRow: 500, startCol: 0, endRow: 500, endCol: 0 };
     const { deps, worksheet, calls } = createMockDeps([range], {
       displayText: null,
-      viewportBounds: { sheetId: activeSheetId, startRow: 0, startCol: 0, endRow: 100, endCol: 100 },
+      viewportBounds: {
+        sheetId: activeSheetId,
+        startRow: 0,
+        startCol: 0,
+        endRow: 100,
+        endCol: 100,
+      },
     });
 
     const result = await SET_FONT_SIZE(deps, { size: 24 });

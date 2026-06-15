@@ -50,13 +50,7 @@ describe('WorksheetStructureImpl merge operations', () => {
     const result = await structure.unmerge('A1:B2');
 
     expect(ctx.writeGate.assertWritable).toHaveBeenCalledWith('structure.unmerge');
-    expect(ctx.computeBridge.getMergesInViewportSpatial).toHaveBeenCalledWith(
-      SHEET_ID,
-      0,
-      0,
-      1,
-      1,
-    );
+    expect(ctx.computeBridge.getMergesInViewportSpatial).toHaveBeenCalledWith(SHEET_ID, 0, 0, 1, 1);
     expect(ctx.computeBridge.unmergeRange).not.toHaveBeenCalled();
     expect(ctx.computeBridge.invalidateAllViewportPrefetch).not.toHaveBeenCalled();
     expect(ctx.computeBridge.forceRefreshAllViewports).not.toHaveBeenCalled();
@@ -72,13 +66,7 @@ describe('WorksheetStructureImpl merge operations', () => {
 
     await structure.unmerge('A1:B2');
 
-    expect(ctx.computeBridge.getMergesInViewportSpatial).toHaveBeenCalledWith(
-      SHEET_ID,
-      0,
-      0,
-      1,
-      1,
-    );
+    expect(ctx.computeBridge.getMergesInViewportSpatial).toHaveBeenCalledWith(SHEET_ID, 0, 0, 1, 1);
     expect(ctx.computeBridge.unmergeRange).toHaveBeenCalledWith(SHEET_ID, 0, 0, 1, 1);
     expect(ctx.computeBridge.invalidateAllViewportPrefetch).toHaveBeenCalledTimes(1);
     expect(ctx.computeBridge.forceRefreshAllViewports).toHaveBeenCalledTimes(1);

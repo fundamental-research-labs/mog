@@ -249,7 +249,7 @@ describe('Home/End Keys - Navigation', () => {
   it('extendToHome extends to column A on moving edge row', () => {
     // Uses moving edge row, not anchor row.
     // Starting at C3, after extend up to C1, Home extends to A1:C3.
-    // activeCell follows the moving edge to A1.
+    // activeCell remains anchored at C3 while followCell can track A1.
 
     const context = createContext({
       activeCell: cell(2, 2), // C3 (anchor)
@@ -264,7 +264,7 @@ describe('Home/End Keys - Navigation', () => {
     });
 
     // Moving edge is C1 (row 0), so Home extends to A1 in range geometry.
-    expect(result.activeCell).toEqual(cell(0, 0)); // A1 (moving edge)
+    expect(result.activeCell).toEqual(cell(2, 2)); // C3 (anchor)
     expect(result.pendingRange).toEqual(range(0, 0, 2, 2)); // A1:C3
   });
 
@@ -324,7 +324,7 @@ describe('Page Navigation - With Merged Cells', () => {
     expect(result.pendingRange).toEqual(range(0, 3, 0, 3));
   });
 
-  it('pageDownExtend preserves anchor and moves activeCell by page size', () => {
+  it('pageDownExtend preserves activeCell at the anchor while moving range edge by page size', () => {
     const context = createContext({
       activeCell: cell(5, 3), // D6
       pendingRange: range(5, 3, 5, 3),
@@ -337,8 +337,8 @@ describe('Page Navigation - With Merged Cells', () => {
       shiftKey: true,
     });
 
-    // Anchor stays at D6; activeCell and viewport-follow track D16.
-    expect(result.activeCell).toEqual(cell(15, 3)); // D16 (moving edge)
+    // Anchor stays at D6; range geometry and viewport-follow track D16.
+    expect(result.activeCell).toEqual(cell(5, 3)); // D6 (anchor)
     expect(result.pendingRange).toEqual(range(5, 3, 15, 3)); // D6:D16
   });
 

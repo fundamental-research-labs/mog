@@ -63,7 +63,13 @@ export interface SelectionContext {
    * range alongside `committedRanges`.
    */
   pendingRange: CellRange;
-  /** The active cell (where typing goes, shown with dark border) */
+  /**
+   * The active cell: where typing, paste, and F2 edit target.
+   *
+   * Excel parity: physical Shift-extension keeps this at the selection anchor.
+   * The moving edge is represented by `pendingRange` geometry and emitted as
+   * `followCell` for viewport-follow; it is not automatically the active cell.
+   */
   activeCell: CellCoord;
   /**
    * Direction the selection was created in (from anchor to active cell).

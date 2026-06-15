@@ -102,7 +102,7 @@ export const EXTEND_TO_ROW_END: AsyncActionHandler = async (deps) => {
   const targetCell: CellCoord = { row: extendFrom.row, col: lastDataCol };
   const newRange = rangeFromAnchorAndCell(anchorCell, targetCell);
 
-  deps.commands.selection.setSelection([newRange], targetCell, anchorCell);
+  deps.commands.selection.setSelection([newRange], anchorCell, anchorCell);
   return handled();
 };
 
@@ -117,7 +117,7 @@ export const EXTEND_TO_A1: ActionHandler = (deps) => {
   const anchorCell: CellCoord = anchor ?? activeCell;
   const newRange = rangeFromAnchorAndCell(anchorCell, targetCell);
 
-  deps.commands.selection.setSelection([newRange], targetCell, anchorCell);
+  deps.commands.selection.setSelection([newRange], anchorCell, anchorCell);
   return handled();
 };
 
@@ -143,6 +143,6 @@ export const EXTEND_TO_LAST_USED_CELL: AsyncActionHandler = async (deps) => {
   const anchorCell: CellCoord = anchor ?? activeCell;
   const newRange = rangeFromAnchorAndCell(anchorCell, lastUsed);
 
-  deps.commands.selection.setSelection([newRange], lastUsed, anchorCell);
+  deps.commands.selection.setSelection([newRange], anchorCell, anchorCell);
   return handled();
 };

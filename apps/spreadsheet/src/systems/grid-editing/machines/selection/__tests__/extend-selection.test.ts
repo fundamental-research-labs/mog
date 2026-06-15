@@ -659,8 +659,10 @@ describe('extendSelection - Shift+Arrow bug tests', () => {
 // =============================================================================
 // buildExtendUpdate — direct unit tests for the shared helper.
 //
-// Lowest-layer guard: callers that omit the optional activeCell argument use
-// the moving-edge default used by Home/Page and edge-jump extension paths.
+// Lowest-layer guard: callers that omit the optional activeCell argument still
+// use the moving-edge default. Physical Shift-extension callers pass the
+// anchor explicitly; sticky/additive/formula callers may intentionally use an
+// edge-active cell.
 // =============================================================================
 
 describe('buildExtendUpdate (range geometry helper)', () => {

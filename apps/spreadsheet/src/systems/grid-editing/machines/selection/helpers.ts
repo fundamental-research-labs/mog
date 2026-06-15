@@ -131,9 +131,14 @@ export function computeDirection(anchor: CellCoord, active: CellCoord): Selectio
 
 /**
  * Single source of truth for constructing an anchor-to-edge pending range.
- * Callers that omit the optional activeCell argument move activeCell to the
- * moving edge. Shift+Arrow, formula, mouse, and specialized mode callers pass
- * an explicit active cell when they intentionally need different behavior.
+ *
+ * Excel parity contract:
+ * - physical Shift-extension passes `activeCell = anchor`
+ * - `newEnd` is the moving edge and remains visible through range geometry
+ *   plus the emitted viewport `followCell`
+ * - callers that intentionally want edge-active behavior (formula point-mode,
+ *   mouse/drag, sticky F8/additive bookkeeping) pass `activeCell = newEnd` or
+ *   rely on the default
  *
  * `committedRanges` is intentionally not touched here — non-additive flows
  * keep it empty by invariant; additive flows leave it intact while the

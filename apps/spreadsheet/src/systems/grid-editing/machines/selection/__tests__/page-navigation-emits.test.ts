@@ -170,4 +170,33 @@ describe('page navigation emits', () => {
     subscription.unsubscribe();
     actor.stop();
   });
+
+  it('keeps Shift+PageDown activeCell anchored while following the moving edge', () => {
+    const actor = createActor(selectionMachine);
+    const emitted: SelectionEmitted[] = [];
+    const subscription = actor.on('userSelectionChanged', (event) => emitted.push(event));
+
+    actor.start();
+    actor.send({
+      type: 'SET_SELECTION',
+      ranges: [{ startRow: 0, startCol: 0, endRow: 0, endCol: 0 }],
+      activeCell: { row: 0, col: 0 },
+      anchor: { row: 0, col: 0 },
+      source: 'user',
+    });
+    emitted.length = 0;
+
+    actor.send({ type: 'PAGE_DOWN', visibleRows: 20, shiftKey: true });
+
+    expect(emitted).toHaveLength(1);
+    expect(emitted[0]).toMatchObject({
+      activeCell: { row: 0, col: 0 },
+      followCell: { row: 20, col: 0 },
+      range: { startRow: 0, startCol: 0, endRow: 20, endCol: 0 },
+      scrollIntent: { type: 'page', axis: 'vertical', direction: 'next' },
+    });
+
+    subscription.unsubscribe();
+    actor.stop();
+  });
 });

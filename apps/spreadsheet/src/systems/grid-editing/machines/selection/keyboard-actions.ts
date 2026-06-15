@@ -360,7 +360,8 @@ const endModeExtendToEdge = assign(
       context.isColHidden,
     );
     const newEnd = escapeMergeOnMove(stepped, event.direction, context.getMergedRegionAt);
-    return buildExtendUpdate(anchor, newEnd);
+    const activeCell = context.modes.additive || context.modes.extend ? newEnd : anchor;
+    return buildExtendUpdate(anchor, newEnd, activeCell);
   },
 );
 
@@ -390,7 +391,8 @@ const moveToHome = assign(
 /**
  * Shift+Home or Ctrl+Shift+Home: Extend selection to beginning.
  * Shift+Home extends to column 0 on the moving edge's row;
- * Ctrl+Shift+Home extends to A1. activeCell follows the moving edge.
+ * Ctrl+Shift+Home extends to A1. Physical Shift-extension keeps activeCell
+ * anchored while range geometry and viewport-follow track the moving edge.
  */
 const extendToHome = assign(
   ({ context, event }: { context: SelectionContext; event: SelectionEvent }) => {
@@ -401,7 +403,8 @@ const extendToHome = assign(
       ? { row: 0, col: 0 } // Ctrl+Shift+Home = extend to A1
       : { row: movingEdge.row, col: 0 }; // Shift+Home = extend to column A on moving edge's row
     const newEnd = escapeMergeOnMove(target, 'left', context.getMergedRegionAt);
-    return buildExtendUpdate(anchor, newEnd);
+    const activeCell = context.modes.additive || context.modes.extend ? newEnd : anchor;
+    return buildExtendUpdate(anchor, newEnd, activeCell);
   },
 );
 
@@ -434,7 +437,8 @@ const moveToEnd = assign(
  * NOTE: Ctrl+Shift+End is properly handled by KeyboardCoordinator which dispatches
  * EXTEND_TO_LAST_USED_CELL action. This fallback uses MAX constants for safety.
  * Shift+End (without Ctrl) extends to last column of current row.
- * activeCell follows the moving edge.
+ * Physical Shift-extension keeps activeCell anchored while range geometry and
+ * viewport-follow track the moving edge.
  */
 const extendToEnd = assign(
   ({ context, event }: { context: SelectionContext; event: SelectionEvent }) => {
@@ -447,7 +451,8 @@ const extendToEnd = assign(
       ? { row: MAX_ROWS - 1, col: MAX_COLS - 1 }
       : { row: movingEdge.row, col: MAX_COLS - 1 };
     const newEnd = escapeMergeOnMove(target, 'right', context.getMergedRegionAt);
-    return buildExtendUpdate(anchor, newEnd);
+    const activeCell = context.modes.additive || context.modes.extend ? newEnd : anchor;
+    return buildExtendUpdate(anchor, newEnd, activeCell);
   },
 );
 

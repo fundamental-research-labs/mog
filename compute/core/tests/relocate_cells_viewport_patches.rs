@@ -34,7 +34,10 @@
 
 use cell_types::SheetId;
 use compute_core::storage::engine::YrsComputeEngine;
-use compute_wire::constants::{MUTATION_HEADER_SIZE, PATCH_STRIDE};
+use compute_wire::constants::{
+    CELL_STRIDE, MUTATION_HEADER_SIZE, OFF_FLAGS, OFF_NUMBER_VALUE, PATCH_STRIDE,
+    VIEWPORT_HEADER_SIZE,
+};
 use compute_wire::flags::{VALUE_TYPE_MASK, VALUE_TYPE_NULL, VALUE_TYPE_NUMBER};
 use domain_types::domain::table::Table;
 use snapshot_types::{CellData, SheetSnapshot, WorkbookSnapshot};
@@ -54,6 +57,18 @@ fn number_cell(id_suffix: u32, row: u32, col: u32, n: f64) -> CellData {
         col,
         value: CellValue::Number(FiniteF64::must(n)),
         formula: None,
+        identity_formula: None,
+        array_ref: None,
+    }
+}
+
+fn formula_cell(id_suffix: u32, row: u32, col: u32, formula: &str) -> CellData {
+    CellData {
+        cell_id: cell_id_str(id_suffix),
+        row,
+        col,
+        value: CellValue::Null,
+        formula: Some(formula.to_string()),
         identity_formula: None,
         array_ref: None,
     }
@@ -247,6 +262,68 @@ fn effective_number_at(mutation_bytes: &[u8], row: u32, col: u32) -> Option<f64>
         .filter(|p| p.row == row && p.col == col)
         .last()
         .map(|p| p.number_value)
+}
+
+fn full_viewport_cell_offset(viewport_bytes: &[u8], row: u32, col: u32) -> Option<usize> {
+    if viewport_bytes.len() < VIEWPORT_HEADER_SIZE {
+        return None;
+    }
+    let start_row = u32::from_le_bytes([
+        viewport_bytes[0],
+        viewport_bytes[1],
+        viewport_bytes[2],
+        viewport_bytes[3],
+    ]);
+    let start_col = u32::from_le_bytes([
+        viewport_bytes[4],
+        viewport_bytes[5],
+        viewport_bytes[6],
+        viewport_bytes[7],
+    ]);
+    let cell_count = u32::from_le_bytes([
+        viewport_bytes[8],
+        viewport_bytes[9],
+        viewport_bytes[10],
+        viewport_bytes[11],
+    ]) as usize;
+    let viewport_cols = u16::from_le_bytes([viewport_bytes[22], viewport_bytes[23]]) as u32;
+    if row < start_row || col < start_col || viewport_cols == 0 {
+        return None;
+    }
+    let rel_row = row - start_row;
+    let rel_col = col - start_col;
+    if rel_col >= viewport_cols {
+        return None;
+    }
+    let index = rel_row.checked_mul(viewport_cols)?.checked_add(rel_col)? as usize;
+    if index >= cell_count {
+        return None;
+    }
+    let offset = VIEWPORT_HEADER_SIZE + index * CELL_STRIDE;
+    (offset + CELL_STRIDE <= viewport_bytes.len()).then_some(offset)
+}
+
+fn full_viewport_value_type_at(viewport_bytes: &[u8], row: u32, col: u32) -> Option<u16> {
+    let offset = full_viewport_cell_offset(viewport_bytes, row, col)?;
+    let flags = u16::from_le_bytes([
+        viewport_bytes[offset + OFF_FLAGS],
+        viewport_bytes[offset + OFF_FLAGS + 1],
+    ]);
+    Some(flags & VALUE_TYPE_MASK)
+}
+
+fn full_viewport_number_at(viewport_bytes: &[u8], row: u32, col: u32) -> Option<f64> {
+    let offset = full_viewport_cell_offset(viewport_bytes, row, col)?;
+    Some(f64::from_le_bytes([
+        viewport_bytes[offset + OFF_NUMBER_VALUE],
+        viewport_bytes[offset + OFF_NUMBER_VALUE + 1],
+        viewport_bytes[offset + OFF_NUMBER_VALUE + 2],
+        viewport_bytes[offset + OFF_NUMBER_VALUE + 3],
+        viewport_bytes[offset + OFF_NUMBER_VALUE + 4],
+        viewport_bytes[offset + OFF_NUMBER_VALUE + 5],
+        viewport_bytes[offset + OFF_NUMBER_VALUE + 6],
+        viewport_bytes[offset + OFF_NUMBER_VALUE + 7],
+    ]))
 }
 
 /// Pick the first viewport's mutation bytes that match the given `vp_id`.
@@ -722,6 +799,105 @@ fn cut_clears_source_on_paste_only() {
             ),
         }
     }
+}
+
+/// Mirrors the Kewpie Insert Cut Cells shape more closely than the minimal
+/// app-eval failure: the destination viewport is registered over L:M, the cut
+/// source AA:AB sits outside it, and the moved formula is imported with a null
+/// cached value even though ComputeCore has an evaluated result.
+#[test]
+fn relocate_formula_cell_after_insert_down_writes_target_patch_when_source_offscreen() {
+    let snapshot = WorkbookSnapshot {
+        sheets: vec![SheetSnapshot {
+            id: sheet_id_str(1),
+            name: "S1".to_string(),
+            rows: 50,
+            cols: 40,
+            cells: vec![
+                number_cell(200, 6, 23, 10.0),
+                number_cell(201, 6, 24, 20.0),
+                number_cell(202, 6, 25, 30.0),
+                formula_cell(203, 6, 26, "=1000-Z7-Y7-X7"),
+                number_cell(204, 6, 27, 123.0),
+                number_cell(205, 6, 12, 505.0),
+            ],
+            ranges: vec![],
+        }],
+        ..Default::default()
+    };
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
+    let sid = engine.mirror().sheet_by_name("S1").expect("S1");
+
+    let before = engine.query_range(&sid, 6, 26, 6, 27);
+    let aa7 = before
+        .cells
+        .iter()
+        .find(|cell| cell.row == 6 && cell.col == 26)
+        .expect("AA7 formula before cut");
+    assert_eq!(aa7.value, CellValue::Number(FiniteF64::must(940.0)));
+    assert_eq!(aa7.formula.as_deref(), Some("=1000-Z7-Y7-X7"));
+
+    engine
+        .register_viewport("vp", &sid, 0, 0, 20, 15)
+        .expect("register destination viewport");
+
+    engine
+        .insert_cells_with_shift(&sid, 6, 11, 1, 2, false)
+        .expect("insert L7:M7 shift down");
+    let (patches, _result) = engine
+        .relocate_cells_yrs(&sid, 6, 26, 6, 27, &sid, 6, 11)
+        .expect("relocate AA7:AB7 to L7:M7");
+    let bytes = viewport_bytes(&patches, "vp").expect("vp bytes");
+
+    let l7_vt = effective_value_type_at(bytes, 6, 11).expect("patch at target L7");
+    assert_eq!(
+        l7_vt, VALUE_TYPE_NUMBER,
+        "target L7 must replay as Number for the moved offscreen formula; got value_type={}",
+        l7_vt
+    );
+    let l7_number = effective_number_at(bytes, 6, 11).expect("L7 number");
+    assert!(
+        (l7_number - 940.0).abs() < f64::EPSILON,
+        "target L7 expected evaluated formula value 940, got {}",
+        l7_number
+    );
+
+    let m7_vt = effective_value_type_at(bytes, 6, 12).expect("patch at target M7");
+    assert_eq!(
+        m7_vt, VALUE_TYPE_NUMBER,
+        "target M7 must replay as Number for the moved value"
+    );
+    let m7_number = effective_number_at(bytes, 6, 12).expect("M7 number");
+    assert!(
+        (m7_number - 123.0).abs() < f64::EPSILON,
+        "target M7 expected moved value 123, got {}",
+        m7_number
+    );
+
+    let after = engine.query_range(&sid, 6, 11, 6, 12);
+    let l7 = after
+        .cells
+        .iter()
+        .find(|cell| cell.row == 6 && cell.col == 11)
+        .expect("L7 formula cell");
+    assert_eq!(l7.value, CellValue::Number(FiniteF64::must(940.0)));
+    assert_eq!(l7.formula.as_deref(), Some("=1000-Z7-Y7-X7"));
+
+    let full_viewport = engine.get_viewport_binary(&sid, 0, 0, 20, 15, false);
+    let full_l7_vt =
+        full_viewport_value_type_at(&full_viewport, 6, 11).expect("full viewport L7 record");
+    assert_eq!(
+        full_l7_vt, VALUE_TYPE_NUMBER,
+        "full viewport rebuild must serialize L7 as Number after relocate; got value_type={}",
+        full_l7_vt
+    );
+    let full_l7_number =
+        full_viewport_number_at(&full_viewport, 6, 11).expect("full viewport L7 number");
+    assert!(
+        (full_l7_number - 940.0).abs() < f64::EPSILON,
+        "full viewport rebuild expected L7 value 940, got {}",
+        full_l7_number
+    );
 }
 
 /// Overlapping source/target case: A1:A3 → A2:A4. After move, A2/A3

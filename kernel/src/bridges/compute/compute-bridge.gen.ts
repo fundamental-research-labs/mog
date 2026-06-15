@@ -2157,6 +2157,14 @@ export class GeneratedBridgeBase implements GeneratedBridgeMethods {
     return this.core.mutatePublic('compute_set_col_format', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_col_format', { docId: this.core.docId, sheetId, col, format }));
   }
 
+  clearColFormat(sheetId: SheetId, col: number): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_clear_col_format', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_clear_col_format', { docId: this.core.docId, sheetId, col }));
+  }
+
+  setColFormatRange(sheetId: SheetId, startCol: number, endCol: number, format: CellFormat): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_set_col_format_range', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_col_format_range', { docId: this.core.docId, sheetId, startCol, endCol, format }));
+  }
+
   getRowFormats(sheetId: SheetId, rows: number[]): Promise<[number, CellFormat | null][]> {
     return this.core.query(this.core.transport.call<[number, CellFormat | null][]>('compute_get_row_formats', { docId: this.core.docId, sheetId, rows }));
   }

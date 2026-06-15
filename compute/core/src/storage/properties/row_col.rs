@@ -1,9 +1,10 @@
 use super::super::{KEY_COL_FORMATS, KEY_ROW_FORMATS, id_to_hex};
 use super::merge::{merge_formats, normalize_format_patch};
+use super::ranges::clear_col_format_ranges_in_span;
 use super::yrs::get_sheet_submap;
 use crate::identity::GridIndex;
 use crate::storage::YrsStorage;
-use cell_types::SheetId;
+use cell_types::{IdAllocator, SheetId};
 use compute_document::undo::ORIGIN_USER_EDIT;
 use domain_types::{CellFormat, yrs_schema};
 use value_types::ComputeError;
@@ -234,17 +235,37 @@ pub fn clear_col_format(
     col: u32,
     grid_index: Option<&GridIndex>,
 ) {
-    let col_id = match grid_index.and_then(|gi| gi.col_id(col)) {
-        Some(cid) => id_to_hex(cid.as_u128()),
-        None => return,
-    };
-    let sheets = storage.sheets_ref();
-    let mut txn = storage
-        .doc()
-        .transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
-    if let Some(fmt_map) = get_sheet_submap(&txn, &sheets, sheet_id, KEY_COL_FORMATS) {
-        fmt_map.remove(&mut txn, &col_id);
+    clear_col_format_with_alloc(
+        storage,
+        sheet_id,
+        col,
+        grid_index,
+        &crate::storage::STORAGE_ID_ALLOC,
+    );
+}
+
+pub(crate) fn clear_col_format_with_alloc(
+    storage: &mut YrsStorage,
+    sheet_id: &SheetId,
+    col: u32,
+    grid_index: Option<&GridIndex>,
+    id_alloc: &IdAllocator,
+) {
+    let col_id = grid_index
+        .and_then(|gi| gi.col_id(col))
+        .map(|cid| id_to_hex(cid.as_u128()));
+
+    if let Some(col_id) = col_id {
+        let sheets = storage.sheets_ref();
+        let mut txn = storage
+            .doc()
+            .transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
+        if let Some(fmt_map) = get_sheet_submap(&txn, &sheets, sheet_id, KEY_COL_FORMATS) {
+            fmt_map.remove(&mut txn, &col_id);
+        }
     }
+
+    clear_col_format_ranges_in_span(storage, sheet_id, col, col, id_alloc);
 }
 
 // -------------------------------------------------------------------

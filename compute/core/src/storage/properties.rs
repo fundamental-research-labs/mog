@@ -71,9 +71,11 @@ pub use defaults::default_format;
 use merge::merge_formats;
 pub(crate) use merge::normalize_format_patch;
 pub use protection::{is_cell_locked, is_formula_hidden};
+pub(crate) use ranges::set_col_format_range_with_alloc;
 pub use ranges::{
     add_format_range, hydrate_col_format_ranges, hydrate_format_ranges, remove_format_range,
 };
+pub(crate) use row_col::clear_col_format_with_alloc;
 pub use row_col::{
     ColFormatEntry, RowFormatEntry, clear_col_format, clear_row_format, get_all_col_formats,
     get_all_row_formats, get_col_format, get_col_xlsx_style_id, get_row_format,

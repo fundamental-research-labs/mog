@@ -333,6 +333,26 @@ impl YrsComputeEngine {
         row_col::set_col_format(self, sheet_id, col, format)
     }
 
+    #[bridge::write(scope = "sheet")]
+    pub fn clear_col_format(
+        &mut self,
+        sheet_id: &SheetId,
+        col: u32,
+    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+        row_col::clear_col_format(self, sheet_id, col)
+    }
+
+    #[bridge::write(scope = "sheet")]
+    pub fn set_col_format_range(
+        &mut self,
+        sheet_id: &SheetId,
+        start_col: u32,
+        end_col: u32,
+        format: CellFormat,
+    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+        row_col::set_col_format_range(self, sheet_id, start_col, end_col, format)
+    }
+
     #[bridge::read(scope = "sheet")]
     pub fn get_row_formats(
         &self,

@@ -171,4 +171,28 @@ impl SheetFormats {
             .call_engine(move |e| e.set_col_format(&sid, col, format).map(|(_, r)| r))
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
+
+    /// Clear format for an entire column.
+    pub fn clear_col_format(&self, col: u32) -> Result<MutationResult, ComputeApiError> {
+        let sid = self.sheet_id;
+        self.dispatch
+            .call_engine(move |e| e.clear_col_format(&sid, col).map(|(_, r)| r))
+            .and_then(|r| r.map_err(ComputeApiError::from))
+    }
+
+    /// Set format for a sparse whole-column range.
+    pub fn set_col_format_range(
+        &self,
+        start_col: u32,
+        end_col: u32,
+        format: CellFormat,
+    ) -> Result<MutationResult, ComputeApiError> {
+        let sid = self.sheet_id;
+        self.dispatch
+            .call_engine(move |e| {
+                e.set_col_format_range(&sid, start_col, end_col, format)
+                    .map(|(_, r)| r)
+            })
+            .and_then(|r| r.map_err(ComputeApiError::from))
+    }
 }

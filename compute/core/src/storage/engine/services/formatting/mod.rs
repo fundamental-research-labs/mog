@@ -21,7 +21,9 @@ pub(in crate::storage::engine) use conditional_formats::{
 pub(in crate::storage::engine) use range_formats::{
     clear_format_for_ranges, set_format_for_ranges, toggle_format_property,
 };
-pub(in crate::storage::engine) use row_col_formats::{set_col_format, set_row_format};
+pub(in crate::storage::engine) use row_col_formats::{
+    clear_col_format, set_col_format, set_col_format_range, set_row_format,
+};
 pub(in crate::storage::engine) use schema_map::{
     clear_schemas, remove_schema, set_schema_map, update_schema,
 };

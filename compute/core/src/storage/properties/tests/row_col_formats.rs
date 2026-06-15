@@ -178,6 +178,108 @@ fn test_clear_col_format_virtual_noop() {
 }
 
 #[test]
+fn test_clear_col_format_splits_inherited_col_format_range() {
+    let (mut storage, sid, gi, mut mirror) = storage_with_sheet_and_mirror();
+    insert_col_format_range(
+        &storage,
+        &sid,
+        crate::mirror::RangeId::from_raw(700),
+        0,
+        4,
+        &CellFormat {
+            background_color: Some("#FFEE00".to_string()),
+            ..Default::default()
+        },
+        Some(42),
+    );
+
+    hydrate_col_format_ranges(&storage, &sid, mirror.get_sheet_mut(&sid).unwrap());
+
+    clear_col_format_with_alloc(
+        &mut storage,
+        &sid,
+        2,
+        Some(&gi),
+        &cell_types::IdAllocator::with_seed(10_000),
+    );
+    hydrate_col_format_ranges(&storage, &sid, mirror.get_sheet_mut(&sid).unwrap());
+
+    let sheet_mirror = mirror.get_sheet(&sid).unwrap();
+    let mut ranges = sheet_mirror.col_format_ranges().to_vec();
+    ranges.sort_by_key(|range| range.start_col);
+    assert_eq!(ranges.len(), 2);
+    assert_eq!((ranges[0].start_col, ranges[0].end_col), (0, 1));
+    assert_eq!((ranges[1].start_col, ranges[1].end_col), (3, 4));
+    assert!(
+        ranges.iter().all(|range| {
+            sheet_mirror.col_range_xlsx_style_id_cache().get(&range.id) == Some(&42)
+        })
+    );
+
+    let before = get_positional_format(&storage, &sid, 0, 1, Some(&gi), Some(sheet_mirror));
+    let cleared = get_positional_format(&storage, &sid, 0, 2, Some(&gi), Some(sheet_mirror));
+    let after = get_positional_format(&storage, &sid, 0, 3, Some(&gi), Some(sheet_mirror));
+
+    assert_eq!(before.background_color, Some("#FFEE00".to_string()));
+    assert_eq!(cleared.background_color, None);
+    assert_eq!(after.background_color, Some("#FFEE00".to_string()));
+}
+
+#[test]
+fn test_set_col_format_range_merges_inherited_defaults_sparsely() {
+    let (mut storage, sid, gi, mut mirror) = storage_with_sheet_and_mirror();
+    insert_col_format_range(
+        &storage,
+        &sid,
+        crate::mirror::RangeId::from_raw(701),
+        0,
+        4,
+        &CellFormat {
+            number_format: Some("0.0".to_string()),
+            ..Default::default()
+        },
+        Some(24),
+    );
+
+    set_col_format_range_with_alloc(
+        &mut storage,
+        &sid,
+        1,
+        3,
+        &CellFormat {
+            bold: Some(true),
+            ..Default::default()
+        },
+        &cell_types::IdAllocator::with_seed(11_000),
+    );
+    hydrate_col_format_ranges(&storage, &sid, mirror.get_sheet_mut(&sid).unwrap());
+
+    assert!(
+        get_all_col_formats(&storage, &sid, Some(&gi)).is_empty(),
+        "range formatting must not materialize explicit per-column formats"
+    );
+
+    let sheet_mirror = mirror.get_sheet(&sid).unwrap();
+    let mut ranges = sheet_mirror.col_format_ranges().to_vec();
+    ranges.sort_by_key(|range| range.start_col);
+    assert_eq!(ranges.len(), 3);
+    assert_eq!((ranges[0].start_col, ranges[0].end_col), (0, 0));
+    assert_eq!((ranges[1].start_col, ranges[1].end_col), (1, 3));
+    assert_eq!((ranges[2].start_col, ranges[2].end_col), (4, 4));
+
+    let before = get_positional_format(&storage, &sid, 0, 0, Some(&gi), Some(sheet_mirror));
+    let patched = get_positional_format(&storage, &sid, 0, 2, Some(&gi), Some(sheet_mirror));
+    let after = get_positional_format(&storage, &sid, 0, 4, Some(&gi), Some(sheet_mirror));
+
+    assert_eq!(before.number_format, Some("0.0".to_string()));
+    assert_ne!(before.bold, Some(true));
+    assert_eq!(patched.number_format, Some("0.0".to_string()));
+    assert_eq!(patched.bold, Some(true));
+    assert_eq!(after.number_format, Some("0.0".to_string()));
+    assert_ne!(after.bold, Some(true));
+}
+
+#[test]
 fn test_get_all_row_formats_surfaces_formats_and_xlsx_style_ids() {
     let (mut storage, sid, gi) = storage_with_sheet();
 

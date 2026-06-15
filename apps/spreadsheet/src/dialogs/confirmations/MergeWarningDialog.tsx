@@ -12,7 +12,7 @@
  * Merge Data Loss Warning Dialog
  */
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { dispatch, useUIStore } from '../../internal-api';
 
 import { Button, Dialog, DialogBody, DialogFooter, DialogHeader } from '@mog/shell';
@@ -39,6 +39,12 @@ export function MergeWarningDialog() {
   const sheetId = useUIStore((s) => s.mergeWarningDialog.sheetId);
   const mergeType = useUIStore((s) => s.mergeWarningDialog.mergeType);
   const [isConfirming, setIsConfirming] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setIsConfirming(false);
+    }
+  }, [isOpen]);
 
   // Handle OK button - confirm merge (data will be lost)
   const handleConfirm = useCallback(() => {

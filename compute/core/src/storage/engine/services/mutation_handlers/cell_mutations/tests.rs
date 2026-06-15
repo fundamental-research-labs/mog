@@ -1,4 +1,6 @@
 use cell_types::{CellId, SheetId, SheetPos};
+use compute_wire::constants::{MUTATION_HEADER_SIZE, OFF_FLAGS, PATCH_STRIDE};
+use compute_wire::flags as render_flags;
 use snapshot_types::{CellData, SheetSnapshot, WorkbookSnapshot};
 use value_types::{CellError, CellValue, ComputeError};
 
@@ -7,6 +9,7 @@ use crate::storage::engine::YrsComputeEngine;
 use crate::storage::engine::mutation::CellInput;
 
 const SHEET_UUID: &str = "aa000000000000000000000000000001";
+const SHEET2_UUID: &str = "aa000000000000000000000000000002";
 const A1_UUID: &str = "aa000000000000000000000000000101";
 const J10_UUID: &str = "aa000000000000000000000000000102";
 const CSE_A1_UUID: &str = "aa000000000000000000000000000103";
@@ -27,6 +30,30 @@ fn snapshot_with_cells(cells: Vec<CellData>) -> WorkbookSnapshot {
     }
 }
 
+fn two_sheet_snapshot() -> WorkbookSnapshot {
+    WorkbookSnapshot {
+        sheets: vec![
+            SheetSnapshot {
+                id: SHEET_UUID.to_string(),
+                name: "Sheet1".to_string(),
+                rows: 10,
+                cols: 10,
+                cells: vec![],
+                ranges: vec![],
+            },
+            SheetSnapshot {
+                id: SHEET2_UUID.to_string(),
+                name: "Sheet2".to_string(),
+                rows: 10,
+                cols: 10,
+                cells: vec![],
+                ranges: vec![],
+            },
+        ],
+        ..Default::default()
+    }
+}
+
 fn cell_change_at(
     changes: &[snapshot_types::CellChange],
     row: u32,
@@ -35,6 +62,48 @@ fn cell_change_at(
     changes
         .iter()
         .find(|change| change.position.as_ref().map(|pos| (pos.row, pos.col)) == Some((row, col)))
+}
+
+fn first_viewport_patch(packed: &[u8]) -> Option<&[u8]> {
+    if packed.len() < 2 {
+        return None;
+    }
+    let viewport_count = u16::from_le_bytes([packed[0], packed[1]]) as usize;
+    if viewport_count == 0 {
+        return None;
+    }
+    let mut offset = 2;
+    let id_len = *packed.get(offset)? as usize;
+    offset += 1 + id_len;
+    let len_bytes: [u8; 4] = packed.get(offset..offset + 4)?.try_into().ok()?;
+    let patch_len = u32::from_le_bytes(len_bytes) as usize;
+    offset += 4;
+    packed.get(offset..offset + patch_len)
+}
+
+fn patch_flags_for_position(packed: &[u8], row: u32, col: u32) -> Option<u16> {
+    let mutation = first_viewport_patch(packed)?;
+    let patch_count = u32::from_le_bytes(mutation.get(0..4)?.try_into().ok()?) as usize;
+    let sheet_id_len = u16::from_le_bytes(mutation.get(8..10)?.try_into().ok()?) as usize;
+    let patches_start = MUTATION_HEADER_SIZE + sheet_id_len;
+
+    for i in 0..patch_count {
+        let patch_off = patches_start + i * PATCH_STRIDE;
+        let patch_row = u32::from_le_bytes(mutation.get(patch_off..patch_off + 4)?.try_into().ok()?);
+        let patch_col = u32::from_le_bytes(
+            mutation
+                .get(patch_off + 4..patch_off + 8)?
+                .try_into()
+                .ok()?,
+        );
+        if patch_row == row && patch_col == col {
+            let flags_off = patch_off + 8 + OFF_FLAGS;
+            return Some(u16::from_le_bytes(
+                mutation.get(flags_off..flags_off + 2)?.try_into().ok()?,
+            ));
+        }
+    }
+    None
 }
 
 #[test]
@@ -100,6 +169,128 @@ fn mutation_set_cells_by_position_trusted_path_errors_newly_created_cycle() {
             .cloned(),
         Some(CellValue::Error(CellError::Circ, None)),
         "B1 should commit as the cycle-closing error"
+    );
+}
+
+#[test]
+fn mutation_cross_sheet_cycle_viewport_preserves_formula_flag() {
+    let snapshot = two_sheet_snapshot();
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
+    let sheet1 = SheetId::from_uuid_str(SHEET_UUID).expect("sheet1 uuid");
+    let sheet2 = SheetId::from_uuid_str(SHEET2_UUID).expect("sheet2 uuid");
+    engine
+        .register_viewport("sheet2-main", &sheet2, 0, 0, 10, 10)
+        .expect("register sheet2 viewport");
+
+    engine
+        .batch_set_cells_by_position(
+            vec![
+                (
+                    sheet1,
+                    0,
+                    3,
+                    CellInput::Parse {
+                        text: "7".to_string(),
+                    },
+                ),
+                (
+                    sheet1,
+                    0,
+                    2,
+                    CellInput::Parse {
+                        text: "=Sheet2!C1".to_string(),
+                    },
+                ),
+            ],
+            true,
+        )
+        .expect("set Sheet1 D1/C1");
+
+    engine
+        .batch_set_cells_by_position(
+            vec![(
+                sheet2,
+                0,
+                3,
+                CellInput::Parse {
+                    text: "=Sheet1!D1".to_string(),
+                },
+            )],
+            true,
+        )
+        .expect("set Sheet2 D1");
+
+    let (patches, mutation_result) = engine
+        .batch_set_cells_by_position(
+            vec![(
+                sheet2,
+                0,
+                2,
+                CellInput::Parse {
+                    text: "=Sheet1!C1".to_string(),
+                },
+            )],
+            true,
+        )
+        .expect("set Sheet2 C1 cycle closer");
+
+    let changed_c1 = mutation_result
+        .recalc
+        .changed_cells
+        .iter()
+        .find(|cell| cell.position.as_ref().map(|pos| (pos.row, pos.col)) == Some((0, 2)))
+        .unwrap_or_else(|| {
+            panic!(
+                "mutation result should include Sheet2 C1; changes={:#?}",
+                mutation_result.recalc.changed_cells
+            )
+        });
+    assert_eq!(
+        changed_c1.value,
+        CellValue::Error(CellError::Circ, None),
+        "mutation result should surface the circular reference error"
+    );
+
+    let patched_c1_flags =
+        patch_flags_for_position(&patches, 0, 2).expect("patch should include Sheet2 C1");
+    assert_ne!(
+        patched_c1_flags & render_flags::HAS_FORMULA,
+        0,
+        "binary viewport patch must mark Sheet2 C1 as formula-owned"
+    );
+
+    let queried = engine.query_range(&sheet2, 0, 2, 0, 3);
+    let queried_c1 = queried
+        .cells
+        .iter()
+        .find(|cell| cell.row == 0 && cell.col == 2)
+        .expect("query_range should include Sheet2 C1");
+    assert_eq!(
+        queried_c1.formula.as_deref(),
+        Some("=Sheet1!C1"),
+        "query_range must preserve the cycle-closing formula text"
+    );
+    assert_eq!(
+        queried_c1.value,
+        CellValue::Error(CellError::Circ, None),
+        "Sheet2 C1 should surface the circular reference error"
+    );
+
+    let viewport = engine.build_viewport_render_data(&sheet2, 0, 0, 1, 4);
+    let rendered_c1 = viewport
+        .cells
+        .iter()
+        .find(|cell| cell.row == 0 && cell.col == 2)
+        .expect("viewport should include Sheet2 C1");
+    assert_eq!(
+        rendered_c1.flags & render_flags::VALUE_TYPE_MASK,
+        render_flags::VALUE_TYPE_ERROR,
+        "Sheet2 C1 should render as an error"
+    );
+    assert_ne!(
+        rendered_c1.flags & render_flags::HAS_FORMULA,
+        0,
+        "viewport formula ownership must agree with query_range"
     );
 }
 

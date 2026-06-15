@@ -463,6 +463,10 @@ impl YrsComputeEngine {
             return self.produce_viewport_patches(recalc, &sheet_ids[0], 0);
         }
 
+        // Multi-sheet recalc does not delegate to `produce_viewport_patches`,
+        // so it must run the same metadata enrichment before serialization.
+        self.enrich_metadata_flags(recalc);
+
         // Enrich format_idx for all changed cells across all sheets.
         let theme_palette = &self.settings.theme_palette;
         let mut per_sheet_palette_params: FxHashMap<SheetId, (u16, Vec<u8>)> = FxHashMap::default();

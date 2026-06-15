@@ -18,7 +18,7 @@
 //! Run:
 //!   cargo test -p compute-core --test spill_blocker_merged_region -- --nocapture
 //!
-//! Expected on origin/dev HEAD: FAILS at the A1 == #SPILL! assertion.
+//! Expected before the fix: FAILS at the A1 == #SPILL! assertion.
 
 use cell_types::{CellId, SheetId};
 use compute_core::mirror::{CellMirror, MergeRegion};

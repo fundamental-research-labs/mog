@@ -11,7 +11,7 @@
 //! the projection, splitting the array.
 //!
 //! This is the regression test that pins the contract. It currently FAILS
-//! on `origin/dev` HEAD because `set_cells` does not reject partial-array
+//! before the fix because `set_cells` does not reject partial-array
 //! writes; once the guard is lifted to cover both single and batch paths,
 //! it will pass.
 

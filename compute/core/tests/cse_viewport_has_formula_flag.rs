@@ -30,7 +30,7 @@
 //!
 //! ## Expected state
 //!
-//! This test must FAIL on `origin/dev` and PASS once the per-cell render
+//! This test must FAIL before the fix and PASS once the per-cell render
 //! path consults CSE / projection membership when computing `has_formula`.
 //!
 //! Run:

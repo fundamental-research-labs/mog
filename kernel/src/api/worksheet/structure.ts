@@ -271,16 +271,9 @@ export class WorksheetStructureImpl implements WorksheetStructure {
       columns,
       hasHeaders ?? false,
     );
-    // `compute_remove_duplicates` returns viewport patches via
-    // `produce_full_viewport_patches`, which wraps a full viewport binary
-    // inside the multi-viewport-patches envelope. However,
-    // `applyMultiViewportPatches` on the TypeScript side reads the inner
-    // bytes via `BinaryMutationReader` (mutation-patch format), which is
-    // incompatible with the full viewport binary format — so the patches are
-    // silently discarded and the viewport stays stale. Force-refresh all
-    // viewports to pull the correct post-compaction data from Rust.
-    this.ctx.computeBridge.invalidateAllViewportPrefetch();
-    await this.ctx.computeBridge.forceRefreshAllViewports();
+    // Rust returns full-viewport patches for this operation and the viewport
+    // coordinator applies those patches directly, so no follow-up refresh is
+    // needed here.
     // The bridge returns MutationResult whose `.data` field carries the
     // removeDuplicates stats as a JSON object set via `with_data` on the Rust side.
     const payload = (raw as MutationResult).data as

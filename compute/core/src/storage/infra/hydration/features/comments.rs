@@ -4,6 +4,8 @@ use yrs::{Map, MapPrelim, MapRef};
 
 use domain_types::yrs_schema;
 
+use crate::storage::infra::hydration::helpers::PositionMap;
+
 /// Hydrate comments using structured Y.Map entries via `yrs_schema::comment`.
 ///
 /// Comments with source IDs, such as XLSX threaded-comment IDs, keep those IDs
@@ -11,7 +13,7 @@ use domain_types::yrs_schema;
 pub(in crate::storage::infra::hydration) fn hydrate_comments(
     txn: &mut yrs::TransactionMut,
     comments_map: &MapRef,
-    pos_map: &HashMap<String, String>,
+    pos_map: &PositionMap,
     comments: &[domain_types::domain::comment::Comment],
     persons: &[domain_types::domain::comment::PersonInfo],
 ) {
@@ -65,15 +67,14 @@ fn allocate_comment_id(
 }
 
 fn resolve_comment_cell_ref(
-    pos_map: &HashMap<String, String>,
+    pos_map: &PositionMap,
     comment: &domain_types::domain::comment::Comment,
 ) -> String {
     let Some((row, col)) = crate::import::phantom::parse_cell_ref(&comment.cell_ref) else {
         return comment.cell_ref.clone();
     };
 
-    let pos_key = format!("{}:{}", row, col);
-    match pos_map.get(&pos_key) {
+    match pos_map.get(&(row, col)) {
         Some(cell_hex) => cell_hex.clone(),
         None => {
             tracing::warn!(

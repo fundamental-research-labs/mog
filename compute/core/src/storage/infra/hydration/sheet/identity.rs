@@ -1,10 +1,11 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 use cell_types::{CellId, ColId, RowId, SheetId};
 use compute_document::hex::{SmallHex, id_to_hex};
 use domain_types::SheetData;
 
 use crate::import::parse_output_to_snapshot::anchor_collection::collect_identity_required_anchors;
+use crate::storage::infra::hydration::helpers::PositionMap;
 use crate::storage::infra::hydration::{AnchoredCellIdentity, IdAllocator};
 
 pub(crate) fn cell_keeps_import_identity(cell: &domain_types::CellData) -> bool {
@@ -68,7 +69,7 @@ pub(crate) fn allocate_anchored_identities(
 
 pub(crate) fn allocate_missing_anchored_identities(
     sheet: &SheetData,
-    pos_map: &HashMap<String, String>,
+    pos_map: &PositionMap,
     allocator: &mut impl IdAllocator,
 ) -> Vec<AnchoredCellIdentity> {
     let anchors = collect_identity_required_anchors(sheet);
@@ -77,7 +78,7 @@ pub(crate) fn allocate_missing_anchored_identities(
 
     positions
         .into_iter()
-        .filter(|(row, col)| !pos_map.contains_key(&format!("{}:{}", row, col)))
+        .filter(|(row, col)| !pos_map.contains_key(&(*row, *col)))
         .filter_map(|(row, col)| {
             let reasons = anchors.get(&(row, col))?.clone();
             Some(AnchoredCellIdentity {
@@ -91,13 +92,13 @@ pub(crate) fn allocate_missing_anchored_identities(
 }
 
 pub(crate) fn insert_missing_anchored_identities(
-    pos_map: &mut HashMap<String, String>,
+    pos_map: &mut PositionMap,
     identities: &[AnchoredCellIdentity],
 ) -> Vec<(CellId, u32, u32)> {
     let mut inserted = Vec::new();
     for identity in identities {
         debug_assert!(!identity.reasons.is_empty());
-        let pos_key = format!("{}:{}", identity.row, identity.col);
+        let pos_key = (identity.row, identity.col);
         if pos_map.contains_key(&pos_key) {
             continue;
         }

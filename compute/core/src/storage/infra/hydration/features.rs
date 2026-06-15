@@ -1,4 +1,4 @@
-use std::collections::{BTreeSet, HashMap};
+use std::collections::BTreeSet;
 use std::sync::Arc;
 
 use yrs::{Any, Array, Map, MapPrelim, MapRef};
@@ -16,7 +16,7 @@ use compute_document::cell_serde::{
 
 use super::IdAllocator;
 use super::form_controls::normalize_form_control_references_for_hydration;
-use super::helpers::get_or_create_cell_id_for_pos;
+use super::helpers::{PositionMap, get_or_create_cell_id_for_pos};
 use crate::import::parse_output_to_snapshot::hyperlink_lowering::{
     HyperlinkAnchor, classify_hyperlink_anchor,
 };
@@ -38,7 +38,7 @@ pub(super) use comments::hydrate_comments;
 /// 2. Write cell data using `build_cell_prelim()` (the gold standard)
 ///
 /// Returns `(cell_ids, pos_map)` where `pos_map` is an in-memory position index
-/// (pos_key -> cell_hex) used by downstream hydration functions (merges, comments,
+/// (`(row, col)` -> cell_hex) used by downstream hydration functions (merges, comments,
 /// hyperlinks, styles, filters) and mirrored by the caller into the canonical
 /// Yrs `gridIndex/{posToId,idToPos}` store before the import transaction commits.
 pub(super) fn hydrate_cells(
@@ -46,9 +46,9 @@ pub(super) fn hydrate_cells(
     cells_map: &MapRef,
     cells: &[CellData],
     allocator: &mut impl IdAllocator,
-) -> (Vec<CellId>, HashMap<String, String>) {
+) -> (Vec<CellId>, PositionMap) {
     let mut allocated_ids = Vec::with_capacity(cells.len());
-    let mut pos_map = HashMap::with_capacity(cells.len());
+    let mut pos_map = PositionMap::with_capacity(cells.len());
     for cell in cells {
         let cell_id = allocator.alloc_cell_id();
         allocated_ids.push(cell_id);
@@ -77,8 +77,7 @@ pub(super) fn hydrate_cells(
         }
 
         // Track position → cell_hex in memory for downstream hydration lookups
-        let pos_key = format!("{}:{}", cell.row, cell.col);
-        pos_map.insert(pos_key, cell_hex.to_string());
+        pos_map.insert((cell.row, cell.col), cell_hex.to_string());
     }
     (allocated_ids, pos_map)
 }
@@ -100,9 +99,8 @@ pub(super) fn hydrate_cells_with_ids(
     cell_ids: &[CellId],
     ranged_positions: &std::collections::HashSet<(u32, u32)>,
     range_style_positions: &std::collections::HashSet<(u32, u32)>,
-) -> HashMap<String, String> {
-    let mut pos_map = HashMap::with_capacity(cells.len() / 2);
-    let mut pos_key_buf = String::with_capacity(16);
+) -> PositionMap {
+    let mut pos_map = PositionMap::with_capacity(cells.len() / 2);
     for (i, cell) in cells.iter().enumerate() {
         if cell.projection_role == ImportedCellProjectionRole::DynamicArraySpillTarget {
             continue;
@@ -135,10 +133,7 @@ pub(super) fn hydrate_cells_with_ids(
 
         let cell_hex = id_to_hex(cell_ids[i].as_u128());
 
-        pos_key_buf.clear();
-        use std::fmt::Write;
-        let _ = write!(pos_key_buf, "{}:{}", cell.row, cell.col);
-        pos_map.insert(pos_key_buf.clone(), cell_hex.to_string());
+        pos_map.insert((cell.row, cell.col), cell_hex.to_string());
 
         // Empty styled cells don't need a Yrs cell entry — only the
         // pos_map slot (for style hydration). Skip the Yrs write.
@@ -192,7 +187,7 @@ pub(super) fn hydrate_merges(
     txn: &mut yrs::TransactionMut,
     merges_map: &MapRef,
     cells_map: &MapRef,
-    pos_map: &mut HashMap<String, String>,
+    pos_map: &mut PositionMap,
     merges: &[MergeRegion],
     allocator: &mut impl IdAllocator,
 ) {
@@ -347,7 +342,7 @@ pub(super) fn hydrate_hidden_rows_cols(
 /// these new positions automatically.
 pub(super) fn hydrate_hyperlinks(
     txn: &mut yrs::TransactionMut,
-    pos_map: &mut HashMap<String, String>,
+    pos_map: &mut PositionMap,
     cells_map: &MapRef,
     meta_map: &MapRef,
     hyperlinks: &[domain_types::domain::hyperlink::Hyperlink],
@@ -695,7 +690,7 @@ pub(super) fn hydrate_auto_filter(
     txn: &mut yrs::TransactionMut,
     meta_map: &MapRef,
     filters_map: &MapRef,
-    pos_map: &HashMap<String, String>,
+    pos_map: &PositionMap,
     auto_filter: &Option<domain_types::domain::filter::AutoFilter>,
 ) {
     use domain_types::domain::filter::auto_filter_to_filter_state;
@@ -709,10 +704,8 @@ pub(super) fn hydrate_auto_filter(
     meta_map.insert(txn, "autoFilter", af_prelim);
 
     // (2) Runtime FilterState (drives UI filter evaluation). Lossy vs (1).
-    let cell_id_resolver = |row: u32, col: u32| -> Option<String> {
-        let pos_key = format!("{}:{}", row, col);
-        pos_map.get(&pos_key).cloned()
-    };
+    let cell_id_resolver =
+        |row: u32, col: u32| -> Option<String> { pos_map.get(&(row, col)).cloned() };
     if let Some(filter_state) = auto_filter_to_filter_state(af, &cell_id_resolver) {
         crate::storage::sheet::filters::write_filter_state_to_ymap(filters_map, txn, &filter_state);
     }
@@ -778,7 +771,7 @@ pub(super) struct FloatingObjectHydrationMaps<'a> {
 pub(super) fn hydrate_floating_objects(
     txn: &mut yrs::TransactionMut,
     maps: FloatingObjectHydrationMaps<'_>,
-    pos_map: &mut HashMap<String, String>,
+    pos_map: &mut PositionMap,
     sheet_id: &cell_types::SheetId,
     objects: &[domain_types::domain::floating_object::FloatingObject],
     allocator: &mut impl IdAllocator,
@@ -912,7 +905,7 @@ mod tests {
             &range_style_positions,
         );
 
-        assert_eq!(pos_map.get("4:2"), Some(&id_to_hex(0xA).to_string()));
+        assert_eq!(pos_map.get(&(4, 2)), Some(&id_to_hex(0xA).to_string()));
         assert_eq!(cells_map.len(&txn), 0);
     }
 

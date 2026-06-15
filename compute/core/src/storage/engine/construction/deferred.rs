@@ -144,25 +144,22 @@ pub(in crate::storage::engine) fn import_from_xlsx_bytes_deferred(
         Vec<crate::storage::infra::hydration::ImportedRangeStyle>,
     > = Vec::with_capacity(parse_output.sheets.len());
     for sheet_idx in 0..parse_output.sheets.len() {
-        if sheet_idx == critical_sheet_index && sheet_idx < workbook_snap.sheets.len() {
-            let snap_sheet = &workbook_snap.sheets[sheet_idx];
-            let snap_positions: std::collections::HashSet<(u32, u32)> =
-                snap_sheet.cells.iter().map(|c| (c.row, c.col)).collect();
-            let ranged = parse_output.sheets[sheet_idx]
-                .cells
-                .iter()
-                .filter(|c| c.formula.is_some() || !c.value.is_null())
-                .map(|c| (c.row, c.col))
-                .filter(|pos| !snap_positions.contains(pos))
-                .collect();
-            critical_ranged_positions.push(ranged);
-            critical_range_data_per_sheet.push(snap_sheet.ranges.clone());
-        } else {
-            critical_ranged_positions.push(std::collections::HashSet::new());
-            critical_range_data_per_sheet.push(Vec::new());
-        }
-        critical_range_style_positions.push(std::collections::HashSet::new());
-        critical_range_styles_per_sheet.push(Vec::new());
+        let plan = match (
+            sheet_idx == critical_sheet_index,
+            workbook_snap.sheets.get(sheet_idx),
+        ) {
+            (true, Some(snap_sheet)) => build_deferred_critical_sheet_range_plan(
+                &parse_output.sheets[sheet_idx],
+                snap_sheet,
+                &allocations[sheet_idx],
+                &mut allocator,
+            ),
+            _ => DeferredCriticalSheetRangePlan::default(),
+        };
+        critical_ranged_positions.push(plan.ranged_positions);
+        critical_range_data_per_sheet.push(plan.ranges);
+        critical_range_style_positions.push(plan.range_style_positions);
+        critical_range_styles_per_sheet.push(plan.range_styles);
     }
     let mut critical_allocator = DefaultIdAllocator::new();
     {
@@ -192,6 +189,20 @@ pub(in crate::storage::engine) fn import_from_xlsx_bytes_deferred(
             critical_ranged_positions
                 .iter()
                 .map(|positions| positions.len() as u64)
+                .sum::<u64>(),
+        );
+        profile.counter(
+            "range_style_positions",
+            critical_range_style_positions
+                .iter()
+                .map(|positions| positions.len() as u64)
+                .sum::<u64>(),
+        );
+        profile.counter(
+            "range_styles",
+            critical_range_styles_per_sheet
+                .iter()
+                .map(|styles| styles.len() as u64)
                 .sum::<u64>(),
         );
     }
@@ -637,6 +648,42 @@ fn merge_import_reports(
     target.object_statuses.extend(source.object_statuses);
     target.stats = source.stats;
     target.canonicalize();
+}
+
+#[derive(Default)]
+struct DeferredCriticalSheetRangePlan {
+    ranged_positions: std::collections::HashSet<(u32, u32)>,
+    ranges: Vec<snapshot_types::RangeData>,
+    range_style_positions: std::collections::HashSet<(u32, u32)>,
+    range_styles: Vec<crate::storage::infra::hydration::ImportedRangeStyle>,
+}
+
+fn build_deferred_critical_sheet_range_plan(
+    sheet_data: &domain_types::SheetData,
+    snap_sheet: &SheetSnapshot,
+    allocation: &crate::storage::infra::hydration::SheetIdAllocation,
+    allocator: &mut crate::storage::infra::hydration::DefaultIdAllocator,
+) -> DeferredCriticalSheetRangePlan {
+    let snap_positions: std::collections::HashSet<(u32, u32)> =
+        snap_sheet.cells.iter().map(|c| (c.row, c.col)).collect();
+    let ranged_positions = sheet_data
+        .cells
+        .iter()
+        .filter(|c| c.formula.is_some() || !c.value.is_null())
+        .map(|c| (c.row, c.col))
+        .filter(|pos| !snap_positions.contains(pos))
+        .collect();
+    let ranges = snap_sheet.ranges.clone();
+    let (range_style_positions, range_styles) = range_style_formats_enabled()
+        .then(|| build_imported_range_style_plan(sheet_data, allocation, &ranges, allocator))
+        .unwrap_or_default();
+
+    DeferredCriticalSheetRangePlan {
+        ranged_positions,
+        ranges,
+        range_style_positions,
+        range_styles,
+    }
 }
 
 pub(in crate::storage::engine) fn commit_deferred_hydration(

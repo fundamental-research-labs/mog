@@ -1,15 +1,13 @@
-use std::collections::HashMap;
-
 use yrs::MapRef;
 
 use super::IdAllocator;
-use super::helpers::get_or_create_cell_id_for_pos;
+use super::helpers::{PositionMap, get_or_create_cell_id_for_pos};
 use crate::import::phantom::{parse_cell_ref, parse_range_ref};
 
 pub(super) fn normalize_form_control_references_for_hydration(
     obj: &mut domain_types::domain::floating_object::FloatingObject,
     cells_map: &MapRef,
-    pos_map: &mut HashMap<String, String>,
+    pos_map: &mut PositionMap,
     txn: &mut yrs::TransactionMut,
     allocator: &mut impl IdAllocator,
 ) {
@@ -65,7 +63,7 @@ pub(super) fn normalize_form_control_references_for_hydration(
 fn resolve_form_control_cell_ref_to_id(
     reference: &str,
     cells_map: &MapRef,
-    pos_map: &mut HashMap<String, String>,
+    pos_map: &mut PositionMap,
     txn: &mut yrs::TransactionMut,
     allocator: &mut impl IdAllocator,
 ) -> Option<String> {
@@ -79,7 +77,7 @@ fn resolve_form_control_cell_ref_to_id(
 fn resolve_form_control_range_ref_to_identity_json(
     reference: &str,
     cells_map: &MapRef,
-    pos_map: &mut HashMap<String, String>,
+    pos_map: &mut PositionMap,
     txn: &mut yrs::TransactionMut,
     allocator: &mut impl IdAllocator,
 ) -> Option<String> {

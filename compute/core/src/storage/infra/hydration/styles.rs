@@ -9,6 +9,8 @@ use domain_types::{CellData, DocumentFormat, SheetData, WorkbookStylesheet};
 use compute_document::hex::{SmallHex, id_to_hex};
 use compute_document::schema::*;
 
+use super::helpers::PositionMap;
+
 const KEY_STYLE_REGISTRY_NUMBER_FORMATS: &str = "numberFormats";
 const KEY_STYLE_REGISTRY_FONTS: &str = "fonts";
 const KEY_STYLE_REGISTRY_FILLS: &str = "fills";
@@ -505,7 +507,7 @@ pub(super) fn hydrate_authored_style_runs(
 /// `properties::resolve_compact_props` can deserialize it directly.
 pub(super) fn hydrate_cell_styles(
     txn: &mut yrs::TransactionMut,
-    pos_map: &HashMap<String, String>,
+    pos_map: &PositionMap,
     sheet_map: &MapRef,
     cells: &[CellData],
     range_style_positions: &std::collections::HashSet<(u32, u32)>,
@@ -548,8 +550,7 @@ pub(super) fn hydrate_cell_styles(
         }
 
         // Look up cell_id from in-memory pos_map
-        let pos_key = format!("{}:{}", cell.row, cell.col);
-        let cell_hex = match pos_map.get(&pos_key) {
+        let cell_hex = match pos_map.get(&(cell.row, cell.col)) {
             Some(s) => s.clone(),
             _ => continue,
         };

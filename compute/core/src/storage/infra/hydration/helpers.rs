@@ -6,6 +6,8 @@ use compute_document::hex::id_to_hex;
 
 use super::IdAllocator;
 
+pub(super) type PositionMap = HashMap<(u32, u32), String>;
+
 // ===========================================================================
 // Identity helpers (Row/Col/Cell ID allocation)
 // ===========================================================================
@@ -17,13 +19,13 @@ use super::IdAllocator;
 /// placeholder cell.
 pub(super) fn get_or_create_cell_id_for_pos(
     cells_map: &MapRef,
-    pos_map: &mut HashMap<String, String>,
+    pos_map: &mut PositionMap,
     txn: &mut yrs::TransactionMut,
     row: u32,
     col: u32,
     allocator: &mut impl IdAllocator,
 ) -> String {
-    let pos_key = format!("{}:{}", row, col);
+    let pos_key = (row, col);
 
     // Check in-memory map first
     if let Some(existing) = pos_map.get(&pos_key) {

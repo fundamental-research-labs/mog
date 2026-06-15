@@ -12,7 +12,7 @@
  *
  */
 
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
 import type {
   ColumnFilterCriteria,
@@ -22,6 +22,8 @@ import type {
 export interface ConditionFilterPanelProps {
   /** Current criteria if editing existing filter */
   currentCriteria?: Pick<ColumnFilterCriteria, 'conditions' | 'conditionLogic'>;
+  /** Operator selected from a type-specific submenu before opening the panel */
+  initialOperator?: FilterOperator | null;
   /** Called when user applies the condition filter */
   onApply: (criteria: ColumnFilterCriteria) => void;
   /** Called to cancel without applying */
@@ -97,12 +99,13 @@ function parseInputValue(input: string): string | number {
  */
 export function ConditionFilterPanel({
   currentCriteria,
+  initialOperator,
   onApply,
   onCancel,
 }: ConditionFilterPanelProps): React.ReactElement {
   // First condition state
   const [operator1, setOperator1] = useState<FilterOperator>(
-    currentCriteria?.conditions?.[0]?.operator ?? 'equals',
+    currentCriteria?.conditions?.[0]?.operator ?? initialOperator ?? 'equals',
   );
   const [value1, setValue1] = useState<string>(
     currentCriteria?.conditions?.[0]?.value != null
@@ -130,6 +133,14 @@ export function ConditionFilterPanel({
       ? String(currentCriteria.conditions[1].value)
       : '',
   );
+
+  useEffect(() => {
+    if (!initialOperator) return;
+    setOperator1(initialOperator);
+    if (!needsSecondValue(initialOperator)) {
+      setValue1b('');
+    }
+  }, [initialOperator]);
 
   // Validation
   const isValid = useMemo(() => {

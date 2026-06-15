@@ -122,7 +122,7 @@ export function FilterDropdownContent({
   const [activeSubmenu, setActiveSubmenu] = useState<ActiveSubmenu>(null);
 
   // Pending operator for condition panel (when switching from submenu)
-  const [, setPendingOperator] = useState<FilterOperator | null>(null);
+  const [pendingOperator, setPendingOperator] = useState<FilterOperator | null>(null);
 
   // Get filter state via Worksheet API (async)
   // Only store the fields we actually use (id + columnFilters)
@@ -518,6 +518,7 @@ export function FilterDropdownContent({
         ) : (
           <ConditionFilterPanel
             currentCriteria={conditionCriteria}
+            initialOperator={pendingOperator}
             onApply={handleApplyConditionFilter}
             onCancel={onClose}
           />

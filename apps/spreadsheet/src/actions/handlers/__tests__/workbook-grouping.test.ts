@@ -377,7 +377,31 @@ describe('Workbook SHOW_DETAIL/HIDE_DETAIL summary selections', () => {
     expect(outline.toggleCollapsed).toHaveBeenCalledWith('imported-cols-p-aa');
   });
 
-  it('expands an imported hidden column group from the adjacent column on the left', async () => {
+  it('expands an imported hidden row group through the outline toggle only', async () => {
+    const range: CellRange = { startRow: 4, startCol: 0, endRow: 4, endCol: 0 };
+    const { deps, outline, layout } = createMockDeps([range], {
+      rowGroups: [
+        {
+          id: 'imported-rows-2-4',
+          start: 1,
+          end: 3,
+          level: 1,
+          collapsed: true,
+          hidden: true,
+        },
+      ],
+      columnGroups: [],
+    });
+
+    const result = await SHOW_DETAIL(deps);
+
+    expect(result.handled).toBe(true);
+    expect(outline.toggleCollapsed).toHaveBeenCalledTimes(1);
+    expect(outline.toggleCollapsed).toHaveBeenCalledWith('imported-rows-2-4');
+    expect(layout.unhideRows).not.toHaveBeenCalled();
+  });
+
+  it('expands an imported hidden column group from the adjacent column on the left through the outline toggle only', async () => {
     const range: CellRange = { startRow: 12, startCol: 14, endRow: 12, endCol: 14 };
     const { deps, outline, layout } = createMockDeps([range], {
       rowGroups: [],
@@ -398,11 +422,10 @@ describe('Workbook SHOW_DETAIL/HIDE_DETAIL summary selections', () => {
     expect(result.handled).toBe(true);
     expect(outline.toggleCollapsed).toHaveBeenCalledTimes(1);
     expect(outline.toggleCollapsed).toHaveBeenCalledWith('imported-cols-p-aa');
-    expect(layout.unhideColumns).toHaveBeenCalledTimes(1);
-    expect(layout.unhideColumns).toHaveBeenCalledWith(15, 26);
+    expect(layout.unhideColumns).not.toHaveBeenCalled();
   });
 
-  it('expands an imported hidden column group from its visible leading sibling group', async () => {
+  it('expands an imported hidden column group from its visible leading sibling group through the outline toggle only', async () => {
     const range: CellRange = { startRow: 12, startCol: 11, endRow: 12, endCol: 11 };
     const { deps, outline, layout } = createMockDeps([range], {
       rowGroups: [],
@@ -424,8 +447,7 @@ describe('Workbook SHOW_DETAIL/HIDE_DETAIL summary selections', () => {
     expect(result.handled).toBe(true);
     expect(outline.toggleCollapsed).toHaveBeenCalledTimes(1);
     expect(outline.toggleCollapsed).toHaveBeenCalledWith('imported-cols-p-aa');
-    expect(layout.unhideColumns).toHaveBeenCalledTimes(1);
-    expect(layout.unhideColumns).toHaveBeenCalledWith(15, 26);
+    expect(layout.unhideColumns).not.toHaveBeenCalled();
   });
 
   it('expands a collapsed column group when the selection overlaps hidden detail columns', async () => {

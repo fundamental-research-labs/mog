@@ -76,18 +76,34 @@ impl<'a> grouping::SubtotalsCellAccessor for EngineSubtotalAccessor<'a> {
     }
 }
 
+fn empty_viewport_patches() -> Vec<u8> {
+    compute_wire::mutation::serialize_multi_viewport_patches(&[])
+}
+
+fn grouping_viewport_patches(
+    engine: &mut YrsComputeEngine,
+    sheet_id: &SheetId,
+    result: &MutationResult,
+) -> Vec<u8> {
+    // Visibility-changing grouping mutations already drive a client-side
+    // geometry refresh from MutationResult.visibility_changes. Returning a full
+    // viewport here duplicates that fetch and serializes buffers that the
+    // client immediately replaces.
+    if result.visibility_changes.is_empty() {
+        engine.produce_full_viewport_patches(sheet_id)
+    } else {
+        empty_viewport_patches()
+    }
+}
+
 pub(super) fn group_rows(
     engine: &mut YrsComputeEngine,
     sheet_id: &SheetId,
     start_row: u32,
     end_row: u32,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-    svc::group_rows(&mut engine.stores, sheet_id, start_row, end_row).map(|r| {
-        (
-            compute_wire::mutation::serialize_multi_viewport_patches(&[]),
-            r,
-        )
-    })
+    svc::group_rows(&mut engine.stores, sheet_id, start_row, end_row)
+        .map(|r| (empty_viewport_patches(), r))
 }
 
 pub(super) fn ungroup_rows(
@@ -97,7 +113,7 @@ pub(super) fn ungroup_rows(
     end_row: u32,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
     let result = svc::ungroup_rows(&mut engine.stores, sheet_id, start_row, end_row)?;
-    let patches = engine.produce_full_viewport_patches(sheet_id);
+    let patches = grouping_viewport_patches(engine, sheet_id, &result);
     Ok((patches, result))
 }
 
@@ -107,12 +123,8 @@ pub(super) fn group_columns(
     start_col: u32,
     end_col: u32,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-    svc::group_columns(&mut engine.stores, sheet_id, start_col, end_col).map(|r| {
-        (
-            compute_wire::mutation::serialize_multi_viewport_patches(&[]),
-            r,
-        )
-    })
+    svc::group_columns(&mut engine.stores, sheet_id, start_col, end_col)
+        .map(|r| (empty_viewport_patches(), r))
 }
 
 pub(super) fn ungroup_columns(
@@ -122,7 +134,7 @@ pub(super) fn ungroup_columns(
     end_col: u32,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
     let result = svc::ungroup_columns(&mut engine.stores, sheet_id, start_col, end_col)?;
-    let patches = engine.produce_full_viewport_patches(sheet_id);
+    let patches = grouping_viewport_patches(engine, sheet_id, &result);
     Ok((patches, result))
 }
 
@@ -133,7 +145,7 @@ pub(super) fn set_group_collapsed(
     collapsed: bool,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
     let result = svc::set_group_collapsed(&mut engine.stores, sheet_id, group_id, collapsed)?;
-    let patches = engine.produce_full_viewport_patches(sheet_id);
+    let patches = grouping_viewport_patches(engine, sheet_id, &result);
     Ok((patches, result))
 }
 
@@ -143,7 +155,7 @@ pub(super) fn toggle_group_collapsed(
     group_id: &str,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
     let result = svc::toggle_group_collapsed(&mut engine.stores, sheet_id, group_id)?;
-    let patches = engine.produce_full_viewport_patches(sheet_id);
+    let patches = grouping_viewport_patches(engine, sheet_id, &result);
     Ok((patches, result))
 }
 
@@ -152,7 +164,7 @@ pub(super) fn expand_all_groups(
     sheet_id: &SheetId,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
     let result = svc::expand_all_groups(&mut engine.stores, sheet_id)?;
-    let patches = engine.produce_full_viewport_patches(sheet_id);
+    let patches = grouping_viewport_patches(engine, sheet_id, &result);
     Ok((patches, result))
 }
 
@@ -161,7 +173,7 @@ pub(super) fn collapse_all_groups(
     sheet_id: &SheetId,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
     let result = svc::collapse_all_groups(&mut engine.stores, sheet_id)?;
-    let patches = engine.produce_full_viewport_patches(sheet_id);
+    let patches = grouping_viewport_patches(engine, sheet_id, &result);
     Ok((patches, result))
 }
 
@@ -197,14 +209,8 @@ pub(super) fn create_subtotals(
         end_col,
         options,
     })? {
-        MutationOutput::Recalc(result) => Ok((
-            compute_wire::mutation::serialize_multi_viewport_patches(&[]),
-            result,
-        )),
-        _ => Ok((
-            compute_wire::mutation::serialize_multi_viewport_patches(&[]),
-            MutationResult::empty(),
-        )),
+        MutationOutput::Recalc(result) => Ok((empty_viewport_patches(), result)),
+        _ => Ok((empty_viewport_patches(), MutationResult::empty())),
     }
 }
 
@@ -219,12 +225,9 @@ pub(super) fn remove_subtotals(
     let range = grouping::CellRange::new(start_row, start_col, end_row, end_col);
     let doc = engine.stores.storage.doc().clone();
     let sheets_map = doc.get_or_insert_map("sheets");
-    let mut accessor = EngineSubtotalAccessor { engine: engine };
+    let mut accessor = EngineSubtotalAccessor { engine };
     grouping::remove_subtotals(&doc, &sheets_map, &mut accessor, sheet_id, &range);
-    Ok((
-        compute_wire::mutation::serialize_multi_viewport_patches(&[]),
-        MutationResult::empty(),
-    ))
+    Ok((empty_viewport_patches(), MutationResult::empty()))
 }
 
 pub(super) fn auto_outline(
@@ -238,7 +241,7 @@ pub(super) fn auto_outline(
     let range = grouping::CellRange::new(start_row, start_col, end_row, end_col);
     let doc = engine.stores.storage.doc().clone();
     let sheets_map = doc.get_or_insert_map("sheets");
-    let accessor = EngineSubtotalAccessor { engine: engine };
+    let accessor = EngineSubtotalAccessor { engine };
     let count = grouping::auto_outline(&doc, &sheets_map, &accessor, sheet_id, &range);
     let mut result = MutationResult::empty();
     result.grouping_changes.push(GroupingChange {
@@ -246,10 +249,7 @@ pub(super) fn auto_outline(
         axis: Axis::Row,
         kind: ChangeKind::Set,
     });
-    Ok((
-        compute_wire::mutation::serialize_multi_viewport_patches(&[]),
-        result.with_data(&count)?,
-    ))
+    Ok((empty_viewport_patches(), result.with_data(&count)?))
 }
 
 pub(super) fn get_subtotal_config(
@@ -369,7 +369,7 @@ pub(super) fn set_level_collapsed(
     collapsed: bool,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
     let result = svc::set_level_collapsed(&mut engine.stores, sheet_id, axis, level, collapsed)?;
-    let patches = engine.produce_full_viewport_patches(sheet_id);
+    let patches = grouping_viewport_patches(engine, sheet_id, &result);
     Ok((patches, result))
 }
 
@@ -379,7 +379,7 @@ pub(super) fn set_outline_settings(
     settings: grouping::OutlineSettingsUpdate,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
     let result = svc::set_outline_settings(&mut engine.stores, sheet_id, &settings)?;
-    let patches = engine.produce_full_viewport_patches(sheet_id);
+    let patches = grouping_viewport_patches(engine, sheet_id, &result);
     Ok((patches, result))
 }
 
@@ -390,7 +390,7 @@ pub(super) fn clear_row_grouping(
     end_row: u32,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
     let result = svc::clear_row_grouping(&mut engine.stores, sheet_id, start_row, end_row)?;
-    let patches = engine.produce_full_viewport_patches(sheet_id);
+    let patches = grouping_viewport_patches(engine, sheet_id, &result);
     Ok((patches, result))
 }
 
@@ -401,7 +401,7 @@ pub(super) fn clear_column_grouping(
     end_col: u32,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
     let result = svc::clear_column_grouping(&mut engine.stores, sheet_id, start_col, end_col)?;
-    let patches = engine.produce_full_viewport_patches(sheet_id);
+    let patches = grouping_viewport_patches(engine, sheet_id, &result);
     Ok((patches, result))
 }
 
@@ -410,6 +410,6 @@ pub(super) fn clear_all_grouping(
     sheet_id: &SheetId,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
     let result = svc::clear_all_grouping(&mut engine.stores, sheet_id)?;
-    let patches = engine.produce_full_viewport_patches(sheet_id);
+    let patches = grouping_viewport_patches(engine, sheet_id, &result);
     Ok((patches, result))
 }

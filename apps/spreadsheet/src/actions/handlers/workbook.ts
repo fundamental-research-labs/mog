@@ -391,28 +391,19 @@ function detailIndexes(group: GroupRecord): number[] {
   );
 }
 
-async function setImportedDetailVisibility(
+async function hideImportedDetail(
   ws: import('@mog-sdk/contracts/api').WorksheetWithInternals,
   group: GroupRecord,
   axis: GroupingAxis,
-  visible: boolean,
 ): Promise<void> {
   if (group.hidden !== true) return;
 
   if (axis === 'rows') {
-    if (visible) {
-      await ws.layout.unhideRows(group.start, group.end);
-    } else {
-      await ws.layout.hideRows(detailIndexes(group));
-    }
+    await ws.layout.hideRows(detailIndexes(group));
     return;
   }
 
-  if (visible) {
-    await ws.layout.unhideColumns(group.start, group.end);
-  } else {
-    await ws.layout.hideColumns(detailIndexes(group));
-  }
+  await ws.layout.hideColumns(detailIndexes(group));
 }
 
 // =============================================================================
@@ -649,7 +640,6 @@ export const SHOW_DETAIL: AsyncActionHandler = async (deps) => {
         selectionMatchesRowGroupForDetail(group, bounds, settings, rowGroups)
       ) {
         await ws.outline.toggleCollapsed(group.id);
-        await setImportedDetailVisibility(ws, group, 'rows', true);
         toggled = true;
       }
     }
@@ -661,7 +651,6 @@ export const SHOW_DETAIL: AsyncActionHandler = async (deps) => {
         selectionMatchesColumnGroupForDetail(group, bounds, settings, columnGroups)
       ) {
         await ws.outline.toggleCollapsed(group.id);
-        await setImportedDetailVisibility(ws, group, 'columns', true);
         toggled = true;
       }
     }
@@ -703,7 +692,7 @@ export const HIDE_DETAIL: AsyncActionHandler = async (deps) => {
   if (rowGroupsContaining.length > 0) {
     const group = rowGroupsContaining[0];
     if (group.hidden === true) {
-      await setImportedDetailVisibility(ws, group, 'rows', false);
+      await hideImportedDetail(ws, group, 'rows');
     } else {
       await ws.outline.toggleCollapsed(group.id);
     }
@@ -724,7 +713,7 @@ export const HIDE_DETAIL: AsyncActionHandler = async (deps) => {
   if (colGroupsContaining.length > 0) {
     const group = colGroupsContaining[0];
     if (group.hidden === true) {
-      await setImportedDetailVisibility(ws, group, 'columns', false);
+      await hideImportedDetail(ws, group, 'columns');
     } else {
       await ws.outline.toggleCollapsed(group.id);
     }

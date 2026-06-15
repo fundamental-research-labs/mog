@@ -11,7 +11,6 @@
 use super::super::*;
 use super::helpers::*;
 use crate::snapshot::Axis;
-use compute_wire::constants::{CELL_STRIDE, DIM_STRIDE, MERGE_STRIDE, VIEWPORT_HEADER_SIZE};
 use domain_types::{
     ColDimension, OutlineGroup, ParseOutput, RowDimension, SheetData, SheetDimensions,
 };
@@ -30,63 +29,12 @@ fn created_group_id(group_result: MutationResult) -> String {
         .id
 }
 
-fn read_u16(bytes: &[u8], offset: usize) -> u16 {
-    u16::from_le_bytes([bytes[offset], bytes[offset + 1]])
-}
-
-fn read_u32(bytes: &[u8], offset: usize) -> u32 {
-    u32::from_le_bytes([
-        bytes[offset],
-        bytes[offset + 1],
-        bytes[offset + 2],
-        bytes[offset + 3],
-    ])
-}
-
-fn read_f32(bytes: &[u8], offset: usize) -> f32 {
-    f32::from_le_bytes([
-        bytes[offset],
-        bytes[offset + 1],
-        bytes[offset + 2],
-        bytes[offset + 3],
-    ])
-}
-
-fn viewport_dimension_offsets(viewport_bytes: &[u8]) -> (usize, usize, usize, usize) {
-    let cell_count = read_u32(viewport_bytes, 8) as usize;
-    let string_pool_bytes = read_u32(viewport_bytes, 16) as usize;
-    let merge_count = read_u16(viewport_bytes, 24) as usize;
-    let row_dim_count = read_u16(viewport_bytes, 26) as usize;
-    let col_dim_count = read_u16(viewport_bytes, 28) as usize;
-
-    let row_dims_start = VIEWPORT_HEADER_SIZE
-        + cell_count * CELL_STRIDE
-        + string_pool_bytes
-        + merge_count * MERGE_STRIDE;
-    let col_dims_start = row_dims_start + row_dim_count * DIM_STRIDE;
-    (row_dims_start, row_dim_count, col_dims_start, col_dim_count)
-}
-
-fn viewport_row_height(viewport_bytes: &[u8], target_row: u32) -> Option<f32> {
-    let (row_dims_start, row_dim_count, _, _) = viewport_dimension_offsets(viewport_bytes);
-    for index in 0..row_dim_count {
-        let offset = row_dims_start + index * DIM_STRIDE;
-        if read_u32(viewport_bytes, offset) == target_row {
-            return Some(read_f32(viewport_bytes, offset + 4));
-        }
-    }
-    None
-}
-
-fn viewport_col_width(viewport_bytes: &[u8], target_col: u32) -> Option<f32> {
-    let (_, _, col_dims_start, col_dim_count) = viewport_dimension_offsets(viewport_bytes);
-    for index in 0..col_dim_count {
-        let offset = col_dims_start + index * DIM_STRIDE;
-        if read_u32(viewport_bytes, offset) == target_col {
-            return Some(read_f32(viewport_bytes, offset + 4));
-        }
-    }
-    None
+fn assert_empty_viewport_patches(patches: &[u8]) {
+    assert_eq!(
+        patches,
+        &[0, 0],
+        "visibility-changing outline mutations should not duplicate the client geometry refresh"
+    );
 }
 
 #[test]
@@ -432,7 +380,7 @@ fn expanded_outline_group_does_not_zero_height() {
 }
 
 #[test]
-fn collapsed_outline_group_updates_layout_index_and_viewport_rows() {
+fn collapsed_outline_group_updates_layout_index_and_defers_viewport_refresh_rows() {
     let snap = simple_snapshot();
     let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
@@ -475,11 +423,7 @@ fn collapsed_outline_group_updates_layout_index_and_viewport_rows() {
         "outline collapse affects effective height, not explicit hidden state"
     );
 
-    let viewport_bytes =
-        extract_first_viewport_mutation(&collapse_patches).expect("viewport patch");
-    assert_eq!(viewport_row_height(&viewport_bytes, 2), Some(0.0));
-    assert_eq!(viewport_row_height(&viewport_bytes, 3), Some(0.0));
-    assert_eq!(viewport_row_height(&viewport_bytes, 4), Some(0.0));
+    assert_empty_viewport_patches(&collapse_patches);
 
     let (expand_patches, expand_result) = engine
         .set_group_collapsed(&sid, &group_id, false)
@@ -502,14 +446,11 @@ fn collapsed_outline_group_updates_layout_index_and_viewport_rows() {
     assert!(layout.get_row_height(3).0 > 0.0);
     assert!(layout.get_row_height(4).0 > 0.0);
 
-    let viewport_bytes = extract_first_viewport_mutation(&expand_patches).expect("viewport patch");
-    assert!(viewport_row_height(&viewport_bytes, 2).is_some_and(|height| height > 0.0));
-    assert!(viewport_row_height(&viewport_bytes, 3).is_some_and(|height| height > 0.0));
-    assert!(viewport_row_height(&viewport_bytes, 4).is_some_and(|height| height > 0.0));
+    assert_empty_viewport_patches(&expand_patches);
 }
 
 #[test]
-fn collapsed_outline_group_updates_layout_index_and_viewport_columns() {
+fn collapsed_outline_group_updates_layout_index_and_defers_viewport_refresh_columns() {
     let snap = simple_snapshot();
     let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
     let sid = sheet_id();
@@ -555,10 +496,5 @@ fn collapsed_outline_group_updates_layout_index_and_viewport_columns() {
         "outline collapse affects effective width, not explicit hidden state"
     );
 
-    let viewport_bytes =
-        extract_first_viewport_mutation(&collapse_patches).expect("viewport patch");
-    assert_eq!(viewport_col_width(&viewport_bytes, 3), Some(0.0));
-    assert_eq!(viewport_col_width(&viewport_bytes, 4), Some(0.0));
-    assert_eq!(viewport_col_width(&viewport_bytes, 5), Some(0.0));
-    assert_eq!(viewport_col_width(&viewport_bytes, 6), Some(0.0));
+    assert_empty_viewport_patches(&collapse_patches);
 }

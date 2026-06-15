@@ -107,7 +107,12 @@ fn create_subtotals_replaces_existing_on_production_engine_path() {
     );
 
     let rows: Vec<[String; 2]> = (0..=8)
-        .map(|row| [text_at(&engine, &sid, row, 0), text_at(&engine, &sid, row, 1)])
+        .map(|row| {
+            [
+                text_at(&engine, &sid, row, 0),
+                text_at(&engine, &sid, row, 1),
+            ]
+        })
         .collect();
     assert_eq!(
         rows,

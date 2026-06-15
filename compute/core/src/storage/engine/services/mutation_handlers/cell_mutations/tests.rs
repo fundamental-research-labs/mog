@@ -89,7 +89,8 @@ fn patch_flags_for_position(packed: &[u8], row: u32, col: u32) -> Option<u16> {
 
     for i in 0..patch_count {
         let patch_off = patches_start + i * PATCH_STRIDE;
-        let patch_row = u32::from_le_bytes(mutation.get(patch_off..patch_off + 4)?.try_into().ok()?);
+        let patch_row =
+            u32::from_le_bytes(mutation.get(patch_off..patch_off + 4)?.try_into().ok()?);
         let patch_col = u32::from_le_bytes(
             mutation
                 .get(patch_off + 4..patch_off + 8)?

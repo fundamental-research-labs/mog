@@ -71,7 +71,9 @@ async function extendToDataEdge(
 
   const newRange = rangeFromAnchorAndCell(anchorCell, targetCell);
 
-  deps.commands.selection.setSelection([newRange], targetCell, anchorCell);
+  // Physical Shift-extension keeps the anchor as the active cell. The moving
+  // edge still drives range growth and viewport-follow through the range shape.
+  deps.commands.selection.setSelection([newRange], anchorCell, anchorCell);
   return handled();
 }
 

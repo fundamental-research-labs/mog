@@ -533,7 +533,7 @@ describe('Ctrl+Shift+Arrow extend (jumpToEdgeExtend)', () => {
       endRow: 14,
       endCol: 1,
     });
-    expect(result.activeCell).toEqual({ row: 14, col: 1 });
+    expect(result.activeCell).toEqual({ row: 4, col: 1 });
     expect(result.anchor).toEqual({ row: 4, col: 1 });
   });
 
@@ -559,7 +559,7 @@ describe('Ctrl+Shift+Arrow extend (jumpToEdgeExtend)', () => {
       endRow: 14,
       endCol: 1,
     });
-    expect(result.activeCell).toEqual({ row: 4, col: 1 });
+    expect(result.activeCell).toEqual({ row: 14, col: 1 });
     expect(result.anchor).toEqual({ row: 14, col: 1 });
   });
 
@@ -586,7 +586,7 @@ describe('Ctrl+Shift+Arrow extend (jumpToEdgeExtend)', () => {
       endRow: 18,
       endCol: 1,
     });
-    expect(result.activeCell).toEqual({ row: 18, col: 1 });
+    expect(result.activeCell).toEqual({ row: 4, col: 1 });
     expect(result.anchor).toEqual({ row: 4, col: 1 });
   });
 });

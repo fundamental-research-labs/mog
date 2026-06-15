@@ -343,7 +343,7 @@ describe('extendToDataEdge - Cmd+Shift+Arrow bug reproduction', () => {
 });
 
 describe('EXTEND_TO_EDGE handler contract', () => {
-  it('moves activeCell to the data edge while preserving the anchor', async () => {
+  it('keeps activeCell at the anchor while extending to the data edge', async () => {
     const activeCell: CellCoord = { row: 0, col: 0 };
     const targetCell: CellCoord = { row: 0, col: 2 };
     const setSelection = jest.fn();
@@ -373,7 +373,7 @@ describe('EXTEND_TO_EDGE handler contract', () => {
     expect(result.handled).toBe(true);
     expect(setSelection).toHaveBeenCalledWith(
       [{ startRow: 0, startCol: 0, endRow: 0, endCol: 2 }],
-      targetCell,
+      activeCell,
       activeCell,
     );
   });

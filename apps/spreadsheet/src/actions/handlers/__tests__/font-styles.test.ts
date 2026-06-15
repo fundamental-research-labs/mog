@@ -12,6 +12,14 @@ function createMockDeps(
   opts: {
     activeFormat?: Record<string, unknown>;
     displayedFormats?: Array<Array<Record<string, unknown>>>;
+    displayText?: string | null;
+    viewportBounds?: {
+      sheetId: string;
+      startRow: number;
+      startCol: number;
+      endRow: number;
+      endCol: number;
+    } | null;
   } = {},
 ) {
   const calls: string[] = [];
@@ -19,9 +27,14 @@ function createMockDeps(
   const worksheet = {
     viewport: {
       getCellData: jest.fn(() => ({
-        displayText: 'wrapped text',
+        displayText: opts.displayText === undefined ? 'wrapped text' : opts.displayText,
         format: opts.activeFormat ?? { wrapText: false },
       })),
+      getBounds: jest.fn(() =>
+        opts.viewportBounds === undefined
+          ? { sheetId: activeSheetId, startRow: 0, startCol: 0, endRow: 100, endCol: 100 }
+          : opts.viewportBounds,
+      ),
     },
     formats: {
       getDisplayedRangeProperties: jest.fn(async () => opts.displayedFormats ?? [[{}]]),
@@ -78,6 +91,35 @@ describe('font style formatting actions', () => {
     expect(workbook.undoGroup).toHaveBeenCalledTimes(1);
     expect(worksheet.formats.setRanges).toHaveBeenCalledWith([range], { fontSize: 24 });
     expect(worksheet.layout.autoFitRows).toHaveBeenCalledWith([0]);
+    expect(calls).toEqual(['undoGroup:start', 'setRanges', 'autoFitRows', 'undoGroup:end']);
+  });
+
+  it('skips row auto-fit for SET_FONT_SIZE when changed visible cells are empty', async () => {
+    const range: CellRange = { startRow: 0, startCol: 0, endRow: 0, endCol: 0 };
+    const { deps, workbook, worksheet, calls } = createMockDeps([range], {
+      displayText: null,
+    });
+
+    const result = await SET_FONT_SIZE(deps, { size: 24 });
+
+    expect(result.handled).toBe(true);
+    expect(workbook.undoGroup).toHaveBeenCalledTimes(1);
+    expect(worksheet.formats.setRanges).toHaveBeenCalledWith([range], { fontSize: 24 });
+    expect(worksheet.layout.autoFitRows).not.toHaveBeenCalled();
+    expect(calls).toEqual(['undoGroup:start', 'setRanges', 'undoGroup:end']);
+  });
+
+  it('keeps row auto-fit for SET_FONT_SIZE when changed cells are outside the viewport', async () => {
+    const range: CellRange = { startRow: 500, startCol: 0, endRow: 500, endCol: 0 };
+    const { deps, worksheet, calls } = createMockDeps([range], {
+      displayText: null,
+      viewportBounds: { sheetId: activeSheetId, startRow: 0, startCol: 0, endRow: 100, endCol: 100 },
+    });
+
+    const result = await SET_FONT_SIZE(deps, { size: 24 });
+
+    expect(result.handled).toBe(true);
+    expect(worksheet.layout.autoFitRows).toHaveBeenCalledWith([500]);
     expect(calls).toEqual(['undoGroup:start', 'setRanges', 'autoFitRows', 'undoGroup:end']);
   });
 

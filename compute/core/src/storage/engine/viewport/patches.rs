@@ -16,7 +16,7 @@ use compute_document::hex::id_to_hex;
 use compute_wire::PaletteSnapshot;
 use compute_wire::mutation::CfColorOverrides;
 use domain_types::CellFormat;
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use snapshot_types::RecalcResult;
 use value_types::CellValue;
 
@@ -266,6 +266,131 @@ impl YrsComputeEngine {
         }
 
         compute_wire::mutation::serialize_multi_viewport_patches(&patches)
+    }
+
+    /// Produce targeted viewport patches for row/column format mutations.
+    ///
+    /// Row/column formats affect virtual cells too, so this cannot enumerate
+    /// only allocated cell IDs. Instead, synthesize format changes for the
+    /// visible strips intersecting registered viewports.
+    pub(crate) fn produce_row_col_format_viewport_patches(
+        &mut self,
+        sheet_id: &SheetId,
+        rows: &[u32],
+        cols: &[u32],
+    ) -> Vec<u8> {
+        let mut positions: FxHashSet<(u32, u32)> = FxHashSet::default();
+
+        for (_viewport_id, bounds) in self.viewport.viewports_for_sheet(sheet_id) {
+            for &row in rows {
+                if row < bounds.start_row || row > bounds.end_row {
+                    continue;
+                }
+                for col in bounds.start_col..=bounds.end_col {
+                    positions.insert((row, col));
+                }
+            }
+
+            for &col in cols {
+                if col < bounds.start_col || col > bounds.end_col {
+                    continue;
+                }
+                for row in bounds.start_row..=bounds.end_row {
+                    positions.insert((row, col));
+                }
+            }
+        }
+
+        if positions.is_empty() {
+            return compute_wire::mutation::serialize_multi_viewport_patches(&[]);
+        }
+
+        let mut positions: Vec<(u32, u32)> = positions.into_iter().collect();
+        positions.sort_unstable();
+
+        let sheet_id_str = sheet_id.to_uuid_string();
+
+        // Pass 1: collect value + effective format without holding the
+        // mutable palette borrow needed for interning.
+        let mut cell_data: Vec<(String, u32, u32, CellValue, CellFormat)> =
+            Vec::with_capacity(positions.len());
+
+        for (row, col) in positions {
+            let pos = SheetPos::new(row, col);
+            let resolved_cell_id = self.mirror.resolve_cell_id(sheet_id, pos);
+            let value = resolved_cell_id
+                .as_ref()
+                .and_then(|cell_id| self.stores.compute.get_cell_value(&self.mirror, cell_id))
+                .cloned()
+                .unwrap_or_else(|| {
+                    self.mirror
+                        .get_cell_value_at(sheet_id, pos)
+                        .cloned()
+                        .unwrap_or(CellValue::Null)
+                });
+            let cell_id_str = resolved_cell_id
+                .as_ref()
+                .map(|cell_id| cell_id.to_uuid_string())
+                .unwrap_or_default();
+            let cell_hex = resolved_cell_id
+                .as_ref()
+                .map(|cell_id| id_to_hex(cell_id.as_u128()))
+                .unwrap_or_default();
+            let table_fmt =
+                services::tables::resolve_table_format_at_cell(&self.mirror, sheet_id, row, col);
+            let effective = properties::get_effective_format(
+                &self.stores.storage,
+                sheet_id,
+                &cell_hex,
+                row,
+                col,
+                table_fmt.as_ref(),
+                self.stores.grid_indexes.get(sheet_id),
+                self.mirror.get_sheet(sheet_id),
+            );
+
+            cell_data.push((cell_id_str, row, col, value, effective));
+        }
+
+        // Pass 2: intern effective formats into the sheet palette.
+        let mut palettes = self.viewport.format_palettes_mut();
+        let palette = palettes.entry(*sheet_id).or_default();
+        let palette_len_before = palette.len() as u16;
+        let theme_palette = &self.settings.theme_palette;
+
+        let mut changed_cells: Vec<snapshot_types::CellChange> =
+            Vec::with_capacity(cell_data.len());
+        for (cell_id, row, col, value, mut effective) in cell_data {
+            domain_types::theme_color::resolve_theme_refs(&mut effective, theme_palette);
+            let format_idx = palette.intern(&effective).unwrap_or(0);
+            changed_cells.push(snapshot_types::CellChange {
+                cell_id,
+                sheet_id: sheet_id_str.clone(),
+                position: Some(snapshot_types::CellPosition { row, col }),
+                value,
+                display_text: None,
+                format_idx: Some(format_idx),
+                extra_flags: 0,
+                old_value: None,
+            });
+        }
+
+        let delta_formats = palette.formats_since(palette_len_before);
+        let palette_bytes = compute_wire::palette_binary::serialize_palette_binary(
+            delta_formats,
+            palette_len_before,
+        );
+        drop(palettes);
+
+        let mut recalc = RecalcResult::empty();
+        recalc.changed_cells = changed_cells;
+
+        self.produce_format_viewport_patches(
+            &mut recalc,
+            sheet_id,
+            palette_len_before,
+            &palette_bytes,
+        )
     }
 
     /// Produce multi-viewport patches for a recalc result (possibly multi-sheet).

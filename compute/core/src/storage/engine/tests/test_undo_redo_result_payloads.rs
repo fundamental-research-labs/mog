@@ -3,6 +3,14 @@
 use super::super::*;
 use super::helpers::*;
 
+fn sorted_first_viewport_patch_positions(patches: &[u8]) -> Vec<(u32, u32)> {
+    let mutation =
+        extract_first_viewport_mutation(patches).expect("expected first viewport mutation patch");
+    let mut positions = extract_patch_positions(&mutation);
+    positions.sort_unstable();
+    positions
+}
+
 #[test]
 fn test_undo_formula_clear_reports_restored_cell_change() {
     let snap = simple_snapshot();
@@ -117,14 +125,31 @@ fn test_undo_row_format_produces_viewport_patches() {
         bold: Some(true),
         ..Default::default()
     };
-    engine.set_row_format(&sid, 0, format).unwrap();
+    let (forward_patches, _result) = engine.set_row_format(&sid, 0, format).unwrap();
+    let forward_positions = sorted_first_viewport_patch_positions(&forward_patches);
+    assert_eq!(
+        forward_positions.len(),
+        27,
+        "forward row format should patch only the visible row strip"
+    );
+    assert!(
+        forward_positions.iter().all(|(row, _col)| *row == 0),
+        "forward row format patched non-row cells: {:?}",
+        forward_positions
+    );
 
     let (patches, _result) = engine.undo().unwrap();
+    let undo_positions = sorted_first_viewport_patch_positions(&patches);
 
+    assert_eq!(
+        undo_positions.len(),
+        27,
+        "undo row format should patch only the visible row strip"
+    );
     assert!(
-        patches.len() > 2,
-        "undo of row format should produce viewport patches, got {} bytes",
-        patches.len(),
+        undo_positions.iter().all(|(row, _col)| *row == 0),
+        "undo row format patched non-row cells: {:?}",
+        undo_positions
     );
 }
 
@@ -144,14 +169,31 @@ fn test_undo_col_format_produces_viewport_patches() {
         bold: Some(true),
         ..Default::default()
     };
-    engine.set_col_format(&sid, 0, format).unwrap();
+    let (forward_patches, _result) = engine.set_col_format(&sid, 0, format).unwrap();
+    let forward_positions = sorted_first_viewport_patch_positions(&forward_patches);
+    assert_eq!(
+        forward_positions.len(),
+        101,
+        "forward column format should patch only the visible column strip"
+    );
+    assert!(
+        forward_positions.iter().all(|(_row, col)| *col == 0),
+        "forward column format patched non-column cells: {:?}",
+        forward_positions
+    );
 
     let (patches, _result) = engine.undo().unwrap();
+    let undo_positions = sorted_first_viewport_patch_positions(&patches);
 
+    assert_eq!(
+        undo_positions.len(),
+        101,
+        "undo column format should patch only the visible column strip"
+    );
     assert!(
-        patches.len() > 2,
-        "undo of column format should produce viewport patches, got {} bytes",
-        patches.len(),
+        undo_positions.iter().all(|(_row, col)| *col == 0),
+        "undo column format patched non-column cells: {:?}",
+        undo_positions
     );
 }
 

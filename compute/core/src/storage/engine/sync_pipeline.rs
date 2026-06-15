@@ -957,8 +957,50 @@ impl YrsComputeEngine {
 
         let mut full_viewport_sheets = std::collections::HashSet::new();
         full_viewport_sheets.extend(doc_changes.sparklines.iter().map(|change| change.sheet_id));
-        full_viewport_sheets.extend(doc_changes.row_formats.iter().map(|change| change.sheet_id));
-        full_viewport_sheets.extend(doc_changes.col_formats.iter().map(|change| change.sheet_id));
+        let mut row_col_format_sheets =
+            std::collections::HashMap::<SheetId, (Vec<u32>, Vec<u32>)>::new();
+        for change in &doc_changes.row_formats {
+            if let Some(row) = change.key.as_deref().and_then(|key| {
+                services::mutation::resolve_hex_id_to_position(
+                    &self.stores,
+                    &change.sheet_id,
+                    key,
+                    true,
+                )
+            }) {
+                row_col_format_sheets
+                    .entry(change.sheet_id)
+                    .or_default()
+                    .0
+                    .push(row);
+            } else {
+                full_viewport_sheets.insert(change.sheet_id);
+            }
+        }
+        for change in &doc_changes.col_formats {
+            if let Some(col) = change.key.as_deref().and_then(|key| {
+                services::mutation::resolve_hex_id_to_position(
+                    &self.stores,
+                    &change.sheet_id,
+                    key,
+                    false,
+                )
+            }) {
+                row_col_format_sheets
+                    .entry(change.sheet_id)
+                    .or_default()
+                    .1
+                    .push(col);
+            } else {
+                full_viewport_sheets.insert(change.sheet_id);
+            }
+        }
+        let row_col_format_patch_sets = row_col_format_sheets
+            .into_iter()
+            .map(|(sheet_id, (rows, cols))| {
+                self.produce_row_col_format_viewport_patches(&sheet_id, &rows, &cols)
+            })
+            .collect::<Vec<_>>();
         let full_viewport_patch_sets = full_viewport_sheets
             .into_iter()
             .map(|sheet_id| self.produce_full_viewport_patches(&sheet_id))
@@ -969,7 +1011,11 @@ impl YrsComputeEngine {
             &value_patches,
             &format_patches,
         );
-        for patches in cf_patch_sets.into_iter().chain(full_viewport_patch_sets) {
+        for patches in cf_patch_sets
+            .into_iter()
+            .chain(row_col_format_patch_sets)
+            .chain(full_viewport_patch_sets)
+        {
             combined_patches = viewport::service::ViewportService::merge_patch_binaries(
                 &combined_patches,
                 &patches,

@@ -91,7 +91,6 @@ function isShowFormulasChange(change: SheetSettingsChange): boolean {
 
 function historyReplayNeedsFullViewportRefresh(result: MutationResult): boolean {
   return Boolean(
-    result.propertyChanges?.length ||
     result.dimensionChanges?.length ||
     result.mergeChanges?.length ||
     result.visibilityChanges?.length ||

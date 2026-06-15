@@ -7,11 +7,7 @@ pub(super) fn set_row_format(
     format: CellFormat,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
     let result = services::formatting::set_row_format(&mut engine.stores, sheet_id, row, &format)?;
-    // Row-level format affects every cell in the row, including virtual
-    // positions with no allocated cell — there is no enumerable affected
-    // set, so rebuild the visible viewport region. Mirrors the broad-effect
-    // pattern used by `produce_cf_viewport_patches`.
-    let patches = engine.produce_full_viewport_patches(sheet_id);
+    let patches = engine.produce_row_col_format_viewport_patches(sheet_id, &[row], &[]);
     Ok((patches, result))
 }
 
@@ -22,7 +18,7 @@ pub(super) fn set_col_format(
     format: CellFormat,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
     let result = services::formatting::set_col_format(&mut engine.stores, sheet_id, col, &format)?;
-    let patches = engine.produce_full_viewport_patches(sheet_id);
+    let patches = engine.produce_row_col_format_viewport_patches(sheet_id, &[], &[col]);
     Ok((patches, result))
 }
 
@@ -48,7 +44,11 @@ pub(super) fn set_row_formats(
     for (row, format) in &updates {
         services::formatting::set_row_format(&mut engine.stores, sheet_id, *row, format)?;
     }
-    let patches = engine.produce_full_viewport_patches(sheet_id);
+    let rows = updates
+        .iter()
+        .map(|(row, _format)| *row)
+        .collect::<Vec<_>>();
+    let patches = engine.produce_row_col_format_viewport_patches(sheet_id, &rows, &[]);
     Ok((patches, MutationResult::empty()))
 }
 
@@ -74,6 +74,10 @@ pub(super) fn set_col_formats(
     for (col, format) in &updates {
         services::formatting::set_col_format(&mut engine.stores, sheet_id, *col, format)?;
     }
-    let patches = engine.produce_full_viewport_patches(sheet_id);
+    let cols = updates
+        .iter()
+        .map(|(col, _format)| *col)
+        .collect::<Vec<_>>();
+    let patches = engine.produce_row_col_format_viewport_patches(sheet_id, &[], &cols);
     Ok((patches, MutationResult::empty()))
 }

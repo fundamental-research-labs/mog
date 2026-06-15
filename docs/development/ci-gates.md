@@ -72,11 +72,16 @@ collaboration, API, or app behavior.
 
 ## GitHub Publish Workflow
 
-The checked-in GitHub Actions workflow is
+The primary checked-in GitHub Actions workflow is
 `.github/workflows/publish-sdk.yml`. It is a manual `workflow_dispatch` release
 workflow, not the local PR gate. It validates release branch and package
 versions, checks whether target npm packages already exist, builds native and
 WASM artifacts, then runs publish-readiness steps against release candidates.
+For production releases, it also calls `.github/workflows/publish-vscode-extension.yml`
+after npm package publication so `FundamentalResearchLabs.mog-xlsx-editor` is
+published to both the VS Code Marketplace and Open VSX as part of the standard
+SDK release path. Production marketplace publishing requires `VSCE_PAT` and
+`OVSX_PAT` secrets.
 
 The publish workflow does not call `pnpm check:publish-readiness` verbatim. It
 runs the relevant component commands directly because the workflow has
@@ -95,6 +100,12 @@ pnpm assemble:public-packages
 pnpm check:public-package-manifests
 pnpm check:external-fixtures -- --skip-build
 ```
+
+The marketplace workflow packages the VSIX from the same release version,
+hydrates `@mog-sdk/wasm` from the just-published npm package, runs the extension
+unit tests and typecheck, uploads the VSIX artifact, then publishes it to both
+marketplaces. The SDK release job waits for that marketplace job before creating
+the GitHub release and attaches the VSIX beside the CLI skill artifact.
 
 ## Workflow Rule
 

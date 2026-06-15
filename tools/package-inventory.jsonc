@@ -6,7 +6,8 @@
   // disposition: "ship-public" | "binary-wrapper" | "bundle-only" | "workspace-internal"
   //            | "private" | "dev-eval" | "generated-asset" | "reserved" | "monorepo-root"
   // requirePrivate: true if the package.json MUST have "private": true
-  // publicTarget: the public package or marketplace target (null if not publishable)
+  // publicTarget: the primary public package or marketplace target (null if not publishable)
+  // marketplaceTargets: all marketplace targets for marketplace-extension packages
   // forbiddenRuntimeDeps: patterns that must NOT appear in dependencies/peerDependencies
 
   // ── monorepo root ─────────────────────────────────────────────────────
@@ -672,7 +673,11 @@
   "mog-xlsx-editor": {
     "disposition": "marketplace-extension",
     "requirePrivate": false,
-    "publicTarget": "vscode:mog.mog-xlsx-editor",
+    "publicTarget": "vscode:FundamentalResearchLabs.mog-xlsx-editor",
+    "marketplaceTargets": [
+      "vscode:FundamentalResearchLabs.mog-xlsx-editor",
+      "open-vsx:FundamentalResearchLabs.mog-xlsx-editor",
+    ],
     "forbiddenRuntimeDeps": [],
   },
 

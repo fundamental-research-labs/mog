@@ -972,14 +972,35 @@ jobs:
         env:
           PUBLISH_PYTHON: ${{ inputs.publish-python || false }}
 
-  release:
-    name: Create GitHub Release
+  publish-vscode-extension:
+    name: Publish VS Code and Open VSX extension
     needs: [version, publish]
     if: |
       always() &&
       needs.version.outputs.dry-run != 'true' &&
       needs.version.result == 'success' &&
       needs.publish.result == 'success'
+    uses: ./.github/workflows/publish-vscode-extension.yml
+    with:
+      version: ${{ needs.version.outputs.version }}
+      dry-run: false
+      publish_vs_marketplace: true
+      publish_open_vsx: true
+      run_typecheck: true
+      wasm_package_version: ${{ needs.version.outputs.version }}
+    secrets:
+      VSCE_PAT: ${{ secrets.VSCE_PAT }}
+      OVSX_PAT: ${{ secrets.OVSX_PAT }}
+
+  release:
+    name: Create GitHub Release
+    needs: [version, publish, publish-vscode-extension]
+    if: |
+      always() &&
+      needs.version.outputs.dry-run != 'true' &&
+      needs.version.result == 'success' &&
+      needs.publish.result == 'success' &&
+      needs.publish-vscode-extension.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -991,6 +1012,12 @@ jobs:
         uses: actions/download-artifact@v7
         with:
           name: mog-cli-kernel-skill-${{ needs.version.outputs.version }}
+          path: artifacts
+
+      - name: Download VS Code extension artifact
+        uses: actions/download-artifact@v7
+        with:
+          name: mog-xlsx-editor-vsix-${{ needs.version.outputs.version }}
           path: artifacts
 
       - name: Ensure TypeScript SDK release tag exists
@@ -1020,6 +1047,14 @@ jobs:
         run: |
           gh release upload "${{ needs.version.outputs.tag }}" \
             artifacts/mog-cli-kernel.skill.zip \
+            --clobber
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload VS Code extension artifact to TypeScript SDK release
+        run: |
+          gh release upload "${{ needs.version.outputs.tag }}" \
+            artifacts/mog-xlsx-editor.vsix \
             --clobber
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,4 +1,5 @@
 use super::helpers::capture_namespaces_from_xml;
+use crate::domain::cells::pre_sheet_data_region;
 use crate::domain::workbook::read::SheetPackageContext;
 use crate::domain::worksheet::read::{
     parse_dimension_ref_with_text, parse_dimensions, parse_frozen_pane, parse_sheet_format_pr,
@@ -68,9 +69,7 @@ pub(super) fn append_metadata_only_sheets(
 }
 
 fn apply_metadata_xml(empty_sheet: &mut FullParsedSheet, xml: &[u8]) {
-    let pre_sd = memchr::memmem::find(xml, b"<sheetData")
-        .map(|p| &xml[..p])
-        .unwrap_or(xml);
+    let pre_sd = pre_sheet_data_region(xml);
     let (col_widths, row_heights) = parse_dimensions(xml);
     empty_sheet.col_widths = col_widths;
     empty_sheet.row_heights = row_heights;

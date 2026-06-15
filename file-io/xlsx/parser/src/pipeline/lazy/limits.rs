@@ -1,17 +1,7 @@
 use super::ParseError;
 
 pub(super) fn count_worksheet_cell_elements(xml: &[u8]) -> usize {
-    let mut count = 0usize;
-    let mut pos = 0usize;
-    while let Some(rel) = memchr::memmem::find(&xml[pos..], b"<c") {
-        let start = pos + rel;
-        let next = start + 2;
-        if next >= xml.len() || matches!(xml[next], b' ' | b'>' | b'/' | b'\t' | b'\n' | b'\r') {
-            count += 1;
-        }
-        pos = next;
-    }
-    count
+    crate::domain::cells::count_worksheet_cell_elements(xml)
 }
 
 pub(super) fn ensure_lazy_limit(label: &str, count: usize, limit: usize) -> Result<(), ParseError> {
@@ -41,6 +31,11 @@ mod tests {
             (b"<c\nfoo=\"bar\">".as_slice(), 1),
             (b"<c\rfoo=\"bar\">".as_slice(), 1),
             (b"<c".as_slice(), 1),
+            (b"<x:c>".as_slice(), 1),
+            (b"<x:c/>".as_slice(), 1),
+            (b"<x:c r=\"A1\">".as_slice(), 1),
+            (b"<x:cols>".as_slice(), 0),
+            (b"<x:conditionalFormatting>".as_slice(), 0),
         ];
 
         for (xml, expected) in cases {

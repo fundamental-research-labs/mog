@@ -1,4 +1,4 @@
-use super::super::adapters::{find_byte, find_sequence};
+use super::super::adapters::find_byte;
 use super::super::types::{
     AuthoredStyleOnlyCell, CELL_TYPE_BOOL, CELL_TYPE_DATE, CELL_TYPE_ERROR,
     CELL_TYPE_FORMULA_STRING, CELL_TYPE_NUMBER, CELL_TYPE_STRING, CellData, VALUE_TYPE_INLINE,
@@ -6,6 +6,7 @@ use super::super::types::{
 };
 use super::a1::parse_a1_reference;
 use super::bytes::parse_u32;
+use super::tags::{closing_tag_at, find_closing_tag_span, start_tag_at};
 use super::value::{extract_formula_forward, extract_inline_string_owned_forward};
 
 pub(crate) struct ScanResult {
@@ -53,7 +54,8 @@ pub(crate) fn scan_cell<'a>(
     _col_styles: &[Option<u32>],
 ) -> Option<ScanResult> {
     let len = xml.len();
-    let mut pos = cell_start + 2; // Skip past "<c"
+    let cell_tag = start_tag_at(xml, cell_start, b"c")?;
+    let mut pos = cell_tag.name_end; // Skip past the qualified cell tag name.
 
     // --- Step 1: scan opening tag for r/s/t attributes + extras (cm, vm, s) ---
     let mut row = fallback_row;
@@ -240,110 +242,49 @@ pub(crate) fn scan_cell<'a>(
     let (value_type, value_bytes): (u8, &[u8]) = if let Some(first_lt) = first_lt_opt {
         let next = first_lt + 1;
         if next < len {
-            match xml[next] {
-                b'f' => extract_formula_forward(xml, first_lt, cell_type, shared_strings),
-                b'v' => {
-                    // Inline <v> extraction to also capture xml_space and sst_raw_idx
-                    let after_v = first_lt + 2;
-                    if after_v >= len {
-                        (VALUE_TYPE_NONE, b"" as &[u8])
-                    } else {
-                        match xml[after_v] {
-                            b'>' => {
-                                // <v>content</v> — find </v> by scanning for '<'
-                                // Cell values are typically short (1-20 bytes for numbers,
-                                // 1-10 bytes for SST indices), so a simple byte scan
-                                // beats SIMD find_sequence overhead.
-                                let content_start = after_v + 1;
-                                let v_end = {
-                                    let mut p = content_start;
-                                    while p < len && xml[p] != b'<' {
-                                        p += 1;
-                                    }
-                                    p
-                                };
-                                if v_end < len {
-                                    // Verify it's actually </v> (should always be true in well-formed XML)
-                                    scan_end = v_end + 4; // past "</v>"
-                                    let value_bytes = &xml[content_start..v_end];
-                                    if cell_type == CELL_TYPE_STRING {
-                                        let raw_idx = parse_u32(value_bytes);
-                                        sst_raw_idx = raw_idx;
-                                        if let Some(idx) = raw_idx {
-                                            if let Some(shared_str) =
-                                                shared_strings.get(idx as usize)
-                                            {
-                                                (VALUE_TYPE_SHARED_STRING, shared_str.as_bytes())
-                                            } else {
-                                                (VALUE_TYPE_INLINE, value_bytes)
-                                            }
-                                        } else {
-                                            (VALUE_TYPE_INLINE, value_bytes)
-                                        }
-                                    } else {
-                                        (VALUE_TYPE_INLINE, value_bytes)
-                                    }
-                                } else {
-                                    (VALUE_TYPE_NONE, b"" as &[u8])
-                                }
-                            }
-                            b'/' if after_v + 1 < len && xml[after_v + 1] == b'>' => {
-                                scan_end = after_v + 2; // past "<v/>"
-                                (VALUE_TYPE_INLINE, b"" as &[u8]) // <v/>
-                            }
-                            _ => {
-                                // <v ...> (attributes like xml:space="preserve")
-                                let tag_region_start = after_v;
-                                match find_byte(xml, b'>', tag_region_start) {
-                                    Some(gt) => {
-                                        let tag_bytes = &xml[first_lt..=gt];
-                                        if tag_bytes.windows(9).any(|w| w == b"xml:space") {
-                                            has_xml_space_v = true;
-                                        }
-                                        let content_start = gt + 1;
-                                        if let Some(v_end) =
-                                            find_sequence(xml, b"</v>", content_start)
-                                        {
-                                            scan_end = v_end + 4;
-                                            let value_bytes = &xml[content_start..v_end];
-                                            if cell_type == CELL_TYPE_STRING {
-                                                let raw_idx = parse_u32(value_bytes);
-                                                sst_raw_idx = raw_idx;
-                                                if let Some(idx) = raw_idx {
-                                                    if let Some(shared_str) =
-                                                        shared_strings.get(idx as usize)
-                                                    {
-                                                        (
-                                                            VALUE_TYPE_SHARED_STRING,
-                                                            shared_str.as_bytes(),
-                                                        )
-                                                    } else {
-                                                        (VALUE_TYPE_INLINE, value_bytes)
-                                                    }
-                                                } else {
-                                                    (VALUE_TYPE_INLINE, value_bytes)
-                                                }
-                                            } else {
-                                                (VALUE_TYPE_INLINE, value_bytes)
-                                            }
-                                        } else {
-                                            (VALUE_TYPE_NONE, b"" as &[u8])
-                                        }
-                                    }
-                                    None => (VALUE_TYPE_NONE, b"" as &[u8]),
-                                }
-                            }
-                        }
-                    }
+            if start_tag_at(xml, first_lt, b"f").is_some() {
+                extract_formula_forward(xml, first_lt, cell_type, shared_strings)
+            } else if let Some(v_tag) = start_tag_at(xml, first_lt, b"v") {
+                // Inline <v> extraction to also capture xml_space and sst_raw_idx
+                let tag_bytes = &xml[first_lt..=v_tag.tag_end];
+                if tag_bytes.windows(9).any(|w| w == b"xml:space") {
+                    has_xml_space_v = true;
                 }
-                b'i' => match extract_inline_string_owned_forward(xml, first_lt) {
+                if v_tag.is_self_closing {
+                    scan_end = v_tag.content_start;
+                    (VALUE_TYPE_INLINE, b"" as &[u8])
+                } else if let Some(v_close) = find_closing_tag_span(xml, b"v", v_tag.content_start)
+                {
+                    scan_end = v_close.end;
+                    let value_bytes = &xml[v_tag.content_start..v_close.lt];
+                    if cell_type == CELL_TYPE_STRING {
+                        let raw_idx = parse_u32(value_bytes);
+                        sst_raw_idx = raw_idx;
+                        if let Some(idx) = raw_idx {
+                            if let Some(shared_str) = shared_strings.get(idx as usize) {
+                                (VALUE_TYPE_SHARED_STRING, shared_str.as_bytes())
+                            } else {
+                                (VALUE_TYPE_INLINE, value_bytes)
+                            }
+                        } else {
+                            (VALUE_TYPE_INLINE, value_bytes)
+                        }
+                    } else {
+                        (VALUE_TYPE_INLINE, value_bytes)
+                    }
+                } else {
+                    (VALUE_TYPE_NONE, b"" as &[u8])
+                }
+            } else if start_tag_at(xml, first_lt, b"is").is_some() {
+                match extract_inline_string_owned_forward(xml, first_lt) {
                     Some(value) => {
-                        owned_value = Some(value);
-                        (VALUE_TYPE_INLINE, owned_value.as_deref().unwrap_or(b""))
+                        let value_bytes = owned_value.insert(value).as_slice();
+                        (VALUE_TYPE_INLINE, value_bytes)
                     }
                     None => (VALUE_TYPE_NONE, b""),
-                },
-                _ => (VALUE_TYPE_NONE, b"" as &[u8]),
+                }
+            } else {
+                (VALUE_TYPE_NONE, b"" as &[u8])
             }
         } else {
             (VALUE_TYPE_NONE, b"" as &[u8])
@@ -366,18 +307,13 @@ pub(crate) fn scan_cell<'a>(
             {
                 p += 1;
             }
-            if p + 3 < len
-                && xml[p] == b'<'
-                && xml[p + 1] == b'/'
-                && xml[p + 2] == b'c'
-                && xml[p + 3] == b'>'
-            {
-                break 'find_end p + 4;
+            if let Some(close) = closing_tag_at(xml, p, b"c") {
+                break 'find_end close.end;
             }
         }
         // Fallback: SIMD search for unusual cell structures or formula cells
-        match find_sequence(xml, b"</c>", body_start) {
-            Some(p) => p + 4,
+        match find_closing_tag_span(xml, b"c", body_start) {
+            Some(close) => close.end,
             None => return None,
         }
     };

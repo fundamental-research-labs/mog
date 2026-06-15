@@ -25,26 +25,12 @@
 
 use rayon::prelude::*;
 
-use crate::domain::cells::{CellData, parse_worksheet_fast};
+use crate::domain::cells::{CellData, count_worksheet_cell_elements, parse_worksheet_fast};
 use crate::domain::strings::read::SharedStrings;
 use crate::domain::workbook::read::parse_workbook;
 use crate::zip::constants::{MAX_SHARED_STRINGS, MAX_WORKSHEET_CELLS};
 use crate::zip::{XlsxArchive, ZipError};
 use ooxml_types::worksheet::RowHeight;
-
-fn count_worksheet_cell_elements(xml: &[u8]) -> usize {
-    let mut count = 0usize;
-    let mut pos = 0usize;
-    while let Some(rel) = memchr::memmem::find(&xml[pos..], b"<c") {
-        let start = pos + rel;
-        let next = start + 2;
-        if next >= xml.len() || matches!(xml[next], b' ' | b'>' | b'/' | b'\t' | b'\n' | b'\r') {
-            count += 1;
-        }
-        pos = next;
-    }
-    count
-}
 
 fn ensure_parallel_limit(
     label: &str,
@@ -476,14 +462,6 @@ pub fn parse_xlsx_parallel_full(
 mod tests {
     use super::*;
 
-    /// Helper to create minimal test XLSX data
-    fn create_minimal_xlsx() -> Vec<u8> {
-        // This is a minimal valid XLSX for testing structure
-        // In practice, tests should use real XLSX files or more complete test data
-        // For now, we'll test the error handling paths
-        vec![]
-    }
-
     #[test]
     fn test_parallel_parse_error_display() {
         let archive_err = ParallelParseError::ArchiveError("test error".to_string());
@@ -542,6 +520,27 @@ mod tests {
         let result = ParallelParseResult::from_sheets(vec![sheet1, sheet2]);
         assert_eq!(result.sheet_count, 2);
         assert_eq!(result.total_cells, 300);
+    }
+
+    #[test]
+    fn test_parse_single_sheet_prefixed_worksheet_tags() {
+        let xml = br#"<x:worksheet xmlns:x="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><x:sheetData>
+            <x:row r="1">
+                <x:c r="A1"><x:v>42</x:v></x:c>
+                <x:c r="B1" t="s"><x:v>0</x:v></x:c>
+            </x:row>
+        </x:sheetData></x:worksheet>"#;
+        let shared_strings = vec!["Shared".to_string()];
+
+        let sheet = parse_single_sheet(0, "Sheet1".to_string(), xml, &shared_strings)
+            .expect("prefixed worksheet should parse in parallel path");
+
+        assert_eq!(sheet.cell_count, 2);
+        let second_col = sheet.cells[1].col;
+        assert_eq!(second_col, 1);
+        let start = sheet.cells[1].value_offset as usize;
+        let end = start + sheet.cells[1].value_len as usize;
+        assert_eq!(&sheet.strings[start..end], b"Shared");
     }
 
     #[test]

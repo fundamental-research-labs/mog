@@ -6,11 +6,12 @@ mod fixtures;
 
 use fixtures::{
     CellValue, col_to_letters, create_minimal_xlsx, create_xlsx_with_cells,
-    create_xlsx_with_multiple_sheets, create_xlsx_with_shared_strings,
-    create_xlsx_with_various_types,
+    create_xlsx_with_multiple_sheets, create_xlsx_with_raw_worksheet_xml,
+    create_xlsx_with_shared_strings, create_xlsx_with_various_types,
 };
 use std::fs;
 
+use value_types::CellValue as DomainCellValue;
 use xlsx_parser::{SharedStrings, XlsxArchive, parse_xlsx_full_native, parse_xlsx_to_output};
 
 // =============================================================================
@@ -35,6 +36,50 @@ fn test_parse_minimal_xlsx() {
 
     let worksheet = archive.get_worksheet(1).expect("Failed to read worksheet");
     assert!(!worksheet.is_empty());
+}
+
+#[test]
+fn prefixed_worksheet_tags_full_parse_imports_cells_and_metadata() {
+    let worksheet = br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<x:worksheet xmlns:x="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <x:sheetData>
+    <x:row r="1">
+      <x:c r="A1" s="0" t="str"><x:v>Audit generated</x:v></x:c>
+    </x:row>
+  </x:sheetData>
+  <mergeCells count="1"><mergeCell ref="A1:B1"/></mergeCells>
+  <dataValidations count="1">
+    <dataValidation type="whole" operator="between" allowBlank="1" sqref="A2">
+      <formula1>1</formula1>
+      <formula2>10</formula2>
+    </dataValidation>
+  </dataValidations>
+</x:worksheet>"#;
+    let xlsx_data = create_xlsx_with_raw_worksheet_xml(worksheet, &[]);
+
+    let (output, diagnostics) =
+        parse_xlsx_to_output(&xlsx_data).expect("prefixed worksheet should parse");
+
+    assert!(
+        diagnostics.errors.is_empty(),
+        "prefixed worksheet diagnostics should not contain errors: {:?}",
+        diagnostics.errors
+    );
+    let sheet = &output.sheets[0];
+    assert_eq!(sheet.cells.len(), 1);
+    let cell = &sheet.cells[0];
+    assert_eq!(cell.row, 0);
+    assert_eq!(cell.col, 0);
+    assert!(
+        matches!(&cell.value, DomainCellValue::Text(text) if text.as_ref() == "Audit generated")
+    );
+    assert_eq!(sheet.merges.len(), 1);
+    assert_eq!(sheet.merges[0].start_row, 0);
+    assert_eq!(sheet.merges[0].start_col, 0);
+    assert_eq!(sheet.merges[0].end_row, 0);
+    assert_eq!(sheet.merges[0].end_col, 1);
+    assert_eq!(sheet.data_validations.len(), 1);
+    assert_eq!(sheet.data_validations[0].ranges, vec!["A2".to_string()]);
 }
 
 #[test]

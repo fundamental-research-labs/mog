@@ -1,27 +1,35 @@
+use crate::domain::cells::extract_cell_value_fast;
 use crate::domain::cells::{
     CELL_TYPE_BOOL, CELL_TYPE_ERROR, CELL_TYPE_FORMULA_STRING, CELL_TYPE_NUMBER, CELL_TYPE_STRING,
 };
-use crate::domain::cells::{
-    CellData, VALUE_TYPE_FORMULA, VALUE_TYPE_INLINE, VALUE_TYPE_NONE, VALUE_TYPE_SHARED_STRING,
-};
+use crate::domain::cells::{CellData, VALUE_TYPE_NONE};
 use crate::infra::scanner::{find_gt_simd, find_lt_simd};
 
 /// Check if the tag at the given position matches the expected tag name.
 #[inline]
 pub(super) fn matches_tag(data: &[u8], pos: usize, tag: &[u8]) -> bool {
-    if pos + tag.len() > data.len() {
+    if pos >= data.len() {
         return false;
     }
-    let slice = &data[pos..pos + tag.len()];
-    if slice != tag {
+
+    let mut name_end = pos;
+    while name_end < data.len()
+        && !matches!(data[name_end], b' ' | b'\t' | b'\n' | b'\r' | b'>' | b'/')
+    {
+        name_end += 1;
+    }
+    if name_end <= pos {
         return false;
     }
-    // Verify tag ends with delimiter
-    if pos + tag.len() < data.len() {
-        let next = data[pos + tag.len()];
-        matches!(next, b' ' | b'>' | b'/' | b'\t' | b'\n' | b'\r')
+
+    let name = &data[pos..name_end];
+    if name == tag {
+        return true;
+    }
+    if let Some(colon) = name.iter().position(|&b| b == b':') {
+        &name[colon + 1..] == tag
     } else {
-        true
+        false
     }
 }
 
@@ -80,12 +88,9 @@ pub(super) fn find_cell_end(data: &[u8], start: usize) -> Option<usize> {
                 // Closing tag
                 depth -= 1;
                 if depth == 0 {
-                    // Check if this is </c>
-                    if tag_start + 1 < data.len() && data[tag_start + 1] == b'c' {
-                        let after_c = tag_start + 2;
-                        if after_c >= data.len() || matches!(data[after_c], b'>' | b' ') {
-                            return Some(inner_gt + 1);
-                        }
+                    // Check if this is </c> or </prefix:c>.
+                    if matches_tag(data, tag_start + 1, b"c") {
+                        return Some(inner_gt + 1);
                     }
                     // Even if not </c>, we're done at depth 0
                     return Some(inner_gt + 1);
@@ -265,88 +270,13 @@ fn parse_style_idx(xml: &[u8]) -> u16 {
 
 /// Extract cell value from XML.
 fn extract_cell_value<'a>(xml: &'a [u8], shared_strings: &'a [&'a str]) -> (u8, &'a [u8]) {
-    // Check for formula <f>
-    if let Some(f_start) = find_sequence(xml, b"<f>") {
-        let content_start = f_start + 3;
-        if let Some(f_end) = find_sequence(&xml[content_start..], b"</f>") {
-            return (
-                VALUE_TYPE_FORMULA,
-                &xml[content_start..content_start + f_end],
-            );
-        }
-    }
-
-    // Check for value <v>
-    if let Some(v_start) = find_sequence(xml, b"<v>") {
-        let content_start = v_start + 3;
-        if let Some(v_end) = find_sequence(&xml[content_start..], b"</v>") {
-            let value_bytes = &xml[content_start..content_start + v_end];
-
-            // Check if this is a shared string reference
-            let cell_type = parse_cell_type(xml);
-            if cell_type == CELL_TYPE_STRING {
-                // Parse the shared string index
-                if let Some(idx) = parse_u32(value_bytes) {
-                    if let Some(shared_str) = shared_strings.get(idx as usize) {
-                        return (VALUE_TYPE_SHARED_STRING, shared_str.as_bytes());
-                    }
-                }
-            }
-
-            return (VALUE_TYPE_INLINE, value_bytes);
-        }
-    }
-
-    // Check for inline string <is><t>
-    if let Some(is_start) = find_sequence(xml, b"<is>") {
-        if let Some(t_start) = find_sequence(&xml[is_start..], b"<t>") {
-            let content_start = is_start + t_start + 3;
-            if let Some(t_end) = find_sequence(&xml[content_start..], b"</t>") {
-                return (
-                    VALUE_TYPE_INLINE,
-                    &xml[content_start..content_start + t_end],
-                );
-            }
-        }
-    }
-
-    // Check for self-closing value <v/>
-    if find_sequence(xml, b"<v/>").is_some() {
-        return (VALUE_TYPE_INLINE, b"");
-    }
-
-    (VALUE_TYPE_NONE, b"")
-}
-
-/// Find a byte sequence in the slice.
-#[inline]
-fn find_sequence(data: &[u8], seq: &[u8]) -> Option<usize> {
-    if seq.is_empty() || data.len() < seq.len() {
-        return None;
-    }
-    data.windows(seq.len()).position(|w| w == seq)
-}
-
-/// Parse a u32 from ASCII digits.
-#[inline]
-fn parse_u32(bytes: &[u8]) -> Option<u32> {
-    if bytes.is_empty() {
-        return None;
-    }
-    let mut result: u32 = 0;
-    for &b in bytes {
-        if b.is_ascii_digit() {
-            result = result.saturating_mul(10).saturating_add((b - b'0') as u32);
-        } else {
-            break;
-        }
-    }
-    Some(result)
+    extract_cell_value_fast(xml, shared_strings)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::cells::{VALUE_TYPE_FORMULA, VALUE_TYPE_INLINE, VALUE_TYPE_SHARED_STRING};
 
     #[test]
     fn test_matches_tag() {
@@ -431,22 +361,6 @@ mod tests {
         let strings: Vec<&str> = vec![];
         let (vtype, _) = extract_cell_value(b"<c r=\"A1\"/>", &strings);
         assert_eq!(vtype, VALUE_TYPE_NONE);
-    }
-
-    #[test]
-    fn test_find_sequence() {
-        assert_eq!(find_sequence(b"hello world", b"world"), Some(6));
-        assert_eq!(find_sequence(b"hello", b"world"), None);
-        assert_eq!(find_sequence(b"hello", b""), None);
-        assert_eq!(find_sequence(b"", b"hello"), None);
-    }
-
-    #[test]
-    fn test_parse_u32() {
-        assert_eq!(parse_u32(b"123"), Some(123));
-        assert_eq!(parse_u32(b"0"), Some(0));
-        assert_eq!(parse_u32(b"42abc"), Some(42));
-        assert_eq!(parse_u32(b""), None);
     }
 
     #[test]

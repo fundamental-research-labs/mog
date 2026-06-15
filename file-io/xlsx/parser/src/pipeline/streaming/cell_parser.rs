@@ -110,7 +110,10 @@ impl<'a> StreamingCellParser<'a> {
                     }
                 } else {
                     // Keep searching - save last part of data in case tag spans chunks
-                    let keep_from = data.len().saturating_sub(20); // "sheetData" + some buffer
+                    let keep_from = data
+                        .iter()
+                        .rposition(|&b| b == b'<')
+                        .unwrap_or_else(|| data.len().saturating_sub(64));
                     self.pending_xml = data[keep_from..].to_vec();
                     return 0;
                 }
@@ -156,7 +159,7 @@ impl<'a> StreamingCellParser<'a> {
                     self.pending_xml = data[lt_pos..].to_vec();
                     break;
                 }
-            } else if tag_byte == b'r' && matches_tag(&data, tag_start, b"row") {
+            } else if matches_tag(&data, tag_start, b"row") {
                 // <row> element - extract row number
                 if let Some(gt_pos) = find_gt_simd(&data, lt_pos) {
                     let row_element = &data[lt_pos..=gt_pos];
@@ -171,10 +174,7 @@ impl<'a> StreamingCellParser<'a> {
                     self.pending_xml = data[lt_pos..].to_vec();
                     break;
                 }
-            } else if tag_byte == b'c'
-                && (tag_start + 1 >= data.len()
-                    || matches!(data.get(tag_start + 1), Some(b' ' | b'>' | b'/')))
-            {
+            } else if matches_tag(&data, tag_start, b"c") {
                 // <c> element - parse cell
                 // Find the end of this cell element
                 if let Some(cell_end) = find_cell_end(&data, lt_pos) {
@@ -258,7 +258,13 @@ impl<'a> StreamingCellParser<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::cells::VALUE_TYPE_FORMULA;
+    use crate::domain::cells::{VALUE_TYPE_FORMULA, VALUE_TYPE_SHARED_STRING};
+
+    fn value_bytes<'a>(cell: &CellData, strings: &'a [u8]) -> &'a [u8] {
+        let start = cell.value_offset as usize;
+        let end = start + cell.value_len as usize;
+        &strings[start..end]
+    }
 
     #[test]
     fn test_streaming_cell_parser_new() {
@@ -305,6 +311,34 @@ mod tests {
     }
 
     #[test]
+    fn test_streaming_cell_parser_prefixed_tags_parse_cells() {
+        let strings: Vec<&str> = vec!["Shared"];
+        let mut parser = StreamingCellParser::new(&strings);
+        let mut output = Vec::new();
+        let mut string_buf = Vec::new();
+
+        let xml = br#"<x:worksheet xmlns:x="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><x:sheetData>
+            <x:row r="1">
+                <x:c r="A1"><x:v>42</x:v></x:c>
+                <x:c r="B1" t="s"><x:v>0</x:v></x:c>
+            </x:row>
+        </x:sheetData></x:worksheet>"#;
+
+        let count = parser.process_chunk(xml, &mut output, &mut string_buf);
+
+        assert_eq!(count, 2);
+        assert_eq!(output.len(), 2);
+        let row = output[0].row;
+        let col = output[1].col;
+        let value_type = output[1].value_type;
+        assert_eq!(row, 0);
+        assert_eq!(col, 1);
+        assert_eq!(value_type, VALUE_TYPE_SHARED_STRING);
+        assert_eq!(value_bytes(&output[0], &string_buf), b"42");
+        assert_eq!(value_bytes(&output[1], &string_buf), b"Shared");
+    }
+
+    #[test]
     fn test_streaming_cell_parser_chunk_boundary() {
         let strings: Vec<&str> = vec![];
         let mut parser = StreamingCellParser::new(&strings);
@@ -323,6 +357,36 @@ mod tests {
 
         // Should have parsed the cell
         assert!(!output.is_empty());
+    }
+
+    #[test]
+    fn test_streaming_cell_parser_prefixed_sheet_data_split_across_chunks() {
+        let strings: Vec<&str> = vec![];
+        let mut parser = StreamingCellParser::new(&strings);
+        let mut output = Vec::new();
+        let mut string_buf = Vec::new();
+
+        let chunk1 = b"<worksheet><verylongprefixname";
+        let chunk2 = b":sheetData><verylongprefixname:row r=\"1\"><verylongprefixname:c r=\"A1\"><verylongprefixname:v>42</";
+        let chunk3 = b"verylongprefixname:v></verylongprefixname:c></verylongprefixname:row></verylongprefixname:sheetData></worksheet>";
+
+        assert_eq!(
+            parser.process_chunk(chunk1, &mut output, &mut string_buf),
+            0
+        );
+        assert_eq!(
+            parser.process_chunk(chunk2, &mut output, &mut string_buf),
+            0
+        );
+        parser.process_chunk(chunk3, &mut output, &mut string_buf);
+        parser.finish(&mut output, &mut string_buf);
+
+        assert_eq!(output.len(), 1);
+        let row = output[0].row;
+        let col = output[0].col;
+        assert_eq!(row, 0);
+        assert_eq!(col, 0);
+        assert_eq!(value_bytes(&output[0], &string_buf), b"42");
     }
 
     #[test]

@@ -3,8 +3,9 @@
 //! These functions provide error handling and recovery capabilities
 //! for parsing cells with malformed or invalid data.
 
-use super::adapters::{find_byte, find_sequence};
+use super::adapters::find_sequence;
 use super::helpers::{extract_attribute, parse_u32};
+use super::helpers::{find_closing_tag_span, find_start_tag, start_tag_at};
 use super::types::{
     CELL_TYPE_BOOL, CELL_TYPE_ERROR, CELL_TYPE_FORMULA_STRING, CELL_TYPE_NUMBER, CELL_TYPE_STRING,
     CellData, VALUE_TYPE_CACHED_FORMULA, VALUE_TYPE_FORMULA, VALUE_TYPE_INLINE, VALUE_TYPE_NONE,
@@ -129,17 +130,21 @@ pub(crate) fn parse_cell_type_with_recovery(
     _row: u32,
     _col: u32,
 ) -> u8 {
+    let search_region = start_tag_at(xml, 0, b"c")
+        .map(|tag| &xml[..=tag.tag_end])
+        .unwrap_or(xml);
+
     // Look for t=" attribute
-    if let Some(t_pos) = find_sequence(xml, b"t=\"", 0) {
+    if let Some(t_pos) = find_sequence(search_region, b"t=\"", 0) {
         let start = t_pos + 3;
 
         // Read the type value (up to closing quote)
-        if start < xml.len() {
-            match xml[start] {
+        if start < search_region.len() {
+            match search_region[start] {
                 b'n' => CELL_TYPE_NUMBER,
                 b's' => {
                     // Could be "s" (shared string) or "str" (inline formula string)
-                    if start + 1 < xml.len() && xml[start + 1] == b't' {
+                    if start + 1 < search_region.len() && search_region[start + 1] == b't' {
                         // "str" - inline formula string result (<v> is literal text)
                         CELL_TYPE_FORMULA_STRING
                     } else {
@@ -185,54 +190,49 @@ pub(crate) fn parse_style_idx_with_recovery(
     _col: u32,
 ) -> u16 {
     // Look for s=" attribute (space before to avoid matching other attrs ending in 's')
-    let patterns: [&[u8]; 2] = [b" s=\"", b"<c s=\""];
+    let search_region = start_tag_at(xml, 0, b"c")
+        .map(|tag| &xml[..=tag.tag_end])
+        .unwrap_or(xml);
 
-    for pattern in patterns {
-        if let Some(s_pos) = find_sequence(xml, pattern, 0) {
-            let start = s_pos + pattern.len();
-            let mut style_idx: u32 = 0;
-            let mut pos = start;
-            let mut valid = true;
-            let mut digits_found = false;
+    if let Some(value) = extract_attribute(search_region, b"s") {
+        let mut style_idx: u32 = 0;
+        let mut valid = true;
+        let mut digits_found = false;
 
-            while pos < xml.len() && xml[pos] != b'"' {
-                if xml[pos].is_ascii_digit() {
-                    style_idx = style_idx
-                        .saturating_mul(10)
-                        .saturating_add((xml[pos] - b'0') as u32);
-                    digits_found = true;
-                } else {
-                    valid = false;
-                    break;
-                }
-                pos += 1;
+        for &b in value {
+            if b.is_ascii_digit() {
+                style_idx = style_idx
+                    .saturating_mul(10)
+                    .saturating_add((b - b'0') as u32);
+                digits_found = true;
+            } else {
+                valid = false;
+                break;
             }
-
-            if !valid || !digits_found {
-                // Invalid style index - extract raw value for error reporting
-                let raw_style = extract_attribute(xml, b"s")
-                    .map(diagnostic_utf8)
-                    .unwrap_or_else(|| "<invalid>".to_string());
-
-                context.report_warning(
-                    ErrorCode::InvalidStyleIndex,
-                    &format!("Invalid style index '{}', using default style 0", raw_style),
-                );
-
-                return recover_style_index(&raw_style) as u16;
-            }
-
-            // Check for overflow
-            if style_idx > u16::MAX as u32 {
-                context.report_warning(
-                    ErrorCode::InvalidStyleIndex,
-                    &format!("Style index {} exceeds maximum, using 0", style_idx),
-                );
-                return 0;
-            }
-
-            return style_idx as u16;
         }
+
+        if !valid || !digits_found {
+            // Invalid style index - extract raw value for error reporting
+            let raw_style = diagnostic_utf8(value);
+
+            context.report_warning(
+                ErrorCode::InvalidStyleIndex,
+                &format!("Invalid style index '{}', using default style 0", raw_style),
+            );
+
+            return recover_style_index(&raw_style) as u16;
+        }
+
+        // Check for overflow
+        if style_idx > u16::MAX as u32 {
+            context.report_warning(
+                ErrorCode::InvalidStyleIndex,
+                &format!("Style index {} exceeds maximum, using 0", style_idx),
+            );
+            return 0;
+        }
+
+        return style_idx as u16;
     }
 
     0 // Default style
@@ -248,167 +248,147 @@ pub(crate) fn extract_cell_value_with_context<'a>(
     col: u32,
     cell_type: u8,
 ) -> (u8, &'a [u8]) {
-    // Check for formula first (<f>)
-    if let Some(f_start) = find_sequence(xml, b"<f>", 0) {
-        let content_start = f_start + 3;
-        if let Some(f_end) = find_sequence(xml, b"</f>", content_start) {
-            return (VALUE_TYPE_FORMULA, &xml[content_start..f_end]);
-        } else {
-            // Malformed formula element
-            context.report_warning(ErrorCode::MalformedXml, "Unclosed <f> element in cell");
-        }
-    }
-
-    // Also check for formula with attributes (<f ...>)
-    if let Some(f_start) = find_sequence(xml, b"<f ", 0) {
-        if let Some(gt) = find_byte(xml, b'>', f_start) {
-            // Check for self-closing formula tag like <f t="shared" si="4"/>
-            if gt > f_start && xml[gt - 1] == b'/' {
-                // Self-closing formula reference - extract cached <v> value
-                // Handles both <v>text</v> and <v xml:space="preserve">text</v>
-                let v_content_start = if let Some(v_start) = find_sequence(xml, b"<v>", 0) {
-                    Some(v_start + 3)
-                } else if let Some(v_start) = find_sequence(xml, b"<v ", 0) {
-                    find_byte(xml, b'>', v_start).map(|gt| gt + 1)
-                } else {
-                    None
-                };
-                if let Some(v_content_start) = v_content_start {
-                    if let Some(v_end) = find_sequence(xml, b"</v>", v_content_start) {
-                        let value_bytes = &xml[v_content_start..v_end];
-                        if cell_type == CELL_TYPE_STRING {
-                            if let Some(idx) = parse_u32(value_bytes) {
-                                if let Some(shared_str) = shared_strings.get(idx as usize) {
-                                    return (VALUE_TYPE_CACHED_FORMULA, shared_str.as_bytes());
-                                }
-                            }
-                        }
-                        return (VALUE_TYPE_CACHED_FORMULA, value_bytes);
-                    }
-                }
-                return (VALUE_TYPE_CACHED_FORMULA, b"" as &[u8]);
+    // Check for formula first (<f> or <prefix:f>)
+    if let Some(f_tag) = find_start_tag(xml, b"f", 0) {
+        if f_tag.is_self_closing {
+            if let Some(v_tag) = find_start_tag(xml, b"v", f_tag.content_start) {
+                return extract_value_tag_with_context(
+                    xml,
+                    v_tag.lt,
+                    shared_strings,
+                    context,
+                    row,
+                    col,
+                    cell_type,
+                    VALUE_TYPE_CACHED_FORMULA,
+                );
             }
-            let content_start = gt + 1;
-            if let Some(f_end) = find_sequence(xml, b"</f>", content_start) {
-                return (VALUE_TYPE_FORMULA, &xml[content_start..f_end]);
-            }
+            return (VALUE_TYPE_CACHED_FORMULA, b"" as &[u8]);
         }
+        if let Some(f_end) = find_closing_tag_span(xml, b"f", f_tag.content_start) {
+            return (VALUE_TYPE_FORMULA, &xml[f_tag.content_start..f_end.lt]);
+        }
+        context.report_warning(ErrorCode::MalformedXml, "Unclosed <f> element in cell");
     }
 
     // Check for value (<v>) — handles both <v>text</v> and <v xml:space="preserve">text</v>
-    let v_content_start = if let Some(v_start) = find_sequence(xml, b"<v>", 0) {
-        Some(v_start + 3)
-    } else if let Some(v_start) = find_sequence(xml, b"<v ", 0) {
-        find_byte(xml, b'>', v_start).map(|gt| gt + 1)
-    } else {
-        None
-    };
-    if let Some(content_start) = v_content_start {
-        if let Some(v_end) = find_sequence(xml, b"</v>", content_start) {
-            let value_bytes = &xml[content_start..v_end];
-
-            // Check if this is a shared string reference (using passed cell_type)
-            if cell_type == CELL_TYPE_STRING {
-                // Parse the shared string index
-                match parse_u32(value_bytes) {
-                    Some(idx) => {
-                        let idx_usize = idx as usize;
-                        if let Some(shared_str) = shared_strings.get(idx_usize) {
-                            // Return the actual string from shared strings
-                            return (VALUE_TYPE_SHARED_STRING, shared_str.as_bytes());
-                        } else {
-                            // Invalid shared string index - report error
-                            context.report_error_detail(
-                                ParseErrorDetail::error(
-                                    ErrorCode::InvalidSharedStringIndex,
-                                    format!(
-                                        "Shared string index {} out of bounds (max: {})",
-                                        idx,
-                                        shared_strings.len()
-                                    ),
-                                )
-                                .with_location(ErrorLocation::cell(
-                                    &context.current_part,
-                                    row + 1,
-                                    col + 1,
-                                ))
-                                .with_raw_data(format!("{}", idx))
-                                .with_fallback("#REF!"),
-                            );
-
-                            // Return placeholder
-                            let placeholder =
-                                recover_shared_string(idx_usize, shared_strings.len());
-                            return (VALUE_TYPE_INLINE, placeholder.as_bytes());
-                        }
-                    }
-                    None => {
-                        // Cannot parse shared string index
-                        let raw_value = diagnostic_utf8(value_bytes);
-                        context.report_error_detail(
-                            ParseErrorDetail::error(
-                                ErrorCode::InvalidCellValue,
-                                "Cannot parse shared string index",
-                            )
-                            .with_location(ErrorLocation::cell(
-                                &context.current_part,
-                                row + 1,
-                                col + 1,
-                            ))
-                            .with_raw_data(raw_value)
-                            .with_fallback("#REF!"),
-                        );
-
-                        return (VALUE_TYPE_INLINE, b"#REF!");
-                    }
-                }
-            }
-
-            // For number types, validate the value
-            if cell_type == CELL_TYPE_NUMBER {
-                let value_str = std::str::from_utf8(value_bytes).unwrap_or("");
-                if !value_str.is_empty() && value_str.parse::<f64>().is_err() {
-                    // Invalid number - report warning and use recovery
-                    let recovered = recover_number(value_str);
-                    context.report_warning(
-                        ErrorCode::InvalidCellValue,
-                        &format!("Invalid number '{}', recovered as {}", value_str, recovered),
-                    );
-                    // We still return the original bytes as we don't want to allocate
-                    // The consumer will need to handle the invalid value
-                }
-            }
-
-            return (VALUE_TYPE_INLINE, value_bytes);
-        } else {
-            // Unclosed <v> element
-            context.report_warning(ErrorCode::MalformedXml, "Unclosed <v> element in cell");
-        }
+    if let Some(v_tag) = find_start_tag(xml, b"v", 0) {
+        return extract_value_tag_with_context(
+            xml,
+            v_tag.lt,
+            shared_strings,
+            context,
+            row,
+            col,
+            cell_type,
+            VALUE_TYPE_INLINE,
+        );
     }
 
     // Check for inline string (<is><t>)
-    if let Some(is_start) = find_sequence(xml, b"<is>", 0) {
-        if let Some(t_start) = find_sequence(xml, b"<t>", is_start) {
-            let content_start = t_start + 3;
-            if let Some(t_end) = find_sequence(xml, b"</t>", content_start) {
-                return (VALUE_TYPE_INLINE, &xml[content_start..t_end]);
-            }
-        }
-        // Handle <t xml:space="preserve"> variant
-        if let Some(t_start) = find_sequence(xml, b"<t ", is_start) {
-            if let Some(gt) = find_byte(xml, b'>', t_start) {
-                let content_start = gt + 1;
-                if let Some(t_end) = find_sequence(xml, b"</t>", content_start) {
-                    return (VALUE_TYPE_INLINE, &xml[content_start..t_end]);
-                }
-            }
-        }
-    }
-
-    // Self-closing value element <v/>
-    if find_sequence(xml, b"<v/>", 0).is_some() {
-        return (VALUE_TYPE_INLINE, b"");
+    if let Some(is_tag) = find_start_tag(xml, b"is", 0)
+        && !is_tag.is_self_closing
+        && let Some(is_close) = find_closing_tag_span(xml, b"is", is_tag.content_start)
+        && let Some(t_tag) = find_start_tag(xml, b"t", is_tag.content_start)
+        && t_tag.lt < is_close.lt
+        && !t_tag.is_self_closing
+        && let Some(t_close) = find_closing_tag_span(xml, b"t", t_tag.content_start)
+        && t_close.lt <= is_close.lt
+    {
+        return (VALUE_TYPE_INLINE, &xml[t_tag.content_start..t_close.lt]);
     }
 
     (VALUE_TYPE_NONE, b"")
+}
+
+fn extract_value_tag_with_context<'a>(
+    xml: &'a [u8],
+    v_lt: usize,
+    shared_strings: &'a [&'a str],
+    context: &mut ParseContext,
+    row: u32,
+    col: u32,
+    cell_type: u8,
+    success_type: u8,
+) -> (u8, &'a [u8]) {
+    let Some(v_tag) = start_tag_at(xml, v_lt, b"v") else {
+        return (VALUE_TYPE_NONE, b"");
+    };
+    if v_tag.is_self_closing {
+        return (success_type, b"");
+    }
+    let Some(v_end) = find_closing_tag_span(xml, b"v", v_tag.content_start) else {
+        context.report_warning(ErrorCode::MalformedXml, "Unclosed <v> element in cell");
+        return (VALUE_TYPE_NONE, b"");
+    };
+    let value_bytes = &xml[v_tag.content_start..v_end.lt];
+
+    // Check if this is a shared string reference (using passed cell_type)
+    if cell_type == CELL_TYPE_STRING {
+        // Parse the shared string index
+        match parse_u32(value_bytes) {
+            Some(idx) => {
+                let idx_usize = idx as usize;
+                if let Some(shared_str) = shared_strings.get(idx_usize) {
+                    let value_type = if success_type == VALUE_TYPE_CACHED_FORMULA {
+                        VALUE_TYPE_CACHED_FORMULA
+                    } else {
+                        VALUE_TYPE_SHARED_STRING
+                    };
+                    return (value_type, shared_str.as_bytes());
+                } else {
+                    // Invalid shared string index - report error
+                    context.report_error_detail(
+                        ParseErrorDetail::error(
+                            ErrorCode::InvalidSharedStringIndex,
+                            format!(
+                                "Shared string index {} out of bounds (max: {})",
+                                idx,
+                                shared_strings.len()
+                            ),
+                        )
+                        .with_location(ErrorLocation::cell(&context.current_part, row + 1, col + 1))
+                        .with_raw_data(format!("{}", idx))
+                        .with_fallback("#REF!"),
+                    );
+
+                    // Return placeholder
+                    let placeholder = recover_shared_string(idx_usize, shared_strings.len());
+                    return (VALUE_TYPE_INLINE, placeholder.as_bytes());
+                }
+            }
+            None => {
+                // Cannot parse shared string index
+                let raw_value = diagnostic_utf8(value_bytes);
+                context.report_error_detail(
+                    ParseErrorDetail::error(
+                        ErrorCode::InvalidCellValue,
+                        "Cannot parse shared string index",
+                    )
+                    .with_location(ErrorLocation::cell(&context.current_part, row + 1, col + 1))
+                    .with_raw_data(raw_value)
+                    .with_fallback("#REF!"),
+                );
+
+                return (VALUE_TYPE_INLINE, b"#REF!");
+            }
+        }
+    }
+
+    // For number types, validate the value
+    if cell_type == CELL_TYPE_NUMBER {
+        let value_str = std::str::from_utf8(value_bytes).unwrap_or("");
+        if !value_str.is_empty() && value_str.parse::<f64>().is_err() {
+            // Invalid number - report warning and use recovery
+            let recovered = recover_number(value_str);
+            context.report_warning(
+                ErrorCode::InvalidCellValue,
+                &format!("Invalid number '{}', recovered as {}", value_str, recovered),
+            );
+            // We still return the original bytes as we don't want to allocate
+            // The consumer will need to handle the invalid value
+        }
+    }
+
+    (success_type, value_bytes)
 }

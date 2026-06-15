@@ -1,3 +1,7 @@
+use crate::domain::cells::{
+    find_closing_tag_span, find_start_tag,
+    post_sheet_data_region as worksheet_post_sheet_data_region,
+};
 use crate::infra::xml::parse_string_attr;
 use crate::infra::xml_fragment::extract_element_bounds;
 use crate::infra::xml_namespaces::NamespaceMap;
@@ -212,22 +216,9 @@ pub(super) fn extract_explicit_blank_cells(xml: &[u8]) -> Vec<(u32, u32)> {
     let mut cells = Vec::new();
     let mut pos = 0usize;
 
-    while let Some(rel) = memchr::memmem::find(&xml[pos..], b"<c") {
-        let start = pos + rel;
-        let Some(&next) = xml.get(start + 2) else {
-            break;
-        };
-        if !matches!(next, b' ' | b'>' | b'/') {
-            pos = start + 2;
-            continue;
-        }
-
-        let Some(gt_rel) = memchr::memchr(b'>', &xml[start..]) else {
-            break;
-        };
-        let tag_end = start + gt_rel + 1;
-        let tag = &xml[start..tag_end];
-        pos = tag_end;
+    while let Some(cell_tag) = find_start_tag(xml, b"c", pos) {
+        let tag = &xml[cell_tag.lt..=cell_tag.tag_end];
+        pos = cell_tag.content_start;
 
         if has_attr(tag, b"s")
             || has_attr(tag, b"t")
@@ -238,17 +229,13 @@ pub(super) fn extract_explicit_blank_cells(xml: &[u8]) -> Vec<(u32, u32)> {
             continue;
         }
 
-        let is_empty = tag
-            .iter()
-            .rev()
-            .find(|&&b| !b.is_ascii_whitespace() && b != b'>')
-            == Some(&b'/')
-            || xml[tag_end..]
-                .iter()
-                .copied()
-                .skip_while(u8::is_ascii_whitespace)
-                .take(b"</c>".len())
-                .eq(b"</c>".iter().copied());
+        let mut close_pos = cell_tag.content_start;
+        while close_pos < xml.len() && xml[close_pos].is_ascii_whitespace() {
+            close_pos += 1;
+        }
+        let is_empty = cell_tag.is_self_closing
+            || find_closing_tag_span(xml, b"c", close_pos)
+                .is_some_and(|close| close.lt == close_pos);
         if !is_empty {
             continue;
         }
@@ -268,7 +255,7 @@ pub(super) fn extract_explicit_blank_cells(xml: &[u8]) -> Vec<(u32, u32)> {
 
 #[cfg(test)]
 mod tests {
-    use super::capture_ext_lst_raw;
+    use super::{capture_ext_lst_raw, extract_explicit_blank_cells, find_post_sheet_data_region};
 
     #[test]
     fn stylesheet_ext_capture_ignores_nested_extensions() {
@@ -293,6 +280,33 @@ mod tests {
             capture_ext_lst_raw(xml).as_deref(),
             Some(br#"<x:extLst xmlns:x="urn:test"><x:ext uri="root"/></x:extLst>"#.as_slice())
         );
+    }
+
+    #[test]
+    fn worksheet_post_sheet_data_region_handles_prefixed_sheet_data() {
+        let xml = br#"<x:worksheet xmlns:x="urn:test"><x:sheetData><x:row r="1"/></x:sheetData><mergeCells count="1"><mergeCell ref="A1:B1"/></mergeCells></x:worksheet>"#;
+
+        let post_sd = find_post_sheet_data_region(xml);
+
+        assert!(post_sd.starts_with(br#"<mergeCells count="1">"#));
+    }
+
+    #[test]
+    fn worksheet_post_sheet_data_region_handles_prefixed_self_closing_sheet_data() {
+        let xml = br#"<x:worksheet xmlns:x="urn:test"><x:sheetData/><dataValidations count="1"/></x:worksheet>"#;
+
+        let post_sd = find_post_sheet_data_region(xml);
+
+        assert!(post_sd.starts_with(br#"<dataValidations count="1"/>"#));
+    }
+
+    #[test]
+    fn explicit_blank_cells_handles_prefixed_cell_tags() {
+        let xml = br#"<x:worksheet xmlns:x="urn:test"><x:sheetData>
+            <x:row r="1"><x:c r="A1"></x:c><x:c r="B2"/><x:c r="C3" s="1"/></x:row>
+        </x:sheetData></x:worksheet>"#;
+
+        assert_eq!(extract_explicit_blank_cells(xml), vec![(0, 0), (1, 1)]);
     }
 }
 
@@ -395,18 +409,7 @@ pub(super) fn find_matching_alternate_content_end(xml: &[u8], start: usize) -> O
 /// the full document as the "post" region, which would cause the root
 /// `<worksheet>` opening tag to be mistakenly captured as a preserved child.
 pub(super) fn find_post_sheet_data_region(xml: &[u8]) -> &[u8] {
-    // Normal case: explicit </sheetData> closing tag
-    if let Some(p) = memchr::memmem::find(xml, b"</sheetData>") {
-        return &xml[p + b"</sheetData>".len()..];
-    }
-    // Self-closing <sheetData/> — find it and skip past the `>`
-    if let Some(p) = memchr::memmem::find(xml, b"<sheetData") {
-        if let Some(gt_offset) = memchr::memchr(b'>', &xml[p..]) {
-            return &xml[p + gt_offset + 1..];
-        }
-    }
-    // Fallback: no sheetData found — return empty slice at end of file
-    &xml[xml.len()..]
+    worksheet_post_sheet_data_region(xml)
 }
 
 pub(super) fn parse_external_reference_rids(workbook_xml: &[u8]) -> Vec<String> {

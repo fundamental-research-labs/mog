@@ -1,5 +1,7 @@
-use super::super::adapters::{find_byte, find_sequence, skip_whitespace};
-use super::super::helpers::{CellEnd, find_cell_end, find_sheet_data, parse_row_number};
+use super::super::adapters::{find_byte, skip_whitespace};
+use super::super::helpers::{
+    CellEnd, find_cell_end, find_sheet_data_bounds, parse_row_number, start_tag_at,
+};
 use super::super::recovery::{CellParseResult, parse_cell_element_with_context};
 use super::super::types::CellData;
 use super::rows::apply_recovery_row_attrs;
@@ -19,8 +21,8 @@ pub(super) fn parse_worksheet_with_context_impl(
     let mut skipped_count = 0;
     let mut pos = 0;
 
-    pos = match find_sheet_data(xml, pos) {
-        Some(p) => p,
+    let sheet_data_bounds = match find_sheet_data_bounds(xml, pos) {
+        Some(bounds) => bounds,
         None => {
             context.report_warning(
                 ErrorCode::MissingAttribute,
@@ -29,8 +31,9 @@ pub(super) fn parse_worksheet_with_context_impl(
             return (0, 0);
         }
     };
+    pos = sheet_data_bounds.content_start;
 
-    let sheet_data_end = find_sequence(xml, b"</sheetData>", pos).unwrap_or(xml.len());
+    let sheet_data_end = sheet_data_bounds.content_end;
     let mut current_row: u32 = 0;
 
     while pos < sheet_data_end && cell_idx < cells.len() {
@@ -49,27 +52,23 @@ pub(super) fn parse_worksheet_with_context_impl(
             }
             pos = tag_start + 1;
 
-            if pos + 3 < xml.len()
-                && xml[pos] == b'r'
-                && xml[pos + 1] == b'o'
-                && xml[pos + 2] == b'w'
-            {
-                if let Some(row_num) = parse_row_number(xml, pos) {
+            if let Some(row_tag) = start_tag_at(xml, tag_start, b"row") {
+                if let Some(row_num) = parse_row_number(xml, row_tag.name_end) {
                     current_row = row_num.saturating_sub(1);
                 }
-                if let Some(gt) = find_byte(xml, b'>', pos) {
-                    apply_recovery_row_attrs(&xml[pos..gt], current_row, row_heights);
-                    pos = gt + 1;
-                }
-            } else if xml[pos] == b'c'
-                && (xml.get(pos + 1).map_or(true, |&c| c == b' ' || c == b'>'))
-            {
+                apply_recovery_row_attrs(
+                    &xml[tag_start..row_tag.tag_end],
+                    current_row,
+                    row_heights,
+                );
+                pos = row_tag.content_start;
+            } else if start_tag_at(xml, tag_start, b"c").is_some() {
                 let cell_start = tag_start;
                 let CellEnd {
                     end: cell_end,
                     is_self_closing,
                 } =
-                    match find_cell_end(xml, pos) {
+                    match find_cell_end(xml, tag_start) {
                         Some(ce) => ce,
                         None => {
                             context.report_error_detail(

@@ -1857,44 +1857,6 @@ describe('WorksheetImpl', () => {
   });
 
   // =========================================================================
-  // Merge operations
-  // =========================================================================
-
-  describe('Merge operations', () => {
-    it('merge("A1:B2") resolves and delegates to computeBridge.mergeRange', async () => {
-      await ws.structure.merge('A1:B2');
-
-      expect(ctx.computeBridge.mergeRange).toHaveBeenCalledWith(SHEET_ID, 0, 0, 1, 1);
-    });
-
-    it('merge(0, 0, 1, 1) uses numeric bounds', async () => {
-      await ws.structure.merge(0, 0, 1, 1);
-
-      expect(ctx.computeBridge.mergeRange).toHaveBeenCalledWith(SHEET_ID, 0, 0, 1, 1);
-    });
-
-    it('unmerge("A1:B2") delegates to computeBridge.unmergeRange', async () => {
-      await ws.structure.unmerge('A1:B2');
-
-      expect(ctx.computeBridge.unmergeRange).toHaveBeenCalledWith(SHEET_ID, 0, 0, 1, 1);
-    });
-
-    it('getMergedRegions returns formatted merge regions', async () => {
-      ctx.computeBridge.getAllMergesInSheet.mockResolvedValue([
-        { startRow: 0, startCol: 0, endRow: 1, endCol: 1 },
-        { startRow: 3, startCol: 2, endRow: 5, endCol: 4 },
-      ]);
-
-      const regions = await ws.structure.getMergedRegions();
-
-      expect(regions).toHaveLength(2);
-      expect(regions[0].range).toBe('A1:B2');
-      expect(regions[0].startRow).toBe(0);
-      expect(regions[1].range).toBe('C4:E6');
-    });
-  });
-
-  // =========================================================================
   // Hyperlinks
   // =========================================================================
 

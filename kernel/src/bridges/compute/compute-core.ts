@@ -40,6 +40,7 @@ import {
 } from '../wire/viewport-prefetch';
 
 import { ViewportFetchManager } from './viewport-fetch-manager';
+import { refreshViewportForCfSiblings } from './cf-sibling-refresh';
 import {
   admitPublicMutation as admitPublicMutationForCore,
   type DirectEditPosition,
@@ -1178,27 +1179,14 @@ export class ComputeCore {
     changedCells: CellChange[],
     cfChanges: CfChange[] | undefined,
   ): Promise<void> {
-    // Evict stale cache entries when CF rule definitions change.
-    if (cfChanges?.length) {
-      for (const change of cfChanges) {
-        this.sheetsWithCfRules.delete(change.sheetId);
-      }
-    }
-
-    // Force-refresh the viewport so that sibling cells whose CF status changed
-    // (e.g. the other member of a Duplicate-Values pair, or a displaced Top-N
-    // entry) pick up the corrected CF colors from Rust's refreshed CF cache.
-    //
-    // Rust refreshes its CF cache during produce_viewport_patches for every
-    // mutation that affects a sheet with CF rules. The binary patches only
-    // cover changedCells — sibling cells are left stale in the buffer. A full
-    // viewport re-read makes those corrections visible.
-    //
-    // Performance note: we unconditionally refresh here. A per-sheet CF-rules
-    // check (via compute_get_all_cf_rules) could skip refreshes for sheets
-    // without CF, but the transport call itself adds latency comparable to the
-    // refresh. Keeping this simple is correct and measurable.
-    await this.forceRefreshAllViewports();
+    await refreshViewportForCfSiblings({
+      transport: this.transport,
+      docId: this.docId,
+      fetchManager: this.fetchManager,
+      sheetsWithCfRules: this.sheetsWithCfRules,
+      changedCells,
+      cfChanges,
+    });
   }
 
   // ===========================================================================

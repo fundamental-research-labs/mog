@@ -228,6 +228,26 @@ describe('merge operation action handlers', () => {
     expect(uiState.closeMergeWarningDialog).toHaveBeenCalledTimes(1);
   });
 
+  it('accepts captured merge warning payload after the dialog state has closed', async () => {
+    const { deps, workbook, worksheet, uiState } = createMockDeps([range]);
+
+    const result = await CONFIRM_MERGE_WITH_DATA_LOSS(deps, {
+      pendingRange: range,
+      sheetId: activeSheetId,
+      mergeType: 'mergeAndCenter',
+    });
+
+    expect(result.handled).toBe(true);
+    expect(workbook.setPendingUndoDescription).toHaveBeenCalledWith('Merge A1:B2 and center');
+    expect(workbook.undoGroup).toHaveBeenCalledTimes(1);
+    expect(worksheet.structure.merge).toHaveBeenCalledWith(0, 0, 1, 1);
+    expect(worksheet.formats.set).toHaveBeenCalledWith(0, 0, {
+      horizontalAlign: 'center',
+      verticalAlign: 'middle',
+    });
+    expect(uiState.closeMergeWarningDialog).toHaveBeenCalledTimes(1);
+  });
+
   it('routes SET_HORIZONTAL_ALIGN centerContinuous through bounded center-across formatting', async () => {
     const { deps, workbook, worksheet } = createMockDeps([
       { startRow: 0, startCol: 0, endRow: 0, endCol: 3 },

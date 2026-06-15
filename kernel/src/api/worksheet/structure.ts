@@ -333,6 +333,20 @@ export class WorksheetStructureImpl implements WorksheetStructure {
     const bounds = resolveRange(a, b, c, d);
     const normalized = normalizeRange(bounds);
 
+    const overlappingMerges = await this.ctx.computeBridge.getMergesInViewportSpatial(
+      this.sheetId,
+      normalized.startRow,
+      normalized.startCol,
+      normalized.endRow,
+      normalized.endCol,
+    );
+    if (overlappingMerges.length === 0) {
+      return {
+        kind: 'unmerge',
+        range: `${toA1(normalized.startRow, normalized.startCol)}:${toA1(normalized.endRow, normalized.endCol)}`,
+      };
+    }
+
     await this.ctx.computeBridge.unmergeRange(
       this.sheetId,
       normalized.startRow,

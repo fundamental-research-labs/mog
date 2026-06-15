@@ -16,11 +16,14 @@
 
 import type { ActionHandler, AsyncActionHandler } from '@mog-sdk/contracts/actions';
 import type { ViewportReader } from '@mog-sdk/contracts/api';
-import type { CellFormat } from '@mog-sdk/contracts/core';
+import type { CellFormat, CellRange, SheetId } from '@mog-sdk/contracts/core';
 
 import { toA1 } from '@mog/spreadsheet-utils/a1';
 
-import type { CellCoord } from '../../../ui-store/slices/dialogs/merge-warning-dialog';
+import type {
+  CellCoord,
+  MergeOperationType,
+} from '../../../ui-store/slices/dialogs/merge-warning-dialog';
 
 import { callUIStoreAction, getSelectionContext, getUIState } from './shared';
 
@@ -66,6 +69,12 @@ function getCellsWithDataInRange(
   }
   return cellsWithData;
 }
+
+type ConfirmMergeWithDataLossPayload = {
+  pendingRange?: CellRange | null;
+  sheetId?: SheetId | null;
+  mergeType?: MergeOperationType | null;
+};
 
 // =============================================================================
 // Merge Operations
@@ -317,9 +326,13 @@ export const MERGE_CELLS: AsyncActionHandler = async (deps) => {
  * Proceeds with merge, clearing data from non-top-left cells.
  * Handles different merge types: merge, mergeAcross, mergeAndCenter.
  */
-export const CONFIRM_MERGE_WITH_DATA_LOSS: AsyncActionHandler = async (deps) => {
+export const CONFIRM_MERGE_WITH_DATA_LOSS: AsyncActionHandler = async (
+  deps,
+  payload?: ConfirmMergeWithDataLossPayload,
+) => {
   const uiState = getUIState(deps);
-  const { pendingRange, sheetId, mergeType } = uiState.mergeWarningDialog;
+  const dialogState = payload ?? uiState.mergeWarningDialog;
+  const { pendingRange, sheetId, mergeType } = dialogState;
 
   if (!pendingRange || !sheetId) {
     // Close dialog and return

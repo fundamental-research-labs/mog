@@ -12,11 +12,12 @@
  * Merge Data Loss Warning Dialog
  */
 
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import { dispatch, useUIStore } from '../../internal-api';
 
 import { Button, Dialog, DialogBody, DialogFooter, DialogHeader } from '@mog/shell';
 import { useActionDependencies } from '../../hooks/toolbar/use-action-dependencies';
+import { scheduleDialogAction } from '../dialog-action-scheduler';
 
 // =============================================================================
 // Component
@@ -34,16 +35,37 @@ export function MergeWarningDialog() {
   // Get dialog state from UIStore
   const isOpen = useUIStore((s) => s.mergeWarningDialog.isOpen);
   const cellsWithData = useUIStore((s) => s.mergeWarningDialog.cellsWithData);
+  const pendingRange = useUIStore((s) => s.mergeWarningDialog.pendingRange);
+  const sheetId = useUIStore((s) => s.mergeWarningDialog.sheetId);
+  const mergeType = useUIStore((s) => s.mergeWarningDialog.mergeType);
+  const [isConfirming, setIsConfirming] = useState(false);
 
   // Handle OK button - confirm merge (data will be lost)
   const handleConfirm = useCallback(() => {
-    dispatch('CONFIRM_MERGE_WITH_DATA_LOSS', deps);
-  }, [deps]);
+    if (isConfirming) return;
+    setIsConfirming(true);
+    scheduleDialogAction(async () => {
+      try {
+        const result = await dispatch('CONFIRM_MERGE_WITH_DATA_LOSS', deps, {
+          pendingRange,
+          sheetId,
+          mergeType,
+        });
+        if (result && typeof result === 'object' && 'error' in result) {
+          setIsConfirming(false);
+        }
+      } catch (error) {
+        setIsConfirming(false);
+        throw error;
+      }
+    });
+  }, [deps, isConfirming, mergeType, pendingRange, sheetId]);
 
   // Handle Cancel button
   const handleCancel = useCallback(() => {
+    if (isConfirming) return;
     dispatch('CANCEL_MERGE', deps);
-  }, [deps]);
+  }, [deps, isConfirming]);
 
   return (
     <Dialog
@@ -67,10 +89,15 @@ export function MergeWarningDialog() {
         )}
       </DialogBody>
       <DialogFooter>
-        <Button variant="secondary" onClick={handleCancel}>
+        <Button variant="secondary" onClick={handleCancel} disabled={isConfirming}>
           Cancel
         </Button>
-        <Button variant="primary" onClick={handleConfirm} data-confirm-button="true">
+        <Button
+          variant="primary"
+          onClick={handleConfirm}
+          disabled={isConfirming}
+          data-confirm-button="true"
+        >
           OK
         </Button>
       </DialogFooter>

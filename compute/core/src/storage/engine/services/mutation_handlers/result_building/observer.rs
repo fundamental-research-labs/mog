@@ -158,6 +158,25 @@ pub(in crate::storage::engine) fn build_mutation_result_from_changes(
     }
 
     // --- Property changes ---
+    //
+    // Property removals can arrive in the same observer batch as a
+    // gridIndex/posToId removal. apply_all_observer_changes applies that
+    // removal before this result is built, so sparse cell_id -> position
+    // lookups may fail. Preserve the position from the observer gridIndex
+    // payload whenever it is available.
+    let mut property_position_fallbacks: HashMap<(SheetId, CellId), CellPosition> = HashMap::new();
+    for change in &changes.grid_index {
+        let Some(row) = resolve_row_id_to_index(stores, &change.sheet_id, &change.row_hex) else {
+            continue;
+        };
+        let Some(col) = resolve_col_id_to_index(stores, &change.sheet_id, &change.col_hex) else {
+            continue;
+        };
+        property_position_fallbacks
+            .entry((change.sheet_id, change.cell_id))
+            .or_insert(CellPosition { row, col });
+    }
+
     for pch in &changes.properties {
         let sheet_id_str = pch.sheet_id.to_uuid_string();
         let cell_hex = id_to_hex(pch.cell_id.as_u128());
@@ -172,6 +191,11 @@ pub(in crate::storage::engine) fn build_mutation_result_from_changes(
                 mirror
                     .resolve_position(&pch.cell_id)
                     .map(|pos| (pos.row(), pos.col()))
+            })
+            .or_else(|| {
+                property_position_fallbacks
+                    .get(&(pch.sheet_id, pch.cell_id))
+                    .map(|pos| (pos.row, pos.col))
             })
             .map(|(row, col)| CellPosition { row, col });
 

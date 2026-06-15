@@ -2,6 +2,10 @@
 
 use super::super::*;
 use super::helpers::*;
+use crate::snapshot::SheetSnapshot;
+use compute_wire::constants::{MUTATION_HEADER_SIZE, PATCH_STRIDE};
+use compute_wire::flags::{MUT_HAS_PALETTE, MUT_HAS_PROJECTION_CHANGES};
+use domain_types::CellFormat;
 
 fn sorted_first_viewport_patch_positions(patches: &[u8]) -> Vec<(u32, u32)> {
     let mutation =
@@ -9,6 +13,81 @@ fn sorted_first_viewport_patch_positions(patches: &[u8]) -> Vec<(u32, u32)> {
     let mut positions = extract_patch_positions(&mutation);
     positions.sort_unstable();
     positions
+}
+
+fn first_viewport_format_idx_at(patches: &[u8], row: u32, col: u32) -> Option<u16> {
+    let mutation = extract_first_viewport_mutation(patches)?;
+    let patch_count =
+        u32::from_le_bytes([mutation[0], mutation[1], mutation[2], mutation[3]]) as usize;
+    let sheet_id_len = u16::from_le_bytes([mutation[8], mutation[9]]) as usize;
+    let patches_start = MUTATION_HEADER_SIZE + sheet_id_len;
+
+    for i in 0..patch_count {
+        let patch_off = patches_start + i * PATCH_STRIDE;
+        let patch_row = u32::from_le_bytes([
+            mutation[patch_off],
+            mutation[patch_off + 1],
+            mutation[patch_off + 2],
+            mutation[patch_off + 3],
+        ]);
+        let patch_col = u32::from_le_bytes([
+            mutation[patch_off + 4],
+            mutation[patch_off + 5],
+            mutation[patch_off + 6],
+            mutation[patch_off + 7],
+        ]);
+        if patch_row == row && patch_col == col {
+            let record_off = patch_off + 8;
+            return Some(u16::from_le_bytes([
+                mutation[record_off + 18],
+                mutation[record_off + 19],
+            ]));
+        }
+    }
+
+    None
+}
+
+fn first_viewport_format_at(patches: &[u8], row: u32, col: u32) -> Option<CellFormat> {
+    let mutation = extract_first_viewport_mutation(patches)?;
+    let format_idx = first_viewport_format_idx_at(patches, row, col)?;
+    let patch_count =
+        u32::from_le_bytes([mutation[0], mutation[1], mutation[2], mutation[3]]) as usize;
+    let string_bytes =
+        u32::from_le_bytes([mutation[4], mutation[5], mutation[6], mutation[7]]) as usize;
+    let sheet_id_len = u16::from_le_bytes([mutation[8], mutation[9]]) as usize;
+    let flags = mutation[10];
+    if flags & MUT_HAS_PALETTE == 0 {
+        return None;
+    }
+
+    let mut palette_offset =
+        MUTATION_HEADER_SIZE + sheet_id_len + patch_count * PATCH_STRIDE + string_bytes;
+    if flags & MUT_HAS_PROJECTION_CHANGES != 0 {
+        let projection_count = u32::from_le_bytes([
+            mutation[palette_offset],
+            mutation[palette_offset + 1],
+            mutation[palette_offset + 2],
+            mutation[palette_offset + 3],
+        ]) as usize;
+        palette_offset += 4 + projection_count * PATCH_STRIDE;
+    }
+
+    let palette_bytes_len = u32::from_le_bytes([
+        mutation[palette_offset + 2],
+        mutation[palette_offset + 3],
+        mutation[palette_offset + 4],
+        mutation[palette_offset + 5],
+    ]) as usize;
+    let palette_bytes_start = palette_offset + 6;
+    let palette_bytes_end = palette_bytes_start + palette_bytes_len;
+    let (palette_start_index, formats) = compute_wire::palette_binary::deserialize_palette_binary(
+        &mutation[palette_bytes_start..palette_bytes_end],
+    )
+    .ok()?;
+
+    let local_idx = format_idx.checked_sub(palette_start_index)? as usize;
+    formats.get(local_idx).cloned()
 }
 
 #[test]
@@ -85,9 +164,7 @@ fn test_undo_format_produces_viewport_patches() {
     let sid = sheet_id();
 
     // Register a viewport so patches get produced
-    engine
-        .register_viewport("main", &sid, 0, 0, 100, 26)
-        .unwrap();
+    let _initial_viewport = engine.get_viewport_binary(&sid, 0, 0, 100, 26, false);
 
     // Apply a format change
     let format = CellFormat {
@@ -106,6 +183,167 @@ fn test_undo_format_produces_viewport_patches() {
         patches.len() > 2,
         "undo of format should produce viewport patches, got {} bytes",
         patches.len(),
+    );
+}
+
+#[test]
+fn test_undo_cell_format_to_default_patches_default_format() {
+    use domain_types::CellFormat;
+
+    let snap = WorkbookSnapshot {
+        sheets: vec![SheetSnapshot {
+            id: sheet_id().to_uuid_string(),
+            name: "Sheet1".to_string(),
+            rows: 100,
+            cols: 26,
+            cells: vec![],
+            ranges: vec![],
+        }],
+        ..Default::default()
+    };
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let sid = sheet_id();
+
+    engine
+        .register_viewport("main", &sid, 0, 0, 100, 26)
+        .unwrap();
+
+    let format = CellFormat {
+        font_size: Some(12.0.into()),
+        ..Default::default()
+    };
+    let (forward_patches, _) = engine
+        .set_format_for_ranges(&sid, &[(0, 0, 0, 0)], &format)
+        .unwrap();
+    assert!(first_viewport_format_idx_at(&forward_patches, 0, 0).is_some());
+    assert_eq!(
+        engine
+            .get_displayed_cell_properties(&sid, 0, 0)
+            .font_size
+            .map(|size| size.points()),
+        Some(12.0)
+    );
+
+    let (patches, result) = engine.undo().unwrap();
+
+    assert_eq!(
+        engine
+            .get_displayed_cell_properties(&sid, 0, 0)
+            .font_size
+            .map(|size| size.points()),
+        Some(11.0),
+        "undo should restore the default displayed font size"
+    );
+    assert!(
+        result.property_changes.iter().any(|change| change
+            .position
+            .as_ref()
+            .is_some_and(|pos| pos.row == 0 && pos.col == 0)),
+        "undo should report A1 as a property change; got {:?}",
+        result.property_changes
+    );
+
+    let undo_positions = sorted_first_viewport_patch_positions(&patches);
+    assert!(
+        undo_positions.contains(&(0, 0)),
+        "undo should patch A1 back to the default format; got {:?}",
+        undo_positions
+    );
+    assert_eq!(
+        first_viewport_format_at(&patches, 0, 0)
+            .and_then(|format| format.font_size.map(|size| size.points())),
+        Some(11.0),
+        "undo patch should include a palette entry for A1's restored default format"
+    );
+}
+
+#[test]
+fn test_observer_format_patches_use_grid_index_position_fallback() {
+    use compute_document::observe::{
+        CellChangeKind, DocumentChanges, GridIndexCellChange, PropertyCellChange,
+    };
+    use domain_types::CellFormat;
+
+    let snap = WorkbookSnapshot {
+        sheets: vec![SheetSnapshot {
+            id: sheet_id().to_uuid_string(),
+            name: "Sheet1".to_string(),
+            rows: 100,
+            cols: 26,
+            cells: vec![],
+            ranges: vec![],
+        }],
+        ..Default::default()
+    };
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let sid = sheet_id();
+
+    engine
+        .register_viewport("main", &sid, 0, 0, 100, 26)
+        .unwrap();
+
+    let format = CellFormat {
+        font_size: Some(12.0.into()),
+        ..Default::default()
+    };
+    engine
+        .set_format_for_ranges(&sid, &[(0, 0, 0, 0)], &format)
+        .unwrap();
+
+    let (cell_id, row_hex, col_hex) = {
+        let grid = engine
+            .stores
+            .grid_indexes
+            .get(&sid)
+            .expect("sheet should have a grid index");
+        (
+            grid.cell_id_at(0, 0)
+                .expect("formatting A1 should allocate a CellId"),
+            grid.row_id_hex(0)
+                .expect("A1 row should have a row identity")
+                .to_string(),
+            grid.col_id_hex(0)
+                .expect("A1 column should have a column identity")
+                .to_string(),
+        )
+    };
+
+    engine
+        .stores
+        .grid_indexes
+        .get_mut(&sid)
+        .expect("sheet should have a mutable grid index")
+        .remove_cell(&cell_id);
+    assert_eq!(
+        engine
+            .stores
+            .grid_indexes
+            .get(&sid)
+            .and_then(|grid| grid.cell_position(&cell_id)),
+        None,
+        "test setup should simulate the observer state after gridIndex removal"
+    );
+
+    let mut changes = DocumentChanges::default();
+    changes.properties.push(PropertyCellChange {
+        sheet_id: sid,
+        cell_id,
+        kind: CellChangeKind::Removed,
+    });
+    changes.grid_index.push(GridIndexCellChange {
+        sheet_id: sid,
+        cell_id,
+        row_hex,
+        col_hex,
+        kind: CellChangeKind::Removed,
+    });
+
+    let patches = engine.produce_observer_format_patches(&changes);
+    let positions = sorted_first_viewport_patch_positions(&patches);
+    assert!(
+        positions.contains(&(0, 0)),
+        "format observer patch should use gridIndex row/col fallback; got {:?}",
+        positions
     );
 }
 

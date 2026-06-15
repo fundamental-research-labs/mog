@@ -927,7 +927,7 @@ impl YrsComputeEngine {
 
         // Build format viewport patches from property changes
         let format_patches = if !doc_changes.properties.is_empty() {
-            self.produce_observer_format_patches(&doc_changes.properties)
+            self.produce_observer_format_patches(&doc_changes)
         } else {
             vec![]
         };

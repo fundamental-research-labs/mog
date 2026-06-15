@@ -738,7 +738,7 @@ impl YrsComputeEngine {
     /// patches.
     pub(crate) fn produce_observer_format_patches(
         &mut self,
-        property_changes: &[compute_document::observe::PropertyCellChange],
+        doc_changes: &compute_document::observe::DocumentChanges,
     ) -> Vec<u8> {
         // ── Borrow splitting ────────────────────────────────────────────
         // We must take shared refs to stores/mirror/settings BEFORE taking
@@ -772,12 +772,51 @@ impl YrsComputeEngine {
         };
 
         // ── Pass 0: Group affected cells by sheet ──────────────────────
+        //
+        // Undoing a format on a previously-empty cell removes both the
+        // property payload and the sparse gridIndex cell binding. At this
+        // point apply_all_observer_changes has already applied the gridIndex
+        // removal, so cell_id -> (row, col) can be gone. The observer's
+        // gridIndex change still carries row/col identity hexes; use them as
+        // the authoritative fallback for the matching property change.
+        let mut grid_position_fallbacks: FxHashMap<(SheetId, CellId), (u32, u32)> =
+            FxHashMap::default();
+        for change in &doc_changes.grid_index {
+            let Some(row) = services::mutation::resolve_hex_id_to_position(
+                stores,
+                &change.sheet_id,
+                &change.row_hex,
+                true,
+            ) else {
+                continue;
+            };
+            let Some(col) = services::mutation::resolve_hex_id_to_position(
+                stores,
+                &change.sheet_id,
+                &change.col_hex,
+                false,
+            ) else {
+                continue;
+            };
+            grid_position_fallbacks
+                .entry((change.sheet_id, change.cell_id))
+                .or_insert((row, col));
+        }
+
         let mut by_sheet: FxHashMap<SheetId, Vec<(u128, u32, u32)>> = FxHashMap::default();
 
-        for pch in property_changes {
-            if let Some(grid) = stores.grid_indexes.get(&pch.sheet_id)
-                && let Some((row, col)) = grid.cell_position(&pch.cell_id)
-            {
+        for pch in &doc_changes.properties {
+            let position = stores
+                .grid_indexes
+                .get(&pch.sheet_id)
+                .and_then(|grid| grid.cell_position(&pch.cell_id))
+                .or_else(|| {
+                    grid_position_fallbacks
+                        .get(&(pch.sheet_id, pch.cell_id))
+                        .copied()
+                });
+
+            if let Some((row, col)) = position {
                 by_sheet
                     .entry(pch.sheet_id)
                     .or_default()

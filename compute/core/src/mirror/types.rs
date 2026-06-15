@@ -56,6 +56,36 @@ impl RectLike for FormatRange {
     }
 }
 
+/// A sparse whole-column default format range.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct ColumnFormatRange {
+    pub id: RangeId,
+    pub start_col: u32,
+    pub end_col: u32,
+}
+
+impl RectLike for ColumnFormatRange {
+    #[inline]
+    fn start_row(&self) -> u32 {
+        0
+    }
+
+    #[inline]
+    fn end_row(&self) -> u32 {
+        u32::MAX
+    }
+
+    #[inline]
+    fn start_col(&self) -> u32 {
+        self.start_col
+    }
+
+    #[inline]
+    fn end_col(&self) -> u32 {
+        self.end_col
+    }
+}
+
 /// A rectangular merge region (zero-based, inclusive bounds).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MergeRegion {
@@ -180,6 +210,12 @@ pub struct SheetMirror {
     pub(crate) range_format_cache: FxHashMap<RangeId, CellFormat>,
     /// Original XLSX cellXfs style id per imported format RangeId.
     pub(crate) range_xlsx_style_id_cache: FxHashMap<RangeId, u32>,
+
+    // --- Column format range caches ---
+    pub(crate) col_format_ranges: Vec<ColumnFormatRange>,
+    pub(crate) col_format_range_spatial_index: IntervalTree<ColumnFormatRange>,
+    pub(crate) col_format_range_cache: FxHashMap<RangeId, CellFormat>,
+    pub(crate) col_range_xlsx_style_id_cache: FxHashMap<RangeId, u32>,
 }
 
 impl SheetMirror {
@@ -217,6 +253,10 @@ impl SheetMirror {
             format_range_spatial_index: IntervalTree::new(),
             range_format_cache: FxHashMap::default(),
             range_xlsx_style_id_cache: FxHashMap::default(),
+            col_format_ranges: Vec::new(),
+            col_format_range_spatial_index: IntervalTree::new(),
+            col_format_range_cache: FxHashMap::default(),
+            col_range_xlsx_style_id_cache: FxHashMap::default(),
         }
     }
 
@@ -264,6 +304,10 @@ impl SheetMirror {
             format_range_spatial_index: IntervalTree::new(),
             range_format_cache: FxHashMap::default(),
             range_xlsx_style_id_cache: FxHashMap::default(),
+            col_format_ranges: Vec::new(),
+            col_format_range_spatial_index: IntervalTree::new(),
+            col_format_range_cache: FxHashMap::default(),
+            col_range_xlsx_style_id_cache: FxHashMap::default(),
         }
     }
 
@@ -669,5 +713,36 @@ impl SheetMirror {
     /// Get the imported XLSX style id cache for format ranges.
     pub(crate) fn range_xlsx_style_id_cache(&self) -> &FxHashMap<RangeId, u32> {
         &self.range_xlsx_style_id_cache
+    }
+
+    pub(crate) fn col_format_ranges_at(&self, col: u32) -> Vec<(RangeId, &CellFormat)> {
+        let mut matches: Vec<(RangeId, &CellFormat)> = self
+            .col_format_range_spatial_index
+            .query(0, col)
+            .into_iter()
+            .filter_map(|r| {
+                self.col_format_range_cache
+                    .get(&r.id)
+                    .map(|fmt| (r.id, fmt))
+            })
+            .collect();
+        matches.sort_by_key(|(id, _)| id.as_u128());
+        matches
+    }
+
+    pub(crate) fn rebuild_col_format_range_spatial_index(&mut self) {
+        self.col_format_range_spatial_index = IntervalTree::build(&self.col_format_ranges);
+    }
+
+    pub(crate) fn col_format_ranges(&self) -> &[ColumnFormatRange] {
+        &self.col_format_ranges
+    }
+
+    pub(crate) fn col_format_range_cache(&self) -> &FxHashMap<RangeId, CellFormat> {
+        &self.col_format_range_cache
+    }
+
+    pub(crate) fn col_range_xlsx_style_id_cache(&self) -> &FxHashMap<RangeId, u32> {
+        &self.col_range_xlsx_style_id_cache
     }
 }

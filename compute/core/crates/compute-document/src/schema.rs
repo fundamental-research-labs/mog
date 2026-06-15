@@ -56,6 +56,7 @@ pub const KEY_COL_ORDER: &str = "colOrder";
 /// Per-sheet feature maps
 pub const KEY_ROW_FORMATS: &str = "rowFormats";
 pub const KEY_COL_FORMATS: &str = "colFormats";
+pub const KEY_COL_FORMAT_RANGES: &str = "colFormatRanges";
 pub const KEY_COMMENTS: &str = "comments";
 pub const KEY_FILTERS: &str = "filters";
 pub const KEY_FILTER_METADATA_BINDINGS: &str = "filterMetadataBindings";
@@ -389,6 +390,7 @@ pub fn init_canonical_schema(doc: &Doc) -> (MapRef, MapRef, crate::hex::SmallHex
     sheet_map.insert(&mut txn, KEY_HIDDEN_COLS, empty());
     sheet_map.insert(&mut txn, KEY_ROW_FORMATS, empty());
     sheet_map.insert(&mut txn, KEY_COL_FORMATS, empty());
+    sheet_map.insert(&mut txn, KEY_COL_FORMAT_RANGES, empty());
     sheet_map.insert(&mut txn, KEY_COMMENTS, empty());
     sheet_map.insert(&mut txn, KEY_FILTERS, empty());
     sheet_map.insert(&mut txn, KEY_FILTER_METADATA_BINDINGS, empty());
@@ -556,6 +558,7 @@ mod tests {
             KEY_HIDDEN_COLS,
             KEY_ROW_FORMATS,
             KEY_COL_FORMATS,
+            KEY_COL_FORMAT_RANGES,
             KEY_COMMENTS,
             KEY_FILTERS,
             KEY_FILTER_METADATA_BINDINGS,

@@ -14,35 +14,34 @@ use crate::output::results::{
 };
 use ooxml_types::worksheet::ColWidth;
 
-/// Build a flat col_styles lookup from parsed ColWidth entries.
+/// Build sparse column style ranges from parsed ColWidth entries.
 ///
-/// Returns a Vec where index = 0-based column number, value = Some(style_id)
-/// if that column has a non-zero default style. The cell parser uses this to
-/// skip empty cells whose style matches the column default.
-pub(crate) fn build_col_styles_from_widths(col_widths: &[ColWidth]) -> Vec<Option<u32>> {
-    let max_col = col_widths
-        .iter()
-        .filter(|cw| cw.style.map(|s| s > 0).unwrap_or(false))
-        .map(|cw| cw.max as usize)
-        .max()
-        .unwrap_or(0);
-    if max_col == 0 {
-        return Vec::new();
-    }
-    let mut styles = vec![None; max_col];
+/// Bounds are converted from OOXML's 1-based inclusive `min/max` to the
+/// domain model's 0-based inclusive columns.
+pub(crate) fn build_col_style_ranges_from_widths(
+    col_widths: &[ColWidth],
+) -> Vec<domain_types::ColStyleRange> {
+    let mut ranges = Vec::new();
     for cw in col_widths {
         if let Some(style_id) = cw.style {
             if style_id > 0 {
-                for one_based in cw.min..=cw.max.min(max_col as u32) {
-                    let idx = one_based.saturating_sub(1) as usize;
-                    if idx < styles.len() {
-                        styles[idx] = Some(style_id);
-                    }
-                }
+                ranges.push(domain_types::ColStyleRange {
+                    start_col: cw.min.saturating_sub(1),
+                    end_col: cw.max.saturating_sub(1),
+                    style_id,
+                });
             }
         }
     }
-    styles
+    ranges
+}
+
+pub(crate) fn col_style_range_at(ranges: &[domain_types::ColStyleRange], col: u32) -> Option<u32> {
+    ranges
+        .iter()
+        .rev()
+        .find(|range| col >= range.start_col && col <= range.end_col)
+        .map(|range| range.style_id)
 }
 
 /// Convert bytes to String after the XML part boundary has validated UTF-8.

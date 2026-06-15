@@ -9,6 +9,15 @@ use value_types::CellValue;
 use crate::import::phantom::parse_cell_ref;
 use crate::storage::infra::hydration::HydrationIdMap;
 
+fn col_style_range_at(sheet: &SheetData, col: u32) -> Option<u32> {
+    sheet
+        .col_style_ranges
+        .iter()
+        .rev()
+        .find(|range| col >= range.start_col && col <= range.end_col)
+        .map(|range| range.style_id)
+}
+
 #[inline]
 fn u128_to_hex32(val: u128) -> String {
     const HEX: &[u8; 16] = b"0123456789abcdef";
@@ -66,7 +75,11 @@ pub(crate) fn convert_sheets(
                     {
                         let cell_sid = cell.style_id.unwrap_or(0);
                         let row_sid = row_default_style.get(&cell.row).copied().unwrap_or(0);
-                        let col_sid = col_default_style.get(&cell.col).copied().unwrap_or(0);
+                        let col_sid = col_default_style
+                            .get(&cell.col)
+                            .copied()
+                            .or_else(|| col_style_range_at(sheet, cell.col))
+                            .unwrap_or(0);
                         let positional_sid = if row_sid != 0 { row_sid } else { col_sid };
                         if cell_sid == positional_sid {
                             return None;

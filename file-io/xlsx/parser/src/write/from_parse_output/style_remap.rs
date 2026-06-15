@@ -64,6 +64,7 @@ fn output_references_cell_style_ids(output: &ParseOutput) -> bool {
                 .any(|run| run.style_id != 0 || !sheet.cells.is_empty())
             || !sheet.row_styles.is_empty()
             || !sheet.col_styles.is_empty()
+            || !sheet.col_style_ranges.is_empty()
             || sheet
                 .dimensions
                 .trailing_col_ranges

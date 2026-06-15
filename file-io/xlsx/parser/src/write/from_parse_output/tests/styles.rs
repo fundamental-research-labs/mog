@@ -822,3 +822,40 @@ fn test_col_styles_roundtrip() {
         &xml[..xml.len().min(2000)]
     );
 }
+
+#[test]
+fn test_sparse_col_style_ranges_export_as_col_metadata() {
+    use super::sheet_builder::build_sheet;
+    use crate::write::SharedStringsWriter;
+
+    let sheet_data = SheetData {
+        name: "Sheet1".to_string(),
+        col_style_ranges: vec![domain_types::ColStyleRange {
+            start_col: 0,
+            end_col: 16_383,
+            style_id: 15,
+        }],
+        ..Default::default()
+    };
+
+    let mut shared_strings = SharedStringsWriter::new();
+    let no_dt_bodies: std::collections::HashSet<(u32, u32)> = std::collections::HashSet::new();
+    let no_dt_regions = Vec::new();
+    let style_remapper =
+        super::super::style_remap::StyleExportRemapper::palette_projection(u32::MAX);
+    let writer = build_sheet(
+        &sheet_data,
+        &mut shared_strings,
+        &no_dt_bodies,
+        &no_dt_regions,
+        true,
+        &style_remapper,
+    );
+    let xml = String::from_utf8(writer.to_xml()).unwrap();
+    assert!(xml.contains(r#"<col min="1" max="16384""#), "{xml}");
+    assert!(xml.contains(r#"style="16""#), "{xml}");
+    assert!(
+        !xml.contains("<c "),
+        "sparse column defaults must not export as blank cells: {xml}"
+    );
+}

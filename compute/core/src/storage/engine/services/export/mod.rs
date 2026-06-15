@@ -9,7 +9,8 @@ mod slicers;
 mod table_totals;
 mod workbook;
 pub(in crate::storage::engine) use cells::{
-    export_authored_style_runs_for_sheet, export_cells_for_sheet, export_row_col_styles_for_sheet,
+    export_authored_style_runs_for_sheet, export_cells_for_sheet,
+    export_col_style_ranges_for_sheet, export_row_col_styles_for_sheet,
 };
 pub(in crate::storage::engine) use dimensions::{
     ExportedTableProjectionInput, TableExportProjection, export_dimensions_for_sheet,
@@ -537,6 +538,7 @@ fn export_single_sheet(
 
     let (row_styles, col_styles) =
         export_row_col_styles_for_sheet(stores, sheet_id, style_max_row, max_col, palette);
+    let col_style_ranges = export_col_style_ranges_for_sheet(mirror, sheet_id, palette);
 
     let sparklines = export_sparklines_for_sheet(stores, sheet_id);
     let sparkline_groups = export_sparkline_groups_for_sheet(stores, sheet_id);
@@ -756,6 +758,7 @@ fn export_single_sheet(
         sheet_calc_pr,
         row_styles,
         col_styles,
+        col_style_ranges,
         charts,
         sparklines,
         sparkline_groups,

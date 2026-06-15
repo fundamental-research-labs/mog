@@ -100,6 +100,64 @@ fn test_format_cascade_all_layers() {
 }
 
 #[test]
+fn col_format_ranges_are_column_defaults_below_explicit_col_and_row_formats() {
+    let (mut storage, sid, gi, mut mirror) = storage_with_sheet_and_mirror();
+
+    insert_col_format_range(
+        &storage,
+        &sid,
+        crate::mirror::RangeId::from_raw(500),
+        1,
+        200,
+        &CellFormat {
+            number_format: Some("0.0".to_string()),
+            font_color: Some("#0000FF".to_string()),
+            background_color: Some("#EEEEEE".to_string()),
+            ..Default::default()
+        },
+        Some(9),
+    );
+    let sheet_mirror = mirror.get_sheet_mut(&sid).unwrap();
+    hydrate_col_format_ranges(&storage, &sid, sheet_mirror);
+
+    set_col_format(
+        &mut storage,
+        &sid,
+        2,
+        &CellFormat {
+            number_format: Some("0.00%".to_string()),
+            ..Default::default()
+        },
+        Some(&gi),
+    )
+    .unwrap();
+    set_row_format(
+        &mut storage,
+        &sid,
+        4,
+        &CellFormat {
+            font_color: Some("#FF0000".to_string()),
+            ..Default::default()
+        },
+        Some(&gi),
+    )
+    .unwrap();
+
+    let sheet_mirror = mirror.get_sheet(&sid).unwrap();
+    let inherited = get_positional_format(&storage, &sid, 4, 1, Some(&gi), Some(sheet_mirror));
+    assert_eq!(inherited.number_format, Some("0.0".to_string()));
+    assert_eq!(inherited.font_color, Some("#FF0000".to_string()));
+    assert_eq!(inherited.background_color, Some("#EEEEEE".to_string()));
+
+    let explicit_col = get_positional_format(&storage, &sid, 4, 2, Some(&gi), Some(sheet_mirror));
+    assert_eq!(explicit_col.number_format, Some("0.00%".to_string()));
+    assert_eq!(explicit_col.font_color, Some("#FF0000".to_string()));
+
+    let virtual_col = get_positional_format(&storage, &sid, 0, 200, Some(&gi), Some(sheet_mirror));
+    assert_eq!(virtual_col.number_format, Some("0.0".to_string()));
+}
+
+#[test]
 fn test_overlapping_format_ranges() {
     let (mut storage, sid, _gi, mut mirror) = storage_with_sheet_and_mirror();
 

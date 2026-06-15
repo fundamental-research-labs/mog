@@ -68,6 +68,7 @@ use domain_types::{
     CellData,
     ColDimension,
     ColStyleEntry,
+    ColStyleRange,
     // Domain types
     Comment,
     FrozenPane,

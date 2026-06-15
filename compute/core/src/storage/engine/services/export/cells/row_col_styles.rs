@@ -1,6 +1,7 @@
 use cell_types::SheetId;
-use domain_types::{ColStyleEntry, RowStyleEntry};
+use domain_types::{ColStyleEntry, ColStyleRange, RowStyleEntry};
 
+use crate::mirror::CellMirror;
 use crate::storage::engine::stores::EngineStores;
 use crate::storage::properties;
 
@@ -47,4 +48,40 @@ pub(in crate::storage::engine) fn export_row_col_styles_for_sheet(
     }
 
     (row_styles, col_styles)
+}
+
+pub(in crate::storage::engine) fn export_col_style_ranges_for_sheet(
+    mirror: &CellMirror,
+    sheet_id: &SheetId,
+    palette: &impl PaletteOps,
+) -> Vec<ColStyleRange> {
+    let Some(sheet) = mirror.get_sheet(sheet_id) else {
+        return Vec::new();
+    };
+
+    let mut ranges = Vec::new();
+    for range in sheet.col_format_ranges() {
+        let style_id = sheet
+            .col_range_xlsx_style_id_cache()
+            .get(&range.id)
+            .copied()
+            .or_else(|| {
+                sheet
+                    .col_format_range_cache()
+                    .get(&range.id)
+                    .and_then(|format| style_id_for_cell_format(format, palette))
+            });
+        let Some(style_id) = style_id else {
+            continue;
+        };
+        ranges.push(ColStyleRange {
+            start_col: range.start_col,
+            end_col: range.end_col,
+            style_id,
+        });
+    }
+
+    ranges.sort_by_key(|r| (r.start_col, r.end_col, r.style_id));
+    ranges.dedup();
+    ranges
 }

@@ -4,7 +4,7 @@ use super::super::{
 use super::helpers::{empty_style_cell, extent_test_cell};
 use crate::output::results::{CommentOutput, FullParsedSheet, HyperlinkOutput};
 use domain_types::{AuthoredStyleRun, Comment, SheetData};
-use ooxml_types::worksheet::MergeRange;
+use ooxml_types::worksheet::{ColWidth, MergeRange};
 
 #[test]
 fn test_non_empty() {
@@ -60,6 +60,42 @@ fn test_compute_sheet_extent_includes_merge_endpoint() {
     sheet.merges.push(MergeRange::from_coords(0, 0, 4, 3));
 
     assert_eq!(compute_sheet_extent(&sheet), (5, 4));
+}
+
+#[test]
+fn full_width_column_style_does_not_inflate_extent_or_dense_col_styles() {
+    let mut full_width_style = ColWidth::range(1, 16_384, 0.0).with_style(7);
+    full_width_style.width = None;
+    let sheet = FullParsedSheet {
+        col_widths: vec![full_width_style],
+        ..Default::default()
+    };
+
+    assert_eq!(compute_sheet_extent(&sheet), (0, 0));
+
+    let sheet_data = convert_sheet(
+        &sheet,
+        &[],
+        &[],
+        &[],
+        &[],
+        &[],
+        &std::collections::HashMap::new(),
+        &std::collections::HashMap::<String, Vec<u8>>::new(),
+        None,
+    );
+
+    assert_eq!((sheet_data.rows, sheet_data.cols), (0, 0));
+    assert!(sheet_data.col_styles.is_empty());
+    assert_eq!(
+        sheet_data.col_style_ranges,
+        vec![domain_types::ColStyleRange {
+            start_col: 0,
+            end_col: 16_383,
+            style_id: 7,
+        }]
+    );
+    assert!(sheet_data.dimensions.trailing_col_ranges.is_empty());
 }
 
 #[test]

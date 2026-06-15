@@ -115,6 +115,7 @@ pub(super) fn output_references_style_ids(output: &ParseOutput) -> bool {
             || !sheet.authored_style_runs.is_empty()
             || !sheet.row_styles.is_empty()
             || !sheet.col_styles.is_empty()
+            || !sheet.col_style_ranges.is_empty()
             || sheet
                 .dimensions
                 .trailing_col_ranges

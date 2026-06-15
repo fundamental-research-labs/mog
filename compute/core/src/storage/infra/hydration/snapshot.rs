@@ -179,6 +179,7 @@ impl YrsStorage {
                 KEY_HIDDEN_COLS,
                 KEY_ROW_FORMATS,
                 KEY_COL_FORMATS,
+                KEY_COL_FORMAT_RANGES,
                 KEY_COMMENTS,
                 KEY_FILTERS,
                 KEY_SPARKLINES,

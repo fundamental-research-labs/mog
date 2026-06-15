@@ -38,8 +38,8 @@ pub use parsing::{
 };
 
 pub(crate) use full_convert::{
-    apply_parse_extras, build_col_styles_from_widths, coalesce_authored_style_only_cells,
-    convert_cell_data, data_table_info,
+    apply_parse_extras, build_col_style_ranges_from_widths, coalesce_authored_style_only_cells,
+    col_style_range_at, convert_cell_data, data_table_info,
 };
 
 // Re-export public helper functions

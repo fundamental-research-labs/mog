@@ -150,11 +150,6 @@ pub(super) fn compute_sheet_extent(sheet: &FullParsedSheet) -> (u32, u32) {
     if let Some(desc_rows) = sheet.row_descents.keys().map(|&r| r + 1).max() {
         rows = rows.max(desc_rows);
     }
-    if let Some(dim_cols) = sheet.col_widths.iter().map(|cw| cw.max).max() {
-        // ColWidth::max is 1-based, so it already equals the required count.
-        cols = cols.max(dim_cols);
-    }
-
     for merge in &sheet.merges {
         include_extent_pos(&mut rows, &mut cols, merge.start_row, merge.start_col);
         include_extent_pos(&mut rows, &mut cols, merge.end_row, merge.end_col);

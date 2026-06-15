@@ -32,8 +32,8 @@ use super::features::{
     hydrate_sort_state, hydrate_sparklines, hydrate_x14_data_validations,
 };
 use super::styles::{
-    ImportedRangeStyle, hydrate_authored_style_runs, hydrate_cell_styles, hydrate_col_styles,
-    hydrate_imported_range_styles, hydrate_row_styles,
+    ImportedRangeStyle, hydrate_authored_style_runs, hydrate_cell_styles, hydrate_col_style_ranges,
+    hydrate_col_styles, hydrate_imported_range_styles, hydrate_row_styles,
 };
 use dimensions::{DimensionMaps, hydrate_dimensions};
 use domain::{hydrate_worksheet_import_xml_metadata, hydrate_worksheet_semantic_containers};
@@ -235,6 +235,11 @@ pub(crate) fn hydrate_sheet(
 
     let col_formats_prelim = MapPrelim::from([] as [(&str, Any); 0]);
     let col_formats_map: MapRef = sheet_map.insert(txn, KEY_COL_FORMATS, col_formats_prelim);
+    sheet_map.insert(
+        txn,
+        KEY_COL_FORMAT_RANGES,
+        MapPrelim::from([] as [(&str, Any); 0]),
+    );
 
     let comments_prelim = MapPrelim::from([] as [(&str, Any); 0]);
     let comments_map: MapRef = sheet_map.insert(txn, KEY_COMMENTS, comments_prelim);
@@ -435,6 +440,7 @@ pub(crate) fn hydrate_sheet(
         &sheet.col_styles,
         style_palette,
     );
+    hydrate_col_style_ranges(txn, &sheet_map, &sheet.col_style_ranges, style_palette);
     hydrate_authored_style_runs(txn, &sheet_map, &sheet.authored_style_runs, style_palette);
 
     // --- Cell-level style overrides ---
@@ -664,6 +670,11 @@ pub(crate) fn hydrate_sheet_with_allocation(
 
     let col_formats_prelim = MapPrelim::from([] as [(&str, Any); 0]);
     let col_formats_map: MapRef = sheet_map.insert(txn, KEY_COL_FORMATS, col_formats_prelim);
+    sheet_map.insert(
+        txn,
+        KEY_COL_FORMAT_RANGES,
+        MapPrelim::from([] as [(&str, Any); 0]),
+    );
 
     let comments_prelim = MapPrelim::from([] as [(&str, Any); 0]);
     let comments_map: MapRef = sheet_map.insert(txn, KEY_COMMENTS, comments_prelim);
@@ -830,6 +841,7 @@ pub(crate) fn hydrate_sheet_with_allocation(
         &sheet.col_styles,
         style_palette,
     );
+    hydrate_col_style_ranges(txn, &sheet_map, &sheet.col_style_ranges, style_palette);
     hydrate_authored_style_runs(txn, &sheet_map, &sheet.authored_style_runs, style_palette);
     hydrate_imported_range_styles(txn, &sheet_map, imported_range_styles, style_palette);
     hydrate_cell_styles(

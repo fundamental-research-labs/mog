@@ -13,6 +13,43 @@ fn env_flag_default_true(name: &str) -> bool {
         .unwrap_or(true)
 }
 
+fn build_col_style_ranges(col_widths: &[ooxml_types::worksheet::ColWidth]) -> Vec<ColStyleRange> {
+    col_widths
+        .iter()
+        .filter_map(|cw| {
+            let style_id = cw.style.filter(|&style| style > 0)? as u32;
+            Some(ColStyleRange {
+                start_col: cw.min.saturating_sub(1),
+                end_col: cw.max.saturating_sub(1),
+                style_id,
+            })
+        })
+        .collect()
+}
+
+fn col_style_range_at(ranges: &[ColStyleRange], col: u32) -> Option<u32> {
+    ranges
+        .iter()
+        .rev()
+        .find(|range| col >= range.start_col && col <= range.end_col)
+        .map(|range| range.style_id)
+}
+
+fn authored_run_repeats_positional_default(
+    run: &AuthoredStyleRun,
+    row_styles: &std::collections::HashMap<u32, u32>,
+    col_ranges: &[ColStyleRange],
+) -> bool {
+    (run.start_row..=run.end_row).all(|row| {
+        (run.start_col..=run.end_col).all(|col| {
+            let row_style = row_styles.get(&row).copied().unwrap_or(0);
+            let col_style = col_style_range_at(col_ranges, col).unwrap_or(0);
+            let positional_style = if row_style != 0 { row_style } else { col_style };
+            positional_style == run.style_id
+        })
+    })
+}
+
 // =============================================================================
 // Sheet conversion
 // =============================================================================
@@ -29,6 +66,8 @@ pub(super) fn convert_sheet(
     binary_parts: &HashMap<String, Vec<u8>>,
     metadata: Option<&crate::output::results::MetadataOutput>,
 ) -> SheetData {
+    let col_style_ranges = build_col_style_ranges(&sheet.col_widths);
+
     // --- Cells ---
     let projection_roles = build_projection_roles(&sheet.cells, metadata);
     let compact_sst_provenance = env_flag_default_true("MOG_XLSX_COMPACT_SST_PROVENANCE");
@@ -85,6 +124,18 @@ pub(super) fn convert_sheet(
     let mut authored_style_runs = sheet.authored_style_runs.clone();
     authored_style_runs.extend(coalesce_style_only_points(&authored_style_points));
     normalize_authored_style_runs(&mut authored_style_runs);
+    let row_style_lookup: std::collections::HashMap<u32, u32> = sheet
+        .row_heights
+        .iter()
+        .filter_map(|rh| {
+            rh.style
+                .filter(|&style| style > 0)
+                .map(|style| (rh.row, style as u32))
+        })
+        .collect();
+    authored_style_runs.retain(|run| {
+        !authored_run_repeats_positional_default(run, &row_style_lookup, &col_style_ranges)
+    });
     // --- Dimensions ---
     let (rows, cols) = compute_sheet_extent(sheet);
 
@@ -232,8 +283,21 @@ pub(super) fn convert_sheet(
                 });
             }
         }
-        // If the range extends beyond data cols, store the tail as a trailing range
-        if cw.max > boundary_1 {
+        let has_trailing_dimension_metadata = cw.width.is_some()
+            || cw.custom_width
+            || cw.custom_width_attr.is_some()
+            || cw.hidden
+            || cw.hidden_attr.is_some()
+            || cw.best_fit
+            || cw.best_fit_attr.is_some()
+            || cw.outline_level.is_some()
+            || cw.collapsed
+            || cw.collapsed_attr.is_some()
+            || cw.phonetic
+            || cw.phonetic_attr.is_some();
+        // If the range extends beyond data cols, store non-style dimension
+        // metadata as a trailing range. Style ownership lives in col_style_ranges.
+        if cw.max > boundary_1 && has_trailing_dimension_metadata {
             let trailing_min = (boundary_1 + 1).max(cw.min);
             trailing_col_ranges.push(TrailingColRange {
                 min: trailing_min,
@@ -252,7 +316,7 @@ pub(super) fn convert_sheet(
                 collapsed_attr: cw.collapsed_attr,
                 phonetic: cw.phonetic,
                 phonetic_attr: cw.phonetic_attr,
-                style_id: cw.style.filter(|&s| s > 0).map(|s| s as u32),
+                style_id: None,
             });
         }
     }
@@ -378,21 +442,7 @@ pub(super) fn convert_sheet(
         })
         .collect();
 
-    // Cap col_styles expansion at data cols, matching col_widths treatment.
-    // Trailing col styles are already captured in trailing_col_ranges.style_id.
-    let col_styles: Vec<ColStyleEntry> = sheet
-        .col_widths
-        .iter()
-        .filter(|cw| cw.style.map(|s| s > 0).unwrap_or(false))
-        .flat_map(|cw| {
-            let style_id = cw.style.unwrap() as u32;
-            let effective_max = cw.max.min(cols);
-            (cw.min..=effective_max).map(move |one_based| ColStyleEntry {
-                col: one_based.saturating_sub(1),
-                style_id,
-            })
-        })
-        .collect();
+    let col_styles: Vec<ColStyleEntry> = Vec::new();
 
     // --- Sheet protection ---
     let protection = sheet.protection.as_ref().map(|p| {
@@ -490,6 +540,7 @@ pub(super) fn convert_sheet(
         sheet_views_ext_lst_xml: sheet.sheet_views_ext_lst_xml.clone(),
         row_styles,
         col_styles,
+        col_style_ranges,
         // Domain objects
         charts,
         conditional_formats,

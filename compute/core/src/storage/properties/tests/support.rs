@@ -110,6 +110,47 @@ pub(super) fn insert_col_xlsx_style_id(
     );
 }
 
+pub(super) fn insert_col_format_range(
+    storage: &YrsStorage,
+    sheet_id: &SheetId,
+    range_id: cell_types::RangeId,
+    start_col: u32,
+    end_col: u32,
+    format: &CellFormat,
+    xlsx_style_id: Option<u32>,
+) {
+    let sheets = storage.sheets();
+    let mut txn = storage.doc().transact_mut();
+    let sheet_hex = id_to_hex(sheet_id.as_u128());
+    let sheet_map = match sheets.get(&txn, &sheet_hex) {
+        Some(Out::YMap(map)) => map,
+        _ => panic!("sheet map not found"),
+    };
+    let ranges_map = match sheet_map.get(&txn, compute_document::schema::KEY_COL_FORMAT_RANGES) {
+        Some(Out::YMap(map)) => map,
+        _ => {
+            let empty: MapPrelim = Vec::<(&str, Any)>::new().into_iter().collect();
+            sheet_map.insert(
+                &mut txn,
+                compute_document::schema::KEY_COL_FORMAT_RANGES,
+                empty,
+            )
+        }
+    };
+    let mut entries = domain_types::yrs_schema::cell_format::to_yrs_prelim(format);
+    entries.push(("_sc", Any::Number(start_col as f64)));
+    entries.push(("_ec", Any::Number(end_col as f64)));
+    if let Some(style_id) = xlsx_style_id {
+        entries.push((
+            domain_types::yrs_schema::cell_format::KEY_XLSX_STYLE_ID,
+            Any::Number(style_id as f64),
+        ));
+    }
+    let nested: MapPrelim = entries.into_iter().collect();
+    let range_key = id_to_hex(range_id.as_u128());
+    ranges_map.insert(&mut txn, range_key.as_str(), nested);
+}
+
 fn insert_axis_xlsx_style_id(
     storage: &YrsStorage,
     sheet_id: &SheetId,

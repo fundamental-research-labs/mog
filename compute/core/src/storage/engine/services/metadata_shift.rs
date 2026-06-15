@@ -9,9 +9,9 @@ use std::collections::{HashMap, HashSet};
 
 use cell_types::{IdAllocator, SheetId};
 use compute_document::hex::id_to_hex;
-use compute_document::schema::KEY_PROPERTIES;
+use compute_document::schema::{KEY_COL_FORMAT_RANGES, KEY_PROPERTIES};
 use formula_types::StructureChange;
-use yrs::{Map, Out, Transact};
+use yrs::{Any, Map, Out, Transact};
 
 use crate::mirror::CellMirror;
 use crate::storage::engine::services::tables;
@@ -41,10 +41,78 @@ pub(in crate::storage::engine) fn shift_all_metadata_ranges(
     shift_table_ranges(stores, mirror, sheet_id, change);
     shift_validation_ranges(stores, sheet_id, change);
     shift_grouping_ranges(stores, sheet_id, change);
+    shift_col_format_ranges(stores, mirror, sheet_id, change);
     shift_sparkline_ranges(stores, sheet_id, change);
     shift_pivot_ranges(stores, mirror, sheet_id, change);
     shift_print_metadata(stores, sheet_id, change);
     invalidate_range_bound_worksheet_semantic_containers(stores, sheet_id, change);
+}
+
+fn shift_col_format_ranges(
+    stores: &mut EngineStores,
+    mirror: &mut CellMirror,
+    sheet_id: &SheetId,
+    change: &StructureChange,
+) {
+    if !matches!(
+        change,
+        StructureChange::InsertCols { .. } | StructureChange::DeleteCols { .. }
+    ) {
+        return;
+    }
+
+    let doc = stores.storage.doc();
+    let sheets = stores.storage.sheets();
+    let mut txn = doc.transact_mut();
+    let sheet_hex = id_to_hex(sheet_id.as_u128());
+    let Some(Out::YMap(sheet_map)) = sheets.get(&txn, sheet_hex.as_str()) else {
+        return;
+    };
+    let Some(Out::YMap(ranges_map)) = sheet_map.get(&txn, KEY_COL_FORMAT_RANGES) else {
+        return;
+    };
+
+    let mut remove_keys = Vec::new();
+    let mut updates = Vec::new();
+    for (key, value) in ranges_map.iter(&txn) {
+        let Out::YMap(nested) = value else {
+            continue;
+        };
+        let start_col = match nested.get(&txn, "_sc") {
+            Some(Out::Any(Any::Number(n))) => n as u32,
+            _ => continue,
+        };
+        let end_col = match nested.get(&txn, "_ec") {
+            Some(Out::Any(Any::Number(n))) => n as u32,
+            _ => continue,
+        };
+        let range = cell_types::SheetRange::new(0, start_col, 0, end_col);
+        match shift_range(&range, change) {
+            Some(shifted) => {
+                updates.push((key.to_string(), shifted.start_col(), shifted.end_col()))
+            }
+            None => remove_keys.push(key.to_string()),
+        }
+    }
+
+    for key in remove_keys {
+        ranges_map.remove(&mut txn, key.as_str());
+    }
+    for (key, start_col, end_col) in updates {
+        if let Some(Out::YMap(nested)) = ranges_map.get(&txn, key.as_str()) {
+            nested.insert(&mut txn, "_sc", Any::Number(start_col as f64));
+            nested.insert(&mut txn, "_ec", Any::Number(end_col as f64));
+        }
+    }
+    drop(txn);
+
+    if let Some(sheet_mirror) = mirror.get_sheet_mut(sheet_id) {
+        crate::storage::properties::hydrate_col_format_ranges(
+            &stores.storage,
+            sheet_id,
+            sheet_mirror,
+        );
+    }
 }
 
 /// Relocate range-backed validation metadata for a cut/move operation.

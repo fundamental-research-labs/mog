@@ -51,5 +51,5 @@ pub use cell_mirror::CellMirror;
 pub(crate) use cell_types::RangeId;
 pub use read::MirrorPositionLookup;
 pub use sheet_key::{clear_caches, sheet_name_cache_entry_count};
-pub(crate) use types::FormatRange;
 pub use types::{CellEdit, CellEntry, MergeRegion, SheetMirror};
+pub(crate) use types::{ColumnFormatRange, FormatRange};

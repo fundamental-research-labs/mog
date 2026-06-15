@@ -13,7 +13,7 @@ use yrs::{Any, Map, Out, Transact};
 /// Get the effective (computed) format for a cell.
 ///
 /// Merges from lowest to highest priority:
-/// `default -> workbook Normal -> column -> row -> Format Range -> table -> cell`
+/// `default -> workbook Normal -> column range default -> column -> row -> Format Range -> table -> cell`
 ///
 /// Each property is resolved independently -- a cell can inherit font
 /// from row, color from column, and alignment from default.
@@ -33,8 +33,10 @@ pub fn get_effective_format(
 ) -> CellFormat {
     let base = workbook_base_format(storage);
 
+    let after_col_range = apply_col_format_range_layer(&base, col, sheet_mirror);
+
     let col_fmt = get_col_format(storage, sheet_id, col, grid_index).unwrap_or_default();
-    let after_col = merge_formats(&base, &col_fmt);
+    let after_col = merge_formats(&after_col_range, &col_fmt);
 
     let row_fmt = get_row_format(storage, sheet_id, row, grid_index).unwrap_or_default();
     let after_row = merge_formats(&after_col, &row_fmt);
@@ -73,8 +75,10 @@ pub fn get_effective_format_preloaded(
 ) -> CellFormat {
     let base = workbook_base_format(storage);
 
+    let after_col_range = apply_col_format_range_layer(&base, col, sheet_mirror);
+
     let col_fmt = get_col_format(storage, sheet_id, col, grid_index).unwrap_or_default();
-    let after_col = merge_formats(&base, &col_fmt);
+    let after_col = merge_formats(&after_col_range, &col_fmt);
 
     let row_fmt = get_row_format(storage, sheet_id, row, grid_index).unwrap_or_default();
     let after_row = merge_formats(&after_col, &row_fmt);
@@ -91,7 +95,7 @@ pub fn get_effective_format_preloaded(
 }
 
 /// Positional format for cells with no cell_id:
-/// default → workbook Normal → column → row → Format Range.
+/// default → workbook Normal → column range default → column → row → Format Range.
 ///
 /// This is the same cascade as `get_effective_format` but without the cell and
 /// table layers (which require a cell_id). Used by the viewport render pipeline
@@ -106,8 +110,10 @@ pub fn get_positional_format(
 ) -> CellFormat {
     let base = workbook_base_format(storage);
 
+    let after_col_range = apply_col_format_range_layer(&base, col, sheet_mirror);
+
     let col_fmt = get_col_format(storage, sheet_id, col, grid_index).unwrap_or_default();
-    let after_col = merge_formats(&base, &col_fmt);
+    let after_col = merge_formats(&after_col_range, &col_fmt);
 
     let row_fmt = get_row_format(storage, sheet_id, row, grid_index).unwrap_or_default();
     let after_row = merge_formats(&after_col, &row_fmt);
@@ -139,6 +145,32 @@ fn workbook_normal_format(storage: &YrsStorage) -> Option<CellFormat> {
         }
         _ => None,
     }
+}
+
+// -------------------------------------------------------------------
+// Column Format Range Layer Helper
+// -------------------------------------------------------------------
+
+fn apply_col_format_range_layer(
+    base: &CellFormat,
+    col: u32,
+    sheet_mirror: Option<&SheetMirror>,
+) -> CellFormat {
+    let mirror = match sheet_mirror {
+        Some(m) => m,
+        None => return base.clone(),
+    };
+
+    let matching = mirror.col_format_ranges_at(col);
+    if matching.is_empty() {
+        return base.clone();
+    }
+
+    let mut range_fmt = CellFormat::default();
+    for (_id, fmt) in &matching {
+        range_fmt = merge_formats(&range_fmt, fmt);
+    }
+    merge_formats(base, &range_fmt)
 }
 
 // -------------------------------------------------------------------

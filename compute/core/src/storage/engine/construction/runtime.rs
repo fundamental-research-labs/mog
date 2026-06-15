@@ -80,6 +80,7 @@ pub(in crate::storage::engine) fn hydrate_mirror_format_ranges(
     let sheet_ids: Vec<_> = mirror.sheet_ids().copied().collect();
     for sheet_id in sheet_ids {
         if let Some(sheet_mirror) = mirror.get_sheet_mut(&sheet_id) {
+            crate::storage::properties::hydrate_col_format_ranges(storage, &sheet_id, sheet_mirror);
             crate::storage::properties::hydrate_format_ranges(storage, &sheet_id, sheet_mirror);
         }
     }

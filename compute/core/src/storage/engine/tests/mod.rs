@@ -50,6 +50,7 @@ mod test_undo_redo_result_payloads;
 mod test_undo_redo_sort;
 mod test_viewport;
 mod test_workbook_settings;
+mod test_xlsx_col_style_ranges;
 mod test_xlsx_export;
 mod test_xlsx_export_form_controls;
 mod test_xlsx_export_imported_pivots;

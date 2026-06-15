@@ -12,7 +12,7 @@
 #![allow(clippy::string_slice)]
 
 use crate::domain::cells::{
-    CellData, ParseExtras, apply_parse_extras, build_col_styles_from_widths,
+    CellData, ParseExtras, apply_parse_extras, build_col_style_ranges_from_widths,
     coalesce_authored_style_only_cells, convert_cell_data, data_table_info,
     parse_worksheet_fast_with_extras,
 };
@@ -69,6 +69,21 @@ use crate::pipeline::metadata::parse_metadata;
 
 use crate::infra::xml_namespaces::NamespaceMap;
 use crate::pipeline::import_extensions::ImportExtensionParts;
+
+fn authored_run_repeats_positional_default(
+    run: &domain_types::AuthoredStyleRun,
+    row_styles: &std::collections::HashMap<u32, u32>,
+    col_ranges: &[domain_types::ColStyleRange],
+) -> bool {
+    (run.start_row..=run.end_row).all(|row| {
+        (run.start_col..=run.end_col).all(|col| {
+            let row_style = row_styles.get(&row).copied().unwrap_or(0);
+            let col_style = crate::domain::cells::col_style_range_at(col_ranges, col).unwrap_or(0);
+            let positional_style = if row_style != 0 { row_style } else { col_style };
+            positional_style == run.style_id
+        })
+    })
+}
 
 fn build_hyperlinks_output(
     worksheet_xml: &[u8],
@@ -1313,11 +1328,8 @@ fn process_sheet_core(
         })
     };
 
-    // Build col_styles from col_widths so the cell parser can skip empty cells
-    // whose style matches the column default. The XLSX writer reconstructs these
-    // from col_styles metadata (already preserved in SheetData.col_styles), so
-    // individual empty styled cells don't need to survive in the cell list.
-    let col_styles: Vec<Option<u32>> = build_col_styles_from_widths(&col_widths);
+    let col_style_ranges = build_col_style_ranges_from_widths(&col_widths);
+    let empty_col_styles: &[Option<u32>] = &[];
 
     let mut cell_count = parse_worksheet_fast_with_extras(
         worksheet_xml,
@@ -1326,7 +1338,7 @@ fn process_sheet_core(
         &mut strings_buffer,
         &mut row_heights,
         &mut extras,
-        &col_styles,
+        empty_col_styles,
     );
 
     // If the buffer was completely filled, the parser may have truncated cells.
@@ -1345,7 +1357,7 @@ fn process_sheet_core(
             &mut strings_buffer,
             &mut row_heights,
             &mut extras,
-            &col_styles,
+            empty_col_styles,
         );
     }
 
@@ -1479,7 +1491,20 @@ fn process_sheet_core(
     // Build per-row spans map from parsed extras
     let row_spans_map: std::collections::HashMap<u32, String> =
         extras.row_spans.iter().cloned().collect();
-    let authored_style_runs = coalesce_authored_style_only_cells(&extras.authored_style_only_cells);
+    let row_style_lookup: std::collections::HashMap<u32, u32> = row_heights
+        .iter()
+        .filter_map(|rh| {
+            rh.style
+                .filter(|&style| style > 0)
+                .map(|style| (rh.row, style as u32))
+        })
+        .collect();
+    let authored_style_runs = coalesce_authored_style_only_cells(&extras.authored_style_only_cells)
+        .into_iter()
+        .filter(|run| {
+            !authored_run_repeats_positional_default(run, &row_style_lookup, &col_style_ranges)
+        })
+        .collect();
 
     let sheet = FullParsedSheet {
         name: sheet_name,
@@ -1717,7 +1742,8 @@ fn parse_sheets_sequential(
             })
         };
 
-        let col_styles: Vec<Option<u32>> = build_col_styles_from_widths(&col_widths);
+        let col_style_ranges = build_col_style_ranges_from_widths(&col_widths);
+        let empty_col_styles: &[Option<u32>] = &[];
 
         let mut cell_count = parse_worksheet_fast_with_extras(
             &worksheet_xml,
@@ -1726,7 +1752,7 @@ fn parse_sheets_sequential(
             &mut strings_buffer,
             &mut row_heights,
             &mut extras,
-            &col_styles,
+            empty_col_styles,
         );
 
         // If the buffer was completely filled, the parser may have truncated cells.
@@ -1745,7 +1771,7 @@ fn parse_sheets_sequential(
                 &mut strings_buffer,
                 &mut row_heights,
                 &mut extras,
-                &col_styles,
+                empty_col_styles,
             );
         }
         let ws_t2 = tick(timings);
@@ -2020,8 +2046,25 @@ fn parse_sheets_sequential(
 
         let row_spans_map: std::collections::HashMap<u32, String> =
             extras.row_spans.iter().cloned().collect();
-        let authored_style_runs =
-            coalesce_authored_style_only_cells(&extras.authored_style_only_cells);
+        let row_style_lookup: std::collections::HashMap<u32, u32> = row_heights
+            .iter()
+            .filter_map(|rh| {
+                rh.style
+                    .filter(|&style| style > 0)
+                    .map(|style| (rh.row, style as u32))
+            })
+            .collect();
+        let authored_style_runs: Vec<_> =
+            coalesce_authored_style_only_cells(&extras.authored_style_only_cells)
+                .into_iter()
+                .filter(|run| {
+                    !authored_run_repeats_positional_default(
+                        run,
+                        &row_style_lookup,
+                        &col_style_ranges,
+                    )
+                })
+                .collect();
 
         sheets.push(FullParsedSheet {
             name: sheet_name,

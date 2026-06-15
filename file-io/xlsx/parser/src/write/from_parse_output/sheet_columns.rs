@@ -19,6 +19,16 @@ pub(super) fn apply_columns(
                 .map(|style_id| (cs.col, style_id))
         })
         .collect();
+    let style_for_col = |col: u32| -> Option<u32> {
+        col_style_map.get(&col).copied().or_else(|| {
+            sheet_data
+                .col_style_ranges
+                .iter()
+                .rev()
+                .find(|range| col >= range.start_col && col <= range.end_col)
+                .and_then(|range| style_remapper.emitted_cell_xf_id(range.style_id))
+        })
+    };
 
     let mut col_outline_levels: HashMap<u32, u8> = HashMap::new();
     let mut col_outline_hidden: HashMap<u32, bool> = HashMap::new();
@@ -69,7 +79,7 @@ pub(super) fn apply_columns(
     let mut emitted_cols = HashSet::new();
 
     for col_dim in &sheet_data.dimensions.col_widths {
-        let style = col_style_map.get(&col_dim.col).copied();
+        let style = style_for_col(col_dim.col);
         let outline_level = col_outline_levels.get(&col_dim.col).copied();
         let hidden = col_dim.hidden
             || col_outline_hidden
@@ -132,6 +142,39 @@ pub(super) fn apply_columns(
                 phonetic_attr: None,
             });
             emitted_cols.insert(cs.col);
+        }
+    }
+
+    for range in &sheet_data.col_style_ranges {
+        let Some(style) = style_remapper.emitted_cell_xf_id(range.style_id) else {
+            continue;
+        };
+        for col in range.start_col..=range.end_col {
+            if emitted_cols.contains(&col) {
+                continue;
+            }
+            let outline_level = col_outline_levels.get(&col).copied();
+            let hidden = col_outline_hidden.get(&col).copied().unwrap_or(false);
+            let is_collapsed = col_collapsed.get(&col).copied().unwrap_or(false);
+            col_entries.push(ColEntry {
+                col_0: col,
+                width: default_cw,
+                width_str: None,
+                custom_width: false,
+                custom_width_attr: None,
+                hidden,
+                hidden_attr: hidden.then_some(true),
+                best_fit: false,
+                best_fit_attr: None,
+                style: Some(style),
+                has_width: false,
+                outline_level,
+                collapsed: is_collapsed,
+                collapsed_attr: is_collapsed.then_some(true),
+                phonetic: false,
+                phonetic_attr: None,
+            });
+            emitted_cols.insert(col);
         }
     }
 
@@ -259,6 +302,17 @@ pub(super) fn apply_columns(
         cw.phonetic_attr = tcr.phonetic_attr;
         if let Some(sid) = tcr.style_id {
             cw.style = style_remapper.emitted_cell_xf_id(sid);
+        } else {
+            let start_col = tcr.min.saturating_sub(1);
+            let end_col = tcr.max.saturating_sub(1);
+            let mut uniform_style = style_for_col(start_col);
+            for col in start_col.saturating_add(1)..=end_col {
+                if style_for_col(col) != uniform_style {
+                    uniform_style = None;
+                    break;
+                }
+            }
+            cw.style = uniform_style;
         }
         if !tcr.width_present.unwrap_or(true) {
             cw.width = None;

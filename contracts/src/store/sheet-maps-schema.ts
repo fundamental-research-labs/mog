@@ -118,6 +118,13 @@ export const SHEET_MAPS_SCHEMA = {
     copy: 'deep',
     lazyInit: true,
   },
+  colFormatRanges: {
+    type: 'Y.Map',
+    valueType: 'ColumnFormatRange',
+    required: true,
+    copy: 'deep',
+    lazyInit: true,
+  },
 
   // ===========================================================================
   // Column Schemas

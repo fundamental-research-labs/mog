@@ -1431,6 +1431,12 @@ pub struct SheetData {
     pub sheet_views_ext_lst_xml: Option<String>,
     pub row_styles: Vec<RowStyleEntry>,
     pub col_styles: Vec<ColStyleEntry>,
+    /// Authored XLSX `<col style="...">` column-default ranges.
+    ///
+    /// These are sparse column-default formatting metadata and do not imply that
+    /// every covered column has a materialized `ColId`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub col_style_ranges: Vec<ColStyleRange>,
     // Domain objects
     pub charts: Vec<ChartSpec>,
     pub conditional_formats: Vec<ConditionalFormat>,
@@ -2175,5 +2181,18 @@ pub struct RowStyleEntry {
 #[serde(rename_all = "camelCase")]
 pub struct ColStyleEntry {
     pub col: u32,
+    pub style_id: u32,
+}
+
+/// Sparse style override for a range of whole columns.
+///
+/// Bounds are zero-based and inclusive. This represents the authored XLSX
+/// column-default layer (`<col min max style>`), not a rectangular cell format
+/// range.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ColStyleRange {
+    pub start_col: u32,
+    pub end_col: u32,
     pub style_id: u32,
 }

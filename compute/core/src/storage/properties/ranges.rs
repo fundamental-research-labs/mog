@@ -185,3 +185,75 @@ pub fn hydrate_format_ranges(storage: &YrsStorage, sheet_id: &SheetId, mirror: &
     }
     mirror.rebuild_format_range_spatial_index();
 }
+
+/// Hydrate sparse whole-column default format ranges from Yrs into a SheetMirror.
+pub fn hydrate_col_format_ranges(
+    storage: &YrsStorage,
+    sheet_id: &SheetId,
+    mirror: &mut SheetMirror,
+) {
+    use compute_document::schema::KEY_COL_FORMAT_RANGES;
+
+    mirror.col_format_ranges.clear();
+    mirror.rebuild_col_format_range_spatial_index();
+    mirror.col_format_range_cache.clear();
+    mirror.col_range_xlsx_style_id_cache.clear();
+
+    let sheets = storage.sheets_ref();
+    let txn = storage.doc().transact();
+
+    let sheet_map = match get_sheet_map(&txn, &sheets, sheet_id) {
+        Some(m) => m,
+        None => return,
+    };
+
+    let ranges_map = match sheet_map.get(&txn, KEY_COL_FORMAT_RANGES) {
+        Some(Out::YMap(m)) => m,
+        _ => return,
+    };
+
+    for (hex_key, value) in ranges_map.iter(&txn) {
+        let raw_id = match compute_document::hex::hex_to_id(hex_key) {
+            Some(id) => id,
+            None => continue,
+        };
+        let range_id = crate::mirror::RangeId::from_raw(raw_id);
+
+        if let Out::YMap(nested) = value {
+            let start_col = match nested.get(&txn, "_sc") {
+                Some(Out::Any(Any::Number(n))) => n as u32,
+                _ => continue,
+            };
+            let end_col = match nested.get(&txn, "_ec") {
+                Some(Out::Any(Any::Number(n))) => n as u32,
+                _ => continue,
+            };
+            if start_col > end_col {
+                continue;
+            }
+
+            let imported_style_id =
+                match nested.get(&txn, yrs_schema::cell_format::KEY_XLSX_STYLE_ID) {
+                    Some(Out::Any(Any::Number(n))) if n >= 0.0 => Some(n as u32),
+                    _ => None,
+                };
+
+            if let Some(fmt) = yrs_schema::cell_format::from_yrs_map(&nested, &txn) {
+                mirror
+                    .col_format_ranges
+                    .push(crate::mirror::ColumnFormatRange {
+                        id: range_id,
+                        start_col,
+                        end_col,
+                    });
+                mirror.col_format_range_cache.insert(range_id, fmt);
+                if let Some(style_id) = imported_style_id {
+                    mirror
+                        .col_range_xlsx_style_id_cache
+                        .insert(range_id, style_id);
+                }
+            }
+        }
+    }
+    mirror.rebuild_col_format_range_spatial_index();
+}

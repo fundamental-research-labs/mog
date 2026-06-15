@@ -93,6 +93,48 @@ pub(super) fn hydrate_col_styles(
     }
 }
 
+/// Hydrate sparse authored column-default style ranges.
+pub(super) fn hydrate_col_style_ranges(
+    txn: &mut yrs::TransactionMut,
+    sheet_map: &MapRef,
+    col_style_ranges: &[domain_types::ColStyleRange],
+    style_palette: &[DocumentFormat],
+) {
+    if col_style_ranges.is_empty() {
+        return;
+    }
+
+    let ranges_map: MapRef = match sheet_map.get(txn, KEY_COL_FORMAT_RANGES) {
+        Some(Out::YMap(map)) => map,
+        _ => sheet_map.insert(
+            txn,
+            KEY_COL_FORMAT_RANGES,
+            MapPrelim::from([] as [(&str, Any); 0]),
+        ),
+    };
+
+    for range in col_style_ranges {
+        if range.start_col > range.end_col {
+            continue;
+        }
+        let Some(format) = style_palette.get(range.style_id as usize) else {
+            continue;
+        };
+        let cell_fmt = document_format_to_cell_format(format);
+        let mut entries = yrs_schema::cell_format::to_yrs_prelim(&cell_fmt);
+        entries.push(("_sc", Any::Number(range.start_col as f64)));
+        entries.push(("_ec", Any::Number(range.end_col as f64)));
+        entries.push((
+            yrs_schema::cell_format::KEY_XLSX_STYLE_ID,
+            Any::Number(range.style_id as f64),
+        ));
+        let range_id = cell_types::RangeId::from_raw(crate::storage::STORAGE_ID_ALLOC.next_u128());
+        let range_hex = id_to_hex(range_id.as_u128());
+        let nested: MapPrelim = entries.into_iter().collect();
+        ranges_map.insert(txn, range_hex.as_str(), nested);
+    }
+}
+
 /// Convert a `DocumentFormat` (nested, from parser) to a flat `CellFormat` (runtime).
 pub(super) fn document_format_to_cell_format(doc: &DocumentFormat) -> domain_types::CellFormat {
     domain_types::CellFormat::from(doc)
@@ -342,6 +384,11 @@ pub(crate) fn remap_sheet_style_ids(sheet: &mut SheetData, remap: &HashMap<u32, 
     for cs in &mut sheet.col_styles {
         if let Some(new_sid) = remap.get(&cs.style_id) {
             cs.style_id = *new_sid;
+        }
+    }
+    for range in &mut sheet.col_style_ranges {
+        if let Some(new_sid) = remap.get(&range.style_id) {
+            range.style_id = *new_sid;
         }
     }
     for run in &mut sheet.authored_style_runs {

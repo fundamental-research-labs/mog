@@ -139,6 +139,7 @@ export function SortDialog() {
 
   // E4: Error message state for merge validation
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isApplying, setIsApplying] = useState(false);
 
   // Sort orientation state (top to bottom vs left to right)
   const [orientation, setOrientation] = useState<SortOrientation>('topToBottom');
@@ -184,6 +185,7 @@ export function SortDialog() {
         },
       ]);
       setErrorMessage(null);
+      setIsApplying(false);
       setOrientation('topToBottom');
     }
   }, [isOpen, range, initialKind]);
@@ -281,73 +283,91 @@ export function SortDialog() {
 
   // Handle sort execution via Worksheet API
   const handleSort = useCallback(() => {
-    if (!range) return;
+    if (!range || isApplying) return;
 
     void (async () => {
+      setIsApplying(true);
       const ws = wb.getSheetById(activeSheetId);
 
-      // E4: Check for merged cells - Excel refuses to sort ranges with merges
-      const merges = await ws.structure.getMergedRegions();
-      const hasMerges = merges.some(
-        (m) =>
-          m.startRow <= range.endRow &&
-          m.endRow >= range.startRow &&
-          m.startCol <= range.endCol &&
-          m.endCol >= range.startCol,
-      );
-
-      if (hasMerges) {
-        setErrorMessage(
-          'This operation requires the merged cells to be identically sized. ' +
-            'To sort or filter a range with merged cells, you must unmerge them first.',
+      try {
+        // E4: Check for merged cells - Excel refuses to sort ranges with merges
+        const merges = await ws.structure.getMergedRegions();
+        const hasMerges = merges.some(
+          (m) =>
+            m.startRow <= range.endRow &&
+            m.endRow >= range.startRow &&
+            m.startCol <= range.endCol &&
+            m.endCol >= range.startCol,
         );
-        return;
-      }
 
-      if (levels.length === 0) {
-        closeSortDialog();
-        return;
-      }
+        if (hasMerges) {
+          setErrorMessage(
+            'This operation requires the merged cells to be identically sized. ' +
+              'To sort or filter a range with merged cells, you must unmerge them first.',
+          );
+          setIsApplying(false);
+          return;
+        }
 
-      const columns: SortColumn[] = levels.map((level) => {
-        const list =
-          level.customListId !== undefined
-            ? customLists.find((l) => l.id === level.customListId)
-            : undefined;
-        if (
-          (level.sortBy === 'cellColor' || level.sortBy === 'fontColor') &&
-          level.targetColor &&
-          level.colorPosition
-        ) {
+        if (levels.length === 0) {
+          closeSortDialog();
+          return;
+        }
+
+        const columns: SortColumn[] = levels.map((level) => {
+          const list =
+            level.customListId !== undefined
+              ? customLists.find((l) => l.id === level.customListId)
+              : undefined;
+          if (
+            (level.sortBy === 'cellColor' || level.sortBy === 'fontColor') &&
+            level.targetColor &&
+            level.colorPosition
+          ) {
+            return {
+              column: level.columnIndex,
+              direction: level.direction as 'asc' | 'desc',
+              sortBy: level.sortBy,
+              targetColor: level.targetColor,
+              colorPosition: level.colorPosition,
+            };
+          }
           return {
             column: level.columnIndex,
             direction: level.direction as 'asc' | 'desc',
-            sortBy: level.sortBy,
-            targetColor: level.targetColor,
-            colorPosition: level.colorPosition,
+            sortBy: 'value' as const,
+            ...(list ? { customList: [...list.values] } : {}),
           };
-        }
-        return {
-          column: level.columnIndex,
-          direction: level.direction as 'asc' | 'desc',
-          sortBy: 'value' as const,
-          ...(list ? { customList: [...list.values] } : {}),
-        };
-      });
+        });
 
-      // Execute sort through Worksheet API
-      const rangeA1 = cellRangeToA1(range);
-      void ws.sortRange(rangeA1, { columns, hasHeaders, visibleRowsOnly });
+        // Execute sort through Worksheet API
+        const rangeA1 = cellRangeToA1(range);
+        await ws.sortRange(rangeA1, { columns, hasHeaders, visibleRowsOnly });
 
-      setErrorMessage(null);
-      closeSortDialog();
+        setErrorMessage(null);
+        closeSortDialog();
+      } catch (error) {
+        setErrorMessage(error instanceof Error ? error.message : 'Sort failed.');
+        setIsApplying(false);
+      }
     })();
-  }, [range, levels, hasHeaders, visibleRowsOnly, wb, activeSheetId, closeSortDialog, customLists]);
+  }, [
+    range,
+    isApplying,
+    levels,
+    hasHeaders,
+    visibleRowsOnly,
+    wb,
+    activeSheetId,
+    closeSortDialog,
+    customLists,
+  ]);
 
   // Handle cancel
   const handleCancel = useCallback(() => {
+    if (isApplying) return;
     closeSortDialog();
-  }, [closeSortDialog]);
+  }, [closeSortDialog, isApplying]);
 
   // Don't render if not open
   if (!isOpen || !range) return null;
@@ -362,7 +382,7 @@ export function SortDialog() {
       dialogId="sort-dialog"
       width={560}
     >
-      <DialogHeader onClose={handleCancel}>Sort</DialogHeader>
+      <DialogHeader onClose={isApplying ? undefined : handleCancel}>Sort</DialogHeader>
 
       <DialogBody>
         <div className="space-y-4">
@@ -381,6 +401,7 @@ export function SortDialog() {
                 id="sort-has-headers"
                 checked={hasHeaders}
                 onChange={(checked) => setSortDialogHasHeaders(checked)}
+                disabled={isApplying}
                 data-testid="sort-has-headers"
               />
               <Label htmlFor="sort-has-headers">My data has headers</Label>
@@ -395,6 +416,7 @@ export function SortDialog() {
                 value={orientation}
                 onChange={(value) => setOrientation(value as SortOrientation)}
                 options={ORIENTATION_OPTIONS}
+                disabled={isApplying}
                 data-testid="sort-orientation"
               />
             </div>
@@ -419,6 +441,7 @@ export function SortDialog() {
                     value={String(level.columnIndex)}
                     onChange={(value) => updateLevel(index, { columnIndex: Number(value) })}
                     options={columnOptions}
+                    disabled={isApplying}
                     data-testid={`sort-level-${index}-column`}
                   />
 
@@ -428,6 +451,7 @@ export function SortDialog() {
                     value={level.sortBy}
                     onChange={(value) => updateLevel(index, { sortBy: value as SortBy })}
                     options={SORT_BY_OPTIONS}
+                    disabled={isApplying}
                     data-testid={`sort-level-${index}-sort-on`}
                   />
 
@@ -455,6 +479,7 @@ export function SortDialog() {
                       }
                     }}
                     options={DIRECTION_OPTIONS}
+                    disabled={isApplying}
                     data-testid={`sort-level-${index}-order`}
                   />
 
@@ -465,7 +490,7 @@ export function SortDialog() {
                       icon="chevron-up"
                       size="sm"
                       onClick={() => moveLevelUp(index)}
-                      disabled={index === 0}
+                      disabled={isApplying || index === 0}
                       title="Move level up"
                     />
                     {/* Move Down */}
@@ -473,7 +498,7 @@ export function SortDialog() {
                       icon="chevron-down"
                       size="sm"
                       onClick={() => moveLevelDown(index)}
-                      disabled={index === levels.length - 1}
+                      disabled={isApplying || index === levels.length - 1}
                       title="Move level down"
                     />
                     {/* Copy Level */}
@@ -481,7 +506,7 @@ export function SortDialog() {
                       icon="document-list"
                       size="sm"
                       onClick={() => copyLevel(index)}
-                      disabled={!canAddLevel}
+                      disabled={isApplying || !canAddLevel}
                       title="Copy level"
                     />
                     {/* Remove Button */}
@@ -489,7 +514,7 @@ export function SortDialog() {
                       icon="delete"
                       size="sm"
                       onClick={() => removeLevel(index)}
-                      disabled={levels.length <= 1}
+                      disabled={isApplying || levels.length <= 1}
                       title="Remove sort level"
                     />
                   </div>
@@ -505,6 +530,7 @@ export function SortDialog() {
                       value={level.customListId}
                       onChange={(value) => updateLevel(index, { customListId: value })}
                       options={customListOptions}
+                      disabled={isApplying}
                       data-testid={`sort-level-${index}-custom-list`}
                     />
                     <span />
@@ -515,17 +541,27 @@ export function SortDialog() {
           </div>
 
           {/* Add Level Button */}
-          <Button variant="secondary" size="sm" onClick={addLevel} disabled={!canAddLevel}>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={addLevel}
+            disabled={isApplying || !canAddLevel}
+          >
             + Add Level
           </Button>
         </div>
       </DialogBody>
 
       <DialogFooter>
-        <Button variant="secondary" onClick={handleCancel}>
+        <Button variant="secondary" onClick={handleCancel} disabled={isApplying}>
           Cancel
         </Button>
-        <Button variant="primary" onClick={handleSort} data-confirm-button="true">
+        <Button
+          variant="primary"
+          onClick={handleSort}
+          disabled={isApplying}
+          data-confirm-button="true"
+        >
           OK
         </Button>
       </DialogFooter>

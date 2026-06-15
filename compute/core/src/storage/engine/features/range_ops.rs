@@ -24,17 +24,13 @@ pub(super) fn sort_range(
         },
     )? {
         crate::storage::engine::mutation::MutationOutput::Recalc(r) => {
-            // Always use the incremental mutation-result path so that the
-            // per-viewport blobs are in serialize_mutation_result_for_viewport
-            // format — the format TS's BinaryMutationReader expects.  The
-            // old cf_overlaps branch called produce_cf_viewport_patches which
-            // emitted serialize_viewport_binary blobs (full-viewport format);
-            // applyMultiViewportPatches blindly passed those to
-            // BinaryMutationReader, producing garbage reads and leaving the
-            // viewport stale.  For absolute-threshold CF rules ("> 70" etc.)
-            // all sorted cells appear in recalc.changed_cells, so the
-            // incremental path covers them correctly.
-            Ok((engine.flush_viewport_patches(), r))
+            // Sorting changes positional identity. Range-backed imports do that
+            // by reordering rowOrder while many visible values are unchanged, so
+            // recalc.changed_cells is not a complete viewport invalidation set.
+            // Rebuild registered sheet viewports from the post-sort engine state
+            // so unchanged sparse/range-backed cells move visually with their rows.
+            engine.mutation.pending_recalc = None;
+            Ok((engine.produce_full_viewport_patches(sheet_id), r))
         }
         _ => Ok((
             compute_wire::mutation::serialize_multi_viewport_patches(&[]),

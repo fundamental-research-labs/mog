@@ -195,10 +195,11 @@ impl ComputeCore {
         // Iterative calculation ON: seed non-numeric cycle values to 0 and run
         // the fixed-point solver.
         //
-        // Iterative calculation OFF: imported workbooks may carry Excel cached
-        // values for circular formulas. Preserve those values while still
-        // materializing an explicit circular error for genuinely blank cycles
-        // such as newly-authored formulas with no cached value.
+        // Iterative calculation OFF in a mutation-driven partial recalc:
+        // materialize every cycle member as a circular error. The cached-value
+        // preservation contract is intentionally kept on the full-recalc import
+        // path below; values produced earlier in the same editing session are
+        // not imported Excel caches and must not mask a newly-created cycle.
         let mut iterative_result: Option<IterativeResult> = None;
         if self.iterative_calc {
             let iteration_cells =
@@ -213,7 +214,7 @@ impl ComputeCore {
                 &cycle_cell_set,
             );
         } else {
-            Self::materialize_blank_cycle_cells_as_circular_errors(mirror, &cycle_cells);
+            Self::materialize_cycle_cells_as_circular_errors(mirror, &cycle_cells);
         }
 
         // Collect final values from cycle cells. Mark genuinely unresolvable
@@ -313,10 +314,7 @@ impl ComputeCore {
                             &cycle_cell_set,
                         );
                     } else {
-                        Self::materialize_blank_cycle_cells_as_circular_errors(
-                            mirror,
-                            &all_cycle_cells,
-                        );
+                        Self::materialize_cycle_cells_as_circular_errors(mirror, &all_cycle_cells);
                     }
                 }
             }
@@ -657,6 +655,12 @@ impl ComputeCore {
             if matches!(current, CellValue::Null) {
                 mirror.set_value_mut(&cell_id, CellValue::Error(CellError::Circ, None));
             }
+        }
+    }
+
+    fn materialize_cycle_cells_as_circular_errors(mirror: &mut CellMirror, cycle_cells: &[CellId]) {
+        for &cell_id in cycle_cells {
+            mirror.set_value_mut(&cell_id, CellValue::Error(CellError::Circ, None));
         }
     }
 

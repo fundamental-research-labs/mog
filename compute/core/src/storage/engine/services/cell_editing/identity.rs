@@ -1,4 +1,4 @@
-use cell_types::{CellId, SheetId};
+use cell_types::{CellId, SheetId, SheetPos};
 use yrs::{Array, Map, Origin, Out, Transact};
 
 use crate::mirror::CellMirror;
@@ -57,6 +57,16 @@ pub(in crate::storage::engine) fn find_cell_id_at_mirrored(
         return Some(cid);
     }
 
+    // Formula parsing can create a ghost identity in the mirror before any
+    // value has been written at that position. Reuse that identity for later
+    // position-based writes so existing dependencies keep pointing at the
+    // written cell instead of an orphaned ghost.
+    if let Some(cid) = mirror.resolve_cell_id(sheet_id, SheetPos::new(row, col)) {
+        let grid = stores.grid_indexes.get_mut(sheet_id)?;
+        grid.register_cell(cid, row, col);
+        return Some(cid);
+    }
+
     // Check the mirror for Range coverage and pre-register if found.
     let grid = stores.grid_indexes.get_mut(sheet_id)?;
     crate::storage::cells::values::maybe_register_virtual_cell_id(mirror, sheet_id, grid, row, col);
@@ -82,6 +92,9 @@ pub(in crate::storage::engine) fn ensure_cell_id_mirrored(
     // ensure_cell_id returns it instead of minting a fresh random one.
     let grid = stores.grid_indexes.get_mut(sheet_id)?;
     if already_registered.is_none() {
+        if let Some(cid) = mirror.resolve_cell_id(sheet_id, SheetPos::new(row, col)) {
+            grid.register_cell(cid, row, col);
+        }
         cell_values::maybe_register_virtual_cell_id(mirror, sheet_id, grid, row, col);
     }
 

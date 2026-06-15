@@ -1,6 +1,6 @@
 use cell_types::{CellId, SheetId, SheetPos};
 use snapshot_types::{CellData, SheetSnapshot, WorkbookSnapshot};
-use value_types::{CellValue, ComputeError};
+use value_types::{CellError, CellValue, ComputeError};
 
 use super::*;
 use crate::storage::engine::YrsComputeEngine;
@@ -35,6 +35,72 @@ fn cell_change_at(
     changes
         .iter()
         .find(|change| change.position.as_ref().map(|pos| (pos.row, pos.col)) == Some((row, col)))
+}
+
+#[test]
+fn mutation_set_cells_by_position_trusted_path_errors_newly_created_cycle() {
+    let snapshot = snapshot_with_cells(vec![]);
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot).expect("from_snapshot");
+    let sheet_id = SheetId::from_uuid_str(SHEET_UUID).expect("sheet uuid");
+
+    engine
+        .batch_set_cells_by_position(
+            vec![(
+                sheet_id,
+                0,
+                0,
+                CellInput::Parse {
+                    text: "=B1+1".to_string(),
+                },
+            )],
+            true,
+        )
+        .expect("set A1");
+
+    let ghost_b1_id = engine
+        .mirror()
+        .resolve_cell_id(&sheet_id, SheetPos::new(0, 1))
+        .expect("A1 formula should create a ghost identity for B1");
+
+    engine
+        .batch_set_cells_by_position(
+            vec![(
+                sheet_id,
+                0,
+                1,
+                CellInput::Parse {
+                    text: "=A1*0.5".to_string(),
+                },
+            )],
+            true,
+        )
+        .expect("set B1");
+
+    let written_b1_id = engine
+        .mirror()
+        .resolve_cell_id(&sheet_id, SheetPos::new(0, 1))
+        .expect("B1 should resolve after position write");
+    assert_eq!(
+        written_b1_id, ghost_b1_id,
+        "position writes must reuse formula-created ghost identities"
+    );
+
+    assert_eq!(
+        engine
+            .mirror()
+            .get_cell_value_at(&sheet_id, SheetPos::new(0, 0))
+            .cloned(),
+        Some(CellValue::Error(CellError::Circ, None)),
+        "A1 should not preserve a pre-cycle edit-session value as an imported cache"
+    );
+    assert_eq!(
+        engine
+            .mirror()
+            .get_cell_value_at(&sheet_id, SheetPos::new(0, 1))
+            .cloned(),
+        Some(CellValue::Error(CellError::Circ, None)),
+        "B1 should commit as the cycle-closing error"
+    );
 }
 
 #[test]

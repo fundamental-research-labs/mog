@@ -40,6 +40,10 @@ fn authored_run_repeats_positional_default(
     row_styles: &std::collections::HashMap<u32, u32>,
     col_ranges: &[ColStyleRange],
 ) -> bool {
+    if run.style_id == 0 {
+        return false;
+    }
+
     (run.start_row..=run.end_row).all(|row| {
         (run.start_col..=run.end_col).all(|col| {
             let row_style = row_styles.get(&row).copied().unwrap_or(0);

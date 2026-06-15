@@ -404,23 +404,38 @@ impl YrsComputeEngine {
             return Ok(MutationResult::empty());
         }
 
-        let _guard = self.mutation.suppress_guard();
         let mut result = MutationResult::empty();
+        let mut patch_blobs = Vec::new();
         for (sheet_id, row, col, number_format) in to_apply {
             let format = CellFormat {
                 number_format: Some(number_format),
                 ..Default::default()
             };
-            let (_affected, format_result) = services::formatting::set_format_for_ranges(
-                &mut self.stores,
-                &self.mirror,
-                &sheet_id,
-                &[(row, col, row, col)],
-                &format,
-            )?;
+            let (affected, format_result) = {
+                let _guard = self.mutation.suppress_guard();
+                services::formatting::set_format_for_ranges(
+                    &mut self.stores,
+                    &self.mirror,
+                    &sheet_id,
+                    &[(row, col, row, col)],
+                    &format,
+                )?
+            };
             result
                 .property_changes
                 .extend(format_result.property_changes);
+            patch_blobs.push(self.produce_format_change_patches(&sheet_id, &affected));
+        }
+
+        if !patch_blobs.is_empty() {
+            let patches = compute_wire::mutation::concat_multi_viewport_patches(&patch_blobs);
+            self.mutation.pending_format_patches =
+                Some(match self.mutation.pending_format_patches.take() {
+                    Some(existing) => {
+                        compute_wire::mutation::concat_multi_viewport_patches(&[existing, patches])
+                    }
+                    None => patches,
+                });
         }
 
         Ok(result)

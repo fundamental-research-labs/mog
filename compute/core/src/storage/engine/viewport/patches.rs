@@ -551,9 +551,18 @@ impl YrsComputeEngine {
 
     /// Pull viewport patches for the stashed pending recalc result.
     pub fn flush_viewport_patches(&mut self) -> Vec<u8> {
-        match self.mutation.pending_recalc.take() {
+        let format_patches = self.mutation.pending_format_patches.take();
+        let value_patches = match self.mutation.pending_recalc.take() {
             Some(mut recalc) => self.produce_viewport_patches_for_recalc(&mut recalc),
             None => compute_wire::mutation::serialize_multi_viewport_patches(&[]),
+        };
+
+        match format_patches {
+            Some(format_patches) => compute_wire::mutation::concat_multi_viewport_patches(&[
+                format_patches,
+                value_patches,
+            ]),
+            None => value_patches,
         }
     }
 

@@ -28,21 +28,26 @@ impl YrsComputeEngine {
         col: u32,
         input: mutation::CellInput,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        let mut recalc = services::cell_editing::set_cell(
-            &mut self.stores,
-            &mut self.mirror,
-            &mut self.mutation,
-            sheet_id,
-            cell_id,
-            row,
-            col,
-            &input,
-        )?;
-        let format_result = if is_formula_parse_input(&input) {
-            self.apply_formula_inherited_number_formats(&[(*sheet_id, row, col)])?
-        } else {
-            MutationResult::empty()
-        };
+        let should_apply_formula_format = is_formula_parse_input(&input);
+        let (mut recalc, format_result) =
+            self.with_undo_group_if(should_apply_formula_format, |engine| {
+                let recalc = services::cell_editing::set_cell(
+                    &mut engine.stores,
+                    &mut engine.mirror,
+                    &mut engine.mutation,
+                    sheet_id,
+                    cell_id,
+                    row,
+                    col,
+                    &input,
+                )?;
+                let format_result = if should_apply_formula_format {
+                    engine.apply_formula_inherited_number_formats(&[(*sheet_id, row, col)])?
+                } else {
+                    MutationResult::empty()
+                };
+                Ok((recalc, format_result))
+            })?;
         self.prepare_recalc_for_flush(&mut recalc);
         let patches = self.flush_viewport_patches();
         let mut result = MutationResult::from_recalc(recalc);
@@ -86,19 +91,22 @@ impl YrsComputeEngine {
         right_col: u32,
         formula: String,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        let mut recalc = services::cell_editing::set_array_formula(
-            &mut self.stores,
-            &mut self.mirror,
-            &mut self.mutation,
-            sheet_id,
-            top_row,
-            left_col,
-            bottom_row,
-            right_col,
-            &formula,
-        )?;
-        let format_result =
-            self.apply_formula_inherited_number_formats(&[(*sheet_id, top_row, left_col)])?;
+        let (mut recalc, format_result) = self.with_undo_group_if(true, |engine| {
+            let recalc = services::cell_editing::set_array_formula(
+                &mut engine.stores,
+                &mut engine.mirror,
+                &mut engine.mutation,
+                sheet_id,
+                top_row,
+                left_col,
+                bottom_row,
+                right_col,
+                &formula,
+            )?;
+            let format_result =
+                engine.apply_formula_inherited_number_formats(&[(*sheet_id, top_row, left_col)])?;
+            Ok((recalc, format_result))
+        })?;
         self.prepare_recalc_for_flush(&mut recalc);
         let patches = self.flush_viewport_patches();
         let mut result = MutationResult::from_recalc(recalc);
@@ -121,20 +129,25 @@ impl YrsComputeEngine {
         col: u32,
         raw_input: &str,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        let mut recalc = services::cell_editing::set_cell_value_parsed(
-            &mut self.stores,
-            &mut self.mirror,
-            &mut self.mutation,
-            sheet_id,
-            row,
-            col,
-            raw_input,
-        )?;
-        let format_result = if raw_input.trim().starts_with('=') {
-            self.apply_formula_inherited_number_formats(&[(*sheet_id, row, col)])?
-        } else {
-            MutationResult::empty()
-        };
+        let should_apply_formula_format = raw_input.trim().starts_with('=');
+        let (mut recalc, format_result) =
+            self.with_undo_group_if(should_apply_formula_format, |engine| {
+                let recalc = services::cell_editing::set_cell_value_parsed(
+                    &mut engine.stores,
+                    &mut engine.mirror,
+                    &mut engine.mutation,
+                    sheet_id,
+                    row,
+                    col,
+                    raw_input,
+                )?;
+                let format_result = if should_apply_formula_format {
+                    engine.apply_formula_inherited_number_formats(&[(*sheet_id, row, col)])?
+                } else {
+                    MutationResult::empty()
+                };
+                Ok((recalc, format_result))
+            })?;
         self.prepare_recalc_for_flush(&mut recalc);
         let patches = self.flush_viewport_patches();
         let mut result = MutationResult::from_recalc(recalc);
@@ -174,19 +187,35 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         updates: Vec<(u32, u32, String)>,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+        let formula_format_candidates: Vec<(SheetId, u32, u32)> = updates
+            .iter()
+            .filter_map(|(row, col, raw_input)| {
+                let input = mutation::CellInput::Parse {
+                    text: raw_input.clone(),
+                };
+                is_formula_parse_input(&input).then_some((*sheet_id, *row, *col))
+            })
+            .collect();
         let group_undo = !updates.is_empty();
-        let mut recalc = self.with_undo_group_if(group_undo, |engine| {
-            services::cell_editing::set_cell_values_parsed(
+        let (mut recalc, format_result) = self.with_undo_group_if(group_undo, |engine| {
+            let recalc = services::cell_editing::set_cell_values_parsed(
                 &mut engine.stores,
                 &mut engine.mirror,
                 &mut engine.mutation,
                 sheet_id,
                 &updates,
-            )
+            )?;
+            let format_result =
+                engine.apply_formula_inherited_number_formats(&formula_format_candidates)?;
+            Ok((recalc, format_result))
         })?;
         self.prepare_recalc_for_flush(&mut recalc);
         let patches = self.flush_viewport_patches();
-        Ok((patches, MutationResult::from_recalc(recalc)))
+        let mut result = MutationResult::from_recalc(recalc);
+        result
+            .property_changes
+            .extend(format_result.property_changes);
+        Ok((patches, result))
     }
 
     /// Import pre-parsed cell values in bulk.

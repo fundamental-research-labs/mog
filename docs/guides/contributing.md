@@ -153,8 +153,9 @@ monorepo subpaths are classified for controlled internal use. `@mog/shell` and
 
 ### Branch Naming
 
-Use `dev-v0.7.2` as the development branch for this repository version unless a
-task explicitly names another branch. Do not base new public work on `dev`.
+Use the active versioned development branch for this repository version unless
+a task explicitly names another branch. Do not base new public work on
+unversioned local or remote development branches.
 
 For normal pull-request work, use a short branch name that describes the public
 change, such as `docs/contributing-workflow` or `fix/sdk-disposal-error`.
@@ -170,8 +171,8 @@ fix: reject disposed workbook reads
 
 ### Pull Requests
 
-Open pull requests against the current development branch for the active release
-line. In this repository version, use `dev-v0.7.2`.
+Open pull requests against the current versioned development branch for the
+active release line.
 
 Include:
 

@@ -1910,7 +1910,9 @@ export class WorkbookImpl implements WorkbookInternal {
   }
 
   get diagnostics(): WorkbookDiagnostics {
-    return (this._diagnostics ??= new WorkbookDiagnosticsImpl(this.ctx));
+    return (this._diagnostics ??= new WorkbookDiagnosticsImpl(this.ctx, {
+      isDirty: () => this.isDirty,
+    }));
   }
 
   get links(): WorkbookLinks {

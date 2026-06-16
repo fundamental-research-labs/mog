@@ -85,15 +85,7 @@
       "asyncModel": "sync",
       "signature": "addressToIndex(address: string): { row: number; col: number };",
       "typeText": "{row:number;col:number}",
-      "compatibility": [
-        {
-          "id": "mog-api.worksheet.addressToIndex.unsupported",
-          "observedPath": "ws.addressToIndex",
-          "canonicalPath": "wb.addressToIndex",
-          "status": "structured_diagnostic",
-          "appliesTo": "method"
-        }
-      ],
+      "compatibility": [],
       "source": {
         "file": "types/api/src/api/workbook.ts"
       },
@@ -511,6 +503,177 @@
     },
     {
       "schemaVersion": "1",
+      "path": "wb.diagnostics.checkBlankRegions",
+      "stableId": "WorkbookDiagnostics.checkBlankRegions",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookDiagnostics",
+      "member": "checkBlankRegions",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "checkBlankRegions(input: WorkbookBlankRegionCheckInput): Promise<WorkbookValidationResult>;",
+      "typeText": "Promise<WorkbookValidationResult>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/diagnostics.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "wb.diagnostics.checkErrors",
+      "stableId": "WorkbookDiagnostics.checkErrors",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookDiagnostics",
+      "member": "checkErrors",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "checkErrors(options?: CheckErrorsOptions): Promise<WorkbookValidationResult>;",
+      "typeText": "Promise<WorkbookValidationResult>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/diagnostics.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "wb.diagnostics.checkExternalReferences",
+      "stableId": "WorkbookDiagnostics.checkExternalReferences",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookDiagnostics",
+      "member": "checkExternalReferences",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "checkExternalReferences(\n    options?: WorkbookExternalReferenceCheckOptions,\n  ): Promise<WorkbookValidationResult>;",
+      "typeText": "Promise<WorkbookValidationResult>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/diagnostics.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "wb.diagnostics.checkFormulaErrors",
+      "stableId": "WorkbookDiagnostics.checkFormulaErrors",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookDiagnostics",
+      "member": "checkFormulaErrors",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "checkFormulaErrors(options?: WorkbookValidationScanOptions): Promise<WorkbookValidationResult>;",
+      "typeText": "Promise<WorkbookValidationResult>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/diagnostics.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "wb.diagnostics.checkFormulaErrorValues",
+      "stableId": "WorkbookDiagnostics.checkFormulaErrorValues",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookDiagnostics",
+      "member": "checkFormulaErrorValues",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "checkFormulaErrorValues(\n    options?: WorkbookValidationScanOptions,\n  ): Promise<WorkbookValidationResult>;",
+      "typeText": "Promise<WorkbookValidationResult>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/diagnostics.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "wb.diagnostics.checkFormulaShape",
+      "stableId": "WorkbookDiagnostics.checkFormulaShape",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookDiagnostics",
+      "member": "checkFormulaShape",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "checkFormulaShape(input: WorkbookFormulaShapeCheckInput): Promise<WorkbookValidationResult>;",
+      "typeText": "Promise<WorkbookValidationResult>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/diagnostics.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "wb.diagnostics.checkOpenXmlLoadability",
+      "stableId": "WorkbookDiagnostics.checkOpenXmlLoadability",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookDiagnostics",
+      "member": "checkOpenXmlLoadability",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "checkOpenXmlLoadability(): Promise<WorkbookValidationResult>;",
+      "typeText": "Promise<WorkbookValidationResult>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/diagnostics.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "wb.diagnostics.checkStaleCachedValues",
+      "stableId": "WorkbookDiagnostics.checkStaleCachedValues",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookDiagnostics",
+      "member": "checkStaleCachedValues",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "checkStaleCachedValues(): Promise<WorkbookValidationResult>;",
+      "typeText": "Promise<WorkbookValidationResult>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/diagnostics.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "wb.diagnostics.checkWorkbookDirtyState",
+      "stableId": "WorkbookDiagnostics.checkWorkbookDirtyState",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookDiagnostics",
+      "member": "checkWorkbookDirtyState",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "checkWorkbookDirtyState(): Promise<WorkbookValidationResult>;",
+      "typeText": "Promise<WorkbookValidationResult>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/diagnostics.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
       "path": "wb.diagnostics.getFormulaReferences",
       "stableId": "WorkbookDiagnostics.getFormulaReferences",
       "root": "subApi",
@@ -598,6 +761,25 @@
       "asyncModel": "promise",
       "signature": "runtime(options?: RuntimeDiagnosticsOptions): Promise<RuntimeDiagnosticsPage>;",
       "typeText": "Promise<RuntimeDiagnosticsPage>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/diagnostics.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "wb.diagnostics.validateWorkbook",
+      "stableId": "WorkbookDiagnostics.validateWorkbook",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookDiagnostics",
+      "member": "validateWorkbook",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "validateWorkbook(options?: ValidateWorkbookOptions): Promise<WorkbookValidationResult>;",
+      "typeText": "Promise<WorkbookValidationResult>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/workbook/diagnostics.ts"
@@ -1537,22 +1719,7 @@
       "asyncModel": "sync",
       "signature": "indexToAddress(row: number, col: number): string;",
       "typeText": "string",
-      "compatibility": [
-        {
-          "id": "mog-api.worksheet.indexToAddress.unsupported",
-          "observedPath": "ws.indexToAddress",
-          "canonicalPath": "wb.indexToAddress",
-          "status": "structured_diagnostic",
-          "appliesTo": "method"
-        },
-        {
-          "id": "mog-api.worksheet.privateColLetter.unsupported",
-          "observedPath": "ws._colLetter",
-          "canonicalPath": "wb.indexToAddress",
-          "status": "structured_diagnostic",
-          "appliesTo": "method"
-        }
-      ],
+      "compatibility": [],
       "source": {
         "file": "types/api/src/api/workbook.ts"
       },
@@ -5267,6 +5434,25 @@
     },
     {
       "schemaVersion": "1",
+      "path": "ws.charts.describe",
+      "stableId": "WorksheetCharts.describe",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetCharts",
+      "member": "describe",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "describe(chartId: string, options?: ImageExportOptions): Promise<ChartDescription>;",
+      "typeText": "Promise<ChartDescription>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet/charts.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
       "path": "ws.charts.duplicate",
       "stableId": "WorksheetCharts.duplicate",
       "root": "subApi",
@@ -5297,6 +5483,25 @@
       "asyncModel": "promise",
       "signature": "exportImage(chartId: string, options?: ImageExportOptions): Promise<string>;",
       "typeText": "Promise<string>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet/charts.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "ws.charts.findBySourceRange",
+      "stableId": "WorksheetCharts.findBySourceRange",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetCharts",
+      "member": "findBySourceRange",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "findBySourceRange(range: string | CellRange): Promise<ChartSourceRangeMatch[]>;",
+      "typeText": "Promise<ChartSourceRangeMatch[]>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/charts.ts"
@@ -5609,6 +5814,25 @@
       "asyncModel": "promise",
       "signature": "getSeriesDimensionValues(\n    chartId: string,\n    seriesIndex: number,\n    dimension: ChartSeriesDimension,\n  ): Promise<(string | number)[]>;",
       "typeText": "Promise<(string|number)[]>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet/charts.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "ws.charts.getSourceData",
+      "stableId": "WorksheetCharts.getSourceData",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetCharts",
+      "member": "getSourceData",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "getSourceData(chartId: string, options?: ImageExportOptions): Promise<ChartSourceData>;",
+      "typeText": "Promise<ChartSourceData>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/charts.ts"
@@ -6141,6 +6365,25 @@
     },
     {
       "schemaVersion": "1",
+      "path": "ws.charts.setSourceData",
+      "stableId": "WorksheetCharts.setSourceData",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetCharts",
+      "member": "setSourceData",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "setSourceData(chartId: string, sourceData: ChartSourceDataUpdate): Promise<void>;",
+      "typeText": "Promise<void>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet/charts.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
       "path": "ws.charts.setTitleFormula",
       "stableId": "WorksheetCharts.setTitleFormula",
       "root": "subApi",
@@ -6236,6 +6479,25 @@
       "asyncModel": "promise",
       "signature": "updateSeries(chartId: string, index: number, updates: Partial<SeriesConfig>): Promise<void>;",
       "typeText": "Promise<void>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet/charts.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "ws.charts.usesRange",
+      "stableId": "WorksheetCharts.usesRange",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetCharts",
+      "member": "usesRange",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "usesRange(range: string | CellRange): Promise<boolean>;",
+      "typeText": "Promise<boolean>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/charts.ts"
@@ -6918,6 +7180,25 @@
       "visibility": "public",
       "asyncModel": "promise",
       "signature": "add(ranges: (string | CellRange)[], rules: CFRuleInput[]): Promise<ConditionalFormat>;",
+      "typeText": "Promise<ConditionalFormat>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet/conditional-formats.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "ws.conditionalFormats.addFormula",
+      "stableId": "WorksheetConditionalFormatting.addFormula",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetConditionalFormatting",
+      "member": "addFormula",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "addFormula(\n    range: string | CellRange | (string | CellRange)[],\n    formula: string,\n    style: CFStyle,\n  ): Promise<ConditionalFormat>;",
       "typeText": "Promise<ConditionalFormat>",
       "compatibility": [],
       "source": {
@@ -8066,6 +8347,24 @@
       "visibility": "public",
       "asyncModel": "promise",
       "signature": "evaluate(expression: string): Promise<CellValue>;",
+      "typeText": "Promise<CellValue>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "ws.evaluateFormula",
+      "stableId": "Worksheet.evaluateFormula",
+      "root": "worksheet",
+      "interface": "Worksheet",
+      "member": "evaluateFormula",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "evaluateFormula(formula: string, options?: { sheet?: string | SheetId }): Promise<CellValue>;",
       "typeText": "Promise<CellValue>",
       "compatibility": [],
       "source": {
@@ -14245,6 +14544,78 @@
     },
     {
       "schemaVersion": "1",
+      "path": "ws.setFormula",
+      "stableId": "Worksheet.setFormula",
+      "root": "worksheet",
+      "interface": "Worksheet",
+      "member": "setFormula",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "setFormula(address: string, formula: string): Promise<void>;",
+      "typeText": "Promise<void>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "ws.setFormulaConditionalFormat",
+      "stableId": "Worksheet.setFormulaConditionalFormat",
+      "root": "worksheet",
+      "interface": "Worksheet",
+      "member": "setFormulaConditionalFormat",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "setFormulaConditionalFormat(\n    range: string | CellRange | (string | CellRange)[],\n    formula: string,\n    style: CFStyle,\n  ): Promise<ConditionalFormat>;",
+      "typeText": "Promise<ConditionalFormat>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "ws.setFormulas",
+      "stableId": "Worksheet.setFormulas",
+      "root": "worksheet",
+      "interface": "Worksheet",
+      "member": "setFormulas",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "setFormulas(range: string, formulas: string[][]): Promise<void>;",
+      "typeText": "Promise<void>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "ws.setListValidation",
+      "stableId": "Worksheet.setListValidation",
+      "root": "worksheet",
+      "interface": "Worksheet",
+      "member": "setListValidation",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "setListValidation(\n    range: string | CellRange,\n    source: ListValidationSource,\n    options?: ListValidationOptions,\n  ): Promise<ValidationSetReceipt>;",
+      "typeText": "Promise<ValidationSetReceipt>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
       "path": "ws.setName",
       "stableId": "Worksheet.setName",
       "root": "worksheet",
@@ -14409,6 +14780,24 @@
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/settings.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "ws.setValue",
+      "stableId": "Worksheet.setValue",
+      "root": "worksheet",
+      "interface": "Worksheet",
+      "member": "setValue",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "setValue(\n    address: string,\n    value: CellValuePrimitive | Date,\n    options?: Pick<CellWriteOptions, 'literal' | 'asText'>,\n  ): Promise<void>;",
+      "typeText": "Promise<void>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet.ts"
       },
       "ownerPackage": "@mog/types-api"
     },
@@ -17462,6 +17851,40 @@
     },
     {
       "schemaVersion": "1",
+      "path": "ws.validations.setList",
+      "stableId": "WorksheetValidation.setList",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetValidation",
+      "member": "setList",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "setList(\n    address: string,\n    source: ListValidationSource,\n    options?: ListValidationOptions,\n  ): Promise<ValidationSetReceipt>;",
+      "typeText": "Promise<ValidationSetReceipt>",
+      "compatibility": [
+        {
+          "id": "mog-api.validation.dataValidationAdd.unsupported",
+          "observedPath": "ws.dataValidation.add",
+          "canonicalPath": "ws.validations.setList",
+          "status": "structured_diagnostic",
+          "appliesTo": "method"
+        },
+        {
+          "id": "mog-api.validation.validationsAdd.unsupported",
+          "observedPath": "ws.validations.add",
+          "canonicalPath": "ws.validations.setList",
+          "status": "structured_diagnostic",
+          "appliesTo": "method"
+        }
+      ],
+      "source": {
+        "file": "types/api/src/api/worksheet/validation.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
       "path": "ws.validations.validate",
       "stableId": "WorksheetValidation.validate",
       "root": "subApi",
@@ -17966,15 +18389,7 @@
       "asyncModel": "sync",
       "signature": "addressToIndex(address: string): { row: number; col: number };",
       "typeText": "{row:number;col:number}",
-      "compatibility": [
-        {
-          "id": "mog-api.worksheet.addressToIndex.unsupported",
-          "observedPath": "ws.addressToIndex",
-          "canonicalPath": "wb.addressToIndex",
-          "status": "structured_diagnostic",
-          "appliesTo": "method"
-        }
-      ],
+      "compatibility": [],
       "source": {
         "file": "types/api/src/api/workbook.ts"
       },
@@ -18390,6 +18805,177 @@
       },
       "ownerPackage": "@mog/types-api"
     },
+    "wb.diagnostics.checkBlankRegions": {
+      "schemaVersion": "1",
+      "path": "wb.diagnostics.checkBlankRegions",
+      "stableId": "WorkbookDiagnostics.checkBlankRegions",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookDiagnostics",
+      "member": "checkBlankRegions",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "checkBlankRegions(input: WorkbookBlankRegionCheckInput): Promise<WorkbookValidationResult>;",
+      "typeText": "Promise<WorkbookValidationResult>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/diagnostics.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "wb.diagnostics.checkErrors": {
+      "schemaVersion": "1",
+      "path": "wb.diagnostics.checkErrors",
+      "stableId": "WorkbookDiagnostics.checkErrors",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookDiagnostics",
+      "member": "checkErrors",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "checkErrors(options?: CheckErrorsOptions): Promise<WorkbookValidationResult>;",
+      "typeText": "Promise<WorkbookValidationResult>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/diagnostics.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "wb.diagnostics.checkExternalReferences": {
+      "schemaVersion": "1",
+      "path": "wb.diagnostics.checkExternalReferences",
+      "stableId": "WorkbookDiagnostics.checkExternalReferences",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookDiagnostics",
+      "member": "checkExternalReferences",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "checkExternalReferences(\n    options?: WorkbookExternalReferenceCheckOptions,\n  ): Promise<WorkbookValidationResult>;",
+      "typeText": "Promise<WorkbookValidationResult>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/diagnostics.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "wb.diagnostics.checkFormulaErrors": {
+      "schemaVersion": "1",
+      "path": "wb.diagnostics.checkFormulaErrors",
+      "stableId": "WorkbookDiagnostics.checkFormulaErrors",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookDiagnostics",
+      "member": "checkFormulaErrors",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "checkFormulaErrors(options?: WorkbookValidationScanOptions): Promise<WorkbookValidationResult>;",
+      "typeText": "Promise<WorkbookValidationResult>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/diagnostics.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "wb.diagnostics.checkFormulaErrorValues": {
+      "schemaVersion": "1",
+      "path": "wb.diagnostics.checkFormulaErrorValues",
+      "stableId": "WorkbookDiagnostics.checkFormulaErrorValues",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookDiagnostics",
+      "member": "checkFormulaErrorValues",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "checkFormulaErrorValues(\n    options?: WorkbookValidationScanOptions,\n  ): Promise<WorkbookValidationResult>;",
+      "typeText": "Promise<WorkbookValidationResult>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/diagnostics.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "wb.diagnostics.checkFormulaShape": {
+      "schemaVersion": "1",
+      "path": "wb.diagnostics.checkFormulaShape",
+      "stableId": "WorkbookDiagnostics.checkFormulaShape",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookDiagnostics",
+      "member": "checkFormulaShape",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "checkFormulaShape(input: WorkbookFormulaShapeCheckInput): Promise<WorkbookValidationResult>;",
+      "typeText": "Promise<WorkbookValidationResult>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/diagnostics.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "wb.diagnostics.checkOpenXmlLoadability": {
+      "schemaVersion": "1",
+      "path": "wb.diagnostics.checkOpenXmlLoadability",
+      "stableId": "WorkbookDiagnostics.checkOpenXmlLoadability",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookDiagnostics",
+      "member": "checkOpenXmlLoadability",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "checkOpenXmlLoadability(): Promise<WorkbookValidationResult>;",
+      "typeText": "Promise<WorkbookValidationResult>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/diagnostics.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "wb.diagnostics.checkStaleCachedValues": {
+      "schemaVersion": "1",
+      "path": "wb.diagnostics.checkStaleCachedValues",
+      "stableId": "WorkbookDiagnostics.checkStaleCachedValues",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookDiagnostics",
+      "member": "checkStaleCachedValues",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "checkStaleCachedValues(): Promise<WorkbookValidationResult>;",
+      "typeText": "Promise<WorkbookValidationResult>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/diagnostics.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "wb.diagnostics.checkWorkbookDirtyState": {
+      "schemaVersion": "1",
+      "path": "wb.diagnostics.checkWorkbookDirtyState",
+      "stableId": "WorkbookDiagnostics.checkWorkbookDirtyState",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookDiagnostics",
+      "member": "checkWorkbookDirtyState",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "checkWorkbookDirtyState(): Promise<WorkbookValidationResult>;",
+      "typeText": "Promise<WorkbookValidationResult>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/diagnostics.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
     "wb.diagnostics.getFormulaReferences": {
       "schemaVersion": "1",
       "path": "wb.diagnostics.getFormulaReferences",
@@ -18479,6 +19065,25 @@
       "asyncModel": "promise",
       "signature": "runtime(options?: RuntimeDiagnosticsOptions): Promise<RuntimeDiagnosticsPage>;",
       "typeText": "Promise<RuntimeDiagnosticsPage>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/diagnostics.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "wb.diagnostics.validateWorkbook": {
+      "schemaVersion": "1",
+      "path": "wb.diagnostics.validateWorkbook",
+      "stableId": "WorkbookDiagnostics.validateWorkbook",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookDiagnostics",
+      "member": "validateWorkbook",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "validateWorkbook(options?: ValidateWorkbookOptions): Promise<WorkbookValidationResult>;",
+      "typeText": "Promise<WorkbookValidationResult>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/workbook/diagnostics.ts"
@@ -19418,22 +20023,7 @@
       "asyncModel": "sync",
       "signature": "indexToAddress(row: number, col: number): string;",
       "typeText": "string",
-      "compatibility": [
-        {
-          "id": "mog-api.worksheet.indexToAddress.unsupported",
-          "observedPath": "ws.indexToAddress",
-          "canonicalPath": "wb.indexToAddress",
-          "status": "structured_diagnostic",
-          "appliesTo": "method"
-        },
-        {
-          "id": "mog-api.worksheet.privateColLetter.unsupported",
-          "observedPath": "ws._colLetter",
-          "canonicalPath": "wb.indexToAddress",
-          "status": "structured_diagnostic",
-          "appliesTo": "method"
-        }
-      ],
+      "compatibility": [],
       "source": {
         "file": "types/api/src/api/workbook.ts"
       },
@@ -23146,6 +23736,25 @@
       },
       "ownerPackage": "@mog/types-api"
     },
+    "ws.charts.describe": {
+      "schemaVersion": "1",
+      "path": "ws.charts.describe",
+      "stableId": "WorksheetCharts.describe",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetCharts",
+      "member": "describe",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "describe(chartId: string, options?: ImageExportOptions): Promise<ChartDescription>;",
+      "typeText": "Promise<ChartDescription>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet/charts.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
     "ws.charts.duplicate": {
       "schemaVersion": "1",
       "path": "ws.charts.duplicate",
@@ -23178,6 +23787,25 @@
       "asyncModel": "promise",
       "signature": "exportImage(chartId: string, options?: ImageExportOptions): Promise<string>;",
       "typeText": "Promise<string>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet/charts.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "ws.charts.findBySourceRange": {
+      "schemaVersion": "1",
+      "path": "ws.charts.findBySourceRange",
+      "stableId": "WorksheetCharts.findBySourceRange",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetCharts",
+      "member": "findBySourceRange",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "findBySourceRange(range: string | CellRange): Promise<ChartSourceRangeMatch[]>;",
+      "typeText": "Promise<ChartSourceRangeMatch[]>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/charts.ts"
@@ -23490,6 +24118,25 @@
       "asyncModel": "promise",
       "signature": "getSeriesDimensionValues(\n    chartId: string,\n    seriesIndex: number,\n    dimension: ChartSeriesDimension,\n  ): Promise<(string | number)[]>;",
       "typeText": "Promise<(string|number)[]>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet/charts.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "ws.charts.getSourceData": {
+      "schemaVersion": "1",
+      "path": "ws.charts.getSourceData",
+      "stableId": "WorksheetCharts.getSourceData",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetCharts",
+      "member": "getSourceData",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "getSourceData(chartId: string, options?: ImageExportOptions): Promise<ChartSourceData>;",
+      "typeText": "Promise<ChartSourceData>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/charts.ts"
@@ -24020,6 +24667,25 @@
       },
       "ownerPackage": "@mog/types-api"
     },
+    "ws.charts.setSourceData": {
+      "schemaVersion": "1",
+      "path": "ws.charts.setSourceData",
+      "stableId": "WorksheetCharts.setSourceData",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetCharts",
+      "member": "setSourceData",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "setSourceData(chartId: string, sourceData: ChartSourceDataUpdate): Promise<void>;",
+      "typeText": "Promise<void>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet/charts.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
     "ws.charts.setTitleFormula": {
       "schemaVersion": "1",
       "path": "ws.charts.setTitleFormula",
@@ -24117,6 +24783,25 @@
       "asyncModel": "promise",
       "signature": "updateSeries(chartId: string, index: number, updates: Partial<SeriesConfig>): Promise<void>;",
       "typeText": "Promise<void>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet/charts.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "ws.charts.usesRange": {
+      "schemaVersion": "1",
+      "path": "ws.charts.usesRange",
+      "stableId": "WorksheetCharts.usesRange",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetCharts",
+      "member": "usesRange",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "usesRange(range: string | CellRange): Promise<boolean>;",
+      "typeText": "Promise<boolean>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/charts.ts"
@@ -24799,6 +25484,25 @@
       "visibility": "public",
       "asyncModel": "promise",
       "signature": "add(ranges: (string | CellRange)[], rules: CFRuleInput[]): Promise<ConditionalFormat>;",
+      "typeText": "Promise<ConditionalFormat>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet/conditional-formats.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "ws.conditionalFormats.addFormula": {
+      "schemaVersion": "1",
+      "path": "ws.conditionalFormats.addFormula",
+      "stableId": "WorksheetConditionalFormatting.addFormula",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetConditionalFormatting",
+      "member": "addFormula",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "addFormula(\n    range: string | CellRange | (string | CellRange)[],\n    formula: string,\n    style: CFStyle,\n  ): Promise<ConditionalFormat>;",
       "typeText": "Promise<ConditionalFormat>",
       "compatibility": [],
       "source": {
@@ -25947,6 +26651,24 @@
       "visibility": "public",
       "asyncModel": "promise",
       "signature": "evaluate(expression: string): Promise<CellValue>;",
+      "typeText": "Promise<CellValue>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "ws.evaluateFormula": {
+      "schemaVersion": "1",
+      "path": "ws.evaluateFormula",
+      "stableId": "Worksheet.evaluateFormula",
+      "root": "worksheet",
+      "interface": "Worksheet",
+      "member": "evaluateFormula",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "evaluateFormula(formula: string, options?: { sheet?: string | SheetId }): Promise<CellValue>;",
       "typeText": "Promise<CellValue>",
       "compatibility": [],
       "source": {
@@ -32124,6 +32846,78 @@
       },
       "ownerPackage": "@mog/types-api"
     },
+    "ws.setFormula": {
+      "schemaVersion": "1",
+      "path": "ws.setFormula",
+      "stableId": "Worksheet.setFormula",
+      "root": "worksheet",
+      "interface": "Worksheet",
+      "member": "setFormula",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "setFormula(address: string, formula: string): Promise<void>;",
+      "typeText": "Promise<void>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "ws.setFormulaConditionalFormat": {
+      "schemaVersion": "1",
+      "path": "ws.setFormulaConditionalFormat",
+      "stableId": "Worksheet.setFormulaConditionalFormat",
+      "root": "worksheet",
+      "interface": "Worksheet",
+      "member": "setFormulaConditionalFormat",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "setFormulaConditionalFormat(\n    range: string | CellRange | (string | CellRange)[],\n    formula: string,\n    style: CFStyle,\n  ): Promise<ConditionalFormat>;",
+      "typeText": "Promise<ConditionalFormat>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "ws.setFormulas": {
+      "schemaVersion": "1",
+      "path": "ws.setFormulas",
+      "stableId": "Worksheet.setFormulas",
+      "root": "worksheet",
+      "interface": "Worksheet",
+      "member": "setFormulas",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "setFormulas(range: string, formulas: string[][]): Promise<void>;",
+      "typeText": "Promise<void>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "ws.setListValidation": {
+      "schemaVersion": "1",
+      "path": "ws.setListValidation",
+      "stableId": "Worksheet.setListValidation",
+      "root": "worksheet",
+      "interface": "Worksheet",
+      "member": "setListValidation",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "setListValidation(\n    range: string | CellRange,\n    source: ListValidationSource,\n    options?: ListValidationOptions,\n  ): Promise<ValidationSetReceipt>;",
+      "typeText": "Promise<ValidationSetReceipt>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
     "ws.setName": {
       "schemaVersion": "1",
       "path": "ws.setName",
@@ -32290,6 +33084,24 @@
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/settings.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "ws.setValue": {
+      "schemaVersion": "1",
+      "path": "ws.setValue",
+      "stableId": "Worksheet.setValue",
+      "root": "worksheet",
+      "interface": "Worksheet",
+      "member": "setValue",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "setValue(\n    address: string,\n    value: CellValuePrimitive | Date,\n    options?: Pick<CellWriteOptions, 'literal' | 'asText'>,\n  ): Promise<void>;",
+      "typeText": "Promise<void>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet.ts"
       },
       "ownerPackage": "@mog/types-api"
     },
@@ -35336,6 +36148,40 @@
       "signature": "set(address: string, rule: ValidationRule): Promise<ValidationSetReceipt>;",
       "typeText": "Promise<ValidationSetReceipt>",
       "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet/validation.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "ws.validations.setList": {
+      "schemaVersion": "1",
+      "path": "ws.validations.setList",
+      "stableId": "WorksheetValidation.setList",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetValidation",
+      "member": "setList",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "setList(\n    address: string,\n    source: ListValidationSource,\n    options?: ListValidationOptions,\n  ): Promise<ValidationSetReceipt>;",
+      "typeText": "Promise<ValidationSetReceipt>",
+      "compatibility": [
+        {
+          "id": "mog-api.validation.dataValidationAdd.unsupported",
+          "observedPath": "ws.dataValidation.add",
+          "canonicalPath": "ws.validations.setList",
+          "status": "structured_diagnostic",
+          "appliesTo": "method"
+        },
+        {
+          "id": "mog-api.validation.validationsAdd.unsupported",
+          "observedPath": "ws.validations.add",
+          "canonicalPath": "ws.validations.setList",
+          "status": "structured_diagnostic",
+          "appliesTo": "method"
+        }
+      ],
       "source": {
         "file": "types/api/src/api/worksheet/validation.ts"
       },

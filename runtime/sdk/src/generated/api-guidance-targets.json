@@ -9026,8 +9026,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "findCells(predicate: (cell: CellData) => boolean, range?: string): Promise<string[]>;",
-      "typeText": "Promise<string[]>",
+      "signature": "findCells(query: FindCellsQuery): Promise<FindCellsResult>;",
+      "typeText": "Promise<FindCellsResult>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet.ts"
@@ -27330,8 +27330,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "findCells(predicate: (cell: CellData) => boolean, range?: string): Promise<string[]>;",
-      "typeText": "Promise<string[]>",
+      "signature": "findCells(query: FindCellsQuery): Promise<FindCellsResult>;",
+      "typeText": "Promise<FindCellsResult>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet.ts"

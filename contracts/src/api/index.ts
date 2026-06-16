@@ -14,7 +14,16 @@ export type {
   WorkbookCustomListInput,
   WorkbookCustomListUpdate,
 } from './workbook';
-export type { Worksheet, WorksheetWithInternals } from './worksheet';
+export type {
+  Worksheet,
+  WorksheetWithInternals,
+  FindCellsFormatQuery,
+  FindCellsInclude,
+  FindCellsQuery,
+  FindCellsResult,
+  FindCellsValueType,
+  FoundCell,
+} from './worksheet';
 export type * from '@mog/types-api/api';
 export type {
   ImportDiagnosticDetails,

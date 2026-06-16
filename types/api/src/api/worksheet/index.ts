@@ -79,6 +79,14 @@ export type {
   WorksheetProtection,
 } from './protection';
 export type { WorksheetSettings } from './settings';
+export type {
+  FindCellsFormatQuery,
+  FindCellsInclude,
+  FindCellsQuery,
+  FindCellsResult,
+  FindCellsValueType,
+  FoundCell,
+} from './search';
 export type { WorksheetSlicers } from './slicers';
 export type { NodeMoveDirection, NodePosition, WorksheetDiagrams } from './diagrams';
 export type { WorksheetSparklines } from './sparklines';

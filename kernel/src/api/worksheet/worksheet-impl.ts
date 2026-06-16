@@ -46,6 +46,8 @@ import type {
   PivotTableInfo,
   RawCellData,
   FindInRangeOptions,
+  FindCellsQuery,
+  FindCellsResult,
   SearchOptions,
   SearchResult,
   SetCellsResult,
@@ -1917,21 +1919,20 @@ export class WorksheetImpl implements Worksheet {
     return this.ctx.computeBridge.findLastColumn(this.sheetId, row);
   }
 
-  async findCells(predicate: (cell: CellData) => boolean, range?: string): Promise<string[]> {
-    const addresses = await QueryOps.findCells(this.ctx, this.sheetId, predicate);
-    const results = addresses.map((a) => toA1(a.row, a.col));
-    if (!range) return results;
-    const bounds = parseCellRange(range);
-    if (!bounds) return results;
-    return results.filter((addr) => {
-      const pos = resolveCell(addr);
-      return (
-        pos.row >= bounds.startRow &&
-        pos.row <= bounds.endRow &&
-        pos.col >= bounds.startCol &&
-        pos.col <= bounds.endCol
-      );
-    });
+  async findCells(query: FindCellsQuery): Promise<FindCellsResult>;
+  async findCells(predicate: (cell: CellData) => boolean, range?: string): Promise<string[]>;
+  async findCells(
+    queryOrPredicate: FindCellsQuery | ((cell: CellData) => boolean),
+    range?: string,
+  ): Promise<FindCellsResult | string[]> {
+    if (typeof queryOrPredicate !== 'function') {
+      const bounds = queryOrPredicate.range ? resolveRange(queryOrPredicate.range) : undefined;
+      return QueryOps.findCellsByQuery(this.ctx, this.sheetId, queryOrPredicate, bounds);
+    }
+
+    const bounds = range ? resolveRange(range) : undefined;
+    const addresses = await QueryOps.findCells(this.ctx, this.sheetId, queryOrPredicate, bounds);
+    return addresses.map((a) => toA1(a.row, a.col));
   }
 
   async findByValue(value: CellValue, range?: string): Promise<string[]> {

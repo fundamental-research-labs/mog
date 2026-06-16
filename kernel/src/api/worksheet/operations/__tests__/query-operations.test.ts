@@ -122,3 +122,95 @@ describe('findByValue type coercion', () => {
     expect(results).toEqual([{ sheetId: SHEET_ID, row: 0, col: 2 }]);
   });
 });
+
+describe('findCells(query)', () => {
+  it('finds blank cells inside an explicit bounded range with pagination', async () => {
+    const ctx = {
+      computeBridge: {
+        queryRange: jest.fn().mockResolvedValue({
+          cells: [
+            { row: 0, col: 0, value: 1, formula: undefined },
+            { row: 0, col: 2, value: 2, formula: '=A1' },
+          ],
+        }),
+      },
+    } as any;
+
+    const result = await QueryOps.findCellsByQuery(
+      ctx,
+      SHEET_ID,
+      { blank: true, hasFormula: false, pageSize: 2 },
+      { startRow: 0, startCol: 0, endRow: 1, endCol: 2 },
+    );
+
+    expect(ctx.computeBridge.queryRange).toHaveBeenCalledWith(SHEET_ID, 0, 0, 1, 2);
+    expect(result).toEqual({
+      addresses: ['B1', 'A2'],
+      cells: [
+        { address: 'B1', row: 0, col: 1 },
+        { address: 'A2', row: 1, col: 0 },
+      ],
+      ranges: ['B1', 'A2'],
+      truncated: true,
+      nextCursor: '4',
+    });
+  });
+
+  it('filters blank formatted cells with fillColor alias and returns requested metadata', async () => {
+    const ctx = {
+      computeBridge: {
+        queryRange: jest.fn().mockResolvedValue({
+          cells: [
+            {
+              row: 0,
+              col: 0,
+              value: null,
+              formula: undefined,
+              format: { backgroundColor: '#FFF2CC' },
+            },
+            {
+              row: 0,
+              col: 1,
+              value: null,
+              formula: undefined,
+              format: { backgroundColor: '#ffffff' },
+            },
+            {
+              row: 0,
+              col: 2,
+              value: 1,
+              formula: undefined,
+              format: { backgroundColor: '#FFF2CC' },
+            },
+          ],
+        }),
+      },
+    } as any;
+
+    const result = await QueryOps.findCellsByQuery(
+      ctx,
+      SHEET_ID,
+      {
+        blank: true,
+        format: { fillColor: ['#fff2cc'] },
+        include: ['value', 'format'],
+      },
+      { startRow: 0, startCol: 0, endRow: 0, endCol: 2 },
+    );
+
+    expect(result).toEqual({
+      addresses: ['A1'],
+      cells: [
+        {
+          address: 'A1',
+          row: 0,
+          col: 0,
+          value: null,
+          format: { backgroundColor: '#FFF2CC' },
+        },
+      ],
+      ranges: ['A1'],
+      truncated: false,
+    });
+  });
+});

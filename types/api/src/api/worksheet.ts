@@ -110,6 +110,8 @@ import type {
   WorksheetPivots,
   WorksheetPrint,
   WorksheetProtection,
+  FindCellsQuery,
+  FindCellsResult,
   WorksheetSettings,
   WorksheetShapeCollection,
   WorksheetSlicers,
@@ -140,6 +142,14 @@ export type {
   WorksheetRangeOrigin,
   WorksheetRangeValueCell,
 } from './worksheet/cell-reads';
+export type {
+  FindCellsFormatQuery,
+  FindCellsInclude,
+  FindCellsQuery,
+  FindCellsResult,
+  FindCellsValueType,
+  FoundCell,
+} from './worksheet/index';
 
 /**
  * Options for {@link Worksheet.sortByColor}.
@@ -811,6 +821,13 @@ export interface Worksheet {
   findLastColumn(
     row: number,
   ): Promise<{ lastDataCol: number | null; lastFormatCol: number | null }>;
+
+  /**
+   * Find cells with a declarative query. Returns a paginated structured result.
+   *
+   * Use this form for blank/formula/value-type/format discovery.
+   */
+  findCells(query: FindCellsQuery): Promise<FindCellsResult>;
 
   /** Find all cells matching a predicate. Returns A1 addresses. Searches entire sheet or optionally within a range. */
   findCells(predicate: (cell: CellData) => boolean, range?: string): Promise<string[]>;

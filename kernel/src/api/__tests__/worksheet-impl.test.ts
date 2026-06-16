@@ -85,6 +85,7 @@ jest.unstable_mockModule('../worksheet/operations/merge-operations', () => ({
 jest.unstable_mockModule('../worksheet/operations/query-operations', () => ({
   getUsedRange: jest.fn(),
   findCells: jest.fn(),
+  findCellsByQuery: jest.fn(),
   findByValue: jest.fn(),
   findByFormula: jest.fn(),
   getSelectionAggregates: jest.fn(),
@@ -2051,8 +2052,44 @@ describe('WorksheetImpl', () => {
 
       const result = await ws.findCells(predicate);
 
-      expect(QueryOps.findCells).toHaveBeenCalledWith(ctx, SHEET_ID, predicate);
+      expect(QueryOps.findCells).toHaveBeenCalledWith(ctx, SHEET_ID, predicate, undefined);
       expect(result).toEqual(['A1', 'C2']);
+    });
+
+    it('findCells callback passes validated range bounds to query ops', async () => {
+      const predicate = (cell: any) => cell.value > 10;
+      (QueryOps.findCells as jest.Mock).mockResolvedValue([{ row: 1, col: 2 }]);
+
+      const result = await ws.findCells(predicate, 'B2:D4');
+
+      expect(QueryOps.findCells).toHaveBeenCalledWith(ctx, SHEET_ID, predicate, {
+        startRow: 1,
+        startCol: 1,
+        endRow: 3,
+        endCol: 3,
+      });
+      expect(result).toEqual(['C2']);
+    });
+
+    it('findCells query object delegates and returns structured results', async () => {
+      const query = { range: 'A1:C3', blank: true, hasFormula: false, pageSize: 25 };
+      const structured = {
+        addresses: ['B2'],
+        cells: [{ address: 'B2', row: 1, col: 1 }],
+        ranges: ['B2'],
+        truncated: false,
+      };
+      (QueryOps.findCellsByQuery as jest.Mock).mockResolvedValue(structured);
+
+      const result = await ws.findCells(query);
+
+      expect(QueryOps.findCellsByQuery).toHaveBeenCalledWith(ctx, SHEET_ID, query, {
+        startRow: 0,
+        startCol: 0,
+        endRow: 2,
+        endCol: 2,
+      });
+      expect(result).toBe(structured);
     });
 
     it('findByValue delegates and returns A1 addresses', async () => {

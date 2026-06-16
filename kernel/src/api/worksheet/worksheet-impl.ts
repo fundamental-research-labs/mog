@@ -106,7 +106,7 @@ import type { SpreadsheetObjectManager } from '../../floating-objects';
 import { ERROR_DISPLAY_MAP, isCellError } from '@mog/spreadsheet-utils/errors';
 import { resolveCell, resolveRange, resolveRangeToA1 } from '../internal/address-resolver';
 import { parseCellAddress, parseCellRange, toA1 } from '../internal/utils';
-import { normalizeCellValue } from '../internal/value-conversions';
+import { classifyRangeValueType, normalizeCellValue } from '../internal/value-conversions';
 import { renameSheet } from '../workbook/operations/sheet-crud-operations';
 import { calendarPartsInTz, parseIsoDate } from './operations/calendar-tz';
 import * as CellOps from './operations/cell-operations';
@@ -3244,16 +3244,6 @@ function colLettersToNumber(letters: string): number {
 }
 
 /**
- * Set of Excel error display strings (`#DIV/0!`, `#N/A`, ...). Used by
- * {@link projectCellRecord} to discriminate string-typed cell values
- * between {@link RangeValueType.Error} and {@link RangeValueType.String}.
- *
- * Built from {@link ERROR_DISPLAY_MAP} so the two stay in sync; if a new
- * `ErrorVariant` ships, the map is the single source of truth.
- */
-const ERROR_DISPLAY_STRINGS = new Set<string>(Object.values(ERROR_DISPLAY_MAP));
-
-/**
  * Project a domain-layer {@link StoreCellData} (or `undefined`) to the
  * public {@link CellRecord} shape returned by `Worksheet.cells.get(addr)`.
  *
@@ -3287,7 +3277,7 @@ function projectCellRecord(
   }
 
   const effective = CellReads.getEffectiveValue(data);
-  const valueType = classifyValueType(effective);
+  const valueType = classifyRangeValueType(effective);
   const value: CellValuePrimitive | null =
     effective !== null && isCellError(effective)
       ? ERROR_DISPLAY_MAP[effective.value]
@@ -3305,29 +3295,6 @@ function projectCellRecord(
     region,
     isArrayMember,
   };
-}
-
-/**
- * Classify an effective {@link CellValue} into a {@link RangeValueType}.
- *
- * Switch arms:
- *
- * - `null`  → `Empty`
- * - number  → `Double` (dates included; matches OfficeJS)
- * - boolean → `Boolean`
- * - string  → `Error` if the string matches a known Excel error display
- *   (e.g. `#DIV/0!`, `#N/A`); otherwise `String`
- * - {@link CellError} object → `Error`
- */
-function classifyValueType(v: CellValue | null): RangeValueType {
-  if (v === null) return RangeValueType.Empty;
-  if (typeof v === 'number') return RangeValueType.Double;
-  if (typeof v === 'boolean') return RangeValueType.Boolean;
-  if (typeof v === 'string') {
-    return ERROR_DISPLAY_STRINGS.has(v) ? RangeValueType.Error : RangeValueType.String;
-  }
-  if (isCellError(v)) return RangeValueType.Error;
-  return RangeValueType.Empty;
 }
 
 /** Regex matching A1-style cell references (with optional $ anchors). */

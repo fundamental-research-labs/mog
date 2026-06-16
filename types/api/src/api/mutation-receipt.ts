@@ -7,9 +7,10 @@
  */
 
 import type { ObjectBounds } from '../kernel/floating-object-manager';
-import type { CellRange } from '@mog/types-core/core';
+import type { CellRange, CellValue } from '@mog/types-core/core';
 import type { FloatingObject } from '@mog/types-objects/objects/floating-objects';
 import type { OperationReceiptBase } from './operation-receipt';
+import type { Slicer } from './types';
 import type {
   PivotCommandReceipt,
   PivotKernelMutationReceipt,
@@ -365,6 +366,82 @@ export interface PivotRefreshAllReceipt extends OperationReceiptBase {
 }
 
 // =============================================================================
+// Slicers
+// =============================================================================
+
+export interface SlicerReceiptSourceFields {
+  readonly sourceTableId?: string;
+  readonly sourcePivotId?: string;
+}
+
+export interface SlicerAddReceipt extends OperationReceiptBase, SlicerReceiptSourceFields {
+  readonly kind: 'slicer.add';
+  readonly status: 'applied';
+  readonly slicerId: string;
+  readonly slicer: Slicer;
+}
+
+export interface SlicerUpdateReceipt extends OperationReceiptBase, SlicerReceiptSourceFields {
+  readonly kind: 'slicer.update';
+  readonly status: 'applied' | 'noOp';
+  readonly slicerId: string;
+  readonly slicer?: Slicer | null;
+}
+
+export interface SlicerRemoveReceipt extends OperationReceiptBase, SlicerReceiptSourceFields {
+  readonly kind: 'slicer.remove';
+  readonly status: 'applied';
+  readonly slicerId: string;
+  readonly slicer?: Slicer | null;
+}
+
+export interface SlicerClearReceipt extends OperationReceiptBase {
+  readonly kind: 'slicer.clear';
+  readonly status: 'applied' | 'noOp';
+  readonly slicerIds: readonly string[];
+  readonly slicers: readonly Slicer[];
+  readonly removedCount: number;
+}
+
+export interface SlicerDuplicateReceipt extends OperationReceiptBase, SlicerReceiptSourceFields {
+  readonly kind: 'slicer.duplicate';
+  readonly status: 'applied';
+  readonly slicerId: string;
+  readonly sourceSlicerId: string;
+  readonly slicer?: Slicer | null;
+}
+
+export interface SlicerSelectionSetReceipt
+  extends OperationReceiptBase,
+    SlicerReceiptSourceFields {
+  readonly kind: 'slicer.selection.set';
+  readonly status: 'applied';
+  readonly slicerId: string;
+  readonly selectedItems: readonly CellValue[];
+  readonly slicer?: Slicer | null;
+}
+
+export interface SlicerSelectionClearReceipt
+  extends OperationReceiptBase,
+    SlicerReceiptSourceFields {
+  readonly kind: 'slicer.selection.clear';
+  readonly status: 'applied';
+  readonly slicerId: string;
+  readonly selectedItems: readonly [];
+  readonly slicer?: Slicer | null;
+}
+
+export type SlicerSelectionReceipt = SlicerSelectionSetReceipt | SlicerSelectionClearReceipt;
+
+export type SlicerMutationReceipt =
+  | SlicerAddReceipt
+  | SlicerUpdateReceipt
+  | SlicerRemoveReceipt
+  | SlicerClearReceipt
+  | SlicerDuplicateReceipt
+  | SlicerSelectionReceipt;
+
+// =============================================================================
 // Discriminated Union
 // =============================================================================
 
@@ -404,6 +481,7 @@ export type MutationReceipt =
   | PivotAddWithSheetReceipt
   | PivotRefreshReceipt
   | PivotRefreshAllReceipt
+  | SlicerMutationReceipt
   | PivotKernelMutationReceipt
   | PivotPlacementMutationReceipt
   | PivotCommandReceipt;

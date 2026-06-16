@@ -292,9 +292,17 @@ describe('WorksheetSlicersImpl', () => {
         },
       });
 
-      const newId = await slicers.duplicate('slicer-1');
+      const receipt = await slicers.duplicate('slicer-1');
 
-      expect(newId).toBe('slicer-2');
+      expect(receipt).toEqual(
+        expect.objectContaining({
+          kind: 'slicer.duplicate',
+          status: 'applied',
+          slicerId: 'slicer-2',
+          sourceSlicerId: 'slicer-1',
+          sourceTableId: 'SalesTable',
+        }),
+      );
       const [, config] = bridge.createSlicer.mock.calls[0];
       expect(config.position).toEqual(
         expect.objectContaining({

@@ -7,6 +7,15 @@
  */
 import type { CellValue } from '@mog/types-core/core';
 import type {
+  SlicerAddReceipt,
+  SlicerClearReceipt,
+  SlicerDuplicateReceipt,
+  SlicerRemoveReceipt,
+  SlicerSelectionClearReceipt,
+  SlicerSelectionSetReceipt,
+  SlicerUpdateReceipt,
+} from '../mutation-receipt';
+import type {
   Slicer,
   SlicerConfig,
   SlicerInfo,
@@ -21,21 +30,21 @@ export interface WorksheetSlicers {
    * Create a new slicer on this worksheet.
    *
    * @param config - Slicer configuration (table, column, position)
-   * @returns The created slicer with full state
+   * @returns Operation receipt containing the created slicer with full state
    */
-  add(config: SlicerConfig): Promise<Slicer>;
+  add(config: SlicerConfig): Promise<SlicerAddReceipt>;
 
   /**
    * Remove a slicer from this worksheet.
    *
    * @param slicerId - ID of the slicer to remove
    */
-  remove(slicerId: string): Promise<void>;
+  remove(slicerId: string): Promise<SlicerRemoveReceipt>;
 
   /**
    * Remove all slicers from this worksheet.
    */
-  clear(): Promise<void>;
+  clear(): Promise<SlicerClearReceipt>;
 
   /**
    * List all slicers on this worksheet.
@@ -119,23 +128,29 @@ export interface WorksheetSlicers {
    * @param slicerId - ID of the slicer
    * @param selectedItems - Array of values to select
    */
-  setSelection(slicerId: string, selectedItems: CellValue[]): Promise<void>;
+  setSelection(
+    slicerId: string,
+    selectedItems: CellValue[],
+  ): Promise<SlicerSelectionSetReceipt>;
 
   /**
    * Clear all selections in a slicer (show all items).
    *
    * @param slicerId - ID of the slicer
    */
-  clearSelection(slicerId: string): Promise<void>;
+  clearSelection(slicerId: string): Promise<SlicerSelectionClearReceipt>;
 
   /**
    * Duplicate a slicer with an optional position offset.
    *
    * @param slicerId - ID of the slicer to duplicate
    * @param offset - Position offset in pixels (defaults to { x: 20, y: 20 })
-   * @returns The ID of the newly created slicer
+   * @returns Operation receipt containing the ID of the newly created slicer
    */
-  duplicate(slicerId: string, offset?: { x?: number; y?: number }): Promise<string>;
+  duplicate(
+    slicerId: string,
+    offset?: { x?: number; y?: number },
+  ): Promise<SlicerDuplicateReceipt>;
 
   /**
    * Update a slicer's configuration.
@@ -143,7 +158,7 @@ export interface WorksheetSlicers {
    * @param slicerId - ID of the slicer
    * @param updates - Partial configuration updates
    */
-  update(slicerId: string, updates: Partial<SlicerConfig>): Promise<void>;
+  update(slicerId: string, updates: Partial<SlicerConfig>): Promise<SlicerUpdateReceipt>;
 
   /**
    * Get the enriched runtime state of a slicer.

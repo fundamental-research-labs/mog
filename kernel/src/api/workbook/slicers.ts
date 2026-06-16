@@ -4,7 +4,13 @@
  * Provides workbook-scoped slicer access by using the Rust bridge's
  * getAllSlicersWorkbook() for efficient cross-sheet queries.
  */
-import type { Slicer, SlicerInfo, SlicerItem, WorkbookSlicers } from '@mog-sdk/contracts/api';
+import type {
+  Slicer,
+  SlicerInfo,
+  SlicerItem,
+  SlicerRemoveReceipt,
+  WorkbookSlicers,
+} from '@mog-sdk/contracts/api';
 import { type CellValue, type SheetId, sheetId } from '@mog-sdk/contracts/core';
 import type { DocumentContext } from '../../context';
 import { KernelError } from '../../errors';
@@ -20,7 +26,7 @@ export interface WorkbookSlicersDeps {
     getItems(slicerId: string): Promise<SlicerItem[]>;
     getItem(slicerId: string, key: CellValue): Promise<SlicerItem>;
     getItemOrNullObject(slicerId: string, key: CellValue): Promise<SlicerItem | null>;
-    remove(slicerId: string): Promise<void>;
+    remove(slicerId: string): Promise<SlicerRemoveReceipt>;
   };
 }
 
@@ -98,7 +104,7 @@ export class WorkbookSlicersImpl implements WorkbookSlicers {
     return wsSlicers.getItemOrNullObject(slicerId, key);
   }
 
-  async remove(slicerId: string): Promise<void> {
+  async remove(slicerId: string): Promise<SlicerRemoveReceipt> {
     const stored = await this._findSlicerSheet(slicerId);
     if (!stored) {
       throw new KernelError('COMPUTE_ERROR', `Slicer "${slicerId}" not found`);

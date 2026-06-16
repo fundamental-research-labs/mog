@@ -4058,8 +4058,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "remove(slicerId: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "remove(slicerId: string): Promise<SlicerRemoveReceipt>;",
+      "typeText": "Promise<SlicerRemoveReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/workbook/slicers.ts"
@@ -15000,8 +15000,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "add(config: SlicerConfig): Promise<Slicer>;",
-      "typeText": "Promise<Slicer>",
+      "signature": "add(config: SlicerConfig): Promise<SlicerAddReceipt>;",
+      "typeText": "Promise<SlicerAddReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/slicers.ts"
@@ -15019,8 +15019,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "clear(): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "clear(): Promise<SlicerClearReceipt>;",
+      "typeText": "Promise<SlicerClearReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/slicers.ts"
@@ -15038,8 +15038,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "clearSelection(slicerId: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "clearSelection(slicerId: string): Promise<SlicerSelectionClearReceipt>;",
+      "typeText": "Promise<SlicerSelectionClearReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/slicers.ts"
@@ -15057,8 +15057,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "duplicate(slicerId: string, offset?: { x?: number; y?: number }): Promise<string>;",
-      "typeText": "Promise<string>",
+      "signature": "duplicate(\n    slicerId: string,\n    offset?: { x?: number; y?: number },\n  ): Promise<SlicerDuplicateReceipt>;",
+      "typeText": "Promise<SlicerDuplicateReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/slicers.ts"
@@ -15266,8 +15266,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "remove(slicerId: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "remove(slicerId: string): Promise<SlicerRemoveReceipt>;",
+      "typeText": "Promise<SlicerRemoveReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/slicers.ts"
@@ -15285,8 +15285,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setSelection(slicerId: string, selectedItems: CellValue[]): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setSelection(\n    slicerId: string,\n    selectedItems: CellValue[],\n  ): Promise<SlicerSelectionSetReceipt>;",
+      "typeText": "Promise<SlicerSelectionSetReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/slicers.ts"
@@ -15304,8 +15304,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "update(slicerId: string, updates: Partial<SlicerConfig>): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "update(slicerId: string, updates: Partial<SlicerConfig>): Promise<SlicerUpdateReceipt>;",
+      "typeText": "Promise<SlicerUpdateReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/slicers.ts"
@@ -22437,8 +22437,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "remove(slicerId: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "remove(slicerId: string): Promise<SlicerRemoveReceipt>;",
+      "typeText": "Promise<SlicerRemoveReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/workbook/slicers.ts"
@@ -33379,8 +33379,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "add(config: SlicerConfig): Promise<Slicer>;",
-      "typeText": "Promise<Slicer>",
+      "signature": "add(config: SlicerConfig): Promise<SlicerAddReceipt>;",
+      "typeText": "Promise<SlicerAddReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/slicers.ts"
@@ -33398,8 +33398,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "clear(): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "clear(): Promise<SlicerClearReceipt>;",
+      "typeText": "Promise<SlicerClearReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/slicers.ts"
@@ -33417,8 +33417,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "clearSelection(slicerId: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "clearSelection(slicerId: string): Promise<SlicerSelectionClearReceipt>;",
+      "typeText": "Promise<SlicerSelectionClearReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/slicers.ts"
@@ -33436,8 +33436,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "duplicate(slicerId: string, offset?: { x?: number; y?: number }): Promise<string>;",
-      "typeText": "Promise<string>",
+      "signature": "duplicate(\n    slicerId: string,\n    offset?: { x?: number; y?: number },\n  ): Promise<SlicerDuplicateReceipt>;",
+      "typeText": "Promise<SlicerDuplicateReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/slicers.ts"
@@ -33645,8 +33645,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "remove(slicerId: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "remove(slicerId: string): Promise<SlicerRemoveReceipt>;",
+      "typeText": "Promise<SlicerRemoveReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/slicers.ts"
@@ -33664,8 +33664,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setSelection(slicerId: string, selectedItems: CellValue[]): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setSelection(\n    slicerId: string,\n    selectedItems: CellValue[],\n  ): Promise<SlicerSelectionSetReceipt>;",
+      "typeText": "Promise<SlicerSelectionSetReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/slicers.ts"
@@ -33683,8 +33683,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "update(slicerId: string, updates: Partial<SlicerConfig>): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "update(slicerId: string, updates: Partial<SlicerConfig>): Promise<SlicerUpdateReceipt>;",
+      "typeText": "Promise<SlicerUpdateReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/slicers.ts"

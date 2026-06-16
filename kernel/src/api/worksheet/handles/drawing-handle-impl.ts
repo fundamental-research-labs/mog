@@ -1,10 +1,14 @@
-import type { StrokeTransformParams } from '@mog-sdk/contracts/api';
+import type {
+  FloatingObjectHandleMutationReceipt,
+  StrokeTransformParams,
+} from '@mog-sdk/contracts/api';
 import type { DrawingHandle } from '@mog-sdk/contracts/api/worksheet/handles/index';
 import type { DrawingObject, InkStroke, StrokeId } from '@mog-sdk/contracts/ink';
 import type { IObjectBoundsReader } from '@mog-sdk/contracts/objects/object-bounds-reader';
 
 import { KernelError } from '../../../errors';
 import type { WorksheetObjectsImpl } from '../objects';
+import { attachFloatingObjectHandle } from '../objects-receipts';
 import { FloatingObjectHandleImpl } from './floating-object-handle-impl';
 
 export class DrawingHandleImpl extends FloatingObjectHandleImpl implements DrawingHandle {
@@ -40,9 +44,13 @@ export class DrawingHandleImpl extends FloatingObjectHandleImpl implements Drawi
     return this.objectsImpl.findStrokesAtPoint(this.id, x, y, tolerance);
   }
 
-  async duplicate(_offsetX?: number, _offsetY?: number): Promise<DrawingHandle> {
+  async duplicate(
+    _offsetX?: number,
+    _offsetY?: number,
+  ): Promise<FloatingObjectHandleMutationReceipt<DrawingHandle>> {
     const receipt = await this.objectsImpl.duplicate(this.id);
-    return new DrawingHandleImpl(receipt.id, this.objectsImpl, this.boundsReader);
+    const handle = new DrawingHandleImpl(receipt.id, this.objectsImpl, this.boundsReader);
+    return attachFloatingObjectHandle(receipt, handle);
   }
 
   async getData(): Promise<DrawingObject> {

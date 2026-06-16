@@ -13,6 +13,7 @@ import type {
   ObjectBounds,
 } from '@mog-sdk/contracts/objects/object-bounds-reader';
 import type {
+  FloatingObjectHandleMutationReceipt,
   FloatingObjectRemoveReceipt,
   FloatingObjectMutationReceipt,
 } from '@mog-sdk/contracts/api';
@@ -33,6 +34,7 @@ import type {
 
 import { KernelError } from '../../../errors';
 import type { WorksheetObjectsImpl } from '../objects';
+import { attachFloatingObjectHandle } from '../objects-receipts';
 
 /**
  * Runtime-checked type narrowing. The factory guarantees that when
@@ -92,9 +94,18 @@ export class FloatingObjectHandleImpl implements FloatingObjectHandle {
     return this.objectsImpl.remove(this.id);
   }
 
-  async duplicate(_offsetX?: number, _offsetY?: number): Promise<FloatingObjectHandle> {
+  async duplicate(
+    _offsetX?: number,
+    _offsetY?: number,
+  ): Promise<FloatingObjectHandleMutationReceipt<FloatingObjectHandle>> {
     const receipt = await this.objectsImpl.duplicate(this.id);
-    return new FloatingObjectHandleImpl(receipt.id, this.type, this.objectsImpl, this.boundsReader);
+    const handle = new FloatingObjectHandleImpl(
+      receipt.id,
+      this.type,
+      this.objectsImpl,
+      this.boundsReader,
+    );
+    return attachFloatingObjectHandle(receipt, handle);
   }
 
   // -- Reads --

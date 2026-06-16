@@ -1,9 +1,14 @@
+import type {
+  FloatingObjectHandleMutationReceipt,
+  FloatingObjectMutationReceipt,
+} from '@mog-sdk/contracts/api';
 import type { ConnectorHandle } from '@mog-sdk/contracts/api/worksheet/handles/index';
 import type { ConnectorObject } from '@mog-sdk/contracts/floating-objects';
 import type { IObjectBoundsReader } from '@mog-sdk/contracts/objects/object-bounds-reader';
 
 import { KernelError } from '../../../errors';
 import type { WorksheetObjectsImpl } from '../objects';
+import { attachFloatingObjectHandle } from '../objects-receipts';
 import { FloatingObjectHandleImpl } from './floating-object-handle-impl';
 
 export class ConnectorHandleImpl extends FloatingObjectHandleImpl implements ConnectorHandle {
@@ -15,13 +20,17 @@ export class ConnectorHandleImpl extends FloatingObjectHandleImpl implements Con
     super(id, 'connector', objectsImpl, boundsReader);
   }
 
-  async update(props: Record<string, unknown>): Promise<void> {
-    await this.objectsImpl.update(this.id, props);
+  async update(props: Record<string, unknown>): Promise<FloatingObjectMutationReceipt> {
+    return this.objectsImpl.update(this.id, props);
   }
 
-  async duplicate(_offsetX?: number, _offsetY?: number): Promise<ConnectorHandle> {
+  async duplicate(
+    _offsetX?: number,
+    _offsetY?: number,
+  ): Promise<FloatingObjectHandleMutationReceipt<ConnectorHandle>> {
     const receipt = await this.objectsImpl.duplicate(this.id);
-    return new ConnectorHandleImpl(receipt.id, this.objectsImpl, this.boundsReader);
+    const handle = new ConnectorHandleImpl(receipt.id, this.objectsImpl, this.boundsReader);
+    return attachFloatingObjectHandle(receipt, handle);
   }
 
   async getData(): Promise<ConnectorObject> {

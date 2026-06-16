@@ -30,6 +30,10 @@ import {
 } from '../../../bridges/compute/floating-object-mapper';
 import { invalidShapeConfig } from '../../../errors/api';
 import type { SpreadsheetObjectManager } from '../../../floating-objects';
+import {
+  withFloatingObjectMutationReceiptBase,
+  withFloatingObjectRemoveReceiptBase,
+} from '../objects-receipts';
 
 import type { CellFormat } from '@mog-sdk/contracts/core';
 import type { DocumentContext } from './shared';
@@ -81,6 +85,7 @@ function shapeObjectToShape(shape: ShapeObject, sheetId: SheetId): Shape {
 function buildMutationReceipt(
   change: FloatingObjectChange,
   action: 'create' | 'update',
+  sheetId: SheetId,
 ): FloatingObjectMutationReceipt {
   const bounds: ObjectBounds = change.bounds
     ? {
@@ -92,15 +97,36 @@ function buildMutationReceipt(
       }
     : { x: 0, y: 0, width: 0, height: 0, rotation: 0 };
 
-  return {
-    domain: 'floatingObject',
-    action,
-    id: change.objectId,
-    object: change.data
-      ? toFloatingObject(change.data as WireFloatingObject)
-      : createMinimalFloatingObject('shape', change.objectId, ''),
-    bounds,
-  };
+  return withFloatingObjectMutationReceiptBase(
+    {
+      domain: 'floatingObject',
+      action,
+      id: change.objectId,
+      object: change.data
+        ? toFloatingObject(change.data as WireFloatingObject)
+        : createMinimalFloatingObject('shape', change.objectId, sheetId),
+      bounds,
+    },
+    sheetId,
+  );
+}
+
+function buildFallbackMutationReceipt(
+  sheetId: SheetId,
+  action: 'create' | 'update',
+  id: string,
+  bounds: ObjectBounds,
+): FloatingObjectMutationReceipt {
+  return withFloatingObjectMutationReceiptBase(
+    {
+      domain: 'floatingObject',
+      action,
+      id,
+      object: createMinimalFloatingObject('shape', id, sheetId),
+      bounds,
+    },
+    sheetId,
+  );
 }
 
 // =============================================================================
@@ -146,23 +172,22 @@ export async function createShape(
 
   const change = result.floatingObjectChanges?.[0];
   if (change?.data) {
-    return buildMutationReceipt(change, 'create');
+    return buildMutationReceipt(change, 'create', sheetId);
   }
 
   // Fallback: construct minimal receipt from config
-  return {
-    domain: 'floatingObject',
-    action: 'create',
-    id: '',
-    object: createMinimalFloatingObject('shape', '', sheetId),
-    bounds: {
+  return buildFallbackMutationReceipt(
+    sheetId,
+    'create',
+    '',
+    {
       x: 0,
       y: 0,
       width: config.width ?? 200,
       height: config.height ?? 200,
       rotation: config.rotation ?? 0,
     },
-  };
+  );
 }
 
 /**
@@ -294,16 +319,16 @@ export async function updateShape(
 
   const change = lastResult?.floatingObjectChanges?.[0];
   if (change?.data) {
-    return buildMutationReceipt(change, 'update');
+    return buildMutationReceipt(change, 'update', sheetId);
   }
 
-  return {
-    domain: 'floatingObject',
-    action: 'update',
-    id: shapeId,
-    object: createMinimalFloatingObject('shape', shapeId, sheetId),
-    bounds: { x: 0, y: 0, width: 0, height: 0, rotation: 0 },
-  };
+  return buildFallbackMutationReceipt(sheetId, 'update', shapeId, {
+    x: 0,
+    y: 0,
+    width: 0,
+    height: 0,
+    rotation: 0,
+  });
 }
 
 /**
@@ -317,7 +342,10 @@ export async function deleteShape(
   shapeId: string,
 ): Promise<FloatingObjectRemoveReceipt> {
   await ctx.computeBridge.deleteFloatingObject(sheetId, shapeId);
-  return { domain: 'floatingObject', action: 'remove', id: shapeId };
+  return withFloatingObjectRemoveReceiptBase(
+    { domain: 'floatingObject', action: 'remove', id: shapeId },
+    sheetId,
+  );
 }
 
 /**
@@ -341,16 +369,16 @@ export async function moveShape(
 
   const change = result.floatingObjectChanges?.[0];
   if (change?.data) {
-    return buildMutationReceipt(change, 'update');
+    return buildMutationReceipt(change, 'update', sheetId);
   }
 
-  return {
-    domain: 'floatingObject',
-    action: 'update',
-    id: shapeId,
-    object: createMinimalFloatingObject('shape', shapeId, sheetId),
-    bounds: { x: 0, y: 0, width: 0, height: 0, rotation: 0 },
-  };
+  return buildFallbackMutationReceipt(sheetId, 'update', shapeId, {
+    x: 0,
+    y: 0,
+    width: 0,
+    height: 0,
+    rotation: 0,
+  });
 }
 
 /**
@@ -373,16 +401,16 @@ export async function resizeShape(
 
   const change = result.floatingObjectChanges?.[0];
   if (change?.data) {
-    return buildMutationReceipt(change, 'update');
+    return buildMutationReceipt(change, 'update', sheetId);
   }
 
-  return {
-    domain: 'floatingObject',
-    action: 'update',
-    id: shapeId,
-    object: createMinimalFloatingObject('shape', shapeId, sheetId),
-    bounds: { x: 0, y: 0, width, height, rotation: 0 },
-  };
+  return buildFallbackMutationReceipt(sheetId, 'update', shapeId, {
+    x: 0,
+    y: 0,
+    width,
+    height,
+    rotation: 0,
+  });
 }
 
 /**
@@ -431,16 +459,16 @@ export async function duplicateShape(
   );
   const change = result.floatingObjectChanges?.[0];
   if (change?.data) {
-    return buildMutationReceipt(change, 'create');
+    return buildMutationReceipt(change, 'create', sheetId);
   }
 
-  return {
-    domain: 'floatingObject',
-    action: 'create',
-    id: '',
-    object: createMinimalFloatingObject('shape', '', sheetId),
-    bounds: { x: 0, y: 0, width: 0, height: 0, rotation: 0 },
-  };
+  return buildFallbackMutationReceipt(sheetId, 'create', '', {
+    x: 0,
+    y: 0,
+    width: 0,
+    height: 0,
+    rotation: 0,
+  });
 }
 
 /**

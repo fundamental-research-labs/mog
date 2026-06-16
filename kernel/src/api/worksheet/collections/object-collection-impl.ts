@@ -7,6 +7,8 @@ import type {
   FloatingObjectHandle,
   FloatingObjectInfo,
   FloatingObjectType,
+  FloatingObjectCollectionRemoveReceipt,
+  FloatingObjectMutationReceipt,
   WorksheetObjectCollection,
 } from '@mog-sdk/contracts/api';
 import type { IObjectBoundsReader } from '@mog-sdk/contracts/objects/object-bounds-reader';
@@ -16,6 +18,10 @@ import type { TextWarpPreset } from '@mog-sdk/contracts/text-effects';
 
 import type { WorksheetObjectsImpl } from '../objects';
 import { createFloatingObjectHandle } from '../handles/floating-object-handle-factory';
+import {
+  floatingObjectRemoveNoOpReceipt,
+  withFloatingObjectCollectionRemovePayload,
+} from '../objects-receipts';
 
 export class WorksheetObjectCollectionImpl implements WorksheetObjectCollection {
   constructor(
@@ -48,11 +54,11 @@ export class WorksheetObjectCollectionImpl implements WorksheetObjectCollection 
 
   // ── Single-ID convenience methods ──────────────────────────
 
-  async remove(id: string): Promise<boolean> {
+  async remove(id: string): Promise<FloatingObjectCollectionRemoveReceipt> {
     const handle = await this.get(id);
-    if (!handle) return false;
-    await handle.delete();
-    return true;
+    if (!handle) return floatingObjectRemoveNoOpReceipt(this.objectsImpl.sheetIdForReceipts(), id);
+    const receipt = await handle.delete();
+    return withFloatingObjectCollectionRemovePayload(receipt, true);
   }
 
   async bringToFront(id: string): Promise<void> {
@@ -75,7 +81,10 @@ export class WorksheetObjectCollectionImpl implements WorksheetObjectCollection 
     if (handle) await handle.sendBackward();
   }
 
-  async update(objectId: string, updates: Record<string, unknown>): Promise<void> {
+  async update(
+    objectId: string,
+    updates: Record<string, unknown>,
+  ): Promise<FloatingObjectMutationReceipt> {
     return this.objectsImpl.update(objectId, updates);
   }
 

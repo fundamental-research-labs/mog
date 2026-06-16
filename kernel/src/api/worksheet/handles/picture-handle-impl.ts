@@ -1,10 +1,15 @@
-import type { PictureConfig } from '@mog-sdk/contracts/api';
+import type {
+  FloatingObjectHandleMutationReceipt,
+  FloatingObjectMutationReceipt,
+  PictureConfig,
+} from '@mog-sdk/contracts/api';
 import type { PictureHandle } from '@mog-sdk/contracts/api/worksheet/handles/index';
 import type { PictureObject } from '@mog-sdk/contracts/floating-objects';
 import type { IObjectBoundsReader } from '@mog-sdk/contracts/objects/object-bounds-reader';
 
 import { KernelError } from '../../../errors';
 import type { WorksheetObjectsImpl } from '../objects';
+import { attachFloatingObjectHandle } from '../objects-receipts';
 import { FloatingObjectHandleImpl } from './floating-object-handle-impl';
 
 export class PictureHandleImpl extends FloatingObjectHandleImpl implements PictureHandle {
@@ -16,13 +21,17 @@ export class PictureHandleImpl extends FloatingObjectHandleImpl implements Pictu
     super(id, 'picture', objectsImpl, boundsReader);
   }
 
-  async update(props: Partial<PictureConfig>): Promise<void> {
-    await this.objectsImpl.updatePicture(this.id, props);
+  async update(props: Partial<PictureConfig>): Promise<FloatingObjectMutationReceipt> {
+    return this.objectsImpl.updatePicture(this.id, props);
   }
 
-  async duplicate(_offsetX?: number, _offsetY?: number): Promise<PictureHandle> {
+  async duplicate(
+    _offsetX?: number,
+    _offsetY?: number,
+  ): Promise<FloatingObjectHandleMutationReceipt<PictureHandle>> {
     const receipt = await this.objectsImpl.duplicate(this.id);
-    return new PictureHandleImpl(receipt.id, this.objectsImpl, this.boundsReader);
+    const handle = new PictureHandleImpl(receipt.id, this.objectsImpl, this.boundsReader);
+    return attachFloatingObjectHandle(receipt, handle);
   }
 
   async getData(): Promise<PictureObject> {

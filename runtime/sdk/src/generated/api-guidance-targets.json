@@ -8213,8 +8213,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "add(position: Partial<ObjectPosition>, options?: CreateDrawingOptions): Promise<DrawingHandle>;",
-      "typeText": "Promise<DrawingHandle>",
+      "signature": "add(\n    position: Partial<ObjectPosition>,\n    options?: CreateDrawingOptions,\n  ): Promise<FloatingObjectHandleMutationReceipt<DrawingHandle>>;",
+      "typeText": "Promise<FloatingObjectHandleMutationReceipt<DrawingHandle>>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/collections/drawing-collection.ts"
@@ -8308,8 +8308,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "add(config: EquationConfig): Promise<EquationHandle>;",
-      "typeText": "Promise<EquationHandle>",
+      "signature": "add(config: EquationConfig): Promise<FloatingObjectHandleMutationReceipt<EquationHandle>>;",
+      "typeText": "Promise<FloatingObjectHandleMutationReceipt<EquationHandle>>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/collections/equation-collection.ts"
@@ -11949,8 +11949,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "remove(id: string): Promise<boolean>;",
-      "typeText": "Promise<boolean>",
+      "signature": "remove(id: string): Promise<FloatingObjectCollectionRemoveReceipt>;",
+      "typeText": "Promise<FloatingObjectCollectionRemoveReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/collections/object-collection.ts"
@@ -12044,8 +12044,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "update(objectId: string, updates: Record<string, unknown>): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "update(objectId: string, updates: Record<string, unknown>): Promise<FloatingObjectMutationReceipt>;",
+      "typeText": "Promise<FloatingObjectMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/collections/object-collection.ts"
@@ -12387,8 +12387,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "add(config: PictureConfig): Promise<PictureHandle>;",
-      "typeText": "Promise<PictureHandle>",
+      "signature": "add(config: PictureConfig): Promise<FloatingObjectHandleMutationReceipt<PictureHandle>>;",
+      "typeText": "Promise<FloatingObjectHandleMutationReceipt<PictureHandle>>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/collections/picture-collection.ts"
@@ -14906,8 +14906,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "add(config: ShapeConfig): Promise<ShapeHandle>;",
-      "typeText": "Promise<ShapeHandle>",
+      "signature": "add(config: ShapeConfig): Promise<FloatingObjectHandleMutationReceipt<ShapeHandle>>;",
+      "typeText": "Promise<FloatingObjectHandleMutationReceipt<ShapeHandle>>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/collections/shape-collection.ts"
@@ -17379,8 +17379,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "add(config: TextBoxConfig): Promise<TextBoxHandle>;",
-      "typeText": "Promise<TextBoxHandle>",
+      "signature": "add(config: TextBoxConfig): Promise<FloatingObjectHandleMutationReceipt<TextBoxHandle>>;",
+      "typeText": "Promise<FloatingObjectHandleMutationReceipt<TextBoxHandle>>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/collections/textbox-collection.ts"
@@ -17456,8 +17456,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "add(config: CreateTextEffectInput): Promise<TextEffectHandle>;",
-      "typeText": "Promise<TextEffectHandle>",
+      "signature": "add(\n    config: CreateTextEffectInput,\n  ): Promise<FloatingObjectHandleMutationReceipt<TextEffectHandle>>;",
+      "typeText": "Promise<FloatingObjectHandleMutationReceipt<TextEffectHandle>>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/collections/text-effects-collection.ts"
@@ -26630,8 +26630,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "add(position: Partial<ObjectPosition>, options?: CreateDrawingOptions): Promise<DrawingHandle>;",
-      "typeText": "Promise<DrawingHandle>",
+      "signature": "add(\n    position: Partial<ObjectPosition>,\n    options?: CreateDrawingOptions,\n  ): Promise<FloatingObjectHandleMutationReceipt<DrawingHandle>>;",
+      "typeText": "Promise<FloatingObjectHandleMutationReceipt<DrawingHandle>>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/collections/drawing-collection.ts"
@@ -26725,8 +26725,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "add(config: EquationConfig): Promise<EquationHandle>;",
-      "typeText": "Promise<EquationHandle>",
+      "signature": "add(config: EquationConfig): Promise<FloatingObjectHandleMutationReceipt<EquationHandle>>;",
+      "typeText": "Promise<FloatingObjectHandleMutationReceipt<EquationHandle>>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/collections/equation-collection.ts"
@@ -30366,8 +30366,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "remove(id: string): Promise<boolean>;",
-      "typeText": "Promise<boolean>",
+      "signature": "remove(id: string): Promise<FloatingObjectCollectionRemoveReceipt>;",
+      "typeText": "Promise<FloatingObjectCollectionRemoveReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/collections/object-collection.ts"
@@ -30461,8 +30461,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "update(objectId: string, updates: Record<string, unknown>): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "update(objectId: string, updates: Record<string, unknown>): Promise<FloatingObjectMutationReceipt>;",
+      "typeText": "Promise<FloatingObjectMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/collections/object-collection.ts"
@@ -30804,8 +30804,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "add(config: PictureConfig): Promise<PictureHandle>;",
-      "typeText": "Promise<PictureHandle>",
+      "signature": "add(config: PictureConfig): Promise<FloatingObjectHandleMutationReceipt<PictureHandle>>;",
+      "typeText": "Promise<FloatingObjectHandleMutationReceipt<PictureHandle>>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/collections/picture-collection.ts"
@@ -33323,8 +33323,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "add(config: ShapeConfig): Promise<ShapeHandle>;",
-      "typeText": "Promise<ShapeHandle>",
+      "signature": "add(config: ShapeConfig): Promise<FloatingObjectHandleMutationReceipt<ShapeHandle>>;",
+      "typeText": "Promise<FloatingObjectHandleMutationReceipt<ShapeHandle>>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/collections/shape-collection.ts"
@@ -35796,8 +35796,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "add(config: TextBoxConfig): Promise<TextBoxHandle>;",
-      "typeText": "Promise<TextBoxHandle>",
+      "signature": "add(config: TextBoxConfig): Promise<FloatingObjectHandleMutationReceipt<TextBoxHandle>>;",
+      "typeText": "Promise<FloatingObjectHandleMutationReceipt<TextBoxHandle>>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/collections/textbox-collection.ts"
@@ -35873,8 +35873,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "add(config: CreateTextEffectInput): Promise<TextEffectHandle>;",
-      "typeText": "Promise<TextEffectHandle>",
+      "signature": "add(\n    config: CreateTextEffectInput,\n  ): Promise<FloatingObjectHandleMutationReceipt<TextEffectHandle>>;",
+      "typeText": "Promise<FloatingObjectHandleMutationReceipt<TextEffectHandle>>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/collections/text-effects-collection.ts"

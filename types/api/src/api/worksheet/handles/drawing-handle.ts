@@ -1,4 +1,5 @@
 import type { DrawingObject, InkStroke, StrokeId } from '@mog/types-objects/ink/types';
+import type { FloatingObjectHandleMutationReceipt } from '../../mutation-receipt';
 import type { StrokeTransformParams } from '../../types';
 import type { FloatingObjectHandle } from './types';
 
@@ -9,6 +10,9 @@ export interface DrawingHandle extends FloatingObjectHandle {
   moveStrokes(strokeIds: StrokeId[], dx: number, dy: number): Promise<void>;
   transformStrokes(strokeIds: StrokeId[], transform: StrokeTransformParams): Promise<void>;
   findStrokesAtPoint(x: number, y: number, tolerance?: number): Promise<StrokeId[]>;
-  duplicate(offsetX?: number, offsetY?: number): Promise<DrawingHandle>;
+  duplicate(
+    offsetX?: number,
+    offsetY?: number,
+  ): Promise<FloatingObjectHandleMutationReceipt<DrawingHandle>>;
   getData(): Promise<DrawingObject>;
 }

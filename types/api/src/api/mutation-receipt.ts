@@ -54,8 +54,16 @@ export type {
 // Floating Objects
 // =============================================================================
 
+export interface FloatingObjectReceiptBase extends OperationReceiptBase {
+  readonly kind:
+    | 'floatingObject.create'
+    | 'floatingObject.update'
+    | 'floatingObject.remove';
+  readonly sheetId: string;
+}
+
 /** Receipt for a floating object creation or update mutation. */
-export interface FloatingObjectMutationReceipt {
+export interface FloatingObjectMutationReceipt extends FloatingObjectReceiptBase {
   readonly domain: 'floatingObject';
   readonly action: 'create' | 'update';
   readonly id: string;
@@ -64,13 +72,18 @@ export interface FloatingObjectMutationReceipt {
 }
 
 /** Receipt for a floating object removal mutation. */
-export interface FloatingObjectRemoveReceipt {
+export interface FloatingObjectRemoveReceipt extends FloatingObjectReceiptBase {
   readonly domain: 'floatingObject';
   readonly action: 'remove';
   readonly id: string;
 }
 
 export type FloatingObjectReceipt = FloatingObjectMutationReceipt | FloatingObjectRemoveReceipt;
+export type FloatingObjectHandleMutationReceipt<THandle extends object> =
+  FloatingObjectMutationReceipt & THandle & { readonly handle: THandle };
+export type FloatingObjectCollectionRemoveReceipt = FloatingObjectRemoveReceipt & {
+  readonly removed: boolean;
+};
 
 /**
  * @deprecated Use `FloatingObjectRemoveReceipt` instead.

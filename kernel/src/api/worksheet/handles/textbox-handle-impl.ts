@@ -1,10 +1,15 @@
-import type { TextBoxConfig } from '@mog-sdk/contracts/api';
+import type {
+  FloatingObjectHandleMutationReceipt,
+  FloatingObjectMutationReceipt,
+  TextBoxConfig,
+} from '@mog-sdk/contracts/api';
 import type { TextBoxHandle } from '@mog-sdk/contracts/api/worksheet/handles/index';
 import type { TextBoxObject } from '@mog-sdk/contracts/floating-objects';
 import type { IObjectBoundsReader } from '@mog-sdk/contracts/objects/object-bounds-reader';
 
 import { KernelError } from '../../../errors';
 import type { WorksheetObjectsImpl } from '../objects';
+import { attachFloatingObjectHandle } from '../objects-receipts';
 import { FloatingObjectHandleImpl } from './floating-object-handle-impl';
 
 export class TextBoxHandleImpl extends FloatingObjectHandleImpl implements TextBoxHandle {
@@ -16,13 +21,17 @@ export class TextBoxHandleImpl extends FloatingObjectHandleImpl implements TextB
     super(id, 'textbox', objectsImpl, boundsReader);
   }
 
-  async update(props: Partial<TextBoxConfig>): Promise<void> {
-    await this.objectsImpl.update(this.id, props as Record<string, unknown>);
+  async update(props: Partial<TextBoxConfig>): Promise<FloatingObjectMutationReceipt> {
+    return this.objectsImpl.update(this.id, props as Record<string, unknown>);
   }
 
-  async duplicate(_offsetX?: number, _offsetY?: number): Promise<TextBoxHandle> {
+  async duplicate(
+    _offsetX?: number,
+    _offsetY?: number,
+  ): Promise<FloatingObjectHandleMutationReceipt<TextBoxHandle>> {
     const receipt = await this.objectsImpl.duplicate(this.id);
-    return new TextBoxHandleImpl(receipt.id, this.objectsImpl, this.boundsReader);
+    const handle = new TextBoxHandleImpl(receipt.id, this.objectsImpl, this.boundsReader);
+    return attachFloatingObjectHandle(receipt, handle);
   }
 
   async getData(): Promise<TextBoxObject> {

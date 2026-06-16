@@ -1,7 +1,13 @@
-import type { ShapeConfig, ShapeHandle, WorksheetShapeCollection } from '@mog-sdk/contracts/api';
+import type {
+  FloatingObjectHandleMutationReceipt,
+  ShapeConfig,
+  ShapeHandle,
+  WorksheetShapeCollection,
+} from '@mog-sdk/contracts/api';
 import type { IObjectBoundsReader } from '@mog-sdk/contracts/objects/object-bounds-reader';
 
 import type { WorksheetObjectsImpl } from '../objects';
+import { attachFloatingObjectHandle } from '../objects-receipts';
 import { ShapeHandleImpl } from '../handles/shape-handle-impl';
 
 export class WorksheetShapeCollectionImpl implements WorksheetShapeCollection {
@@ -23,9 +29,10 @@ export class WorksheetShapeCollectionImpl implements WorksheetShapeCollection {
     );
   }
 
-  async add(config: ShapeConfig): Promise<ShapeHandle> {
+  async add(config: ShapeConfig): Promise<FloatingObjectHandleMutationReceipt<ShapeHandle>> {
     const receipt = await this.objectsImpl.addShape(config);
-    return new ShapeHandleImpl(receipt.id, config.type, this.objectsImpl, this.boundsReader);
+    const handle = new ShapeHandleImpl(receipt.id, config.type, this.objectsImpl, this.boundsReader);
+    return attachFloatingObjectHandle(receipt, handle);
   }
 
   async getItemAt(index: number): Promise<ShapeHandle | null> {

@@ -384,6 +384,38 @@ describe('data analysis actions', () => {
     );
   });
 
+  it('reports partial Data Table static write receipts', async () => {
+    const writeDataTableValues = jest.fn().mockResolvedValue(
+      dataTableWriteReceipt(2, {
+        status: 'partial',
+        materialized: true,
+        worksheetChanged: true,
+        cellsWritten: 2,
+        diagnostics: [
+          {
+            severity: 'error',
+            code: 'DATA_TABLE_STATIC_WRITE_CELL_FAILED',
+            message: 'Only part of the static Data Table range was written.',
+          },
+        ],
+      }),
+    );
+    const deps = createDeps({ writeDataTableValues });
+
+    await EXECUTE_DATA_TABLE(deps);
+    const state = deps.uiStore.getState() as {
+      setDataTableResult: jest.Mock;
+    };
+
+    expect(state.setDataTableResult).toHaveBeenCalledWith(
+      expect.objectContaining({
+        cellCount: 0,
+        cancelled: false,
+        errorMessage: 'Only part of the static Data Table range was written.',
+      }),
+    );
+  });
+
   it('reports validation errors without calling the bridge', async () => {
     const writeDataTableValues = jest.fn();
     const deps = createDeps({

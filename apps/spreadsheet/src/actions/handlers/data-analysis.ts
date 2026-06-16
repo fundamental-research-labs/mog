@@ -8,6 +8,7 @@
 import type { ActionHandler, ActionResult, AsyncActionHandler } from '@mog-sdk/contracts/actions';
 import type { CellValue, CellValuePrimitive, ErrorVariant } from '@mog-sdk/contracts/core';
 import { sheetId } from '@mog-sdk/contracts/core';
+import type { OperationDiagnostic } from '@mog-sdk/contracts/api';
 import type { DataTableWriteStaticValuesReceipt } from '@mog-sdk/contracts/what-if';
 import { parseA1, toA1 } from '@mog/spreadsheet-utils/a1';
 import { errorDisplayString, isCellError } from '@mog/spreadsheet-utils/errors';
@@ -732,16 +733,45 @@ export const CLOSE_DATA_TABLE_DIALOG: ActionHandler = (deps): ActionResult => {
   return { handled: true };
 };
 
+const DATA_TABLE_LIFECYCLE = 'staticValues' as const;
+
+function diagnosticMessage(diagnostics: readonly OperationDiagnostic[]): string | null {
+  const diagnostic = diagnostics.find((item) => item.severity === 'error') ?? diagnostics[0];
+  return diagnostic?.message ?? null;
+}
+
 function dataTableWriteError(receipt: DataTableWriteStaticValuesReceipt): string {
-  const message =
-    receipt.diagnostics.find((diagnostic) => diagnostic.severity === 'error')?.message ??
-    receipt.diagnostics[0]?.message ??
-    `Data Table static write did not apply: ${receipt.status}.`;
-  return message;
+  return (
+    diagnosticMessage(receipt.diagnostics) ??
+    `Data Table static value write did not apply: ${receipt.status}.`
+  );
+}
+
+function assertStaticDataTableReceiptApplied(receipt: DataTableWriteStaticValuesReceipt): void {
+  if (receipt.kind !== 'dataTable.writeStaticValues' || receipt.lifecycle !== DATA_TABLE_LIFECYCLE) {
+    throw new Error(
+      `Data Table action expected a static values receipt but received ${receipt.kind}.`,
+    );
+  }
+
+  const diagnosticError = diagnosticMessage(
+    receipt.diagnostics.filter((diagnostic) => diagnostic.severity === 'error'),
+  );
+  if (diagnosticError) throw new Error(diagnosticError);
+  if (receipt.status === 'applied' || receipt.status === 'noOp') return;
+
+  if (receipt.status === 'partial') {
+    throw new Error(
+      diagnosticMessage(receipt.diagnostics) ??
+        'Data Table static value write only partially applied.',
+    );
+  }
+
+  throw new Error(dataTableWriteError(receipt));
 }
 
 /**
- * Execute Data Table creation through the production worksheet API.
+ * Execute a static-values Data Table write through the production worksheet API.
  */
 export const EXECUTE_DATA_TABLE: AsyncActionHandler = async (deps): Promise<ActionResult> => {
   const state = getUIStore(deps).getState();
@@ -863,9 +893,7 @@ export const EXECUTE_DATA_TABLE: AsyncActionHandler = async (deps): Promise<Acti
       throw new Error('At least one input cell is required.');
     }
 
-    if (receipt.status !== 'applied' && receipt.status !== 'noOp') {
-      throw new Error(dataTableWriteError(receipt));
-    }
+    assertStaticDataTableReceiptApplied(receipt);
 
     state.setDataTableResult({
       cellCount: receipt.cellsWritten,

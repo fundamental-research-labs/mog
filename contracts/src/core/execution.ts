@@ -15,6 +15,23 @@
 export type ExecutionStatus = 'success' | 'error' | 'timeout' | 'cancelled';
 
 /**
+ * Mutation policy for code execution.
+ * - rollbackOnError: failed executions restore the pre-execution workbook state.
+ * - allowPartial: failed executions may leave earlier mutations committed.
+ */
+export type ExecutionMutationPolicy = 'rollbackOnError' | 'allowPartial';
+
+/**
+ * Workbook mutation outcome for a code execution.
+ */
+export type ExecutionMutationStatus =
+  | 'none'
+  | 'committed'
+  | 'rolledBack'
+  | 'partial'
+  | 'unknown';
+
+/**
  * Type of cell change - direct (by code) or indirect (formula recalc).
  */
 export type ChangeType = 'direct' | 'indirect';
@@ -143,6 +160,10 @@ export interface CodeExecutionResult {
   dirtyCells: DirtyCell[];
   /** Pre-formatted LLM-readable summary of cell changes */
   formattedSummary?: string;
+  /** Explicit workbook mutation outcome for this execution. */
+  mutationStatus: ExecutionMutationStatus;
+  /** Error encountered while attempting rollback, if rollback failed. */
+  rollbackError?: string;
   /** Execution timing in milliseconds */
   timing: {
     /** Total execution time */
@@ -164,6 +185,8 @@ export interface CodeExecutionResult {
 export interface CodeExecutionOptions {
   /** Timeout in milliseconds (default: 30000) */
   timeout?: number;
+  /** Workbook mutation policy (default: rollbackOnError) */
+  mutationPolicy?: ExecutionMutationPolicy;
   /** Global store object persisted between executions */
   store?: Record<string, unknown>;
   /** Whether to track indirect changes from formula recalc (default: true) */
@@ -176,3 +199,4 @@ export interface CodeExecutionOptions {
 
 export const DEFAULT_EXECUTION_TIMEOUT = 30000; // 30 seconds
 export const API_CALL_TIMEOUT = 10000; // 10 seconds per API call
+export const DEFAULT_EXECUTION_MUTATION_POLICY: ExecutionMutationPolicy = 'rollbackOnError';

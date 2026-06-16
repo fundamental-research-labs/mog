@@ -1121,6 +1121,7 @@ export class WorkbookImpl implements WorkbookInternal {
     const executor = this._getExecutor();
     const result = await executor.execute(code, {
       timeout: options?.timeout,
+      mutationPolicy: options?.mutationPolicy ?? 'rollbackOnError',
     });
 
     return {
@@ -1128,6 +1129,14 @@ export class WorkbookImpl implements WorkbookInternal {
       output: result.logs?.join('\n'),
       error: result.error ?? undefined,
       diagnostics: result.diagnostics,
+      mutationStatus: result.mutationStatus ?? 'unknown',
+      changeCount: result.changeCount ?? 0,
+      directCount: result.directCount ?? 0,
+      indirectCount: result.indirectCount ?? 0,
+      editRanges: result.editRanges ?? [],
+      dirtyCells: result.dirtyCells ?? [],
+      formattedSummary: result.formattedSummary,
+      rollbackError: result.rollbackError,
       duration: result.timing?.total,
     };
   }

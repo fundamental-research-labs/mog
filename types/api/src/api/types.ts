@@ -7,7 +7,12 @@
  */
 import type { FormulaA1 } from '@mog/types-core/formula-string';
 import type { FunctionArgument } from '@mog/types-core/function-registry';
-import type { CodeExecutionDiagnostic } from '@mog/types-commands/execution';
+import type {
+  CodeExecutionDiagnostic,
+  DirtyCell,
+  ExecutionMutationPolicy,
+  ExecutionMutationStatus,
+} from '@mog/types-commands/execution';
 import type {
   CellBorders,
   CellFormat,
@@ -1391,6 +1396,8 @@ export interface CheckpointInfo {
 export interface ExecuteOptions {
   /** Maximum execution time in milliseconds */
   timeout?: number;
+  /** Workbook mutation policy (default: rollbackOnError) */
+  mutationPolicy?: ExecutionMutationPolicy;
   /** Whether to run in a sandboxed environment */
   sandbox?: boolean;
 }
@@ -1405,6 +1412,22 @@ export interface CodeResult {
   error?: string;
   /** Structured diagnostics produced by the executor */
   diagnostics?: readonly CodeExecutionDiagnostic[];
+  /** Explicit workbook mutation outcome for this execution */
+  mutationStatus: ExecutionMutationStatus;
+  /** Total number of cells changed or attempted */
+  changeCount: number;
+  /** Number of cells directly modified by code */
+  directCount: number;
+  /** Number of cells indirectly changed by recalculation */
+  indirectCount: number;
+  /** Ranges that were edited or attempted */
+  editRanges: string[];
+  /** Detailed list of modified or attempted cells */
+  dirtyCells: DirtyCell[];
+  /** Pre-formatted LLM-readable summary of cell changes */
+  formattedSummary?: string;
+  /** Error encountered while attempting rollback, if rollback failed */
+  rollbackError?: string;
   /** Execution duration in milliseconds */
   duration?: number;
 }

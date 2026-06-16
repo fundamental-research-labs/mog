@@ -49,6 +49,7 @@ const spec = apiSpec;
 export interface OverviewResult {
   workbook: { methods: string[]; subApis: string[] };
   worksheet: { methods: string[]; subApis: string[] };
+  utilities: { namespaces: string[]; methods: string[] };
 }
 
 export interface MethodSummary {
@@ -108,6 +109,54 @@ for (const root of ['wb', 'ws'] as const) {
 const rootInterfaces: Record<string, string> = {
   wb: 'Workbook',
   ws: 'Worksheet',
+};
+
+const A1_UTILITY_METHODS: Record<string, ApiSpecFunctionEntry> = {
+  address: {
+    signature: 'address(row: number, col: number): string',
+    docstring: 'Format zero-based Mog row/column coordinates as an A1 cell address.',
+    usedTypes: [],
+  },
+  range: {
+    signature: 'range(row1: number, col1: number, row2: number, col2: number): string',
+    docstring: 'Format two zero-based Mog coordinate pairs as an A1 range address.',
+    usedTypes: [],
+  },
+  column: {
+    signature: 'column(index: number): string',
+    docstring: 'Format a zero-based Mog column index as a spreadsheet column name.',
+    usedTypes: [],
+  },
+  columnIndex: {
+    signature: 'columnIndex(name: string): number',
+    docstring: 'Parse a spreadsheet column name into a zero-based Mog column index.',
+    usedTypes: [],
+  },
+  offset: {
+    signature: 'offset(address: string, dr: number, dc: number): string',
+    docstring: 'Offset an A1 cell address by row and column deltas.',
+    usedTypes: [],
+  },
+  parse: {
+    signature: 'parse(address: string): { row: number; col: number; sheetName?: string } | null',
+    docstring: 'Parse an A1 cell address into zero-based Mog row/column coordinates.',
+    usedTypes: [],
+  },
+  rangeAddress: {
+    signature: 'rangeAddress(row1: number, col1: number, row2: number, col2: number): string',
+    docstring: 'Descriptive alias for a1.range().',
+    usedTypes: [],
+  },
+  columnName: {
+    signature: 'columnName(index: number): string',
+    docstring: 'Descriptive alias for a1.column().',
+    usedTypes: [],
+  },
+  parseAddress: {
+    signature: 'parseAddress(address: string): { row: number; col: number; sheetName?: string } | null',
+    docstring: 'Descriptive alias for a1.parse().',
+    usedTypes: [],
+  },
 };
 
 /** Built-in type names to skip when extracting type references from definitions. */
@@ -179,6 +228,52 @@ function buildMethodSummaries(ifaceName: string, excludeAccessors?: Set<string>)
     }));
 }
 
+function compatibilityReferencesForPath(path: string): ApiCompatibilityReference[] {
+  return (apiCompatibility.byCanonicalPath[path] ?? []).map((entry) => ({
+    id: entry.id,
+    observedPath: entry.observedPath,
+    canonicalPath: entry.canonicalPath,
+    status: entry.status,
+    appliesTo: entry.appliesTo,
+  }));
+}
+
+function buildA1MethodSummaries(): MethodSummary[] {
+  return Object.entries(A1_UTILITY_METHODS).map(([name, fn]) => ({
+    name,
+    signature: fn.signature,
+    docstring: fn.docstring,
+    compatibility: compatibilityReferencesForPath(`a1.${name}`),
+  }));
+}
+
+function describeA1(parts: string[]): InterfaceResult | MethodResult | null {
+  if (parts.length === 1) {
+    return {
+      name: 'A1AddressHelpers',
+      path: 'a1',
+      docstring: 'Stateless helpers for generated A1 addresses and column names.',
+      methods: buildA1MethodSummaries(),
+    };
+  }
+
+  if (parts.length !== 2) return null;
+
+  const methodName = parts[1];
+  const fn = A1_UTILITY_METHODS[methodName];
+  if (!fn) return null;
+
+  const fullPath = `a1.${methodName}`;
+  return {
+    name: methodName,
+    path: fullPath,
+    signature: fn.signature,
+    docstring: fn.docstring,
+    compatibility: compatibilityReferencesForPath(fullPath),
+    types: {},
+  };
+}
+
 function resolveType(name: string): TypeResult | null {
   // Check spec.types first
   const t = spec.types[name as keyof typeof spec.types] as
@@ -233,6 +328,10 @@ function describe(path?: string): DescribeResult {
         methods: getMethodsExcludingAccessors('Worksheet', 'ws'),
         subApis: Object.keys(getSubApisForRoot('ws')),
       },
+      utilities: {
+        namespaces: ['a1'],
+        methods: Object.keys(A1_UTILITY_METHODS).map((name) => `a1.${name}`),
+      },
     };
   }
 
@@ -243,8 +342,9 @@ function describe(path?: string): DescribeResult {
   }
 
   const parts = path.split('.');
-  const root = parts[0]; // 'wb' or 'ws'
+  const root = parts[0]; // 'wb', 'ws', or utility root
 
+  if (root === 'a1') return describeA1(parts);
   if (root !== 'wb' && root !== 'ws') return null;
 
   const rootIfaceName = rootInterfaces[root];

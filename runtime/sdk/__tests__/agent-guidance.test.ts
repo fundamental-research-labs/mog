@@ -18,6 +18,19 @@ describe('SDK agent API guidance', () => {
     expect(a1.columnIndex('AA')).toBe(26);
     expect(a1.offset('Z10', 0, 1)).toBe('AA10');
     expect(a1.parse('B4')).toEqual({ row: 3, col: 1 });
+
+    expect(api.describe().utilities.namespaces).toContain('a1');
+    expect(api.describe().utilities.methods).toContain('a1.address');
+
+    const a1Description = api.describe('a1');
+    expect(a1Description && 'methods' in a1Description ? a1Description.methods : []).toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: 'address' })]),
+    );
+
+    const addressDescription = api.describe('a1.address');
+    expect(
+      addressDescription && 'signature' in addressDescription ? addressDescription.signature : '',
+    ).toContain('address(row: number, col: number)');
   });
 
   it('keeps the generated guidance artifact in sync with the typed catalog', () => {

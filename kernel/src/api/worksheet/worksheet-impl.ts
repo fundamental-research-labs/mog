@@ -1879,8 +1879,8 @@ export class WorksheetImpl implements Worksheet {
     return dataConfigToApiConfig(receipt.config, receipt.config.sourceSheetName);
   }
 
-  removePivotTable(name: string): Promise<void> {
-    return this.pivots.remove(name);
+  async removePivotTable(name: string): Promise<void> {
+    await this.pivots.remove(name);
   }
 
   listPivotTables(): Promise<PivotTableInfo[]> {

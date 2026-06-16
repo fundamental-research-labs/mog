@@ -12491,8 +12491,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "addCalculatedField(name: string, field: CalculatedField): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "addCalculatedField(name: string, field: CalculatedField): Promise<PivotAddCalculatedFieldReceipt>;",
+      "typeText": "Promise<PivotAddCalculatedFieldReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -12510,8 +12510,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "addField(\n    name: string,\n    fieldId: string,\n    area: PivotFieldArea,\n    options?: {\n      position?: number;\n      aggregateFunction?: AggregateFunction;\n      sortOrder?: SortOrder;\n      displayName?: string;\n      showValuesAs?: ShowValuesAsConfig;\n    },\n  ): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "addField(\n    name: string,\n    fieldId: string,\n    area: PivotFieldArea,\n    options?: {\n      position?: number;\n      aggregateFunction?: AggregateFunction;\n      sortOrder?: SortOrder;\n      displayName?: string;\n      showValuesAs?: ShowValuesAsConfig;\n    },\n  ): Promise<PivotAddFieldReceipt>;",
+      "typeText": "Promise<PivotAddFieldReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -12548,8 +12548,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "clear(): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "clear(): Promise<PivotClearReceipt>;",
+      "typeText": "Promise<PivotClearReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -12567,8 +12567,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "compute(name: string, forceRefresh?: boolean): Promise<PivotTableResult | null>;",
-      "typeText": "Promise<PivotTableResult|null>",
+      "signature": "compute(name: string, forceRefresh?: boolean): Promise<PivotComputeReceipt>;",
+      "typeText": "Promise<PivotComputeReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -13039,8 +13039,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "moveField(\n    name: string,\n    fieldId: string,\n    fromArea: PivotFieldArea,\n    toArea: PivotFieldArea,\n    toPosition: number,\n  ): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "moveField(\n    name: string,\n    fieldId: string,\n    fromArea: PivotFieldArea,\n    toArea: PivotFieldArea,\n    toPosition: number,\n  ): Promise<PivotMoveFieldReceipt>;",
+      "typeText": "Promise<PivotMoveFieldReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -13058,8 +13058,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "queryPivot(\n    pivotName: string,\n    filters?: Record<string, CellValue | CellValue[]>,\n  ): Promise<PivotQueryResult | null>;",
-      "typeText": "Promise<PivotQueryResult|null>",
+      "signature": "queryPivot(\n    pivotName: string,\n    filters?: Record<string, CellValue | CellValue[]>,\n  ): Promise<PivotQueryReceipt>;",
+      "typeText": "Promise<PivotQueryReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -13115,8 +13115,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "remove(name: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "remove(name: string): Promise<PivotRemoveReceipt>;",
+      "typeText": "Promise<PivotRemoveReceipt>",
       "compatibility": [
         {
           "id": "mog-api.pivot.root.removePivotTable.deprecated",
@@ -13142,8 +13142,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "removeCalculatedField(name: string, fieldId: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "removeCalculatedField(\n    name: string,\n    fieldId: string,\n  ): Promise<PivotRemoveCalculatedFieldReceipt>;",
+      "typeText": "Promise<PivotRemoveCalculatedFieldReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -13161,8 +13161,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "removeField(name: string, fieldId: string, area: PivotFieldArea): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "removeField(name: string, fieldId: string, area: PivotFieldArea): Promise<PivotRemoveFieldReceipt>;",
+      "typeText": "Promise<PivotRemoveFieldReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -13180,8 +13180,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "removeFilter(name: string, fieldId: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "removeFilter(name: string, fieldId: string): Promise<PivotRemoveFilterReceipt>;",
+      "typeText": "Promise<PivotRemoveFilterReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -13199,8 +13199,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "rename(name: string, newName: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "rename(name: string, newName: string): Promise<PivotRenameReceipt>;",
+      "typeText": "Promise<PivotRenameReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -13218,8 +13218,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "resetField(name: string, fieldId: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "resetField(name: string, fieldId: string): Promise<PivotResetFieldReceipt>;",
+      "typeText": "Promise<PivotResetFieldReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -13256,8 +13256,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setAllExpanded(name: string, expanded: boolean): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setAllExpanded(name: string, expanded: boolean): Promise<PivotSetAllExpandedReceipt>;",
+      "typeText": "Promise<PivotSetAllExpandedReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -13275,8 +13275,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setAllowMultipleFiltersPerField(name: string, allow: boolean): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setAllowMultipleFiltersPerField(\n    name: string,\n    allow: boolean,\n  ): Promise<PivotSetAllowMultipleFiltersPerFieldReceipt>;",
+      "typeText": "Promise<PivotSetAllowMultipleFiltersPerFieldReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -13294,8 +13294,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setAutoFormat(name: string, autoFormat: boolean): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setAutoFormat(name: string, autoFormat: boolean): Promise<PivotSetAutoFormatReceipt>;",
+      "typeText": "Promise<PivotSetAutoFormatReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -13313,8 +13313,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setDataSource(name: string, dataSource: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setDataSource(name: string, dataSource: string): Promise<PivotSetDataSourceReceipt>;",
+      "typeText": "Promise<PivotSetDataSourceReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -13332,8 +13332,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setEnableMultipleFilterItems(name: string, fieldId: string, enabled: boolean): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setEnableMultipleFilterItems(\n    name: string,\n    fieldId: string,\n    enabled: boolean,\n  ): Promise<PivotSetEnableMultipleFilterItemsReceipt>;",
+      "typeText": "Promise<PivotSetEnableMultipleFilterItemsReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -13351,8 +13351,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setFilter(name: string, fieldId: string, filter: Omit<PivotFilter, 'fieldId'>): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setFilter(\n    name: string,\n    fieldId: string,\n    filter: Omit<PivotFilter, 'fieldId'>,\n  ): Promise<PivotSetFilterReceipt>;",
+      "typeText": "Promise<PivotSetFilterReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -13370,8 +13370,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setItemVisibility(\n    name: string,\n    fieldId: string,\n    visibleItems: Record<string, boolean>,\n  ): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setItemVisibility(\n    name: string,\n    fieldId: string,\n    visibleItems: Record<string, boolean>,\n  ): Promise<PivotSetItemVisibilityReceipt>;",
+      "typeText": "Promise<PivotSetItemVisibilityReceipt>",
       "compatibility": [
         {
           "id": "mog-api.pivot.collection.setItemVisibility.alias",
@@ -13416,8 +13416,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setPivotItemVisibility(\n    name: string,\n    fieldId: string,\n    visibleItems: Record<string, boolean>,\n  ): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setPivotItemVisibility(\n    name: string,\n    fieldId: string,\n    visibleItems: Record<string, boolean>,\n  ): Promise<PivotSetPivotItemVisibilityReceipt>;",
+      "typeText": "Promise<PivotSetPivotItemVisibilityReceipt>",
       "compatibility": [
         {
           "id": "mog-api.pivot.collection.setItemVisibility.alias",
@@ -13443,8 +13443,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setPreserveFormatting(name: string, preserve: boolean): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setPreserveFormatting(\n    name: string,\n    preserve: boolean,\n  ): Promise<PivotSetPreserveFormattingReceipt>;",
+      "typeText": "Promise<PivotSetPreserveFormattingReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -30908,8 +30908,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "addCalculatedField(name: string, field: CalculatedField): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "addCalculatedField(name: string, field: CalculatedField): Promise<PivotAddCalculatedFieldReceipt>;",
+      "typeText": "Promise<PivotAddCalculatedFieldReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -30927,8 +30927,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "addField(\n    name: string,\n    fieldId: string,\n    area: PivotFieldArea,\n    options?: {\n      position?: number;\n      aggregateFunction?: AggregateFunction;\n      sortOrder?: SortOrder;\n      displayName?: string;\n      showValuesAs?: ShowValuesAsConfig;\n    },\n  ): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "addField(\n    name: string,\n    fieldId: string,\n    area: PivotFieldArea,\n    options?: {\n      position?: number;\n      aggregateFunction?: AggregateFunction;\n      sortOrder?: SortOrder;\n      displayName?: string;\n      showValuesAs?: ShowValuesAsConfig;\n    },\n  ): Promise<PivotAddFieldReceipt>;",
+      "typeText": "Promise<PivotAddFieldReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -30965,8 +30965,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "clear(): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "clear(): Promise<PivotClearReceipt>;",
+      "typeText": "Promise<PivotClearReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -30984,8 +30984,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "compute(name: string, forceRefresh?: boolean): Promise<PivotTableResult | null>;",
-      "typeText": "Promise<PivotTableResult|null>",
+      "signature": "compute(name: string, forceRefresh?: boolean): Promise<PivotComputeReceipt>;",
+      "typeText": "Promise<PivotComputeReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -31456,8 +31456,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "moveField(\n    name: string,\n    fieldId: string,\n    fromArea: PivotFieldArea,\n    toArea: PivotFieldArea,\n    toPosition: number,\n  ): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "moveField(\n    name: string,\n    fieldId: string,\n    fromArea: PivotFieldArea,\n    toArea: PivotFieldArea,\n    toPosition: number,\n  ): Promise<PivotMoveFieldReceipt>;",
+      "typeText": "Promise<PivotMoveFieldReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -31475,8 +31475,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "queryPivot(\n    pivotName: string,\n    filters?: Record<string, CellValue | CellValue[]>,\n  ): Promise<PivotQueryResult | null>;",
-      "typeText": "Promise<PivotQueryResult|null>",
+      "signature": "queryPivot(\n    pivotName: string,\n    filters?: Record<string, CellValue | CellValue[]>,\n  ): Promise<PivotQueryReceipt>;",
+      "typeText": "Promise<PivotQueryReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -31532,8 +31532,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "remove(name: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "remove(name: string): Promise<PivotRemoveReceipt>;",
+      "typeText": "Promise<PivotRemoveReceipt>",
       "compatibility": [
         {
           "id": "mog-api.pivot.root.removePivotTable.deprecated",
@@ -31559,8 +31559,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "removeCalculatedField(name: string, fieldId: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "removeCalculatedField(\n    name: string,\n    fieldId: string,\n  ): Promise<PivotRemoveCalculatedFieldReceipt>;",
+      "typeText": "Promise<PivotRemoveCalculatedFieldReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -31578,8 +31578,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "removeField(name: string, fieldId: string, area: PivotFieldArea): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "removeField(name: string, fieldId: string, area: PivotFieldArea): Promise<PivotRemoveFieldReceipt>;",
+      "typeText": "Promise<PivotRemoveFieldReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -31597,8 +31597,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "removeFilter(name: string, fieldId: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "removeFilter(name: string, fieldId: string): Promise<PivotRemoveFilterReceipt>;",
+      "typeText": "Promise<PivotRemoveFilterReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -31616,8 +31616,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "rename(name: string, newName: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "rename(name: string, newName: string): Promise<PivotRenameReceipt>;",
+      "typeText": "Promise<PivotRenameReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -31635,8 +31635,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "resetField(name: string, fieldId: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "resetField(name: string, fieldId: string): Promise<PivotResetFieldReceipt>;",
+      "typeText": "Promise<PivotResetFieldReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -31673,8 +31673,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setAllExpanded(name: string, expanded: boolean): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setAllExpanded(name: string, expanded: boolean): Promise<PivotSetAllExpandedReceipt>;",
+      "typeText": "Promise<PivotSetAllExpandedReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -31692,8 +31692,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setAllowMultipleFiltersPerField(name: string, allow: boolean): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setAllowMultipleFiltersPerField(\n    name: string,\n    allow: boolean,\n  ): Promise<PivotSetAllowMultipleFiltersPerFieldReceipt>;",
+      "typeText": "Promise<PivotSetAllowMultipleFiltersPerFieldReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -31711,8 +31711,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setAutoFormat(name: string, autoFormat: boolean): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setAutoFormat(name: string, autoFormat: boolean): Promise<PivotSetAutoFormatReceipt>;",
+      "typeText": "Promise<PivotSetAutoFormatReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -31730,8 +31730,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setDataSource(name: string, dataSource: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setDataSource(name: string, dataSource: string): Promise<PivotSetDataSourceReceipt>;",
+      "typeText": "Promise<PivotSetDataSourceReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -31749,8 +31749,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setEnableMultipleFilterItems(name: string, fieldId: string, enabled: boolean): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setEnableMultipleFilterItems(\n    name: string,\n    fieldId: string,\n    enabled: boolean,\n  ): Promise<PivotSetEnableMultipleFilterItemsReceipt>;",
+      "typeText": "Promise<PivotSetEnableMultipleFilterItemsReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -31768,8 +31768,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setFilter(name: string, fieldId: string, filter: Omit<PivotFilter, 'fieldId'>): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setFilter(\n    name: string,\n    fieldId: string,\n    filter: Omit<PivotFilter, 'fieldId'>,\n  ): Promise<PivotSetFilterReceipt>;",
+      "typeText": "Promise<PivotSetFilterReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -31787,8 +31787,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setItemVisibility(\n    name: string,\n    fieldId: string,\n    visibleItems: Record<string, boolean>,\n  ): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setItemVisibility(\n    name: string,\n    fieldId: string,\n    visibleItems: Record<string, boolean>,\n  ): Promise<PivotSetItemVisibilityReceipt>;",
+      "typeText": "Promise<PivotSetItemVisibilityReceipt>",
       "compatibility": [
         {
           "id": "mog-api.pivot.collection.setItemVisibility.alias",
@@ -31833,8 +31833,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setPivotItemVisibility(\n    name: string,\n    fieldId: string,\n    visibleItems: Record<string, boolean>,\n  ): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setPivotItemVisibility(\n    name: string,\n    fieldId: string,\n    visibleItems: Record<string, boolean>,\n  ): Promise<PivotSetPivotItemVisibilityReceipt>;",
+      "typeText": "Promise<PivotSetPivotItemVisibilityReceipt>",
       "compatibility": [
         {
           "id": "mog-api.pivot.collection.setItemVisibility.alias",
@@ -31860,8 +31860,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setPreserveFormatting(name: string, preserve: boolean): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setPreserveFormatting(\n    name: string,\n    preserve: boolean,\n  ): Promise<PivotSetPreserveFormattingReceipt>;",
+      "typeText": "Promise<PivotSetPreserveFormattingReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"

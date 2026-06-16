@@ -14,13 +14,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import type {
-  PivotAddReceipt,
-  PivotAddWithSheetReceipt,
-  PivotHandlePlacementSpec,
-  PivotRefreshReceipt,
-  PivotValueSortConfig,
-} from '@mog-sdk/contracts/api';
+import type { PivotHandlePlacementSpec, PivotValueSortConfig } from '@mog-sdk/contracts/api';
 import { type CellRange, type SheetId, sheetId as toSheetId } from '@mog-sdk/contracts/core';
 import type {
   AggregateFunction,
@@ -52,41 +46,16 @@ import { getUniqueSheetName } from '../../infra/utils/naming';
 import type { WorkbookWithImportedPivots } from '../../pivot/imported-pivot-runtime';
 import type { PivotViewModel } from '../../pivot/pivot-capabilities';
 import { loadPivotConfigEntries, type PivotConfigEntry } from '../../pivot/pivot-view-records';
-
-interface WorkbookWithPivotMaterialization {
-  readonly ctx?: {
-    awaitMaterialized?: (scope?: SheetId | 'allSheets') => Promise<void>;
-  };
-}
+import {
+  assertPivotMaterialized,
+  awaitPivotMaterialization,
+  inspectPivotMutationReceipt,
+  pivotReceiptMessage,
+  warnPivotRefresh,
+} from './pivot-receipt-utils';
 
 function pivotEntryMatchesId(entry: PivotConfigEntry, pivotId: string): boolean {
   return entry.config.id === pivotId || entry.alternateIds?.includes(pivotId) === true;
-}
-
-async function awaitPivotMaterialization(workbook: unknown): Promise<void> {
-  const awaitMaterialized = (workbook as WorkbookWithPivotMaterialization).ctx?.awaitMaterialized;
-  if (typeof awaitMaterialized !== 'function') return;
-  await awaitMaterialized('allSheets');
-}
-
-function pivotReceiptMessage(
-  receipt: PivotAddReceipt | PivotAddWithSheetReceipt | PivotRefreshReceipt,
-): string {
-  return (
-    receipt.diagnostics.find((diagnostic) => diagnostic.severity === 'error')?.message ??
-    receipt.diagnostics[0]?.message ??
-    `Pivot operation did not apply: ${receipt.status}.`
-  );
-}
-
-function assertPivotMaterialized(receipt: PivotAddReceipt | PivotAddWithSheetReceipt): void {
-  if (receipt.status === 'applied' && receipt.materialized) return;
-  throw new Error(pivotReceiptMessage(receipt));
-}
-
-function warnPivotRefresh(receipt: PivotRefreshReceipt | null | undefined): void {
-  if (!receipt || receipt.status === 'applied') return;
-  console.warn(pivotReceiptMessage(receipt), receipt);
 }
 
 // =============================================================================
@@ -697,7 +666,7 @@ export function usePivotTables({ sheetId }: UsePivotTablesOptions): UsePivotTabl
   // Add a field as a placement at a specific position.
   const addPlacement = useCallback(
     (pivotId: string, spec: PivotHandlePlacementSpec) => {
-      void pivotHandleFromId(pivotId)?.addPlacement(spec);
+      inspectPivotMutationReceipt('add placement', pivotHandleFromId(pivotId)?.addPlacement(spec));
     },
     [pivotHandleFromId],
   );
@@ -715,7 +684,10 @@ export function usePivotTables({ sheetId }: UsePivotTablesOptions): UsePivotTabl
   // Remove a specific placement by placementId.
   const removePlacement = useCallback(
     (pivotId: string, placementId: PlacementId) => {
-      void pivotHandleFromId(pivotId)?.removePlacement(placementId);
+      inspectPivotMutationReceipt(
+        'remove placement',
+        pivotHandleFromId(pivotId)?.removePlacement(placementId),
+      );
     },
     [pivotHandleFromId],
   );
@@ -739,7 +711,10 @@ export function usePivotTables({ sheetId }: UsePivotTablesOptions): UsePivotTabl
   // Move a specific placement by placementId.
   const movePlacement = useCallback(
     (pivotId: string, placementId: PlacementId, toArea: PivotFieldArea, toPosition: number) => {
-      void pivotHandleFromId(pivotId)?.movePlacement(placementId, toArea, toPosition);
+      inspectPivotMutationReceipt(
+        'move placement',
+        pivotHandleFromId(pivotId)?.movePlacement(placementId, toArea, toPosition),
+      );
     },
     [pivotHandleFromId],
   );
@@ -758,9 +733,9 @@ export function usePivotTables({ sheetId }: UsePivotTablesOptions): UsePivotTabl
   // Set aggregate function for a specific value placement.
   const setPlacementAggregateFunction = useCallback(
     (pivotId: string, placementId: PlacementId, aggregateFunction: AggregateFunction) => {
-      void pivotHandleFromId(pivotId)?.setPlacementAggregateFunction(
-        placementId,
-        aggregateFunction,
+      inspectPivotMutationReceipt(
+        'set placement aggregate function',
+        pivotHandleFromId(pivotId)?.setPlacementAggregateFunction(placementId, aggregateFunction),
       );
     },
     [pivotHandleFromId],
@@ -785,7 +760,10 @@ export function usePivotTables({ sheetId }: UsePivotTablesOptions): UsePivotTabl
   // Set row/column label sort for a specific placement.
   const setPlacementSortOrder = useCallback(
     (pivotId: string, placementId: PlacementId, sortOrder: SortOrder | null) => {
-      void pivotHandleFromId(pivotId)?.setPlacementSortOrder(placementId, sortOrder);
+      inspectPivotMutationReceipt(
+        'set placement sort order',
+        pivotHandleFromId(pivotId)?.setPlacementSortOrder(placementId, sortOrder),
+      );
     },
     [pivotHandleFromId],
   );
@@ -798,10 +776,13 @@ export function usePivotTables({ sheetId }: UsePivotTablesOptions): UsePivotTabl
       valuePlacementId: PlacementId,
       valueSortConfig: PivotValueSortConfig | null,
     ) => {
-      void pivotHandleFromId(pivotId)?.setSortByValue(
-        axisPlacementId,
-        valuePlacementId,
-        valueSortConfig,
+      inspectPivotMutationReceipt(
+        'set value sort',
+        pivotHandleFromId(pivotId)?.setSortByValue(
+          axisPlacementId,
+          valuePlacementId,
+          valueSortConfig,
+        ),
       );
     },
     [pivotHandleFromId],
@@ -877,7 +858,24 @@ export function usePivotTables({ sheetId }: UsePivotTablesOptions): UsePivotTabl
   const refreshPivotTable = useCallback(
     (pivotId: string) => {
       void (async () => {
-        warnPivotRefresh(await pivotHandleFromId(pivotId)?.refresh());
+        const receipt = await pivotHandleFromId(pivotId)?.refresh();
+        warnPivotRefresh(receipt);
+        if (!receipt) return;
+        if (receipt.config) {
+          setPivotEntries((prev) =>
+            prev.map((entry) =>
+              pivotEntryMatchesId(entry, receipt.pivotId)
+                ? { ...entry, config: receipt.config ?? entry.config }
+                : entry,
+            ),
+          );
+        }
+        setResults((prev) =>
+          new Map(prev).set(receipt.pivotId, {
+            result: receipt.result ?? null,
+            error: receipt.status === 'applied' ? undefined : pivotReceiptMessage(receipt),
+          }),
+        );
       })();
     },
     [pivotHandleFromId],

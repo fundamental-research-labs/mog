@@ -14,13 +14,18 @@ import type { FloatingObject } from '@mog/types-objects/objects/floating-objects
 import type { OperationReceiptBase } from './operation-receipt';
 import type { Comment, Slicer } from './types';
 import type {
+  CalculatedFieldId,
   PivotCommandReceipt,
+  PivotFieldArea,
+  PivotFieldPlacementFlat,
   PivotKernelMutationReceipt,
   PivotPlacementMutationReceipt,
+  PlacementId,
   PivotReadbackRevision,
   PivotTableConfig,
   PivotTableResult,
 } from '@mog/types-data/data/pivot';
+import type { PivotQueryResult } from './types';
 
 export type {
   OperationDiagnostic,
@@ -564,12 +569,6 @@ export interface RedoReceipt {
 // Pivots
 // =============================================================================
 
-/** Receipt for a pivot table remove mutation. */
-export interface PivotRemoveReceipt {
-  readonly kind: 'pivotRemove';
-  readonly name: string;
-}
-
 export type PivotCreationLifecycle = 'defineOnly' | 'materialize';
 
 /** Receipt for defining or materializing a pivot table on an existing sheet. */
@@ -608,6 +607,24 @@ export interface PivotRefreshReceipt extends OperationReceiptBase {
   readonly result?: PivotTableResult | null;
 }
 
+/** Receipt for computing a pivot table without mutating worksheet state. */
+export interface PivotComputeReceipt extends OperationReceiptBase {
+  readonly kind: 'pivot.compute';
+  readonly status: 'completed' | 'failed' | 'unsupported';
+  readonly sheetId: string;
+  readonly pivotId: string;
+  readonly result: PivotTableResult | null;
+}
+
+/** Receipt for querying a pivot table without mutating worksheet state. */
+export interface PivotQueryReceipt extends OperationReceiptBase {
+  readonly kind: 'pivot.query';
+  readonly status: 'completed' | 'failed' | 'unsupported';
+  readonly sheetId: string;
+  readonly pivotId: string;
+  readonly result: PivotQueryResult | null;
+}
+
 /** Aggregate receipt for refreshing/materializing every pivot on a worksheet. */
 export interface PivotRefreshAllReceipt extends OperationReceiptBase {
   readonly kind: 'pivot.refreshAll';
@@ -620,6 +637,205 @@ export interface PivotRefreshAllReceipt extends OperationReceiptBase {
   readonly failedCount: number;
   readonly renderedRanges: readonly (CellRange | null)[];
 }
+
+export type PivotHandleMutationKind =
+  | 'pivot.handle.update'
+  | 'pivot.handle.delete'
+  | 'pivot.handle.addField'
+  | 'pivot.handle.addValueField'
+  | 'pivot.handle.addPlacement'
+  | 'pivot.handle.removeField'
+  | 'pivot.handle.removePlacement'
+  | 'pivot.handle.moveField'
+  | 'pivot.handle.movePlacement'
+  | 'pivot.handle.changeAggregation'
+  | 'pivot.handle.setPlacementAggregateFunction'
+  | 'pivot.handle.renameValueField'
+  | 'pivot.handle.renameValuePlacement'
+  | 'pivot.handle.setShowValuesAs'
+  | 'pivot.handle.setSortOrder'
+  | 'pivot.handle.setPlacementSortOrder'
+  | 'pivot.handle.setSortByValue'
+  | 'pivot.handle.setFilter'
+  | 'pivot.handle.removeFilter'
+  | 'pivot.handle.setLayout'
+  | 'pivot.handle.setStyle'
+  | 'pivot.handle.toggleExpanded'
+  | 'pivot.handle.setAllExpanded'
+  | 'pivot.handle.addCalculatedField'
+  | 'pivot.handle.setItemVisibility'
+  | 'pivot.handle.setDataSource';
+
+export type PivotHandleMutationStatus = 'applied' | 'noOp' | 'failed';
+
+/** Receipt for mutating an existing pivot table through a bound handle. */
+export interface PivotHandleMutationReceipt extends OperationReceiptBase {
+  readonly kind: PivotHandleMutationKind;
+  readonly status: PivotHandleMutationStatus;
+  readonly sheetId: string;
+  readonly pivotId: string;
+  readonly config?: PivotTableConfig;
+  readonly fieldId?: string;
+  readonly area?: PivotFieldArea;
+  readonly placementId?: PlacementId;
+  readonly placement?: PivotFieldPlacementFlat;
+  readonly calculatedFieldId?: CalculatedFieldId;
+  readonly deleted?: boolean;
+  readonly expanded?: boolean;
+  readonly kernelReceipt?:
+    | PivotKernelMutationReceipt
+    | PivotPlacementMutationReceipt
+    | PivotCommandReceipt;
+}
+
+export interface PivotHandleCalculatedFieldReceipt extends PivotHandleMutationReceipt {
+  readonly kind: 'pivot.handle.addCalculatedField';
+  readonly calculatedFieldId: CalculatedFieldId;
+  readonly kernelReceipt: PivotKernelMutationReceipt & { calculatedFieldId: CalculatedFieldId };
+}
+
+export interface PivotHandleDeleteReceipt extends PivotHandleMutationReceipt {
+  readonly kind: 'pivot.handle.delete';
+  readonly deleted: boolean;
+}
+
+export interface PivotHandleExpansionReceipt extends PivotHandleMutationReceipt {
+  readonly kind: 'pivot.handle.toggleExpanded' | 'pivot.handle.setAllExpanded';
+  readonly expanded: boolean;
+}
+
+export interface PivotWorksheetMutationReceiptBase extends OperationReceiptBase {
+  readonly status: 'applied' | 'noOp' | 'failed';
+  readonly sheetId: string;
+  readonly pivotId?: string;
+  readonly pivotName?: string;
+  readonly config?: PivotTableConfig | null;
+  readonly kernelReceipt?: PivotKernelMutationReceipt;
+}
+
+export interface PivotAddFieldReceipt extends PivotWorksheetMutationReceiptBase {
+  readonly kind: 'pivot.addField';
+  readonly placementId?: PlacementId;
+}
+
+export interface PivotMoveFieldReceipt extends PivotWorksheetMutationReceiptBase {
+  readonly kind: 'pivot.moveField';
+  readonly placementId?: PlacementId;
+}
+
+export interface PivotRemoveFieldReceipt extends PivotWorksheetMutationReceiptBase {
+  readonly kind: 'pivot.removeField';
+  readonly placementId?: PlacementId;
+}
+
+export interface PivotResetFieldReceipt extends PivotWorksheetMutationReceiptBase {
+  readonly kind: 'pivot.resetField';
+}
+
+export interface PivotAddCalculatedFieldReceipt extends PivotWorksheetMutationReceiptBase {
+  readonly kind: 'pivot.addCalculatedField';
+  readonly calculatedFieldId?: CalculatedFieldId;
+}
+
+export interface PivotRemoveCalculatedFieldReceipt extends PivotWorksheetMutationReceiptBase {
+  readonly kind: 'pivot.removeCalculatedField';
+  readonly calculatedFieldId?: CalculatedFieldId;
+}
+
+/** Receipt for a pivot table remove mutation. */
+export interface PivotRemoveReceipt extends OperationReceiptBase {
+  readonly kind: 'pivot.remove';
+  readonly status: 'applied' | 'noOp' | 'failed';
+  readonly sheetId: string;
+  readonly pivotId?: string;
+  readonly pivotName: string;
+  readonly removedConfig?: PivotTableConfig | null;
+}
+
+export interface PivotClearReceipt extends OperationReceiptBase {
+  readonly kind: 'pivot.clear';
+  readonly status: 'applied' | 'noOp' | 'partial' | 'failed';
+  readonly sheetId: string;
+  readonly pivotIds: readonly string[];
+  readonly removedCount: number;
+  readonly failedCount: number;
+  readonly receipts: readonly PivotRemoveReceipt[];
+}
+
+export interface PivotRenameReceipt extends PivotWorksheetMutationReceiptBase {
+  readonly kind: 'pivot.rename';
+  readonly oldName: string;
+  readonly newName: string;
+}
+
+export interface PivotSetFilterReceipt extends PivotWorksheetMutationReceiptBase {
+  readonly kind: 'pivot.setFilter';
+}
+
+export interface PivotRemoveFilterReceipt extends PivotWorksheetMutationReceiptBase {
+  readonly kind: 'pivot.removeFilter';
+}
+
+export interface PivotSetPivotItemVisibilityReceipt extends PivotWorksheetMutationReceiptBase {
+  readonly kind: 'pivot.setPivotItemVisibility';
+}
+
+export interface PivotSetItemVisibilityReceipt extends PivotWorksheetMutationReceiptBase {
+  readonly kind: 'pivot.setItemVisibility';
+}
+
+export interface PivotSetAllExpandedReceipt extends PivotWorksheetMutationReceiptBase {
+  readonly kind: 'pivot.setAllExpanded';
+  readonly expanded: boolean;
+}
+
+export interface PivotSetDataSourceReceipt extends PivotWorksheetMutationReceiptBase {
+  readonly kind: 'pivot.setDataSource';
+  readonly dataSource: string;
+}
+
+export interface PivotSetAutoFormatReceipt extends PivotWorksheetMutationReceiptBase {
+  readonly kind: 'pivot.setAutoFormat';
+  readonly autoFormat: boolean;
+}
+
+export interface PivotSetPreserveFormattingReceipt extends PivotWorksheetMutationReceiptBase {
+  readonly kind: 'pivot.setPreserveFormatting';
+  readonly preserveFormatting: boolean;
+}
+
+export interface PivotSetAllowMultipleFiltersPerFieldReceipt
+  extends PivotWorksheetMutationReceiptBase {
+  readonly kind: 'pivot.setAllowMultipleFiltersPerField';
+  readonly allowMultipleFiltersPerField: boolean;
+}
+
+export interface PivotSetEnableMultipleFilterItemsReceipt extends PivotWorksheetMutationReceiptBase {
+  readonly kind: 'pivot.setEnableMultipleFilterItems';
+  readonly fieldId: string;
+  readonly enableMultipleFilterItems: boolean;
+}
+
+export type PivotWorksheetMutationReceipt =
+  | PivotAddFieldReceipt
+  | PivotMoveFieldReceipt
+  | PivotRemoveFieldReceipt
+  | PivotResetFieldReceipt
+  | PivotAddCalculatedFieldReceipt
+  | PivotRemoveCalculatedFieldReceipt
+  | PivotRemoveReceipt
+  | PivotClearReceipt
+  | PivotRenameReceipt
+  | PivotSetFilterReceipt
+  | PivotRemoveFilterReceipt
+  | PivotSetPivotItemVisibilityReceipt
+  | PivotSetItemVisibilityReceipt
+  | PivotSetAllExpandedReceipt
+  | PivotSetDataSourceReceipt
+  | PivotSetAutoFormatReceipt
+  | PivotSetPreserveFormattingReceipt
+  | PivotSetAllowMultipleFiltersPerFieldReceipt
+  | PivotSetEnableMultipleFilterItemsReceipt;
 
 // =============================================================================
 // Slicers
@@ -738,12 +954,18 @@ export type MutationReceipt =
   | ConditionalFormatMutationReceipt
   | UndoReceipt
   | RedoReceipt
-  | PivotRemoveReceipt
+  | PivotWorksheetMutationReceipt
   | PivotAddReceipt
   | PivotAddWithSheetReceipt
   | PivotRefreshReceipt
+  | PivotComputeReceipt
+  | PivotQueryReceipt
   | PivotRefreshAllReceipt
   | SlicerMutationReceipt
+  | PivotHandleMutationReceipt
+  | PivotHandleCalculatedFieldReceipt
+  | PivotHandleDeleteReceipt
+  | PivotHandleExpansionReceipt
   | PivotKernelMutationReceipt
   | PivotPlacementMutationReceipt
   | PivotCommandReceipt;

@@ -20,6 +20,7 @@
 import { assign, createActor, fromPromise, type InspectionEvent } from 'xstate';
 
 import { clipboardSelectors, editorSelectors, selectionSelectors } from '../../selectors';
+import type { PivotRefreshReceipt } from '@mog-sdk/contracts/api';
 import type {
   ClipboardSnapshot,
   Direction,
@@ -30,6 +31,7 @@ import type { CellCoord } from '@mog-sdk/contracts/rendering';
 import type { MutationResult } from '@mog-sdk/contracts/protection';
 import type { RichTextSegment } from '@mog-sdk/contracts/rich-text';
 import type { SlicerCache } from '@mog-sdk/contracts/slicers';
+import type { PivotTableConfig } from '@mog-sdk/contracts/pivot';
 import {
   sheetId as toSheetId,
   type CellFormat,
@@ -147,6 +149,21 @@ function rangeContainsRange(container: CellRange, candidate: CellRange): boolean
     candidate.startCol >= container.startCol &&
     candidate.endCol <= container.endCol
   );
+}
+
+function warnPivotRefreshReceipt(receipt: PivotRefreshReceipt | null | undefined): void {
+  if (!receipt || receipt.status === 'applied') return;
+  console.warn(
+    receipt.diagnostics.find((diagnostic) => diagnostic.severity === 'error')?.message ??
+      receipt.diagnostics[0]?.message ??
+      `Pivot refresh did not apply: ${receipt.status}.`,
+    receipt,
+  );
+}
+
+function warnPivotRelocationError(pivotId: string, error: unknown): void {
+  const message = error instanceof Error ? error.message : String(error);
+  console.warn(`Pivot relocation for "${pivotId}" failed: ${message}`, error);
 }
 
 // =============================================================================
@@ -1676,7 +1693,7 @@ export class GridEditingSystem implements IGridEditingSystem {
                   pivotId: string,
                   updates: { outputLocation: { row: number; col: number } },
                   options: { reason: 'uiConfigChanged'; refreshPolicy: 'refreshAndMaterialize' },
-                ): Promise<unknown>;
+                ): Promise<PivotTableConfig | null>;
               };
             };
           }
@@ -1699,7 +1716,7 @@ export class GridEditingSystem implements IGridEditingSystem {
               return;
             }
 
-            await pivotBridge.updatePivot(
+            const movedPivot = await pivotBridge.updatePivot(
               sourceSheetId,
               pivot.id,
               {
@@ -1710,6 +1727,25 @@ export class GridEditingSystem implements IGridEditingSystem {
               },
               { reason: 'uiConfigChanged', refreshPolicy: 'refreshAndMaterialize' },
             );
+            if (!movedPivot) {
+              console.warn(`Pivot relocation for "${pivot.id}" did not apply: pivot not found.`);
+              return;
+            }
+            const handle = await sheet.pivots.get(movedPivot).catch((error) => {
+              warnPivotRelocationError(pivot.id, error);
+              return null;
+            });
+            if (!handle) {
+              console.warn(
+                `Pivot relocation for "${pivot.id}" updated config without a materialization receipt.`,
+              );
+              return;
+            }
+            const receipt = await handle.refresh().catch((error) => {
+              warnPivotRelocationError(pivot.id, error);
+              return null;
+            });
+            warnPivotRefreshReceipt(receipt);
           }),
         );
       },

@@ -342,8 +342,8 @@ export const DUPLICATE_CHART: AsyncActionHandler = async (deps, payload): Promis
       anchorCol: (existing.anchorCol ?? 0) + 2,
     });
 
-    if (newChart?.id) {
-      selectChartObject(deps, newChart.id);
+    if (newChart.chart.id) {
+      selectChartObject(deps, newChart.chart.id);
     }
   } catch (e: any) {
     return { handled: false, error: e.message ?? String(e) };
@@ -1011,8 +1011,8 @@ export const CREATE_EMBEDDED_CHART: AsyncActionHandler = async (
         width: DEFAULT_WIDTH_CELLS,
         height: DEFAULT_HEIGHT_CELLS,
       });
-      if (newChart?.id) {
-        selectChartObject(deps, newChart.id);
+      if (newChart.chart.id) {
+        selectChartObject(deps, newChart.chart.id);
       }
       return handled();
     }
@@ -1044,8 +1044,8 @@ export const CREATE_EMBEDDED_CHART: AsyncActionHandler = async (
       width: DEFAULT_WIDTH_CELLS,
       height: DEFAULT_HEIGHT_CELLS,
     });
-    if (newChart?.id) {
-      selectChartObject(deps, newChart.id);
+    if (newChart.chart.id) {
+      selectChartObject(deps, newChart.chart.id);
     }
   } catch (e: any) {
     return { handled: false, error: e.message ?? String(e) };
@@ -1212,8 +1212,8 @@ export const INSERT_CHART_FROM_WIZARD: AsyncActionHandler = async (deps): Promis
         height: DEFAULT_HEIGHT_CELLS,
       }),
     );
-    if (newChart?.id) {
-      selectChartObject(deps, newChart.id);
+    if (newChart.chart.id) {
+      selectChartObject(deps, newChart.chart.id);
     }
   } catch (e: any) {
     return { handled: false, error: e.message ?? String(e) };

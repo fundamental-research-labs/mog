@@ -92,15 +92,87 @@ function makePivotItems() {
   ];
 }
 
+function makeUnsupportedImportedPivotRecord() {
+  return {
+    sourceKind: 'unsupportedImport',
+    status: 'unsupported',
+    importIdentity: 'xlsx:pivot-cache-1',
+    outputSheetId: SHEET_ID,
+    config: makePivotConfig({ id: 'imported-pivot-1', name: 'ImportedPivot' }),
+    capabilities: {
+      canEditFields: false,
+      canReorderFields: false,
+      canRemoveFields: false,
+      canChangeAggregate: false,
+      canRefresh: false,
+      canDelete: false,
+      canExport: true,
+      unsupportedReason: 'External cache definition is not supported.',
+    },
+    unsupportedReason: 'External cache definition is not supported.',
+  };
+}
+
+function makeKernelReceipt(action: string, placementId?: string) {
+  return {
+    kernelReceiptId: `receipt-${action}-${placementId ?? 'pivot-1'}`,
+    pivotId: 'pivot-1',
+    effects: placementId ? [{ type: 'placementUpdated', placementId }] : [],
+    mutationResult: { action },
+    updateReason: action,
+    refreshPolicy: 'refreshAndMaterialize',
+    materialized: true,
+    configRevision: 1,
+    status: 'applied',
+  };
+}
+
+function expectHandleConfigReceipt(receipt: any, kind: string) {
+  expect(receipt).toEqual(
+    expect.objectContaining({
+      kind,
+      status: 'applied',
+      sheetId: SHEET_ID,
+      pivotId: 'pivot-1',
+      diagnostics: [],
+      effects: expect.arrayContaining([
+        expect.objectContaining({ type: 'updatedConfig', objectId: 'pivot-1' }),
+        expect.objectContaining({ type: 'invalidatedCache', objectId: 'pivot-1' }),
+      ]),
+    }),
+  );
+}
+
 function createCtx(): any {
   const config = makePivotConfig();
   return {
+    computeBridge: {
+      getAllSheetIds: jest.fn().mockResolvedValue([SHEET_ID]),
+      getSheetName: jest.fn().mockResolvedValue('Sheet1'),
+      queryRange: jest
+        .fn()
+        .mockImplementation(async (_sheetId, startRow, startCol, endRow, endCol) => {
+          const cells = [];
+          if (startRow === 0 && endRow === 0) {
+            const headers = ['Category', 'Amount'];
+            for (let col = startCol; col <= endCol; col++) {
+              cells.push({ row: 0, col, value: headers[col - startCol] ?? `Column${col + 1}` });
+            }
+          } else {
+            for (let col = startCol; col <= endCol; col++) {
+              cells.push({ row: startRow, col, value: col === startCol ? 'Travel' : 100 });
+            }
+          }
+          return { cells };
+        }),
+    },
     pivot: {
       createPivot: jest.fn().mockResolvedValue(config),
       createPivotWithSheet: jest
         .fn()
         .mockResolvedValue({ sheetId: 'sheet-2', config: makePivotConfig() }),
       getAllPivots: jest.fn().mockResolvedValue([config]),
+      getImportedPivotViewRecords: jest.fn().mockResolvedValue([]),
       getPivot: jest.fn().mockResolvedValue(config),
       compute: jest.fn().mockResolvedValue(makePivotResult()),
       updatePivot: jest.fn().mockResolvedValue(config),
@@ -108,6 +180,34 @@ function createCtx(): any {
       refresh: jest.fn().mockResolvedValue(makePivotResult()),
       subscribe: jest.fn().mockReturnValue(jest.fn()),
       getAllPivotItems: jest.fn().mockResolvedValue(makePivotItems()),
+      addPlacement: jest.fn(async (_pivotId: string, spec: any) => ({
+        ...makeKernelReceipt('addPlacement', spec.placementId ?? 'row:Category:1'),
+        placementId: spec.placementId ?? 'row:Category:1',
+      })),
+      removePlacement: jest.fn(async (_pivotId: string, placementId: string) => ({
+        ...makeKernelReceipt('removePlacement', placementId),
+        effects: [{ type: 'placementRemoved', placementId }],
+      })),
+      movePlacement: jest.fn(async (_pivotId: string, placementId: string) =>
+        makeKernelReceipt('movePlacement', placementId),
+      ),
+      setAggregateFunction: jest.fn(async (_pivotId: string, placementId: string) =>
+        makeKernelReceipt('setAggregateFunction', placementId),
+      ),
+      renameValuePlacement: jest.fn(async (_pivotId: string, placementId: string) =>
+        makeKernelReceipt('renameValuePlacement', placementId),
+      ),
+      setSortOrder: jest.fn(async (_pivotId: string, placementId: string) =>
+        makeKernelReceipt('setSortOrder', placementId),
+      ),
+      setSortByValue: jest.fn(async (_pivotId: string, placementId: string) =>
+        makeKernelReceipt('setSortByValue', placementId),
+      ),
+    },
+    pivotExpansionProvider: {
+      toggleExpanded: jest.fn().mockReturnValue(false),
+      setAllExpanded: jest.fn(),
+      getExpansionState: jest.fn().mockReturnValue({ expandedRows: {}, expandedColumns: {} }),
     },
     writeGate: {
       assertWritable: jest.fn(),
@@ -239,6 +339,191 @@ describe('WorksheetPivotsImpl contracts', () => {
     );
   });
 
+  it('compute returns a read-only operation receipt with result details', async () => {
+    const receipt = await pivots.compute('SalesPivot', true);
+
+    expect(ctx.pivot.compute).toHaveBeenCalledWith(SHEET_ID, 'pivot-1', true);
+    expect(receipt).toEqual(
+      expect.objectContaining({
+        kind: 'pivot.compute',
+        status: 'completed',
+        sheetId: SHEET_ID,
+        pivotId: 'pivot-1',
+        result: makePivotResult(),
+        diagnostics: [],
+        effects: expect.arrayContaining([
+          expect.objectContaining({ type: 'computedGrid', objectId: 'pivot-1' }),
+          expect.objectContaining({ type: 'worksheetUnchanged', objectId: 'pivot-1' }),
+        ]),
+      }),
+    );
+  });
+
+  it('compute returns a failed receipt when pure compute produces no result', async () => {
+    ctx.pivot.compute.mockResolvedValue(null);
+
+    const receipt = await pivots.compute('SalesPivot');
+
+    expect(receipt).toEqual(
+      expect.objectContaining({
+        kind: 'pivot.compute',
+        status: 'failed',
+        sheetId: SHEET_ID,
+        pivotId: 'pivot-1',
+        result: null,
+        effects: [],
+        diagnostics: [
+          expect.objectContaining({
+            code: 'PIVOT_COMPUTE_FAILED',
+            target: expect.objectContaining({ sheetId: SHEET_ID, pivotId: 'pivot-1' }),
+          }),
+        ],
+      }),
+    );
+  });
+
+  it('compute returns a failed receipt when the pivot is missing', async () => {
+    ctx.pivot.getAllPivots.mockResolvedValue([]);
+
+    const receipt = await pivots.compute('MissingPivot');
+
+    expect(ctx.pivot.compute).not.toHaveBeenCalled();
+    expect(receipt).toEqual(
+      expect.objectContaining({
+        kind: 'pivot.compute',
+        status: 'failed',
+        sheetId: SHEET_ID,
+        pivotId: 'MissingPivot',
+        result: null,
+        effects: [],
+        diagnostics: [
+          expect.objectContaining({
+            code: 'PIVOT_COMPUTE_PIVOT_NOT_FOUND',
+            target: expect.objectContaining({ sheetId: SHEET_ID, pivotId: 'MissingPivot' }),
+          }),
+        ],
+      }),
+    );
+  });
+
+  it('compute returns an unsupported receipt for unsupported imported pivots', async () => {
+    ctx.pivot.getAllPivots.mockResolvedValue([]);
+    ctx.pivot.getImportedPivotViewRecords.mockResolvedValue([makeUnsupportedImportedPivotRecord()]);
+
+    const receipt = await pivots.compute('ImportedPivot');
+
+    expect(ctx.pivot.compute).not.toHaveBeenCalled();
+    expect(receipt).toEqual(
+      expect.objectContaining({
+        kind: 'pivot.compute',
+        status: 'unsupported',
+        sheetId: SHEET_ID,
+        pivotId: 'imported-pivot-1',
+        result: null,
+        effects: [],
+        diagnostics: [
+          expect.objectContaining({
+            code: 'PIVOT_COMPUTE_UNSUPPORTED_PIVOT',
+            target: expect.objectContaining({ pivotId: 'imported-pivot-1' }),
+          }),
+        ],
+      }),
+    );
+  });
+
+  it('queryPivot returns a read-only operation receipt with flat query result', async () => {
+    const receipt = await pivots.queryPivot('SalesPivot');
+
+    expect(ctx.pivot.compute).toHaveBeenCalledWith(SHEET_ID, 'pivot-1');
+    expect(receipt).toEqual(
+      expect.objectContaining({
+        kind: 'pivot.query',
+        status: 'completed',
+        sheetId: SHEET_ID,
+        pivotId: 'pivot-1',
+        result: expect.objectContaining({
+          pivotName: 'SalesPivot',
+          rowFields: ['Category'],
+          valueFields: ['Sum of Amount'],
+        }),
+        diagnostics: [],
+        effects: [expect.objectContaining({ type: 'worksheetUnchanged', objectId: 'pivot-1' })],
+      }),
+    );
+  });
+
+  it('queryPivot returns a failed receipt when the query has no result', async () => {
+    ctx.pivot.compute.mockResolvedValue(null);
+
+    const receipt = await pivots.queryPivot('SalesPivot');
+
+    expect(receipt).toEqual(
+      expect.objectContaining({
+        kind: 'pivot.query',
+        status: 'failed',
+        sheetId: SHEET_ID,
+        pivotId: 'pivot-1',
+        result: null,
+        effects: [],
+        diagnostics: [
+          expect.objectContaining({
+            code: 'PIVOT_QUERY_FAILED',
+            target: expect.objectContaining({ sheetId: SHEET_ID, pivotId: 'pivot-1' }),
+          }),
+        ],
+      }),
+    );
+  });
+
+  it('queryPivot returns a failed receipt when the pivot is missing', async () => {
+    ctx.pivot.getAllPivots.mockResolvedValue([]);
+
+    const receipt = await pivots.queryPivot('MissingPivot');
+
+    expect(ctx.pivot.compute).not.toHaveBeenCalled();
+    expect(receipt).toEqual(
+      expect.objectContaining({
+        kind: 'pivot.query',
+        status: 'failed',
+        sheetId: SHEET_ID,
+        pivotId: 'MissingPivot',
+        result: null,
+        effects: [],
+        diagnostics: [
+          expect.objectContaining({
+            code: 'PIVOT_QUERY_PIVOT_NOT_FOUND',
+            target: expect.objectContaining({ sheetId: SHEET_ID, pivotId: 'MissingPivot' }),
+          }),
+        ],
+      }),
+    );
+  });
+
+  it('queryPivot returns an unsupported receipt for unsupported imported pivots', async () => {
+    ctx.pivot.getAllPivots.mockResolvedValue([]);
+    ctx.pivot.getImportedPivotViewRecords.mockResolvedValue([makeUnsupportedImportedPivotRecord()]);
+
+    const receipt = await pivots.queryPivot('ImportedPivot');
+
+    expect(ctx.pivot.compute).not.toHaveBeenCalled();
+    expect(receipt).toEqual(
+      expect.objectContaining({
+        kind: 'pivot.query',
+        status: 'unsupported',
+        sheetId: SHEET_ID,
+        pivotId: 'imported-pivot-1',
+        result: null,
+        effects: [],
+        diagnostics: [
+          expect.objectContaining({
+            code: 'PIVOT_QUERY_UNSUPPORTED_PIVOT',
+            target: expect.objectContaining({ pivotId: 'imported-pivot-1' }),
+          }),
+        ],
+      }),
+    );
+  });
+
   it('refreshAll returns an aggregate receipt with per-pivot materialization receipts', async () => {
     const config1 = makePivotConfig();
     const config2 = makePivotConfig({
@@ -338,6 +623,69 @@ describe('WorksheetPivotsImpl contracts', () => {
     );
   });
 
+  it('field mutations return applied operation receipts without materialized cell claims', async () => {
+    const receipt = await pivots.addField('SalesPivot', 'Amount', 'column');
+
+    expect(receipt).toEqual(
+      expect.objectContaining({
+        kind: 'pivot.addField',
+        status: 'applied',
+        pivotId: 'pivot-1',
+        pivotName: 'SalesPivot',
+        diagnostics: [],
+        effects: expect.arrayContaining([
+          expect.objectContaining({ type: 'updatedConfig', objectId: 'pivot-1' }),
+          expect.objectContaining({ type: 'storedMetadata', objectId: 'pivot-1' }),
+          expect.objectContaining({ type: 'invalidatedCache', objectId: 'pivot-1' }),
+        ]),
+      }),
+    );
+    expect(receipt.effects).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ type: 'materializedCells' })]),
+    );
+  });
+
+  it('valid unchanged worksheet pivot mutations return no-op receipts', async () => {
+    const receipt = await pivots.removeFilter('SalesPivot', 'Category');
+
+    expect(receipt).toEqual(
+      expect.objectContaining({
+        kind: 'pivot.removeFilter',
+        status: 'noOp',
+        effects: [
+          expect.objectContaining({
+            type: 'worksheetUnchanged',
+            sheetId: SHEET_ID,
+            objectId: 'pivot-1',
+          }),
+        ],
+        diagnostics: [],
+      }),
+    );
+    expect(ctx.pivot.updatePivot).not.toHaveBeenCalled();
+  });
+
+  it('bridge failures return failed worksheet pivot receipts with diagnostics', async () => {
+    ctx.pivot.updatePivot.mockRejectedValueOnce(new Error('write failed'));
+
+    const receipt = await pivots.setFilter('SalesPivot', 'Category', { includeValues: ['Travel'] });
+
+    expect(receipt).toEqual(
+      expect.objectContaining({
+        kind: 'pivot.setFilter',
+        status: 'failed',
+        effects: [],
+        diagnostics: expect.arrayContaining([
+          expect.objectContaining({
+            code: 'PIVOT_MUTATION_FAILED',
+            message: 'write failed',
+            target: expect.objectContaining({ sheetId: SHEET_ID, pivotId: 'pivot-1' }),
+          }),
+        ]),
+      }),
+    );
+  });
+
   it('handle refresh returns the same materialization receipt shape', async () => {
     const handle = await pivots.get('SalesPivot');
 
@@ -358,6 +706,182 @@ describe('WorksheetPivotsImpl contracts', () => {
           endCol: 4,
         },
         result: makePivotResult(),
+      }),
+    );
+  });
+
+  it('handle config mutators return base operation receipts with useful fields', async () => {
+    const handle = await pivots.get('SalesPivot');
+
+    const updateReceipt = await handle!.update({ name: 'RenamedPivot' });
+    expectHandleConfigReceipt(updateReceipt, 'pivot.handle.update');
+    expect(updateReceipt.config).toEqual(expect.objectContaining({ id: 'pivot-1' }));
+
+    const addFieldReceipt = await handle!.addField('Category', 'column', 0);
+    expectHandleConfigReceipt(addFieldReceipt, 'pivot.handle.addField');
+    expect(addFieldReceipt).toEqual(
+      expect.objectContaining({
+        fieldId: 'Category',
+        area: 'column',
+        placement: expect.objectContaining({ fieldId: 'Category', area: 'column' }),
+      }),
+    );
+
+    const addValueReceipt = await handle!.addValueField('Amount', 'sum', 'Total Amount');
+    expectHandleConfigReceipt(addValueReceipt, 'pivot.handle.addValueField');
+    expect(addValueReceipt.placement).toEqual(
+      expect.objectContaining({ fieldId: 'Amount', area: 'value' }),
+    );
+
+    const removeFieldReceipt = await handle!.removeField('Category', 'row');
+    expectHandleConfigReceipt(removeFieldReceipt, 'pivot.handle.removeField');
+    expect(removeFieldReceipt).toEqual(expect.objectContaining({ fieldId: 'Category' }));
+
+    const renameReceipt = await handle!.renameValueField('Amount', 'Total Amount');
+    expectHandleConfigReceipt(renameReceipt, 'pivot.handle.renameValueField');
+    expect(renameReceipt.placement).toEqual(
+      expect.objectContaining({ fieldId: 'Amount', displayName: 'Total Amount' }),
+    );
+
+    const aggregationReceipt = await handle!.changeAggregation('Amount', 'average');
+    expectHandleConfigReceipt(aggregationReceipt, 'pivot.handle.changeAggregation');
+    expect(aggregationReceipt.placement).toEqual(
+      expect.objectContaining({ fieldId: 'Amount', aggregateFunction: 'average' }),
+    );
+
+    const showValuesReceipt = await handle!.setShowValuesAs('Amount', {
+      type: 'percentOfGrandTotal',
+    });
+    expectHandleConfigReceipt(showValuesReceipt, 'pivot.handle.setShowValuesAs');
+    expect(showValuesReceipt.placement).toEqual(
+      expect.objectContaining({ showValuesAs: { type: 'percentOfGrandTotal' } }),
+    );
+
+    const filterReceipt = await handle!.setFilter('Category', { excludeValues: ['Travel'] });
+    expectHandleConfigReceipt(filterReceipt, 'pivot.handle.setFilter');
+    expect(filterReceipt).toEqual(expect.objectContaining({ fieldId: 'Category' }));
+
+    const removeFilterReceipt = await handle!.removeFilter('Category');
+    expectHandleConfigReceipt(removeFilterReceipt, 'pivot.handle.removeFilter');
+
+    const layoutReceipt = await handle!.setLayout({ showRowGrandTotals: false });
+    expectHandleConfigReceipt(layoutReceipt, 'pivot.handle.setLayout');
+
+    const styleReceipt = await handle!.setStyle({ styleName: 'PivotStyleMedium2' });
+    expectHandleConfigReceipt(styleReceipt, 'pivot.handle.setStyle');
+
+    const visibilityReceipt = await handle!.setItemVisibility('Category', {
+      ['\u0000BLANK\u0000']: false,
+    });
+    expectHandleConfigReceipt(visibilityReceipt, 'pivot.handle.setItemVisibility');
+    expect(visibilityReceipt).toEqual(expect.objectContaining({ fieldId: 'Category' }));
+
+    const dataSourceReceipt = await handle!.setDataSource('Sheet1!A1:B5');
+    expectHandleConfigReceipt(dataSourceReceipt, 'pivot.handle.setDataSource');
+  });
+
+  it('handle placement and calculated-field mutators wrap kernel receipts with base fields', async () => {
+    const handle = await pivots.get('SalesPivot');
+
+    const addPlacementReceipt = await handle!.addPlacement({
+      placementId: 'row:Category:1' as any,
+      fieldId: 'Category',
+      area: 'row',
+    });
+    expectHandleConfigReceipt(addPlacementReceipt, 'pivot.handle.addPlacement');
+    expect(addPlacementReceipt).toEqual(
+      expect.objectContaining({
+        placementId: 'row:Category:1',
+        kernelReceipt: expect.objectContaining({ kernelReceiptId: expect.any(String) }),
+      }),
+    );
+
+    const moveFieldReceipt = await handle!.moveField('Category', 'row', 'column', 0);
+    expectHandleConfigReceipt(moveFieldReceipt, 'pivot.handle.moveField');
+    expect(moveFieldReceipt).toEqual(expect.objectContaining({ fieldId: 'Category' }));
+
+    const removePlacementReceipt = await handle!.removePlacement('row:Category:0' as any);
+    expectHandleConfigReceipt(removePlacementReceipt, 'pivot.handle.removePlacement');
+
+    const movePlacementReceipt = await handle!.movePlacement('row:Category:0' as any, 'column', 0);
+    expectHandleConfigReceipt(movePlacementReceipt, 'pivot.handle.movePlacement');
+
+    const aggregateReceipt = await handle!.setPlacementAggregateFunction(
+      'value:Amount:0' as any,
+      'average',
+    );
+    expectHandleConfigReceipt(aggregateReceipt, 'pivot.handle.setPlacementAggregateFunction');
+
+    const renamePlacementReceipt = await handle!.renameValuePlacement(
+      'value:Amount:0' as any,
+      'Average Amount',
+    );
+    expectHandleConfigReceipt(renamePlacementReceipt, 'pivot.handle.renameValuePlacement');
+
+    const sortReceipt = await handle!.setSortOrder('Category', 'desc');
+    expectHandleConfigReceipt(sortReceipt, 'pivot.handle.setSortOrder');
+
+    const placementSortReceipt = await handle!.setPlacementSortOrder('row:Category:0' as any, 'asc');
+    expectHandleConfigReceipt(placementSortReceipt, 'pivot.handle.setPlacementSortOrder');
+
+    const sortByValueReceipt = await handle!.setSortByValue(
+      'row:Category:0' as any,
+      'value:Amount:0' as any,
+      { order: 'desc' },
+    );
+    expectHandleConfigReceipt(sortByValueReceipt, 'pivot.handle.setSortByValue');
+
+    const calculatedReceipt = await handle!.addCalculatedField({
+      fieldId: 'Margin',
+      name: 'Margin',
+      formula: '=Amount',
+    });
+    expectHandleConfigReceipt(calculatedReceipt, 'pivot.handle.addCalculatedField');
+    expect(calculatedReceipt).toEqual(
+      expect.objectContaining({
+        calculatedFieldId: 'Margin',
+        kernelReceipt: expect.objectContaining({ calculatedFieldId: 'Margin' }),
+      }),
+    );
+  });
+
+  it('handle expansion and delete mutators preserve old return values on receipts', async () => {
+    const handle = await pivots.get('SalesPivot');
+
+    const toggleReceipt = await handle!.toggleExpanded('Category:Travel', true);
+    expect(toggleReceipt).toEqual(
+      expect.objectContaining({
+        kind: 'pivot.handle.toggleExpanded',
+        status: 'applied',
+        expanded: false,
+        effects: expect.arrayContaining([
+          expect.objectContaining({ type: 'updatedExpansionState' }),
+          expect.objectContaining({ type: 'invalidatedCache' }),
+        ]),
+        diagnostics: [],
+      }),
+    );
+
+    const allExpandedReceipt = await handle!.setAllExpanded(true);
+    expect(allExpandedReceipt).toEqual(
+      expect.objectContaining({
+        kind: 'pivot.handle.setAllExpanded',
+        status: 'applied',
+        expanded: true,
+      }),
+    );
+
+    const deleteReceipt = await handle!.delete();
+    expect(deleteReceipt).toEqual(
+      expect.objectContaining({
+        kind: 'pivot.handle.delete',
+        status: 'applied',
+        deleted: true,
+        effects: expect.arrayContaining([
+          expect.objectContaining({ type: 'removedObject', objectId: 'pivot-1' }),
+          expect.objectContaining({ type: 'invalidatedCache', objectId: 'pivot-1' }),
+        ]),
+        diagnostics: [],
       }),
     );
   });

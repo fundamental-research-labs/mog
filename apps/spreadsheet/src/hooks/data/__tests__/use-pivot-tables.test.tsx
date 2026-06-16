@@ -1,8 +1,13 @@
 import { jest } from '@jest/globals';
-import { renderHook, waitFor } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 
 import type { SheetId } from '@mog-sdk/contracts/core';
-import type { PivotFieldPlacementFlat, PivotTableConfig } from '@mog-sdk/contracts/pivot';
+import type {
+  PivotFieldPlacementFlat,
+  PivotKernelMutationReceipt,
+  PivotTableConfig,
+  PivotTableResult,
+} from '@mog-sdk/contracts/pivot';
 import type { PivotConfigEntry } from '../../../pivot/pivot-view-records';
 
 const mockLoadPivotConfigEntries = jest.fn();
@@ -111,6 +116,157 @@ function unsupportedEntry(id: string): PivotConfigEntry {
     result: null,
   };
 }
+
+function pivotResult(): PivotTableResult {
+  return {
+    columnHeaders: [],
+    rows: [],
+    grandTotals: {},
+    sourceRowCount: 0,
+    renderedBounds: {
+      totalRows: 1,
+      totalCols: 1,
+      firstDataRow: 0,
+      firstDataCol: 0,
+      numDataCols: 1,
+    },
+  };
+}
+
+function nativeEntry(id: string, handle: Record<string, unknown>): PivotConfigEntry {
+  return {
+    config: pivotConfig(id),
+    sourceKind: 'native',
+    capabilities: readOnlyCapabilities,
+    handle: {
+      subscribeResult: jest.fn(() => jest.fn()),
+      compute: jest.fn(async () => null),
+      ...handle,
+    } as NonNullable<PivotConfigEntry['handle']>,
+  };
+}
+
+function failedKernelReceipt(message: string): PivotKernelMutationReceipt {
+  return {
+    kernelReceiptId: 'receipt-1',
+    pivotId: 'pivot-1',
+    effects: [],
+    mutationResult: null,
+    updateReason: 'fieldPlacementChanged',
+    refreshPolicy: 'refreshAndMaterialize',
+    materialized: false,
+    configRevision: 1,
+    status: 'failed',
+    error: { code: 'MATERIALIZATION_FAILED', stage: 'materialize', message },
+  };
+}
+
+beforeEach(() => {
+  jest.clearAllMocks();
+  mockLoadPivotConfigEntries.mockReset();
+  mockWorksheet.pivots.add.mockReset();
+  mockWorksheet.pivots.addWithSheet.mockReset();
+  mockWorksheet.pivots.detectFields.mockReset();
+  mockWorksheet.pivots.get.mockReset();
+  mockLoadPivotConfigEntries.mockResolvedValue([]);
+  mockAwaitMaterialized.mockResolvedValue(undefined);
+  mockWorksheet.getName.mockResolvedValue('Pivot');
+  mockWorksheet.getSheetId.mockReturnValue('sheet-1');
+  mockWorksheet.pivots.detectFields.mockResolvedValue(pivotConfig('fields').fields);
+  mockWorkbook.getSheetById.mockReturnValue(mockWorksheet);
+  mockWorkbook.getSheets.mockResolvedValue([mockWorksheet]);
+  mockWorkbook.sheetNames = ['Pivot'];
+  mockEditingPivotId = null;
+  mockSelectedPivotId = null;
+});
+
+describe('usePivotTables pivot receipts', () => {
+  it('requests materialization and rejects creation receipts with diagnostics', async () => {
+    const receiptConfig = pivotConfig('pivot-created');
+    mockWorksheet.pivots.addWithSheet.mockResolvedValue({
+      kind: 'pivot.addWithSheet',
+      status: 'partial',
+      effects: [],
+      diagnostics: [
+        {
+          severity: 'error',
+          code: 'PIVOT_MATERIALIZATION_FAILED',
+          message: 'Rendered cells were not materialized.',
+        },
+      ],
+      sheetId: 'sheet-created',
+      pivotId: receiptConfig.id,
+      config: receiptConfig,
+      lifecycle: 'materialize',
+      materialized: false,
+      renderedRange: null,
+      result: null,
+    });
+
+    const { result } = renderHook(() => usePivotTables({ sheetId: 'sheet-1' as SheetId }));
+
+    await expect(
+      result.current.createPivotTable(
+        'Sales Pivot',
+        { startRow: 0, startCol: 0, endRow: 3, endCol: 2 },
+        'sheet-1' as SheetId,
+        { mode: 'newWorksheet' },
+      ),
+    ).rejects.toThrow('Rendered cells were not materialized.');
+
+    expect(mockWorksheet.pivots.addWithSheet).toHaveBeenCalledWith(
+      'Sales Pivot',
+      expect.any(Object),
+      { lifecycle: 'materialize' },
+    );
+  });
+
+  it('refreshes local result state from the refresh receipt payload', async () => {
+    const refreshedResult = pivotResult();
+    const compute = jest.fn(async () => null);
+    const refresh = jest.fn(async () => ({
+      kind: 'pivot.refresh',
+      status: 'applied',
+      effects: [],
+      diagnostics: [],
+      pivotId: 'pivot-1',
+      config: null,
+      materialized: true,
+      renderedRange: null,
+      result: refreshedResult,
+    }));
+    mockLoadPivotConfigEntries.mockResolvedValue([nativeEntry('pivot-1', { compute, refresh })]);
+
+    const { result } = renderHook(() => usePivotTables({ sheetId: 'sheet-1' as SheetId }));
+
+    await waitFor(() => expect(result.current.pivotTables).toHaveLength(1));
+    await waitFor(() => expect(compute).toHaveBeenCalled());
+    act(() => result.current.refreshPivotTable('pivot-1'));
+
+    await waitFor(() => {
+      expect(result.current.pivotTables[0]?.result).toBe(refreshedResult);
+    });
+  });
+
+  it('warns when a placement mutation receipt does not apply', async () => {
+    const failedReceipt = failedKernelReceipt('Placement materialization failed.');
+    const addPlacement = jest.fn(async () => failedReceipt);
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    mockLoadPivotConfigEntries.mockResolvedValue([nativeEntry('pivot-1', { addPlacement })]);
+
+    const { result } = renderHook(() => usePivotTables({ sheetId: 'sheet-1' as SheetId }));
+
+    await waitFor(() => expect(result.current.pivotTables).toHaveLength(1));
+    act(() => {
+      result.current.addPlacement('pivot-1', { fieldId: 'Amount', area: 'value' });
+    });
+
+    await waitFor(() =>
+      expect(warn).toHaveBeenCalledWith('Placement materialization failed.', failedReceipt),
+    );
+    warn.mockRestore();
+  });
+});
 
 describe('usePivotTables imported materialization refresh', () => {
   beforeEach(() => {

@@ -8,7 +8,11 @@
  */
 
 import type {
+  OperationDiagnostic,
+  OperationEffect,
   ViewportChangeEvent,
+  ViewportRefreshDetails,
+  ViewportRegionRefreshReceipt,
   ViewportRegion,
   WorkbookViewport,
   WorkbookViewportBounds,
@@ -37,6 +41,121 @@ function isDisposedBridgeError(err: unknown): boolean {
     'code' in err &&
     (err as { code?: unknown }).code === 'BRIDGE_DISPOSED'
   );
+}
+
+function viewportRefreshStatus(
+  details: ViewportRefreshDetails | undefined,
+  error?: unknown,
+): ViewportRegionRefreshReceipt['status'] {
+  if (error) return 'failed';
+  if (details?.superseded) return 'cancelled';
+  if (details?.cacheHit && !details.fetched) return 'noOp';
+  return 'applied';
+}
+
+function viewportRefreshEffects(details: ViewportRefreshDetails | undefined): OperationEffect[] {
+  if (!details || details.superseded) return [];
+  if (details.cacheHit && !details.fetched) {
+    return [
+      {
+        type: 'readViewportCache',
+        sheetId: details.sheetId,
+        objectId: details.viewportId,
+        details: {
+          reason: details.reason,
+          visibleBounds: details.visibleBounds,
+          prefetchBounds: details.prefetchBounds,
+        },
+      },
+    ];
+  }
+
+  const effects: OperationEffect[] = [
+    {
+      type: 'readViewportCells',
+      sheetId: details.sheetId,
+      objectId: details.viewportId,
+      details: {
+        delta: details.delta,
+        visibleBounds: details.visibleBounds,
+        prefetchBounds: details.prefetchBounds,
+      },
+    },
+    {
+      type: 'refreshedViewport',
+      sheetId: details.sheetId,
+      objectId: details.viewportId,
+      details: {
+        fetched: details.fetched,
+        delta: details.delta,
+      },
+    },
+    {
+      type: 'invalidatedCache',
+      sheetId: details.sheetId,
+      objectId: details.viewportId,
+      details: {
+        cache: 'viewportPrefetchDirtyState',
+        durable: false,
+      },
+    },
+  ];
+
+  if (details.projectionChanged) {
+    effects.push({
+      type: 'changedRange',
+      sheetId: details.sheetId,
+      objectId: details.viewportId,
+      details: {
+        projection: 'viewportPrefetch',
+        visibleBounds: details.visibleBounds,
+        prefetchBounds: details.prefetchBounds,
+      },
+    });
+  }
+
+  return effects;
+}
+
+function viewportRefreshDiagnostics(input: {
+  regionId: string;
+  sheetId: SheetId;
+  error?: unknown;
+}): OperationDiagnostic[] {
+  if (!input.error) return [];
+  return [
+    {
+      severity: 'error',
+      code: 'VIEWPORT_REFRESH_FAILED',
+      message: input.error instanceof Error ? input.error.message : String(input.error),
+      target: {
+        sheetId: input.sheetId,
+        regionId: input.regionId,
+        stage: 'refresh',
+      },
+      recoverable: true,
+      nextAction: 'Retry the viewport refresh after the compute engine is available.',
+    },
+  ];
+}
+
+function buildViewportRefreshReceipt(input: {
+  regionId: string;
+  sheetId: SheetId;
+  bounds: ViewportBounds;
+  details?: ViewportRefreshDetails;
+  error?: unknown;
+}): ViewportRegionRefreshReceipt {
+  return {
+    kind: 'viewport.refresh',
+    status: viewportRefreshStatus(input.details, input.error),
+    effects: viewportRefreshEffects(input.details),
+    diagnostics: viewportRefreshDiagnostics(input),
+    regionId: input.regionId,
+    sheetId: input.sheetId,
+    bounds: input.bounds,
+    details: input.details,
+  };
 }
 
 export class ViewportRegionImpl extends DisposableBase implements ViewportRegion {
@@ -97,16 +216,31 @@ export class ViewportRegionImpl extends DisposableBase implements ViewportRegion
     this.computeBridge.updateViewportVisibleWindow(this.id, this.sheetId, this.bounds);
   }
 
-  async refresh(scrollBehavior?: unknown): Promise<void> {
+  async refresh(scrollBehavior?: unknown): Promise<ViewportRegionRefreshReceipt> {
     this.throwIfDisposed();
-    await this.registration;
-    this.throwIfDisposed();
-    await this.computeBridge.refreshViewportForRegion(
-      this.id,
-      this.sheetId,
-      this.bounds,
-      (scrollBehavior as ViewportScrollBehavior | undefined) ?? 'free',
-    );
+    try {
+      await this.registration;
+      this.throwIfDisposed();
+      const details = await this.computeBridge.refreshViewportForRegion(
+        this.id,
+        this.sheetId,
+        this.bounds,
+        (scrollBehavior as ViewportScrollBehavior | undefined) ?? 'free',
+      );
+      return buildViewportRefreshReceipt({
+        regionId: this.id,
+        sheetId: this.sheetId,
+        bounds: this.bounds,
+        details,
+      });
+    } catch (error) {
+      return buildViewportRefreshReceipt({
+        regionId: this.id,
+        sheetId: this.sheetId,
+        bounds: this.bounds,
+        error,
+      });
+    }
   }
 
   protected _dispose(): void {

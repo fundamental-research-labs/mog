@@ -15,6 +15,8 @@ import type { OperationReceiptBase } from './operation-receipt';
 import type { AutoFillApplyReceipt } from './worksheet/fill';
 import type { Comment, Slicer } from './types';
 import type { TableInfo, TableUpdateOptions } from './types';
+import type { ApplyScenarioResult, LinkId } from './types';
+import type { LinkStatusView } from './workbook';
 import type {
   CalculatedFieldId,
   PivotCommandReceipt,
@@ -741,6 +743,91 @@ export interface RedoReceipt {
 }
 
 // =============================================================================
+// Workbook Lifecycle Operations
+// =============================================================================
+
+/** Receipt for refreshing one workbook external link status. */
+export interface WorkbookLinkRefreshReceipt extends OperationReceiptBase {
+  readonly kind: 'workbook.links.refresh';
+  readonly status: 'applied' | 'partial' | 'failed' | 'unsupported';
+  readonly linkId: LinkId;
+  readonly statusView: LinkStatusView;
+}
+
+/** Aggregate receipt for refreshing all workbook external links. */
+export interface WorkbookLinksRefreshAllReceipt extends OperationReceiptBase {
+  readonly kind: 'workbook.links.refreshAll';
+  readonly status: 'applied' | 'noOp' | 'partial' | 'failed' | 'unsupported';
+  readonly linkIds: readonly LinkId[];
+  readonly statusViews: readonly LinkStatusView[];
+  readonly receipts: readonly WorkbookLinkRefreshReceipt[];
+  readonly refreshedCount: number;
+  readonly failedCount: number;
+  readonly unsupportedCount: number;
+}
+
+/** Successful receipt for applying a workbook what-if scenario. */
+export interface WorkbookScenarioApplySuccessReceipt
+  extends OperationReceiptBase,
+    ApplyScenarioResult {
+  readonly kind: 'workbook.scenarios.apply';
+  readonly status: 'applied' | 'noOp' | 'partial';
+  readonly scenarioId: string;
+  readonly result: ApplyScenarioResult;
+}
+
+/** Failed receipt for applying a workbook what-if scenario. */
+export interface WorkbookScenarioApplyFailureReceipt extends OperationReceiptBase {
+  readonly kind: 'workbook.scenarios.apply';
+  readonly status: 'failed';
+  readonly scenarioId: string;
+  readonly result: null;
+}
+
+export type WorkbookScenarioApplyReceipt =
+  | WorkbookScenarioApplySuccessReceipt
+  | WorkbookScenarioApplyFailureReceipt;
+
+export interface ViewportRefreshBounds {
+  readonly startRow: number;
+  readonly startCol: number;
+  readonly endRow: number;
+  readonly endCol: number;
+}
+
+export type ViewportRefreshReason =
+  | 'smartSkip'
+  | 'prefetchHit'
+  | 'fullFetch'
+  | 'deltaFetch'
+  | 'superseded';
+
+/** Details returned by the viewport movement refresh pipeline. */
+export interface ViewportRefreshDetails {
+  readonly viewportId: string;
+  readonly sheetId: string;
+  readonly visibleBounds: ViewportRefreshBounds;
+  readonly prefetchBounds: ViewportRefreshBounds | null;
+  readonly scrollBehavior: string;
+  readonly fetched: boolean;
+  readonly cacheHit: boolean;
+  readonly delta: boolean;
+  readonly projectionChanged: boolean;
+  readonly superseded: boolean;
+  readonly reason: ViewportRefreshReason | (string & {});
+}
+
+/** Receipt for refreshing one registered viewport region. */
+export interface ViewportRegionRefreshReceipt extends OperationReceiptBase {
+  readonly kind: 'viewport.refresh';
+  readonly status: 'applied' | 'noOp' | 'cancelled' | 'failed';
+  readonly regionId: string;
+  readonly sheetId: string;
+  readonly bounds: ViewportRefreshBounds;
+  readonly details?: ViewportRefreshDetails;
+}
+
+// =============================================================================
 // Pivots
 // =============================================================================
 
@@ -1139,6 +1226,10 @@ export type MutationReceipt =
   | UndoReceipt
   | RedoReceipt
   | PivotWorksheetMutationReceipt
+  | WorkbookLinkRefreshReceipt
+  | WorkbookLinksRefreshAllReceipt
+  | WorkbookScenarioApplyReceipt
+  | ViewportRegionRefreshReceipt
   | PivotAddReceipt
   | PivotAddWithSheetReceipt
   | PivotRefreshReceipt

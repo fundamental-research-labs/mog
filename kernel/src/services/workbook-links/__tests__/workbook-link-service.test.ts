@@ -53,14 +53,22 @@ describe('WorkbookLinkService', () => {
     expect(service.list()[0]).toHaveProperty('status');
 
     await expect(service.refresh('link-budget', scope('alice'))).resolves.toMatchObject({
+      kind: 'workbook.links.refresh',
+      status: 'applied',
       linkId: 'link-budget',
-      status: 'ready',
-      cachedValuesVersion: 'cache-v1',
+      statusView: {
+        status: 'ready',
+        cachedValuesVersion: 'cache-v1',
+      },
     });
     await expect(service.refresh('link-budget', scope('bob'))).resolves.toMatchObject({
+      kind: 'workbook.links.refresh',
+      status: 'failed',
       linkId: 'link-budget',
-      status: 'denied',
-      statusReason: 'permissionDenied',
+      statusView: {
+        status: 'denied',
+        statusReason: 'permissionDenied',
+      },
     });
 
     expect(service.getStatus('link-budget', scope('alice')).status).toBe('ready');
@@ -124,9 +132,13 @@ describe('WorkbookLinkService', () => {
     });
 
     await expect(service.refresh('link-budget', scope('alice'))).resolves.toMatchObject({
+      kind: 'workbook.links.refresh',
+      status: 'failed',
       linkId: 'link-budget',
-      status: 'broken',
-      statusReason: 'wrongWorkbookId',
+      statusView: {
+        status: 'broken',
+        statusReason: 'wrongWorkbookId',
+      },
     });
   });
 
@@ -169,9 +181,75 @@ describe('WorkbookLinkService', () => {
       deniedReason: 'redacted',
     });
     await expect(service.refresh('link-dde', scope('alice'))).resolves.toMatchObject({
-      status: 'unresolved',
-      statusReason: 'unsupportedLinkKind',
-      canRefresh: false,
+      kind: 'workbook.links.refresh',
+      status: 'unsupported',
+      statusView: {
+        status: 'unresolved',
+        statusReason: 'unsupportedLinkKind',
+        canRefresh: false,
+      },
+    });
+  });
+
+  it('returns an aggregate receipt for refreshAll including no-op inventory', async () => {
+    const service = createWorkbookLinkService();
+
+    await expect(service.refreshAll(scope('alice'))).resolves.toMatchObject({
+      kind: 'workbook.links.refreshAll',
+      status: 'noOp',
+      refreshedCount: 0,
+      failedCount: 0,
+      unsupportedCount: 0,
+      statusViews: [],
+      receipts: [],
+    });
+  });
+
+  it('returns aggregate refreshAll receipts with preserved status views', async () => {
+    const resolver: WorkbookLinkResolver = {
+      resolve(request) {
+        return {
+          linkId: request.linkId,
+          status: 'ready',
+          authorization: 'read',
+        };
+      },
+    };
+    const service = createWorkbookLinkService({ resolver });
+    service.create({
+      linkId: 'link-ready',
+      expectedWorkbookId: null,
+      target: { kind: 'open-session', sessionId: 'source-session' },
+      displayName: 'Ready',
+      sourceKind: 'mog-workbook',
+    });
+    service.create({
+      linkId: 'link-dde',
+      expectedWorkbookId: null,
+      target: { kind: 'opaque-host-ref', provider: 'ooxml-dde', ref: 'token' },
+      displayName: 'DDE',
+      sourceKind: 'dde-link',
+    });
+
+    await expect(service.refreshAll(scope('alice'))).resolves.toMatchObject({
+      kind: 'workbook.links.refreshAll',
+      status: 'partial',
+      linkIds: ['link-ready', 'link-dde'],
+      refreshedCount: 1,
+      failedCount: 0,
+      unsupportedCount: 1,
+      statusViews: [
+        expect.objectContaining({ linkId: 'link-ready', status: 'ready' }),
+        expect.objectContaining({
+          linkId: 'link-dde',
+          status: 'unresolved',
+          statusReason: 'unsupportedLinkKind',
+        }),
+      ],
+      receipts: [
+        expect.objectContaining({ kind: 'workbook.links.refresh', status: 'applied' }),
+        expect.objectContaining({ kind: 'workbook.links.refresh', status: 'unsupported' }),
+      ],
     });
   });
 });

@@ -9,6 +9,7 @@
 
 import type { IDisposable } from '@mog/types-core/disposable';
 import type { RenderScheduler } from '@mog/types-rendering/grid-renderer';
+import type { ViewportRegionRefreshReceipt } from '../mutation-receipt';
 
 export interface ViewportBounds {
   startRow: number;
@@ -44,7 +45,7 @@ export interface ViewportRegion extends IDisposable {
    */
   updateBounds(bounds: ViewportBounds): void;
   /** Request a data refresh for this region. */
-  refresh(scrollBehavior?: unknown): Promise<void>;
+  refresh(scrollBehavior?: unknown): Promise<ViewportRegionRefreshReceipt>;
 }
 
 /**

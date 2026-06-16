@@ -2000,8 +2000,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "refresh(linkId: LinkId): Promise<LinkStatusView>;",
-      "typeText": "Promise<LinkStatusView>",
+      "signature": "refresh(linkId: LinkId): Promise<WorkbookLinkRefreshReceipt>;",
+      "typeText": "Promise<WorkbookLinkRefreshReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/workbook.ts"
@@ -2019,8 +2019,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "refreshAll(options?: { readonly concurrency?: number }): Promise<readonly LinkStatusView[]>;",
-      "typeText": "Promise<readonly LinkStatusView[]>",
+      "signature": "refreshAll(options?: { readonly concurrency?: number }): Promise<WorkbookLinksRefreshAllReceipt>;",
+      "typeText": "Promise<WorkbookLinksRefreshAllReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/workbook.ts"
@@ -3211,8 +3211,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "apply(id: string): Promise<ApplyScenarioResult>;",
-      "typeText": "Promise<ApplyScenarioResult>",
+      "signature": "apply(id: string): Promise<WorkbookScenarioApplyReceipt>;",
+      "typeText": "Promise<WorkbookScenarioApplyReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/workbook/scenarios.ts"
@@ -20417,8 +20417,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "refresh(linkId: LinkId): Promise<LinkStatusView>;",
-      "typeText": "Promise<LinkStatusView>",
+      "signature": "refresh(linkId: LinkId): Promise<WorkbookLinkRefreshReceipt>;",
+      "typeText": "Promise<WorkbookLinkRefreshReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/workbook.ts"
@@ -20436,8 +20436,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "refreshAll(options?: { readonly concurrency?: number }): Promise<readonly LinkStatusView[]>;",
-      "typeText": "Promise<readonly LinkStatusView[]>",
+      "signature": "refreshAll(options?: { readonly concurrency?: number }): Promise<WorkbookLinksRefreshAllReceipt>;",
+      "typeText": "Promise<WorkbookLinksRefreshAllReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/workbook.ts"
@@ -21628,8 +21628,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "apply(id: string): Promise<ApplyScenarioResult>;",
-      "typeText": "Promise<ApplyScenarioResult>",
+      "signature": "apply(id: string): Promise<WorkbookScenarioApplyReceipt>;",
+      "typeText": "Promise<WorkbookScenarioApplyReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/workbook/scenarios.ts"

@@ -77,6 +77,10 @@ import type { AccessPrincipal } from '@mog-sdk/types-document/security';
 import type { Worksheet, WorksheetWithInternals } from './worksheet';
 import type { IFloatingObjectManager } from '../kernel/floating-object-manager';
 import type { CodeExecutionResult, CodeExecutionOptions } from '@mog/types-commands/execution';
+import type {
+  WorkbookLinkRefreshReceipt,
+  WorkbookLinksRefreshAllReceipt,
+} from './mutation-receipt';
 
 export type { CustomList } from '@mog/types-editor/fill/custom-lists';
 export type { WorkbookId, WorkbookSessionId, DocumentId, LinkId, ActorId } from './types';
@@ -303,8 +307,8 @@ export interface WorkbookLinks {
   break(linkId: LinkId, options: BreakWorkbookLinkOptions): boolean;
   delete(linkId: LinkId): boolean;
   getStatus(linkId: LinkId): LinkStatusView;
-  refresh(linkId: LinkId): Promise<LinkStatusView>;
-  refreshAll(options?: { readonly concurrency?: number }): Promise<readonly LinkStatusView[]>;
+  refresh(linkId: LinkId): Promise<WorkbookLinkRefreshReceipt>;
+  refreshAll(options?: { readonly concurrency?: number }): Promise<WorkbookLinksRefreshAllReceipt>;
   watchStatus(linkId: LinkId, handler: (status: LinkStatusView) => void): () => void;
   getUsages(linkId: LinkId): Promise<readonly WorkbookExternalLinkUsageView[]>;
   copySource(linkId: LinkId): Promise<CopyWorkbookLinkSourceResult>;

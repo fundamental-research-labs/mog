@@ -7,9 +7,12 @@
 import type {
   ActiveScenarioState,
   ApplyScenarioResult,
+  OperationDiagnostic,
+  OperationEffect,
   OriginalCellValue,
   Scenario,
   ScenarioConfig,
+  WorkbookScenarioApplyReceipt,
   WorkbookScenarios,
 } from '@mog-sdk/contracts/api';
 import type { SheetId } from '@mog-sdk/contracts/core';
@@ -38,6 +41,139 @@ function unwrapResult<T>(result: { success: boolean; data?: T; error?: any }): T
     );
   }
   return result.data as T;
+}
+
+function operationErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function scenarioApplyDiagnostics(
+  scenarioId: string,
+  result: ApplyScenarioResult,
+): OperationDiagnostic[] {
+  if (result.skippedCells.length === 0) return [];
+  return [
+    {
+      severity: 'warning',
+      code: 'SCENARIO_APPLY_SKIPPED_CELLS',
+      message: 'Scenario apply skipped one or more missing cells.',
+      target: {
+        objectId: scenarioId,
+        stage: 'apply',
+      },
+      recoverable: true,
+      nextAction: 'Update the scenario changing-cell references and apply it again.',
+      details: {
+        skippedCells: result.skippedCells,
+      },
+    },
+  ];
+}
+
+function scenarioApplyEffects(
+  scenarioId: string,
+  result: ApplyScenarioResult,
+): OperationEffect[] {
+  const effects: OperationEffect[] = [
+    {
+      type: 'computedGrid',
+      count: result.cellsUpdated,
+      details: {
+        operation: 'scenarioApply',
+        scenarioId,
+      },
+    },
+    {
+      type: 'updatedRuntimeMetadata',
+      objectId: scenarioId,
+      details: {
+        metadata: 'activeScenario',
+        durable: false,
+        baselineId: result.baselineId,
+        documentId: result.documentId,
+      },
+    },
+  ];
+
+  if (result.cellsUpdated > 0) {
+    effects.push(
+      {
+        type: 'wroteStaticValues',
+        count: result.cellsUpdated,
+        details: {
+          source: 'scenarioValues',
+          scenarioId,
+        },
+      },
+      {
+        type: 'materializedCells',
+        count: result.cellsUpdated,
+        details: {
+          source: 'scenarioValues',
+          scenarioId,
+        },
+      },
+    );
+  } else {
+    effects.push({
+      type: 'worksheetUnchanged',
+      details: {
+        reason: 'scenarioAppliedNoCellUpdates',
+        scenarioId,
+      },
+    });
+  }
+
+  return effects;
+}
+
+function buildScenarioApplyReceipt(
+  scenarioId: string,
+  result: ApplyScenarioResult,
+): WorkbookScenarioApplyReceipt {
+  const diagnostics = scenarioApplyDiagnostics(scenarioId, result);
+  const status: 'applied' | 'noOp' | 'partial' =
+    result.cellsUpdated === 0 ? 'noOp' : diagnostics.length > 0 ? 'partial' : 'applied';
+
+  return {
+    kind: 'workbook.scenarios.apply',
+    status,
+    effects: scenarioApplyEffects(scenarioId, result),
+    diagnostics,
+    scenarioId,
+    result,
+    baselineId: result.baselineId,
+    documentId: result.documentId,
+    cellsUpdated: result.cellsUpdated,
+    skippedCells: result.skippedCells,
+    originalValues: result.originalValues,
+  };
+}
+
+function buildScenarioApplyFailureReceipt(
+  scenarioId: string,
+  error: unknown,
+): WorkbookScenarioApplyReceipt {
+  return {
+    kind: 'workbook.scenarios.apply',
+    status: 'failed',
+    effects: [],
+    diagnostics: [
+      {
+        severity: 'error',
+        code: 'SCENARIO_APPLY_FAILED',
+        message: operationErrorMessage(error),
+        target: {
+          objectId: scenarioId,
+          stage: 'apply',
+        },
+        recoverable: true,
+        nextAction: 'Fix the scenario definition and apply it again.',
+      },
+    ],
+    scenarioId,
+    result: null,
+  };
 }
 
 export class WorkbookScenariosImpl implements WorkbookScenarios {
@@ -155,8 +291,12 @@ export class WorkbookScenariosImpl implements WorkbookScenarios {
     return unwrapResult(await ScenarioOps.getActiveScenarioState(this.ctx));
   }
 
-  async apply(id: string): Promise<ApplyScenarioResult> {
-    return unwrapResult(await ScenarioOps.applyScenarioFull(this.ctx, id));
+  async apply(id: string): Promise<WorkbookScenarioApplyReceipt> {
+    const result = await ScenarioOps.applyScenarioFull(this.ctx, id);
+    if (!result.success) {
+      return buildScenarioApplyFailureReceipt(id, result.error);
+    }
+    return buildScenarioApplyReceipt(id, result.data as ApplyScenarioResult);
   }
 
   async restore(baselineIdOrOriginals: string | OriginalCellValue[]): Promise<void> {

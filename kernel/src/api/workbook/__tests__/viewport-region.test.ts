@@ -11,7 +11,21 @@ function createBridge(overrides?: Partial<Record<string, jest.Mock>>) {
   return {
     registerViewportRegion: jest.fn().mockResolvedValue(undefined),
     unregisterViewportRegion: jest.fn().mockResolvedValue(undefined),
-    refreshViewportForRegion: jest.fn().mockResolvedValue(undefined),
+    refreshViewportForRegion: jest.fn(
+      async (viewportId: string, sheetId: string, bounds: any, scrollBehavior: string) => ({
+        viewportId,
+        sheetId,
+        visibleBounds: bounds,
+        prefetchBounds: bounds,
+        scrollBehavior,
+        fetched: true,
+        cacheHit: false,
+        delta: false,
+        projectionChanged: true,
+        superseded: false,
+        reason: 'fullFetch',
+      }),
+    ),
     updateViewportVisibleWindow: jest.fn(),
     resetSheetViewportRegions: jest.fn().mockResolvedValue(undefined),
     setRenderScheduler: jest.fn(),
@@ -88,9 +102,18 @@ describe('ViewportRegionImpl async cleanup ordering', () => {
       'frozen-corner:sheet-1',
     );
 
-    await region.refresh('none');
+    const receipt = await region.refresh('none');
 
     const normalizedBounds = { startRow: 0, startCol: 0, endRow: 1, endCol: 0 };
+    expect(receipt).toMatchObject({
+      kind: 'viewport.refresh',
+      status: 'applied',
+      regionId: 'frozen-corner:sheet-1',
+      details: {
+        fetched: true,
+        projectionChanged: true,
+      },
+    });
     expect(bridge.registerViewportRegion).toHaveBeenCalledWith(
       'frozen-corner:sheet-1',
       'sheet-1',
@@ -102,5 +125,60 @@ describe('ViewportRegionImpl async cleanup ordering', () => {
       normalizedBounds,
       'none',
     );
+  });
+
+  it('returns a failed receipt when refresh fails', async () => {
+    const bridge = createBridge({
+      refreshViewportForRegion: jest.fn().mockRejectedValue(new Error('fetch failed')),
+    });
+    const region = new ViewportRegionImpl('sheet-1' as any, bounds, bridge, 'vp-1');
+
+    await expect(region.refresh('free')).resolves.toMatchObject({
+      kind: 'viewport.refresh',
+      status: 'failed',
+      regionId: 'vp-1',
+      diagnostics: [
+        expect.objectContaining({
+          code: 'VIEWPORT_REFRESH_FAILED',
+          message: 'fetch failed',
+        }),
+      ],
+    });
+  });
+
+  it('returns a no-op receipt when refresh uses the viewport cache', async () => {
+    const bridge = createBridge({
+      refreshViewportForRegion: jest.fn(
+        async (viewportId: string, sheetId: string, currentBounds: any) => ({
+          viewportId,
+          sheetId,
+          visibleBounds: currentBounds,
+          prefetchBounds: currentBounds,
+          scrollBehavior: 'free',
+          fetched: false,
+          cacheHit: true,
+          delta: false,
+          projectionChanged: false,
+          superseded: false,
+          reason: 'prefetchHit',
+        }),
+      ),
+    });
+    const region = new ViewportRegionImpl('sheet-1' as any, bounds, bridge, 'vp-1');
+
+    await expect(region.refresh('free')).resolves.toMatchObject({
+      kind: 'viewport.refresh',
+      status: 'noOp',
+      effects: [
+        expect.objectContaining({
+          type: 'readViewportCache',
+        }),
+      ],
+      details: {
+        fetched: false,
+        cacheHit: true,
+        reason: 'prefetchHit',
+      },
+    });
   });
 });

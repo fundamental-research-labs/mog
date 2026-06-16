@@ -1,4 +1,8 @@
 import type { AccessPrincipal } from '@mog-sdk/contracts/security';
+import type {
+  WorkbookLinkRefreshReceipt,
+  WorkbookLinksRefreshAllReceipt,
+} from '@mog-sdk/contracts/api';
 
 export type WorkbookId = string;
 export type WorkbookSessionId = string;
@@ -221,11 +225,11 @@ export interface WorkbookLinksAPI {
   delete(linkId: LinkId): boolean;
   break(linkId: LinkId, options: { readonly mode: 'delete-record-only' }): boolean;
   getStatus(linkId: LinkId, scope?: Partial<WorkbookLinkStatusScope>): LinkStatusView;
-  refresh(linkId: LinkId, scope: WorkbookLinkStatusScope): Promise<LinkStatusView>;
+  refresh(linkId: LinkId, scope: WorkbookLinkStatusScope): Promise<WorkbookLinkRefreshReceipt>;
   refreshAll(
     scope: WorkbookLinkStatusScope,
     options?: { readonly concurrency?: number },
-  ): Promise<readonly LinkStatusView[]>;
+  ): Promise<WorkbookLinksRefreshAllReceipt>;
   watchStatus(
     linkId: LinkId,
     scope: WorkbookLinkStatusScope,

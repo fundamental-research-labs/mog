@@ -86,6 +86,17 @@ function mapToOriginalCellValues(map: Map<string, OriginalValueEntry>): Original
   }));
 }
 
+function receiptErrorMessage(
+  diagnostics: readonly { severity?: string; message?: string }[],
+  fallback: string,
+): string {
+  return (
+    diagnostics.find((diagnostic) => diagnostic.severity === 'error')?.message ??
+    diagnostics[0]?.message ??
+    fallback
+  );
+}
+
 // =============================================================================
 // Sub-Components
 // =============================================================================
@@ -344,17 +355,24 @@ export function ScenarioManagerDialog() {
     setProcessing(true);
 
     try {
-      const result = await wb.scenarios.apply(selectedScenario.id);
+      const receipt = await wb.scenarios.apply(selectedScenario.id);
+      if (receipt.status === 'failed') {
+        setValidationError(
+          'general',
+          receiptErrorMessage(receipt.diagnostics, 'Scenario could not be applied.'),
+        );
+        return;
+      }
 
       // Merge new originals with any already saved (preserves first-ever originals)
-      const merged = mergeOriginals(originalValuesBeforeScenario, result.originalValues);
+      const merged = mergeOriginals(originalValuesBeforeScenario, receipt.originalValues);
       storeOriginalValues(merged);
       setActivelyShownScenarioId(selectedScenario.id);
     } catch (err) {
       setValidationError('general', String(err));
+    } finally {
+      setProcessing(false);
     }
-
-    setProcessing(false);
   }, [
     selectedScenario,
     wb,

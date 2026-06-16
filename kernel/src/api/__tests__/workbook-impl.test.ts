@@ -1744,23 +1744,36 @@ describe('WorkbookImpl - Scenarios', () => {
   it('applyScenario() delegates to ScenarioOps.applyScenarioFull', async () => {
     (ScenarioOps.applyScenarioFull as jest.Mock).mockResolvedValue({
       success: true,
-      data: { cellsUpdated: 2, skippedCells: [], originalValues: [] },
+      data: { baselineId: 'baseline-1', cellsUpdated: 2, skippedCells: [], originalValues: [] },
     });
     const { wb } = await createWorkbook();
 
     const result = await wb.scenarios.apply('sc-1');
+    expect(result).toMatchObject({
+      kind: 'workbook.scenarios.apply',
+      status: 'applied',
+      result: {
+        baselineId: 'baseline-1',
+        cellsUpdated: 2,
+      },
+    });
     expect(result.cellsUpdated).toBe(2);
     expect(ScenarioOps.applyScenarioFull).toHaveBeenCalledWith(expect.anything(), 'sc-1');
   });
 
-  it('applyScenario() throws KernelError on failure', async () => {
+  it('applyScenario() returns a failed receipt on failure', async () => {
     (ScenarioOps.applyScenarioFull as jest.Mock).mockResolvedValue({
       success: false,
       error: 'not found',
     });
     const { wb } = await createWorkbook();
 
-    await expect(wb.scenarios.apply('sc-bad')).rejects.toThrow(KernelError);
+    await expect(wb.scenarios.apply('sc-bad')).resolves.toMatchObject({
+      kind: 'workbook.scenarios.apply',
+      status: 'failed',
+      scenarioId: 'sc-bad',
+      result: null,
+    });
   });
 
   it('restoreScenario() delegates to ScenarioOps.restoreScenarioValues', async () => {

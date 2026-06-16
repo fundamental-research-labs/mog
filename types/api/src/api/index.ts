@@ -387,6 +387,14 @@ export type {
   ValidationRemovalPayload,
   ValidationReceiptTarget,
   ValidationSetReceipt,
+  ViewportRefreshDetails,
+  ViewportRefreshReason,
+  ViewportRegionRefreshReceipt,
+  WorkbookLinkRefreshReceipt,
+  WorkbookLinksRefreshAllReceipt,
+  WorkbookScenarioApplyFailureReceipt,
+  WorkbookScenarioApplyReceipt,
+  WorkbookScenarioApplySuccessReceipt,
 } from './mutation-receipt';
 
 // Records API types (re-exported from types.ts but explicit for discoverability)

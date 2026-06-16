@@ -19,6 +19,7 @@ import type { BridgeTransport } from '@rust-bridge/client';
 import { TrapError, resetWasmModule } from '@mog/transport';
 import { asFormulaA1 } from '@mog/spreadsheet-utils/cells/formula-string';
 import type { SchemaChangedEvent } from '@mog-sdk/contracts/events';
+import type { ViewportRefreshDetails } from '@mog-sdk/contracts/api';
 import type { IKernelContext, ISpreadsheetKernelContext } from '@mog-sdk/contracts/kernel';
 import type { ColumnSchema } from '@mog-sdk/contracts/schema';
 import { type SheetId, sheetId as toSheetId } from '@mog-sdk/contracts/core';
@@ -1324,7 +1325,7 @@ export class ComputeCore {
     sheetId: SheetId,
     bounds: { startRow: number; startCol: number; endRow: number; endCol: number },
     scrollBehavior: ViewportScrollBehavior = 'free',
-  ): Promise<void> {
+  ): Promise<ViewportRefreshDetails> {
     this.ensureInitialized();
     return this.fetchManager!.refresh(
       viewportId,

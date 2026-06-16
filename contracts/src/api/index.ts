@@ -28,6 +28,17 @@ export type {
   RuntimeDiagnosticsPage,
   RuntimeOperationDiagnostic,
 } from '@mog/types-api/api/workbook/diagnostics';
+export type {
+  ChartAxisDescription,
+  ChartCachedPoint,
+  ChartDescription,
+  ChartSeriesDescription,
+  ChartSeriesSourceDataUpdate,
+  ChartSourceData,
+  ChartSourceDataUpdate,
+  ChartSourceRangeKind,
+  ChartSourceRangeMatch,
+} from '@mog/types-api/api/worksheet/charts';
 export { CellType, CellValueType, NumberFormatCategory, RangeValueType } from './types';
 export {
   isFloatingObjectMutationReceipt,

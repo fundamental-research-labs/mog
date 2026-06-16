@@ -25,9 +25,18 @@ export type {
   WorksheetChanges,
 } from './changes';
 export type {
+  ChartAxisDescription,
+  ChartCachedPoint,
+  ChartDescription,
   ChartImageExporter,
   ChartReadMaterialization,
   ChartReadOptions,
+  ChartSeriesDescription,
+  ChartSeriesSourceDataUpdate,
+  ChartSourceData,
+  ChartSourceDataUpdate,
+  ChartSourceRangeKind,
+  ChartSourceRangeMatch,
   WorksheetCharts,
 } from './charts';
 export type { WorksheetComments } from './comments';

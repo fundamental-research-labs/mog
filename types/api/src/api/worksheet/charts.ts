@@ -5,6 +5,7 @@
  * series manipulation, and point formatting methods.
  */
 import type { CallableDisposable } from '@mog/types-core/disposable';
+import type { CellRange } from '@mog/types-core/core';
 import type {
   BoxplotConfig,
   Chart,
@@ -17,6 +18,7 @@ import type {
   DataTableConfig,
   HistogramConfig,
   ImageExportOptions,
+  ResolvedChartSpecSnapshot,
   SeriesConfig,
   SingleAxisConfig,
   TrendlineConfig,
@@ -43,6 +45,88 @@ export interface ChartReadOptions {
    * block first interaction, and `complete` waits for all workbook sheets.
    */
   materialization?: ChartReadMaterialization;
+}
+
+export type ChartSourceData = ResolvedChartSpecSnapshot['resolved']['ranges'];
+
+export type ChartAxisDescription = ResolvedChartSpecSnapshot['resolved']['axes'];
+
+export interface ChartCachedPoint {
+  readonly index: number;
+  readonly category: string | number | null;
+  readonly xValue: string | number | null;
+  readonly value: number | null;
+  readonly renderedValue?: number | null;
+  readonly bubbleSize?: number | null;
+  readonly blank: boolean;
+}
+
+export interface ChartSeriesDescription {
+  readonly index: number;
+  readonly name: string;
+  readonly type?: string;
+  readonly axisGroup: 'primary' | 'secondary';
+  readonly source: ResolvedChartSpecSnapshot['resolved']['series'][number]['source'];
+  readonly ranges: ChartSourceData['seriesReferences'][number] | null;
+  readonly cachedPoints: readonly ChartCachedPoint[];
+  readonly pointCount: number;
+  readonly renderedPointCount: number;
+}
+
+export interface ChartDescription {
+  readonly chartId: string;
+  readonly sheetId: string;
+  readonly name?: string;
+  readonly title?: string;
+  readonly chartType: string;
+  readonly subType?: string;
+  readonly axes: ChartAxisDescription;
+  readonly sourceData: ChartSourceData;
+  readonly categories: readonly (string | number | null)[];
+  readonly series: readonly ChartSeriesDescription[];
+  readonly warnings: readonly string[];
+  readonly diagnostics: {
+    readonly ranges: ChartSourceData['diagnostics'];
+    readonly compiler: readonly string[];
+    readonly unsupportedFeatures: readonly string[];
+  };
+  readonly resolvedSpec: ResolvedChartSpecSnapshot;
+}
+
+export interface ChartSeriesSourceDataUpdate {
+  readonly index: number;
+  readonly name?: string | null;
+  readonly nameRef?: string | null;
+  readonly values?: string | null;
+  readonly categories?: string | null;
+  readonly bubbleSize?: string | null;
+}
+
+export interface ChartSourceDataUpdate {
+  readonly dataRange?: string | null;
+  readonly categoryRange?: string | null;
+  readonly seriesRange?: string | null;
+  readonly series?: readonly ChartSeriesSourceDataUpdate[];
+}
+
+export type ChartSourceRangeKind =
+  | 'dataRange'
+  | 'categoryRange'
+  | 'seriesRange'
+  | 'seriesName'
+  | 'seriesValues'
+  | 'seriesCategories'
+  | 'seriesBubbleSizes';
+
+export interface ChartSourceRangeMatch {
+  readonly chartId: string;
+  readonly chartName?: string;
+  readonly chartTitle?: string;
+  readonly rangeKind: ChartSourceRangeKind;
+  readonly seriesIndex?: number;
+  readonly source: 'identity' | 'a1';
+  readonly ref?: string;
+  readonly range: NonNullable<ChartSourceData['dataRange']>['range'];
 }
 
 export interface WorksheetCharts {
@@ -97,6 +181,27 @@ export interface WorksheetCharts {
 
   /** Find a chart by its name, or null if not found. */
   getByName(name: string): Promise<Chart | null>;
+
+  /**
+   * Describe the chart using the same resolved spec and source data that the
+   * production chart renderer uses.
+   */
+  describe(chartId: string, options?: ImageExportOptions): Promise<ChartDescription>;
+
+  /** Get the resolved chart source ranges and source-range diagnostics. */
+  getSourceData(chartId: string, options?: ImageExportOptions): Promise<ChartSourceData>;
+
+  /**
+   * Replace chart source range metadata. This does not write worksheet cell
+   * values; it changes which worksheet ranges feed the chart.
+   */
+  setSourceData(chartId: string, sourceData: ChartSourceDataUpdate): Promise<void>;
+
+  /** Find loaded charts whose resolved source ranges overlap the worksheet range. */
+  findBySourceRange(range: string | CellRange): Promise<ChartSourceRangeMatch[]>;
+
+  /** True when any loaded chart source range overlaps the worksheet range. */
+  usesRange(range: string | CellRange): Promise<boolean>;
 
   // ===========================================================================
   // Group B: Z-Order Methods (2g)

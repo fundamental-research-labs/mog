@@ -81,9 +81,18 @@ export type {
 
 // Worksheet sub-API interfaces
 export type {
+  ChartAxisDescription,
+  ChartCachedPoint,
+  ChartDescription,
   ChartImageExporter,
   ChartReadMaterialization,
   ChartReadOptions,
+  ChartSeriesDescription,
+  ChartSeriesSourceDataUpdate,
+  ChartSourceData,
+  ChartSourceDataUpdate,
+  ChartSourceRangeKind,
+  ChartSourceRangeMatch,
   ConditionalFormatUpdate,
   NodeMoveDirection,
   NodePosition,

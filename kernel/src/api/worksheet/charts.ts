@@ -6,17 +6,22 @@
  */
 import type {
   Chart,
+  ChartDescription,
   ChartConfig,
   ChartFormatString,
   ChartImageExporter,
   ChartReadOptions,
   ChartSeriesDimension,
+  ChartSourceData,
+  ChartSourceDataUpdate,
+  ChartSourceRangeMatch,
   ChartType,
   SheetId,
   SingleAxisConfig,
   WorksheetCharts,
 } from '@mog-sdk/contracts/api';
 
+import type { CellRange } from '@mog-sdk/contracts/core';
 import type {
   BoxplotConfig,
   ChartBorder,
@@ -53,6 +58,12 @@ import { sliceChartTitle } from './chart-title-substring';
 import { chartNotFound, invalidChartConfig, operationFailed } from '../../errors/api';
 import { KernelError } from '../../errors';
 import { type CallableDisposable, toDisposable } from '@mog/spreadsheet-utils/disposable';
+import {
+  describeWorksheetChart,
+  findWorksheetChartsBySourceRange,
+  getWorksheetChartSourceData,
+  updateChartSourceData,
+} from './chart-source-diagnostics';
 
 // =============================================================================
 // Implementation
@@ -205,7 +216,7 @@ export class WorksheetChartsImpl implements WorksheetCharts {
   }
 
   async setDataRange(chartId: string, range: string): Promise<void> {
-    await applyUpdate(this.ctx, this.sheetId, chartId, { dataRange: range });
+    await this.setSourceData(chartId, { dataRange: range });
   }
 
   async setType(chartId: string, type: ChartType, subType?: string): Promise<void> {
@@ -230,6 +241,32 @@ export class WorksheetChartsImpl implements WorksheetCharts {
   async getByName(name: string): Promise<Chart | null> {
     const charts = await this.list();
     return charts.find((c) => c.name === name) ?? null;
+  }
+
+  async describe(chartId: string, options?: ImageExportOptions): Promise<ChartDescription> {
+    return describeWorksheetChart(this.ctx, this.sheetId, chartId, options);
+  }
+
+  async getSourceData(chartId: string, options?: ImageExportOptions): Promise<ChartSourceData> {
+    return getWorksheetChartSourceData(this.ctx, this.sheetId, chartId, options);
+  }
+
+  async setSourceData(chartId: string, sourceData: ChartSourceDataUpdate): Promise<void> {
+    await updateChartSourceData(this.ctx, this.sheetId, chartId, sourceData);
+  }
+
+  async findBySourceRange(range: string | CellRange): Promise<ChartSourceRangeMatch[]> {
+    return findWorksheetChartsBySourceRange(
+      this.ctx,
+      this.sheetId,
+      range,
+      () => this.list(),
+      (chartId) => this.describe(chartId),
+    );
+  }
+
+  async usesRange(range: string | CellRange): Promise<boolean> {
+    return (await this.findBySourceRange(range)).length > 0;
   }
 
   // ===========================================================================
@@ -608,10 +645,6 @@ export class WorksheetChartsImpl implements WorksheetCharts {
   // Layout Retrieval Methods
   // ===========================================================================
 
-  /**
-   * Get the plot area layout for a chart.
-   * Delegates to ChartBridge.getLayout() and returns the plotArea sub-object.
-   */
   async getPlotAreaLayout(
     chartId: string,
   ): Promise<{ left: number; top: number; width: number; height: number } | null> {
@@ -620,10 +653,6 @@ export class WorksheetChartsImpl implements WorksheetCharts {
     return layout.plotArea;
   }
 
-  /**
-   * Get the legend layout for a chart.
-   * Delegates to ChartBridge.getLayout() and returns the legend sub-object.
-   */
   async getLegendLayout(
     chartId: string,
   ): Promise<{ left: number; top: number; width: number; height: number } | null> {
@@ -632,10 +661,6 @@ export class WorksheetChartsImpl implements WorksheetCharts {
     return layout.legend;
   }
 
-  /**
-   * Get the title layout for a chart.
-   * Delegates to ChartBridge.getLayout() and returns the title sub-object.
-   */
   async getTitleLayout(
     chartId: string,
   ): Promise<{ left: number; top: number; width: number; height: number } | null> {
@@ -644,10 +669,6 @@ export class WorksheetChartsImpl implements WorksheetCharts {
     return layout.title;
   }
 
-  /**
-   * Get the data label layout for a chart.
-   * Delegates to ChartBridge.getLayout() and returns the dataLabels sub-object.
-   */
   async getDataLabelLayout(
     chartId: string,
   ): Promise<{ left: number; top: number; width: number; height: number } | null> {
@@ -656,13 +677,6 @@ export class WorksheetChartsImpl implements WorksheetCharts {
     return layout.dataLabels;
   }
 
-  /**
-   * Internal helper: get the full chart layout snapshot from the chart bridge.
-   *
-   * Uses `IChartBridge.getLayout()` directly — no concrete-class cast needed
-   * now that the interface returns `ChartLayoutSnapshot` (the narrower cached
-   * snapshot, not the richer `ChartLayout` used by the charts library).
-   */
   private async getChartLayout(chartId: string): Promise<ChartLayoutSnapshot | null> {
     await awaitSheetMaterialized(this.ctx, this.sheetId);
     const bridge = this.ctx.charts;

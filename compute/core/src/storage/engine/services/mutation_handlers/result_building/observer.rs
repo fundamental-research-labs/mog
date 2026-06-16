@@ -234,34 +234,29 @@ pub(in crate::storage::engine) fn build_mutation_result_from_changes(
     // Yrs stores canonical units (points); DimensionChange.size must be pixels for TS.
     for dch in &changes.row_heights {
         let sheet_id_str = dch.sheet_id.to_uuid_string();
-        let kind = observer_kind_to_change_kind(dch.kind);
         if let Some(row) = resolve_row_id_to_index(stores, &dch.sheet_id, &dch.key) {
-            let size = if kind == ChangeKind::Set {
-                let height_pt = dimensions::get_row_height(
-                    stores.storage.doc(),
-                    stores.storage.sheets(),
-                    &dch.sheet_id,
-                    row,
-                    stores.grid_indexes.get(&dch.sheet_id),
-                );
-                let pixels = if height_pt.0 == 0.0 {
-                    0.0
-                } else {
-                    domain_types::units::points_to_pixels(height_pt).0
-                };
-                // Storage units are always finite; use `must` to document the
-                // invariant. A non-finite value here would indicate corrupt
-                // storage state, which should panic in debug.
-                Some(value_types::FiniteF64::must(pixels))
+            let height_pt = dimensions::get_row_height(
+                stores.storage.doc(),
+                stores.storage.sheets(),
+                &dch.sheet_id,
+                row,
+                stores.grid_indexes.get(&dch.sheet_id),
+            );
+            let pixels = if height_pt.0 == 0.0 {
+                0.0
             } else {
-                None
+                domain_types::units::points_to_pixels(height_pt).0
+            };
+            let kind = match dch.kind {
+                CellChangeKind::Modified => observer_kind_to_change_kind(dch.kind),
+                CellChangeKind::Removed => ChangeKind::Set,
             };
             result.dimension_changes.push(DimensionChange {
                 sheet_id: sheet_id_str,
                 axis: Axis::Row,
                 index: row,
                 kind,
-                size,
+                size: Some(value_types::FiniteF64::must(pixels)),
             });
         }
     }
@@ -271,31 +266,29 @@ pub(in crate::storage::engine) fn build_mutation_result_from_changes(
     let mdw = domain_types::units::platform_mdw();
     for dch in &changes.col_widths {
         let sheet_id_str = dch.sheet_id.to_uuid_string();
-        let kind = observer_kind_to_change_kind(dch.kind);
         if let Some(col) = resolve_col_id_to_index(stores, &dch.sheet_id, &dch.key) {
-            let size = if kind == ChangeKind::Set {
-                let width_cw = dimensions::get_col_width(
-                    stores.storage.doc(),
-                    stores.storage.sheets(),
-                    &dch.sheet_id,
-                    col,
-                    stores.grid_indexes.get(&dch.sheet_id),
-                );
-                let pixels = if width_cw.0 == 0.0 {
-                    0.0
-                } else {
-                    domain_types::units::char_width_to_pixels(width_cw, mdw).0
-                };
-                Some(value_types::FiniteF64::must(pixels))
+            let width_cw = dimensions::get_col_width(
+                stores.storage.doc(),
+                stores.storage.sheets(),
+                &dch.sheet_id,
+                col,
+                stores.grid_indexes.get(&dch.sheet_id),
+            );
+            let pixels = if width_cw.0 == 0.0 {
+                0.0
             } else {
-                None
+                domain_types::units::char_width_to_pixels(width_cw, mdw).0
+            };
+            let kind = match dch.kind {
+                CellChangeKind::Modified => observer_kind_to_change_kind(dch.kind),
+                CellChangeKind::Removed => ChangeKind::Set,
             };
             result.dimension_changes.push(DimensionChange {
                 sheet_id: sheet_id_str,
                 axis: Axis::Col,
                 index: col,
                 kind,
-                size,
+                size: Some(value_types::FiniteF64::must(pixels)),
             });
         }
     }

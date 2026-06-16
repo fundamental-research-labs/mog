@@ -90,6 +90,34 @@ fn first_viewport_format_at(patches: &[u8], row: u32, col: u32) -> Option<CellFo
     formats.get(local_idx).cloned()
 }
 
+fn assert_dimension_set_size(
+    result: &crate::snapshot::MutationResult,
+    axis: crate::snapshot::Axis,
+    index: u32,
+    expected_size: f64,
+) {
+    let change = result
+        .dimension_changes
+        .iter()
+        .find(|change| change.axis == axis && change.index == index)
+        .unwrap_or_else(|| {
+            panic!(
+                "missing dimension change for {:?} {}; got {:?}",
+                axis, index, result.dimension_changes
+            )
+        });
+    assert_eq!(change.kind, crate::snapshot::ChangeKind::Set);
+    let size = change.size.as_ref().expect("dimension size").get();
+    assert!(
+        (size - expected_size).abs() < 0.001,
+        "expected restored {:?} {} size {}px, got {}px",
+        axis,
+        index,
+        expected_size,
+        size
+    );
+}
+
 #[test]
 fn test_undo_formula_clear_reports_restored_cell_change() {
     let snap = simple_snapshot();
@@ -497,6 +525,7 @@ fn test_undo_row_height_produces_dimension_changes() {
     let sid = sheet_id();
 
     // Set a row height
+    let before = engine.get_row_height_query(&sid, 0);
     let _fwd = engine.set_row_height(&sid, 0, 40.0).unwrap();
 
     // Undo it
@@ -512,6 +541,118 @@ fn test_undo_row_height_produces_dimension_changes() {
     assert_eq!(dc.sheet_id, sid.to_uuid_string());
     assert_eq!(dc.axis, crate::snapshot::Axis::Row);
     assert_eq!(dc.index, 0);
+    assert_dimension_set_size(&result, crate::snapshot::Axis::Row, 0, before);
+}
+
+#[test]
+fn test_undo_col_width_restores_width_and_produces_dimension_changes() {
+    let snap = simple_snapshot();
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let sid = sheet_id();
+
+    let before = engine.get_col_width_query(&sid, 1);
+    engine.set_col_width(&sid, 1, 145.0).unwrap();
+    assert_ne!(engine.get_col_width_query(&sid, 1), before);
+
+    assert!(engine.can_undo());
+    let (_patches, result) = engine.undo().unwrap();
+
+    assert_eq!(engine.get_col_width_query(&sid, 1), before);
+    assert!(
+        !result.dimension_changes.is_empty(),
+        "undo of column width should produce dimension_changes",
+    );
+
+    let dc = &result.dimension_changes[0];
+    assert_eq!(dc.sheet_id, sid.to_uuid_string());
+    assert_eq!(dc.axis, crate::snapshot::Axis::Col);
+    assert_eq!(dc.index, 1);
+    assert_dimension_set_size(&result, crate::snapshot::Axis::Col, 1, before);
+}
+
+#[test]
+fn test_undo_col_widths_batch_restores_all_widths_as_one_action() {
+    let snap = simple_snapshot();
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let sid = sheet_id();
+
+    let before_col_1 = engine.get_col_width_query(&sid, 1);
+    let before_col_2 = engine.get_col_width_query(&sid, 2);
+    engine
+        .set_col_widths(&sid, &[(1, 145.0), (2, 172.0)])
+        .unwrap();
+
+    assert_ne!(engine.get_col_width_query(&sid, 1), before_col_1);
+    assert_ne!(engine.get_col_width_query(&sid, 2), before_col_2);
+
+    assert!(engine.can_undo());
+    let (_patches, result) = engine.undo().unwrap();
+
+    assert_eq!(engine.get_col_width_query(&sid, 1), before_col_1);
+    assert_eq!(engine.get_col_width_query(&sid, 2), before_col_2);
+    assert_dimension_set_size(&result, crate::snapshot::Axis::Col, 1, before_col_1);
+    assert_dimension_set_size(&result, crate::snapshot::Axis::Col, 2, before_col_2);
+    let mut changed_cols: Vec<u32> = result
+        .dimension_changes
+        .iter()
+        .filter(|change| change.axis == crate::snapshot::Axis::Col)
+        .map(|change| change.index)
+        .collect();
+    changed_cols.sort_unstable();
+    changed_cols.dedup();
+    assert_eq!(
+        changed_cols,
+        vec![1, 2],
+        "undo of batch column widths should surface each restored column",
+    );
+}
+
+#[test]
+fn test_undo_col_widths_chars_batch_restores_all_widths_as_one_action() {
+    let snap = simple_snapshot();
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let sid = sheet_id();
+
+    let before_col_1 = engine.get_col_width_chars_query(&sid, 1);
+    let before_col_2 = engine.get_col_width_chars_query(&sid, 2);
+    engine
+        .set_col_widths_chars(&sid, &[(1, 17.0), (2, 21.0)])
+        .unwrap();
+
+    assert_ne!(engine.get_col_width_chars_query(&sid, 1), before_col_1);
+    assert_ne!(engine.get_col_width_chars_query(&sid, 2), before_col_2);
+
+    assert!(engine.can_undo());
+    let (_patches, result) = engine.undo().unwrap();
+
+    assert_eq!(engine.get_col_width_chars_query(&sid, 1), before_col_1);
+    assert_eq!(engine.get_col_width_chars_query(&sid, 2), before_col_2);
+    assert_dimension_set_size(
+        &result,
+        crate::snapshot::Axis::Col,
+        1,
+        engine.get_col_width_query(&sid, 1),
+    );
+    assert_dimension_set_size(
+        &result,
+        crate::snapshot::Axis::Col,
+        2,
+        engine.get_col_width_query(&sid, 2),
+    );
+
+    let mut changed_cols: Vec<u32> = result
+        .dimension_changes
+        .iter()
+        .filter(|change| change.axis == crate::snapshot::Axis::Col)
+        .map(|change| change.index)
+        .collect();
+    changed_cols.sort_unstable();
+    changed_cols.dedup();
+    assert_eq!(
+        changed_cols,
+        vec![1, 2],
+        "undo of batch char-width columns should surface each restored column",
+    );
 }
 
 #[test]

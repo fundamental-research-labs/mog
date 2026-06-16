@@ -50,8 +50,10 @@ impl YrsComputeEngine {
             let width_cw = domain_types::units::pixels_to_char_width(*width_px, mdw);
             validation::structure::validate_col_width(width_cw)?;
         }
-        services::structural::set_col_widths(&mut self.stores, sheet_id, &widths_px)
-            .map(|r| (serialize_multi_viewport_patches(&[]), r))
+        self.with_undo_group_if(widths_px.len() > 1, |engine| {
+            services::structural::set_col_widths(&mut engine.stores, sheet_id, &widths_px)
+                .map(|r| (serialize_multi_viewport_patches(&[]), r))
+        })
     }
 
     pub(super) fn apply_set_col_width_chars(
@@ -78,8 +80,10 @@ impl YrsComputeEngine {
         for (_, width_cw) in &widths_cw {
             validation::structure::validate_col_width(*width_cw)?;
         }
-        services::structural::set_col_widths_chars(&mut self.stores, sheet_id, &widths_cw)
-            .map(|r| (serialize_multi_viewport_patches(&[]), r))
+        self.with_undo_group_if(widths_cw.len() > 1, |engine| {
+            services::structural::set_col_widths_chars(&mut engine.stores, sheet_id, &widths_cw)
+                .map(|r| (serialize_multi_viewport_patches(&[]), r))
+        })
     }
 
     pub(super) fn apply_hide_rows(

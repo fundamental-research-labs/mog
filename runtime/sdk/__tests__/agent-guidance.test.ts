@@ -234,7 +234,7 @@ describe('SDK agent API guidance', () => {
   it('blocks missing await on workbook getSheet before worksheet getValue', () => {
     const preflight = preflightMogCode(`
       const a = await workbook.getSheet("Data").getValue("A1");
-      const b = await wb.getSheet("Data").getValue("B1");
+      const b = await wb.getSheet("Data").describe("B1:C2");
       console.log(a, b);
     `);
 
@@ -247,22 +247,73 @@ describe('SDK agent API guidance', () => {
           matcherId: 'compatibility.mog-api.workbook.getSheet.missing-await.workbook',
           blocking: true,
           message: expect.stringContaining('getSheet is async'),
-          suggestion: expect.stringContaining('const ws = await wb.getSheet(name);'),
+          suggestion: expect.stringContaining('const ws = await workbook.getSheet(name);'),
         }),
         expect.objectContaining({
           code: 'MOG002_MOG_API_USAGE',
           entryId: 'mog-api.workbook.getSheet.missing-await',
           matcherId: 'compatibility.mog-api.workbook.getSheet.missing-await.wb',
           blocking: true,
+          offendingSymbol: 'wb.getSheet(...).describe',
         }),
       ]),
+    );
+  });
+
+  it('blocks guessed workbook/global helper namespaces with targeted Mog replacements', () => {
+    const preflight = preflightMogCode(`
+      await workbook.loadWorkbook("input.xlsx");
+      await saveWorkbook("output.xlsx");
+      const diagnostics = await errorCheck();
+      await calculate();
+      const sheet = await getSheet("Data");
+      const value = await workbook.getValue("A1");
+      console.log(diagnostics, sheet, value);
+    `);
+
+    expect(preflight.ok).toBe(false);
+    const byId = new Map(
+      preflight.diagnostics.map((diagnostic) => [diagnostic.entryId, diagnostic]),
+    );
+
+    expect(byId.get('mog-api.namespace.loadWorkbook.unsupported')).toEqual(
+      expect.objectContaining({
+        blocking: true,
+        message: expect.stringContaining('loadWorkbook'),
+        suggestion: expect.stringContaining('createWorkbook'),
+      }),
+    );
+    expect(byId.get('mog-api.namespace.saveWorkbook.unsupported')?.mogReplacements).toEqual(
+      expect.arrayContaining([expect.objectContaining({ path: 'wb.save' })]),
+    );
+    expect(byId.get('mog-api.namespace.errorCheck.unsupported')?.mogReplacements).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ path: 'wb.diagnostics.getFormulaReferences' }),
+      ]),
+    );
+    expect(byId.get('mog-api.namespace.calculate.global')?.mogReplacements).toEqual([
+      expect.objectContaining({ path: 'wb.calculate' }),
+    ]);
+    expect(byId.get('mog-api.namespace.getSheet.global')?.mogReplacements).toEqual(
+      expect.arrayContaining([expect.objectContaining({ path: 'wb.getSheet' })]),
+    );
+    expect(byId.get('mog-api.namespace.workbook-worksheet-method')).toEqual(
+      expect.objectContaining({
+        offendingSymbol: 'workbook.getValue(...)',
+        suggestion: expect.stringContaining('workbook.activeSheet'),
+      }),
     );
   });
 
   it('does not flag comments, strings, valid Mog calls, or unrelated local helper names for Mog API guidance', () => {
     const source = `
       // await ws.getCellValue("A1");
-      const text = 'ws.rawCellData("A1"); ws.getFormat("A1"); ws._colLetter(1); workbook.getSheet("S").getValue("A1")';
+      const text = 'ws.rawCellData("A1"); ws.getFormat("A1"); ws._colLetter(1); workbook.getSheet("S").getValue("A1"); calculate(); loadWorkbook(); saveWorkbook(); errorCheck(); getSheet("S")';
+      function calculate() {}
+      const loadWorkbook = () => {};
+      const saveWorkbook = () => {};
+      const errorCheck = () => {};
+      const getSheet = () => {};
       const helpers = {
         getCellValue() {},
         rawCellData() {},
@@ -277,6 +328,11 @@ describe('SDK agent API guidance', () => {
       helpers.indexToAddress();
       helpers.addressToIndex();
       helpers._colLetter();
+      calculate();
+      loadWorkbook();
+      saveWorkbook();
+      errorCheck();
+      getSheet("S");
       const ws2 = await wb.getSheet("S");
       await ws.getValue("A1");
       await ws.getRawCellData("A1");

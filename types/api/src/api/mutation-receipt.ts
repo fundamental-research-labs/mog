@@ -7,7 +7,7 @@
  */
 
 import type { ObjectBounds } from '../kernel/floating-object-manager';
-import type { CellRange, CellValue } from '@mog/types-core/core';
+import type { CellRange, CellValue, SheetId } from '@mog/types-core/core';
 import type { CFRule, ConditionalFormat } from '@mog/types-formatting/conditional-format/rules';
 import type { FloatingObject } from '@mog/types-objects/objects/floating-objects';
 import type { OperationReceiptBase } from './operation-receipt';
@@ -242,17 +242,48 @@ export interface TableDeleteRowReceipt {
 // Named Ranges
 // =============================================================================
 
-/** Receipt for a named range add mutation. */
-export interface NameAddReceipt {
-  readonly kind: 'nameAdd';
+export interface NameReceiptItem {
+  readonly id: string;
   readonly name: string;
   readonly reference: string;
+  readonly scope?: string;
+  readonly scopeSheetId?: SheetId;
+  readonly comment?: string;
+  readonly visible?: boolean;
+}
+
+/** Receipt for a named range add mutation. */
+export interface NameAddReceipt extends OperationReceiptBase {
+  readonly kind: 'nameAdd';
+  readonly status: 'applied';
+  readonly name: string;
+  readonly reference: string;
+  readonly created: NameReceiptItem;
 }
 
 /** Receipt for a named range remove mutation. */
-export interface NameRemoveReceipt {
+export interface NameRemoveReceipt extends OperationReceiptBase {
   readonly kind: 'nameRemove';
+  readonly status: 'applied';
   readonly name: string;
+  readonly removed: NameReceiptItem;
+}
+
+/** Receipt for a named range update mutation. */
+export interface NameUpdateReceipt extends OperationReceiptBase {
+  readonly kind: 'nameUpdate';
+  readonly status: 'applied' | 'noOp';
+  readonly name: string;
+  readonly previous: NameReceiptItem;
+  readonly updated: NameReceiptItem;
+}
+
+/** Receipt for clearing named ranges. */
+export interface NameClearReceipt extends OperationReceiptBase {
+  readonly kind: 'nameClear';
+  readonly status: 'applied' | 'noOp';
+  readonly removed: readonly NameReceiptItem[];
+  readonly removedCount: number;
 }
 
 // =============================================================================
@@ -277,16 +308,41 @@ export interface AutoFilterClearReceipt extends OperationReceiptBase {
 // Validation
 // =============================================================================
 
+export interface ValidationReceiptTarget {
+  readonly id?: string;
+  readonly address?: string;
+  readonly ranges: readonly string[];
+}
+
+export interface ValidationRemovalPayload {
+  readonly address?: string;
+  readonly ids: readonly string[];
+  readonly ranges: readonly string[];
+  readonly count: number;
+}
+
 /** Receipt for setting a validation rule. */
-export interface ValidationSetReceipt {
+export interface ValidationSetReceipt extends OperationReceiptBase {
   readonly kind: 'validationSet';
+  readonly status: 'applied';
   readonly address: string;
+  readonly validation: ValidationReceiptTarget;
 }
 
 /** Receipt for removing a validation rule. */
-export interface ValidationRemoveReceipt {
+export interface ValidationRemoveReceipt extends OperationReceiptBase {
   readonly kind: 'validationRemove';
+  readonly status: 'applied' | 'noOp';
   readonly address: string;
+  readonly removed: ValidationRemovalPayload;
+}
+
+/** Receipt for clearing validation rules from a sheet or range. */
+export interface ValidationClearReceipt extends OperationReceiptBase {
+  readonly kind: 'validationClear';
+  readonly status: 'applied' | 'noOp';
+  readonly address?: string;
+  readonly removed: ValidationRemovalPayload;
 }
 
 // =============================================================================
@@ -581,10 +637,13 @@ export type MutationReceipt =
   | TableDeleteRowReceipt
   | NameAddReceipt
   | NameRemoveReceipt
+  | NameUpdateReceipt
+  | NameClearReceipt
   | AutoFilterSetReceipt
   | AutoFilterClearReceipt
   | ValidationSetReceipt
   | ValidationRemoveReceipt
+  | ValidationClearReceipt
   | CommentReceipt
   | ConditionalFormatMutationReceipt
   | UndoReceipt

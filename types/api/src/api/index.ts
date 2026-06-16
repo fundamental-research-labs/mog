@@ -296,7 +296,10 @@ export type {
   MergeReceipt,
   MutationReceipt,
   NameAddReceipt,
+  NameClearReceipt,
+  NameReceiptItem,
   NameRemoveReceipt,
+  NameUpdateReceipt,
   PivotAddReceipt,
   PivotAddWithSheetReceipt,
   PivotCreationLifecycle,
@@ -327,7 +330,10 @@ export type {
   TableResizeReceipt,
   UndoReceipt,
   UnmergeReceipt,
+  ValidationClearReceipt,
   ValidationRemoveReceipt,
+  ValidationRemovalPayload,
+  ValidationReceiptTarget,
   ValidationSetReceipt,
 } from './mutation-receipt';
 

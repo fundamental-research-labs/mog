@@ -6,7 +6,12 @@
  * Usage: `workbook.names.add("Revenue", "Sheet1!A1:A10")` instead of
  *        `workbook.addNamedRange("Revenue", "Sheet1!A1:A10")`
  */
-import type { NameAddReceipt, NameRemoveReceipt } from '../mutation-receipt';
+import type {
+  NameAddReceipt,
+  NameClearReceipt,
+  NameRemoveReceipt,
+  NameUpdateReceipt,
+} from '../mutation-receipt';
 import type {
   CellRange,
   CellValue,
@@ -71,17 +76,27 @@ export interface WorkbookNames {
   remove(name: string, scope?: string): Promise<NameRemoveReceipt>;
 
   /**
+   * Remove a named range by its stable internal ID.
+   * @param id - The named range ID to remove.
+   */
+  removeById(id: string): Promise<NameRemoveReceipt>;
+
+  /**
    * Update an existing named range.
    * @param name - The current name to update.
    * @param updates - Fields to change (name, reference, comment).
    * @param scope - Optional sheet name scope. Omit for workbook-scoped names.
    */
-  update(name: string, updates: NamedRangeUpdateOptions, scope?: string): Promise<void>;
+  update(
+    name: string,
+    updates: NamedRangeUpdateOptions,
+    scope?: string,
+  ): Promise<NameUpdateReceipt>;
 
   /**
    * Remove all named ranges from the workbook.
    */
-  clear(): Promise<void>;
+  clear(): Promise<NameClearReceipt>;
 
   /**
    * List all named ranges in the workbook.

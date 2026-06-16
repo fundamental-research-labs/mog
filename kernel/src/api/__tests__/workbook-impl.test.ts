@@ -46,7 +46,10 @@ const copySheetMock = jest.fn();
 const moveSheetMock = jest.fn();
 const setSheetHiddenMock = jest.fn();
 const namedRangesGetByNameMock = jest.fn();
+const namedRangesGetByIdMock = jest.fn();
+const namedRangesGetRefersToA1Mock = jest.fn();
 const namedRangesCreateMock = jest.fn();
+const namedRangesUpdateMock = jest.fn();
 const namedRangesRemoveMock = jest.fn();
 const namedRangesExportNamesMock = jest.fn();
 const getFunctionCatalogMock = jest.fn();
@@ -68,7 +71,10 @@ jest.unstable_mockModule('../worksheet/worksheet-impl', () => ({
 
 jest.unstable_mockModule('../../domain/formulas/named-ranges', () => ({
   getByName: namedRangesGetByNameMock,
+  getById: namedRangesGetByIdMock,
+  getRefersToA1: namedRangesGetRefersToA1Mock,
   create: namedRangesCreateMock,
+  update: namedRangesUpdateMock,
   remove: namedRangesRemoveMock,
   exportNames: namedRangesExportNamesMock,
 }));
@@ -349,6 +355,11 @@ let mockCheckpointMethods: {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  (NamedRanges.getRefersToA1 as jest.Mock).mockImplementation(
+    async (_ctx: unknown, defined: any) => {
+      return defined.refersToA1 ?? '=Sheet1!A1';
+    },
+  );
 
   // Default mock for createCheckpointManager factory.
   // We store a reference to the mocked methods so tests can assert on them.
@@ -1211,11 +1222,17 @@ describe('WorkbookImpl - Named Ranges', () => {
   });
 
   it('addNamedRange() delegates to NamedRanges.create on success', async () => {
-    (NamedRanges.getByName as jest.Mock).mockResolvedValue(undefined);
+    (NamedRanges.getByName as jest.Mock)
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce({
+        id: 'nr-revenue',
+        name: 'Revenue',
+        refersToA1: '=Sheet1!A1:B10',
+      });
     (NamedRanges.create as jest.Mock).mockResolvedValue(undefined);
     const { wb } = await createWorkbook();
 
-    await wb.names.add('Revenue', '=Sheet1!A1:B10');
+    const receipt = await wb.names.add('Revenue', '=Sheet1!A1:B10');
 
     expect(NamedRanges.create).toHaveBeenCalledWith(
       expect.anything(),
@@ -1223,10 +1240,26 @@ describe('WorkbookImpl - Named Ranges', () => {
       'sheet1',
       'api',
     );
+    expect(receipt).toMatchObject({
+      kind: 'nameAdd',
+      status: 'applied',
+      name: 'Revenue',
+      created: {
+        id: 'nr-revenue',
+        name: 'Revenue',
+        reference: 'Sheet1!A1:B10',
+      },
+    });
   });
 
   it('addNamedRange() prepends = to reference if missing', async () => {
-    (NamedRanges.getByName as jest.Mock).mockResolvedValue(undefined);
+    (NamedRanges.getByName as jest.Mock)
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce({
+        id: 'nr-revenue',
+        name: 'Revenue',
+        refersToA1: '=Sheet1!A1:B10',
+      });
     (NamedRanges.create as jest.Mock).mockResolvedValue(undefined);
     const { wb } = await createWorkbook();
 

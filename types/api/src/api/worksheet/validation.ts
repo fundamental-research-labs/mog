@@ -5,7 +5,11 @@
  * on a worksheet. Supports both A1-style string and numeric (row, col)
  * addressing.
  */
-import type { ValidationSetReceipt } from '../mutation-receipt';
+import type {
+  ValidationClearReceipt,
+  ValidationRemoveReceipt,
+  ValidationSetReceipt,
+} from '../mutation-receipt';
 import type { CellRange } from '../types';
 import type { ValidationRule } from '../types';
 
@@ -133,20 +137,20 @@ export interface WorksheetValidation {
    *
    * @param address - A1-style cell address
    */
-  remove(address: string): Promise<void>;
+  remove(address: string): Promise<ValidationRemoveReceipt>;
   /**
    * Remove validation from a range (deletes any range schema overlapping the range).
    *
    * @param range - CellRange object defining the target range
    */
-  remove(range: CellRange): Promise<void>;
+  remove(range: CellRange): Promise<ValidationRemoveReceipt>;
   /**
    * Remove validation from a cell (deletes any range schema covering the cell).
    *
    * @param row - Row index (0-based)
    * @param col - Column index (0-based)
    */
-  remove(row: number, col: number): Promise<void>;
+  remove(row: number, col: number): Promise<ValidationRemoveReceipt>;
 
   /**
    * Get the validation rule for a cell.
@@ -252,21 +256,21 @@ export interface WorksheetValidation {
    *
    * @param range - (Optional) A1-style range string. If omitted, removes ALL rules.
    */
-  clear(range?: string): Promise<void>;
+  clear(range?: string | CellRange): Promise<ValidationClearReceipt>;
 
   /**
    * Clear validation rules that overlap a range.
    *
    * @param range - A1-style range string (e.g. "A1:B5") or CellRange object
    */
-  clearInRange(range: string | CellRange): Promise<void>;
+  clearInRange(range: string | CellRange): Promise<ValidationClearReceipt>;
 
   /**
    * Remove a validation rule by its ID.
    *
    * @param id - Validation rule / range schema ID
    */
-  removeById(id: string): Promise<void>;
+  removeById(id: string): Promise<ValidationRemoveReceipt>;
 
   /**
    * Validate a candidate value for a cell against the rule covering it.

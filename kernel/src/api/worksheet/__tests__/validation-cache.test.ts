@@ -106,9 +106,33 @@ describe('WorksheetValidationImpl sheet cache', () => {
     await validations.get(0, 0);
     expect(ctx.computeBridge.getRangeSchemasForSheet).toHaveBeenCalledTimes(1);
 
-    await validations.remove(0, 0);
+    const receipt = await validations.remove(0, 0);
     await validations.get(0, 0);
 
+    expect(receipt).toMatchObject({
+      kind: 'validationRemove',
+      status: 'applied',
+      address: 'R0C0',
+      removed: {
+        ids: ['old'],
+        ranges: ['A1:A1'],
+        count: 1,
+      },
+      effects: [
+        {
+          type: 'changedValidation',
+          sheetId: SHEET_ID,
+          range: 'A1:A1',
+          count: 1,
+        },
+        {
+          type: 'changedRange',
+          sheetId: SHEET_ID,
+          range: 'A1:A1',
+        },
+      ],
+      diagnostics: [],
+    });
     expect(ctx.computeBridge.deleteRangeSchema).toHaveBeenCalledWith(SHEET_ID, 'old');
     expect(ctx.computeBridge.getRangeSchemasForSheet).toHaveBeenCalledTimes(2);
     expect(validations.peek(0, 0)).toBeNull();
@@ -121,10 +145,67 @@ describe('WorksheetValidationImpl sheet cache', () => {
     ]);
     const validations = new WorksheetValidationImpl(ctx, SHEET_ID);
 
-    await validations.remove(0, 0);
+    const receipt = await validations.remove(0, 0);
 
     expect(ctx.computeBridge.deleteRangeSchema).toHaveBeenCalledWith(SHEET_ID, 'first');
     expect(ctx.computeBridge.deleteRangeSchema).toHaveBeenCalledWith(SHEET_ID, 'second');
+    expect(receipt.removed).toEqual({
+      address: 'R0C0',
+      ids: ['first', 'second'],
+      ranges: ['A1:B2', 'A1:A1'],
+      count: 2,
+    });
+  });
+
+  it('returns a no-op clear receipt when no validation overlaps the range', async () => {
+    const ctx = createCtx();
+    const validations = new WorksheetValidationImpl(ctx, SHEET_ID);
+
+    await expect(validations.clearInRange('C3:D4')).resolves.toMatchObject({
+      kind: 'validationClear',
+      status: 'noOp',
+      address: 'C3:D4',
+      removed: {
+        ids: [],
+        ranges: [],
+        count: 0,
+      },
+      effects: [{ type: 'worksheetUnchanged', sheetId: SHEET_ID, range: 'C3:D4' }],
+      diagnostics: [],
+    });
+  });
+
+  it('removeById returns the removed validation ID and affected range', async () => {
+    const ctx = createCtx([
+      makeSchema({ id: 'target-rule', ranges: [{ startId: '2:2', endId: '4:2' }] }),
+    ]);
+    const validations = new WorksheetValidationImpl(ctx, SHEET_ID);
+
+    await expect(validations.removeById('target-rule')).resolves.toMatchObject({
+      kind: 'validationRemove',
+      status: 'applied',
+      address: 'target-rule',
+      removed: {
+        address: 'target-rule',
+        ids: ['target-rule'],
+        ranges: ['C3:C5'],
+        count: 1,
+      },
+      effects: [
+        {
+          type: 'changedValidation',
+          sheetId: SHEET_ID,
+          range: 'C3:C5',
+          count: 1,
+        },
+        {
+          type: 'changedRange',
+          sheetId: SHEET_ID,
+          range: 'C3:C5',
+        },
+      ],
+      diagnostics: [],
+    });
   });
 
   it('does not let stale hydration survive an import/load invalidation', async () => {
@@ -263,13 +344,36 @@ describe('WorksheetValidationImpl list validation', () => {
     const ctx = createCtx();
     const validations = new WorksheetValidationImpl(ctx, SHEET_ID);
 
-    await expect(
-      validations.setList('B2:B4', ['Red', 'Blue'], {
-        allowBlank: false,
-        errorTitle: 'Choose from list',
-        errorMessage: 'Use one of the allowed values.',
-      }),
-    ).resolves.toEqual({ kind: 'validationSet', address: 'B2:B4' });
+    const receipt = await validations.setList('B2:B4', ['Red', 'Blue'], {
+      allowBlank: false,
+      errorTitle: 'Choose from list',
+      errorMessage: 'Use one of the allowed values.',
+    });
+
+    expect(receipt).toMatchObject({
+      kind: 'validationSet',
+      status: 'applied',
+      address: 'B2:B4',
+      validation: {
+        address: 'B2:B4',
+        ranges: ['B2:B4'],
+      },
+      effects: [
+        {
+          type: 'changedValidation',
+          sheetId: SHEET_ID,
+          range: 'B2:B4',
+        },
+        {
+          type: 'changedRange',
+          sheetId: SHEET_ID,
+          range: 'B2:B4',
+          count: 3,
+        },
+      ],
+      diagnostics: [],
+    });
+    expect(receipt.validation.id).toEqual(expect.stringMatching(/^rs-/));
 
     const schema = Array.from(ctx.__schemas.values())[0];
     expect(schema.ranges).toEqual([{ startId: '1:1', endId: '3:1' }]);

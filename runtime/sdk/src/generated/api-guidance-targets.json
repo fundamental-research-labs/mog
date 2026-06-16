@@ -2224,8 +2224,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "clear(): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "clear(): Promise<NameClearReceipt>;",
+      "typeText": "Promise<NameClearReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/workbook/names.ts"
@@ -2481,6 +2481,25 @@
     },
     {
       "schemaVersion": "1",
+      "path": "wb.names.removeById",
+      "stableId": "WorkbookNames.removeById",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookNames",
+      "member": "removeById",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "removeById(id: string): Promise<NameRemoveReceipt>;",
+      "typeText": "Promise<NameRemoveReceipt>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/names.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
       "path": "wb.names.update",
       "stableId": "WorkbookNames.update",
       "root": "subApi",
@@ -2490,8 +2509,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "update(name: string, updates: NamedRangeUpdateOptions, scope?: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "update(\n    name: string,\n    updates: NamedRangeUpdateOptions,\n    scope?: string,\n  ): Promise<NameUpdateReceipt>;",
+      "typeText": "Promise<NameUpdateReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/workbook/names.ts"
@@ -17631,8 +17650,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "clear(range?: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "clear(range?: string | CellRange): Promise<ValidationClearReceipt>;",
+      "typeText": "Promise<ValidationClearReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/validation.ts"
@@ -17650,8 +17669,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "clearInRange(range: string | CellRange): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "clearInRange(range: string | CellRange): Promise<ValidationClearReceipt>;",
+      "typeText": "Promise<ValidationClearReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/validation.ts"
@@ -17821,8 +17840,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "remove(address: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "remove(address: string): Promise<ValidationRemoveReceipt>;",
+      "typeText": "Promise<ValidationRemoveReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/validation.ts"
@@ -17840,8 +17859,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "removeById(id: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "removeById(id: string): Promise<ValidationRemoveReceipt>;",
+      "typeText": "Promise<ValidationRemoveReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/validation.ts"
@@ -20603,8 +20622,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "clear(): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "clear(): Promise<NameClearReceipt>;",
+      "typeText": "Promise<NameClearReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/workbook/names.ts"
@@ -20858,6 +20877,25 @@
       },
       "ownerPackage": "@mog/types-api"
     },
+    "wb.names.removeById": {
+      "schemaVersion": "1",
+      "path": "wb.names.removeById",
+      "stableId": "WorkbookNames.removeById",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookNames",
+      "member": "removeById",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "removeById(id: string): Promise<NameRemoveReceipt>;",
+      "typeText": "Promise<NameRemoveReceipt>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/names.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
     "wb.names.update": {
       "schemaVersion": "1",
       "path": "wb.names.update",
@@ -20869,8 +20907,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "update(name: string, updates: NamedRangeUpdateOptions, scope?: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "update(\n    name: string,\n    updates: NamedRangeUpdateOptions,\n    scope?: string,\n  ): Promise<NameUpdateReceipt>;",
+      "typeText": "Promise<NameUpdateReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/workbook/names.ts"
@@ -36010,8 +36048,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "clear(range?: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "clear(range?: string | CellRange): Promise<ValidationClearReceipt>;",
+      "typeText": "Promise<ValidationClearReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/validation.ts"
@@ -36029,8 +36067,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "clearInRange(range: string | CellRange): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "clearInRange(range: string | CellRange): Promise<ValidationClearReceipt>;",
+      "typeText": "Promise<ValidationClearReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/validation.ts"
@@ -36200,8 +36238,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "remove(address: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "remove(address: string): Promise<ValidationRemoveReceipt>;",
+      "typeText": "Promise<ValidationRemoveReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/validation.ts"
@@ -36219,8 +36257,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "removeById(id: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "removeById(id: string): Promise<ValidationRemoveReceipt>;",
+      "typeText": "Promise<ValidationRemoveReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/validation.ts"

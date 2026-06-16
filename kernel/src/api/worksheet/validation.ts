@@ -9,8 +9,11 @@ import type {
   DropdownItemsWithRevision,
   ListValidationOptions,
   ListValidationSource,
+  OperationEffect,
   SheetId,
+  ValidationClearReceipt,
   ValidationCheckResult,
+  ValidationRemoveReceipt,
   ValidationRule,
   ValidationSetReceipt,
   WorksheetValidation,
@@ -27,11 +30,17 @@ import { parseCellRange, rangeToA1 } from '../internal/utils';
 import {
   applyListSourceString,
   errorStyleToEnforcement,
+  parseRefIdSimple,
   rangeSchemaToValidationRule,
   validationRuleToConstraints,
   validationTypeToSchemaType,
 } from './operations/validation-helpers';
-import { getDropdownItems, resolveDropdownItems } from './operations/validation-operations';
+import {
+  deleteRangeSchema,
+  getDropdownItems,
+  resolveDropdownItems,
+  setRangeSchema,
+} from './operations/validation-operations';
 import { getWorksheetValidationCache } from './validation-cache';
 
 function enforcementToValidationErrorStyle(
@@ -65,6 +74,189 @@ function receivedType(value: unknown): string {
   if (value === null) return 'null';
   if (Array.isArray(value)) return 'array';
   return typeof value;
+}
+
+function rangeCellCount(range: CellRange): number {
+  return (range.endRow - range.startRow + 1) * (range.endCol - range.startCol + 1);
+}
+
+function schemaRangeToCellRange(rangeRef: RangeSchema['ranges'][number]): CellRange | null {
+  const start = parseRefIdSimple(rangeRef.startId);
+  const end = parseRefIdSimple(rangeRef.endId);
+  if (!start || !end) return null;
+  return {
+    startRow: start.row,
+    startCol: start.col,
+    endRow: end.row,
+    endCol: end.col,
+  };
+}
+
+function schemaRangesToA1(schema: RangeSchema): string[] {
+  const ranges: string[] = [];
+  for (const rangeRef of schema.ranges) {
+    const range = schemaRangeToCellRange(rangeRef);
+    if (range) ranges.push(rangeToA1(range));
+  }
+  return ranges;
+}
+
+function uniqueStrings(values: readonly string[]): string[] {
+  return Array.from(new Set(values));
+}
+
+function validationChangedRangeEffects(
+  sheetId: SheetId,
+  ranges: readonly string[],
+  action: string,
+): OperationEffect[] {
+  return uniqueStrings(ranges).map((range) => ({
+    type: 'changedRange',
+    sheetId,
+    range,
+    details: { action },
+  }));
+}
+
+function validationRemovedReceiptInput(schemas: readonly RangeSchema[]): {
+  ids: string[];
+  ranges: string[];
+  count: number;
+} {
+  const ranges: string[] = [];
+  for (const schema of schemas) {
+    ranges.push(...schemaRangesToA1(schema));
+  }
+  return {
+    ids: schemas.map((schema) => schema.id),
+    ranges: uniqueStrings(ranges),
+    count: schemas.length,
+  };
+}
+
+function validationSetReceipt(params: {
+  sheetId: SheetId;
+  schema: RangeSchema;
+  address: string;
+  range: CellRange;
+  rule: ValidationRule;
+}): ValidationSetReceipt {
+  const range = rangeToA1(params.range);
+  return {
+    kind: 'validationSet',
+    status: 'applied',
+    effects: [
+      {
+        type: 'changedValidation',
+        sheetId: params.sheetId,
+        range,
+        objectId: params.schema.id,
+        details: { action: 'set', validationType: params.rule.type },
+      },
+      {
+        type: 'changedRange',
+        sheetId: params.sheetId,
+        range,
+        count: rangeCellCount(params.range),
+        details: { action: 'validation.set' },
+      },
+    ],
+    diagnostics: [],
+    address: params.address,
+    validation: {
+      id: params.schema.id,
+      address: params.address,
+      ranges: [range],
+    },
+  };
+}
+
+function validationRemoveReceipt(params: {
+  sheetId: SheetId;
+  address: string;
+  schemas: readonly RangeSchema[];
+  noOpRange?: string;
+  requestedId?: string;
+}): ValidationRemoveReceipt {
+  const removed = validationRemovedReceiptInput(params.schemas);
+  const status = params.schemas.length === 0 ? 'noOp' : 'applied';
+  let effects: OperationEffect[];
+  if (status === 'noOp') {
+    let unchanged: OperationEffect = {
+      type: 'worksheetUnchanged',
+      sheetId: params.sheetId,
+    };
+    if (params.noOpRange) unchanged = { ...unchanged, range: params.noOpRange };
+    if (params.requestedId) {
+      unchanged = { ...unchanged, details: { validationId: params.requestedId } };
+    }
+    effects = [unchanged];
+  } else {
+    let changedValidation: OperationEffect = {
+      type: 'changedValidation',
+      sheetId: params.sheetId,
+      count: removed.ids.length,
+      details: { action: 'remove', validationIds: removed.ids },
+    };
+    if (removed.ranges[0]) {
+      changedValidation = { ...changedValidation, range: removed.ranges[0] };
+    }
+    effects = [
+      changedValidation,
+      ...validationChangedRangeEffects(params.sheetId, removed.ranges, 'validation.remove'),
+    ];
+  }
+
+  return {
+    kind: 'validationRemove',
+    status,
+    effects,
+    diagnostics: [],
+    address: params.address,
+    removed: { ...removed, address: params.address },
+  };
+}
+
+function validationClearReceipt(params: {
+  sheetId: SheetId;
+  address?: string;
+  schemas: readonly RangeSchema[];
+  noOpRange?: string;
+}): ValidationClearReceipt {
+  const removed = validationRemovedReceiptInput(params.schemas);
+  const status = params.schemas.length === 0 ? 'noOp' : 'applied';
+  let effects: OperationEffect[];
+  if (status === 'noOp') {
+    let unchanged: OperationEffect = {
+      type: 'worksheetUnchanged',
+      sheetId: params.sheetId,
+    };
+    if (params.noOpRange) unchanged = { ...unchanged, range: params.noOpRange };
+    effects = [unchanged];
+  } else {
+    let changedValidation: OperationEffect = {
+      type: 'changedValidation',
+      sheetId: params.sheetId,
+      count: removed.ids.length,
+      details: { action: 'clear', validationIds: removed.ids },
+    };
+    if (removed.ranges[0]) {
+      changedValidation = { ...changedValidation, range: removed.ranges[0] };
+    }
+    effects = [
+      changedValidation,
+      ...validationChangedRangeEffects(params.sheetId, removed.ranges, 'validation.clear'),
+    ];
+  }
+
+  const receipt: ValidationClearReceipt = {
+    kind: 'validationClear',
+    status,
+    effects,
+    diagnostics: [],
+    removed: params.address ? { ...removed, address: params.address } : removed,
+  };
+  return params.address ? { ...receipt, address: params.address } : receipt;
 }
 
 export class WorksheetValidationImpl implements WorksheetValidation {
@@ -171,7 +363,7 @@ export class WorksheetValidationImpl implements WorksheetValidation {
       },
     };
 
-    await this.ctx.computeBridge.setRangeSchema(this.sheetId, schema);
+    await setRangeSchema(this.ctx, this.sheetId, schema);
     this.ctx.eventBus.emit({
       type: 'range-schema:created',
       timestamp: Date.now(),
@@ -185,7 +377,13 @@ export class WorksheetValidationImpl implements WorksheetValidation {
         : typeof a === 'object'
           ? `R${startRow}C${startCol}:R${endRow}C${endCol}`
           : `R${a}C${b}`;
-    return { kind: 'validationSet', address };
+    return validationSetReceipt({
+      sheetId: this.sheetId,
+      schema,
+      address,
+      range: { startRow, startCol, endRow, endCol },
+      rule,
+    });
   }
 
   private createListRule(
@@ -255,7 +453,8 @@ export class WorksheetValidationImpl implements WorksheetValidation {
     return rule;
   }
 
-  async remove(a: string | number | CellRange, b?: number): Promise<void> {
+  async remove(a: string | number | CellRange, b?: number): Promise<ValidationRemoveReceipt> {
+    this._ensureWritable('validation.remove');
     if (typeof a === 'object') {
       // CellRange form: remove overlapping schemas (same logic as clear())
       const schemas = await getWorksheetValidationCache(this.ctx).getSchemasOverlappingRange(
@@ -265,30 +464,46 @@ export class WorksheetValidationImpl implements WorksheetValidation {
       for (const schema of schemas) {
         await this.deleteSchemaAndEmit(schema);
       }
-      return;
+      const address = rangeToA1(a);
+      return validationRemoveReceipt({
+        sheetId: this.sheetId,
+        address,
+        schemas,
+        noOpRange: address,
+      });
     }
 
     let row: number, col: number;
+    let address: string;
     if (typeof a === 'string') {
       const pos = resolveCell(a);
       row = pos.row;
       col = pos.col;
+      address = a;
     } else {
       row = a;
       col = b!;
+      address = `R${a}C${b}`;
     }
 
+    const range = { startRow: row, startCol: col, endRow: row, endCol: col };
     const schemas = await getWorksheetValidationCache(this.ctx).getSchemasOverlappingRange(
       this.sheetId,
-      { startRow: row, startCol: col, endRow: row, endCol: col },
+      range,
     );
     for (const schema of schemas) {
       await this.deleteSchemaAndEmit(schema);
     }
+    return validationRemoveReceipt({
+      sheetId: this.sheetId,
+      address,
+      schemas,
+      noOpRange: rangeToA1(range),
+    });
   }
 
   private async deleteSchemaAndEmit(schema: RangeSchema): Promise<void> {
-    await this.ctx.computeBridge.deleteRangeSchema(this.sheetId, schema.id);
+    await deleteRangeSchema(this.ctx, this.sheetId, schema.id);
     this.ctx.eventBus.emit({
       type: 'range-schema:deleted',
       timestamp: Date.now(),
@@ -381,18 +596,24 @@ export class WorksheetValidationImpl implements WorksheetValidation {
     return schemas.map(rangeSchemaToValidationRule);
   }
 
-  async clear(range?: string | CellRange): Promise<void> {
+  async clear(range?: string | CellRange): Promise<ValidationClearReceipt> {
     if (range !== undefined) {
       return this.clearInRange(range);
     }
+    this._ensureWritable('validation.clear');
     // No-arg: remove ALL validation rules from the sheet
     const schemas = await getWorksheetValidationCache(this.ctx).getSchemasForSheet(this.sheetId);
     for (const schema of schemas) {
       await this.deleteSchemaAndEmit(schema);
     }
+    return validationClearReceipt({
+      sheetId: this.sheetId,
+      schemas,
+    });
   }
 
-  async clearInRange(range: string | CellRange): Promise<void> {
+  async clearInRange(range: string | CellRange): Promise<ValidationClearReceipt> {
+    this._ensureWritable('validation.clearInRange');
     const bounds = resolveRange(range);
     const schemas = await getWorksheetValidationCache(this.ctx).getSchemasOverlappingRange(
       this.sheetId,
@@ -401,16 +622,30 @@ export class WorksheetValidationImpl implements WorksheetValidation {
     for (const schema of schemas) {
       await this.deleteSchemaAndEmit(schema);
     }
+    const address = typeof range === 'string' ? range : rangeToA1(bounds);
+    return validationClearReceipt({
+      sheetId: this.sheetId,
+      address,
+      schemas,
+      noOpRange: rangeToA1(bounds),
+    });
   }
 
-  async removeById(id: string): Promise<void> {
+  async removeById(id: string): Promise<ValidationRemoveReceipt> {
+    this._ensureWritable('validation.removeById');
     const schemas = await this.ctx.computeBridge.getRangeSchemasForSheet(this.sheetId);
     const target = schemas.find((s) => s.id === id);
     if (target) {
       await this.deleteSchemaAndEmit(target);
     } else {
-      await this.ctx.computeBridge.deleteRangeSchema(this.sheetId, id);
+      await deleteRangeSchema(this.ctx, this.sheetId, id);
     }
+    return validationRemoveReceipt({
+      sheetId: this.sheetId,
+      address: id,
+      schemas: target ? [target] : [],
+      requestedId: id,
+    });
   }
 
   async validate(

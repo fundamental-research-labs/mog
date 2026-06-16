@@ -12,11 +12,15 @@ import type {
   CreateNamesFromSelectionOptions,
   CreateNamesResult,
   NameAddReceipt,
+  NameClearReceipt,
+  NameReceiptItem,
   NamedItemType,
   NamedRangeInfo,
   NamedRangeReference,
   NamedRangeUpdateOptions,
   NameRemoveReceipt,
+  NameUpdateReceipt,
+  OperationEffect,
   WorkbookNames,
 } from '@mog-sdk/contracts/api';
 import { RangeValueType } from '@mog-sdk/contracts/api';
@@ -28,6 +32,59 @@ import * as NamedRanges from '../../domain/formulas/named-ranges';
 import { createSheetNotFoundError } from '../internal/sheet-lookup-diagnostics';
 import { validateName } from '@mog/spreadsheet-utils/data/named-ranges';
 import { isApiVisibleNamedRangeReference, stripFormulaPrefix } from '../named-range-visibility';
+
+type DefinedName = NonNullable<Awaited<ReturnType<typeof NamedRanges.getByName>>>;
+
+function nameEffectDetails(item: NameReceiptItem, action: string): Record<string, unknown> {
+  return {
+    objectType: 'definedName',
+    action,
+    name: item.name,
+    scope: item.scope ?? 'workbook',
+    scopeSheetId: item.scopeSheetId,
+  };
+}
+
+function nameObjectEffect(
+  type: 'createdObject' | 'updatedObject' | 'removedObject',
+  item: NameReceiptItem,
+  action: string,
+): OperationEffect {
+  let effect: OperationEffect = {
+    type,
+    objectId: item.id,
+    details: nameEffectDetails(item, action),
+  };
+  if (item.scopeSheetId) effect = { ...effect, sheetId: item.scopeSheetId };
+  if (isApiVisibleNamedRangeReference(item.reference)) {
+    effect = { ...effect, range: item.reference };
+  }
+  return effect;
+}
+
+function nameRangeEffect(item: NameReceiptItem, action: string): OperationEffect | null {
+  if (!isApiVisibleNamedRangeReference(item.reference)) return null;
+  let effect: OperationEffect = {
+    type: 'changedRange',
+    range: item.reference,
+    details: nameEffectDetails(item, action),
+  };
+  if (item.scopeSheetId) effect = { ...effect, sheetId: item.scopeSheetId };
+  return effect;
+}
+
+function nameWorksheetUnchangedEffect(item?: NameReceiptItem): OperationEffect {
+  let effect: OperationEffect = {
+    type: 'worksheetUnchanged',
+    details: item ? nameEffectDetails(item, 'noOp') : { objectType: 'definedName' },
+  };
+  if (item?.scopeSheetId) effect = { ...effect, sheetId: item.scopeSheetId };
+  return effect;
+}
+
+function compactEffects(effects: readonly (OperationEffect | null)[]): OperationEffect[] {
+  return effects.filter((effect): effect is OperationEffect => effect !== null);
+}
 
 /**
  * Dependencies injected from WorkbookImpl.
@@ -72,7 +129,7 @@ export class WorkbookNamesImpl implements WorkbookNames {
     name: string,
     scope?: string,
   ): Promise<{
-    defined: NonNullable<Awaited<ReturnType<typeof NamedRanges.getByName>>>;
+    defined: DefinedName;
     reference: string;
     scopeSheetId: SheetId | undefined;
   } | null> {
@@ -84,6 +141,58 @@ export class WorkbookNamesImpl implements WorkbookNames {
     const reference = stripFormulaPrefix(a1);
 
     return { defined, reference, scopeSheetId };
+  }
+
+  private async _toReceiptItem(defined: DefinedName): Promise<NameReceiptItem> {
+    const reference = stripFormulaPrefix(
+      await NamedRanges.getRefersToA1(this.deps.ctx, defined),
+    );
+    const item: NameReceiptItem = {
+      id: defined.id,
+      name: defined.name,
+      reference,
+    };
+    let result = item;
+    if (defined.scope) {
+      result = {
+        ...result,
+        scopeSheetId: defined.scope,
+      };
+      const scope = await this.deps.getSheetName(defined.scope);
+      if (scope) result = { ...result, scope };
+    }
+    if (defined.comment !== undefined) result = { ...result, comment: defined.comment };
+    if (defined.visible !== undefined) result = { ...result, visible: defined.visible };
+    return result;
+  }
+
+  private nameAddReceipt(created: NameReceiptItem, reference: string): NameAddReceipt {
+    return {
+      kind: 'nameAdd',
+      status: 'applied',
+      effects: compactEffects([
+        nameObjectEffect('createdObject', created, 'add'),
+        nameRangeEffect(created, 'name.add'),
+      ]),
+      diagnostics: [],
+      name: created.name,
+      reference,
+      created,
+    };
+  }
+
+  private nameRemoveReceipt(removed: NameReceiptItem): NameRemoveReceipt {
+    return {
+      kind: 'nameRemove',
+      status: 'applied',
+      effects: compactEffects([
+        nameObjectEffect('removedObject', removed, 'remove'),
+        nameRangeEffect(removed, 'name.remove'),
+      ]),
+      diagnostics: [],
+      name: removed.name,
+      removed,
+    };
   }
 
   async add(
@@ -121,7 +230,15 @@ export class WorkbookNamesImpl implements WorkbookNames {
       contextSheet,
       'api',
     );
-    return { kind: 'nameAdd', name, reference };
+    const created = await NamedRanges.getByName(ctx, name, scopeSheetId);
+    if (!created) {
+      throw new KernelError(
+        'DOMAIN_DEFINED_NAME_NOT_FOUND',
+        `Created named range "${name}" could not be read back.`,
+      );
+    }
+
+    return this.nameAddReceipt(await this._toReceiptItem(created), reference);
   }
 
   async has(name: string, scope?: string): Promise<boolean> {
@@ -178,6 +295,7 @@ export class WorkbookNamesImpl implements WorkbookNames {
   }
 
   async remove(name: string, scope?: string): Promise<NameRemoveReceipt> {
+    this._ensureWritable('names.remove');
     const { ctx } = this.deps;
 
     const scopeSheetId = await this._resolveScope(scope);
@@ -187,11 +305,30 @@ export class WorkbookNamesImpl implements WorkbookNames {
       throw new KernelError('COMPUTE_ERROR', `Named range "${name}" not found.`);
     }
 
+    const removed = await this._toReceiptItem(defined);
     await NamedRanges.remove(ctx, defined.id, 'api');
-    return { kind: 'nameRemove', name };
+    return this.nameRemoveReceipt(removed);
   }
 
-  async update(name: string, updates: NamedRangeUpdateOptions, scope?: string): Promise<void> {
+  async removeById(id: string): Promise<NameRemoveReceipt> {
+    this._ensureWritable('names.removeById');
+    const { ctx } = this.deps;
+    const defined = await NamedRanges.getById(ctx, id);
+    if (!defined) {
+      throw new KernelError('COMPUTE_ERROR', `Named range with ID "${id}" not found.`);
+    }
+
+    const removed = await this._toReceiptItem(defined);
+    await NamedRanges.remove(ctx, defined.id, 'api');
+    return this.nameRemoveReceipt(removed);
+  }
+
+  async update(
+    name: string,
+    updates: NamedRangeUpdateOptions,
+    scope?: string,
+  ): Promise<NameUpdateReceipt> {
+    this._ensureWritable('names.update');
     const { ctx, getActiveSheetId } = this.deps;
     const contextSheet = getActiveSheetId();
     const scopeSheetId = await this._resolveScope(scope);
@@ -200,6 +337,24 @@ export class WorkbookNamesImpl implements WorkbookNames {
     const defined = await NamedRanges.getByName(ctx, name, scopeSheetId);
     if (!defined) {
       throw new KernelError('COMPUTE_ERROR', `Named range "${name}" not found.`);
+    }
+
+    const previous = await this._toReceiptItem(defined);
+    const hasUpdates =
+      updates.name !== undefined ||
+      updates.reference !== undefined ||
+      updates.comment !== undefined ||
+      updates.visible !== undefined;
+    if (!hasUpdates) {
+      return {
+        kind: 'nameUpdate',
+        status: 'noOp',
+        effects: [nameWorksheetUnchangedEffect(previous)],
+        diagnostics: [],
+        name,
+        previous,
+        updated: previous,
+      };
     }
 
     // Ensure reference starts with = for IdentityFormula conversion (same as add)
@@ -224,13 +379,70 @@ export class WorkbookNamesImpl implements WorkbookNames {
       },
       contextSheet,
     );
+    const updatedDefined =
+      (await NamedRanges.getById(ctx, defined.id)) ??
+      (updates.name ? await NamedRanges.getByName(ctx, updates.name, scopeSheetId) : undefined);
+    if (!updatedDefined) {
+      throw new KernelError(
+        'DOMAIN_DEFINED_NAME_NOT_FOUND',
+        `Updated named range "${name}" could not be read back.`,
+      );
+    }
+    const updated = await this._toReceiptItem(updatedDefined);
+    return {
+      kind: 'nameUpdate',
+      status: 'applied',
+      effects: compactEffects([
+        {
+          ...nameObjectEffect('updatedObject', updated, 'update'),
+          details: {
+            ...nameEffectDetails(updated, 'update'),
+            previousName: previous.name,
+            previousReference: previous.reference,
+          },
+        },
+        nameRangeEffect(updated, 'name.update'),
+      ]),
+      diagnostics: [],
+      name,
+      previous,
+      updated,
+    };
   }
 
-  async clear(): Promise<void> {
+  async clear(): Promise<NameClearReceipt> {
+    this._ensureWritable('names.clear');
     const items = await this.list();
+    const removed: NameReceiptItem[] = [];
     for (const item of items) {
-      await this.remove(item.name, item.scope);
+      removed.push((await this.remove(item.name, item.scope)).removed);
     }
+    if (removed.length === 0) {
+      return {
+        kind: 'nameClear',
+        status: 'noOp',
+        effects: [nameWorksheetUnchangedEffect()],
+        diagnostics: [],
+        removed,
+        removedCount: 0,
+      };
+    }
+
+    return {
+      kind: 'nameClear',
+      status: 'applied',
+      effects: compactEffects([
+        {
+          type: 'removedObject',
+          count: removed.length,
+          details: { objectType: 'definedName', action: 'clear' },
+        },
+        ...removed.map((item) => nameRangeEffect(item, 'name.clear')),
+      ]),
+      diagnostics: [],
+      removed,
+      removedCount: removed.length,
+    };
   }
 
   async list(): Promise<NamedRangeInfo[]> {

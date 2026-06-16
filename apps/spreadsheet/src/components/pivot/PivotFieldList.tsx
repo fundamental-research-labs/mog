@@ -347,6 +347,8 @@ export function PivotFieldList({
         return;
       }
 
+      event.preventDefault();
+      event.dataTransfer.dropEffect = 'move';
       dragPointRef.current = { x: event.clientX, y: event.clientY };
       ensureAutoScroll().start();
     },
@@ -678,7 +680,9 @@ export function PivotFieldList({
           data-pivot-accepts-selected={selectedItem ? 'true' : 'false'}
         >
           {placedFields.length === 0 ? (
-            <span className="text-caption text-ss-text-disabled italic p-1">Drop fields here</span>
+            <span className="pointer-events-none text-caption text-ss-text-disabled italic p-1">
+              Drop fields here
+            </span>
           ) : (
             placedFields.map((item, index) => renderPlacementChip(item, index))
           )}

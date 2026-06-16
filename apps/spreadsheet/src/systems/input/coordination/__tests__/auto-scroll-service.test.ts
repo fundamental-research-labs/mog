@@ -61,6 +61,30 @@ describe('isNearViewportEdge', () => {
       const result = isNearViewportEdge(500, 55, viewport, 50);
       expect(result.edge).toBeNull();
     });
+
+    it('should preserve a non-scrolling center in small viewports', () => {
+      const result = isNearViewportEdge(
+        50,
+        32,
+        { left: 0, top: 0, right: 100, bottom: 64 },
+        50,
+      );
+      expect(result.edge).toBeNull();
+    });
+  });
+
+  describe('small viewport threshold capping', () => {
+    it('should still detect the closest edge near a small viewport boundary', () => {
+      const result = isNearViewportEdge(
+        50,
+        58,
+        { left: 0, top: 0, right: 100, bottom: 64 },
+        50,
+      );
+      expect(result.edge).toBe('bottom');
+      expect(result.distance).toBe(6);
+      expect(result.threshold).toBeCloseTo(22.4);
+    });
   });
 
   describe('edge detection at exact threshold', () => {
@@ -148,6 +172,17 @@ describe('getScrollVelocity', () => {
       const velocity = getScrollVelocity(atThreshold, 50, 100, 600);
 
       // At threshold, should be at min speed
+      expect(velocity.dy).toBe(100);
+    });
+
+    it('should use the proximity effective threshold when provided', () => {
+      const atEffectiveThreshold: EdgeProximity = {
+        edge: 'bottom',
+        distance: 20,
+        threshold: 20,
+      };
+      const velocity = getScrollVelocity(atEffectiveThreshold, 50, 100, 600);
+
       expect(velocity.dy).toBe(100);
     });
   });
@@ -267,6 +302,26 @@ describe('setupAutoScroll', () => {
     jest.advanceTimersByTime(16);
 
     // Should NOT have called applyScrollDelta (not near edge)
+    expect(applyScrollDelta).not.toHaveBeenCalled();
+
+    controller.cleanup();
+  });
+
+  it('should not scroll from the stable middle of a small viewport', () => {
+    const applyScrollDelta = jest.fn();
+
+    const controller = setupAutoScroll({
+      getMousePosition: () => ({ x: 50, y: 32 }),
+      getViewportBounds: () => ({ left: 0, top: 0, right: 100, bottom: 64 }),
+      applyScrollDelta,
+      threshold: 50,
+    });
+
+    controller.start();
+
+    jest.advanceTimersByTime(16);
+    jest.advanceTimersByTime(16);
+
     expect(applyScrollDelta).not.toHaveBeenCalled();
 
     controller.cleanup();

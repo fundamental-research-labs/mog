@@ -181,6 +181,14 @@ describe('PivotFieldList placement editor', () => {
     );
   });
 
+  it('keeps empty-zone placeholder text out of the drag hit target', () => {
+    const { container } = renderList({ placements: [] });
+
+    expect(within(zone(container, 'row')).getByText('Drop fields here')).toHaveClass(
+      'pointer-events-none',
+    );
+  });
+
   it('reorders placements within the same well by placementId', () => {
     const { container, props } = renderList();
     const transfer = dataTransfer();
@@ -257,12 +265,14 @@ describe('PivotFieldList placement editor', () => {
       if (!fieldList) throw new Error('Missing field list');
 
       fireEvent.dragStart(category, { dataTransfer: transfer });
-      fireEvent.dragOver(fieldList, {
+      const accepted = fireEvent.dragOver(fieldList, {
         dataTransfer: transfer,
         clientX: 12,
         clientY: 98,
       });
 
+      expect(accepted).toBe(false);
+      expect(transfer.dropEffect).toBe('move');
       expect(requestAnimationFrameMock).toHaveBeenCalled();
       frameCallbacks[0](1);
       expect(getDragScrollContainer).toHaveBeenCalled();

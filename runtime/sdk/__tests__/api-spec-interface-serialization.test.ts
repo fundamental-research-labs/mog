@@ -84,4 +84,76 @@ describe('api spec interface serialization', () => {
     expect(definition).toContain('autoFillPreview(sourceRange: string, targetRange: string)');
     expect(definition).toContain('getCell(address: string)');
   });
+
+  it('serializes OperationReceiptBase fields onto derived receipt definitions', () => {
+    const baseSource = parseSource(
+      'operation-receipt.ts',
+      `
+      export interface OperationReceiptBase {
+        readonly kind: string;
+        readonly status: OperationStatus;
+        readonly effects: readonly OperationEffect[];
+        readonly diagnostics: readonly OperationDiagnostic[];
+        readonly operationId?: string;
+      }
+    `,
+    );
+    const payloadSource = parseSource(
+      'fill-types.ts',
+      `
+      export interface AutoFillResult {
+        readonly filledCellCount: number;
+      }
+    `,
+    );
+    const receiptSource = parseSource(
+      'worksheet-fill.ts',
+      `
+      export interface AutoFillApplyReceipt extends OperationReceiptBase, AutoFillResult {
+        readonly kind: 'autofill.apply';
+        readonly status: 'applied' | 'noOp';
+        readonly mode: AutoFillMode;
+      }
+    `,
+    );
+
+    const declarations = new Map<string, InterfaceResolution>([
+      [
+        'OperationReceiptBase',
+        {
+          node: findInterface(baseSource, 'OperationReceiptBase'),
+          sourceFile: baseSource,
+        },
+      ],
+      [
+        'AutoFillResult',
+        {
+          node: findInterface(payloadSource, 'AutoFillResult'),
+          sourceFile: payloadSource,
+        },
+      ],
+      [
+        'AutoFillApplyReceipt',
+        {
+          node: findInterface(receiptSource, 'AutoFillApplyReceipt'),
+          sourceFile: receiptSource,
+        },
+      ],
+    ]);
+    const receipt = declarations.get('AutoFillApplyReceipt')!;
+
+    const definition = serializeInterfaceDefinition({
+      node: receipt.node,
+      sourceFile: receipt.sourceFile,
+      resolveInterface: (name) => declarations.get(name) ?? null,
+    });
+
+    expect(definition).toContain("kind: 'autofill.apply';");
+    expect(definition).toContain("status: 'applied' | 'noOp';");
+    expect(definition).toContain('effects: readonly OperationEffect[];');
+    expect(definition).toContain('diagnostics: readonly OperationDiagnostic[];');
+    expect(definition).toContain('operationId?: string;');
+    expect(definition).toContain('filledCellCount: number;');
+    expect(definition).toContain('mode: AutoFillMode;');
+  });
 });

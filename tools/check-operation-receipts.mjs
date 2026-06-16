@@ -6,10 +6,16 @@ import ts from 'typescript';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const API_ROOT = path.join(REPO_ROOT, 'types/api/src/api');
-const TYPES_API_SRC_ROOT = path.join(REPO_ROOT, 'types/api/src');
+const TYPES_ROOT = path.join(REPO_ROOT, 'types');
 const INVENTORY_FILE = path.join(REPO_ROOT, 'tools/operation-receipt-inventory.json');
 const API_SPEC_FILE = path.join(REPO_ROOT, 'runtime/sdk/src/generated/api-spec.json');
 const UPDATE = process.argv.includes('--update');
+
+const BASE_OPERATION_RECEIPT_FIELDS = ['kind', 'status', 'effects', 'diagnostics'];
+const DEFAULT_RATIONALE = 'Generated initial disposition; refine as receipt waves migrate this API.';
+const MIGRATED_RECEIPT_RATIONALE =
+  'Returns an OperationReceiptBase-derived receipt with the public receipt base fields.';
+const RECEIPT_REQUIRED_DISPOSITIONS = new Set(['receiptRequired', 'lifecycleReceiptRequired']);
 
 const REQUIRED_GENERATED_RECEIPT_TYPES = [
   'OperationDiagnostic',
@@ -71,6 +77,10 @@ function compact(text) {
   return text.replace(/\s+/g, ' ').replace(/\s*([{}()[\]<>,:;|&=])\s*/g, '$1').trim();
 }
 
+function collectTypeRefs(text) {
+  return [...text.matchAll(/\b([A-Z][A-Za-z0-9]+)\b/g)].map(([, name]) => name);
+}
+
 function sourceLine(sourceFile, node) {
   return sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1;
 }
@@ -109,7 +119,14 @@ function isMutationLike(interfaceName, name) {
   return MUTATION_NAME_PATTERN.test(name);
 }
 
-function defaultDisposition(entry) {
+function returnsMigratedReceipt(typeText, migratedReceiptNames) {
+  return collectTypeRefs(typeText).some((name) => migratedReceiptNames.has(name));
+}
+
+function defaultDisposition(entry, migratedReceiptNames) {
+  if (returnsMigratedReceipt(entry.returnType, migratedReceiptNames)) {
+    return 'noReceiptNeeded';
+  }
   if (
     LIFECYCLE_INTERFACES.has(entry.interface) ||
     LIFECYCLE_METHODS.has(entry.method) ||
@@ -123,7 +140,7 @@ function defaultDisposition(entry) {
   return 'receiptRequired';
 }
 
-function inventoryEntries() {
+function inventoryEntries(migratedReceiptNames) {
   const files = collectTsFiles(API_ROOT).filter((file) => !file.endsWith('/index.ts'));
   const entries = [];
   const keyCounts = new Map();
@@ -156,8 +173,10 @@ function inventoryEntries() {
           };
           entries.push({
             ...entry,
-            disposition: defaultDisposition(entry),
-            rationale: 'Generated initial disposition; refine as receipt waves migrate this API.',
+            disposition: defaultDisposition(entry, migratedReceiptNames),
+            rationale: returnsMigratedReceipt(typeText, migratedReceiptNames)
+              ? MIGRATED_RECEIPT_RATIONALE
+              : DEFAULT_RATIONALE,
           });
         }
       }
@@ -177,12 +196,28 @@ function writeInventory(entries) {
   fs.writeFileSync(INVENTORY_FILE, `${JSON.stringify(entries, null, 2)}\n`);
 }
 
+function hasReceiptRequirementJustification(entry) {
+  return (
+    typeof entry.receiptRequirementJustification === 'string' &&
+    entry.receiptRequirementJustification.trim().length > 0
+  );
+}
+
 function mergeInventory(current, existing) {
   const byKey = new Map(existing.map((entry) => [entry.key, entry]));
   return current.map((entry) => {
     const previous = byKey.get(entry.key);
     if (!previous) return entry;
+    if (
+      entry.disposition === 'noReceiptNeeded' &&
+      (previous.disposition === 'receiptExistingNeedsBase' ||
+        (RECEIPT_REQUIRED_DISPOSITIONS.has(previous.disposition) &&
+          !hasReceiptRequirementJustification(previous)))
+    ) {
+      return entry;
+    }
     return {
+      ...previous,
       ...entry,
       disposition: previous.disposition,
       rationale: previous.rationale,
@@ -192,7 +227,7 @@ function mergeInventory(current, existing) {
 
 function migratedReceiptTypes() {
   const heritageByName = new Map();
-  for (const filePath of collectTsFiles(TYPES_API_SRC_ROOT)) {
+  for (const filePath of collectTsFiles(TYPES_ROOT)) {
     const text = fs.readFileSync(filePath, 'utf8');
     const sourceFile = ts.createSourceFile(filePath, text, ts.ScriptTarget.Latest, true);
     ts.forEachChild(sourceFile, (node) => {
@@ -230,7 +265,43 @@ function migratedReceiptTypes() {
   return [...receiptNames].sort();
 }
 
-function verifyGeneratedReceiptDefinitions(errors) {
+function generatedDefinitionFields(name, definition, errors) {
+  const sourceFile = ts.createSourceFile(
+    `${name}.d.ts`,
+    `type __GeneratedReceiptDefinition = ${definition};`,
+    ts.ScriptTarget.Latest,
+    true,
+  );
+  let typeNode = null;
+  ts.forEachChild(sourceFile, (node) => {
+    if (ts.isTypeAliasDeclaration(node) && node.name.text === '__GeneratedReceiptDefinition') {
+      typeNode = node.type;
+    }
+  });
+  if (!typeNode || !ts.isTypeLiteralNode(typeNode)) {
+    errors.push(`Generated ${name} definition is not an object type literal`);
+    return new Set();
+  }
+
+  const fields = new Set();
+  for (const member of typeNode.members) {
+    if (ts.isPropertySignature(member) && member.name) {
+      fields.add(member.name.getText(sourceFile).replace(/^['"]|['"]$/g, ''));
+    }
+  }
+  return fields;
+}
+
+function verifyBaseFieldsInGeneratedDefinition(errors, name, definition) {
+  const fields = generatedDefinitionFields(name, definition, errors);
+  for (const field of BASE_OPERATION_RECEIPT_FIELDS) {
+    if (!fields.has(field)) {
+      errors.push(`Generated ${name} definition omits base field ${field}`);
+    }
+  }
+}
+
+function verifyGeneratedReceiptDefinitions(errors, migrated) {
   if (!fs.existsSync(API_SPEC_FILE)) {
     errors.push(`Missing generated API spec: ${repoPath(API_SPEC_FILE)}`);
     return;
@@ -241,23 +312,50 @@ function verifyGeneratedReceiptDefinitions(errors) {
       errors.push(`Generated API spec is missing public operation receipt grammar type ${name}`);
     }
   }
+  const baseDefinition = spec.types?.OperationReceiptBase?.definition;
+  if (typeof baseDefinition === 'string') {
+    verifyBaseFieldsInGeneratedDefinition(errors, 'OperationReceiptBase', baseDefinition);
+  }
 
-  const migrated = migratedReceiptTypes();
   for (const name of migrated) {
     const definition = spec.types?.[name]?.definition;
     if (typeof definition !== 'string') {
       errors.push(`Generated API spec is missing migrated receipt type ${name}`);
       continue;
     }
-    for (const field of ['kind', 'status', 'effects', 'diagnostics']) {
-      if (!new RegExp(`\\b${field}\\??:`).test(definition)) {
-        errors.push(`Generated ${name} definition omits base field ${field}`);
-      }
-    }
+    verifyBaseFieldsInGeneratedDefinition(errors, name, definition);
   }
 }
 
-const current = inventoryEntries();
+function verifyMigratedReceiptDispositions(
+  errors,
+  currentEntry,
+  recordedEntry,
+  migratedReceiptNames,
+) {
+  if (!returnsMigratedReceipt(currentEntry.returnType, migratedReceiptNames)) return;
+  if (recordedEntry.disposition === 'receiptExistingNeedsBase') {
+    errors.push(
+      `Migrated receipt method ${currentEntry.key} returns ${currentEntry.returnType} but is still marked receiptExistingNeedsBase`,
+    );
+  }
+  if (
+    RECEIPT_REQUIRED_DISPOSITIONS.has(recordedEntry.disposition) &&
+    !hasReceiptRequirementJustification(recordedEntry)
+  ) {
+    errors.push(
+      [
+        `Migrated receipt method ${currentEntry.key} returns ${currentEntry.returnType}`,
+        `but is still marked ${recordedEntry.disposition};`,
+        'add receiptRequirementJustification only if this still intentionally needs a separate receipt migration',
+      ].join(' '),
+    );
+  }
+}
+
+const migratedReceipts = migratedReceiptTypes();
+const migratedReceiptNames = new Set(['OperationReceiptBase', ...migratedReceipts]);
+const current = inventoryEntries(migratedReceiptNames);
 const existing = readInventory();
 
 if (UPDATE) {
@@ -279,6 +377,7 @@ for (const entry of current) {
   if (!DISPOSITIONS.has(recorded.disposition)) {
     errors.push(`Invalid disposition for ${entry.key}: ${recorded.disposition}`);
   }
+  verifyMigratedReceiptDispositions(errors, entry, recorded, migratedReceiptNames);
   if (recorded.returnCategory !== entry.returnCategory || recorded.returnType !== entry.returnType) {
     errors.push(
       `Stale receipt inventory return shape for ${entry.key}: expected ${entry.returnType} (${entry.returnCategory}), found ${recorded.returnType} (${recorded.returnCategory})`,
@@ -292,7 +391,7 @@ for (const entry of existing) {
   }
 }
 
-verifyGeneratedReceiptDefinitions(errors);
+verifyGeneratedReceiptDefinitions(errors, migratedReceipts);
 
 if (errors.length > 0) {
   console.error(`Operation receipt guard failed with ${errors.length} issue(s):`);

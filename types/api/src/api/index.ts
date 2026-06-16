@@ -281,6 +281,8 @@ export type {
   CommentReceipt,
   CommentRemoveReceipt,
   CommentUpdateReceipt,
+  ConditionalFormatMutationKind,
+  ConditionalFormatMutationReceipt,
   DeleteCellsReceipt,
   DeleteColumnsReceipt,
   DeleteRowsReceipt,

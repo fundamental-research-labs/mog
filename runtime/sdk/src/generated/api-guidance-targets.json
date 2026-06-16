@@ -7197,8 +7197,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "add(ranges: (string | CellRange)[], rules: CFRuleInput[]): Promise<ConditionalFormat>;",
-      "typeText": "Promise<ConditionalFormat>",
+      "signature": "add(\n    ranges: (string | CellRange)[],\n    rules: CFRuleInput[],\n  ): Promise<ConditionalFormatMutationReceipt & ConditionalFormat>;",
+      "typeText": "Promise<ConditionalFormatMutationReceipt&ConditionalFormat>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/conditional-formats.ts"
@@ -7216,8 +7216,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "addFormula(\n    range: string | CellRange | (string | CellRange)[],\n    formula: string,\n    style: CFStyle,\n  ): Promise<ConditionalFormat>;",
-      "typeText": "Promise<ConditionalFormat>",
+      "signature": "addFormula(\n    range: string | CellRange | (string | CellRange)[],\n    formula: string,\n    style: CFStyle,\n  ): Promise<ConditionalFormatMutationReceipt & ConditionalFormat>;",
+      "typeText": "Promise<ConditionalFormatMutationReceipt&ConditionalFormat>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/conditional-formats.ts"
@@ -7235,8 +7235,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "changeRuleType(formatId: string, ruleId: string, newRule: CFRuleInput): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "changeRuleType(\n    formatId: string,\n    ruleId: string,\n    newRule: CFRuleInput,\n  ): Promise<ConditionalFormatMutationReceipt>;",
+      "typeText": "Promise<ConditionalFormatMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/conditional-formats.ts"
@@ -7254,8 +7254,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "clear(): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "clear(): Promise<ConditionalFormatMutationReceipt>;",
+      "typeText": "Promise<ConditionalFormatMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/conditional-formats.ts"
@@ -7273,8 +7273,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "clearInRanges(ranges: (string | CellRange)[]): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "clearInRanges(ranges: (string | CellRange)[]): Promise<ConditionalFormatMutationReceipt>;",
+      "typeText": "Promise<ConditionalFormatMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/conditional-formats.ts"
@@ -7292,8 +7292,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "clearRuleStyle(formatId: string, ruleId: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "clearRuleStyle(formatId: string, ruleId: string): Promise<ConditionalFormatMutationReceipt>;",
+      "typeText": "Promise<ConditionalFormatMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/conditional-formats.ts"
@@ -7311,8 +7311,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "cloneForPaste(\n    sourceSheetId: string,\n    relativeCFs: Array<{\n      rules: any[];\n      rangeOffsets: Array<{\n        startRowOffset: number;\n        startColOffset: number;\n        endRowOffset: number;\n        endColOffset: number;\n      }>;\n    }>,\n    origin: { row: number; col: number },\n    isCut: boolean,\n  ): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "cloneForPaste(\n    sourceSheetId: string,\n    relativeCFs: Array<{\n      rules: any[];\n      rangeOffsets: Array<{\n        startRowOffset: number;\n        startColOffset: number;\n        endRowOffset: number;\n        endColOffset: number;\n      }>;\n    }>,\n    origin: { row: number; col: number },\n    isCut: boolean,\n  ): Promise<ConditionalFormatMutationReceipt>;",
+      "typeText": "Promise<ConditionalFormatMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/conditional-formats.ts"
@@ -7425,8 +7425,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "remove(formatId: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "remove(formatId: string): Promise<ConditionalFormatMutationReceipt>;",
+      "typeText": "Promise<ConditionalFormatMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/conditional-formats.ts"
@@ -7444,8 +7444,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "removeRule(formatId: string, ruleId: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "removeRule(formatId: string, ruleId: string): Promise<ConditionalFormatMutationReceipt>;",
+      "typeText": "Promise<ConditionalFormatMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/conditional-formats.ts"
@@ -7463,8 +7463,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "reorder(formatIds: string[]): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "reorder(formatIds: string[]): Promise<ConditionalFormatMutationReceipt>;",
+      "typeText": "Promise<ConditionalFormatMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/conditional-formats.ts"
@@ -7482,8 +7482,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "update(formatId: string, updates: ConditionalFormatUpdate): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "update(\n    formatId: string,\n    updates: ConditionalFormatUpdate,\n  ): Promise<ConditionalFormatMutationReceipt>;",
+      "typeText": "Promise<ConditionalFormatMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/conditional-formats.ts"
@@ -25576,8 +25576,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "add(ranges: (string | CellRange)[], rules: CFRuleInput[]): Promise<ConditionalFormat>;",
-      "typeText": "Promise<ConditionalFormat>",
+      "signature": "add(\n    ranges: (string | CellRange)[],\n    rules: CFRuleInput[],\n  ): Promise<ConditionalFormatMutationReceipt & ConditionalFormat>;",
+      "typeText": "Promise<ConditionalFormatMutationReceipt&ConditionalFormat>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/conditional-formats.ts"
@@ -25595,8 +25595,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "addFormula(\n    range: string | CellRange | (string | CellRange)[],\n    formula: string,\n    style: CFStyle,\n  ): Promise<ConditionalFormat>;",
-      "typeText": "Promise<ConditionalFormat>",
+      "signature": "addFormula(\n    range: string | CellRange | (string | CellRange)[],\n    formula: string,\n    style: CFStyle,\n  ): Promise<ConditionalFormatMutationReceipt & ConditionalFormat>;",
+      "typeText": "Promise<ConditionalFormatMutationReceipt&ConditionalFormat>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/conditional-formats.ts"
@@ -25614,8 +25614,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "changeRuleType(formatId: string, ruleId: string, newRule: CFRuleInput): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "changeRuleType(\n    formatId: string,\n    ruleId: string,\n    newRule: CFRuleInput,\n  ): Promise<ConditionalFormatMutationReceipt>;",
+      "typeText": "Promise<ConditionalFormatMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/conditional-formats.ts"
@@ -25633,8 +25633,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "clear(): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "clear(): Promise<ConditionalFormatMutationReceipt>;",
+      "typeText": "Promise<ConditionalFormatMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/conditional-formats.ts"
@@ -25652,8 +25652,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "clearInRanges(ranges: (string | CellRange)[]): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "clearInRanges(ranges: (string | CellRange)[]): Promise<ConditionalFormatMutationReceipt>;",
+      "typeText": "Promise<ConditionalFormatMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/conditional-formats.ts"
@@ -25671,8 +25671,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "clearRuleStyle(formatId: string, ruleId: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "clearRuleStyle(formatId: string, ruleId: string): Promise<ConditionalFormatMutationReceipt>;",
+      "typeText": "Promise<ConditionalFormatMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/conditional-formats.ts"
@@ -25690,8 +25690,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "cloneForPaste(\n    sourceSheetId: string,\n    relativeCFs: Array<{\n      rules: any[];\n      rangeOffsets: Array<{\n        startRowOffset: number;\n        startColOffset: number;\n        endRowOffset: number;\n        endColOffset: number;\n      }>;\n    }>,\n    origin: { row: number; col: number },\n    isCut: boolean,\n  ): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "cloneForPaste(\n    sourceSheetId: string,\n    relativeCFs: Array<{\n      rules: any[];\n      rangeOffsets: Array<{\n        startRowOffset: number;\n        startColOffset: number;\n        endRowOffset: number;\n        endColOffset: number;\n      }>;\n    }>,\n    origin: { row: number; col: number },\n    isCut: boolean,\n  ): Promise<ConditionalFormatMutationReceipt>;",
+      "typeText": "Promise<ConditionalFormatMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/conditional-formats.ts"
@@ -25804,8 +25804,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "remove(formatId: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "remove(formatId: string): Promise<ConditionalFormatMutationReceipt>;",
+      "typeText": "Promise<ConditionalFormatMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/conditional-formats.ts"
@@ -25823,8 +25823,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "removeRule(formatId: string, ruleId: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "removeRule(formatId: string, ruleId: string): Promise<ConditionalFormatMutationReceipt>;",
+      "typeText": "Promise<ConditionalFormatMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/conditional-formats.ts"
@@ -25842,8 +25842,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "reorder(formatIds: string[]): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "reorder(formatIds: string[]): Promise<ConditionalFormatMutationReceipt>;",
+      "typeText": "Promise<ConditionalFormatMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/conditional-formats.ts"
@@ -25861,8 +25861,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "update(formatId: string, updates: ConditionalFormatUpdate): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "update(\n    formatId: string,\n    updates: ConditionalFormatUpdate,\n  ): Promise<ConditionalFormatMutationReceipt>;",
+      "typeText": "Promise<ConditionalFormatMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/conditional-formats.ts"

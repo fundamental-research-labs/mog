@@ -13,6 +13,7 @@ import type {
   CFStyle,
   ConditionalFormat,
   ConditionalFormatUpdate,
+  ConditionalFormatMutationReceipt,
   SheetId,
   WorksheetConditionalFormatting,
 } from '@mog-sdk/contracts/api';
@@ -435,7 +436,7 @@ export class WorksheetConditionalFormattingImpl implements WorksheetConditionalF
     range: string | CellRange | (string | CellRange)[],
     formula: string,
     style: CFStyle,
-  ): Promise<ConditionalFormat> {
+  ): Promise<ConditionalFormatMutationReceipt & ConditionalFormat> {
     if (typeof formula !== 'string' || !formula.trim()) {
       throw invalidCfRuleError(
         formula,
@@ -451,10 +452,14 @@ export class WorksheetConditionalFormattingImpl implements WorksheetConditionalF
     const trimmed = formula.trim();
     const normalizedFormula = trimmed.startsWith('=') ? trimmed : `=${trimmed}`;
     const rule = { type: 'formula', formula: normalizedFormula, style } as CFRuleInput;
-    return this.add(ranges, [rule]);
+    const receipt = await this.add(ranges, [rule]);
+    return { ...receipt, kind: 'conditionalFormat.addFormula' };
   }
 
-  async add(ranges: (string | CellRange)[], rules: CFRuleInput[]): Promise<ConditionalFormat> {
+  async add(
+    ranges: (string | CellRange)[],
+    rules: CFRuleInput[],
+  ): Promise<ConditionalFormatMutationReceipt & ConditionalFormat> {
     this._ensureWritable('conditionalFormats.add');
     assertCfRangeArray(
       ranges,
@@ -465,18 +470,16 @@ export class WorksheetConditionalFormattingImpl implements WorksheetConditionalF
     );
     assertCfRuleArray(rules, ['rules'], 'conditionalFormats.add');
     const resolved = ranges.map((r) => resolveRange(r));
-    const formatId = await CFOps.addConditionalFormat(this.ctx, this.sheetId, resolved, rules);
+    const fallback = await CFOps.addConditionalFormat(this.ctx, this.sheetId, resolved, rules);
 
     // Read back the full entity.
-    const full = await this.get(formatId);
-    if (full) return full;
-
-    // Fallback: construct minimal entity from inputs if read-back fails.
-    return {
-      id: formatId,
-      ranges: resolved,
-      rules: rules.map((r, i) => ({ ...r, id: '', priority: i })) as CFRule[],
-    };
+    const format = (await this.get(fallback.id)) ?? fallback;
+    const receipt = CFOps.buildConditionalFormatMutationReceipt({
+      kind: 'conditionalFormat.add',
+      sheetId: this.sheetId,
+      format,
+    });
+    return { ...receipt, ...format };
   }
 
   async get(formatId: string): Promise<ConditionalFormat | null> {
@@ -491,7 +494,10 @@ export class WorksheetConditionalFormattingImpl implements WorksheetConditionalF
     return (await this.list()).length;
   }
 
-  async update(formatId: string, updates: ConditionalFormatUpdate): Promise<void> {
+  async update(
+    formatId: string,
+    updates: ConditionalFormatUpdate,
+  ): Promise<ConditionalFormatMutationReceipt> {
     const { ranges, stopIfTrue, ...ruleUpdates } = updates;
 
     if (ranges !== undefined) {
@@ -507,50 +513,153 @@ export class WorksheetConditionalFormattingImpl implements WorksheetConditionalF
       assertCfRuleArray(ruleUpdates.rules, ['updates', 'rules'], 'conditionalFormats.update');
     }
 
-    // If stopIfTrue is provided, apply it to all rules in the update payload
-    if (stopIfTrue !== undefined && ruleUpdates.rules) {
-      ruleUpdates.rules = ruleUpdates.rules.map((r) => ({ ...r, stopIfTrue }));
+    const before = await CFOps.getConditionalFormat(this.ctx, this.sheetId, formatId);
+    if (!before) {
+      return CFOps.buildConditionalFormatMutationReceipt({
+        kind: 'conditionalFormat.update',
+        sheetId: this.sheetId,
+        status: 'noOp',
+        format: null,
+      });
     }
 
+    let nextRules = ruleUpdates.rules;
+    if (stopIfTrue !== undefined) {
+      nextRules = (nextRules ?? before.rules).map((rule) => ({ ...rule, stopIfTrue })) as CFRule[];
+    }
+
+    let changed = false;
+
     // Route ranges through the dedicated updateCfRanges bridge for CRDT safety
-    if (ranges) {
+    if (ranges !== undefined) {
       await this.ctx.computeBridge.updateCfRanges(this.sheetId, formatId, ranges);
+      changed = true;
     }
 
     // Route rule/property updates through updateCfRule (JSON merge)
-    if (ruleUpdates.rules) {
-      ruleUpdates.rules = normalizeRules(ruleUpdates.rules);
-      await this.ctx.computeBridge.updateCfRule(this.sheetId, formatId, ruleUpdates);
+    if (nextRules !== undefined) {
+      const normalizedRules = normalizeRules(nextRules);
+      await this.ctx.computeBridge.updateCfRule(this.sheetId, formatId, { rules: normalizedRules });
+      nextRules = normalizedRules as CFRule[];
+      changed = true;
     }
+
+    if (!changed) {
+      return CFOps.buildConditionalFormatMutationReceipt({
+        kind: 'conditionalFormat.update',
+        sheetId: this.sheetId,
+        status: 'noOp',
+        ranges: before.ranges,
+        formatCount: 0,
+        ruleCount: 0,
+      });
+    }
+
+    const fallback = {
+      ...before,
+      ranges: ranges ?? before.ranges,
+      rules: nextRules ?? before.rules,
+    };
+    const after = (await CFOps.getConditionalFormat(this.ctx, this.sheetId, formatId)) ?? fallback;
+    return CFOps.buildConditionalFormatMutationReceipt({
+      kind: 'conditionalFormat.update',
+      sheetId: this.sheetId,
+      format: after,
+    });
   }
 
-  async clearRuleStyle(formatId: string, ruleId: string): Promise<void> {
+  async clearRuleStyle(
+    formatId: string,
+    ruleId: string,
+  ): Promise<ConditionalFormatMutationReceipt> {
     const format = await CFOps.getConditionalFormat(this.ctx, this.sheetId, formatId);
-    if (!format) return;
+    if (!format) {
+      return CFOps.buildConditionalFormatMutationReceipt({
+        kind: 'conditionalFormat.clearRuleStyle',
+        sheetId: this.sheetId,
+        status: 'noOp',
+        format: null,
+      });
+    }
 
+    let updatedRule: CFRule | null = null;
     const updatedRules = format.rules.map((rule) => {
       if (rule.id !== ruleId) return rule;
       // Reset style to empty object (all properties unset)
       if ('style' in rule) {
-        return { ...rule, style: {} };
+        updatedRule = { ...rule, style: {} } as CFRule;
+        return updatedRule;
       }
+      updatedRule = rule;
       return rule;
     });
 
+    if (!updatedRule) {
+      return CFOps.buildConditionalFormatMutationReceipt({
+        kind: 'conditionalFormat.clearRuleStyle',
+        sheetId: this.sheetId,
+        status: 'noOp',
+        formatCount: 0,
+        ruleCount: 0,
+      });
+    }
+
     await this.ctx.computeBridge.updateCfRule(this.sheetId, formatId, { rules: updatedRules });
+    const fallback = { ...format, rules: updatedRules };
+    const after = (await CFOps.getConditionalFormat(this.ctx, this.sheetId, formatId)) ?? fallback;
+    return CFOps.buildConditionalFormatMutationReceipt({
+      kind: 'conditionalFormat.clearRuleStyle',
+      sheetId: this.sheetId,
+      format: after,
+      rules: [updatedRule],
+      ruleIds: [ruleId],
+      ruleCount: 1,
+    });
   }
 
-  async changeRuleType(formatId: string, ruleId: string, newRule: CFRuleInput): Promise<void> {
+  async changeRuleType(
+    formatId: string,
+    ruleId: string,
+    newRule: CFRuleInput,
+  ): Promise<ConditionalFormatMutationReceipt> {
     const format = await CFOps.getConditionalFormat(this.ctx, this.sheetId, formatId);
-    if (!format) return;
+    if (!format) {
+      return CFOps.buildConditionalFormatMutationReceipt({
+        kind: 'conditionalFormat.changeRuleType',
+        sheetId: this.sheetId,
+        status: 'noOp',
+        format: null,
+      });
+    }
 
+    let updatedRule: CFRule | null = null;
     const updatedRules = format.rules.map((rule) => {
       if (rule.id !== ruleId) return rule;
-      return { ...newRule, id: rule.id, priority: rule.priority };
+      updatedRule = { ...newRule, id: rule.id, priority: rule.priority } as CFRule;
+      return updatedRule;
     });
 
-    await this.ctx.computeBridge.updateCfRule(this.sheetId, formatId, {
-      rules: normalizeRules(updatedRules),
+    if (!updatedRule) {
+      return CFOps.buildConditionalFormatMutationReceipt({
+        kind: 'conditionalFormat.changeRuleType',
+        sheetId: this.sheetId,
+        status: 'noOp',
+        formatCount: 0,
+        ruleCount: 0,
+      });
+    }
+
+    const normalizedRules = normalizeRules(updatedRules);
+    await this.ctx.computeBridge.updateCfRule(this.sheetId, formatId, { rules: normalizedRules });
+    const fallback = { ...format, rules: normalizedRules as CFRule[] };
+    const after = (await CFOps.getConditionalFormat(this.ctx, this.sheetId, formatId)) ?? fallback;
+    return CFOps.buildConditionalFormatMutationReceipt({
+      kind: 'conditionalFormat.changeRuleType',
+      sheetId: this.sheetId,
+      format: after,
+      rules: [updatedRule],
+      ruleIds: [ruleId],
+      ruleCount: 1,
     });
   }
 
@@ -559,30 +668,91 @@ export class WorksheetConditionalFormattingImpl implements WorksheetConditionalF
     return all[index] ?? null;
   }
 
-  async remove(formatId: string): Promise<void> {
+  async remove(formatId: string): Promise<ConditionalFormatMutationReceipt> {
+    const before = await CFOps.getConditionalFormat(this.ctx, this.sheetId, formatId);
+    if (!before) {
+      return CFOps.buildConditionalFormatMutationReceipt({
+        kind: 'conditionalFormat.remove',
+        sheetId: this.sheetId,
+        status: 'noOp',
+        format: null,
+      });
+    }
+
     await this.ctx.computeBridge.deleteCfRule(this.sheetId, formatId);
+    return CFOps.buildConditionalFormatMutationReceipt({
+      kind: 'conditionalFormat.remove',
+      sheetId: this.sheetId,
+      formats: [before],
+    });
   }
 
-  async removeRule(formatId: string, ruleId: string): Promise<void> {
+  async removeRule(
+    formatId: string,
+    ruleId: string,
+  ): Promise<ConditionalFormatMutationReceipt> {
+    const before = await CFOps.getConditionalFormat(this.ctx, this.sheetId, formatId);
+    const removedRule = before?.rules.find((rule) => rule.id === ruleId);
+    if (!before || !removedRule) {
+      return CFOps.buildConditionalFormatMutationReceipt({
+        kind: 'conditionalFormat.removeRule',
+        sheetId: this.sheetId,
+        status: 'noOp',
+        formatCount: 0,
+        ruleCount: 0,
+      });
+    }
+
     await this.ctx.computeBridge.deleteRuleFromCf(this.sheetId, formatId, ruleId);
+    return CFOps.buildConditionalFormatMutationReceipt({
+      kind: 'conditionalFormat.removeRule',
+      sheetId: this.sheetId,
+      formats: [before],
+      rules: [removedRule],
+      formatIds: [formatId],
+      ruleIds: [ruleId],
+      formatCount: 1,
+      ruleCount: 1,
+    });
   }
 
   async list(): Promise<ConditionalFormat[]> {
     return CFOps.getConditionalFormats(this.ctx, this.sheetId);
   }
 
-  async clear(): Promise<void> {
+  async clear(): Promise<ConditionalFormatMutationReceipt> {
     return CFOps.clearAllConditionalFormats(this.ctx, this.sheetId);
   }
 
-  async clearInRanges(ranges: (string | CellRange)[]): Promise<void> {
+  async clearInRanges(ranges: (string | CellRange)[]): Promise<ConditionalFormatMutationReceipt> {
     assertCfRangeArray(ranges, ['ranges'], 'conditionalFormats.clearInRanges');
     const resolved = ranges.map((r) => resolveRange(r));
-    await CFOps.clearCFRulesInRanges(this.ctx, this.sheetId, resolved);
+    return CFOps.clearCFRulesInRanges(this.ctx, this.sheetId, resolved);
   }
 
-  async reorder(formatIds: string[]): Promise<void> {
+  async reorder(formatIds: string[]): Promise<ConditionalFormatMutationReceipt> {
+    const before = await this.list();
+    const affectedBefore = before.filter((format) => formatIds.includes(format.id));
+    if (formatIds.length === 0 || affectedBefore.length === 0) {
+      return CFOps.buildConditionalFormatMutationReceipt({
+        kind: 'conditionalFormat.reorder',
+        sheetId: this.sheetId,
+        status: 'noOp',
+        formatCount: 0,
+        ruleCount: 0,
+      });
+    }
     await this.ctx.computeBridge.reorderCfRules(this.sheetId, formatIds);
+    const after = await this.list();
+    const affectedAfter = formatIds
+      .map((id) => after.find((format) => format.id === id))
+      .filter((format): format is ConditionalFormat => Boolean(format));
+    return CFOps.buildConditionalFormatMutationReceipt({
+      kind: 'conditionalFormat.reorder',
+      sheetId: this.sheetId,
+      formats: affectedAfter.length > 0 ? affectedAfter : affectedBefore,
+      formatIds,
+    });
   }
 
   async cloneForPaste(
@@ -598,7 +768,7 @@ export class WorksheetConditionalFormattingImpl implements WorksheetConditionalF
     }>,
     origin: { row: number; col: number },
     isCut: boolean,
-  ): Promise<void> {
+  ): Promise<ConditionalFormatMutationReceipt> {
     assertCfRelativeFormatArray(relativeCFs, ['relativeCFs'], 'conditionalFormats.cloneForPaste');
     relativeCFs.forEach((cf, index) => {
       assertCfRuleArray(
@@ -612,7 +782,7 @@ export class WorksheetConditionalFormattingImpl implements WorksheetConditionalF
         'conditionalFormats.cloneForPaste',
       );
     });
-    await CFOps.cloneConditionalFormatsForPaste(
+    return CFOps.cloneConditionalFormatsForPaste(
       this.ctx,
       sourceSheetId,
       this.sheetId,

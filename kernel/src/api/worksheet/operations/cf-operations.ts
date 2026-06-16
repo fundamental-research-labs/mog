@@ -9,10 +9,329 @@
  * have been inlined into their callers.
  */
 
-import type { ConditionalFormat as PublicConditionalFormat } from '@mog-sdk/contracts/api';
-import type { SheetId } from '@mog-sdk/contracts/core';
+import type {
+  ConditionalFormat as PublicConditionalFormat,
+  ConditionalFormatMutationKind,
+  ConditionalFormatMutationReceipt,
+  OperationDiagnostic,
+  OperationEffect,
+} from '@mog-sdk/contracts/api';
+import type { CellRange, SheetId } from '@mog-sdk/contracts/core';
 
+import { rangeToA1 } from '../../internal/utils';
 import type { DocumentContext } from './shared';
+
+type PublicCFRule = PublicConditionalFormat['rules'][number];
+
+const publicRuleTypes = new Set([
+  'cellValue',
+  'formula',
+  'colorScale',
+  'dataBar',
+  'iconSet',
+  'top10',
+  'aboveAverage',
+  'duplicateValues',
+  'containsText',
+  'containsBlanks',
+  'containsErrors',
+  'timePeriod',
+]);
+
+function uniqueStrings(values: readonly (string | undefined | null)[]): string[] {
+  const seen = new Set<string>();
+  const unique: string[] = [];
+  for (const value of values) {
+    if (!value || seen.has(value)) continue;
+    seen.add(value);
+    unique.push(value);
+  }
+  return unique;
+}
+
+function rangeKey(range: CellRange): string {
+  return `${range.sheetId ?? ''}:${range.startRow}:${range.startCol}:${range.endRow}:${range.endCol}`;
+}
+
+function uniqueRanges(ranges: readonly CellRange[]): CellRange[] {
+  const seen = new Set<string>();
+  const unique: CellRange[] = [];
+  for (const range of ranges) {
+    const key = rangeKey(range);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique.push(range);
+  }
+  return unique;
+}
+
+function rulesFor(formats: readonly PublicConditionalFormat[]): PublicCFRule[] {
+  return formats.flatMap((format) => [...(format.rules ?? [])]);
+}
+
+function rangesFor(formats: readonly PublicConditionalFormat[]): CellRange[] {
+  return uniqueRanges(formats.flatMap((format) => [...(format.ranges ?? [])]));
+}
+
+function ruleIdsFor(rules: readonly PublicCFRule[]): string[] {
+  return uniqueStrings(rules.map((rule: any) => rule?.id));
+}
+
+function objectEffect(input: {
+  type: 'createdObject' | 'updatedObject' | 'removedObject';
+  sheetId: SheetId;
+  ids: readonly string[];
+  count: number;
+  objectType: string;
+  details?: Record<string, unknown>;
+}): OperationEffect {
+  return {
+    type: input.type,
+    sheetId: input.sheetId,
+    ...(input.ids.length === 1 ? { objectId: input.ids[0] } : {}),
+    count: input.count,
+    details: {
+      objectType: input.objectType,
+      objectIds: input.ids,
+      ...input.details,
+    },
+  };
+}
+
+function changedConditionalFormatEffect(input: {
+  sheetId: SheetId;
+  formatIds: readonly string[];
+  ruleIds: readonly string[];
+  formatCount: number;
+  ruleCount: number;
+}): OperationEffect {
+  return {
+    type: 'changedConditionalFormat',
+    sheetId: input.sheetId,
+    ...(input.formatIds.length === 1 ? { objectId: input.formatIds[0] } : {}),
+    count: input.ruleCount,
+    details: {
+      formatIds: input.formatIds,
+      ruleIds: input.ruleIds,
+      formatCount: input.formatCount,
+      ruleCount: input.ruleCount,
+    },
+  };
+}
+
+function changedRangeEffects(
+  sheetId: SheetId,
+  ranges: readonly CellRange[],
+  count: number,
+): OperationEffect[] {
+  return ranges.map((range) => ({
+    type: 'changedRange',
+    sheetId,
+    range: rangeToA1(range),
+    count,
+  }));
+}
+
+function noOpEffects(sheetId: SheetId, ranges: readonly CellRange[]): OperationEffect[] {
+  if (ranges.length === 0) return [{ type: 'worksheetUnchanged', sheetId }];
+  return ranges.map((range) => ({
+    type: 'worksheetUnchanged',
+    sheetId,
+    range: rangeToA1(range),
+  }));
+}
+
+function mutationPrimaryEffect(kind: ConditionalFormatMutationKind):
+  | {
+      type: 'createdObject' | 'updatedObject' | 'removedObject';
+      objectType: string;
+    }
+  | null {
+  switch (kind) {
+    case 'conditionalFormat.add':
+    case 'conditionalFormat.addFormula':
+    case 'conditionalFormat.cloneForPaste':
+      return { type: 'createdObject', objectType: 'conditionalFormat' };
+    case 'conditionalFormat.remove':
+    case 'conditionalFormat.clear':
+    case 'conditionalFormat.clearInRanges':
+      return { type: 'removedObject', objectType: 'conditionalFormat' };
+    case 'conditionalFormat.removeRule':
+      return { type: 'removedObject', objectType: 'conditionalFormatRule' };
+    case 'conditionalFormat.update':
+    case 'conditionalFormat.clearRuleStyle':
+    case 'conditionalFormat.changeRuleType':
+    case 'conditionalFormat.reorder':
+      return { type: 'updatedObject', objectType: 'conditionalFormat' };
+  }
+}
+
+function effectsForConditionalFormatMutation(input: {
+  kind: ConditionalFormatMutationKind;
+  status: ConditionalFormatMutationReceipt['status'];
+  sheetId: SheetId;
+  formatIds: readonly string[];
+  ruleIds: readonly string[];
+  ranges: readonly CellRange[];
+  formatCount: number;
+  ruleCount: number;
+}): OperationEffect[] {
+  if (input.status === 'noOp') {
+    return noOpEffects(input.sheetId, input.ranges);
+  }
+
+  const primary = mutationPrimaryEffect(input.kind);
+  return [
+    ...(primary
+      ? [
+          objectEffect({
+            type: primary.type,
+            sheetId: input.sheetId,
+            ids:
+              primary.objectType === 'conditionalFormatRule' ? input.ruleIds : input.formatIds,
+            count:
+              primary.objectType === 'conditionalFormatRule'
+                ? input.ruleCount
+                : input.formatCount,
+            objectType: primary.objectType,
+            details: {
+              formatIds: input.formatIds,
+              ruleIds: input.ruleIds,
+            },
+          }),
+        ]
+      : []),
+    changedConditionalFormatEffect(input),
+    ...changedRangeEffects(input.sheetId, input.ranges, input.ruleCount),
+  ];
+}
+
+function unsupportedReasonsFor(value: any): string[] {
+  if (!value || typeof value !== 'object') return [];
+  const reasons: string[] = [];
+  const explicitReasons = value.unsupportedReasons ?? value.unsupported_reasons;
+  if (Array.isArray(explicitReasons)) {
+    reasons.push(...explicitReasons.map((reason) => String(reason)));
+  }
+  if (
+    value.unsupportedPreserved === true ||
+    value.unsupported_preserved === true ||
+    value.preservedUnsupported === true ||
+    value.preserved_unsupported === true
+  ) {
+    reasons.push('unsupportedPreserved');
+  }
+  if (value.capability === 'unsupported') {
+    reasons.push('unsupportedCapability');
+  }
+  const importStatus = value.importStatus ?? value.import_status;
+  if (typeof importStatus === 'string' && importStatus.toLowerCase().includes('unsupported')) {
+    reasons.push(importStatus);
+  }
+  return reasons;
+}
+
+function unsupportedConditionalFormatDiagnostics(
+  sheetId: SheetId,
+  formats: readonly PublicConditionalFormat[],
+): OperationDiagnostic[] {
+  const diagnostics: OperationDiagnostic[] = [];
+  for (const format of formats) {
+    const formatReasons = unsupportedReasonsFor(format);
+    for (const rule of format.rules ?? []) {
+      const ruleAny = rule as any;
+      const ruleType = typeof ruleAny?.type === 'string' ? ruleAny.type : undefined;
+      const reasons = [
+        ...formatReasons,
+        ...unsupportedReasonsFor(ruleAny),
+        ...(ruleType && !publicRuleTypes.has(ruleType)
+          ? [`unsupportedRuleType:${ruleType}`]
+          : []),
+      ];
+      if (reasons.length === 0) continue;
+      diagnostics.push({
+        severity: 'warning',
+        code: 'CONDITIONAL_FORMAT_UNSUPPORTED_IMPORTED_RULE',
+        message: 'Conditional format contains an unsupported preserved or imported rule shell.',
+        target: {
+          sheetId,
+          objectId: format.id,
+        },
+        recoverable: true,
+        nextAction: 'Remove or replace the unsupported conditional-format rule before editing it.',
+        details: {
+          formatId: format.id,
+          ruleId: ruleAny?.id,
+          ruleType,
+          unsupportedReasons: uniqueStrings(reasons),
+        },
+      });
+    }
+  }
+  return diagnostics;
+}
+
+export function buildConditionalFormatMutationReceipt(input: {
+  kind: ConditionalFormatMutationKind;
+  sheetId: SheetId;
+  status?: ConditionalFormatMutationReceipt['status'];
+  format?: PublicConditionalFormat | null;
+  formats?: readonly PublicConditionalFormat[];
+  rules?: readonly PublicCFRule[];
+  ranges?: readonly CellRange[];
+  requestedRanges?: readonly CellRange[];
+  formatIds?: readonly string[];
+  ruleIds?: readonly string[];
+  formatCount?: number;
+  ruleCount?: number;
+  effects?: readonly OperationEffect[];
+  diagnostics?: readonly OperationDiagnostic[];
+}): ConditionalFormatMutationReceipt {
+  const formats = input.formats ?? (input.format ? [input.format] : []);
+  const rules = [...(input.rules ?? rulesFor(formats))];
+  const formatIds = uniqueStrings([
+    ...(input.formatIds ?? []),
+    ...formats.map((format) => format.id),
+    ...(input.format ? [input.format.id] : []),
+  ]);
+  const ruleIds = uniqueStrings([...(input.ruleIds ?? []), ...ruleIdsFor(rules)]);
+  const ranges = uniqueRanges([...(input.ranges ?? []), ...rangesFor(formats)]);
+  const requestedRanges =
+    input.requestedRanges === undefined ? undefined : uniqueRanges(input.requestedRanges);
+  const formatCount = input.formatCount ?? formatIds.length;
+  const ruleCount = input.ruleCount ?? ruleIds.length;
+  const status = input.status ?? (formatCount > 0 || ruleCount > 0 ? 'applied' : 'noOp');
+  const diagnostics = [
+    ...(input.diagnostics ?? []),
+    ...unsupportedConditionalFormatDiagnostics(input.sheetId, formats),
+  ];
+
+  return {
+    kind: input.kind,
+    status,
+    effects: input.effects ?? effectsForConditionalFormatMutation({
+      kind: input.kind,
+      status,
+      sheetId: input.sheetId,
+      formatIds,
+      ruleIds,
+      ranges: requestedRanges && ranges.length === 0 ? requestedRanges : ranges,
+      formatCount,
+      ruleCount,
+    }),
+    diagnostics,
+    sheetId: input.sheetId,
+    formatIds,
+    ruleIds,
+    ranges,
+    formatCount,
+    ruleCount,
+    ...(input.format !== undefined ? { format: input.format } : {}),
+    ...(input.formats !== undefined ? { formats } : {}),
+    ...(input.rules !== undefined ? { rules } : {}),
+    ...(requestedRanges !== undefined ? { requestedRanges } : {}),
+  };
+}
 
 // =============================================================================
 // Format Painter: Clone conditional formats for paste
@@ -52,7 +371,8 @@ export async function cloneConditionalFormatsForPaste(
   formats: RelativeConditionalFormat[],
   origin: { row: number; col: number },
   isCut: boolean = false,
-): Promise<void> {
+): Promise<ConditionalFormatMutationReceipt> {
+  const createdFormats: PublicConditionalFormat[] = [];
   for (const cf of formats) {
     // Translate relative range offsets to absolute target ranges
     const targetRanges = cf.rangeOffsets.map((offset) => ({
@@ -73,6 +393,7 @@ export async function cloneConditionalFormatsForPaste(
       })),
     };
     await ctx.computeBridge.addCfRule(targetSheetId, cfFormat);
+    createdFormats.push(toPublicFormat(cfFormat));
   }
 
   // For cut: delete originals from source sheet
@@ -80,6 +401,13 @@ export async function cloneConditionalFormatsForPaste(
   //  for format-painter isCut is always false)
   void sourceSheetId;
   void isCut;
+
+  return buildConditionalFormatMutationReceipt({
+    kind: 'conditionalFormat.cloneForPaste',
+    sheetId: targetSheetId,
+    status: createdFormats.length === 0 ? 'noOp' : 'applied',
+    formats: createdFormats,
+  });
 }
 
 // =============================================================================
@@ -96,10 +424,10 @@ export async function clearCFRulesInRanges(
   ctx: DocumentContext,
   sheetId: SheetId,
   ranges: Array<{ startRow: number; startCol: number; endRow: number; endCol: number }>,
-): Promise<void> {
+): Promise<ConditionalFormatMutationReceipt> {
   const allRules = await ctx.computeBridge.getAllCfRules(sheetId);
 
-  const toDelete: string[] = [];
+  const toDelete: any[] = [];
   for (const rule of allRules) {
     const ruleRanges: Array<{
       startRow: number;
@@ -111,14 +439,7 @@ export async function clearCFRulesInRanges(
     let shouldDelete = false;
     for (const selRange of ranges) {
       for (const cfRange of ruleRanges) {
-        if (
-          !(
-            selRange.endRow < cfRange.startRow ||
-            selRange.startRow > cfRange.endRow ||
-            selRange.endCol < cfRange.startCol ||
-            selRange.startCol > cfRange.endCol
-          )
-        ) {
+        if (rangesIntersect(selRange, cfRange)) {
           shouldDelete = true;
           break;
         }
@@ -127,11 +448,31 @@ export async function clearCFRulesInRanges(
     }
 
     if (shouldDelete && rule.id) {
-      toDelete.push(rule.id);
+      toDelete.push(rule);
     }
   }
 
-  await Promise.all(toDelete.map((id) => ctx.computeBridge.deleteCfRule(sheetId, id)));
+  await Promise.all(toDelete.map((rule) => ctx.computeBridge.deleteCfRule(sheetId, rule.id)));
+
+  return buildConditionalFormatMutationReceipt({
+    kind: 'conditionalFormat.clearInRanges',
+    sheetId,
+    status: toDelete.length === 0 ? 'noOp' : 'applied',
+    formats: toDelete.map(toPublicFormat),
+    requestedRanges: ranges,
+  });
+}
+
+function rangesIntersect(
+  a: { startRow: number; startCol: number; endRow: number; endCol: number },
+  b: { startRow: number; startCol: number; endRow: number; endCol: number },
+): boolean {
+  return !(
+    a.endRow < b.startRow ||
+    a.startRow > b.endRow ||
+    a.endCol < b.startCol ||
+    a.startCol > b.endCol
+  );
 }
 
 // =============================================================================
@@ -438,7 +779,7 @@ export async function addConditionalFormat(
   sheetId: SheetId,
   ranges: Array<{ startRow: number; startCol: number; endRow: number; endCol: number }>,
   rules: any[],
-): Promise<string> {
+): Promise<PublicConditionalFormat> {
   const formatId = generateFormatId();
   const cfFormat = {
     id: formatId,
@@ -460,7 +801,7 @@ export async function addConditionalFormat(
     })),
   };
   await ctx.computeBridge.addCfRule(sheetId, cfFormat);
-  return formatId;
+  return toPublicFormat(cfFormat);
 }
 
 /**
@@ -497,7 +838,13 @@ export async function getConditionalFormats(
 export async function clearAllConditionalFormats(
   ctx: DocumentContext,
   sheetId: SheetId,
-): Promise<void> {
+): Promise<ConditionalFormatMutationReceipt> {
   const allRules = await ctx.computeBridge.getAllCfRules(sheetId);
   await Promise.all(allRules.map((rule) => ctx.computeBridge.deleteCfRule(sheetId, rule.id)));
+  return buildConditionalFormatMutationReceipt({
+    kind: 'conditionalFormat.clear',
+    sheetId,
+    status: allRules.length === 0 ? 'noOp' : 'applied',
+    formats: allRules.map(toPublicFormat),
+  });
 }

@@ -5,6 +5,7 @@
  * on a worksheet. Operates at the format level (not individual rules).
  */
 import type { CellRange, CFRule, CFRuleInput, CFStyle, ConditionalFormat } from '../types';
+import type { ConditionalFormatMutationReceipt } from '../mutation-receipt';
 
 /** Update payload for a conditional format. */
 export interface ConditionalFormatUpdate {
@@ -28,13 +29,13 @@ export interface WorksheetConditionalFormatting {
    * @param range - Cell range, or array of ranges, this format applies to
    * @param formula - Conditional-format formula (e.g. "=A1>100")
    * @param style - Style applied when the formula is true
-   * @returns The created conditional format with assigned IDs and priorities
+   * @returns Receipt with the created conditional format, assigned IDs, and affected ranges
    */
   addFormula(
     range: string | CellRange | (string | CellRange)[],
     formula: string,
     style: CFStyle,
-  ): Promise<ConditionalFormat>;
+  ): Promise<ConditionalFormatMutationReceipt & ConditionalFormat>;
 
   /**
    * Add a new conditional format with ranges and rules.
@@ -42,9 +43,12 @@ export interface WorksheetConditionalFormatting {
    *
    * @param ranges - Cell ranges this format applies to
    * @param rules - Rule inputs (without id/priority)
-   * @returns The created conditional format with assigned IDs and priorities
+   * @returns Receipt with the created conditional format, assigned IDs, and affected ranges
    */
-  add(ranges: (string | CellRange)[], rules: CFRuleInput[]): Promise<ConditionalFormat>;
+  add(
+    ranges: (string | CellRange)[],
+    rules: CFRuleInput[],
+  ): Promise<ConditionalFormatMutationReceipt & ConditionalFormat>;
 
   /**
    * Get a conditional format by its ID.
@@ -76,7 +80,10 @@ export interface WorksheetConditionalFormatting {
    * @param formatId - Format ID to update
    * @param updates - Object with optional rules, ranges, and stopIfTrue
    */
-  update(formatId: string, updates: ConditionalFormatUpdate): Promise<void>;
+  update(
+    formatId: string,
+    updates: ConditionalFormatUpdate,
+  ): Promise<ConditionalFormatMutationReceipt>;
 
   /**
    * Clear the style of a specific rule within a conditional format, resetting
@@ -85,7 +92,7 @@ export interface WorksheetConditionalFormatting {
    * @param formatId - Format ID containing the rule
    * @param ruleId - Rule ID within the format to clear style for
    */
-  clearRuleStyle(formatId: string, ruleId: string): Promise<void>;
+  clearRuleStyle(formatId: string, ruleId: string): Promise<ConditionalFormatMutationReceipt>;
 
   /**
    * Change the type and configuration of a specific rule within a conditional format,
@@ -96,7 +103,11 @@ export interface WorksheetConditionalFormatting {
    * @param ruleId - Rule ID to change
    * @param newRule - New rule configuration (type + type-specific fields)
    */
-  changeRuleType(formatId: string, ruleId: string, newRule: CFRuleInput): Promise<void>;
+  changeRuleType(
+    formatId: string,
+    ruleId: string,
+    newRule: CFRuleInput,
+  ): Promise<ConditionalFormatMutationReceipt>;
 
   /**
    * Get a conditional format by its index in the priority-ordered list.
@@ -111,7 +122,7 @@ export interface WorksheetConditionalFormatting {
    *
    * @param formatId - Format ID to remove
    */
-  remove(formatId: string): Promise<void>;
+  remove(formatId: string): Promise<ConditionalFormatMutationReceipt>;
 
   /**
    * Remove a single rule from a conditional format. If the removed rule was
@@ -120,7 +131,7 @@ export interface WorksheetConditionalFormatting {
    * @param formatId - Format ID containing the rule
    * @param ruleId - Rule ID to remove
    */
-  removeRule(formatId: string, ruleId: string): Promise<void>;
+  removeRule(formatId: string, ruleId: string): Promise<ConditionalFormatMutationReceipt>;
 
   /**
    * Get all conditional formats on the sheet.
@@ -132,21 +143,21 @@ export interface WorksheetConditionalFormatting {
   /**
    * Clear all conditional formats from the sheet.
    */
-  clear(): Promise<void>;
+  clear(): Promise<ConditionalFormatMutationReceipt>;
 
   /**
    * Clear conditional formats that intersect with the given ranges.
    *
    * @param ranges - Ranges to clear conditional formats from
    */
-  clearInRanges(ranges: (string | CellRange)[]): Promise<void>;
+  clearInRanges(ranges: (string | CellRange)[]): Promise<ConditionalFormatMutationReceipt>;
 
   /**
    * Reorder conditional formats by format ID array (first = highest priority).
    *
    * @param formatIds - Array of format IDs in the desired order
    */
-  reorder(formatIds: string[]): Promise<void>;
+  reorder(formatIds: string[]): Promise<ConditionalFormatMutationReceipt>;
 
   /**
    * Clone conditional formats from source to target with offset.
@@ -170,5 +181,5 @@ export interface WorksheetConditionalFormatting {
     }>,
     origin: { row: number; col: number },
     isCut: boolean,
-  ): Promise<void>;
+  ): Promise<ConditionalFormatMutationReceipt>;
 }

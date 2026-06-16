@@ -8,6 +8,7 @@
 
 import type { ObjectBounds } from '../kernel/floating-object-manager';
 import type { CellRange, CellValue } from '@mog/types-core/core';
+import type { CFRule, ConditionalFormat } from '@mog/types-formatting/conditional-format/rules';
 import type { FloatingObject } from '@mog/types-objects/objects/floating-objects';
 import type { OperationReceiptBase } from './operation-receipt';
 import type { Comment, Slicer } from './types';
@@ -366,6 +367,39 @@ export interface CommentRemoveReceipt extends OperationReceiptBase {
 export type CommentReceipt = CommentAddReceipt | CommentUpdateReceipt | CommentRemoveReceipt;
 
 // =============================================================================
+// Conditional Formatting
+// =============================================================================
+
+export type ConditionalFormatMutationKind =
+  | 'conditionalFormat.add'
+  | 'conditionalFormat.addFormula'
+  | 'conditionalFormat.update'
+  | 'conditionalFormat.clearRuleStyle'
+  | 'conditionalFormat.changeRuleType'
+  | 'conditionalFormat.remove'
+  | 'conditionalFormat.removeRule'
+  | 'conditionalFormat.clear'
+  | 'conditionalFormat.clearInRanges'
+  | 'conditionalFormat.reorder'
+  | 'conditionalFormat.cloneForPaste';
+
+/** Receipt for conditional-format mutations. */
+export interface ConditionalFormatMutationReceipt extends OperationReceiptBase {
+  readonly kind: ConditionalFormatMutationKind;
+  readonly status: 'applied' | 'noOp';
+  readonly sheetId: string;
+  readonly formatIds: readonly string[];
+  readonly ruleIds: readonly string[];
+  readonly ranges: readonly CellRange[];
+  readonly formatCount: number;
+  readonly ruleCount: number;
+  readonly format?: ConditionalFormat | null;
+  readonly formats?: readonly ConditionalFormat[];
+  readonly rules?: readonly CFRule[];
+  readonly requestedRanges?: readonly CellRange[];
+}
+
+// =============================================================================
 // History
 // =============================================================================
 
@@ -552,6 +586,7 @@ export type MutationReceipt =
   | ValidationSetReceipt
   | ValidationRemoveReceipt
   | CommentReceipt
+  | ConditionalFormatMutationReceipt
   | UndoReceipt
   | RedoReceipt
   | PivotRemoveReceipt

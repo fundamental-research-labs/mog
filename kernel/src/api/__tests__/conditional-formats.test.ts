@@ -41,6 +41,11 @@ import { WorksheetConditionalFormattingImpl } from '../worksheet/conditional-for
 
 const SHEET_ID = sheetId('test-sheet-cf');
 
+function resetCfOperationMocks(): void {
+  mockGetConditionalFormat.mockReset();
+  mockGetConditionalFormats.mockReset();
+}
+
 function createMockComputeBridge() {
   return {
     updateCfRule: jest.fn().mockResolvedValue({ data: null }),
@@ -190,6 +195,7 @@ describe('WorksheetConditionalFormattingImpl — input shape diagnostics', () =>
 
   beforeEach(() => {
     jest.clearAllMocks();
+    resetCfOperationMocks();
     bridge = createMockComputeBridge();
     ctx = createMockCtx(bridge);
     cf = new WorksheetConditionalFormattingImpl(ctx, SHEET_ID);
@@ -397,6 +403,7 @@ describe('WorksheetConditionalFormattingImpl — input shape diagnostics', () =>
 
   it('update preserves valid array inputs', async () => {
     const ranges = [{ startRow: 0, startCol: 0, endRow: 9, endCol: 0 }];
+    mockBridgeFormats(bridge, [makeFormat()]);
 
     await cf.update('fmt-1', { ranges, rules: [formulaRule], stopIfTrue: true } as any);
 
@@ -515,6 +522,7 @@ describe('WorksheetConditionalFormattingImpl — changeRuleType', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    resetCfOperationMocks();
     bridge = createMockComputeBridge();
     ctx = createMockCtx(bridge);
     cf = new WorksheetConditionalFormattingImpl(ctx, SHEET_ID);
@@ -662,7 +670,7 @@ describe('WorksheetConditionalFormattingImpl — changeRuleType', () => {
     expect(bridge.updateCfRule).not.toHaveBeenCalled();
   });
 
-  it('non-existent ruleId — all rules untouched, bridge called with original rules', async () => {
+  it('non-existent ruleId — returns a no-op receipt without writing original rules back', async () => {
     const format = makeFormat({
       rules: [
         {
@@ -683,12 +691,16 @@ describe('WorksheetConditionalFormattingImpl — changeRuleType', () => {
       style: {},
     } as CFRuleInput;
 
-    await cf.changeRuleType('fmt-1', 'no-such-rule', newRule);
+    const receipt = await cf.changeRuleType('fmt-1', 'no-such-rule', newRule);
 
-    expect(bridge.updateCfRule).toHaveBeenCalledTimes(1);
-    const rules = bridge.updateCfRule.mock.calls[0][2].rules;
-    // Original rules passed through unchanged
-    expect(rules).toEqual(format.rules);
+    expect(bridge.updateCfRule).not.toHaveBeenCalled();
+    expect(receipt).toMatchObject({
+      kind: 'conditionalFormat.changeRuleType',
+      status: 'noOp',
+      formatCount: 0,
+      ruleCount: 0,
+      effects: [{ type: 'worksheetUnchanged', sheetId: SHEET_ID }],
+    });
   });
 
   it('change rule type to same type with different config — config-only change works', async () => {
@@ -756,6 +768,7 @@ describe('WorksheetConditionalFormattingImpl — getItemAt', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    resetCfOperationMocks();
     bridge = createMockComputeBridge();
     ctx = createMockCtx(bridge);
     cf = new WorksheetConditionalFormattingImpl(ctx, SHEET_ID);
@@ -800,12 +813,16 @@ describe('WorksheetConditionalFormattingImpl — removeRule', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    resetCfOperationMocks();
     bridge = createMockComputeBridge();
     ctx = createMockCtx(bridge);
     cf = new WorksheetConditionalFormattingImpl(ctx, SHEET_ID);
   });
 
   it('routes single-rule removal to the rule-level compute bridge', async () => {
+    const format = makeFormat();
+    mockBridgeFormats(bridge, [format]);
+
     await cf.removeRule('fmt-1', 'rule-1');
 
     expect(bridge.deleteRuleFromCf).toHaveBeenCalledTimes(1);

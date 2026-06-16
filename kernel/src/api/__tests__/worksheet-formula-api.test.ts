@@ -217,7 +217,15 @@ describe('Worksheet formula API ergonomics', () => {
   it('setCell rejects formula-looking strings missing equals unless text intent is explicit', async () => {
     await expect(ws.setCell('A1', '+G352')).rejects.toMatchObject({
       code: 'API_INVALID_ARGUMENT',
-      suggestion: expect.stringContaining('setFormula'),
+      message:
+        'worksheet.setCell: "+G352" looks like a formula but is missing the leading "=". Mog cannot safely guess whether you meant a formula or literal text.',
+      suggestion:
+        'Formula: call worksheet.setFormula(address, "=+G352"). Literal text: call worksheet.setCell(address, "+G352", { asText: true }).',
+      context: expect.objectContaining({
+        validationKind: 'formulaTextMissingEquals',
+        formulaExample: 'worksheet.setFormula(address, "=+G352")',
+        literalTextExample: 'worksheet.setCell(address, "+G352", { asText: true })',
+      }),
     });
     expect(CellOps.setCell).not.toHaveBeenCalled();
   });
@@ -225,7 +233,10 @@ describe('Worksheet formula API ergonomics', () => {
   it('setValue rejects formula text and stores it literally when asText is explicit', async () => {
     await expect(ws.setValue('A1', '=SUM(B1:B10)')).rejects.toMatchObject({
       code: 'API_INVALID_ARGUMENT',
-      suggestion: expect.stringContaining('setFormula'),
+      message:
+        'worksheet.setValue: received formula text "=SUM(B1:B10)", but this API writes values unless formula intent is explicit.',
+      suggestion:
+        'Formula: call worksheet.setFormula(address, "=SUM(B1:B10)"). Literal text: call worksheet.setValue(address, "=SUM(B1:B10)", { asText: true }).',
     });
     expect(CellOps.setCell).not.toHaveBeenCalled();
 
@@ -246,9 +257,11 @@ describe('Worksheet formula API ergonomics', () => {
   it('setFormula rejects a missing formula argument with runnable guidance', async () => {
     await expect((ws as any).setFormula('A1')).rejects.toMatchObject({
       code: 'API_INVALID_ARGUMENT',
-      message: 'worksheet.setFormula: missing formula argument',
+      message:
+        'worksheet.setFormula: missing required formula argument. Expected setFormula(address, formula).',
       path: ['formula'],
-      suggestion: expect.stringContaining('worksheet.setFormula("A1", "=SUM(B1:B10)")'),
+      suggestion:
+        'Call worksheet.setFormula("A1", "=SUM(B1:B10)"). The formula may include or omit the leading "=".',
       context: expect.objectContaining({
         validationKind: 'missingFormula',
         received: 'undefined',
@@ -260,9 +273,10 @@ describe('Worksheet formula API ergonomics', () => {
   it('setFormula rejects non-string formulas with the received type', async () => {
     await expect((ws as any).setFormula('A1', null)).rejects.toMatchObject({
       code: 'API_INVALID_ARGUMENT',
-      message: 'worksheet.setFormula: formula must be a string, received null',
+      message: 'worksheet.setFormula: formula must be a string expression, received null',
       path: ['formula'],
-      suggestion: expect.stringContaining('worksheet.setFormula("A1", "=SUM(B1:B10)")'),
+      suggestion:
+        'Call worksheet.setFormula("A1", "=SUM(B1:B10)"). The formula may include or omit the leading "=".',
       context: expect.objectContaining({
         validationKind: 'invalidFormulaType',
         received: 'null',
@@ -274,12 +288,14 @@ describe('Worksheet formula API ergonomics', () => {
   it('setFormula rejects empty formulas with an actionable example', async () => {
     await expect(ws.setFormula('A1', '=')).rejects.toMatchObject({
       code: 'API_INVALID_ARGUMENT',
-      message: 'worksheet.setFormula: formula expression is empty',
+      message:
+        'worksheet.setFormula: formula cannot be empty. Provide an expression after the optional leading "=".',
       path: ['formula'],
-      suggestion: expect.stringContaining('worksheet.setFormula("A1", "=SUM(B1:B10)")'),
+      suggestion:
+        'Call worksheet.setFormula("A1", "=SUM(B1:B10)"). The formula may include or omit the leading "=".',
       context: expect.objectContaining({
         validationKind: 'emptyFormula',
-        expected: 'non-empty formula expression',
+        expected: 'formula string such as "=SUM(B1:B10)" or "SUM(B1:B10)"',
       }),
     });
     expect(CellOps.setCell).not.toHaveBeenCalled();
@@ -305,6 +321,18 @@ describe('Worksheet formula API ergonomics', () => {
     expect(CellOps.setCells).not.toHaveBeenCalled();
   });
 
+  it('setCells points to the exact formula entry when a formula is invalid', async () => {
+    await expect(ws.setCells([{ cell: 'A1', formula: '' }])).rejects.toMatchObject({
+      code: 'API_INVALID_ARGUMENT',
+      message:
+        'worksheet.setCells: cells[0].formula cannot be empty. Provide an expression after the optional leading "=".',
+      path: ['cells', '0', 'formula'],
+      suggestion:
+        'Use { cell: "A1", formula: "=SUM(B1:B10)" } for formulas, or { cell: "A1", value } for literal values.',
+    });
+    expect(CellOps.setCells).not.toHaveBeenCalled();
+  });
+
   it('setFormulas normalizes formulas and delegates to the range write path', async () => {
     (RangeOps.setRange as jest.Mock).mockResolvedValue(undefined);
 
@@ -315,10 +343,48 @@ describe('Worksheet formula API ergonomics', () => {
     ]);
   });
 
+  it('setFormulas rejects missing or malformed formula grids with exact paths', async () => {
+    await expect((ws as any).setFormulas('A1')).rejects.toMatchObject({
+      code: 'API_INVALID_ARGUMENT',
+      message:
+        'worksheet.setFormulas: missing required formulas array. Expected setFormulas(range, formulas).',
+      path: ['formulas'],
+      suggestion:
+        'Call worksheet.setFormulas("A1:B2", [["=SUM(B1:B10)"]]). Each populated item must be a formula string.',
+      context: expect.objectContaining({
+        validationKind: 'missingFormulas',
+      }),
+    });
+
+    await expect((ws as any).setFormulas('A1', [1])).rejects.toMatchObject({
+      code: 'API_INVALID_ARGUMENT',
+      message: 'worksheet.setFormulas: formulas[0] must be an array of formula strings, received number',
+      path: ['formulas', '0'],
+      context: expect.objectContaining({
+        validationKind: 'invalidFormulaRowType',
+      }),
+    });
+    expect(RangeOps.setRange).not.toHaveBeenCalled();
+  });
+
+  it('setFormulas points to the exact formula cell when a formula is invalid', async () => {
+    await expect(ws.setFormulas('A1:B1', [['=SUM(A1:A3)', '']])).rejects.toMatchObject({
+      code: 'API_INVALID_ARGUMENT',
+      message:
+        'worksheet.setFormulas: formulas[0][1] cannot be empty. Provide an expression after the optional leading "=".',
+      path: ['formulas', '0', '1'],
+    });
+    expect(RangeOps.setRange).not.toHaveBeenCalled();
+  });
+
   it('getValue rejects formula text with a hint to use evaluateFormula', async () => {
     await expect(ws.getValue('=PMT(0.1/12,12,1000)')).rejects.toMatchObject({
       code: 'API_INVALID_ADDRESS',
-      suggestion: expect.stringContaining('evaluateFormula'),
+      message:
+        'worksheet.getValue: expected a cell address such as "A1", but received formula text "=PMT(0.1/12,12,1000)". getValue reads existing cells; it does not evaluate formula text.',
+      suggestion:
+        'To evaluate this formula, call worksheet.evaluateFormula("=PMT(0.1/12,12,1000)"). To read a value already in the sheet, pass a cell address such as worksheet.getValue("A1").',
+      path: ['address'],
     });
     expect(CellOps.getValue).not.toHaveBeenCalled();
   });

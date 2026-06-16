@@ -184,6 +184,7 @@ import {
   isExplicitTextWrite,
   normalizeFormulaA1,
   normalizeFormulaExpression,
+  normalizeFormulaGrid,
   shouldEscapeAsLiteralText,
   type ExplicitTextWriteOptions,
   type FormulaCellWriteOptions,
@@ -822,7 +823,7 @@ export class WorksheetImpl implements Worksheet {
   async setFormulas(a: string | number | CellRange, b: any, c?: string[][]): Promise<void> {
     this._assertLive('worksheet.setFormulas');
     this._ensureWritable('worksheet.setFormulas');
-    let startRow: number, startCol: number, formulas: string[][];
+    let startRow: number, startCol: number, formulas: unknown;
     if (typeof a === 'object') {
       startRow = a.startRow;
       startCol = a.startCol;
@@ -845,13 +846,11 @@ export class WorksheetImpl implements Worksheet {
       formulas = c!;
     }
 
-    if (!formulas.length || !formulas[0]?.length) {
+    const values = normalizeFormulaGrid(formulas, 'worksheet.setFormulas');
+
+    if (!values.length || !values[0]?.length) {
       return;
     }
-
-    const values = formulas.map((row) =>
-      row.map((formula) => normalizeFormulaA1(formula, 'worksheet.setFormulas')),
-    );
 
     await this.ensureRangeEditable(
       startRow,
@@ -2456,7 +2455,7 @@ export class WorksheetImpl implements Worksheet {
   }
 
   private normalizeSetCellsEntries(cells: SetCellsEntry[]): NormalizedSetCellsEntry[] {
-    return cells.map((cell) => {
+    return cells.map((cell, index) => {
       const hasValue = Object.prototype.hasOwnProperty.call(cell, 'value');
       const hasFormula = Object.prototype.hasOwnProperty.call(cell, 'formula');
       if (hasValue === hasFormula) {
@@ -2476,7 +2475,11 @@ export class WorksheetImpl implements Worksheet {
 
       const addr = 'cell' in cell ? cell.cell : (cell.addr ?? cell.address);
       const value = hasFormula
-        ? normalizeFormulaA1((cell as SetCellsFormulaEntry).formula, 'worksheet.setCells')
+        ? normalizeFormulaA1((cell as SetCellsFormulaEntry).formula, 'worksheet.setCells', [
+            'cells',
+            String(index),
+            'formula',
+          ])
         : (cell as SetCellsValueEntry).value;
 
       if (addr !== undefined) {

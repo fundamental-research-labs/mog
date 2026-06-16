@@ -16,7 +16,7 @@ import type {
 } from '@mog-sdk/contracts/api';
 import { sheetId } from '@mog-sdk/contracts/core';
 
-import { createShape, deleteShape, updateShape } from '../shape-operations';
+import { createShape, deleteShape, duplicateShape, updateShape } from '../shape-operations';
 
 // =============================================================================
 // Mock Helpers
@@ -65,6 +65,7 @@ function createMockCtx(overrides?: {
       resizeFloatingObjectTyped: jest.fn().mockResolvedValue(mutationResult),
       moveFloatingObjectTyped: jest.fn().mockResolvedValue(mutationResult),
       rotateFloatingObjectTyped: jest.fn().mockResolvedValue(mutationResult),
+      duplicateFloatingObjectTyped: jest.fn().mockResolvedValue(mutationResult),
     },
   } as any;
 }
@@ -148,6 +149,36 @@ describe('createShape — receipt construction', () => {
       width: 300,
       height: 200,
       rotation: 45,
+    });
+  });
+
+  it('builds a receipt when the bridge omits optional object data', async () => {
+    const ctx = createMockCtx({
+      floatingObjectChanges: [
+        {
+          objectId: 'shape-minimal-1',
+          kind: { type: 'created' },
+          bounds: { x: 15, y: 25, width: 120, height: 80, rotation: 5 },
+        },
+      ],
+    });
+
+    const receipt = await createShape(ctx, SHEET_ID, {
+      type: 'rect',
+      anchorRow: 0,
+      anchorCol: 0,
+      width: 120,
+      height: 80,
+    });
+
+    expect(receipt.id).toBe('shape-minimal-1');
+    expect(receipt.object.id).toBe('shape-minimal-1');
+    expect(receipt.bounds).toEqual({
+      x: 15,
+      y: 25,
+      width: 120,
+      height: 80,
+      rotation: 5,
     });
   });
 
@@ -249,6 +280,43 @@ describe('updateShape — receipt construction', () => {
     expect(receipt.status).toBe('applied');
   });
 
+  it('preserves mutation bounds when update change omits optional object data', async () => {
+    const ctx = createMockCtx({
+      floatingObjectChanges: [
+        {
+          objectId: 'shape-1',
+          kind: { type: 'updated' },
+          bounds: { x: 5, y: 10, width: 240, height: 80, rotation: 15 },
+        },
+      ],
+      currentWire: {
+        id: 'shape-1',
+        type: 'shape',
+        sheetId: SHEET_ID,
+        anchor: {
+          anchorRow: 1,
+          anchorCol: 2,
+          anchorRowOffsetEmu: 0,
+          anchorColOffsetEmu: 0,
+          anchorMode: 'oneCell',
+        },
+        width: 120,
+        height: 80,
+      },
+    });
+
+    const receipt = await updateShape(ctx, SHEET_ID, 'shape-1', { width: 240 });
+
+    expect(receipt.id).toBe('shape-1');
+    expect(receipt.bounds).toEqual({
+      x: 5,
+      y: 10,
+      width: 240,
+      height: 80,
+      rotation: 15,
+    });
+  });
+
   it('uses current anchor values for omitted absolute move fields', async () => {
     const ctx = createMockCtx({
       floatingObjectChanges: [
@@ -283,6 +351,32 @@ describe('updateShape — receipt construction', () => {
       anchorCol: 4,
       xOffset: 1,
       yOffset: 12,
+    });
+  });
+});
+
+describe('duplicateShape — receipt construction', () => {
+  it('builds a receipt when the bridge omits optional object data', async () => {
+    const ctx = createMockCtx({
+      floatingObjectChanges: [
+        {
+          objectId: 'shape-copy-1',
+          kind: { type: 'created' },
+          bounds: { x: 25, y: 35, width: 160, height: 90, rotation: 0 },
+        },
+      ],
+    });
+
+    const receipt = await duplicateShape(ctx, SHEET_ID, 'shape-1');
+
+    expect(receipt.id).toBe('shape-copy-1');
+    expect(receipt.object.id).toBe('shape-copy-1');
+    expect(receipt.bounds).toEqual({
+      x: 25,
+      y: 35,
+      width: 160,
+      height: 90,
+      rotation: 0,
     });
   });
 });

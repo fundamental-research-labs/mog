@@ -201,7 +201,7 @@ export async function createShape(
   const result = await ctx.computeBridge.createShape(sheetId, bridgeConfig);
 
   const change = result.floatingObjectChanges?.[0];
-  if (change?.data) {
+  if (change?.objectId) {
     return buildMutationReceipt(change, 'create', sheetId);
   }
 
@@ -379,7 +379,7 @@ export async function updateShape(
   }
 
   const change = lastResult?.floatingObjectChanges?.[0];
-  if (change?.data) {
+  if (change?.objectId) {
     return buildMutationReceipt(change, 'update', sheetId);
   }
 
@@ -433,7 +433,7 @@ export async function moveShape(
   });
 
   const change = result.floatingObjectChanges?.[0];
-  if (change?.data) {
+  if (change?.objectId) {
     return buildMutationReceipt(change, 'update', sheetId);
   }
 
@@ -465,7 +465,7 @@ export async function resizeShape(
   });
 
   const change = result.floatingObjectChanges?.[0];
-  if (change?.data) {
+  if (change?.objectId) {
     return buildMutationReceipt(change, 'update', sheetId);
   }
 
@@ -523,7 +523,7 @@ export async function duplicateShape(
     offsetY ?? 20,
   );
   const change = result.floatingObjectChanges?.[0];
-  if (change?.data) {
+  if (change?.objectId) {
     return buildMutationReceipt(change, 'create', sheetId);
   }
 

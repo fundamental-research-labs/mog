@@ -12,7 +12,9 @@ import type { CFRule, ConditionalFormat } from '@mog/types-formatting/conditiona
 import type { Chart, SeriesConfig, TrendlineConfig } from '@mog/types-data/data/charts';
 import type { FloatingObject } from '@mog/types-objects/objects/floating-objects';
 import type { OperationReceiptBase } from './operation-receipt';
+import type { AutoFillApplyReceipt } from './worksheet/fill';
 import type { Comment, Slicer } from './types';
+import type { TableInfo, TableUpdateOptions } from './types';
 import type {
   CalculatedFieldId,
   PivotCommandReceipt,
@@ -290,46 +292,192 @@ export interface UnmergeReceipt {
 // Table Mutations
 // =============================================================================
 
+/** Receipt for a table creation mutation. */
+export interface TableAddReceipt extends OperationReceiptBase {
+  readonly kind: 'tableAdd';
+  readonly status: 'applied';
+  readonly tableId: string;
+  readonly name: string;
+  readonly range: string;
+  readonly table: TableInfo;
+}
+
 /** Receipt for a table remove mutation. */
-export interface TableRemoveReceipt {
+export interface TableRemoveReceipt extends OperationReceiptBase {
   readonly kind: 'tableRemove';
+  readonly status: 'applied';
+  readonly tableId: string;
   readonly tableName: string;
+  readonly range: string;
+  readonly table: TableInfo;
+}
+
+/** Receipt for converting a table back to a plain range. */
+export interface TableConvertToRangeReceipt extends OperationReceiptBase {
+  readonly kind: 'tableConvertToRange';
+  readonly status: 'applied';
+  readonly tableId: string;
+  readonly tableName: string;
+  readonly range: string;
+  readonly table: TableInfo;
+  readonly affectedFormulaCount: number;
+}
+
+/** Receipt for removing all table definitions on a worksheet. */
+export interface TableClearReceipt extends OperationReceiptBase {
+  readonly kind: 'tableClear';
+  readonly status: 'applied' | 'noOp';
+  readonly sheetId: string;
+  readonly removedCount: number;
+  readonly tableIds: readonly string[];
+  readonly tables: readonly TableInfo[];
+}
+
+/** Receipt for a table rename mutation. */
+export interface TableRenameReceipt extends OperationReceiptBase {
+  readonly kind: 'tableRename';
+  readonly status: 'applied' | 'noOp';
+  readonly tableId: string;
+  readonly tableName: string;
+  readonly oldName: string;
+  readonly newName: string;
+  readonly name: string;
+  readonly range: string;
+}
+
+/** Receipt for a table property update mutation. */
+export interface TableUpdateReceipt extends OperationReceiptBase {
+  readonly kind: 'tableUpdate';
+  readonly status: 'applied' | 'noOp';
+  readonly tableId: string;
+  readonly tableName: string;
+  readonly range: string;
+  readonly updates: TableUpdateOptions;
 }
 
 /** Receipt for a table resize mutation. */
-export interface TableResizeReceipt {
+export interface TableResizeReceipt extends OperationReceiptBase {
   readonly kind: 'tableResize';
+  readonly status: 'applied' | 'noOp';
+  readonly tableId: string;
   readonly tableName: string;
+  readonly oldRange: string;
   readonly newRange: string;
+  readonly range: string;
 }
 
 /** Receipt for a table addColumn mutation. */
-export interface TableAddColumnReceipt {
+export interface TableAddColumnReceipt extends OperationReceiptBase {
   readonly kind: 'tableAddColumn';
+  readonly status: 'applied';
+  readonly tableId: string;
   readonly tableName: string;
   readonly columnName: string;
   readonly position: number;
+  readonly range: string;
 }
 
 /** Receipt for a table removeColumn mutation. */
-export interface TableRemoveColumnReceipt {
+export interface TableRemoveColumnReceipt extends OperationReceiptBase {
   readonly kind: 'tableRemoveColumn';
+  readonly status: 'applied';
+  readonly tableId: string;
   readonly tableName: string;
   readonly columnIndex: number;
+  readonly columnName: string;
+  readonly range: string;
+}
+
+/** Receipt for a table column rename mutation. */
+export interface TableRenameColumnReceipt extends OperationReceiptBase {
+  readonly kind: 'tableRenameColumn';
+  readonly status: 'applied' | 'noOp';
+  readonly tableId: string;
+  readonly tableName: string;
+  readonly columnIndex: number;
+  readonly oldColumnName: string;
+  readonly newColumnName: string;
+  readonly range: string;
 }
 
 /** Receipt for a table addRow mutation. */
-export interface TableAddRowReceipt {
+export interface TableAddRowReceipt extends OperationReceiptBase {
   readonly kind: 'tableAddRow';
+  readonly status: 'applied';
+  readonly tableId: string;
   readonly tableName: string;
   readonly index: number;
+  readonly range: string;
 }
 
 /** Receipt for a table deleteRow mutation. */
-export interface TableDeleteRowReceipt {
+export interface TableDeleteRowReceipt extends OperationReceiptBase {
   readonly kind: 'tableDeleteRow';
+  readonly status: 'applied';
+  readonly tableId: string;
   readonly tableName: string;
   readonly index: number;
+  readonly range: string;
+}
+
+interface TableCalculatedColumnReceiptBase extends OperationReceiptBase {
+  readonly status: 'applied' | 'noOp' | 'partial' | 'failed';
+  readonly tableName: string;
+  readonly tableId: string;
+  readonly columnIndex: number;
+  readonly columnName?: string;
+  readonly tableRange: string;
+  readonly bodyRange: string | null;
+  readonly columnRange: string | null;
+  readonly cellsWritten: number;
+  readonly metadataChanged: boolean;
+  readonly undoGroup: boolean;
+}
+
+/** Receipt for setting a table calculated-column formula. */
+export interface TableSetCalculatedColumnReceipt extends TableCalculatedColumnReceiptBase {
+  readonly kind: 'table.calculatedColumn.set';
+  readonly action: 'set';
+  readonly formula: string;
+  readonly autofillReceipt?: AutoFillApplyReceipt;
+}
+
+/** Receipt for clearing a table calculated-column formula. */
+export interface TableClearCalculatedColumnReceipt extends TableCalculatedColumnReceiptBase {
+  readonly kind: 'table.calculatedColumn.clear';
+  readonly action: 'clear';
+  readonly formula: null;
+}
+
+export type TableCalculatedColumnReceipt =
+  | TableSetCalculatedColumnReceipt
+  | TableClearCalculatedColumnReceipt;
+
+export type TableAutoExpansionStatus =
+  | 'applied'
+  | 'noOp'
+  | 'unsupported'
+  | 'partial'
+  | 'failed';
+
+export type TableAutoExpansionUnsupportedReason =
+  | 'protectedRegion'
+  | 'filteredRegion'
+  | 'mergedRegion';
+
+/** Receipt for applying table auto-expansion. */
+export interface TableAutoExpansionReceipt extends OperationReceiptBase {
+  readonly kind: 'tableAutoExpansion';
+  readonly status: TableAutoExpansionStatus;
+  readonly sheetId: string;
+  readonly tableName: string;
+  readonly tableId?: string;
+  readonly previousRange?: string;
+  readonly expectedRange?: string;
+  readonly newRange?: string;
+  readonly changedTableMetadata: boolean;
+  readonly changedCellCount: number;
+  readonly unsupportedReasons: readonly TableAutoExpansionUnsupportedReason[];
 }
 
 // =============================================================================
@@ -935,12 +1083,20 @@ export type MutationReceipt =
   | SheetShowReceipt
   | MergeReceipt
   | UnmergeReceipt
+  | TableAddReceipt
   | TableRemoveReceipt
+  | TableConvertToRangeReceipt
+  | TableClearReceipt
+  | TableRenameReceipt
+  | TableUpdateReceipt
   | TableResizeReceipt
   | TableAddColumnReceipt
   | TableRemoveColumnReceipt
+  | TableRenameColumnReceipt
   | TableAddRowReceipt
   | TableDeleteRowReceipt
+  | TableCalculatedColumnReceipt
+  | TableAutoExpansionReceipt
   | NameAddReceipt
   | NameRemoveReceipt
   | NameUpdateReceipt

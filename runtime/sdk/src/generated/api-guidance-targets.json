@@ -16198,8 +16198,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "add(range: string | CellRange, options?: TableOptions): Promise<TableInfo>;",
-      "typeText": "Promise<TableInfo>",
+      "signature": "add(range: string | CellRange, options?: TableOptions): Promise<TableAddReceipt>;",
+      "typeText": "Promise<TableAddReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/tables.ts"
@@ -16255,8 +16255,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "applyAutoExpansion(tableName: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "applyAutoExpansion(tableName: string): Promise<TableAutoExpansionReceipt>;",
+      "typeText": "Promise<TableAutoExpansionReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/tables.ts"
@@ -16293,8 +16293,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "clear(): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "clear(): Promise<TableClearReceipt>;",
+      "typeText": "Promise<TableClearReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/tables.ts"
@@ -16312,8 +16312,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "clearCalculatedColumn(tableName: string, colIndex: number): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "clearCalculatedColumn(\n    tableName: string,\n    colIndex: number,\n  ): Promise<TableClearCalculatedColumnReceipt>;",
+      "typeText": "Promise<TableClearCalculatedColumnReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/tables.ts"
@@ -16350,8 +16350,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "convertToRange(name: string): Promise<number>;",
-      "typeText": "Promise<number>",
+      "signature": "convertToRange(name: string): Promise<TableConvertToRangeReceipt>;",
+      "typeText": "Promise<TableConvertToRangeReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/tables.ts"
@@ -16921,8 +16921,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "remove(name: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "remove(name: string): Promise<TableRemoveReceipt>;",
+      "typeText": "Promise<TableRemoveReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/tables.ts"
@@ -16959,8 +16959,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "rename(oldName: string, newName: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "rename(oldName: string, newName: string): Promise<TableRenameReceipt>;",
+      "typeText": "Promise<TableRenameReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/tables.ts"
@@ -16978,8 +16978,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "renameColumn(name: string, columnIndex: number, newColumnName: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "renameColumn(\n    name: string,\n    columnIndex: number,\n    newColumnName: string,\n  ): Promise<TableRenameColumnReceipt>;",
+      "typeText": "Promise<TableRenameColumnReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/tables.ts"
@@ -17016,8 +17016,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setCalculatedColumn(tableName: string, colIndex: number, formula: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setCalculatedColumn(\n    tableName: string,\n    colIndex: number,\n    formula: string,\n  ): Promise<TableSetCalculatedColumnReceipt>;",
+      "typeText": "Promise<TableSetCalculatedColumnReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/tables.ts"
@@ -17054,8 +17054,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setHighlightFirstColumn(tableName: string, value: boolean): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setHighlightFirstColumn(tableName: string, value: boolean): Promise<TableUpdateReceipt>;",
+      "typeText": "Promise<TableUpdateReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/tables.ts"
@@ -17073,8 +17073,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setHighlightLastColumn(tableName: string, value: boolean): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setHighlightLastColumn(tableName: string, value: boolean): Promise<TableUpdateReceipt>;",
+      "typeText": "Promise<TableUpdateReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/tables.ts"
@@ -17111,8 +17111,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setShowBandedColumns(tableName: string, value: boolean): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setShowBandedColumns(tableName: string, value: boolean): Promise<TableUpdateReceipt>;",
+      "typeText": "Promise<TableUpdateReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/tables.ts"
@@ -17130,8 +17130,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setShowBandedRows(tableName: string, value: boolean): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setShowBandedRows(tableName: string, value: boolean): Promise<TableUpdateReceipt>;",
+      "typeText": "Promise<TableUpdateReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/tables.ts"
@@ -17149,8 +17149,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setShowFilterButton(tableName: string, value: boolean): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setShowFilterButton(tableName: string, value: boolean): Promise<TableUpdateReceipt>;",
+      "typeText": "Promise<TableUpdateReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/tables.ts"
@@ -17168,8 +17168,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setShowHeaders(tableName: string, visible: boolean): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setShowHeaders(tableName: string, visible: boolean): Promise<TableUpdateReceipt>;",
+      "typeText": "Promise<TableUpdateReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/tables.ts"
@@ -17187,8 +17187,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setShowTotals(tableName: string, visible: boolean): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setShowTotals(tableName: string, visible: boolean): Promise<TableUpdateReceipt>;",
+      "typeText": "Promise<TableUpdateReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/tables.ts"
@@ -17206,8 +17206,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setStylePreset(tableName: string, preset: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setStylePreset(tableName: string, preset: string): Promise<TableUpdateReceipt>;",
+      "typeText": "Promise<TableUpdateReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/tables.ts"
@@ -17302,8 +17302,8 @@
       "kind": "method",
       "visibility": "deprecated",
       "asyncModel": "promise",
-      "signature": "toggleHeaderRow(name: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "toggleHeaderRow(name: string): Promise<TableUpdateReceipt>;",
+      "typeText": "Promise<TableUpdateReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/tables.ts"
@@ -17321,8 +17321,8 @@
       "kind": "method",
       "visibility": "deprecated",
       "asyncModel": "promise",
-      "signature": "toggleTotalsRow(name: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "toggleTotalsRow(name: string): Promise<TableUpdateReceipt>;",
+      "typeText": "Promise<TableUpdateReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/tables.ts"
@@ -17340,8 +17340,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "update(tableName: string, updates: TableUpdateOptions): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "update(tableName: string, updates: TableUpdateOptions): Promise<TableUpdateReceipt>;",
+      "typeText": "Promise<TableUpdateReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/tables.ts"
@@ -34615,8 +34615,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "add(range: string | CellRange, options?: TableOptions): Promise<TableInfo>;",
-      "typeText": "Promise<TableInfo>",
+      "signature": "add(range: string | CellRange, options?: TableOptions): Promise<TableAddReceipt>;",
+      "typeText": "Promise<TableAddReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/tables.ts"
@@ -34672,8 +34672,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "applyAutoExpansion(tableName: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "applyAutoExpansion(tableName: string): Promise<TableAutoExpansionReceipt>;",
+      "typeText": "Promise<TableAutoExpansionReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/tables.ts"
@@ -34710,8 +34710,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "clear(): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "clear(): Promise<TableClearReceipt>;",
+      "typeText": "Promise<TableClearReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/tables.ts"
@@ -34729,8 +34729,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "clearCalculatedColumn(tableName: string, colIndex: number): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "clearCalculatedColumn(\n    tableName: string,\n    colIndex: number,\n  ): Promise<TableClearCalculatedColumnReceipt>;",
+      "typeText": "Promise<TableClearCalculatedColumnReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/tables.ts"
@@ -34767,8 +34767,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "convertToRange(name: string): Promise<number>;",
-      "typeText": "Promise<number>",
+      "signature": "convertToRange(name: string): Promise<TableConvertToRangeReceipt>;",
+      "typeText": "Promise<TableConvertToRangeReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/tables.ts"
@@ -35338,8 +35338,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "remove(name: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "remove(name: string): Promise<TableRemoveReceipt>;",
+      "typeText": "Promise<TableRemoveReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/tables.ts"
@@ -35376,8 +35376,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "rename(oldName: string, newName: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "rename(oldName: string, newName: string): Promise<TableRenameReceipt>;",
+      "typeText": "Promise<TableRenameReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/tables.ts"
@@ -35395,8 +35395,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "renameColumn(name: string, columnIndex: number, newColumnName: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "renameColumn(\n    name: string,\n    columnIndex: number,\n    newColumnName: string,\n  ): Promise<TableRenameColumnReceipt>;",
+      "typeText": "Promise<TableRenameColumnReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/tables.ts"
@@ -35433,8 +35433,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setCalculatedColumn(tableName: string, colIndex: number, formula: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setCalculatedColumn(\n    tableName: string,\n    colIndex: number,\n    formula: string,\n  ): Promise<TableSetCalculatedColumnReceipt>;",
+      "typeText": "Promise<TableSetCalculatedColumnReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/tables.ts"
@@ -35471,8 +35471,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setHighlightFirstColumn(tableName: string, value: boolean): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setHighlightFirstColumn(tableName: string, value: boolean): Promise<TableUpdateReceipt>;",
+      "typeText": "Promise<TableUpdateReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/tables.ts"
@@ -35490,8 +35490,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setHighlightLastColumn(tableName: string, value: boolean): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setHighlightLastColumn(tableName: string, value: boolean): Promise<TableUpdateReceipt>;",
+      "typeText": "Promise<TableUpdateReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/tables.ts"
@@ -35528,8 +35528,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setShowBandedColumns(tableName: string, value: boolean): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setShowBandedColumns(tableName: string, value: boolean): Promise<TableUpdateReceipt>;",
+      "typeText": "Promise<TableUpdateReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/tables.ts"
@@ -35547,8 +35547,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setShowBandedRows(tableName: string, value: boolean): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setShowBandedRows(tableName: string, value: boolean): Promise<TableUpdateReceipt>;",
+      "typeText": "Promise<TableUpdateReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/tables.ts"
@@ -35566,8 +35566,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setShowFilterButton(tableName: string, value: boolean): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setShowFilterButton(tableName: string, value: boolean): Promise<TableUpdateReceipt>;",
+      "typeText": "Promise<TableUpdateReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/tables.ts"
@@ -35585,8 +35585,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setShowHeaders(tableName: string, visible: boolean): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setShowHeaders(tableName: string, visible: boolean): Promise<TableUpdateReceipt>;",
+      "typeText": "Promise<TableUpdateReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/tables.ts"
@@ -35604,8 +35604,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setShowTotals(tableName: string, visible: boolean): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setShowTotals(tableName: string, visible: boolean): Promise<TableUpdateReceipt>;",
+      "typeText": "Promise<TableUpdateReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/tables.ts"
@@ -35623,8 +35623,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setStylePreset(tableName: string, preset: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setStylePreset(tableName: string, preset: string): Promise<TableUpdateReceipt>;",
+      "typeText": "Promise<TableUpdateReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/tables.ts"
@@ -35719,8 +35719,8 @@
       "kind": "method",
       "visibility": "deprecated",
       "asyncModel": "promise",
-      "signature": "toggleHeaderRow(name: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "toggleHeaderRow(name: string): Promise<TableUpdateReceipt>;",
+      "typeText": "Promise<TableUpdateReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/tables.ts"
@@ -35738,8 +35738,8 @@
       "kind": "method",
       "visibility": "deprecated",
       "asyncModel": "promise",
-      "signature": "toggleTotalsRow(name: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "toggleTotalsRow(name: string): Promise<TableUpdateReceipt>;",
+      "typeText": "Promise<TableUpdateReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/tables.ts"
@@ -35757,8 +35757,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "update(tableName: string, updates: TableUpdateOptions): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "update(tableName: string, updates: TableUpdateOptions): Promise<TableUpdateReceipt>;",
+      "typeText": "Promise<TableUpdateReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/tables.ts"

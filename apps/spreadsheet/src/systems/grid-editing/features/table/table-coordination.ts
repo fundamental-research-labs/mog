@@ -20,7 +20,7 @@
  * @see engine/src/state/coordinator/subscriptions/event-subscriptions.ts
  */
 
-import type { Workbook } from '@mog-sdk/contracts/api';
+import type { TableAutoExpansionReceipt, Workbook } from '@mog-sdk/contracts/api';
 import { sheetId as toSheetId } from '@mog-sdk/contracts/core';
 
 import type { EventSubscriptionResult } from '../../../renderer/subscriptions/event-subscriptions';
@@ -53,6 +53,16 @@ export interface TableCoordinationConfig {
 export interface TableCoordinationResult {
   /** Cleanup function */
   cleanup: () => void;
+}
+
+function receiptExpandedTableRange(receipt: TableAutoExpansionReceipt): boolean {
+  return (
+    (receipt.status === 'applied' || receipt.status === 'partial') &&
+    receipt.changedTableMetadata &&
+    receipt.previousRange != null &&
+    receipt.newRange != null &&
+    receipt.previousRange !== receipt.newRange
+  );
 }
 
 // =============================================================================
@@ -124,14 +134,14 @@ export function buildTableCoordination(
       autoExpandTableRow: async (tableId) => {
         if (!workbook) return false;
         const ws = workbook.getSheetById(toSheetId(getCurrentSheetId()));
-        await ws.tables.applyAutoExpansion(tableId);
-        return true;
+        const receipt = await ws.tables.applyAutoExpansion(tableId);
+        return receiptExpandedTableRange(receipt);
       },
       autoExpandTableColumn: async (tableId, _newColumnName) => {
         if (!workbook) return false;
         const ws = workbook.getSheetById(toSheetId(getCurrentSheetId()));
-        await ws.tables.applyAutoExpansion(tableId);
-        return true;
+        const receipt = await ws.tables.applyAutoExpansion(tableId);
+        return receiptExpandedTableRange(receipt);
       },
       getCurrentSheetId,
       applyCalculatedFormulasToNewRow: (tableId, rowIndex) =>

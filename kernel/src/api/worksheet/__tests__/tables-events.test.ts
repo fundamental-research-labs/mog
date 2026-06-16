@@ -4,6 +4,13 @@ import type { SheetId } from '@mog-sdk/contracts/core';
 import { sheetId } from '@mog-sdk/contracts/core';
 import { WorksheetTablesImpl } from '../tables';
 
+jest.mock('../../../domain/sheets/structures', () => ({
+  insertRows: jest.fn().mockResolvedValue(undefined),
+  deleteRows: jest.fn().mockResolvedValue(undefined),
+  insertColumns: jest.fn().mockResolvedValue(undefined),
+  deleteColumns: jest.fn().mockResolvedValue(undefined),
+}));
+
 const SHEET_ID = sheetId('sheet-1');
 
 function createRawTable(overrides: Record<string, unknown> = {}): any {
@@ -71,6 +78,18 @@ function createContext() {
       deleteTable: jest.fn().mockResolvedValue(undefined),
       convertTableToRange: jest.fn().mockResolvedValue({ data: 3 }),
       setTableStyle: jest.fn().mockResolvedValue(undefined),
+      setTableBoolOption: jest.fn().mockResolvedValue(undefined),
+      resizeTable: jest.fn().mockResolvedValue(undefined),
+      beginUndoGroup: jest.fn().mockResolvedValue(undefined),
+      endUndoGroup: jest.fn().mockResolvedValue(undefined),
+      addTableColumn: jest.fn().mockResolvedValue(undefined),
+      removeTableColumn: jest.fn().mockResolvedValue(undefined),
+      addTableDataRow: jest
+        .fn()
+        .mockResolvedValue({ data: { insertRow: 3, needsRangeExpand: true } }),
+      removeTableDataRow: jest.fn().mockResolvedValue({ data: 1 }),
+      setCellsByPosition: jest.fn().mockResolvedValue(undefined),
+      structureChange: jest.fn().mockResolvedValue(undefined),
     },
   } as any;
 }
@@ -96,7 +115,7 @@ describe('WorksheetTablesImpl table event identity', () => {
   });
 
   it('emits table:created with the stable table id', async () => {
-    await tables.add('A1:B3', { name: 'Sales' });
+    const receipt = await tables.add('A1:B3', { name: 'Sales' });
 
     const event = getOnlyEvent(ctx, 'table:created');
     expect(event.tableId).toBe('tbl_stable_1');
@@ -117,10 +136,27 @@ describe('WorksheetTablesImpl table event identity', () => {
       true,
       null,
     );
+    expect(receipt).toEqual(
+      expect.objectContaining({
+        kind: 'tableAdd',
+        status: 'applied',
+        tableId: 'tbl_stable_1',
+        name: 'Sales',
+        range: 'A1:B3',
+        table: expect.objectContaining({ id: 'tbl_stable_1', name: 'Sales' }),
+        diagnostics: [],
+      }),
+    );
+    expect(receipt.effects).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'createdObject', objectId: 'tbl_stable_1' }),
+        expect.objectContaining({ type: 'storedMetadata', objectId: 'tbl_stable_1' }),
+      ]),
+    );
   });
 
   it('emits table:updated with the stable table id while preserving name-based update input', async () => {
-    await tables.update('Sales', { style: 'TableStyleMedium4' });
+    const receipt = await tables.update('Sales', { style: 'TableStyleMedium4' });
 
     const event = getOnlyEvent(ctx, 'table:updated');
     expect(event.tableId).toBe('tbl_stable_1');
@@ -128,30 +164,73 @@ describe('WorksheetTablesImpl table event identity', () => {
       style: expect.objectContaining({ preset: 'medium4' }),
     });
     expect(ctx.computeBridge.setTableStyle).toHaveBeenCalledWith('Sales', 'TableStyleMedium4');
+    expect(receipt).toEqual(
+      expect.objectContaining({
+        kind: 'tableUpdate',
+        status: 'applied',
+        tableId: 'tbl_stable_1',
+        tableName: 'Sales',
+        updates: { style: 'TableStyleMedium4' },
+      }),
+    );
+    expect(receipt.effects).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'updatedObject', objectId: 'tbl_stable_1' }),
+        expect.objectContaining({ type: 'storedMetadata', objectId: 'tbl_stable_1' }),
+      ]),
+    );
   });
 
   it('emits rename updates with the pre-rename stable table id', async () => {
-    await tables.rename('Sales', 'Revenue');
+    const receipt = await tables.rename('Sales', 'Revenue');
 
     const event = getOnlyEvent(ctx, 'table:updated');
     expect(event.tableId).toBe('tbl_stable_1');
     expect(event.changes).toEqual({ name: 'Revenue' });
     expect(ctx.computeBridge.renameTable).toHaveBeenCalledWith('Sales', 'Revenue');
     expect(ctx.computeBridge.tableValidateTableName).toHaveBeenCalledWith('Revenue', []);
+    expect(receipt).toEqual(
+      expect.objectContaining({
+        kind: 'tableRename',
+        status: 'applied',
+        tableId: 'tbl_stable_1',
+        oldName: 'Sales',
+        newName: 'Revenue',
+        name: 'Revenue',
+      }),
+    );
+    expect(receipt.effects).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'renamedObject', objectId: 'tbl_stable_1' }),
+        expect.objectContaining({ type: 'storedMetadata', objectId: 'tbl_stable_1' }),
+      ]),
+    );
   });
 
   it('emits removal with the stable table id while deleting by public table name', async () => {
-    await tables.remove('Sales');
+    const receipt = await tables.remove('Sales');
 
     const event = getOnlyEvent(ctx, 'table:deleted');
     expect(event.tableId).toBe('tbl_stable_1');
     expect(ctx.computeBridge.deleteTable).toHaveBeenCalledWith('Sales');
+    expect(receipt).toEqual(
+      expect.objectContaining({
+        kind: 'tableRemove',
+        status: 'applied',
+        tableId: 'tbl_stable_1',
+        tableName: 'Sales',
+        range: 'A1:B3',
+      }),
+    );
+    expect(receipt.effects).toEqual([
+      expect.objectContaining({ type: 'removedObject', objectId: 'tbl_stable_1' }),
+    ]);
   });
 
   it('emits convert-to-range and follow-up deletion with stable table ids', async () => {
-    const affectedFormulaCount = await tables.convertToRange('Sales');
+    const receipt = await tables.convertToRange('Sales');
 
-    expect(affectedFormulaCount).toBe(3);
+    expect(receipt.affectedFormulaCount).toBe(3);
     expect(ctx.computeBridge.convertTableToRange).toHaveBeenCalledWith('Sales');
 
     const converted = getOnlyEvent(ctx, 'table:converted-to-range');
@@ -165,6 +244,141 @@ describe('WorksheetTablesImpl table event identity', () => {
 
     const deleted = getOnlyEvent(ctx, 'table:deleted');
     expect(deleted.tableId).toBe('tbl_stable_1');
+    expect(receipt).toEqual(
+      expect.objectContaining({
+        kind: 'tableConvertToRange',
+        status: 'applied',
+        tableId: 'tbl_stable_1',
+        tableName: 'Sales',
+        range: 'A1:B3',
+      }),
+    );
+    expect(receipt.effects).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'removedObject', objectId: 'tbl_stable_1' }),
+        expect.objectContaining({ type: 'changedRange', count: 3 }),
+      ]),
+    );
+  });
+
+  it('returns no-op receipts for valid table requests that change nothing', async () => {
+    const renameReceipt = await tables.rename('Sales', 'Sales');
+    const styleReceipt = await tables.setStylePreset('Sales', 'TableStyleMedium2');
+
+    expect(renameReceipt).toEqual(
+      expect.objectContaining({
+        kind: 'tableRename',
+        status: 'noOp',
+        tableId: 'tbl_stable_1',
+      }),
+    );
+    expect(styleReceipt).toEqual(
+      expect.objectContaining({
+        kind: 'tableUpdate',
+        status: 'noOp',
+        tableId: 'tbl_stable_1',
+        updates: {},
+      }),
+    );
+    expect(renameReceipt.effects).toEqual([
+      { type: 'worksheetUnchanged', sheetId: SHEET_ID, range: 'A1:B3' },
+    ]);
+    expect(styleReceipt.effects).toEqual([
+      { type: 'worksheetUnchanged', sheetId: SHEET_ID, range: 'A1:B3' },
+    ]);
+    expect(ctx.computeBridge.renameTable).not.toHaveBeenCalled();
+    expect(ctx.computeBridge.setTableStyle).not.toHaveBeenCalled();
+  });
+
+  it('returns base receipt fields for table resize, column, and row mutations', async () => {
+    const resizeReceipt = await tables.resize('Sales', 'A1:C3');
+    const addColumnReceipt = await tables.addColumn('Sales', 'Margin');
+    const removeColumnReceipt = await tables.removeColumn('Sales', 1);
+    const addRowReceipt = await tables.addRow('Sales', undefined, ['West', 10]);
+    const deleteRowReceipt = await tables.deleteRow('Sales', 0);
+
+    expect(resizeReceipt).toEqual(
+      expect.objectContaining({
+        kind: 'tableResize',
+        status: 'applied',
+        tableId: 'tbl_stable_1',
+        oldRange: 'A1:B3',
+        newRange: 'A1:C3',
+      }),
+    );
+    expect(addColumnReceipt).toEqual(
+      expect.objectContaining({
+        kind: 'tableAddColumn',
+        status: 'applied',
+        tableId: 'tbl_stable_1',
+        columnName: 'Margin',
+        position: 2,
+        range: 'C1:C3',
+      }),
+    );
+    expect(removeColumnReceipt).toEqual(
+      expect.objectContaining({
+        kind: 'tableRemoveColumn',
+        status: 'applied',
+        tableId: 'tbl_stable_1',
+        columnIndex: 1,
+        columnName: 'Amount',
+        range: 'B1:B3',
+      }),
+    );
+    expect(addRowReceipt).toEqual(
+      expect.objectContaining({
+        kind: 'tableAddRow',
+        status: 'applied',
+        tableId: 'tbl_stable_1',
+        index: 3,
+        range: 'A4:B4',
+      }),
+    );
+    expect(deleteRowReceipt).toEqual(
+      expect.objectContaining({
+        kind: 'tableDeleteRow',
+        status: 'applied',
+        tableId: 'tbl_stable_1',
+        index: 0,
+        range: 'A2:B2',
+      }),
+    );
+    for (const receipt of [
+      resizeReceipt,
+      addColumnReceipt,
+      removeColumnReceipt,
+      addRowReceipt,
+      deleteRowReceipt,
+    ]) {
+      expect(receipt.diagnostics).toEqual([]);
+      expect(receipt.effects).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ type: 'changedRange' }),
+          expect.objectContaining({ type: 'updatedObject', objectId: 'tbl_stable_1' }),
+        ]),
+      );
+    }
+  });
+
+  it('returns no-op receipt when clearing a worksheet with no tables', async () => {
+    ctx.computeBridge.getAllTablesInSheet.mockResolvedValueOnce([]);
+
+    const receipt = await tables.clear();
+
+    expect(receipt).toEqual(
+      expect.objectContaining({
+        kind: 'tableClear',
+        status: 'noOp',
+        sheetId: SHEET_ID,
+        removedCount: 0,
+        tableIds: [],
+        tables: [],
+        diagnostics: [],
+        effects: [{ type: 'worksheetUnchanged', sheetId: SHEET_ID }],
+      }),
+    );
+    expect(ctx.computeBridge.deleteTable).not.toHaveBeenCalled();
   });
 
   it('filters onTableChanged subscriptions by stable table id', async () => {

@@ -1,6 +1,7 @@
 import rawApiSpec from './generated/api-spec.json';
 import { apiCompatibility, type ApiCompatibilityIndex } from './api-compatibility/index';
 import { apiGuidance, type ApiGuidanceApi } from './agent-guidance/index';
+import { Utils, a1, type PublicA1Utils, type PublicUtils } from './public-kernel-facade';
 import type { ApiCompatibilityReference } from './api-compatibility/types';
 
 // ─── Return Types ────────────────────────────────────────────────────────────
@@ -514,6 +515,8 @@ export const api: {
   };
   guidance: ApiGuidanceApi;
   compatibility: ApiCompatibilityIndex;
+  a1: PublicA1Utils;
+  utils: PublicUtils;
   wb: RootNode;
   ws: RootNode;
   types: TypesNode;
@@ -521,6 +524,8 @@ export const api: {
   describe,
   guidance: apiGuidance,
   compatibility: apiCompatibility,
+  a1,
+  utils: Utils,
   wb: buildRootNode('wb'),
   ws: buildRootNode('ws'),
   types: buildTypesNode(),

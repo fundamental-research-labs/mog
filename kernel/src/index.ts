@@ -53,9 +53,17 @@ export type {
 // =============================================================================
 
 export {
+  address,
+  column,
+  columnIndex,
+  columnName,
   colToLetter,
+  offset,
+  parse,
+  parseAddress,
   parseCellAddress,
   parseCellRange,
+  rangeAddress,
   rangeToA1,
   toA1,
 } from './api/internal/utils';

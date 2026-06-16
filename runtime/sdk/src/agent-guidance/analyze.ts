@@ -124,14 +124,16 @@ function patternFor(matcher: ApiGuidanceSymbolMatcher): RegExp {
 
 function compatibilityPattern(entry: ApiCompatibilityEntry): RegExp | null {
   const path = entry.observedPath.trim();
-  if (!path.startsWith('ws.') && !path.startsWith('wb.')) return null;
+  if (!path.startsWith('ws.') && !path.startsWith('wb.') && !path.startsWith('workbook.')) {
+    return null;
+  }
 
   if (isPivotHandleDescribePath(path)) {
     return /\bws\s*\.\s*pivots\s*\.\s*get\s*\([^)]*\)\s*\.\s*describe\s*\(/g;
   }
 
   const normalized = path.replace(/\(\s*\)$/, '');
-  if (!/^(ws|wb)(?:\.[A-Za-z_$][\w$]*)+$/.test(normalized)) return null;
+  if (!/^(ws|wb|workbook)(?:\.[A-Za-z_$][\w$]*)+$/.test(normalized)) return null;
   return callPattern(normalized);
 }
 
@@ -227,7 +229,19 @@ function replacementsForCompatibility(entry: ApiCompatibilityEntry): MogReplacem
       ? [entry.canonicalPath]
       : [];
   return paths
-    .filter((path) => path.startsWith('ws.') || path.startsWith('wb.') || path.startsWith('type:'))
+    .filter(
+      (path) =>
+        path.startsWith('ws.') ||
+        path.startsWith('wb.') ||
+        path.startsWith('workbook.') ||
+        path.startsWith('a1.') ||
+        path.startsWith('api.utils.') ||
+        path.startsWith('Utils.') ||
+        path.startsWith('type:') ||
+        ['a1', 'address', 'rangeAddress', 'columnName', 'columnIndex', 'offset', 'parseAddress'].includes(
+          path,
+        ),
+    )
     .map((path) => ({ path }));
 }
 

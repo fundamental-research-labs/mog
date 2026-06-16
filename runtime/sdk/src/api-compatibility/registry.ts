@@ -1,4 +1,5 @@
 import type { ApiCompatibilityEntry } from './types';
+import { addressHelperCompatibilityRegistry } from './address-helper-registry';
 
 const WORKBOOK_API_COMPATIBILITY_REPORT = 'api-compatibility:workbook-api-issues';
 const VERSIONED_API_COMPATIBILITY_PLAN = 'api-compatibility:versioned-api-compatibility-layer';
@@ -430,108 +431,7 @@ export const apiCompatibilityRegistry = [
     },
     verification: ['pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe'],
   },
-  {
-    id: 'mog-api.worksheet.indexToAddress.unsupported',
-    observedPath: 'ws.indexToAddress',
-    canonicalPath: 'wb.indexToAddress',
-    status: 'structured_diagnostic',
-    appliesTo: 'method',
-    ownerTheme: 'sdk-agent-guidance/worksheet-api-usage',
-    ownerPackage: '@mog-sdk/sdk',
-    firstObservedVersion: '0.9.2',
-    canonicalSince: null,
-    deprecatedSince: null,
-    removeAfter: null,
-    evidence: [{ source: 'source', reference: WORKSHEET_METHOD_GUIDANCE }],
-    behavior:
-      'Address conversion helpers are workbook APIs; worksheets do not expose indexToAddress().',
-    runtimeSurfaces: ['executeCode-preflight', 'agent-guidance', 'docs', 'api-eval'],
-    surfaceDisposition: {
-      typescript: 'structured_diagnostic',
-      kernel: 'structured_diagnostic',
-      'executeCode-preflight': 'structured_diagnostic',
-      'api-describe': 'structured_diagnostic',
-      'agent-guidance': 'structured_diagnostic',
-      docs: 'structured_diagnostic',
-      python: 'structured_diagnostic',
-      'api-eval': 'structured_diagnostic',
-    },
-    diagnostics: {
-      code: 'MOG002_MOG_API_USAGE',
-      message:
-        'ws.indexToAddress(row, col) is not a Mog worksheet method. Use wb.indexToAddress(row, col).',
-      replacements: ['wb.indexToAddress'],
-    },
-    verification: ['pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe'],
-  },
-  {
-    id: 'mog-api.worksheet.addressToIndex.unsupported',
-    observedPath: 'ws.addressToIndex',
-    canonicalPath: 'wb.addressToIndex',
-    status: 'structured_diagnostic',
-    appliesTo: 'method',
-    ownerTheme: 'sdk-agent-guidance/worksheet-api-usage',
-    ownerPackage: '@mog-sdk/sdk',
-    firstObservedVersion: '0.9.2',
-    canonicalSince: null,
-    deprecatedSince: null,
-    removeAfter: null,
-    evidence: [{ source: 'source', reference: WORKSHEET_METHOD_GUIDANCE }],
-    behavior:
-      'Address conversion helpers are workbook APIs; worksheets do not expose addressToIndex().',
-    runtimeSurfaces: ['executeCode-preflight', 'agent-guidance', 'docs', 'api-eval'],
-    surfaceDisposition: {
-      typescript: 'structured_diagnostic',
-      kernel: 'structured_diagnostic',
-      'executeCode-preflight': 'structured_diagnostic',
-      'api-describe': 'structured_diagnostic',
-      'agent-guidance': 'structured_diagnostic',
-      docs: 'structured_diagnostic',
-      python: 'structured_diagnostic',
-      'api-eval': 'structured_diagnostic',
-    },
-    diagnostics: {
-      code: 'MOG002_MOG_API_USAGE',
-      message:
-        'ws.addressToIndex(address) is not a Mog worksheet method. Use wb.addressToIndex(address).',
-      replacements: ['wb.addressToIndex'],
-    },
-    verification: ['pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe'],
-  },
-  {
-    id: 'mog-api.worksheet.privateColLetter.unsupported',
-    observedPath: 'ws._colLetter',
-    canonicalPath: 'wb.indexToAddress',
-    status: 'structured_diagnostic',
-    appliesTo: 'method',
-    ownerTheme: 'sdk-agent-guidance/worksheet-api-usage',
-    ownerPackage: '@mog-sdk/sdk',
-    firstObservedVersion: '0.9.2',
-    canonicalSince: null,
-    deprecatedSince: null,
-    removeAfter: null,
-    evidence: [{ source: 'source', reference: WORKSHEET_METHOD_GUIDANCE }],
-    behavior:
-      'Private worksheet/helper guesses such as _colLetter are not public Mog APIs; use workbook address helpers where possible.',
-    runtimeSurfaces: ['executeCode-preflight', 'agent-guidance', 'docs', 'api-eval'],
-    surfaceDisposition: {
-      typescript: 'structured_diagnostic',
-      kernel: 'structured_diagnostic',
-      'executeCode-preflight': 'structured_diagnostic',
-      'api-describe': 'structured_diagnostic',
-      'agent-guidance': 'structured_diagnostic',
-      docs: 'structured_diagnostic',
-      python: 'structured_diagnostic',
-      'api-eval': 'structured_diagnostic',
-    },
-    diagnostics: {
-      code: 'MOG002_MOG_API_USAGE',
-      message:
-        'ws._colLetter(index) is not a public Mog worksheet method. Use wb.indexToAddress(row, col) when converting indexes to addresses.',
-      replacements: ['wb.indexToAddress'],
-    },
-    verification: ['pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe'],
-  },
+  ...addressHelperCompatibilityRegistry,
   {
     id: 'mog-api.chart.root.listCharts.deprecated',
     observedPath: 'ws.listCharts',

@@ -1,5 +1,6 @@
 import generatedGuidance from '../src/generated/api-guidance.json';
 import { api, apiSpec } from '../src/api-describe';
+import { a1 } from '../src/index';
 import {
   analyzeMogCode,
   apiCompatibility,
@@ -10,6 +11,15 @@ import {
 } from '../src/agent-guidance';
 
 describe('SDK agent API guidance', () => {
+  it('exports the concise a1 helper namespace', () => {
+    expect(a1.address(3, 1)).toBe('B4');
+    expect(a1.range(0, 0, 1, 2)).toBe('A1:C2');
+    expect(a1.column(26)).toBe('AA');
+    expect(a1.columnIndex('AA')).toBe(26);
+    expect(a1.offset('Z10', 0, 1)).toBe('AA10');
+    expect(a1.parse('B4')).toEqual({ row: 3, col: 1 });
+  });
+
   it('keeps the generated guidance artifact in sync with the typed catalog', () => {
     expect(generatedGuidance.entries).toEqual(apiGuidanceCatalog);
     expect(generatedGuidance.compatibility.entries).toEqual(apiCompatibility.entries);
@@ -45,6 +55,12 @@ describe('SDK agent API guidance', () => {
     expect(rootImport?.kind).toBe('mog-api');
     if (rootImport?.kind !== 'mog-api') throw new Error('expected root import guidance');
     expect(rootImport.target.kind).toBe('rootImport');
+
+    const addressHelper = api.guidance.explain('a1.address');
+    expect(addressHelper?.kind).toBe('mog-api');
+    if (addressHelper?.kind !== 'mog-api') throw new Error('expected a1 guidance');
+    expect(addressHelper.target.kind).toBe('method');
+    expect(addressHelper.target.signature).toContain('address(row: number, col: number)');
   });
 
   it('explains versioned Mog API compatibility decisions', () => {
@@ -188,7 +204,10 @@ describe('SDK agent API guidance', () => {
       const address = ws.indexToAddress(1, 1);
       const position = ws.addressToIndex("A1");
       const col = ws._colLetter(1);
-      console.log(cellValue, raw, displayedFormat, address, position, col);
+      const guessed = wb.indexToIndex(1, 1);
+      const guessedWorkbook = workbook.indexToIndex(1, 1);
+      const guessedRange = ws.rangeAddress(0, 0, 1, 1);
+      console.log(cellValue, raw, displayedFormat, address, position, col, guessed, guessedWorkbook, guessedRange);
     `;
 
     const preflight = preflightMogCode(source);
@@ -204,6 +223,9 @@ describe('SDK agent API guidance', () => {
       'mog-api.worksheet.indexToAddress.unsupported',
       'mog-api.worksheet.addressToIndex.unsupported',
       'mog-api.worksheet.privateColLetter.unsupported',
+      'mog-api.address.wbIndexToIndex.unsupported',
+      'mog-api.address.indexToIndex.unsupported',
+      'mog-api.address.worksheetRangeAddressHelper.unsupported',
     ];
 
     for (const entryId of expectedEntryIds) {
@@ -228,6 +250,12 @@ describe('SDK agent API guidance', () => {
         expect.objectContaining({ path: 'ws.formats.getDisplayedCellProperties' }),
         expect.objectContaining({ path: 'ws.formats.get' }),
       ]),
+    );
+    expect(byId.get('mog-api.worksheet.indexToAddress.unsupported')?.mogReplacements).toEqual(
+      expect.arrayContaining([expect.objectContaining({ path: 'a1.address' })]),
+    );
+    expect(byId.get('mog-api.worksheet.addressToIndex.unsupported')?.mogReplacements).toEqual(
+      expect.arrayContaining([expect.objectContaining({ path: 'a1.parse' })]),
     );
   });
 

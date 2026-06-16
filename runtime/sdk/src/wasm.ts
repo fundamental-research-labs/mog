@@ -44,6 +44,25 @@ export type {
 } from '@mog-sdk/contracts/document';
 export type { FormulaA1 } from '@mog-sdk/contracts/cells';
 
+export {
+  Utils,
+  a1,
+  address,
+  column,
+  columnIndex,
+  columnName,
+  colToLetter,
+  offset,
+  parse,
+  parseAddress,
+  parseCellAddress,
+  parseCellRange,
+  rangeAddress,
+  rangeToA1,
+  toA1,
+} from './public-kernel-facade';
+export type { PublicA1Utils, PublicRangeUtils, PublicUtils } from './public-kernel-facade';
+
 export interface CreateWorkbookOptions {
   documentId?: string;
   wasmModule?: WebAssembly.Module | Promise<WebAssembly.Module>;

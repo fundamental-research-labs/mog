@@ -60,6 +60,7 @@ export {
 // Kernel-backed public APIs — SDK-owned declarations, bundled runtime
 // ---------------------------------------------------------------------------
 export { Utils } from './public-kernel-facade';
+export type { PublicA1Utils, PublicRangeUtils, PublicUtils } from './public-kernel-facade';
 export type { CellWriteData } from '@mog-sdk/contracts/store';
 export type { FilterExpression, RecordValues, TableRecord } from '@mog-sdk/contracts/api';
 export type { CellRawValue, CellValue, SheetId } from '@mog-sdk/contracts/core';
@@ -70,9 +71,18 @@ export type { StoreCellData } from '@mog-sdk/contracts/store';
 // Kernel utility functions — flat re-exports for convenience
 // ---------------------------------------------------------------------------
 export {
+  a1,
+  address,
+  column,
+  columnIndex,
+  columnName,
   colToLetter,
+  offset,
+  parse,
+  parseAddress,
   parseCellAddress,
   parseCellRange,
+  rangeAddress,
   rangeToA1,
   toA1,
 } from './public-kernel-facade';

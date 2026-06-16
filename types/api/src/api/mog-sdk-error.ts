@@ -21,6 +21,10 @@ import type { ApiErrorCode } from './api-errors';
  */
 export type MogSdkErrorCode =
   | ApiErrorCode
+  // Stable SDK argument / provider / internal codes
+  | 'INVALID_ARGUMENT'
+  | 'PROVIDER_ERROR'
+  | 'INTERNAL_ERROR'
   // SDK transport / bridge
   | 'TRANSPORT_ERROR'
   | 'BRIDGE_NOT_AVAILABLE'
@@ -190,6 +194,36 @@ export interface MogSdkOperationDetails {
   feature?: string;
 }
 
+export type MogSdkSavePathIssue =
+  | 'save-path-invalid'
+  | 'save-path-writer-unavailable'
+  | 'save-path-write-failed'
+  | 'save-callback-failed';
+
+/** Details for workbook save path and host save callback failures */
+export interface MogSdkSavePathErrorDetails {
+  /** Machine-readable save-path issue */
+  issue: MogSdkSavePathIssue;
+  /** SDK operation that failed */
+  operation: 'workbook.save';
+  /** Path exactly passed to wb.save(path), when present */
+  requestedPath?: string;
+  /** Host-resolved absolute path, when the runtime can provide it */
+  absolutePath?: string;
+  /** Runtime current working directory, when available */
+  cwd?: string;
+  /** Parent directory selected by the host writer, when available */
+  parentDirectory?: string;
+  /** Filesystem error code such as ENOENT, EACCES, EPERM, or EISDIR */
+  filesystemCode?: string;
+  /** Original error class/name */
+  causeName?: string;
+  /** Original error message */
+  causeMessage?: string;
+  /** Valid call examples useful for agents */
+  examples?: readonly string[];
+}
+
 // =============================================================================
 // Discriminated union: code -> details mapping
 // =============================================================================
@@ -199,6 +233,11 @@ export interface MogSdkOperationDetails {
  * Use with `MogSdkError['code']` for exhaustive switch narrowing.
  */
 export interface MogSdkErrorDetailsMap {
+  // Stable SDK codes
+  INVALID_ARGUMENT: MogSdkInvalidArgumentDetails | MogSdkSavePathErrorDetails;
+  PROVIDER_ERROR: MogSdkSavePathErrorDetails | MogSdkOperationDetails;
+  INTERNAL_ERROR: MogSdkOperationDetails;
+
   // Invalid argument / address / range
   INVALID_CELL_ADDRESS: MogSdkInvalidArgumentDetails;
   INVALID_RANGE: MogSdkInvalidArgumentDetails;

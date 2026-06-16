@@ -34,6 +34,43 @@ export async function readNodeFileBytes(path: string): Promise<Uint8Array> {
 }
 
 export async function writeNodeFileBytes(path: string, data: Uint8Array): Promise<void> {
-  const { writeFile } = await import('node:fs/promises');
-  await writeFile(path, data);
+  const { mkdir, writeFile } = await import('node:fs/promises');
+  const { dirname, resolve } = await import('node:path');
+  const cwd = process.cwd();
+  const absolutePath = resolve(path);
+  const parentDirectory = dirname(absolutePath);
+
+  try {
+    await mkdir(parentDirectory, { recursive: true });
+    await writeFile(absolutePath, data);
+  } catch (cause) {
+    const error = new Error(
+      `Could not write file "${absolutePath}" for wb.save("${path}")`,
+      cause != null ? { cause } : undefined,
+    ) as Error & {
+      requestedPath: string;
+      absolutePath: string;
+      cwd: string;
+      parentDirectory: string;
+      filesystemCode?: string;
+      code?: string;
+    };
+    error.name = 'MogNodeFileWriteError';
+    error.requestedPath = path;
+    error.absolutePath = absolutePath;
+    error.cwd = cwd;
+    error.parentDirectory = parentDirectory;
+    const code =
+      typeof cause === 'object' &&
+      cause !== null &&
+      'code' in cause &&
+      typeof (cause as { code?: unknown }).code === 'string'
+        ? (cause as { code: string }).code
+        : undefined;
+    if (code) {
+      error.filesystemCode = code;
+      error.code = code;
+    }
+    throw error;
+  }
 }

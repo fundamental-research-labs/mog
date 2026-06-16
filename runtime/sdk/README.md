@@ -162,11 +162,16 @@ const jsonNoHeader = await ws.toJSON({ headerRow: 'none' });
 ```typescript
 // Save to file (returns buffer too)
 await wb.save('output.xlsx');
+await wb.save('./outputs/model.xlsx'); // Node SDK creates missing parent dirs
 
 // Save to buffer only
 const buf = await wb.save();
 const buf = await wb.toXlsx();
 ```
+
+`wb.save(path)` rejects invalid paths and host filesystem failures with
+`MogSdkError` details such as `issue`, `requestedPath`, `cwd`, `absolutePath`,
+and `filesystemCode`.
 
 ### Formulas
 

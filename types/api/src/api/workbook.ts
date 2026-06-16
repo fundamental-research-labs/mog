@@ -557,7 +557,18 @@ export interface Workbook {
    */
   insertWorksheets(data: string | Uint8Array, options?: InsertWorksheetOptions): Promise<string[]>;
 
-  /** Save the workbook to a file path or buffer. Marks the workbook as clean. */
+  /**
+   * Export the workbook as XLSX bytes and optionally write those bytes to a file.
+   *
+   * `save()` returns the XLSX bytes without filesystem side effects.
+   * `save(path)` writes to the platform file writer and still returns the same
+   * bytes. In the Node SDK, relative paths resolve from `process.cwd()` and
+   * missing parent directories are created. Invalid paths and host write
+   * failures reject with `MogSdkError` details containing `requestedPath`,
+   * `cwd`, and, when available, `absolutePath` and `filesystemCode`.
+   *
+   * Marks the workbook as clean after all configured save sinks succeed.
+   */
   save(path: string): Promise<Uint8Array>;
   save(): Promise<Uint8Array>;
 

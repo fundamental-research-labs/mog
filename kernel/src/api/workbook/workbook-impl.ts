@@ -111,6 +111,12 @@ import {
   resolveSheetNameToId as resolveWorkbookSheetNameToId,
   resolveSheetTarget,
 } from './sheet-lookup';
+import {
+  createSaveCallbackFailedError,
+  createSaveWriteFailedError,
+  createSaveWriterUnavailableError,
+  normalizeWorkbookSavePath,
+} from './save-errors';
 export type { CreateWorkbookOptions, WorkbookConfig } from './types';
 
 // Event mapping — extracted to `event-mapping.ts` so `sheets.ts` can import it
@@ -1640,18 +1646,25 @@ export class WorkbookImpl implements WorkbookInternal {
 
   async save(path?: string): Promise<Uint8Array> {
     this._ensureNotDisposed();
+    const saveTarget = normalizeWorkbookSavePath(path);
+    if (saveTarget && !this._writeFile) {
+      throw createSaveWriterUnavailableError(saveTarget);
+    }
+
     const buffer = await this.toXlsx();
-    if (path) {
-      if (!this._writeFile) {
-        throw new KernelError(
-          'API_UNSUPPORTED_OPERATION',
-          'Workbook.save(path) requires a platform-provided file writer in this runtime',
-        );
+    if (saveTarget) {
+      try {
+        await this._writeFile!(saveTarget.requestedPath, buffer);
+      } catch (error) {
+        throw createSaveWriteFailedError(saveTarget, error);
       }
-      await this._writeFile(path, buffer);
     }
     if (this._onSave) {
-      await this._onSave(buffer);
+      try {
+        await this._onSave(buffer);
+      } catch (error) {
+        throw createSaveCallbackFailedError(error);
+      }
     }
     this.markClean();
     return buffer;

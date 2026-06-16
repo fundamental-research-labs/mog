@@ -26,10 +26,11 @@ import type {
   IMogSdkEventFacade,
   MogSdkDiagnostics,
   MogSdkErrorCode,
+  MogSdkSavePathErrorDetails,
 } from '@mog-sdk/contracts/sdk';
 
 export interface MogSdkErrorOptions {
-  details?: Record<string, unknown>;
+  details?: Record<string, unknown> | MogSdkSavePathErrorDetails;
   operation?: string;
   diagnostics?: MogSdkDiagnostics;
   cause?: unknown;

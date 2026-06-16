@@ -127,6 +127,8 @@ export type {
   IMogSdkError,
   MogSdkErrorJSON,
   MogSdkDiagnostics,
+  MogSdkSavePathErrorDetails,
+  MogSdkSavePathIssue,
 } from '@mog-sdk/contracts/sdk';
 export type {
   MogSdkEvent,

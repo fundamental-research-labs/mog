@@ -263,10 +263,15 @@ Export to an `.xlsx` file with `wb.save(path)`, or get workbook bytes with
 
 ```typescript
 await wb.save('output.xlsx');
+await wb.save('./outputs/model.xlsx'); // Node SDK creates missing parent dirs
 
 const savedBytes = await wb.save();
 const xlsxBytes = await wb.toXlsx();
 ```
+
+`wb.save(path)` still returns XLSX bytes after writing. Path validation and
+host write failures reject with `MogSdkError` details containing fields such as
+`issue`, `requestedPath`, `cwd`, `absolutePath`, and `filesystemCode`.
 
 ## Error Handling
 

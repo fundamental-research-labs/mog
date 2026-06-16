@@ -25,6 +25,8 @@ export type {
   MogSdkErrorJSON,
   IMogSdkError,
   KernelToSdkErrorMapping,
+  MogSdkSavePathErrorDetails,
+  MogSdkSavePathIssue,
 } from './mog-sdk-error';
 
 // Events

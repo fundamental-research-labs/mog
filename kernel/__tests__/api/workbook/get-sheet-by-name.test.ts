@@ -9,6 +9,7 @@ import { jest } from '@jest/globals';
 
 import type { WorkbookConfig } from '../../../src/api/workbook/workbook-impl';
 import type { DocumentContext } from '../../../src/context/types';
+import type { KernelError } from '../../../src/errors';
 
 // ---------------------------------------------------------------------------
 // Mock the domain module that _resolveTarget depends on
@@ -68,6 +69,15 @@ function createConfig(ctx: DocumentContext): WorkbookConfig {
     ctx,
     eventBus: ctx.eventBus as WorkbookConfig['eventBus'],
   };
+}
+
+async function captureKernelError(promise: Promise<unknown>): Promise<KernelError> {
+  try {
+    await promise;
+  } catch (error) {
+    return error as KernelError;
+  }
+  throw new Error('Expected KernelError');
 }
 
 // ---------------------------------------------------------------------------
@@ -153,5 +163,54 @@ describe('getSheet — case-insensitive lookup', () => {
     await wb._init();
 
     await expect(wb.getSheet('NonExistent')).rejects.toThrow();
+  });
+
+  it('shows invisible whitespace and trim-equivalent matches when a sheet name is missing', async () => {
+    (ctx.computeBridge.getSheetName as jest.Mock).mockImplementation(async (id: string) => {
+      const names: Record<string, string> = {
+        'sheet-1': 'Working Capital ',
+        'sheet-2': 'Revenue Data',
+      };
+      return names[id] ?? null;
+    });
+
+    const wb = new WorkbookImpl(createConfig(ctx));
+    await wb._init();
+
+    const error = await captureKernelError(wb.getSheet('Working Capital'));
+
+    expect(error.code).toBe('API_SHEET_NOT_FOUND');
+    expect(error.message).toContain('"Working\\sCapital\\s"');
+    expect(error.context).toEqual(
+      expect.objectContaining({
+        target: 'Working Capital',
+        targetVisible: 'Working\\sCapital',
+        knownSheetNames: ['Working Capital ', 'Revenue Data'],
+        knownSheetNamesVisible: ['Working\\sCapital\\s', 'Revenue\\sData'],
+      }),
+    );
+    expect(error.context.nearMatches).toEqual([
+      expect.objectContaining({
+        name: 'Working Capital ',
+        visibleName: 'Working\\sCapital\\s',
+        matchKind: 'trim-equivalent',
+      }),
+    ]);
+  });
+
+  it('suggests fuzzy near matches for typoed sheet names', async () => {
+    const wb = new WorkbookImpl(createConfig(ctx));
+    await wb._init();
+
+    const error = await captureKernelError(wb.getSheet('Revenue Dtaa'));
+
+    expect(error.code).toBe('API_SHEET_NOT_FOUND');
+    expect(error.context.nearMatches).toEqual([
+      expect.objectContaining({
+        name: 'Revenue Data',
+        visibleName: 'Revenue\\sData',
+        matchKind: 'fuzzy',
+      }),
+    ]);
   });
 });

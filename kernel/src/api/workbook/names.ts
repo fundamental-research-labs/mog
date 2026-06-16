@@ -25,6 +25,7 @@ import { KernelError } from '../../errors';
 
 import type { DocumentContext } from '../../context';
 import * as NamedRanges from '../../domain/formulas/named-ranges';
+import { createSheetNotFoundError } from '../internal/sheet-lookup-diagnostics';
 import { validateName } from '@mog/spreadsheet-utils/data/named-ranges';
 import { isApiVisibleNamedRangeReference, stripFormulaPrefix } from '../named-range-visibility';
 
@@ -39,6 +40,8 @@ export interface WorkbookNamesDeps {
   resolveSheetNameToId: (nameLower: string) => Promise<SheetId | undefined>;
   /** Get sheet name by sheetId. ASYNC — reads from Rust. */
   getSheetName: (sheetId: SheetId) => Promise<string | undefined>;
+  /** Get all known sheet names in display order. ASYNC — reads from Rust. */
+  getKnownSheetNames: () => Promise<string[]>;
 }
 
 export class WorkbookNamesImpl implements WorkbookNames {
@@ -56,8 +59,12 @@ export class WorkbookNamesImpl implements WorkbookNames {
     if (!scope) return undefined;
     const resolved = await this.deps.resolveSheetNameToId(scope.toLowerCase());
     if (resolved) return resolved;
-    throw new KernelError('API_SHEET_NOT_FOUND', `Sheet not found: ${scope}`, {
-      context: { target: scope },
+    throw createSheetNotFoundError({
+      target: scope,
+      knownSheetNames: await this.deps.getKnownSheetNames(),
+      context: {
+        lookupKind: 'namedRangeScope',
+      },
     });
   }
 

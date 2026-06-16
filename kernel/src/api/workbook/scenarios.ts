@@ -16,6 +16,7 @@ import type { SheetId } from '@mog-sdk/contracts/core';
 import type { DocumentContext } from '../../context';
 import { getOrCreateCellId } from '../../domain/cells/cell-identity';
 import { KernelError } from '../../errors';
+import { createSheetNotFoundError } from '../internal/sheet-lookup-diagnostics';
 import { parseCellAddress, toA1, toSheetA1 } from '../internal/utils';
 import * as ScenarioOps from './operations/scenario-operations';
 
@@ -50,9 +51,20 @@ export class WorkbookScenariosImpl implements WorkbookScenarios {
     if (!sheetName) return this.deps.getActiveSheetId();
     const resolved = await this.deps.resolveSheetNameToId(sheetName.toLowerCase());
     if (resolved) return resolved;
-    throw new KernelError('API_SHEET_NOT_FOUND', `Sheet not found: ${sheetName}`, {
-      context: { target: sheetName, reference: ref },
+    throw createSheetNotFoundError({
+      target: sheetName,
+      knownSheetNames: await this.getKnownSheetNames(),
+      context: {
+        lookupKind: 'scenarioReference',
+        reference: ref,
+      },
     });
+  }
+
+  private async getKnownSheetNames(): Promise<string[]> {
+    const order = await this.deps.getSheetOrder();
+    const names = await Promise.all(order.map((id) => this.deps.getSheetName(id)));
+    return names.filter((name): name is string => name != null);
   }
 
   private async toStorageCellRef(ref: string): Promise<string> {

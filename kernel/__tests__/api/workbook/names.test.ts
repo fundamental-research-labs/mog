@@ -11,6 +11,7 @@ import { sheetId, type SheetId } from '@mog-sdk/contracts/core';
 
 import type { WorkbookNamesDeps } from '../../../src/api/workbook/names';
 import type { DocumentContext } from '../../../src/context/types';
+import type { KernelError } from '../../../src/errors';
 
 // =============================================================================
 // Mock the NamedRanges domain module
@@ -68,8 +69,18 @@ function createMockDeps(overrides?: Partial<WorkbookNamesDeps>): WorkbookNamesDe
       if (sheetId === 'sheet-2') return 'Sheet2';
       return undefined;
     },
+    getKnownSheetNames: async () => ['Sheet1', 'Sheet2'],
     ...overrides,
   };
+}
+
+async function captureKernelError(promise: Promise<unknown>): Promise<KernelError> {
+  try {
+    await promise;
+  } catch (error) {
+    return error as KernelError;
+  }
+  throw new Error('Expected KernelError');
 }
 
 // =============================================================================
@@ -150,6 +161,27 @@ describe('WorkbookNamesImpl', () => {
         visible: false,
       });
       expect(mockGetByName).toHaveBeenCalledWith(deps.ctx, 'LocalName', 'sheet-1');
+    });
+
+    it('reports known sheet names when scoped sheet lookup fails', async () => {
+      const error = await captureKernelError(names.get('LocalName', 'Sheet 1'));
+
+      expect(error.code).toBe('API_SHEET_NOT_FOUND');
+      expect(error.context).toEqual(
+        expect.objectContaining({
+          lookupKind: 'namedRangeScope',
+          target: 'Sheet 1',
+          knownSheetNames: ['Sheet1', 'Sheet2'],
+        }),
+      );
+      expect(error.context.nearMatches).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            name: 'Sheet1',
+            matchKind: 'fuzzy',
+          }),
+        ]),
+      );
     });
 
     it('includes visible field in results', async () => {

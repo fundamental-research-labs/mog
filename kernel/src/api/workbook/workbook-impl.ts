@@ -106,6 +106,11 @@ import type {
   CreateWorkbookOptions,
   WorkbookConfig,
 } from './types';
+import {
+  getKnownSheetNames,
+  resolveSheetNameToId as resolveWorkbookSheetNameToId,
+  resolveSheetTarget,
+} from './sheet-lookup';
 export type { CreateWorkbookOptions, WorkbookConfig } from './types';
 
 // Event mapping — extracted to `event-mapping.ts` so `sheets.ts` can import it
@@ -423,46 +428,12 @@ export class WorkbookImpl implements WorkbookInternal {
    * Never pass a sheetId here — use getSheetById(sheetId) for direct ID access.
    */
   async _resolveTarget(target: number | string): Promise<SheetId> {
-    if (typeof target === 'number') {
-      const order = await getOrder(this.ctx);
-      if (target < 0 || target >= order.length) {
-        throw new KernelError('API_SHEET_NOT_FOUND', `Sheet not found: ${target}`, {
-          context: { target },
-        });
-      }
-      return order[target];
-    }
-
-    // String — first try as a sheet name (case-insensitive lookup)
-    const order = await getOrder(this.ctx);
-    for (const id of order) {
-      const name = await this.ctx.computeBridge.getSheetName(id);
-      if (name != null && name.toLowerCase() === target.toLowerCase()) {
-        return id;
-      }
-    }
-
-    // Fallback: check if target is itself a sheetId in the order array
-    const matchedId = order.find((id) => id === target);
-    if (matchedId) {
-      return matchedId;
-    }
-
-    throw new KernelError('API_SHEET_NOT_FOUND', `Sheet not found: ${target}`, {
-      context: { target },
-    });
+    return resolveSheetTarget(this.ctx, target);
   }
 
   /** Resolve a sheet name (case-insensitive) to its sheetId. ASYNC — reads from Rust. */
   private async _resolveSheetNameToId(nameLower: string): Promise<SheetId | undefined> {
-    const order = await getOrder(this.ctx);
-    for (const id of order) {
-      const sheetName = await this.ctx.computeBridge.getSheetName(id);
-      if (sheetName != null && sheetName.toLowerCase() === nameLower) {
-        return id;
-      }
-    }
-    return undefined;
+    return resolveWorkbookSheetNameToId(this.ctx, nameLower);
   }
 
   // ===========================================================================
@@ -1816,6 +1787,7 @@ export class WorkbookImpl implements WorkbookInternal {
       getActiveSheetId: () => this.getActiveSheetId(),
       resolveSheetNameToId: (nameLower) => this._resolveSheetNameToId(nameLower),
       getSheetName: (id) => getName(this.ctx, id),
+      getKnownSheetNames: () => getKnownSheetNames(this.ctx),
     }));
   }
 

@@ -6,6 +6,11 @@ import type {
 } from '@mog-sdk/contracts/api';
 import type { SheetId } from '@mog-sdk/contracts/core';
 
+interface PivotReceiptWithDiagnostics {
+  readonly status: string;
+  readonly diagnostics: readonly { severity?: string; message?: string }[];
+}
+
 interface WorkbookWithPivotMaterialization {
   readonly ctx?: {
     awaitMaterialized?: (scope?: SheetId | 'allSheets') => Promise<void>;
@@ -18,9 +23,7 @@ export async function awaitPivotMaterialization(workbook: unknown): Promise<void
   await awaitMaterialized('allSheets');
 }
 
-export function pivotReceiptMessage(
-  receipt: PivotAddReceipt | PivotAddWithSheetReceipt | PivotRefreshReceipt,
-): string {
+export function pivotReceiptMessage(receipt: PivotReceiptWithDiagnostics): string {
   return (
     receipt.diagnostics.find((diagnostic) => diagnostic.severity === 'error')?.message ??
     receipt.diagnostics[0]?.message ??

@@ -622,15 +622,29 @@ export function usePivotTables({ sheetId }: UsePivotTablesOptions): UsePivotTabl
   // Delete pivot table via ws.pivots (fire-and-forget async)
   const deletePivotTable = useCallback(
     (pivotId: string) => {
-      void pivotHandleFromId(pivotId)?.delete();
+      const deleteMutation = pivotHandleFromId(pivotId)?.delete();
+      if (!deleteMutation) return;
+      void deleteMutation
+        .then((receipt) => {
+          if (receipt.status !== 'applied' || receipt.deleted === false) {
+            console.warn(pivotReceiptMessage(receipt), receipt);
+            return;
+          }
 
-      // Clear selection if deleted pivot was selected
-      if (selectedPivotId === pivotId) {
-        selectPivotAction(null);
-      }
-      if (editingPivotId === pivotId) {
-        stopEditingPivotAction();
-      }
+          // Clear selection if deleted pivot was selected
+          if (selectedPivotId === pivotId) {
+            selectPivotAction(null);
+          }
+          if (editingPivotId === pivotId) {
+            stopEditingPivotAction();
+          }
+        })
+        .catch((error) =>
+          console.warn(
+            `Pivot delete failed: ${error instanceof Error ? error.message : String(error)}`,
+            error,
+          ),
+        );
     },
     [pivotHandleFromId, selectedPivotId, editingPivotId, selectPivotAction, stopEditingPivotAction],
   );

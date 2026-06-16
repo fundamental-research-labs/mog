@@ -74,7 +74,9 @@ function filterReceiptError(receipt: unknown, fallback: string): string | null {
   ) {
     return null;
   }
-  if (maybe.status !== 'failed' && maybe.status !== 'unsupported') return null;
+  if (maybe.status !== 'failed' && maybe.status !== 'unsupported' && maybe.status !== 'noOp') {
+    return null;
+  }
   return (
     maybe.diagnostics.find((diagnostic) => diagnostic.severity === 'error')?.message ??
     maybe.diagnostics[0]?.message ??

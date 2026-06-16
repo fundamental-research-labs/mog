@@ -68,7 +68,7 @@ function filterReceiptOverrides(
 function filterReceiptError(receipt: unknown, fallback: string): string | null {
   const r = asFilterReceipt(receipt);
   if (!r) return null;
-  if (r.status !== 'failed' && r.status !== 'unsupported') return null;
+  if (r.status !== 'failed' && r.status !== 'unsupported' && r.status !== 'noOp') return null;
   return (
     r.diagnostics.find((diagnostic) => diagnostic.severity === 'error')?.message ??
     r.diagnostics[0]?.message ??

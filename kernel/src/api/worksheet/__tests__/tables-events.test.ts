@@ -331,7 +331,7 @@ describe('WorksheetTablesImpl table event identity', () => {
         kind: 'tableAddRow',
         status: 'applied',
         tableId: 'tbl_stable_1',
-        index: 3,
+        index: 2,
         range: 'A4:B4',
       }),
     );

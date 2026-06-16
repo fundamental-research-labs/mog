@@ -54,7 +54,7 @@ const LIFECYCLE_METHODS = new Set([
 const LIFECYCLE_INTERFACES = new Set(['WorksheetPivots', 'WorksheetWhatIf']);
 
 const MUTATION_NAME_PATTERN =
-  /^(add|append|apply|autoFill|bring|cancel|clear|clone|commit|convert|copy|create|delete|duplicate|execute|fill|fillSeries|hide|import|insert|materialize|merge|move|paste|reapply|refresh|remove|rename|replace|reset|resize|restore|send|set|show|sort|toggle|undo|unmerge|update|write)/;
+  /^(add|append|apply|autoFill|bring|cancel|clear|clone|commit|convert|copy|create|delete|duplicate|execute|fill|fillSeries|hide|import|insert|materialize|merge|move|paste|reapply|redo|refresh|remove|rename|replace|reset|resize|restore|send|set|show|sort|toggle|undo|unmerge|update|write)/;
 
 function collectTsFiles(dir) {
   const files = [];
@@ -225,44 +225,119 @@ function mergeInventory(current, existing) {
   });
 }
 
-function migratedReceiptTypes() {
+function typeReferenceName(node, sourceFile) {
+  if (!ts.isTypeReferenceNode(node)) return null;
+  return node.typeName.getText(sourceFile).split('.').pop() ?? null;
+}
+
+function isIgnorableUnionPart(node) {
+  if (
+    node.kind === ts.SyntaxKind.NullKeyword ||
+    node.kind === ts.SyntaxKind.UndefinedKeyword ||
+    node.kind === ts.SyntaxKind.VoidKeyword ||
+    node.kind === ts.SyntaxKind.NeverKeyword
+  ) {
+    return true;
+  }
+  return ts.isLiteralTypeNode(node) && node.literal.kind === ts.SyntaxKind.NullKeyword;
+}
+
+function typeNodeReturnsMigratedReceipt(node, sourceFile, interfaceReceiptNames, aliasReceiptNames) {
+  const referenceName = typeReferenceName(node, sourceFile);
+  if (referenceName) {
+    return (
+      referenceName === 'OperationReceiptBase' ||
+      interfaceReceiptNames.has(referenceName) ||
+      aliasReceiptNames.has(referenceName)
+    );
+  }
+  if (ts.isParenthesizedTypeNode(node)) {
+    return typeNodeReturnsMigratedReceipt(
+      node.type,
+      sourceFile,
+      interfaceReceiptNames,
+      aliasReceiptNames,
+    );
+  }
+  if (ts.isIntersectionTypeNode(node)) {
+    return node.types.some((part) =>
+      typeNodeReturnsMigratedReceipt(part, sourceFile, interfaceReceiptNames, aliasReceiptNames),
+    );
+  }
+  if (ts.isUnionTypeNode(node)) {
+    const meaningfulParts = node.types.filter((part) => !isIgnorableUnionPart(part));
+    return (
+      meaningfulParts.length > 0 &&
+      meaningfulParts.every((part) =>
+        typeNodeReturnsMigratedReceipt(part, sourceFile, interfaceReceiptNames, aliasReceiptNames),
+      )
+    );
+  }
+  return false;
+}
+
+function migratedReceiptTypeInfo() {
   const heritageByName = new Map();
+  const aliasTypeByName = new Map();
   for (const filePath of collectTsFiles(TYPES_ROOT)) {
     const text = fs.readFileSync(filePath, 'utf8');
     const sourceFile = ts.createSourceFile(filePath, text, ts.ScriptTarget.Latest, true);
     ts.forEachChild(sourceFile, (node) => {
-      if (!ts.isInterfaceDeclaration(node)) return;
-      const heritageNames = [];
-      for (const clause of node.heritageClauses ?? []) {
-        if (clause.token !== ts.SyntaxKind.ExtendsKeyword) continue;
-        for (const type of clause.types) {
-          heritageNames.push(type.expression.getText(sourceFile));
+      if (ts.isInterfaceDeclaration(node)) {
+        const heritageNames = [];
+        for (const clause of node.heritageClauses ?? []) {
+          if (clause.token !== ts.SyntaxKind.ExtendsKeyword) continue;
+          for (const type of clause.types) {
+            heritageNames.push(type.expression.getText(sourceFile).split('.').pop() ?? '');
+          }
         }
+        if (heritageNames.length > 0) {
+          heritageByName.set(node.name.text, heritageNames);
+        }
+        return;
       }
-      if (heritageNames.length > 0) {
-        heritageByName.set(node.name.text, heritageNames);
+      if (ts.isTypeAliasDeclaration(node)) {
+        aliasTypeByName.set(node.name.text, { node: node.type, sourceFile });
       }
     });
   }
 
-  const receiptNames = new Set();
+  const interfaceReceiptNames = new Set();
   let changed = true;
   while (changed) {
     changed = false;
     for (const [name, heritageNames] of heritageByName) {
       if (
-        !receiptNames.has(name) &&
+        !interfaceReceiptNames.has(name) &&
         heritageNames.some(
           (heritageName) =>
-            heritageName === 'OperationReceiptBase' || receiptNames.has(heritageName),
+            heritageName === 'OperationReceiptBase' || interfaceReceiptNames.has(heritageName),
         )
       ) {
-        receiptNames.add(name);
+        interfaceReceiptNames.add(name);
         changed = true;
       }
     }
   }
-  return [...receiptNames].sort();
+
+  const aliasReceiptNames = new Set();
+  changed = true;
+  while (changed) {
+    changed = false;
+    for (const [name, { node, sourceFile }] of aliasTypeByName) {
+      if (
+        !aliasReceiptNames.has(name) &&
+        typeNodeReturnsMigratedReceipt(node, sourceFile, interfaceReceiptNames, aliasReceiptNames)
+      ) {
+        aliasReceiptNames.add(name);
+        changed = true;
+      }
+    }
+  }
+  return {
+    generatedReceiptNames: [...interfaceReceiptNames].sort(),
+    returnReceiptNames: [...new Set([...interfaceReceiptNames, ...aliasReceiptNames])].sort(),
+  };
 }
 
 function generatedDefinitionFields(name, definition, errors) {
@@ -353,8 +428,11 @@ function verifyMigratedReceiptDispositions(
   }
 }
 
-const migratedReceipts = migratedReceiptTypes();
-const migratedReceiptNames = new Set(['OperationReceiptBase', ...migratedReceipts]);
+const migratedReceiptInfo = migratedReceiptTypeInfo();
+const migratedReceiptNames = new Set([
+  'OperationReceiptBase',
+  ...migratedReceiptInfo.returnReceiptNames,
+]);
 const current = inventoryEntries(migratedReceiptNames);
 const existing = readInventory();
 
@@ -391,7 +469,7 @@ for (const entry of existing) {
   }
 }
 
-verifyGeneratedReceiptDefinitions(errors, migratedReceipts);
+verifyGeneratedReceiptDefinitions(errors, migratedReceiptInfo.generatedReceiptNames);
 
 if (errors.length > 0) {
   console.error(`Operation receipt guard failed with ${errors.length} issue(s):`);

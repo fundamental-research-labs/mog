@@ -266,6 +266,61 @@ describe('usePivotTables pivot receipts', () => {
     );
     warn.mockRestore();
   });
+
+  it('clears selection and editing state only after an applied delete receipt', async () => {
+    mockSelectedPivotId = 'pivot-1';
+    mockEditingPivotId = 'pivot-1';
+    const deletePivot = jest.fn(async () => ({
+      kind: 'pivot.handle.delete',
+      status: 'applied',
+      effects: [],
+      diagnostics: [],
+      sheetId: 'sheet-1',
+      pivotId: 'pivot-1',
+      deleted: true,
+    }));
+    mockLoadPivotConfigEntries.mockResolvedValue([nativeEntry('pivot-1', { delete: deletePivot })]);
+
+    const { result } = renderHook(() => usePivotTables({ sheetId: 'sheet-1' as SheetId }));
+
+    await waitFor(() => expect(result.current.pivotTables).toHaveLength(1));
+    act(() => {
+      result.current.deletePivotTable('pivot-1');
+    });
+
+    await waitFor(() => expect(deletePivot).toHaveBeenCalled());
+    await waitFor(() => expect(mockUiStore.selectPivot).toHaveBeenCalledWith(null));
+    expect(mockUiStore.stopEditingPivot).toHaveBeenCalled();
+  });
+
+  it('keeps selection and editing state when a delete receipt is no-op', async () => {
+    mockSelectedPivotId = 'pivot-1';
+    mockEditingPivotId = 'pivot-1';
+    const noOpReceipt = {
+      kind: 'pivot.handle.delete',
+      status: 'noOp',
+      effects: [],
+      diagnostics: [{ severity: 'warning', code: 'PIVOT_NOT_FOUND', message: 'Pivot not found.' }],
+      sheetId: 'sheet-1',
+      pivotId: 'pivot-1',
+      deleted: false,
+    };
+    const deletePivot = jest.fn(async () => noOpReceipt);
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    mockLoadPivotConfigEntries.mockResolvedValue([nativeEntry('pivot-1', { delete: deletePivot })]);
+
+    const { result } = renderHook(() => usePivotTables({ sheetId: 'sheet-1' as SheetId }));
+
+    await waitFor(() => expect(result.current.pivotTables).toHaveLength(1));
+    act(() => {
+      result.current.deletePivotTable('pivot-1');
+    });
+
+    await waitFor(() => expect(warn).toHaveBeenCalledWith('Pivot not found.', noOpReceipt));
+    expect(mockUiStore.selectPivot).not.toHaveBeenCalled();
+    expect(mockUiStore.stopEditingPivot).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
 });
 
 describe('usePivotTables imported materialization refresh', () => {

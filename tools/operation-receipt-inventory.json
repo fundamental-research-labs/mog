@@ -828,6 +828,18 @@
     "rationale": "Generated initial disposition; refine as receipt waves migrate this API."
   },
   {
+    "key": "types/api/src/api/workbook/history.ts#WorkbookHistory.redo",
+    "file": "types/api/src/api/workbook/history.ts",
+    "line": 16,
+    "interface": "WorkbookHistory",
+    "method": "redo",
+    "signature": "redo():Promise<RedoReceipt>;",
+    "returnType": "Promise<RedoReceipt>",
+    "returnCategory": "receipt",
+    "disposition": "receiptExistingNeedsBase",
+    "rationale": "Generated initial disposition; refine as receipt waves migrate this API."
+  },
+  {
     "key": "types/api/src/api/workbook/history.ts#WorkbookHistory.setNextDescription",
     "file": "types/api/src/api/workbook/history.ts",
     "line": 51,
@@ -992,8 +1004,8 @@
     "signature": "apply(id:string):Promise<WorkbookScenarioApplyReceipt>;",
     "returnType": "Promise<WorkbookScenarioApplyReceipt>",
     "returnCategory": "receipt",
-    "disposition": "lifecycleReceiptRequired",
-    "rationale": "Generated initial disposition; refine as receipt waves migrate this API."
+    "disposition": "noReceiptNeeded",
+    "rationale": "Returns an OperationReceiptBase-derived receipt with the public receipt base fields."
   },
   {
     "key": "types/api/src/api/workbook/scenarios.ts#WorkbookScenarios.remove",
@@ -2204,8 +2216,8 @@
     "signature": "addSeries(chartId:string,config:SeriesConfig):Promise<ChartMutationReceipt>;",
     "returnType": "Promise<ChartMutationReceipt>",
     "returnCategory": "receipt",
-    "disposition": "receiptRequired",
-    "rationale": "Generated initial disposition; refine as receipt waves migrate this API."
+    "disposition": "noReceiptNeeded",
+    "rationale": "Returns an OperationReceiptBase-derived receipt with the public receipt base fields."
   },
   {
     "key": "types/api/src/api/worksheet/charts.ts#WorksheetCharts.addTrendline",
@@ -2216,8 +2228,8 @@
     "signature": "addTrendline(chartId:string,seriesIndex:number,config:TrendlineConfig,):Promise<ChartMutationReceipt>;",
     "returnType": "Promise<ChartMutationReceipt>",
     "returnCategory": "receipt",
-    "disposition": "receiptRequired",
-    "rationale": "Generated initial disposition; refine as receipt waves migrate this API."
+    "disposition": "noReceiptNeeded",
+    "rationale": "Returns an OperationReceiptBase-derived receipt with the public receipt base fields."
   },
   {
     "key": "types/api/src/api/worksheet/charts.ts#WorksheetCharts.bringForward",
@@ -2288,8 +2300,8 @@
     "signature": "removeSeries(chartId:string,index:number):Promise<ChartMutationReceipt>;",
     "returnType": "Promise<ChartMutationReceipt>",
     "returnCategory": "receipt",
-    "disposition": "receiptRequired",
-    "rationale": "Generated initial disposition; refine as receipt waves migrate this API."
+    "disposition": "noReceiptNeeded",
+    "rationale": "Returns an OperationReceiptBase-derived receipt with the public receipt base fields."
   },
   {
     "key": "types/api/src/api/worksheet/charts.ts#WorksheetCharts.removeTrendline",
@@ -2300,8 +2312,8 @@
     "signature": "removeTrendline(chartId:string,seriesIndex:number,trendlineIndex:number,):Promise<ChartMutationReceipt>;",
     "returnType": "Promise<ChartMutationReceipt>",
     "returnCategory": "receipt",
-    "disposition": "receiptRequired",
-    "rationale": "Generated initial disposition; refine as receipt waves migrate this API."
+    "disposition": "noReceiptNeeded",
+    "rationale": "Returns an OperationReceiptBase-derived receipt with the public receipt base fields."
   },
   {
     "key": "types/api/src/api/worksheet/charts.ts#WorksheetCharts.sendBackward",
@@ -2336,8 +2348,8 @@
     "signature": "setAxisTitle(chartId:string,axisType:'category'|'value',formula:string,):Promise<ChartMutationReceipt>;",
     "returnType": "Promise<ChartMutationReceipt>",
     "returnCategory": "receipt",
-    "disposition": "receiptRequired",
-    "rationale": "Generated initial disposition; refine as receipt waves migrate this API."
+    "disposition": "noReceiptNeeded",
+    "rationale": "Returns an OperationReceiptBase-derived receipt with the public receipt base fields."
   },
   {
     "key": "types/api/src/api/worksheet/charts.ts#WorksheetCharts.setBubbleSizes",
@@ -2348,8 +2360,8 @@
     "signature": "setBubbleSizes(chartId:string,seriesIndex:number,range:string,):Promise<ChartMutationReceipt>;",
     "returnType": "Promise<ChartMutationReceipt>",
     "returnCategory": "receipt",
-    "disposition": "receiptRequired",
-    "rationale": "Generated initial disposition; refine as receipt waves migrate this API."
+    "disposition": "noReceiptNeeded",
+    "rationale": "Returns an OperationReceiptBase-derived receipt with the public receipt base fields."
   },
   {
     "key": "types/api/src/api/worksheet/charts.ts#WorksheetCharts.setCategoryNames",
@@ -2360,8 +2372,8 @@
     "signature": "setCategoryNames(chartId:string,range:string):Promise<ChartMutationReceipt>;",
     "returnType": "Promise<ChartMutationReceipt>",
     "returnCategory": "receipt",
-    "disposition": "receiptRequired",
-    "rationale": "Generated initial disposition; refine as receipt waves migrate this API."
+    "disposition": "noReceiptNeeded",
+    "rationale": "Returns an OperationReceiptBase-derived receipt with the public receipt base fields."
   },
   {
     "key": "types/api/src/api/worksheet/charts.ts#WorksheetCharts.setDataLabelHeight",
@@ -2372,8 +2384,8 @@
     "signature": "setDataLabelHeight(chartId:string,seriesIndex:number,pointIndex:number,value:number,):Promise<ChartMutationReceipt>;",
     "returnType": "Promise<ChartMutationReceipt>",
     "returnCategory": "receipt",
-    "disposition": "receiptRequired",
-    "rationale": "Generated initial disposition; refine as receipt waves migrate this API."
+    "disposition": "noReceiptNeeded",
+    "rationale": "Returns an OperationReceiptBase-derived receipt with the public receipt base fields."
   },
   {
     "key": "types/api/src/api/worksheet/charts.ts#WorksheetCharts.setDataLabelWidth",
@@ -2384,8 +2396,8 @@
     "signature": "setDataLabelWidth(chartId:string,seriesIndex:number,pointIndex:number,value:number,):Promise<ChartMutationReceipt>;",
     "returnType": "Promise<ChartMutationReceipt>",
     "returnCategory": "receipt",
-    "disposition": "receiptRequired",
-    "rationale": "Generated initial disposition; refine as receipt waves migrate this API."
+    "disposition": "noReceiptNeeded",
+    "rationale": "Returns an OperationReceiptBase-derived receipt with the public receipt base fields."
   },
   {
     "key": "types/api/src/api/worksheet/charts.ts#WorksheetCharts.setDataRange",
@@ -2408,8 +2420,8 @@
     "signature": "setPointDataLabel(chartId:string,seriesIndex:number,pointIndex:number,config:DataLabelConfig,):Promise<ChartMutationReceipt>;",
     "returnType": "Promise<ChartMutationReceipt>",
     "returnCategory": "receipt",
-    "disposition": "receiptRequired",
-    "rationale": "Generated initial disposition; refine as receipt waves migrate this API."
+    "disposition": "noReceiptNeeded",
+    "rationale": "Returns an OperationReceiptBase-derived receipt with the public receipt base fields."
   },
   {
     "key": "types/api/src/api/worksheet/charts.ts#WorksheetCharts.setSeriesBinOptions",
@@ -2420,8 +2432,8 @@
     "signature": "setSeriesBinOptions(chartId:string,seriesIndex:number,options:HistogramConfig,):Promise<ChartMutationReceipt>;",
     "returnType": "Promise<ChartMutationReceipt>",
     "returnCategory": "receipt",
-    "disposition": "receiptRequired",
-    "rationale": "Generated initial disposition; refine as receipt waves migrate this API."
+    "disposition": "noReceiptNeeded",
+    "rationale": "Returns an OperationReceiptBase-derived receipt with the public receipt base fields."
   },
   {
     "key": "types/api/src/api/worksheet/charts.ts#WorksheetCharts.setSeriesBoxwhiskerOptions",
@@ -2432,8 +2444,8 @@
     "signature": "setSeriesBoxwhiskerOptions(chartId:string,seriesIndex:number,options:BoxplotConfig,):Promise<ChartMutationReceipt>;",
     "returnType": "Promise<ChartMutationReceipt>",
     "returnCategory": "receipt",
-    "disposition": "receiptRequired",
-    "rationale": "Generated initial disposition; refine as receipt waves migrate this API."
+    "disposition": "noReceiptNeeded",
+    "rationale": "Returns an OperationReceiptBase-derived receipt with the public receipt base fields."
   },
   {
     "key": "types/api/src/api/worksheet/charts.ts#WorksheetCharts.setSeriesCategories",
@@ -2444,8 +2456,8 @@
     "signature": "setSeriesCategories(chartId:string,index:number,range:string):Promise<ChartMutationReceipt>;",
     "returnType": "Promise<ChartMutationReceipt>",
     "returnCategory": "receipt",
-    "disposition": "receiptRequired",
-    "rationale": "Generated initial disposition; refine as receipt waves migrate this API."
+    "disposition": "noReceiptNeeded",
+    "rationale": "Returns an OperationReceiptBase-derived receipt with the public receipt base fields."
   },
   {
     "key": "types/api/src/api/worksheet/charts.ts#WorksheetCharts.setSeriesValues",
@@ -2456,8 +2468,8 @@
     "signature": "setSeriesValues(chartId:string,index:number,range:string):Promise<ChartMutationReceipt>;",
     "returnType": "Promise<ChartMutationReceipt>",
     "returnCategory": "receipt",
-    "disposition": "receiptRequired",
-    "rationale": "Generated initial disposition; refine as receipt waves migrate this API."
+    "disposition": "noReceiptNeeded",
+    "rationale": "Returns an OperationReceiptBase-derived receipt with the public receipt base fields."
   },
   {
     "key": "types/api/src/api/worksheet/charts.ts#WorksheetCharts.setSourceData",
@@ -2516,8 +2528,8 @@
     "signature": "updateSeries(chartId:string,index:number,updates:Partial<SeriesConfig>,):Promise<ChartMutationReceipt>;",
     "returnType": "Promise<ChartMutationReceipt>",
     "returnCategory": "receipt",
-    "disposition": "receiptRequired",
-    "rationale": "Generated initial disposition; refine as receipt waves migrate this API."
+    "disposition": "noReceiptNeeded",
+    "rationale": "Returns an OperationReceiptBase-derived receipt with the public receipt base fields."
   },
   {
     "key": "types/api/src/api/worksheet/charts.ts#WorksheetCharts.updateTrendline",
@@ -2528,8 +2540,8 @@
     "signature": "updateTrendline(chartId:string,seriesIndex:number,trendlineIndex:number,updates:Partial<TrendlineConfig>,):Promise<ChartMutationReceipt>;",
     "returnType": "Promise<ChartMutationReceipt>",
     "returnCategory": "receipt",
-    "disposition": "receiptExistingNeedsBase",
-    "rationale": "Generated initial disposition; refine as receipt waves migrate this API."
+    "disposition": "noReceiptNeeded",
+    "rationale": "Returns an OperationReceiptBase-derived receipt with the public receipt base fields."
   },
   {
     "key": "types/api/src/api/worksheet/collections/drawing-collection.ts#WorksheetDrawingCollection.add",
@@ -2540,8 +2552,8 @@
     "signature": "add(position:Partial<ObjectPosition>,options?:CreateDrawingOptions,):Promise<FloatingObjectHandleMutationReceipt<DrawingHandle>>;",
     "returnType": "Promise<FloatingObjectHandleMutationReceipt<DrawingHandle>>",
     "returnCategory": "receipt",
-    "disposition": "receiptRequired",
-    "rationale": "Generated initial disposition; refine as receipt waves migrate this API."
+    "disposition": "noReceiptNeeded",
+    "rationale": "Returns an OperationReceiptBase-derived receipt with the public receipt base fields."
   },
   {
     "key": "types/api/src/api/worksheet/collections/equation-collection.ts#WorksheetEquationCollection.add",
@@ -2552,8 +2564,8 @@
     "signature": "add(config:EquationConfig):Promise<FloatingObjectHandleMutationReceipt<EquationHandle>>;",
     "returnType": "Promise<FloatingObjectHandleMutationReceipt<EquationHandle>>",
     "returnCategory": "receipt",
-    "disposition": "receiptRequired",
-    "rationale": "Generated initial disposition; refine as receipt waves migrate this API."
+    "disposition": "noReceiptNeeded",
+    "rationale": "Returns an OperationReceiptBase-derived receipt with the public receipt base fields."
   },
   {
     "key": "types/api/src/api/worksheet/collections/object-collection.ts#WorksheetObjectCollection.bringForward",
@@ -2612,8 +2624,8 @@
     "signature": "remove(id:string):Promise<FloatingObjectCollectionRemoveReceipt>;",
     "returnType": "Promise<FloatingObjectCollectionRemoveReceipt>",
     "returnCategory": "receipt",
-    "disposition": "receiptRequired",
-    "rationale": "Generated initial disposition; refine as receipt waves migrate this API."
+    "disposition": "noReceiptNeeded",
+    "rationale": "Returns an OperationReceiptBase-derived receipt with the public receipt base fields."
   },
   {
     "key": "types/api/src/api/worksheet/collections/object-collection.ts#WorksheetObjectCollection.removeMany",
@@ -2672,8 +2684,8 @@
     "signature": "add(config:PictureConfig):Promise<FloatingObjectHandleMutationReceipt<PictureHandle>>;",
     "returnType": "Promise<FloatingObjectHandleMutationReceipt<PictureHandle>>",
     "returnCategory": "receipt",
-    "disposition": "receiptRequired",
-    "rationale": "Generated initial disposition; refine as receipt waves migrate this API."
+    "disposition": "noReceiptNeeded",
+    "rationale": "Returns an OperationReceiptBase-derived receipt with the public receipt base fields."
   },
   {
     "key": "types/api/src/api/worksheet/collections/shape-collection.ts#WorksheetShapeCollection.add",
@@ -2684,8 +2696,8 @@
     "signature": "add(config:ShapeConfig):Promise<FloatingObjectHandleMutationReceipt<ShapeHandle>>;",
     "returnType": "Promise<FloatingObjectHandleMutationReceipt<ShapeHandle>>",
     "returnCategory": "receipt",
-    "disposition": "receiptRequired",
-    "rationale": "Generated initial disposition; refine as receipt waves migrate this API."
+    "disposition": "noReceiptNeeded",
+    "rationale": "Returns an OperationReceiptBase-derived receipt with the public receipt base fields."
   },
   {
     "key": "types/api/src/api/worksheet/collections/text-effects-collection.ts#WorksheetTextEffectCollection.add",
@@ -2696,8 +2708,8 @@
     "signature": "add(config:CreateTextEffectInput,):Promise<FloatingObjectHandleMutationReceipt<TextEffectHandle>>;",
     "returnType": "Promise<FloatingObjectHandleMutationReceipt<TextEffectHandle>>",
     "returnCategory": "receipt",
-    "disposition": "receiptRequired",
-    "rationale": "Generated initial disposition; refine as receipt waves migrate this API."
+    "disposition": "noReceiptNeeded",
+    "rationale": "Returns an OperationReceiptBase-derived receipt with the public receipt base fields."
   },
   {
     "key": "types/api/src/api/worksheet/collections/textbox-collection.ts#WorksheetTextBoxCollection.add",
@@ -2708,8 +2720,8 @@
     "signature": "add(config:TextBoxConfig):Promise<FloatingObjectHandleMutationReceipt<TextBoxHandle>>;",
     "returnType": "Promise<FloatingObjectHandleMutationReceipt<TextBoxHandle>>",
     "returnCategory": "receipt",
-    "disposition": "receiptRequired",
-    "rationale": "Generated initial disposition; refine as receipt waves migrate this API."
+    "disposition": "noReceiptNeeded",
+    "rationale": "Returns an OperationReceiptBase-derived receipt with the public receipt base fields."
   },
   {
     "key": "types/api/src/api/worksheet/comments.ts#WorksheetComments.add",
@@ -3800,8 +3812,8 @@
     "signature": "duplicate(offsetX?:number,offsetY?:number,):Promise<FloatingObjectHandleMutationReceipt<ChartHandle>>;",
     "returnType": "Promise<FloatingObjectHandleMutationReceipt<ChartHandle>>",
     "returnCategory": "receipt",
-    "disposition": "receiptRequired",
-    "rationale": "Generated initial disposition; refine as receipt waves migrate this API."
+    "disposition": "noReceiptNeeded",
+    "rationale": "Returns an OperationReceiptBase-derived receipt with the public receipt base fields."
   },
   {
     "key": "types/api/src/api/worksheet/handles/connector-handle.ts#ConnectorHandle.duplicate",
@@ -3812,8 +3824,8 @@
     "signature": "duplicate(offsetX?:number,offsetY?:number,):Promise<FloatingObjectHandleMutationReceipt<ConnectorHandle>>;",
     "returnType": "Promise<FloatingObjectHandleMutationReceipt<ConnectorHandle>>",
     "returnCategory": "receipt",
-    "disposition": "receiptRequired",
-    "rationale": "Generated initial disposition; refine as receipt waves migrate this API."
+    "disposition": "noReceiptNeeded",
+    "rationale": "Returns an OperationReceiptBase-derived receipt with the public receipt base fields."
   },
   {
     "key": "types/api/src/api/worksheet/handles/connector-handle.ts#ConnectorHandle.update",
@@ -3836,8 +3848,8 @@
     "signature": "duplicate(offsetX?:number,offsetY?:number,):Promise<FloatingObjectHandleMutationReceipt<DiagramHandle>>;",
     "returnType": "Promise<FloatingObjectHandleMutationReceipt<DiagramHandle>>",
     "returnCategory": "receipt",
-    "disposition": "receiptRequired",
-    "rationale": "Generated initial disposition; refine as receipt waves migrate this API."
+    "disposition": "noReceiptNeeded",
+    "rationale": "Returns an OperationReceiptBase-derived receipt with the public receipt base fields."
   },
   {
     "key": "types/api/src/api/worksheet/handles/drawing-handle.ts#DrawingHandle.addStroke",
@@ -3872,8 +3884,8 @@
     "signature": "duplicate(offsetX?:number,offsetY?:number,):Promise<FloatingObjectHandleMutationReceipt<DrawingHandle>>;",
     "returnType": "Promise<FloatingObjectHandleMutationReceipt<DrawingHandle>>",
     "returnCategory": "receipt",
-    "disposition": "receiptRequired",
-    "rationale": "Generated initial disposition; refine as receipt waves migrate this API."
+    "disposition": "noReceiptNeeded",
+    "rationale": "Returns an OperationReceiptBase-derived receipt with the public receipt base fields."
   },
   {
     "key": "types/api/src/api/worksheet/handles/drawing-handle.ts#DrawingHandle.moveStrokes",
@@ -3896,8 +3908,8 @@
     "signature": "duplicate(offsetX?:number,offsetY?:number,):Promise<FloatingObjectHandleMutationReceipt<EquationHandle>>;",
     "returnType": "Promise<FloatingObjectHandleMutationReceipt<EquationHandle>>",
     "returnCategory": "receipt",
-    "disposition": "receiptRequired",
-    "rationale": "Generated initial disposition; refine as receipt waves migrate this API."
+    "disposition": "noReceiptNeeded",
+    "rationale": "Returns an OperationReceiptBase-derived receipt with the public receipt base fields."
   },
   {
     "key": "types/api/src/api/worksheet/handles/equation-handle.ts#EquationHandle.update",
@@ -3920,8 +3932,8 @@
     "signature": "duplicate(offsetX?:number,offsetY?:number,):Promise<FloatingObjectHandleMutationReceipt<OleObjectHandle>>;",
     "returnType": "Promise<FloatingObjectHandleMutationReceipt<OleObjectHandle>>",
     "returnCategory": "receipt",
-    "disposition": "receiptRequired",
-    "rationale": "Generated initial disposition; refine as receipt waves migrate this API."
+    "disposition": "noReceiptNeeded",
+    "rationale": "Returns an OperationReceiptBase-derived receipt with the public receipt base fields."
   },
   {
     "key": "types/api/src/api/worksheet/handles/picture-handle.ts#PictureHandle.duplicate",
@@ -3932,8 +3944,8 @@
     "signature": "duplicate(offsetX?:number,offsetY?:number,):Promise<FloatingObjectHandleMutationReceipt<PictureHandle>>;",
     "returnType": "Promise<FloatingObjectHandleMutationReceipt<PictureHandle>>",
     "returnCategory": "receipt",
-    "disposition": "receiptRequired",
-    "rationale": "Generated initial disposition; refine as receipt waves migrate this API."
+    "disposition": "noReceiptNeeded",
+    "rationale": "Returns an OperationReceiptBase-derived receipt with the public receipt base fields."
   },
   {
     "key": "types/api/src/api/worksheet/handles/picture-handle.ts#PictureHandle.update",
@@ -3956,8 +3968,8 @@
     "signature": "duplicate(offsetX?:number,offsetY?:number,):Promise<FloatingObjectHandleMutationReceipt<ShapeHandle>>;",
     "returnType": "Promise<FloatingObjectHandleMutationReceipt<ShapeHandle>>",
     "returnCategory": "receipt",
-    "disposition": "receiptRequired",
-    "rationale": "Generated initial disposition; refine as receipt waves migrate this API."
+    "disposition": "noReceiptNeeded",
+    "rationale": "Returns an OperationReceiptBase-derived receipt with the public receipt base fields."
   },
   {
     "key": "types/api/src/api/worksheet/handles/shape-handle.ts#ShapeHandle.update",
@@ -3980,8 +3992,8 @@
     "signature": "duplicate(offsetX?:number,offsetY?:number,):Promise<FloatingObjectHandleMutationReceipt<SlicerHandle>>;",
     "returnType": "Promise<FloatingObjectHandleMutationReceipt<SlicerHandle>>",
     "returnCategory": "receipt",
-    "disposition": "receiptRequired",
-    "rationale": "Generated initial disposition; refine as receipt waves migrate this API."
+    "disposition": "noReceiptNeeded",
+    "rationale": "Returns an OperationReceiptBase-derived receipt with the public receipt base fields."
   },
   {
     "key": "types/api/src/api/worksheet/handles/text-effects-handle.ts#TextEffectHandle.duplicate",
@@ -3992,8 +4004,8 @@
     "signature": "duplicate(offsetX?:number,offsetY?:number,):Promise<FloatingObjectHandleMutationReceipt<TextEffectHandle>>;",
     "returnType": "Promise<FloatingObjectHandleMutationReceipt<TextEffectHandle>>",
     "returnCategory": "receipt",
-    "disposition": "receiptRequired",
-    "rationale": "Generated initial disposition; refine as receipt waves migrate this API."
+    "disposition": "noReceiptNeeded",
+    "rationale": "Returns an OperationReceiptBase-derived receipt with the public receipt base fields."
   },
   {
     "key": "types/api/src/api/worksheet/handles/text-effects-handle.ts#TextEffectHandle.update",
@@ -4016,8 +4028,8 @@
     "signature": "duplicate(offsetX?:number,offsetY?:number,):Promise<FloatingObjectHandleMutationReceipt<TextBoxHandle>>;",
     "returnType": "Promise<FloatingObjectHandleMutationReceipt<TextBoxHandle>>",
     "returnCategory": "receipt",
-    "disposition": "receiptRequired",
-    "rationale": "Generated initial disposition; refine as receipt waves migrate this API."
+    "disposition": "noReceiptNeeded",
+    "rationale": "Returns an OperationReceiptBase-derived receipt with the public receipt base fields."
   },
   {
     "key": "types/api/src/api/worksheet/handles/textbox-handle.ts#TextBoxHandle.update",
@@ -4076,8 +4088,8 @@
     "signature": "duplicate(offsetX?:number,offsetY?:number,):Promise<FloatingObjectHandleMutationReceipt<FloatingObjectHandle>>;",
     "returnType": "Promise<FloatingObjectHandleMutationReceipt<FloatingObjectHandle>>",
     "returnCategory": "receipt",
-    "disposition": "receiptRequired",
-    "rationale": "Generated initial disposition; refine as receipt waves migrate this API."
+    "disposition": "noReceiptNeeded",
+    "rationale": "Returns an OperationReceiptBase-derived receipt with the public receipt base fields."
   },
   {
     "key": "types/api/src/api/worksheet/handles/types.ts#FloatingObjectHandle.move",

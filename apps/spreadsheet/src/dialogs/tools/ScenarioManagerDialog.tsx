@@ -356,10 +356,15 @@ export function ScenarioManagerDialog() {
 
     try {
       const receipt = await wb.scenarios.apply(selectedScenario.id);
-      if (receipt.status === 'failed') {
+      if (receipt.status === 'failed' || receipt.status === 'partial') {
         setValidationError(
           'general',
-          receiptErrorMessage(receipt.diagnostics, 'Scenario could not be applied.'),
+          receiptErrorMessage(
+            receipt.diagnostics,
+            receipt.status === 'partial'
+              ? 'Scenario was only partially applied.'
+              : 'Scenario could not be applied.',
+          ),
         );
         return;
       }

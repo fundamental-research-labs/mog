@@ -28,7 +28,7 @@ import {
   toFloatingObject,
   createMinimalFloatingObject,
 } from '../../../bridges/compute/floating-object-mapper';
-import { invalidShapeConfig } from '../../../errors/api';
+import { invalidShapeConfig, operationFailed } from '../../../errors/api';
 import type { SpreadsheetObjectManager } from '../../../floating-objects';
 import {
   withFloatingObjectMutationReceiptBase,
@@ -41,6 +41,15 @@ import type { DocumentContext } from './shared';
 // =============================================================================
 // Private Helpers
 // =============================================================================
+
+const EMU_PER_PX = 9525;
+
+function anchorOffsetPx(
+  anchor: { anchorColOffsetEmu?: number; anchorRowOffsetEmu?: number },
+  axis: 'x' | 'y',
+): number {
+  return ((axis === 'x' ? anchor.anchorColOffsetEmu : anchor.anchorRowOffsetEmu) ?? 0) / EMU_PER_PX;
+}
 
 /**
  * Convert internal ShapeObject to API Shape.
@@ -87,6 +96,9 @@ function buildMutationReceipt(
   action: 'create' | 'update',
   sheetId: SheetId,
 ): FloatingObjectMutationReceipt {
+  if (!change.objectId) {
+    throw operationFailed(`${action}Shape`, 'mutation returned no object ID');
+  }
   const bounds: ObjectBounds = change.bounds
     ? {
         x: change.bounds.x,
@@ -117,6 +129,9 @@ function buildFallbackMutationReceipt(
   id: string,
   bounds: ObjectBounds,
 ): FloatingObjectMutationReceipt {
+  if (!id) {
+    throw operationFailed(`${action}Shape`, 'mutation returned no object ID');
+  }
   return withFloatingObjectMutationReceiptBase(
     {
       domain: 'floatingObject',
@@ -127,6 +142,21 @@ function buildFallbackMutationReceipt(
     },
     sheetId,
   );
+}
+
+function buildNoOpUpdateReceipt(sheetId: SheetId, id: string): FloatingObjectMutationReceipt {
+  return {
+    domain: 'floatingObject',
+    action: 'update',
+    id,
+    object: createMinimalFloatingObject('shape', id, sheetId),
+    bounds: { x: 0, y: 0, width: 0, height: 0, rotation: 0 },
+    kind: 'floatingObject.update',
+    status: 'noOp',
+    effects: [],
+    diagnostics: [],
+    sheetId,
+  };
 }
 
 // =============================================================================
@@ -250,6 +280,17 @@ export async function updateShape(
   const styleUpdate: ShapeStyleUpdate = {};
   let hasStyleUpdate = false;
   let lastResult: { floatingObjectChanges?: FloatingObjectChange[] } | undefined;
+  let currentWire: WireFloatingObject | null | undefined;
+
+  async function readCurrentWire(): Promise<WireFloatingObject> {
+    if (currentWire === undefined) {
+      currentWire = await ctx.computeBridge.getFloatingObjectTyped(sheetId, shapeId);
+    }
+    if (!currentWire) {
+      throw operationFailed('updateShape', `shape ${shapeId} was not found`);
+    }
+    return currentWire;
+  }
 
   if (updates.fill !== undefined) {
     styleUpdate.fill = updates.fill as ShapeStyleUpdate['fill'];
@@ -287,7 +328,9 @@ export async function updateShape(
     updates.name !== undefined ||
     updates.lockAspectRatio !== undefined ||
     updates.altTextTitle !== undefined ||
-    updates.displayName !== undefined
+    updates.displayName !== undefined ||
+    updates.pixelX !== undefined ||
+    updates.pixelY !== undefined
   ) {
     const genericUpdates: Record<string, unknown> = {};
     if (updates.visible !== undefined) genericUpdates.visible = updates.visible;
@@ -299,14 +342,32 @@ export async function updateShape(
       genericUpdates.lockAspectRatio = updates.lockAspectRatio;
     if (updates.altTextTitle !== undefined) genericUpdates.altTextTitle = updates.altTextTitle;
     if (updates.displayName !== undefined) genericUpdates.displayName = updates.displayName;
+    if (updates.pixelX !== undefined) genericUpdates.pixelX = updates.pixelX;
+    if (updates.pixelY !== undefined) genericUpdates.pixelY = updates.pixelY;
     lastResult = await ctx.computeBridge.updateFloatingObject(sheetId, shapeId, genericUpdates);
   }
 
   // Handle position updates separately
-  if (updates.width !== undefined && updates.height !== undefined) {
+  if (updates.width !== undefined || updates.height !== undefined) {
+    const wire = await readCurrentWire();
     lastResult = await ctx.computeBridge.resizeFloatingObjectTyped(sheetId, shapeId, {
-      width: updates.width,
-      height: updates.height,
+      width: updates.width ?? wire.width ?? 0,
+      height: updates.height ?? wire.height ?? 0,
+    });
+  }
+  if (
+    updates.anchorRow !== undefined ||
+    updates.anchorCol !== undefined ||
+    updates.xOffset !== undefined ||
+    updates.yOffset !== undefined
+  ) {
+    const wire = await readCurrentWire();
+    lastResult = await ctx.computeBridge.moveFloatingObjectTyped(sheetId, shapeId, {
+      type: 'absolute',
+      anchorRow: updates.anchorRow ?? wire.anchor.anchorRow,
+      anchorCol: updates.anchorCol ?? wire.anchor.anchorCol,
+      xOffset: updates.xOffset ?? anchorOffsetPx(wire.anchor, 'x'),
+      yOffset: updates.yOffset ?? anchorOffsetPx(wire.anchor, 'y'),
     });
   }
   if (updates.rotation !== undefined) {
@@ -320,6 +381,10 @@ export async function updateShape(
   const change = lastResult?.floatingObjectChanges?.[0];
   if (change?.data) {
     return buildMutationReceipt(change, 'update', sheetId);
+  }
+
+  if (!lastResult) {
+    return buildNoOpUpdateReceipt(sheetId, shapeId);
   }
 
   return buildFallbackMutationReceipt(sheetId, 'update', shapeId, {

@@ -23,11 +23,12 @@ import type { ActionDependencies } from '@mog-sdk/contracts/actions';
 import { sheetId as makeSheetId } from '@mog-sdk/contracts/core';
 
 import * as ChartHandlers from '../charts';
-import { createMockFileHandle, createMockPlatform, createMockShellService } from './test-helpers';
-
-// =============================================================================
-// TEST UTILITIES
-// =============================================================================
+import {
+  createChartAddReceipt,
+  createMockFileHandle,
+  createMockPlatform,
+  createMockShellService,
+} from './test-helpers';
 
 /**
  * Create minimal mock action dependencies for testing.
@@ -65,7 +66,7 @@ function createMockDeps(overrides?: Partial<ActionDependencies>): ActionDependen
     charts: {
       get: jest.fn().mockResolvedValue(null),
       list: jest.fn().mockResolvedValue([]),
-      add: jest.fn().mockResolvedValue({ id: 'new-chart-id' }),
+      add: jest.fn().mockResolvedValue(createChartAddReceipt()),
       update: jest.fn().mockResolvedValue(undefined),
       remove: jest.fn().mockResolvedValue(undefined),
       bringToFront: jest.fn().mockResolvedValue(undefined),

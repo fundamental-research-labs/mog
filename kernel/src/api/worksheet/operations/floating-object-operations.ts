@@ -850,6 +850,10 @@ function buildBridgeMutationReceipt(
   fallbackSheetId: SheetId,
   fallbackType: 'shape' | 'connector' | 'picture' = 'shape',
 ): FloatingObjectMutationReceipt {
+  const objectId = change?.objectId ?? fallbackId;
+  if (!objectId) {
+    throw operationFailed('floatingObjectMutation', 'mutation returned no object ID');
+  }
   const bounds: ObjectBounds = change?.bounds
     ? {
         x: change.bounds.x,
@@ -864,10 +868,10 @@ function buildBridgeMutationReceipt(
     {
       domain: 'floatingObject',
       action,
-      id: change?.objectId ?? fallbackId,
+      id: objectId,
       object: change?.data
         ? toFloatingObject(change.data as WireFloatingObject)
-        : createMinimalFloatingObject(fallbackType, fallbackId, fallbackSheetId),
+        : createMinimalFloatingObject(fallbackType, objectId, fallbackSheetId),
       bounds,
     },
     fallbackSheetId,

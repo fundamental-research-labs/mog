@@ -1335,12 +1335,13 @@ export class WorksheetTablesImpl implements WorksheetTables {
     if (!before) throw new KernelError('COMPUTE_ERROR', `Table not found: ${tableName}`);
     const beforeRange = parseTableRange(before);
     const rowCount = await this.getRowCount(tableName);
+    const insertedDataRowIndex = index == null ? rowCount : Math.max(0, Math.min(index, rowCount));
     const preflightInsertRow =
       index == null
         ? before.hasTotalsRow
           ? beforeRange.endRow
           : beforeRange.endRow + 1
-        : dataRowToSheetRow(before, Math.max(0, Math.min(index, rowCount)));
+        : dataRowToSheetRow(before, insertedDataRowIndex);
     await assertTableRowsInsertAllowed(
       this.ctx,
       this.sheetId,
@@ -1430,7 +1431,7 @@ export class WorksheetTablesImpl implements WorksheetTables {
         ...before,
         range: newTableRange,
       },
-      index: insertRow,
+      index: insertedDataRowIndex,
       range: rowRange,
     });
   }

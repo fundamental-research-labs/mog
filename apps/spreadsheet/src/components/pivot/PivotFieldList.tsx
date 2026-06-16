@@ -439,6 +439,8 @@ export function PivotFieldList({
           canDrag ? 'cursor-grab' : 'cursor-default'
         } ${isDragging ? 'opacity-50' : ''} ${isSelected ? 'ring-2 ring-ss-primary' : ''} bg-ss-surface-hover`}
         draggable={canDrag}
+        title={field.name}
+        aria-label={field.name}
         onDragStart={(event) => handleDragStart(event, state)}
         onDragEnd={handleDragEnd}
         onClick={(event) => {
@@ -454,7 +456,9 @@ export function PivotFieldList({
         data-pivot-selected={isSelected ? 'true' : 'false'}
       >
         <DataTypeIcon dataType={field.dataType} />
-        <span className="min-w-0 flex-1 truncate">{field.name}</span>
+        <span className="min-w-0 flex-1 truncate" title={field.name} aria-label={field.name}>
+          {field.name}
+        </span>
       </div>
     );
   };
@@ -490,6 +494,8 @@ export function PivotFieldList({
           isValueField ? 'bg-ss-primary-light' : 'bg-ss-surface-hover'
         }`}
         draggable={canDrag}
+        title={label}
+        aria-label={label}
         onDragStart={(event) => handleDragStart(event, state)}
         onDragEnd={handleDragEnd}
         onDragOver={(event) => handleDragOver(event, placement.area)}
@@ -521,7 +527,9 @@ export function PivotFieldList({
       >
         <div className="flex w-full min-w-0 items-center gap-1.5">
           <DataTypeIcon dataType={field.dataType} />
-          <span className="min-w-0 flex-1 truncate">{label}</span>
+          <span className="min-w-0 flex-1 truncate" title={label} aria-label={label}>
+            {label}
+          </span>
           {canRemoveFields && (
             <button
               type="button"

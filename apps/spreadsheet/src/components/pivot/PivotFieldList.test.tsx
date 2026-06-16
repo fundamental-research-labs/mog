@@ -303,7 +303,11 @@ describe('PivotFieldList placement editor', () => {
     const controls = valueChip.querySelector('[data-pivot-target="placement-controls"]');
 
     expect(valueChip).toHaveClass('w-full', 'max-w-full', 'min-w-0');
+    expect(valueChip).toHaveAttribute('title', longName);
+    expect(valueChip).toHaveAttribute('aria-label', longName);
     expect(label).toHaveClass('min-w-0', 'flex-1', 'truncate');
+    expect(label).toHaveAttribute('title', longName);
+    expect(label).toHaveAttribute('aria-label', longName);
     expect(controls).toHaveClass('w-full', 'min-w-0');
     expect(screen.getByRole('combobox', { name: /Sort values by/i })).toHaveClass('min-w-0');
   });

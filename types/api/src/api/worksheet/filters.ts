@@ -139,7 +139,7 @@ export interface WorksheetFilters {
    *
    * @param range - A1-style range string (e.g. "A1:D100") or a CellRange object
    */
-  add(range: string | CellRange): Promise<void>;
+  add(range: string | CellRange): Promise<AutoFilterSetReceipt>;
 
   /**
    * Apply an Excel Advanced Filter.
@@ -174,7 +174,7 @@ export interface WorksheetFilters {
    * Clear the auto-filter from the sheet.
    * Removes all filters, not just criteria.
    */
-  clear(): Promise<void>;
+  clear(): Promise<AutoFilterClearReceipt>;
 
   /**
    * @deprecated Use {@link add} instead.

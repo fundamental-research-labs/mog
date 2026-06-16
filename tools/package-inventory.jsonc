@@ -147,6 +147,7 @@
       "./actors/diagram": { "disposition": "public-experimental" },
       "./api": { "disposition": "public-experimental" },
       "./api/mutation-receipt": { "disposition": "public-experimental" },
+      "./api/operation-receipt": { "disposition": "public-experimental" },
       "./api-errors": { "disposition": "public-experimental" },
       "./apps": { "disposition": "public-experimental" },
       "./apps/api": { "disposition": "public-experimental" },

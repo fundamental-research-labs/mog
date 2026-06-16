@@ -118,6 +118,75 @@ describe('WorksheetFiltersImpl.byColor', () => {
     expect(ctx.computeBridge.applyFilter).toHaveBeenCalledWith(SHEET_ID, 'explicit-filter');
   });
 
+  it('returns a base operation receipt when setting an auto-filter', async () => {
+    const receipt = await filters.add('A1:B10');
+
+    expect(ctx.computeBridge.createFilter).toHaveBeenCalledWith(SHEET_ID, {
+      startRow: 0,
+      startCol: 0,
+      endRow: 9,
+      endCol: 1,
+    });
+    expect(receipt).toEqual({
+      kind: 'autoFilterSet',
+      status: 'applied',
+      effects: [
+        {
+          type: 'createdObject',
+          sheetId: SHEET_ID,
+          range: 'A1:B10',
+          details: { objectType: 'filter' },
+        },
+        {
+          type: 'changedFilterProjection',
+          sheetId: SHEET_ID,
+          range: 'A1:B10',
+        },
+      ],
+      diagnostics: [],
+      range: 'A1:B10',
+    });
+  });
+
+  it('returns applied and no-op receipts when clearing auto-filters', async () => {
+    const applied = await filters.clear();
+
+    expect(ctx.computeBridge.deleteFilter).toHaveBeenCalledWith(SHEET_ID, FILTER_ID);
+    expect(applied).toEqual({
+      kind: 'autoFilterClear',
+      status: 'applied',
+      effects: [
+        {
+          type: 'removedObject',
+          sheetId: SHEET_ID,
+          count: 1,
+          details: { objectType: 'filter' },
+        },
+        {
+          type: 'changedFilterProjection',
+          sheetId: SHEET_ID,
+          count: 1,
+        },
+      ],
+      diagnostics: [],
+      clearedCount: 1,
+    });
+
+    ctx.computeBridge.getFiltersInSheet.mockResolvedValue([]);
+    ctx.computeBridge.deleteFilter.mockClear();
+
+    const noOp = await filters.clear();
+
+    expect(ctx.computeBridge.deleteFilter).not.toHaveBeenCalled();
+    expect(noOp).toEqual({
+      kind: 'autoFilterClear',
+      status: 'noOp',
+      effects: [],
+      diagnostics: [],
+      clearedCount: 0,
+    });
+  });
+
   it('throws when no auto-filter exists and no filterId is provided', async () => {
     ctx = createMockCtx({ existingFilters: [] });
     filters = new WorksheetFiltersImpl(ctx, SHEET_ID);

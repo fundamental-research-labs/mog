@@ -24,6 +24,7 @@ export type {
   FindCellsValueType,
   FoundCell,
 } from './worksheet';
+export type * from './operation-receipt';
 export type * from '@mog/types-api/api';
 export type {
   ImportDiagnosticDetails,

@@ -8421,8 +8421,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "add(range: string | CellRange): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "add(range: string | CellRange): Promise<AutoFilterSetReceipt>;",
+      "typeText": "Promise<AutoFilterSetReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/filters.ts"
@@ -8516,8 +8516,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "clear(): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "clear(): Promise<AutoFilterClearReceipt>;",
+      "typeText": "Promise<AutoFilterClearReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/filters.ts"
@@ -26725,8 +26725,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "add(range: string | CellRange): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "add(range: string | CellRange): Promise<AutoFilterSetReceipt>;",
+      "typeText": "Promise<AutoFilterSetReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/filters.ts"
@@ -26820,8 +26820,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "clear(): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "clear(): Promise<AutoFilterClearReceipt>;",
+      "typeText": "Promise<AutoFilterClearReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/filters.ts"

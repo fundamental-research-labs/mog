@@ -121,6 +121,11 @@
       "types": "./dist/api/mutation-receipt.d.ts",
       "import": "./dist/api/mutation-receipt.js"
     },
+    "./api/operation-receipt": {
+      "development": "./src/api/operation-receipt.ts",
+      "types": "./dist/api/operation-receipt.d.ts",
+      "import": "./dist/api/operation-receipt.js"
+    },
     "./api-errors": {
       "development": "./src/api-errors.ts",
       "types": "./dist/api-errors.d.ts",
@@ -811,6 +816,10 @@
       "./api/mutation-receipt": {
         "types": "./dist/api/mutation-receipt.d.ts",
         "import": "./dist/api/mutation-receipt.js"
+      },
+      "./api/operation-receipt": {
+        "types": "./dist/api/operation-receipt.d.ts",
+        "import": "./dist/api/operation-receipt.js"
       },
       "./api-errors": {
         "types": "./dist/api-errors.d.ts",

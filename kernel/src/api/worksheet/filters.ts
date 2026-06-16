@@ -342,9 +342,9 @@ export class WorksheetFiltersImpl implements WorksheetFilters {
   }
 
   /** Standard alias for {@link setAutoFilter}. */
-  async add(range: string | CellRange): Promise<void> {
+  async add(range: string | CellRange): Promise<AutoFilterSetReceipt> {
     this._ensureWritable('filters.add');
-    await this.setAutoFilter(range);
+    return this.setAutoFilter(range);
   }
 
   /**
@@ -402,8 +402,8 @@ export class WorksheetFiltersImpl implements WorksheetFilters {
   }
 
   /** Standard alias for {@link clearAutoFilter}. */
-  async clear(): Promise<void> {
-    await this.clearAutoFilter();
+  async clear(): Promise<AutoFilterClearReceipt> {
+    return this.clearAutoFilter();
   }
 
   /** @deprecated Use {@link add} instead. */
@@ -420,7 +420,25 @@ export class WorksheetFiltersImpl implements WorksheetFilters {
         endRow: parsed.endRow,
         endCol: parsed.endCol,
       });
-      return { kind: 'autoFilterSet', range };
+      return {
+        kind: 'autoFilterSet',
+        status: 'applied',
+        effects: [
+          {
+            type: 'createdObject',
+            sheetId: this.sheetId,
+            range,
+            details: { objectType: 'filter' },
+          },
+          {
+            type: 'changedFilterProjection',
+            sheetId: this.sheetId,
+            range,
+          },
+        ],
+        diagnostics: [],
+        range,
+      };
     } else {
       if (
         range.startRow < 0 ||
@@ -442,7 +460,25 @@ export class WorksheetFiltersImpl implements WorksheetFilters {
         endCol: range.endCol,
       });
       const rangeStr = `${toA1(range.startRow, range.startCol)}:${toA1(range.endRow, range.endCol)}`;
-      return { kind: 'autoFilterSet', range: rangeStr };
+      return {
+        kind: 'autoFilterSet',
+        status: 'applied',
+        effects: [
+          {
+            type: 'createdObject',
+            sheetId: this.sheetId,
+            range: rangeStr,
+            details: { objectType: 'filter' },
+          },
+          {
+            type: 'changedFilterProjection',
+            sheetId: this.sheetId,
+            range: rangeStr,
+          },
+        ],
+        diagnostics: [],
+        range: rangeStr,
+      };
     }
   }
 
@@ -456,7 +492,28 @@ export class WorksheetFiltersImpl implements WorksheetFilters {
     for (const filter of filters) {
       await this.ctx.computeBridge.deleteFilter(this.sheetId, filter.id);
     }
-    return { kind: 'autoFilterClear' };
+    return {
+      kind: 'autoFilterClear',
+      status: filters.length === 0 ? 'noOp' : 'applied',
+      effects:
+        filters.length === 0
+          ? []
+          : [
+              {
+                type: 'removedObject',
+                sheetId: this.sheetId,
+                count: filters.length,
+                details: { objectType: 'filter' },
+              },
+              {
+                type: 'changedFilterProjection',
+                sheetId: this.sheetId,
+                count: filters.length,
+              },
+            ],
+      diagnostics: [],
+      clearedCount: filters.length,
+    };
   }
 
   /** @deprecated Use {@link get} instead. */

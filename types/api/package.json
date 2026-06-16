@@ -33,6 +33,11 @@
       "types": "./dist/api/mutation-receipt.d.ts",
       "import": "./dist/api/mutation-receipt.js"
     },
+    "./api/operation-receipt": {
+      "development": "./src/api/operation-receipt.ts",
+      "types": "./dist/api/operation-receipt.d.ts",
+      "import": "./dist/api/operation-receipt.js"
+    },
     "./api/types": {
       "development": "./src/api/types.ts",
       "types": "./dist/api/types.d.ts",

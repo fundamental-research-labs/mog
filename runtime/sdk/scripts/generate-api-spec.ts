@@ -35,6 +35,8 @@ import {
   compatibilityReferencesForPath,
   generateApiCompatibilityIndex,
 } from './api-compatibility-generation';
+import { serializeInterfaceDefinition } from './api-spec-interface-serialization';
+import { REQUIRED_OPERATION_RECEIPT_TYPE_NAMES } from './api-spec-receipt-types';
 import type {
   ApiCompatibilityIndex,
   ApiCompatibilityReference,
@@ -1078,31 +1080,16 @@ function findTypeDefinitions(
 
         const docstring = getJSDocText(node);
         const ownerPackage = getOwnerPackage(sourceFile.fileName);
-        // Serialize properties into a definition string
-        const parts: string[] = [];
-        for (const member of node.members) {
-          if (ts.isPropertySignature(member)) {
-            const propName = member.name?.getText(sourceFile) ?? '';
-            const optional = member.questionToken ? '?' : '';
-            const typeText = member.type?.getText(sourceFile) ?? 'unknown';
-            const propDoc = getJSDocText(member);
-            if (propDoc) {
-              parts.push(`  /** ${propDoc} */`);
-            }
-            parts.push(`  ${propName}${optional}: ${typeText};`);
-          } else if (ts.isMethodSignature(member)) {
-            const sig = getSignatureText(member, sourceFile);
-            const methodDoc = getJSDocText(member);
-            if (methodDoc) {
-              parts.push(`  /** ${methodDoc} */`);
-            }
-            parts.push(`  ${sig};`);
-          }
-        }
-
         result[name] = {
           name,
-          definition: parts.length > 0 ? `{\n${parts.join('\n')}\n}` : '{}',
+          definition: serializeInterfaceDefinition({
+            node,
+            sourceFile,
+            resolveInterface: (heritageName) => {
+              const heritageFile = findInterfaceFile(heritageName);
+              return heritageFile ? parseInterfaceFromFile(heritageFile, heritageName) : null;
+            },
+          }),
           docstring,
           source: getSourceLocation(sourceFile),
           ownership: { package: ownerPackage },
@@ -1240,6 +1227,9 @@ function generate(): ApiSpec {
 
   // --- Step 4: Collect all referenced PascalCase types ---
   const allTypeRefs = new Set<string>();
+  for (const typeName of REQUIRED_OPERATION_RECEIPT_TYPE_NAMES) {
+    allTypeRefs.add(typeName);
+  }
 
   for (const [, iface] of Object.entries(interfaces)) {
     for (const [, fn] of Object.entries(iface.functions)) {

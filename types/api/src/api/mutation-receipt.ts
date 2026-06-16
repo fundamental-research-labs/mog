@@ -8,12 +8,23 @@
 
 import type { ObjectBounds } from '../kernel/floating-object-manager';
 import type { FloatingObject } from '@mog/types-objects/objects/floating-objects';
+import type { OperationReceiptBase } from './operation-receipt';
 import type {
   PivotCommandReceipt,
   PivotKernelMutationReceipt,
   PivotPlacementMutationReceipt,
   PivotReadbackRevision,
 } from '@mog/types-data/data/pivot';
+
+export type {
+  OperationDiagnostic,
+  OperationDiagnosticTarget,
+  OperationEffect,
+  OperationEffectMapping,
+  OperationEffectType,
+  OperationReceiptBase,
+  OperationStatus,
+} from './operation-receipt';
 
 export type {
   PivotCommandReceipt,
@@ -244,14 +255,17 @@ export interface NameRemoveReceipt {
 // =============================================================================
 
 /** Receipt for setting an auto-filter. */
-export interface AutoFilterSetReceipt {
+export interface AutoFilterSetReceipt extends OperationReceiptBase {
   readonly kind: 'autoFilterSet';
+  readonly status: 'applied';
   readonly range: string;
 }
 
 /** Receipt for clearing an auto-filter. */
-export interface AutoFilterClearReceipt {
+export interface AutoFilterClearReceipt extends OperationReceiptBase {
   readonly kind: 'autoFilterClear';
+  readonly status: 'applied' | 'noOp';
+  readonly clearedCount: number;
 }
 
 // =============================================================================

@@ -5,6 +5,7 @@
  * Import path: `@mog-sdk/contracts/api`
  */
 export * from './types';
+export type * from './operation-receipt';
 export type {
   Workbook,
   WorkbookLinks,

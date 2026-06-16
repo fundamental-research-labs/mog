@@ -1,0 +1,280 @@
+#!/usr/bin/env node
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import ts from 'typescript';
+
+const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const API_ROOT = path.join(REPO_ROOT, 'types/api/src/api');
+const INVENTORY_FILE = path.join(REPO_ROOT, 'tools/operation-receipt-inventory.json');
+const API_SPEC_FILE = path.join(REPO_ROOT, 'runtime/sdk/src/generated/api-spec.json');
+const UPDATE = process.argv.includes('--update');
+
+const REQUIRED_GENERATED_RECEIPT_TYPES = [
+  'OperationDiagnostic',
+  'OperationDiagnosticTarget',
+  'OperationEffect',
+  'OperationEffectMapping',
+  'OperationEffectType',
+  'OperationReceiptBase',
+  'OperationStatus',
+];
+
+const DISPOSITIONS = new Set([
+  'noReceiptNeeded',
+  'receiptExistingNeedsBase',
+  'receiptRequired',
+  'lifecycleReceiptRequired',
+]);
+
+const LIFECYCLE_METHODS = new Set([
+  'autoFill',
+  'clearAllCriteria',
+  'clearColumnFilter',
+  'compute',
+  'createDataTable',
+  'dataTable',
+  'fillSeries',
+  'queryPivot',
+  'refresh',
+  'refreshAll',
+  'reapply',
+  'setColumnFilter',
+  'apply',
+  'applyDynamicFilter',
+]);
+
+const LIFECYCLE_INTERFACES = new Set(['WorksheetPivots', 'WorksheetWhatIf']);
+
+const MUTATION_NAME_PATTERN =
+  /^(add|append|apply|autoFill|bring|cancel|clear|clone|commit|convert|copy|create|delete|duplicate|execute|fill|fillSeries|hide|import|insert|materialize|merge|move|paste|reapply|refresh|remove|rename|replace|reset|resize|restore|send|set|show|sort|toggle|undo|unmerge|update|write)/;
+
+function collectTsFiles(dir) {
+  const files = [];
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...collectTsFiles(full));
+    } else if (entry.isFile() && entry.name.endsWith('.ts') && !entry.name.endsWith('.test.ts')) {
+      files.push(full);
+    }
+  }
+  return files;
+}
+
+function repoPath(filePath) {
+  return path.relative(REPO_ROOT, filePath).split(path.sep).join('/');
+}
+
+function compact(text) {
+  return text.replace(/\s+/g, ' ').replace(/\s*([{}()[\]<>,:;|&=])\s*/g, '$1').trim();
+}
+
+function sourceLine(sourceFile, node) {
+  return sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1;
+}
+
+function methodName(member, sourceFile) {
+  return member.name?.getText(sourceFile) ?? '';
+}
+
+function returnTypeText(member, sourceFile) {
+  return compact(member.type?.getText(sourceFile) ?? 'unknown');
+}
+
+function unwrapPromise(typeText) {
+  const match = typeText.match(/^Promise<([\s\S]+)>$/);
+  return match ? match[1] : typeText;
+}
+
+function returnCategory(typeText) {
+  const inner = unwrapPromise(typeText);
+  if (inner === 'void') return 'void';
+  if (/\bReceipt\b|Receipt[>|&\s]/.test(inner) || /Receipt/.test(inner)) return 'receipt';
+  if (/^(boolean|string|number)$/.test(inner)) return 'primitive';
+  if (/^(boolean|string|number)\|/.test(inner) || /\|(boolean|string|number)\b/.test(inner)) {
+    return 'primitive';
+  }
+  if (/\b(Result|Info|Config|State|Handle|Comment|Chart|Slicer|Table|Object)\b/.test(inner)) {
+    return 'domainObject';
+  }
+  return 'other';
+}
+
+function isMutationLike(interfaceName, name) {
+  if (LIFECYCLE_INTERFACES.has(interfaceName) && LIFECYCLE_METHODS.has(name)) return true;
+  if (name === 'dataTable' || name === 'queryPivot' || name === 'fillSeries') return true;
+  if (/^(get|list|has|find|describe|read|subscribe|on|off|watch)/.test(name)) return false;
+  return MUTATION_NAME_PATTERN.test(name);
+}
+
+function defaultDisposition(entry) {
+  if (
+    LIFECYCLE_INTERFACES.has(entry.interface) ||
+    LIFECYCLE_METHODS.has(entry.method) ||
+    entry.method === 'dataTable' ||
+    entry.method === 'queryPivot' ||
+    entry.method === 'fillSeries'
+  ) {
+    return 'lifecycleReceiptRequired';
+  }
+  if (entry.returnCategory === 'receipt') return 'receiptExistingNeedsBase';
+  return 'receiptRequired';
+}
+
+function inventoryEntries() {
+  const files = collectTsFiles(API_ROOT).filter((file) => !file.endsWith('/index.ts'));
+  const entries = [];
+  const keyCounts = new Map();
+
+  for (const file of files) {
+    const text = fs.readFileSync(file, 'utf8');
+    const sourceFile = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true);
+    ts.forEachChild(sourceFile, function visit(node) {
+      if (ts.isInterfaceDeclaration(node)) {
+        const interfaceName = node.name.text;
+        for (const member of node.members) {
+          if (!ts.isMethodSignature(member)) continue;
+          const name = methodName(member, sourceFile);
+          if (!name || !isMutationLike(interfaceName, name)) continue;
+
+          const baseKey = `${repoPath(file)}#${interfaceName}.${name}`;
+          const count = (keyCounts.get(baseKey) ?? 0) + 1;
+          keyCounts.set(baseKey, count);
+          const key = count === 1 ? baseKey : `${baseKey}:${count}`;
+          const typeText = returnTypeText(member, sourceFile);
+          const entry = {
+            key,
+            file: repoPath(file),
+            line: sourceLine(sourceFile, member),
+            interface: interfaceName,
+            method: name,
+            signature: compact(member.getText(sourceFile)),
+            returnType: typeText,
+            returnCategory: returnCategory(typeText),
+          };
+          entries.push({
+            ...entry,
+            disposition: defaultDisposition(entry),
+            rationale: 'Generated initial disposition; refine as receipt waves migrate this API.',
+          });
+        }
+      }
+      ts.forEachChild(node, visit);
+    });
+  }
+
+  return entries.sort((a, b) => a.key.localeCompare(b.key));
+}
+
+function readInventory() {
+  if (!fs.existsSync(INVENTORY_FILE)) return [];
+  return JSON.parse(fs.readFileSync(INVENTORY_FILE, 'utf8'));
+}
+
+function writeInventory(entries) {
+  fs.writeFileSync(INVENTORY_FILE, `${JSON.stringify(entries, null, 2)}\n`);
+}
+
+function mergeInventory(current, existing) {
+  const byKey = new Map(existing.map((entry) => [entry.key, entry]));
+  return current.map((entry) => {
+    const previous = byKey.get(entry.key);
+    if (!previous) return entry;
+    return {
+      ...entry,
+      disposition: previous.disposition,
+      rationale: previous.rationale,
+    };
+  });
+}
+
+function migratedReceiptTypes() {
+  const receiptFile = path.join(API_ROOT, 'mutation-receipt.ts');
+  const text = fs.readFileSync(receiptFile, 'utf8');
+  const names = [];
+  const sourceFile = ts.createSourceFile(receiptFile, text, ts.ScriptTarget.Latest, true);
+  ts.forEachChild(sourceFile, (node) => {
+    if (!ts.isInterfaceDeclaration(node)) return;
+    const extendsBase = node.heritageClauses?.some(
+      (clause) =>
+        clause.token === ts.SyntaxKind.ExtendsKeyword &&
+        clause.types.some((type) => type.expression.getText(sourceFile) === 'OperationReceiptBase'),
+    );
+    if (extendsBase) names.push(node.name.text);
+  });
+  return names;
+}
+
+function verifyGeneratedReceiptDefinitions(errors) {
+  if (!fs.existsSync(API_SPEC_FILE)) {
+    errors.push(`Missing generated API spec: ${repoPath(API_SPEC_FILE)}`);
+    return;
+  }
+  const spec = JSON.parse(fs.readFileSync(API_SPEC_FILE, 'utf8'));
+  for (const name of REQUIRED_GENERATED_RECEIPT_TYPES) {
+    if (!spec.types?.[name]) {
+      errors.push(`Generated API spec is missing public operation receipt grammar type ${name}`);
+    }
+  }
+
+  const migrated = migratedReceiptTypes();
+  for (const name of migrated) {
+    const definition = spec.types?.[name]?.definition;
+    if (typeof definition !== 'string') {
+      errors.push(`Generated API spec is missing migrated receipt type ${name}`);
+      continue;
+    }
+    for (const field of ['kind', 'status', 'effects', 'diagnostics']) {
+      if (!new RegExp(`\\b${field}\\??:`).test(definition)) {
+        errors.push(`Generated ${name} definition omits base field ${field}`);
+      }
+    }
+  }
+}
+
+const current = inventoryEntries();
+const existing = readInventory();
+
+if (UPDATE) {
+  writeInventory(mergeInventory(current, existing));
+  console.log(`Updated ${repoPath(INVENTORY_FILE)} with ${current.length} mutation-like methods.`);
+  process.exit(0);
+}
+
+const errors = [];
+const existingByKey = new Map(existing.map((entry) => [entry.key, entry]));
+const currentByKey = new Map(current.map((entry) => [entry.key, entry]));
+
+for (const entry of current) {
+  const recorded = existingByKey.get(entry.key);
+  if (!recorded) {
+    errors.push(`Missing receipt inventory disposition for ${entry.key}`);
+    continue;
+  }
+  if (!DISPOSITIONS.has(recorded.disposition)) {
+    errors.push(`Invalid disposition for ${entry.key}: ${recorded.disposition}`);
+  }
+  if (recorded.returnCategory !== entry.returnCategory || recorded.returnType !== entry.returnType) {
+    errors.push(
+      `Stale receipt inventory return shape for ${entry.key}: expected ${entry.returnType} (${entry.returnCategory}), found ${recorded.returnType} (${recorded.returnCategory})`,
+    );
+  }
+}
+
+for (const entry of existing) {
+  if (!currentByKey.has(entry.key)) {
+    errors.push(`Receipt inventory contains stale method ${entry.key}`);
+  }
+}
+
+verifyGeneratedReceiptDefinitions(errors);
+
+if (errors.length > 0) {
+  console.error(`Operation receipt guard failed with ${errors.length} issue(s):`);
+  for (const error of errors) console.error(`- ${error}`);
+  console.error('\nRun `node tools/check-operation-receipts.mjs --update` after intentional API changes.');
+  process.exit(1);
+}
+
+console.log(`Operation receipt guard passed for ${current.length} mutation-like methods.`);

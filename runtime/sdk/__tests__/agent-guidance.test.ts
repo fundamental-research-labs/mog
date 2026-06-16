@@ -120,6 +120,53 @@ describe('SDK agent API guidance', () => {
     ).toContain('addFormula(');
   });
 
+  it('surfaces receipt-aware examples for lifecycle-heavy worksheet APIs', () => {
+    const examplesFor = (path: string) => {
+      const explanation = api.guidance.explain(path);
+      expect(explanation?.kind).toBe('mog-api');
+      if (explanation?.kind !== 'mog-api') throw new Error(`expected Mog API guidance for ${path}`);
+      expect(explanation.examples.length).toBeGreaterThan(0);
+      return explanation.examples.join('\n');
+    };
+
+    const dataTableCompute = examplesFor('ws.whatIf.dataTable');
+    expect(dataTableCompute).toContain('receipt.status === "failed"');
+    expect(dataTableCompute).toContain('receipt.status === "unsupported"');
+    expect(dataTableCompute).toContain('receipt.status !== "completed"');
+    expect(dataTableCompute).toContain('receipt.diagnostics');
+    expect(dataTableCompute).toContain('receipt.effects');
+    expect(dataTableCompute).toContain('receipt.results');
+
+    const dataTableCreate = examplesFor('ws.whatIf.createDataTable');
+    expect(dataTableCreate).toContain('receipt.status === "partial"');
+    expect(dataTableCreate).toContain('!receipt.materialized');
+    expect(dataTableCreate).toContain('receipt.diagnostics');
+    expect(dataTableCreate).toContain('ws.whatIf.refreshDataTable');
+    expect(dataTableCreate).toContain('receipt.effects');
+
+    const dataTableRepair = examplesFor('ws.whatIf.refreshDataTable');
+    expect(dataTableRepair).toContain('repair.status === "failed"');
+    expect(dataTableRepair).toContain('repair.status === "unsupported"');
+    expect(dataTableRepair).toContain('repair.status === "partial"');
+    expect(dataTableRepair).toContain('repair.diagnostics');
+    expect(dataTableRepair).toContain('repair.effects');
+
+    const pivotMaterialize = examplesFor('ws.pivots.add');
+    expect(pivotMaterialize).toContain('{ lifecycle: "materialize" }');
+    expect(pivotMaterialize).toContain('receipt.status === "failed"');
+    expect(pivotMaterialize).toContain('receipt.status === "partial"');
+    expect(pivotMaterialize).toContain('!receipt.materialized');
+    expect(pivotMaterialize).toContain('ws.pivots.refresh');
+    expect(pivotMaterialize).toContain('receipt.effects');
+
+    const autofillPreview = examplesFor('ws.autoFillPreview');
+    expect(autofillPreview).toContain('ws.autoFillPreview');
+    expect(autofillPreview).toContain('preview.diagnostics');
+    expect(autofillPreview).toContain('preview.referenceDiagnostics');
+    expect(autofillPreview).toContain('preview.status !== "completed"');
+    expect(autofillPreview).toContain('await ws.autoFill');
+  });
+
   it('analyzes and preflights common OfficeJS residue without executing code', () => {
     const source = `
       await Excel.run(async (context) => {

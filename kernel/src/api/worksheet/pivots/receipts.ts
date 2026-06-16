@@ -4,6 +4,7 @@ import type {
   PivotAddReceipt,
   PivotAddWithSheetReceipt,
   PivotCreationLifecycle,
+  PivotRefreshAllReceipt,
   PivotRefreshReceipt,
 } from '@mog-sdk/contracts/api';
 import type { CellRange, SheetId } from '@mog-sdk/contracts/core';
@@ -60,6 +61,23 @@ function materializationFailureDiagnostic(input: {
     },
     recoverable: true,
     nextAction: 'Fix the pivot source/configuration and call ws.pivots.refresh(name).',
+  };
+}
+
+function refreshAllListFailureDiagnostic(input: {
+  sheetId: SheetId;
+  message?: string;
+}): OperationDiagnostic {
+  return {
+    severity: 'error',
+    code: 'PIVOT_REFRESH_ALL_LIST_FAILED',
+    message: input.message ?? 'Pivot refreshAll could not list worksheet pivot tables.',
+    target: {
+      sheetId: input.sheetId,
+      stage: 'refreshAll',
+    },
+    recoverable: true,
+    nextAction: 'Retry ws.pivots.refreshAll() after the worksheet pivot catalog is available.',
   };
 }
 
@@ -150,6 +168,56 @@ export function buildPivotAddReceipt(input: {
     materialized,
     renderedRange,
     result: input.result ?? null,
+  };
+}
+
+export function buildPivotRefreshAllReceipt(input: {
+  sheetId: SheetId;
+  receipts: readonly PivotRefreshReceipt[];
+  listError?: unknown;
+}): PivotRefreshAllReceipt {
+  const pivotIds = input.receipts.map((receipt) => receipt.pivotId);
+  const materializedCount = input.receipts.filter((receipt) => receipt.materialized).length;
+  const failedCount = input.receipts.filter((receipt) => receipt.status !== 'applied').length;
+  const listDiagnostic = input.listError
+    ? [
+        refreshAllListFailureDiagnostic({
+          sheetId: input.sheetId,
+          message: errorMessage(input.listError),
+        }),
+      ]
+    : [];
+  const diagnostics = [
+    ...listDiagnostic,
+    ...input.receipts.flatMap((receipt) => [...receipt.diagnostics]),
+  ];
+  const status: PivotRefreshAllReceipt['status'] = input.listError
+    ? 'failed'
+    : input.receipts.length === 0
+      ? 'noOp'
+      : failedCount === 0
+        ? 'applied'
+        : materializedCount > 0
+          ? 'partial'
+          : 'failed';
+  const effects: OperationEffect[] = input.listError
+    ? []
+    : input.receipts.length === 0
+      ? [{ type: 'worksheetUnchanged', sheetId: input.sheetId }]
+      : input.receipts.flatMap((receipt) => [...receipt.effects]);
+
+  return {
+    kind: 'pivot.refreshAll',
+    status,
+    effects,
+    diagnostics,
+    sheetId: input.sheetId,
+    pivotIds,
+    receipts: input.receipts,
+    materialized: input.receipts.length > 0 && failedCount === 0,
+    materializedCount,
+    failedCount,
+    renderedRanges: input.receipts.map((receipt) => receipt.renderedRange ?? null),
   };
 }
 

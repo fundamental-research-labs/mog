@@ -351,6 +351,19 @@ export interface PivotRefreshReceipt extends OperationReceiptBase {
   readonly result?: PivotTableResult | null;
 }
 
+/** Aggregate receipt for refreshing/materializing every pivot on a worksheet. */
+export interface PivotRefreshAllReceipt extends OperationReceiptBase {
+  readonly kind: 'pivot.refreshAll';
+  readonly status: 'applied' | 'noOp' | 'partial' | 'failed';
+  readonly sheetId: string;
+  readonly pivotIds: readonly string[];
+  readonly receipts: readonly PivotRefreshReceipt[];
+  readonly materialized: boolean;
+  readonly materializedCount: number;
+  readonly failedCount: number;
+  readonly renderedRanges: readonly (CellRange | null)[];
+}
+
 // =============================================================================
 // Discriminated Union
 // =============================================================================
@@ -390,6 +403,7 @@ export type MutationReceipt =
   | PivotAddReceipt
   | PivotAddWithSheetReceipt
   | PivotRefreshReceipt
+  | PivotRefreshAllReceipt
   | PivotKernelMutationReceipt
   | PivotPlacementMutationReceipt
   | PivotCommandReceipt;

@@ -4942,7 +4942,25 @@
       "typeText": "Promise<AutoFillApplyReceipt>",
       "compatibility": [],
       "source": {
-        "file": "types/api/src/api/worksheet.ts"
+        "file": "types/api/src/api/worksheet/fill.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "ws.autoFillPreview",
+      "stableId": "Worksheet.autoFillPreview",
+      "root": "worksheet",
+      "interface": "Worksheet",
+      "member": "autoFillPreview",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "autoFillPreview(\n    sourceRange: string,\n    targetRange: string,\n    fillMode?: AutoFillMode,\n  ): Promise<AutoFillPreviewReceipt>;",
+      "typeText": "Promise<AutoFillPreviewReceipt>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet/fill.ts"
       },
       "ownerPackage": "@mog/types-api"
     },
@@ -8386,7 +8404,7 @@
       "typeText": "Promise<FillSeriesApplyReceipt>",
       "compatibility": [],
       "source": {
-        "file": "types/api/src/api/worksheet.ts"
+        "file": "types/api/src/api/worksheet/fill.ts"
       },
       "ownerPackage": "@mog/types-api"
     },
@@ -13040,8 +13058,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "refreshAll(): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "refreshAll(): Promise<PivotRefreshAllReceipt>;",
+      "typeText": "Promise<PivotRefreshAllReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -23303,7 +23321,25 @@
       "typeText": "Promise<AutoFillApplyReceipt>",
       "compatibility": [],
       "source": {
-        "file": "types/api/src/api/worksheet.ts"
+        "file": "types/api/src/api/worksheet/fill.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "ws.autoFillPreview": {
+      "schemaVersion": "1",
+      "path": "ws.autoFillPreview",
+      "stableId": "Worksheet.autoFillPreview",
+      "root": "worksheet",
+      "interface": "Worksheet",
+      "member": "autoFillPreview",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "autoFillPreview(\n    sourceRange: string,\n    targetRange: string,\n    fillMode?: AutoFillMode,\n  ): Promise<AutoFillPreviewReceipt>;",
+      "typeText": "Promise<AutoFillPreviewReceipt>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet/fill.ts"
       },
       "ownerPackage": "@mog/types-api"
     },
@@ -26747,7 +26783,7 @@
       "typeText": "Promise<FillSeriesApplyReceipt>",
       "compatibility": [],
       "source": {
-        "file": "types/api/src/api/worksheet.ts"
+        "file": "types/api/src/api/worksheet/fill.ts"
       },
       "ownerPackage": "@mog/types-api"
     },
@@ -31401,8 +31437,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "refreshAll(): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "refreshAll(): Promise<PivotRefreshAllReceipt>;",
+      "typeText": "Promise<PivotRefreshAllReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"

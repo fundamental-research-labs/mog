@@ -245,6 +245,49 @@ export interface BoxplotConfigData {
   whiskerType?: string;
 }
 
+export interface BridgeAdjustedRef {
+  refIndex: number;
+  targetRow: number;
+  targetCol: number;
+  targetEndRow: number | null;
+  targetEndCol: number | null;
+  outOfBounds: boolean;
+}
+
+export interface BridgeAutoFillChange {
+  row: number;
+  col: number;
+  type: string;
+}
+
+export interface BridgeAutoFillFormulaPreview {
+  row: number;
+  col: number;
+  formula: string;
+  sourceFormula: string;
+  adjustedRefs: BridgeAdjustedRef[];
+}
+
+export interface BridgeAutoFillPreviewResult {
+  patternType: string;
+  filledCellCount: number;
+  warnings: BridgeAutoFillWarning[];
+  changes: BridgeAutoFillChange[];
+  formulas: BridgeAutoFillFormulaPreview[];
+  referenceDiagnostics: BridgeAutoFillReferenceDiagnostic[];
+}
+
+export interface BridgeAutoFillReferenceDiagnostic {
+  row: number;
+  col: number;
+  refIndex: number;
+  targetRow: number;
+  targetCol: number;
+  targetEndRow: number | null;
+  targetEndCol: number | null;
+  outOfBounds: boolean;
+}
+
 export interface BridgeAutoFillRequest {
   sourceRange: BridgeFillRangeSpec;
   targetRange: BridgeFillRangeSpec;
@@ -254,6 +297,21 @@ export interface BridgeAutoFillRequest {
   includeValues: boolean;
   includeFormats: boolean;
   stepValue: number;
+}
+
+export interface BridgeAutoFillWarning {
+  row: number;
+  col: number;
+  kind: BridgeAutoFillWarningKind;
+}
+
+export type BridgeAutoFillWarningKind =
+  | { type: "mergedCellsInTarget" }
+  | { type: "formulaRefOutOfBounds" } & BridgeAutoFillWarningKind_formulaRefOutOfBounds
+  | { type: "sourceCellEmpty" };
+
+export interface BridgeAutoFillWarningKind_formulaRefOutOfBounds {
+  refIndex: number;
 }
 
 export interface BridgeFillRangeSpec {

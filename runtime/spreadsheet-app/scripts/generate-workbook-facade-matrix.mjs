@@ -31,6 +31,7 @@ const ROUTE_SCREENSHOT = new Set(['captureScreenshot']);
 const UNDO_GROUP = new Set(['undoGroup', 'batch']);
 const POLICY_ADMIN_INTERFACES = new Set(['WorkbookSecurity']);
 const EXPORT_NAMES = new Set(['toCSV', 'toJSON']);
+const READ_NAMES = new Set(['autoFillPreview']);
 const WRITE_NAMES = new Set(['getOrCreateSheet']);
 const WRITE_PREFIXES = [
   'add',
@@ -78,6 +79,9 @@ function classify(interfaceName, methodName) {
   }
   if (methodName === 'calculate') {
     return { decision: 'allow', capability: 'workbook:write' };
+  }
+  if (READ_NAMES.has(methodName)) {
+    return { decision: 'allow', capability: 'workbook:read' };
   }
   if (WRITE_NAMES.has(methodName)) {
     return { decision: 'allow', capability: 'workbook:write' };

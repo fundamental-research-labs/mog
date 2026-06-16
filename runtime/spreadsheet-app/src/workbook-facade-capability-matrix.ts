@@ -3633,6 +3633,10 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
       decision: 'allow',
       capability: 'workbook:write',
     },
+    autoFillPreview: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
     calculate: {
       decision: 'allow',
       capability: 'workbook:write',

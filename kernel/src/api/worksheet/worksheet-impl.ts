@@ -23,6 +23,7 @@ import type {
   ActiveCellEditSource,
   AggregateResult,
   AutoFillApplyReceipt,
+  AutoFillPreviewReceipt,
   Chart,
   ChartConfig,
   ChartReadOptions,
@@ -2315,6 +2316,19 @@ export class WorksheetImpl implements Worksheet {
       fillMode ?? 'auto',
     );
     return result;
+  }
+
+  async autoFillPreview(
+    sourceRange: string,
+    targetRange: string,
+    fillMode?: AutoFillMode,
+  ): Promise<AutoFillPreviewReceipt> {
+    this._assertLive('worksheet.autoFillPreview');
+    const source = parseCellRange(sourceRange);
+    const target = parseCellRange(targetRange);
+    if (!source) throw new KernelError('COMPUTE_ERROR', `Invalid source range: "${sourceRange}"`);
+    if (!target) throw new KernelError('COMPUTE_ERROR', `Invalid target range: "${targetRange}"`);
+    return FillOps.autoFillPreview(this.ctx, this.sheetId, source, target, fillMode ?? 'auto');
   }
 
   async fillSeries(range: string, options: FillSeriesOptions): Promise<FillSeriesApplyReceipt> {

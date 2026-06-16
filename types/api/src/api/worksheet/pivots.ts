@@ -13,6 +13,7 @@ import type {
   PivotCreationLifecycle,
   PivotKernelMutationReceipt,
   PivotReadbackRevision,
+  PivotRefreshAllReceipt,
   PivotRefreshReceipt,
 } from '../mutation-receipt';
 import type { CellRange, CellValue } from '@mog/types-core';
@@ -517,7 +518,7 @@ export interface WorksheetPivots {
   /**
    * Refresh all pivot tables on this worksheet.
    */
-  refreshAll(): Promise<void>;
+  refreshAll(): Promise<PivotRefreshAllReceipt>;
 
   /**
    * Get drill-down data for a pivot table cell, resolved by pivot name.

@@ -5,6 +5,11 @@ export interface InterfaceResolution {
   sourceFile: ts.SourceFile;
 }
 
+export interface InterfaceTypeElement {
+  member: ts.TypeElement;
+  sourceFile: ts.SourceFile;
+}
+
 export type ResolveInterfaceDeclaration = (interfaceName: string) => InterfaceResolution | null;
 
 function getJSDocText(node: ts.Node): string {
@@ -60,10 +65,7 @@ function serializeInterfaceMember(member: ts.TypeElement, sourceFile: ts.SourceF
     const optional = member.questionToken ? '?' : '';
     const typeText = member.type?.getText(sourceFile) ?? 'unknown';
     const propDoc = getJSDocText(member);
-    return [
-      ...(propDoc ? [`  /** ${propDoc} */`] : []),
-      `  ${propName}${optional}: ${typeText};`,
-    ];
+    return [...(propDoc ? [`  /** ${propDoc} */`] : []), `  ${propName}${optional}: ${typeText};`];
   }
 
   if (ts.isMethodSignature(member)) {
@@ -81,31 +83,63 @@ function collectInterfaceMembers(
   resolveInterface: ResolveInterfaceDeclaration,
   visited: Set<string>,
 ): Map<string, string[]> {
+  const typeElements = collectInterfaceTypeElementsInternal(
+    node,
+    sourceFile,
+    resolveInterface,
+    visited,
+  );
+  const members = new Map<string, string[]>();
+  for (const { member, sourceFile: memberSourceFile } of typeElements) {
+    const name = getMemberName(member, memberSourceFile);
+    if (!name) continue;
+    members.set(name, serializeInterfaceMember(member, memberSourceFile));
+  }
+  return members;
+}
+
+function collectInterfaceTypeElementsInternal(
+  node: ts.InterfaceDeclaration,
+  sourceFile: ts.SourceFile,
+  resolveInterface: ResolveInterfaceDeclaration,
+  visited: Set<string>,
+): InterfaceTypeElement[] {
   const key = `${sourceFile.fileName}::${node.name.text}`;
-  if (visited.has(key)) return new Map();
+  if (visited.has(key)) return [];
   visited.add(key);
 
-  const members = new Map<string, string[]>();
+  const members: InterfaceTypeElement[] = [];
   for (const heritageName of getHeritageInterfaceNames(node, sourceFile)) {
     const heritage = resolveInterface(heritageName);
     if (!heritage) continue;
-    for (const [name, lines] of collectInterfaceMembers(
-      heritage.node,
-      heritage.sourceFile,
-      resolveInterface,
-      visited,
-    )) {
-      members.set(name, lines);
-    }
+    members.push(
+      ...collectInterfaceTypeElementsInternal(
+        heritage.node,
+        heritage.sourceFile,
+        resolveInterface,
+        visited,
+      ),
+    );
   }
 
   for (const member of node.members) {
-    const name = getMemberName(member, sourceFile);
-    if (!name) continue;
-    members.set(name, serializeInterfaceMember(member, sourceFile));
+    members.push({ member, sourceFile });
   }
 
   return members;
+}
+
+export function collectInterfaceTypeElements(options: {
+  node: ts.InterfaceDeclaration;
+  sourceFile: ts.SourceFile;
+  resolveInterface: ResolveInterfaceDeclaration;
+}): InterfaceTypeElement[] {
+  return collectInterfaceTypeElementsInternal(
+    options.node,
+    options.sourceFile,
+    options.resolveInterface,
+    new Set(),
+  );
 }
 
 export function serializeInterfaceDefinition(options: {

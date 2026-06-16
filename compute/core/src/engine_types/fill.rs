@@ -34,6 +34,85 @@ pub struct BridgeAutoFillRequest {
     pub step_value: f64,
 }
 
+/// Bridge-facing adjusted formula reference.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BridgeAdjustedRef {
+    pub ref_index: usize,
+    pub target_row: u32,
+    pub target_col: u32,
+    pub target_end_row: Option<u32>,
+    pub target_end_col: Option<u32>,
+    pub out_of_bounds: bool,
+}
+
+/// Bridge-facing autofill warning.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BridgeAutoFillWarning {
+    pub row: u32,
+    pub col: u32,
+    pub kind: BridgeAutoFillWarningKind,
+}
+
+/// Bridge-facing autofill warning kind.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", tag = "type")]
+pub enum BridgeAutoFillWarningKind {
+    MergedCellsInTarget,
+    FormulaRefOutOfBounds { ref_index: usize },
+    SourceCellEmpty,
+}
+
+/// Bridge-facing single autofill change summary.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BridgeAutoFillChange {
+    pub row: u32,
+    pub col: u32,
+    #[serde(rename = "type")]
+    pub change_type: String,
+}
+
+/// Preview of a formula cell that autofill would write.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BridgeAutoFillFormulaPreview {
+    pub row: u32,
+    pub col: u32,
+    /// Adjusted formula text, including the leading '='.
+    pub formula: String,
+    /// Source formula text, including the leading '='.
+    pub source_formula: String,
+    pub adjusted_refs: Vec<BridgeAdjustedRef>,
+}
+
+/// Per-reference dry-run diagnostic emitted for adjusted formula refs.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BridgeAutoFillReferenceDiagnostic {
+    pub row: u32,
+    pub col: u32,
+    pub ref_index: usize,
+    pub target_row: u32,
+    pub target_col: u32,
+    pub target_end_row: Option<u32>,
+    pub target_end_col: Option<u32>,
+    pub out_of_bounds: bool,
+}
+
+/// Bridge-facing autofill preview result.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BridgeAutoFillPreviewResult {
+    pub pattern_type: String,
+    pub filled_cell_count: u32,
+    pub warnings: Vec<BridgeAutoFillWarning>,
+    pub changes: Vec<BridgeAutoFillChange>,
+    pub formulas: Vec<BridgeAutoFillFormulaPreview>,
+    pub reference_diagnostics: Vec<BridgeAutoFillReferenceDiagnostic>,
+}
+
 fn default_step_value() -> f64 {
     1.0
 }

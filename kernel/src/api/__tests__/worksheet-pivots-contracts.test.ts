@@ -239,6 +239,105 @@ describe('WorksheetPivotsImpl contracts', () => {
     );
   });
 
+  it('refreshAll returns an aggregate receipt with per-pivot materialization receipts', async () => {
+    const config1 = makePivotConfig();
+    const config2 = makePivotConfig({
+      id: 'pivot-2',
+      name: 'RevenuePivot',
+      outputLocation: { row: 5, col: 1 },
+    });
+    ctx.pivot.getAllPivots.mockResolvedValue([config1, config2]);
+    ctx.pivot.getPivot.mockImplementation(async (_sheetId: string, pivotId: string) =>
+      pivotId === 'pivot-2' ? config2 : config1,
+    );
+
+    const receipt = await pivots.refreshAll();
+
+    expect(ctx.pivot.refresh).toHaveBeenCalledTimes(2);
+    expect(ctx.pivot.refresh).toHaveBeenCalledWith(SHEET_ID, 'pivot-1');
+    expect(ctx.pivot.refresh).toHaveBeenCalledWith(SHEET_ID, 'pivot-2');
+    expect(receipt).toEqual(
+      expect.objectContaining({
+        kind: 'pivot.refreshAll',
+        status: 'applied',
+        sheetId: SHEET_ID,
+        pivotIds: ['pivot-1', 'pivot-2'],
+        materialized: true,
+        materializedCount: 2,
+        failedCount: 0,
+        renderedRanges: [
+          { sheetId: SHEET_ID, startRow: 2, startCol: 3, endRow: 3, endCol: 4 },
+          { sheetId: SHEET_ID, startRow: 5, startCol: 1, endRow: 6, endCol: 2 },
+        ],
+        diagnostics: [],
+      }),
+    );
+    expect(receipt.receipts).toHaveLength(2);
+    expect(receipt.effects).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'materializedCells', objectId: 'pivot-1' }),
+        expect.objectContaining({ type: 'materializedCells', objectId: 'pivot-2' }),
+      ]),
+    );
+  });
+
+  it('refreshAll reports a no-op aggregate receipt when the worksheet has no pivots', async () => {
+    ctx.pivot.getAllPivots.mockResolvedValue([]);
+
+    const receipt = await pivots.refreshAll();
+
+    expect(ctx.pivot.refresh).not.toHaveBeenCalled();
+    expect(receipt).toEqual(
+      expect.objectContaining({
+        kind: 'pivot.refreshAll',
+        status: 'noOp',
+        sheetId: SHEET_ID,
+        pivotIds: [],
+        receipts: [],
+        materialized: false,
+        materializedCount: 0,
+        failedCount: 0,
+        renderedRanges: [],
+        diagnostics: [],
+        effects: [{ type: 'worksheetUnchanged', sheetId: SHEET_ID }],
+      }),
+    );
+  });
+
+  it('refreshAll reports partial when one pivot fails to materialize', async () => {
+    const config1 = makePivotConfig();
+    const config2 = makePivotConfig({ id: 'pivot-2', name: 'RevenuePivot' });
+    ctx.pivot.getAllPivots.mockResolvedValue([config1, config2]);
+    ctx.pivot.getPivot.mockImplementation(async (_sheetId: string, pivotId: string) =>
+      pivotId === 'pivot-2' ? config2 : config1,
+    );
+    ctx.pivot.refresh.mockImplementation(async (_sheetId: string, pivotId: string) =>
+      pivotId === 'pivot-2' ? null : makePivotResult(),
+    );
+
+    const receipt = await pivots.refreshAll();
+
+    expect(receipt).toEqual(
+      expect.objectContaining({
+        kind: 'pivot.refreshAll',
+        status: 'partial',
+        pivotIds: ['pivot-1', 'pivot-2'],
+        materialized: false,
+        materializedCount: 1,
+        failedCount: 1,
+      }),
+    );
+    expect(receipt.receipts.map((child) => child.status)).toEqual(['applied', 'failed']);
+    expect(receipt.diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'PIVOT_MATERIALIZATION_FAILED',
+          target: expect.objectContaining({ pivotId: 'pivot-2' }),
+        }),
+      ]),
+    );
+  });
+
   it('handle refresh returns the same materialization receipt shape', async () => {
     const handle = await pivots.get('SalesPivot');
 

@@ -34,7 +34,6 @@ import type {
   SpreadsheetEventType as InternalEventType,
   SpreadsheetEvent,
 } from '@mog/types-events';
-import type { AutoFillMode, FillSeriesOptions } from '@mog/types-editor/fill/types';
 import type { IObjectBoundsReader } from '@mog/types-objects/objects/object-bounds-reader';
 import type {
   AggregateResult,
@@ -116,8 +115,6 @@ import type {
   WorksheetShapeCollection,
   WorksheetSlicers,
   WorksheetDiagrams,
-  AutoFillApplyReceipt,
-  FillSeriesApplyReceipt,
   WorksheetSparklines,
   WorksheetStructure,
   WorksheetStyles,
@@ -131,8 +128,14 @@ import type {
   WorksheetTextEffectCollection,
   PivotCreateConfig,
 } from './worksheet/index';
+import type { WorksheetFill } from './worksheet/fill';
 
-export type { AutoFillApplyReceipt, FillSeriesApplyReceipt } from './worksheet/fill';
+export type {
+  AutoFillApplyReceipt,
+  AutoFillPreviewReceipt,
+  FillSeriesApplyReceipt,
+  WorksheetFill,
+} from './worksheet/fill';
 export type { PivotCreateOptions } from './worksheet/index';
 
 export type {
@@ -287,7 +290,7 @@ export interface ActiveCellEditSource {
   fresh: boolean;
 }
 
-export interface Worksheet {
+export interface Worksheet extends WorksheetFill {
   // ===========================================================================
   // Identity
   // ===========================================================================
@@ -1013,31 +1016,6 @@ export interface Worksheet {
    * @param opts - Color sort options (column, color type, target color, top/bottom position)
    */
   sortByColor(range: string | CellRange, opts: SortByColorOptions): Promise<void>;
-
-  /**
-   * Autofill from source range into target range.
-   *
-   * @param sourceRange - Source range in A1 notation (e.g., "A1:A3")
-   * @param targetRange - Target range to fill into (e.g., "A4:A10")
-   * @param fillMode - Fill behavior. Default: 'auto' (detect pattern).
-   */
-  autoFill(
-    sourceRange: string,
-    targetRange: string,
-    fillMode?: AutoFillMode,
-  ): Promise<AutoFillApplyReceipt>;
-
-  /**
-   * Fill a range with a series (Edit > Fill > Series dialog equivalent).
-   * More explicit than autoFill — caller specifies exact series parameters.
-   *
-   * The range contains BOTH source cells (first row/col) and target cells (rest).
-   * The kernel splits them based on direction.
-   *
-   * @param range - Range in A1 notation containing source + target cells
-   * @param options - Series parameters (type, step, stop, direction, etc.)
-   */
-  fillSeries(range: string, options: FillSeriesOptions): Promise<FillSeriesApplyReceipt>;
 
   /**
    * Move (relocate) cells from a source range to a target position.

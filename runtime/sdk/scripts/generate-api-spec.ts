@@ -35,7 +35,11 @@ import {
   compatibilityReferencesForPath,
   generateApiCompatibilityIndex,
 } from './api-compatibility-generation';
-import { serializeInterfaceDefinition } from './api-spec-interface-serialization';
+import {
+  collectInterfaceTypeElements,
+  serializeInterfaceDefinition,
+  type InterfaceTypeElement,
+} from './api-spec-interface-serialization';
 import { REQUIRED_OPERATION_RECEIPT_TYPE_NAMES } from './api-spec-receipt-types';
 import type {
   ApiCompatibilityIndex,
@@ -242,18 +246,18 @@ function collectTypeRefs(signature: string): string[] {
 }
 
 /** For overloaded members, prefer the most agent-friendly overload. */
-function pickOverload(overloads: ts.TypeElement[], sourceFile: ts.SourceFile): ts.TypeElement {
+function pickOverload(overloads: InterfaceTypeElement[]): InterfaceTypeElement {
   if (overloads.length === 1) return overloads[0];
 
   const nonGenericOverload = overloads.find(
-    (o) => ts.isMethodSignature(o) && !o.typeParameters?.length,
+    ({ member }) => ts.isMethodSignature(member) && !member.typeParameters?.length,
   );
   if (nonGenericOverload) return nonGenericOverload;
 
   for (const overload of overloads) {
-    if (ts.isMethodSignature(overload) && overload.parameters.length > 0) {
-      const firstParam = overload.parameters[0];
-      const typeText = firstParam.type?.getText(sourceFile) ?? '';
+    if (ts.isMethodSignature(overload.member) && overload.member.parameters.length > 0) {
+      const firstParam = overload.member.parameters[0];
+      const typeText = firstParam.type?.getText(overload.sourceFile) ?? '';
       if (typeText === 'string') return overload;
     }
   }
@@ -725,10 +729,14 @@ function discoverSubApis(
 ): SubApiInfo[] {
   const results: SubApiInfo[] = [];
 
-  for (const member of node.members) {
+  for (const { member, sourceFile: memberSourceFile } of collectInterfaceTypeElements({
+    node,
+    sourceFile,
+    resolveInterface: resolveNamedInterface,
+  })) {
     if (!ts.isPropertySignature(member)) continue;
 
-    const name = member.name?.getText(sourceFile) ?? '';
+    const name = member.name?.getText(memberSourceFile) ?? '';
     if (!name || excludedMembers.has(name)) continue;
 
     // Must be readonly
@@ -736,7 +744,7 @@ function discoverSubApis(
     if (!isReadonly) continue;
 
     // Get the type text
-    const typeText = member.type?.getText(sourceFile) ?? '';
+    const typeText = member.type?.getText(memberSourceFile) ?? '';
 
     // Must reference a PascalCase interface name (Workbook* or Worksheet*)
     // Skip primitives, generic types, union types, etc.
@@ -748,7 +756,7 @@ function discoverSubApis(
     // Skip internal interfaces
     if (interfaceName === 'WorksheetInternal') continue;
 
-    results.push({ accessor: name, interfaceName, parent, member, sourceFile });
+    results.push({ accessor: name, interfaceName, parent, member, sourceFile: memberSourceFile });
   }
 
   return results;
@@ -775,30 +783,35 @@ function extractInterface(
   const functions: Record<string, FunctionEntry> = {};
   const skipMembers = options.skipMembers ?? new Set<string>();
 
-  const byName = new Map<string, ts.TypeElement[]>();
-  for (const member of node.members) {
-    const name = (member as any).name?.getText(sourceFile) ?? '';
+  const byName = new Map<string, InterfaceTypeElement[]>();
+  for (const entry of collectInterfaceTypeElements({
+    node,
+    sourceFile,
+    resolveInterface: resolveNamedInterface,
+  })) {
+    const { member, sourceFile: memberSourceFile } = entry;
+    const name = (member as any).name?.getText(memberSourceFile) ?? '';
     if (!name || excludedMembers.has(name) || skipMembers.has(name)) continue;
 
     if (!ts.isMethodSignature(member) && !ts.isPropertySignature(member)) continue;
 
     if (!byName.has(name)) byName.set(name, []);
-    byName.get(name)!.push(member);
+    byName.get(name)!.push(entry);
   }
 
   for (const [name, overloads] of byName) {
-    const chosen = pickOverload(overloads, sourceFile);
+    const chosen = pickOverload(overloads);
     const entry = createMemberEntry({
       interfaceName: node.name.text,
       memberName: name,
-      member: chosen,
-      sourceFile,
+      member: chosen.member,
+      sourceFile: chosen.sourceFile,
       canonicalPath: `${options.pathPrefix}.${name}`,
       root: options.root,
       ...(options.parentRoot ? { parentRoot: options.parentRoot } : {}),
-      kind: getMemberKind(chosen),
-      ...(getPropertyTargetInterface(chosen, sourceFile)
-        ? { targetInterface: getPropertyTargetInterface(chosen, sourceFile) }
+      kind: getMemberKind(chosen.member),
+      ...(getPropertyTargetInterface(chosen.member, chosen.sourceFile)
+        ? { targetInterface: getPropertyTargetInterface(chosen.member, chosen.sourceFile) }
         : {}),
     });
 
@@ -1006,6 +1019,13 @@ function parseInterfaceFromFile(
   const resolved = resolveInterfaceDeclaration(filePath, interfaceName);
   if (!resolved) return null;
   return { node: resolved.node, sourceFile: resolved.sourceFile };
+}
+
+function resolveNamedInterface(
+  interfaceName: string,
+): { node: ts.InterfaceDeclaration; sourceFile: ts.SourceFile } | null {
+  const filePath = findInterfaceFile(interfaceName);
+  return filePath ? parseInterfaceFromFile(filePath, interfaceName) : null;
 }
 
 // ---------------------------------------------------------------------------

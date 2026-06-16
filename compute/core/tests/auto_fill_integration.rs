@@ -179,6 +179,51 @@ fn bug3_formula_fill_down_no_ref_error() {
     }
 }
 
+#[test]
+fn auto_fill_preview_adjusts_formula_without_mutating_cells_or_undo() {
+    let snapshot = make_snapshot(vec![make_cell(0, 0, num(10.0)), make_cell(0, 1, num(20.0))]);
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(snapshot).unwrap();
+    let sheet_id = engine.mirror().sheet_by_name("Sheet1").unwrap();
+
+    engine
+        .set_cell_value_parsed(&sheet_id, 0, 2, "=A1+B1")
+        .unwrap();
+    let before_undo_depth = engine.get_undo_state().undo_depth;
+
+    let request = fill_request(0, 2, 0, 2, 1, 2, 4, 2, "down");
+    let preview = engine.auto_fill_preview(&sheet_id, request).unwrap();
+
+    assert_eq!(preview.pattern_type, "copy");
+    assert_eq!(preview.filled_cell_count, 4);
+    assert_eq!(preview.formulas.len(), 4);
+    assert_eq!(engine.get_undo_state().undo_depth, before_undo_depth);
+    assert!(
+        engine
+            .mirror()
+            .resolve_cell_id(&sheet_id, SheetPos::new(1, 2))
+            .is_none(),
+        "preview must not create a target cell"
+    );
+
+    let first = preview
+        .formulas
+        .iter()
+        .find(|formula| formula.row == 1 && formula.col == 2)
+        .expect("C2 formula preview");
+    assert_eq!(first.source_formula, "=A1+B1");
+    assert_eq!(first.formula, "=A2+B2");
+    assert_eq!(first.adjusted_refs.len(), 2);
+
+    assert!(preview.reference_diagnostics.iter().any(|diag| {
+        diag.row == 1
+            && diag.col == 2
+            && diag.ref_index == 0
+            && diag.target_row == 1
+            && diag.target_col == 0
+            && !diag.out_of_bounds
+    }));
+}
+
 /// Bug #3 variant: formula with multiple refs filling right.
 ///
 /// Setup: A1=1, A2=2, A3=A1+A2 → fill A3 right to B3:D3

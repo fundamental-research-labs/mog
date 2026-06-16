@@ -62,7 +62,12 @@ export type {
   WorksheetFilters,
 } from './filters';
 export type { WorksheetFormControls } from './form-controls';
-export type { AutoFillApplyReceipt, FillSeriesApplyReceipt } from './fill';
+export type {
+  AutoFillApplyReceipt,
+  AutoFillPreviewReceipt,
+  FillSeriesApplyReceipt,
+  WorksheetFill,
+} from './fill';
 export type { WorksheetFormats } from './formats';
 export type { WorksheetHyperlink, WorksheetHyperlinks } from './hyperlinks';
 export type { WorksheetInternal } from './internal';

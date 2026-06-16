@@ -1,13 +1,8 @@
-/**
- * WorksheetPivotsImpl — facade for the WorksheetPivots sub-API.
- *
- * The worksheet instance owns sheetId and delegates behavior to focused
- * worksheet pivot modules.
- */
 import type {
   PivotTableConfig as ApiPivotTableConfig,
   PivotAddReceipt,
   PivotAddWithSheetReceipt,
+  PivotRefreshAllReceipt,
   PivotRefreshReceipt,
   PivotTableHandle,
   PivotTableInfo,
@@ -108,6 +103,7 @@ import type { HandleLiveness } from '../../lifecycle/handle-liveness';
 import {
   buildPivotAddReceipt,
   buildPivotAddWithSheetReceipt,
+  buildPivotRefreshAllReceipt,
   buildPivotRefreshReceipt,
   materializePivotForReceipt,
 } from './receipts';
@@ -178,10 +174,6 @@ export class WorksheetPivotsImpl implements WorksheetPivots {
     this.pivotSnapshots.set(pivotId, { status: 'deleted' });
   }
 
-  // ---------------------------------------------------------------------------
-  // Name → ID resolution
-  // ---------------------------------------------------------------------------
-
   /**
    * Resolve a pivot table name to its ID.
    * Throws KernelError if not found.
@@ -194,10 +186,6 @@ export class WorksheetPivotsImpl implements WorksheetPivots {
     }
     return pivot.id ?? pivot.name;
   }
-
-  // ===========================================================================
-  // CRUD
-  // ===========================================================================
 
   /** Monotonic counter to ensure unique pivot IDs within the same millisecond. */
   private static _idCounter = 0;
@@ -569,10 +557,6 @@ export class WorksheetPivotsImpl implements WorksheetPivots {
     });
   }
 
-  // ===========================================================================
-  // Computation
-  // ===========================================================================
-
   async detectFields(
     sourceSheetId: SheetId,
     range: { startRow: number; startCol: number; endRow: number; endCol: number },
@@ -590,25 +574,38 @@ export class WorksheetPivotsImpl implements WorksheetPivots {
     return this._refreshByPivotId(pivotId);
   }
 
-  async refreshAll(): Promise<void> {
+  async refreshAll(): Promise<PivotRefreshAllReceipt> {
     let pivots: DataPivotTableConfig[];
     try {
       pivots = await this.ctx.pivot.getAllPivots(this.sheetId);
-    } catch {
-      return;
+    } catch (error) {
+      return buildPivotRefreshAllReceipt({
+        sheetId: this.sheetId,
+        receipts: [],
+        listError: error,
+      });
     }
-    await Promise.all(pivots.map((p) => this._refreshByPivotId(p.id ?? p.name)));
+    const receipts = await Promise.all(pivots.map((p) => this._refreshByPivotId(p.id ?? p.name)));
+    return buildPivotRefreshAllReceipt({
+      sheetId: this.sheetId,
+      receipts,
+    });
   }
 
   private async _refreshByPivotId(pivotId: string): Promise<PivotRefreshReceipt> {
     let result: PivotTableResult | null = null;
+    let config: DataPivotTableConfig | null = null;
     let error: unknown;
     try {
       result = await this.ctx.pivot.refresh(this.sheetId, pivotId);
     } catch (caught) {
       error = caught;
     }
-    const config = await this.ctx.pivot.getPivot(this.sheetId, pivotId);
+    try {
+      config = await this.ctx.pivot.getPivot(this.sheetId, pivotId);
+    } catch (caught) {
+      error ??= caught;
+    }
     if (config) {
       this.cachePivot(config);
     }

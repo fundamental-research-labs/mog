@@ -67,6 +67,7 @@ export const worksheetRangeQueryOpsMock = {
 
 export const worksheetFillOpsMock = {
   autoFill: jest.fn(),
+  autoFillPreview: jest.fn(),
   fillSeries: jest.fn(),
 };
 

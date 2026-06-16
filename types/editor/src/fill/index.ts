@@ -11,7 +11,11 @@ export type { CustomList, CustomListRegistry } from './custom-lists';
 // Fill types (shared across zones)
 export type {
   AutoFillChange,
+  AutoFillAdjustedRef,
+  AutoFillFormulaPreview,
   AutoFillMode,
+  AutoFillPreviewResult,
+  AutoFillReferenceDiagnostic,
   AutoFillResult,
   AutoFillWarning,
   AutoFillWarningKind,

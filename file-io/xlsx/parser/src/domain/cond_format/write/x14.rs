@@ -7,6 +7,7 @@
 use domain_types::{
     CFColorScale, CFCustomIcon, CFDataBar, CFIconSet, CFRule, CFValueRef, ConditionalFormat,
 };
+use ooxml_types::cond_format::CfvoType;
 
 use super::bridge::{cfvo_ooxml_value, ranges_to_sqref};
 use crate::domain::sparklines::write::hex_to_argb;
@@ -72,14 +73,15 @@ fn rule_needs_x14(rule: &CFRule) -> bool {
                 || data_bar.axis_color.is_some()
                 || data_bar.min_point.ext_lst_xml.is_some()
                 || data_bar.max_point.ext_lst_xml.is_some()
+                || color_point_uses_x14(&data_bar.min_point.value)
+                || color_point_uses_x14(&data_bar.max_point.value)
         }
         CFRule::IconSet { icon_set, .. } => {
             !icon_set.custom_icons.is_empty()
                 || icon_set.percent.is_some()
-                || icon_set
-                    .thresholds
-                    .iter()
-                    .any(|threshold| threshold.ext_lst_xml.is_some())
+                || icon_set.thresholds.iter().any(|threshold| {
+                    threshold_uses_x14_cfvo(threshold.value_type) || threshold.ext_lst_xml.is_some()
+                })
         }
         CFRule::ColorScale { color_scale, .. } => color_scale_uses_x14_cfvo(color_scale),
         _ => false,
@@ -95,6 +97,10 @@ fn color_scale_uses_x14_cfvo(color_scale: &CFColorScale) -> bool {
 
 fn color_point_uses_x14(value: &CFValueRef) -> bool {
     matches!(value, CFValueRef::AutoMin | CFValueRef::AutoMax)
+}
+
+fn threshold_uses_x14_cfvo(value_type: CfvoType) -> bool {
+    matches!(value_type, CfvoType::AutoMin | CfvoType::AutoMax)
 }
 
 fn write_x14_rule(w: &mut XmlWriter, rule: &CFRule) {
@@ -298,4 +304,130 @@ fn write_x14_cf_icon(w: &mut XmlWriter, icon: Option<&CFCustomIcon>) {
         w.attr("iconSet", "NoIcons").attr_num("iconId", 0);
     }
     w.self_close();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::x14_conditional_formatting_ext_xml_from_domain;
+    use domain_types::{
+        CFColorPoint, CFColorScale, CFDataBar, CFIconSet, CFIconThreshold, CFRule, CFValueRef,
+        ConditionalFormat,
+    };
+    use ooxml_types::cond_format::{CfvoType, IconSetType};
+
+    fn point(value: CFValueRef, color: &str) -> CFColorPoint {
+        CFColorPoint {
+            value,
+            ooxml_value: None,
+            color: color.to_string(),
+            color_theme: None,
+            color_tint: None,
+            color_indexed: None,
+            color_auto: None,
+            ext_lst_xml: None,
+        }
+    }
+
+    fn conditional_format(rule: CFRule) -> Vec<ConditionalFormat> {
+        vec![ConditionalFormat {
+            id: "cf-1".to_string(),
+            sheet_id: "sheet-1".to_string(),
+            pivot: None,
+            ranges: vec![domain_types::CFCellRange::new(0, 0, 4, 0)],
+            range_identities: None,
+            rules: vec![rule],
+        }]
+    }
+
+    #[test]
+    fn data_bar_auto_cfvo_values_emit_x14_extension() {
+        let cfs = conditional_format(CFRule::DataBar {
+            id: "rule-1".to_string(),
+            priority: 1,
+            stop_if_true: None,
+            data_bar: CFDataBar {
+                min_point: point(CFValueRef::AutoMin, ""),
+                max_point: point(CFValueRef::AutoMax, ""),
+                min_length: None,
+                max_length: None,
+                positive_color: "#4472C4".to_string(),
+                negative_color: None,
+                negative_border_color: None,
+                border_color: None,
+                show_border: None,
+                gradient: None,
+                direction: None,
+                axis_position: None,
+                axis_color: None,
+                show_value: None,
+                match_positive_fill_color: None,
+                match_positive_border_color: None,
+                ext_id: None,
+            },
+        });
+
+        let xml = x14_conditional_formatting_ext_xml_from_domain(&cfs);
+
+        assert!(xml.contains("<x14:dataBar>"));
+        assert!(xml.contains("<x14:cfvo type=\"autoMin\"/>"));
+        assert!(xml.contains("<x14:cfvo type=\"autoMax\"/>"));
+        assert!(xml.contains("<xm:sqref>A1:A5</xm:sqref>"));
+    }
+
+    #[test]
+    fn color_scale_auto_cfvo_values_emit_x14_extension() {
+        let cfs = conditional_format(CFRule::ColorScale {
+            id: "rule-1".to_string(),
+            priority: 1,
+            stop_if_true: None,
+            color_scale: CFColorScale {
+                points: Vec::new(),
+                min_point: point(CFValueRef::AutoMin, "#F8696B"),
+                mid_point: None,
+                max_point: point(CFValueRef::AutoMax, "#63BE7B"),
+            },
+        });
+
+        let xml = x14_conditional_formatting_ext_xml_from_domain(&cfs);
+
+        assert!(xml.contains("<x14:colorScale>"));
+        assert!(xml.contains("<x14:cfvo type=\"autoMin\"/>"));
+        assert!(xml.contains("<x14:cfvo type=\"autoMax\"/>"));
+    }
+
+    #[test]
+    fn icon_set_auto_cfvo_values_emit_x14_extension() {
+        let cfs = conditional_format(CFRule::IconSet {
+            id: "rule-1".to_string(),
+            priority: 1,
+            stop_if_true: None,
+            icon_set: CFIconSet {
+                icon_set_name: IconSetType::ThreeArrows,
+                reverse_order: None,
+                show_icon_only: None,
+                percent: None,
+                thresholds: vec![
+                    CFIconThreshold {
+                        value_type: CfvoType::AutoMin,
+                        value: None,
+                        gte: true,
+                        ext_lst_xml: None,
+                    },
+                    CFIconThreshold {
+                        value_type: CfvoType::AutoMax,
+                        value: None,
+                        gte: true,
+                        ext_lst_xml: None,
+                    },
+                ],
+                custom_icons: Vec::new(),
+            },
+        });
+
+        let xml = x14_conditional_formatting_ext_xml_from_domain(&cfs);
+
+        assert!(xml.contains("<x14:iconSet"));
+        assert!(xml.contains("<x14:cfvo type=\"autoMin\"/>"));
+        assert!(xml.contains("<x14:cfvo type=\"autoMax\"/>"));
+    }
 }

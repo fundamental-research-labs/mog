@@ -7,6 +7,7 @@
 use compute_parser::SqrefList;
 use domain_types::{CFCellRange, CFColorPoint, CFRule, CFStyle, ConditionalFormat};
 use formula_types::{CellRef, RangeType};
+use ooxml_types::cond_format::CfvoType;
 
 use crate::domain::sparklines::write::hex_to_argb;
 use crate::write::XmlWriter;
@@ -39,11 +40,19 @@ pub(super) fn cfvo_ooxml_value(point: &CFColorPoint) -> Option<String> {
 
 fn write_cfvo_from_color_point(w: &mut XmlWriter, point: &CFColorPoint) {
     w.start_element("cfvo")
-        .attr("type", point.value.cfvo_type().to_ooxml());
+        .attr("type", base_cfvo_type(point.value.cfvo_type()).to_ooxml());
     if let Some(val) = cfvo_ooxml_value(point) {
         w.attr("val", &val);
     }
     w.self_close();
+}
+
+fn base_cfvo_type(cfvo_type: CfvoType) -> CfvoType {
+    match cfvo_type {
+        CfvoType::AutoMin => CfvoType::Min,
+        CfvoType::AutoMax => CfvoType::Max,
+        other => other,
+    }
 }
 
 fn data_bar_has_x14_payload(data_bar: &domain_types::CFDataBar) -> bool {
@@ -59,6 +68,14 @@ fn data_bar_has_x14_payload(data_bar: &domain_types::CFDataBar) -> bool {
         || data_bar.axis_color.is_some()
         || data_bar.min_point.ext_lst_xml.is_some()
         || data_bar.max_point.ext_lst_xml.is_some()
+        || matches!(
+            data_bar.min_point.value,
+            domain_types::CFValueRef::AutoMin | domain_types::CFValueRef::AutoMax
+        )
+        || matches!(
+            data_bar.max_point.value,
+            domain_types::CFValueRef::AutoMin | domain_types::CFValueRef::AutoMax
+        )
 }
 
 /// Build `<conditionalFormatting>` XML string from domain `ConditionalFormat` list.
@@ -409,7 +426,7 @@ fn write_cf_rule(w: &mut XmlWriter, rule: &CFRule, first_cell: &str) {
             w.end_attrs();
             for threshold in &icon_set.thresholds {
                 w.start_element("cfvo")
-                    .attr("type", threshold.value_type.to_ooxml());
+                    .attr("type", base_cfvo_type(threshold.value_type).to_ooxml());
                 if let Some(ref val) = threshold.value {
                     w.attr("val", val);
                 }
@@ -633,8 +650,11 @@ fn write_cf_rule(w: &mut XmlWriter, rule: &CFRule, first_cell: &str) {
 #[cfg(test)]
 mod tests {
     use super::cf_xml_from_domain;
-    use domain_types::{CFColorPoint, CFDataBar, CFRule, CFValueRef, ConditionalFormat};
-    use ooxml_types::cond_format::{DataBarAxisPosition, DataBarDirection};
+    use domain_types::{
+        CFColorPoint, CFColorScale, CFDataBar, CFIconSet, CFIconThreshold, CFRule, CFValueRef,
+        ConditionalFormat,
+    };
+    use ooxml_types::cond_format::{CfvoType, DataBarAxisPosition, DataBarDirection, IconSetType};
 
     fn data_bar_point(value: CFValueRef) -> CFColorPoint {
         CFColorPoint {
@@ -701,6 +721,128 @@ mod tests {
         assert!(xml.contains("<negativeFillColor rgb=\"FFFF0000\"/>"));
         assert!(xml.contains("<axisColor rgb=\"FF000000\"/>"));
         assert!(xml.contains("<x14:id>rule-1</x14:id>"));
+    }
+
+    #[test]
+    fn data_bar_domain_writer_downgrades_x14_auto_cfvo_in_base_xml() {
+        let cfs = vec![ConditionalFormat {
+            id: "cf-1".to_string(),
+            sheet_id: "sheet-1".to_string(),
+            pivot: None,
+            ranges: vec![domain_types::CFCellRange::new(0, 0, 4, 0)],
+            range_identities: None,
+            rules: vec![CFRule::DataBar {
+                id: "rule-1".to_string(),
+                priority: 1,
+                stop_if_true: None,
+                data_bar: CFDataBar {
+                    min_point: data_bar_point(CFValueRef::AutoMin),
+                    max_point: data_bar_point(CFValueRef::AutoMax),
+                    min_length: None,
+                    max_length: None,
+                    positive_color: "#4472C4".to_string(),
+                    negative_color: None,
+                    negative_border_color: None,
+                    border_color: None,
+                    show_border: None,
+                    gradient: None,
+                    direction: None,
+                    axis_position: None,
+                    axis_color: None,
+                    show_value: None,
+                    match_positive_fill_color: None,
+                    match_positive_border_color: None,
+                    ext_id: None,
+                },
+            }],
+        }];
+
+        let xml = cf_xml_from_domain(&cfs);
+
+        assert!(xml.contains("<cfvo type=\"min\"/>"));
+        assert!(xml.contains("<cfvo type=\"max\"/>"));
+        assert!(!xml.contains("autoMin"));
+        assert!(!xml.contains("autoMax"));
+        assert!(xml.contains("<x14:id>rule-1</x14:id>"));
+    }
+
+    #[test]
+    fn color_scale_domain_writer_downgrades_x14_auto_cfvo_in_base_xml() {
+        let cfs = vec![ConditionalFormat {
+            id: "cf-1".to_string(),
+            sheet_id: "sheet-1".to_string(),
+            pivot: None,
+            ranges: vec![domain_types::CFCellRange::new(0, 0, 4, 0)],
+            range_identities: None,
+            rules: vec![CFRule::ColorScale {
+                id: "rule-1".to_string(),
+                priority: 1,
+                stop_if_true: None,
+                color_scale: CFColorScale {
+                    points: Vec::new(),
+                    min_point: CFColorPoint {
+                        color: "#F8696B".to_string(),
+                        ..data_bar_point(CFValueRef::AutoMin)
+                    },
+                    mid_point: None,
+                    max_point: CFColorPoint {
+                        color: "#63BE7B".to_string(),
+                        ..data_bar_point(CFValueRef::AutoMax)
+                    },
+                },
+            }],
+        }];
+
+        let xml = cf_xml_from_domain(&cfs);
+
+        assert!(xml.contains("<cfvo type=\"min\"/>"));
+        assert!(xml.contains("<cfvo type=\"max\"/>"));
+        assert!(!xml.contains("autoMin"));
+        assert!(!xml.contains("autoMax"));
+    }
+
+    #[test]
+    fn icon_set_domain_writer_downgrades_x14_auto_cfvo_in_base_xml() {
+        let cfs = vec![ConditionalFormat {
+            id: "cf-1".to_string(),
+            sheet_id: "sheet-1".to_string(),
+            pivot: None,
+            ranges: vec![domain_types::CFCellRange::new(0, 0, 4, 0)],
+            range_identities: None,
+            rules: vec![CFRule::IconSet {
+                id: "rule-1".to_string(),
+                priority: 1,
+                stop_if_true: None,
+                icon_set: CFIconSet {
+                    icon_set_name: IconSetType::ThreeArrows,
+                    reverse_order: None,
+                    show_icon_only: None,
+                    percent: None,
+                    thresholds: vec![
+                        CFIconThreshold {
+                            value_type: CfvoType::AutoMin,
+                            value: None,
+                            gte: true,
+                            ext_lst_xml: None,
+                        },
+                        CFIconThreshold {
+                            value_type: CfvoType::AutoMax,
+                            value: None,
+                            gte: true,
+                            ext_lst_xml: None,
+                        },
+                    ],
+                    custom_icons: Vec::new(),
+                },
+            }],
+        }];
+
+        let xml = cf_xml_from_domain(&cfs);
+
+        assert!(xml.contains("<cfvo type=\"min\"/>"));
+        assert!(xml.contains("<cfvo type=\"max\"/>"));
+        assert!(!xml.contains("autoMin"));
+        assert!(!xml.contains("autoMax"));
     }
 
     #[test]

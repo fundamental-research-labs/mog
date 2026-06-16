@@ -204,6 +204,20 @@ describe('Worksheet formula API ergonomics', () => {
     ws = new WorksheetImpl(SHEET_ID, ctx);
   });
 
+  it('setCell recommends a1.address for generated-looking invalid address strings', async () => {
+    await expect(ws.setCell('row=3,col=1', 42)).rejects.toMatchObject({
+      code: 'API_INVALID_ADDRESS',
+      message: 'Invalid cell address: "row=3,col=1"',
+      suggestion: expect.stringContaining('a1.address(row, col)'),
+      context: expect.objectContaining({
+        validationKind: 'invalidCellAddress',
+        received: 'row=3,col=1',
+        suggestion: expect.stringContaining('zero-based Mog coordinates'),
+      }),
+    });
+    expect(CellOps.setCell).not.toHaveBeenCalled();
+  });
+
   it('setCell asFormula normalizes bare formulas without double-prepending equals', async () => {
     (CellOps.setCell as jest.Mock).mockResolvedValue(undefined);
 

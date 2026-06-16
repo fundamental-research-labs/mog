@@ -17,6 +17,15 @@ import { parseCellAddress, parseCellRange, rangeToA1 } from './utils';
 
 type ResolverPath = string[];
 
+const SINGLE_CELL_ADDRESS_SUGGESTION =
+  'Pass a single A1 cell address such as "A1". If you are generating a reference from row/column indexes, call a1.address(row, col) with zero-based Mog coordinates.';
+
+const SINGLE_CELL_NOT_RANGE_SUGGESTION =
+  'Pass a single cell address such as "A1", or call a range API for contiguous ranges. Use a1.address(row, col) for generated cells and a1.range(row1, col1, row2, col2) for generated ranges.';
+
+const RANGE_ADDRESS_SUGGESTION =
+  'Pass a contiguous A1 range such as "A1:B2". If you are generating a range from row/column indexes, call a1.range(row1, col1, row2, col2) with zero-based Mog coordinates.';
+
 interface AddressDiagnostic {
   code?: KernelErrorCode;
   validationKind: string;
@@ -141,18 +150,18 @@ export function resolveCell(a: string | number, b?: number): { row: number; col:
           path: ['address'],
           expected: 'single cell address such as "A1"',
           received: a,
-          suggestion: 'Pass a single cell address, or call a range API for contiguous ranges.',
+          suggestion: SINGLE_CELL_NOT_RANGE_SUGGESTION,
         });
       }
       throw new KernelError('API_INVALID_ADDRESS', `Invalid cell address: "${a}"`, {
         path: ['address'],
-        suggestion: 'Pass a single cell address such as "A1".',
+        suggestion: SINGLE_CELL_ADDRESS_SUGGESTION,
         context: {
           validationKind: 'invalidCellAddress',
           path: ['address'],
           expected: 'single cell address such as "A1"',
           received: a,
-          suggestion: 'Pass a single cell address such as "A1".',
+          suggestion: SINGLE_CELL_ADDRESS_SUGGESTION,
         },
       });
     }
@@ -226,13 +235,13 @@ export function resolveRange(
       }
       throw new KernelError('API_INVALID_ADDRESS', `Invalid range address: "${a}"`, {
         path: ['range'],
-        suggestion: 'Pass a contiguous A1 range such as "A1:B2".',
+        suggestion: RANGE_ADDRESS_SUGGESTION,
         context: {
           validationKind: 'invalidRangeAddress',
           path: ['range'],
           expected: 'single cell or contiguous range such as "A1:B2"',
           received: a,
-          suggestion: 'Pass a contiguous A1 range such as "A1:B2".',
+          suggestion: RANGE_ADDRESS_SUGGESTION,
         },
       });
     }

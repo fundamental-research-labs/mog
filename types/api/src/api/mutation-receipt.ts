@@ -10,7 +10,7 @@ import type { ObjectBounds } from '../kernel/floating-object-manager';
 import type { CellRange, CellValue } from '@mog/types-core/core';
 import type { FloatingObject } from '@mog/types-objects/objects/floating-objects';
 import type { OperationReceiptBase } from './operation-receipt';
-import type { Slicer } from './types';
+import type { Comment, Slicer } from './types';
 import type {
   PivotCommandReceipt,
   PivotKernelMutationReceipt,
@@ -289,6 +289,83 @@ export interface ValidationRemoveReceipt {
 }
 
 // =============================================================================
+// Comments
+// =============================================================================
+
+/** Cell or range affected by a comment mutation. */
+export interface CommentMutationTarget {
+  readonly sheetId: string;
+  readonly address?: string;
+  readonly range?: string;
+  readonly row?: number;
+  readonly col?: number;
+  readonly cellRef?: string;
+}
+
+/** Details for an implicit note-to-thread conversion performed by a comment mutation. */
+export interface CommentConversionEffect {
+  readonly commentId: string;
+  readonly from: 'note';
+  readonly to: 'threadedComment';
+  readonly comment: Comment;
+  readonly target?: CommentMutationTarget;
+}
+
+/** Receipt for creating a comment, note, or reply. */
+export interface CommentAddReceipt extends OperationReceiptBase {
+  readonly kind: 'comment.add' | 'comment.addNote' | 'comment.addReply';
+  readonly status: 'applied';
+  readonly sheetId: string;
+  readonly commentId: string;
+  readonly threadId: string | null;
+  readonly parentId?: string | null;
+  readonly target: CommentMutationTarget;
+  readonly comment: Comment;
+  readonly conversion?: CommentConversionEffect;
+  readonly removedCommentIds?: readonly string[];
+  readonly removedCount?: number;
+}
+
+/** Receipt for updating comment, note, thread, or conversion state. */
+export interface CommentUpdateReceipt extends OperationReceiptBase {
+  readonly kind:
+    | 'comment.update'
+    | 'comment.updateNote'
+    | 'comment.resolveThread'
+    | 'comment.convertNoteToThread';
+  readonly status: 'applied' | 'noOp';
+  readonly sheetId: string;
+  readonly commentId?: string;
+  readonly threadId?: string | null;
+  readonly target?: CommentMutationTarget;
+  readonly comment?: Comment;
+  readonly comments?: readonly Comment[];
+  readonly commentIds?: readonly string[];
+  readonly resolved?: boolean;
+  readonly conversion?: CommentConversionEffect;
+}
+
+/** Receipt for removing comments or clearing comment collections. */
+export interface CommentRemoveReceipt extends OperationReceiptBase {
+  readonly kind:
+    | 'comment.remove'
+    | 'comment.removeNote'
+    | 'comment.removeForCell'
+    | 'comment.clear'
+    | 'comment.clean';
+  readonly status: 'applied' | 'noOp';
+  readonly sheetId: string;
+  readonly commentId?: string;
+  readonly threadId?: string | null;
+  readonly target?: CommentMutationTarget;
+  readonly removedCount: number;
+  readonly removedCommentIds: readonly string[];
+  readonly comments?: readonly Comment[];
+}
+
+export type CommentReceipt = CommentAddReceipt | CommentUpdateReceipt | CommentRemoveReceipt;
+
+// =============================================================================
 // History
 // =============================================================================
 
@@ -474,6 +551,7 @@ export type MutationReceipt =
   | AutoFilterClearReceipt
   | ValidationSetReceipt
   | ValidationRemoveReceipt
+  | CommentReceipt
   | UndoReceipt
   | RedoReceipt
   | PivotRemoveReceipt

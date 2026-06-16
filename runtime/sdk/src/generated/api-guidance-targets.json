@@ -6607,8 +6607,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "add(cell: string, options: { text: string; author?: string }): Promise<Comment>;",
-      "typeText": "Promise<Comment>",
+      "signature": "add(cell: string, options: { text: string; author?: string }): Promise<CommentAddReceipt>;",
+      "typeText": "Promise<CommentAddReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/comments.ts"
@@ -6626,8 +6626,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "addNote(cell: string, options: { text: string; author?: string }): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "addNote(cell: string, options: { text: string; author?: string }): Promise<CommentAddReceipt>;",
+      "typeText": "Promise<CommentAddReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/comments.ts"
@@ -6645,8 +6645,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "addReply(commentId: string, text: string, author: string): Promise<Comment>;",
-      "typeText": "Promise<Comment>",
+      "signature": "addReply(commentId: string, text: string, author: string): Promise<CommentAddReceipt>;",
+      "typeText": "Promise<CommentAddReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/comments.ts"
@@ -6664,8 +6664,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "clean(): Promise<number>;",
-      "typeText": "Promise<number>",
+      "signature": "clean(): Promise<CommentRemoveReceipt>;",
+      "typeText": "Promise<CommentRemoveReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/comments.ts"
@@ -6683,8 +6683,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "clear(): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "clear(): Promise<CommentRemoveReceipt>;",
+      "typeText": "Promise<CommentRemoveReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/comments.ts"
@@ -6702,8 +6702,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "convertNoteToThread(commentId: string): Promise<Comment>;",
-      "typeText": "Promise<Comment>",
+      "signature": "convertNoteToThread(commentId: string): Promise<CommentUpdateReceipt>;",
+      "typeText": "Promise<CommentUpdateReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/comments.ts"
@@ -7006,8 +7006,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "remove(commentId: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "remove(commentId: string): Promise<CommentRemoveReceipt>;",
+      "typeText": "Promise<CommentRemoveReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/comments.ts"
@@ -7025,8 +7025,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "removeForCell(address: string): Promise<number>;",
-      "typeText": "Promise<number>",
+      "signature": "removeForCell(address: string): Promise<CommentRemoveReceipt>;",
+      "typeText": "Promise<CommentRemoveReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/comments.ts"
@@ -7044,8 +7044,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "removeNote(address: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "removeNote(address: string): Promise<CommentRemoveReceipt>;",
+      "typeText": "Promise<CommentRemoveReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/comments.ts"
@@ -7063,8 +7063,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "resolveThread(threadId: string, resolved: boolean): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "resolveThread(threadId: string, resolved: boolean): Promise<CommentUpdateReceipt>;",
+      "typeText": "Promise<CommentUpdateReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/comments.ts"
@@ -7082,8 +7082,8 @@
       "kind": "method",
       "visibility": "deprecated",
       "asyncModel": "promise",
-      "signature": "setNote(address: string, text: string, author?: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setNote(address: string, text: string, author?: string): Promise<CommentAddReceipt>;",
+      "typeText": "Promise<CommentAddReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/comments.ts"
@@ -7101,8 +7101,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setNoteHeight(address: string, height: number): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setNoteHeight(address: string, height: number): Promise<CommentUpdateReceipt>;",
+      "typeText": "Promise<CommentUpdateReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/comments.ts"
@@ -7120,8 +7120,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setNoteVisible(address: string, visible: boolean): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setNoteVisible(address: string, visible: boolean): Promise<CommentUpdateReceipt>;",
+      "typeText": "Promise<CommentUpdateReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/comments.ts"
@@ -7139,8 +7139,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setNoteWidth(address: string, width: number): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setNoteWidth(address: string, width: number): Promise<CommentUpdateReceipt>;",
+      "typeText": "Promise<CommentUpdateReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/comments.ts"
@@ -7158,8 +7158,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "update(commentId: string, updates: CommentUpdate): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "update(commentId: string, updates: CommentUpdate): Promise<CommentUpdateReceipt>;",
+      "typeText": "Promise<CommentUpdateReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/comments.ts"
@@ -24986,8 +24986,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "add(cell: string, options: { text: string; author?: string }): Promise<Comment>;",
-      "typeText": "Promise<Comment>",
+      "signature": "add(cell: string, options: { text: string; author?: string }): Promise<CommentAddReceipt>;",
+      "typeText": "Promise<CommentAddReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/comments.ts"
@@ -25005,8 +25005,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "addNote(cell: string, options: { text: string; author?: string }): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "addNote(cell: string, options: { text: string; author?: string }): Promise<CommentAddReceipt>;",
+      "typeText": "Promise<CommentAddReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/comments.ts"
@@ -25024,8 +25024,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "addReply(commentId: string, text: string, author: string): Promise<Comment>;",
-      "typeText": "Promise<Comment>",
+      "signature": "addReply(commentId: string, text: string, author: string): Promise<CommentAddReceipt>;",
+      "typeText": "Promise<CommentAddReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/comments.ts"
@@ -25043,8 +25043,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "clean(): Promise<number>;",
-      "typeText": "Promise<number>",
+      "signature": "clean(): Promise<CommentRemoveReceipt>;",
+      "typeText": "Promise<CommentRemoveReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/comments.ts"
@@ -25062,8 +25062,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "clear(): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "clear(): Promise<CommentRemoveReceipt>;",
+      "typeText": "Promise<CommentRemoveReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/comments.ts"
@@ -25081,8 +25081,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "convertNoteToThread(commentId: string): Promise<Comment>;",
-      "typeText": "Promise<Comment>",
+      "signature": "convertNoteToThread(commentId: string): Promise<CommentUpdateReceipt>;",
+      "typeText": "Promise<CommentUpdateReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/comments.ts"
@@ -25385,8 +25385,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "remove(commentId: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "remove(commentId: string): Promise<CommentRemoveReceipt>;",
+      "typeText": "Promise<CommentRemoveReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/comments.ts"
@@ -25404,8 +25404,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "removeForCell(address: string): Promise<number>;",
-      "typeText": "Promise<number>",
+      "signature": "removeForCell(address: string): Promise<CommentRemoveReceipt>;",
+      "typeText": "Promise<CommentRemoveReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/comments.ts"
@@ -25423,8 +25423,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "removeNote(address: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "removeNote(address: string): Promise<CommentRemoveReceipt>;",
+      "typeText": "Promise<CommentRemoveReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/comments.ts"
@@ -25442,8 +25442,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "resolveThread(threadId: string, resolved: boolean): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "resolveThread(threadId: string, resolved: boolean): Promise<CommentUpdateReceipt>;",
+      "typeText": "Promise<CommentUpdateReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/comments.ts"
@@ -25461,8 +25461,8 @@
       "kind": "method",
       "visibility": "deprecated",
       "asyncModel": "promise",
-      "signature": "setNote(address: string, text: string, author?: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setNote(address: string, text: string, author?: string): Promise<CommentAddReceipt>;",
+      "typeText": "Promise<CommentAddReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/comments.ts"
@@ -25480,8 +25480,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setNoteHeight(address: string, height: number): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setNoteHeight(address: string, height: number): Promise<CommentUpdateReceipt>;",
+      "typeText": "Promise<CommentUpdateReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/comments.ts"
@@ -25499,8 +25499,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setNoteVisible(address: string, visible: boolean): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setNoteVisible(address: string, visible: boolean): Promise<CommentUpdateReceipt>;",
+      "typeText": "Promise<CommentUpdateReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/comments.ts"
@@ -25518,8 +25518,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setNoteWidth(address: string, width: number): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setNoteWidth(address: string, width: number): Promise<CommentUpdateReceipt>;",
+      "typeText": "Promise<CommentUpdateReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/comments.ts"
@@ -25537,8 +25537,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "update(commentId: string, updates: CommentUpdate): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "update(commentId: string, updates: CommentUpdate): Promise<CommentUpdateReceipt>;",
+      "typeText": "Promise<CommentUpdateReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/comments.ts"

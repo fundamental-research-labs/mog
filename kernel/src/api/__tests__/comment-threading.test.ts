@@ -73,6 +73,7 @@ function createMockCtx() {
       getCommentsForCellByPosition: jest.fn(),
       getCommentThread: jest.fn(),
       getCommentCount: jest.fn(),
+      getCellPosition: jest.fn(),
       convertNoteToThread: jest.fn(),
     },
   } as any;
@@ -191,8 +192,25 @@ describe('WorksheetCommentsImpl — Comment Threading', () => {
         null,
         'threadedComment',
       );
-      expect(result.id).toBe('new-1');
-      expect(result.content).toBe('Hello world');
+      expect(result.kind).toBe('comment.add');
+      expect(result.status).toBe('applied');
+      expect(result.commentId).toBe('new-1');
+      expect(result.threadId).toBe('comment-1');
+      expect(result.target).toEqual({
+        sheetId: SHEET_ID,
+        address: 'A1',
+        range: 'A1',
+        row: 0,
+        col: 0,
+      });
+      expect(result.comment.id).toBe('new-1');
+      expect(result.comment.content).toBe('Hello world');
+      expect(result.effects).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ type: 'createdObject', objectId: 'new-1' }),
+          expect.objectContaining({ type: 'changedRange', range: 'A1' }),
+        ]),
+      );
     });
 
     it('returns created comment via row/col', async () => {
@@ -211,7 +229,8 @@ describe('WorksheetCommentsImpl — Comment Threading', () => {
         null,
         'threadedComment',
       );
-      expect(result.id).toBe('new-2');
+      expect(result.comment.id).toBe('new-2');
+      expect(result.commentId).toBe('new-2');
     });
   });
 
@@ -241,8 +260,17 @@ describe('WorksheetCommentsImpl — Comment Threading', () => {
         'Bob',
         { parentId: 'root-1', commentType: 'threadedComment' },
       );
+      expect(result.kind).toBe('comment.addReply');
+      expect(result.comment.parentId).toBe('root-1');
+      expect(result.comment.threadId).toBe('root-1');
       expect(result.parentId).toBe('root-1');
       expect(result.threadId).toBe('root-1');
+      expect(result.effects).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ type: 'createdObject', objectId: 'reply-1' }),
+          expect.objectContaining({ type: 'changedRange', range: 'K6' }),
+        ]),
+      );
     });
 
     it('converts a legacy note parent before creating a threaded reply', async () => {
@@ -279,8 +307,15 @@ describe('WorksheetCommentsImpl — Comment Threading', () => {
         'Bob',
         { parentId: 'note-1', commentType: 'threadedComment' },
       );
-      expect(result.parentId).toBe('note-1');
-      expect(result.threadId).toBe('note-1');
+      expect(result.comment.parentId).toBe('note-1');
+      expect(result.comment.threadId).toBe('note-1');
+      expect(result.conversion).toEqual(
+        expect.objectContaining({
+          commentId: 'note-1',
+          from: 'note',
+          to: 'threadedComment',
+        }),
+      );
     });
 
     it('throws when parent comment not found', async () => {
@@ -288,6 +323,96 @@ describe('WorksheetCommentsImpl — Comment Threading', () => {
 
       await expect(ws.addReply('nonexistent', 'text', 'author')).rejects.toThrow(
         'Comment not found: nonexistent',
+      );
+    });
+  });
+
+  // =========================================================================
+  // resolveThread()
+  // =========================================================================
+
+  describe('resolveThread()', () => {
+    it('returns a receipt with updated thread comments', async () => {
+      const root = makeComment({
+        id: 'root-1',
+        cellRef: '5:10',
+        threadId: 'root-1',
+        resolved: false,
+      });
+      const reply = makeComment({
+        id: 'reply-1',
+        cellRef: '5:10',
+        parentId: 'root-1',
+        threadId: 'root-1',
+        resolved: false,
+      });
+      const resolvedRoot = makeComment({
+        ...root,
+        resolved: true,
+      });
+      const resolvedReply = makeComment({
+        ...reply,
+        resolved: true,
+      });
+
+      mockCtx.computeBridge.getCommentThread
+        .mockResolvedValueOnce([root, reply])
+        .mockResolvedValueOnce([resolvedRoot, resolvedReply]);
+      mockCtx.computeBridge.setThreadResolved.mockResolvedValue({});
+
+      const result = await ws.resolveThread('root-1', true);
+
+      expect(mockCtx.computeBridge.setThreadResolved).toHaveBeenCalledWith(
+        SHEET_ID,
+        'root-1',
+        true,
+      );
+      expect(result.kind).toBe('comment.resolveThread');
+      expect(result.status).toBe('applied');
+      expect(result.threadId).toBe('root-1');
+      expect(result.resolved).toBe(true);
+      expect(result.comment?.id).toBe('root-1');
+      expect(result.comments?.map((comment) => comment.id)).toEqual(['root-1', 'reply-1']);
+      expect(result.effects).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ type: 'updatedObject', objectId: 'root-1' }),
+          expect.objectContaining({ type: 'changedRange', range: 'K6', count: 2 }),
+        ]),
+      );
+    });
+  });
+
+  // =========================================================================
+  // remove()
+  // =========================================================================
+
+  describe('remove()', () => {
+    it('returns a receipt with removed comment details', async () => {
+      const existing = makeComment({ id: 'remove-1', cellRef: '2:3', threadId: 'remove-1' });
+      mockCtx.computeBridge.getComment.mockResolvedValue(existing);
+      mockCtx.computeBridge.deleteComment.mockResolvedValue({});
+
+      const result = await ws.remove('remove-1');
+
+      expect(mockCtx.computeBridge.deleteComment).toHaveBeenCalledWith(SHEET_ID, 'remove-1');
+      expect(result.kind).toBe('comment.remove');
+      expect(result.status).toBe('applied');
+      expect(result.commentId).toBe('remove-1');
+      expect(result.threadId).toBe('remove-1');
+      expect(result.removedCount).toBe(1);
+      expect(result.removedCommentIds).toEqual(['remove-1']);
+      expect(result.target).toEqual({
+        sheetId: SHEET_ID,
+        address: 'D3',
+        range: 'D3',
+        row: 2,
+        col: 3,
+      });
+      expect(result.effects).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ type: 'removedObject', count: 1 }),
+          expect.objectContaining({ type: 'changedRange', range: 'D3' }),
+        ]),
       );
     });
   });

@@ -275,6 +275,12 @@ export {
 export type {
   AutoFilterClearReceipt,
   AutoFilterSetReceipt,
+  CommentAddReceipt,
+  CommentConversionEffect,
+  CommentMutationTarget,
+  CommentReceipt,
+  CommentRemoveReceipt,
+  CommentUpdateReceipt,
   DeleteCellsReceipt,
   DeleteColumnsReceipt,
   DeleteRowsReceipt,

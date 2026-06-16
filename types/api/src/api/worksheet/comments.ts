@@ -5,6 +5,11 @@
  * threaded comments (multi-author, resolvable).
  */
 import type { Comment, CommentUpdate, Note } from '../types';
+import type {
+  CommentAddReceipt,
+  CommentRemoveReceipt,
+  CommentUpdateReceipt,
+} from '../mutation-receipt';
 // Comment is now the Rust-generated type (cellRef, runs, threadId: string | null, etc.)
 
 /** Sub-API for comment and note operations on a worksheet. */
@@ -19,7 +24,7 @@ export interface WorksheetComments {
    * @param cell - A1-style cell address (e.g. "A1")
    * @param options - Note text and optional author
    */
-  addNote(cell: string, options: { text: string; author?: string }): Promise<void>;
+  addNote(cell: string, options: { text: string; author?: string }): Promise<CommentAddReceipt>;
   /**
    * Add a note to a cell (options object form).
    *
@@ -27,7 +32,11 @@ export interface WorksheetComments {
    * @param col - Column index (0-based)
    * @param options - Note text and optional author
    */
-  addNote(row: number, col: number, options: { text: string; author?: string }): Promise<void>;
+  addNote(
+    row: number,
+    col: number,
+    options: { text: string; author?: string },
+  ): Promise<CommentAddReceipt>;
   /**
    * @deprecated Use the options-object overload instead.
    * Set the note for a cell (overwrites any existing note).
@@ -37,7 +46,7 @@ export interface WorksheetComments {
    * @param author - Optional author name (defaults to 'api')
    * @deprecated Use the options-object overload instead.
    */
-  setNote(address: string, text: string, author?: string): Promise<void>;
+  setNote(address: string, text: string, author?: string): Promise<CommentAddReceipt>;
   /**
    * Set the note for a cell (overwrites any existing note).
    *
@@ -47,7 +56,7 @@ export interface WorksheetComments {
    * @param author - Optional author name (defaults to 'api')
    * @deprecated Use the options-object overload instead.
    */
-  setNote(row: number, col: number, text: string, author?: string): Promise<void>;
+  setNote(row: number, col: number, text: string, author?: string): Promise<CommentAddReceipt>;
 
   /**
    * Get the note for a cell as a Note object.
@@ -70,14 +79,14 @@ export interface WorksheetComments {
    *
    * @param address - A1-style cell address
    */
-  removeNote(address: string): Promise<void>;
+  removeNote(address: string): Promise<CommentRemoveReceipt>;
   /**
    * Remove the note from a cell.
    *
    * @param row - Row index (0-based)
    * @param col - Column index (0-based)
    */
-  removeNote(row: number, col: number): Promise<void>;
+  removeNote(row: number, col: number): Promise<CommentRemoveReceipt>;
 
   /** Get the total number of comments (notes + threaded) on this worksheet. */
   getCount(): Promise<number>;
@@ -114,7 +123,7 @@ export interface WorksheetComments {
    * @param address - A1-style cell address
    * @param visible - Whether the note should be visible
    */
-  setNoteVisible(address: string, visible: boolean): Promise<void>;
+  setNoteVisible(address: string, visible: boolean): Promise<CommentUpdateReceipt>;
   /**
    * Set the visibility of a note at the given cell position.
    *
@@ -122,7 +131,7 @@ export interface WorksheetComments {
    * @param col - Column index (0-based)
    * @param visible - Whether the note should be visible
    */
-  setNoteVisible(row: number, col: number, visible: boolean): Promise<void>;
+  setNoteVisible(row: number, col: number, visible: boolean): Promise<CommentUpdateReceipt>;
 
   /**
    * Set the height of a note callout box in points.
@@ -130,7 +139,7 @@ export interface WorksheetComments {
    * @param address - A1-style cell address
    * @param height - Height in points
    */
-  setNoteHeight(address: string, height: number): Promise<void>;
+  setNoteHeight(address: string, height: number): Promise<CommentUpdateReceipt>;
   /**
    * Set the height of a note callout box in points.
    *
@@ -138,7 +147,7 @@ export interface WorksheetComments {
    * @param col - Column index (0-based)
    * @param height - Height in points
    */
-  setNoteHeight(row: number, col: number, height: number): Promise<void>;
+  setNoteHeight(row: number, col: number, height: number): Promise<CommentUpdateReceipt>;
 
   /**
    * Set the width of a note callout box in points.
@@ -146,7 +155,7 @@ export interface WorksheetComments {
    * @param address - A1-style cell address
    * @param width - Width in points
    */
-  setNoteWidth(address: string, width: number): Promise<void>;
+  setNoteWidth(address: string, width: number): Promise<CommentUpdateReceipt>;
   /**
    * Set the width of a note callout box in points.
    *
@@ -154,7 +163,7 @@ export interface WorksheetComments {
    * @param col - Column index (0-based)
    * @param width - Width in points
    */
-  setNoteWidth(row: number, col: number, width: number): Promise<void>;
+  setNoteWidth(row: number, col: number, width: number): Promise<CommentUpdateReceipt>;
 
   // ===========================================================================
   // Threaded Comments
@@ -166,7 +175,7 @@ export interface WorksheetComments {
    * @param cell - A1-style cell address
    * @param options - Comment text and optional author
    */
-  add(cell: string, options: { text: string; author?: string }): Promise<Comment>;
+  add(cell: string, options: { text: string; author?: string }): Promise<CommentAddReceipt>;
   /**
    * Add a threaded comment to a cell (options object form).
    *
@@ -174,7 +183,11 @@ export interface WorksheetComments {
    * @param col - Column index (0-based)
    * @param options - Comment text and optional author
    */
-  add(row: number, col: number, options: { text: string; author?: string }): Promise<Comment>;
+  add(
+    row: number,
+    col: number,
+    options: { text: string; author?: string },
+  ): Promise<CommentAddReceipt>;
   /**
    * Add a threaded comment to a cell.
    *
@@ -183,7 +196,7 @@ export interface WorksheetComments {
    * @param author - Author name or identifier
    * @deprecated Use the options-object overload instead.
    */
-  add(address: string, text: string, author: string): Promise<Comment>;
+  add(address: string, text: string, author: string): Promise<CommentAddReceipt>;
   /**
    * Add a threaded comment to a cell.
    *
@@ -193,7 +206,7 @@ export interface WorksheetComments {
    * @param author - Author name or identifier
    * @deprecated Use the options-object overload instead.
    */
-  add(row: number, col: number, text: string, author: string): Promise<Comment>;
+  add(row: number, col: number, text: string, author: string): Promise<CommentAddReceipt>;
 
   /**
    * Update an existing comment.
@@ -201,14 +214,14 @@ export interface WorksheetComments {
    * @param commentId - Comment identifier
    * @param updates - Object with fields to update (text, mentions, or both)
    */
-  update(commentId: string, updates: CommentUpdate): Promise<void>;
+  update(commentId: string, updates: CommentUpdate): Promise<CommentUpdateReceipt>;
 
   /**
    * Remove a threaded comment by ID.
    *
    * @param commentId - Comment identifier
    */
-  remove(commentId: string): Promise<void>;
+  remove(commentId: string): Promise<CommentRemoveReceipt>;
 
   /**
    * Set the resolved state of a comment thread.
@@ -216,7 +229,7 @@ export interface WorksheetComments {
    * @param threadId - Thread identifier (cell ID)
    * @param resolved - Whether the thread should be marked as resolved
    */
-  resolveThread(threadId: string, resolved: boolean): Promise<void>;
+  resolveThread(threadId: string, resolved: boolean): Promise<CommentUpdateReceipt>;
 
   /**
    * List all comments in the worksheet.
@@ -247,9 +260,9 @@ export interface WorksheetComments {
    * @param commentId - ID of the comment to reply to
    * @param text - Reply text
    * @param author - Author name or identifier
-   * @returns The created reply comment
+   * @returns Receipt containing the created reply comment
    */
-  addReply(commentId: string, text: string, author: string): Promise<Comment>;
+  addReply(commentId: string, text: string, author: string): Promise<CommentAddReceipt>;
 
   /**
    * Convert a legacy note into a modern threaded comment.
@@ -259,9 +272,9 @@ export interface WorksheetComments {
    * Idempotent on a comment that is already a threaded comment.
    *
    * @param commentId - ID of the note to convert
-   * @returns The updated comment so the caller can re-render in thread mode
+   * @returns Receipt containing the updated comment so the caller can re-render in thread mode
    */
-  convertNoteToThread(commentId: string): Promise<Comment>;
+  convertNoteToThread(commentId: string): Promise<CommentUpdateReceipt>;
 
   /**
    * Get all comments in a thread (root + replies), sorted by createdAt.
@@ -355,27 +368,27 @@ export interface WorksheetComments {
    * Remove all comments on a cell.
    *
    * @param address - A1-style cell address
-   * @returns The number of comments removed
+   * @returns Receipt containing the number of comments removed
    */
-  removeForCell(address: string): Promise<number>;
+  removeForCell(address: string): Promise<CommentRemoveReceipt>;
   /**
    * Remove all comments on a cell.
    *
    * @param row - Row index (0-based)
    * @param col - Column index (0-based)
-   * @returns The number of comments removed
+   * @returns Receipt containing the number of comments removed
    */
-  removeForCell(row: number, col: number): Promise<number>;
+  removeForCell(row: number, col: number): Promise<CommentRemoveReceipt>;
 
   /**
    * Clear all comments on the worksheet.
    */
-  clear(): Promise<void>;
+  clear(): Promise<CommentRemoveReceipt>;
 
   /**
    * Remove orphaned comments (comments referencing non-existent cells).
    *
-   * @returns The number of orphaned comments removed
+   * @returns Receipt containing the number of orphaned comments removed
    */
-  clean(): Promise<number>;
+  clean(): Promise<CommentRemoveReceipt>;
 }

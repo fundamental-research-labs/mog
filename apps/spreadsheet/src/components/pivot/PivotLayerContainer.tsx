@@ -9,12 +9,12 @@
 
 import { useEffect, useMemo, useState } from 'react';
 
-import type { PivotFieldArea, PivotTableConfig } from '@mog-sdk/contracts/pivot';
 import type { PivotViewModel } from '../../pivot/pivot-capabilities';
 import { pivotBoundsForConfig, type PivotBounds } from '../../pivot/pivot-view-geometry';
 import { useActiveSheetId } from '../../internal-api';
 import { useRendererActions, useRendererStatus, useCoordinator } from '../../hooks';
 import { usePivotTables } from '../../hooks/data/use-pivot-tables';
+import { pivotFieldLabel, pivotPlacementsFor, pivotReadbackAttributes } from '../../systems/pivot';
 
 // =============================================================================
 // DOM marker helpers
@@ -47,48 +47,14 @@ function renderedBoundsForPivot(pivot: PivotViewModel): PivotBounds {
   return pivotBoundsForConfig(pivot.config);
 }
 
-function fieldLabel(config: PivotTableConfig, fieldId: string): string {
-  return config.fields.find((field) => field.id === fieldId)?.name ?? fieldId;
-}
-
-function placementsFor(config: PivotTableConfig, area: PivotFieldArea) {
-  return config.placements
-    .filter((placement) => placement.area === area)
-    .sort((a, b) => a.position - b.position);
-}
-
-function placementFieldNames(config: PivotTableConfig, area: 'row' | 'column' | 'filter'): string {
-  return JSON.stringify(
-    placementsFor(config, area).map((placement) => fieldLabel(config, placement.fieldId)),
-  );
-}
-
-function valueFieldReadback(config: PivotTableConfig): string {
-  return JSON.stringify(
-    placementsFor(config, 'value').map((placement) => {
-      const sourceField = placement.calculatedFieldId
-        ? (config.calculatedFields ?? []).find(
-            (field) => (field.calculatedFieldId ?? field.fieldId) === placement.calculatedFieldId,
-          )?.name
-        : fieldLabel(config, placement.fieldId);
-      const name = placement.displayName ?? sourceField ?? placement.fieldId;
-      return {
-        name,
-        sourceField: sourceField ?? name,
-        aggregation: placement.aggregateFunction ?? 'sum',
-      };
-    }),
-  );
-}
-
-function hasOutputPlacements(config: PivotTableConfig): boolean {
+function hasOutputPlacements(config: PivotViewModel['config']): boolean {
   return config.placements.some(
     (placement) =>
       placement.area === 'row' || placement.area === 'column' || placement.area === 'value',
   );
 }
 
-function hasFilterPlacements(config: PivotTableConfig): boolean {
+function hasFilterPlacements(config: PivotViewModel['config']): boolean {
   return config.placements.some((placement) => placement.area === 'filter');
 }
 
@@ -258,7 +224,7 @@ export function PivotLayerContainer() {
         const overlayHeight = showEmptyState
           ? Math.max(marker.rect.height, 132)
           : Math.max(marker.rect.height, 36);
-        const filterPlacements = placementsFor(config, 'filter');
+        const filterPlacements = pivotPlacementsFor(config, 'filter');
 
         return (
           <div
@@ -267,10 +233,7 @@ export function PivotLayerContainer() {
             data-pivot-layer-overlay="true"
             data-pivot-id={marker.id}
             data-pivot-name={marker.name}
-            data-pivot-row-fields={placementFieldNames(config, 'row')}
-            data-pivot-column-fields={placementFieldNames(config, 'column')}
-            data-pivot-filter-fields={placementFieldNames(config, 'filter')}
-            data-pivot-value-fields={valueFieldReadback(config)}
+            {...pivotReadbackAttributes(config)}
             style={{
               position: 'fixed',
               left: marker.rect.x,
@@ -284,7 +247,7 @@ export function PivotLayerContainer() {
             {showFilterControls && (
               <div className="flex flex-wrap items-center gap-2 rounded border border-ss-border bg-ss-surface/95 px-2 py-1 shadow-sm">
                 {filterPlacements.map((placement) => {
-                  const label = fieldLabel(config, placement.fieldId);
+                  const label = pivotFieldLabel(config, placement.fieldId);
                   return (
                     <button
                       key={placement.placementId}

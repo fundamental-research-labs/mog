@@ -18,6 +18,7 @@ import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from
 
 import type { CellRange } from '@mog-sdk/contracts/core';
 import type { PivotField } from '@mog-sdk/contracts/pivot';
+import { parseCellAddress, parseCellRange } from '@mog/spreadsheet-utils/a1';
 import { usePivotEditorActions } from '../../hooks/data/use-pivot-editor-actions';
 import {
   useActiveSheetId,
@@ -53,51 +54,28 @@ import { MinimizableDialog } from '../ui/radix/MinimizableDialog';
  * Parse a cell reference like "A1" to row/col (0-indexed)
  */
 export function parseCellRef(ref: string): { row: number; col: number } | null {
-  const match = ref.match(/^([A-Z]+)(\d+)$/i);
-  if (!match) return null;
-
-  const colStr = match[1].toUpperCase();
-  const rowNum = parseInt(match[2], 10);
-
-  // Row 0 is invalid in Excel notation (rows start at 1)
-  if (rowNum < 1) return null;
-
-  let col = 0;
-  for (let i = 0; i < colStr.length; i++) {
-    col = col * 26 + (colStr.charCodeAt(i) - 64);
-  }
-
-  return { row: rowNum - 1, col: col - 1 };
+  const parsed = parseCellAddress(ref.trim());
+  if (parsed?.sheetName) return null;
+  if (!parsed || parsed.row < 0 || parsed.col < 0) return null;
+  return parsed ? { row: parsed.row, col: parsed.col } : null;
 }
 
 /**
  * Parse a range string like "A1:D10" to CellRange
  */
 export function parseRange(rangeStr: string): CellRange | null {
-  const bangIndex = rangeStr.lastIndexOf('!');
-  const localRange = bangIndex >= 0 ? rangeStr.slice(bangIndex + 1) : rangeStr;
-  const parts = localRange.split(':');
-  if (parts.length !== 2) return null;
-
-  const start = parseCellRef(parts[0].trim());
-  const end = parseCellRef(parts[1].trim());
-
-  if (!start || !end) return null;
+  const parsed = parseCellRange(rangeStr.trim());
+  if (!parsed || parsed.isFullColumn || parsed.isFullRow) return null;
+  if (parsed.startRow < 0 || parsed.startCol < 0 || parsed.endRow < 0 || parsed.endCol < 0) {
+    return null;
+  }
 
   return {
-    startRow: Math.min(start.row, end.row),
-    startCol: Math.min(start.col, end.col),
-    endRow: Math.max(start.row, end.row),
-    endCol: Math.max(start.col, end.col),
+    startRow: Math.min(parsed.startRow, parsed.endRow),
+    startCol: Math.min(parsed.startCol, parsed.endCol),
+    endRow: Math.max(parsed.startRow, parsed.endRow),
+    endCol: Math.max(parsed.startCol, parsed.endCol),
   };
-}
-
-function parseSheetName(rangeStr: string): string | null {
-  const bangIndex = rangeStr.lastIndexOf('!');
-  if (bangIndex < 0) return null;
-  const rawName = rangeStr.slice(0, bangIndex).trim();
-  if (!rawName) return null;
-  return rawName.replace(/^'|'$/g, '').replace(/''/g, "'");
 }
 
 // =============================================================================
@@ -176,7 +154,7 @@ export function CreatePivotDialog() {
 
   const resolveSourceSheetId = useCallback(
     async (value: string) => {
-      const sheetName = parseSheetName(value);
+      const sheetName = parseCellRange(value.trim())?.sheetName;
       if (!sheetName) return activeSheetId;
       const sourceSheet = await wb.getSheet(sheetName);
       return sourceSheet.sheetId;

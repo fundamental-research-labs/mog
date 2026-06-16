@@ -8,7 +8,7 @@
  * that provides real-time feedback as fields are added/moved/removed.
  */
 
-import { useCallback, useEffect, type CSSProperties, type DragEvent } from 'react';
+import { useCallback, useEffect, useRef, type CSSProperties } from 'react';
 
 import type {
   AggregateFunction,
@@ -22,28 +22,6 @@ import {
   type PivotCapabilities,
 } from '../../pivot/pivot-capabilities';
 import { PivotFieldList } from './PivotFieldList';
-
-const DRAG_SCROLL_EDGE_PX = 48;
-const DRAG_SCROLL_MAX_STEP_PX = 30;
-
-function scrollElementNearDragEdge(scroller: HTMLElement, clientY: number): boolean {
-  const rect = scroller.getBoundingClientRect();
-  if (clientY < rect.top || clientY > rect.bottom) return false;
-
-  let delta = 0;
-  if (clientY > rect.bottom - DRAG_SCROLL_EDGE_PX) {
-    const distance = Math.min(DRAG_SCROLL_EDGE_PX, clientY - (rect.bottom - DRAG_SCROLL_EDGE_PX));
-    delta = Math.ceil((distance / DRAG_SCROLL_EDGE_PX) * DRAG_SCROLL_MAX_STEP_PX);
-  } else if (clientY < rect.top + DRAG_SCROLL_EDGE_PX) {
-    const distance = Math.min(DRAG_SCROLL_EDGE_PX, rect.top + DRAG_SCROLL_EDGE_PX - clientY);
-    delta = -Math.ceil((distance / DRAG_SCROLL_EDGE_PX) * DRAG_SCROLL_MAX_STEP_PX);
-  }
-
-  if (delta === 0) return false;
-  const before = scroller.scrollTop;
-  scroller.scrollTop += delta;
-  return scroller.scrollTop !== before;
-}
 
 // =============================================================================
 // Types
@@ -97,6 +75,7 @@ export function PivotFieldPanel({
   style,
 }: PivotFieldPanelProps) {
   const { config, result, error } = pivot;
+  const contentRef = useRef<HTMLDivElement>(null);
   const effectiveCapabilities =
     capabilities ??
     pivot.capabilities ??
@@ -133,10 +112,8 @@ export function PivotFieldPanel({
     [onSetAggregateFunction],
   );
 
-  const handleContentDragOver = useCallback((event: DragEvent<HTMLDivElement>) => {
-    if (scrollElementNearDragEdge(event.currentTarget, event.clientY)) {
-      event.preventDefault();
-    }
+  const getContentScrollContainer = useCallback(() => {
+    return contentRef.current;
   }, []);
 
   return (
@@ -164,7 +141,7 @@ export function PivotFieldPanel({
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto p-4" onDragOver={handleContentDragOver}>
+      <div ref={contentRef} className="flex-1 overflow-y-auto p-4">
         {/* Error banner */}
         {error && (
           <div className="px-3 py-2 bg-ss-error-bg rounded mb-4 text-body text-ss-error">
@@ -189,6 +166,7 @@ export function PivotFieldPanel({
           canChangeAggregate={effectiveCapabilities.canChangeAggregate}
           canSortLabels={effectiveCapabilities.canSortLabels}
           canSortByValue={effectiveCapabilities.canSortByValue}
+          getDragScrollContainer={getContentScrollContainer}
         />
 
         {effectiveCapabilities.unsupportedReason && (

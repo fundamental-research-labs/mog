@@ -7,6 +7,7 @@ import type {
   PivotTableConfig,
 } from '@mog-sdk/contracts/pivot';
 
+import { PIVOT_AGGREGATE_FUNCTION_OPTIONS } from '../../systems/pivot';
 import { PivotFieldList, type PivotFieldListProps } from './PivotFieldList';
 
 function pid(id: string): PivotFieldPlacementFlat['placementId'] {
@@ -168,6 +169,18 @@ describe('PivotFieldList placement editor', () => {
     expect(props.onValueSortChange).toHaveBeenCalledWith('value:Amount:0', 'desc');
   });
 
+  it('renders every aggregate function supported by the pivot contract', () => {
+    renderList();
+
+    const aggregateSelect = screen.getByRole('combobox', {
+      name: /Aggregate value field/i,
+    }) as HTMLSelectElement;
+
+    expect(Array.from(aggregateSelect.options).map((option) => option.value)).toEqual(
+      PIVOT_AGGREGATE_FUNCTION_OPTIONS.map((option) => option.type),
+    );
+  });
+
   it('reorders placements within the same well by placementId', () => {
     const { container, props } = renderList();
     const transfer = dataTransfer();
@@ -208,6 +221,64 @@ describe('PivotFieldList placement editor', () => {
       position: 0,
       aggregateFunction: 'count',
     });
+  });
+
+  it('starts auto-scroll against the provided pane during field drag', () => {
+    const frameCallbacks: FrameRequestCallback[] = [];
+    const requestAnimationFrameMock = jest.fn((callback: FrameRequestCallback) => {
+      frameCallbacks.push(callback);
+      return frameCallbacks.length;
+    });
+    const cancelAnimationFrameMock = jest.fn();
+    const originalRequestAnimationFrame = window.requestAnimationFrame;
+    const originalCancelAnimationFrame = window.cancelAnimationFrame;
+    Object.defineProperty(window, 'requestAnimationFrame', {
+      configurable: true,
+      value: requestAnimationFrameMock,
+    });
+    Object.defineProperty(window, 'cancelAnimationFrame', {
+      configurable: true,
+      value: cancelAnimationFrameMock,
+    });
+
+    try {
+      const scrollContainer = document.createElement('div');
+      setRect(scrollContainer, { top: 0, bottom: 100, left: 0, right: 240, height: 100 });
+      const getDragScrollContainer = jest.fn(() => scrollContainer);
+      const { container } = renderList({
+        getDragScrollContainer,
+      });
+      const transfer = dataTransfer();
+      const category = container.querySelector<HTMLElement>(
+        '[data-pivot-target="field-chip"][data-pivot-area="available"][data-pivot-field-id="Category"]',
+      );
+      if (!category) throw new Error('Missing Category source chip');
+      const fieldList = container.querySelector<HTMLElement>('[data-pivot-target="field-list"]');
+      if (!fieldList) throw new Error('Missing field list');
+
+      fireEvent.dragStart(category, { dataTransfer: transfer });
+      fireEvent.dragOver(fieldList, {
+        dataTransfer: transfer,
+        clientX: 12,
+        clientY: 98,
+      });
+
+      expect(requestAnimationFrameMock).toHaveBeenCalled();
+      frameCallbacks[0](1);
+      expect(getDragScrollContainer).toHaveBeenCalled();
+
+      fireEvent.dragEnd(category);
+      expect(cancelAnimationFrameMock).toHaveBeenCalled();
+    } finally {
+      Object.defineProperty(window, 'requestAnimationFrame', {
+        configurable: true,
+        value: originalRequestAnimationFrame,
+      });
+      Object.defineProperty(window, 'cancelAnimationFrame', {
+        configurable: true,
+        value: originalCancelAnimationFrame,
+      });
+    }
   });
 
   it('places a selected source field after a clicked placement chip', () => {

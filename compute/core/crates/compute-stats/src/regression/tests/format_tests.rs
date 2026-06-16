@@ -24,5 +24,5 @@ fn round_coef_zero_threshold() {
     // Very small values should be "0"
     assert_eq!(round_coef(1e-10, 4), "0");
     // Normal values should show precision
-    assert_eq!(round_coef(3.14159, 4), "3.142");
+    assert_eq!(round_coef(12.34567, 4), "12.35");
 }

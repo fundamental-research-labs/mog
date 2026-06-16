@@ -435,7 +435,7 @@ mod tests {
     fn redact_scalar_numeric_zeroed_on_none() {
         assert_eq!(redact_scalar(42_u32, AccessLevel::None), 0);
         assert_eq!(redact_scalar(42_i32, AccessLevel::Structure), 0);
-        assert_eq!(redact_scalar(3.14_f64, AccessLevel::None), 0.0);
+        assert_eq!(redact_scalar(12.34_f64, AccessLevel::None), 0.0);
     }
 
     #[test]

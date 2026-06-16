@@ -235,12 +235,12 @@ fn test_attr_num() {
     let mut w = XmlWriter::new();
     w.start_element("item")
         .attr_num("int", 42)
-        .attr_num("float", 3.14)
+        .attr_num("float", 12.34)
         .attr_num("negative", -100)
         .self_close();
     assert_eq!(
         w.finish_string(),
-        "<item int=\"42\" float=\"3.14\" negative=\"-100\"/>"
+        "<item int=\"42\" float=\"12.34\" negative=\"-100\"/>"
     );
 }
 

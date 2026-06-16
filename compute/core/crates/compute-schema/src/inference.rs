@@ -447,7 +447,7 @@ mod tests {
 
     #[test]
     fn infer_float() {
-        assert_eq!(infer_type(&num(3.14)), SchemaType::Number);
+        assert_eq!(infer_type(&num(12.34)), SchemaType::Number);
     }
 
     #[test]

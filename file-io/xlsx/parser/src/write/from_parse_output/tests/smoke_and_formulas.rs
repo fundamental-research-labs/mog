@@ -16,7 +16,7 @@ fn test_number_cells() {
         name: "Sheet1".to_string(),
         cells: vec![
             make_cell(0, 0, DomainValue::Number(FiniteF64::new(42.0).unwrap())),
-            make_cell(0, 1, DomainValue::Number(FiniteF64::new(3.14).unwrap())),
+            make_cell(0, 1, DomainValue::Number(FiniteF64::new(12.34).unwrap())),
         ],
         ..Default::default()
     }]);

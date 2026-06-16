@@ -881,7 +881,7 @@ mod tests {
 
     #[test]
     fn display_number_with_decimal() {
-        assert_eq!(format_cell_display(&CellValue::number(3.14)), "3.14");
+        assert_eq!(format_cell_display(&CellValue::number(12.34)), "12.34");
     }
 
     #[test]

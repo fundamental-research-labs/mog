@@ -560,7 +560,7 @@ pub fn create_xlsx_with_various_types() -> Vec<u8> {
     let cells: Vec<((usize, usize), CellValue)> = vec![
         // Numbers
         ((0, 0), CellValue::Number(42.0)),
-        ((0, 1), CellValue::Number(3.14159)),
+        ((0, 1), CellValue::Number(12.34567)),
         ((0, 2), CellValue::Number(-100.5)),
         ((0, 3), CellValue::Number(0.0)),
         // Strings

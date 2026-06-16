@@ -831,7 +831,7 @@ mod general_format {
 
     #[test]
     fn decimal_value() {
-        assert_eq!(format_number(3.14, "General"), "3.14");
+        assert_eq!(format_number(12.34, "General"), "12.34");
     }
 
     #[test]

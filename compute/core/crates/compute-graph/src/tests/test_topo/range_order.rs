@@ -18,13 +18,13 @@ fn test_topo_sort_with_range_deps_correct_order() {
     let resolve = |cell: &CellId| -> Option<CellPosition> {
         if *cell == b {
             Some(CellPosition {
-                sheet: sheet,
+                sheet,
                 row: 5,
                 col: 3,
             })
         } else if *cell == c {
             Some(CellPosition {
-                sheet: sheet,
+                sheet,
                 row: 0,
                 col: 0,
             })
@@ -70,7 +70,7 @@ fn test_topo_sort_with_mixed_cell_and_range_deps() {
     let resolve = |cell: &CellId| -> Option<CellPosition> {
         if *cell == c {
             Some(CellPosition {
-                sheet: sheet,
+                sheet,
                 row: 3,
                 col: 3,
             })
@@ -105,7 +105,7 @@ fn test_topo_sort_with_range_deps_no_false_cycle() {
     let resolve = |cell: &CellId| -> Option<CellPosition> {
         if *cell == b {
             Some(CellPosition {
-                sheet: sheet,
+                sheet,
                 row: 5,
                 col: 5,
             })

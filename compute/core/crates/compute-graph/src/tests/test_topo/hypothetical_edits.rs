@@ -30,13 +30,13 @@ fn test_would_create_cycle_with_positions_through_range_true() {
     let resolve = |cell: &CellId| -> Option<CellPosition> {
         if *cell == b {
             Some(CellPosition {
-                sheet: sheet,
+                sheet,
                 row: 500,
                 col: 0,
             }) // inside the range
         } else if *cell == a {
             Some(CellPosition {
-                sheet: sheet,
+                sheet,
                 row: 0,
                 col: 1,
             }) // outside the range
@@ -73,19 +73,19 @@ fn test_would_create_cycle_with_positions_through_range_false() {
     let resolve = |cell: &CellId| -> Option<CellPosition> {
         if *cell == b {
             Some(CellPosition {
-                sheet: sheet,
+                sheet,
                 row: 500,
                 col: 0,
             })
         } else if *cell == a {
             Some(CellPosition {
-                sheet: sheet,
+                sheet,
                 row: 0,
                 col: 1,
             })
         } else if *cell == c {
             Some(CellPosition {
-                sheet: sheet,
+                sheet,
                 row: 0,
                 col: 2,
             })
@@ -131,12 +131,12 @@ fn test_would_create_cycle_with_new_cell_in_range() {
     let resolve = |cell: &CellId| -> Option<CellPosition> {
         match cell.as_u128() {
             1 => Some(CellPosition {
-                sheet: sheet,
+                sheet,
                 row: 0,
                 col: 1,
             }), // A
             2 => Some(CellPosition {
-                sheet: sheet,
+                sheet,
                 row: 5,
                 col: 0,
             }), // X — inside the range
@@ -171,12 +171,12 @@ fn test_would_create_cycle_with_new_cell_outside_range() {
     let resolve = |cell: &CellId| -> Option<CellPosition> {
         match cell.as_u128() {
             1 => Some(CellPosition {
-                sheet: sheet,
+                sheet,
                 row: 0,
                 col: 1,
             }),
             3 => Some(CellPosition {
-                sheet: sheet,
+                sheet,
                 row: 20,
                 col: 0,
             }), // Y — outside the range

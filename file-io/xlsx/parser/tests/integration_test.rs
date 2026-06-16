@@ -211,7 +211,7 @@ fn test_various_cell_types() {
 
     // Verify numbers are present
     assert!(worksheet_str.contains("<v>42</v>"));
-    assert!(worksheet_str.contains("<v>3.14159</v>"));
+    assert!(worksheet_str.contains("<v>12.34567</v>"));
     assert!(worksheet_str.contains("<v>-100.5</v>"));
 
     // Verify booleans are present

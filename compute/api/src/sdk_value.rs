@@ -161,9 +161,9 @@ mod tests {
     #[test]
     fn float_number_to_typed_value() {
         assert_eq!(
-            SdkValue::Number(3.14).to_cell_input(),
+            SdkValue::Number(12.34).to_cell_input(),
             CellInput::Value {
-                value: CellValue::from(3.14)
+                value: CellValue::from(12.34)
             }
         );
         assert_eq!(

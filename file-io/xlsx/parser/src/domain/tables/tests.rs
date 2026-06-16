@@ -175,10 +175,10 @@ mod tests {
 
     #[test]
     fn test_parse_f64_attr() {
-        let xml = b"<element val=\"3.14\" int=\"42\" neg=\"-1.5\">";
+        let xml = b"<element val=\"12.34\" int=\"42\" neg=\"-1.5\">";
         let val = parse_f64_attr(xml, b"val=\"");
         assert!(val.is_some());
-        assert!((val.unwrap() - 3.14).abs() < 0.001);
+        assert!((val.unwrap() - 12.34).abs() < 0.001);
 
         let int_val = parse_f64_attr(xml, b"int=\"");
         assert!(int_val.is_some());

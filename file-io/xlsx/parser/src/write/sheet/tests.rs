@@ -13,7 +13,7 @@ fn test_format_number_integer() {
 
 #[test]
 fn test_format_number_decimal() {
-    assert_eq!(format_number(3.14), "3.14");
+    assert_eq!(format_number(12.34), "12.34");
     assert_eq!(format_number(1.5), "1.5");
     assert_eq!(format_number(0.001), "0.001");
 }

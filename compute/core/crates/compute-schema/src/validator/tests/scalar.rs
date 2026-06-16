@@ -24,7 +24,7 @@ fn valid_integer() {
 #[test]
 fn float_fails_integer() {
     let schema = make_schema(SchemaType::Integer);
-    let result = validate(&num(3.14), &schema);
+    let result = validate(&num(12.34), &schema);
     assert!(!result.valid);
     assert!(
         result

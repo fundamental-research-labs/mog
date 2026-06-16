@@ -413,8 +413,8 @@ mod tests {
 
     #[test]
     fn deserialize_bare_float() {
-        let v: CfValue = serde_json::from_str("3.14").unwrap();
-        assert_eq!(v, CfValue::Number { value: 3.14 });
+        let v: CfValue = serde_json::from_str("12.34").unwrap();
+        assert_eq!(v, CfValue::Number { value: 12.34 });
     }
 
     #[test]

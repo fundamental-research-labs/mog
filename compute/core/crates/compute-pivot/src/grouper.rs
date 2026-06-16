@@ -652,8 +652,8 @@ mod tests {
             cell_value_to_key(&CellValue::number(42.0)).into_owned()
         );
         assert_eq!(
-            normalize_to_key(&CellValue::number(3.14)),
-            cell_value_to_key(&CellValue::number(3.14)).into_owned()
+            normalize_to_key(&CellValue::number(12.34)),
+            cell_value_to_key(&CellValue::number(12.34)).into_owned()
         );
     }
 

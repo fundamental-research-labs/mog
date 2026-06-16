@@ -17,7 +17,7 @@ fn bool_to_number() {
 #[test]
 fn text_to_number() {
     assert_num_result(&coerce(&text("42"), SchemaType::Number), 42.0);
-    assert_num_result(&coerce(&text("3.14"), SchemaType::Number), 3.14);
+    assert_num_result(&coerce(&text("12.34"), SchemaType::Number), 12.34);
     assert_num_result(&coerce(&text("-7"), SchemaType::Number), -7.0);
 }
 
@@ -41,5 +41,5 @@ fn invalid_text_to_number() {
 
 #[test]
 fn distribution_coerces_as_number() {
-    assert_num_result(&coerce(&num(3.14), SchemaType::Distribution), 3.14);
+    assert_num_result(&coerce(&num(12.34), SchemaType::Distribution), 12.34);
 }

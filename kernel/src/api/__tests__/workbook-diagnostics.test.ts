@@ -1,5 +1,6 @@
 import { jest } from '@jest/globals';
 
+import { trackExternalFormulaWrite } from '../../services/external-formulas';
 import { WorkbookDiagnosticsImpl } from '../workbook/diagnostics';
 
 describe('WorkbookDiagnosticsImpl', () => {
@@ -199,6 +200,62 @@ describe('WorkbookDiagnosticsImpl', () => {
         }),
       }),
     );
+  });
+
+  it('explains unregistered external-style formulas when a matching local sheet exists', async () => {
+    const ctx = {
+      workbookLinkScope: jest.fn(() => ({ requestingDocumentId: 'doc-1' })),
+      workbookLinks: {
+        list: jest.fn(() => []),
+        listRecords: jest.fn(() => []),
+        getStatus: jest.fn(),
+      },
+      computeBridge: {
+        getFormulaReferenceDiagnostics: jest.fn(async () => ({
+          diagnostics: [],
+          snapshotVersion: 'v1',
+        })),
+        getAllSheetIds: jest.fn(async () => ['model-sheet', 'ccm-sheet']),
+        getSheetName: jest.fn(async (sheetId: string) =>
+          sheetId === 'model-sheet' ? 'Model' : 'CCM-GAAP',
+        ),
+      },
+    };
+    trackExternalFormulaWrite(
+      ctx as any,
+      'model-sheet' as any,
+      0,
+      0,
+      "='[1]CCM-GAAP'!$L$17",
+    );
+    const diagnostics = new WorkbookDiagnosticsImpl(ctx as any);
+
+    const result = await diagnostics.checkExternalReferences();
+
+    expect(result.ok).toBe(false);
+    expect(result.findings).toEqual([
+      expect.objectContaining({
+        code: 'EXTERNAL_REFERENCE_UNBOUND_LOCAL_SHEET_CANDIDATE',
+        severity: 'error',
+        sheetName: 'Model',
+        address: 'A1',
+        formula: "='[1]CCM-GAAP'!$L$17",
+        suggestedNextApiCall:
+          'await wb.getSheet("Model").then(ws => ws.setFormula("A1", "=\'CCM-GAAP\'!$L$17"))',
+        details: expect.objectContaining({
+          diagnosticCode: 'EXTERNAL_REFERENCE_UNBOUND_LOCAL_SHEET_CANDIDATE',
+          text: "'[1]CCM-GAAP'!$L$17",
+          workbookToken: '1',
+          tokenKind: 'excel-internal-ordinal',
+          localSheetName: 'CCM-GAAP',
+          localReference: "'CCM-GAAP'!$L$17",
+          suggestedFormula: "='CCM-GAAP'!$L$17",
+        }),
+      }),
+    ]);
+    expect(result.findings[0]!.message).toContain('Excel internal external-link ordinal');
+    expect(result.findings[0]!.message).toContain('Local sheet "CCM-GAAP" exists');
+    expect(result.findings[0]!.message).toContain('readable name and write the formula with that name');
   });
 
   it('composes validateWorkbook and reports requested unsupported checks instead of passing them', async () => {

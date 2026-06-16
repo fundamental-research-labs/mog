@@ -42,6 +42,7 @@ import type { MaterializationState } from '@mog-sdk/contracts/api';
 import { classifyRangeValueType, normalizeCellValue } from '../internal/value-conversions';
 import { normalizeRange, parseCellRange, rangeToA1, toA1 } from '../internal/utils';
 import { projectImportDiagnostic } from '../document/import-diagnostics';
+import { diagnoseTrackedExternalFormulaReferences } from './external-reference-diagnostics';
 
 const DEFAULT_FINDING_LIMIT = 1000;
 const ERROR_REFERENCE_KINDS = new Set([
@@ -170,6 +171,16 @@ export class WorkbookDiagnosticsImpl implements WorkbookDiagnostics {
         truncated = true;
         break;
       }
+    }
+
+    if (!truncated) {
+      const tracked = await diagnoseTrackedExternalFormulaReferences(
+        this.ctx,
+        check,
+        limit - findings.length,
+      );
+      findings.push(...tracked.findings);
+      truncated = tracked.truncated;
     }
 
     if (!truncated && this.ctx.workbookLinks) {

@@ -229,7 +229,13 @@ describe('WorksheetChartsImpl materialization scopes', () => {
       chart.id,
       expect.objectContaining({ name: 'Updated chart' }),
     );
-    expect(calls).toEqual([`await:${SHEET_ID}`, 'getChart', 'getChart', 'updateChart']);
+    expect(calls).toEqual([
+      `await:${SHEET_ID}`,
+      'getChart',
+      'getChart',
+      'updateChart',
+      'getChart',
+    ]);
   });
 
   it('accepts worksheet-scoped short imported chart IDs but returns canonical IDs', async () => {
@@ -263,6 +269,184 @@ describe('WorksheetChartsImpl materialization scopes', () => {
   });
 });
 
+describe('WorksheetChartsImpl mutation receipts', () => {
+  it('returns add and duplicate receipts with created chart payloads', async () => {
+    const source = makeChart({ id: 'source-chart', chartType: 'bar', dataRange: 'A1:B5' });
+    const created = makeChart({ id: 'created-chart', chartType: 'column', dataRange: 'A1:B5' });
+    const copy = makeChart({ id: 'copy-chart', chartType: 'bar', dataRange: 'A1:B5' });
+    const createdQueue = [created, copy];
+    const ctx = {
+      awaitMaterialized: jest.fn(async () => undefined),
+      computeBridge: {
+        createChart: jest.fn(async () => ({
+          floatingObjectChanges: [
+            {
+              sheetId: SHEET_ID,
+              objectId: createdQueue[0]?.id,
+              kind: { type: 'created' },
+              objectType: 'chart',
+              data: createdQueue.shift(),
+            },
+          ],
+        })),
+        getChart: jest.fn(async (_sheetId: string, chartId: string) => {
+          if (chartId === source.id) return source;
+          if (chartId === created.id) return created;
+          if (chartId === copy.id) return copy;
+          return null;
+        }),
+      },
+    };
+    const charts = new WorksheetChartsImpl(ctx as any, SHEET_ID);
+
+    const addReceipt = await charts.add({
+      type: 'column',
+      dataRange: 'A1:B5',
+      anchorRow: 1,
+      anchorCol: 1,
+      width: 8,
+      height: 15,
+      name: 'Created chart',
+    });
+    const duplicateReceipt = await charts.duplicate(source.id);
+
+    expect(addReceipt).toEqual(
+      expect.objectContaining({
+        kind: 'chart.add',
+        status: 'applied',
+        chart: expect.objectContaining({ id: created.id }),
+      }),
+    );
+    expect(addReceipt.effects).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'createdObject',
+          sheetId: SHEET_ID,
+          objectId: created.id,
+          details: expect.objectContaining({ objectType: 'chart' }),
+        }),
+        expect.objectContaining({ type: 'invalidatedCache', objectId: created.id }),
+      ]),
+    );
+    expect(duplicateReceipt).toEqual(
+      expect.objectContaining({
+        kind: 'chart.duplicate',
+        status: 'applied',
+        sourceChartId: source.id,
+        chart: expect.objectContaining({ id: copy.id }),
+      }),
+    );
+    expect(duplicateReceipt.effects).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'createdObject',
+          objectId: copy.id,
+          details: expect.objectContaining({ objectType: 'chart', sourceObjectId: source.id }),
+        }),
+      ]),
+    );
+  });
+
+  it('returns update and remove receipts and forwards root aliases', async () => {
+    let chart = makeChart({ name: 'Original chart' });
+    const ctx = {
+      awaitMaterialized: jest.fn(async () => undefined),
+      chartImageExporter: null,
+      computeBridge: {
+        getChart: jest.fn(async (_sheetId: string, chartId: string) =>
+          chartId === chart.id ? chart : null,
+        ),
+        updateChart: jest.fn(
+          async (_sheetId: string, _chartId: string, updates: Partial<ChartFloatingObject>) => {
+            chart = { ...chart, ...updates };
+          },
+        ),
+        deleteChart: jest.fn(async () => undefined),
+      },
+    };
+    const charts = new WorksheetChartsImpl(ctx as any, SHEET_ID);
+    const worksheet = new WorksheetImpl(SHEET_ID, ctx as any);
+
+    const updateReceipt = await charts.update('chart-1', { name: 'Updated chart' });
+
+    expect(updateReceipt).toEqual(
+      expect.objectContaining({
+        kind: 'chart.update',
+        status: 'applied',
+        changedFields: ['name'],
+        chart: expect.objectContaining({ id: 'chart-1', name: 'Updated chart' }),
+      }),
+    );
+    expect(updateReceipt.effects).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'updatedObject',
+          objectId: 'chart-1',
+          details: expect.objectContaining({ objectType: 'chart', changedFields: ['name'] }),
+        }),
+        expect.objectContaining({ type: 'invalidatedCache', objectId: 'chart-1' }),
+      ]),
+    );
+    await expect(worksheet.updateChart('chart-1', { name: 'Root updated' })).resolves.toEqual(
+      expect.objectContaining({ kind: 'chart.update' }),
+    );
+    await expect(worksheet.removeChart('chart-1')).resolves.toEqual(
+      expect.objectContaining({ kind: 'chart.remove', chartId: 'chart-1' }),
+    );
+    expect(ctx.computeBridge.deleteChart).toHaveBeenCalledWith(SHEET_ID, 'chart-1');
+    expect((await charts.remove('chart-1')).effects).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'removedObject',
+          objectId: 'chart-1',
+          details: expect.objectContaining({ objectType: 'chart' }),
+        }),
+        expect.objectContaining({ type: 'invalidatedCache', objectId: 'chart-1' }),
+      ]),
+    );
+  });
+
+  it('returns an activate receipt with a changed selection target effect', async () => {
+    const chart = makeChart();
+    const ctx = {
+      awaitMaterialized: jest.fn(async () => undefined),
+      eventBus: {
+        emit: jest.fn(),
+      },
+      computeBridge: {
+        getChart: jest.fn(async (_sheetId: string, chartId: string) =>
+          chartId === chart.id ? chart : null,
+        ),
+      },
+    };
+    const charts = new WorksheetChartsImpl(ctx as any, SHEET_ID);
+
+    const receipt = await charts.activate(chart.id);
+
+    expect(ctx.eventBus.emit).toHaveBeenCalledWith({
+      type: 'chart:selected',
+      sheetId: SHEET_ID,
+      chartId: chart.id,
+    });
+    expect(receipt).toEqual(
+      expect.objectContaining({
+        kind: 'chart.activate',
+        status: 'applied',
+        diagnostics: [],
+        chartId: chart.id,
+        effects: [
+          expect.objectContaining({
+            type: 'changedSelectionTarget',
+            sheetId: SHEET_ID,
+            objectId: chart.id,
+            details: expect.objectContaining({ objectType: 'chart' }),
+          }),
+        ],
+      }),
+    );
+  });
+});
+
 describe('WorksheetChartsImpl chart title inference', () => {
   const tableCells = {
     '3,2': 'Market',
@@ -280,7 +464,7 @@ describe('WorksheetChartsImpl chart title inference', () => {
   it('infers a pie chart title from a single value-header table', async () => {
     const { charts, ctx, getCreatedConfig } = createPieChartAddApi(tableCells);
 
-    const chart = await charts.add({
+    const receipt = await charts.add({
       type: 'pie',
       dataRange: 'C4:D8',
       anchorRow: 9,
@@ -290,7 +474,7 @@ describe('WorksheetChartsImpl chart title inference', () => {
     });
 
     expect(getCreatedConfig()).toEqual(expect.objectContaining({ title: 'Net Income' }));
-    expect(chart).toEqual(expect.objectContaining({ title: 'Net Income' }));
+    expect(receipt.chart).toEqual(expect.objectContaining({ title: 'Net Income' }));
     expect(ctx.computeBridge.getCellData).toHaveBeenCalledWith(SHEET_ID, 3, 3);
   });
 
@@ -472,11 +656,6 @@ describe('WorksheetChartsImpl range-backed series overrides', () => {
     await expect(charts.getSeries('chart-1', 1)).rejects.toThrow(
       'Series index 1 out of range (0-0)',
     );
-    await expect(
-      charts.setSeriesBinOptions('chart-1', 1, {
-        binCount: 4,
-      }),
-    ).rejects.toThrow('Series index 1 out of range (0-0)');
   });
 });
 

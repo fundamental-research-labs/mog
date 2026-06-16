@@ -9,6 +9,7 @@
 import type { ObjectBounds } from '../kernel/floating-object-manager';
 import type { CellRange, CellValue, SheetId } from '@mog/types-core/core';
 import type { CFRule, ConditionalFormat } from '@mog/types-formatting/conditional-format/rules';
+import type { Chart, SeriesConfig, TrendlineConfig } from '@mog/types-data/data/charts';
 import type { FloatingObject } from '@mog/types-objects/objects/floating-objects';
 import type { OperationReceiptBase } from './operation-receipt';
 import type { Comment, Slicer } from './types';
@@ -86,6 +87,94 @@ export function isFloatingObjectRemoveReceipt(
 ): receipt is FloatingObjectRemoveReceipt {
   return isFloatingObjectReceipt(receipt) && receipt.action === 'remove';
 }
+
+// =============================================================================
+// Charts
+// =============================================================================
+
+/** Receipt for creating a chart. */
+export interface ChartAddReceipt extends OperationReceiptBase {
+  readonly kind: 'chart.add';
+  readonly status: 'applied';
+  readonly chart: Chart;
+}
+
+/** Receipt for updating a chart. */
+export interface ChartUpdateReceipt extends OperationReceiptBase {
+  readonly kind: 'chart.update';
+  readonly status: 'applied';
+  readonly chart: Chart;
+  readonly changedFields: readonly string[];
+}
+
+/** Receipt for removing a chart. */
+export interface ChartRemoveReceipt extends OperationReceiptBase {
+  readonly kind: 'chart.remove';
+  readonly status: 'applied';
+  readonly chartId: string;
+}
+
+/** Receipt for duplicating a chart. */
+export interface ChartDuplicateReceipt extends OperationReceiptBase {
+  readonly kind: 'chart.duplicate';
+  readonly status: 'applied';
+  readonly sourceChartId: string;
+  readonly chart: Chart;
+}
+
+/** Receipt for activating/selecting a chart. */
+export interface ChartActivateReceipt extends OperationReceiptBase {
+  readonly kind: 'chart.activate';
+  readonly status: 'applied';
+  readonly chartId: string;
+}
+
+export type ChartCoreMutationReceipt =
+  | ChartAddReceipt
+  | ChartUpdateReceipt
+  | ChartRemoveReceipt
+  | ChartDuplicateReceipt
+  | ChartActivateReceipt;
+
+export type ChartMutationReceiptKind =
+  | 'chart.series.add'
+  | 'chart.series.update'
+  | 'chart.series.remove'
+  | 'chart.series.reorder'
+  | 'chart.series.setValues'
+  | 'chart.series.setCategories'
+  | 'chart.series.setBubbleSizes'
+  | 'chart.series.setBinOptions'
+  | 'chart.series.setBoxwhiskerOptions'
+  | 'chart.point.format'
+  | 'chart.point.setDataLabel'
+  | 'chart.trendline.add'
+  | 'chart.trendline.update'
+  | 'chart.trendline.remove'
+  | 'chart.axis.setTitle'
+  | 'chart.categoryNames.set'
+  | 'chart.dataLabel.setHeight'
+  | 'chart.dataLabel.setWidth';
+
+/** Receipt for chart series, trendline, axis, and data-label mutations. */
+export interface ChartSeriesMutationReceipt extends OperationReceiptBase {
+  readonly kind: ChartMutationReceiptKind;
+  readonly status: 'applied' | 'failed' | 'noOp';
+  readonly sheetId: string;
+  readonly chartId: string;
+  readonly chart?: Chart | null;
+  readonly seriesIndex?: number;
+  readonly fromSeriesIndex?: number;
+  readonly toSeriesIndex?: number;
+  readonly trendlineIndex?: number;
+  readonly pointIndex?: number;
+  readonly axisType?: 'category' | 'value';
+  readonly range?: string;
+  readonly series?: SeriesConfig | null;
+  readonly trendline?: TrendlineConfig | null;
+}
+
+export type ChartMutationReceipt = ChartCoreMutationReceipt | ChartSeriesMutationReceipt;
 
 // =============================================================================
 // Structure Mutations
@@ -616,6 +705,7 @@ export type SlicerMutationReceipt =
 export type MutationReceipt =
   | FloatingObjectMutationReceipt
   | FloatingObjectRemoveReceipt
+  | ChartMutationReceipt
   | InsertRowsReceipt
   | DeleteRowsReceipt
   | InsertColumnsReceipt

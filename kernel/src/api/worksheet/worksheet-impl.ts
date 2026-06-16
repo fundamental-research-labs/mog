@@ -26,6 +26,8 @@ import type {
   AutoFillPreviewReceipt,
   Chart,
   ChartConfig,
+  ChartRemoveReceipt,
+  ChartUpdateReceipt,
   ChartReadOptions,
   CellData,
   CellMetadataCache as CellMetadataCacheContract,
@@ -1864,11 +1866,11 @@ export class WorksheetImpl implements Worksheet {
     return this.charts.get(chartId);
   }
 
-  updateChart(chartId: string, updates: Partial<ChartConfig>): Promise<void> {
+  updateChart(chartId: string, updates: Partial<ChartConfig>): Promise<ChartUpdateReceipt> {
     return this.charts.update(chartId, updates);
   }
 
-  removeChart(chartId: string): Promise<void> {
+  removeChart(chartId: string): Promise<ChartRemoveReceipt> {
     return this.charts.remove(chartId);
   }
 

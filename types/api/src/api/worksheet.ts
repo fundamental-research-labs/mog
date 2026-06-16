@@ -82,7 +82,11 @@ import type {
   WorksheetRangeValueCell,
 } from './worksheet/cell-reads';
 import type { CellType, CellValueType } from './types';
-import type { ValidationSetReceipt } from './mutation-receipt';
+import type {
+  ChartRemoveReceipt,
+  ChartUpdateReceipt,
+  ValidationSetReceipt,
+} from './mutation-receipt';
 import type { RegionMeta } from '../store/store-types';
 import type { CopyFromOptions } from '@mog/types-core/core';
 import type {
@@ -778,12 +782,12 @@ export interface Worksheet extends WorksheetFill {
   /**
    * @deprecated Use `ws.charts.update(chartId, updates)` instead.
    */
-  updateChart(chartId: string, updates: Partial<ChartConfig>): Promise<void>;
+  updateChart(chartId: string, updates: Partial<ChartConfig>): Promise<ChartUpdateReceipt>;
 
   /**
    * @deprecated Use `ws.charts.remove(chartId)` instead.
    */
-  removeChart(chartId: string): Promise<void>;
+  removeChart(chartId: string): Promise<ChartRemoveReceipt>;
 
   /**
    * @deprecated Use `ws.pivots.add(config)` instead.

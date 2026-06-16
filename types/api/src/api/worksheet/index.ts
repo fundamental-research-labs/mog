@@ -39,6 +39,7 @@ export type {
   ChartSourceRangeMatch,
   WorksheetCharts,
 } from './charts';
+export type { ChartMutationReceipt } from '../mutation-receipt';
 export type { WorksheetComments } from './comments';
 export type { WorksheetCustomProperties } from './custom-properties';
 export type {

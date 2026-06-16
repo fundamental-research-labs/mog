@@ -6,6 +6,7 @@
  */
 import type { CallableDisposable } from '@mog/types-core/disposable';
 import type { CellRange } from '@mog/types-core/core';
+import type { ChartMutationReceipt } from '../mutation-receipt';
 import type {
   BoxplotConfig,
   Chart,
@@ -23,6 +24,13 @@ import type {
   SingleAxisConfig,
   TrendlineConfig,
 } from '../types';
+import type {
+  ChartActivateReceipt,
+  ChartAddReceipt,
+  ChartDuplicateReceipt,
+  ChartRemoveReceipt,
+  ChartUpdateReceipt,
+} from '../mutation-receipt';
 
 /**
  * ChartImageExporter — Injectable dependency for chart image export.
@@ -134,17 +142,17 @@ export interface WorksheetCharts {
   // Core CRUD (Wave 1)
   // ===========================================================================
 
-  /** Add a chart to the sheet. Returns the created chart. */
-  add(config: ChartConfig): Promise<Chart>;
+  /** Add a chart to the sheet. Returns a receipt with the created chart. */
+  add(config: ChartConfig): Promise<ChartAddReceipt>;
 
   /** Get a chart by ID, or null if not found. */
   get(chartId: string): Promise<Chart | null>;
 
   /** Update a chart's configuration. */
-  update(chartId: string, updates: Partial<ChartConfig>): Promise<void>;
+  update(chartId: string, updates: Partial<ChartConfig>): Promise<ChartUpdateReceipt>;
 
   /** Remove a chart by ID. */
-  remove(chartId: string): Promise<void>;
+  remove(chartId: string): Promise<ChartRemoveReceipt>;
 
   /** List charts in the sheet. Pass `{ materialization: "available" }` for passive UI reads. */
   list(options?: ChartReadOptions): Promise<Chart[]>;
@@ -156,8 +164,8 @@ export interface WorksheetCharts {
   // Group A: Simple Convenience Methods (2a-2f)
   // ===========================================================================
 
-  /** Duplicate a chart, offsetting the copy by 2 rows. Returns the new chart ID. */
-  duplicate(chartId: string): Promise<string>;
+  /** Duplicate a chart, offsetting the copy by 2 rows. Returns a receipt with the copy. */
+  duplicate(chartId: string): Promise<ChartDuplicateReceipt>;
 
   /**
    * Export a chart as an image.
@@ -237,28 +245,32 @@ export interface WorksheetCharts {
   // ===========================================================================
 
   /** Add a data series to a chart. Returns the new series index. */
-  addSeries(chartId: string, config: SeriesConfig): Promise<number>;
+  addSeries(chartId: string, config: SeriesConfig): Promise<ChartMutationReceipt>;
 
   /** Remove a data series by index. */
-  removeSeries(chartId: string, index: number): Promise<void>;
+  removeSeries(chartId: string, index: number): Promise<ChartMutationReceipt>;
 
   /** Get a data series by index. */
   getSeries(chartId: string, index: number): Promise<SeriesConfig>;
 
   /** Update a data series at the given index. */
-  updateSeries(chartId: string, index: number, updates: Partial<SeriesConfig>): Promise<void>;
+  updateSeries(
+    chartId: string,
+    index: number,
+    updates: Partial<SeriesConfig>,
+  ): Promise<ChartMutationReceipt>;
 
   /** Get the number of data series in a chart. */
   getSeriesCount(chartId: string): Promise<number>;
 
   /** Reorder a series from one index to another. */
-  reorderSeries(chartId: string, fromIndex: number, toIndex: number): Promise<void>;
+  reorderSeries(chartId: string, fromIndex: number, toIndex: number): Promise<ChartMutationReceipt>;
 
   /** Set the values range for a series (A1 notation). */
-  setSeriesValues(chartId: string, index: number, range: string): Promise<void>;
+  setSeriesValues(chartId: string, index: number, range: string): Promise<ChartMutationReceipt>;
 
   /** Set the categories range for a series (A1 notation). */
-  setSeriesCategories(chartId: string, index: number, range: string): Promise<void>;
+  setSeriesCategories(chartId: string, index: number, range: string): Promise<ChartMutationReceipt>;
 
   // ===========================================================================
   // Group D2: Per-Series Statistical Options
@@ -272,7 +284,7 @@ export interface WorksheetCharts {
     chartId: string,
     seriesIndex: number,
     options: HistogramConfig,
-  ): Promise<void>;
+  ): Promise<ChartMutationReceipt>;
 
   /** Get per-series box/whisker options, or null if not set (falls back to chart-level). */
   getSeriesBoxwhiskerOptions(chartId: string, seriesIndex: number): Promise<BoxplotConfig | null>;
@@ -282,7 +294,7 @@ export interface WorksheetCharts {
     chartId: string,
     seriesIndex: number,
     options: BoxplotConfig,
-  ): Promise<void>;
+  ): Promise<ChartMutationReceipt>;
 
   // ===========================================================================
   // Group E: Point Formatting (2j)
@@ -294,7 +306,7 @@ export interface WorksheetCharts {
     seriesIndex: number,
     pointIndex: number,
     format: { fill?: string; border?: ChartBorder },
-  ): Promise<void>;
+  ): Promise<ChartMutationReceipt>;
 
   /** Set the data label configuration for an individual data point. */
   setPointDataLabel(
@@ -302,17 +314,33 @@ export interface WorksheetCharts {
     seriesIndex: number,
     pointIndex: number,
     config: DataLabelConfig,
-  ): Promise<void>;
+  ): Promise<ChartMutationReceipt>;
 
   // ===========================================================================
   // Group F: Trendline CRUD
   // ===========================================================================
 
   /** Add a trendline to a series. Returns the new trendline index. */
-  addTrendline(chartId: string, seriesIndex: number, config: TrendlineConfig): Promise<number>;
+  addTrendline(
+    chartId: string,
+    seriesIndex: number,
+    config: TrendlineConfig,
+  ): Promise<ChartMutationReceipt>;
+
+  /** Update a trendline on a series by index. */
+  updateTrendline(
+    chartId: string,
+    seriesIndex: number,
+    trendlineIndex: number,
+    updates: Partial<TrendlineConfig>,
+  ): Promise<ChartMutationReceipt>;
 
   /** Remove a trendline from a series by index. */
-  removeTrendline(chartId: string, seriesIndex: number, trendlineIndex: number): Promise<void>;
+  removeTrendline(
+    chartId: string,
+    seriesIndex: number,
+    trendlineIndex: number,
+  ): Promise<ChartMutationReceipt>;
 
   /** Get a trendline configuration by index, or null if not found. */
   getTrendline(
@@ -339,7 +367,11 @@ export interface WorksheetCharts {
   getItemAt(index: number): Promise<Chart | null>;
 
   /** Set the bubble sizes range for a series (A1 notation). */
-  setBubbleSizes(chartId: string, seriesIndex: number, range: string): Promise<void>;
+  setBubbleSizes(
+    chartId: string,
+    seriesIndex: number,
+    range: string,
+  ): Promise<ChartMutationReceipt>;
 
   // ===========================================================================
   // Group M: Collection Events
@@ -363,10 +395,14 @@ export interface WorksheetCharts {
   ): Promise<SingleAxisConfig | null>;
 
   /** Set axis title from a formula string. */
-  setAxisTitle(chartId: string, axisType: 'category' | 'value', formula: string): Promise<void>;
+  setAxisTitle(
+    chartId: string,
+    axisType: 'category' | 'value',
+    formula: string,
+  ): Promise<ChartMutationReceipt>;
 
   /** Set category axis labels from a cell range (A1 notation). */
-  setCategoryNames(chartId: string, range: string): Promise<void>;
+  setCategoryNames(chartId: string, range: string): Promise<ChartMutationReceipt>;
 
   // ===========================================================================
   // Series dimension methods
@@ -412,7 +448,7 @@ export interface WorksheetCharts {
     seriesIndex: number,
     pointIndex: number,
     value: number,
-  ): Promise<void>;
+  ): Promise<ChartMutationReceipt>;
 
   /** Set the width of a data label. */
   setDataLabelWidth(
@@ -420,7 +456,7 @@ export interface WorksheetCharts {
     seriesIndex: number,
     pointIndex: number,
     value: number,
-  ): Promise<void>;
+  ): Promise<ChartMutationReceipt>;
 
   /** Get the tail anchor point for a data label's leader line. */
   getDataLabelTailAnchor(
@@ -444,5 +480,5 @@ export interface WorksheetCharts {
   // ===========================================================================
 
   /** Activate (select + focus) a chart. Emits 'chart:selected' event and scrolls chart into view. */
-  activate(chartId: string): Promise<void>;
+  activate(chartId: string): Promise<ChartActivateReceipt>;
 }

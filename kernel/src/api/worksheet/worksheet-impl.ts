@@ -59,7 +59,15 @@ import type {
   Workbook,
   WorkbookInternal,
   Worksheet,
+  WorksheetCellVisitor,
   WorksheetCellsAccessor,
+  WorksheetGetCellsFormulasOnlyOptions,
+  WorksheetGetCellsFullOptions,
+  WorksheetGetCellsOptions,
+  WorksheetGetCellsValuesOnlyOptions,
+  WorksheetRangeCell,
+  WorksheetRangeFormulaCell,
+  WorksheetRangeValueCell,
 } from '@mog-sdk/contracts/api';
 import { RangeValueType } from '@mog-sdk/contracts/api';
 import type { CellType, CellValueType } from '@mog-sdk/contracts/api';
@@ -934,6 +942,23 @@ export class WorksheetImpl implements Worksheet {
           const data = await CellReads.getData(this.ctx, this.sheetId, row, col);
           return projectCellRecord(addr, row, col, data);
         },
+        list: (async (range: string | CellRange, options?: WorksheetGetCellsOptions) => {
+          this._assertLive('worksheet.cells.list');
+          const bounds = resolveRange(range);
+          return RangeOps.getCells(
+            this.ctx,
+            this.sheetId,
+            this.name,
+            {
+              sheetId: this.sheetId,
+              startRow: bounds.startRow,
+              startCol: bounds.startCol,
+              endRow: bounds.endRow,
+              endCol: bounds.endCol,
+            },
+            options,
+          );
+        }) as WorksheetCellsAccessor['list'],
       };
     }
     return this._cells;
@@ -1001,6 +1026,71 @@ export class WorksheetImpl implements Worksheet {
       .map((s) => s.trim())
       .filter(Boolean);
     return Promise.all(parts.map((addr) => this.getRange(addr)));
+  }
+
+  async getCells(
+    range: string | CellRange,
+    options?: WorksheetGetCellsFullOptions,
+  ): Promise<WorksheetRangeCell[]>;
+  async getCells(
+    range: string | CellRange,
+    options: WorksheetGetCellsValuesOnlyOptions,
+  ): Promise<WorksheetRangeValueCell[]>;
+  async getCells(
+    range: string | CellRange,
+    options: WorksheetGetCellsFormulasOnlyOptions,
+  ): Promise<WorksheetRangeFormulaCell[]>;
+  async getCells(
+    startRow: number,
+    startCol: number,
+    endRow: number,
+    endCol: number,
+    options?: WorksheetGetCellsOptions,
+  ): Promise<WorksheetRangeCell[]>;
+  async getCells(
+    a: string | number | CellRange,
+    b?: number | WorksheetGetCellsOptions,
+    c?: number,
+    d?: number,
+    e?: WorksheetGetCellsOptions,
+  ): Promise<Array<WorksheetRangeCell | WorksheetRangeValueCell | WorksheetRangeFormulaCell>> {
+    this._assertLive('worksheet.getCells');
+    let bounds: { startRow: number; startCol: number; endRow: number; endCol: number };
+    let options: WorksheetGetCellsOptions | undefined;
+
+    if (typeof a === 'number') {
+      bounds = resolveRange(a, b as number, c, d);
+      options = e;
+    } else {
+      bounds = resolveRange(a);
+      options = b as WorksheetGetCellsOptions | undefined;
+    }
+
+    return RangeOps.getCells(
+      this.ctx,
+      this.sheetId,
+      this.name,
+      {
+        sheetId: this.sheetId,
+        startRow: bounds.startRow,
+        startCol: bounds.startCol,
+        endRow: bounds.endRow,
+        endCol: bounds.endCol,
+      },
+      options,
+    );
+  }
+
+  async forEachCell(
+    range: string | CellRange,
+    visitor: WorksheetCellVisitor,
+    options?: { readonly sparse?: boolean },
+  ): Promise<void> {
+    this._assertLive('worksheet.forEachCell');
+    const cells = await this.getCells(range, options);
+    for (let i = 0; i < cells.length; i++) {
+      await visitor(cells[i], i);
+    }
   }
 
   async setRange(a: string | number | CellRange, b: any, c?: any[][]): Promise<void> {

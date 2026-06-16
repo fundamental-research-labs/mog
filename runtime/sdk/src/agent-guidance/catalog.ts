@@ -84,6 +84,11 @@ export const apiGuidanceCatalog = [
     suggestion:
       'Mog APIs return real values directly. Await the Mog method that reads or writes the data you need.',
     mogReplacements: [
+      {
+        path: 'ws.getCells',
+        snippet: 'const cells = await ws.getCells("A1:B2");',
+        note: 'Use when you need addresses, absolute row/col, formulas, formats, or range-relative offsets.',
+      },
       { path: 'ws.getValues', snippet: 'const values = await ws.getValues("A1:B2");' },
       { path: 'ws.getRange', snippet: 'const range = await ws.getRange("A1:B2");' },
       { path: 'wb.findSheet', snippet: 'const ws = await wb.findSheet(name);' },
@@ -178,8 +183,14 @@ export const apiGuidanceCatalog = [
     ],
     message:
       'Microsoft Office JavaScript spreadsheet range proxy reads require load/sync; Mog reads return values directly.',
-    suggestion: 'Use `await ws.getValues(range)` or `await ws.getRange(range)`.',
+    suggestion:
+      'Use `await ws.getCells(range)` for address-bearing cells, `await ws.getValues(range)` for a value matrix, or `await ws.getRange(range)` for a cell-data matrix.',
     mogReplacements: [
+      {
+        path: 'ws.getCells',
+        snippet: 'const cells = await ws.getCells("A1:B2");',
+        note: 'Flat records include address, row, col, value, formula, format, and range offsets.',
+      },
       { path: 'ws.getValues', snippet: 'const values = await ws.getValues("A1:B2");' },
       { path: 'ws.getRange', snippet: 'const range = await ws.getRange("A1:B2");' },
     ],

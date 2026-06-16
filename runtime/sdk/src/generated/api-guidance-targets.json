@@ -5048,6 +5048,25 @@
     },
     {
       "schemaVersion": "1",
+      "path": "ws.cells.list",
+      "stableId": "WorksheetCellsAccessor.list",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetCellsAccessor",
+      "member": "list",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "list(\n    range: string | CellRange,\n    options?: WorksheetGetCellsFullOptions,\n  ): Promise<WorksheetRangeCell[]>;",
+      "typeText": "Promise<WorksheetRangeCell[]>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
       "path": "ws.changes",
       "stableId": "Worksheet.changes",
       "root": "subApi",
@@ -8790,6 +8809,24 @@
     },
     {
       "schemaVersion": "1",
+      "path": "ws.forEachCell",
+      "stableId": "Worksheet.forEachCell",
+      "root": "worksheet",
+      "interface": "Worksheet",
+      "member": "forEachCell",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "forEachCell(\n    range: string | CellRange,\n    visitor: WorksheetCellVisitor,\n    options?: { readonly sparse?: boolean },\n  ): Promise<void>;",
+      "typeText": "Promise<void>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
       "path": "ws.formats",
       "stableId": "Worksheet.formats",
       "root": "subApi",
@@ -9530,6 +9567,24 @@
       "asyncModel": "promise",
       "signature": "getCell(address: string): Promise<CellData>;",
       "typeText": "Promise<CellData>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "ws.getCells",
+      "stableId": "Worksheet.getCells",
+      "root": "worksheet",
+      "interface": "Worksheet",
+      "member": "getCells",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "getCells(\n    range: string | CellRange,\n    options?: WorksheetGetCellsFullOptions,\n  ): Promise<WorksheetRangeCell[]>;",
+      "typeText": "Promise<WorksheetRangeCell[]>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet.ts"
@@ -22872,6 +22927,25 @@
       },
       "ownerPackage": "@mog/types-api"
     },
+    "ws.cells.list": {
+      "schemaVersion": "1",
+      "path": "ws.cells.list",
+      "stableId": "WorksheetCellsAccessor.list",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetCellsAccessor",
+      "member": "list",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "list(\n    range: string | CellRange,\n    options?: WorksheetGetCellsFullOptions,\n  ): Promise<WorksheetRangeCell[]>;",
+      "typeText": "Promise<WorksheetRangeCell[]>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
     "ws.changes": {
       "schemaVersion": "1",
       "path": "ws.changes",
@@ -26614,6 +26688,24 @@
       },
       "ownerPackage": "@mog/types-api"
     },
+    "ws.forEachCell": {
+      "schemaVersion": "1",
+      "path": "ws.forEachCell",
+      "stableId": "Worksheet.forEachCell",
+      "root": "worksheet",
+      "interface": "Worksheet",
+      "member": "forEachCell",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "forEachCell(\n    range: string | CellRange,\n    visitor: WorksheetCellVisitor,\n    options?: { readonly sparse?: boolean },\n  ): Promise<void>;",
+      "typeText": "Promise<void>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
     "ws.formats": {
       "schemaVersion": "1",
       "path": "ws.formats",
@@ -27356,6 +27448,24 @@
       "asyncModel": "promise",
       "signature": "getCell(address: string): Promise<CellData>;",
       "typeText": "Promise<CellData>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "ws.getCells": {
+      "schemaVersion": "1",
+      "path": "ws.getCells",
+      "stableId": "Worksheet.getCells",
+      "root": "worksheet",
+      "interface": "Worksheet",
+      "member": "getCells",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "getCells(\n    range: string | CellRange,\n    options?: WorksheetGetCellsFullOptions,\n  ): Promise<WorksheetRangeCell[]>;",
+      "typeText": "Promise<WorksheetRangeCell[]>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet.ts"

@@ -9,8 +9,11 @@
  * These are pure type-conversion functions with no side effects.
  */
 
+import { RangeValueType } from '@mog-sdk/contracts/api';
 import type { CellValue, CellValuePrimitive } from '@mog-sdk/contracts/core';
-import { isCellError, errorDisplayString } from '@mog/spreadsheet-utils/errors';
+import { ERROR_DISPLAY_MAP, isCellError, errorDisplayString } from '@mog/spreadsheet-utils/errors';
+
+const ERROR_DISPLAY_STRINGS = new Set<string>(Object.values(ERROR_DISPLAY_MAP));
 
 /**
  * Normalize a CellValue for consumer-facing APIs.
@@ -32,4 +35,18 @@ export function cellValueToString(cv: CellValue): string {
   if (typeof cv === 'boolean') return cv ? 'TRUE' : 'FALSE';
   if (isCellError(cv)) return errorDisplayString(cv.value);
   return '';
+}
+
+/**
+ * Classify an effective cell value into the public range value-type enum.
+ */
+export function classifyRangeValueType(value: CellValue | null | undefined): RangeValueType {
+  if (value == null) return RangeValueType.Empty;
+  if (typeof value === 'number') return RangeValueType.Double;
+  if (typeof value === 'boolean') return RangeValueType.Boolean;
+  if (typeof value === 'string') {
+    return ERROR_DISPLAY_STRINGS.has(value) ? RangeValueType.Error : RangeValueType.String;
+  }
+  if (isCellError(value)) return RangeValueType.Error;
+  return RangeValueType.Empty;
 }

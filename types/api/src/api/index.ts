@@ -67,6 +67,16 @@ export type {
   SortByColorOptions,
   CellRecord,
   WorksheetCellsAccessor,
+  WorksheetCellVisitor,
+  WorksheetGetCellsFormulasOnlyOptions,
+  WorksheetGetCellsFullOptions,
+  WorksheetGetCellsOptions,
+  WorksheetGetCellsValuesOnlyOptions,
+  WorksheetRangeCell,
+  WorksheetRangeCellBase,
+  WorksheetRangeFormulaCell,
+  WorksheetRangeOrigin,
+  WorksheetRangeValueCell,
 } from './worksheet';
 
 // Worksheet sub-API interfaces

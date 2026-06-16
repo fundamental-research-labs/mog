@@ -70,6 +70,16 @@ import type {
   ViewportReader,
   VisibleRangeView,
 } from './types';
+import type {
+  WorksheetCellVisitor,
+  WorksheetGetCellsFormulasOnlyOptions,
+  WorksheetGetCellsFullOptions,
+  WorksheetGetCellsOptions,
+  WorksheetGetCellsValuesOnlyOptions,
+  WorksheetRangeCell,
+  WorksheetRangeFormulaCell,
+  WorksheetRangeValueCell,
+} from './worksheet/cell-reads';
 import type { CellType, CellValueType } from './types';
 import type { RegionMeta } from '../store/store-types';
 import type { CopyFromOptions } from '@mog/types-core/core';
@@ -112,6 +122,19 @@ import type {
   WorksheetTextEffectCollection,
   PivotCreateConfig,
 } from './worksheet/index';
+
+export type {
+  WorksheetCellVisitor,
+  WorksheetGetCellsFormulasOnlyOptions,
+  WorksheetGetCellsFullOptions,
+  WorksheetGetCellsOptions,
+  WorksheetGetCellsValuesOnlyOptions,
+  WorksheetRangeCell,
+  WorksheetRangeCellBase,
+  WorksheetRangeFormulaCell,
+  WorksheetRangeOrigin,
+  WorksheetRangeValueCell,
+} from './worksheet/cell-reads';
 
 /**
  * Options for {@link Worksheet.sortByColor}.
@@ -190,6 +213,26 @@ export interface WorksheetCellsAccessor {
    * present (callers don't need a separate "is this in-bounds" check).
    */
   get(addr: string): Promise<CellRecord | undefined>;
+
+  /**
+   * Read a range as a flat, address-bearing cell list.
+   *
+   * This is the bulk counterpart to {@link get}. It deliberately returns a
+   * single flat array rather than a matrix, so callers do not need to infer
+   * absolute positions from row/column indexes.
+   */
+  list(
+    range: string | CellRange,
+    options?: WorksheetGetCellsFullOptions,
+  ): Promise<WorksheetRangeCell[]>;
+  list(
+    range: string | CellRange,
+    options: WorksheetGetCellsValuesOnlyOptions,
+  ): Promise<WorksheetRangeValueCell[]>;
+  list(
+    range: string | CellRange,
+    options: WorksheetGetCellsFormulasOnlyOptions,
+  ): Promise<WorksheetRangeFormulaCell[]>;
 }
 
 /**
@@ -366,6 +409,43 @@ export interface Worksheet {
    * @returns Array of 2D cell data arrays, one per address
    */
   getRanges(addresses: string): Promise<CellData[][][]>;
+
+  /**
+   * Get cells for a range as a flat, address-bearing list.
+   *
+   * Unlike {@link getRange}, the result does not require callers to recover
+   * coordinates from matrix indexes. Each record includes the sheet, A1
+   * address, absolute row/column, range-relative offsets, and range origin.
+   */
+  getCells(
+    range: string | CellRange,
+    options?: WorksheetGetCellsFullOptions,
+  ): Promise<WorksheetRangeCell[]>;
+  getCells(
+    range: string | CellRange,
+    options: WorksheetGetCellsValuesOnlyOptions,
+  ): Promise<WorksheetRangeValueCell[]>;
+  getCells(
+    range: string | CellRange,
+    options: WorksheetGetCellsFormulasOnlyOptions,
+  ): Promise<WorksheetRangeFormulaCell[]>;
+  getCells(
+    startRow: number,
+    startCol: number,
+    endRow: number,
+    endCol: number,
+    options?: WorksheetGetCellsOptions,
+  ): Promise<WorksheetRangeCell[]>;
+
+  /**
+   * Iterate address-bearing cells in a range. The callback may be synchronous
+   * or async; callbacks run sequentially in range order.
+   */
+  forEachCell(
+    range: string | CellRange,
+    visitor: WorksheetCellVisitor,
+    options?: { readonly sparse?: boolean },
+  ): Promise<void>;
 
   /**
    * Set a 2D array of values into a range (A1 notation).
@@ -949,7 +1029,6 @@ export interface Worksheet {
   setCells(
     cells: Array<{ row: number; col: number; value: CellValuePrimitive | Date }>,
   ): Promise<SetCellsResult>;
-
   // ===========================================================================
   // Export helpers
   // ===========================================================================

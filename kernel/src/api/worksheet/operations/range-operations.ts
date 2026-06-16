@@ -8,13 +8,19 @@
  */
 
 import type { ClearResult } from '@mog-sdk/contracts/api';
+import type {
+  WorksheetGetCellsOptions,
+  WorksheetRangeCell,
+  WorksheetRangeFormulaCell,
+  WorksheetRangeValueCell,
+} from '@mog-sdk/contracts/api';
 import type { FormulaA1 } from '@mog-sdk/contracts/cells';
 import type { SheetId } from '@mog-sdk/contracts/core';
 
 import { KernelError } from '../../../errors';
-import { normalizeRange } from '../../internal/utils';
+import { normalizeRange, rangeToA1, toA1 } from '../../internal/utils';
 
-import { normalizeCellValue } from '../../internal/value-conversions';
+import { classifyRangeValueType, normalizeCellValue } from '../../internal/value-conversions';
 import { prepareExternalFormulaWrite } from '../../../services/external-formulas';
 import type { CellData, CellRange, CellValue, CellValuePrimitive, DocumentContext } from './shared';
 import { invalidRange, isValidAddress, isValidRange } from './shared';
@@ -151,6 +157,104 @@ export async function getRangeFormulas(
     result.push(rowData);
   }
   return result;
+}
+
+export async function getCells(
+  ctx: DocumentContext,
+  sheetId: SheetId,
+  sheetName: string,
+  range: CellRange,
+  options: WorksheetGetCellsOptions = {},
+): Promise<Array<WorksheetRangeCell | WorksheetRangeValueCell | WorksheetRangeFormulaCell>> {
+  if (options.valuesOnly && options.formulasOnly) {
+    throw new KernelError(
+      'API_INVALID_ARGUMENT',
+      'getCells options valuesOnly and formulasOnly are mutually exclusive',
+      {
+        path: ['options'],
+        suggestion: 'Use either { valuesOnly: true } or { formulasOnly: true }, not both.',
+        context: {
+          issueCode: 'MUTUALLY_EXCLUSIVE_GET_CELLS_OPTIONS',
+          received: { valuesOnly: options.valuesOnly, formulasOnly: options.formulasOnly },
+        },
+      },
+    );
+  }
+
+  const normalized = normalizeRange(range);
+  const origin = {
+    address: rangeToA1({ sheetId, ...normalized }),
+    startRow: normalized.startRow,
+    startCol: normalized.startCol,
+    endRow: normalized.endRow,
+    endCol: normalized.endCol,
+  };
+
+  const rangeResult = await ctx.computeBridge.queryRange(
+    sheetId,
+    normalized.startRow,
+    normalized.startCol,
+    normalized.endRow,
+    normalized.endCol,
+  );
+
+  const cellMap = new Map<string, (typeof rangeResult.cells)[number]>();
+  for (const cell of rangeResult.cells) {
+    cellMap.set(`${cell.row},${cell.col}`, cell);
+  }
+
+  const cells: Array<WorksheetRangeCell | WorksheetRangeValueCell | WorksheetRangeFormulaCell> = [];
+  for (let row = normalized.startRow; row <= normalized.endRow; row++) {
+    for (let col = normalized.startCol; col <= normalized.endCol; col++) {
+      const source = cellMap.get(`${row},${col}`);
+      const hasFormula = source?.formula != null;
+      const hasFormat = source?.format != null;
+      const hasFormatted = source?.formatted != null;
+      const value = normalizeCellValue(source?.value ?? null);
+      const isEmpty = value === null && !hasFormula && !hasFormat && !hasFormatted;
+
+      if (options.formulasOnly && !hasFormula) continue;
+      if (options.sparse && isEmpty) continue;
+
+      const base = {
+        sheet: sheetName,
+        sheetId,
+        address: toA1(row, col),
+        row,
+        col,
+        offsetRow: row - normalized.startRow,
+        offsetCol: col - normalized.startCol,
+        range: origin,
+      };
+      const valueType = classifyRangeValueType(value);
+      const formatted = source?.formatted ?? undefined;
+      const formattedField = formatted !== undefined ? { formatted } : {};
+
+      if (options.valuesOnly) {
+        cells.push({ ...base, value, valueType, ...formattedField });
+      } else if (options.formulasOnly) {
+        cells.push({
+          ...base,
+          value,
+          valueType,
+          formula: source!.formula as FormulaA1,
+          ...formattedField,
+        });
+      } else {
+        const format = (source?.format ?? undefined) as WorksheetRangeCell['format'];
+        cells.push({
+          ...base,
+          value,
+          valueType,
+          formula: (source?.formula ?? null) as FormulaA1 | null,
+          ...(format ? { format } : {}),
+          ...formattedField,
+        });
+      }
+    }
+  }
+
+  return cells;
 }
 
 // ==========================================================================

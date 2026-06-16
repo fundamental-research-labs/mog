@@ -6,6 +6,18 @@
 
 export type { WorksheetBindings } from './bindings';
 export type {
+  WorksheetCellVisitor,
+  WorksheetGetCellsFormulasOnlyOptions,
+  WorksheetGetCellsFullOptions,
+  WorksheetGetCellsOptions,
+  WorksheetGetCellsValuesOnlyOptions,
+  WorksheetRangeCell,
+  WorksheetRangeCellBase,
+  WorksheetRangeFormulaCell,
+  WorksheetRangeOrigin,
+  WorksheetRangeValueCell,
+} from './cell-reads';
+export type {
   ChangeOrigin,
   ChangeRecord,
   ChangeTracker,

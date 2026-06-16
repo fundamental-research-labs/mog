@@ -58,6 +58,7 @@ jest.unstable_mockModule('../worksheet/operations/cell-operations', () => ({
 }));
 jest.unstable_mockModule('../worksheet/operations/range-operations', () => ({
   getRange: jest.fn(),
+  getCells: jest.fn(),
   setRange: jest.fn(),
   clearRange: jest.fn(),
 }));

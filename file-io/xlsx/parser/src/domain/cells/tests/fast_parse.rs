@@ -150,6 +150,80 @@ fn test_parse_worksheet_fast_with_extras_prefixed_formula_tags() {
 }
 
 #[test]
+fn self_closing_shared_formula_without_cached_value_does_not_read_next_cell_value() {
+    let xml = br#"<worksheet><sheetData>
+    <row r="1">
+      <c r="A1"><f t="shared" si="7" ref="A1:A3">A1+1</f><v>2</v></c>
+      <c r="A2"><f t="shared" si="7"/></c>
+      <c r="B2"><v>999</v></c>
+      <c r="A3"><f t="shared" si="7"/><v>4</v></c>
+    </row>
+  </sheetData></worksheet>"#;
+
+    let shared_strings: Vec<&str> = vec![];
+    let mut cells = vec![CellData::default(); 10];
+    let mut strings = Vec::new();
+    let mut row_heights = Vec::new();
+    let mut extras = ParseExtras::default();
+
+    let count = parse_worksheet_fast_with_extras(
+        xml,
+        &shared_strings,
+        &mut cells,
+        &mut strings,
+        &mut row_heights,
+        &mut extras,
+        &[],
+    );
+
+    assert_eq!(count, 4);
+    assert_eq!(cells[1].get_row(), 1);
+    assert_eq!(cells[1].get_col(), 0);
+    assert_eq!(cells[1].get_value_type(), VALUE_TYPE_CACHED_FORMULA);
+    assert_eq!(value_bytes(&cells[1], &strings), b"");
+    assert_eq!(value_bytes(&cells[2], &strings), b"999");
+    assert_eq!(value_bytes(&cells[3], &strings), b"4");
+    assert_eq!(extras.sf_refs, vec![(7, 1, 0), (7, 2, 0)]);
+}
+
+#[test]
+fn prefixed_self_closing_shared_formula_without_cached_value_stays_empty() {
+    let xml = br#"<x:worksheet xmlns:x="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><x:sheetData>
+    <x:row r="1">
+      <x:c r="A1"><x:f t="shared" si="7" ref="A1:A3">A1+1</x:f><x:v>2</x:v></x:c>
+      <x:c r="A2"><x:f t="shared" si="7"/></x:c>
+      <x:c r="B2"><x:v>999</x:v></x:c>
+      <x:c r="A3"><x:f t="shared" si="7"/><x:v>4</x:v></x:c>
+    </x:row>
+  </x:sheetData></x:worksheet>"#;
+
+    let shared_strings: Vec<&str> = vec![];
+    let mut cells = vec![CellData::default(); 10];
+    let mut strings = Vec::new();
+    let mut row_heights = Vec::new();
+    let mut extras = ParseExtras::default();
+
+    let count = parse_worksheet_fast_with_extras(
+        xml,
+        &shared_strings,
+        &mut cells,
+        &mut strings,
+        &mut row_heights,
+        &mut extras,
+        &[],
+    );
+
+    assert_eq!(count, 4);
+    assert_eq!(cells[1].get_row(), 1);
+    assert_eq!(cells[1].get_col(), 0);
+    assert_eq!(cells[1].get_value_type(), VALUE_TYPE_CACHED_FORMULA);
+    assert_eq!(value_bytes(&cells[1], &strings), b"");
+    assert_eq!(value_bytes(&cells[2], &strings), b"999");
+    assert_eq!(value_bytes(&cells[3], &strings), b"4");
+    assert_eq!(extras.sf_refs, vec![(7, 1, 0), (7, 2, 0)]);
+}
+
+#[test]
 fn test_parse_worksheet_with_styles() {
     let xml = br#"<worksheet><sheetData>
     <row r="1">

@@ -60,8 +60,15 @@ pub(super) fn extract_formula_forward<'a>(
 
     if f_tag.is_self_closing {
         // Self-closing <f .../> — shared formula reference
-        // Extract the cached <v> value that follows
-        match find_start_tag(xml, b"v", f_tag.content_start) {
+        // Extract the cached <v> value that follows within the same cell. The
+        // fast worksheet scanner passes the whole worksheet buffer here, so the
+        // search must be bounded to this `<c>` element rather than the next
+        // cell's value.
+        let cell_content_end = match find_closing_tag_span(xml, b"c", f_tag.content_start) {
+            Some(c_close) => c_close.lt,
+            None => return (VALUE_TYPE_CACHED_FORMULA, b""),
+        };
+        match find_start_tag(&xml[..cell_content_end], b"v", f_tag.content_start) {
             Some(v_tag) => extract_v_forward(
                 xml,
                 v_tag.lt,

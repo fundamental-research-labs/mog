@@ -19,6 +19,23 @@ import { WorksheetFiltersImpl } from '../filters';
 const SHEET_ID = sheetId('sheet-1');
 const FILTER_ID = 'filter-1';
 
+function mutationResult(overrides: Record<string, unknown> = {}): any {
+  return {
+    recalc: { changedCells: [] },
+    ...overrides,
+  };
+}
+
+function tableFilter(overrides: Record<string, unknown> = {}): any {
+  return {
+    id: FILTER_ID,
+    type: 'tableFilter',
+    tableId: 'table-1',
+    columnFilters: {},
+    ...overrides,
+  };
+}
+
 function createMockCtx(opts: { existingFilters?: Array<{ id: string }> } = {}): any {
   const filters = opts.existingFilters ?? [{ id: FILTER_ID }];
   return {
@@ -39,10 +56,19 @@ function createMockCtx(opts: { existingFilters?: Array<{ id: string }> } = {}): 
       }),
       setColumnFilter: jest.fn().mockResolvedValue(undefined),
       applyFilter: jest.fn().mockResolvedValue(undefined),
+      reapplyFilter: jest.fn().mockResolvedValue(undefined),
       createFilter: jest.fn().mockResolvedValue(undefined),
       deleteFilter: jest.fn().mockResolvedValue(undefined),
       clearColumnFilter: jest.fn().mockResolvedValue(undefined),
       clearAllColumnFilters: jest.fn().mockResolvedValue(undefined),
+      computeDynamicFilterSerialRange: jest.fn().mockResolvedValue(null),
+      getAllTablesInSheet: jest.fn().mockResolvedValue([
+        {
+          id: 'table-1',
+          range: { startRow: 0, startCol: 0, endRow: 4, endCol: 1 },
+        },
+      ]),
+      getCellIdAt: jest.fn().mockResolvedValue(null),
       getCellPosition: jest.fn().mockResolvedValue(null),
       getUniqueColumnValues: jest.fn().mockResolvedValue([]),
       getFilterSortState: jest.fn().mockResolvedValue(null),
@@ -100,15 +126,16 @@ describe('WorksheetFiltersImpl.byColor', () => {
     expect(ctx.computeBridge.applyFilter).toHaveBeenCalledWith(SHEET_ID, FILTER_ID);
   });
 
-  it('honors an explicit filterId without resolving the active filter', async () => {
+  it('honors an explicit filterId target', async () => {
+    ctx = createMockCtx({ existingFilters: [{ id: 'explicit-filter' }] });
+    filters = new WorksheetFiltersImpl(ctx, SHEET_ID);
+
     await filters.byColor(1, {
       colorType: 'fill',
       color: '#00FF00',
       filterId: 'explicit-filter',
     });
 
-    // Explicit ID avoids active-filter resolution when sheet protection is inactive.
-    expect(ctx.computeBridge.getFiltersInSheet).not.toHaveBeenCalled();
     expect(ctx.computeBridge.setColumnFilter).toHaveBeenCalledWith(
       SHEET_ID,
       'explicit-filter',
@@ -185,6 +212,175 @@ describe('WorksheetFiltersImpl.byColor', () => {
       diagnostics: [],
       clearedCount: 0,
     });
+  });
+
+  it('returns an applied receipt for setColumnFilter projection changes', async () => {
+    ctx = createMockCtx({ existingFilters: [tableFilter()] });
+    filters = new WorksheetFiltersImpl(ctx, SHEET_ID);
+    ctx.computeBridge.setColumnFilter.mockResolvedValueOnce(
+      mutationResult({
+        filterChanges: [
+          {
+            sheetId: SHEET_ID,
+            filterId: FILTER_ID,
+            filterKind: 'tableFilter',
+            tableId: 'table-1',
+            action: 'applied',
+            hiddenRowCount: 2,
+            visibleRowCount: 3,
+            kind: 'Set',
+          },
+        ],
+      }),
+    );
+
+    const receipt = await filters.setColumnFilter(0, { type: 'value', values: ['East'] });
+
+    expect(receipt).toEqual(
+      expect.objectContaining({
+        kind: 'filter.columnFilter.set',
+        status: 'applied',
+        sheetId: SHEET_ID,
+        filterId: FILTER_ID,
+        filterKind: 'tableFilter',
+        tableId: 'table-1',
+        range: 'A1:B5',
+        column: 0,
+        hiddenRowCount: 2,
+        visibleRowCount: 3,
+        diagnostics: [],
+      }),
+    );
+    expect(receipt.effects).toEqual([
+      expect.objectContaining({
+        type: 'changedFilterProjection',
+        sheetId: SHEET_ID,
+        range: 'A1:B5',
+        details: expect.objectContaining({
+          filterId: FILTER_ID,
+          hiddenRowCount: 2,
+          visibleRowCount: 3,
+        }),
+      }),
+    ]);
+  });
+
+  it('returns a no-op receipt when clearing an already-clear column', async () => {
+    ctx = createMockCtx({ existingFilters: [tableFilter()] });
+    filters = new WorksheetFiltersImpl(ctx, SHEET_ID);
+
+    const receipt = await filters.clearColumnFilter(0);
+
+    expect(ctx.computeBridge.clearColumnFilter).not.toHaveBeenCalled();
+    expect(receipt).toEqual(
+      expect.objectContaining({
+        kind: 'filter.columnFilter.clear',
+        status: 'noOp',
+        sheetId: SHEET_ID,
+        filterId: FILTER_ID,
+        filterKind: 'tableFilter',
+        range: 'A1:B5',
+        column: 0,
+        effects: [],
+        diagnostics: [],
+      }),
+    );
+  });
+
+  it('returns an unsupported receipt with diagnostics for preserved filter shells', async () => {
+    const diagnostic = {
+      id: 'runtime-diagnostic-1',
+      sequence: '1',
+      code: 'unsupported_filter_reapply',
+      severity: 'warning',
+      recoverability: 'unsupported_preserved',
+      operation: 'applyFilter',
+      sheetId: SHEET_ID,
+      filterId: FILTER_ID,
+      filterKind: 'tableFilter',
+      tableId: 'table-1',
+      reason: 'iconFilterUnsupported',
+      reasons: ['iconFilterUnsupported'],
+    };
+    ctx = createMockCtx({ existingFilters: [tableFilter()] });
+    filters = new WorksheetFiltersImpl(ctx, SHEET_ID);
+    ctx.computeBridge.applyFilter.mockResolvedValueOnce(
+      mutationResult({
+        diagnostics: [diagnostic],
+        filterChanges: [
+          {
+            sheetId: SHEET_ID,
+            filterId: FILTER_ID,
+            filterKind: 'tableFilter',
+            tableId: 'table-1',
+            capability: 'unsupported',
+            unsupportedReasons: ['iconFilterUnsupported'],
+            diagnostics: [diagnostic],
+            action: 'applied',
+            hiddenRowCount: 0,
+            visibleRowCount: 5,
+            kind: 'Set',
+          },
+        ],
+      }),
+    );
+
+    const receipt = await filters.apply(FILTER_ID);
+
+    expect(receipt.status).toBe('unsupported');
+    expect(receipt.unsupportedReasons).toEqual(['iconFilterUnsupported']);
+    expect(receipt.diagnostics).toEqual([
+      expect.objectContaining({
+        severity: 'warning',
+        code: 'unsupported_filter_reapply',
+        target: expect.objectContaining({ sheetId: SHEET_ID, objectId: FILTER_ID }),
+      }),
+    ]);
+    expect(receipt.effects).toEqual([
+      expect.objectContaining({ type: 'changedFilterProjection' }),
+    ]);
+  });
+
+  it('returns failed status when compute reports failure diagnostics', async () => {
+    ctx = createMockCtx({ existingFilters: [tableFilter()] });
+    filters = new WorksheetFiltersImpl(ctx, SHEET_ID);
+    ctx.computeBridge.reapplyFilter.mockResolvedValueOnce(
+      mutationResult({
+        diagnostics: [
+          {
+            id: 'runtime-diagnostic-2',
+            sequence: '2',
+            code: 'filter_runtime_failure',
+            severity: 'error',
+            recoverability: 'fatal',
+            operation: 'reapplyFilter',
+            sheetId: SHEET_ID,
+            filterId: FILTER_ID,
+            filterKind: 'tableFilter',
+            tableId: 'table-1',
+          },
+        ],
+      }),
+    );
+
+    const receipt = await filters.reapply(FILTER_ID);
+
+    expect(receipt).toEqual(
+      expect.objectContaining({
+        kind: 'filter.reapply',
+        status: 'failed',
+        sheetId: SHEET_ID,
+        filterId: FILTER_ID,
+        range: 'A1:B5',
+      }),
+    );
+    expect(receipt.diagnostics[0]).toEqual(
+      expect.objectContaining({
+        severity: 'error',
+        code: 'filter_runtime_failure',
+        recoverable: false,
+      }),
+    );
   });
 
   it('throws when no auto-filter exists and no filterId is provided', async () => {

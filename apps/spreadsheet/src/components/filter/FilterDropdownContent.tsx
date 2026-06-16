@@ -58,6 +58,48 @@ export interface FilterDropdownContentProps {
 type FilterTab = 'values' | 'conditions';
 type ActiveSubmenu = 'number' | 'text' | 'date' | 'color' | 'sortByColor' | null;
 
+type FilterOperationReceipt = {
+  readonly status: string;
+  readonly effects: readonly unknown[];
+  readonly diagnostics: readonly { severity?: string; message?: string }[];
+};
+
+function filterReceiptError(receipt: unknown, fallback: string): string | null {
+  if (typeof receipt !== 'object' || receipt === null) return null;
+  const maybe = receipt as Partial<FilterOperationReceipt>;
+  if (
+    typeof maybe.status !== 'string' ||
+    !Array.isArray(maybe.effects) ||
+    !Array.isArray(maybe.diagnostics)
+  ) {
+    return null;
+  }
+  if (maybe.status !== 'failed' && maybe.status !== 'unsupported') return null;
+  return (
+    maybe.diagnostics.find((diagnostic) => diagnostic.severity === 'error')?.message ??
+    maybe.diagnostics[0]?.message ??
+    fallback
+  );
+}
+
+async function runFilterMutation(
+  mutation: () => Promise<unknown>,
+  onApplied: () => void,
+  fallback: string,
+): Promise<void> {
+  try {
+    const receipt = await mutation();
+    const error = filterReceiptError(receipt, fallback);
+    if (error) {
+      console.warn(error, receipt);
+      return;
+    }
+    onApplied();
+  } catch (error) {
+    console.warn(fallback, error);
+  }
+}
+
 function tableRangeMatchesFilter(
   tableRange: string,
   range: { startRow: number; startCol: number; endRow: number; endCol: number },
@@ -227,9 +269,14 @@ export function FilterDropdownContent({
       };
 
       const ws = wb.getSheetById(activeSheetId);
-      void ws.filters.setColumnFilter(col, criteria, filterId);
-      onClose();
-      onFilterApplied?.();
+      void runFilterMutation(
+        () => ws.filters.setColumnFilter(col, criteria, filterId),
+        () => {
+          onClose();
+          onFilterApplied?.();
+        },
+        'Value filter did not apply.',
+      );
     },
     [wb, activeSheetId, filterId, headerCellId, col, onClose, onFilterApplied],
   );
@@ -240,9 +287,14 @@ export function FilterDropdownContent({
       if (!filterId || !headerCellId || col === undefined) return;
 
       const ws = wb.getSheetById(activeSheetId);
-      void ws.filters.setColumnFilter(col, criteria, filterId);
-      onClose();
-      onFilterApplied?.();
+      void runFilterMutation(
+        () => ws.filters.setColumnFilter(col, criteria, filterId),
+        () => {
+          onClose();
+          onFilterApplied?.();
+        },
+        'Condition filter did not apply.',
+      );
     },
     [wb, activeSheetId, filterId, headerCellId, col, onClose, onFilterApplied],
   );
@@ -252,9 +304,14 @@ export function FilterDropdownContent({
     if (!filterId || !headerCellId || col === undefined) return;
 
     const ws = wb.getSheetById(activeSheetId);
-    void ws.filters.clearColumnFilter(col, filterId);
-    onClose();
-    onFilterApplied?.();
+    void runFilterMutation(
+      () => ws.filters.clearColumnFilter(col, filterId),
+      () => {
+        onClose();
+        onFilterApplied?.();
+      },
+      'Column filter did not clear.',
+    );
   }, [wb, activeSheetId, filterId, headerCellId, col, onClose, onFilterApplied]);
 
   // Sort handlers - integrated with sort system

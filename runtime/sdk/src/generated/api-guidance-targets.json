@@ -8496,8 +8496,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "apply(filterId: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "apply(filterId: string): Promise<FilterMutationReceipt>;",
+      "typeText": "Promise<FilterMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/filters.ts"
@@ -8534,8 +8534,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "applyDynamicFilter(col: number, rule: DynamicFilterRule, filterId?: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "applyDynamicFilter(\n    col: number,\n    rule: DynamicFilterRule,\n    filterId?: string,\n  ): Promise<FilterMutationReceipt>;",
+      "typeText": "Promise<FilterMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/filters.ts"
@@ -8591,8 +8591,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "clearAllCriteria(filterId: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "clearAllCriteria(filterId: string): Promise<FilterMutationReceipt>;",
+      "typeText": "Promise<FilterMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/filters.ts"
@@ -8629,8 +8629,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "clearColumnFilter(col: number, filterId?: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "clearColumnFilter(col: number, filterId?: string): Promise<FilterMutationReceipt>;",
+      "typeText": "Promise<FilterMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/filters.ts"
@@ -8933,8 +8933,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "reapply(filterId: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "reapply(filterId: string): Promise<FilterMutationReceipt>;",
+      "typeText": "Promise<FilterMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/filters.ts"
@@ -8990,8 +8990,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setColumnFilter(col: number, criteria: ColumnFilterCriteria, filterId?: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setColumnFilter(\n    col: number,\n    criteria: ColumnFilterCriteria,\n    filterId?: string,\n  ): Promise<FilterMutationReceipt>;",
+      "typeText": "Promise<FilterMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/filters.ts"
@@ -26913,8 +26913,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "apply(filterId: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "apply(filterId: string): Promise<FilterMutationReceipt>;",
+      "typeText": "Promise<FilterMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/filters.ts"
@@ -26951,8 +26951,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "applyDynamicFilter(col: number, rule: DynamicFilterRule, filterId?: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "applyDynamicFilter(\n    col: number,\n    rule: DynamicFilterRule,\n    filterId?: string,\n  ): Promise<FilterMutationReceipt>;",
+      "typeText": "Promise<FilterMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/filters.ts"
@@ -27008,8 +27008,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "clearAllCriteria(filterId: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "clearAllCriteria(filterId: string): Promise<FilterMutationReceipt>;",
+      "typeText": "Promise<FilterMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/filters.ts"
@@ -27046,8 +27046,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "clearColumnFilter(col: number, filterId?: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "clearColumnFilter(col: number, filterId?: string): Promise<FilterMutationReceipt>;",
+      "typeText": "Promise<FilterMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/filters.ts"
@@ -27350,8 +27350,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "reapply(filterId: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "reapply(filterId: string): Promise<FilterMutationReceipt>;",
+      "typeText": "Promise<FilterMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/filters.ts"
@@ -27407,8 +27407,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setColumnFilter(col: number, criteria: ColumnFilterCriteria, filterId?: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setColumnFilter(\n    col: number,\n    criteria: ColumnFilterCriteria,\n    filterId?: string,\n  ): Promise<FilterMutationReceipt>;",
+      "typeText": "Promise<FilterMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/filters.ts"

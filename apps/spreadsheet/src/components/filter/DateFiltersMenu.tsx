@@ -62,6 +62,30 @@ type PeriodSubmenuOption =
   | 'nov'
   | 'dec';
 
+type FilterOperationReceipt = {
+  readonly status: string;
+  readonly effects: readonly unknown[];
+  readonly diagnostics: readonly { severity?: string; message?: string }[];
+};
+
+function filterReceiptError(receipt: unknown, fallback: string): string | null {
+  if (typeof receipt !== 'object' || receipt === null) return null;
+  const maybe = receipt as Partial<FilterOperationReceipt>;
+  if (
+    typeof maybe.status !== 'string' ||
+    !Array.isArray(maybe.effects) ||
+    !Array.isArray(maybe.diagnostics)
+  ) {
+    return null;
+  }
+  if (maybe.status !== 'failed' && maybe.status !== 'unsupported') return null;
+  return (
+    maybe.diagnostics.find((diagnostic) => diagnostic.severity === 'error')?.message ??
+    maybe.diagnostics[0]?.message ??
+    fallback
+  );
+}
+
 /**
  * Date filters submenu with operator shortcuts and quick filters
  *
@@ -82,6 +106,28 @@ export function DateFiltersMenu({
   const activeSheetId = useActiveSheetId();
   const setPendingFilterConfig = useUIStore((s) => s.setPendingFilterConfig);
   const [showPeriodSubmenu, setShowPeriodSubmenu] = useState(false);
+
+  const applyDateCriteria = useCallback(
+    (criteria: ColumnFilterCriteria, onApplied?: () => void) => {
+      const ws = wb.getSheetById(activeSheetId);
+      void (async () => {
+        try {
+          const receipt = await ws.filters.setColumnFilter(col, criteria, filterId);
+          const error = filterReceiptError(receipt, 'Date filter did not apply.');
+          if (error) {
+            console.warn(error, receipt);
+            return;
+          }
+          onApplied?.();
+          onClose();
+          onFilterApplied?.();
+        } catch (error) {
+          console.warn('Date filter did not apply.', error);
+        }
+      })();
+    },
+    [wb, activeSheetId, filterId, col, onClose, onFilterApplied],
+  );
 
   /**
    * Handle operator selection.
@@ -138,12 +184,9 @@ export function DateFiltersMenu({
         conditionLogic: 'and',
       };
 
-      const ws = wb.getSheetById(activeSheetId);
-      void ws.filters.setColumnFilter(col, criteria, filterId);
-      onClose();
-      onFilterApplied?.();
+      applyDateCriteria(criteria);
     },
-    [wb, activeSheetId, filterId, headerCellId, col, onClose, onFilterApplied],
+    [applyDateCriteria, onClose],
   );
 
   /**
@@ -171,11 +214,8 @@ export function DateFiltersMenu({
       conditionLogic: 'and',
     };
 
-    const ws = wb.getSheetById(activeSheetId);
-    void ws.filters.setColumnFilter(col, criteria, filterId);
-    onClose();
-    onFilterApplied?.();
-  }, [wb, activeSheetId, filterId, col, onClose, onFilterApplied]);
+    applyDateCriteria(criteria);
+  }, [applyDateCriteria]);
 
   /**
    * Apply a filter for a specific quarter or month across all years.
@@ -270,13 +310,9 @@ export function DateFiltersMenu({
         conditionLogic: 'and',
       };
 
-      const ws = wb.getSheetById(activeSheetId);
-      void ws.filters.setColumnFilter(col, criteria, filterId);
-      setShowPeriodSubmenu(false);
-      onClose();
-      onFilterApplied?.();
+      applyDateCriteria(criteria, () => setShowPeriodSubmenu(false));
     },
-    [wb, activeSheetId, filterId, headerCellId, col, onClose, onFilterApplied],
+    [applyDateCriteria, onClose],
   );
 
   /**

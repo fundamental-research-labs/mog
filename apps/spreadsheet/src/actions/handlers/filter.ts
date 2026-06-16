@@ -22,21 +22,84 @@ import { recordFilterReadinessError } from '../../infra/diagnostics/filter-readi
 import { guardBridgeMutation } from './bridge-error-guard';
 import { getUIStore, handled, notHandled } from './handler-utils';
 
-// =============================================================================
-// Type Helpers
-// =============================================================================
-
-/**
- * Get typed Worksheet from ActionDependencies.
- */
 function getWs(deps: ActionDependencies) {
   return deps.workbook.getSheetById(deps.getActiveSheetId());
 }
 
 type WorksheetApi = ReturnType<typeof getWs>;
+type WorksheetFilterInfo = {
+  readonly id: string;
+  readonly filterKind: 'autoFilter' | 'tableFilter' | 'advancedFilter';
+};
+
+type FilterOperationReceipt = {
+  readonly status: string;
+  readonly effects: readonly unknown[];
+  readonly diagnostics: readonly { severity?: string; message?: string }[];
+  readonly filterId?: string;
+};
 
 function isAdvancedFilterInfo(filter: { filterKind?: string } | null | undefined): boolean {
   return filter?.filterKind === 'advancedFilter';
+}
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null;
+
+function asFilterReceipt(value: unknown): FilterOperationReceipt | null {
+  if (!isRecord(value)) return null;
+  return (
+    typeof value.status === 'string' &&
+    Array.isArray(value.effects) &&
+    Array.isArray(value.diagnostics)
+      ? (value as FilterOperationReceipt)
+      : null
+  );
+}
+
+function filterReceiptOverrides(
+  receipts: readonly unknown[],
+): Omit<Partial<ActionResult>, 'handled'> {
+  const operationReceipts = receipts.map(asFilterReceipt).filter((r) => r !== null);
+  if (operationReceipts.length === 0) return {};
+  return { receipts: operationReceipts as NonNullable<ActionResult['receipts']> };
+}
+
+function filterReceiptError(receipt: unknown, fallback: string): string | null {
+  const r = asFilterReceipt(receipt);
+  if (!r) return null;
+  if (r.status !== 'failed' && r.status !== 'unsupported') return null;
+  return (
+    r.diagnostics.find((diagnostic) => diagnostic.severity === 'error')?.message ??
+    r.diagnostics[0]?.message ??
+    fallback
+  );
+}
+
+function handledFilterReceiptError(
+  receipt: unknown,
+  fallback: string,
+  receipts: readonly unknown[] = [receipt],
+): ActionResult | null {
+  const error = filterReceiptError(receipt, fallback);
+  if (!error) return null;
+  return handled({ ...filterReceiptOverrides(receipts), error });
+}
+
+function filterIdFromReceipt(receipt: unknown): string | null {
+  if (!isRecord(receipt)) return null;
+  if (typeof receipt.filterId === 'string') return receipt.filterId;
+
+  const effects = Array.isArray(receipt.effects) ? receipt.effects : [];
+  for (const effect of effects) {
+    if (!isRecord(effect)) continue;
+    if (typeof effect.objectId === 'string') return effect.objectId;
+    const details = isRecord(effect.details) ? effect.details : null;
+    if (details && typeof details.filterId === 'string') return details.filterId;
+    if (details && typeof details.objectId === 'string') return details.objectId;
+  }
+
+  return null;
 }
 
 async function resolveHeaderColumn(ws: WorksheetApi, headerCellId: string): Promise<number | null> {
@@ -49,34 +112,39 @@ async function setCriteriaForHeader(
   filterId: string,
   headerCellId: string,
   criteria: ColumnFilterCriteria,
-): Promise<boolean> {
+): Promise<unknown | false> {
   const col = await resolveHeaderColumn(ws, headerCellId);
   if (col === null) return false;
-  await ws.filters.setColumnFilter(col, criteria, filterId);
-  return true;
+  return ws.filters.setColumnFilter(col, criteria, filterId);
 }
 
 async function clearCriteriaForHeader(
   ws: WorksheetApi,
   filterId: string,
   headerCellId: string,
-): Promise<boolean> {
+): Promise<unknown | false> {
   const col = await resolveHeaderColumn(ws, headerCellId);
   if (col === null) return false;
-  await ws.filters.clearColumnFilter(col, filterId);
-  return true;
+  return ws.filters.clearColumnFilter(col, filterId);
 }
 
-// =============================================================================
-// Handlers
-// =============================================================================
+async function resolveCreatedFilter(
+  ws: WorksheetApi,
+  activeCell: { col: number },
+  receipt: unknown,
+): Promise<WorksheetFilterInfo | null> {
+  const receiptFilterId = filterIdFromReceipt(receipt);
+  if (receiptFilterId) {
+    return { id: receiptFilterId, filterKind: 'autoFilter' };
+  }
+  return ws.filters.getForRange({
+    startRow: 0,
+    startCol: activeCell.col,
+    endRow: 0,
+    endCol: activeCell.col,
+  });
+}
 
-/**
- * APPLY_NUMBER_FILTER
- *
- * Applies a number filter (condition filter) to a column.
- * Reads pending config from UIStore (Draft + Apply pattern).
- */
 export const APPLY_NUMBER_FILTER: AsyncActionHandler = async (
   deps: ActionDependencies,
 ): Promise<ActionResult> => {
@@ -101,24 +169,20 @@ export const APPLY_NUMBER_FILTER: AsyncActionHandler = async (
     },
   ];
 
-  const applied = await setCriteriaForHeader(ws, filterId, headerCellId, {
+  const receipt = await setCriteriaForHeader(ws, filterId, headerCellId, {
     type: 'condition',
     conditions: conditions as FilterCondition[],
   });
-  if (!applied) return notHandled('disabled');
+  if (receipt === false) return notHandled('disabled');
+  const receiptError = handledFilterReceiptError(receipt, 'Number filter did not apply.');
+  if (receiptError) return receiptError;
 
   // Clear pending config
   uiStore.getState().clearPendingFilterConfig();
 
-  return handled();
+  return handled(filterReceiptOverrides([receipt]));
 };
 
-/**
- * APPLY_TEXT_FILTER
- *
- * Applies a text filter (condition filter) to a column.
- * Reads pending config from UIStore (Draft + Apply pattern).
- */
 export const APPLY_TEXT_FILTER: AsyncActionHandler = async (
   deps: ActionDependencies,
 ): Promise<ActionResult> => {
@@ -142,26 +206,20 @@ export const APPLY_TEXT_FILTER: AsyncActionHandler = async (
     },
   ];
 
-  const applied = await setCriteriaForHeader(ws, filterId, headerCellId, {
+  const receipt = await setCriteriaForHeader(ws, filterId, headerCellId, {
     type: 'condition',
     conditions: conditions as FilterCondition[],
   });
-  if (!applied) return notHandled('disabled');
+  if (receipt === false) return notHandled('disabled');
+  const receiptError = handledFilterReceiptError(receipt, 'Text filter did not apply.');
+  if (receiptError) return receiptError;
 
   // Clear pending config
   uiStore.getState().clearPendingFilterConfig();
 
-  return handled();
+  return handled(filterReceiptOverrides([receipt]));
 };
 
-/**
- * APPLY_COLOR_FILTER
- *
- * Applies a color filter to a column.
- * Reads pending config from UIStore (Draft + Apply pattern).
- *
- * B4: Excel-parity quickwin - Color filter support
- */
 export const APPLY_COLOR_FILTER: AsyncActionHandler = async (
   deps: ActionDependencies,
 ): Promise<ActionResult> => {
@@ -177,9 +235,10 @@ export const APPLY_COLOR_FILTER: AsyncActionHandler = async (
 
   const { filterId, headerCellId, col, colorType, color } = pendingColorFilter;
 
+  let receipt: unknown;
   if (col !== undefined) {
     // Use the column-index-based API (preferred path when col is available)
-    await ws.filters.setColumnFilter(
+    receipt = await ws.filters.setColumnFilter(
       col,
       {
         type: 'color',
@@ -187,28 +246,24 @@ export const APPLY_COLOR_FILTER: AsyncActionHandler = async (
       },
       filterId,
     );
+    const receiptError = handledFilterReceiptError(receipt, 'Color filter did not apply.');
+    if (receiptError) return receiptError;
   } else {
-    const applied = await setCriteriaForHeader(ws, filterId, headerCellId, {
+    receipt = await setCriteriaForHeader(ws, filterId, headerCellId, {
       type: 'color',
       colorFilter: { type: colorType, color },
     });
-    if (!applied) return notHandled('disabled');
+    if (receipt === false) return notHandled('disabled');
+    const receiptError = handledFilterReceiptError(receipt, 'Color filter did not apply.');
+    if (receiptError) return receiptError;
   }
 
   // Clear pending config
   uiStore.getState().clearPendingColorFilter();
 
-  return handled();
+  return handled(filterReceiptOverrides([receipt]));
 };
 
-/**
- * APPLY_TOP10_FILTER
- *
- * Applies a top 10 filter to a column.
- * Reads pending config from UIStore (Draft + Apply pattern).
- *
- * B4: Excel-parity quickwin - Top10 filter support
- */
 export const APPLY_TOP10_FILTER: AsyncActionHandler = async (
   deps: ActionDependencies,
 ): Promise<ActionResult> => {
@@ -225,47 +280,33 @@ export const APPLY_TOP10_FILTER: AsyncActionHandler = async (
   const { filterId, headerCellId, type, count, by } = pendingTop10Config;
 
   // Set the top10 criteria
-  const applied = await setCriteriaForHeader(ws, filterId, headerCellId, {
+  const receipt = await setCriteriaForHeader(ws, filterId, headerCellId, {
     type: 'top10',
     topBottom: { type, count, by },
   });
-  if (!applied) return notHandled('disabled');
+  if (receipt === false) return notHandled('disabled');
+  const receiptError = handledFilterReceiptError(receipt, 'Top 10 filter did not apply.');
+  if (receiptError) return receiptError;
 
   // Clear pending config and close dialog
   uiStore.getState().clearPendingTop10Config();
   uiStore.getState().closeTop10Dialog();
 
-  return handled();
+  return handled(filterReceiptOverrides([receipt]));
 };
 
-/**
- * OPEN_TOP10_DIALOG
- *
- * Opens the Top 10 filter dialog.
- */
 export const OPEN_TOP10_DIALOG: ActionHandler = (deps: ActionDependencies): ActionResult => {
   const uiStore = getUIStore(deps);
   uiStore.getState().openTop10Dialog();
   return handled();
 };
 
-/**
- * CLOSE_TOP10_DIALOG
- *
- * Closes the Top 10 filter dialog.
- */
 export const CLOSE_TOP10_DIALOG: ActionHandler = (deps: ActionDependencies): ActionResult => {
   const uiStore = getUIStore(deps);
   uiStore.getState().closeTop10Dialog();
   return handled();
 };
 
-/**
- * CLEAR_COLUMN_FILTER
- *
- * Clears the filter from a specific column.
- * Uses the current filter dropdown context (filterId, headerCellId).
- */
 export const CLEAR_COLUMN_FILTER: AsyncActionHandler = async (
   deps: ActionDependencies,
 ): Promise<ActionResult> => {
@@ -279,23 +320,14 @@ export const CLEAR_COLUMN_FILTER: AsyncActionHandler = async (
     return notHandled('disabled');
   }
 
-  const cleared = await clearCriteriaForHeader(ws, filterId, headerCellId);
-  if (!cleared) return notHandled('disabled');
+  const receipt = await clearCriteriaForHeader(ws, filterId, headerCellId);
+  if (receipt === false) return notHandled('disabled');
+  const receiptError = handledFilterReceiptError(receipt, 'Column filter did not clear.');
+  if (receiptError) return receiptError;
 
-  return handled();
+  return handled(filterReceiptOverrides([receipt]));
 };
 
-// =============================================================================
-// Context Menu Filter Actions (Context Menus - Item 4.4)
-// =============================================================================
-
-/**
- * FILTER_BY_SELECTED_VALUE
- *
- * Filter the data to show only rows matching the value in the selected cell.
- *
- * Context Menus - Item 4.4 (Sort/Filter Submenus)
- */
 export const FILTER_BY_SELECTED_VALUE: AsyncActionHandler = async (
   deps: ActionDependencies,
 ): Promise<ActionResult> => {
@@ -322,26 +354,25 @@ export const FILTER_BY_SELECTED_VALUE: AsyncActionHandler = async (
     return notHandled('disabled');
   }
 
+  const receipts: unknown[] = [];
   if (!filter) {
-    await ws.filters.setAutoFilter({
+    const receipt = await ws.filters.setAutoFilter({
       startRow: 0,
       startCol: 0,
       endRow: 1000,
       endCol: activeCell.col + 1,
     });
-    filter = await ws.filters.getForRange({
-      startRow: 0,
-      startCol: activeCell.col,
-      endRow: 0,
-      endCol: activeCell.col,
-    });
+    receipts.push(receipt);
+    const receiptError = handledFilterReceiptError(receipt, 'Filter creation did not apply.', receipts);
+    if (receiptError) return receiptError;
+    filter = await resolveCreatedFilter(ws, activeCell, receipt);
   }
 
   if (!filter || isAdvancedFilterInfo(filter)) {
     return notHandled('disabled');
   }
 
-  await ws.filters.setColumnFilter(
+  const receipt = await ws.filters.setColumnFilter(
     activeCell.col,
     {
       type: 'value',
@@ -349,17 +380,13 @@ export const FILTER_BY_SELECTED_VALUE: AsyncActionHandler = async (
     },
     filter.id,
   );
+  receipts.push(receipt);
+  const receiptError = handledFilterReceiptError(receipt, 'Selected-value filter did not apply.', receipts);
+  if (receiptError) return receiptError;
 
-  return handled();
+  return handled(filterReceiptOverrides(receipts));
 };
 
-/**
- * FILTER_BY_COLOR
- *
- * Filter the data to show only rows matching the color of the selected cell.
- *
- * Context Menus - Item 4.4 (Sort/Filter Submenus)
- */
 export const FILTER_BY_COLOR: AsyncActionHandler = async (
   deps: ActionDependencies,
 ): Promise<ActionResult> => {
@@ -391,19 +418,18 @@ export const FILTER_BY_COLOR: AsyncActionHandler = async (
     return notHandled('disabled');
   }
 
+  const receipts: unknown[] = [];
   if (!filter) {
-    await ws.filters.setAutoFilter({
+    const receipt = await ws.filters.setAutoFilter({
       startRow: 0,
       startCol: 0,
       endRow: 1000,
       endCol: activeCell.col + 1,
     });
-    filter = await ws.filters.getForRange({
-      startRow: 0,
-      startCol: activeCell.col,
-      endRow: 0,
-      endCol: activeCell.col,
-    });
+    receipts.push(receipt);
+    const receiptError = handledFilterReceiptError(receipt, 'Filter creation did not apply.', receipts);
+    if (receiptError) return receiptError;
+    filter = await resolveCreatedFilter(ws, activeCell, receipt);
   }
 
   if (!filter || isAdvancedFilterInfo(filter)) {
@@ -413,7 +439,7 @@ export const FILTER_BY_COLOR: AsyncActionHandler = async (
   const colorType: 'fill' | 'font' = backgroundColor ? 'fill' : 'font';
   const color = backgroundColor || fontColor;
 
-  await ws.filters.setColumnFilter(
+  const receipt = await ws.filters.setColumnFilter(
     activeCell.col,
     {
       type: 'color',
@@ -421,17 +447,13 @@ export const FILTER_BY_COLOR: AsyncActionHandler = async (
     },
     filter.id,
   );
+  receipts.push(receipt);
+  const receiptError = handledFilterReceiptError(receipt, 'Color filter did not apply.', receipts);
+  if (receiptError) return receiptError;
 
-  return handled();
+  return handled(filterReceiptOverrides(receipts));
 };
 
-/**
- * FILTER_BY_FONT_COLOR
- *
- * Filter the data to show only rows matching the font color of the selected cell.
- *
- * Context Menus - Filter by Font Color
- */
 export const FILTER_BY_FONT_COLOR: AsyncActionHandler = async (
   deps: ActionDependencies,
 ): Promise<ActionResult> => {
@@ -460,26 +482,25 @@ export const FILTER_BY_FONT_COLOR: AsyncActionHandler = async (
     return notHandled('disabled');
   }
 
+  const receipts: unknown[] = [];
   if (!filter) {
-    await ws.filters.setAutoFilter({
+    const receipt = await ws.filters.setAutoFilter({
       startRow: 0,
       startCol: 0,
       endRow: 1000,
       endCol: activeCell.col + 1,
     });
-    filter = await ws.filters.getForRange({
-      startRow: 0,
-      startCol: activeCell.col,
-      endRow: 0,
-      endCol: activeCell.col,
-    });
+    receipts.push(receipt);
+    const receiptError = handledFilterReceiptError(receipt, 'Filter creation did not apply.', receipts);
+    if (receiptError) return receiptError;
+    filter = await resolveCreatedFilter(ws, activeCell, receipt);
   }
 
   if (!filter || isAdvancedFilterInfo(filter)) {
     return notHandled('disabled');
   }
 
-  await ws.filters.setColumnFilter(
+  const receipt = await ws.filters.setColumnFilter(
     activeCell.col,
     {
       type: 'color',
@@ -487,17 +508,13 @@ export const FILTER_BY_FONT_COLOR: AsyncActionHandler = async (
     },
     filter.id,
   );
+  receipts.push(receipt);
+  const receiptError = handledFilterReceiptError(receipt, 'Font color filter did not apply.', receipts);
+  if (receiptError) return receiptError;
 
-  return handled();
+  return handled(filterReceiptOverrides(receipts));
 };
 
-/**
- * CLEAR_FILTER
- *
- * Clear all filters from the current data region.
- *
- * Context Menus - Item 4.4 (Sort/Filter Submenus)
- */
 export const CLEAR_FILTER: AsyncActionHandler = async (
   deps: ActionDependencies,
 ): Promise<ActionResult> => {
@@ -519,22 +536,13 @@ export const CLEAR_FILTER: AsyncActionHandler = async (
     return notHandled('disabled');
   }
 
-  await ws.filters.remove(filter.id);
+  const receipt = await ws.filters.remove(filter.id);
+  const receiptError = handledFilterReceiptError(receipt, 'Filter removal did not apply.');
+  if (receiptError) return receiptError;
 
-  return handled();
+  return handled(filterReceiptOverrides([receipt]));
 };
 
-// =============================================================================
-// Custom AutoFilter Dialog Actions
-// =============================================================================
-
-/**
- * OPEN_CUSTOM_AUTOFILTER_DIALOG
- *
- * Opens the Custom AutoFilter dialog for a specific column.
- *
- * Custom AutoFilter Dialog
- */
 export const OPEN_CUSTOM_AUTOFILTER_DIALOG: ActionHandler = (
   deps: ActionDependencies,
   payload?: { filterId: string; columnIndex: number; columnName?: string },
@@ -550,13 +558,6 @@ export const OPEN_CUSTOM_AUTOFILTER_DIALOG: ActionHandler = (
   return handled();
 };
 
-/**
- * CLOSE_CUSTOM_AUTOFILTER_DIALOG
- *
- * Closes the Custom AutoFilter dialog.
- *
- * Custom AutoFilter Dialog
- */
 export const CLOSE_CUSTOM_AUTOFILTER_DIALOG: ActionHandler = (
   deps: ActionDependencies,
 ): ActionResult => {
@@ -565,14 +566,6 @@ export const CLOSE_CUSTOM_AUTOFILTER_DIALOG: ActionHandler = (
   return handled();
 };
 
-/**
- * APPLY_CUSTOM_AUTOFILTER
- *
- * Applies custom filter conditions from the Custom AutoFilter dialog.
- * Supports two conditions with AND/OR logic and wildcards (* and ?).
- *
- * Custom AutoFilter Dialog
- */
 export const APPLY_CUSTOM_AUTOFILTER: AsyncActionHandler = async (
   deps: ActionDependencies,
   payload?: {
@@ -628,7 +621,7 @@ export const APPLY_CUSTOM_AUTOFILTER: AsyncActionHandler = async (
     });
   }
 
-  await ws.filters.setColumnFilter(
+  const receipt = await ws.filters.setColumnFilter(
     columnIndex,
     {
       type: 'condition',
@@ -637,14 +630,12 @@ export const APPLY_CUSTOM_AUTOFILTER: AsyncActionHandler = async (
     },
     filterId,
   );
+  const receiptError = handledFilterReceiptError(receipt, 'Custom AutoFilter did not apply.');
+  if (receiptError) return receiptError;
 
-  return handled();
+  return handled(filterReceiptOverrides([receipt]));
 };
 
-/**
- * Map custom autofilter operator names to filter domain operator names.
- * Maps to FilterOperator type defined in contracts/src/pivot.ts
- */
 function mapCustomOperatorToFilterOperator(operator: string): string {
   const mapping: Record<string, string> = {
     equals: 'equals',
@@ -661,14 +652,6 @@ function mapCustomOperatorToFilterOperator(operator: string): string {
   return mapping[operator] || operator;
 }
 
-// =============================================================================
-// Helper Functions
-// =============================================================================
-
-/**
- * Parse a filter value string to appropriate type.
- * Attempts to convert to number if possible.
- */
 function parseFilterValue(value: string): string | number {
   const trimmed = value.trim();
 
@@ -682,18 +665,6 @@ function parseFilterValue(value: string): string | number {
   return trimmed;
 }
 
-// =============================================================================
-// Advanced Filter Dialog Actions
-// =============================================================================
-
-/**
- * OPEN_ADVANCED_FILTER_DIALOG
- *
- * Opens the Advanced Filter dialog.
- * Pre-populates the list range based on current selection if available.
- *
- * Advanced Filter Dialog
- */
 export const OPEN_ADVANCED_FILTER_DIALOG: ActionHandler = (
   deps: ActionDependencies,
 ): ActionResult => {
@@ -714,13 +685,6 @@ export const OPEN_ADVANCED_FILTER_DIALOG: ActionHandler = (
   return handled();
 };
 
-/**
- * CLOSE_ADVANCED_FILTER_DIALOG
- *
- * Closes the Advanced Filter dialog.
- *
- * Advanced Filter Dialog
- */
 export const CLOSE_ADVANCED_FILTER_DIALOG: ActionHandler = (
   deps: ActionDependencies,
 ): ActionResult => {
@@ -729,24 +693,6 @@ export const CLOSE_ADVANCED_FILTER_DIALOG: ActionHandler = (
   return handled();
 };
 
-/**
- * APPLY_ADVANCED_FILTER
- *
- * Applies the advanced filter based on criteria range.
- * Supports filtering in place or copying to another location.
- *
- * Advanced Filter Dialog
- *
- * The criteria range format is:
- * - Row 1: Column headers (must match data headers exactly)
- * - Row 2+: Filter criteria (AND within row, OR across rows)
- *
- * Example criteria range:
- * | Name | Age |
- * | Smith | >30 |
- * | Johnson | |
- * This filters for: (Name="Smith" AND Age>30) OR (Name="Johnson")
- */
 export const APPLY_ADVANCED_FILTER: AsyncActionHandler = async (
   deps: ActionDependencies,
 ): Promise<ActionResult> => {
@@ -771,8 +717,9 @@ export const APPLY_ADVANCED_FILTER: AsyncActionHandler = async (
   }
 
   try {
+    let receipt: unknown;
     const ok = await guardBridgeMutation(async () => {
-      await ws.filters.applyAdvanced({
+      receipt = await ws.filters.applyAdvanced({
         listRange: dialogState.listRange,
         criteriaRange: dialogState.criteriaRange || undefined,
         mode: dialogState.filterInPlace ? 'inPlace' : 'copyTo',
@@ -780,8 +727,15 @@ export const APPLY_ADVANCED_FILTER: AsyncActionHandler = async (
         uniqueRecordsOnly: dialogState.uniqueRecordsOnly,
       } as Parameters<typeof ws.filters.applyAdvanced>[0]);
     });
-    if (!ok) return handled();
+    const receiptOverrides = filterReceiptOverrides([receipt]);
+    if (!ok) return handled(receiptOverrides);
+    const receiptError = filterReceiptError(receipt, 'Advanced Filter failed.');
+    if (receiptError) {
+      uiStore.getState().setAdvancedFilterError(receiptError);
+      return handled({ ...receiptOverrides, error: receiptError });
+    }
     uiStore.getState().closeAdvancedFilterDialog();
+    return handled(receiptOverrides);
   } catch (err) {
     uiStore
       .getState()
@@ -791,9 +745,6 @@ export const APPLY_ADVANCED_FILTER: AsyncActionHandler = async (
   return handled();
 };
 
-/**
- * Convert a CellRange to A1 notation string.
- */
 function rangeToA1Notation(range: {
   startRow: number;
   startCol: number;
@@ -811,9 +762,6 @@ function rangeToA1Notation(range: {
   return `${startCol}${startRow}:${endCol}${endRow}`;
 }
 
-/**
- * Convert column index to letter (0 = A, 1 = B, etc.)
- */
 function columnToLetter(col: number): string {
   let result = '';
   let c = col;
@@ -824,19 +772,6 @@ function columnToLetter(col: number): string {
   return result;
 }
 
-// =============================================================================
-// Sort & Filter Group Actions
-// =============================================================================
-
-/**
- * CLEAR_ALL_FILTERS
- *
- * Clear all filters on the active sheet.
- * Unlike CLEAR_FILTER which clears a single filter, this removes all
- * column filter criteria from all filters on the sheet.
- *
- * Sort & Filter group - Clear button
- */
 export const CLEAR_ALL_FILTERS: AsyncActionHandler = async (
   deps: ActionDependencies,
 ): Promise<ActionResult> => {
@@ -856,11 +791,23 @@ export const CLEAR_ALL_FILTERS: AsyncActionHandler = async (
     }
 
     operation = 'filters.clearAllCriteria';
+    const receipts: unknown[] = [];
     for (const filter of clearableFilters) {
-      await ws.filters.clearAllCriteria(filter.id);
+      const receipt = await ws.filters.clearAllCriteria(filter.id);
+      receipts.push(receipt);
+      const receiptError = filterReceiptError(receipt, 'Filter criteria did not clear.');
+      if (receiptError) {
+        recordFilterReadinessError({
+          source: 'dataTabClear',
+          sheetId,
+          operation,
+          error: new Error(receiptError),
+        });
+        return handled({ ...filterReceiptOverrides(receipts), error: receiptError });
+      }
     }
 
-    return handled();
+    return handled(filterReceiptOverrides(receipts));
   } catch (error) {
     recordFilterReadinessError({
       source: 'dataTabClear',
@@ -872,14 +819,6 @@ export const CLEAR_ALL_FILTERS: AsyncActionHandler = async (
   }
 };
 
-/**
- * REAPPLY_FILTERS
- *
- * Re-apply all filters on the active sheet.
- * Useful after data changes to ensure row visibility is correct.
- *
- * Sort & Filter group - Reapply button
- */
 export const REAPPLY_FILTERS: AsyncActionHandler = async (
   deps: ActionDependencies,
 ): Promise<ActionResult> => {
@@ -895,6 +834,7 @@ export const REAPPLY_FILTERS: AsyncActionHandler = async (
     }
 
     operation = 'filters.apply';
+    const receipts: unknown[] = [];
     for (const filter of allFilters) {
       if (filter.filterKind === 'advancedFilter') {
         const hasActiveFilter =
@@ -906,7 +846,7 @@ export const REAPPLY_FILTERS: AsyncActionHandler = async (
         if (!details?.advancedFilter?.active) continue;
 
         operation = 'filters.applyAdvanced';
-        await ws.filters.applyAdvanced({
+        const receipt = await ws.filters.applyAdvanced({
           listRange: rangeToA1Notation(details.range),
           criteriaRange: details.advancedFilter.criteriaRange
             ? rangeToA1Notation(details.advancedFilter.criteriaRange)
@@ -915,13 +855,35 @@ export const REAPPLY_FILTERS: AsyncActionHandler = async (
           uniqueRecordsOnly: details.advancedFilter.uniqueRecordsOnly,
           filterId: filter.id,
         });
+        receipts.push(receipt);
+        const receiptError = filterReceiptError(receipt, 'Advanced Filter did not reapply.');
+        if (receiptError) {
+          recordFilterReadinessError({
+            source: 'dataTabReapply',
+            sheetId,
+            operation,
+            error: new Error(receiptError),
+          });
+          return handled({ ...filterReceiptOverrides(receipts), error: receiptError });
+        }
       } else {
         operation = 'filters.reapply';
-        await ws.filters.reapply(filter.id);
+        const receipt = await ws.filters.reapply(filter.id);
+        receipts.push(receipt);
+        const receiptError = filterReceiptError(receipt, 'Filter did not reapply.');
+        if (receiptError) {
+          recordFilterReadinessError({
+            source: 'dataTabReapply',
+            sheetId,
+            operation,
+            error: new Error(receiptError),
+          });
+          return handled({ ...filterReceiptOverrides(receipts), error: receiptError });
+        }
       }
     }
 
-    return handled();
+    return handled(filterReceiptOverrides(receipts));
   } catch (error) {
     recordFilterReadinessError({
       source: 'dataTabReapply',

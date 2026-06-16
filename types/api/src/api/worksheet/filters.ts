@@ -4,7 +4,11 @@
  * Provides methods to create, query, and manage auto-filters and
  * CellId-aware filter operations on a worksheet.
  */
-import type { AutoFilterClearReceipt, AutoFilterSetReceipt } from '../mutation-receipt';
+import type {
+  AutoFilterClearReceipt,
+  AutoFilterSetReceipt,
+  FilterMutationReceipt,
+} from '../mutation-receipt';
 import type { ColumnFilterCriteria, DynamicFilterRule } from '@mog/types-data/data/filter';
 import type {
   CellRange,
@@ -244,7 +248,11 @@ export interface WorksheetFilters {
    * @param criteria - Filter criteria to apply
    * @param filterId - Optional filter ID; defaults to first auto-filter
    */
-  setColumnFilter(col: number, criteria: ColumnFilterCriteria, filterId?: string): Promise<void>;
+  setColumnFilter(
+    col: number,
+    criteria: ColumnFilterCriteria,
+    filterId?: string,
+  ): Promise<FilterMutationReceipt>;
 
   /**
    * Apply a dynamic filter rule to a column on an auto-filter.
@@ -259,7 +267,11 @@ export interface WorksheetFilters {
    * @param rule - Dynamic filter rule to apply
    * @param filterId - Optional filter ID; defaults to first auto-filter
    */
-  applyDynamicFilter(col: number, rule: DynamicFilterRule, filterId?: string): Promise<void>;
+  applyDynamicFilter(
+    col: number,
+    rule: DynamicFilterRule,
+    filterId?: string,
+  ): Promise<FilterMutationReceipt>;
 
   /**
    * Clear filter criteria for a column on an auto-filter.
@@ -270,7 +282,7 @@ export interface WorksheetFilters {
    * @param col - Column index (0-based)
    * @param filterId - Optional filter ID; defaults to first auto-filter
    */
-  clearColumnFilter(col: number, filterId?: string): Promise<void>;
+  clearColumnFilter(col: number, filterId?: string): Promise<FilterMutationReceipt>;
 
   /**
    * Get unique values in a column (for filter dropdowns).
@@ -319,21 +331,21 @@ export interface WorksheetFilters {
    *
    * @param filterId - Filter ID
    */
-  clearAllCriteria(filterId: string): Promise<void>;
+  clearAllCriteria(filterId: string): Promise<FilterMutationReceipt>;
 
   /**
    * Apply a filter (Rust evaluates criteria and updates row visibility).
    *
    * @param filterId - Filter ID to apply
    */
-  apply(filterId: string): Promise<void>;
+  apply(filterId: string): Promise<FilterMutationReceipt>;
 
   /**
    * Reapply a filter after data changes.
    *
    * @param filterId - Filter ID to reapply
    */
-  reapply(filterId: string): Promise<void>;
+  reapply(filterId: string): Promise<FilterMutationReceipt>;
 
   /**
    * Get detailed filter info including resolved range and column filters.

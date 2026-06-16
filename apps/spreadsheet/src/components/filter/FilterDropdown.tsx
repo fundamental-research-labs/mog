@@ -61,6 +61,48 @@ export interface FilterDropdownProps {
 type FilterTab = 'values' | 'conditions';
 type ActiveSubmenu = 'number' | 'text' | 'date' | 'color' | 'sortByColor' | null;
 
+type FilterOperationReceipt = {
+  readonly status: string;
+  readonly effects: readonly unknown[];
+  readonly diagnostics: readonly { severity?: string; message?: string }[];
+};
+
+function filterReceiptError(receipt: unknown, fallback: string): string | null {
+  if (typeof receipt !== 'object' || receipt === null) return null;
+  const maybe = receipt as Partial<FilterOperationReceipt>;
+  if (
+    typeof maybe.status !== 'string' ||
+    !Array.isArray(maybe.effects) ||
+    !Array.isArray(maybe.diagnostics)
+  ) {
+    return null;
+  }
+  if (maybe.status !== 'failed' && maybe.status !== 'unsupported') return null;
+  return (
+    maybe.diagnostics.find((diagnostic) => diagnostic.severity === 'error')?.message ??
+    maybe.diagnostics[0]?.message ??
+    fallback
+  );
+}
+
+async function runFilterMutation(
+  mutation: () => Promise<unknown>,
+  onApplied: () => void,
+  fallback: string,
+): Promise<void> {
+  try {
+    const receipt = await mutation();
+    const error = filterReceiptError(receipt, fallback);
+    if (error) {
+      console.warn(error, receipt);
+      return;
+    }
+    onApplied();
+  } catch (error) {
+    console.warn(fallback, error);
+  }
+}
+
 /**
  * Filter dropdown menu for AutoFilter header cells.
  *
@@ -232,9 +274,14 @@ export function FilterDropdown({
       };
 
       const ws = wb.getSheetById(activeSheetId);
-      void ws.filters.setColumnFilter(headerCol, criteria, filterId);
-      handleClose();
-      onFilterApplied?.();
+      void runFilterMutation(
+        () => ws.filters.setColumnFilter(headerCol, criteria, filterId),
+        () => {
+          handleClose();
+          onFilterApplied?.();
+        },
+        'Value filter did not apply.',
+      );
     },
     [wb, activeSheetId, filterId, headerCellId, headerCol, handleClose, onFilterApplied],
   );
@@ -245,9 +292,14 @@ export function FilterDropdown({
       if (!filterId || !headerCellId || headerCol === null) return;
 
       const ws = wb.getSheetById(activeSheetId);
-      void ws.filters.setColumnFilter(headerCol, criteria, filterId);
-      handleClose();
-      onFilterApplied?.();
+      void runFilterMutation(
+        () => ws.filters.setColumnFilter(headerCol, criteria, filterId),
+        () => {
+          handleClose();
+          onFilterApplied?.();
+        },
+        'Condition filter did not apply.',
+      );
     },
     [wb, activeSheetId, filterId, headerCellId, headerCol, handleClose, onFilterApplied],
   );
@@ -257,9 +309,14 @@ export function FilterDropdown({
     if (!filterId || !headerCellId || headerCol === null) return;
 
     const ws = wb.getSheetById(activeSheetId);
-    void ws.filters.clearColumnFilter(headerCol, filterId);
-    handleClose();
-    onFilterApplied?.();
+    void runFilterMutation(
+      () => ws.filters.clearColumnFilter(headerCol, filterId),
+      () => {
+        handleClose();
+        onFilterApplied?.();
+      },
+      'Column filter did not clear.',
+    );
   }, [wb, activeSheetId, filterId, headerCellId, headerCol, handleClose, onFilterApplied]);
 
   // Sort handlers - integrated with sort system

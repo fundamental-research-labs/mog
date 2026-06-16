@@ -546,6 +546,33 @@ export interface AutoFilterClearReceipt extends OperationReceiptBase {
   readonly clearedCount: number;
 }
 
+export type FilterMutationKind =
+  | 'filter.columnFilter.set'
+  | 'filter.dynamicFilter.apply'
+  | 'filter.columnFilter.clear'
+  | 'filter.criteria.clearAll'
+  | 'filter.apply'
+  | 'filter.reapply';
+
+export type FilterMutationStatus = 'applied' | 'noOp' | 'unsupported' | 'failed';
+
+/** Receipt for criteria and projection mutations on an existing worksheet filter. */
+export interface FilterMutationReceipt extends OperationReceiptBase {
+  readonly kind: FilterMutationKind;
+  readonly status: FilterMutationStatus;
+  readonly sheetId: string;
+  readonly filterId?: string;
+  readonly filterKind?: 'autoFilter' | 'tableFilter' | 'advancedFilter' | (string & {});
+  readonly tableId?: string;
+  readonly range?: string;
+  readonly column?: number;
+  readonly hiddenRowCount?: number;
+  readonly visibleRowCount?: number;
+  readonly unsupportedReasons?: readonly string[];
+  readonly hasActiveFilter?: boolean;
+  readonly clearable?: boolean;
+}
+
 // =============================================================================
 // Validation
 // =============================================================================
@@ -1103,6 +1130,7 @@ export type MutationReceipt =
   | NameClearReceipt
   | AutoFilterSetReceipt
   | AutoFilterClearReceipt
+  | FilterMutationReceipt
   | ValidationSetReceipt
   | ValidationRemoveReceipt
   | ValidationClearReceipt

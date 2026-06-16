@@ -304,7 +304,7 @@ export interface Worksheet {
    * Set a cell value by A1 address.
    * String values starting with "=" are treated as formulas (e.g. "=SUM(B1:B10)").
    * Use `options.asFormula` to force formula interpretation without the "=" prefix.
-   * Use `options.literal` to store strings starting with "=" as literal text.
+   * Use `options.literal` / `options.asText` to store formula-shaped strings as literal text.
    * Date values are automatically converted via setDateValue().
    */
   setCell(
@@ -316,7 +316,7 @@ export interface Worksheet {
    * Set a cell value by row/col.
    * String values starting with "=" are treated as formulas (e.g. "=SUM(B1:B10)").
    * Use `options.asFormula` to force formula interpretation without the "=" prefix.
-   * Use `options.literal` to store strings starting with "=" as literal text.
+   * Use `options.literal` / `options.asText` to store formula-shaped strings as literal text.
    * Date values are automatically converted via setDateValue().
    */
   setCell(
@@ -324,6 +324,26 @@ export interface Worksheet {
     col: number,
     value: CellValuePrimitive | Date,
     options?: CellWriteOptions,
+  ): Promise<void>;
+
+  /**
+   * Set an explicit scalar value by A1 address.
+   *
+   * Unlike {@link setCell}, this method does not accept formula intent through
+   * the value string. Formula-shaped strings are rejected unless
+   * `options.asText` / `options.literal` is set; use {@link setFormula} for formulas.
+   */
+  setValue(
+    address: string,
+    value: CellValuePrimitive | Date,
+    options?: Pick<CellWriteOptions, 'literal' | 'asText'>,
+  ): Promise<void>;
+  /** Set an explicit scalar value by row/col. */
+  setValue(
+    row: number,
+    col: number,
+    value: CellValuePrimitive | Date,
+    options?: Pick<CellWriteOptions, 'literal' | 'asText'>,
   ): Promise<void>;
 
   /**
@@ -468,6 +488,22 @@ export interface Worksheet {
   ): Promise<void>;
 
   /**
+   * Set a formula in one cell. Accepts either "=SUM(A1:A10)" or
+   * "SUM(A1:A10)" and stores the normalized formula with a leading "=".
+   */
+  setFormula(address: string, formula: string): Promise<void>;
+  /** Set a formula by row/col. */
+  setFormula(row: number, col: number, formula: string): Promise<void>;
+
+  /**
+   * Set formulas into a range, starting at the top-left cell.
+   * Each formula accepts either leading-"=" or bare expression form.
+   */
+  setFormulas(range: string, formulas: string[][]): Promise<void>;
+  setFormulas(range: CellRange, formulas: string[][]): Promise<void>;
+  setFormulas(startRow: number, startCol: number, formulas: string[][]): Promise<void>;
+
+  /**
    * Enter a CSE (`Ctrl+Shift+Enter`) array formula on the given range.
    *
    * The formula is stored only on the top-left anchor; covered cells
@@ -572,6 +608,15 @@ export interface Worksheet {
    * @returns The computed result value
    */
   evaluate(expression: string): Promise<CellValue>;
+
+  /**
+   * Evaluate a formula in the context of this sheet without writing it.
+   * Accepts either "=SUM(A1:A10)" or "SUM(A1:A10)".
+   *
+   * If `options.sheet` is provided, it must resolve through the owning workbook
+   * to a sheet in the same workbook.
+   */
+  evaluateFormula(formula: string, options?: { sheet?: string | SheetId }): Promise<CellValue>;
 
   /**
    * Validate a formula expression in the context of this sheet without writing
@@ -1029,6 +1074,11 @@ export interface Worksheet {
   setCells(
     cells: Array<{ row: number; col: number; value: CellValuePrimitive | Date }>,
   ): Promise<SetCellsResult>;
+  setCells(cells: Array<{ cell: string; formula: string }>): Promise<SetCellsResult>;
+  setCells(cells: Array<{ addr: string; formula: string }>): Promise<SetCellsResult>;
+  setCells(cells: Array<{ address: string; formula: string }>): Promise<SetCellsResult>;
+  setCells(cells: Array<{ row: number; col: number; formula: string }>): Promise<SetCellsResult>;
+
   // ===========================================================================
   // Export helpers
   // ===========================================================================

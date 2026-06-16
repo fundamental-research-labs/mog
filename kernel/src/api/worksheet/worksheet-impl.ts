@@ -178,6 +178,20 @@ import { WorksheetConditionalFormattingImpl } from './conditional-formats';
 import { WorksheetCustomPropertiesImpl } from './custom-properties';
 import { WorksheetFiltersImpl } from './filters';
 import { formControlLinkedCellResetValue } from './form-control-linked-cell-reset';
+import {
+  assertNoAmbiguousFormulaText,
+  formulaAddressHint,
+  isExplicitTextWrite,
+  normalizeFormulaA1,
+  normalizeFormulaExpression,
+  shouldEscapeAsLiteralText,
+  type ExplicitTextWriteOptions,
+  type FormulaCellWriteOptions,
+  type NormalizedSetCellsEntry,
+  type SetCellsEntry,
+  type SetCellsFormulaEntry,
+  type SetCellsValueEntry,
+} from './formula-api-helpers';
 import { WorksheetFormControlsImpl } from './form-controls';
 import { WorksheetFormatsImpl } from './formats';
 import { WorksheetHyperlinksImpl } from './hyperlinks';
@@ -664,42 +678,68 @@ export class WorksheetImpl implements Worksheet {
   // Cell read/write (overloaded addressing)
   // ===========================================================================
 
+  private resolveCellWriteArgs(
+    a: string | number,
+    b: unknown,
+    c?: unknown,
+    d?: unknown,
+  ): {
+    row: number;
+    col: number;
+    value: unknown;
+    options: FormulaCellWriteOptions | undefined;
+  } {
+    if (typeof a === 'string') {
+      const pos = resolveCell(a);
+      return {
+        row: pos.row,
+        col: pos.col,
+        value: b,
+        options: c as FormulaCellWriteOptions | undefined,
+      };
+    }
+
+    const col = b;
+    if (typeof col !== 'number') {
+      throw new KernelError(
+        'API_INVALID_ADDRESS',
+        `Invalid cell address: col must be a number, got ${typeof col}`,
+        {
+          context: { row: a, col },
+        },
+      );
+    }
+
+    return {
+      row: a,
+      col,
+      value: c,
+      options: d as FormulaCellWriteOptions | undefined,
+    };
+  }
+
   async setCell(
     address: string,
-    value: CellValuePrimitive,
+    value: CellValuePrimitive | Date,
     options?: CellWriteOptions,
   ): Promise<void>;
   async setCell(
     row: number,
     col: number,
-    value: CellValuePrimitive,
+    value: CellValuePrimitive | Date,
     options?: CellWriteOptions,
   ): Promise<void>;
   async setCell(a: string | number, b: any, c?: any, d?: any): Promise<void> {
     this._assertLive('worksheet.setCell');
     this._ensureWritable('worksheet.setCell');
-    let row: number, col: number, value: any, options: CellWriteOptions | undefined;
-    if (typeof a === 'string') {
-      const pos = resolveCell(a);
-      row = pos.row;
-      col = pos.col;
-      value = b;
-      options = c as CellWriteOptions | undefined;
-    } else {
-      row = a;
-      col = b;
-      if (typeof col !== 'number') {
-        throw new KernelError(
-          'API_INVALID_ADDRESS',
-          `Invalid cell address: col must be a number, got ${typeof col}`,
-          {
-            context: { row, col },
-          },
-        );
-      }
-      value = c;
-      options = d as CellWriteOptions | undefined;
+    let { row, col, value, options } = this.resolveCellWriteArgs(a, b, c, d);
+    if (options?.asFormula === true && isExplicitTextWrite(options)) {
+      throw new KernelError(
+        'API_INVALID_ARGUMENT',
+        'worksheet.setCell: options.asFormula cannot be combined with options.asText/literal.',
+      );
     }
+    assertNoAmbiguousFormulaText('worksheet.setCell', value, options, 'missingEqualsOnly');
 
     await this.ensureCellEditable(row, col);
 
@@ -709,18 +749,124 @@ export class WorksheetImpl implements Worksheet {
       return;
     }
 
-    // If literal option is set, prefix "=" strings with apostrophe to store as text
-    if (options?.literal && typeof value === 'string' && value.startsWith('=')) {
+    // Prefix formula-shaped text with apostrophe to force literal storage.
+    if (
+      isExplicitTextWrite(options) &&
+      typeof value === 'string' &&
+      shouldEscapeAsLiteralText(value)
+    ) {
       value = "'" + value;
     }
 
     // If asFormula option is set, prepend = if not already
     if (options?.asFormula && typeof value === 'string' && !value.startsWith('=')) {
-      value = `=${value}`;
+      value = normalizeFormulaA1(value, 'worksheet.setCell');
     }
 
     this._invalidateActiveCellEditSourceForCell(row, col);
-    await CellOps.setCell(this.ctx, this.sheetId, row, col, value);
+    await CellOps.setCell(this.ctx, this.sheetId, row, col, value as CellValuePrimitive);
+  }
+
+  async setValue(
+    address: string,
+    value: CellValuePrimitive | Date,
+    options?: ExplicitTextWriteOptions,
+  ): Promise<void>;
+  async setValue(
+    row: number,
+    col: number,
+    value: CellValuePrimitive | Date,
+    options?: ExplicitTextWriteOptions,
+  ): Promise<void>;
+  async setValue(a: string | number, b: any, c?: any, d?: any): Promise<void> {
+    this._assertLive('worksheet.setValue');
+    this._ensureWritable('worksheet.setValue');
+    let { row, col, value, options } = this.resolveCellWriteArgs(a, b, c, d);
+    assertNoAmbiguousFormulaText('worksheet.setValue', value, options, 'formulaOrMissingEquals');
+
+    await this.ensureCellEditable(row, col);
+
+    if (value instanceof Date) {
+      await this.setDateValue(row, col, value);
+      return;
+    }
+
+    if (
+      isExplicitTextWrite(options) &&
+      typeof value === 'string' &&
+      shouldEscapeAsLiteralText(value)
+    ) {
+      value = "'" + value;
+    }
+
+    this._invalidateActiveCellEditSourceForCell(row, col);
+    await CellOps.setCell(this.ctx, this.sheetId, row, col, value as CellValuePrimitive);
+  }
+
+  async setFormula(address: string, formula: string): Promise<void>;
+  async setFormula(row: number, col: number, formula: string): Promise<void>;
+  async setFormula(a: string | number, b: number | string, c?: string): Promise<void> {
+    this._assertLive('worksheet.setFormula');
+    this._ensureWritable('worksheet.setFormula');
+    const { row, col, value } = this.resolveCellWriteArgs(a, b, c);
+    const formula = normalizeFormulaA1(value as string, 'worksheet.setFormula');
+
+    await this.ensureCellEditable(row, col);
+    this._invalidateActiveCellEditSourceForCell(row, col);
+    await CellOps.setCell(this.ctx, this.sheetId, row, col, formula);
+  }
+
+  async setFormulas(range: string, formulas: string[][]): Promise<void>;
+  async setFormulas(range: CellRange, formulas: string[][]): Promise<void>;
+  async setFormulas(startRow: number, startCol: number, formulas: string[][]): Promise<void>;
+  async setFormulas(a: string | number | CellRange, b: any, c?: string[][]): Promise<void> {
+    this._assertLive('worksheet.setFormulas');
+    this._ensureWritable('worksheet.setFormulas');
+    let startRow: number, startCol: number, formulas: string[][];
+    if (typeof a === 'object') {
+      startRow = a.startRow;
+      startCol = a.startCol;
+      formulas = b;
+    } else if (typeof a === 'string') {
+      const parsed = parseCellRange(a);
+      if (parsed) {
+        startRow = parsed.startRow;
+        startCol = parsed.startCol;
+      } else {
+        const cell = parseCellAddress(a);
+        if (!cell) throw new KernelError('COMPUTE_ERROR', `Invalid range: "${a}"`);
+        startRow = cell.row;
+        startCol = cell.col;
+      }
+      formulas = b;
+    } else {
+      startRow = a;
+      startCol = b as number;
+      formulas = c!;
+    }
+
+    if (!formulas.length || !formulas[0]?.length) {
+      return;
+    }
+
+    const values = formulas.map((row) =>
+      row.map((formula) => normalizeFormulaA1(formula, 'worksheet.setFormulas')),
+    );
+
+    await this.ensureRangeEditable(
+      startRow,
+      startCol,
+      startRow + values.length - 1,
+      startCol + (values[0]?.length ?? 1) - 1,
+    );
+
+    this._invalidateActiveCellEditSourceForRange({
+      startRow,
+      startCol,
+      endRow: startRow + values.length - 1,
+      endCol: startCol + (values[0]?.length ?? 1) - 1,
+    });
+    await RangeOps.setRange(this.ctx, this.sheetId, startRow, startCol, values);
   }
 
   /**
@@ -966,6 +1112,9 @@ export class WorksheetImpl implements Worksheet {
 
   async getValue(a: string | number, b?: number): Promise<CellValuePrimitive> {
     this._assertLive('worksheet.getValue');
+    if (typeof a === 'string' && a.trim().startsWith('=')) {
+      throw formulaAddressHint('worksheet.getValue', a);
+    }
     const { row, col } = resolveCell(a, b);
     const value = await CellOps.getValue(this.ctx, this.sheetId, row, col);
     return normalizeCellValue(value ?? null);
@@ -1439,7 +1588,49 @@ export class WorksheetImpl implements Worksheet {
   }
 
   async evaluate(expression: string): Promise<CellValue> {
-    return this.ctx.computeBridge.evaluateExpression(this.sheetId, expression);
+    this._assertLive('worksheet.evaluate');
+    return this.ctx.computeBridge.evaluateExpression(
+      this.sheetId,
+      normalizeFormulaExpression(expression, 'worksheet.evaluate'),
+    );
+  }
+
+  async evaluateFormula(
+    formula: string,
+    options?: { sheet?: string | SheetId },
+  ): Promise<CellValue> {
+    this._assertLive('worksheet.evaluateFormula');
+    const targetSheetId = await this.resolveFormulaEvaluationSheetId(options?.sheet);
+    return this.ctx.computeBridge.evaluateExpression(
+      targetSheetId,
+      normalizeFormulaExpression(formula, 'worksheet.evaluateFormula'),
+    );
+  }
+
+  private async resolveFormulaEvaluationSheetId(sheet?: string | SheetId): Promise<SheetId> {
+    if (sheet == null || sheet === this.sheetId || sheet === this.name) {
+      return this.sheetId;
+    }
+
+    if (this.workbook) {
+      const target = await this.workbook.findSheet(String(sheet));
+      if (target) {
+        return target.sheetId;
+      }
+    }
+
+    throw new KernelError(
+      'API_SHEET_NOT_FOUND',
+      `Sheet not found for formula evaluation: ${sheet}`,
+      {
+        suggestion:
+          'Call evaluateFormula on the target worksheet, or pass a sheet name from the same workbook.',
+        context: {
+          validationKind: 'formulaEvaluationSheetNotFound',
+          received: sheet,
+        },
+      },
+    );
   }
 
   async validateFormulaSyntax(formula: string): Promise<FormulaSyntaxValidationError | null> {
@@ -2232,23 +2423,22 @@ export class WorksheetImpl implements Worksheet {
   async setCells(
     cells: Array<{ row: number; col: number; value: CellValuePrimitive | Date }>,
   ): Promise<SetCellsResult>;
+  async setCells(cells: Array<{ cell: string; formula: string }>): Promise<SetCellsResult>;
+  async setCells(cells: Array<{ addr: string; formula: string }>): Promise<SetCellsResult>;
+  async setCells(cells: Array<{ address: string; formula: string }>): Promise<SetCellsResult>;
   async setCells(
-    cells: Array<{
-      addr?: string;
-      address?: string;
-      row?: number;
-      col?: number;
-      value: CellValuePrimitive | Date;
-    }>,
-  ): Promise<SetCellsResult> {
+    cells: Array<{ row: number; col: number; formula: string }>,
+  ): Promise<SetCellsResult>;
+  async setCells(cells: SetCellsEntry[]): Promise<SetCellsResult> {
     this._ensureWritable('worksheet.setCells');
+    const normalizedCells = this.normalizeSetCellsEntries(cells);
     // Protection check: an unprotected sheet can skip per-cell bridge checks.
     // Protected sheets keep the exact sparse-cell semantics instead of using a
     // bounding rectangle, because unlocked islands inside a protected sheet are
     // valid edit targets.
     if (this.protection.canEditCellFast(0, 0) !== true) {
       await Promise.all(
-        cells.map((cell) => {
+        normalizedCells.map((cell) => {
           const addrStr = cell.addr ?? cell.address;
           const { row, col } =
             addrStr !== undefined ? resolveCell(addrStr) : (cell as { row: number; col: number });
@@ -2256,13 +2446,48 @@ export class WorksheetImpl implements Worksheet {
         }),
       );
     }
-    for (const cell of cells) {
+    for (const cell of normalizedCells) {
       const addrStr = cell.addr ?? cell.address;
       const { row, col } =
         addrStr !== undefined ? resolveCell(addrStr) : (cell as { row: number; col: number });
       this._invalidateActiveCellEditSourceForCell(row, col);
     }
-    return CellOps.setCells(this.ctx, this.sheetId, cells);
+    return CellOps.setCells(this.ctx, this.sheetId, normalizedCells);
+  }
+
+  private normalizeSetCellsEntries(cells: SetCellsEntry[]): NormalizedSetCellsEntry[] {
+    return cells.map((cell) => {
+      const hasValue = Object.prototype.hasOwnProperty.call(cell, 'value');
+      const hasFormula = Object.prototype.hasOwnProperty.call(cell, 'formula');
+      if (hasValue === hasFormula) {
+        throw new KernelError(
+          'API_INVALID_ARGUMENT',
+          'worksheet.setCells entries must provide exactly one of `value` or `formula`.',
+          {
+            suggestion:
+              'Use { address: "A1", value } for values or { cell: "A1", formula: "=SUM(B1:B3)" } for formulas.',
+            context: {
+              validationKind: 'ambiguousSetCellsEntry',
+              received: cell as Record<string, unknown>,
+            },
+          },
+        );
+      }
+
+      const addr = 'cell' in cell ? cell.cell : (cell.addr ?? cell.address);
+      const value = hasFormula
+        ? normalizeFormulaA1((cell as SetCellsFormulaEntry).formula, 'worksheet.setCells')
+        : (cell as SetCellsValueEntry).value;
+
+      if (addr !== undefined) {
+        return { address: addr, value };
+      }
+      return {
+        row: cell.row,
+        col: cell.col,
+        value,
+      };
+    });
   }
 
   // ===========================================================================

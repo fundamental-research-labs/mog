@@ -2,6 +2,7 @@ import type {
   PivotHandlePlacementSpec,
   PivotHandleInfo,
   PivotHandleInfoOptions,
+  PivotRefreshReceipt,
   PivotTableInfo,
   PivotValueSortConfig,
   PivotTableConfig as ApiPivotTableConfig,
@@ -36,6 +37,7 @@ import {
 import { setPivotItemVisibilityForId } from '../../../domain/pivots/filters';
 import { toA1 } from '../../internal/utils';
 import type { HandleLiveness } from '../../lifecycle/handle-liveness';
+import { buildPivotRefreshReceipt } from './receipts';
 
 type PivotFieldPlacement = PivotFieldPlacementFlat;
 type ValueAggregation = 'sum' | 'count' | 'average' | 'max' | 'min';
@@ -451,10 +453,23 @@ export function buildPivotTableHandle(options: PivotHandleBuilderOptions): Pivot
       return receipt;
     },
 
-    async refresh(): Promise<void> {
+    async refresh(): Promise<PivotRefreshReceipt> {
       assertLive('refresh');
-      await ctx.pivot.refresh(sheetId, pivotId);
-      await refreshCachedConfig('refresh');
+      let result: PivotTableResult | null = null;
+      let error: unknown;
+      try {
+        result = await ctx.pivot.refresh(sheetId, pivotId);
+      } catch (caught) {
+        error = caught;
+      }
+      const current = await refreshCachedConfig('refresh');
+      return buildPivotRefreshReceipt({
+        sheetId,
+        pivotId,
+        config: current,
+        result,
+        materializationError: error,
+      });
     },
 
     getAllItems(): Promise<PivotFieldItems[]> {

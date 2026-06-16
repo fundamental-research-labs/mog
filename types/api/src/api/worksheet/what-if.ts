@@ -8,7 +8,12 @@ import type { CellValue } from '@mog/types-core/core';
 import type {
   CreateDataTableOptions,
   CreateDataTableResult,
+  DataTableDescriptor,
+  DataTableRefreshReceipt,
+  DataTableWriteStaticValuesReceipt,
   DataTableResult,
+  RefreshDataTableOptions,
+  WriteDataTableValuesOptions,
 } from '../../what-if/what-if';
 import type { GoalSeekResult } from '../types';
 
@@ -84,6 +89,17 @@ export interface WorksheetWhatIf {
   ): Promise<DataTableResult>;
 
   /**
+   * Compute a Data Table and write the result grid as static worksheet values.
+   *
+   * This is a write operation. It does not create live Data Table metadata; use
+   * `createDataTable()` for a persistent Data Table region.
+   */
+  writeDataTableValues(
+    formulaCell: string,
+    options: WriteDataTableValuesOptions,
+  ): Promise<DataTableWriteStaticValuesReceipt>;
+
+  /**
    * Create a persistent two-variable Data Table over the selected table range.
    *
    * Unlike `dataTable()`, this is a write operation. It stores the Data Table
@@ -91,4 +107,24 @@ export interface WorksheetWhatIf {
    * export use the same compute-owned authority.
    */
   createDataTable(options: CreateDataTableOptions): Promise<CreateDataTableResult>;
+
+  /**
+   * Describe persistent Data Table regions intersecting `range`.
+   *
+   * When omitted, the used range is scanned through the same cell metadata path
+   * used by rendering and formula-bar reads.
+   */
+  describeDataTables(range?: string): Promise<DataTableDescriptor[]>;
+
+  /**
+   * Refresh a persistent Data Table region by id or A1 range.
+   *
+   * The current compute bridge does not expose a dedicated refresh mutation yet,
+   * so implementations must return an explicit unsupported receipt rather than
+   * silently falling back to static writes.
+   */
+  refreshDataTable(
+    regionIdOrRange: string,
+    options?: RefreshDataTableOptions,
+  ): Promise<DataTableRefreshReceipt>;
 }

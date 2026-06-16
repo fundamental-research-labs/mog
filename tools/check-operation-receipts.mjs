@@ -6,6 +6,7 @@ import ts from 'typescript';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const API_ROOT = path.join(REPO_ROOT, 'types/api/src/api');
+const TYPES_API_SRC_ROOT = path.join(REPO_ROOT, 'types/api/src');
 const INVENTORY_FILE = path.join(REPO_ROOT, 'tools/operation-receipt-inventory.json');
 const API_SPEC_FILE = path.join(REPO_ROOT, 'runtime/sdk/src/generated/api-spec.json');
 const UPDATE = process.argv.includes('--update');
@@ -190,20 +191,43 @@ function mergeInventory(current, existing) {
 }
 
 function migratedReceiptTypes() {
-  const receiptFile = path.join(API_ROOT, 'mutation-receipt.ts');
-  const text = fs.readFileSync(receiptFile, 'utf8');
-  const names = [];
-  const sourceFile = ts.createSourceFile(receiptFile, text, ts.ScriptTarget.Latest, true);
-  ts.forEachChild(sourceFile, (node) => {
-    if (!ts.isInterfaceDeclaration(node)) return;
-    const extendsBase = node.heritageClauses?.some(
-      (clause) =>
-        clause.token === ts.SyntaxKind.ExtendsKeyword &&
-        clause.types.some((type) => type.expression.getText(sourceFile) === 'OperationReceiptBase'),
-    );
-    if (extendsBase) names.push(node.name.text);
-  });
-  return names;
+  const heritageByName = new Map();
+  for (const filePath of collectTsFiles(TYPES_API_SRC_ROOT)) {
+    const text = fs.readFileSync(filePath, 'utf8');
+    const sourceFile = ts.createSourceFile(filePath, text, ts.ScriptTarget.Latest, true);
+    ts.forEachChild(sourceFile, (node) => {
+      if (!ts.isInterfaceDeclaration(node)) return;
+      const heritageNames = [];
+      for (const clause of node.heritageClauses ?? []) {
+        if (clause.token !== ts.SyntaxKind.ExtendsKeyword) continue;
+        for (const type of clause.types) {
+          heritageNames.push(type.expression.getText(sourceFile));
+        }
+      }
+      if (heritageNames.length > 0) {
+        heritageByName.set(node.name.text, heritageNames);
+      }
+    });
+  }
+
+  const receiptNames = new Set();
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const [name, heritageNames] of heritageByName) {
+      if (
+        !receiptNames.has(name) &&
+        heritageNames.some(
+          (heritageName) =>
+            heritageName === 'OperationReceiptBase' || receiptNames.has(heritageName),
+        )
+      ) {
+        receiptNames.add(name);
+        changed = true;
+      }
+    }
+  }
+  return [...receiptNames].sort();
 }
 
 function verifyGeneratedReceiptDefinitions(errors) {

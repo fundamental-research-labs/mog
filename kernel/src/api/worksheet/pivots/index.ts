@@ -6,6 +6,8 @@
  */
 import type {
   PivotTableConfig as ApiPivotTableConfig,
+  PivotAddReceipt,
+  PivotAddWithSheetReceipt,
   PivotRefreshReceipt,
   PivotTableHandle,
   PivotTableInfo,
@@ -103,10 +105,17 @@ import {
   getPivotRowLabelRangeByName,
 } from '../../../domain/pivots/ranges';
 import type { HandleLiveness } from '../../lifecycle/handle-liveness';
+import {
+  buildPivotAddReceipt,
+  buildPivotAddWithSheetReceipt,
+  buildPivotRefreshReceipt,
+  materializePivotForReceipt,
+} from './receipts';
 
 type PivotSnapshotEntry =
   | { readonly status: 'live'; readonly config: DataPivotTableConfig }
   | { readonly status: 'deleted' };
+type PivotCreateOptions = Parameters<WorksheetPivots['add']>[1];
 
 export class WorksheetPivotsImpl implements WorksheetPivots {
   private readonly pivotSnapshots = new Map<string, PivotSnapshotEntry>();
@@ -193,7 +202,10 @@ export class WorksheetPivotsImpl implements WorksheetPivots {
   /** Monotonic counter to ensure unique pivot IDs within the same millisecond. */
   private static _idCounter = 0;
 
-  async add(config: PivotCreateDataConfig | ApiPivotTableConfig): Promise<DataPivotTableConfig> {
+  async add(
+    config: PivotCreateDataConfig | ApiPivotTableConfig,
+    options?: PivotCreateOptions,
+  ): Promise<PivotAddReceipt> {
     this._ensureWritable('pivots.add');
     let dataConfig: PivotCreateDataConfig;
 
@@ -217,13 +229,25 @@ export class WorksheetPivotsImpl implements WorksheetPivots {
       dataConfig,
       `pivot-${Date.now()}-${WorksheetPivotsImpl._idCounter++}`,
     );
-    return this.cachePivot(await this.ctx.pivot.createPivot(configWithId));
+    const created = this.cachePivot(await this.ctx.pivot.createPivot(configWithId));
+    const pivotId = this.pivotId(created);
+    const materialization = await materializePivotForReceipt(options?.lifecycle, () =>
+      this.ctx.pivot.refresh(this.sheetId, pivotId),
+    );
+    return buildPivotAddReceipt({
+      sheetId: this.sheetId,
+      config: created,
+      lifecycle: options?.lifecycle ?? 'defineOnly',
+      result: materialization.result,
+      materializationError: materialization.error,
+    });
   }
 
   async addWithSheet(
     sheetName: string,
     config: PivotCreateDataConfig | ApiPivotTableConfig,
-  ): Promise<{ sheetId: SheetId; config: DataPivotTableConfig }> {
+    options?: PivotCreateOptions,
+  ): Promise<PivotAddWithSheetReceipt> {
     let dataConfig: PivotCreateDataConfig;
 
     if (isSimplePivotConfig(config as Record<string, unknown>)) {
@@ -250,7 +274,20 @@ export class WorksheetPivotsImpl implements WorksheetPivots {
     if (this.workbook) {
       await (this.workbook as WorkbookInternal).refreshSheetMetadata();
     }
-    return { sheetId: toSheetId(result.sheetId), config: this.cachePivot(result.config) };
+    const sheetId = toSheetId(result.sheetId);
+    const created = this.cachePivot(result.config);
+    const pivotId = this.pivotId(created);
+    const materialization = await materializePivotForReceipt(options?.lifecycle, () =>
+      this.ctx.pivot.refresh(sheetId, pivotId),
+    );
+    return buildPivotAddWithSheetReceipt({
+      sheetId,
+      sheetName,
+      config: created,
+      lifecycle: options?.lifecycle ?? 'defineOnly',
+      result: materialization.result,
+      materializationError: materialization.error,
+    });
   }
 
   async getAll(): Promise<DataPivotTableConfig[]> {
@@ -564,8 +601,24 @@ export class WorksheetPivotsImpl implements WorksheetPivots {
   }
 
   private async _refreshByPivotId(pivotId: string): Promise<PivotRefreshReceipt> {
-    await this.ctx.pivot.refresh(this.sheetId, pivotId);
-    return { kind: 'pivotRefresh', pivotId };
+    let result: PivotTableResult | null = null;
+    let error: unknown;
+    try {
+      result = await this.ctx.pivot.refresh(this.sheetId, pivotId);
+    } catch (caught) {
+      error = caught;
+    }
+    const config = await this.ctx.pivot.getPivot(this.sheetId, pivotId);
+    if (config) {
+      this.cachePivot(config);
+    }
+    return buildPivotRefreshReceipt({
+      sheetId: this.sheetId,
+      pivotId,
+      config,
+      result,
+      materializationError: error,
+    });
   }
 
   async getDrillDownData(name: string, rowKey: string, columnKey: string): Promise<CellValue[][]> {

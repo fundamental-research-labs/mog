@@ -6352,9 +6352,21 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
       decision: 'allow',
       capability: 'workbook:read',
     },
+    describeDataTables: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
     goalSeek: {
       decision: 'allow',
       capability: 'workbook:read',
+    },
+    refreshDataTable: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    writeDataTableValues: {
+      decision: 'allow',
+      capability: 'workbook:write',
     },
   },
 } as const satisfies Record<string, Record<string, SpreadsheetFacadeMatrixEntry>>;

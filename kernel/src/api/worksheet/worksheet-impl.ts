@@ -22,6 +22,7 @@
 import type {
   ActiveCellEditSource,
   AggregateResult,
+  AutoFillApplyReceipt,
   Chart,
   ChartConfig,
   ChartReadOptions,
@@ -35,6 +36,7 @@ import type {
   ClearResult,
   ConditionalFormat,
   EventHandler,
+  FillSeriesApplyReceipt,
   FormatEntry,
   FormulaCircularReferenceValidation,
   FormulaSyntaxValidationError,
@@ -91,7 +93,7 @@ import type {
   SpreadsheetEventType as InternalEventType,
   SpreadsheetEvent,
 } from '@mog-sdk/contracts/events';
-import type { AutoFillMode, AutoFillResult, FillSeriesOptions } from '@mog-sdk/contracts/fill';
+import type { AutoFillMode, FillSeriesOptions } from '@mog-sdk/contracts/fill';
 import { maskExternalFormulaRefsForValidation } from '../../services/external-formulas';
 import type { IObjectBoundsReader } from '@mog-sdk/contracts/objects';
 import { type CallableDisposable, toDisposable } from '@mog/spreadsheet-utils/disposable';
@@ -1870,8 +1872,8 @@ export class WorksheetImpl implements Worksheet {
   }
 
   async addPivotTable(config: PivotCreateConfig): Promise<PivotTableConfig> {
-    const created = await this.pivots.add(config);
-    return dataConfigToApiConfig(created, created.sourceSheetName);
+    const receipt = await this.pivots.add(config);
+    return dataConfigToApiConfig(receipt.config, receipt.config.sourceSheetName);
   }
 
   removePivotTable(name: string): Promise<void> {
@@ -2298,7 +2300,7 @@ export class WorksheetImpl implements Worksheet {
     sourceRange: string,
     targetRange: string,
     fillMode?: AutoFillMode,
-  ): Promise<AutoFillResult> {
+  ): Promise<AutoFillApplyReceipt> {
     this._ensureWritable('worksheet.autoFill');
     const source = parseCellRange(sourceRange);
     const target = parseCellRange(targetRange);
@@ -2315,7 +2317,7 @@ export class WorksheetImpl implements Worksheet {
     return result;
   }
 
-  async fillSeries(range: string, options: FillSeriesOptions): Promise<void> {
+  async fillSeries(range: string, options: FillSeriesOptions): Promise<FillSeriesApplyReceipt> {
     this._ensureWritable('worksheet.fillSeries');
     const cellRange = parseCellRange(range);
     if (!cellRange) throw new KernelError('COMPUTE_ERROR', `Invalid range: "${range}"`);

@@ -54,6 +54,7 @@ const WRITE_PREFIXES = [
   'show',
   'sort',
   'update',
+  'write',
 ];
 
 function classify(interfaceName, methodName) {

@@ -55,6 +55,7 @@ const CONTRACTS_SRC_DIR = path.resolve(REPO_ROOT, 'contracts/src');
 // type references — contracts/ hosts the interfaces while types/ hosts the
 // data shapes they reference (ChartConfig, AxisConfig, …).
 const TYPES_SRC_DIR = path.resolve(REPO_ROOT, 'types');
+const TYPES_API_SRC_DIR = path.resolve(REPO_ROOT, 'types/api/src');
 const TYPES_API_DIR = path.resolve(REPO_ROOT, 'types/api/src/api');
 const OUTPUT_FILE = path.resolve(REPO_ROOT, 'runtime/sdk/src/generated/api-spec.json');
 const OUTPUT_SCHEMA_FILE = path.resolve(
@@ -972,8 +973,8 @@ function collectDirectories(root: string): string[] {
 
 function findInterfaceFile(interfaceName: string): string | null {
   const searchDirs = [
-    ...collectDirectories(TYPES_API_DIR),
-    ...collectDirectories(CONTRACTS_API_DIR),
+    ...collectDirectories(TYPES_API_SRC_DIR),
+    ...collectDirectories(CONTRACTS_SRC_DIR),
   ];
 
   for (const dir of searchDirs) {
@@ -1100,6 +1101,46 @@ function findTypeDefinitions(
   }
 
   return result;
+}
+
+function collectMigratedReceiptTypeNames(searchFiles: string[]): string[] {
+  const heritageByName = new Map<string, string[]>();
+  for (const filePath of searchFiles) {
+    if (!fs.existsSync(filePath)) continue;
+    const sourceFile = readFile(filePath);
+    ts.forEachChild(sourceFile, (node) => {
+      if (!ts.isInterfaceDeclaration(node)) return;
+      const heritageNames: string[] = [];
+      for (const clause of node.heritageClauses ?? []) {
+        if (clause.token !== ts.SyntaxKind.ExtendsKeyword) continue;
+        for (const type of clause.types) {
+          heritageNames.push(type.expression.getText(sourceFile));
+        }
+      }
+      if (heritageNames.length > 0) {
+        heritageByName.set(node.name.text, heritageNames);
+      }
+    });
+  }
+
+  const receiptNames = new Set<string>();
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const [name, heritageNames] of heritageByName) {
+      if (
+        !receiptNames.has(name) &&
+        heritageNames.some(
+          (heritageName) =>
+            heritageName === 'OperationReceiptBase' || receiptNames.has(heritageName),
+        )
+      ) {
+        receiptNames.add(name);
+        changed = true;
+      }
+    }
+  }
+  return [...receiptNames].sort();
 }
 
 // ---------------------------------------------------------------------------
@@ -1269,6 +1310,9 @@ function generate(): ApiSpec {
     ...collectTsFiles(CONTRACTS_SRC_DIR),
     ...collectTsFiles(TYPES_SRC_DIR).filter((p) => !skipSegments.some((s) => p.includes(s))),
   ];
+  for (const receiptTypeName of collectMigratedReceiptTypeNames(typeSearchFiles)) {
+    allTypeRefs.add(receiptTypeName);
+  }
 
   const types = findTypeDefinitions(allTypeRefs, typeSearchFiles);
 

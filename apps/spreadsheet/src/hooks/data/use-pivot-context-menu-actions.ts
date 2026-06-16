@@ -292,7 +292,17 @@ export function usePivotContextMenuActions(
   const addCalculatedField = useCallback(
     (field: CalculatedField) => {
       if (!pivot?.handle || !canEditFields) return;
-      void pivot.handle.addCalculatedField(field).then(() => pivot.handle?.refresh());
+      void pivot.handle.addCalculatedField(field).then(async () => {
+        const receipt = await pivot.handle?.refresh();
+        if (receipt && receipt.status !== 'applied') {
+          console.warn(
+            receipt.diagnostics.find((diagnostic) => diagnostic.severity === 'error')?.message ??
+              receipt.diagnostics[0]?.message ??
+              `Pivot refresh did not apply: ${receipt.status}.`,
+            receipt,
+          );
+        }
+      });
       closeContextMenu();
     },
     [pivot, canEditFields, closeContextMenu],

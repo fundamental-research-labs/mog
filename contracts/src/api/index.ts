@@ -17,6 +17,9 @@ export type {
 export type {
   Worksheet,
   WorksheetWithInternals,
+  AutoFillApplyReceipt,
+  FillSeriesApplyReceipt,
+  PivotCreateOptions,
   FindCellsFormatQuery,
   FindCellsInclude,
   FindCellsQuery,

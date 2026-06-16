@@ -62,6 +62,7 @@ export type {
   WorksheetFilters,
 } from './filters';
 export type { WorksheetFormControls } from './form-controls';
+export type { AutoFillApplyReceipt, FillSeriesApplyReceipt } from './fill';
 export type { WorksheetFormats } from './formats';
 export type { WorksheetHyperlink, WorksheetHyperlinks } from './hyperlinks';
 export type { WorksheetInternal } from './internal';
@@ -70,7 +71,12 @@ export type { WorksheetNames } from './names';
 /** @internal — kept for kernel WorksheetObjectsImpl; not part of the public Worksheet interface. */
 export type { WorksheetObjects } from './objects';
 export type { WorksheetOutline } from './outline';
-export type { ImportedPivotViewRecord, PivotCreateConfig, WorksheetPivots } from './pivots';
+export type {
+  ImportedPivotViewRecord,
+  PivotCreateConfig,
+  PivotCreateOptions,
+  WorksheetPivots,
+} from './pivots';
 export type { WorksheetPrint } from './print';
 export type {
   AllowEditRange,

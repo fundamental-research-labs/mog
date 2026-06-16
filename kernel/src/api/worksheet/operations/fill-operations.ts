@@ -13,6 +13,13 @@ import type {
   FillPatternType,
   FillSeriesOptions,
 } from '@mog-sdk/contracts/fill';
+import type {
+  AutoFillApplyReceipt,
+  FillSeriesApplyReceipt,
+  OperationDiagnostic,
+  OperationEffect,
+} from '@mog-sdk/contracts/api';
+import { cellRangeToA1 } from '@mog/spreadsheet-utils/a1';
 import { KernelError } from '../../../errors';
 import type { CellRange, SheetId } from '@mog-sdk/contracts/core';
 import type { DocumentContext } from '../../../context';
@@ -76,6 +83,159 @@ async function runAsSingleUndoStep<T>(
   }
 }
 
+function extractFillResult(bridgeResult: { data?: unknown } | null | undefined): AutoFillResult {
+  const fillData = bridgeResult?.data as
+    | {
+        patternType?: string;
+        filledCellCount?: number;
+        warnings?: AutoFillWarning[];
+        changes?: AutoFillChange[];
+      }
+    | undefined;
+
+  return {
+    patternType: (fillData?.patternType ?? 'copy') as FillPatternType,
+    filledCellCount: fillData?.filledCellCount ?? 0,
+    warnings: fillData?.warnings ?? [],
+    changes: fillData?.changes ?? [],
+  };
+}
+
+function filledChangeCount(result: AutoFillResult): number {
+  return result.filledCellCount > 0 ? result.filledCellCount : result.changes.length;
+}
+
+function effectsForFillApply(params: {
+  sheetId: SheetId;
+  targetRange: CellRange;
+  changedCellCount: number;
+  undoGroup: boolean;
+}): OperationEffect[] {
+  const range = cellRangeToA1(params.targetRange);
+  if (params.changedCellCount === 0) {
+    return [{ type: 'worksheetUnchanged', sheetId: params.sheetId, range }];
+  }
+
+  const effects: OperationEffect[] = [
+    {
+      type: 'materializedCells',
+      sheetId: params.sheetId,
+      range,
+      count: params.changedCellCount,
+    },
+    {
+      type: 'changedRange',
+      sheetId: params.sheetId,
+      range,
+      count: params.changedCellCount,
+    },
+  ];
+
+  if (params.undoGroup) {
+    effects.push({ type: 'createdUndoEntry', sheetId: params.sheetId, range });
+  }
+
+  return effects;
+}
+
+function diagnosticForAutoFillWarning(
+  warning: AutoFillWarning,
+  sheetId: SheetId,
+): OperationDiagnostic {
+  const target = { sheetId, row: warning.row, col: warning.col };
+
+  switch (warning.kind.type) {
+    case 'mergedCellsInTarget':
+      return {
+        severity: 'warning',
+        code: 'AUTOFILL_MERGED_CELLS_IN_TARGET',
+        message: 'Target range contains merged cells.',
+        target,
+        recoverable: true,
+        nextAction: 'Unmerge the target cells or choose a target range without merged cells.',
+      };
+    case 'formulaRefOutOfBounds':
+      return {
+        severity: 'warning',
+        code: 'AUTOFILL_REF_OUT_OF_BOUNDS',
+        message: 'A formula reference moved outside the worksheet bounds during autofill.',
+        target,
+        recoverable: true,
+        nextAction: 'Review the filled formula references before relying on the result.',
+        details: { refIndex: warning.kind.refIndex },
+      };
+    case 'sourceCellEmpty':
+      return {
+        severity: 'warning',
+        code: 'AUTOFILL_SOURCE_CELL_EMPTY',
+        message: 'The source cell used for autofill is empty.',
+        target,
+        recoverable: true,
+        nextAction: 'Enter a source value or adjust the source range.',
+      };
+  }
+}
+
+function diagnosticsForAutoFillWarnings(
+  warnings: readonly AutoFillWarning[],
+  sheetId: SheetId,
+): OperationDiagnostic[] {
+  return warnings.map((warning) => diagnosticForAutoFillWarning(warning, sheetId));
+}
+
+function autoFillApplyReceipt(params: {
+  sheetId: SheetId;
+  targetRange: CellRange;
+  mode: AutoFillMode;
+  result: AutoFillResult;
+  undoGroup: boolean;
+}): AutoFillApplyReceipt {
+  const changedCellCount = filledChangeCount(params.result);
+  return {
+    kind: 'autofill.apply',
+    status: changedCellCount > 0 ? 'applied' : 'noOp',
+    effects: effectsForFillApply({
+      sheetId: params.sheetId,
+      targetRange: params.targetRange,
+      changedCellCount,
+      undoGroup: params.undoGroup,
+    }),
+    diagnostics: diagnosticsForAutoFillWarnings(params.result.warnings, params.sheetId),
+    mode: params.mode,
+    patternType: params.result.patternType,
+    filledCellCount: params.result.filledCellCount,
+    warnings: params.result.warnings,
+    changes: params.result.changes,
+  };
+}
+
+function fillSeriesApplyReceipt(params: {
+  sheetId: SheetId;
+  targetRange: CellRange;
+  mode: AutoFillMode;
+  options: FillSeriesOptions;
+  result: AutoFillResult;
+}): FillSeriesApplyReceipt {
+  const changedCellCount = filledChangeCount(params.result);
+  return {
+    kind: 'fillSeries.apply',
+    status: changedCellCount > 0 ? 'applied' : 'noOp',
+    effects: effectsForFillApply({
+      sheetId: params.sheetId,
+      targetRange: params.targetRange,
+      changedCellCount,
+      undoGroup: true,
+    }),
+    diagnostics: diagnosticsForAutoFillWarnings(params.result.warnings, params.sheetId),
+    mode: params.mode,
+    options: params.options,
+    patternType: params.result.patternType,
+    filledCellCount: params.result.filledCellCount,
+    warnings: params.result.warnings,
+    changes: params.result.changes,
+  };
+}
+
 /**
  * Autofill from source range into target range.
  *
@@ -97,7 +257,7 @@ export async function autoFill(
   targetRange: CellRange,
   mode: AutoFillMode,
   options: { undoGroup?: boolean } = {},
-): Promise<AutoFillResult> {
+): Promise<AutoFillApplyReceipt> {
   // Validate ranges
   if (
     sourceRange.startRow < 0 ||
@@ -135,22 +295,15 @@ export async function autoFill(
   const operation = () => ctx.computeBridge.autoFill(sheetId, bridgeRequest);
   const bridgeResult =
     options.undoGroup === false ? await operation() : await runAsSingleUndoStep(ctx, operation);
+  const result = extractFillResult(bridgeResult);
 
-  const fillData = bridgeResult?.data as
-    | {
-        patternType?: string;
-        filledCellCount?: number;
-        warnings?: AutoFillWarning[];
-        changes?: AutoFillChange[];
-      }
-    | undefined;
-
-  return {
-    patternType: (fillData?.patternType ?? 'copy') as FillPatternType,
-    filledCellCount: fillData?.filledCellCount ?? 0,
-    warnings: fillData?.warnings ?? [],
-    changes: fillData?.changes ?? [],
-  };
+  return autoFillApplyReceipt({
+    sheetId,
+    targetRange,
+    mode,
+    result,
+    undoGroup: options.undoGroup !== false,
+  });
 }
 
 // ==========================================================================
@@ -286,7 +439,7 @@ export async function fillSeries(
   sheetId: SheetId,
   range: CellRange,
   options: FillSeriesOptions,
-): Promise<void> {
+): Promise<FillSeriesApplyReceipt> {
   // Validate that the range has enough rows/cols to split
   const isVertical = options.direction === 'down' || options.direction === 'up';
   if (isVertical && range.startRow === range.endRow) {
@@ -305,7 +458,7 @@ export async function fillSeries(
   const { sourceRange, targetRange } = splitRangeForSeries(range, options.direction);
   const mode = seriesOptionsToMode(options);
 
-  await runAsSingleUndoStep(ctx, () =>
+  const bridgeResult = await runAsSingleUndoStep(ctx, () =>
     ctx.computeBridge.autoFill(sheetId, {
       sourceRange: {
         startRow: sourceRange.startRow,
@@ -327,4 +480,13 @@ export async function fillSeries(
       stepValue: options.stepValue ?? 1,
     }),
   );
+  const result = extractFillResult(bridgeResult);
+
+  return fillSeriesApplyReceipt({
+    sheetId,
+    targetRange,
+    mode,
+    options,
+    result,
+  });
 }

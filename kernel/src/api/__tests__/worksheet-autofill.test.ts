@@ -125,13 +125,30 @@ describe('WorksheetImpl — autoFill', () => {
 
     // Default mock for FillOps.autoFill
     (FillOps.autoFill as jest.Mock).mockResolvedValue({
+      kind: 'autofill.apply',
+      status: 'applied',
+      effects: [],
+      diagnostics: [],
+      mode: 'auto',
       patternType: 'linear',
       filledCellCount: 7,
       warnings: [],
+      changes: [],
     });
 
     // Default mock for FillOps.fillSeries
-    (FillOps.fillSeries as jest.Mock).mockResolvedValue(undefined);
+    (FillOps.fillSeries as jest.Mock).mockResolvedValue({
+      kind: 'fillSeries.apply',
+      status: 'applied',
+      effects: [],
+      diagnostics: [],
+      mode: 'series',
+      options: { direction: 'down', seriesType: 'linear', stepValue: 1 },
+      patternType: 'linear',
+      filledCellCount: 7,
+      warnings: [],
+      changes: [],
+    });
   });
 
   // =========================================================================
@@ -207,11 +224,17 @@ describe('WorksheetImpl — autoFill', () => {
     await expect(ws.autoFill('A1:A3', 'INVALID')).rejects.toThrow(KernelError);
   });
 
-  it('returns AutoFillResult from FillOps', async () => {
+  it('returns AutoFillApplyReceipt from FillOps', async () => {
     const mockResult = {
+      kind: 'autofill.apply' as const,
+      status: 'applied' as const,
+      effects: [{ type: 'materializedCells' as const, sheetId: SHEET_ID, range: 'A4:A10', count: 14 }],
+      diagnostics: [],
+      mode: 'auto' as const,
       patternType: 'date' as const,
       filledCellCount: 14,
       warnings: [{ row: 5, col: 0, kind: { type: 'sourceCellEmpty' as const } }],
+      changes: [{ row: 5, col: 0, type: 'value' as const }],
     };
     (FillOps.autoFill as jest.Mock).mockResolvedValue(mockResult);
 
@@ -238,11 +261,28 @@ describe('WorksheetImpl — fillSeries', () => {
     ws = new WorksheetImpl(SHEET_ID, ctx);
 
     (FillOps.autoFill as jest.Mock).mockResolvedValue({
+      kind: 'autofill.apply',
+      status: 'noOp',
+      effects: [],
+      diagnostics: [],
+      mode: 'auto',
       patternType: 'linear',
       filledCellCount: 0,
       warnings: [],
+      changes: [],
     });
-    (FillOps.fillSeries as jest.Mock).mockResolvedValue(undefined);
+    (FillOps.fillSeries as jest.Mock).mockResolvedValue({
+      kind: 'fillSeries.apply',
+      status: 'applied',
+      effects: [],
+      diagnostics: [],
+      mode: 'series',
+      options: { direction: 'down', seriesType: 'linear', stepValue: 1 },
+      patternType: 'linear',
+      filledCellCount: 9,
+      warnings: [],
+      changes: [],
+    });
   });
 
   it('delegates to FillOps.fillSeries with parsed range and options', async () => {
@@ -308,6 +348,34 @@ describe('WorksheetImpl — fillSeries', () => {
       { startRow: 0, startCol: 2, endRow: 19, endCol: 2 }, // C1:C20
       options,
     );
+  });
+
+  it('returns FillSeriesApplyReceipt from FillOps', async () => {
+    const options: FillSeriesOptions = {
+      direction: 'down',
+      seriesType: 'linear',
+      stepValue: 1,
+    };
+    const mockResult = {
+      kind: 'fillSeries.apply' as const,
+      status: 'applied' as const,
+      effects: [{ type: 'materializedCells' as const, sheetId: SHEET_ID, range: 'A2:A10', count: 9 }],
+      diagnostics: [],
+      mode: 'series' as const,
+      options,
+      patternType: 'linear' as const,
+      filledCellCount: 9,
+      warnings: [],
+      changes: [{ row: 1, col: 0, type: 'value' as const }],
+    };
+    (FillOps.fillSeries as jest.Mock).mockResolvedValue(mockResult);
+
+    const result = await ws.fillSeries('A1:A10', options);
+
+    expect(result).toEqual(mockResult);
+    expect(result.kind).toBe('fillSeries.apply');
+    expect(result.status).toBe('applied');
+    expect(result.filledCellCount).toBe(9);
   });
 });
 
@@ -641,7 +709,7 @@ describe('fill-operations — unit tests', () => {
 
     it('autoFill returns filledCellCount from bridge result', async () => {
       ctx.computeBridge.autoFill.mockResolvedValue({
-        data: { patternType: 'linear', filledCellCount: 7, warnings: [] },
+        data: { patternType: 'linear', filledCellCount: 7, warnings: [], changes: [] },
       });
 
       const source = { startRow: 0, startCol: 0, endRow: 2, endCol: 0 };
@@ -652,9 +720,85 @@ describe('fill-operations — unit tests', () => {
       expect(result.filledCellCount).toBe(7);
     });
 
+    it('autoFill returns an apply receipt with base fields and preserved payload', async () => {
+      const warnings = [{ row: 5, col: 0, kind: { type: 'formulaRefOutOfBounds' as const, refIndex: 2 } }];
+      const changes = [{ row: 5, col: 0, type: 'formula' as const }];
+      ctx.computeBridge.autoFill.mockResolvedValue({
+        data: { patternType: 'linear', filledCellCount: 7, warnings, changes },
+      });
+
+      const source = { startRow: 0, startCol: 0, endRow: 2, endCol: 0 };
+      const target = { startRow: 3, startCol: 0, endRow: 9, endCol: 0 };
+
+      const result = await realFillOps.autoFill(ctx, SHEET_ID, source, target, 'auto');
+
+      expect(result).toMatchObject({
+        kind: 'autofill.apply',
+        status: 'applied',
+        mode: 'auto',
+        patternType: 'linear',
+        filledCellCount: 7,
+        warnings,
+        changes,
+      });
+      expect(result.effects).toEqual([
+        { type: 'materializedCells', sheetId: SHEET_ID, range: 'A4:A10', count: 7 },
+        { type: 'changedRange', sheetId: SHEET_ID, range: 'A4:A10', count: 7 },
+        { type: 'createdUndoEntry', sheetId: SHEET_ID, range: 'A4:A10' },
+      ]);
+      expect(result.diagnostics).toEqual([
+        expect.objectContaining({
+          severity: 'warning',
+          code: 'AUTOFILL_REF_OUT_OF_BOUNDS',
+          target: { sheetId: SHEET_ID, row: 5, col: 0 },
+          details: { refIndex: 2 },
+        }),
+      ]);
+    });
+
+    it('autoFill returns noOp when the bridge reports no changes', async () => {
+      ctx.computeBridge.autoFill.mockResolvedValue({
+        data: { patternType: 'copy', filledCellCount: 0, warnings: [], changes: [] },
+      });
+
+      const source = { startRow: 0, startCol: 0, endRow: 0, endCol: 0 };
+      const target = { startRow: 1, startCol: 0, endRow: 1, endCol: 0 };
+
+      const result = await realFillOps.autoFill(ctx, SHEET_ID, source, target, 'copy');
+
+      expect(result.status).toBe('noOp');
+      expect(result.effects).toEqual([
+        { type: 'worksheetUnchanged', sheetId: SHEET_ID, range: 'A2' },
+      ]);
+    });
+
+    it('autoFill omits createdUndoEntry when undo grouping is disabled', async () => {
+      ctx.computeBridge.autoFill.mockResolvedValue({
+        data: {
+          patternType: 'copy',
+          filledCellCount: 1,
+          warnings: [],
+          changes: [{ row: 1, col: 0, type: 'value' }],
+        },
+      });
+
+      const source = { startRow: 0, startCol: 0, endRow: 0, endCol: 0 };
+      const target = { startRow: 1, startCol: 0, endRow: 1, endCol: 0 };
+
+      const result = await realFillOps.autoFill(ctx, SHEET_ID, source, target, 'copy', {
+        undoGroup: false,
+      });
+
+      expect(result.status).toBe('applied');
+      expect(result.effects).toEqual([
+        { type: 'materializedCells', sheetId: SHEET_ID, range: 'A2', count: 1 },
+        { type: 'changedRange', sheetId: SHEET_ID, range: 'A2', count: 1 },
+      ]);
+    });
+
     it('autoFill returns patternType from bridge result', async () => {
       ctx.computeBridge.autoFill.mockResolvedValue({
-        data: { patternType: 'linear', filledCellCount: 7, warnings: [] },
+        data: { patternType: 'linear', filledCellCount: 7, warnings: [], changes: [] },
       });
 
       const source = { startRow: 0, startCol: 0, endRow: 2, endCol: 0 };
@@ -671,7 +815,7 @@ describe('fill-operations — unit tests', () => {
         { row: 5, col: 0, kind: { type: 'sourceCellEmpty' as const } },
       ];
       ctx.computeBridge.autoFill.mockResolvedValue({
-        data: { patternType: 'linear', filledCellCount: 7, warnings },
+        data: { patternType: 'linear', filledCellCount: 7, warnings, changes: [] },
       });
 
       const source = { startRow: 0, startCol: 0, endRow: 2, endCol: 0 };
@@ -680,6 +824,40 @@ describe('fill-operations — unit tests', () => {
       const result = await realFillOps.autoFill(ctx, SHEET_ID, source, target, 'auto');
 
       expect(result.warnings).toEqual(warnings);
+    });
+
+    it('fillSeries returns an apply receipt with the bridge payload', async () => {
+      ctx.computeBridge.autoFill.mockResolvedValue({
+        data: {
+          patternType: 'linear',
+          filledCellCount: 9,
+          warnings: [],
+          changes: [{ row: 1, col: 0, type: 'value' }],
+        },
+      });
+
+      const range = { startRow: 0, startCol: 0, endRow: 9, endCol: 0 };
+      const options: FillSeriesOptions = {
+        direction: 'down',
+        seriesType: 'linear',
+        stepValue: 1,
+      };
+
+      const result = await realFillOps.fillSeries(ctx, SHEET_ID, range, options);
+
+      expect(result).toMatchObject({
+        kind: 'fillSeries.apply',
+        status: 'applied',
+        mode: 'series',
+        options,
+        patternType: 'linear',
+        filledCellCount: 9,
+      });
+      expect(result.effects).toEqual([
+        { type: 'materializedCells', sheetId: SHEET_ID, range: 'A2:A10', count: 9 },
+        { type: 'changedRange', sheetId: SHEET_ID, range: 'A2:A10', count: 9 },
+        { type: 'createdUndoEntry', sheetId: SHEET_ID, range: 'A2:A10' },
+      ]);
     });
   });
 });

@@ -96,11 +96,16 @@ function createCtx(): any {
   const config = makePivotConfig();
   return {
     pivot: {
+      createPivot: jest.fn().mockResolvedValue(config),
+      createPivotWithSheet: jest
+        .fn()
+        .mockResolvedValue({ sheetId: 'sheet-2', config: makePivotConfig() }),
       getAllPivots: jest.fn().mockResolvedValue([config]),
       getPivot: jest.fn().mockResolvedValue(config),
       compute: jest.fn().mockResolvedValue(makePivotResult()),
       updatePivot: jest.fn().mockResolvedValue(config),
       deletePivot: jest.fn().mockResolvedValue(true),
+      refresh: jest.fn().mockResolvedValue(makePivotResult()),
       subscribe: jest.fn().mockReturnValue(jest.fn()),
       getAllPivotItems: jest.fn().mockResolvedValue(makePivotItems()),
     },
@@ -117,6 +122,145 @@ describe('WorksheetPivotsImpl contracts', () => {
   beforeEach(() => {
     ctx = createCtx();
     pivots = new WorksheetPivotsImpl(ctx, SHEET_ID);
+  });
+
+  it('add returns a define-only operation receipt preserving the created config', async () => {
+    const receipt = await pivots.add(makePivotConfig());
+
+    expect(receipt).toEqual(
+      expect.objectContaining({
+        kind: 'pivot.add',
+        status: 'applied',
+        pivotId: 'pivot-1',
+        config: expect.objectContaining({ id: 'pivot-1', name: 'SalesPivot' }),
+        lifecycle: 'defineOnly',
+        materialized: false,
+        renderedRange: null,
+        result: null,
+        diagnostics: [],
+        effects: expect.arrayContaining([
+          expect.objectContaining({ type: 'createdObject', objectId: 'pivot-1' }),
+          expect.objectContaining({ type: 'storedMetadata', objectId: 'pivot-1' }),
+        ]),
+      }),
+    );
+    expect(ctx.pivot.createPivot).toHaveBeenCalled();
+    expect(ctx.pivot.refresh).not.toHaveBeenCalled();
+  });
+
+  it('add can request materialization and returns rendered result details', async () => {
+    const receipt = await pivots.add(makePivotConfig(), { lifecycle: 'materialize' });
+
+    expect(ctx.pivot.refresh).toHaveBeenCalledWith(SHEET_ID, 'pivot-1');
+    expect(receipt).toEqual(
+      expect.objectContaining({
+        kind: 'pivot.add',
+        status: 'applied',
+        lifecycle: 'materialize',
+        materialized: true,
+        renderedRange: {
+          sheetId: SHEET_ID,
+          startRow: 2,
+          startCol: 3,
+          endRow: 3,
+          endCol: 4,
+        },
+        result: makePivotResult(),
+        diagnostics: [],
+        effects: expect.arrayContaining([
+          expect.objectContaining({ type: 'storedMetadata', objectId: 'pivot-1' }),
+          expect.objectContaining({
+            type: 'materializedCells',
+            objectId: 'pivot-1',
+            range: 'D3:E4',
+          }),
+        ]),
+      }),
+    );
+  });
+
+  it('addWithSheet returns a receipt preserving sheetId and created config', async () => {
+    const receipt = await pivots.addWithSheet('Pivot Output', makePivotConfig());
+
+    expect(ctx.pivot.createPivotWithSheet).toHaveBeenCalledWith(
+      'Pivot Output',
+      expect.objectContaining({ name: 'SalesPivot' }),
+    );
+    expect(receipt).toEqual(
+      expect.objectContaining({
+        kind: 'pivot.addWithSheet',
+        status: 'applied',
+        sheetId: 'sheet-2',
+        pivotId: 'pivot-1',
+        config: expect.objectContaining({ id: 'pivot-1', name: 'SalesPivot' }),
+        lifecycle: 'defineOnly',
+        materialized: false,
+        effects: expect.arrayContaining([
+          expect.objectContaining({
+            type: 'createdObject',
+            sheetId: 'sheet-2',
+            objectId: 'sheet-2',
+          }),
+          expect.objectContaining({ type: 'storedMetadata', objectId: 'pivot-1' }),
+        ]),
+      }),
+    );
+  });
+
+  it('refresh returns a materialization receipt with result details', async () => {
+    const receipt = await pivots.refresh('SalesPivot');
+
+    expect(ctx.pivot.refresh).toHaveBeenCalledWith(SHEET_ID, 'pivot-1');
+    expect(receipt).toEqual(
+      expect.objectContaining({
+        kind: 'pivot.refresh',
+        status: 'applied',
+        pivotId: 'pivot-1',
+        config: expect.objectContaining({ id: 'pivot-1', name: 'SalesPivot' }),
+        materialized: true,
+        renderedRange: {
+          sheetId: SHEET_ID,
+          startRow: 2,
+          startCol: 3,
+          endRow: 3,
+          endCol: 4,
+        },
+        result: makePivotResult(),
+        diagnostics: [],
+        effects: expect.arrayContaining([
+          expect.objectContaining({
+            type: 'materializedCells',
+            objectId: 'pivot-1',
+            range: 'D3:E4',
+          }),
+          expect.objectContaining({ type: 'refreshedViewport', objectId: 'pivot-1' }),
+        ]),
+      }),
+    );
+  });
+
+  it('handle refresh returns the same materialization receipt shape', async () => {
+    const handle = await pivots.get('SalesPivot');
+
+    const receipt = await handle!.refresh();
+
+    expect(ctx.pivot.refresh).toHaveBeenCalledWith(SHEET_ID, 'pivot-1');
+    expect(receipt).toEqual(
+      expect.objectContaining({
+        kind: 'pivot.refresh',
+        status: 'applied',
+        pivotId: 'pivot-1',
+        materialized: true,
+        renderedRange: {
+          sheetId: SHEET_ID,
+          startRow: 2,
+          startCol: 3,
+          endRow: 3,
+          endCol: 4,
+        },
+        result: makePivotResult(),
+      }),
+    );
   });
 
   it('getInfo exposes contentArea from rendered bounds', async () => {

@@ -14,7 +14,13 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import type { PivotHandlePlacementSpec, PivotValueSortConfig } from '@mog-sdk/contracts/api';
+import type {
+  PivotAddReceipt,
+  PivotAddWithSheetReceipt,
+  PivotHandlePlacementSpec,
+  PivotRefreshReceipt,
+  PivotValueSortConfig,
+} from '@mog-sdk/contracts/api';
 import { type CellRange, type SheetId, sheetId as toSheetId } from '@mog-sdk/contracts/core';
 import type {
   AggregateFunction,
@@ -61,6 +67,26 @@ async function awaitPivotMaterialization(workbook: unknown): Promise<void> {
   const awaitMaterialized = (workbook as WorkbookWithPivotMaterialization).ctx?.awaitMaterialized;
   if (typeof awaitMaterialized !== 'function') return;
   await awaitMaterialized('allSheets');
+}
+
+function pivotReceiptMessage(
+  receipt: PivotAddReceipt | PivotAddWithSheetReceipt | PivotRefreshReceipt,
+): string {
+  return (
+    receipt.diagnostics.find((diagnostic) => diagnostic.severity === 'error')?.message ??
+    receipt.diagnostics[0]?.message ??
+    `Pivot operation did not apply: ${receipt.status}.`
+  );
+}
+
+function assertPivotMaterialized(receipt: PivotAddReceipt | PivotAddWithSheetReceipt): void {
+  if (receipt.status === 'applied' && receipt.materialized) return;
+  throw new Error(pivotReceiptMessage(receipt));
+}
+
+function warnPivotRefresh(receipt: PivotRefreshReceipt | null | undefined): void {
+  if (!receipt || receipt.status === 'applied') return;
+  console.warn(pivotReceiptMessage(receipt), receipt);
 }
 
 // =============================================================================
@@ -553,17 +579,20 @@ export function usePivotTables({ sheetId }: UsePivotTablesOptions): UsePivotTabl
         const sheetName = getUniqueSheetName(name, existingNames);
 
         // Use the atomic addWithSheet method for undo atomicity
-        const result = await ws.pivots.addWithSheet(sheetName, {
-          ...baseConfig,
-          outputSheetName: sheetName,
-          outputLocation: { row: 0, col: 0 },
-        });
-        const outputSheetId = toSheetId(result.sheetId);
-        const handle = await wb.getSheetById(outputSheetId).pivots.get(result.config);
-        await handle?.refresh();
+        const receipt = await ws.pivots.addWithSheet(
+          sheetName,
+          {
+            ...baseConfig,
+            outputSheetName: sheetName,
+            outputLocation: { row: 0, col: 0 },
+          },
+          { lifecycle: 'materialize' },
+        );
+        assertPivotMaterialized(receipt);
+        const outputSheetId = toSheetId(receipt.sheetId);
 
         return {
-          config: { ...result.config, outputSheetId },
+          config: { ...receipt.config, outputSheetId },
           outputSheetId,
         };
       } else {
@@ -581,17 +610,20 @@ export function usePivotTables({ sheetId }: UsePivotTablesOptions): UsePivotTabl
           throw new Error(`Target sheet "${targetSheetId}" does not exist`);
         }
 
-        // Create pivot on the target sheet via ws.pivots
+        // Create pivot on the target sheet via ws.pivots.
         const targetWs = wb.getSheetById(targetSheetId);
         const targetSheetName = await targetWs.getName();
-        const config = await targetWs.pivots.add({
-          ...baseConfig,
-          outputSheetId: targetSheetId,
-          outputSheetName: targetSheetName,
-          outputLocation: targetCell,
-        });
-        const handle = await targetWs.pivots.get(config);
-        await handle?.refresh();
+        const receipt = await targetWs.pivots.add(
+          {
+            ...baseConfig,
+            outputSheetId: targetSheetId,
+            outputSheetName: targetSheetName,
+            outputLocation: targetCell,
+          },
+          { lifecycle: 'materialize' },
+        );
+        assertPivotMaterialized(receipt);
+        const config = receipt.config;
 
         return {
           config,
@@ -844,7 +876,9 @@ export function usePivotTables({ sheetId }: UsePivotTablesOptions): UsePivotTabl
   // Refresh pivot table via ws.pivots (fire-and-forget async)
   const refreshPivotTable = useCallback(
     (pivotId: string) => {
-      void pivotHandleFromId(pivotId)?.refresh();
+      void (async () => {
+        warnPivotRefresh(await pivotHandleFromId(pivotId)?.refresh());
+      })();
     },
     [pivotHandleFromId],
   );

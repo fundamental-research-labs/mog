@@ -9,6 +9,7 @@
 
 import type { CellId } from '@mog/types-core/cell-identity';
 import type { CellValue } from '@mog/types-core/core';
+import type { OperationReceiptBase } from '../api/operation-receipt';
 
 // =============================================================================
 // Goal Seek Types
@@ -153,10 +154,13 @@ export interface DataTableParams {
   signal?: AbortSignal;
 }
 
-/**
- * Result of Data Table operation.
- */
-export interface DataTableResult {
+export interface DataTableComputeReceipt extends OperationReceiptBase {
+  readonly kind: 'dataTable.compute';
+  readonly status: 'completed' | 'failed' | 'unsupported' | 'cancelled' | 'timedOut';
+  readonly lifecycle: 'transient';
+  readonly materialized: false;
+  readonly worksheetChanged: false;
+
   /**
    * 2D array of computed results.
    * results[rowIndex][colIndex] is the value when:
@@ -182,6 +186,11 @@ export interface DataTableResult {
 }
 
 /**
+ * Result of a transient Data Table compute operation.
+ */
+export interface DataTableResult extends DataTableComputeReceipt {}
+
+/**
  * Persistent Data Table creation options.
  *
  * `tableRange` is the full anchor-inclusive table selection. The worksheet is
@@ -204,10 +213,34 @@ export interface CreateDataTableOptions {
   colInputCell?: string | null;
 }
 
+export interface DataTableDescriptor {
+  readonly regionId: string;
+  readonly sheetId: string;
+  readonly lifecycle: 'live';
+  readonly materialized: boolean;
+  readonly bodyRange: string;
+  readonly tableRange?: string;
+  readonly anchorAddress: string;
+  readonly startRow: number;
+  readonly startCol: number;
+  readonly endRow: number;
+  readonly endCol: number;
+  readonly rowsComputed: number;
+  readonly colsComputed: number;
+  readonly cellCount: number;
+  readonly rowInputCell?: string | null;
+  readonly colInputCell?: string | null;
+}
+
 /**
  * Result of creating a persistent Data Table region.
  */
-export interface CreateDataTableResult {
+export interface DataTableCreateReceipt extends OperationReceiptBase {
+  readonly kind: 'dataTable.create';
+  readonly status: 'applied' | 'partial' | 'failed' | 'unsupported';
+  readonly lifecycle: 'live';
+  readonly materialized: boolean;
+  readonly worksheetChanged: boolean;
   regionId: string;
   tableRange: string;
   bodyRange: string;
@@ -216,4 +249,59 @@ export interface CreateDataTableResult {
   rowsComputed: number;
   colsComputed: number;
   cellCount: number;
+}
+
+export interface CreateDataTableResult extends DataTableCreateReceipt {}
+
+export interface RefreshDataTableOptions {
+  /**
+   * Reserved for future recalculation policy once the compute bridge exposes a
+   * dedicated Data Table refresh mutation.
+   */
+  force?: boolean;
+}
+
+export interface DataTableRefreshReceipt extends OperationReceiptBase {
+  readonly kind: 'dataTable.refresh';
+  readonly status: 'applied' | 'noOp' | 'partial' | 'failed' | 'unsupported';
+  readonly lifecycle: 'live';
+  readonly materialized: boolean;
+  readonly worksheetChanged: boolean;
+  readonly target: string;
+  readonly regionId?: string;
+  readonly bodyRange?: string;
+  readonly tableRange?: string;
+  readonly cellCount?: number;
+}
+
+export interface WriteDataTableValuesOptions {
+  readonly rowInputCell?: string | null;
+  readonly colInputCell?: string | null;
+  readonly rowValues: readonly (string | number | boolean | null)[];
+  readonly colValues: readonly (string | number | boolean | null)[];
+  /**
+   * A1 range that will receive the computed result grid as static values.
+   * This is the output/body range only, not the formula/header range.
+   */
+  readonly targetRange: string;
+}
+
+export interface DataTableWriteStaticValuesReceipt extends OperationReceiptBase {
+  readonly kind: 'dataTable.writeStaticValues';
+  readonly status:
+    | 'applied'
+    | 'noOp'
+    | 'partial'
+    | 'failed'
+    | 'unsupported'
+    | 'cancelled'
+    | 'timedOut';
+  readonly lifecycle: 'staticValues';
+  readonly materialized: boolean;
+  readonly worksheetChanged: boolean;
+  readonly targetRange: string;
+  readonly results: CellValue[][];
+  readonly cellCount: number;
+  readonly cellsWritten: number;
+  readonly elapsedMs: number;
 }

@@ -24,16 +24,16 @@ fn materialize_data_table_body_edits(
     let mut edits = Vec::new();
     for row in region.start_row..=region.end_row {
         for col in region.start_col..=region.end_col {
-            let cell_id =
-                services::cell_editing::ensure_cell_id_mirrored(stores, mirror, sheet_id, row, col)
-                    .ok_or_else(|| ComputeError::SheetNotFound {
-                        sheet_id: sheet_id.to_uuid_string(),
-                    })?;
             let formula = super::data_table_formula::formula_at(mirror, sheet_id, row, col)
                 .ok_or_else(|| ComputeError::InvalidInput {
                     message: "create_data_table could not synthesize TABLE formula text"
                         .to_string(),
                 })?;
+            let cell_id =
+                services::cell_editing::ensure_cell_id_mirrored(stores, mirror, sheet_id, row, col)
+                    .ok_or_else(|| ComputeError::SheetNotFound {
+                        sheet_id: sheet_id.to_uuid_string(),
+                    })?;
             edits.push((*sheet_id, cell_id, row, col, CellValue::Null, Some(formula)));
         }
     }
@@ -213,18 +213,20 @@ impl YrsComputeEngine {
             EngineMutation::CreateDataTable { input } => {
                 let (region, data) =
                     crate::data_table::prepare_data_table_creation(&self.mirror, &input)?;
+                let mut materialization_mirror = self.mirror.clone();
+                materialization_mirror.upsert_data_table_region(region.clone());
+                let edits = materialize_data_table_body_edits(
+                    &mut self.stores,
+                    &materialization_mirror,
+                    &input.sheet_id,
+                    &region,
+                )?;
                 crate::storage::workbook::data_tables::upsert_data_table_region(
                     self.stores.storage.doc(),
                     self.stores.storage.workbook_map(),
                     &region,
                 );
                 self.mirror.upsert_data_table_region(region.clone());
-                let edits = materialize_data_table_body_edits(
-                    &mut self.stores,
-                    &self.mirror,
-                    &input.sheet_id,
-                    &region,
-                )?;
                 let mut recalc = services::mutation_handlers::mutation_set_cells_raw_with_trust(
                     &mut self.stores,
                     &mut self.mirror,

@@ -4938,8 +4938,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "autoFill(\n    sourceRange: string,\n    targetRange: string,\n    fillMode?: AutoFillMode,\n  ): Promise<AutoFillResult>;",
-      "typeText": "Promise<AutoFillResult>",
+      "signature": "autoFill(\n    sourceRange: string,\n    targetRange: string,\n    fillMode?: AutoFillMode,\n  ): Promise<AutoFillApplyReceipt>;",
+      "typeText": "Promise<AutoFillApplyReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet.ts"
@@ -8382,8 +8382,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "fillSeries(range: string, options: FillSeriesOptions): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "fillSeries(range: string, options: FillSeriesOptions): Promise<FillSeriesApplyReceipt>;",
+      "typeText": "Promise<FillSeriesApplyReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet.ts"
@@ -12408,8 +12408,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "add(config: PivotCreateConfig): Promise<PivotTableConfig>;",
-      "typeText": "Promise<PivotTableConfig>",
+      "signature": "add(config: PivotCreateConfig, options?: PivotCreateOptions): Promise<PivotAddReceipt>;",
+      "typeText": "Promise<PivotAddReceipt>",
       "compatibility": [
         {
           "id": "mog-api.pivot.root.addPivotTable.deprecated",
@@ -12473,8 +12473,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "addWithSheet(\n    sheetName: string,\n    config: PivotCreateConfig,\n  ): Promise<{ sheetId: string; config: PivotTableConfig }>;",
-      "typeText": "Promise<{sheetId:string;config:PivotTableConfig}>",
+      "signature": "addWithSheet(\n    sheetName: string,\n    config: PivotCreateConfig,\n    options?: PivotCreateOptions,\n  ): Promise<PivotAddWithSheetReceipt>;",
+      "typeText": "Promise<PivotAddWithSheetReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -13021,8 +13021,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "refresh(name: string): Promise<PivotRefreshReceipt | PivotCommandReceipt>;",
-      "typeText": "Promise<PivotRefreshReceipt|PivotCommandReceipt>",
+      "signature": "refresh(name: string): Promise<PivotRefreshReceipt>;",
+      "typeText": "Promise<PivotRefreshReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -18286,6 +18286,25 @@
     },
     {
       "schemaVersion": "1",
+      "path": "ws.whatIf.describeDataTables",
+      "stableId": "WorksheetWhatIf.describeDataTables",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetWhatIf",
+      "member": "describeDataTables",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "describeDataTables(range?: string): Promise<DataTableDescriptor[]>;",
+      "typeText": "Promise<DataTableDescriptor[]>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet/what-if.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
       "path": "ws.whatIf.goalSeek",
       "stableId": "WorksheetWhatIf.goalSeek",
       "root": "subApi",
@@ -18297,6 +18316,44 @@
       "asyncModel": "promise",
       "signature": "goalSeek(targetCell: string, targetValue: number, changingCell: string): Promise<GoalSeekResult>;",
       "typeText": "Promise<GoalSeekResult>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet/what-if.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "ws.whatIf.refreshDataTable",
+      "stableId": "WorksheetWhatIf.refreshDataTable",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetWhatIf",
+      "member": "refreshDataTable",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "refreshDataTable(\n    regionIdOrRange: string,\n    options?: RefreshDataTableOptions,\n  ): Promise<DataTableRefreshReceipt>;",
+      "typeText": "Promise<DataTableRefreshReceipt>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet/what-if.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "ws.whatIf.writeDataTableValues",
+      "stableId": "WorksheetWhatIf.writeDataTableValues",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetWhatIf",
+      "member": "writeDataTableValues",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "writeDataTableValues(\n    formulaCell: string,\n    options: WriteDataTableValuesOptions,\n  ): Promise<DataTableWriteStaticValuesReceipt>;",
+      "typeText": "Promise<DataTableWriteStaticValuesReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/what-if.ts"
@@ -23242,8 +23299,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "autoFill(\n    sourceRange: string,\n    targetRange: string,\n    fillMode?: AutoFillMode,\n  ): Promise<AutoFillResult>;",
-      "typeText": "Promise<AutoFillResult>",
+      "signature": "autoFill(\n    sourceRange: string,\n    targetRange: string,\n    fillMode?: AutoFillMode,\n  ): Promise<AutoFillApplyReceipt>;",
+      "typeText": "Promise<AutoFillApplyReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet.ts"
@@ -26686,8 +26743,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "fillSeries(range: string, options: FillSeriesOptions): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "fillSeries(range: string, options: FillSeriesOptions): Promise<FillSeriesApplyReceipt>;",
+      "typeText": "Promise<FillSeriesApplyReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet.ts"
@@ -30712,8 +30769,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "add(config: PivotCreateConfig): Promise<PivotTableConfig>;",
-      "typeText": "Promise<PivotTableConfig>",
+      "signature": "add(config: PivotCreateConfig, options?: PivotCreateOptions): Promise<PivotAddReceipt>;",
+      "typeText": "Promise<PivotAddReceipt>",
       "compatibility": [
         {
           "id": "mog-api.pivot.root.addPivotTable.deprecated",
@@ -30777,8 +30834,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "addWithSheet(\n    sheetName: string,\n    config: PivotCreateConfig,\n  ): Promise<{ sheetId: string; config: PivotTableConfig }>;",
-      "typeText": "Promise<{sheetId:string;config:PivotTableConfig}>",
+      "signature": "addWithSheet(\n    sheetName: string,\n    config: PivotCreateConfig,\n    options?: PivotCreateOptions,\n  ): Promise<PivotAddWithSheetReceipt>;",
+      "typeText": "Promise<PivotAddWithSheetReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -31325,8 +31382,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "refresh(name: string): Promise<PivotRefreshReceipt | PivotCommandReceipt>;",
-      "typeText": "Promise<PivotRefreshReceipt|PivotCommandReceipt>",
+      "signature": "refresh(name: string): Promise<PivotRefreshReceipt>;",
+      "typeText": "Promise<PivotRefreshReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -36588,6 +36645,25 @@
       },
       "ownerPackage": "@mog/types-api"
     },
+    "ws.whatIf.describeDataTables": {
+      "schemaVersion": "1",
+      "path": "ws.whatIf.describeDataTables",
+      "stableId": "WorksheetWhatIf.describeDataTables",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetWhatIf",
+      "member": "describeDataTables",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "describeDataTables(range?: string): Promise<DataTableDescriptor[]>;",
+      "typeText": "Promise<DataTableDescriptor[]>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet/what-if.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
     "ws.whatIf.goalSeek": {
       "schemaVersion": "1",
       "path": "ws.whatIf.goalSeek",
@@ -36601,6 +36677,44 @@
       "asyncModel": "promise",
       "signature": "goalSeek(targetCell: string, targetValue: number, changingCell: string): Promise<GoalSeekResult>;",
       "typeText": "Promise<GoalSeekResult>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet/what-if.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "ws.whatIf.refreshDataTable": {
+      "schemaVersion": "1",
+      "path": "ws.whatIf.refreshDataTable",
+      "stableId": "WorksheetWhatIf.refreshDataTable",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetWhatIf",
+      "member": "refreshDataTable",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "refreshDataTable(\n    regionIdOrRange: string,\n    options?: RefreshDataTableOptions,\n  ): Promise<DataTableRefreshReceipt>;",
+      "typeText": "Promise<DataTableRefreshReceipt>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet/what-if.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "ws.whatIf.writeDataTableValues": {
+      "schemaVersion": "1",
+      "path": "ws.whatIf.writeDataTableValues",
+      "stableId": "WorksheetWhatIf.writeDataTableValues",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetWhatIf",
+      "member": "writeDataTableValues",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "writeDataTableValues(\n    formulaCell: string,\n    options: WriteDataTableValuesOptions,\n  ): Promise<DataTableWriteStaticValuesReceipt>;",
+      "typeText": "Promise<DataTableWriteStaticValuesReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/what-if.ts"

@@ -131,6 +131,7 @@ export function installWorksheetImplEsmMocks(): void {
   jest.unstable_mockModule('../../internal/value-conversions', () => ({
     normalizeCellValue: jest.fn(),
     cellValueToString: jest.fn(),
+    classifyRangeValueType: jest.fn(),
   }));
 
   jest.unstable_mockModule(

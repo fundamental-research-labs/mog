@@ -7,6 +7,7 @@
  */
 
 import type { ObjectBounds } from '../kernel/floating-object-manager';
+import type { CellRange } from '@mog/types-core/core';
 import type { FloatingObject } from '@mog/types-objects/objects/floating-objects';
 import type { OperationReceiptBase } from './operation-receipt';
 import type {
@@ -14,6 +15,8 @@ import type {
   PivotKernelMutationReceipt,
   PivotPlacementMutationReceipt,
   PivotReadbackRevision,
+  PivotTableConfig,
+  PivotTableResult,
 } from '@mog/types-data/data/pivot';
 
 export type {
@@ -310,10 +313,42 @@ export interface PivotRemoveReceipt {
   readonly name: string;
 }
 
-/** Receipt for a pivot table refresh mutation. */
-export interface PivotRefreshReceipt {
-  readonly kind: 'pivotRefresh';
+export type PivotCreationLifecycle = 'defineOnly' | 'materialize';
+
+/** Receipt for defining or materializing a pivot table on an existing sheet. */
+export interface PivotAddReceipt extends OperationReceiptBase {
+  readonly kind: 'pivot.add';
+  readonly status: 'applied' | 'partial' | 'failed';
   readonly pivotId: string;
+  readonly config: PivotTableConfig;
+  readonly lifecycle: PivotCreationLifecycle;
+  readonly materialized: boolean;
+  readonly renderedRange?: CellRange | null;
+  readonly result?: PivotTableResult | null;
+}
+
+/** Receipt for atomically creating a sheet and defining/materializing a pivot. */
+export interface PivotAddWithSheetReceipt extends OperationReceiptBase {
+  readonly kind: 'pivot.addWithSheet';
+  readonly status: 'applied' | 'partial' | 'failed';
+  readonly sheetId: string;
+  readonly pivotId: string;
+  readonly config: PivotTableConfig;
+  readonly lifecycle: PivotCreationLifecycle;
+  readonly materialized: boolean;
+  readonly renderedRange?: CellRange | null;
+  readonly result?: PivotTableResult | null;
+}
+
+/** Receipt for a pivot table refresh/materialization mutation. */
+export interface PivotRefreshReceipt extends OperationReceiptBase {
+  readonly kind: 'pivot.refresh';
+  readonly status: 'applied' | 'failed' | 'cancelled' | 'timedOut';
+  readonly pivotId: string;
+  readonly config?: PivotTableConfig | null;
+  readonly materialized: boolean;
+  readonly renderedRange?: CellRange | null;
+  readonly result?: PivotTableResult | null;
 }
 
 // =============================================================================
@@ -352,6 +387,8 @@ export type MutationReceipt =
   | UndoReceipt
   | RedoReceipt
   | PivotRemoveReceipt
+  | PivotAddReceipt
+  | PivotAddWithSheetReceipt
   | PivotRefreshReceipt
   | PivotKernelMutationReceipt
   | PivotPlacementMutationReceipt

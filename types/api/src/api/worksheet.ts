@@ -34,7 +34,7 @@ import type {
   SpreadsheetEventType as InternalEventType,
   SpreadsheetEvent,
 } from '@mog/types-events';
-import type { AutoFillMode, AutoFillResult, FillSeriesOptions } from '@mog/types-editor/fill/types';
+import type { AutoFillMode, FillSeriesOptions } from '@mog/types-editor/fill/types';
 import type { IObjectBoundsReader } from '@mog/types-objects/objects/object-bounds-reader';
 import type {
   AggregateResult,
@@ -116,6 +116,8 @@ import type {
   WorksheetShapeCollection,
   WorksheetSlicers,
   WorksheetDiagrams,
+  AutoFillApplyReceipt,
+  FillSeriesApplyReceipt,
   WorksheetSparklines,
   WorksheetStructure,
   WorksheetStyles,
@@ -129,6 +131,9 @@ import type {
   WorksheetTextEffectCollection,
   PivotCreateConfig,
 } from './worksheet/index';
+
+export type { AutoFillApplyReceipt, FillSeriesApplyReceipt } from './worksheet/fill';
+export type { PivotCreateOptions } from './worksheet/index';
 
 export type {
   WorksheetCellVisitor,
@@ -1020,7 +1025,7 @@ export interface Worksheet {
     sourceRange: string,
     targetRange: string,
     fillMode?: AutoFillMode,
-  ): Promise<AutoFillResult>;
+  ): Promise<AutoFillApplyReceipt>;
 
   /**
    * Fill a range with a series (Edit > Fill > Series dialog equivalent).
@@ -1032,7 +1037,7 @@ export interface Worksheet {
    * @param range - Range in A1 notation containing source + target cells
    * @param options - Series parameters (type, step, stop, direction, etc.)
    */
-  fillSeries(range: string, options: FillSeriesOptions): Promise<void>;
+  fillSeries(range: string, options: FillSeriesOptions): Promise<FillSeriesApplyReceipt>;
 
   /**
    * Move (relocate) cells from a source range to a target position.

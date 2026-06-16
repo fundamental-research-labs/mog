@@ -8,7 +8,12 @@ import type { GoalSeekResult, SheetId, WorksheetWhatIf } from '@mog-sdk/contract
 import type {
   CreateDataTableOptions,
   CreateDataTableResult,
+  DataTableDescriptor,
+  DataTableRefreshReceipt,
+  DataTableWriteStaticValuesReceipt,
   DataTableResult,
+  RefreshDataTableOptions,
+  WriteDataTableValuesOptions,
 } from '@mog-sdk/contracts/what-if';
 import type { DocumentContext } from '../../context';
 import * as DataTableOps from './operations/data-table-operations';
@@ -42,5 +47,23 @@ export class WorksheetWhatIfImpl implements WorksheetWhatIf {
 
   async createDataTable(options: CreateDataTableOptions): Promise<CreateDataTableResult> {
     return DataTableOps.createDataTable(this.ctx, this.sheetId, options);
+  }
+
+  async writeDataTableValues(
+    formulaCell: string,
+    options: WriteDataTableValuesOptions,
+  ): Promise<DataTableWriteStaticValuesReceipt> {
+    return DataTableOps.writeDataTableValues(this.ctx, this.sheetId, formulaCell, options);
+  }
+
+  async describeDataTables(range?: string): Promise<DataTableDescriptor[]> {
+    return DataTableOps.describeDataTables(this.ctx, this.sheetId, range);
+  }
+
+  async refreshDataTable(
+    regionIdOrRange: string,
+    options?: RefreshDataTableOptions,
+  ): Promise<DataTableRefreshReceipt> {
+    return DataTableOps.refreshDataTable(this.ctx, this.sheetId, regionIdOrRange, options);
   }
 }

@@ -53,6 +53,7 @@ import type {
 } from '@mog/types-data/data/pivot';
 import type { TotalFunction } from '@mog/types-data/data/tables';
 import type { SpreadsheetEvent as InternalSpreadsheetEvent } from '@mog/types-events/events';
+import type { PivotRefreshReceipt } from './mutation-receipt';
 import type {
   CellChangedEvent,
   CellsBatchChangedEvent,
@@ -1017,8 +1018,8 @@ export interface PivotTableHandle {
     placementId: PlacementId,
     displayName: string | null,
   ): Promise<PivotKernelMutationReceipt>;
-  /** Refresh the pivot table from its data source */
-  refresh(): Promise<void>;
+  /** Refresh/materialize the pivot table from its data source. */
+  refresh(): Promise<PivotRefreshReceipt>;
   /** Get all items for all non-value fields */
   getAllItems(): Promise<PivotFieldItems[]>;
   /** Set the "Show Values As" calculation for a value field. Pass null to clear. */

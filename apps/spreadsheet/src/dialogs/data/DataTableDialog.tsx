@@ -290,7 +290,9 @@ function DataTableResults({ status, result }: DataTableResultsProps) {
   // Success
   return (
     <div className="flex flex-col gap-3">
-      <div className="text-body font-medium text-ss-success">Data Table created successfully.</div>
+      <div className="text-body font-medium text-ss-success">
+        Data Table calculated successfully.
+      </div>
 
       {result && (
         <div className="bg-ss-surface-secondary rounded p-3 space-y-2">

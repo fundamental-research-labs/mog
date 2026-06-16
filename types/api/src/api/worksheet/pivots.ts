@@ -8,7 +8,9 @@
  * Operations on this sub-API operate on the worksheet's sheet (no sheetId parameter needed).
  */
 import type {
-  PivotCommandReceipt,
+  PivotAddReceipt,
+  PivotAddWithSheetReceipt,
+  PivotCreationLifecycle,
   PivotKernelMutationReceipt,
   PivotReadbackRevision,
   PivotRefreshReceipt,
@@ -64,6 +66,14 @@ import type {
 export type PivotCreateConfig =
   | SimplePivotTableConfig
   | Omit<PivotTableConfig, 'id' | 'createdAt' | 'updatedAt' | 'schemaVersion'>;
+
+export interface PivotCreateOptions {
+  /**
+   * `defineOnly` stores the pivot metadata without writing rendered cells.
+   * `materialize` stores metadata and refreshes the rendered worksheet output.
+   */
+  lifecycle?: PivotCreationLifecycle;
+}
 
 export interface PivotPlacementSpec {
   placementId?: PlacementId;
@@ -227,9 +237,10 @@ export interface WorksheetPivots {
    *   Direct wire format — no conversion needed.
    *
    * @param config - Pivot table configuration
-   * @returns The created pivot table configuration (with generated id, timestamps)
+   * @param options - Creation lifecycle; defaults to defineOnly.
+   * @returns A receipt containing the created pivot table configuration.
    */
-  add(config: PivotCreateConfig): Promise<PivotTableConfig>;
+  add(config: PivotCreateConfig, options?: PivotCreateOptions): Promise<PivotAddReceipt>;
 
   /**
    * Atomically create a new sheet AND a pivot table on it.
@@ -239,12 +250,14 @@ export interface WorksheetPivots {
    *
    * @param sheetName - Name for the new sheet
    * @param config - Pivot table configuration
-   * @returns The new sheet ID and the created pivot config
+   * @param options - Creation lifecycle; defaults to defineOnly.
+   * @returns A receipt containing the new sheet ID and created pivot config.
    */
   addWithSheet(
     sheetName: string,
     config: PivotCreateConfig,
-  ): Promise<{ sheetId: string; config: PivotTableConfig }>;
+    options?: PivotCreateOptions,
+  ): Promise<PivotAddWithSheetReceipt>;
 
   /**
    * List full pivot configs rendered on this worksheet.
@@ -499,7 +512,7 @@ export interface WorksheetPivots {
    *
    * @param name - Pivot table name
    */
-  refresh(name: string): Promise<PivotRefreshReceipt | PivotCommandReceipt>;
+  refresh(name: string): Promise<PivotRefreshReceipt>;
 
   /**
    * Refresh all pivot tables on this worksheet.

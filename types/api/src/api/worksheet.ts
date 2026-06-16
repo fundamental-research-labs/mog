@@ -42,8 +42,10 @@ import type {
   CellMetadataCache,
   CellRange,
   CellWriteOptions,
+  CFStyle,
   ClearApplyTo,
   ClearResult,
+  ConditionalFormat,
   FormatChangeResult,
   FormatEntry,
   GoalSeekResult,
@@ -81,6 +83,7 @@ import type {
   WorksheetRangeValueCell,
 } from './worksheet/cell-reads';
 import type { CellType, CellValueType } from './types';
+import type { ValidationSetReceipt } from './mutation-receipt';
 import type { RegionMeta } from '../store/store-types';
 import type { CopyFromOptions } from '@mog/types-core/core';
 import type {
@@ -116,6 +119,8 @@ import type {
   WorksheetStyles,
   WorksheetTables,
   WorksheetTextBoxCollection,
+  ListValidationOptions,
+  ListValidationSource,
   WorksheetValidation,
   WorksheetView,
   WorksheetWhatIf,
@@ -1249,6 +1254,36 @@ export interface Worksheet {
    * data so callers can fall back to one Rust-owned edit-source query.
    */
   getActiveCellEditSource(row: number, col: number): ActiveCellEditSource | null;
+
+  /**
+   * Set list validation on a cell or range.
+   *
+   * Shortcut for `ws.validations.setList(range, source, options)`.
+   *
+   * @param range - A1-style cell/range address or CellRange object
+   * @param source - Inline values, inline CSV, A1 source range, formula/named source, or CellRange
+   * @param options - Optional validation UI and enforcement metadata
+   */
+  setListValidation(
+    range: string | CellRange,
+    source: ListValidationSource,
+    options?: ListValidationOptions,
+  ): Promise<ValidationSetReceipt>;
+
+  /**
+   * Add a formula-based conditional format for a cell or range.
+   *
+   * Shortcut for `ws.conditionalFormats.addFormula(range, formula, style)`.
+   *
+   * @param range - A1-style cell/range address, CellRange object, or array of ranges
+   * @param formula - Conditional-format formula (e.g. "=A1>100")
+   * @param style - Style applied when the formula is true
+   */
+  setFormulaConditionalFormat(
+    range: string | CellRange | (string | CellRange)[],
+    formula: string,
+    style: CFStyle,
+  ): Promise<ConditionalFormat>;
 
   // ===========================================================================
   // Sub-API namespaces (domain-specific operations)

@@ -99,6 +99,27 @@ describe('SDK agent API guidance', () => {
     );
   });
 
+  it('surfaces validation and conditional-format helper paths in API guidance', () => {
+    const listValidation = api.guidance.explain('ws.validations.setList');
+    expect(listValidation?.kind).toBe('mog-api');
+    if (listValidation?.kind !== 'mog-api') throw new Error('expected setList guidance');
+    expect(listValidation.target.signature).toContain('setList(');
+
+    const formulaFormat = api.guidance.explain('ws.conditionalFormats.addFormula');
+    expect(formulaFormat?.kind).toBe('mog-api');
+    if (formulaFormat?.kind !== 'mog-api') throw new Error('expected addFormula guidance');
+    expect(formulaFormat.target.signature).toContain('addFormula(');
+
+    const listDescription = api.describe('ws.validations.setList');
+    expect(listDescription && 'signature' in listDescription ? listDescription.signature : '').toContain(
+      'setList(',
+    );
+    const formulaDescription = api.describe('ws.conditionalFormats.addFormula');
+    expect(
+      formulaDescription && 'signature' in formulaDescription ? formulaDescription.signature : '',
+    ).toContain('addFormula(');
+  });
+
   it('analyzes and preflights common OfficeJS residue without executing code', () => {
     const source = `
       await Excel.run(async (context) => {
@@ -269,6 +290,33 @@ describe('SDK agent API guidance', () => {
     );
     expect(byId.get('mog-api.worksheet.addressToIndex.unsupported')?.mogReplacements).toEqual(
       expect.arrayContaining([expect.objectContaining({ path: 'a1.parse' })]),
+    );
+  });
+
+  it('preflights observed validation add guesses to the list-validation helper', () => {
+    const preflight = preflightMogCode(`
+      await ws.validations.add("A1:A10", { type: "list", values: ["Open"] });
+      await ws.dataValidation.add("B1:B10", ["Open", "Done"]);
+    `);
+
+    expect(preflight.ok).toBe(false);
+    const byId = new Map(
+      preflight.diagnostics.map((diagnostic) => [diagnostic.entryId, diagnostic]),
+    );
+
+    expect(byId.get('mog-api.validation.validationsAdd.unsupported')).toEqual(
+      expect.objectContaining({
+        blocking: true,
+        mogReplacements: expect.arrayContaining([
+          expect.objectContaining({ path: 'ws.validations.setList' }),
+        ]),
+      }),
+    );
+    expect(byId.get('mog-api.validation.dataValidationAdd.unsupported')).toEqual(
+      expect.objectContaining({
+        blocking: true,
+        mogReplacements: [expect.objectContaining({ path: 'ws.validations.setList' })],
+      }),
     );
   });
 

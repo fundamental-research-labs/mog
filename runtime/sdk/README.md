@@ -204,7 +204,10 @@ The full kernel API is accessible — charts, tables, filters, validation, condi
 await ws.charts.add({ type: 'bar', dataRange: 'A1:B5' });
 
 // Conditional formatting
-await ws.conditionalFormats.add({ range: 'B2:B10', rule: { type: 'greaterThan', value: 100 } });
+await ws.conditionalFormats.addFormula('B2:B10', '=B2>100', { backgroundColor: '#fff2cc' });
+
+// Data validation
+await ws.validations.setList('C2:C10', ['Open', 'Blocked', 'Done']);
 
 // Tables
 await ws.tables.add('A1:C5', { name: 'MyTable', hasHeaders: true });

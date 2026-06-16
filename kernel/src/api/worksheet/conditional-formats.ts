@@ -10,6 +10,7 @@ import type {
   CellRange,
   CFRule,
   CFRuleInput,
+  CFStyle,
   ConditionalFormat,
   ConditionalFormatUpdate,
   SheetId,
@@ -88,6 +89,222 @@ function assertCfRuleArray(
       'CF_RULES_MUST_BE_ARRAY',
       'Use an array of rule objects, for example [{ type: "formula", formula: "=A1>0", style: {} }].',
     );
+  }
+
+  value.forEach((rule, index) => assertCfRuleInput(rule, [...path, String(index)], methodName));
+}
+
+function invalidCfRuleError(
+  value: unknown,
+  path: string[],
+  methodName: string,
+  expected: string,
+  issueCode: string,
+  suggestion: string,
+): KernelError {
+  return new KernelError(
+    'API_INVALID_ARGUMENT',
+    `${methodName}: ${path.join('.')} must be ${expected}.`,
+    {
+      context: {
+        issueCode,
+        path,
+        expected,
+        receivedType: receivedType(value),
+      },
+      path,
+      suggestion,
+    },
+  );
+}
+
+function assertPlainObject(
+  value: unknown,
+  path: string[],
+  methodName: string,
+  issueCode: string,
+  suggestion: string,
+): asserts value is Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw invalidCfRuleError(value, path, methodName, 'an object', issueCode, suggestion);
+  }
+}
+
+function assertStringField(
+  rule: Record<string, unknown>,
+  field: string,
+  path: string[],
+  methodName: string,
+  suggestion: string,
+): void {
+  const value = rule[field];
+  if (typeof value !== 'string' || value.trim() === '') {
+    throw invalidCfRuleError(
+      value,
+      [...path, field],
+      methodName,
+      'a non-empty string',
+      `CF_RULE_${field.toUpperCase()}_REQUIRED`,
+      suggestion,
+    );
+  }
+}
+
+function assertNumberField(
+  rule: Record<string, unknown>,
+  field: string,
+  path: string[],
+  methodName: string,
+  suggestion: string,
+): void {
+  const value = rule[field];
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    throw invalidCfRuleError(
+      value,
+      [...path, field],
+      methodName,
+      'a finite number',
+      `CF_RULE_${field.toUpperCase()}_REQUIRED`,
+      suggestion,
+    );
+  }
+}
+
+function assertBooleanField(
+  rule: Record<string, unknown>,
+  field: string,
+  path: string[],
+  methodName: string,
+  suggestion: string,
+): void {
+  const value = rule[field];
+  if (typeof value !== 'boolean') {
+    throw invalidCfRuleError(
+      value,
+      [...path, field],
+      methodName,
+      'a boolean',
+      `CF_RULE_${field.toUpperCase()}_REQUIRED`,
+      suggestion,
+    );
+  }
+}
+
+function assertObjectField(
+  rule: Record<string, unknown>,
+  field: string,
+  path: string[],
+  methodName: string,
+  suggestion: string,
+): void {
+  assertPlainObject(
+    rule[field],
+    [...path, field],
+    methodName,
+    `CF_RULE_${field.toUpperCase()}_REQUIRED`,
+    suggestion,
+  );
+}
+
+function assertStyleField(
+  rule: Record<string, unknown>,
+  path: string[],
+  methodName: string,
+  suggestion: string,
+): void {
+  assertObjectField(rule, 'style', path, methodName, suggestion);
+}
+
+function assertCfRuleInput(
+  value: unknown,
+  path: string[],
+  methodName: string,
+): asserts value is CFRuleInput {
+  assertPlainObject(
+    value,
+    path,
+    methodName,
+    'CF_RULE_MUST_BE_OBJECT',
+    'Use a rule object, for example { type: "formula", formula: "=A1>0", style: { backgroundColor: "#fff2cc" } }.',
+  );
+
+  const type = value.type;
+  if (typeof type !== 'string') {
+    throw invalidCfRuleError(
+      type,
+      [...path, 'type'],
+      methodName,
+      'a conditional format rule type string',
+      'CF_RULE_TYPE_REQUIRED',
+      'Use a rule object, for example { type: "formula", formula: "=A1>0", style: { backgroundColor: "#fff2cc" } }.',
+    );
+  }
+
+  switch (type) {
+    case 'cellValue':
+      assertStringField(value, 'operator', path, methodName, 'Use { type: "cellValue", operator: "greaterThan", value1: 100, style: { backgroundColor: "#fff2cc" } }.');
+      if (value.value1 == null) {
+        throw invalidCfRuleError(
+          value.value1,
+          [...path, 'value1'],
+          methodName,
+          'a comparison value',
+          'CF_RULE_VALUE1_REQUIRED',
+          'Use { type: "cellValue", operator: "greaterThan", value1: 100, style: { backgroundColor: "#fff2cc" } }.',
+        );
+      }
+      assertStyleField(value, path, methodName, 'Use { type: "cellValue", operator: "greaterThan", value1: 100, style: { backgroundColor: "#fff2cc" } }.');
+      return;
+    case 'formula':
+      assertStringField(value, 'formula', path, methodName, 'Use { type: "formula", formula: "=A1>0", style: { backgroundColor: "#fff2cc" } }.');
+      assertStyleField(value, path, methodName, 'Use { type: "formula", formula: "=A1>0", style: { backgroundColor: "#fff2cc" } }.');
+      return;
+    case 'colorScale':
+      assertObjectField(value, 'colorScale', path, methodName, 'Use { type: "colorScale", colorScale: { minPoint: { type: "min", color: "#f8696b" }, maxPoint: { type: "max", color: "#63be7b" } } }.');
+      return;
+    case 'dataBar':
+      assertObjectField(value, 'dataBar', path, methodName, 'Use { type: "dataBar", dataBar: { minPoint: { type: "min", color: "#638ec6" }, maxPoint: { type: "max", color: "#638ec6" }, positiveColor: "#638ec6" } }.');
+      return;
+    case 'iconSet':
+      assertObjectField(value, 'iconSet', path, methodName, 'Use { type: "iconSet", iconSet: { iconSetName: "3Arrows" } }.');
+      return;
+    case 'top10':
+      assertNumberField(value, 'rank', path, methodName, 'Use { type: "top10", rank: 10, style: { backgroundColor: "#fff2cc" } }.');
+      assertStyleField(value, path, methodName, 'Use { type: "top10", rank: 10, style: { backgroundColor: "#fff2cc" } }.');
+      return;
+    case 'aboveAverage':
+      assertBooleanField(value, 'aboveAverage', path, methodName, 'Use { type: "aboveAverage", aboveAverage: true, style: { backgroundColor: "#fff2cc" } }.');
+      assertStyleField(value, path, methodName, 'Use { type: "aboveAverage", aboveAverage: true, style: { backgroundColor: "#fff2cc" } }.');
+      return;
+    case 'duplicateValues':
+      assertStyleField(value, path, methodName, 'Use { type: "duplicateValues", style: { backgroundColor: "#ffc7ce" } }.');
+      return;
+    case 'containsText':
+      assertStringField(value, 'operator', path, methodName, 'Use { type: "containsText", operator: "contains", text: "urgent", style: { backgroundColor: "#fff2cc" } }.');
+      assertStringField(value, 'text', path, methodName, 'Use { type: "containsText", operator: "contains", text: "urgent", style: { backgroundColor: "#fff2cc" } }.');
+      assertStyleField(value, path, methodName, 'Use { type: "containsText", operator: "contains", text: "urgent", style: { backgroundColor: "#fff2cc" } }.');
+      return;
+    case 'containsBlanks':
+      assertBooleanField(value, 'blanks', path, methodName, 'Use { type: "containsBlanks", blanks: true, style: { backgroundColor: "#fff2cc" } }.');
+      assertStyleField(value, path, methodName, 'Use { type: "containsBlanks", blanks: true, style: { backgroundColor: "#fff2cc" } }.');
+      return;
+    case 'containsErrors':
+      assertBooleanField(value, 'errors', path, methodName, 'Use { type: "containsErrors", errors: true, style: { backgroundColor: "#ffc7ce" } }.');
+      assertStyleField(value, path, methodName, 'Use { type: "containsErrors", errors: true, style: { backgroundColor: "#ffc7ce" } }.');
+      return;
+    case 'timePeriod':
+      assertStringField(value, 'timePeriod', path, methodName, 'Use { type: "timePeriod", timePeriod: "today", style: { backgroundColor: "#fff2cc" } }.');
+      assertStyleField(value, path, methodName, 'Use { type: "timePeriod", timePeriod: "today", style: { backgroundColor: "#fff2cc" } }.');
+      return;
+    default:
+      throw invalidCfRuleError(
+        type,
+        [...path, 'type'],
+        methodName,
+        'one of: cellValue, formula, colorScale, dataBar, iconSet, top10, aboveAverage, duplicateValues, containsText, containsBlanks, containsErrors, timePeriod',
+        'CF_RULE_TYPE_UNSUPPORTED',
+        'For formula-based conditional formatting, use { type: "formula", formula: "=A1>0", style: { backgroundColor: "#fff2cc" } } or ws.conditionalFormats.addFormula("A1:A10", "=A1>0", { backgroundColor: "#fff2cc" }).',
+      );
   }
 }
 
@@ -214,9 +431,38 @@ export class WorksheetConditionalFormattingImpl implements WorksheetConditionalF
     this.ctx.writeGate.assertWritable(op);
   }
 
+  async addFormula(
+    range: string | CellRange | (string | CellRange)[],
+    formula: string,
+    style: CFStyle,
+  ): Promise<ConditionalFormat> {
+    if (typeof formula !== 'string' || !formula.trim()) {
+      throw invalidCfRuleError(
+        formula,
+        ['formula'],
+        'conditionalFormats.addFormula',
+        'a non-empty formula string',
+        'CF_FORMULA_REQUIRED',
+        'Use ws.conditionalFormats.addFormula("A1:A10", "=A1>0", { backgroundColor: "#fff2cc" }).',
+      );
+    }
+
+    const ranges = Array.isArray(range) ? range : [range];
+    const trimmed = formula.trim();
+    const normalizedFormula = trimmed.startsWith('=') ? trimmed : `=${trimmed}`;
+    const rule = { type: 'formula', formula: normalizedFormula, style } as CFRuleInput;
+    return this.add(ranges, [rule]);
+  }
+
   async add(ranges: (string | CellRange)[], rules: CFRuleInput[]): Promise<ConditionalFormat> {
     this._ensureWritable('conditionalFormats.add');
-    assertCfRangeArray(ranges, ['ranges'], 'conditionalFormats.add');
+    assertCfRangeArray(
+      ranges,
+      ['ranges'],
+      'conditionalFormats.add',
+      'an array of range strings or CellRange objects',
+      'Use ws.conditionalFormats.add(["A1:A10"], [{ type: "formula", formula: "=A1>0", style: { backgroundColor: "#fff2cc" } }]) or ws.conditionalFormats.addFormula("A1:A10", "=A1>0", { backgroundColor: "#fff2cc" }).',
+    );
     assertCfRuleArray(rules, ['rules'], 'conditionalFormats.add');
     const resolved = ranges.map((r) => resolveRange(r));
     const formatId = await CFOps.addConditionalFormat(this.ctx, this.sheetId, resolved, rules);

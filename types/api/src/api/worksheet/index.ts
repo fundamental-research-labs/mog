@@ -92,6 +92,8 @@ export type {
 } from './tables';
 export type {
   DropdownItemsWithRevision,
+  ListValidationOptions,
+  ListValidationSource,
   WorksheetValidation,
   ValidationCheckResult,
 } from './validation';

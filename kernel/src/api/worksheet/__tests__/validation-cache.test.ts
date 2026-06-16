@@ -47,6 +47,9 @@ function createCtx(initialSchemas: RangeSchema[] = []): TestDocumentContext {
       for (const listener of undoListeners) listener({ trigger });
     },
     eventBus: createEventBus(),
+    writeGate: {
+      assertWritable: jest.fn(),
+    },
     services: {
       undo: {
         subscribe: jest.fn((listener) => {
@@ -254,6 +257,68 @@ describe('WorksheetValidationImpl list validation', () => {
       errorMessage: 'Use one of the allowed values.',
     });
     expect(ctx.computeBridge.validateCellValueInDoc).not.toHaveBeenCalled();
+  });
+
+  it('setList creates an inline list validation with UI metadata', async () => {
+    const ctx = createCtx();
+    const validations = new WorksheetValidationImpl(ctx, SHEET_ID);
+
+    await expect(
+      validations.setList('B2:B4', ['Red', 'Blue'], {
+        allowBlank: false,
+        errorTitle: 'Choose from list',
+        errorMessage: 'Use one of the allowed values.',
+      }),
+    ).resolves.toEqual({ kind: 'validationSet', address: 'B2:B4' });
+
+    const schema = Array.from(ctx.__schemas.values())[0];
+    expect(schema.ranges).toEqual([{ startId: '1:1', endId: '3:1' }]);
+    expect(schema.schema).toEqual({
+      type: undefined,
+      constraints: {
+        enum: ['Red', 'Blue'],
+        allowBlank: false,
+      },
+    });
+    expect(schema.ui).toEqual({
+      showDropdown: true,
+      errorMessage: {
+        title: 'Choose from list',
+        message: 'Use one of the allowed values.',
+      },
+    });
+  });
+
+  it('setList accepts CellRange list sources without callers building schema fields', async () => {
+    const ctx = createCtx();
+    const validations = new WorksheetValidationImpl(ctx, SHEET_ID);
+
+    await validations.setList(
+      { startRow: 4, startCol: 1, endRow: 6, endCol: 1 },
+      { startRow: 0, startCol: 3, endRow: 2, endCol: 3 },
+    );
+
+    const schema = Array.from(ctx.__schemas.values())[0];
+    expect(schema.ranges).toEqual([{ startId: '4:1', endId: '6:1' }]);
+    expect(schema.schema.constraints).toMatchObject({
+      enumSource: { startId: '0:3', endId: '2:3' },
+    });
+  });
+
+  it('setList returns schema-aware diagnostics for empty sources', async () => {
+    const ctx = createCtx();
+    const validations = new WorksheetValidationImpl(ctx, SHEET_ID);
+
+    await expect(validations.setList('A1', [])).rejects.toMatchObject({
+      code: 'API_INVALID_ARGUMENT',
+      path: ['source'],
+      suggestion: expect.stringContaining('["Red", "Blue"]'),
+      context: expect.objectContaining({
+        issueCode: 'VALIDATION_LIST_SOURCE_EMPTY',
+        expected: expect.stringContaining('non-empty'),
+      }),
+    });
+    expect(ctx.computeBridge.setRangeSchema).not.toHaveBeenCalled();
   });
 
   it('accepts resolved range-backed list values case-insensitively', async () => {

@@ -246,6 +246,85 @@ describe('WorksheetConditionalFormattingImpl — input shape diagnostics', () =>
     });
   });
 
+  it('addFormula creates a formula rule without requiring callers to know the rule schema', async () => {
+    const result = await cf.addFormula('B2:B10', 'B2>100', { backgroundColor: '#fff2cc' });
+
+    expect(bridge.addCfRule).toHaveBeenCalledTimes(1);
+    expect(bridge.addCfRule.mock.calls[0][0]).toBe(SHEET_ID);
+    expect(bridge.addCfRule.mock.calls[0][1]).toMatchObject({
+      sheetId: SHEET_ID,
+      ranges: [{ startRow: 1, startCol: 1, endRow: 9, endCol: 1 }],
+      rules: [
+        expect.objectContaining({
+          type: 'formula',
+          formula: '=B2>100',
+          style: { backgroundColor: '#fff2cc' },
+          priority: 0,
+        }),
+      ],
+    });
+    expect(result).toMatchObject({
+      ranges: [{ startRow: 1, startCol: 1, endRow: 9, endCol: 1 }],
+    });
+  });
+
+  it('addFormula rejects empty formulas with a runnable helper example', async () => {
+    let caught: unknown;
+
+    try {
+      await cf.addFormula('A1:A10', '   ', { backgroundColor: '#fff2cc' });
+    } catch (error) {
+      caught = error;
+    }
+
+    expectInvalidArrayDiagnostic(
+      caught,
+      'a non-empty formula string',
+      ['formula'],
+      'string',
+    );
+    expect((caught as KernelError).suggestion).toContain('ws.conditionalFormats.addFormula');
+    expect(bridge.addCfRule).not.toHaveBeenCalled();
+  });
+
+  it('add rejects formula rules missing the formula field before bridge mutation', async () => {
+    let caught: unknown;
+
+    try {
+      await cf.add(['A1:A10'], [{ type: 'formula', style: {} } as any]);
+    } catch (error) {
+      caught = error;
+    }
+
+    expectInvalidArrayDiagnostic(
+      caught,
+      'a non-empty string',
+      ['rules', '0', 'formula'],
+      'undefined',
+    );
+    expect((caught as KernelError).suggestion).toContain('type: "formula"');
+    expect(bridge.addCfRule).not.toHaveBeenCalled();
+  });
+
+  it('add rejects unsupported rule types with formula-helper guidance', async () => {
+    let caught: unknown;
+
+    try {
+      await cf.add(['A1:A10'], [{ type: 'greaterThan', value: 100, style: {} } as any]);
+    } catch (error) {
+      caught = error;
+    }
+
+    expectInvalidArrayDiagnostic(
+      caught,
+      'one of: cellValue, formula, colorScale, dataBar, iconSet, top10, aboveAverage, duplicateValues, containsText, containsBlanks, containsErrors, timePeriod',
+      ['rules', '0', 'type'],
+      'string',
+    );
+    expect((caught as KernelError).suggestion).toContain('ws.conditionalFormats.addFormula');
+    expect(bridge.addCfRule).not.toHaveBeenCalled();
+  });
+
   it('clearInRanges rejects a non-array ranges argument', async () => {
     let caught: unknown;
 

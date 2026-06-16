@@ -35,8 +35,76 @@ export interface DropdownItemsWithRevision {
   dataRevision: string | number;
 }
 
+/** Source accepted by {@link WorksheetValidation.setList}. */
+export type ListValidationSource = string | readonly string[] | CellRange;
+
+/** Options for {@link WorksheetValidation.setList}. */
+export interface ListValidationOptions {
+  /** Whether blank cells pass validation (default: true). */
+  allowBlank?: boolean;
+  /** Whether to show a dropdown arrow (default: true). */
+  showDropdown?: boolean;
+  /** Whether to show an input message when the cell is selected. */
+  showInputMessage?: boolean;
+  /** Title for the input message. */
+  inputTitle?: string;
+  /** Body text for the input message. */
+  inputMessage?: string;
+  /** Whether to show an error alert on invalid input. */
+  showErrorAlert?: boolean;
+  /** Error alert style. */
+  errorStyle?: 'stop' | 'warning' | 'information';
+  /** Title for the error alert. */
+  errorTitle?: string;
+  /** Body text for the error alert. */
+  errorMessage?: string;
+}
+
 /** Sub-API for data validation operations on a worksheet. */
 export interface WorksheetValidation {
+  /**
+   * Set list validation on a cell or range.
+   *
+   * `source` may be an inline array (`["Red", "Blue"]`), inline CSV
+   * (`"Red,Blue"`), an A1 range (`"D1:D10"` or `"=D1:D10"`), a named
+   * source/formula (`"=Colors"`), or a CellRange object.
+   *
+   * @param address - A1-style cell or range address (e.g. "A1", "A1:B5")
+   * @param source - Allowed list values or a source range/formula
+   * @param options - Optional validation UI and enforcement metadata
+   */
+  setList(
+    address: string,
+    source: ListValidationSource,
+    options?: ListValidationOptions,
+  ): Promise<ValidationSetReceipt>;
+  /**
+   * Set list validation on a range.
+   *
+   * @param range - CellRange object defining the target range
+   * @param source - Allowed list values or a source range/formula
+   * @param options - Optional validation UI and enforcement metadata
+   */
+  setList(
+    range: CellRange,
+    source: ListValidationSource,
+    options?: ListValidationOptions,
+  ): Promise<ValidationSetReceipt>;
+  /**
+   * Set list validation on a cell.
+   *
+   * @param row - Row index (0-based)
+   * @param col - Column index (0-based)
+   * @param source - Allowed list values or a source range/formula
+   * @param options - Optional validation UI and enforcement metadata
+   */
+  setList(
+    row: number,
+    col: number,
+    source: ListValidationSource,
+    options?: ListValidationOptions,
+  ): Promise<ValidationSetReceipt>;
+
   /**
    * Set a validation rule on a cell or range.
    *

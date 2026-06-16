@@ -4,7 +4,7 @@
  * Provides methods to add, update, remove, and query conditional formats
  * on a worksheet. Operates at the format level (not individual rules).
  */
-import type { CellRange, CFRule, CFRuleInput, ConditionalFormat } from '../types';
+import type { CellRange, CFRule, CFRuleInput, CFStyle, ConditionalFormat } from '../types';
 
 /** Update payload for a conditional format. */
 export interface ConditionalFormatUpdate {
@@ -18,6 +18,24 @@ export interface ConditionalFormatUpdate {
 
 /** Sub-API for conditional formatting operations on a worksheet. */
 export interface WorksheetConditionalFormatting {
+  /**
+   * Add a formula-based conditional format for a range.
+   *
+   * This is the intent-level wrapper for the common case. It creates a single
+   * formula rule and assigns IDs/priorities through the same path as {@link add}.
+   * Formula strings may include the leading `=` or omit it.
+   *
+   * @param range - Cell range, or array of ranges, this format applies to
+   * @param formula - Conditional-format formula (e.g. "=A1>100")
+   * @param style - Style applied when the formula is true
+   * @returns The created conditional format with assigned IDs and priorities
+   */
+  addFormula(
+    range: string | CellRange | (string | CellRange)[],
+    formula: string,
+    style: CFStyle,
+  ): Promise<ConditionalFormat>;
+
   /**
    * Add a new conditional format with ranges and rules.
    * The API assigns IDs and priorities — callers provide rule configuration only.

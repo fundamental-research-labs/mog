@@ -30,8 +30,10 @@ import type {
   CellRange,
   CellRecord,
   CellWriteOptions,
+  CFStyle,
   ClearApplyTo,
   ClearResult,
+  ConditionalFormat,
   EventHandler,
   FormatEntry,
   FormulaCircularReferenceValidation,
@@ -152,6 +154,9 @@ import type {
   WorksheetStyles,
   WorksheetTables,
   WorksheetTextBoxCollection,
+  ListValidationOptions,
+  ListValidationSource,
+  ValidationSetReceipt,
   WorksheetValidation,
   WorksheetView,
   WorksheetWhatIf,
@@ -2917,6 +2922,24 @@ export class WorksheetImpl implements Worksheet {
       };
     }
     return this._cellMetadata;
+  }
+
+  async setListValidation(
+    range: string | CellRange,
+    source: ListValidationSource,
+    options?: ListValidationOptions,
+  ): Promise<ValidationSetReceipt> {
+    return typeof range === 'string'
+      ? this.validations.setList(range, source, options)
+      : this.validations.setList(range, source, options);
+  }
+
+  async setFormulaConditionalFormat(
+    range: string | CellRange | (string | CellRange)[],
+    formula: string,
+    style: CFStyle,
+  ): Promise<ConditionalFormat> {
+    return this.conditionalFormats.addFormula(range, formula, style);
   }
 
   // ===========================================================================

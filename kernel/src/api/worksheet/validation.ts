@@ -7,6 +7,8 @@
 import type {
   CellRange,
   DropdownItemsWithRevision,
+  ListValidationOptions,
+  ListValidationSource,
   SheetId,
   ValidationCheckResult,
   ValidationRule,
@@ -19,8 +21,9 @@ import type { RangeSchemaCreatedEvent, RangeSchemaDeletedEvent } from '@mog-sdk/
 import type { RangeSchema } from '../../bridges/compute/compute-bridge';
 import type { DocumentContext } from '../../context';
 import * as Properties from '../../domain/cells/cell-properties';
+import { KernelError } from '../../errors';
 import { resolveCell, resolveRange } from '../internal/address-resolver';
-import { parseCellRange } from '../internal/utils';
+import { parseCellRange, rangeToA1 } from '../internal/utils';
 import {
   applyListSourceString,
   errorStyleToEnforcement,
@@ -58,6 +61,12 @@ function isListValidationSchema(schema: RangeSchema): boolean {
   );
 }
 
+function receivedType(value: unknown): string {
+  if (value === null) return 'null';
+  if (Array.isArray(value)) return 'array';
+  return typeof value;
+}
+
 export class WorksheetValidationImpl implements WorksheetValidation {
   constructor(
     private readonly ctx: DocumentContext,
@@ -66,6 +75,18 @@ export class WorksheetValidationImpl implements WorksheetValidation {
 
   private _ensureWritable(op: string): void {
     this.ctx.writeGate.assertWritable(op);
+  }
+
+  async setList(
+    a: string | number | CellRange,
+    b: ListValidationSource | number,
+    c?: ListValidationOptions | ListValidationSource,
+    d?: ListValidationOptions,
+  ): Promise<ValidationSetReceipt> {
+    if (typeof a === 'number') {
+      return this.set(a, b as number, this.createListRule(c as ListValidationSource, d));
+    }
+    return this.set(a, this.createListRule(b as ListValidationSource, c as ListValidationOptions));
   }
 
   async set(
@@ -165,6 +186,73 @@ export class WorksheetValidationImpl implements WorksheetValidation {
           ? `R${startRow}C${startCol}:R${endRow}C${endCol}`
           : `R${a}C${b}`;
     return { kind: 'validationSet', address };
+  }
+
+  private createListRule(
+    source: ListValidationSource,
+    options: ListValidationOptions = {},
+  ): ValidationRule {
+    const rule: ValidationRule = {
+      type: 'list',
+      allowBlank: options.allowBlank,
+      showDropdown: options.showDropdown ?? true,
+      showInputMessage: options.showInputMessage,
+      inputTitle: options.inputTitle,
+      inputMessage: options.inputMessage,
+      showErrorAlert: options.showErrorAlert,
+      errorStyle: options.errorStyle,
+      errorTitle: options.errorTitle,
+      errorMessage: options.errorMessage,
+    };
+
+    if (Array.isArray(source)) {
+      if (source.length === 0) {
+        throw new KernelError(
+          'API_INVALID_ARGUMENT',
+          'validations.setList: source must contain at least one list item.',
+          {
+            context: {
+              issueCode: 'VALIDATION_LIST_SOURCE_EMPTY',
+              path: ['source'],
+              expected: 'a non-empty inline list, A1 range, formula/named source, or CellRange',
+              receivedType: 'array',
+            },
+            path: ['source'],
+            suggestion: 'Use ["Red", "Blue"] or a source range such as "D1:D10".',
+          },
+        );
+      }
+      rule.values = source.map(String);
+    } else if (typeof source === 'string') {
+      if (!source.trim()) {
+        throw new KernelError('API_INVALID_ARGUMENT', 'validations.setList: source is empty.', {
+          context: {
+            issueCode: 'VALIDATION_LIST_SOURCE_EMPTY',
+            path: ['source'],
+            expected: 'a non-empty inline list, A1 range, formula/named source, or CellRange',
+            receivedType: 'string',
+          },
+          path: ['source'],
+          suggestion: 'Use "Red,Blue", "D1:D10", "=D1:D10", or "=NamedRange".',
+        });
+      }
+      rule.listSource = source;
+    } else if (source && typeof source === 'object') {
+      rule.listSource = `=${rangeToA1(source as CellRange)}`;
+    } else {
+      throw new KernelError('API_INVALID_ARGUMENT', 'validations.setList: source is invalid.', {
+        context: {
+          issueCode: 'VALIDATION_LIST_SOURCE_INVALID',
+          path: ['source'],
+          expected: 'an inline string/list source or CellRange object',
+          receivedType: receivedType(source),
+        },
+        path: ['source'],
+        suggestion: 'Use ["Red", "Blue"], "Red,Blue", "D1:D10", or { startRow, startCol, endRow, endCol }.',
+      });
+    }
+
+    return rule;
   }
 
   async remove(a: string | number | CellRange, b?: number): Promise<void> {

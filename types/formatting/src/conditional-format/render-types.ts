@@ -56,7 +56,7 @@ export interface CFStyle {
 }
 
 /**
- * Border styles for conditional formatting (Excel-compatible).
+ * Border styles for conditional formatting.
  * Maps 1:1 to Rust `CFBorderStyle` enum in compute-cf/src/types.rs.
  */
 export type CFBorderStyle =

@@ -137,19 +137,19 @@ describe('CellOps filter reapply materialization', () => {
       actor: 'agent',
       principal: { tags: [] },
     }));
-    ctx.computeBridge.getAllSheetIds = jest.fn(async () => [SHEET_ID, 'ccm-sheet']);
+    ctx.computeBridge.getAllSheetIds = jest.fn(async () => [SHEET_ID, 'source-gaap-sheet']);
     ctx.computeBridge.getSheetName = jest.fn(async (id: string) =>
-      id === 'ccm-sheet' ? 'CCM-GAAP' : 'Model',
+      id === 'source-gaap-sheet' ? 'Source-GAAP' : 'Model',
     );
 
     await expect(
-      CellOps.setCell(ctx, SHEET_ID, 0, 0, "='[1]CCM-GAAP'!$L$17"),
+      CellOps.setCell(ctx, SHEET_ID, 0, 0, "='[1]Source-GAAP'!$L$17"),
     ).rejects.toMatchObject({
       code: 'API_INVALID_ARGUMENT',
       message: expect.stringContaining('Excel internal external-link ordinal'),
       context: expect.objectContaining({
         diagnosticCode: 'EXTERNAL_REFERENCE_UNBOUND_LOCAL_SHEET_CANDIDATE',
-        suggestedFormula: "='CCM-GAAP'!$L$17",
+        suggestedFormula: "='Source-GAAP'!$L$17",
       }),
     });
     expect(ctx.computeBridge.setCellsByPosition).not.toHaveBeenCalled();

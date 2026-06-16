@@ -4,39 +4,17 @@
 
 ```ts
 
-import { AccessExplanation } from '@mog-sdk/types-document/security/evaluator';
-import { CellWriteData } from '@mog-sdk/kernel';
-import { ColId } from '@mog/types-core/cell-identity';
-import { colToLetter } from '@mog-sdk/kernel';
-import { DocumentByteSyncPort } from '@mog-sdk/kernel/storage';
-import { DocumentHandle } from '@mog-sdk/kernel';
-import { DocumentImportWarning } from '@mog-sdk/types-document/document/comments';
-import { DocumentSecurityConfig } from '@mog-sdk/types-document/security/evaluator';
-import { DocumentSource } from '@mog-sdk/types-document/document/comments';
-import { FilterExpression } from '@mog-sdk/kernel';
-import { FormulaA1 } from '@mog/types-core/cell-identity';
-import { DocumentImportOptions as ImportOptions } from '@mog-sdk/types-document/document/comments';
-import { KernelCellData } from '@mog-sdk/kernel';
-import { MogDocumentFactory } from '@mog-sdk/kernel';
-import { MogSdkError } from '@mog-sdk/kernel';
-import { MogSdkEventFacade } from '@mog-sdk/kernel';
-import { parseCellAddress } from '@mog-sdk/kernel';
-import { parseCellRange } from '@mog-sdk/kernel';
-import { rangeToA1 } from '@mog-sdk/kernel';
-import { RecordValues } from '@mog-sdk/kernel';
-import { RichText } from '@mog/types-core/rich-text';
-import { ScreenshotOptions } from '@mog/types-api/api';
-import { SheetId as SheetId_2 } from '@mog/types-core/core';
-import { StoreCellData } from '@mog/types-api/store';
-import { TableRecord } from '@mog-sdk/kernel';
-import { toA1 } from '@mog-sdk/kernel';
-import { Utils } from '@mog-sdk/kernel';
-import { Workbook } from '@mog/types-api/api';
-import { WorkbookInternal } from '@mog-sdk/contracts/api';
-import { WorkbookSecurity } from '@mog/types-api/api';
-import { Worksheet } from '@mog/types-api/api';
+// @public (undocumented)
+export const a1: PublicA1Utils;
 
-export { AccessExplanation }
+// @public
+export interface AccessExplanation {
+    readonly candidatePolicies: AccessPolicy[];
+    readonly level: AccessLevel;
+    readonly matchedPolicy: AccessPolicy | null;
+    readonly reason: string;
+    readonly warnings: string[];
+}
 
 // @public
 export type AccessLevel = 'none' | 'structure' | 'read' | 'write' | 'admin';
@@ -73,12 +51,18 @@ export type AccessTarget = {
     readonly kind: 'workbook';
 } | {
     readonly kind: 'sheet';
-    readonly sheetId: SheetId_2;
+    readonly sheetId: SheetId;
 } | {
     readonly kind: 'column';
     readonly colId: ColId;
-    readonly sheetId: SheetId_2;
+    readonly sheetId: SheetId;
 };
+
+// @public (undocumented)
+export const address: (row: number, col: number) => string;
+
+// @public (undocumented)
+export function analyzeMogCode(code: string): ApiGuidanceDiagnostic[];
 
 // @public (undocumented)
 export const api: {
@@ -86,13 +70,820 @@ export const api: {
         (): OverviewResult;
         (path: string): DescribeResult;
     };
+    guidance: ApiGuidanceApi;
+    compatibility: ApiCompatibilityIndex;
+    a1: PublicA1Utils;
+    utils: PublicUtils;
     wb: RootNode;
     ws: RootNode;
     types: TypesNode;
 };
 
 // @public (undocumented)
+export const apiCompatibility: ApiCompatibilityIndex;
+
+// @public (undocumented)
+export interface ApiCompatibilityEntry {
+    // Warning: (ae-forgotten-export) The symbol "ApiCompatibilityAppliesTo" needs to be exported by the entry point index.d.ts
+    //
+    // (undocumented)
+    readonly appliesTo: ApiCompatibilityAppliesTo;
+    // (undocumented)
+    readonly behavior: string;
+    // (undocumented)
+    readonly canonicalPath: string | null;
+    // (undocumented)
+    readonly canonicalSince: string | null;
+    // (undocumented)
+    readonly deprecatedSince: string | null;
+    // Warning: (ae-forgotten-export) The symbol "ApiCompatibilityDiagnostic" needs to be exported by the entry point index.d.ts
+    //
+    // (undocumented)
+    readonly diagnostics?: ApiCompatibilityDiagnostic;
+    // Warning: (ae-forgotten-export) The symbol "ApiCompatibilityEvidence" needs to be exported by the entry point index.d.ts
+    //
+    // (undocumented)
+    readonly evidence: readonly ApiCompatibilityEvidence[];
+    // (undocumented)
+    readonly firstObservedVersion: string | null;
+    // (undocumented)
+    readonly id: string;
+    // (undocumented)
+    readonly notes?: string;
+    // (undocumented)
+    readonly observedPath: string;
+    // (undocumented)
+    readonly ownerPackage: string;
+    // (undocumented)
+    readonly ownerTheme: string;
+    // (undocumented)
+    readonly removeAfter: string | null;
+    // (undocumented)
+    readonly runtimeSurfaces: readonly ApiCompatibilitySurface[];
+    // (undocumented)
+    readonly status: ApiCompatibilityStatus;
+    // (undocumented)
+    readonly surfaceDisposition: Partial<Record<ApiCompatibilitySurface, ApiCompatibilityStatus>>;
+    // (undocumented)
+    readonly verification: readonly string[];
+}
+
+// @public (undocumented)
+export interface ApiCompatibilityIndex {
+    // (undocumented)
+    readonly byCanonicalPath: Record<string, readonly ApiCompatibilityEntry[]>;
+    // (undocumented)
+    readonly byId: Record<string, ApiCompatibilityEntry>;
+    // (undocumented)
+    readonly byObservedPath: Record<string, readonly ApiCompatibilityEntry[]>;
+    // (undocumented)
+    readonly entries: readonly ApiCompatibilityEntry[];
+    // (undocumented)
+    readonly schemaVersion: '1';
+}
+
+// @public (undocumented)
+export interface ApiCompatibilityReference {
+    // (undocumented)
+    readonly appliesTo: ApiCompatibilityAppliesTo;
+    // (undocumented)
+    readonly canonicalPath: string | null;
+    // (undocumented)
+    readonly id: string;
+    // (undocumented)
+    readonly observedPath: string;
+    // (undocumented)
+    readonly status: ApiCompatibilityStatus;
+}
+
+// @public (undocumented)
+export type ApiCompatibilityStatus = 'canonical' | 'contract_extension' | 'supported_alias' | 'input_alias' | 'deprecated_alias' | 'semantic_compatibility' | 'structured_diagnostic' | 'rejected';
+
+// @public (undocumented)
+export type ApiCompatibilitySurface = 'typescript' | 'kernel' | 'executeCode-preflight' | 'api-describe' | 'agent-guidance' | 'docs' | 'python' | 'api-eval';
+
+// @public (undocumented)
+export const apiGuidance: ApiGuidanceApi;
+
+// @public (undocumented)
+export interface ApiGuidanceApi {
+    // (undocumented)
+    readonly analyze: (code: string) => ApiGuidanceDiagnostic[];
+    // (undocumented)
+    readonly catalog: readonly ApiGuidanceEntry[];
+    // (undocumented)
+    readonly explain: (symbolOrPath: string) => ApiGuidanceExplanation | null;
+    // (undocumented)
+    readonly preflight: (code: string) => ApiGuidancePreflightResult;
+    // (undocumented)
+    readonly targets: readonly ApiGuidanceTarget[];
+}
+
+// @public (undocumented)
+export const apiGuidanceCatalog: readonly [{
+    readonly id: "officejs.bootstrap";
+    readonly dialect: "officejs";
+    readonly category: "bootstrap";
+    readonly matchers: readonly [{
+        readonly id: "officejs.excel-run";
+        readonly kind: "call";
+        readonly symbol: "Excel.run";
+        readonly confidence: 0.99;
+    }, {
+        readonly id: "officejs.office-on-ready";
+        readonly kind: "call";
+        readonly symbol: "Office.onReady";
+        readonly confidence: 0.94;
+    }, {
+        readonly id: "officejs.excel-create-workbook";
+        readonly kind: "call";
+        readonly symbol: "Excel.createWorkbook";
+        readonly confidence: 0.96;
+    }];
+    readonly message: "This looks like Microsoft Office JavaScript spreadsheet API code. You are writing Mog code.";
+    readonly suggestion: "Do not wrap Mog code in Excel.run or Office.onReady. Use the injected `wb` / `ws` objects, or create a workbook with `createWorkbook(...)` at the SDK boundary.";
+    readonly mogReplacements: readonly [{
+        readonly path: "wb.activeSheet";
+        readonly snippet: "const ws = wb.activeSheet;";
+    }, {
+        readonly path: "createWorkbook";
+        readonly snippet: "import { createWorkbook } from '@mog-sdk/sdk';\nconst wb = await createWorkbook();";
+        readonly note: "Root SDK factory, not a workbook member path.";
+    }];
+    readonly confidence: 0.99;
+    readonly blocking: true;
+}, {
+    readonly id: "officejs.host-globals";
+    readonly dialect: "officejs";
+    readonly category: "host";
+    readonly matchers: readonly [{
+        readonly id: "officejs.office-context";
+        readonly kind: "member-chain";
+        readonly symbol: "Office.context";
+    }, {
+        readonly id: "officejs.office-document";
+        readonly kind: "member-chain";
+        readonly symbol: "Office.context.document";
+    }, {
+        readonly id: "officejs.display-dialog";
+        readonly kind: "member-chain";
+        readonly symbol: "Office.context.ui.displayDialogAsync";
+    }, {
+        readonly id: "officejs.storage";
+        readonly kind: "member-chain";
+        readonly symbol: "OfficeRuntime.storage";
+    }];
+    readonly message: "Office host globals are not available in Mog code.";
+    readonly suggestion: "Use the Mog SDK workbook object and host integration outside the code execution sandbox.";
+    readonly mogReplacements: readonly [{
+        readonly path: "wb.save";
+        readonly snippet: "await wb.save(path);";
+    }, {
+        readonly path: "wb.toXlsx";
+        readonly snippet: "const bytes = await wb.toXlsx();";
+    }];
+    readonly confidence: 0.96;
+    readonly blocking: true;
+}, {
+    readonly id: "officejs.sync-load";
+    readonly dialect: "officejs";
+    readonly category: "sync-load";
+    readonly matchers: readonly [{
+        readonly id: "officejs.context-sync";
+        readonly kind: "call";
+        readonly symbol: "context.sync";
+        readonly confidence: 0.98;
+    }, {
+        readonly id: "officejs.proxy-load";
+        readonly kind: "call";
+        readonly symbol: ".load";
+        readonly confidence: 0.92;
+    }, {
+        readonly id: "officejs.null-object";
+        readonly kind: "member-chain";
+        readonly symbol: ".isNullObject";
+    }, {
+        readonly id: "officejs.tracked-objects";
+        readonly kind: "member-chain";
+        readonly symbol: "trackedObjects";
+    }, {
+        readonly id: "officejs.load-then-sync";
+        readonly kind: "compound";
+        readonly symbols: readonly [".load", "context.sync"];
+        readonly confidence: 0.99;
+        readonly blocking: true;
+    }];
+    readonly message: "Microsoft Office JavaScript spreadsheet proxy load/sync code is not part of the Mog API.";
+    readonly suggestion: "Mog APIs return real values directly. Await the Mog method that reads or writes the data you need.";
+    readonly mogReplacements: readonly [{
+        readonly path: "ws.getCells";
+        readonly snippet: "const cells = await ws.getCells(\"A1:B2\");";
+        readonly note: "Use when you need addresses, absolute row/col, formulas, formats, or range-relative offsets.";
+    }, {
+        readonly path: "ws.getValues";
+        readonly snippet: "const values = await ws.getValues(\"A1:B2\");";
+    }, {
+        readonly path: "ws.getRange";
+        readonly snippet: "const range = await ws.getRange(\"A1:B2\");";
+    }, {
+        readonly path: "wb.findSheet";
+        readonly snippet: "const ws = await wb.findSheet(name);";
+    }];
+    readonly confidence: 0.96;
+    readonly blocking: true;
+}, {
+    readonly id: "officejs.active-sheet";
+    readonly dialect: "officejs";
+    readonly category: "worksheet";
+    readonly matchers: readonly [{
+        readonly id: "officejs.context-workbook-active-worksheet";
+        readonly kind: "call";
+        readonly symbol: "context.workbook.worksheets.getActiveWorksheet";
+        readonly confidence: 0.98;
+    }, {
+        readonly id: "officejs.workbook-active-worksheet";
+        readonly kind: "call";
+        readonly symbol: "workbook.worksheets.getActiveWorksheet";
+        readonly confidence: 0.94;
+    }, {
+        readonly id: "officejs.worksheets-active-worksheet";
+        readonly kind: "call";
+        readonly symbol: "worksheets.getActiveWorksheet";
+        readonly confidence: 0.94;
+    }];
+    readonly message: "This active worksheet access comes from the Microsoft Office JavaScript spreadsheet API, not Mog.";
+    readonly suggestion: "Use `const ws = wb.activeSheet;` for the active worksheet.";
+    readonly mogReplacements: readonly [{
+        readonly path: "wb.activeSheet";
+        readonly snippet: "const ws = wb.activeSheet;";
+    }];
+    readonly confidence: 0.98;
+    readonly blocking: true;
+}, {
+    readonly id: "officejs.sheet-lookup";
+    readonly dialect: "officejs";
+    readonly category: "worksheet";
+    readonly matchers: readonly [{
+        readonly id: "officejs.worksheets-get-item";
+        readonly kind: "member-chain";
+        readonly symbol: "worksheets.getItem";
+    }, {
+        readonly id: "officejs.worksheets-get-item-or-null";
+        readonly kind: "member-chain";
+        readonly symbol: "worksheets.getItemOrNullObject";
+    }, {
+        readonly id: "officejs.worksheets-items";
+        readonly kind: "member-chain";
+        readonly symbol: "worksheets.items";
+    }];
+    readonly message: "Microsoft Office JavaScript spreadsheet worksheet collection calls are not Mog worksheet access.";
+    readonly suggestion: "Use `await wb.getSheet(name)` when the sheet must exist, `await wb.findSheet(name)` for nullable lookup, or `wb.sheetNames` / `await wb.getSheets()` for listing.";
+    readonly mogReplacements: readonly [{
+        readonly path: "wb.getSheet";
+        readonly snippet: "const ws = await wb.getSheet(name);";
+    }, {
+        readonly path: "wb.findSheet";
+        readonly snippet: "const ws = await wb.findSheet(name);";
+    }, {
+        readonly path: "wb.sheetNames";
+        readonly snippet: "const names = wb.sheetNames;";
+    }, {
+        readonly path: "wb.getSheets";
+        readonly snippet: "const sheets = await wb.getSheets();";
+    }];
+    readonly confidence: 0.95;
+    readonly blocking: true;
+}, {
+    readonly id: "officejs.range-write";
+    readonly dialect: "officejs";
+    readonly category: "range";
+    readonly matchers: readonly [{
+        readonly id: "officejs.range-values-assignment";
+        readonly kind: "assignment";
+        readonly symbol: ".values";
+    }, {
+        readonly id: "officejs.range-formulas-assignment";
+        readonly kind: "assignment";
+        readonly symbol: ".formulas";
+    }];
+    readonly message: "Microsoft Office JavaScript spreadsheet range proxy assignment does not write data in Mog.";
+    readonly suggestion: "Use `await ws.setRange(range, values)` for range writes.";
+    readonly mogReplacements: readonly [{
+        readonly path: "ws.setRange";
+        readonly snippet: "await ws.setRange(\"A1:B2\", values);";
+    }];
+    readonly confidence: 0.97;
+    readonly blocking: true;
+}, {
+    readonly id: "officejs.range-read";
+    readonly dialect: "officejs";
+    readonly category: "range";
+    readonly matchers: readonly [{
+        readonly id: "officejs.load-sync-range-values";
+        readonly kind: "compound";
+        readonly symbols: readonly [".load", "context.sync", ".values"];
+        readonly confidence: 0.98;
+        readonly blocking: true;
+    }];
+    readonly message: "Microsoft Office JavaScript spreadsheet range proxy reads require load/sync; Mog reads return values directly.";
+    readonly suggestion: "Use `await ws.getCells(range)` for address-bearing cells, `await ws.getValues(range)` for a value matrix, or `await ws.getRange(range)` for a cell-data matrix.";
+    readonly mogReplacements: readonly [{
+        readonly path: "ws.getCells";
+        readonly snippet: "const cells = await ws.getCells(\"A1:B2\");";
+        readonly note: "Flat records include address, row, col, value, formula, format, and range offsets.";
+    }, {
+        readonly path: "ws.getValues";
+        readonly snippet: "const values = await ws.getValues(\"A1:B2\");";
+    }, {
+        readonly path: "ws.getRange";
+        readonly snippet: "const range = await ws.getRange(\"A1:B2\");";
+    }];
+    readonly confidence: 0.9;
+    readonly blocking: true;
+}, {
+    readonly id: "officejs.range-navigation";
+    readonly dialect: "officejs";
+    readonly category: "range";
+    readonly matchers: readonly [{
+        readonly id: "officejs.get-used-range-null-object";
+        readonly kind: "call";
+        readonly symbol: "getUsedRangeOrNullObject";
+    }, {
+        readonly id: "officejs.get-range-edge";
+        readonly kind: "call";
+        readonly symbol: "getRangeEdge";
+    }, {
+        readonly id: "officejs.get-surrounding-region";
+        readonly kind: "call";
+        readonly symbol: "getSurroundingRegion";
+    }, {
+        readonly id: "officejs.get-resized-range";
+        readonly kind: "call";
+        readonly symbol: "getResizedRange";
+    }, {
+        readonly id: "officejs.get-offset-range";
+        readonly kind: "call";
+        readonly symbol: "getOffsetRange";
+    }];
+    readonly message: "Microsoft Office JavaScript spreadsheet range navigation helpers do not map one-for-one to Mog APIs.";
+    readonly suggestion: "Choose the Mog range API that matches the intent: used range, current region, data edge, or address/index conversion.";
+    readonly mogReplacements: readonly [{
+        readonly path: "ws.getUsedRange";
+        readonly snippet: "const used = await ws.getUsedRange();";
+    }, {
+        readonly path: "ws.getCurrentRegion";
+        readonly snippet: "const region = await ws.getCurrentRegion(0, 0);";
+    }, {
+        readonly path: "ws.findDataEdge";
+        readonly snippet: "const edge = await ws.findDataEdge(0, 0, \"down\");";
+    }, {
+        readonly path: "wb.addressToIndex";
+        readonly snippet: "const { row, col } = wb.addressToIndex(\"A1\");";
+    }];
+    readonly confidence: 0.9;
+    readonly blocking: true;
+}, {
+    readonly id: "officejs.what-if-data-table";
+    readonly dialect: "officejs";
+    readonly category: "worksheet";
+    readonly matchers: readonly [{
+        readonly id: "officejs-workbook-application-calculate";
+        readonly kind: "call";
+        readonly symbol: "context.workbook.application.calculate";
+        readonly confidence: 0.8;
+    }, {
+        readonly id: "officejs-calculation-type";
+        readonly kind: "member-chain";
+        readonly symbol: "Excel.CalculationType";
+        readonly confidence: 0.78;
+    }];
+    readonly message: "Microsoft Office JavaScript spreadsheet recalculation helpers do not expose Mog Data Table receipt semantics.";
+    readonly suggestion: "Use worksheet what-if APIs and branch on receipt status, diagnostics, and effects before reading results or assuming worksheet writes.";
+    readonly mogReplacements: readonly [{
+        readonly path: "ws.whatIf.dataTable";
+        readonly snippet: "const receipt = await ws.whatIf.dataTable(\"B3\", {\n  rowInputCell: \"B1\",\n  colInputCell: \"B2\",\n  rowValues: [0.08, 0.09, 0.1],\n  colValues: [0.02, 0.025, 0.03],\n});\nconst diagnosticMessage = receipt.diagnostics\n  .map((diagnostic) => diagnostic.message)\n  .join(\"\\n\");\nif (receipt.status === \"failed\" || receipt.status === \"unsupported\") {\n  throw new Error(diagnosticMessage || \"Data Table compute \" + receipt.status);\n}\nif (receipt.status !== \"completed\") {\n  throw new Error(diagnosticMessage || \"Data Table compute \" + receipt.status);\n}\nif (!receipt.effects.some((effect) => effect.type === \"computedGrid\")) {\n  throw new Error(\"Data Table compute did not report a computed grid\");\n}\nconst computedGrid = receipt.results;";
+        readonly note: "Transient Data Table compute returns a receipt and does not mutate the worksheet.";
+    }, {
+        readonly path: "ws.whatIf.createDataTable";
+        readonly snippet: "const receipt = await ws.whatIf.createDataTable({\n  tableRange: \"B3:F8\",\n  rowInputCell: \"B1\",\n  colInputCell: \"B2\",\n});\nconst diagnosticMessage = receipt.diagnostics\n  .map((diagnostic) => diagnostic.message)\n  .join(\"\\n\");\nif (receipt.status === \"failed\" || receipt.status === \"unsupported\") {\n  throw new Error(diagnosticMessage || \"Data Table create \" + receipt.status);\n}\nif (receipt.status === \"partial\" || !receipt.materialized) {\n  const repairHint = receipt.diagnostics.find((diagnostic) => diagnostic.recoverable)?.nextAction;\n  const repair = await ws.whatIf.refreshDataTable(receipt.regionId, { force: true });\n  const repairDiagnostics = repair.diagnostics\n    .map((diagnostic) => diagnostic.message)\n    .join(\"\\n\");\n  if (\n    repair.status === \"failed\" ||\n    repair.status === \"unsupported\" ||\n    repair.status === \"partial\"\n  ) {\n    throw new Error(repairDiagnostics || repairHint || \"Data Table repair \" + repair.status);\n  }\n}\nconst materializedRanges = receipt.effects\n  .filter((effect) => effect.type === \"materializedCells\" && effect.range)\n  .map((effect) => effect.range);";
+        readonly note: "Persistent Data Table creation can be applied, partial, failed, or unsupported.";
+    }, {
+        readonly path: "ws.whatIf.refreshDataTable";
+        readonly snippet: "const repair = await ws.whatIf.refreshDataTable(\"B3:F8\", {\n  force: true,\n});\nconst diagnosticMessage = repair.diagnostics\n  .map((diagnostic) => diagnostic.message)\n  .join(\"\\n\");\nif (\n  repair.status === \"failed\" ||\n  repair.status === \"unsupported\" ||\n  repair.status === \"partial\"\n) {\n  throw new Error(diagnosticMessage || \"Data Table repair \" + repair.status);\n}\nconst refreshedRanges = repair.effects\n  .filter((effect) => effect.type === \"materializedCells\" && effect.range)\n  .map((effect) => effect.range);";
+        readonly note: "Use refresh receipts to repair or verify a partial materialized Data Table.";
+    }];
+    readonly confidence: 0.82;
+    readonly blocking: true;
+}, {
+    readonly id: "officejs.pivots";
+    readonly dialect: "officejs";
+    readonly category: "pivots";
+    readonly matchers: readonly [{
+        readonly id: "officejs-context-workbook-pivottables";
+        readonly kind: "member-chain";
+        readonly symbol: "context.workbook.pivotTables";
+        readonly confidence: 0.86;
+    }];
+    readonly message: "Microsoft Office JavaScript pivot table APIs do not return Mog materialization receipts.";
+    readonly suggestion: "Use `ws.pivots.add(..., { lifecycle: \"materialize\" })` and branch on the returned receipt before relying on rendered output.";
+    readonly mogReplacements: readonly [{
+        readonly path: "ws.pivots.add";
+        readonly snippet: "const receipt = await ws.pivots.add(\n  {\n    name: \"SalesPivot\",\n    dataSource: \"Sales!A1:E500\",\n    targetSheet: \"Summary\",\n    targetAddress: \"A3\",\n    rowFields: [\"Region\"],\n    columnFields: [\"Quarter\"],\n    valueFields: [{ field: \"Revenue\", aggregation: \"sum\" }],\n  },\n  { lifecycle: \"materialize\" },\n);\nconst diagnosticMessage = receipt.diagnostics\n  .map((diagnostic) => diagnostic.message)\n  .join(\"\\n\");\nif (receipt.status === \"failed\") {\n  throw new Error(diagnosticMessage || \"Pivot materialization failed\");\n}\nif (receipt.status === \"partial\" || !receipt.materialized) {\n  const repair = await ws.pivots.refresh(receipt.config.name);\n  const repairDiagnostics = repair.diagnostics\n    .map((diagnostic) => diagnostic.message)\n    .join(\"\\n\");\n  if (repair.status !== \"applied\") {\n    throw new Error(repairDiagnostics || \"Pivot repair \" + repair.status);\n  }\n}\nconst changedRanges = receipt.effects\n  .filter((effect) => effect.range)\n  .map((effect) => effect.range);";
+        readonly note: "Materialized pivot creation can return applied, partial, or failed receipts.";
+    }, {
+        readonly path: "ws.pivots.refresh";
+        readonly snippet: "const receipt = await ws.pivots.add(\n  {\n    name: \"SalesPivot\",\n    dataSource: \"Sales!A1:E500\",\n    targetSheet: \"Summary\",\n    targetAddress: \"A3\",\n    rowFields: [\"Region\"],\n    columnFields: [\"Quarter\"],\n    valueFields: [{ field: \"Revenue\", aggregation: \"sum\" }],\n  },\n  { lifecycle: \"materialize\" },\n);\nconst diagnosticMessage = receipt.diagnostics\n  .map((diagnostic) => diagnostic.message)\n  .join(\"\\n\");\nif (receipt.status === \"failed\") {\n  throw new Error(diagnosticMessage || \"Pivot materialization failed\");\n}\nif (receipt.status === \"partial\" || !receipt.materialized) {\n  const repair = await ws.pivots.refresh(receipt.config.name);\n  const repairDiagnostics = repair.diagnostics\n    .map((diagnostic) => diagnostic.message)\n    .join(\"\\n\");\n  if (repair.status !== \"applied\") {\n    throw new Error(repairDiagnostics || \"Pivot repair \" + repair.status);\n  }\n}\nconst changedRanges = receipt.effects\n  .filter((effect) => effect.range)\n  .map((effect) => effect.range);";
+        readonly note: "Refresh is the public repair path when materialization was partial.";
+    }];
+    readonly confidence: 0.84;
+    readonly blocking: true;
+}, {
+    readonly id: "officejs.autofill";
+    readonly dialect: "officejs";
+    readonly category: "range";
+    readonly matchers: readonly [{
+        readonly id: "officejs-excel-autofill-type";
+        readonly kind: "member-chain";
+        readonly symbol: "Excel.AutoFillType";
+        readonly confidence: 0.86;
+    }];
+    readonly message: "Microsoft Office JavaScript autofill does not provide Mog preview receipts.";
+    readonly suggestion: "Preview first with `ws.autoFillPreview(...)`, inspect diagnostics and reference diagnostics, then call `ws.autoFill(...)` only when the preview is acceptable.";
+    readonly mogReplacements: readonly [{
+        readonly path: "ws.autoFillPreview";
+        readonly snippet: "const preview = await ws.autoFillPreview(\"A2:A3\", \"A4:A20\", \"series\");\nconst previewDiagnostics = [\n  ...preview.diagnostics.map((diagnostic) => diagnostic.message),\n  ...preview.referenceDiagnostics\n    .filter((diagnostic) => diagnostic.outOfBounds)\n    .map((diagnostic) => \"Reference out of bounds at \" + diagnostic.row + \",\" + diagnostic.col),\n];\nif (previewDiagnostics.length > 0) {\n  throw new Error(previewDiagnostics.join(\"\\n\"));\n}\nif (preview.status !== \"completed\" || preview.worksheetChanged || preview.undoChanged) {\n  throw new Error(\"Autofill preview did not remain read-only\");\n}\nconst receipt = await ws.autoFill(\"A2:A3\", \"A4:A20\", preview.mode);\nif (receipt.status === \"applied\") {\n  const changedRanges = receipt.effects\n    .filter((effect) => effect.type === \"changedRange\" && effect.range)\n    .map((effect) => effect.range);\n}";
+        readonly note: "Preview uses the same fill engine as apply without changing worksheet cells or undo state.";
+    }, {
+        readonly path: "ws.autoFill";
+        readonly snippet: "const preview = await ws.autoFillPreview(\"A2:A3\", \"A4:A20\", \"series\");\nconst previewDiagnostics = [\n  ...preview.diagnostics.map((diagnostic) => diagnostic.message),\n  ...preview.referenceDiagnostics\n    .filter((diagnostic) => diagnostic.outOfBounds)\n    .map((diagnostic) => \"Reference out of bounds at \" + diagnostic.row + \",\" + diagnostic.col),\n];\nif (previewDiagnostics.length > 0) {\n  throw new Error(previewDiagnostics.join(\"\\n\"));\n}\nif (preview.status !== \"completed\" || preview.worksheetChanged || preview.undoChanged) {\n  throw new Error(\"Autofill preview did not remain read-only\");\n}\nconst receipt = await ws.autoFill(\"A2:A3\", \"A4:A20\", preview.mode);\nif (receipt.status === \"applied\") {\n  const changedRanges = receipt.effects\n    .filter((effect) => effect.type === \"changedRange\" && effect.range)\n    .map((effect) => effect.range);\n}";
+        readonly note: "Apply after the preview receipt confirms the formula references are acceptable.";
+    }];
+    readonly confidence: 0.86;
+    readonly blocking: true;
+}, {
+    readonly id: "officejs.formatting";
+    readonly dialect: "officejs";
+    readonly category: "formatting";
+    readonly matchers: readonly [{
+        readonly id: "officejs.fill-color";
+        readonly kind: "member-chain";
+        readonly symbol: ".format.fill.color";
+    }, {
+        readonly id: "officejs.font-bold";
+        readonly kind: "member-chain";
+        readonly symbol: ".format.font.bold";
+    }, {
+        readonly id: "officejs.number-format";
+        readonly kind: "member-chain";
+        readonly symbol: ".numberFormat";
+    }];
+    readonly message: "Microsoft Office JavaScript spreadsheet range formatting properties are not Mog formatting calls.";
+    readonly suggestion: "Use the worksheet formats API with an explicit range and format object.";
+    readonly mogReplacements: readonly [{
+        readonly path: "ws.formats.setRange";
+        readonly snippet: "await ws.formats.setRange(\"A1:B2\", { backgroundColor: \"#fff\" });";
+    }, {
+        readonly path: "ws.formats.setCellProperties";
+        readonly snippet: "await ws.formats.setCellProperties([{ row: 0, col: 0, format: { bold: true } }]);";
+        readonly note: "Use cell properties for per-cell format matrices.";
+    }, {
+        readonly path: "ws.formats.setNumberFormatLocal";
+        readonly snippet: "await ws.formats.setNumberFormatLocal(\"A1:B2\", \"0.00\", \"en-US\");";
+    }];
+    readonly confidence: 0.96;
+    readonly blocking: true;
+}, {
+    readonly id: "officejs.tables";
+    readonly dialect: "officejs";
+    readonly category: "tables";
+    readonly matchers: readonly [{
+        readonly id: "officejs.worksheet-tables-add";
+        readonly kind: "call";
+        readonly symbol: "worksheet.tables.add";
+    }, {
+        readonly id: "officejs-sheet-tables-add";
+        readonly kind: "call";
+        readonly symbol: "sheet.tables.add";
+    }, {
+        readonly id: "officejs.table-rows-add";
+        readonly kind: "call";
+        readonly symbol: "table.rows.add";
+    }, {
+        readonly id: "officejs.table-columns-add";
+        readonly kind: "call";
+        readonly symbol: "table.columns.add";
+    }, {
+        readonly id: "officejs.workbook-tables";
+        readonly kind: "member-chain";
+        readonly symbol: "context.workbook.tables";
+    }];
+    readonly message: "Microsoft Office JavaScript spreadsheet table collection calls use a different table API shape.";
+    readonly suggestion: "Use `await ws.tables.add(range, { name, hasHeaders })` and worksheet table row helpers.";
+    readonly mogReplacements: readonly [{
+        readonly path: "ws.tables.add";
+        readonly snippet: "const table = await ws.tables.add(\"A1:C10\", { name, hasHeaders: true });";
+    }, {
+        readonly path: "ws.tables.addRow";
+        readonly snippet: "await ws.tables.addRow(table.name, undefined, values);";
+    }, {
+        readonly path: "wb.getSheets";
+        readonly snippet: "for (const ws of await wb.getSheets()) {\n  // inspect ws.tables\n}";
+    }];
+    readonly confidence: 0.95;
+    readonly blocking: true;
+}, {
+    readonly id: "officejs.filters-sort";
+    readonly dialect: "officejs";
+    readonly category: "filters";
+    readonly matchers: readonly [{
+        readonly id: "officejs.table-sort-apply";
+        readonly kind: "call";
+        readonly symbol: "table.sort.apply";
+    }, {
+        readonly id: "officejs-column-filter-values";
+        readonly kind: "call";
+        readonly symbol: "column.filter.applyValuesFilter";
+    }, {
+        readonly id: "officejs-worksheet-auto-filter-apply";
+        readonly kind: "call";
+        readonly symbol: "worksheet.autoFilter.apply";
+    }, {
+        readonly id: "officejs-sheet-auto-filter-apply";
+        readonly kind: "call";
+        readonly symbol: "sheet.autoFilter.apply";
+    }];
+    readonly message: "Microsoft Office JavaScript spreadsheet filter and sort calls are not Mog filter APIs.";
+    readonly suggestion: "Use worksheet filter APIs or `ws.sortRange(...)` with explicit ranges and criteria.";
+    readonly mogReplacements: readonly [{
+        readonly path: "ws.filters.add";
+        readonly snippet: "await ws.filters.add(\"A1:C10\");";
+    }, {
+        readonly path: "ws.filters.setColumnFilter";
+        readonly snippet: "await ws.filters.setColumnFilter(0, { type: \"value\", values: [\"Widget\"] });";
+    }, {
+        readonly path: "ws.tables.sort.apply";
+        readonly snippet: "await ws.tables.sort.apply(\"Table1\", [{ columnIndex: 0, ascending: true }]);";
+    }, {
+        readonly path: "ws.sortRange";
+        readonly snippet: "await ws.sortRange(\"A1:C10\", { columns: [{ columnIndex: 0, ascending: true }], hasHeaders: true });";
+    }];
+    readonly confidence: 0.95;
+    readonly blocking: true;
+}, {
+    readonly id: "officejs.names";
+    readonly dialect: "officejs";
+    readonly category: "names";
+    readonly matchers: readonly [{
+        readonly id: "officejs-workbook-names-add";
+        readonly kind: "member-chain";
+        readonly symbol: "context.workbook.names.add";
+    }, {
+        readonly id: "officejs-workbook-names-get-item";
+        readonly kind: "member-chain";
+        readonly symbol: "context.workbook.names.getItem";
+    }, {
+        readonly id: "officejs-named-item-get-range";
+        readonly kind: "member-chain";
+        readonly symbol: "namedItem.getRange";
+    }, {
+        readonly id: "officejs-names-items";
+        readonly kind: "member-chain";
+        readonly symbol: "names.items";
+    }];
+    readonly message: "Microsoft Office JavaScript spreadsheet named item APIs do not exist in Mog.";
+    readonly suggestion: "Use the Mog workbook or worksheet names APIs.";
+    readonly mogReplacements: readonly [{
+        readonly path: "wb.names.add";
+        readonly snippet: "await wb.names.add(name, reference);";
+    }, {
+        readonly path: "wb.names.getRange";
+        readonly snippet: "const range = await wb.names.getRange(name);";
+    }, {
+        readonly path: "wb.names.list";
+        readonly snippet: "const names = await wb.names.list();";
+    }, {
+        readonly path: "ws.names.add";
+        readonly snippet: "await ws.names.add(\"LocalName\", \"A1:A10\");";
+    }];
+    readonly confidence: 0.93;
+    readonly blocking: true;
+}, {
+    readonly id: "officejs.file-io";
+    readonly dialect: "officejs";
+    readonly category: "file-io";
+    readonly matchers: readonly [{
+        readonly id: "officejs-document-get-file";
+        readonly kind: "member-chain";
+        readonly symbol: "Office.context.document.getFileAsync";
+    }, {
+        readonly id: "officejs-file-slices";
+        readonly kind: "member-chain";
+        readonly symbol: ".getSliceAsync";
+    }, {
+        readonly id: "officejs-create-workbook-file";
+        readonly kind: "call";
+        readonly symbol: "Excel.createWorkbook";
+    }];
+    readonly message: "Microsoft Office JavaScript spreadsheet document file APIs are host APIs, not Mog file I/O.";
+    readonly suggestion: "Use Mog workbook save/export APIs or create workbooks through the SDK.";
+    readonly mogReplacements: readonly [{
+        readonly path: "wb.save";
+        readonly snippet: "await wb.save(path);";
+    }, {
+        readonly path: "wb.toXlsx";
+        readonly snippet: "const bytes = await wb.toXlsx();";
+    }, {
+        readonly path: "createWorkbook";
+        readonly snippet: "const wb = await createWorkbook(sourceOrOptions);";
+        readonly note: "Root SDK factory, not a workbook member path.";
+    }];
+    readonly confidence: 0.96;
+    readonly blocking: true;
+}];
+
+// @public (undocumented)
+export interface ApiGuidanceCatalogValidation {
+    // (undocumented)
+    readonly issues: readonly ApiGuidanceCatalogValidationIssue[];
+    // (undocumented)
+    readonly valid: boolean;
+}
+
+// @public (undocumented)
+export const apiGuidanceCatalogValidation: ApiGuidanceCatalogValidation;
+
+// @public (undocumented)
+export interface ApiGuidanceCatalogValidationIssue {
+    // (undocumented)
+    readonly entryId: string;
+    // (undocumented)
+    readonly path: string;
+    // (undocumented)
+    readonly reason: string;
+}
+
+// @public (undocumented)
+export type ApiGuidanceCategory = 'bootstrap' | 'sync-load' | 'workbook' | 'worksheet' | 'range' | 'formatting' | 'tables' | 'filters' | 'compatibility' | 'charts' | 'pivots' | 'names' | 'file-io' | 'host';
+
+// Warning: (ae-forgotten-export) The symbol "ApiGuidanceBaseMatcher" needs to be exported by the entry point index.d.ts
+//
+// @public (undocumented)
+export interface ApiGuidanceCompoundMatcher extends ApiGuidanceBaseMatcher {
+    // (undocumented)
+    readonly blocking: boolean;
+    // (undocumented)
+    readonly confidence: number;
+    // (undocumented)
+    readonly kind: 'compound';
+    // (undocumented)
+    readonly symbols: readonly string[];
+}
+
+// @public (undocumented)
+export interface ApiGuidanceDiagnostic {
+    // (undocumented)
+    readonly blocking: boolean;
+    // (undocumented)
+    readonly category: ApiGuidanceCategory;
+    // (undocumented)
+    readonly code: ApiGuidanceDiagnosticCode;
+    // (undocumented)
+    readonly compatibilityId?: string;
+    // (undocumented)
+    readonly compatibilityStatus?: ApiCompatibilityStatus;
+    // (undocumented)
+    readonly confidence: number;
+    // (undocumented)
+    readonly dialect?: ApiGuidanceDialect;
+    // (undocumented)
+    readonly entryId: string;
+    // (undocumented)
+    readonly matcherId: string;
+    // (undocumented)
+    readonly message: string;
+    // (undocumented)
+    readonly mogReplacements: readonly MogReplacement[];
+    // (undocumented)
+    readonly offendingSymbol: string;
+    // (undocumented)
+    readonly references: readonly string[];
+    // (undocumented)
+    readonly severity: 'error' | 'warning' | 'info';
+    // (undocumented)
+    readonly span?: SourceSpan;
+    // (undocumented)
+    readonly suggestion: string;
+}
+
+// @public (undocumented)
+export type ApiGuidanceDiagnosticCode = 'MOG001_FOREIGN_API_DIALECT' | 'MOG002_MOG_API_USAGE' | 'MOG003_COMPATIBILITY_REJECTED';
+
+// @public (undocumented)
+export type ApiGuidanceDialect = 'officejs' | 'mog-version';
+
+// @public (undocumented)
+export interface ApiGuidanceEntry {
+    // (undocumented)
+    readonly blocking: boolean;
+    // (undocumented)
+    readonly category: ApiGuidanceCategory;
+    // (undocumented)
+    readonly confidence: number;
+    // (undocumented)
+    readonly dialect: ApiGuidanceDialect;
+    // (undocumented)
+    readonly id: string;
+    // (undocumented)
+    readonly matchers: readonly ApiGuidanceMatcher[];
+    // (undocumented)
+    readonly message: string;
+    // (undocumented)
+    readonly mogReplacements: readonly MogReplacement[];
+    // (undocumented)
+    readonly suggestion: string;
+}
+
+// @public (undocumented)
+export type ApiGuidanceExplanation = ForeignApiGuidanceExplanation | MogApiGuidanceExplanation | MogApiCompatibilityExplanation;
+
+// @public (undocumented)
+export type ApiGuidanceMatcher = ApiGuidanceSymbolMatcher | ApiGuidanceCompoundMatcher;
+
+// @public (undocumented)
+export type ApiGuidanceMatcherKind = 'member-chain' | 'call' | 'assignment' | 'token' | 'compound';
+
+// @public (undocumented)
+export interface ApiGuidancePreflightResult {
+    // (undocumented)
+    readonly diagnostics: readonly ApiGuidanceDiagnostic[];
+    // (undocumented)
+    readonly ok: boolean;
+}
+
+// @public (undocumented)
+export interface ApiGuidanceSourceLocation {
+    // (undocumented)
+    readonly file: string;
+    // (undocumented)
+    readonly line?: number;
+}
+
+// @public (undocumented)
+export interface ApiGuidanceSymbolMatcher extends ApiGuidanceBaseMatcher {
+    // (undocumented)
+    readonly kind: Exclude<ApiGuidanceMatcherKind, 'compound'>;
+    // (undocumented)
+    readonly symbol: string;
+}
+
+// @public (undocumented)
+export interface ApiGuidanceTarget {
+    // (undocumented)
+    readonly asyncModel: 'sync' | 'promise';
+    // (undocumented)
+    readonly compatibility?: readonly ApiCompatibilityReference[];
+    // (undocumented)
+    readonly interface?: string;
+    // (undocumented)
+    readonly kind: ApiGuidanceTargetKind;
+    // (undocumented)
+    readonly member?: string;
+    // (undocumented)
+    readonly ownerPackage: string;
+    // (undocumented)
+    readonly parentRoot?: 'workbook' | 'worksheet';
+    // (undocumented)
+    readonly path: string;
+    // Warning: (ae-forgotten-export) The symbol "ApiGuidanceTargetRoot" needs to be exported by the entry point index.d.ts
+    //
+    // (undocumented)
+    readonly root: ApiGuidanceTargetRoot;
+    // (undocumented)
+    readonly schemaVersion?: '1';
+    // (undocumented)
+    readonly signature: string;
+    // (undocumented)
+    readonly source?: ApiGuidanceSourceLocation;
+    // (undocumented)
+    readonly stableId?: string;
+    // (undocumented)
+    readonly targetInterface?: string;
+    // (undocumented)
+    readonly typeText: string;
+    // (undocumented)
+    readonly visibility: 'public' | 'internal' | 'deprecated';
+}
+
+// @public (undocumented)
+export type ApiGuidanceTargetKind = 'method' | 'property' | 'subApiAccessor' | 'rootImport';
+
+// @public (undocumented)
+export const apiGuidanceTargets: readonly ApiGuidanceTarget[];
+
+// @public (undocumented)
 export interface ApiSpec {
+    // (undocumented)
+    compatibility?: ApiCompatibilityIndex;
     // (undocumented)
     defaultFormats?: Record<string, string>;
     // (undocumented)
@@ -107,8 +898,8 @@ export interface ApiSpec {
     interfaces: Record<string, ApiSpecInterfaceEntry>;
     // (undocumented)
     subApis: {
-        wb: Record<string, string>;
-        ws: Record<string, string>;
+        workbook: Record<string, ApiSpecFunctionEntry>;
+        worksheet: Record<string, ApiSpecFunctionEntry>;
     };
     // (undocumented)
     types: Record<string, ApiSpecTypeEntry>;
@@ -120,9 +911,13 @@ export const apiSpec: ApiSpec;
 // @public (undocumented)
 export interface ApiSpecFunctionEntry {
     // (undocumented)
+    compatibility?: ApiCompatibilityReference[];
+    // (undocumented)
     docstring: string;
     // (undocumented)
     signature: string;
+    // (undocumented)
+    targetInterface?: string;
     // (undocumented)
     usedTypes: string[];
 }
@@ -150,6 +945,7 @@ export interface ApiSpecTypeEntry {
 }
 
 // Warning: (ae-forgotten-export) The symbol "CellValuePrimitive" needs to be exported by the entry point index.d.ts
+// Warning: (ae-forgotten-export) The symbol "RichText" needs to be exported by the entry point index.d.ts
 //
 // @public
 export type CellRawValue = CellValuePrimitive | RichText;
@@ -159,7 +955,84 @@ export type CellRawValue = CellValuePrimitive | RichText;
 // @public
 export type CellValue = CellValuePrimitive | CellError;
 
-export { CellWriteData }
+// @public
+export type CellWriteData = Pick<StoreCellData, 'raw' | 'formula' | 'identityFormula' | 'computed'>;
+
+// @public (undocumented)
+export interface ChartImageFrame {
+    // (undocumented)
+    readonly contentHeight: number;
+    // (undocumented)
+    readonly contentWidth: number;
+    // (undocumented)
+    readonly contentX: number;
+    // (undocumented)
+    readonly contentY: number;
+    // (undocumented)
+    readonly exportHeight: number;
+    // (undocumented)
+    readonly exportWidth: number;
+    // (undocumented)
+    readonly sourceHeight?: number;
+    // (undocumented)
+    readonly sourceWidth?: number;
+}
+
+// @public (undocumented)
+export interface ChartRasterBackend {
+    // (undocumented)
+    readonly id: string;
+    // (undocumented)
+    render(request: ChartRasterRequest): Promise<ChartRasterResult> | ChartRasterResult;
+    // Warning: (ae-forgotten-export) The symbol "ChartRasterBackendRuntime" needs to be exported by the entry point index.d.ts
+    //
+    // (undocumented)
+    readonly runtime: ChartRasterBackendRuntime;
+    // Warning: (ae-forgotten-export) The symbol "ChartRasterImageExportFormat" needs to be exported by the entry point index.d.ts
+    //
+    // (undocumented)
+    readonly supportedFormats: readonly ChartRasterImageExportFormat[];
+}
+
+// @public (undocumented)
+export interface ChartRasterRequest {
+    // (undocumented)
+    readonly marks: readonly Record<string, unknown>[];
+    // (undocumented)
+    readonly options: {
+        readonly format: ChartRasterImageExportFormat;
+        readonly width: number;
+        readonly height: number;
+        readonly pixelRatio: number;
+        readonly backgroundColor: string;
+        readonly quality?: number;
+        readonly fittingMode: ChartImageFittingMode;
+        readonly frame: ChartImageFrame;
+    };
+    // (undocumented)
+    readonly version: 1;
+}
+
+// @public (undocumented)
+export interface ChartRasterResult {
+    // (undocumented)
+    readonly bytes: Uint8Array;
+    // (undocumented)
+    readonly format: ChartRasterImageExportFormat;
+    // (undocumented)
+    readonly height: number;
+    // (undocumented)
+    readonly width: number;
+}
+
+// @public (undocumented)
+export type ChartRenderingConfig = 'auto' | ChartRenderingOptions;
+
+// @public (undocumented)
+export interface ChartRenderingOptions {
+    readonly rasterBackend?: ChartRasterBackend;
+    readonly rasterModule?: WebAssembly.Module | Promise<WebAssembly.Module>;
+}
 
 // @public (undocumented)
 export class CollaborativeEngine {
@@ -207,7 +1080,17 @@ export interface CollaborativeEngineOptions {
     xlsxSource?: Buffer;
 }
 
-export { colToLetter }
+// @public (undocumented)
+export const colToLetter: (col: number) => string;
+
+// @public (undocumented)
+export const column: (index: number) => string;
+
+// @public (undocumented)
+export const columnIndex: (name: string) => number;
+
+// @public (undocumented)
+export const columnName: (index: number) => string;
 
 // Warning: (ae-incompatible-release-tags) The symbol "createCollaborativeGroup" is marked as @public, but its signature references "NapiAddonModule" which is marked as @internal
 //
@@ -223,7 +1106,6 @@ export function createCollaborativeGroup(addon: NapiAddonModule, count: number, 
     dispose: () => Promise<void>;
 }>;
 
-// Warning: (ae-forgotten-export) The symbol "HeadlessOptions" needs to be exported by the entry point index.d.ts
 // Warning: (ae-internal-missing-underscore) The name "createHeadlessEngine" should be prefixed with an underscore because the declaration is marked as @internal
 //
 // @internal @deprecated
@@ -254,10 +1136,13 @@ export function createWorkbook(options: CreateWorkbookOptions): Promise<Workbook
 
 // @public (undocumented)
 export interface CreateWorkbookOptions {
+    chartRendering?: ChartRenderingConfig;
+    debug?: boolean;
     // (undocumented)
     documentId?: string;
     // (undocumented)
     importOptions?: ImportOptions;
+    logger?: MogSdkLogger | false;
     principal?: {
         tags: string[];
     };
@@ -270,15 +1155,45 @@ export interface CreateWorkbookOptions {
 // @public (undocumented)
 export type DescribeResult = OverviewResult | InterfaceResult | MethodResult | TypeResult | null;
 
-export { DocumentHandle }
+// @public
+export interface DocumentSecurityConfig {
+    resolvePrincipal: () => AccessPrincipal;
+}
 
-export { DocumentSecurityConfig }
+// @public
+export type DocumentSource = {
+    readonly type: 'path';
+    readonly path: string;
+} | {
+    readonly type: 'bytes';
+    readonly data: Uint8Array;
+};
 
-export { DocumentSource }
+// @public (undocumented)
+export function explainApiSymbol(symbolOrPath: string): ApiGuidanceExplanation | null;
 
-export { FilterExpression }
+// @public
+export interface FilterExpression {
+    equals: CellValue;
+    field: string;
+}
 
-export { FormulaA1 }
+// @public (undocumented)
+export interface ForeignApiGuidanceExplanation {
+    // (undocumented)
+    readonly diagnostic: ApiGuidanceDiagnostic;
+    // (undocumented)
+    readonly entry: ApiGuidanceEntry;
+    // (undocumented)
+    readonly kind: 'foreign-api-dialect';
+    // (undocumented)
+    readonly symbol: string;
+}
+
+// @public
+export type FormulaA1 = string & {
+    readonly [formulaA1Brand]: true;
+};
 
 // Warning: (ae-internal-missing-underscore) The name "HeadlessCodeExecutorFactory" should be prefixed with an underscore because the declaration is marked as @internal
 //
@@ -299,10 +1214,31 @@ export class HeadlessEngine {
     set activeSheetId(id: string);
     dispose(): Promise<void>;
     initWorkbook(): Promise<void>;
+    // Warning: (ae-forgotten-export) The symbol "DocumentByteSyncPort" needs to be exported by the entry point index.d.ts
+    //
     // (undocumented)
     get syncPort(): DocumentByteSyncPort;
     get workbook(): Workbook;
+    // Warning: (ae-forgotten-export) The symbol "WorkbookInternal" needs to be exported by the entry point index.d.ts
     get _workbookInternal(): WorkbookInternal;
+}
+
+// Warning: (ae-internal-missing-underscore) The name "HeadlessOptions" should be prefixed with an underscore because the declaration is marked as @internal
+//
+// @internal
+export interface HeadlessOptions {
+    codeExecutorFactory?: HeadlessCodeExecutorFactory;
+    computeAddon: NapiAddonModule;
+    docId?: string;
+    importOptions?: ImportOptions;
+    initialSnapshot?: Record<string, unknown>;
+    userTimezone?: string;
+    // Warning: (ae-forgotten-export) The symbol "WorkbookLinkResolver" needs to be exported by the entry point index.d.ts
+    workbookLinkResolver?: WorkbookLinkResolver;
+    // Warning: (ae-forgotten-export) The symbol "WorkbookLinkStatusScope" needs to be exported by the entry point index.d.ts
+    workbookLinkScope?: WorkbookLinkStatusScope;
+    xlsxSource?: Buffer;
+    yrsState?: Uint8Array;
 }
 
 // @public (undocumented)
@@ -336,7 +1272,7 @@ export interface IMogSdkError extends Error {
     // (undocumented)
     readonly code: MogSdkErrorCode;
     // (undocumented)
-    readonly details?: Record<string, unknown>;
+    readonly details?: Record<string, unknown> | MogSdkSavePathErrorDetails;
     // (undocumented)
     readonly diagnostics?: MogSdkDiagnostics;
     // (undocumented)
@@ -353,7 +1289,17 @@ export interface IMogSdkEventFacade {
     onMany(types: readonly MogSdkEventType[], handler: (event: MogSdkEvent) => void): MogSdkSubscription;
 }
 
-export { ImportOptions }
+// Warning: (ae-forgotten-export) The symbol "CreateDocumentOptions" needs to be exported by the entry point index.d.ts
+//
+// @public
+export interface ImportOptions extends CreateDocumentOptions {
+    maxCells?: number;
+    // Warning: (ae-forgotten-export) The symbol "ImportProgressInfo" needs to be exported by the entry point index.d.ts
+    onProgress?: (progress: ImportProgressInfo) => void;
+    signal?: AbortSignal;
+    skipFormatting?: boolean;
+    valuesOnly?: boolean;
+}
 
 // @public (undocumented)
 export interface InterfaceResult {
@@ -367,10 +1313,10 @@ export interface InterfaceResult {
     path: string;
 }
 
-export { KernelCellData }
-
 // @public (undocumented)
 export interface MethodNode {
+    // (undocumented)
+    readonly compatibility: ApiCompatibilityReference[];
     // (undocumented)
     readonly docstring: string;
     // (undocumented)
@@ -386,6 +1332,8 @@ export interface MethodNode {
 // @public (undocumented)
 export interface MethodResult {
     // (undocumented)
+    compatibility: ApiCompatibilityReference[];
+    // (undocumented)
     docstring: string;
     // (undocumented)
     name: string;
@@ -400,11 +1348,39 @@ export interface MethodResult {
 // @public (undocumented)
 export interface MethodSummary {
     // (undocumented)
+    compatibility: ApiCompatibilityReference[];
+    // (undocumented)
     docstring: string;
     // (undocumented)
     name: string;
     // (undocumented)
     signature: string;
+}
+
+// @public (undocumented)
+export interface MogApiCompatibilityExplanation {
+    // (undocumented)
+    readonly entry: ApiCompatibilityEntry;
+    // (undocumented)
+    readonly kind: 'mog-api-compatibility';
+    // (undocumented)
+    readonly path: string;
+    // (undocumented)
+    readonly target: ApiGuidanceTarget | null;
+}
+
+// @public (undocumented)
+export interface MogApiGuidanceExplanation {
+    // (undocumented)
+    readonly examples: readonly string[];
+    // (undocumented)
+    readonly kind: 'mog-api';
+    // (undocumented)
+    readonly path: string;
+    // (undocumented)
+    readonly recommendedBy: readonly string[];
+    // (undocumented)
+    readonly target: ApiGuidanceTarget;
 }
 
 // @public (undocumented)
@@ -450,7 +1426,7 @@ export interface MogDisposable {
     dispose(): void;
 }
 
-// @public
+// @public (undocumented)
 export interface MogDocument extends MogAsyncDisposable {
     // (undocumented)
     attachCollaboration(provider: MogSdkCollaborationProvider): Promise<MogCollaborationHandle>;
@@ -516,7 +1492,8 @@ export interface MogDocumentCreateOptions {
 // @public (undocumented)
 export type MogDocumentDurabilityMode = 'ephemeral' | 'durableLocal' | 'localFirst' | 'remoteBacked' | 'readOnly';
 
-export { MogDocumentFactory }
+// @public (undocumented)
+export const MogDocumentFactory: IMogDocumentFactory;
 
 // @public (undocumented)
 export interface MogDocumentImportOptions extends MogDocumentCreateOptions {
@@ -548,7 +1525,7 @@ export interface MogDocumentPersistenceState {
     readonly readOnly: boolean;
 }
 
-// @public
+// @public (undocumented)
 export type MogDocumentSource = {
     readonly type: 'blank';
 } | {
@@ -651,17 +1628,48 @@ export interface MogImportResult {
 
 // @public (undocumented)
 export interface MogImportWarning {
+    // Warning: (ae-forgotten-export) The symbol "ImportDiagnosticDetails" needs to be exported by the entry point index.d.ts
+    //
     // (undocumented)
-    readonly location?: {
-        readonly sheet?: string;
-        readonly cell?: string;
-    };
+    readonly details?: ImportDiagnosticDetails;
+    // Warning: (ae-forgotten-export) The symbol "ImportDiagnosticDto" needs to be exported by the entry point index.d.ts
+    //
+    // (undocumented)
+    readonly diagnostic?: ImportDiagnosticDto;
+    // (undocumented)
+    readonly feature?: string;
+    // (undocumented)
+    readonly id?: string;
+    // Warning: (ae-forgotten-export) The symbol "ImportDiagnosticLocation" needs to be exported by the entry point index.d.ts
+    //
+    // (undocumented)
+    readonly location?: ImportDiagnosticLocation;
     // (undocumented)
     readonly message: string;
+    // (undocumented)
+    readonly reason?: string;
+    // Warning: (ae-forgotten-export) The symbol "ImportDiagnosticRecoverability" needs to be exported by the entry point index.d.ts
+    //
+    // (undocumented)
+    readonly recoverability?: ImportDiagnosticRecoverability | string;
+    // Warning: (ae-forgotten-export) The symbol "ImportDiagnosticSeverity" needs to be exported by the entry point index.d.ts
+    //
+    // (undocumented)
+    readonly severity?: ImportDiagnosticSeverity;
     // Warning: (ae-forgotten-export) The symbol "MogImportWarningType" needs to be exported by the entry point index.d.ts
     //
     // (undocumented)
     readonly type: MogImportWarningType;
+}
+
+// @public (undocumented)
+export interface MogReplacement {
+    // (undocumented)
+    readonly note?: string;
+    // (undocumented)
+    readonly path: string;
+    // (undocumented)
+    readonly snippet?: string;
 }
 
 // @public (undocumented)
@@ -687,7 +1695,16 @@ export interface MogSdkDiagnostics {
     readonly severity?: 'error' | 'warning' | 'info';
 }
 
+// @public (undocumented)
+interface MogSdkError extends IMogSdkError {
+}
+
+// Warning: (ae-forgotten-export) The symbol "MogSdkErrorConstructor" needs to be exported by the entry point index.d.ts
+//
+// @public (undocumented)
+const MogSdkError: MogSdkErrorConstructor;
 export { MogSdkError }
+export { MogSdkError as MogSdkErrorInstance }
 
 // @public
 export type MogSdkErrorCode = 'INVALID_ARGUMENT' | 'NOT_FOUND' | 'CONFLICT' | 'AUTHORIZATION_DENIED' | 'READ_ONLY' | 'DISPOSED' | 'IMPORT_ERROR' | 'EXPORT_ERROR' | 'COMPUTE_ERROR' | 'TRANSPORT_ERROR' | 'PROVIDER_ERROR' | 'INTERNAL_ERROR';
@@ -699,7 +1716,7 @@ export interface MogSdkErrorJSON {
     // (undocumented)
     readonly code: MogSdkErrorCode;
     // (undocumented)
-    readonly details?: Record<string, unknown>;
+    readonly details?: Record<string, unknown> | MogSdkSavePathErrorDetails;
     // (undocumented)
     readonly diagnostics?: MogSdkDiagnostics;
     // (undocumented)
@@ -708,7 +1725,19 @@ export interface MogSdkErrorJSON {
     readonly operation?: string;
 }
 
-// @public
+// @public (undocumented)
+export interface MogSdkErrorOptions {
+    // (undocumented)
+    cause?: unknown;
+    // (undocumented)
+    details?: Record<string, unknown> | MogSdkSavePathErrorDetails;
+    // (undocumented)
+    diagnostics?: MogSdkDiagnostics;
+    // (undocumented)
+    operation?: string;
+}
+
+// @public (undocumented)
 export interface MogSdkEvent<TPayload = unknown> {
     // (undocumented)
     readonly batchId?: string;
@@ -734,7 +1763,16 @@ export interface MogSdkEvent<TPayload = unknown> {
     readonly version: 1;
 }
 
+// @public (undocumented)
+interface MogSdkEventFacade extends IMogSdkEventFacade {
+}
+
+// Warning: (ae-forgotten-export) The symbol "MogSdkEventFacadeConstructor" needs to be exported by the entry point index.d.ts
+//
+// @public (undocumented)
+const MogSdkEventFacade: MogSdkEventFacadeConstructor;
 export { MogSdkEventFacade }
+export { MogSdkEventFacade as MogSdkEventFacadeInstance }
 
 // @public (undocumented)
 export type MogSdkEventOrigin = 'local' | 'remote' | 'system';
@@ -755,15 +1793,54 @@ export type MogSdkEventScope = {
 export type MogSdkEventType = 'document.created' | 'document.ready' | 'document.saving' | 'document.saved' | 'document.dirtyChanged' | 'document.closing' | 'document.closed' | 'document.error' | 'sheet.added' | 'sheet.removed' | 'sheet.moved' | 'sheet.renamed' | 'sheet.visibilityChanged' | 'sheet.activated' | 'cell.changed' | 'cells.batchChanged' | 'range.changed' | 'recalc.started' | 'recalc.completed' | 'table.created' | 'table.updated' | 'table.deleted' | 'table.resized' | 'history.undone' | 'history.redone' | 'history.stateChanged' | 'batch.started' | 'batch.committed' | 'batch.failed' | 'persistence.checkpointed' | 'persistence.flushed' | 'persistence.conflict' | 'persistence.providerError' | 'collaboration.attached' | 'collaboration.detached' | 'collaboration.remoteUpdatesApplied' | 'collaboration.conflict' | 'collaboration.checkpoint' | 'security.policyChanged' | 'security.accessDenied' | 'name.created' | 'name.updated' | 'name.deleted' | 'chart.created' | 'chart.updated' | 'chart.deleted' | 'filter.applied' | 'filter.cleared' | 'validation.failed' | 'validation.passed' | 'import.progress' | 'import.complete' | 'export.progress' | 'export.complete';
 
 // @public (undocumented)
+export interface MogSdkLogger {
+    // (undocumented)
+    debug?(...args: unknown[]): void;
+    // (undocumented)
+    error?(...args: unknown[]): void;
+    // (undocumented)
+    info?(...args: unknown[]): void;
+    // (undocumented)
+    warn?(...args: unknown[]): void;
+}
+
+// @public (undocumented)
 export type MogSdkProviderOwnership = 'sdk' | 'host';
 
-// @public
+// @public (undocumented)
 export interface MogSdkRuntimeProvider {
     // (undocumented)
     readonly kind: 'browser' | 'headless' | 'tauri';
     // (undocumented)
     readonly userTimezone?: string;
 }
+
+// @public (undocumented)
+export interface MogSdkSavePathErrorDetails {
+    // (undocumented)
+    readonly absolutePath?: string;
+    // (undocumented)
+    readonly causeMessage?: string;
+    // (undocumented)
+    readonly causeName?: string;
+    // (undocumented)
+    readonly cwd?: string;
+    // (undocumented)
+    readonly examples?: readonly string[];
+    // (undocumented)
+    readonly filesystemCode?: string;
+    // (undocumented)
+    readonly issue: MogSdkSavePathIssue;
+    // (undocumented)
+    readonly operation: 'workbook.save';
+    // (undocumented)
+    readonly parentDirectory?: string;
+    // (undocumented)
+    readonly requestedPath?: string;
+}
+
+// @public (undocumented)
+export type MogSdkSavePathIssue = 'save-path-invalid' | 'save-path-writer-unavailable' | 'save-path-write-failed' | 'save-callback-failed';
 
 // @public (undocumented)
 export interface MogSdkSecurityProvider {
@@ -800,7 +1877,7 @@ export interface MogSdkStorageProvider {
     readonly readOnly?: boolean;
 }
 
-// @public
+// @public (undocumented)
 export interface MogSdkSubscription {
     // (undocumented)
     dispose(): void;
@@ -846,10 +1923,25 @@ export interface NapiAddonModule {
     ComputeEngine: (new (snapshotJson: string) => ComputeEngineInstance) & {
         initFromYrsState?: (state: Buffer) => ComputeEngineInstance;
     };
+    // (undocumented)
+    render_chart_marks_image?: (requestJson: string) => {
+        readonly bytes: Uint8Array;
+        readonly format: 'png' | 'jpeg';
+        readonly width: number;
+        readonly height: number;
+    };
 }
 
 // @public (undocumented)
+export const offset: (ref: string, dr: number, dc: number) => string;
+
+// @public (undocumented)
 export interface OverviewResult {
+    // (undocumented)
+    utilities: {
+        namespaces: string[];
+        methods: string[];
+    };
     // (undocumented)
     workbook: {
         methods: string[];
@@ -862,18 +1954,117 @@ export interface OverviewResult {
     };
 }
 
-export { parseCellAddress }
+// Warning: (ae-forgotten-export) The symbol "ParsedCellAddress" needs to be exported by the entry point index.d.ts
+//
+// @public (undocumented)
+export const parse: (ref: string) => ParsedCellAddress | null;
 
-export { parseCellRange }
+// @public (undocumented)
+export const parseAddress: (ref: string) => ParsedCellAddress | null;
+
+// @public (undocumented)
+export const parseCellAddress: (ref: string) => ParsedCellAddress | null;
+
+// Warning: (ae-forgotten-export) The symbol "ParsedCellRange" needs to be exported by the entry point index.d.ts
+//
+// @public (undocumented)
+export const parseCellRange: (ref: string) => ParsedCellRange | null;
 
 // @public
 export type PolicyId = string & {
     readonly __brand?: 'PolicyId';
 };
 
-export { rangeToA1 }
+// @public (undocumented)
+export function preflightMogCode(code: string): ApiGuidancePreflightResult;
 
-export { RecordValues }
+// @public (undocumented)
+export interface PublicA1Utils {
+    // (undocumented)
+    readonly [name: string]: unknown;
+    // (undocumented)
+    address(row: number, col: number): string;
+    // (undocumented)
+    colToLetter(col: number): string;
+    // (undocumented)
+    column(index: number): string;
+    // (undocumented)
+    columnIndex(name: string): number;
+    // (undocumented)
+    columnName(index: number): string;
+    // (undocumented)
+    offset(ref: string, dr: number, dc: number): string;
+    // (undocumented)
+    parse(ref: string): ParsedCellAddress | null;
+    // (undocumented)
+    parseAddress(ref: string): ParsedCellAddress | null;
+    // (undocumented)
+    parseCellAddress(ref: string): ParsedCellAddress | null;
+    // (undocumented)
+    parseCellRange(ref: string): ParsedCellRange | null;
+    // (undocumented)
+    range(row1: number, col1: number, row2: number, col2: number): string;
+    // (undocumented)
+    rangeAddress(row1: number, col1: number, row2: number, col2: number): string;
+    // (undocumented)
+    toA1(row: number, col: number): string;
+}
+
+// @public (undocumented)
+export interface PublicRangeUtils {
+    // (undocumented)
+    readonly [name: string]: unknown;
+}
+
+// @public (undocumented)
+export interface PublicUtils {
+    // (undocumented)
+    readonly a1: PublicA1Utils;
+    // (undocumented)
+    address(row: number, col: number): string;
+    // (undocumented)
+    colToLetter(col: number): string;
+    // (undocumented)
+    column(index: number): string;
+    // (undocumented)
+    columnIndex(name: string): number;
+    // (undocumented)
+    columnName(index: number): string;
+    // (undocumented)
+    offset(ref: string, dr: number, dc: number): string;
+    // (undocumented)
+    parse(ref: string): ParsedCellAddress | null;
+    // (undocumented)
+    parseAddress(ref: string): ParsedCellAddress | null;
+    // (undocumented)
+    parseCellAddress(ref: string): ParsedCellAddress | null;
+    // (undocumented)
+    parseCellRange(ref: string): ParsedCellRange | null;
+    // (undocumented)
+    readonly range: PublicRangeUtils;
+    // (undocumented)
+    rangeAddress(row1: number, col1: number, row2: number, col2: number): string;
+    // Warning: (ae-forgotten-export) The symbol "CellRange" needs to be exported by the entry point index.d.ts
+    //
+    // (undocumented)
+    rangeToA1(range: CellRange, includeSheet?: boolean, sheetName?: string): string;
+    // (undocumented)
+    toA1(row: number, col: number): string;
+}
+
+// @public (undocumented)
+export const rangeAddress: (row1: number, col1: number, row2: number, col2: number) => string;
+
+// @public (undocumented)
+export const rangeToA1: (range: CellRange, includeSheet?: boolean, sheetName?: string) => string;
+
+// @public
+export type RecordValues = {
+    [key: string]: CellValue;
+};
+
+// @public (undocumented)
+export function resolveGuidanceTarget(path: string): ApiGuidanceTarget | null;
 
 // @public (undocumented)
 export interface RootNode {
@@ -887,14 +2078,54 @@ export interface RootNode {
     readonly subApis: string[];
 }
 
-export { ScreenshotOptions }
+// @public
+export interface ScreenshotOptions {
+    dpr?: number;
+    maxHeight?: number;
+    maxWidth?: number;
+    showGridlines?: boolean;
+    showHeaders?: boolean;
+}
 
 // @public (undocumented)
 export type SheetId = string & {
     readonly [__sheetId]: true;
 };
 
-export { StoreCellData }
+// @public (undocumented)
+export interface SourceSpan {
+    // (undocumented)
+    readonly column?: number;
+    // (undocumented)
+    readonly end: number;
+    // (undocumented)
+    readonly line?: number;
+    // (undocumented)
+    readonly start: number;
+}
+
+// @public (undocumented)
+export interface StoreCellData {
+    col: number;
+    computed?: CellValue;
+    formula?: FormulaA1;
+    hyperlink?: string;
+    // Warning: (ae-forgotten-export) The symbol "CellId" needs to be exported by the entry point index.d.ts
+    id: CellId;
+    // Warning: (ae-forgotten-export) The symbol "IdentityFormula" needs to be exported by the entry point index.d.ts
+    identityFormula?: IdentityFormula;
+    isCSE?: boolean;
+    note?: string;
+    raw: CellRawValue;
+    // Warning: (ae-forgotten-export) The symbol "RegionMeta" needs to be exported by the entry point index.d.ts
+    region?: RegionMeta | null;
+    row: number;
+    spillAnchor?: CellId;
+    spillRange?: {
+        rows: number;
+        cols: number;
+    };
+}
 
 // @public (undocumented)
 export interface SubApiNode {
@@ -913,12 +2144,17 @@ export interface SubApiNode {
 // @public (undocumented)
 export type SyncMode = 'immediate' | 'batch' | 'manual';
 
-export { TableRecord }
+// @public
+export interface TableRecord {
+    rowId: string;
+    values: RecordValues;
+}
 
 // @public
 export type TagMatcher = string;
 
-export { toA1 }
+// @public (undocumented)
+export const toA1: (row: number, col: number) => string;
 
 // Warning: (ae-forgotten-export) The symbol "MogSdkEventPayloads" needs to be exported by the entry point index.d.ts
 //
@@ -945,21 +2181,582 @@ export interface TypesNode {
     readonly [typeName: string]: TypeResult;
 }
 
-export { Utils }
+// @public (undocumented)
+export const Utils: PublicUtils;
 
-export { Workbook }
+// @public (undocumented)
+export function validateApiGuidanceCatalog(): ApiGuidanceCatalogValidation;
 
-export { WorkbookSecurity }
+// @public (undocumented)
+export interface Workbook {
+    [Symbol.asyncDispose](): Promise<void>;
+    activePrincipal(): Promise<AccessPrincipal | null>;
+    readonly activeSheet: Worksheet;
+    // Warning: (ae-forgotten-export) The symbol "WorkbookCustomListInput" needs to be exported by the entry point index.d.ts
+    addCustomList(input: WorkbookCustomListInput): Promise<CustomList>;
+    addressToIndex(address: string): {
+        row: number;
+        col: number;
+    };
+    readonly autoSave: boolean;
+    batch<T = void>(label: string, fn: (wb: Workbook) => Promise<T>): Promise<T>;
+    // Warning: (ae-forgotten-export) The symbol "CalculateOptions" needs to be exported by the entry point index.d.ts
+    // Warning: (ae-forgotten-export) The symbol "CalculateResult" needs to be exported by the entry point index.d.ts
+    calculate(options?: CalculateOptions): Promise<CalculateResult>;
+    readonly calculationState: 'done' | 'calculating' | 'pending';
+    captureScreenshot(sheet: Worksheet | string, range: string, options?: ScreenshotOptions): Promise<Uint8Array>;
+    // Warning: (ae-forgotten-export) The symbol "WorkbookCellStyles" needs to be exported by the entry point index.d.ts
+    readonly cellStyles: WorkbookCellStyles;
+    // Warning: (ae-forgotten-export) The symbol "WorkbookChanges" needs to be exported by the entry point index.d.ts
+    readonly changes: WorkbookChanges;
+    close(closeBehavior?: 'save' | 'skipSave'): Promise<void>;
+    copyRangeFrom(source: Workbook, fromRange: string, toRange: string, options?: {
+        fromSheet?: string | Worksheet;
+        toSheet?: string | Worksheet;
+    }): Promise<void>;
+    createCheckpoint(label?: string): string;
+    deleteCustomList(id: string): Promise<boolean>;
+    deleteCustomSetting(key: string): Promise<void>;
+    // Warning: (ae-forgotten-export) The symbol "SheetRangeRequest" needs to be exported by the entry point index.d.ts
+    // Warning: (ae-forgotten-export) The symbol "SheetRangeDescribeResult" needs to be exported by the entry point index.d.ts
+    describeRanges(requests: SheetRangeRequest[], includeStyle?: boolean): Promise<SheetRangeDescribeResult[]>;
+    // Warning: (ae-forgotten-export) The symbol "WorkbookDiagnostics" needs to be exported by the entry point index.d.ts
+    readonly diagnostics: WorkbookDiagnostics;
+    dispose(): void;
+    // Warning: (ae-forgotten-export) The symbol "SpreadsheetEvent" needs to be exported by the entry point index.d.ts
+    emit(event: SpreadsheetEvent): void;
+    // Warning: (ae-forgotten-export) The symbol "ExecuteOptions" needs to be exported by the entry point index.d.ts
+    // Warning: (ae-forgotten-export) The symbol "CodeResult" needs to be exported by the entry point index.d.ts
+    executeCode(code: string, options?: ExecuteOptions): Promise<CodeResult>;
+    findSheet(name: string): Promise<Worksheet | null>;
+    // Warning: (ae-forgotten-export) The symbol "WorkbookFunctions" needs to be exported by the entry point index.d.ts
+    readonly functions: WorkbookFunctions;
+    getActiveCell(): {
+        sheetId: string;
+        row: number;
+        col: number;
+        address: string;
+    } | null;
+    getActiveChart(): string | null;
+    getActiveShape(): string | null;
+    getActiveSlicer(): string | null;
+    getCalculationMode(): Promise<'auto' | 'autoNoTable' | 'manual'>;
+    getChartDataPointTrack(): Promise<boolean>;
+    // Warning: (ae-forgotten-export) The symbol "CultureInfo" needs to be exported by the entry point index.d.ts
+    getCultureInfo(): Promise<CultureInfo>;
+    // Warning: (ae-forgotten-export) The symbol "CustomList" needs to be exported by the entry point index.d.ts
+    getCustomLists(): Promise<readonly CustomList[]>;
+    getCustomSetting(key: string): Promise<string | null>;
+    getCustomSettingCount(): Promise<number>;
+    getDecimalSeparator(): Promise<string>;
+    // Warning: (ae-forgotten-export) The symbol "FunctionInfo" needs to be exported by the entry point index.d.ts
+    getFunctionCatalog(): FunctionInfo[];
+    getFunctionInfo(name: string): FunctionInfo | null;
+    getIterativeCalculation(): Promise<boolean>;
+    getOrCreateSheet(name: string): Promise<{
+        sheet: Worksheet;
+        created: boolean;
+    }>;
+    getSelectedRange(): string | null;
+    getSelectedRanges(): string[];
+    // Warning: (ae-forgotten-export) The symbol "WorkbookSettings" needs to be exported by the entry point index.d.ts
+    getSettings(): Promise<WorkbookSettings>;
+    getSheet(name: string): Promise<Worksheet>;
+    getSheetById(sheetId: SheetId): Worksheet;
+    getSheetByIndex(index: number): Promise<Worksheet>;
+    getSheetCount(): Promise<number>;
+    getSheetNames(): Promise<string[]>;
+    getSheets(): Promise<Worksheet[]>;
+    getThousandsSeparator(): Promise<string>;
+    getUsePrecisionAsDisplayed(): Promise<boolean>;
+    // Warning: (ae-forgotten-export) The symbol "WorkbookSnapshot" needs to be exported by the entry point index.d.ts
+    getWorkbookSnapshot(): Promise<WorkbookSnapshot>;
+    // Warning: (ae-forgotten-export) The symbol "WorkbookHistory" needs to be exported by the entry point index.d.ts
+    readonly history: WorkbookHistory;
+    // Warning: (ae-forgotten-export) The symbol "DocumentImportWarning" needs to be exported by the entry point index.d.ts
+    readonly importWarnings: readonly DocumentImportWarning[];
+    indexToAddress(row: number, col: number): string;
+    // Warning: (ae-forgotten-export) The symbol "InsertWorksheetOptions" needs to be exported by the entry point index.d.ts
+    insertWorksheets(data: string | Uint8Array, options?: InsertWorksheetOptions): Promise<string[]>;
+    readonly isDirty: boolean;
+    readonly isDisposed: boolean;
+    // Warning: (ae-forgotten-export) The symbol "WorkbookLinks" needs to be exported by the entry point index.d.ts
+    readonly links: WorkbookLinks;
+    // Warning: (ae-forgotten-export) The symbol "CheckpointInfo" needs to be exported by the entry point index.d.ts
+    listCheckpoints(): CheckpointInfo[];
+    listCustomSettings(): Promise<Array<{
+        key: string;
+        value: string;
+    }>>;
+    makePrincipal(tags: string[]): Promise<AccessPrincipal>;
+    markClean(): void;
+    readonly name: string;
+    // Warning: (ae-forgotten-export) The symbol "WorkbookNames" needs to be exported by the entry point index.d.ts
+    readonly names: WorkbookNames;
+    // Warning: (ae-forgotten-export) The symbol "WorkbookNotifications" needs to be exported by the entry point index.d.ts
+    readonly notifications: WorkbookNotifications;
+    // Warning: (ae-forgotten-export) The symbol "WorkbookEventMap" needs to be exported by the entry point index.d.ts
+    // Warning: (ae-forgotten-export) The symbol "CallableDisposable" needs to be exported by the entry point index.d.ts
+    on<K extends keyof WorkbookEventMap>(event: K, handler: (event: WorkbookEventMap[K]) => void): CallableDisposable;
+    // Warning: (ae-forgotten-export) The symbol "SpreadsheetEventType" needs to be exported by the entry point index.d.ts
+    // Warning: (ae-forgotten-export) The symbol "EventByType" needs to be exported by the entry point index.d.ts
+    on<T extends SpreadsheetEventType>(event: T, handler: (event: EventByType<T>) => void): CallableDisposable;
+    on(event: string, handler: (event: unknown) => void): CallableDisposable;
+    // Warning: (ae-forgotten-export) The symbol "WorkbookPivotTableStyles" needs to be exported by the entry point index.d.ts
+    readonly pivotTableStyles: WorkbookPivotTableStyles;
+    readonly previouslySaved: boolean;
+    // Warning: (ae-forgotten-export) The symbol "WorkbookProperties" needs to be exported by the entry point index.d.ts
+    readonly properties: WorkbookProperties;
+    // Warning: (ae-forgotten-export) The symbol "WorkbookProtection" needs to be exported by the entry point index.d.ts
+    readonly protection: WorkbookProtection;
+    readonly readOnly: boolean;
+    // Warning: (ae-forgotten-export) The symbol "IRecordsAPI" needs to be exported by the entry point index.d.ts
+    readonly records: IRecordsAPI;
+    // (undocumented)
+    replaceSettings(settings: WorkbookSettings): Promise<void>;
+    restoreCheckpoint(id: string): Promise<void>;
+    resumeCalc(): Promise<void>;
+    save(path: string): Promise<Uint8Array>;
+    // (undocumented)
+    save(): Promise<Uint8Array>;
+    // Warning: (ae-forgotten-export) The symbol "WorkbookScenarios" needs to be exported by the entry point index.d.ts
+    readonly scenarios: WorkbookScenarios;
+    // Warning: (ae-forgotten-export) The symbol "SearchOptions" needs to be exported by the entry point index.d.ts
+    // Warning: (ae-forgotten-export) The symbol "SearchResult" needs to be exported by the entry point index.d.ts
+    searchAllSheets(patterns: string[], options?: SearchOptions): Promise<Array<SearchResult & {
+        sheetName: string;
+    }>>;
+    readonly security: WorkbookSecurity;
+    securityActive(): Promise<boolean>;
+    setActivePrincipal(principal: string[] | AccessPrincipal | null): Promise<void>;
+    setCalculationMode(mode: 'auto' | 'autoNoTable' | 'manual'): Promise<void>;
+    setChartDataPointTrack(value: boolean): Promise<void>;
+    setCustomLists(lists: readonly WorkbookCustomListInput[]): Promise<void>;
+    setCustomSetting(key: string, value: string): Promise<void>;
+    // Warning: (ae-forgotten-export) The symbol "WorkbookSettingsPatch" needs to be exported by the entry point index.d.ts
+    setSettings(updates: WorkbookSettingsPatch): Promise<void>;
+    setUsePrecisionAsDisplayed(value: boolean): Promise<void>;
+    readonly sheetCount: number;
+    readonly sheetNames: string[];
+    // Warning: (ae-forgotten-export) The symbol "WorkbookSheets" needs to be exported by the entry point index.d.ts
+    readonly sheets: WorkbookSheets;
+    // Warning: (ae-forgotten-export) The symbol "WorkbookSlicers" needs to be exported by the entry point index.d.ts
+    readonly slicers: WorkbookSlicers;
+    // Warning: (ae-forgotten-export) The symbol "WorkbookSlicerStyles" needs to be exported by the entry point index.d.ts
+    readonly slicerStyles: WorkbookSlicerStyles;
+    suspendCalc(): void;
+    // Warning: (ae-forgotten-export) The symbol "WorkbookTableStyles" needs to be exported by the entry point index.d.ts
+    readonly tableStyles: WorkbookTableStyles;
+    // Warning: (ae-forgotten-export) The symbol "WorkbookTheme" needs to be exported by the entry point index.d.ts
+    readonly theme: WorkbookTheme;
+    // Warning: (ae-forgotten-export) The symbol "WorkbookTimelineStyles" needs to be exported by the entry point index.d.ts
+    readonly timelineStyles: WorkbookTimelineStyles;
+    toXlsx(options?: {
+        contextStripped?: boolean;
+    }): Promise<Uint8Array>;
+    undoGroup<T = void>(fn: (wb: Workbook) => Promise<T>): Promise<T>;
+    union(...ranges: string[]): string;
+    // Warning: (ae-forgotten-export) The symbol "WorkbookCustomListUpdate" needs to be exported by the entry point index.d.ts
+    updateCustomList(id: string, updates: WorkbookCustomListUpdate): Promise<boolean>;
+    readonly useSystemSeparators: boolean;
+    // Warning: (ae-forgotten-export) The symbol "WorkbookViewport" needs to be exported by the entry point index.d.ts
+    readonly viewport: WorkbookViewport;
+}
 
-export { Worksheet }
+// @public (undocumented)
+export interface WorkbookSecurity {
+    addPolicy(policy: Omit<AccessPolicy, 'id'>): Promise<PolicyId>;
+    applyTemplate(templateId: string, options: Record<string, unknown>): Promise<PolicyId[]>;
+    explainAccess(principal: AccessPrincipal, target: AccessTarget): Promise<AccessExplanation>;
+    getEffectiveAccess(principal: AccessPrincipal, target: AccessTarget): Promise<AccessLevel>;
+    getPolicies(): Promise<AccessPolicy[]>;
+    removePolicy(id: PolicyId): Promise<void>;
+    removeTemplate(templateId: string): Promise<void>;
+    updatePolicy(id: PolicyId, updates: Partial<Omit<AccessPolicy, 'id'>>): Promise<void>;
+}
+
+// Warning: (ae-forgotten-export) The symbol "WorksheetFill" needs to be exported by the entry point index.d.ts
+//
+// @public (undocumented)
+export interface Worksheet extends WorksheetFill {
+    // Warning: (ae-forgotten-export) The symbol "PivotCreateConfig" needs to be exported by the entry point index.d.ts
+    // Warning: (ae-forgotten-export) The symbol "PivotTableConfig" needs to be exported by the entry point index.d.ts
+    //
+    // @deprecated (undocumented)
+    addPivotTable(config: PivotCreateConfig): Promise<PivotTableConfig>;
+    // Warning: (ae-forgotten-export) The symbol "WorksheetBindings" needs to be exported by the entry point index.d.ts
+    readonly bindings: WorksheetBindings;
+    calculate(markAllDirty?: boolean): Promise<void>;
+    // Warning: (ae-forgotten-export) The symbol "CellMetadataCache" needs to be exported by the entry point index.d.ts
+    readonly cellMetadata: CellMetadataCache;
+    // Warning: (ae-forgotten-export) The symbol "WorksheetCellsAccessor" needs to be exported by the entry point index.d.ts
+    readonly cells: WorksheetCellsAccessor;
+    // Warning: (ae-forgotten-export) The symbol "WorksheetChanges" needs to be exported by the entry point index.d.ts
+    readonly changes: WorksheetChanges;
+    // Warning: (ae-forgotten-export) The symbol "WorksheetCharts" needs to be exported by the entry point index.d.ts
+    readonly charts: WorksheetCharts;
+    // Warning: (ae-forgotten-export) The symbol "ClearApplyTo" needs to be exported by the entry point index.d.ts
+    clear(range: string, applyTo?: ClearApplyTo): Promise<ClearResult>;
+    // (undocumented)
+    clear(range: CellRange, applyTo?: ClearApplyTo): Promise<ClearResult>;
+    // Warning: (ae-forgotten-export) The symbol "ClearResult" needs to be exported by the entry point index.d.ts
+    clearData(range: string): Promise<ClearResult>;
+    clearData(range: CellRange): Promise<ClearResult>;
+    clearData(startRow: number, startCol: number, endRow: number, endCol: number): Promise<ClearResult>;
+    clearOrResetContents(range: string): Promise<void>;
+    // Warning: (ae-forgotten-export) The symbol "WorksheetComments" needs to be exported by the entry point index.d.ts
+    readonly comments: WorksheetComments;
+    // Warning: (ae-forgotten-export) The symbol "WorksheetConditionalFormatting" needs to be exported by the entry point index.d.ts
+    readonly conditionalFormats: WorksheetConditionalFormatting;
+    // Warning: (ae-forgotten-export) The symbol "WorksheetConnectorCollection" needs to be exported by the entry point index.d.ts
+    readonly connectors: WorksheetConnectorCollection;
+    // Warning: (ae-forgotten-export) The symbol "CopyFromOptions" needs to be exported by the entry point index.d.ts
+    copyFrom(sourceRange: string, targetRange: string, options?: CopyFromOptions): Promise<void>;
+    copyFrom(srcStartRow: number, srcStartCol: number, srcEndRow: number, srcEndCol: number, tgtStartRow: number, tgtStartCol: number, options?: CopyFromOptions): Promise<void>;
+    // Warning: (ae-forgotten-export) The symbol "WorksheetCustomProperties" needs to be exported by the entry point index.d.ts
+    readonly customProperties: WorksheetCustomProperties;
+    describe(address?: string): Promise<string>;
+    describeRange(range?: string | CellRange, includeStyle?: boolean): Promise<string>;
+    // Warning: (ae-forgotten-export) The symbol "WorksheetDiagrams" needs to be exported by the entry point index.d.ts
+    readonly diagrams: WorksheetDiagrams;
+    // Warning: (ae-forgotten-export) The symbol "WorksheetDrawingCollection" needs to be exported by the entry point index.d.ts
+    readonly drawings: WorksheetDrawingCollection;
+    enableCalculation: boolean;
+    // Warning: (ae-forgotten-export) The symbol "WorksheetEquationCollection" needs to be exported by the entry point index.d.ts
+    readonly equations: WorksheetEquationCollection;
+    evaluate(expression: string): Promise<CellValue>;
+    evaluateFormula(formula: string, options?: {
+        sheet?: string | SheetId;
+    }): Promise<CellValue>;
+    // Warning: (ae-forgotten-export) The symbol "WorksheetFilters" needs to be exported by the entry point index.d.ts
+    readonly filters: WorksheetFilters;
+    findByFormula(pattern: RegExp, range?: string): Promise<string[]>;
+    findByValue(value: CellValue, range?: string): Promise<string[]>;
+    // Warning: (ae-forgotten-export) The symbol "FindCellsQuery" needs to be exported by the entry point index.d.ts
+    // Warning: (ae-forgotten-export) The symbol "FindCellsResult" needs to be exported by the entry point index.d.ts
+    findCells(query: FindCellsQuery): Promise<FindCellsResult>;
+    findCells(predicate: (cell: CellData) => boolean, range?: string): Promise<string[]>;
+    findDataEdge(row: number, col: number, direction: 'up' | 'down' | 'left' | 'right'): Promise<{
+        row: number;
+        col: number;
+    }>;
+    // Warning: (ae-forgotten-export) The symbol "FindInRangeOptions" needs to be exported by the entry point index.d.ts
+    findInRange(range: string, text: string, options?: FindInRangeOptions): Promise<SearchResult | null>;
+    findLastColumn(row: number): Promise<{
+        lastDataCol: number | null;
+        lastFormatCol: number | null;
+    }>;
+    findLastRow(col: number): Promise<{
+        lastDataRow: number | null;
+        lastFormatRow: number | null;
+    }>;
+    // Warning: (ae-forgotten-export) The symbol "WorksheetCellVisitor" needs to be exported by the entry point index.d.ts
+    forEachCell(range: string | CellRange, visitor: WorksheetCellVisitor, options?: {
+        readonly sparse?: boolean;
+    }): Promise<void>;
+    // Warning: (ae-forgotten-export) The symbol "WorksheetFormats" needs to be exported by the entry point index.d.ts
+    readonly formats: WorksheetFormats;
+    // Warning: (ae-forgotten-export) The symbol "FormatEntry" needs to be exported by the entry point index.d.ts
+    formatValues(entries: FormatEntry[]): Promise<string[]>;
+    // Warning: (ae-forgotten-export) The symbol "WorksheetFormControls" needs to be exported by the entry point index.d.ts
+    readonly formControls: WorksheetFormControls;
+    // Warning: (ae-forgotten-export) The symbol "ActiveCellEditSource" needs to be exported by the entry point index.d.ts
+    getActiveCellEditSource(row: number, col: number): ActiveCellEditSource | null;
+    // Warning: (ae-forgotten-export) The symbol "CellData" needs to be exported by the entry point index.d.ts
+    getCell(address: string): Promise<CellData>;
+    getCell(row: number, col: number): Promise<CellData>;
+    // Warning: (ae-forgotten-export) The symbol "WorksheetGetCellsFullOptions" needs to be exported by the entry point index.d.ts
+    // Warning: (ae-forgotten-export) The symbol "WorksheetRangeCell" needs to be exported by the entry point index.d.ts
+    getCells(range: string | CellRange, options?: WorksheetGetCellsFullOptions): Promise<WorksheetRangeCell[]>;
+    // Warning: (ae-forgotten-export) The symbol "WorksheetGetCellsValuesOnlyOptions" needs to be exported by the entry point index.d.ts
+    // Warning: (ae-forgotten-export) The symbol "WorksheetRangeValueCell" needs to be exported by the entry point index.d.ts
+    //
+    // (undocumented)
+    getCells(range: string | CellRange, options: WorksheetGetCellsValuesOnlyOptions): Promise<WorksheetRangeValueCell[]>;
+    // Warning: (ae-forgotten-export) The symbol "WorksheetGetCellsFormulasOnlyOptions" needs to be exported by the entry point index.d.ts
+    // Warning: (ae-forgotten-export) The symbol "WorksheetRangeFormulaCell" needs to be exported by the entry point index.d.ts
+    //
+    // (undocumented)
+    getCells(range: string | CellRange, options: WorksheetGetCellsFormulasOnlyOptions): Promise<WorksheetRangeFormulaCell[]>;
+    // Warning: (ae-forgotten-export) The symbol "WorksheetGetCellsOptions" needs to be exported by the entry point index.d.ts
+    //
+    // (undocumented)
+    getCells(startRow: number, startCol: number, endRow: number, endCol: number, options?: WorksheetGetCellsOptions): Promise<WorksheetRangeCell[]>;
+    // @deprecated (undocumented)
+    getChart(chartId: string): Promise<Chart | null>;
+    // Warning: (ae-forgotten-export) The symbol "ChartReadOptions" needs to be exported by the entry point index.d.ts
+    // Warning: (ae-forgotten-export) The symbol "Chart" needs to be exported by the entry point index.d.ts
+    getCharts(options?: ChartReadOptions): Promise<Chart[]>;
+    // Warning: (ae-forgotten-export) The symbol "CellControl" needs to be exported by the entry point index.d.ts
+    getControl(address: string): Promise<CellControl | undefined>;
+    getControl(row: number, col: number): Promise<CellControl | undefined>;
+    getCurrentRegion(row: number, col: number): Promise<CellRange>;
+    getData(): Promise<CellValue[][]>;
+    getDependents(address: string): Promise<string[]>;
+    getDependents(row: number, col: number): Promise<string[]>;
+    getDisplayValue(address: string): Promise<string>;
+    getDisplayValue(row: number, col: number): Promise<string>;
+    getDisplayValues(range: string): Promise<string[][]>;
+    getExtendedRange(range: string, direction: 'up' | 'down' | 'left' | 'right', activeCell?: {
+        row: number;
+        col: number;
+    }): Promise<CellRange>;
+    getFormula(address: string): Promise<string | null>;
+    getFormula(row: number, col: number): Promise<string | null>;
+    getFormulaArray(address: string): Promise<string | null>;
+    getFormulaArray(row: number, col: number): Promise<string | null>;
+    getFormulas(range: string): Promise<(string | null)[][]>;
+    getFormulasR1C1(range: string): Promise<(string | null)[][]>;
+    getIndex(): number;
+    getName(): Promise<string>;
+    getNext(visibleOnly?: boolean): Promise<Worksheet>;
+    getNextOrNull(visibleOnly?: boolean): Promise<Worksheet | null>;
+    // Warning: (ae-forgotten-export) The symbol "NumberFormatCategory" needs to be exported by the entry point index.d.ts
+    getNumberFormatCategories(range: string | CellRange): Promise<NumberFormatCategory[][]>;
+    // Warning: (ae-forgotten-export) The symbol "PivotTableHandle" needs to be exported by the entry point index.d.ts
+    //
+    // @deprecated (undocumented)
+    getPivotTable(name: string): Promise<PivotTableHandle | null>;
+    getPrecedents(address: string): Promise<string[]>;
+    getPrecedents(row: number, col: number): Promise<string[]>;
+    getPrevious(visibleOnly?: boolean): Promise<Worksheet>;
+    getPreviousOrNull(visibleOnly?: boolean): Promise<Worksheet | null>;
+    getRange(range: string): Promise<CellData[][]>;
+    getRange(range: CellRange): Promise<CellData[][]>;
+    getRange(startRow: number, startCol: number, endRow: number, endCol: number): Promise<CellData[][]>;
+    getRanges(addresses: string): Promise<CellData[][][]>;
+    // Warning: (ae-forgotten-export) The symbol "IdentifiedCellData" needs to be exported by the entry point index.d.ts
+    getRangeWithIdentity(range: string | CellRange): Promise<IdentifiedCellData[]>;
+    // (undocumented)
+    getRangeWithIdentity(startRow: number, startCol: number, endRow: number, endCol: number): Promise<IdentifiedCellData[]>;
+    // Warning: (ae-forgotten-export) The symbol "RawCellData" needs to be exported by the entry point index.d.ts
+    getRawCellData(address: string, includeFormula?: boolean): Promise<RawCellData>;
+    getRawCellData(row: number, col: number, includeFormula?: boolean): Promise<RawCellData>;
+    getRawRangeData(range: string | CellRange, options?: {
+        includeFormula?: boolean;
+    }): Promise<RawCellData[][]>;
+    getRawRangeData(startRow: number, startCol: number, endRow: number, endCol: number, includeFormula?: boolean): Promise<RawCellData[][]>;
+    // @deprecated (undocumented)
+    getRawRangeData(range: string, includeFormula?: boolean): Promise<RawCellData[][]>;
+    // Warning: (ae-forgotten-export) The symbol "AggregateResult" needs to be exported by the entry point index.d.ts
+    getSelectionAggregates(ranges: CellRange[]): Promise<AggregateResult>;
+    // @deprecated
+    getSheetId(): SheetId;
+    // Warning: (ae-forgotten-export) The symbol "CellType" needs to be exported by the entry point index.d.ts
+    // Warning: (ae-forgotten-export) The symbol "CellValueType" needs to be exported by the entry point index.d.ts
+    getSpecialCells(cellType: CellType, valueType?: CellValueType): Promise<string[]>;
+    getUsedRange(): Promise<CellRange | null>;
+    getValue(address: string): Promise<CellValuePrimitive>;
+    getValue(row: number, col: number): Promise<CellValuePrimitive>;
+    getValueForEditing(row: number, col: number, editText?: string): Promise<string>;
+    getValues(range: string): Promise<CellValue[][]>;
+    // Warning: (ae-forgotten-export) The symbol "RangeValueType" needs to be exported by the entry point index.d.ts
+    getValueTypes(range: string | CellRange): Promise<RangeValueType[][]>;
+    getVisibility(): Promise<'visible' | 'hidden' | 'veryHidden'>;
+    // Warning: (ae-forgotten-export) The symbol "VisibleRangeView" needs to be exported by the entry point index.d.ts
+    getVisibleView(range: string): Promise<VisibleRangeView>;
+    // Warning: (ae-forgotten-export) The symbol "WorksheetHyperlinks" needs to be exported by the entry point index.d.ts
+    readonly hyperlinks: WorksheetHyperlinks;
+    readonly index: number;
+    isEntireColumn(range: string | CellRange): boolean;
+    isEntireRow(range: string | CellRange): boolean;
+    // Warning: (ae-forgotten-export) The symbol "WorksheetLayout" needs to be exported by the entry point index.d.ts
+    readonly layout: WorksheetLayout;
+    // @deprecated (undocumented)
+    listCharts(options?: ChartReadOptions): Promise<Chart[]>;
+    // Warning: (ae-forgotten-export) The symbol "PivotTableInfo" needs to be exported by the entry point index.d.ts
+    //
+    // @deprecated (undocumented)
+    listPivotTables(): Promise<PivotTableInfo[]>;
+    moveTo(sourceRange: string, targetRow: number, targetCol: number): Promise<void>;
+    readonly name: string;
+    // Warning: (ae-forgotten-export) The symbol "WorksheetNames" needs to be exported by the entry point index.d.ts
+    readonly names: WorksheetNames;
+    // Warning: (ae-forgotten-export) The symbol "WorksheetObjectCollection" needs to be exported by the entry point index.d.ts
+    readonly objects: WorksheetObjectCollection;
+    // Warning: (ae-forgotten-export) The symbol "SheetEventMap" needs to be exported by the entry point index.d.ts
+    on<K extends keyof SheetEventMap>(event: K, handler: (event: SheetEventMap[K]) => void): CallableDisposable;
+    // (undocumented)
+    on<T extends SpreadsheetEventType>(event: T, handler: (event: EventByType<T>) => void): CallableDisposable;
+    // (undocumented)
+    on(event: string, handler: (event: unknown) => void): CallableDisposable;
+    // Warning: (ae-forgotten-export) The symbol "WorksheetOutline" needs to be exported by the entry point index.d.ts
+    readonly outline: WorksheetOutline;
+    // Warning: (ae-forgotten-export) The symbol "WorksheetPictureCollection" needs to be exported by the entry point index.d.ts
+    readonly pictures: WorksheetPictureCollection;
+    // Warning: (ae-forgotten-export) The symbol "WorksheetPivots" needs to be exported by the entry point index.d.ts
+    readonly pivots: WorksheetPivots;
+    // Warning: (ae-forgotten-export) The symbol "WorksheetPrint" needs to be exported by the entry point index.d.ts
+    readonly print: WorksheetPrint;
+    // Warning: (ae-forgotten-export) The symbol "WorksheetProtection" needs to be exported by the entry point index.d.ts
+    readonly protection: WorksheetProtection;
+    refreshActiveCellData(row: number, col: number): Promise<void>;
+    refreshActiveCellEditSource(row: number, col: number): Promise<void>;
+    regexSearch(patterns: string[], options?: SearchOptions): Promise<SearchResult[]>;
+    // Warning: (ae-forgotten-export) The symbol "ChartRemoveReceipt" needs to be exported by the entry point index.d.ts
+    //
+    // @deprecated (undocumented)
+    removeChart(chartId: string): Promise<ChartRemoveReceipt>;
+    // @deprecated (undocumented)
+    removePivotTable(name: string): Promise<void>;
+    replaceAll(range: string, text: string, replacement: string, options?: FindInRangeOptions): Promise<number>;
+    setArrayFormula(range: CellRange, formula: string): Promise<void>;
+    // Warning: (ae-forgotten-export) The symbol "IObjectBoundsReader" needs to be exported by the entry point index.d.ts
+    setBoundsReader(reader: IObjectBoundsReader): void;
+    // Warning: (ae-forgotten-export) The symbol "CellWriteOptions" needs to be exported by the entry point index.d.ts
+    setCell(address: string, value: CellValuePrimitive | Date, options?: CellWriteOptions): Promise<void>;
+    setCell(row: number, col: number, value: CellValuePrimitive | Date, options?: CellWriteOptions): Promise<void>;
+    // Warning: (ae-forgotten-export) The symbol "SetCellsResult" needs to be exported by the entry point index.d.ts
+    setCells(cells: Array<{
+        addr: string;
+        value: CellValuePrimitive | Date;
+    }>): Promise<SetCellsResult>;
+    // (undocumented)
+    setCells(cells: Array<{
+        address: string;
+        value: CellValuePrimitive | Date;
+    }>): Promise<SetCellsResult>;
+    // (undocumented)
+    setCells(cells: Array<{
+        row: number;
+        col: number;
+        value: CellValuePrimitive | Date;
+    }>): Promise<SetCellsResult>;
+    // (undocumented)
+    setCells(cells: Array<{
+        cell: string;
+        formula: string;
+    }>): Promise<SetCellsResult>;
+    // (undocumented)
+    setCells(cells: Array<{
+        addr: string;
+        formula: string;
+    }>): Promise<SetCellsResult>;
+    // (undocumented)
+    setCells(cells: Array<{
+        address: string;
+        formula: string;
+    }>): Promise<SetCellsResult>;
+    // (undocumented)
+    setCells(cells: Array<{
+        row: number;
+        col: number;
+        formula: string;
+    }>): Promise<SetCellsResult>;
+    setControl(address: string, control: CellControl | undefined): Promise<void>;
+    setControl(row: number, col: number, control: CellControl | undefined): Promise<void>;
+    setDateValue(row: number, col: number, year: number, month: number, day: number): Promise<void>;
+    // (undocumented)
+    setDateValue(address: string, year: number, month: number, day: number): Promise<void>;
+    // (undocumented)
+    setDateValue(row: number, col: number, isoDate: string): Promise<void>;
+    // (undocumented)
+    setDateValue(address: string, isoDate: string): Promise<void>;
+    // (undocumented)
+    setDateValue(row: number, col: number, date: Date, opts?: {
+        tz?: string;
+    }): Promise<void>;
+    // (undocumented)
+    setDateValue(address: string, date: Date, opts?: {
+        tz?: string;
+    }): Promise<void>;
+    setFormula(address: string, formula: string): Promise<void>;
+    setFormula(row: number, col: number, formula: string): Promise<void>;
+    // Warning: (ae-forgotten-export) The symbol "CFStyle" needs to be exported by the entry point index.d.ts
+    // Warning: (ae-forgotten-export) The symbol "ConditionalFormat" needs to be exported by the entry point index.d.ts
+    setFormulaConditionalFormat(range: string | CellRange | (string | CellRange)[], formula: string, style: CFStyle): Promise<ConditionalFormat>;
+    setFormulas(range: string, formulas: string[][]): Promise<void>;
+    // (undocumented)
+    setFormulas(range: CellRange, formulas: string[][]): Promise<void>;
+    // (undocumented)
+    setFormulas(startRow: number, startCol: number, formulas: string[][]): Promise<void>;
+    // Warning: (ae-forgotten-export) The symbol "ListValidationSource" needs to be exported by the entry point index.d.ts
+    // Warning: (ae-forgotten-export) The symbol "ListValidationOptions" needs to be exported by the entry point index.d.ts
+    // Warning: (ae-forgotten-export) The symbol "ValidationSetReceipt" needs to be exported by the entry point index.d.ts
+    setListValidation(range: string | CellRange, source: ListValidationSource, options?: ListValidationOptions): Promise<ValidationSetReceipt>;
+    setName(name: string): Promise<void>;
+    setRange(range: string, values: (CellValuePrimitive | Date)[][]): Promise<void>;
+    setRange(range: CellRange, values: (CellValuePrimitive | Date)[][]): Promise<void>;
+    setRange(startRow: number, startCol: number, values: (CellValuePrimitive | Date)[][]): Promise<void>;
+    setTimeValue(row: number, col: number, hours: number, minutes: number, seconds: number): Promise<void>;
+    // (undocumented)
+    setTimeValue(address: string, hours: number, minutes: number, seconds: number): Promise<void>;
+    // (undocumented)
+    setTimeValue(row: number, col: number, date: Date, opts?: {
+        tz?: string;
+    }): Promise<void>;
+    // (undocumented)
+    setTimeValue(address: string, date: Date, opts?: {
+        tz?: string;
+    }): Promise<void>;
+    // Warning: (ae-forgotten-export) The symbol "WorksheetSettings" needs to be exported by the entry point index.d.ts
+    readonly settings: WorksheetSettings;
+    setValue(address: string, value: CellValuePrimitive | Date, options?: Pick<CellWriteOptions, 'literal' | 'asText'>): Promise<void>;
+    setValue(row: number, col: number, value: CellValuePrimitive | Date, options?: Pick<CellWriteOptions, 'literal' | 'asText'>): Promise<void>;
+    setVisibility(state: 'visible' | 'hidden' | 'veryHidden'): Promise<void>;
+    // Warning: (ae-forgotten-export) The symbol "WorksheetShapeCollection" needs to be exported by the entry point index.d.ts
+    readonly shapes: WorksheetShapeCollection;
+    readonly sheetId: SheetId;
+    // Warning: (ae-forgotten-export) The symbol "SignCheckOptions" needs to be exported by the entry point index.d.ts
+    // Warning: (ae-forgotten-export) The symbol "SignCheckResult" needs to be exported by the entry point index.d.ts
+    signCheck(range?: string, options?: SignCheckOptions): Promise<SignCheckResult>;
+    // Warning: (ae-forgotten-export) The symbol "WorksheetSlicers" needs to be exported by the entry point index.d.ts
+    readonly slicers: WorksheetSlicers;
+    // Warning: (ae-forgotten-export) The symbol "SortByColorOptions" needs to be exported by the entry point index.d.ts
+    sortByColor(range: string | CellRange, opts: SortByColorOptions): Promise<void>;
+    // Warning: (ae-forgotten-export) The symbol "SortOptions" needs to be exported by the entry point index.d.ts
+    sortRange(range: string, options: SortOptions): Promise<void>;
+    sortRange(range: CellRange, options: SortOptions): Promise<void>;
+    // Warning: (ae-forgotten-export) The symbol "WorksheetSparklines" needs to be exported by the entry point index.d.ts
+    readonly sparklines: WorksheetSparklines;
+    // Warning: (ae-forgotten-export) The symbol "WorksheetStructure" needs to be exported by the entry point index.d.ts
+    readonly structure: WorksheetStructure;
+    // Warning: (ae-forgotten-export) The symbol "WorksheetStyles" needs to be exported by the entry point index.d.ts
+    readonly styles: WorksheetStyles;
+    // Warning: (ae-forgotten-export) The symbol "SummaryOptions" needs to be exported by the entry point index.d.ts
+    summarize(options?: SummaryOptions): Promise<string>;
+    // Warning: (ae-forgotten-export) The symbol "WorksheetTables" needs to be exported by the entry point index.d.ts
+    readonly tables: WorksheetTables;
+    // Warning: (ae-forgotten-export) The symbol "WorksheetTextBoxCollection" needs to be exported by the entry point index.d.ts
+    readonly textBoxes: WorksheetTextBoxCollection;
+    // Warning: (ae-forgotten-export) The symbol "WorksheetTextEffectCollection" needs to be exported by the entry point index.d.ts
+    readonly textEffects: WorksheetTextEffectCollection;
+    toCSV(options?: {
+        separator?: string;
+        range?: string;
+    }): Promise<string>;
+    toJSON(options?: {
+        headerRow?: number | 'none';
+        range?: string;
+    }): Promise<Record<string, CellValue>[]>;
+    // Warning: (ae-forgotten-export) The symbol "ChartConfig" needs to be exported by the entry point index.d.ts
+    // Warning: (ae-forgotten-export) The symbol "ChartUpdateReceipt" needs to be exported by the entry point index.d.ts
+    //
+    // @deprecated (undocumented)
+    updateChart(chartId: string, updates: Partial<ChartConfig>): Promise<ChartUpdateReceipt>;
+    // Warning: (ae-forgotten-export) The symbol "FormulaCircularReferenceValidation" needs to be exported by the entry point index.d.ts
+    validateFormulaCircularReference(formula: string, row: number, col: number): Promise<FormulaCircularReferenceValidation | null>;
+    // Warning: (ae-forgotten-export) The symbol "FormulaSyntaxValidationError" needs to be exported by the entry point index.d.ts
+    validateFormulaSyntax(formula: string): Promise<FormulaSyntaxValidationError | null>;
+    // Warning: (ae-forgotten-export) The symbol "WorksheetValidation" needs to be exported by the entry point index.d.ts
+    readonly validations: WorksheetValidation;
+    // Warning: (ae-forgotten-export) The symbol "WorksheetView" needs to be exported by the entry point index.d.ts
+    readonly view: WorksheetView;
+    // Warning: (ae-forgotten-export) The symbol "ViewportReader" needs to be exported by the entry point index.d.ts
+    readonly viewport: ViewportReader;
+    // Warning: (ae-forgotten-export) The symbol "WorksheetWhatIf" needs to be exported by the entry point index.d.ts
+    readonly whatIf: WorksheetWhatIf;
+}
 
 // Warnings were encountered during analysis:
 //
-// dist/index.d.ts:382:5 - (ae-forgotten-export) The symbol "CodeExecutionOptions" needs to be exported by the entry point index.d.ts
-// dist/index.d.ts:382:5 - (ae-forgotten-export) The symbol "CodeExecutionResult" needs to be exported by the entry point index.d.ts
-// dist/index.d.ts:685:9 - (ae-incompatible-release-tags) The symbol "computeAddon" is marked as @public, but its signature references "NapiAddonModule" which is marked as @internal
-// dist/index.d.ts:1179:5 - (ae-forgotten-export) The symbol "MogSnapshot" needs to be exported by the entry point index.d.ts
-// dist/index.d.ts:1182:5 - (ae-forgotten-export) The symbol "MogUpdateLog" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:159:5 - (ae-forgotten-export) The symbol "ColId" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:3683:9 - (ae-forgotten-export) The symbol "ChartImageFittingMode" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:4292:9 - (ae-incompatible-release-tags) The symbol "computeAddon" is marked as @public, but its signature references "NapiAddonModule" which is marked as @internal
+// dist/index.d.ts:8750:5 - (ae-forgotten-export) The symbol "CodeExecutionOptions" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:8750:5 - (ae-forgotten-export) The symbol "CodeExecutionResult" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:10501:5 - (ae-forgotten-export) The symbol "MogSnapshot" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:10504:5 - (ae-forgotten-export) The symbol "MogUpdateLog" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

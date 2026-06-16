@@ -4,10 +4,11 @@
     "composite": true,
     "declaration": true,
     "declarationMap": true,
+    "emitDeclarationOnly": true,
     "incremental": true,
     "noEmit": false,
     "rootDir": "./src",
-    "outDir": "./dist"
+    "outDir": "./node_modules/.cache/tsc"
   },
   "include": ["src/**/*"],
   "exclude": [

@@ -3,6 +3,8 @@
 
   "projectFolder": ".",
 
+  "newlineKind": "lf",
+
   "mainEntryPointFilePath": "<projectFolder>/dist/index.d.ts",
 
   "compiler": {
@@ -29,6 +31,7 @@
 
   "apiReport": {
     "enabled": true,
+    "reportFileName": "node.api.md",
     "reportFolder": "<projectFolder>/etc/"
   },
 
@@ -56,6 +59,12 @@
         "logLevel": "warning"
       },
       "ae-missing-release-tag": {
+        "logLevel": "none"
+      },
+      "ae-forgotten-export": {
+        "logLevel": "none"
+      },
+      "ae-incompatible-release-tags": {
         "logLevel": "none"
       },
       "ae-unresolved-link": {

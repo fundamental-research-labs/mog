@@ -12,9 +12,11 @@ export interface SpreadsheetFacadeMatrixEntry {
   readonly returns?: readonly string[];
 }
 
+export type WorkbookSubApiInterfaces = Record<string, Record<string, unknown>>;
+
 export const WORKBOOK_FACADE_GENERATED_FROM = 'runtime/sdk/src/generated/api-spec.json' as const;
 
-export const WORKBOOK_SUB_API_INTERFACES = {
+export const WORKBOOK_SUB_API_INTERFACES: WorkbookSubApiInterfaces = {
   workbook: {
     cellStyles: {
       signature: 'readonly cellStyles: WorkbookCellStyles;',
@@ -2604,7 +2606,7 @@ export const WORKBOOK_SUB_API_INTERFACES = {
       targetInterface: 'WorksheetWhatIf',
     },
   },
-} as const;
+};
 
 export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
   Workbook: {
@@ -3220,6 +3222,10 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
       capability: 'workbook:read',
     },
     remove: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    removeById: {
       decision: 'allow',
       capability: 'workbook:write',
     },
@@ -4348,6 +4354,10 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
       capability: 'workbook:write',
     },
     updateSeries: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    updateTrendline: {
       decision: 'allow',
       capability: 'workbook:write',
     },

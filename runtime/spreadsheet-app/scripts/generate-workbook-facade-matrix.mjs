@@ -173,9 +173,11 @@ export interface SpreadsheetFacadeMatrixEntry {
   readonly returns?: readonly string[];
 }
 
+export type WorkbookSubApiInterfaces = Record<string, Record<string, unknown>>;
+
 export const WORKBOOK_FACADE_GENERATED_FROM = 'runtime/sdk/src/generated/api-spec.json' as const;
 
-export const WORKBOOK_SUB_API_INTERFACES = ${formatValue(spec.subApis)} as const;
+export const WORKBOOK_SUB_API_INTERFACES: WorkbookSubApiInterfaces = ${formatValue(spec.subApis)};
 
 export const WORKBOOK_FACADE_CAPABILITY_MATRIX = ${formatValue(matrix)} as const satisfies Record<string, Record<string, SpreadsheetFacadeMatrixEntry>>;
 `;

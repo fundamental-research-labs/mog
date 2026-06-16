@@ -85,6 +85,10 @@ function parseDataTableRange(sheetId: SheetId, range: string): CellRange {
   return normalizeCellRange(sheetId, { sheetId, ...parsed });
 }
 
+function elapsedNow(ctx: DocumentContext): number {
+  return ctx.clock.performanceNow?.() ?? ctx.clock.now();
+}
+
 function rangeCellCount(range: CellRange): number {
   return (range.endRow - range.startRow + 1) * (range.endCol - range.startCol + 1);
 }
@@ -334,7 +338,7 @@ export async function writeDataTableValues(
   formulaCell: string,
   options: WriteDataTableValuesOptions,
 ): Promise<DataTableWriteStaticValuesReceipt> {
-  const started = performance.now();
+  const started = elapsedNow(ctx);
   const targetRange = parseDataTableRange(sheetId, options.targetRange);
   const targetRangeA1 = rangeToA1(targetRange);
   const computeReceipt = await dataTable(ctx, sheetId, formulaCell, {
@@ -362,7 +366,7 @@ export async function writeDataTableValues(
       results: computeReceipt.results,
       cellCount: computeReceipt.cellCount,
       cellsWritten: 0,
-      elapsedMs: performance.now() - started,
+      elapsedMs: elapsedNow(ctx) - started,
     };
   }
 
@@ -408,7 +412,7 @@ export async function writeDataTableValues(
       results: computeReceipt.results,
       cellCount: computeReceipt.cellCount,
       cellsWritten: 0,
-      elapsedMs: performance.now() - started,
+      elapsedMs: elapsedNow(ctx) - started,
     };
   }
 
@@ -454,7 +458,7 @@ export async function writeDataTableValues(
     results: computeReceipt.results,
     cellCount: computeReceipt.cellCount,
     cellsWritten,
-    elapsedMs: performance.now() - started,
+    elapsedMs: elapsedNow(ctx) - started,
   };
 }
 

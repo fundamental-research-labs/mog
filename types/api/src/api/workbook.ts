@@ -51,6 +51,7 @@ import type {
   LinkId,
   ActorId,
 } from './types';
+import type { LinkStatus, LinkStatusReason, LinkStatusView } from './receipt-payloads';
 import type { CultureInfo } from '@mog/types-culture/types';
 import type {
   WorkbookHistory,
@@ -84,6 +85,7 @@ import type {
 
 export type { CustomList } from '@mog/types-editor/fill/custom-lists';
 export type { WorkbookId, WorkbookSessionId, DocumentId, LinkId, ActorId } from './types';
+export type { LinkStatus, LinkStatusReason, LinkStatusView } from './receipt-payloads';
 
 /** Options for wb.calculate() — all optional, backward compatible. */
 export interface CalculateOptions {
@@ -160,33 +162,6 @@ export interface PersistedWorkbookLinkRecord {
   readonly sourceKind: WorkbookLinkSourceKind;
   readonly importedExcelIdentity?: ImportedExternalLinkIdentity;
   readonly materializedCacheMetadata?: AuthorizedMaterializedCacheMetadata;
-}
-
-export type LinkStatus =
-  | 'unresolved'
-  | 'loading'
-  | 'ready'
-  | 'stale'
-  | 'denied'
-  | 'broken'
-  | 'ambiguous';
-
-export type LinkStatusReason =
-  | 'wrongWorkbookId'
-  | 'missingTarget'
-  | 'unsupportedLinkKind'
-  | 'permissionDenied'
-  | 'sourceUnavailable';
-
-export interface LinkStatusView {
-  readonly linkId: LinkId;
-  readonly status: LinkStatus;
-  readonly statusReason?: LinkStatusReason;
-  readonly lastResolvedAt?: string;
-  readonly cachedValuesVersion?: string;
-  readonly canRefresh: boolean;
-  readonly retryable: boolean;
-  readonly displayMessage: string;
 }
 
 export type UsageKind =
@@ -566,7 +541,7 @@ export interface Workbook {
    *
    * `save()` returns the XLSX bytes without filesystem side effects.
    * `save(path)` writes to the platform file writer and still returns the same
-   * bytes. In the Node SDK, relative paths resolve from `process.cwd()` and
+   * bytes. In the Node SDK, relative paths resolve from the current working directory and
    * missing parent directories are created. Invalid paths and host write
    * failures reject with `MogSdkError` details containing `requestedPath`,
    * `cwd`, and, when available, `absolutePath` and `filesystemCode`.

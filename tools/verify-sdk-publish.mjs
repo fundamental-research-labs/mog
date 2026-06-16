@@ -800,6 +800,10 @@ const wb = await createWorkbook({
   userTimezone: 'UTC',
 });
 
+function chartIdFromAddReceipt(receipt) {
+  return receipt?.chart?.id ?? receipt?.id;
+}
+
 try {
   const ws = wb.activeSheet;
   await ws.setRange('A1:B3', [
@@ -813,7 +817,11 @@ try {
     anchorRow: 0,
     anchorCol: 3,
   });
-  const png = await ws.charts.exportImage(chart.id, {
+  const chartId = chartIdFromAddReceipt(chart);
+  if (!chartId) {
+    throw new Error('Chart add did not return a chart id');
+  }
+  const png = await ws.charts.exportImage(chartId, {
     format: 'png',
     width: 320,
     height: 180,
@@ -916,6 +924,10 @@ function serializeError(error) {
   };
 }
 
+function chartIdFromAddReceipt(receipt) {
+  return receipt?.chart?.id ?? receipt?.id;
+}
+
 export default {
   async fetch() {
     let wb;
@@ -949,23 +961,27 @@ export default {
         anchorCol: 3,
       });
       console.log('WORKER_STAGE:chartAdd:end');
+      const chartId = chartIdFromAddReceipt(chart);
+      if (!chartId) {
+        throw new Error('Chart add did not return a chart id');
+      }
 
       console.log('WORKER_STAGE:export:start');
       const [svg, png, jpeg] = await Promise.all([
-        ws.charts.exportImage(chart.id, {
+        ws.charts.exportImage(chartId, {
           format: 'svg',
           width: 320,
           height: 180,
           backgroundColor: '#ffffff',
         }),
-        ws.charts.exportImage(chart.id, {
+        ws.charts.exportImage(chartId, {
           format: 'png',
           width: 320,
           height: 180,
           pixelRatio: 2,
           backgroundColor: '#ffffff',
         }),
-        ws.charts.exportImage(chart.id, {
+        ws.charts.exportImage(chartId, {
           format: 'jpeg',
           width: 320,
           height: 180,

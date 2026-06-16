@@ -4,6 +4,11 @@ import * as DataTableOps from '../data-table-operations';
 
 function createMockCtx(overrides: Record<string, jest.Mock> = {}): any {
   return {
+    clock: {
+      now: jest.fn(() => 0),
+      dateNow: jest.fn(() => 0),
+      performanceNow: jest.fn(() => 0),
+    },
     computeBridge: {
       dataTable: jest.fn(),
       createDataTable: jest.fn(),

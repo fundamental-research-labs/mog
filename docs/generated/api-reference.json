@@ -320,7 +320,7 @@
         },
         "save": {
           "signature": "save(path: string): Promise<Uint8Array>",
-          "docstring": "Export the workbook as XLSX bytes and optionally write those bytes to a file.\n\n`save()` returns the XLSX bytes without filesystem side effects.\n`save(path)` writes to the platform file writer and still returns the same\nbytes. In the Node SDK, relative paths resolve from `process.cwd()` and\nmissing parent directories are created. Invalid paths and host write\nfailures reject with `MogSdkError` details containing `requestedPath`,\n`cwd`, and, when available, `absolutePath` and `filesystemCode`.\n\nMarks the workbook as clean after all configured save sinks succeed.",
+          "docstring": "Export the workbook as XLSX bytes and optionally write those bytes to a file.\n\n`save()` returns the XLSX bytes without filesystem side effects.\n`save(path)` writes to the platform file writer and still returns the same\nbytes. In the Node SDK, relative paths resolve from the current working directory and\nmissing parent directories are created. Invalid paths and host write\nfailures reject with `MogSdkError` details containing `requestedPath`,\n`cwd`, and, when available, `absolutePath` and `filesystemCode`.\n\nMarks the workbook as clean after all configured save sinks succeed.",
           "usedTypes": []
         },
         "captureScreenshot": {
@@ -630,13 +630,18 @@
           "docstring": "Remove a named range.\n@param - The name to remove.\n@param - Optional sheet name scope. Omit for workbook-scoped names.",
           "usedTypes": []
         },
+        "names.removeById": {
+          "signature": "names.removeById(id: string): Promise<NameRemoveReceipt>",
+          "docstring": "Remove a named range by its stable internal ID.\n@param - The named range ID to remove.",
+          "usedTypes": []
+        },
         "names.update": {
-          "signature": "names.update(name: string, updates: NamedRangeUpdateOptions, scope?: string | undefined): Promise<void>",
+          "signature": "names.update(name: string, updates: NamedRangeUpdateOptions, scope?: string | undefined): Promise<NameUpdateReceipt>",
           "docstring": "Update an existing named range.\n@param - The current name to update.\n@param - Fields to change (name, reference, comment).\n@param - Optional sheet name scope. Omit for workbook-scoped names.",
           "usedTypes": []
         },
         "names.clear": {
-          "signature": "names.clear(): Promise<void>",
+          "signature": "names.clear(): Promise<NameClearReceipt>",
           "docstring": "Remove all named ranges from the workbook.",
           "usedTypes": []
         },
@@ -768,7 +773,7 @@
           "usedTypes": []
         },
         "scenarios.apply": {
-          "signature": "scenarios.apply(id: string): Promise<ApplyScenarioResult>",
+          "signature": "scenarios.apply(id: string): Promise<WorkbookScenarioApplyReceipt>",
           "docstring": "Apply a scenario's values to the worksheet.\n@param - The scenario ID to apply.\n@returns Result including cells updated count and original values for restore.",
           "usedTypes": []
         },
@@ -878,7 +883,7 @@
           ]
         },
         "slicers.remove": {
-          "signature": "slicers.remove(slicerId: string): Promise<void>",
+          "signature": "slicers.remove(slicerId: string): Promise<SlicerRemoveReceipt>",
           "docstring": "Remove a slicer by ID from any sheet.\n@param - ID of the slicer to remove",
           "usedTypes": []
         },
@@ -1412,12 +1417,12 @@
           ]
         },
         "updateChart": {
-          "signature": "updateChart(chartId: string, updates: Partial<ChartConfig>): Promise<void>",
+          "signature": "updateChart(chartId: string, updates: Partial<ChartConfig>): Promise<ChartUpdateReceipt>",
           "docstring": "@deprecated Use `ws.charts.update(chartId, updates)` instead.",
           "usedTypes": []
         },
         "removeChart": {
-          "signature": "removeChart(chartId: string): Promise<void>",
+          "signature": "removeChart(chartId: string): Promise<ChartRemoveReceipt>",
           "docstring": "@deprecated Use `ws.charts.remove(chartId)` instead.",
           "usedTypes": []
         },
@@ -1570,16 +1575,6 @@
         "sortByColor": {
           "signature": "sortByColor(range: string | CellRange, opts: SortByColorOptions): Promise<void>",
           "docstring": "Sort a range by cell or font color, putting matched-color rows on top or bottom.\n\nConvenience wrapper over {@link sortRange} with a single color-keyed criterion.\nExcel/ECMA-376 vocabulary: `'fill'` is the cell background fill, `'font'` is\nthe cell font color. Compares the resolved per-cell effective format.\n@param - A1-style range string or CellRange object\n@param - Color sort options (column, color type, target color, top/bottom position)",
-          "usedTypes": []
-        },
-        "autoFill": {
-          "signature": "autoFill(sourceRange: string, targetRange: string, fillMode?: AutoFillMode | undefined): Promise<AutoFillResult>",
-          "docstring": "Autofill from source range into target range.\n@param - Source range in A1 notation (e.g., \"A1:A3\")\n@param - Target range to fill into (e.g., \"A4:A10\")\n@param - Fill behavior. Default: 'auto' (detect pattern).",
-          "usedTypes": []
-        },
-        "fillSeries": {
-          "signature": "fillSeries(range: string, options: FillSeriesOptions): Promise<void>",
-          "docstring": "Fill a range with a series (Edit > Fill > Series dialog equivalent).\nMore explicit than autoFill — caller specifies exact series parameters.\n\nThe range contains BOTH source cells (first row/col) and target cells (rest).\nThe kernel splits them based on direction.\n@param - Range in A1 notation containing source + target cells\n@param - Series parameters (type, step, stop, direction, etc.)",
           "usedTypes": []
         },
         "moveTo": {
@@ -1745,10 +1740,9 @@
           "usedTypes": []
         },
         "charts.add": {
-          "signature": "charts.add(config: ChartConfig): Promise<Chart>",
-          "docstring": "Add a chart to the sheet. Returns the created chart.",
+          "signature": "charts.add(config: ChartConfig): Promise<ChartAddReceipt>",
+          "docstring": "Add a chart to the sheet. Returns a receipt with the created chart.",
           "usedTypes": [
-            "Chart",
             "ChartConfig"
           ]
         },
@@ -1760,12 +1754,12 @@
           ]
         },
         "charts.update": {
-          "signature": "charts.update(chartId: string, updates: Partial<ChartConfig>): Promise<void>",
+          "signature": "charts.update(chartId: string, updates: Partial<ChartConfig>): Promise<ChartUpdateReceipt>",
           "docstring": "Update a chart's configuration.",
           "usedTypes": []
         },
         "charts.remove": {
-          "signature": "charts.remove(chartId: string): Promise<void>",
+          "signature": "charts.remove(chartId: string): Promise<ChartRemoveReceipt>",
           "docstring": "Remove a chart by ID.",
           "usedTypes": []
         },
@@ -1782,8 +1776,8 @@
           "usedTypes": []
         },
         "charts.duplicate": {
-          "signature": "charts.duplicate(chartId: string): Promise<string>",
-          "docstring": "Duplicate a chart, offsetting the copy by 2 rows. Returns the new chart ID.",
+          "signature": "charts.duplicate(chartId: string): Promise<ChartDuplicateReceipt>",
+          "docstring": "Duplicate a chart, offsetting the copy by 2 rows. Returns a receipt with the copy.",
           "usedTypes": []
         },
         "charts.exportImage": {
@@ -1881,12 +1875,12 @@
           "usedTypes": []
         },
         "charts.addSeries": {
-          "signature": "charts.addSeries(chartId: string, config: SeriesConfig): Promise<number>",
+          "signature": "charts.addSeries(chartId: string, config: SeriesConfig): Promise<ChartMutationReceipt>",
           "docstring": "Add a data series to a chart. Returns the new series index.",
           "usedTypes": []
         },
         "charts.removeSeries": {
-          "signature": "charts.removeSeries(chartId: string, index: number): Promise<void>",
+          "signature": "charts.removeSeries(chartId: string, index: number): Promise<ChartMutationReceipt>",
           "docstring": "Remove a data series by index.",
           "usedTypes": []
         },
@@ -1896,7 +1890,7 @@
           "usedTypes": []
         },
         "charts.updateSeries": {
-          "signature": "charts.updateSeries(chartId: string, index: number, updates: Partial<SeriesConfig>): Promise<void>",
+          "signature": "charts.updateSeries(chartId: string, index: number, updates: Partial<SeriesConfig>): Promise<ChartMutationReceipt>",
           "docstring": "Update a data series at the given index.",
           "usedTypes": []
         },
@@ -1906,17 +1900,17 @@
           "usedTypes": []
         },
         "charts.reorderSeries": {
-          "signature": "charts.reorderSeries(chartId: string, fromIndex: number, toIndex: number): Promise<void>",
+          "signature": "charts.reorderSeries(chartId: string, fromIndex: number, toIndex: number): Promise<ChartMutationReceipt>",
           "docstring": "Reorder a series from one index to another.",
           "usedTypes": []
         },
         "charts.setSeriesValues": {
-          "signature": "charts.setSeriesValues(chartId: string, index: number, range: string): Promise<void>",
+          "signature": "charts.setSeriesValues(chartId: string, index: number, range: string): Promise<ChartMutationReceipt>",
           "docstring": "Set the values range for a series (A1 notation).",
           "usedTypes": []
         },
         "charts.setSeriesCategories": {
-          "signature": "charts.setSeriesCategories(chartId: string, index: number, range: string): Promise<void>",
+          "signature": "charts.setSeriesCategories(chartId: string, index: number, range: string): Promise<ChartMutationReceipt>",
           "docstring": "Set the categories range for a series (A1 notation).",
           "usedTypes": []
         },
@@ -1926,7 +1920,7 @@
           "usedTypes": []
         },
         "charts.setSeriesBinOptions": {
-          "signature": "charts.setSeriesBinOptions(chartId: string, seriesIndex: number, options: HistogramConfig): Promise<void>",
+          "signature": "charts.setSeriesBinOptions(chartId: string, seriesIndex: number, options: HistogramConfig): Promise<ChartMutationReceipt>",
           "docstring": "Set per-series histogram bin options (overrides chart-level histogram config).",
           "usedTypes": []
         },
@@ -1936,27 +1930,32 @@
           "usedTypes": []
         },
         "charts.setSeriesBoxwhiskerOptions": {
-          "signature": "charts.setSeriesBoxwhiskerOptions(chartId: string, seriesIndex: number, options: BoxplotConfig): Promise<void>",
+          "signature": "charts.setSeriesBoxwhiskerOptions(chartId: string, seriesIndex: number, options: BoxplotConfig): Promise<ChartMutationReceipt>",
           "docstring": "Set per-series box/whisker options (overrides chart-level boxplot config).",
           "usedTypes": []
         },
         "charts.formatPoint": {
-          "signature": "charts.formatPoint(chartId: string, seriesIndex: number, pointIndex: number, format: { fill?: string | undefined; border?: ChartBorder | undefined; }): Promise<void>",
+          "signature": "charts.formatPoint(chartId: string, seriesIndex: number, pointIndex: number, format: { fill?: string | undefined; border?: ChartBorder | undefined; }): Promise<ChartMutationReceipt>",
           "docstring": "Format an individual data point within a series.",
           "usedTypes": []
         },
         "charts.setPointDataLabel": {
-          "signature": "charts.setPointDataLabel(chartId: string, seriesIndex: number, pointIndex: number, config: DataLabelConfig): Promise<void>",
+          "signature": "charts.setPointDataLabel(chartId: string, seriesIndex: number, pointIndex: number, config: DataLabelConfig): Promise<ChartMutationReceipt>",
           "docstring": "Set the data label configuration for an individual data point.",
           "usedTypes": []
         },
         "charts.addTrendline": {
-          "signature": "charts.addTrendline(chartId: string, seriesIndex: number, config: TrendlineConfig): Promise<number>",
+          "signature": "charts.addTrendline(chartId: string, seriesIndex: number, config: TrendlineConfig): Promise<ChartMutationReceipt>",
           "docstring": "Add a trendline to a series. Returns the new trendline index.",
           "usedTypes": []
         },
+        "charts.updateTrendline": {
+          "signature": "charts.updateTrendline(chartId: string, seriesIndex: number, trendlineIndex: number, updates: Partial<TrendlineConfig>): Promise<ChartMutationReceipt>",
+          "docstring": "Update a trendline on a series by index.",
+          "usedTypes": []
+        },
         "charts.removeTrendline": {
-          "signature": "charts.removeTrendline(chartId: string, seriesIndex: number, trendlineIndex: number): Promise<void>",
+          "signature": "charts.removeTrendline(chartId: string, seriesIndex: number, trendlineIndex: number): Promise<ChartMutationReceipt>",
           "docstring": "Remove a trendline from a series by index.",
           "usedTypes": []
         },
@@ -1983,7 +1982,7 @@
           ]
         },
         "charts.setBubbleSizes": {
-          "signature": "charts.setBubbleSizes(chartId: string, seriesIndex: number, range: string): Promise<void>",
+          "signature": "charts.setBubbleSizes(chartId: string, seriesIndex: number, range: string): Promise<ChartMutationReceipt>",
           "docstring": "Set the bubble sizes range for a series (A1 notation).",
           "usedTypes": []
         },
@@ -1998,17 +1997,17 @@
           "usedTypes": []
         },
         "charts.getAxisItem": {
-          "signature": "charts.getAxisItem(chartId: string, type: \"series\" | \"category\" | \"value\", group: \"primary\" | \"secondary\"): Promise<SingleAxisConfig | null>",
+          "signature": "charts.getAxisItem(chartId: string, type: \"category\" | \"value\" | \"series\", group: \"primary\" | \"secondary\"): Promise<SingleAxisConfig | null>",
           "docstring": "Get an axis by spreadsheet special-cell typetype/group identifiers.",
           "usedTypes": []
         },
         "charts.setAxisTitle": {
-          "signature": "charts.setAxisTitle(chartId: string, axisType: \"category\" | \"value\", formula: string): Promise<void>",
+          "signature": "charts.setAxisTitle(chartId: string, axisType: \"category\" | \"value\", formula: string): Promise<ChartMutationReceipt>",
           "docstring": "Set axis title from a formula string.",
           "usedTypes": []
         },
         "charts.setCategoryNames": {
-          "signature": "charts.setCategoryNames(chartId: string, range: string): Promise<void>",
+          "signature": "charts.setCategoryNames(chartId: string, range: string): Promise<ChartMutationReceipt>",
           "docstring": "Set category axis labels from a cell range (A1 notation).",
           "usedTypes": []
         },
@@ -2033,12 +2032,12 @@
           "usedTypes": []
         },
         "charts.setDataLabelHeight": {
-          "signature": "charts.setDataLabelHeight(chartId: string, seriesIndex: number, pointIndex: number, value: number): Promise<void>",
+          "signature": "charts.setDataLabelHeight(chartId: string, seriesIndex: number, pointIndex: number, value: number): Promise<ChartMutationReceipt>",
           "docstring": "Set the height of a data label.",
           "usedTypes": []
         },
         "charts.setDataLabelWidth": {
-          "signature": "charts.setDataLabelWidth(chartId: string, seriesIndex: number, pointIndex: number, value: number): Promise<void>",
+          "signature": "charts.setDataLabelWidth(chartId: string, seriesIndex: number, pointIndex: number, value: number): Promise<ChartMutationReceipt>",
           "docstring": "Set the width of a data label.",
           "usedTypes": []
         },
@@ -2058,17 +2057,17 @@
           "usedTypes": []
         },
         "charts.activate": {
-          "signature": "charts.activate(chartId: string): Promise<void>",
+          "signature": "charts.activate(chartId: string): Promise<ChartActivateReceipt>",
           "docstring": "Activate (select + focus) a chart. Emits 'chart:selected' event and scrolls chart into view.",
           "usedTypes": []
         },
         "comments.addNote": {
-          "signature": "comments.addNote(cell: string, options: { text: string; author?: string | undefined; }): Promise<void>",
+          "signature": "comments.addNote(cell: string, options: { text: string; author?: string | undefined; }): Promise<CommentAddReceipt>",
           "docstring": "Add a note to a cell (options object form).\n@param - A1-style cell address (e.g. \"A1\")\n@param - Note text and optional author",
           "usedTypes": []
         },
         "comments.setNote": {
-          "signature": "comments.setNote(address: string, text: string, author?: string | undefined): Promise<void>",
+          "signature": "comments.setNote(address: string, text: string, author?: string | undefined): Promise<CommentAddReceipt>",
           "docstring": "@deprecated Use the options-object overload instead.\nSet the note for a cell (overwrites any existing note).\n@param - A1-style cell address (e.g. \"A1\")\n@param - Note text\n@param - Optional author name (defaults to 'api')\n@deprecated Use the options-object overload instead.",
           "usedTypes": []
         },
@@ -2078,7 +2077,7 @@
           "usedTypes": []
         },
         "comments.removeNote": {
-          "signature": "comments.removeNote(address: string): Promise<void>",
+          "signature": "comments.removeNote(address: string): Promise<CommentRemoveReceipt>",
           "docstring": "Remove the note from a cell.\n@param - A1-style cell address",
           "usedTypes": []
         },
@@ -2103,37 +2102,37 @@
           "usedTypes": []
         },
         "comments.setNoteVisible": {
-          "signature": "comments.setNoteVisible(address: string, visible: boolean): Promise<void>",
+          "signature": "comments.setNoteVisible(address: string, visible: boolean): Promise<CommentUpdateReceipt>",
           "docstring": "Set the visibility of a note at the given cell address.\n@param - A1-style cell address\n@param - Whether the note should be visible",
           "usedTypes": []
         },
         "comments.setNoteHeight": {
-          "signature": "comments.setNoteHeight(address: string, height: number): Promise<void>",
+          "signature": "comments.setNoteHeight(address: string, height: number): Promise<CommentUpdateReceipt>",
           "docstring": "Set the height of a note callout box in points.\n@param - A1-style cell address\n@param - Height in points",
           "usedTypes": []
         },
         "comments.setNoteWidth": {
-          "signature": "comments.setNoteWidth(address: string, width: number): Promise<void>",
+          "signature": "comments.setNoteWidth(address: string, width: number): Promise<CommentUpdateReceipt>",
           "docstring": "Set the width of a note callout box in points.\n@param - A1-style cell address\n@param - Width in points",
           "usedTypes": []
         },
         "comments.add": {
-          "signature": "comments.add(cell: string, options: { text: string; author?: string | undefined; }): Promise<Comment>",
+          "signature": "comments.add(cell: string, options: { text: string; author?: string | undefined; }): Promise<CommentAddReceipt>",
           "docstring": "Add a threaded comment to a cell (options object form).\n@param - A1-style cell address\n@param - Comment text and optional author",
           "usedTypes": []
         },
         "comments.update": {
-          "signature": "comments.update(commentId: string, updates: CommentUpdate): Promise<void>",
+          "signature": "comments.update(commentId: string, updates: CommentUpdate): Promise<CommentUpdateReceipt>",
           "docstring": "Update an existing comment.\n@param - Comment identifier\n@param - Object with fields to update (text, mentions, or both)",
           "usedTypes": []
         },
         "comments.remove": {
-          "signature": "comments.remove(commentId: string): Promise<void>",
+          "signature": "comments.remove(commentId: string): Promise<CommentRemoveReceipt>",
           "docstring": "Remove a threaded comment by ID.\n@param - Comment identifier",
           "usedTypes": []
         },
         "comments.resolveThread": {
-          "signature": "comments.resolveThread(threadId: string, resolved: boolean): Promise<void>",
+          "signature": "comments.resolveThread(threadId: string, resolved: boolean): Promise<CommentUpdateReceipt>",
           "docstring": "Set the resolved state of a comment thread.\n@param - Thread identifier (cell ID)\n@param - Whether the thread should be marked as resolved",
           "usedTypes": []
         },
@@ -2148,13 +2147,13 @@
           "usedTypes": []
         },
         "comments.addReply": {
-          "signature": "comments.addReply(commentId: string, text: string, author: string): Promise<Comment>",
-          "docstring": "Add a reply to an existing comment.\n@param - ID of the comment to reply to\n@param - Reply text\n@param - Author name or identifier\n@returns The created reply comment",
+          "signature": "comments.addReply(commentId: string, text: string, author: string): Promise<CommentAddReceipt>",
+          "docstring": "Add a reply to an existing comment.\n@param - ID of the comment to reply to\n@param - Reply text\n@param - Author name or identifier\n@returns Receipt containing the created reply comment",
           "usedTypes": []
         },
         "comments.convertNoteToThread": {
-          "signature": "comments.convertNoteToThread(commentId: string): Promise<Comment>",
-          "docstring": "Convert a legacy note into a modern threaded comment.\n\nFlips `commentType` to `'threadedComment'`, clears note callout geometry\n(`noteHeight`/`noteWidth`/`visible`/`shapeId`), and assigns `threadId`.\nIdempotent on a comment that is already a threaded comment.\n@param - ID of the note to convert\n@returns The updated comment so the caller can re-render in thread mode",
+          "signature": "comments.convertNoteToThread(commentId: string): Promise<CommentUpdateReceipt>",
+          "docstring": "Convert a legacy note into a modern threaded comment.\n\nFlips `commentType` to `'threadedComment'`, clears note callout geometry\n(`noteHeight`/`noteWidth`/`visible`/`shapeId`), and assigns `threadId`.\nIdempotent on a comment that is already a threaded comment.\n@param - ID of the note to convert\n@returns Receipt containing the updated comment so the caller can re-render in thread mode",
           "usedTypes": []
         },
         "comments.getThread": {
@@ -2198,28 +2197,28 @@
           "usedTypes": []
         },
         "comments.removeForCell": {
-          "signature": "comments.removeForCell(address: string): Promise<number>",
-          "docstring": "Remove all comments on a cell.\n@param - A1-style cell address\n@returns The number of comments removed",
+          "signature": "comments.removeForCell(address: string): Promise<CommentRemoveReceipt>",
+          "docstring": "Remove all comments on a cell.\n@param - A1-style cell address\n@returns Receipt containing the number of comments removed",
           "usedTypes": []
         },
         "comments.clear": {
-          "signature": "comments.clear(): Promise<void>",
+          "signature": "comments.clear(): Promise<CommentRemoveReceipt>",
           "docstring": "Clear all comments on the worksheet.",
           "usedTypes": []
         },
         "comments.clean": {
-          "signature": "comments.clean(): Promise<number>",
-          "docstring": "Remove orphaned comments (comments referencing non-existent cells).\n@returns The number of orphaned comments removed",
+          "signature": "comments.clean(): Promise<CommentRemoveReceipt>",
+          "docstring": "Remove orphaned comments (comments referencing non-existent cells).\n@returns Receipt containing the number of orphaned comments removed",
           "usedTypes": []
         },
         "conditionalFormats.addFormula": {
-          "signature": "conditionalFormats.addFormula(range: string | CellRange | (string | CellRange)[], formula: string, style: CFStyle): Promise<ConditionalFormat>",
-          "docstring": "Add a formula-based conditional format for a range.\n\nThis is the intent-level wrapper for the common case. It creates a single\nformula rule and assigns IDs/priorities through the same path as {@link add}.\nFormula strings may include the leading `=` or omit it.\n@param - Cell range, or array of ranges, this format applies to\n@param - Conditional-format formula (e.g. \"=A1>100\")\n@param - Style applied when the formula is true\n@returns The created conditional format with assigned IDs and priorities",
+          "signature": "conditionalFormats.addFormula(range: string | CellRange | (string | CellRange)[], formula: string, style: CFStyle): Promise<ConditionalFormatMutationReceipt & ConditionalFormat>",
+          "docstring": "Add a formula-based conditional format for a range.\n\nThis is the intent-level wrapper for the common case. It creates a single\nformula rule and assigns IDs/priorities through the same path as {@link add}.\nFormula strings may include the leading `=` or omit it.\n@param - Cell range, or array of ranges, this format applies to\n@param - Conditional-format formula (e.g. \"=A1>100\")\n@param - Style applied when the formula is true\n@returns Receipt with the created conditional format, assigned IDs, and affected ranges",
           "usedTypes": []
         },
         "conditionalFormats.add": {
-          "signature": "conditionalFormats.add(ranges: (string | CellRange)[], rules: CFRuleInput[]): Promise<ConditionalFormat>",
-          "docstring": "Add a new conditional format with ranges and rules.\nThe API assigns IDs and priorities — callers provide rule configuration only.\n@param - Cell ranges this format applies to\n@param - Rule inputs (without id/priority)\n@returns The created conditional format with assigned IDs and priorities",
+          "signature": "conditionalFormats.add(ranges: (string | CellRange)[], rules: CFRuleInput[]): Promise<ConditionalFormatMutationReceipt & ConditionalFormat>",
+          "docstring": "Add a new conditional format with ranges and rules.\nThe API assigns IDs and priorities — callers provide rule configuration only.\n@param - Cell ranges this format applies to\n@param - Rule inputs (without id/priority)\n@returns Receipt with the created conditional format, assigned IDs, and affected ranges",
           "usedTypes": []
         },
         "conditionalFormats.get": {
@@ -2238,17 +2237,17 @@
           "usedTypes": []
         },
         "conditionalFormats.update": {
-          "signature": "conditionalFormats.update(formatId: string, updates: ConditionalFormatUpdate): Promise<void>",
+          "signature": "conditionalFormats.update(formatId: string, updates: ConditionalFormatUpdate): Promise<ConditionalFormatMutationReceipt>",
           "docstring": "Update an existing conditional format.\nSupports replacing rules, ranges, and setting stopIfTrue on all rules.\n@param - Format ID to update\n@param - Object with optional rules, ranges, and stopIfTrue",
           "usedTypes": []
         },
         "conditionalFormats.clearRuleStyle": {
-          "signature": "conditionalFormats.clearRuleStyle(formatId: string, ruleId: string): Promise<void>",
+          "signature": "conditionalFormats.clearRuleStyle(formatId: string, ruleId: string): Promise<ConditionalFormatMutationReceipt>",
           "docstring": "Clear the style of a specific rule within a conditional format, resetting\nall style properties (font, fill, border, number format) to unset.\n@param - Format ID containing the rule\n@param - Rule ID within the format to clear style for",
           "usedTypes": []
         },
         "conditionalFormats.changeRuleType": {
-          "signature": "conditionalFormats.changeRuleType(formatId: string, ruleId: string, newRule: CFRuleInput): Promise<void>",
+          "signature": "conditionalFormats.changeRuleType(formatId: string, ruleId: string, newRule: CFRuleInput): Promise<ConditionalFormatMutationReceipt>",
           "docstring": "Change the type and configuration of a specific rule within a conditional format,\npreserving its ID and priority. This is the equivalent of eight\nchangeRuleTo*() methods, unified into one type-safe call using CFRuleInput.\n@param - Format ID containing the rule\n@param - Rule ID to change\n@param - New rule configuration (type + type-specific fields)",
           "usedTypes": []
         },
@@ -2258,12 +2257,12 @@
           "usedTypes": []
         },
         "conditionalFormats.remove": {
-          "signature": "conditionalFormats.remove(formatId: string): Promise<void>",
+          "signature": "conditionalFormats.remove(formatId: string): Promise<ConditionalFormatMutationReceipt>",
           "docstring": "Remove a conditional format by ID.\n@param - Format ID to remove",
           "usedTypes": []
         },
         "conditionalFormats.removeRule": {
-          "signature": "conditionalFormats.removeRule(formatId: string, ruleId: string): Promise<void>",
+          "signature": "conditionalFormats.removeRule(formatId: string, ruleId: string): Promise<ConditionalFormatMutationReceipt>",
           "docstring": "Remove a single rule from a conditional format. If the removed rule was\nthe last rule in the format, the conditional format itself is removed.\n@param - Format ID containing the rule\n@param - Rule ID to remove",
           "usedTypes": []
         },
@@ -2273,22 +2272,22 @@
           "usedTypes": []
         },
         "conditionalFormats.clear": {
-          "signature": "conditionalFormats.clear(): Promise<void>",
+          "signature": "conditionalFormats.clear(): Promise<ConditionalFormatMutationReceipt>",
           "docstring": "Clear all conditional formats from the sheet.",
           "usedTypes": []
         },
         "conditionalFormats.clearInRanges": {
-          "signature": "conditionalFormats.clearInRanges(ranges: (string | CellRange)[]): Promise<void>",
+          "signature": "conditionalFormats.clearInRanges(ranges: (string | CellRange)[]): Promise<ConditionalFormatMutationReceipt>",
           "docstring": "Clear conditional formats that intersect with the given ranges.\n@param - Ranges to clear conditional formats from",
           "usedTypes": []
         },
         "conditionalFormats.reorder": {
-          "signature": "conditionalFormats.reorder(formatIds: string[]): Promise<void>",
+          "signature": "conditionalFormats.reorder(formatIds: string[]): Promise<ConditionalFormatMutationReceipt>",
           "docstring": "Reorder conditional formats by format ID array (first = highest priority).\n@param - Array of format IDs in the desired order",
           "usedTypes": []
         },
         "conditionalFormats.cloneForPaste": {
-          "signature": "conditionalFormats.cloneForPaste(sourceSheetId: string, relativeCFs: { rules: any[]; rangeOffsets: { startRowOffset: number; startColOffset: number; endRowOffset: number; endColOffset: number; }[]; }[], origin: { row: number; col: number; }, isCut: boolean): Promise<void>",
+          "signature": "conditionalFormats.cloneForPaste(sourceSheetId: string, relativeCFs: { rules: any[]; rangeOffsets: { startRowOffset: number; startColOffset: number; endRowOffset: number; endColOffset: number; }[]; }[], origin: { row: number; col: number; }, isCut: boolean): Promise<ConditionalFormatMutationReceipt>",
           "docstring": "Clone conditional formats from source to target with offset.\nUsed by format painter and paste operations.\n@param - Source sheet ID (for cut operation reference removal)\n@param - Relative CF formats with range offsets\n@param - Target paste origin (row, col)\n@param - Whether this is a cut operation",
           "usedTypes": []
         },
@@ -2400,7 +2399,7 @@
           "usedTypes": []
         },
         "filters.add": {
-          "signature": "filters.add(range: string | CellRange): Promise<void>",
+          "signature": "filters.add(range: string | CellRange): Promise<AutoFilterSetReceipt>",
           "docstring": "Add an auto-filter to the sheet.\n@param - A1-style range string (e.g. \"A1:D100\") or a CellRange object",
           "usedTypes": []
         },
@@ -2422,7 +2421,7 @@
           ]
         },
         "filters.clear": {
-          "signature": "filters.clear(): Promise<void>",
+          "signature": "filters.clear(): Promise<AutoFilterClearReceipt>",
           "docstring": "Clear the auto-filter from the sheet.\nRemoves all filters, not just criteria.",
           "usedTypes": []
         },
@@ -2454,17 +2453,17 @@
           "usedTypes": []
         },
         "filters.setColumnFilter": {
-          "signature": "filters.setColumnFilter(col: number, criteria: ColumnFilterCriteria, filterId?: string | undefined): Promise<void>",
+          "signature": "filters.setColumnFilter(col: number, criteria: ColumnFilterCriteria, filterId?: string | undefined): Promise<FilterMutationReceipt>",
           "docstring": "Set filter criteria for a column on an auto-filter.\n\nWhen `filterId` is omitted, targets the first auto-filter (convenience shorthand).\nWhen provided, targets the specified filter directly.\n@param - Column index (0-based)\n@param - Filter criteria to apply\n@param - Optional filter ID; defaults to first auto-filter",
           "usedTypes": []
         },
         "filters.applyDynamicFilter": {
-          "signature": "filters.applyDynamicFilter(col: number, rule: DynamicFilterRule, filterId?: string | undefined): Promise<void>",
+          "signature": "filters.applyDynamicFilter(col: number, rule: DynamicFilterRule, filterId?: string | undefined): Promise<FilterMutationReceipt>",
           "docstring": "Apply a dynamic filter rule to a column on an auto-filter.\n\nDynamic filters are pre-defined rules resolved against live data,\nsuch as \"above average\", \"below average\", or date-relative rules\nlike \"today\", \"this month\", etc.\n\nWhen `filterId` is omitted, targets the first auto-filter.\n@param - Column index (0-based)\n@param - Dynamic filter rule to apply\n@param - Optional filter ID; defaults to first auto-filter",
           "usedTypes": []
         },
         "filters.clearColumnFilter": {
-          "signature": "filters.clearColumnFilter(col: number, filterId?: string | undefined): Promise<void>",
+          "signature": "filters.clearColumnFilter(col: number, filterId?: string | undefined): Promise<FilterMutationReceipt>",
           "docstring": "Clear filter criteria for a column on an auto-filter.\n\nWhen `filterId` is omitted, targets the first auto-filter.\nWhen provided, targets the specified filter directly.\n@param - Column index (0-based)\n@param - Optional filter ID; defaults to first auto-filter",
           "usedTypes": []
         },
@@ -2489,17 +2488,17 @@
           "usedTypes": []
         },
         "filters.clearAllCriteria": {
-          "signature": "filters.clearAllCriteria(filterId: string): Promise<void>",
+          "signature": "filters.clearAllCriteria(filterId: string): Promise<FilterMutationReceipt>",
           "docstring": "Clear all filter criteria for a filter.\nRemoves filters from all columns but keeps the filter structure intact.\n@param - Filter ID",
           "usedTypes": []
         },
         "filters.apply": {
-          "signature": "filters.apply(filterId: string): Promise<void>",
+          "signature": "filters.apply(filterId: string): Promise<FilterMutationReceipt>",
           "docstring": "Apply a filter (Rust evaluates criteria and updates row visibility).\n@param - Filter ID to apply",
           "usedTypes": []
         },
         "filters.reapply": {
-          "signature": "filters.reapply(filterId: string): Promise<void>",
+          "signature": "filters.reapply(filterId: string): Promise<FilterMutationReceipt>",
           "docstring": "Reapply a filter after data changes.\n@param - Filter ID to reapply",
           "usedTypes": []
         },
@@ -3045,15 +3044,15 @@
           "usedTypes": []
         },
         "pivots.add": {
-          "signature": "pivots.add(config: PivotCreateConfig): Promise<PivotTableConfig>",
-          "docstring": "Create a new pivot table on this worksheet.\n\nAccepts either:\n- **Simple config**: `{ name, dataSource: \"Sheet1!A1:D100\", rowFields: [\"Region\"], ... }`\n  Fields are auto-detected from source headers, placements are generated from field arrays.\n- **Full config**: `{ name, sourceSheetName, sourceRange, fields, placements, filters, ... }`\n  Direct wire format — no conversion needed.\n@param - Pivot table configuration\n@returns The created pivot table configuration (with generated id, timestamps)",
+          "signature": "pivots.add(config: PivotCreateConfig, options?: PivotCreateOptions | undefined): Promise<PivotAddReceipt>",
+          "docstring": "Create a new pivot table on this worksheet.\n\nAccepts either:\n- **Simple config**: `{ name, dataSource: \"Sheet1!A1:D100\", rowFields: [\"Region\"], ... }`\n  Fields are auto-detected from source headers, placements are generated from field arrays.\n- **Full config**: `{ name, sourceSheetName, sourceRange, fields, placements, filters, ... }`\n  Direct wire format — no conversion needed.\n@param - Pivot table configuration\n@param - Creation lifecycle; defaults to defineOnly.\n@returns A receipt containing the created pivot table configuration.",
           "usedTypes": [
             "PivotTableConfig"
           ]
         },
         "pivots.addWithSheet": {
-          "signature": "pivots.addWithSheet(sheetName: string, config: PivotCreateConfig): Promise<{ sheetId: string; config: PivotTableConfig; }>",
-          "docstring": "Atomically create a new sheet AND a pivot table on it.\nBoth operations happen in a single transaction for undo atomicity.\n\nAccepts the same simple or full config formats as `add()`.\n@param - Name for the new sheet\n@param - Pivot table configuration\n@returns The new sheet ID and the created pivot config",
+          "signature": "pivots.addWithSheet(sheetName: string, config: PivotCreateConfig, options?: PivotCreateOptions | undefined): Promise<PivotAddWithSheetReceipt>",
+          "docstring": "Atomically create a new sheet AND a pivot table on it.\nBoth operations happen in a single transaction for undo atomicity.\n\nAccepts the same simple or full config formats as `add()`.\n@param - Name for the new sheet\n@param - Pivot table configuration\n@param - Creation lifecycle; defaults to defineOnly.\n@returns A receipt containing the new sheet ID and created pivot config.",
           "usedTypes": [
             "PivotTableConfig"
           ]
@@ -3071,17 +3070,17 @@
           "usedTypes": []
         },
         "pivots.remove": {
-          "signature": "pivots.remove(name: string): Promise<void>",
+          "signature": "pivots.remove(name: string): Promise<PivotRemoveReceipt>",
           "docstring": "Remove a pivot table by name.\n@param - Pivot table name",
           "usedTypes": []
         },
         "pivots.clear": {
-          "signature": "pivots.clear(): Promise<void>",
+          "signature": "pivots.clear(): Promise<PivotClearReceipt>",
           "docstring": "Remove all pivot tables from this worksheet.",
           "usedTypes": []
         },
         "pivots.rename": {
-          "signature": "pivots.rename(name: string, newName: string): Promise<void>",
+          "signature": "pivots.rename(name: string, newName: string): Promise<PivotRenameReceipt>",
           "docstring": "Rename a pivot table by name.\n@param - Pivot table name\n@param - New name for the pivot table",
           "usedTypes": []
         },
@@ -3113,17 +3112,17 @@
           "usedTypes": []
         },
         "pivots.addField": {
-          "signature": "pivots.addField(name: string, fieldId: string, area: PivotFieldArea, options?: { position?: number | undefined; aggregateFunction?: AggregateFunction | undefined; sortOrder?: SortOrder | undefined; displayName?: string | undefined; showValuesAs?: ShowValuesAsConfig | undefined; } | undefined): Promise<void>",
+          "signature": "pivots.addField(name: string, fieldId: string, area: PivotFieldArea, options?: { position?: number | undefined; aggregateFunction?: AggregateFunction | undefined; sortOrder?: SortOrder | undefined; displayName?: string | undefined; showValuesAs?: ShowValuesAsConfig | undefined; } | undefined): Promise<PivotAddFieldReceipt>",
           "docstring": "Add a field to a pivot table area, resolved by pivot name.\n@param - Pivot table name\n@param - Field ID to add\n@param - Target area (row, column, value, or filter)\n@param - Optional configuration (position, aggregateFunction, sortOrder, displayName)",
           "usedTypes": []
         },
         "pivots.removeField": {
-          "signature": "pivots.removeField(name: string, fieldId: string, area: PivotFieldArea): Promise<void>",
+          "signature": "pivots.removeField(name: string, fieldId: string, area: PivotFieldArea): Promise<PivotRemoveFieldReceipt>",
           "docstring": "Remove a field from a pivot table area, resolved by pivot name.\n@param - Pivot table name\n@param - Field ID to remove\n@param - Area to remove the field from",
           "usedTypes": []
         },
         "pivots.moveField": {
-          "signature": "pivots.moveField(name: string, fieldId: string, fromArea: PivotFieldArea, toArea: PivotFieldArea, toPosition: number): Promise<void>",
+          "signature": "pivots.moveField(name: string, fieldId: string, fromArea: PivotFieldArea, toArea: PivotFieldArea, toPosition: number): Promise<PivotMoveFieldReceipt>",
           "docstring": "Move a field to a different area or position, resolved by pivot name.\n@param - Pivot table name\n@param - Field ID to move\n@param - Source area\n@param - Target area\n@param - Target position within the area",
           "usedTypes": []
         },
@@ -3143,17 +3142,17 @@
           "usedTypes": []
         },
         "pivots.setFilter": {
-          "signature": "pivots.setFilter(name: string, fieldId: string, filter: Omit<PivotFilter, \"fieldId\">): Promise<void>",
+          "signature": "pivots.setFilter(name: string, fieldId: string, filter: Omit<PivotFilter, \"fieldId\">): Promise<PivotSetFilterReceipt>",
           "docstring": "Set (add or update) a filter on a field, resolved by pivot name.\n@param - Pivot table name\n@param - Field ID to filter\n@param - Filter configuration (without fieldId)",
           "usedTypes": []
         },
         "pivots.removeFilter": {
-          "signature": "pivots.removeFilter(name: string, fieldId: string): Promise<void>",
+          "signature": "pivots.removeFilter(name: string, fieldId: string): Promise<PivotRemoveFilterReceipt>",
           "docstring": "Remove a filter from a field, resolved by pivot name.\n@param - Pivot table name\n@param - Field ID whose filter should be removed",
           "usedTypes": []
         },
         "pivots.resetField": {
-          "signature": "pivots.resetField(name: string, fieldId: string): Promise<void>",
+          "signature": "pivots.resetField(name: string, fieldId: string): Promise<PivotResetFieldReceipt>",
           "docstring": "Reset a field placement to defaults, resolved by pivot name.\n@param - Pivot table name\n@param - Field ID to reset",
           "usedTypes": []
         },
@@ -3173,22 +3172,22 @@
           "usedTypes": []
         },
         "pivots.compute": {
-          "signature": "pivots.compute(name: string, forceRefresh?: boolean | undefined): Promise<PivotTableResult | null>",
-          "docstring": "Compute a pivot table result by name (uses cache if available).\n@param - Pivot table name\n@param - Force recomputation ignoring cache\n@returns Computed pivot table result",
+          "signature": "pivots.compute(name: string, forceRefresh?: boolean | undefined): Promise<PivotComputeReceipt>",
+          "docstring": "Compute a pivot table result by name (uses cache if available).\n@param - Pivot table name\n@param - Force recomputation ignoring cache\n@returns A read-only receipt preserving the computed result when available",
           "usedTypes": []
         },
         "pivots.queryPivot": {
-          "signature": "pivots.queryPivot(pivotName: string, filters?: Record<string, CellValue | CellValue[]> | undefined): Promise<PivotQueryResult | null>",
-          "docstring": "Query a pivot table by name, returning flat records optionally filtered by dimension values.\nEliminates the need to manually traverse hierarchical PivotTableResult trees.\n@param - Pivot table name\n@param - Optional dimension filters: field name → value or array of values to include\n@returns Flat query result, or null if pivot not found or not computable",
+          "signature": "pivots.queryPivot(pivotName: string, filters?: Record<string, CellValue | CellValue[]> | undefined): Promise<PivotQueryReceipt>",
+          "docstring": "Query a pivot table by name, returning flat records optionally filtered by dimension values.\nEliminates the need to manually traverse hierarchical PivotTableResult trees.\n@param - Pivot table name\n@param - Optional dimension filters: field name → value or array of values to include\n@returns A read-only receipt preserving the flat query result when available",
           "usedTypes": []
         },
         "pivots.refresh": {
-          "signature": "pivots.refresh(name: string): Promise<PivotRefreshReceipt | PivotCommandReceipt>",
+          "signature": "pivots.refresh(name: string): Promise<PivotRefreshReceipt>",
           "docstring": "Refresh a pivot table by name (recompute without cache).\n@param - Pivot table name",
           "usedTypes": []
         },
         "pivots.refreshAll": {
-          "signature": "pivots.refreshAll(): Promise<void>",
+          "signature": "pivots.refreshAll(): Promise<PivotRefreshAllReceipt>",
           "docstring": "Refresh all pivot tables on this worksheet.",
           "usedTypes": []
         },
@@ -3198,7 +3197,7 @@
           "usedTypes": []
         },
         "pivots.addCalculatedField": {
-          "signature": "pivots.addCalculatedField(name: string, field: CalculatedField): Promise<void>",
+          "signature": "pivots.addCalculatedField(name: string, field: CalculatedField): Promise<PivotAddCalculatedFieldReceipt>",
           "docstring": null,
           "usedTypes": []
         },
@@ -3208,7 +3207,7 @@
           "usedTypes": []
         },
         "pivots.removeCalculatedField": {
-          "signature": "pivots.removeCalculatedField(name: string, fieldId: string): Promise<void>",
+          "signature": "pivots.removeCalculatedField(name: string, fieldId: string): Promise<PivotRemoveCalculatedFieldReceipt>",
           "docstring": null,
           "usedTypes": []
         },
@@ -3243,12 +3242,12 @@
           "usedTypes": []
         },
         "pivots.setPivotItemVisibility": {
-          "signature": "pivots.setPivotItemVisibility(name: string, fieldId: string, visibleItems: Record<string, boolean>): Promise<void>",
+          "signature": "pivots.setPivotItemVisibility(name: string, fieldId: string, visibleItems: Record<string, boolean>): Promise<PivotSetPivotItemVisibilityReceipt>",
           "docstring": "Set visibility of specific items in a field, resolved by pivot name.\n@param - Pivot table name\n@param - Field ID\n@param - Map of item value (as string) to visibility boolean",
           "usedTypes": []
         },
         "pivots.setItemVisibility": {
-          "signature": "pivots.setItemVisibility(name: string, fieldId: string, visibleItems: Record<string, boolean>): Promise<void>",
+          "signature": "pivots.setItemVisibility(name: string, fieldId: string, visibleItems: Record<string, boolean>): Promise<PivotSetItemVisibilityReceipt>",
           "docstring": "Supported compatibility alias for {@link setPivotItemVisibility}.\n\nPrefer `setPivotItemVisibility(name, fieldId, visibleItems)` in new code.",
           "usedTypes": []
         },
@@ -3258,7 +3257,7 @@
           "usedTypes": []
         },
         "pivots.setAllExpanded": {
-          "signature": "pivots.setAllExpanded(name: string, expanded: boolean): Promise<void>",
+          "signature": "pivots.setAllExpanded(name: string, expanded: boolean): Promise<PivotSetAllExpandedReceipt>",
           "docstring": "Set expansion state for all headers, resolved by pivot name.\n@param - Pivot table name\n@param - Whether all headers should be expanded (true) or collapsed (false)",
           "usedTypes": []
         },
@@ -3273,7 +3272,7 @@
           "usedTypes": []
         },
         "pivots.setDataSource": {
-          "signature": "pivots.setDataSource(name: string, dataSource: string): Promise<void>",
+          "signature": "pivots.setDataSource(name: string, dataSource: string): Promise<PivotSetDataSourceReceipt>",
           "docstring": "Change the source data range for a pivot table without refreshing it.\n\n`dataSource` must be a qualified A1 range such as `Sheet1!A1:D100` or\n`'Bob''s Data'!A1:D100`.",
           "usedTypes": []
         },
@@ -3283,7 +3282,7 @@
           "usedTypes": []
         },
         "pivots.setAllowMultipleFiltersPerField": {
-          "signature": "pivots.setAllowMultipleFiltersPerField(name: string, allow: boolean): Promise<void>",
+          "signature": "pivots.setAllowMultipleFiltersPerField(name: string, allow: boolean): Promise<PivotSetAllowMultipleFiltersPerFieldReceipt>",
           "docstring": "Set whether multiple filters per field are allowed on a pivot table.\n@param - Pivot table name\n@param - True to allow multiple filters per field",
           "usedTypes": []
         },
@@ -3293,7 +3292,7 @@
           "usedTypes": []
         },
         "pivots.setAutoFormat": {
-          "signature": "pivots.setAutoFormat(name: string, autoFormat: boolean): Promise<void>",
+          "signature": "pivots.setAutoFormat(name: string, autoFormat: boolean): Promise<PivotSetAutoFormatReceipt>",
           "docstring": "Set whether the pivot table auto-formats when refreshed.\n@param - Pivot table name\n@param - True to enable auto-formatting",
           "usedTypes": []
         },
@@ -3303,7 +3302,7 @@
           "usedTypes": []
         },
         "pivots.setPreserveFormatting": {
-          "signature": "pivots.setPreserveFormatting(name: string, preserve: boolean): Promise<void>",
+          "signature": "pivots.setPreserveFormatting(name: string, preserve: boolean): Promise<PivotSetPreserveFormattingReceipt>",
           "docstring": "Set whether custom formatting is preserved on refresh.\n@param - Pivot table name\n@param - True to preserve custom formatting",
           "usedTypes": []
         },
@@ -3323,7 +3322,7 @@
           "usedTypes": []
         },
         "pivots.setEnableMultipleFilterItems": {
-          "signature": "pivots.setEnableMultipleFilterItems(name: string, fieldId: string, enabled: boolean): Promise<void>",
+          "signature": "pivots.setEnableMultipleFilterItems(name: string, fieldId: string, enabled: boolean): Promise<PivotSetEnableMultipleFilterItemsReceipt>",
           "docstring": "Set whether multiple filter items per field are enabled for a specific field.\n\nWhen enabled, multiple `PivotFilter` entries can exist for the same field,\ncombined with AND logic during evaluation.\n@param - Pivot table name\n@param - Field ID to configure\n@param - True to enable multiple filter items",
           "usedTypes": []
         },
@@ -3532,19 +3531,19 @@
           "usedTypes": []
         },
         "slicers.add": {
-          "signature": "slicers.add(config: SlicerConfig): Promise<Slicer>",
-          "docstring": "Create a new slicer on this worksheet.\n@param - Slicer configuration (table, column, position)\n@returns The created slicer with full state",
+          "signature": "slicers.add(config: SlicerConfig): Promise<SlicerAddReceipt>",
+          "docstring": "Create a new slicer on this worksheet.\n@param - Slicer configuration (table, column, position)\n@returns Operation receipt containing the created slicer with full state",
           "usedTypes": [
             "SlicerConfig"
           ]
         },
         "slicers.remove": {
-          "signature": "slicers.remove(slicerId: string): Promise<void>",
+          "signature": "slicers.remove(slicerId: string): Promise<SlicerRemoveReceipt>",
           "docstring": "Remove a slicer from this worksheet.\n@param - ID of the slicer to remove",
           "usedTypes": []
         },
         "slicers.clear": {
-          "signature": "slicers.clear(): Promise<void>",
+          "signature": "slicers.clear(): Promise<SlicerClearReceipt>",
           "docstring": "Remove all slicers from this worksheet.",
           "usedTypes": []
         },
@@ -3604,22 +3603,22 @@
           ]
         },
         "slicers.setSelection": {
-          "signature": "slicers.setSelection(slicerId: string, selectedItems: CellValue[]): Promise<void>",
+          "signature": "slicers.setSelection(slicerId: string, selectedItems: CellValue[]): Promise<SlicerSelectionSetReceipt>",
           "docstring": "Set the selected items in a slicer, replacing any existing selection.\n@param - ID of the slicer\n@param - Array of values to select",
           "usedTypes": []
         },
         "slicers.clearSelection": {
-          "signature": "slicers.clearSelection(slicerId: string): Promise<void>",
+          "signature": "slicers.clearSelection(slicerId: string): Promise<SlicerSelectionClearReceipt>",
           "docstring": "Clear all selections in a slicer (show all items).\n@param - ID of the slicer",
           "usedTypes": []
         },
         "slicers.duplicate": {
-          "signature": "slicers.duplicate(slicerId: string, offset?: { x?: number | undefined; y?: number | undefined; } | undefined): Promise<string>",
-          "docstring": "Duplicate a slicer with an optional position offset.\n@param - ID of the slicer to duplicate\n@param - Position offset in pixels (defaults to { x: 20, y: 20 })\n@returns The ID of the newly created slicer",
+          "signature": "slicers.duplicate(slicerId: string, offset?: { x?: number | undefined; y?: number | undefined; } | undefined): Promise<SlicerDuplicateReceipt>",
+          "docstring": "Duplicate a slicer with an optional position offset.\n@param - ID of the slicer to duplicate\n@param - Position offset in pixels (defaults to { x: 20, y: 20 })\n@returns Operation receipt containing the ID of the newly created slicer",
           "usedTypes": []
         },
         "slicers.update": {
-          "signature": "slicers.update(slicerId: string, updates: Partial<SlicerConfig>): Promise<void>",
+          "signature": "slicers.update(slicerId: string, updates: Partial<SlicerConfig>): Promise<SlicerUpdateReceipt>",
           "docstring": "Update a slicer's configuration.\n@param - ID of the slicer\n@param - Partial configuration updates",
           "usedTypes": []
         },
@@ -3807,10 +3806,9 @@
           "usedTypes": []
         },
         "tables.add": {
-          "signature": "tables.add(range: string | CellRange, options?: TableOptions | undefined): Promise<TableInfo>",
-          "docstring": "Create a new table from a cell range.\n@param - A1-style range string (e.g. \"A1:D10\") or CellRange object\n@param - Optional table creation settings (name, headers, style)\n@returns The created table information",
+          "signature": "tables.add(range: string | CellRange, options?: TableOptions | undefined): Promise<TableAddReceipt>",
+          "docstring": "Create a new table from a cell range.\n@param - A1-style range string (e.g. \"A1:D10\") or CellRange object\n@param - Optional table creation settings (name, headers, style)\n@returns A receipt containing the created table information.",
           "usedTypes": [
-            "TableInfo",
             "TableOptions"
           ]
         },
@@ -3858,27 +3856,27 @@
           "usedTypes": []
         },
         "tables.remove": {
-          "signature": "tables.remove(name: string): Promise<void>",
+          "signature": "tables.remove(name: string): Promise<TableRemoveReceipt>",
           "docstring": "Remove a table definition, converting it back to a plain range.\n\nCell data is preserved; only the table metadata is removed.\n@param - Table name",
           "usedTypes": []
         },
         "tables.convertToRange": {
-          "signature": "tables.convertToRange(name: string): Promise<number>",
-          "docstring": "Convert a table to a plain range using the table conversion path.\n\nCell data and formatting are preserved, and structured references that\npoint at the converted table are rewritten to A1 references where the\ncompute engine can resolve them.\n@param - Table name\n@returns Number of structured references converted",
+          "signature": "tables.convertToRange(name: string): Promise<TableConvertToRangeReceipt>",
+          "docstring": "Convert a table to a plain range using the table conversion path.\n\nCell data and formatting are preserved, and structured references that\npoint at the converted table are rewritten to A1 references where the\ncompute engine can resolve them.\n@param - Table name\n@returns A receipt containing the number of structured references converted.",
           "usedTypes": []
         },
         "tables.clear": {
-          "signature": "tables.clear(): Promise<void>",
+          "signature": "tables.clear(): Promise<TableClearReceipt>",
           "docstring": "Remove all tables from this worksheet.",
           "usedTypes": []
         },
         "tables.rename": {
-          "signature": "tables.rename(oldName: string, newName: string): Promise<void>",
+          "signature": "tables.rename(oldName: string, newName: string): Promise<TableRenameReceipt>",
           "docstring": "Rename a table.\n@param - Current table name\n@param - New table name",
           "usedTypes": []
         },
         "tables.update": {
-          "signature": "tables.update(tableName: string, updates: TableUpdateOptions): Promise<void>",
+          "signature": "tables.update(tableName: string, updates: TableUpdateOptions): Promise<TableUpdateReceipt>",
           "docstring": "Update a table's properties.\n@param - Table name\n@param - Key-value pairs of properties to update",
           "usedTypes": []
         },
@@ -3895,7 +3893,7 @@
           "usedTypes": []
         },
         "tables.setStylePreset": {
-          "signature": "tables.setStylePreset(tableName: string, preset: string): Promise<void>",
+          "signature": "tables.setStylePreset(tableName: string, preset: string): Promise<TableUpdateReceipt>",
           "docstring": "Set the visual style preset for a table.\n@param - Table name\n@param - Style preset name (e.g. \"TableStyleLight1\")",
           "usedTypes": []
         },
@@ -3910,7 +3908,7 @@
           "usedTypes": []
         },
         "tables.renameColumn": {
-          "signature": "tables.renameColumn(name: string, columnIndex: number, newColumnName: string): Promise<void>",
+          "signature": "tables.renameColumn(name: string, columnIndex: number, newColumnName: string): Promise<TableRenameColumnReceipt>",
           "docstring": "Rename a table column by index.\n@param - Table name\n@param - Column index within the table (0-based)\n@param - New column header name",
           "usedTypes": []
         },
@@ -3920,27 +3918,27 @@
           "usedTypes": []
         },
         "tables.toggleTotalsRow": {
-          "signature": "tables.toggleTotalsRow(name: string): Promise<void>",
+          "signature": "tables.toggleTotalsRow(name: string): Promise<TableUpdateReceipt>",
           "docstring": "@deprecated Use {@link setShowTotals} instead.\nToggle the totals row visibility on a table.\n@param - Table name",
           "usedTypes": []
         },
         "tables.toggleHeaderRow": {
-          "signature": "tables.toggleHeaderRow(name: string): Promise<void>",
+          "signature": "tables.toggleHeaderRow(name: string): Promise<TableUpdateReceipt>",
           "docstring": "@deprecated Use {@link setShowHeaders} instead.\nToggle the header row visibility on a table.\n@param - Table name",
           "usedTypes": []
         },
         "tables.applyAutoExpansion": {
-          "signature": "tables.applyAutoExpansion(tableName: string): Promise<void>",
-          "docstring": "Apply auto-expansion to a table, extending it to include adjacent data.\n@param - Table name",
+          "signature": "tables.applyAutoExpansion(tableName: string): Promise<TableAutoExpansionReceipt>",
+          "docstring": "Apply auto-expansion to a table, extending it to include adjacent data.\n@param - Table name\n@returns Receipt describing whether expansion was applied, skipped, unsupported, or failed",
           "usedTypes": []
         },
         "tables.setCalculatedColumn": {
-          "signature": "tables.setCalculatedColumn(tableName: string, colIndex: number, formula: string): Promise<void>",
+          "signature": "tables.setCalculatedColumn(tableName: string, colIndex: number, formula: string): Promise<TableSetCalculatedColumnReceipt>",
           "docstring": "Set a calculated column formula for all data cells in a table column.\n@param - Table name\n@param - Column index within the table (0-based)\n@param - The formula to set (e.g. \"=[@Price]*[@Quantity]\")",
           "usedTypes": []
         },
         "tables.clearCalculatedColumn": {
-          "signature": "tables.clearCalculatedColumn(tableName: string, colIndex: number): Promise<void>",
+          "signature": "tables.clearCalculatedColumn(tableName: string, colIndex: number): Promise<TableClearCalculatedColumnReceipt>",
           "docstring": "Clear the calculated column formula from a table column, replacing with empty values.\n@param - Table name\n@param - Column index within the table (0-based)",
           "usedTypes": []
         },
@@ -4030,37 +4028,37 @@
           "usedTypes": []
         },
         "tables.setHighlightFirstColumn": {
-          "signature": "tables.setHighlightFirstColumn(tableName: string, value: boolean): Promise<void>",
+          "signature": "tables.setHighlightFirstColumn(tableName: string, value: boolean): Promise<TableUpdateReceipt>",
           "docstring": "Set whether the first column is highlighted.\n@param - Table name\n@param - Whether to highlight the first column",
           "usedTypes": []
         },
         "tables.setHighlightLastColumn": {
-          "signature": "tables.setHighlightLastColumn(tableName: string, value: boolean): Promise<void>",
+          "signature": "tables.setHighlightLastColumn(tableName: string, value: boolean): Promise<TableUpdateReceipt>",
           "docstring": "Set whether the last column is highlighted.\n@param - Table name\n@param - Whether to highlight the last column",
           "usedTypes": []
         },
         "tables.setShowBandedColumns": {
-          "signature": "tables.setShowBandedColumns(tableName: string, value: boolean): Promise<void>",
+          "signature": "tables.setShowBandedColumns(tableName: string, value: boolean): Promise<TableUpdateReceipt>",
           "docstring": "Set whether banded columns are shown.\n@param - Table name\n@param - Whether to show banded columns",
           "usedTypes": []
         },
         "tables.setShowBandedRows": {
-          "signature": "tables.setShowBandedRows(tableName: string, value: boolean): Promise<void>",
+          "signature": "tables.setShowBandedRows(tableName: string, value: boolean): Promise<TableUpdateReceipt>",
           "docstring": "Set whether banded rows are shown.\n@param - Table name\n@param - Whether to show banded rows",
           "usedTypes": []
         },
         "tables.setShowFilterButton": {
-          "signature": "tables.setShowFilterButton(tableName: string, value: boolean): Promise<void>",
+          "signature": "tables.setShowFilterButton(tableName: string, value: boolean): Promise<TableUpdateReceipt>",
           "docstring": "Set whether filter buttons are shown on the header row.\n@param - Table name\n@param - Whether to show filter buttons",
           "usedTypes": []
         },
         "tables.setShowHeaders": {
-          "signature": "tables.setShowHeaders(tableName: string, visible: boolean): Promise<void>",
+          "signature": "tables.setShowHeaders(tableName: string, visible: boolean): Promise<TableUpdateReceipt>",
           "docstring": "Set whether the header row is visible.\n@param - Table name\n@param - Whether to show the header row",
           "usedTypes": []
         },
         "tables.setShowTotals": {
-          "signature": "tables.setShowTotals(tableName: string, visible: boolean): Promise<void>",
+          "signature": "tables.setShowTotals(tableName: string, visible: boolean): Promise<TableUpdateReceipt>",
           "docstring": "Set whether the totals row is visible.\n@param - Table name\n@param - Whether to show the totals row",
           "usedTypes": []
         },
@@ -4094,7 +4092,7 @@
           ]
         },
         "validation.remove": {
-          "signature": "validation.remove(address: string): Promise<void>",
+          "signature": "validation.remove(address: string): Promise<ValidationRemoveReceipt>",
           "docstring": "Remove validation from a cell (deletes any range schema covering the cell).\n@param - A1-style cell address",
           "usedTypes": []
         },
@@ -4140,17 +4138,17 @@
           ]
         },
         "validation.clear": {
-          "signature": "validation.clear(range?: string | undefined): Promise<void>",
+          "signature": "validation.clear(range?: string | CellRange | undefined): Promise<ValidationClearReceipt>",
           "docstring": "Clear all validation rules from the sheet.\nWhen called with a range argument, clears only rules overlapping that range\n(deprecated — use {@link clearInRange} for range-scoped clearing).\n@param - (Optional) A1-style range string. If omitted, removes ALL rules.",
           "usedTypes": []
         },
         "validation.clearInRange": {
-          "signature": "validation.clearInRange(range: string | CellRange): Promise<void>",
+          "signature": "validation.clearInRange(range: string | CellRange): Promise<ValidationClearReceipt>",
           "docstring": "Clear validation rules that overlap a range.\n@param - A1-style range string (e.g. \"A1:B5\") or CellRange object",
           "usedTypes": []
         },
         "validation.removeById": {
-          "signature": "validation.removeById(id: string): Promise<void>",
+          "signature": "validation.removeById(id: string): Promise<ValidationRemoveReceipt>",
           "docstring": "Remove a validation rule by its ID.\n@param - Validation rule / range schema ID",
           "usedTypes": []
         },
@@ -4282,7 +4280,7 @@
     },
     "PivotTableHandle": {
       "name": "PivotTableHandle",
-      "definition": "{\n  /** Get the pivot table name */\n  getName(): string;\n  /** Side-effect-free handle-local introspection bound to this pivot ID. */\n  getInfo(options?: PivotHandleInfoOptions | undefined): Promise<PivotHandleInfo>;\n  /** Get the current configuration including all fields */\n  getConfig(): PivotTableConfig;\n  /** Update the pivot table data configuration. */\n  update(updates: Partial<Omit<PivotTableConfig, \"id\" | \"createdAt\">>): Promise<void>;\n  /** Delete the pivot table. */\n  delete(): Promise<boolean>;\n  /** Subscribe to computed result updates for this pivot. */\n  subscribeResult(callback: (result: PivotTableResult | null, error?: string | undefined) => void): () => void;\n  /** Compute this pivot table result. */\n  compute(forceRefresh?: boolean | undefined): Promise<PivotTableResult | null>;\n  /** Get the full range occupied by the rendered pivot table. */\n  getRange(): Promise<CellRange | null>;\n  /** Add a field to the row, column, or filter area */\n  addField(field: string, area: \"column\" | \"row\" | \"filter\", position?: number | undefined): Promise<void>;\n  /** Add a value field with aggregation */\n  addValueField(field: string, aggregation: \"min\" | \"max\" | \"sum\" | \"count\" | \"average\", label?: string | undefined): Promise<void>;\n  /** Add a placement to a row, column, value, or filter area. */\n  addPlacement(spec: PivotHandlePlacementSpec): Promise<PivotPlacementMutationReceipt>;\n  /** Remove a field by name */\n  removeField(fieldName: string, area?: PivotFieldArea | undefined): Promise<void>;\n  /** Remove a specific placement by stable placement ID. */\n  removePlacement(placementId: PlacementId): Promise<PivotKernelMutationReceipt>;\n  /** Move a field to a different area or position. */\n  moveField(fieldName: string, fromArea: PivotFieldArea, toArea: PivotFieldArea, toPosition: number): Promise<void>;\n  /** Move a specific placement to a different area or ordered position. */\n  movePlacement(placementId: PlacementId, toArea: PivotFieldArea, toPosition: number): Promise<PivotKernelMutationReceipt>;\n  /** Change the aggregation function of a value field */\n  changeAggregation(valueFieldLabel: string, newAggregation: \"min\" | \"max\" | \"sum\" | \"count\" | \"average\"): Promise<void>;\n  /** Change the aggregation function of a specific value placement. */\n  setPlacementAggregateFunction(placementId: PlacementId, aggregateFunction: AggregateFunction): Promise<PivotKernelMutationReceipt>;\n  /** Rename a value field's display label */\n  renameValueField(currentLabel: string, newLabel: string): Promise<void>;\n  /** Rename a value placement by stable placement ID. */\n  renameValuePlacement(placementId: PlacementId, displayName: string | null): Promise<PivotKernelMutationReceipt>;\n  /** Refresh the pivot table from its data source */\n  refresh(): Promise<void>;\n  /** Get all items for all non-value fields */\n  getAllItems(): Promise<PivotFieldItems[]>;\n  /** Set the \"Show Values As\" calculation for a value field. Pass null to clear. */\n  setShowValuesAs(valueFieldLabel: string, showValuesAs: ShowValuesAsConfig | null): Promise<void>;\n  /** Set the sort order for a row or column field. */\n  setSortOrder(fieldOrPlacement: string, sortOrder: SortOrder): Promise<void>;\n  /** Set the sort order for a row or column placement. */\n  setPlacementSortOrder(placementId: PlacementId, sortOrder: SortOrder | null): Promise<PivotKernelMutationReceipt>;\n  /** Set or clear value sorting on a row or column axis placement. */\n  setSortByValue(axisPlacementId: PlacementId, valuePlacementId: PlacementId, config: PivotValueSortConfig | null): Promise<PivotKernelMutationReceipt>;\n  /** Set a filter on a field. */\n  setFilter(fieldId: string, filter: Omit<PivotFilter, \"fieldId\">): Promise<void>;\n  /** Remove a filter from a field. */\n  removeFilter(fieldId: string): Promise<void>;\n  /** Set layout options. */\n  setLayout(layout: Partial<PivotTableLayout>): Promise<void>;\n  /** Set style options. */\n  setStyle(style: Partial<PivotTableStyle>): Promise<void>;\n  /** Toggle expansion state for a header. */\n  toggleExpanded(headerKey: string, isRow: boolean): Promise<boolean>;\n  /** Set expansion state for all headers. */\n  setAllExpanded(expanded: boolean): Promise<void>;\n  /** Read expansion state. */\n  getExpansionState(): Promise<PivotExpansionState>;\n  /** Get drill-down data for a pivot cell. */\n  getDrillDownData(rowKey: string, columnKey: string): Promise<CellValue[][]>;\n  /** Add a calculated field to this pivot. */\n  addCalculatedField(field: CalculatedField): Promise<PivotKernelMutationReceipt & { calculatedFieldId: CalculatedFieldId; }>;\n  /** Set item visibility by value string -> boolean map */\n  setItemVisibility(fieldId: string, visibleItems: Record<string, boolean>): Promise<void>;\n  /** Get the data source type (range, table, or external). */\n  getDataSourceType(): DataSourceType;\n  /** Change the source data range without refreshing/materializing. */\n  setDataSource(dataSource: string): Promise<void>;\n}",
+      "definition": "{\n  /** Get the pivot table name */\n  getName(): string;\n  /** Side-effect-free handle-local introspection bound to this pivot ID. */\n  getInfo(options?: PivotHandleInfoOptions | undefined): Promise<PivotHandleInfo>;\n  /** Get the current configuration including all fields */\n  getConfig(): PivotTableConfig;\n  /** Update the pivot table data configuration. */\n  update(updates: Partial<Omit<PivotTableConfig, \"id\" | \"createdAt\">>): Promise<PivotHandleMutationReceipt>;\n  /** Delete the pivot table. */\n  delete(): Promise<PivotHandleDeleteReceipt>;\n  /** Subscribe to computed result updates for this pivot. */\n  subscribeResult(callback: (result: PivotTableResult | null, error?: string | undefined) => void): () => void;\n  /** Compute this pivot table result. */\n  compute(forceRefresh?: boolean | undefined): Promise<PivotTableResult | null>;\n  /** Get the full range occupied by the rendered pivot table. */\n  getRange(): Promise<CellRange | null>;\n  /** Add a field to the row, column, or filter area */\n  addField(field: string, area: \"column\" | \"row\" | \"filter\", position?: number | undefined): Promise<PivotHandleMutationReceipt>;\n  /** Add a value field with aggregation */\n  addValueField(field: string, aggregation: \"min\" | \"max\" | \"sum\" | \"count\" | \"average\", label?: string | undefined): Promise<PivotHandleMutationReceipt>;\n  /** Add a placement to a row, column, value, or filter area. */\n  addPlacement(spec: PivotHandlePlacementSpec): Promise<PivotHandleMutationReceipt>;\n  /** Remove a field by name */\n  removeField(fieldName: string, area?: PivotFieldArea | undefined): Promise<PivotHandleMutationReceipt>;\n  /** Remove a specific placement by stable placement ID. */\n  removePlacement(placementId: PlacementId): Promise<PivotHandleMutationReceipt>;\n  /** Move a field to a different area or position. */\n  moveField(fieldName: string, fromArea: PivotFieldArea, toArea: PivotFieldArea, toPosition: number): Promise<PivotHandleMutationReceipt>;\n  /** Move a specific placement to a different area or ordered position. */\n  movePlacement(placementId: PlacementId, toArea: PivotFieldArea, toPosition: number): Promise<PivotHandleMutationReceipt>;\n  /** Change the aggregation function of a value field */\n  changeAggregation(valueFieldLabel: string, newAggregation: \"min\" | \"max\" | \"sum\" | \"count\" | \"average\"): Promise<PivotHandleMutationReceipt>;\n  /** Change the aggregation function of a specific value placement. */\n  setPlacementAggregateFunction(placementId: PlacementId, aggregateFunction: AggregateFunction): Promise<PivotHandleMutationReceipt>;\n  /** Rename a value field's display label */\n  renameValueField(currentLabel: string, newLabel: string): Promise<PivotHandleMutationReceipt>;\n  /** Rename a value placement by stable placement ID. */\n  renameValuePlacement(placementId: PlacementId, displayName: string | null): Promise<PivotHandleMutationReceipt>;\n  /** Refresh/materialize the pivot table from its data source. */\n  refresh(): Promise<PivotRefreshReceipt>;\n  /** Get all items for all non-value fields */\n  getAllItems(): Promise<PivotFieldItems[]>;\n  /** Set the \"Show Values As\" calculation for a value field. Pass null to clear. */\n  setShowValuesAs(valueFieldLabel: string, showValuesAs: ShowValuesAsConfig | null): Promise<PivotHandleMutationReceipt>;\n  /** Set the sort order for a row or column field. */\n  setSortOrder(fieldOrPlacement: string, sortOrder: SortOrder): Promise<PivotHandleMutationReceipt>;\n  /** Set the sort order for a row or column placement. */\n  setPlacementSortOrder(placementId: PlacementId, sortOrder: SortOrder | null): Promise<PivotHandleMutationReceipt>;\n  /** Set or clear value sorting on a row or column axis placement. */\n  setSortByValue(axisPlacementId: PlacementId, valuePlacementId: PlacementId, config: PivotValueSortConfig | null): Promise<PivotHandleMutationReceipt>;\n  /** Set a filter on a field. */\n  setFilter(fieldId: string, filter: Omit<PivotFilter, \"fieldId\">): Promise<PivotHandleMutationReceipt>;\n  /** Remove a filter from a field. */\n  removeFilter(fieldId: string): Promise<PivotHandleMutationReceipt>;\n  /** Set layout options. */\n  setLayout(layout: Partial<PivotTableLayout>): Promise<PivotHandleMutationReceipt>;\n  /** Set style options. */\n  setStyle(style: Partial<PivotTableStyle>): Promise<PivotHandleMutationReceipt>;\n  /** Toggle expansion state for a header. */\n  toggleExpanded(headerKey: string, isRow: boolean): Promise<PivotHandleExpansionReceipt>;\n  /** Set expansion state for all headers. */\n  setAllExpanded(expanded: boolean): Promise<PivotHandleExpansionReceipt>;\n  /** Read expansion state. */\n  getExpansionState(): Promise<PivotExpansionState>;\n  /** Get drill-down data for a pivot cell. */\n  getDrillDownData(rowKey: string, columnKey: string): Promise<CellValue[][]>;\n  /** Add a calculated field to this pivot. */\n  addCalculatedField(field: CalculatedField): Promise<PivotHandleCalculatedFieldReceipt>;\n  /** Set item visibility by value string -> boolean map */\n  setItemVisibility(fieldId: string, visibleItems: Record<string, boolean>): Promise<PivotHandleMutationReceipt>;\n  /** Get the data source type (range, table, or external). */\n  getDataSourceType(): DataSourceType;\n  /** Change the source data range without refreshing/materializing. */\n  setDataSource(dataSource: string): Promise<PivotHandleMutationReceipt>;\n}",
       "docstring": "Handle for interacting with an existing pivot table.\n\nReturned by `worksheet.pivots.get()`. Provides methods to query\nand modify the pivot table's field configuration."
     },
     "CellData": {
@@ -4339,11 +4337,6 @@
       "name": "TableOptions",
       "definition": "{\n  /** Table name (auto-generated if omitted) */\n  name?: string | undefined;\n  /** Whether the first row of the range contains headers (default: true) */\n  hasHeaders?: boolean | undefined;\n  /** Table style preset name */\n  style?: string | undefined;\n  /** Whether the table automatically expands when adjacent user input is entered (default: true) */\n  autoExpand?: boolean | undefined;\n  /** Whether formulas entered in table data columns automatically create/fill calculated columns (default: true) */\n  autoCalculatedColumns?: boolean | undefined;\n}",
       "docstring": "Options for creating a new table."
-    },
-    "TableInfo": {
-      "name": "TableInfo",
-      "definition": "{\n  /** Internal table identifier */\n  id: string;\n  /** Table name */\n  name: string;\n  /** Display name */\n  displayName: string;\n  /** Sheet the table belongs to */\n  sheetId: string;\n  /** Table range in A1 notation (converted from Rust SheetRange) */\n  range: string;\n  /** Column definitions */\n  columns: TableColumn[];\n  /** Whether the table has a header row */\n  hasHeaderRow: boolean;\n  /** Whether the totals row is visible */\n  hasTotalsRow: boolean;\n  /** Table style name */\n  style: string;\n  /** Whether banded rows are shown */\n  bandedRows: boolean;\n  /** Whether banded columns are shown */\n  bandedColumns: boolean;\n  /** Whether first column is emphasized */\n  emphasizeFirstColumn: boolean;\n  /** Whether last column is emphasized */\n  emphasizeLastColumn: boolean;\n  /** Whether filter buttons are shown */\n  showFilterButtons: boolean;\n  /** Whether the table automatically expands when adjacent user input is entered */\n  autoExpand: boolean;\n  /** Whether formulas entered in table data columns automatically create/fill calculated columns */\n  autoCalculatedColumns: boolean;\n}",
-      "docstring": "Information about an existing table.\n\nField names match the Rust-generated `Table` type (compute-types.gen.ts)\nexcept `range` which is converted from `SheetRange` to A1 notation string."
     },
     "NamedRangeInfo": {
       "name": "NamedRangeInfo",
@@ -4448,11 +4441,6 @@
       "definition": "{\n  /** Slicer ID (generated if omitted) */\n  id?: string | undefined;\n  /** Sheet ID the slicer belongs to */\n  sheetId?: string | undefined;\n  /** Name of the table to connect the slicer to */\n  tableName?: string | undefined;\n  /** Column name within the table to filter on */\n  columnName?: string | undefined;\n  /** Display name for the slicer (auto-generated if omitted) */\n  name?: string | undefined;\n  /** Position and dimensions in pixels */\n  position?: { x: number; y: number; width: number; height: number; } | undefined;\n  /** Data source connection (rich alternative to tableName/columnName) */\n  source?: SlicerSource | undefined;\n  /** Slicer caption (header text) */\n  caption?: string | undefined;\n  /** Style configuration */\n  style?: SlicerStyle | undefined;\n  /** Show slicer header */\n  showHeader?: boolean | undefined;\n  /** Z-order within the sheet */\n  zIndex?: number | undefined;\n  /** Whether slicer position is locked */\n  locked?: boolean | undefined;\n  /** Whether multi-select is enabled */\n  multiSelect?: boolean | undefined;\n  /** Initial selected values */\n  selectedValues?: CellValue[] | undefined;\n  /** Currently selected date range start (timeline slicers) */\n  selectedStartDate?: number | undefined;\n  /** Currently selected date range end (timeline slicers) */\n  selectedEndDate?: number | undefined;\n  /** Current aggregation level (timeline slicers) */\n  timelineLevel?: TimelineLevel | undefined;\n}",
       "docstring": "Configuration for creating a new slicer."
     },
-    "SlicerInfo": {
-      "name": "SlicerInfo",
-      "definition": "{\n  /** Unique slicer ID */\n  id: string;\n  /** Programmatic name (unique within workbook). Falls back to caption if not set. */\n  name: string;\n  /** Display caption (header text). */\n  caption: string;\n  /** Connected table name */\n  tableName: string;\n  /** Connected column name */\n  columnName: string;\n  /** Source type — 'table' for table slicers, 'pivot' for pivot table slicers */\n  source?: { type: \"table\" | \"pivot\"; } | undefined;\n  /** Discriminator for timeline slicers (matches TimelineSlicerConfig.sourceType) */\n  sourceType?: \"timeline\" | undefined;\n}",
-      "docstring": "Summary information about a slicer."
-    },
     "SlicerState": {
       "name": "SlicerState",
       "definition": "{\n  /** Computed items with selection state */\n  items: SlicerItem[];\n  /** Whether the slicer is connected to its data source */\n  isConnected: boolean;\n  /** Selected values */\n  selectedValues: CellValue[];\n  /** Timeline periods (for timeline slicers) */\n  periods?: TimelinePeriod[] | undefined;\n}",
@@ -4464,7 +4452,7 @@
       "docstring": "A single item in a slicer's value list."
     }
   },
-  "generated": "2026-06-16T05:30:29.691Z",
+  "generated": "2026-06-16T22:19:56.503Z",
   "formatPresets": {
     "general": {
       "default": {

@@ -5,6 +5,7 @@
     "incremental": false,
     "declaration": true,
     "emitDeclarationOnly": true,
-    "noEmit": false
+    "noEmit": false,
+    "outDir": "./dist"
   }
 }

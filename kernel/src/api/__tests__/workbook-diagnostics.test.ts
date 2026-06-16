@@ -215,9 +215,9 @@ describe('WorkbookDiagnosticsImpl', () => {
           diagnostics: [],
           snapshotVersion: 'v1',
         })),
-        getAllSheetIds: jest.fn(async () => ['model-sheet', 'ccm-sheet']),
+        getAllSheetIds: jest.fn(async () => ['model-sheet', 'source-gaap-sheet']),
         getSheetName: jest.fn(async (sheetId: string) =>
-          sheetId === 'model-sheet' ? 'Model' : 'CCM-GAAP',
+          sheetId === 'model-sheet' ? 'Model' : 'Source-GAAP',
         ),
       },
     };
@@ -226,7 +226,7 @@ describe('WorkbookDiagnosticsImpl', () => {
       'model-sheet' as any,
       0,
       0,
-      "='[1]CCM-GAAP'!$L$17",
+      "='[1]Source-GAAP'!$L$17",
     );
     const diagnostics = new WorkbookDiagnosticsImpl(ctx as any);
 
@@ -239,22 +239,22 @@ describe('WorkbookDiagnosticsImpl', () => {
         severity: 'error',
         sheetName: 'Model',
         address: 'A1',
-        formula: "='[1]CCM-GAAP'!$L$17",
+        formula: "='[1]Source-GAAP'!$L$17",
         suggestedNextApiCall:
-          'await wb.getSheet("Model").then(ws => ws.setFormula("A1", "=\'CCM-GAAP\'!$L$17"))',
+          'await wb.getSheet("Model").then(ws => ws.setFormula("A1", "=\'Source-GAAP\'!$L$17"))',
         details: expect.objectContaining({
           diagnosticCode: 'EXTERNAL_REFERENCE_UNBOUND_LOCAL_SHEET_CANDIDATE',
-          text: "'[1]CCM-GAAP'!$L$17",
+          text: "'[1]Source-GAAP'!$L$17",
           workbookToken: '1',
           tokenKind: 'excel-internal-ordinal',
-          localSheetName: 'CCM-GAAP',
-          localReference: "'CCM-GAAP'!$L$17",
-          suggestedFormula: "='CCM-GAAP'!$L$17",
+          localSheetName: 'Source-GAAP',
+          localReference: "'Source-GAAP'!$L$17",
+          suggestedFormula: "='Source-GAAP'!$L$17",
         }),
       }),
     ]);
     expect(result.findings[0]!.message).toContain('Excel internal external-link ordinal');
-    expect(result.findings[0]!.message).toContain('Local sheet "CCM-GAAP" exists');
+    expect(result.findings[0]!.message).toContain('Local sheet "Source-GAAP" exists');
     expect(result.findings[0]!.message).toContain('readable name and write the formula with that name');
   });
 

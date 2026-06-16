@@ -271,28 +271,28 @@ describe('external formula materialization', () => {
       workbookLinks,
       workbookLinkScope: scope,
       computeBridge: {
-        getAllSheetIds: jest.fn(async () => ['model-sheet', 'ccm-sheet']),
+        getAllSheetIds: jest.fn(async () => ['model-sheet', 'source-gaap-sheet']),
         getSheetName: jest.fn(async (id: string) =>
-          id === 'model-sheet' ? 'Model' : 'CCM-GAAP',
+          id === 'model-sheet' ? 'Model' : 'Source-GAAP',
         ),
       },
     } as unknown as DocumentContext;
     const sheetId = 'model-sheet' as SheetId;
 
     await expect(
-      prepareExternalFormulaWrite(ctx, sheetId, 0, 0, "='[1]CCM-GAAP'!$L$17"),
+      prepareExternalFormulaWrite(ctx, sheetId, 0, 0, "='[1]Source-GAAP'!$L$17"),
     ).rejects.toMatchObject({
       code: 'API_INVALID_ARGUMENT',
       path: ['formula'],
       suggestion:
-        'Use =\'CCM-GAAP\'!$L$17 for a local reference, or create or bind an external workbook link with a readable name and write the formula with that name instead of [1].',
+        'Use =\'Source-GAAP\'!$L$17 for a local reference, or create or bind an external workbook link with a readable name and write the formula with that name instead of [1].',
       context: expect.objectContaining({
         diagnosticCode: 'EXTERNAL_REFERENCE_UNBOUND_LOCAL_SHEET_CANDIDATE',
         tokenKind: 'excel-internal-ordinal',
         workbookToken: '1',
-        localSheetName: 'CCM-GAAP',
-        localReference: "'CCM-GAAP'!$L$17",
-        suggestedFormula: "='CCM-GAAP'!$L$17",
+        localSheetName: 'Source-GAAP',
+        localReference: "'Source-GAAP'!$L$17",
+        suggestedFormula: "='Source-GAAP'!$L$17",
       }),
     });
     expect(getTrackedExternalFormula(ctx, sheetId, 0, 0)).toBeUndefined();
@@ -306,19 +306,19 @@ describe('external formula materialization', () => {
   });
 
   it('preserves external reference text for diagnostics and local-reference suggestions', () => {
-    const refs = getExternalFormulaReferences("='[1]CCM-GAAP'!$L$17");
+    const refs = getExternalFormulaReferences("='[1]Source-GAAP'!$L$17");
 
     expect(refs).toEqual([
       expect.objectContaining({
-        text: "'[1]CCM-GAAP'!$L$17",
+        text: "'[1]Source-GAAP'!$L$17",
         start: 1,
-        end: 20,
+        end: 23,
         workbookToken: '1',
-        sheetName: 'CCM-GAAP',
+        sheetName: 'Source-GAAP',
         address: 'L17',
         addressText: '$L$17',
       }),
     ]);
-    expect(localReferenceForExternalRef(refs[0]!)).toBe("'CCM-GAAP'!$L$17");
+    expect(localReferenceForExternalRef(refs[0]!)).toBe("'Source-GAAP'!$L$17");
   });
 });

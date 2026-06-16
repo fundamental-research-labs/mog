@@ -36,7 +36,7 @@ export async function readNodeFileBytes(path: string): Promise<Uint8Array> {
 export async function writeNodeFileBytes(path: string, data: Uint8Array): Promise<void> {
   const { mkdir, writeFile } = await import('node:fs/promises');
   const { dirname, resolve } = await import('node:path');
-  const cwd = process.cwd();
+  const cwd = resolve('.');
   const absolutePath = resolve(path);
   const parentDirectory = dirname(absolutePath);
 

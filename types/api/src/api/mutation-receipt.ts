@@ -13,10 +13,16 @@ import type { Chart, SeriesConfig, TrendlineConfig } from '@mog/types-data/data/
 import type { FloatingObject } from '@mog/types-objects/objects/floating-objects';
 import type { OperationReceiptBase } from './operation-receipt';
 import type { AutoFillApplyReceipt } from './worksheet/fill';
-import type { Comment, Slicer } from './types';
-import type { TableInfo, TableUpdateOptions } from './types';
-import type { ApplyScenarioResult, LinkId } from './types';
-import type { LinkStatusView } from './workbook';
+import type {
+  ApplyScenarioResult,
+  Comment,
+  LinkId,
+  LinkStatusView,
+  PivotQueryResult,
+  Slicer,
+  TableInfo,
+  TableUpdateOptions,
+} from './receipt-payloads';
 import type {
   CalculatedFieldId,
   PivotCommandReceipt,
@@ -29,7 +35,6 @@ import type {
   PivotTableConfig,
   PivotTableResult,
 } from '@mog/types-data/data/pivot';
-import type { PivotQueryResult } from './types';
 
 export type {
   OperationDiagnostic,

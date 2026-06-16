@@ -24,6 +24,19 @@ impl YrsComputeEngine {
         construction::from_snapshot(snapshot)
     }
 
+    /// Assemble an export-capable Yrs engine from an already-initialized
+    /// formula-eval compute state without running another full recalculation.
+    #[cfg(feature = "__internal")]
+    #[doc(hidden)]
+    pub fn from_evaluated_snapshot_for_export(
+        snapshot: WorkbookSnapshot,
+        mirror: crate::mirror::CellMirror,
+        compute: crate::scheduler::ComputeCore,
+    ) -> Result<Self, ComputeError> {
+        let storage = crate::storage::YrsStorage::from_snapshot(snapshot.clone())?;
+        construction::assemble_engine(storage, mirror, compute, &snapshot)
+    }
+
     // -------------------------------------------------------------------
     // Import (XLSX → Rust hydration, bypassing TypeScript pipeline)
     // -------------------------------------------------------------------

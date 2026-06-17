@@ -156,13 +156,18 @@ function assertFacadeAllowed(
 }
 
 function subApiInterfaceFor(interfaceName: string, prop: string): string | undefined {
+  const subApis = WORKBOOK_SUB_API_INTERFACES as unknown as Record<
+    string,
+    Record<string, string | { targetInterface?: string }>
+  >;
   const group =
     interfaceName === 'Workbook'
-      ? WORKBOOK_SUB_API_INTERFACES.wb
+      ? (subApis.workbook ?? subApis.wb)
       : interfaceName === 'Worksheet'
-        ? WORKBOOK_SUB_API_INTERFACES.ws
+        ? (subApis.worksheet ?? subApis.ws)
         : null;
-  return group?.[prop as keyof typeof group] as string | undefined;
+  const entry = group?.[prop];
+  return typeof entry === 'string' ? entry : entry?.targetInterface;
 }
 
 function matrixEntry(

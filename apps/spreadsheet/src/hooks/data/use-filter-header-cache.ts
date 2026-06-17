@@ -120,6 +120,14 @@ export function useFilterHeaderCache({
     unsubscribers.push(ws.on('filter:deleted', handler));
     unsubscribers.push(ws.on('filter:cleared', handler));
     unsubscribers.push(ws.on('filter:applied', handler));
+    unsubscribers.push(ws.on('row:hidden', handler));
+    unsubscribers.push(ws.on('row:shown', handler));
+    unsubscribers.push(ws.on('rows:hidden', handler));
+    unsubscribers.push(ws.on('rows:unhidden', handler));
+    unsubscribers.push(ws.on('column:hidden', handler));
+    unsubscribers.push(ws.on('column:shown', handler));
+    unsubscribers.push(ws.on('columns:hidden', handler));
+    unsubscribers.push(ws.on('columns:unhidden', handler));
     unsubscribers.push(ws.on('table:created', handler));
     unsubscribers.push(ws.on('table:updated', tableUpdatedHandler));
     unsubscribers.push(ws.on('table:deleted', handler));

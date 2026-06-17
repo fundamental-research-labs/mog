@@ -64,13 +64,28 @@ describe('resolveCell', () => {
     it('throws KernelError for invalid A1 string', () => {
       const error = captureKernelError(() => resolveCell('invalid'));
       expect(error.code).toBe('API_INVALID_ADDRESS');
+      expect(error.suggestion).toContain('a1.address(row, col)');
       expect(error.context).toEqual(
         expect.objectContaining({
           validationKind: 'invalidCellAddress',
           path: ['address'],
           expected: 'single cell address such as "A1"',
           received: 'invalid',
-          suggestion: expect.stringContaining('single cell address'),
+          suggestion: expect.stringContaining('a1.address(row, col)'),
+        }),
+      );
+    });
+
+    it('recommends a1.address for generated-looking invalid cell strings', () => {
+      const error = captureKernelError(() => resolveCell('row=3,col=1'));
+      expect(error.code).toBe('API_INVALID_ADDRESS');
+      expect(error.message).toBe('Invalid cell address: "row=3,col=1"');
+      expect(error.suggestion).toContain('a1.address(row, col)');
+      expect(error.context).toEqual(
+        expect.objectContaining({
+          validationKind: 'invalidCellAddress',
+          received: 'row=3,col=1',
+          suggestion: expect.stringContaining('zero-based Mog coordinates'),
         }),
       );
     });
@@ -97,14 +112,15 @@ describe('resolveCell', () => {
       const error = captureKernelError(() => resolveCell('H132:L132'));
       expect(error.code).toBe('API_INVALID_ARGUMENT');
       expect(error.path).toEqual(['address']);
-      expect(error.suggestion).toContain('single cell address');
+      expect(error.suggestion).toContain('a1.address(row, col)');
+      expect(error.suggestion).toContain('a1.range(row1, col1, row2, col2)');
       expect(error.context).toEqual(
         expect.objectContaining({
           validationKind: 'expectedSingleCell',
           path: ['address'],
           expected: 'single cell address such as "A1"',
           received: 'H132:L132',
-          suggestion: expect.stringContaining('single cell address'),
+          suggestion: expect.stringContaining('a1.address(row, col)'),
         }),
       );
     });

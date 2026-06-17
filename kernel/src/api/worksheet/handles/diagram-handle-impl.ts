@@ -1,9 +1,11 @@
+import type { FloatingObjectHandleMutationReceipt } from '@mog-sdk/contracts/api';
 import type { DiagramHandle } from '@mog-sdk/contracts/api/worksheet/handles/index';
 import type { DiagramObject } from '@mog-sdk/contracts/floating-objects';
 import type { IObjectBoundsReader } from '@mog-sdk/contracts/objects/object-bounds-reader';
 
 import { KernelError } from '../../../errors';
 import type { WorksheetObjectsImpl } from '../objects';
+import { attachFloatingObjectHandle } from '../objects-receipts';
 import { FloatingObjectHandleImpl } from './floating-object-handle-impl';
 
 /**
@@ -19,9 +21,13 @@ export class DiagramHandleImpl extends FloatingObjectHandleImpl implements Diagr
     super(id, 'diagram', objectsImpl, boundsReader);
   }
 
-  async duplicate(_offsetX?: number, _offsetY?: number): Promise<DiagramHandle> {
+  async duplicate(
+    _offsetX?: number,
+    _offsetY?: number,
+  ): Promise<FloatingObjectHandleMutationReceipt<DiagramHandle>> {
     const receipt = await this.objectsImpl.duplicate(this.id);
-    return new DiagramHandleImpl(receipt.id, this.objectsImpl, this.boundsReader);
+    const handle = new DiagramHandleImpl(receipt.id, this.objectsImpl, this.boundsReader);
+    return attachFloatingObjectHandle(receipt, handle);
   }
 
   async getData(): Promise<DiagramObject> {

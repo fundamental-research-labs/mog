@@ -376,6 +376,28 @@ pub fn create_minimal_xlsx() -> Vec<u8> {
     builder.build()
 }
 
+/// Create an XLSX file with caller-provided raw worksheet XML.
+pub fn create_xlsx_with_raw_worksheet_xml(worksheet: &[u8], shared_strings: &[&str]) -> Vec<u8> {
+    let mut builder = ZipBuilder::new();
+    let has_shared_strings = !shared_strings.is_empty();
+
+    builder
+        .add_deflate("[Content_Types].xml", &content_types_xml())
+        .add_deflate("_rels/.rels", &root_rels_xml())
+        .add_deflate(
+            "xl/_rels/workbook.xml.rels",
+            &workbook_rels_xml(1, has_shared_strings),
+        )
+        .add_deflate("xl/workbook.xml", &workbook_xml(&["Sheet1"]))
+        .add_deflate("xl/worksheets/sheet1.xml", worksheet);
+
+    if has_shared_strings {
+        builder.add_deflate("xl/sharedStrings.xml", &shared_strings_xml(shared_strings));
+    }
+
+    builder.build()
+}
+
 /// Create an XLSX file with shared strings
 pub fn create_xlsx_with_shared_strings(
     strings: &[&str],
@@ -538,7 +560,7 @@ pub fn create_xlsx_with_various_types() -> Vec<u8> {
     let cells: Vec<((usize, usize), CellValue)> = vec![
         // Numbers
         ((0, 0), CellValue::Number(42.0)),
-        ((0, 1), CellValue::Number(3.14159)),
+        ((0, 1), CellValue::Number(12.34567)),
         ((0, 2), CellValue::Number(-100.5)),
         ((0, 3), CellValue::Number(0.0)),
         // Strings

@@ -12,9 +12,22 @@ function createMockCtx(): any {
     },
     awaitMaterialized: jest.fn().mockResolvedValue(undefined),
     computeBridge: {
-      getFiltersInSheet: jest.fn().mockResolvedValue([]),
+      getFiltersInSheet: jest.fn().mockResolvedValue([
+        {
+          id: 'filter-1',
+          type: 'tableFilter',
+          tableId: 'table-1',
+          columnFilters: {},
+        },
+      ]),
+      getAllTablesInSheet: jest.fn().mockResolvedValue([
+        {
+          id: 'table-1',
+          range: { startRow: 0, startCol: 0, endRow: 4, endCol: 1 },
+        },
+      ]),
       getFilterHeaderInfo: jest.fn().mockResolvedValue([]),
-      reapplyFilter: jest.fn().mockResolvedValue(undefined),
+      reapplyFilter: jest.fn().mockResolvedValue({ recalc: { changedCells: [] } }),
     },
   };
 }

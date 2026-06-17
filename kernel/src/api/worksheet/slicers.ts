@@ -6,10 +6,17 @@
 import type {
   SheetId,
   Slicer,
+  SlicerAddReceipt,
+  SlicerClearReceipt,
   SlicerConfig,
+  SlicerDuplicateReceipt,
   SlicerInfo,
   SlicerItem,
+  SlicerRemoveReceipt,
+  SlicerSelectionClearReceipt,
+  SlicerSelectionSetReceipt,
   SlicerState,
+  SlicerUpdateReceipt,
   WorksheetSlicers,
 } from '@mog-sdk/contracts/api';
 import { sheetId as toSheetId, type CellValue } from '@mog-sdk/contracts/core';
@@ -30,6 +37,17 @@ import {
   assertSlicerObjectTopologyAllowed,
   getActiveProtectionOptions,
 } from './protected-table-operations';
+import { toA1 } from '../internal/utils';
+import {
+  buildSlicerAddReceipt,
+  buildSlicerClearReceipt,
+  buildSlicerDuplicateReceipt,
+  buildSlicerRemoveReceipt,
+  buildSlicerSelectionClearReceipt,
+  buildSlicerSelectionSetReceipt,
+  buildSlicerUpdateReceipt,
+  type SlicerFilterProjectionReceiptInput,
+} from './slicers-receipts';
 
 /** English Metric Units per pixel at 96 DPI (1 px = 9525 EMU). */
 const EMU_PER_PX = 9525;
@@ -135,6 +153,13 @@ type ResolvedTableSlicerSource = {
   column: ResolvedTableSlicerColumn | null;
 };
 
+function tableRangeToA1(table: CanonicalTable): string {
+  return `${toA1(table.range.startRow, table.range.startCol)}:${toA1(
+    table.range.endRow,
+    table.range.endCol,
+  )}`;
+}
+
 export class WorksheetSlicersImpl implements WorksheetSlicers {
   constructor(
     private readonly ctx: DocumentContext,
@@ -160,7 +185,7 @@ export class WorksheetSlicersImpl implements WorksheetSlicers {
     }
   }
 
-  async add(config: SlicerConfig): Promise<Slicer> {
+  async add(config: SlicerConfig): Promise<SlicerAddReceipt> {
     await assertSlicerObjectTopologyAllowed(
       this.ctx,
       this.sheetId,
@@ -242,7 +267,12 @@ export class WorksheetSlicersImpl implements WorksheetSlicers {
 
     // Read back the full slicer entity.
     const full = await this.get(slicerId);
-    if (full) return full;
+    if (full) {
+      return buildSlicerAddReceipt({
+        sheetId: this.sheetId,
+        slicer: full,
+      });
+    }
 
     // Fallback: construct from config if read-back fails.
     const pos = config.position as
@@ -253,7 +283,7 @@ export class WorksheetSlicersImpl implements WorksheetSlicers {
           height?: number;
         }
       | undefined;
-    return {
+    const slicer: Slicer = {
       id: slicerId,
       name: config.name ?? caption,
       caption,
@@ -268,12 +298,22 @@ export class WorksheetSlicersImpl implements WorksheetSlicers {
         height: pos?.height ?? 300,
       },
     };
+    return buildSlicerAddReceipt({
+      sheetId: this.sheetId,
+      slicer,
+    });
   }
 
-  async remove(slicerId: string): Promise<void> {
+  async remove(slicerId: string): Promise<SlicerRemoveReceipt> {
     validateSlicerId(slicerId, 'deleteSlicer');
     await assertSlicerObjectTopologyAllowed(this.ctx, this.sheetId, 'slicers.remove', slicerId);
+    const slicer = await this.get(slicerId);
     await this.ctx.computeBridge.deleteSlicer(this.sheetId, slicerId);
+    return buildSlicerRemoveReceipt({
+      sheetId: this.sheetId,
+      slicerId,
+      slicer,
+    });
   }
 
   async getByName(name: string): Promise<Slicer | null> {
@@ -283,14 +323,22 @@ export class WorksheetSlicersImpl implements WorksheetSlicers {
     return this.get(match.id);
   }
 
-  async clear(): Promise<void> {
+  async clear(): Promise<SlicerClearReceipt> {
     const slicers = await this.list();
     for (const slicer of slicers) {
       await assertSlicerObjectTopologyAllowed(this.ctx, this.sheetId, 'slicers.clear', slicer.name);
     }
+    const removedSlicers = (await Promise.all(slicers.map((slicer) => this.get(slicer.id)))).filter(
+      (slicer): slicer is Slicer => slicer !== null,
+    );
     for (const slicer of slicers) {
-      await this.remove(slicer.id);
+      await this.ctx.computeBridge.deleteSlicer(this.sheetId, slicer.id);
     }
+    return buildSlicerClearReceipt({
+      sheetId: this.sheetId,
+      slicerIds: slicers.map((slicer) => slicer.id),
+      slicers: removedSlicers,
+    });
   }
 
   async list(): Promise<SlicerInfo[]> {
@@ -418,7 +466,10 @@ export class WorksheetSlicersImpl implements WorksheetSlicers {
     return items.find((item) => String(item.value ?? '') === keyStr) ?? null;
   }
 
-  async setSelection(slicerId: string, selectedItems: CellValue[]): Promise<void> {
+  async setSelection(
+    slicerId: string,
+    selectedItems: CellValue[],
+  ): Promise<SlicerSelectionSetReceipt> {
     validateSlicerId(slicerId, 'setSelection');
     await assertSlicerFilteringAllowed(this.ctx, this.sheetId, 'slicers.setSelection', slicerId);
     // Clear existing selection first, then toggle each desired item
@@ -428,16 +479,31 @@ export class WorksheetSlicersImpl implements WorksheetSlicers {
     }
 
     // Propagate selection to table autofilter
-    await this.propagateToAutofilter(slicerId, selectedItems);
+    const projection = await this.propagateToAutofilter(slicerId, selectedItems);
+    const slicer = await this.get(slicerId);
+    return buildSlicerSelectionSetReceipt({
+      sheetId: this.sheetId,
+      slicerId,
+      selectedItems,
+      slicer,
+      projection,
+    });
   }
 
-  async clearSelection(slicerId: string): Promise<void> {
+  async clearSelection(slicerId: string): Promise<SlicerSelectionClearReceipt> {
     validateSlicerId(slicerId, 'clearSlicerSelection');
     await assertSlicerFilteringAllowed(this.ctx, this.sheetId, 'slicers.clearSelection', slicerId);
     await this.ctx.computeBridge.clearSlicerSelection(this.sheetId, slicerId);
 
     // Propagate clear to table autofilter
-    await this.propagateToAutofilter(slicerId, []);
+    const projection = await this.propagateToAutofilter(slicerId, []);
+    const slicer = await this.get(slicerId);
+    return buildSlicerSelectionClearReceipt({
+      sheetId: this.sheetId,
+      slicerId,
+      slicer,
+      projection,
+    });
   }
 
   /**
@@ -447,12 +513,12 @@ export class WorksheetSlicersImpl implements WorksheetSlicers {
   private async propagateToAutofilter(
     slicerId: string,
     selectedValues: CellValue[],
-  ): Promise<void> {
+  ): Promise<SlicerFilterProjectionReceiptInput | null> {
     const stored = await this.ctx.computeBridge.getSlicerState(this.sheetId, slicerId);
-    if (!stored || stored.source.type !== 'table') return;
+    if (!stored || stored.source.type !== 'table') return null;
 
     const resolvedSource = await this.resolveTableSlicerSource(stored.source);
-    if (!resolvedSource?.column) return;
+    if (!resolvedSource?.column) return null;
     const { table, tableSheetId, column: resolvedColumn } = resolvedSource;
 
     // Get or create filter for the table
@@ -506,9 +572,20 @@ export class WorksheetSlicersImpl implements WorksheetSlicers {
 
     // Apply the filter to update row visibility
     await Filters.applyFilter(this.ctx, tableSheetId, filter.id);
+    return {
+      sheetId: tableSheetId,
+      range: tableRangeToA1(table),
+      filterId: filter.id,
+      sourceTableId: table.id,
+      columnCellId: resolvedColumn.columnId,
+      columnIndex: resolvedColumn.tableColumnIndex,
+    };
   }
 
-  async duplicate(slicerId: string, offset?: { x?: number; y?: number }): Promise<string> {
+  async duplicate(
+    slicerId: string,
+    offset?: { x?: number; y?: number },
+  ): Promise<SlicerDuplicateReceipt> {
     validateSlicerId(slicerId, 'duplicateSlicer');
     await assertSlicerObjectTopologyAllowed(this.ctx, this.sheetId, 'slicers.duplicate', slicerId);
     const existing = await this.ctx.computeBridge.getSlicerState(this.sheetId, slicerId);
@@ -552,10 +629,18 @@ export class WorksheetSlicersImpl implements WorksheetSlicers {
       multiSelect: true,
       selectedValues: [],
     });
-    return extractMutationData<StoredSlicer>(result)?.id ?? '';
+    const newSlicerId = extractMutationData<StoredSlicer>(result)?.id ?? '';
+    const slicer = newSlicerId ? await this.get(newSlicerId) : null;
+    return buildSlicerDuplicateReceipt({
+      sheetId: this.sheetId,
+      sourceSlicerId: slicerId,
+      slicerId: newSlicerId,
+      slicer,
+      source: existing.source,
+    });
   }
 
-  async update(slicerId: string, updates: Partial<SlicerConfig>): Promise<void> {
+  async update(slicerId: string, updates: Partial<SlicerConfig>): Promise<SlicerUpdateReceipt> {
     validateSlicerId(slicerId, 'updateSlicerConfig');
     await assertSlicerObjectEditAllowed(this.ctx, this.sheetId, 'slicers.update', slicerId);
 
@@ -573,7 +658,22 @@ export class WorksheetSlicersImpl implements WorksheetSlicers {
       bridgeUpdate.position = pixelRectToAnchor(updates.position);
     }
     if (updates.showHeader !== undefined) bridgeUpdate.showHeader = updates.showHeader;
+    if (Object.keys(bridgeUpdate).length === 0) {
+      const slicer = await this.get(slicerId);
+      return buildSlicerUpdateReceipt({
+        sheetId: this.sheetId,
+        slicerId,
+        slicer,
+        noOp: true,
+      });
+    }
     await this.ctx.computeBridge.updateSlicerConfig(this.sheetId, slicerId, bridgeUpdate);
+    const slicer = await this.get(slicerId);
+    return buildSlicerUpdateReceipt({
+      sheetId: this.sheetId,
+      slicerId,
+      slicer,
+    });
   }
 
   /**

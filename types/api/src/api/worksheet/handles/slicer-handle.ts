@@ -1,3 +1,4 @@
+import type { FloatingObjectHandleMutationReceipt } from '../../mutation-receipt';
 import type { FloatingObjectHandle } from './types';
 
 /**
@@ -9,5 +10,8 @@ import type { FloatingObjectHandle } from './types';
  * getData() returns the base FloatingObject type.
  */
 export interface SlicerHandle extends FloatingObjectHandle {
-  duplicate(offsetX?: number, offsetY?: number): Promise<SlicerHandle>;
+  duplicate(
+    offsetX?: number,
+    offsetY?: number,
+  ): Promise<FloatingObjectHandleMutationReceipt<SlicerHandle>>;
 }

@@ -97,8 +97,12 @@ const wb = await createWorkbook('data.xlsx', { valuesOnly: true });
 
 // Save to file path or buffer
 await wb.save('output.xlsx');         // writes file, returns buffer
-const buf = await wb.save();          // buffer only
+await wb.save('./outputs/model.xlsx'); // Node SDK creates missing parent dirs
+const buf = await wb.save();          // buffer only, no file write
 const buf = await wb.toXlsx();        // same as save() without side effects
+
+// save(path) failures throw MogSdkError with details.issue, requestedPath, cwd,
+// and when available absolutePath/filesystemCode. Empty string is not a path.
 ```
 
 ## Sub-API Examples

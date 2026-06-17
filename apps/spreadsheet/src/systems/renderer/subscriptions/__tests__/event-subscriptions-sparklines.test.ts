@@ -2,7 +2,15 @@ import { jest } from '@jest/globals';
 
 import { setupEventSubscriptions } from '../event-subscriptions';
 
-type EventRecord = { type: string; sheetId?: string; position?: { row: number; col: number } };
+type EventRecord = {
+  type: string;
+  sheetId?: string;
+  row?: number;
+  col?: number;
+  oldValue?: unknown;
+  newValue?: unknown;
+  position?: { row: number; col: number };
+};
 
 function createMockWorkbook() {
   const handlers = new Map<string, Array<(event: EventRecord) => void>>();
@@ -106,5 +114,53 @@ describe('Event Subscriptions sparkline integration', () => {
 
     expect(firstRefresh).not.toHaveBeenCalled();
     expect(secondRefresh).toHaveBeenCalledTimes(1);
+  });
+
+  it('drains pending table auto-expansion tasks', async () => {
+    const workbook = createMockWorkbook();
+    const subscriptions = setupWithWorkbook(workbook);
+    let releaseExpansion: ((value: boolean) => void) | null = null;
+    const autoExpandTableRow = jest.fn(
+      () =>
+        new Promise<boolean>((resolve) => {
+          releaseExpansion = resolve;
+        }),
+    );
+
+    subscriptions.setTableAutoExpansionConfig({
+      checkAutoExpansion: jest.fn(async () => ({
+        id: 'Table1',
+        sheetId: 'sheet1',
+        name: 'Table1',
+      })),
+      autoExpandTableRow,
+      autoExpandTableColumn: jest.fn(async () => false),
+      getCurrentSheetId: () => 'sheet1',
+    });
+
+    workbook.emit({
+      type: 'cell:changed',
+      sheetId: 'sheet1',
+      row: 4,
+      col: 2,
+      oldValue: null,
+      newValue: 'new value',
+    });
+    await Promise.resolve();
+
+    const drained = subscriptions.drainTableAutoExpansion();
+    let didDrain = false;
+    void drained.then(() => {
+      didDrain = true;
+    });
+    await Promise.resolve();
+
+    expect(autoExpandTableRow).toHaveBeenCalledWith('Table1');
+    expect(didDrain).toBe(false);
+
+    releaseExpansion?.(true);
+    await drained;
+
+    expect(didDrain).toBe(true);
   });
 });

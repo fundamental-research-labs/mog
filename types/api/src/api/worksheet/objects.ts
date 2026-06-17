@@ -78,7 +78,10 @@ export interface WorksheetObjects {
   computeAllObjectBounds(): Promise<Map<string, ObjectBounds>>;
 
   /** Update arbitrary properties of a floating object. */
-  update(objectId: string, updates: Record<string, unknown>): Promise<void>;
+  update(
+    objectId: string,
+    updates: Record<string, unknown>,
+  ): Promise<FloatingObjectMutationReceipt>;
 
   /** Remove multiple floating objects. Returns count of successfully removed objects. */
   removeMany(objectIds: string[]): Promise<number>;
@@ -136,7 +139,10 @@ export interface WorksheetObjects {
   addPicture(config: PictureConfig): Promise<FloatingObjectMutationReceipt>;
 
   /** Update a picture's properties. */
-  updatePicture(id: string, updates: Partial<PictureConfig>): Promise<void>;
+  updatePicture(
+    id: string,
+    updates: Partial<PictureConfig>,
+  ): Promise<FloatingObjectMutationReceipt>;
 
   // ===========================================================================
   // Text boxes
@@ -149,21 +155,21 @@ export interface WorksheetObjects {
   // Equations
   // ===========================================================================
 
-  /** Add an equation to the sheet. Returns the equation ID. */
-  addEquation(config: EquationConfig): Promise<string>;
+  /** Add an equation to the sheet. Returns a receipt with the new equation ID. */
+  addEquation(config: EquationConfig): Promise<FloatingObjectMutationReceipt>;
 
   /** Update an existing equation. */
-  updateEquation(id: string, updates: EquationUpdates): Promise<void>;
+  updateEquation(id: string, updates: EquationUpdates): Promise<FloatingObjectMutationReceipt>;
 
   // ===========================================================================
   // TextEffect
   // ===========================================================================
 
-  /** Add TextEffect to the sheet. Returns the TextEffect ID. */
-  addTextEffect(config: CreateTextEffectInput): Promise<string>;
+  /** Add TextEffect to the sheet. Returns a receipt with the new TextEffect ID. */
+  addTextEffect(config: CreateTextEffectInput): Promise<FloatingObjectMutationReceipt>;
 
   /** Update existing TextEffect. */
-  updateTextEffect(id: string, updates: TextEffectUpdates): Promise<void>;
+  updateTextEffect(id: string, updates: TextEffectUpdates): Promise<FloatingObjectMutationReceipt>;
 
   /** Convert a regular text box to TextEffect by applying TextEffect styling. */
   convertToTextEffect(objectId: string, warpPreset?: TextWarpPreset): Promise<void>;
@@ -175,8 +181,11 @@ export interface WorksheetObjects {
   // Drawings (ink)
   // ===========================================================================
 
-  /** Create a new drawing object. Returns the drawing ID. */
-  createDrawing(position: Partial<ObjectPosition>, options?: CreateDrawingOptions): Promise<string>;
+  /** Create a new drawing object. Returns a receipt with the new drawing ID. */
+  createDrawing(
+    position: Partial<ObjectPosition>,
+    options?: CreateDrawingOptions,
+  ): Promise<FloatingObjectMutationReceipt>;
 
   /** Add a completed stroke to a drawing. */
   addDrawingStroke(drawingId: string, stroke: InkStroke): Promise<void>;

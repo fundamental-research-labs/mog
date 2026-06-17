@@ -27,6 +27,8 @@ export interface EdgeProximity {
   edge: 'top' | 'bottom' | 'left' | 'right' | null;
   /** Distance in pixels from the edge (0 = at edge, larger = further) */
   distance: number;
+  /** Effective threshold used for the matched edge after axis-size capping */
+  threshold?: number;
 }
 
 /**
@@ -57,6 +59,13 @@ export interface ViewportBounds {
   bottom: number;
 }
 
+const MAX_EDGE_COVERAGE_PER_SIDE = 0.35;
+
+function effectiveAxisThreshold(axisLength: number, requestedThreshold: number): number {
+  if (!Number.isFinite(axisLength) || axisLength <= 0) return 0;
+  return Math.max(0, Math.min(requestedThreshold, axisLength * MAX_EDGE_COVERAGE_PER_SIDE));
+}
+
 // =============================================================================
 // Pure Functions
 // =============================================================================
@@ -81,36 +90,37 @@ export function isNearViewportEdge(
   viewport: ViewportBounds,
   threshold: number = 50,
 ): EdgeProximity {
-  // Check each edge and return the closest one
-  // Note: viewport.left/top are already adjusted for frozen panes by CoordinateSystem
+  const verticalThreshold = effectiveAxisThreshold(viewport.bottom - viewport.top, threshold);
+  const horizontalThreshold = effectiveAxisThreshold(viewport.right - viewport.left, threshold);
+
   const distanceToTop = y - viewport.top;
   const distanceToBottom = viewport.bottom - y;
   const distanceToLeft = x - viewport.left;
   const distanceToRight = viewport.right - x;
 
-  // Find the minimum distance
-  const minDistance = Math.min(distanceToTop, distanceToBottom, distanceToLeft, distanceToRight);
-
-  // If not near any edge, return null
-  if (minDistance > threshold) {
-    return { edge: null, distance: minDistance };
+  const candidates: Array<Required<EdgeProximity>> = [];
+  if (distanceToTop <= verticalThreshold) {
+    candidates.push({ edge: 'top', distance: distanceToTop, threshold: verticalThreshold });
+  }
+  if (distanceToBottom <= verticalThreshold) {
+    candidates.push({ edge: 'bottom', distance: distanceToBottom, threshold: verticalThreshold });
+  }
+  if (distanceToLeft <= horizontalThreshold) {
+    candidates.push({ edge: 'left', distance: distanceToLeft, threshold: horizontalThreshold });
+  }
+  if (distanceToRight <= horizontalThreshold) {
+    candidates.push({ edge: 'right', distance: distanceToRight, threshold: horizontalThreshold });
   }
 
-  // Return the closest edge
-  if (distanceToTop <= threshold && distanceToTop === minDistance) {
-    return { edge: 'top', distance: distanceToTop };
-  }
-  if (distanceToBottom <= threshold && distanceToBottom === minDistance) {
-    return { edge: 'bottom', distance: distanceToBottom };
-  }
-  if (distanceToLeft <= threshold && distanceToLeft === minDistance) {
-    return { edge: 'left', distance: distanceToLeft };
-  }
-  if (distanceToRight <= threshold && distanceToRight === minDistance) {
-    return { edge: 'right', distance: distanceToRight };
+  if (candidates.length > 0) {
+    candidates.sort((a, b) => a.distance - b.distance);
+    return candidates[0];
   }
 
-  return { edge: null, distance: minDistance };
+  return {
+    edge: null,
+    distance: Math.min(distanceToTop, distanceToBottom, distanceToLeft, distanceToRight),
+  };
 }
 
 /**
@@ -133,10 +143,12 @@ export function getScrollVelocity(
   if (proximity.edge === null) {
     return { dx: 0, dy: 0 };
   }
+  const effectiveThreshold = proximity.threshold ?? threshold;
+  if (effectiveThreshold <= 0) return { dx: 0, dy: 0 };
 
   // Calculate speed based on distance (closer = faster)
   // Use quadratic acceleration curve for smoother feel
-  const t = 1 - proximity.distance / threshold; // 0 = at threshold, 1 = at edge
+  const t = Math.max(0, Math.min(1, 1 - proximity.distance / effectiveThreshold));
   const speedFactor = t * t; // Quadratic curve
   const speed = minSpeed + speedFactor * (maxSpeed - minSpeed);
 

@@ -218,6 +218,17 @@ impl YrsComputeEngine {
         range_ops::auto_fill(self, sheet_id, request)
     }
 
+    /// Dry-run autofill against the production fill engine without mutating
+    /// storage, viewport state, or undo history.
+    #[bridge::read(scope = "sheet")]
+    pub fn auto_fill_preview(
+        &self,
+        sheet_id: &SheetId,
+        request: crate::engine_types::fill::BridgeAutoFillRequest,
+    ) -> Result<crate::engine_types::fill::BridgeAutoFillPreviewResult, ComputeError> {
+        range_ops::auto_fill_preview(self, sheet_id, request)
+    }
+
     /// Flash Fill — infer a text transformation from user-provided examples
     /// and apply it to the remaining rows.
     ///

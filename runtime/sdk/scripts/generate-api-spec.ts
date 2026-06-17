@@ -35,6 +35,12 @@ import {
   compatibilityReferencesForPath,
   generateApiCompatibilityIndex,
 } from './api-compatibility-generation';
+import {
+  collectInterfaceTypeElements,
+  serializeInterfaceDefinition,
+  type InterfaceTypeElement,
+} from './api-spec-interface-serialization';
+import { REQUIRED_OPERATION_RECEIPT_TYPE_NAMES } from './api-spec-receipt-types';
 import type {
   ApiCompatibilityIndex,
   ApiCompatibilityReference,
@@ -53,6 +59,7 @@ const CONTRACTS_SRC_DIR = path.resolve(REPO_ROOT, 'contracts/src');
 // type references — contracts/ hosts the interfaces while types/ hosts the
 // data shapes they reference (ChartConfig, AxisConfig, …).
 const TYPES_SRC_DIR = path.resolve(REPO_ROOT, 'types');
+const TYPES_API_SRC_DIR = path.resolve(REPO_ROOT, 'types/api/src');
 const TYPES_API_DIR = path.resolve(REPO_ROOT, 'types/api/src/api');
 const OUTPUT_FILE = path.resolve(REPO_ROOT, 'runtime/sdk/src/generated/api-spec.json');
 const OUTPUT_SCHEMA_FILE = path.resolve(
@@ -239,18 +246,18 @@ function collectTypeRefs(signature: string): string[] {
 }
 
 /** For overloaded members, prefer the most agent-friendly overload. */
-function pickOverload(overloads: ts.TypeElement[], sourceFile: ts.SourceFile): ts.TypeElement {
+function pickOverload(overloads: InterfaceTypeElement[]): InterfaceTypeElement {
   if (overloads.length === 1) return overloads[0];
 
   const nonGenericOverload = overloads.find(
-    (o) => ts.isMethodSignature(o) && !o.typeParameters?.length,
+    ({ member }) => ts.isMethodSignature(member) && !member.typeParameters?.length,
   );
   if (nonGenericOverload) return nonGenericOverload;
 
   for (const overload of overloads) {
-    if (ts.isMethodSignature(overload) && overload.parameters.length > 0) {
-      const firstParam = overload.parameters[0];
-      const typeText = firstParam.type?.getText(sourceFile) ?? '';
+    if (ts.isMethodSignature(overload.member) && overload.member.parameters.length > 0) {
+      const firstParam = overload.member.parameters[0];
+      const typeText = firstParam.type?.getText(overload.sourceFile) ?? '';
       if (typeText === 'string') return overload;
     }
   }
@@ -722,10 +729,14 @@ function discoverSubApis(
 ): SubApiInfo[] {
   const results: SubApiInfo[] = [];
 
-  for (const member of node.members) {
+  for (const { member, sourceFile: memberSourceFile } of collectInterfaceTypeElements({
+    node,
+    sourceFile,
+    resolveInterface: resolveNamedInterface,
+  })) {
     if (!ts.isPropertySignature(member)) continue;
 
-    const name = member.name?.getText(sourceFile) ?? '';
+    const name = member.name?.getText(memberSourceFile) ?? '';
     if (!name || excludedMembers.has(name)) continue;
 
     // Must be readonly
@@ -733,7 +744,7 @@ function discoverSubApis(
     if (!isReadonly) continue;
 
     // Get the type text
-    const typeText = member.type?.getText(sourceFile) ?? '';
+    const typeText = member.type?.getText(memberSourceFile) ?? '';
 
     // Must reference a PascalCase interface name (Workbook* or Worksheet*)
     // Skip primitives, generic types, union types, etc.
@@ -745,7 +756,7 @@ function discoverSubApis(
     // Skip internal interfaces
     if (interfaceName === 'WorksheetInternal') continue;
 
-    results.push({ accessor: name, interfaceName, parent, member, sourceFile });
+    results.push({ accessor: name, interfaceName, parent, member, sourceFile: memberSourceFile });
   }
 
   return results;
@@ -772,30 +783,35 @@ function extractInterface(
   const functions: Record<string, FunctionEntry> = {};
   const skipMembers = options.skipMembers ?? new Set<string>();
 
-  const byName = new Map<string, ts.TypeElement[]>();
-  for (const member of node.members) {
-    const name = (member as any).name?.getText(sourceFile) ?? '';
+  const byName = new Map<string, InterfaceTypeElement[]>();
+  for (const entry of collectInterfaceTypeElements({
+    node,
+    sourceFile,
+    resolveInterface: resolveNamedInterface,
+  })) {
+    const { member, sourceFile: memberSourceFile } = entry;
+    const name = (member as any).name?.getText(memberSourceFile) ?? '';
     if (!name || excludedMembers.has(name) || skipMembers.has(name)) continue;
 
     if (!ts.isMethodSignature(member) && !ts.isPropertySignature(member)) continue;
 
     if (!byName.has(name)) byName.set(name, []);
-    byName.get(name)!.push(member);
+    byName.get(name)!.push(entry);
   }
 
   for (const [name, overloads] of byName) {
-    const chosen = pickOverload(overloads, sourceFile);
+    const chosen = pickOverload(overloads);
     const entry = createMemberEntry({
       interfaceName: node.name.text,
       memberName: name,
-      member: chosen,
-      sourceFile,
+      member: chosen.member,
+      sourceFile: chosen.sourceFile,
       canonicalPath: `${options.pathPrefix}.${name}`,
       root: options.root,
       ...(options.parentRoot ? { parentRoot: options.parentRoot } : {}),
-      kind: getMemberKind(chosen),
-      ...(getPropertyTargetInterface(chosen, sourceFile)
-        ? { targetInterface: getPropertyTargetInterface(chosen, sourceFile) }
+      kind: getMemberKind(chosen.member),
+      ...(getPropertyTargetInterface(chosen.member, chosen.sourceFile)
+        ? { targetInterface: getPropertyTargetInterface(chosen.member, chosen.sourceFile) }
         : {}),
     });
 
@@ -970,8 +986,8 @@ function collectDirectories(root: string): string[] {
 
 function findInterfaceFile(interfaceName: string): string | null {
   const searchDirs = [
-    ...collectDirectories(TYPES_API_DIR),
-    ...collectDirectories(CONTRACTS_API_DIR),
+    ...collectDirectories(TYPES_API_SRC_DIR),
+    ...collectDirectories(CONTRACTS_SRC_DIR),
   ];
 
   for (const dir of searchDirs) {
@@ -1003,6 +1019,13 @@ function parseInterfaceFromFile(
   const resolved = resolveInterfaceDeclaration(filePath, interfaceName);
   if (!resolved) return null;
   return { node: resolved.node, sourceFile: resolved.sourceFile };
+}
+
+function resolveNamedInterface(
+  interfaceName: string,
+): { node: ts.InterfaceDeclaration; sourceFile: ts.SourceFile } | null {
+  const filePath = findInterfaceFile(interfaceName);
+  return filePath ? parseInterfaceFromFile(filePath, interfaceName) : null;
 }
 
 // ---------------------------------------------------------------------------
@@ -1078,31 +1101,16 @@ function findTypeDefinitions(
 
         const docstring = getJSDocText(node);
         const ownerPackage = getOwnerPackage(sourceFile.fileName);
-        // Serialize properties into a definition string
-        const parts: string[] = [];
-        for (const member of node.members) {
-          if (ts.isPropertySignature(member)) {
-            const propName = member.name?.getText(sourceFile) ?? '';
-            const optional = member.questionToken ? '?' : '';
-            const typeText = member.type?.getText(sourceFile) ?? 'unknown';
-            const propDoc = getJSDocText(member);
-            if (propDoc) {
-              parts.push(`  /** ${propDoc} */`);
-            }
-            parts.push(`  ${propName}${optional}: ${typeText};`);
-          } else if (ts.isMethodSignature(member)) {
-            const sig = getSignatureText(member, sourceFile);
-            const methodDoc = getJSDocText(member);
-            if (methodDoc) {
-              parts.push(`  /** ${methodDoc} */`);
-            }
-            parts.push(`  ${sig};`);
-          }
-        }
-
         result[name] = {
           name,
-          definition: parts.length > 0 ? `{\n${parts.join('\n')}\n}` : '{}',
+          definition: serializeInterfaceDefinition({
+            node,
+            sourceFile,
+            resolveInterface: (heritageName) => {
+              const heritageFile = findInterfaceFile(heritageName);
+              return heritageFile ? parseInterfaceFromFile(heritageFile, heritageName) : null;
+            },
+          }),
           docstring,
           source: getSourceLocation(sourceFile),
           ownership: { package: ownerPackage },
@@ -1113,6 +1121,46 @@ function findTypeDefinitions(
   }
 
   return result;
+}
+
+function collectMigratedReceiptTypeNames(searchFiles: string[]): string[] {
+  const heritageByName = new Map<string, string[]>();
+  for (const filePath of searchFiles) {
+    if (!fs.existsSync(filePath)) continue;
+    const sourceFile = readFile(filePath);
+    ts.forEachChild(sourceFile, (node) => {
+      if (!ts.isInterfaceDeclaration(node)) return;
+      const heritageNames: string[] = [];
+      for (const clause of node.heritageClauses ?? []) {
+        if (clause.token !== ts.SyntaxKind.ExtendsKeyword) continue;
+        for (const type of clause.types) {
+          heritageNames.push(type.expression.getText(sourceFile));
+        }
+      }
+      if (heritageNames.length > 0) {
+        heritageByName.set(node.name.text, heritageNames);
+      }
+    });
+  }
+
+  const receiptNames = new Set<string>();
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const [name, heritageNames] of heritageByName) {
+      if (
+        !receiptNames.has(name) &&
+        heritageNames.some(
+          (heritageName) =>
+            heritageName === 'OperationReceiptBase' || receiptNames.has(heritageName),
+        )
+      ) {
+        receiptNames.add(name);
+        changed = true;
+      }
+    }
+  }
+  return [...receiptNames].sort();
 }
 
 // ---------------------------------------------------------------------------
@@ -1240,6 +1288,9 @@ function generate(): ApiSpec {
 
   // --- Step 4: Collect all referenced PascalCase types ---
   const allTypeRefs = new Set<string>();
+  for (const typeName of REQUIRED_OPERATION_RECEIPT_TYPE_NAMES) {
+    allTypeRefs.add(typeName);
+  }
 
   for (const [, iface] of Object.entries(interfaces)) {
     for (const [, fn] of Object.entries(iface.functions)) {
@@ -1279,6 +1330,9 @@ function generate(): ApiSpec {
     ...collectTsFiles(CONTRACTS_SRC_DIR),
     ...collectTsFiles(TYPES_SRC_DIR).filter((p) => !skipSegments.some((s) => p.includes(s))),
   ];
+  for (const receiptTypeName of collectMigratedReceiptTypeNames(typeSearchFiles)) {
+    allTypeRefs.add(receiptTypeName);
+  }
 
   const types = findTypeDefinitions(allTypeRefs, typeSearchFiles);
 

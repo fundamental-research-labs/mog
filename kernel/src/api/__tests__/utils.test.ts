@@ -1,5 +1,10 @@
 import {
+  a1,
   addressToA1,
+  address,
+  column,
+  columnIndex,
+  columnName,
   colToLetter,
   createRange,
   getRangeDimensions,
@@ -8,8 +13,12 @@ import {
   isValidRange,
   letterToCol,
   normalizeRange,
+  offset,
+  parse,
+  parseAddress,
   parseCellAddress,
   parseCellRange,
+  rangeAddress,
   rangeToA1,
   toA1,
 } from '../internal/utils';
@@ -282,6 +291,55 @@ describe('toA1', () => {
 
   it('converts (0, 25) to "Z1"', () => {
     expect(toA1(0, 25)).toBe('Z1');
+  });
+});
+
+// ============================================================================
+// Canonical address helpers
+// ============================================================================
+
+describe('canonical address helpers', () => {
+  it('formats zero-based Mog coordinates by default', () => {
+    expect(address(0, 0)).toBe('A1');
+    expect(address(9, 26)).toBe('AA10');
+    expect(rangeAddress(0, 0, 1, 2)).toBe('A1:C2');
+  });
+
+  it('exposes the concise a1 namespace', () => {
+    expect(a1.address(0, 0)).toBe('A1');
+    expect(a1.range(0, 0, 1, 2)).toBe('A1:C2');
+    expect(a1.column(26)).toBe('AA');
+    expect(a1.columnIndex('AA')).toBe(26);
+    expect(a1.parse('AA10')).toEqual({ row: 9, col: 26 });
+    expect(a1.offset('Z10', 0, 1)).toBe('AA10');
+  });
+
+  it('converts column names and indexes without manual char-code math', () => {
+    expect(column(0)).toBe('A');
+    expect(column(26)).toBe('AA');
+    expect(columnName(0)).toBe('A');
+    expect(columnName(26)).toBe('AA');
+    expect(columnIndex('A')).toBe(0);
+    expect(columnIndex('AA')).toBe(26);
+  });
+
+  it('parses addresses to zero-based Mog coordinates', () => {
+    expect(parse('AA10')).toEqual({ row: 9, col: 26 });
+    expect(parseAddress('AA10')).toEqual({ row: 9, col: 26 });
+    expect(parseAddress('invalid')).toBeNull();
+  });
+
+  it('offsets addresses across column-name boundaries and preserves sheet names', () => {
+    expect(offset('Z10', 0, 1)).toBe('AA10');
+    expect(offset('AA10', 2, -1)).toBe('Z12');
+    expect(offset("'My Sheet'!Z10", 0, 1)).toBe("'My Sheet'!AA10");
+  });
+
+  it('rejects invalid generated coordinates before formatting', () => {
+    expect(() => address(0, -1)).toThrow('col must be >= 0');
+    expect(() => address(0.5, 0)).toThrow('row must be an integer');
+    expect(() => columnIndex('A1')).toThrow('Invalid column name');
+    expect(() => offset('A1', 0, -1)).toThrow('Offset moves address before A1');
   });
 });
 

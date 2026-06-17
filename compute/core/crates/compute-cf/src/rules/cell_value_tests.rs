@@ -283,14 +283,14 @@ fn test_negative_numbers() {
 
 #[test]
 fn test_decimal_numbers() {
-    let cmp_gt = single(CellValueSingleOp::GreaterThan, "3.14");
+    let cmp_gt = single(CellValueSingleOp::GreaterThan, "12.34");
 
-    // 3.15 > 3.14 -> match
-    assert_eq!(evaluate_cell_value(&n(3.15), &cmp_gt), true);
+    // 12.35 > 12.34 -> match
+    assert_eq!(evaluate_cell_value(&n(12.35), &cmp_gt), true);
 
-    let cmp_eq = single(CellValueSingleOp::Equal, "3.14");
-    // 3.14 == 3.14 -> match
-    assert_eq!(evaluate_cell_value(&n(3.14), &cmp_eq), true);
+    let cmp_eq = single(CellValueSingleOp::Equal, "12.34");
+    // 12.34 == 12.34 -> match
+    assert_eq!(evaluate_cell_value(&n(12.34), &cmp_eq), true);
 }
 
 #[test]

@@ -3,6 +3,7 @@ import { jest } from '@jest/globals';
 import type { ActionDependencies } from '@mog-sdk/contracts/actions';
 
 import { pasteChartFromClipboard } from '../chart-clipboard';
+import { createChartAddReceipt } from './test-helpers';
 
 function createPasteDeps({
   activeCell = { row: 20, col: 3 },
@@ -11,7 +12,7 @@ function createPasteDeps({
   activeCell?: { row: number; col: number } | null;
   isCut?: boolean;
 } = {}) {
-  const addChart = jest.fn().mockResolvedValue({ id: 'pasted-chart-id' });
+  const addChart = jest.fn().mockResolvedValue(createChartAddReceipt('pasted-chart-id'));
   const removeChart = jest.fn().mockResolvedValue(undefined);
   const selectObject = jest.fn();
   const clearChartClipboard = jest.fn();

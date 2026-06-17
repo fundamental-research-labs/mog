@@ -14,6 +14,7 @@ use compute_document::observe::CellChangeKind;
 
 mod cell_mutations;
 mod fill;
+mod fill_preview;
 mod find_replace;
 mod named_ranges;
 mod range_operations;

@@ -6,7 +6,7 @@
  * source fields remain independently addressable.
  */
 
-import { useCallback, useMemo, useState, type DragEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
 
 import type {
   AggregateFunction,
@@ -15,6 +15,11 @@ import type {
   PivotFieldPlacementFlat as PivotFieldPlacement,
   SortOrder,
 } from '@mog-sdk/contracts/pivot';
+import {
+  setupAutoScroll,
+  type AutoScrollController,
+} from '../../systems/input/coordination/auto-scroll-service';
+import { PIVOT_AGGREGATE_FUNCTION_OPTIONS } from '../../systems/pivot';
 
 export interface PivotFieldListProps {
   fields: PivotField[];
@@ -36,6 +41,7 @@ export interface PivotFieldListProps {
   canChangeAggregate?: boolean;
   canSortLabels?: boolean;
   canSortByValue?: boolean;
+  getDragScrollContainer?: () => HTMLElement | null;
 }
 
 type DragState =
@@ -55,6 +61,7 @@ interface PlacedField {
 
 const PIVOT_AREAS: PivotFieldArea[] = ['filter', 'column', 'row', 'value'];
 const DROP_PAYLOAD_TYPE = 'application/x-mog-pivot-field-pane';
+const DRAG_SCROLL_EDGE_PX = 48;
 
 function placementId(placement: PivotFieldPlacement): string {
   return String(placement.placementId);
@@ -120,18 +127,6 @@ function AggregateSelector({
   disabled?: boolean;
   onChange: (value: AggregateFunction) => void;
 }) {
-  const options: { value: AggregateFunction; label: string }[] = [
-    { value: 'sum', label: 'Sum' },
-    { value: 'count', label: 'Count' },
-    { value: 'counta', label: 'Count A' },
-    { value: 'average', label: 'Average' },
-    { value: 'min', label: 'Min' },
-    { value: 'max', label: 'Max' },
-    { value: 'product', label: 'Product' },
-    { value: 'stdev', label: 'StdDev' },
-    { value: 'var', label: 'Var' },
-  ];
-
   return (
     <select
       className="min-w-0 flex-1 px-1.5 py-0.5 border border-ss-border rounded-ss-sm text-caption bg-ss-surface"
@@ -142,8 +137,8 @@ function AggregateSelector({
       onClick={(event) => event.stopPropagation()}
       data-pivot-target="aggregate-selector"
     >
-      {options.map((option) => (
-        <option key={option.value} value={option.value}>
+      {PIVOT_AGGREGATE_FUNCTION_OPTIONS.map((option) => (
+        <option key={option.type} value={option.type}>
           {option.label}
         </option>
       ))}
@@ -225,10 +220,13 @@ export function PivotFieldList({
   canChangeAggregate = !disabled,
   canSortLabels = !disabled,
   canSortByValue = !disabled,
+  getDragScrollContainer,
 }: PivotFieldListProps) {
   const [dragState, setDragState] = useState<DragState | null>(null);
   const [dragOverArea, setDragOverArea] = useState<PivotFieldArea | null>(null);
   const [selectedItem, setSelectedItem] = useState<DragState | null>(null);
+  const dragPointRef = useRef<{ x: number; y: number } | null>(null);
+  const autoScrollRef = useRef<AutoScrollController | null>(null);
 
   const fieldById = useMemo(() => new Map(fields.map((field) => [field.id, field])), [fields]);
   const placementsByArea = useMemo<Record<PivotFieldArea, PlacedField[]>>(() => {
@@ -282,6 +280,45 @@ export function PivotFieldList({
     [dragState],
   );
 
+  const getScrollElement = useCallback(
+    () => getDragScrollContainer?.() ?? null,
+    [getDragScrollContainer],
+  );
+
+  const ensureAutoScroll = useCallback((): AutoScrollController => {
+    if (autoScrollRef.current) return autoScrollRef.current;
+
+    autoScrollRef.current = setupAutoScroll({
+      getMousePosition: () => dragPointRef.current,
+      getViewportBounds: () => {
+        const element = getScrollElement();
+        const rect = element?.getBoundingClientRect();
+        return rect
+          ? { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom }
+          : { left: 0, top: 0, right: 0, bottom: 0 };
+      },
+      applyScrollDelta: (_dx, dy) => {
+        const element = getScrollElement();
+        if (element) element.scrollTop += dy;
+      },
+      threshold: DRAG_SCROLL_EDGE_PX,
+    });
+
+    return autoScrollRef.current;
+  }, [getScrollElement]);
+
+  const stopAutoScroll = useCallback(() => {
+    dragPointRef.current = null;
+    autoScrollRef.current?.stop();
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      autoScrollRef.current?.cleanup();
+      autoScrollRef.current = null;
+    };
+  }, []);
+
   const handleDragStart = useCallback(
     (event: DragEvent, state: DragState) => {
       if (!canDragState(state)) return;
@@ -297,9 +334,35 @@ export function PivotFieldList({
   );
 
   const handleDragEnd = useCallback(() => {
+    stopAutoScroll();
     setDragState(null);
     setDragOverArea(null);
-  }, []);
+  }, [stopAutoScroll]);
+
+  const handleListDragOver = useCallback(
+    (event: DragEvent<HTMLDivElement>) => {
+      const state = dragStateFromEvent(event);
+      if (!canDragState(state) || !getScrollElement()) {
+        stopAutoScroll();
+        return;
+      }
+
+      event.preventDefault();
+      event.dataTransfer.dropEffect = 'move';
+      dragPointRef.current = { x: event.clientX, y: event.clientY };
+      ensureAutoScroll().start();
+    },
+    [canDragState, dragStateFromEvent, ensureAutoScroll, getScrollElement, stopAutoScroll],
+  );
+
+  const handleListDragLeave = useCallback(
+    (event: DragEvent<HTMLDivElement>) => {
+      const relatedTarget = event.relatedTarget;
+      if (relatedTarget instanceof Node && event.currentTarget.contains(relatedTarget)) return;
+      stopAutoScroll();
+    },
+    [stopAutoScroll],
+  );
 
   const handleDragOver = useCallback(
     (event: DragEvent, area: PivotFieldArea) => {
@@ -317,7 +380,10 @@ export function PivotFieldList({
       event.preventDefault();
       event.stopPropagation();
       const state = dragStateFromEvent(event);
-      if (!state || !canDragState(state)) return;
+      if (!state || !canDragState(state)) {
+        stopAutoScroll();
+        return;
+      }
 
       if (state.kind === 'field') {
         const field = fieldById.get(state.fieldId);
@@ -339,8 +405,17 @@ export function PivotFieldList({
       setDragState(null);
       setDragOverArea(null);
       setSelectedItem(null);
+      stopAutoScroll();
     },
-    [canDragState, dragStateFromEvent, fieldById, onAddField, onMovePlacement, placementsByArea],
+    [
+      canDragState,
+      dragStateFromEvent,
+      fieldById,
+      onAddField,
+      onMovePlacement,
+      placementsByArea,
+      stopAutoScroll,
+    ],
   );
 
   const handleDropOnZone = useCallback(
@@ -439,6 +514,8 @@ export function PivotFieldList({
           canDrag ? 'cursor-grab' : 'cursor-default'
         } ${isDragging ? 'opacity-50' : ''} ${isSelected ? 'ring-2 ring-ss-primary' : ''} bg-ss-surface-hover`}
         draggable={canDrag}
+        title={field.name}
+        aria-label={field.name}
         onDragStart={(event) => handleDragStart(event, state)}
         onDragEnd={handleDragEnd}
         onClick={(event) => {
@@ -454,7 +531,9 @@ export function PivotFieldList({
         data-pivot-selected={isSelected ? 'true' : 'false'}
       >
         <DataTypeIcon dataType={field.dataType} />
-        <span className="min-w-0 flex-1 truncate">{field.name}</span>
+        <span className="min-w-0 flex-1 truncate" title={field.name} aria-label={field.name}>
+          {field.name}
+        </span>
       </div>
     );
   };
@@ -490,6 +569,8 @@ export function PivotFieldList({
           isValueField ? 'bg-ss-primary-light' : 'bg-ss-surface-hover'
         }`}
         draggable={canDrag}
+        title={label}
+        aria-label={label}
         onDragStart={(event) => handleDragStart(event, state)}
         onDragEnd={handleDragEnd}
         onDragOver={(event) => handleDragOver(event, placement.area)}
@@ -521,7 +602,9 @@ export function PivotFieldList({
       >
         <div className="flex w-full min-w-0 items-center gap-1.5">
           <DataTypeIcon dataType={field.dataType} />
-          <span className="min-w-0 flex-1 truncate">{label}</span>
+          <span className="min-w-0 flex-1 truncate" title={label} aria-label={label}>
+            {label}
+          </span>
           {canRemoveFields && (
             <button
               type="button"
@@ -597,7 +680,9 @@ export function PivotFieldList({
           data-pivot-accepts-selected={selectedItem ? 'true' : 'false'}
         >
           {placedFields.length === 0 ? (
-            <span className="text-caption text-ss-text-disabled italic p-1">Drop fields here</span>
+            <span className="pointer-events-none text-caption text-ss-text-disabled italic p-1">
+              Drop fields here
+            </span>
           ) : (
             placedFields.map((item, index) => renderPlacementChip(item, index))
           )}
@@ -610,6 +695,8 @@ export function PivotFieldList({
     <div
       className="flex flex-col gap-4 p-4 bg-ss-surface-secondary rounded-ss-lg text-body-sm"
       data-pivot-target="field-list"
+      onDragOver={handleListDragOver}
+      onDragLeave={handleListDragLeave}
     >
       <div className="flex flex-col gap-2">
         <div className="font-semibold text-caption text-ss-text-secondary uppercase tracking-wide">

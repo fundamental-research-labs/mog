@@ -672,10 +672,21 @@ describe('WorksheetPivotsImpl', () => {
       );
     });
 
-    it('throws when pivot not found', async () => {
-      ctx.pivot.getPivot.mockResolvedValue(null);
+    it('returns a failed receipt when pivot not found', async () => {
+      const receipt = await ws.pivots.rename('nonexistent', 'NewName');
 
-      await expect(ws.pivots.rename('nonexistent', 'NewName')).rejects.toThrow(/not found/i);
+      expect(receipt).toEqual(
+        expect.objectContaining({
+          kind: 'pivot.rename',
+          status: 'failed',
+          diagnostics: expect.arrayContaining([
+            expect.objectContaining({
+              code: 'COMPUTE_ERROR',
+              message: expect.stringMatching(/not found/i),
+            }),
+          ]),
+        }),
+      );
     });
   });
 
@@ -771,13 +782,23 @@ describe('WorksheetPivotsImpl', () => {
       );
     });
 
-    it('rejects a missing sheet with a typed pivot error', async () => {
+    it('returns a failed receipt for a missing sheet with a typed pivot error', async () => {
       ctx.computeBridge.getSheetName.mockResolvedValue('Other');
 
-      await expect(ws.pivots.setDataSource('SalesPivot', 'Missing!A1:B5')).rejects.toMatchObject({
-        code: 'PIVOT_INVALID_DATA_SOURCE',
-        context: expect.objectContaining({ reason: 'sourceSheetNotFound' }),
-      });
+      const receipt = await ws.pivots.setDataSource('SalesPivot', 'Missing!A1:B5');
+
+      expect(receipt).toEqual(
+        expect.objectContaining({
+          kind: 'pivot.setDataSource',
+          status: 'failed',
+          diagnostics: expect.arrayContaining([
+            expect.objectContaining({
+              code: 'PIVOT_INVALID_DATA_SOURCE',
+              details: expect.objectContaining({ reason: 'sourceSheetNotFound' }),
+            }),
+          ]),
+        }),
+      );
     });
 
     it('rejects ambiguous duplicate headers with candidate details', async () => {
@@ -807,25 +828,26 @@ describe('WorksheetPivotsImpl', () => {
         },
       );
 
-      await expect(ws.pivots.setDataSource('SalesPivot', 'Sheet1!A1:C5')).rejects.toMatchObject({
-        code: 'PIVOT_UNRESOLVED_FIELD_REFERENCES',
-        context: expect.objectContaining({
-          pivotName: 'SalesPivot',
-          dataSource: 'Sheet1!A1:C5',
-          invalidReferences: expect.arrayContaining([
+      const receipt = await ws.pivots.setDataSource('SalesPivot', 'Sheet1!A1:C5');
+
+      expect(receipt).toEqual(
+        expect.objectContaining({
+          status: 'failed',
+          diagnostics: expect.arrayContaining([
             expect.objectContaining({
-              kind: 'ambiguousDuplicateHeader',
-              path: 'placements[0]',
-              identifier: 'Amount',
-              candidates: expect.arrayContaining(['col0:Amount@0', 'col1:Amount@1']),
-              newResolution: expect.arrayContaining([
-                expect.objectContaining({ id: 'col0', name: 'Amount', sourceColumn: 0 }),
-                expect.objectContaining({ id: 'col1', name: 'Amount', sourceColumn: 1 }),
-              ]),
+              code: 'PIVOT_UNRESOLVED_FIELD_REFERENCES',
+              details: expect.objectContaining({
+                invalidReferences: expect.arrayContaining([
+                  expect.objectContaining({
+                    kind: 'ambiguousDuplicateHeader',
+                    candidates: expect.arrayContaining(['col0:Amount@0', 'col1:Amount@1']),
+                  }),
+                ]),
+              }),
             }),
           ]),
         }),
-      });
+      );
       expect(ctx.pivot.updatePivot).not.toHaveBeenCalled();
     });
 
@@ -868,46 +890,28 @@ describe('WorksheetPivotsImpl', () => {
         },
       );
 
-      await expect(ws.pivots.setDataSource('SalesPivot', 'Sheet1!A1:B5')).rejects.toMatchObject({
-        code: 'PIVOT_UNRESOLVED_FIELD_REFERENCES',
-        context: expect.objectContaining({
-          pivotName: 'SalesPivot',
-          dataSource: 'Sheet1!A1:B5',
-          invalidReferences: expect.arrayContaining([
+      const receipt = await ws.pivots.setDataSource('SalesPivot', 'Sheet1!A1:B5');
+
+      expect(receipt).toEqual(
+        expect.objectContaining({
+          status: 'failed',
+          diagnostics: expect.arrayContaining([
             expect.objectContaining({
-              kind: 'sortByValueField',
-              path: 'placements[0].sortByValue.valueFieldId',
-              fieldId: 'Amount',
-            }),
-            expect.objectContaining({
-              kind: 'showValuesAsBaseField',
-              path: 'placements[0].showValuesAs.baseField',
-              fieldId: 'Amount',
-            }),
-            expect.objectContaining({
-              kind: 'calculatedField',
-              path: 'placements[1]',
-              fieldId: 'CalcMargin',
-              identifier: 'Amount - Cost',
-            }),
-            expect.objectContaining({
-              kind: 'filterField',
-              path: 'filters[0]',
-              fieldId: 'Amount',
-            }),
-            expect.objectContaining({
-              kind: 'topBottomValueField',
-              path: 'filters[0].topBottom.valueFieldId',
-              fieldId: 'Amount',
-            }),
-            expect.objectContaining({
-              kind: 'calculatedFieldFormula',
-              path: 'calculatedFields.CalcMargin',
-              identifier: 'Amount - Cost',
+              code: 'PIVOT_UNRESOLVED_FIELD_REFERENCES',
+              details: expect.objectContaining({
+                invalidReferences: expect.arrayContaining([
+                  expect.objectContaining({ kind: 'sortByValueField', fieldId: 'Amount' }),
+                  expect.objectContaining({ kind: 'showValuesAsBaseField', fieldId: 'Amount' }),
+                  expect.objectContaining({ kind: 'calculatedField', fieldId: 'CalcMargin' }),
+                  expect.objectContaining({ kind: 'filterField', fieldId: 'Amount' }),
+                  expect.objectContaining({ kind: 'topBottomValueField', fieldId: 'Amount' }),
+                  expect.objectContaining({ kind: 'calculatedFieldFormula' }),
+                ]),
+              }),
             }),
           ]),
         }),
-      });
+      );
       expect(ctx.pivot.updatePivot).not.toHaveBeenCalled();
     });
 
@@ -946,34 +950,27 @@ describe('WorksheetPivotsImpl', () => {
         },
       );
 
-      await expect(ws.pivots.setDataSource('SalesPivot', 'Sheet1!E1:F5')).rejects.toMatchObject({
-        code: 'PIVOT_UNRESOLVED_FIELD_REFERENCES',
-        context: expect.objectContaining({
-          invalidReferences: expect.arrayContaining([
+      const receipt = await ws.pivots.setDataSource('SalesPivot', 'Sheet1!E1:F5');
+
+      expect(receipt).toEqual(
+        expect.objectContaining({
+          status: 'failed',
+          diagnostics: expect.arrayContaining([
             expect.objectContaining({
-              kind: 'placement',
-              path: 'placements[0]',
-              fieldId: 'Region',
-            }),
-            expect.objectContaining({
-              kind: 'calculatedField',
-              path: 'placements[1]',
-              fieldId: 'CalcMargin',
-            }),
-            expect.objectContaining({ kind: 'filterField', path: 'filters[0]', fieldId: 'Amount' }),
-            expect.objectContaining({
-              kind: 'topBottomValueField',
-              path: 'filters[0].topBottom.valueFieldId',
-              fieldId: 'Amount',
-            }),
-            expect.objectContaining({
-              kind: 'calculatedFieldFormula',
-              path: 'calculatedFields.CalcMargin',
-              identifier: 'Amount - Cost',
+              code: 'PIVOT_UNRESOLVED_FIELD_REFERENCES',
+              details: expect.objectContaining({
+                invalidReferences: expect.arrayContaining([
+                  expect.objectContaining({ kind: 'placement', fieldId: 'Region' }),
+                  expect.objectContaining({ kind: 'calculatedField', fieldId: 'CalcMargin' }),
+                  expect.objectContaining({ kind: 'filterField', fieldId: 'Amount' }),
+                  expect.objectContaining({ kind: 'topBottomValueField', fieldId: 'Amount' }),
+                  expect.objectContaining({ kind: 'calculatedFieldFormula' }),
+                ]),
+              }),
             }),
           ]),
         }),
-      });
+      );
       expect(ctx.pivot.updatePivot).not.toHaveBeenCalled();
     });
 
@@ -1031,7 +1028,11 @@ describe('WorksheetPivotsImpl', () => {
 
     it('compute reads through the pure pivot compute path even when forceRefresh is true', async () => {
       await expect(ws.pivots.compute('SalesPivot', true)).resolves.toEqual(
-        expect.objectContaining({ sourceRowCount: 1 }),
+        expect.objectContaining({
+          kind: 'pivot.compute',
+          status: 'completed',
+          result: expect.objectContaining({ sourceRowCount: 1 }),
+        }),
       );
 
       expect(ctx.pivot.compute).toHaveBeenCalledWith(SHEET_ID, 'pivot-1', true);
@@ -1039,13 +1040,17 @@ describe('WorksheetPivotsImpl', () => {
     });
 
     it('queryPivot reads through compute and does not refresh or materialize', async () => {
-      const query = await ws.pivots.queryPivot('SalesPivot');
+      const receipt = await ws.pivots.queryPivot('SalesPivot');
 
-      expect(query).toEqual(
+      expect(receipt).toEqual(
         expect.objectContaining({
-          pivotName: 'SalesPivot',
-          rowFields: ['Region'],
-          valueFields: ['Sum of Amount'],
+          kind: 'pivot.query',
+          status: 'completed',
+          result: expect.objectContaining({
+            pivotName: 'SalesPivot',
+            rowFields: ['Region'],
+            valueFields: ['Sum of Amount'],
+          }),
         }),
       );
       expect(ctx.pivot.compute).toHaveBeenCalledWith(SHEET_ID, 'pivot-1');

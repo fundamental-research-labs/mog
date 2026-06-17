@@ -3,6 +3,7 @@ import { jest } from '@jest/globals';
 import { sheetId } from '@mog-sdk/contracts/core';
 
 import * as CellOps from '../cell-operations';
+import { createWorkbookLinkService } from '../../../../services/workbook-links';
 
 const SHEET_ID = sheetId('sheet-1');
 
@@ -125,5 +126,32 @@ describe('CellOps filter reapply materialization', () => {
       'getActiveFilters',
       'applyFilter',
     ]);
+  });
+
+  it('rejects unbound Excel ordinal formulas before writing to compute', async () => {
+    const ctx = createMockCtx();
+    ctx.workbookLinks = createWorkbookLinkService();
+    ctx.workbookLinkScope = jest.fn(() => ({
+      requestingDocumentId: 'doc-1',
+      requestingSessionId: 'session-1',
+      actor: 'agent',
+      principal: { tags: [] },
+    }));
+    ctx.computeBridge.getAllSheetIds = jest.fn(async () => [SHEET_ID, 'source-gaap-sheet']);
+    ctx.computeBridge.getSheetName = jest.fn(async (id: string) =>
+      id === 'source-gaap-sheet' ? 'Source-GAAP' : 'Model',
+    );
+
+    await expect(
+      CellOps.setCell(ctx, SHEET_ID, 0, 0, "='[1]Source-GAAP'!$L$17"),
+    ).rejects.toMatchObject({
+      code: 'API_INVALID_ARGUMENT',
+      message: expect.stringContaining('Excel internal external-link ordinal'),
+      context: expect.objectContaining({
+        diagnosticCode: 'EXTERNAL_REFERENCE_UNBOUND_LOCAL_SHEET_CANDIDATE',
+        suggestedFormula: "='Source-GAAP'!$L$17",
+      }),
+    });
+    expect(ctx.computeBridge.setCellsByPosition).not.toHaveBeenCalled();
   });
 });

@@ -87,7 +87,10 @@ mod tests {
 
     #[test]
     fn test_display_key_fractional_number() {
-        assert_eq!(cell_value_to_display_key(&CellValue::number(3.14)), "3.14");
+        assert_eq!(
+            cell_value_to_display_key(&CellValue::number(12.34)),
+            "12.34"
+        );
     }
 
     #[test]

@@ -6,13 +6,8 @@
  * Usage: `workbook.scenarios.add(config)` instead of
  *        `workbook.createScenario(config)`
  */
-import type {
-  ActiveScenarioState,
-  ApplyScenarioResult,
-  OriginalCellValue,
-  Scenario,
-  ScenarioConfig,
-} from '../types';
+import type { ActiveScenarioState, OriginalCellValue, Scenario, ScenarioConfig } from '../types';
+import type { WorkbookScenarioApplyReceipt } from '../mutation-receipt';
 
 export interface WorkbookScenarios {
   /**
@@ -43,7 +38,7 @@ export interface WorkbookScenarios {
    * @param id - The scenario ID to apply.
    * @returns Result including cells updated count and original values for restore.
    */
-  apply(id: string): Promise<ApplyScenarioResult>;
+  apply(id: string): Promise<WorkbookScenarioApplyReceipt>;
 
   /**
    * Restore original values from a prior apply() call and deactivate the scenario.

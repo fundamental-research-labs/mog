@@ -3,20 +3,32 @@ import type { BatchRangeResponse, RangeQueryResult } from '../bridges/compute/co
 import { getExternalWorkbookSession } from './workbook-links/session-registry';
 import type { PersistedWorkbookLinkRecord } from './workbook-links/types';
 import { sheetId as toSheetId, type SheetId } from '@mog-sdk/contracts/core';
+import { quoteSheetName } from '@mog/spreadsheet-utils/a1';
+import { KernelError } from '../errors';
 
-interface ExternalFormulaCell {
+export interface ExternalFormulaCell {
   readonly sheetId: SheetId;
   readonly row: number;
   readonly col: number;
   readonly formula: string;
 }
 
-interface ParsedExternalRef {
+export interface ParsedExternalRef {
+  readonly text: string;
   readonly start: number;
   readonly end: number;
   readonly workbookToken: string;
   readonly sheetName: string;
   readonly address: string;
+  readonly addressText: string;
+}
+
+export interface ExternalFormulaFeedback {
+  readonly code: 'EXTERNAL_REFERENCE_UNBOUND_LOCAL_SHEET_CANDIDATE' | 'EXTERNAL_REFERENCE_UNBOUND';
+  readonly message: string;
+  readonly suggestion: string;
+  readonly details: Record<string, unknown>;
+  readonly suggestedFormula?: string;
 }
 
 const formulasByContext = new WeakMap<DocumentContext, Map<string, ExternalFormulaCell>>();
@@ -48,6 +60,10 @@ export function getTrackedExternalFormula(
   return formulasByContext.get(ctx)?.get(cellKey(sheetId, row, col))?.formula;
 }
 
+export function getTrackedExternalFormulas(ctx: DocumentContext): readonly ExternalFormulaCell[] {
+  return [...(formulasByContext.get(ctx)?.values() ?? [])];
+}
+
 export async function prepareExternalFormulaWrite(
   ctx: DocumentContext,
   sheetId: SheetId,
@@ -55,14 +71,19 @@ export async function prepareExternalFormulaWrite(
   col: number,
   value: unknown,
 ): Promise<unknown> {
-  trackExternalFormulaWrite(ctx, sheetId, row, col, value);
-  if (
-    typeof value !== 'string' ||
-    !value.startsWith('=') ||
-    parseExternalRefs(value).length === 0
-  ) {
+  if (typeof value !== 'string' || !value.startsWith('=')) {
+    trackExternalFormulaWrite(ctx, sheetId, row, col, value);
     return value;
   }
+
+  const refs = parseExternalRefs(value);
+  if (refs.length === 0) {
+    trackExternalFormulaWrite(ctx, sheetId, row, col, value);
+    return value;
+  }
+
+  await assertExternalFormulaWriteAllowed(ctx, value, refs);
+  trackExternalFormulaWrite(ctx, sheetId, row, col, value);
   return materializeFormula(ctx, value);
 }
 
@@ -146,6 +167,95 @@ export async function materializeExternalFormulas(ctx: DocumentContext): Promise
   return materialized;
 }
 
+export function getExternalFormulaReferences(formula: string): ParsedExternalRef[] {
+  return parseExternalRefs(formula);
+}
+
+export function localReferenceForExternalRef(
+  ref: Pick<ParsedExternalRef, 'sheetName' | 'addressText'>,
+  sheetName = ref.sheetName,
+): string {
+  return `${quoteSheetName(sheetName)}!${ref.addressText}`;
+}
+
+export function formulaWithLocalExternalRef(
+  formula: string,
+  ref: Pick<ParsedExternalRef, 'start' | 'end' | 'sheetName' | 'addressText'>,
+  sheetName = ref.sheetName,
+): string {
+  return replaceFormulaReference(formula, ref, localReferenceForExternalRef(ref, sheetName));
+}
+
+export function buildUnboundExternalFormulaFeedback(
+  formula: string,
+  ref: ParsedExternalRef,
+  localSheetName?: string,
+): ExternalFormulaFeedback {
+  const isOrdinal = isExcelExternalOrdinalToken(ref.workbookToken);
+  const localReference = localSheetName
+    ? localReferenceForExternalRef(ref, localSheetName)
+    : undefined;
+  const suggestedFormula = localReference
+    ? replaceFormulaReference(formula, ref, localReference)
+    : undefined;
+  const code = localSheetName
+    ? 'EXTERNAL_REFERENCE_UNBOUND_LOCAL_SHEET_CANDIDATE'
+    : 'EXTERNAL_REFERENCE_UNBOUND';
+  const identityMessage = isOrdinal
+    ? `Mog interprets ${ref.text} as an Excel internal external-link ordinal because of [${ref.workbookToken}], but this workbook has no external-link metadata for ordinal ${ref.workbookToken}.`
+    : `Mog interprets ${ref.text} as an external workbook reference, but no workbook link is registered for "${ref.workbookToken}".`;
+  const externalGuidance = isOrdinal
+    ? `create or bind an external workbook link with a readable name and write the formula with that name instead of [${ref.workbookToken}]`
+    : `register an external workbook link for "${ref.workbookToken}" before writing this formula`;
+  const localGuidance = localSheetName
+    ? ` Local sheet "${localSheetName}" exists. Use ${suggestedFormula} if you meant this workbook. If you meant another workbook, ${externalGuidance}.`
+    : ` ${capitalizeSentence(externalGuidance)}.`;
+  const suggestion = localSheetName
+    ? `Use ${suggestedFormula} for a local reference, or ${externalGuidance}.`
+    : `${capitalizeSentence(externalGuidance)}.`;
+
+  return {
+    code,
+    message: `${identityMessage}${localGuidance}`,
+    suggestion,
+    suggestedFormula,
+    details: {
+      diagnosticCode: code,
+      text: ref.text,
+      workbookToken: ref.workbookToken,
+      tokenKind: isOrdinal ? 'excel-internal-ordinal' : 'workbook-display-token',
+      externalSheetName: ref.sheetName,
+      externalAddress: ref.addressText,
+      interpretation: 'external-workbook-reference',
+      localSheetName,
+      localReference,
+      suggestedFormula,
+    },
+  };
+}
+
+async function assertExternalFormulaWriteAllowed(
+  ctx: DocumentContext,
+  formula: string,
+  refs: readonly ParsedExternalRef[],
+): Promise<void> {
+  const linkRecords = ctx.workbookLinks.listRecords();
+  let localSheetNames: Map<string, string> | undefined;
+
+  for (const ref of refs) {
+    if (findExternalFormulaLink(linkRecords, ref.workbookToken)) continue;
+
+    localSheetNames ??= await getLocalSheetNames(ctx);
+    const localSheetName = localSheetNames.get(ref.sheetName.toLowerCase());
+    const feedback = buildUnboundExternalFormulaFeedback(formula, ref, localSheetName);
+    throw new KernelError('API_INVALID_ARGUMENT', feedback.message, {
+      suggestion: feedback.suggestion,
+      context: feedback.details,
+      path: ['formula'],
+    });
+  }
+}
+
 async function materializeFormula(ctx: DocumentContext, formula: string): Promise<string> {
   const refs = parseExternalRefs(formula);
   if (refs.length === 0) return formula;
@@ -170,7 +280,7 @@ async function readExternalReference(
   ctx: DocumentContext,
   ref: ParsedExternalRef,
 ): Promise<string> {
-  const link = findLink(ctx.workbookLinks.listRecords(), ref.workbookToken);
+  const link = findExternalFormulaLink(ctx.workbookLinks.listRecords(), ref.workbookToken);
   if (!link) return 'NA()';
 
   const scope = ctx.workbookLinkScope();
@@ -203,7 +313,7 @@ async function readExternalReference(
   return `{${rows.join(';')}}`;
 }
 
-function findLink(
+export function findExternalFormulaLink(
   records: readonly PersistedWorkbookLinkRecord[],
   token: string,
 ): PersistedWorkbookLinkRecord | null {
@@ -219,17 +329,47 @@ function findLink(
   );
 }
 
+async function getLocalSheetNames(ctx: DocumentContext): Promise<Map<string, string>> {
+  const ids = await ctx.computeBridge.getAllSheetIds();
+  const entries = await Promise.all(
+    ids.map(async (id) => {
+      const name = (await ctx.computeBridge.getSheetName(id)) ?? id;
+      return [name.toLowerCase(), name] as const;
+    }),
+  );
+  return new Map(entries);
+}
+
+function isExcelExternalOrdinalToken(token: string): boolean {
+  return /^[1-9]\d*$/.test(token);
+}
+
+function capitalizeSentence(value: string): string {
+  return value.length > 0 ? value[0].toUpperCase() + value.slice(1) : value;
+}
+
+function replaceFormulaReference(
+  formula: string,
+  ref: Pick<ParsedExternalRef, 'start' | 'end'>,
+  replacement: string,
+): string {
+  return `${formula.slice(0, ref.start)}${replacement}${formula.slice(ref.end)}`;
+}
+
 function parseExternalRefs(formula: string): ParsedExternalRef[] {
   const refs: ParsedExternalRef[] = [];
   const pattern =
     /(?:'\[([^\]]+)\]([^']+)'|\[([^\]]+)\]([^!']+))!(\$?[A-Za-z]{1,3}\$?\d+(?::\$?[A-Za-z]{1,3}\$?\d+)?)/g;
   for (const match of formula.matchAll(pattern)) {
+    const addressText = match[5];
     refs.push({
+      text: match[0],
       start: match.index ?? 0,
       end: (match.index ?? 0) + match[0].length,
       workbookToken: match[1] ?? match[3],
       sheetName: (match[2] ?? match[4]).replace(/''/g, "'"),
-      address: match[5].replace(/\$/g, ''),
+      address: addressText.replace(/\$/g, ''),
+      addressText,
     });
   }
   return refs;

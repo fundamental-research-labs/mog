@@ -43,7 +43,8 @@ pub fn toggle_group_collapsed(
         .iter()
         .chain(config.column_groups.iter())
         .find(|g| g.id == group_id)?;
-    let new_state = !current.collapsed;
+    let effective_collapsed = current.collapsed || current.hidden;
+    let new_state = !effective_collapsed;
     set_group_collapsed(doc, sheets, sheet_id, group_id, new_state);
     Some(new_state)
 }
@@ -71,7 +72,7 @@ pub fn expand_all(doc: &Doc, sheets: &MapRef, sheet_id: &SheetId, axis: Option<G
     };
     for ax in axes {
         for group in &get_groups(doc, sheets, sheet_id, ax) {
-            if group.collapsed {
+            if group.collapsed || group.hidden {
                 set_group_collapsed(doc, sheets, sheet_id, &group.id, false);
             }
         }

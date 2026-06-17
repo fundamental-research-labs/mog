@@ -1,7 +1,11 @@
 import type {
+  PivotHandleCalculatedFieldReceipt,
+  PivotHandleMutationKind,
   PivotHandlePlacementSpec,
   PivotHandleInfo,
   PivotHandleInfoOptions,
+  PivotHandleMutationReceipt,
+  PivotRefreshReceipt,
   PivotTableInfo,
   PivotValueSortConfig,
   PivotTableConfig as ApiPivotTableConfig,
@@ -36,6 +40,14 @@ import {
 import { setPivotItemVisibilityForId } from '../../../domain/pivots/filters';
 import { toA1 } from '../../internal/utils';
 import type { HandleLiveness } from '../../lifecycle/handle-liveness';
+import {
+  buildPivotHandleCalculatedFieldReceipt,
+  buildPivotHandleDeleteReceipt,
+  buildPivotHandleExpansionReceipt,
+  buildPivotHandleKernelReceipt,
+  buildPivotHandleMutationReceipt,
+} from './handle-receipts';
+import { buildPivotRefreshReceipt } from './receipts';
 
 type PivotFieldPlacement = PivotFieldPlacementFlat;
 type ValueAggregation = 'sum' | 'count' | 'average' | 'max' | 'min';
@@ -179,6 +191,26 @@ export function buildPivotTableHandle(options: PivotHandleBuilderOptions): Pivot
     return result;
   };
 
+  const configReceipt = (input: {
+    kind: PivotHandleMutationKind;
+    config: DataPivotTableConfig;
+    fieldId?: string;
+    area?: PivotFieldArea;
+    placement?: PivotFieldPlacement;
+    details?: Record<string, unknown>;
+  }): PivotHandleMutationReceipt =>
+    buildPivotHandleMutationReceipt({
+      kind: input.kind,
+      sheetId,
+      pivotId,
+      config: input.config,
+      fieldId: input.fieldId,
+      area: input.area,
+      placementId: input.placement?.placementId,
+      placement: input.placement,
+      details: input.details,
+    });
+
   return {
     getName(): string {
       return currentConfig('getName').name ?? pivotId;
@@ -234,17 +266,27 @@ export function buildPivotTableHandle(options: PivotHandleBuilderOptions): Pivot
       return toApiConfig(current, current.sourceSheetName ?? sourceSheetName);
     },
 
-    async update(updates: Partial<Omit<DataPivotTableConfig, 'id' | 'createdAt'>>): Promise<void> {
-      await updateCachedPivot(updates, 'uiConfigChanged');
+    async update(
+      updates: Partial<Omit<DataPivotTableConfig, 'id' | 'createdAt'>>,
+    ): Promise<PivotHandleMutationReceipt> {
+      const config = await updateCachedPivot(updates, 'uiConfigChanged');
+      return configReceipt({
+        kind: 'pivot.handle.update',
+        config,
+      });
     },
 
-    async delete(): Promise<boolean> {
+    async delete() {
       assertLive('delete');
-      const deleted = await ctx.pivot.deletePivot(sheetId, pivotId);
+      const deleted = (await ctx.pivot.deletePivot(sheetId, pivotId)) === true;
       if (deleted) {
         snapshots.markDeleted(pivotId);
       }
-      return deleted;
+      return buildPivotHandleDeleteReceipt({
+        sheetId,
+        pivotId,
+        deleted,
+      });
     },
 
     subscribeResult(
@@ -282,7 +324,7 @@ export function buildPivotTableHandle(options: PivotHandleBuilderOptions): Pivot
       field: string,
       area: 'row' | 'column' | 'filter',
       position?: number,
-    ): Promise<void> {
+    ): Promise<PivotHandleMutationReceipt> {
       const current = await refreshCachedConfig('addField');
       const areaPlacements = current.placements.filter((p) => p.area === area);
       const otherPlacements = current.placements.filter((p) => p.area !== area);
@@ -300,52 +342,75 @@ export function buildPivotTableHandle(options: PivotHandleBuilderOptions): Pivot
       } else {
         areaPlacements.push(newPlacement);
       }
-      await updateCachedPivot(
+      const config = await updateCachedPivot(
         { placements: [...otherPlacements, ...areaPlacements] },
         'fieldPlacementChanged',
       );
+      return configReceipt({
+        kind: 'pivot.handle.addField',
+        config,
+        fieldId: field,
+        area,
+        placement: newPlacement,
+      });
     },
 
     async addValueField(
       field: string,
       aggregation: ValueAggregation,
       label?: string,
-    ): Promise<void> {
+    ): Promise<PivotHandleMutationReceipt> {
       const current = await refreshCachedConfig('addValueField');
       const valuePlacements = current.placements.filter((p) => p.area === 'value');
-      await updateCachedPivot(
+      const newPlacement: PivotFieldPlacement = {
+        placementId: makePlacementId('value', field, valuePlacements.length),
+        fieldId: field,
+        area: 'value',
+        position: valuePlacements.length,
+        aggregateFunction: aggregation,
+        displayName: automaticPivotValueDisplayName({
+          config: current,
+          fieldId: field,
+          aggregateFunction: aggregation,
+          displayName: label,
+        }),
+      };
+      const config = await updateCachedPivot(
         {
-          placements: [
-            ...current.placements,
-            {
-              placementId: makePlacementId('value', field, valuePlacements.length),
-              fieldId: field,
-              area: 'value',
-              position: valuePlacements.length,
-              aggregateFunction: aggregation,
-              displayName: automaticPivotValueDisplayName({
-                config: current,
-                fieldId: field,
-                aggregateFunction: aggregation,
-                displayName: label,
-              }),
-            },
-          ],
+          placements: [...current.placements, newPlacement],
         },
         'fieldPlacementChanged',
       );
+      return configReceipt({
+        kind: 'pivot.handle.addValueField',
+        config,
+        fieldId: field,
+        area: 'value',
+        placement: newPlacement,
+      });
     },
 
     async addPlacement(spec: PivotHandlePlacementSpec) {
       assertLive('addPlacement');
       const receipt = await ctx.pivot.addPlacement(pivotId, spec);
-      await refreshCachedConfig('addPlacement');
-      return receipt;
+      const config = await refreshCachedConfig('addPlacement');
+      return buildPivotHandleKernelReceipt({
+        kind: 'pivot.handle.addPlacement',
+        sheetId,
+        kernelReceipt: receipt,
+        config,
+        fieldId: spec.fieldId ?? (spec.source?.type === 'field' ? spec.source.fieldId : undefined),
+        area: spec.area,
+        placementId: receipt.placementId,
+      });
     },
 
-    async removeField(fieldName: string, area?: PivotFieldArea): Promise<void> {
+    async removeField(
+      fieldName: string,
+      area?: PivotFieldArea,
+    ): Promise<PivotHandleMutationReceipt> {
       const current = await refreshCachedConfig('removeField');
-      await updateCachedPivot(
+      const config = await updateCachedPivot(
         {
           placements: current.placements.filter(
             (p) => p.fieldId !== fieldName || (area != null && p.area !== area),
@@ -353,6 +418,12 @@ export function buildPivotTableHandle(options: PivotHandleBuilderOptions): Pivot
         },
         'fieldPlacementChanged',
       );
+      return configReceipt({
+        kind: 'pivot.handle.removeField',
+        config,
+        fieldId: fieldName,
+        area,
+      });
     },
 
     async removePlacement(placementIdToRemove) {
@@ -361,8 +432,14 @@ export function buildPivotTableHandle(options: PivotHandleBuilderOptions): Pivot
         pivotId,
         pivotPlacementId(placementIdToRemove),
       );
-      await refreshCachedConfig('removePlacement');
-      return receipt;
+      const config = await refreshCachedConfig('removePlacement');
+      return buildPivotHandleKernelReceipt({
+        kind: 'pivot.handle.removePlacement',
+        sheetId,
+        kernelReceipt: receipt,
+        config,
+        placementId: pivotPlacementId(placementIdToRemove),
+      });
     },
 
     async moveField(
@@ -370,16 +447,28 @@ export function buildPivotTableHandle(options: PivotHandleBuilderOptions): Pivot
       fromArea: PivotFieldArea,
       toArea: PivotFieldArea,
       toPosition: number,
-    ): Promise<void> {
+    ): Promise<PivotHandleMutationReceipt> {
       const current = await refreshCachedConfig('moveField');
       const target = resolvePlacement(current, fieldName, fromArea, 'moveField');
-      await ctx.pivot.movePlacement(
-        pivotId,
-        pivotPlacementId(placementId(target)),
-        toArea,
-        toPosition,
-      );
-      await refreshCachedConfig('moveField');
+      const movedPlacementId = pivotPlacementId(placementId(target));
+      const receipt = await ctx.pivot.movePlacement(pivotId, movedPlacementId, toArea, toPosition);
+      const config = await refreshCachedConfig('moveField');
+      const movedPlacement = config.placements.find((p) => placementId(p) === movedPlacementId) ?? {
+        ...target,
+        placementId: movedPlacementId,
+        area: toArea,
+        position: toPosition,
+      };
+      return buildPivotHandleKernelReceipt({
+        kind: 'pivot.handle.moveField',
+        sheetId,
+        kernelReceipt: receipt,
+        config,
+        fieldId: fieldName,
+        area: toArea,
+        placementId: movedPlacementId,
+        placement: movedPlacement,
+      });
     },
 
     async movePlacement(placementIdToMove, toArea, toPosition) {
@@ -390,30 +479,45 @@ export function buildPivotTableHandle(options: PivotHandleBuilderOptions): Pivot
         toArea,
         toPosition,
       );
-      await refreshCachedConfig('movePlacement');
-      return receipt;
+      const config = await refreshCachedConfig('movePlacement');
+      return buildPivotHandleKernelReceipt({
+        kind: 'pivot.handle.movePlacement',
+        sheetId,
+        kernelReceipt: receipt,
+        config,
+        area: toArea,
+        placementId: pivotPlacementId(placementIdToMove),
+      });
     },
 
     async changeAggregation(
       valueFieldLabel: string,
       newAggregation: ValueAggregation,
-    ): Promise<void> {
+    ): Promise<PivotHandleMutationReceipt> {
       const current = await refreshCachedConfig('changeAggregation');
       const target = resolvePlacement(current, valueFieldLabel, 'value', 'changeAggregation');
-      await updateCachedPivot(
+      let updatedPlacement: PivotFieldPlacement = target;
+      const config = await updateCachedPivot(
         {
-          placements: current.placements.map((placement) =>
-            placement === target
-              ? valuePlacementWithAggregate({
-                  config: current,
-                  placement,
-                  aggregateFunction: newAggregation as AggregateFunction,
-                })
-              : placement,
-          ),
+          placements: current.placements.map((placement) => {
+            if (placement !== target) return placement;
+            updatedPlacement = valuePlacementWithAggregate({
+              config: current,
+              placement,
+              aggregateFunction: newAggregation as AggregateFunction,
+            });
+            return updatedPlacement;
+          }),
         },
         'aggregateFunctionChanged',
       );
+      return configReceipt({
+        kind: 'pivot.handle.changeAggregation',
+        config,
+        fieldId: target.fieldId,
+        area: 'value',
+        placement: updatedPlacement,
+      });
     },
 
     async setPlacementAggregateFunction(placementIdToUpdate, aggregateFunction) {
@@ -423,21 +527,38 @@ export function buildPivotTableHandle(options: PivotHandleBuilderOptions): Pivot
         pivotPlacementId(placementIdToUpdate),
         aggregateFunction,
       );
-      await refreshCachedConfig('setPlacementAggregateFunction');
-      return receipt;
+      const config = await refreshCachedConfig('setPlacementAggregateFunction');
+      return buildPivotHandleKernelReceipt({
+        kind: 'pivot.handle.setPlacementAggregateFunction',
+        sheetId,
+        kernelReceipt: receipt,
+        config,
+        placementId: pivotPlacementId(placementIdToUpdate),
+      });
     },
 
-    async renameValueField(currentLabel: string, newLabel: string): Promise<void> {
+    async renameValueField(
+      currentLabel: string,
+      newLabel: string,
+    ): Promise<PivotHandleMutationReceipt> {
       const current = await refreshCachedConfig('renameValueField');
       const target = resolvePlacement(current, currentLabel, 'value', 'renameValueField');
-      await updateCachedPivot(
+      const updatedPlacement: PivotFieldPlacement = { ...target, displayName: newLabel };
+      const config = await updateCachedPivot(
         {
           placements: current.placements.map((placement) =>
-            placement === target ? { ...placement, displayName: newLabel } : placement,
+            placement === target ? updatedPlacement : placement,
           ),
         },
         'aggregateFunctionChanged',
       );
+      return configReceipt({
+        kind: 'pivot.handle.renameValueField',
+        config,
+        fieldId: target.fieldId,
+        area: 'value',
+        placement: updatedPlacement,
+      });
     },
 
     async renameValuePlacement(placementIdToRename, displayName) {
@@ -447,14 +568,33 @@ export function buildPivotTableHandle(options: PivotHandleBuilderOptions): Pivot
         pivotPlacementId(placementIdToRename),
         displayName,
       );
-      await refreshCachedConfig('renameValuePlacement');
-      return receipt;
+      const config = await refreshCachedConfig('renameValuePlacement');
+      return buildPivotHandleKernelReceipt({
+        kind: 'pivot.handle.renameValuePlacement',
+        sheetId,
+        kernelReceipt: receipt,
+        config,
+        placementId: pivotPlacementId(placementIdToRename),
+      });
     },
 
-    async refresh(): Promise<void> {
+    async refresh(): Promise<PivotRefreshReceipt> {
       assertLive('refresh');
-      await ctx.pivot.refresh(sheetId, pivotId);
-      await refreshCachedConfig('refresh');
+      let result: PivotTableResult | null = null;
+      let error: unknown;
+      try {
+        result = await ctx.pivot.refresh(sheetId, pivotId);
+      } catch (caught) {
+        error = caught;
+      }
+      const current = await refreshCachedConfig('refresh');
+      return buildPivotRefreshReceipt({
+        sheetId,
+        pivotId,
+        config: current,
+        result,
+        materializationError: error,
+      });
     },
 
     getAllItems(): Promise<PivotFieldItems[]> {
@@ -465,26 +605,52 @@ export function buildPivotTableHandle(options: PivotHandleBuilderOptions): Pivot
     async setShowValuesAs(
       valueFieldLabel: string,
       showValuesAs: ShowValuesAsConfig | null,
-    ): Promise<void> {
+    ): Promise<PivotHandleMutationReceipt> {
       const current = await refreshCachedConfig('setShowValuesAs');
       const target = resolvePlacement(current, valueFieldLabel, 'value', 'setShowValuesAs');
-      await updateCachedPivot(
+      const updatedPlacement: PivotFieldPlacement = {
+        ...target,
+        showValuesAs: showValuesAs ?? undefined,
+      };
+      const config = await updateCachedPivot(
         {
           placements: current.placements.map((placement) =>
-            placement === target
-              ? { ...placement, showValuesAs: showValuesAs ?? undefined }
-              : placement,
+            placement === target ? updatedPlacement : placement,
           ),
         },
         'showValuesAsChanged',
       );
+      return configReceipt({
+        kind: 'pivot.handle.setShowValuesAs',
+        config,
+        fieldId: target.fieldId,
+        area: 'value',
+        placement: updatedPlacement,
+      });
     },
 
-    async setSortOrder(fieldOrPlacement: string, sortOrder: SortOrder): Promise<void> {
+    async setSortOrder(
+      fieldOrPlacement: string,
+      sortOrder: SortOrder,
+    ): Promise<PivotHandleMutationReceipt> {
       const current = await refreshCachedConfig('setSortOrder');
       const target = resolvePlacement(current, fieldOrPlacement, null, 'setSortOrder');
-      await ctx.pivot.setSortOrder(pivotId, pivotPlacementId(placementId(target)), sortOrder);
-      await refreshCachedConfig('setSortOrder');
+      const receipt = await ctx.pivot.setSortOrder(
+        pivotId,
+        pivotPlacementId(placementId(target)),
+        sortOrder,
+      );
+      const config = await refreshCachedConfig('setSortOrder');
+      return buildPivotHandleKernelReceipt({
+        kind: 'pivot.handle.setSortOrder',
+        sheetId,
+        kernelReceipt: receipt,
+        config,
+        fieldId: target.fieldId,
+        area: target.area,
+        placementId: pivotPlacementId(placementId(target)),
+        placement: target,
+      });
     },
 
     async setPlacementSortOrder(placementIdToSort, sortOrder) {
@@ -494,8 +660,14 @@ export function buildPivotTableHandle(options: PivotHandleBuilderOptions): Pivot
         pivotPlacementId(placementIdToSort),
         sortOrder,
       );
-      await refreshCachedConfig('setPlacementSortOrder');
-      return receipt;
+      const config = await refreshCachedConfig('setPlacementSortOrder');
+      return buildPivotHandleKernelReceipt({
+        kind: 'pivot.handle.setPlacementSortOrder',
+        sheetId,
+        kernelReceipt: receipt,
+        config,
+        placementId: pivotPlacementId(placementIdToSort),
+      });
     },
 
     async setSortByValue(axisPlacementId, valuePlacementId, config: PivotValueSortConfig | null) {
@@ -506,13 +678,22 @@ export function buildPivotTableHandle(options: PivotHandleBuilderOptions): Pivot
         pivotPlacementId(valuePlacementId),
         config,
       );
-      await refreshCachedConfig('setSortByValue');
-      return receipt;
+      const updatedConfig = await refreshCachedConfig('setSortByValue');
+      return buildPivotHandleKernelReceipt({
+        kind: 'pivot.handle.setSortByValue',
+        sheetId,
+        kernelReceipt: receipt,
+        config: updatedConfig,
+        placementId: pivotPlacementId(axisPlacementId),
+      });
     },
 
-    async setFilter(fieldId: string, filter: Omit<PivotFilter, 'fieldId'>): Promise<void> {
+    async setFilter(
+      fieldId: string,
+      filter: Omit<PivotFilter, 'fieldId'>,
+    ): Promise<PivotHandleMutationReceipt> {
       const current = await refreshCachedConfig('setFilter');
-      await updateCachedPivot(
+      const config = await updateCachedPivot(
         {
           filters: [
             ...current.filters.filter((existing) => existing.fieldId !== fieldId),
@@ -521,34 +702,79 @@ export function buildPivotTableHandle(options: PivotHandleBuilderOptions): Pivot
         },
         'filterChanged',
       );
+      return configReceipt({
+        kind: 'pivot.handle.setFilter',
+        config,
+        fieldId,
+        details: { filter },
+      });
     },
 
-    async removeFilter(fieldId: string): Promise<void> {
+    async removeFilter(fieldId: string): Promise<PivotHandleMutationReceipt> {
       const current = await refreshCachedConfig('removeFilter');
-      await updateCachedPivot(
+      const config = await updateCachedPivot(
         { filters: current.filters.filter((existing) => existing.fieldId !== fieldId) },
         'filterChanged',
       );
+      return configReceipt({
+        kind: 'pivot.handle.removeFilter',
+        config,
+        fieldId,
+      });
     },
 
-    async setLayout(layout: Partial<PivotTableLayout>): Promise<void> {
+    async setLayout(layout: Partial<PivotTableLayout>): Promise<PivotHandleMutationReceipt> {
       const current = currentConfig('setLayout');
-      await updateCachedPivot({ layout: { ...current.layout, ...layout } }, 'layoutChanged');
+      const config = await updateCachedPivot(
+        { layout: { ...current.layout, ...layout } },
+        'layoutChanged',
+      );
+      return configReceipt({
+        kind: 'pivot.handle.setLayout',
+        config,
+        details: { layout },
+      });
     },
 
-    async setStyle(style: Partial<PivotTableStyle>): Promise<void> {
+    async setStyle(style: Partial<PivotTableStyle>): Promise<PivotHandleMutationReceipt> {
       const current = currentConfig('setStyle');
-      await updateCachedPivot({ style: { ...current.style, ...style } }, 'styleChanged');
+      const config = await updateCachedPivot(
+        { style: { ...current.style, ...style } },
+        'styleChanged',
+      );
+      return configReceipt({
+        kind: 'pivot.handle.setStyle',
+        config,
+        details: { style },
+      });
     },
 
-    async toggleExpanded(headerKey: string, isRow: boolean): Promise<boolean> {
+    async toggleExpanded(headerKey: string, isRow: boolean) {
       assertLive('toggleExpanded');
-      return ctx.pivotExpansionProvider?.toggleExpanded(pivotId, headerKey, isRow, sheetId) ?? true;
+      const provider = ctx.pivotExpansionProvider;
+      const expanded = provider?.toggleExpanded(pivotId, headerKey, isRow, sheetId) ?? true;
+      return buildPivotHandleExpansionReceipt({
+        kind: 'pivot.handle.toggleExpanded',
+        sheetId,
+        pivotId,
+        expanded,
+        applied: provider != null,
+        headerKey,
+        isRow,
+      });
     },
 
-    async setAllExpanded(expanded: boolean): Promise<void> {
+    async setAllExpanded(expanded: boolean) {
       assertLive('setAllExpanded');
-      ctx.pivotExpansionProvider?.setAllExpanded(pivotId, expanded);
+      const provider = ctx.pivotExpansionProvider;
+      provider?.setAllExpanded(pivotId, expanded);
+      return buildPivotHandleExpansionReceipt({
+        kind: 'pivot.handle.setAllExpanded',
+        sheetId,
+        pivotId,
+        expanded,
+        applied: provider != null,
+      });
     },
 
     async getExpansionState(): Promise<PivotExpansionState> {
@@ -566,13 +792,15 @@ export function buildPivotTableHandle(options: PivotHandleBuilderOptions): Pivot
       return ctx.pivot.getDrillDownData(sheetId, pivotId, rowKey, columnKey);
     },
 
-    async addCalculatedField(
-      field: CalculatedField,
-    ): Promise<PivotKernelMutationReceipt & { calculatedFieldId: CalculatedFieldId }> {
+    async addCalculatedField(field: CalculatedField): Promise<PivotHandleCalculatedFieldReceipt> {
       assertLive('addCalculatedField');
       const receipt = await addCalculatedField(pivotId, field);
-      await refreshCachedConfig('addCalculatedField');
-      return receipt;
+      const config = await refreshCachedConfig('addCalculatedField');
+      return buildPivotHandleCalculatedFieldReceipt({
+        sheetId,
+        kernelReceipt: receipt,
+        config,
+      });
     },
 
     getDataSourceType(): DataSourceType {
@@ -580,16 +808,30 @@ export function buildPivotTableHandle(options: PivotHandleBuilderOptions): Pivot
       return 'range';
     },
 
-    async setDataSource(dataSource: string): Promise<void> {
+    async setDataSource(dataSource: string): Promise<PivotHandleMutationReceipt> {
       assertLive('setDataSource');
       await setDataSource(pivotId, dataSource);
-      await refreshCachedConfig('setDataSource');
+      const config = await refreshCachedConfig('setDataSource');
+      return configReceipt({
+        kind: 'pivot.handle.setDataSource',
+        config,
+        details: { dataSource },
+      });
     },
 
-    async setItemVisibility(fieldId: string, visibleItems: Record<string, boolean>): Promise<void> {
+    async setItemVisibility(
+      fieldId: string,
+      visibleItems: Record<string, boolean>,
+    ): Promise<PivotHandleMutationReceipt> {
       assertLive('setItemVisibility');
       await setPivotItemVisibilityForId({ ctx, sheetId, pivotId, fieldId, visibleItems });
-      await refreshCachedConfig('setItemVisibility');
+      const config = await refreshCachedConfig('setItemVisibility');
+      return configReceipt({
+        kind: 'pivot.handle.setItemVisibility',
+        config,
+        fieldId,
+        details: { visibleItems },
+      });
     },
   };
 }

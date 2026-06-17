@@ -208,7 +208,7 @@ mod tests {
     #[test]
     fn test_parse_f64_decimals() {
         assert_eq!(parse_f64_fast(b"1.5"), Some(1.5));
-        assert_eq!(parse_f64_fast(b"-3.14"), Some(-3.14));
+        assert_eq!(parse_f64_fast(b"-12.34"), Some(-12.34));
     }
 
     #[test]

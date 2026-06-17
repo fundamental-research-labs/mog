@@ -77,6 +77,51 @@ fn test_expanding_imported_hidden_group_clears_hidden_flag() {
 }
 
 #[test]
+fn test_toggle_imported_hidden_group_expands_effective_collapsed_state() {
+    let (s, id) = storage_with_sheet();
+    let mut config = get_sheet_grouping_config(s.doc(), &s.sheets_ref(), &id);
+    config.column_groups.push(GroupDefinition {
+        id: "imported-hidden-column-group".to_string(),
+        sheet_id: id.to_uuid_string(),
+        axis: GroupAxis::Column,
+        start: 2,
+        end: 5,
+        level: 1,
+        collapsed: false,
+        parent_id: None,
+        hidden: true,
+        collapsed_on_member: false,
+    });
+    set_sheet_grouping_config(s.doc(), &s.sheets_ref(), &id, &config);
+
+    assert_eq!(
+        toggle_group_collapsed(
+            s.doc(),
+            &s.sheets_ref(),
+            &id,
+            "imported-hidden-column-group",
+        ),
+        Some(false)
+    );
+
+    let group = get_group_in_sheet(
+        s.doc(),
+        &s.sheets_ref(),
+        &id,
+        "imported-hidden-column-group",
+    )
+    .unwrap();
+    assert!(!group.collapsed);
+    assert!(!group.hidden);
+    assert!(is_column_visible_by_groups(
+        s.doc(),
+        &s.sheets_ref(),
+        &id,
+        3
+    ));
+}
+
+#[test]
 fn test_set_level_collapsed() {
     let (s, id) = storage_with_sheet();
     group_rows(s.doc(), &s.sheets_ref(), &id, 1, 10).unwrap();
@@ -87,6 +132,43 @@ fn test_set_level_collapsed() {
             .unwrap()
             .collapsed
     );
+}
+
+#[test]
+fn test_expand_all_clears_imported_hidden_group_without_collapsed_flag() {
+    let (s, id) = storage_with_sheet();
+    let mut config = get_sheet_grouping_config(s.doc(), &s.sheets_ref(), &id);
+    config.column_groups.push(GroupDefinition {
+        id: "imported-hidden-column-group".to_string(),
+        sheet_id: id.to_uuid_string(),
+        axis: GroupAxis::Column,
+        start: 2,
+        end: 5,
+        level: 1,
+        collapsed: false,
+        parent_id: None,
+        hidden: true,
+        collapsed_on_member: false,
+    });
+    set_sheet_grouping_config(s.doc(), &s.sheets_ref(), &id, &config);
+
+    expand_all(s.doc(), &s.sheets_ref(), &id, Some(GroupAxis::Column));
+
+    let group = get_group_in_sheet(
+        s.doc(),
+        &s.sheets_ref(),
+        &id,
+        "imported-hidden-column-group",
+    )
+    .unwrap();
+    assert!(!group.collapsed);
+    assert!(!group.hidden);
+    assert!(is_column_visible_by_groups(
+        s.doc(),
+        &s.sheets_ref(),
+        &id,
+        3
+    ));
 }
 
 #[test]

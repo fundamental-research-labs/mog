@@ -185,7 +185,18 @@ jobs:
           WASM_PACKAGE_VERSION="${INPUT_WASM_PACKAGE_VERSION:-$VERSION}"
           node -e "if (!/^\d+\.\d+\.\d+(-[\w.]+)?$/.test('$WASM_PACKAGE_VERSION')) { console.error('Invalid @mog-sdk/wasm semver:', '$WASM_PACKAGE_VERSION'); process.exit(1); }"
           echo "Hydrating @mog-sdk/wasm@${WASM_PACKAGE_VERSION} for extension ${VERSION}."
-          TARBALL=$(npm pack "@mog-sdk/wasm@${WASM_PACKAGE_VERSION}" --pack-destination "$RUNNER_TEMP")
+          TARBALL=""
+          for attempt in 1 2 3 4 5 6 7 8 9 10 11 12; do
+            if TARBALL=$(npm pack "@mog-sdk/wasm@${WASM_PACKAGE_VERSION}" --pack-destination "$RUNNER_TEMP"); then
+              break
+            fi
+            if [ "$attempt" = "12" ]; then
+              echo "::error::@mog-sdk/wasm@${WASM_PACKAGE_VERSION} was not packable from npm after 180s."
+              exit 1
+            fi
+            echo "attempt $attempt: @mog-sdk/wasm@${WASM_PACKAGE_VERSION} not packable yet; sleeping..."
+            sleep 15
+          done
           mkdir -p "$RUNNER_TEMP/mog-sdk-wasm"
           tar -xzf "$RUNNER_TEMP/$TARBALL" -C "$RUNNER_TEMP/mog-sdk-wasm"
           cp "$RUNNER_TEMP"/mog-sdk-wasm/package/compute_core_wasm* compute/wasm/npm/
@@ -245,3 +256,24 @@ jobs:
           npx --yes ovsx@1.0.0 --pat "$OVSX_PAT" publish \
             integrations/vscode/mog-xlsx-editor/dist/mog-xlsx-editor.vsix \
             --skip-duplicate
+
+      - name: Summary
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          echo "## VS Code Extension Summary" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- VSIX artifact: \`mog-xlsx-editor-vsix-${VERSION}\`" >> "$GITHUB_STEP_SUMMARY"
+          if [ "${{ inputs.dry-run || false }}" = "true" ]; then
+            echo "- Marketplace publish: skipped (\`dry-run=true\`)" >> "$GITHUB_STEP_SUMMARY"
+          else
+            if [ "${{ inputs.publish_vs_marketplace != false }}" = "true" ]; then
+              echo "- VS Code Marketplace: \`FundamentalResearchLabs.mog-xlsx-editor@${VERSION}\`" >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "- VS Code Marketplace: skipped" >> "$GITHUB_STEP_SUMMARY"
+            fi
+            if [ "${{ inputs.publish_open_vsx != false }}" = "true" ]; then
+              echo "- Open VSX: \`FundamentalResearchLabs.mog-xlsx-editor@${VERSION}\`" >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "- Open VSX: skipped" >> "$GITHUB_STEP_SUMMARY"
+            fi
+          fi

@@ -11,18 +11,21 @@ import { sheetId, type SheetId } from '@mog-sdk/contracts/core';
 
 import type { WorkbookNamesDeps } from '../../../src/api/workbook/names';
 import type { DocumentContext } from '../../../src/context/types';
+import type { KernelError } from '../../../src/errors';
 
 // =============================================================================
 // Mock the NamedRanges domain module
 // =============================================================================
 
 const mockGetByName = jest.fn();
+const mockGetById = jest.fn();
 const mockGetRefersToA1 = jest.fn();
 const mockExportNames = jest.fn();
 const mockUpdate = jest.fn();
 
 jest.unstable_mockModule('../../../src/domain/formulas/named-ranges', () => ({
   getByName: (...args: unknown[]) => mockGetByName(...args),
+  getById: (...args: unknown[]) => mockGetById(...args),
   getRefersToA1: (...args: unknown[]) => mockGetRefersToA1(...args),
   exportNames: (...args: unknown[]) => mockExportNames(...args),
   update: (...args: unknown[]) => mockUpdate(...args),
@@ -53,6 +56,9 @@ function createMockDeps(overrides?: Partial<WorkbookNamesDeps>): WorkbookNamesDe
       on: jest.fn(),
       off: jest.fn(),
     },
+    writeGate: {
+      assertWritable: jest.fn(),
+    },
   } as unknown as DocumentContext;
 
   return {
@@ -68,8 +74,18 @@ function createMockDeps(overrides?: Partial<WorkbookNamesDeps>): WorkbookNamesDe
       if (sheetId === 'sheet-2') return 'Sheet2';
       return undefined;
     },
+    getKnownSheetNames: async () => ['Sheet1', 'Sheet2'],
     ...overrides,
   };
+}
+
+async function captureKernelError(promise: Promise<unknown>): Promise<KernelError> {
+  try {
+    await promise;
+  } catch (error) {
+    return error as KernelError;
+  }
+  throw new Error('Expected KernelError');
 }
 
 // =============================================================================
@@ -82,7 +98,9 @@ describe('WorkbookNamesImpl', () => {
 
   beforeEach(() => {
     mockGetByName.mockReset();
+    mockGetById.mockReset();
     mockGetRefersToA1.mockReset();
+    mockGetRefersToA1.mockResolvedValue('=Sheet1!$A$1');
     mockExportNames.mockReset();
     mockUpdate.mockReset();
     deps = createMockDeps();
@@ -150,6 +168,27 @@ describe('WorkbookNamesImpl', () => {
         visible: false,
       });
       expect(mockGetByName).toHaveBeenCalledWith(deps.ctx, 'LocalName', 'sheet-1');
+    });
+
+    it('reports known sheet names when scoped sheet lookup fails', async () => {
+      const error = await captureKernelError(names.get('LocalName', 'Sheet 1'));
+
+      expect(error.code).toBe('API_SHEET_NOT_FOUND');
+      expect(error.context).toEqual(
+        expect.objectContaining({
+          lookupKind: 'namedRangeScope',
+          target: 'Sheet 1',
+          knownSheetNames: ['Sheet1', 'Sheet2'],
+        }),
+      );
+      expect(error.context.nearMatches).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            name: 'Sheet1',
+            matchKind: 'fuzzy',
+          }),
+        ]),
+      );
     });
 
     it('includes visible field in results', async () => {
@@ -407,12 +446,14 @@ describe('WorkbookNamesImpl', () => {
 
   describe('update()', () => {
     it('passes visible field through to domain update', async () => {
-      mockGetByName.mockResolvedValue({
+      const defined = {
         id: 'nr-1',
         name: 'Revenue',
         refersTo: { template: '{0}', refs: [] },
         scope: undefined,
-      });
+      };
+      mockGetByName.mockResolvedValue(defined);
+      mockGetById.mockResolvedValue({ ...defined, visible: false });
 
       await names.update('Revenue', { visible: false });
 
@@ -431,11 +472,18 @@ describe('WorkbookNamesImpl', () => {
     });
 
     it('passes all update fields including visible', async () => {
-      mockGetByName.mockResolvedValue({
+      const defined = {
         id: 'nr-2',
         name: 'OldName',
         refersTo: { template: '{0}', refs: [] },
         scope: undefined,
+      };
+      mockGetByName.mockResolvedValue(defined);
+      mockGetById.mockResolvedValue({
+        ...defined,
+        name: 'NewName',
+        comment: 'Updated comment',
+        visible: true,
       });
 
       await names.update('OldName', {

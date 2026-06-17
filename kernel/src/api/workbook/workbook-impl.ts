@@ -106,6 +106,17 @@ import type {
   CreateWorkbookOptions,
   WorkbookConfig,
 } from './types';
+import {
+  getKnownSheetNames,
+  resolveSheetNameToId as resolveWorkbookSheetNameToId,
+  resolveSheetTarget,
+} from './sheet-lookup';
+import {
+  createSaveCallbackFailedError,
+  createSaveWriteFailedError,
+  createSaveWriterUnavailableError,
+  normalizeWorkbookSavePath,
+} from './save-errors';
 export type { CreateWorkbookOptions, WorkbookConfig } from './types';
 
 // Event mapping — extracted to `event-mapping.ts` so `sheets.ts` can import it
@@ -156,6 +167,7 @@ import { WorkbookSecurityImpl } from './security';
 import { WorkbookViewportImpl } from './viewport';
 import { WorkbookChangesImpl } from './changes';
 import { WorkbookDiagnosticsImpl } from './diagnostics';
+import { WorkbookLinksImpl } from './links';
 
 import { DEFAULT_CHROME_THEME } from '@mog-sdk/contracts/rendering';
 import { NO_HOST_OPERATION_GATE, OperationDeniedError } from '../../document/host-operation-gate';
@@ -423,46 +435,12 @@ export class WorkbookImpl implements WorkbookInternal {
    * Never pass a sheetId here — use getSheetById(sheetId) for direct ID access.
    */
   async _resolveTarget(target: number | string): Promise<SheetId> {
-    if (typeof target === 'number') {
-      const order = await getOrder(this.ctx);
-      if (target < 0 || target >= order.length) {
-        throw new KernelError('API_SHEET_NOT_FOUND', `Sheet not found: ${target}`, {
-          context: { target },
-        });
-      }
-      return order[target];
-    }
-
-    // String — first try as a sheet name (case-insensitive lookup)
-    const order = await getOrder(this.ctx);
-    for (const id of order) {
-      const name = await this.ctx.computeBridge.getSheetName(id);
-      if (name != null && name.toLowerCase() === target.toLowerCase()) {
-        return id;
-      }
-    }
-
-    // Fallback: check if target is itself a sheetId in the order array
-    const matchedId = order.find((id) => id === target);
-    if (matchedId) {
-      return matchedId;
-    }
-
-    throw new KernelError('API_SHEET_NOT_FOUND', `Sheet not found: ${target}`, {
-      context: { target },
-    });
+    return resolveSheetTarget(this.ctx, target);
   }
 
   /** Resolve a sheet name (case-insensitive) to its sheetId. ASYNC — reads from Rust. */
   private async _resolveSheetNameToId(nameLower: string): Promise<SheetId | undefined> {
-    const order = await getOrder(this.ctx);
-    for (const id of order) {
-      const sheetName = await this.ctx.computeBridge.getSheetName(id);
-      if (sheetName != null && sheetName.toLowerCase() === nameLower) {
-        return id;
-      }
-    }
-    return undefined;
+    return resolveWorkbookSheetNameToId(this.ctx, nameLower);
   }
 
   // ===========================================================================
@@ -1121,6 +1099,7 @@ export class WorkbookImpl implements WorkbookInternal {
     const executor = this._getExecutor();
     const result = await executor.execute(code, {
       timeout: options?.timeout,
+      mutationPolicy: options?.mutationPolicy ?? 'rollbackOnError',
     });
 
     return {
@@ -1128,6 +1107,14 @@ export class WorkbookImpl implements WorkbookInternal {
       output: result.logs?.join('\n'),
       error: result.error ?? undefined,
       diagnostics: result.diagnostics,
+      mutationStatus: result.mutationStatus ?? 'unknown',
+      changeCount: result.changeCount ?? 0,
+      directCount: result.directCount ?? 0,
+      indirectCount: result.indirectCount ?? 0,
+      editRanges: result.editRanges ?? [],
+      dirtyCells: result.dirtyCells ?? [],
+      formattedSummary: result.formattedSummary,
+      rollbackError: result.rollbackError,
       duration: result.timing?.total,
     };
   }
@@ -1660,18 +1647,25 @@ export class WorkbookImpl implements WorkbookInternal {
 
   async save(path?: string): Promise<Uint8Array> {
     this._ensureNotDisposed();
+    const saveTarget = normalizeWorkbookSavePath(path);
+    if (saveTarget && !this._writeFile) {
+      throw createSaveWriterUnavailableError(saveTarget);
+    }
+
     const buffer = await this.toXlsx();
-    if (path) {
-      if (!this._writeFile) {
-        throw new KernelError(
-          'API_UNSUPPORTED_OPERATION',
-          'Workbook.save(path) requires a platform-provided file writer in this runtime',
-        );
+    if (saveTarget) {
+      try {
+        await this._writeFile!(saveTarget.requestedPath, buffer);
+      } catch (error) {
+        throw createSaveWriteFailedError(saveTarget, error);
       }
-      await this._writeFile(path, buffer);
     }
     if (this._onSave) {
-      await this._onSave(buffer);
+      try {
+        await this._onSave(buffer);
+      } catch (error) {
+        throw createSaveCallbackFailedError(error);
+      }
     }
     this.markClean();
     return buffer;
@@ -1807,6 +1801,7 @@ export class WorkbookImpl implements WorkbookInternal {
       getActiveSheetId: () => this.getActiveSheetId(),
       resolveSheetNameToId: (nameLower) => this._resolveSheetNameToId(nameLower),
       getSheetName: (id) => getName(this.ctx, id),
+      getKnownSheetNames: () => getKnownSheetNames(this.ctx),
     }));
   }
 
@@ -1929,33 +1924,15 @@ export class WorkbookImpl implements WorkbookInternal {
   }
 
   get diagnostics(): WorkbookDiagnostics {
-    return (this._diagnostics ??= new WorkbookDiagnosticsImpl(this.ctx));
+    return (this._diagnostics ??= new WorkbookDiagnosticsImpl(this.ctx, {
+      isDirty: () => this.isDirty,
+    }));
   }
 
   get links(): WorkbookLinks {
-    return (this._links ??= this.createWorkbookLinksPublicApi());
-  }
-
-  private createWorkbookLinksPublicApi(): WorkbookLinks {
-    const service = this.ctx.workbookLinks;
-    return {
-      list: () => service.list(),
-      get: (linkId) => service.get(linkId),
-      add: (input) => service.create(input),
-      create: (input) => service.create(input),
-      retarget: (linkId, input) => service.update(linkId, input),
-      update: (linkId, input) => service.update(linkId, input),
-      break: (linkId, options) => service.break(linkId, options),
-      delete: (linkId) => service.delete(linkId),
-      getStatus: (linkId) => service.getStatus(linkId, this.workbookLinkScope()),
-      refresh: (linkId) => service.refresh(linkId, this.workbookLinkScope()),
-      refreshAll: (options) => service.refreshAll(this.workbookLinkScope(), options),
-      watchStatus: (linkId, handler) =>
-        service.watchStatus(linkId, this.workbookLinkScope(), handler),
-      getUsages: (linkId) => service.getUsages(linkId),
-      copySource: (linkId) => service.copySource(linkId, this.workbookLinkScope()),
-      listPackageDiagnostics: () => service.listPackageDiagnostics(),
-    };
+    return (this._links ??= new WorkbookLinksImpl(this.ctx.workbookLinks, () =>
+      this.workbookLinkScope(),
+    ));
   }
 
   private workbookLinkScope(): WorkbookLinkStatusScope {

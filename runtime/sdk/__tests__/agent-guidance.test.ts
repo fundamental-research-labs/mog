@@ -1,5 +1,6 @@
 import generatedGuidance from '../src/generated/api-guidance.json';
 import { api, apiSpec } from '../src/api-describe';
+import { a1 } from '../src/index';
 import {
   analyzeMogCode,
   apiCompatibility,
@@ -10,6 +11,28 @@ import {
 } from '../src/agent-guidance';
 
 describe('SDK agent API guidance', () => {
+  it('exports the concise a1 helper namespace', () => {
+    expect(a1.address(3, 1)).toBe('B4');
+    expect(a1.range(0, 0, 1, 2)).toBe('A1:C2');
+    expect(a1.column(26)).toBe('AA');
+    expect(a1.columnIndex('AA')).toBe(26);
+    expect(a1.offset('Z10', 0, 1)).toBe('AA10');
+    expect(a1.parse('B4')).toEqual({ row: 3, col: 1 });
+
+    expect(api.describe().utilities.namespaces).toContain('a1');
+    expect(api.describe().utilities.methods).toContain('a1.address');
+
+    const a1Description = api.describe('a1');
+    expect(a1Description && 'methods' in a1Description ? a1Description.methods : []).toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: 'address' })]),
+    );
+
+    const addressDescription = api.describe('a1.address');
+    expect(
+      addressDescription && 'signature' in addressDescription ? addressDescription.signature : '',
+    ).toContain('address(row: number, col: number)');
+  });
+
   it('keeps the generated guidance artifact in sync with the typed catalog', () => {
     expect(generatedGuidance.entries).toEqual(apiGuidanceCatalog);
     expect(generatedGuidance.compatibility.entries).toEqual(apiCompatibility.entries);
@@ -45,6 +68,12 @@ describe('SDK agent API guidance', () => {
     expect(rootImport?.kind).toBe('mog-api');
     if (rootImport?.kind !== 'mog-api') throw new Error('expected root import guidance');
     expect(rootImport.target.kind).toBe('rootImport');
+
+    const addressHelper = api.guidance.explain('a1.address');
+    expect(addressHelper?.kind).toBe('mog-api');
+    if (addressHelper?.kind !== 'mog-api') throw new Error('expected a1 guidance');
+    expect(addressHelper.target.kind).toBe('method');
+    expect(addressHelper.target.signature).toContain('address(row: number, col: number)');
   });
 
   it('explains versioned Mog API compatibility decisions', () => {
@@ -68,6 +97,74 @@ describe('SDK agent API guidance', () => {
     expect(method && 'compatibility' in method ? method.compatibility : []).toContainEqual(
       expect.objectContaining({ id: 'mog-api.worksheet.getCharts.alias' }),
     );
+  });
+
+  it('surfaces validation and conditional-format helper paths in API guidance', () => {
+    const listValidation = api.guidance.explain('ws.validations.setList');
+    expect(listValidation?.kind).toBe('mog-api');
+    if (listValidation?.kind !== 'mog-api') throw new Error('expected setList guidance');
+    expect(listValidation.target.signature).toContain('setList(');
+
+    const formulaFormat = api.guidance.explain('ws.conditionalFormats.addFormula');
+    expect(formulaFormat?.kind).toBe('mog-api');
+    if (formulaFormat?.kind !== 'mog-api') throw new Error('expected addFormula guidance');
+    expect(formulaFormat.target.signature).toContain('addFormula(');
+
+    const listDescription = api.describe('ws.validations.setList');
+    expect(
+      listDescription && 'signature' in listDescription ? listDescription.signature : '',
+    ).toContain('setList(');
+    const formulaDescription = api.describe('ws.conditionalFormats.addFormula');
+    expect(
+      formulaDescription && 'signature' in formulaDescription ? formulaDescription.signature : '',
+    ).toContain('addFormula(');
+  });
+
+  it('surfaces receipt-aware examples for lifecycle-heavy worksheet APIs', () => {
+    const examplesFor = (path: string) => {
+      const explanation = api.guidance.explain(path);
+      expect(explanation?.kind).toBe('mog-api');
+      if (explanation?.kind !== 'mog-api') throw new Error(`expected Mog API guidance for ${path}`);
+      expect(explanation.examples.length).toBeGreaterThan(0);
+      return explanation.examples.join('\n');
+    };
+
+    const dataTableCompute = examplesFor('ws.whatIf.dataTable');
+    expect(dataTableCompute).toContain('receipt.status === "failed"');
+    expect(dataTableCompute).toContain('receipt.status === "unsupported"');
+    expect(dataTableCompute).toContain('receipt.status !== "completed"');
+    expect(dataTableCompute).toContain('receipt.diagnostics');
+    expect(dataTableCompute).toContain('receipt.effects');
+    expect(dataTableCompute).toContain('receipt.results');
+
+    const dataTableCreate = examplesFor('ws.whatIf.createDataTable');
+    expect(dataTableCreate).toContain('receipt.status === "partial"');
+    expect(dataTableCreate).toContain('!receipt.materialized');
+    expect(dataTableCreate).toContain('receipt.diagnostics');
+    expect(dataTableCreate).toContain('ws.whatIf.refreshDataTable');
+    expect(dataTableCreate).toContain('receipt.effects');
+
+    const dataTableRepair = examplesFor('ws.whatIf.refreshDataTable');
+    expect(dataTableRepair).toContain('repair.status === "failed"');
+    expect(dataTableRepair).toContain('repair.status === "unsupported"');
+    expect(dataTableRepair).toContain('repair.status === "partial"');
+    expect(dataTableRepair).toContain('repair.diagnostics');
+    expect(dataTableRepair).toContain('repair.effects');
+
+    const pivotMaterialize = examplesFor('ws.pivots.add');
+    expect(pivotMaterialize).toContain('{ lifecycle: "materialize" }');
+    expect(pivotMaterialize).toContain('receipt.status === "failed"');
+    expect(pivotMaterialize).toContain('receipt.status === "partial"');
+    expect(pivotMaterialize).toContain('!receipt.materialized');
+    expect(pivotMaterialize).toContain('ws.pivots.refresh');
+    expect(pivotMaterialize).toContain('receipt.effects');
+
+    const autofillPreview = examplesFor('ws.autoFillPreview');
+    expect(autofillPreview).toContain('ws.autoFillPreview');
+    expect(autofillPreview).toContain('preview.diagnostics');
+    expect(autofillPreview).toContain('preview.referenceDiagnostics');
+    expect(autofillPreview).toContain('preview.status !== "completed"');
+    expect(autofillPreview).toContain('await ws.autoFill');
   });
 
   it('analyzes and preflights common OfficeJS residue without executing code', () => {
@@ -188,7 +285,10 @@ describe('SDK agent API guidance', () => {
       const address = ws.indexToAddress(1, 1);
       const position = ws.addressToIndex("A1");
       const col = ws._colLetter(1);
-      console.log(cellValue, raw, displayedFormat, address, position, col);
+      const guessed = wb.indexToIndex(1, 1);
+      const guessedWorkbook = workbook.indexToIndex(1, 1);
+      const guessedRange = ws.rangeAddress(0, 0, 1, 1);
+      console.log(cellValue, raw, displayedFormat, address, position, col, guessed, guessedWorkbook, guessedRange);
     `;
 
     const preflight = preflightMogCode(source);
@@ -204,6 +304,9 @@ describe('SDK agent API guidance', () => {
       'mog-api.worksheet.indexToAddress.unsupported',
       'mog-api.worksheet.addressToIndex.unsupported',
       'mog-api.worksheet.privateColLetter.unsupported',
+      'mog-api.address.wbIndexToIndex.unsupported',
+      'mog-api.address.indexToIndex.unsupported',
+      'mog-api.address.worksheetRangeAddressHelper.unsupported',
     ];
 
     for (const entryId of expectedEntryIds) {
@@ -229,12 +332,45 @@ describe('SDK agent API guidance', () => {
         expect.objectContaining({ path: 'ws.formats.get' }),
       ]),
     );
+    expect(byId.get('mog-api.worksheet.indexToAddress.unsupported')?.mogReplacements).toEqual(
+      expect.arrayContaining([expect.objectContaining({ path: 'a1.address' })]),
+    );
+    expect(byId.get('mog-api.worksheet.addressToIndex.unsupported')?.mogReplacements).toEqual(
+      expect.arrayContaining([expect.objectContaining({ path: 'a1.parse' })]),
+    );
+  });
+
+  it('preflights observed validation add guesses to the list-validation helper', () => {
+    const preflight = preflightMogCode(`
+      await ws.validations.add("A1:A10", { type: "list", values: ["Open"] });
+      await ws.dataValidation.add("B1:B10", ["Open", "Done"]);
+    `);
+
+    expect(preflight.ok).toBe(false);
+    const byId = new Map(
+      preflight.diagnostics.map((diagnostic) => [diagnostic.entryId, diagnostic]),
+    );
+
+    expect(byId.get('mog-api.validation.validationsAdd.unsupported')).toEqual(
+      expect.objectContaining({
+        blocking: true,
+        mogReplacements: expect.arrayContaining([
+          expect.objectContaining({ path: 'ws.validations.setList' }),
+        ]),
+      }),
+    );
+    expect(byId.get('mog-api.validation.dataValidationAdd.unsupported')).toEqual(
+      expect.objectContaining({
+        blocking: true,
+        mogReplacements: [expect.objectContaining({ path: 'ws.validations.setList' })],
+      }),
+    );
   });
 
   it('blocks missing await on workbook getSheet before worksheet getValue', () => {
     const preflight = preflightMogCode(`
       const a = await workbook.getSheet("Data").getValue("A1");
-      const b = await wb.getSheet("Data").getValue("B1");
+      const b = await wb.getSheet("Data").describe("B1:C2");
       console.log(a, b);
     `);
 
@@ -247,22 +383,73 @@ describe('SDK agent API guidance', () => {
           matcherId: 'compatibility.mog-api.workbook.getSheet.missing-await.workbook',
           blocking: true,
           message: expect.stringContaining('getSheet is async'),
-          suggestion: expect.stringContaining('const ws = await wb.getSheet(name);'),
+          suggestion: expect.stringContaining('const ws = await workbook.getSheet(name);'),
         }),
         expect.objectContaining({
           code: 'MOG002_MOG_API_USAGE',
           entryId: 'mog-api.workbook.getSheet.missing-await',
           matcherId: 'compatibility.mog-api.workbook.getSheet.missing-await.wb',
           blocking: true,
+          offendingSymbol: 'wb.getSheet(...).describe',
         }),
       ]),
+    );
+  });
+
+  it('blocks guessed workbook/global helper namespaces with targeted Mog replacements', () => {
+    const preflight = preflightMogCode(`
+      await workbook.loadWorkbook("input.xlsx");
+      await saveWorkbook("output.xlsx");
+      const diagnostics = await errorCheck();
+      await calculate();
+      const sheet = await getSheet("Data");
+      const value = await workbook.getValue("A1");
+      console.log(diagnostics, sheet, value);
+    `);
+
+    expect(preflight.ok).toBe(false);
+    const byId = new Map(
+      preflight.diagnostics.map((diagnostic) => [diagnostic.entryId, diagnostic]),
+    );
+
+    expect(byId.get('mog-api.namespace.loadWorkbook.unsupported')).toEqual(
+      expect.objectContaining({
+        blocking: true,
+        message: expect.stringContaining('loadWorkbook'),
+        suggestion: expect.stringContaining('createWorkbook'),
+      }),
+    );
+    expect(byId.get('mog-api.namespace.saveWorkbook.unsupported')?.mogReplacements).toEqual(
+      expect.arrayContaining([expect.objectContaining({ path: 'wb.save' })]),
+    );
+    expect(byId.get('mog-api.namespace.errorCheck.unsupported')?.mogReplacements).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ path: 'wb.diagnostics.getFormulaReferences' }),
+      ]),
+    );
+    expect(byId.get('mog-api.namespace.calculate.global')?.mogReplacements).toEqual([
+      expect.objectContaining({ path: 'wb.calculate' }),
+    ]);
+    expect(byId.get('mog-api.namespace.getSheet.global')?.mogReplacements).toEqual(
+      expect.arrayContaining([expect.objectContaining({ path: 'wb.getSheet' })]),
+    );
+    expect(byId.get('mog-api.namespace.workbook-worksheet-method')).toEqual(
+      expect.objectContaining({
+        offendingSymbol: 'workbook.getValue(...)',
+        suggestion: expect.stringContaining('workbook.activeSheet'),
+      }),
     );
   });
 
   it('does not flag comments, strings, valid Mog calls, or unrelated local helper names for Mog API guidance', () => {
     const source = `
       // await ws.getCellValue("A1");
-      const text = 'ws.rawCellData("A1"); ws.getFormat("A1"); ws._colLetter(1); workbook.getSheet("S").getValue("A1")';
+      const text = 'ws.rawCellData("A1"); ws.getFormat("A1"); ws._colLetter(1); workbook.getSheet("S").getValue("A1"); calculate(); loadWorkbook(); saveWorkbook(); errorCheck(); getSheet("S")';
+      function calculate() {}
+      const loadWorkbook = () => {};
+      const saveWorkbook = () => {};
+      const errorCheck = () => {};
+      const getSheet = () => {};
       const helpers = {
         getCellValue() {},
         rawCellData() {},
@@ -277,6 +464,11 @@ describe('SDK agent API guidance', () => {
       helpers.indexToAddress();
       helpers.addressToIndex();
       helpers._colLetter();
+      calculate();
+      loadWorkbook();
+      saveWorkbook();
+      errorCheck();
+      getSheet("S");
       const ws2 = await wb.getSheet("S");
       await ws.getValue("A1");
       await ws.getRawCellData("A1");

@@ -36,4 +36,8 @@ impl CellData {
     fn get_value_len(&self) -> u32 {
         self.value_len
     }
+    #[inline]
+    fn get_value_type(&self) -> u8 {
+        self.value_type
+    }
 }

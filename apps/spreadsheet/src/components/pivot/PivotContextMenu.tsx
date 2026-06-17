@@ -30,13 +30,13 @@ import {
   SumSvg,
   wrapIcon,
 } from '@mog/icons';
-import type { AggregateFunction } from '@mog-sdk/contracts/pivot';
 import { quoteSheetName } from '@mog/spreadsheet-utils/a1';
 
 import type { ContextMenuTarget } from '../context-menu/types';
 
 import type { ShowValuesAsType } from '../../hooks/data/use-pivot-context-menu-actions';
 import { usePivotContextMenuActions } from '../../hooks/data/use-pivot-context-menu-actions';
+import { PIVOT_AGGREGATE_FUNCTION_OPTIONS } from '../../systems/pivot';
 import { rangeToA1 } from '../../systems/shared/types';
 import {
   Button,
@@ -87,25 +87,6 @@ const SortAscIcon = wrapIcon(SortAscendingSvg, 'toolbar');
 const SortDescIcon = wrapIcon(SortDescendingSvg, 'toolbar');
 const SumIcon = wrapIcon(SumSvg, 'toolbar');
 const RemoveIcon = wrapIcon(CloseSvg, 'toolbar');
-
-// =============================================================================
-// Aggregate Function Options
-// =============================================================================
-
-const AGGREGATE_FUNCTIONS: { type: AggregateFunction; label: string }[] = [
-  { type: 'sum', label: 'Sum' },
-  { type: 'count', label: 'Count' },
-  { type: 'counta', label: 'Count (Non-Empty)' },
-  { type: 'countunique', label: 'Count Unique' },
-  { type: 'average', label: 'Average' },
-  { type: 'min', label: 'Min' },
-  { type: 'max', label: 'Max' },
-  { type: 'product', label: 'Product' },
-  { type: 'stdev', label: 'StdDev' },
-  { type: 'stdevp', label: 'StdDevP' },
-  { type: 'var', label: 'Var' },
-  { type: 'varp', label: 'VarP' },
-];
 
 // =============================================================================
 // Show Values As Options
@@ -430,7 +411,7 @@ export function PivotContextMenu({
                 Summarize Values By
               </ContextMenuSubTrigger>
               <ContextMenuSubContent>
-                {AGGREGATE_FUNCTIONS.map((agg) => (
+                {PIVOT_AGGREGATE_FUNCTION_OPTIONS.map((agg) => (
                   <ContextMenuItemComponent
                     key={agg.type}
                     onSelect={() => actions.setAggregateFunction(agg.type)}

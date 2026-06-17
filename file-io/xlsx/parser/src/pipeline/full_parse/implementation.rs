@@ -13,8 +13,8 @@
 
 use crate::domain::cells::{
     CellData, ParseExtras, apply_parse_extras, build_col_style_ranges_from_widths,
-    coalesce_authored_style_only_cells, convert_cell_data, data_table_info,
-    parse_worksheet_fast_with_extras,
+    coalesce_authored_style_only_cells, convert_cell_data, count_worksheet_cell_elements,
+    data_table_info, parse_worksheet_fast_with_extras, pre_sheet_data_region,
 };
 use crate::domain::charts::read::{
     parse_charts_for_sheet, parse_connectors_for_sheet, parse_drawing_and_charts_for_sheet,
@@ -291,20 +291,6 @@ fn namespace_attrs_from_map(namespaces: &NamespaceMap) -> Vec<(String, String)> 
         .iter()
         .map(|decl| (decl.prefix.clone().unwrap_or_default(), decl.uri.clone()))
         .collect()
-}
-
-fn count_worksheet_cell_elements(xml: &[u8]) -> usize {
-    let mut count = 0usize;
-    let mut pos = 0usize;
-    while let Some(rel) = memchr::memmem::find(&xml[pos..], b"<c") {
-        let start = pos + rel;
-        let next = start + 2;
-        if next >= xml.len() || matches!(xml[next], b' ' | b'>' | b'/' | b'\t' | b'\n' | b'\r') {
-            count += 1;
-        }
-        pos = next;
-    }
-    count
 }
 
 fn legacy_sheet_num_for_context(context: &SheetPackageContext) -> usize {
@@ -1286,9 +1272,7 @@ fn process_sheet_core(
     let mut extras = ParseExtras::default();
 
     // Parse col widths early so we can build a col-style lookup for the cell parser
-    let pre_sd = memchr::memmem::find(worksheet_xml, b"<sheetData")
-        .map(|p| &worksheet_xml[..p])
-        .unwrap_or(worksheet_xml);
+    let pre_sd = pre_sheet_data_region(worksheet_xml);
     let worksheet_dimension_ref = parse_dimension_ref_with_text(pre_sd).map(|d| d.ref_range);
     let col_widths = parse_col_widths(pre_sd);
     let fmt_pr = parse_sheet_format_pr(pre_sd);
@@ -1699,9 +1683,7 @@ fn parse_sheets_sequential(
         let mut extras = ParseExtras::default();
 
         // Parse col widths early so we can build a col-style lookup for the cell parser
-        let pre_sd_early = memchr::memmem::find(&worksheet_xml, b"<sheetData")
-            .map(|p| &worksheet_xml[..p])
-            .unwrap_or(&worksheet_xml);
+        let pre_sd_early = pre_sheet_data_region(&worksheet_xml);
         let worksheet_dimension_ref =
             parse_dimension_ref_with_text(pre_sd_early).map(|d| d.ref_range);
         let col_widths = parse_col_widths(pre_sd_early);
@@ -1888,9 +1870,7 @@ fn parse_sheets_sequential(
 
         // Frozen pane is in pre-sheetData XML. Col widths and row heights
         // were already extracted earlier / by the cell parser.
-        let pre_sd = memchr::memmem::find(&worksheet_xml, b"<sheetData")
-            .map(|p| &worksheet_xml[..p])
-            .unwrap_or(&worksheet_xml);
+        let pre_sd = pre_sheet_data_region(&worksheet_xml);
         let frozen_pane = parse_frozen_pane(pre_sd);
         let aux_t7 = tick(timings);
         let view_options: Vec<crate::output::results::SheetViewOutput> = parse_sheet_views(pre_sd)

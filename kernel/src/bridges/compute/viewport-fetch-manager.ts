@@ -24,6 +24,7 @@
  */
 
 import type { BridgeTransport } from '@rust-bridge/client';
+import type { ViewportRefreshDetails } from '@mog-sdk/contracts/api';
 
 import type { CellAccessor, ViewportBounds } from '../wire/binary-viewport-buffer';
 import type {
@@ -39,6 +40,7 @@ import type {
 } from '../wire/viewport-prefetch';
 import {
   canSkipRefetch,
+  boundsEqual,
   computePrefetchBounds,
   getPrefetchConfigForViewport,
   isWithinPrefetch,
@@ -88,6 +90,43 @@ function prefetchConfigForMovement(
     };
   }
   return getPrefetchConfigForViewport(scrollBehavior);
+}
+
+function toRefreshBounds(bounds: PrefetchBounds): ViewportRefreshDetails['visibleBounds'] {
+  return {
+    startRow: bounds.startRow,
+    startCol: bounds.startCol,
+    endRow: bounds.endRow,
+    endCol: bounds.endCol,
+  };
+}
+
+function buildViewportRefreshDetails(input: {
+  viewportId: string;
+  sheetId: string;
+  visibleBounds: PrefetchBounds;
+  prefetchBounds: PrefetchBounds | null;
+  scrollBehavior: ViewportScrollBehavior;
+  fetched: boolean;
+  cacheHit: boolean;
+  delta: boolean;
+  projectionChanged: boolean;
+  superseded: boolean;
+  reason: ViewportRefreshDetails['reason'];
+}): ViewportRefreshDetails {
+  return {
+    viewportId: input.viewportId,
+    sheetId: input.sheetId,
+    visibleBounds: toRefreshBounds(input.visibleBounds),
+    prefetchBounds: input.prefetchBounds ? toRefreshBounds(input.prefetchBounds) : null,
+    scrollBehavior: input.scrollBehavior,
+    fetched: input.fetched,
+    cacheHit: input.cacheHit,
+    delta: input.delta,
+    projectionChanged: input.projectionChanged,
+    superseded: input.superseded,
+    reason: input.reason,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -327,10 +366,11 @@ export class ViewportFetchManager {
     sheetId: string,
     bounds: { startRow: number; startCol: number; endRow: number; endCol: number },
     scrollBehavior: ViewportScrollBehavior = 'free',
-  ): Promise<void> {
+  ): Promise<ViewportRefreshDetails> {
     const vpState = this.getOrCreateState(viewportId, sheetId, scrollBehavior);
     const fetchSeq = (this.perViewportFetchSeq.get(viewportId) ?? 0) + 1;
     this.perViewportFetchSeq.set(viewportId, fetchSeq);
+    const previousPrefetchBounds = vpState.prefetchBounds;
 
     // Update scroll behavior (may change on viewport config change)
     if (vpState.scrollBehavior !== scrollBehavior) {
@@ -356,10 +396,34 @@ export class ViewportFetchManager {
         await this.syncViewportRegistration(viewportId, sheetId, vpState.prefetchBounds);
       }
       if (this.perViewportFetchSeq.get(viewportId) !== fetchSeq) {
-        return;
+        return buildViewportRefreshDetails({
+          viewportId,
+          sheetId,
+          visibleBounds,
+          prefetchBounds: vpState.prefetchBounds,
+          scrollBehavior,
+          fetched: false,
+          cacheHit: false,
+          delta: false,
+          projectionChanged: false,
+          superseded: true,
+          reason: 'superseded',
+        });
       }
       vpState.lastVisibleBounds = this.latestVisibleBoundsFor(coordinator, visibleBounds);
-      return;
+      return buildViewportRefreshDetails({
+        viewportId,
+        sheetId,
+        visibleBounds,
+        prefetchBounds: vpState.prefetchBounds,
+        scrollBehavior,
+        fetched: false,
+        cacheHit: true,
+        delta: false,
+        projectionChanged: false,
+        superseded: false,
+        reason: 'smartSkip',
+      });
     }
 
     // Prefetch containment check: if visible bounds within existing prefetch, skip
@@ -370,10 +434,34 @@ export class ViewportFetchManager {
     ) {
       await this.syncViewportRegistration(viewportId, sheetId, vpState.prefetchBounds);
       if (this.perViewportFetchSeq.get(viewportId) !== fetchSeq) {
-        return;
+        return buildViewportRefreshDetails({
+          viewportId,
+          sheetId,
+          visibleBounds,
+          prefetchBounds: vpState.prefetchBounds,
+          scrollBehavior,
+          fetched: false,
+          cacheHit: false,
+          delta: false,
+          projectionChanged: false,
+          superseded: true,
+          reason: 'superseded',
+        });
       }
       vpState.lastVisibleBounds = this.latestVisibleBoundsFor(coordinator, visibleBounds);
-      return;
+      return buildViewportRefreshDetails({
+        viewportId,
+        sheetId,
+        visibleBounds,
+        prefetchBounds: vpState.prefetchBounds,
+        scrollBehavior,
+        fetched: false,
+        cacheHit: true,
+        delta: false,
+        projectionChanged: false,
+        superseded: false,
+        reason: 'prefetchHit',
+      });
     }
 
     // Need to fetch — compute per-viewport prefetch bounds
@@ -398,7 +486,20 @@ export class ViewportFetchManager {
     // would race with the mutation that triggers the patch.
     await this.syncViewportRegistration(viewportId, sheetId, prefetch);
     if (this.perViewportFetchSeq.get(viewportId) !== fetchSeq) {
-      return;
+      return buildViewportRefreshDetails({
+        viewportId,
+        sheetId,
+        visibleBounds,
+        prefetchBounds: prefetch,
+        scrollBehavior,
+        fetched: false,
+        cacheHit: false,
+        delta: false,
+        projectionChanged:
+          !previousPrefetchBounds || !boundsEqual(previousPrefetchBounds, prefetch),
+        superseded: true,
+        reason: 'superseded',
+      });
     }
 
     // Capture fetch epoch BEFORE the async IPC call.
@@ -413,6 +514,7 @@ export class ViewportFetchManager {
     // inclusive endRow as-is gives Rust rows = 0 — an empty buffer.
     const rustEndRow = prefetch.endRow + 1;
     const rustEndCol = prefetch.endCol + 1;
+    let committedDelta = false;
 
     if (canDelta) {
       const deltaBuffer: Uint8Array = await this.transport.call<Uint8Array>(
@@ -433,7 +535,20 @@ export class ViewportFetchManager {
       // and will be retained and re-applied during commit.
       const isDelta = deltaBuffer.length >= 31 && (deltaBuffer[30] & 0x01) !== 0;
       if (this.perViewportFetchSeq.get(viewportId) !== fetchSeq) {
-        return;
+        return buildViewportRefreshDetails({
+          viewportId,
+          sheetId,
+          visibleBounds,
+          prefetchBounds: prefetch,
+          scrollBehavior,
+          fetched: true,
+          cacheHit: false,
+          delta: isDelta,
+          projectionChanged:
+            !previousPrefetchBounds || !boundsEqual(previousPrefetchBounds, prefetch),
+          superseded: true,
+          reason: 'superseded',
+        });
       }
       if (isDelta) {
         coordinator.commitDelta(
@@ -444,6 +559,7 @@ export class ViewportFetchManager {
           rustEndCol,
           fetchEpoch,
         );
+        committedDelta = true;
       } else {
         coordinator.commitFetch(deltaBuffer, fetchEpoch);
       }
@@ -464,7 +580,20 @@ export class ViewportFetchManager {
       // Coordinator's epoch-based overlay filtering handles consistency —
       // no stale check or retry needed.
       if (this.perViewportFetchSeq.get(viewportId) !== fetchSeq) {
-        return;
+        return buildViewportRefreshDetails({
+          viewportId,
+          sheetId,
+          visibleBounds,
+          prefetchBounds: prefetch,
+          scrollBehavior,
+          fetched: true,
+          cacheHit: false,
+          delta: false,
+          projectionChanged:
+            !previousPrefetchBounds || !boundsEqual(previousPrefetchBounds, prefetch),
+          superseded: true,
+          reason: 'superseded',
+        });
       }
       coordinator.commitFetch(buffer, fetchEpoch);
     }
@@ -475,6 +604,20 @@ export class ViewportFetchManager {
         ? visibleBounds
         : this.latestVisibleBoundsFor(coordinator, visibleBounds);
     vpState.prefetchDirtyState = { staleCells: new Set(), dirtyRegion: null };
+
+    return buildViewportRefreshDetails({
+      viewportId,
+      sheetId,
+      visibleBounds,
+      prefetchBounds: prefetch,
+      scrollBehavior,
+      fetched: true,
+      cacheHit: false,
+      delta: committedDelta,
+      projectionChanged: !previousPrefetchBounds || !boundsEqual(previousPrefetchBounds, prefetch),
+      superseded: false,
+      reason: committedDelta ? 'deltaFetch' : 'fullFetch',
+    });
   }
 
   /**

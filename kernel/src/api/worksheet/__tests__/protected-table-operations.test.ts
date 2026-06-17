@@ -74,6 +74,7 @@ function createCtx(optionOverrides: Partial<typeof protectedOptions> | null = {}
     getTableByName: jest.fn().mockResolvedValue(bridgeTable),
     getTableAtCell: jest.fn().mockResolvedValue(bridgeTable),
     getAllTablesInSheet: jest.fn().mockResolvedValue([bridgeTable]),
+    getAllTablesWorkbook: jest.fn().mockResolvedValue([]),
     getFiltersInSheet: jest.fn().mockResolvedValue([
       {
         id: 'filter-1',

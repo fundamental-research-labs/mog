@@ -141,7 +141,7 @@ fn test_find_data_edge_returns_visible_boundary_before_collapsed_outline_columns
 }
 
 #[test]
-fn test_find_data_edge_keeps_manual_hidden_columns_as_boundaries() {
+fn test_find_data_edge_skips_hidden_columns_to_next_visible_cell() {
     let (storage, sid, mut grid) = storage_with_grid();
     dimensions::hide_columns(storage.doc(), storage.sheets(), &sid, &[15]);
     seed_cell(
@@ -156,7 +156,62 @@ fn test_find_data_edge_keeps_manual_hidden_columns_as_boundaries() {
     let target = find_data_edge(storage.doc(), storage.sheets(), sid, &grid, 6, 14, "right");
 
     assert_eq!(target.row, 6);
-    assert_eq!(target.col, 14);
+    assert_eq!(target.col, 16);
+}
+
+#[test]
+fn test_find_data_edge_traverses_collapsed_outline_rows_from_hidden_detail() {
+    let (storage, sid, mut grid) = storage_with_grid();
+    let group = grouping::group_rows(storage.doc(), &storage.sheets_ref(), &sid, 23, 31)
+        .expect("group rows");
+    grouping::set_group_collapsed(storage.doc(), &storage.sheets_ref(), &sid, &group.id, true);
+    seed_cell(
+        &storage,
+        sid,
+        &mut grid,
+        23,
+        5,
+        CellValue::Number(FiniteF64::must(1.0)),
+    );
+    seed_cell(
+        &storage,
+        sid,
+        &mut grid,
+        32,
+        5,
+        CellValue::Number(FiniteF64::must(2.0)),
+    );
+
+    let target = find_data_edge(storage.doc(), storage.sheets(), sid, &grid, 23, 5, "down");
+
+    assert_eq!(target.row, 32);
+    assert_eq!(target.col, 5);
+}
+
+#[test]
+fn test_find_data_edge_ignores_hidden_row_for_horizontal_navigation() {
+    let (storage, sid, mut grid) = storage_with_grid();
+    let group = grouping::group_rows(storage.doc(), &storage.sheets_ref(), &sid, 23, 31)
+        .expect("group rows");
+    grouping::set_group_collapsed(storage.doc(), &storage.sheets_ref(), &sid, &group.id, true);
+    for col in 50..=53 {
+        seed_cell(
+            &storage,
+            sid,
+            &mut grid,
+            24,
+            col,
+            CellValue::Number(FiniteF64::must(col as f64)),
+        );
+    }
+
+    let left = find_data_edge(storage.doc(), storage.sheets(), sid, &grid, 24, 52, "left");
+    let right = find_data_edge(storage.doc(), storage.sheets(), sid, &grid, 24, 52, "right");
+
+    assert_eq!(left.row, 24);
+    assert_eq!(left.col, 50);
+    assert_eq!(right.row, 24);
+    assert_eq!(right.col, 53);
 }
 
 #[test]

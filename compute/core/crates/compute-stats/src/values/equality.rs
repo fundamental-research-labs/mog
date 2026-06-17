@@ -69,7 +69,7 @@ mod tests {
     #[test]
     fn test_is_numeric_finite() {
         assert!(cell_value_is_numeric(&CellValue::number(42.0)));
-        assert!(cell_value_is_numeric(&CellValue::number(-3.14)));
+        assert!(cell_value_is_numeric(&CellValue::number(-12.34)));
         assert!(cell_value_is_numeric(&CellValue::number(0.0)));
     }
 

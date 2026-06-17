@@ -403,7 +403,7 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
    * 3. Parse as A1 notation
    */
   const navigateToAddress = useCallback(
-    async (address: string) => {
+    async (address: string, options: { rejectNoOpCellReference?: boolean } = {}) => {
       // First check for named ranges (defined names and tables)
       // This enables typing a name directly to navigate to it
       const trimmedAddress = address.trim();
@@ -435,6 +435,7 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
         anchor?: CellCoord | null,
         viewportFollowCell?: CellCoord,
       ): void => {
+        setValidationError(null);
         deps.commands.object.deselectAll();
         deps.commands.chart.deselectAll();
         selectionCommands.setSelection([range], nextActiveCell, anchor);
@@ -550,7 +551,11 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
           activeCell.col === parsed.startCol;
 
         if (isSingleCellRef && isNoOpSelection) {
-          setValidationError(INVALID_NAME_MESSAGE);
+          if (options.rejectNoOpCellReference) {
+            setValidationError(INVALID_NAME_MESSAGE);
+            return;
+          }
+          setValidationError(null);
           return;
         }
 
@@ -587,6 +592,7 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
 
         try {
           await wb.names.add(trimmedAddress, refersTo);
+          setValidationError(null);
           // Refresh immediately so the cellAddress reverse-lookup picks up
           // the new entry on the very next render. The 'namedRangeChanged'
           // subscription will also fire, but explicit refresh avoids any
@@ -628,7 +634,9 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
       if (commitInFlightRef.current) return;
       commitInFlightRef.current = true;
       try {
-        await navigateToAddress(value);
+        await navigateToAddress(value, {
+          rejectNoOpCellReference: true,
+        });
       } catch {
         setValidationError(INVALID_NAME_MESSAGE);
       } finally {
@@ -901,7 +909,7 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
         <div
           role="alert"
           data-testid="name-box-validation-error"
-          className="absolute left-0 top-full z-ss-popover mt-1 w-[220px] rounded border border-red-200 bg-ss-surface px-2 py-1 text-caption text-red-600 shadow-ss-md"
+          className="pointer-events-none absolute left-0 top-full z-ss-popover mt-1 w-[220px] rounded border border-red-200 bg-ss-surface px-2 py-1 text-caption text-red-600 shadow-ss-md"
         >
           {validationError}
         </div>

@@ -58,6 +58,82 @@ export interface FilterDropdownContentProps {
 type FilterTab = 'values' | 'conditions';
 type ActiveSubmenu = 'number' | 'text' | 'date' | 'color' | 'sortByColor' | null;
 
+type FilterOperationReceipt = {
+  readonly status: string;
+  readonly effects: readonly unknown[];
+  readonly diagnostics: readonly { severity?: string; message?: string }[];
+};
+
+type PendingFilterActionGlobal = typeof globalThis & {
+  __MOG_PENDING_FILTER_ACTION__?: Promise<void>;
+};
+
+const FILTER_ACTION_APPLY_DELAY_MS = 100;
+
+function trackPendingFilterAction(action: () => Promise<void>): void {
+  const global = globalThis as PendingFilterActionGlobal;
+  const pending = new Promise<void>((resolve, reject) => {
+    globalThis.setTimeout(() => {
+      Promise.resolve()
+        .then(action)
+        .then(() => resolve(), reject);
+    }, FILTER_ACTION_APPLY_DELAY_MS);
+  });
+  const tracked = pending.then(
+    () => {
+      if (global.__MOG_PENDING_FILTER_ACTION__ === tracked) {
+        delete global.__MOG_PENDING_FILTER_ACTION__;
+      }
+    },
+    (error) => {
+      if (global.__MOG_PENDING_FILTER_ACTION__ === tracked) {
+        delete global.__MOG_PENDING_FILTER_ACTION__;
+      }
+      throw error;
+    },
+  );
+  global.__MOG_PENDING_FILTER_ACTION__ = tracked;
+  void tracked.catch(() => undefined);
+}
+
+function filterReceiptError(receipt: unknown, fallback: string): string | null {
+  if (typeof receipt !== 'object' || receipt === null) return null;
+  const maybe = receipt as Partial<FilterOperationReceipt>;
+  if (
+    typeof maybe.status !== 'string' ||
+    !Array.isArray(maybe.effects) ||
+    !Array.isArray(maybe.diagnostics)
+  ) {
+    return null;
+  }
+  if (maybe.status !== 'failed' && maybe.status !== 'unsupported' && maybe.status !== 'noOp') {
+    return null;
+  }
+  return (
+    maybe.diagnostics.find((diagnostic) => diagnostic.severity === 'error')?.message ??
+    maybe.diagnostics[0]?.message ??
+    fallback
+  );
+}
+
+async function runFilterMutation(
+  mutation: () => Promise<unknown>,
+  onApplied: () => void,
+  fallback: string,
+): Promise<void> {
+  try {
+    const receipt = await mutation();
+    const error = filterReceiptError(receipt, fallback);
+    if (error) {
+      console.warn(error, receipt);
+      return;
+    }
+    onApplied();
+  } catch (error) {
+    console.warn(fallback, error);
+  }
+}
+
 function tableRangeMatchesFilter(
   tableRange: string,
   range: { startRow: number; startCol: number; endRow: number; endCol: number },
@@ -227,9 +303,14 @@ export function FilterDropdownContent({
       };
 
       const ws = wb.getSheetById(activeSheetId);
-      void ws.filters.setColumnFilter(col, criteria, filterId);
-      onClose();
-      onFilterApplied?.();
+      void runFilterMutation(
+        () => ws.filters.setColumnFilter(col, criteria, filterId),
+        () => {
+          onClose();
+          onFilterApplied?.();
+        },
+        'Value filter did not apply.',
+      );
     },
     [wb, activeSheetId, filterId, headerCellId, col, onClose, onFilterApplied],
   );
@@ -240,9 +321,14 @@ export function FilterDropdownContent({
       if (!filterId || !headerCellId || col === undefined) return;
 
       const ws = wb.getSheetById(activeSheetId);
-      void ws.filters.setColumnFilter(col, criteria, filterId);
-      onClose();
-      onFilterApplied?.();
+      void runFilterMutation(
+        () => ws.filters.setColumnFilter(col, criteria, filterId),
+        () => {
+          onClose();
+          onFilterApplied?.();
+        },
+        'Condition filter did not apply.',
+      );
     },
     [wb, activeSheetId, filterId, headerCellId, col, onClose, onFilterApplied],
   );
@@ -252,28 +338,37 @@ export function FilterDropdownContent({
     if (!filterId || !headerCellId || col === undefined) return;
 
     const ws = wb.getSheetById(activeSheetId);
-    void ws.filters.clearColumnFilter(col, filterId);
-    onClose();
-    onFilterApplied?.();
+    void runFilterMutation(
+      () => ws.filters.clearColumnFilter(col, filterId),
+      () => {
+        onClose();
+        onFilterApplied?.();
+      },
+      'Column filter did not clear.',
+    );
   }, [wb, activeSheetId, filterId, headerCellId, col, onClose, onFilterApplied]);
 
   // Sort handlers - integrated with sort system
-  const handleSortAsc = useCallback(async () => {
+  const handleSortAsc = useCallback(() => {
     if (!filterId || !headerCellId || col === undefined) return;
 
     const ws = wb.getSheetById(activeSheetId);
-    await sortFilterRange(ws, filterId, col, 'asc');
     onClose();
-    onFilterApplied?.();
+    trackPendingFilterAction(async () => {
+      await sortFilterRange(ws, filterId, col, 'asc');
+      onFilterApplied?.();
+    });
   }, [wb, activeSheetId, filterId, headerCellId, col, onClose, onFilterApplied]);
 
-  const handleSortDesc = useCallback(async () => {
+  const handleSortDesc = useCallback(() => {
     if (!filterId || !headerCellId || col === undefined) return;
 
     const ws = wb.getSheetById(activeSheetId);
-    await sortFilterRange(ws, filterId, col, 'desc');
     onClose();
-    onFilterApplied?.();
+    trackPendingFilterAction(async () => {
+      await sortFilterRange(ws, filterId, col, 'desc');
+      onFilterApplied?.();
+    });
   }, [wb, activeSheetId, filterId, headerCellId, col, onClose, onFilterApplied]);
 
   // Handler for switching to condition panel from submenu with pre-selected operator

@@ -204,6 +204,59 @@ fn deferred_xlsx_import_materializes_active_visible_sheet_before_full_hydration(
 }
 
 #[test]
+fn deferred_xlsx_completion_then_grouped_paste_undo_preserves_redo_stack() {
+    let bytes = active_visible_deferred_fixture_xlsx();
+
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    engine
+        .import_from_xlsx_bytes_deferred(&bytes)
+        .expect("deferred XLSX import should succeed");
+    engine
+        .complete_deferred_hydration()
+        .expect("full deferred hydration should succeed");
+
+    let (_, active_visible) = sheet_ids(&engine);
+    engine.begin_undo_group().unwrap();
+    engine
+        .batch_set_cells_by_position(
+            vec![(
+                active_visible,
+                17,
+                0,
+                crate::storage::engine::mutation::CellInput::Parse {
+                    text: "atlas91 paste alpha".into(),
+                },
+            )],
+            true,
+        )
+        .unwrap();
+    engine.end_undo_group().unwrap();
+
+    assert_eq!(
+        cell_value_at(&engine, &active_visible, 17, 0),
+        CellValue::Text("atlas91 paste alpha".into())
+    );
+    assert_eq!(engine.get_undo_state().undo_depth, 1);
+
+    engine.undo().unwrap();
+    assert_eq!(
+        cell_value_at(&engine, &active_visible, 17, 0),
+        CellValue::Null
+    );
+    assert_eq!(
+        engine.get_undo_state().redo_depth,
+        1,
+        "undoing a post-materialization paste must leave the paste redoable"
+    );
+
+    engine.redo().unwrap();
+    assert_eq!(
+        cell_value_at(&engine, &active_visible, 17, 0),
+        CellValue::Text("atlas91 paste alpha".into())
+    );
+}
+
+#[test]
 fn deferred_xlsx_import_exposes_metadata_only_sheet_outlines_before_full_hydration() {
     let bytes = metadata_outline_deferred_fixture_xlsx();
 

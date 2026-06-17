@@ -1,5 +1,122 @@
 import type { ApiGuidanceEntry } from './types';
 
+const dataTableComputeReceiptSnippet = `const receipt = await ws.whatIf.dataTable("B3", {
+  rowInputCell: "B1",
+  colInputCell: "B2",
+  rowValues: [0.08, 0.09, 0.1],
+  colValues: [0.02, 0.025, 0.03],
+});
+const diagnosticMessage = receipt.diagnostics
+  .map((diagnostic) => diagnostic.message)
+  .join("\\n");
+if (receipt.status === "failed" || receipt.status === "unsupported") {
+  throw new Error(diagnosticMessage || "Data Table compute " + receipt.status);
+}
+if (receipt.status !== "completed") {
+  throw new Error(diagnosticMessage || "Data Table compute " + receipt.status);
+}
+if (!receipt.effects.some((effect) => effect.type === "computedGrid")) {
+  throw new Error("Data Table compute did not report a computed grid");
+}
+const computedGrid = receipt.results;`;
+
+const dataTableCreateReceiptSnippet = `const receipt = await ws.whatIf.createDataTable({
+  tableRange: "B3:F8",
+  rowInputCell: "B1",
+  colInputCell: "B2",
+});
+const diagnosticMessage = receipt.diagnostics
+  .map((diagnostic) => diagnostic.message)
+  .join("\\n");
+if (receipt.status === "failed" || receipt.status === "unsupported") {
+  throw new Error(diagnosticMessage || "Data Table create " + receipt.status);
+}
+if (receipt.status === "partial" || !receipt.materialized) {
+  const repairHint = receipt.diagnostics.find((diagnostic) => diagnostic.recoverable)?.nextAction;
+  const repair = await ws.whatIf.refreshDataTable(receipt.regionId, { force: true });
+  const repairDiagnostics = repair.diagnostics
+    .map((diagnostic) => diagnostic.message)
+    .join("\\n");
+  if (
+    repair.status === "failed" ||
+    repair.status === "unsupported" ||
+    repair.status === "partial"
+  ) {
+    throw new Error(repairDiagnostics || repairHint || "Data Table repair " + repair.status);
+  }
+}
+const materializedRanges = receipt.effects
+  .filter((effect) => effect.type === "materializedCells" && effect.range)
+  .map((effect) => effect.range);`;
+
+const dataTableRefreshRepairSnippet = `const repair = await ws.whatIf.refreshDataTable("B3:F8", {
+  force: true,
+});
+const diagnosticMessage = repair.diagnostics
+  .map((diagnostic) => diagnostic.message)
+  .join("\\n");
+if (
+  repair.status === "failed" ||
+  repair.status === "unsupported" ||
+  repair.status === "partial"
+) {
+  throw new Error(diagnosticMessage || "Data Table repair " + repair.status);
+}
+const refreshedRanges = repair.effects
+  .filter((effect) => effect.type === "materializedCells" && effect.range)
+  .map((effect) => effect.range);`;
+
+const pivotMaterializeReceiptSnippet = `const receipt = await ws.pivots.add(
+  {
+    name: "SalesPivot",
+    dataSource: "Sales!A1:E500",
+    targetSheet: "Summary",
+    targetAddress: "A3",
+    rowFields: ["Region"],
+    columnFields: ["Quarter"],
+    valueFields: [{ field: "Revenue", aggregation: "sum" }],
+  },
+  { lifecycle: "materialize" },
+);
+const diagnosticMessage = receipt.diagnostics
+  .map((diagnostic) => diagnostic.message)
+  .join("\\n");
+if (receipt.status === "failed") {
+  throw new Error(diagnosticMessage || "Pivot materialization failed");
+}
+if (receipt.status === "partial" || !receipt.materialized) {
+  const repair = await ws.pivots.refresh(receipt.config.name);
+  const repairDiagnostics = repair.diagnostics
+    .map((diagnostic) => diagnostic.message)
+    .join("\\n");
+  if (repair.status !== "applied") {
+    throw new Error(repairDiagnostics || "Pivot repair " + repair.status);
+  }
+}
+const changedRanges = receipt.effects
+  .filter((effect) => effect.range)
+  .map((effect) => effect.range);`;
+
+const autofillPreviewThenApplySnippet = `const preview = await ws.autoFillPreview("A2:A3", "A4:A20", "series");
+const previewDiagnostics = [
+  ...preview.diagnostics.map((diagnostic) => diagnostic.message),
+  ...preview.referenceDiagnostics
+    .filter((diagnostic) => diagnostic.outOfBounds)
+    .map((diagnostic) => "Reference out of bounds at " + diagnostic.row + "," + diagnostic.col),
+];
+if (previewDiagnostics.length > 0) {
+  throw new Error(previewDiagnostics.join("\\n"));
+}
+if (preview.status !== "completed" || preview.worksheetChanged || preview.undoChanged) {
+  throw new Error("Autofill preview did not remain read-only");
+}
+const receipt = await ws.autoFill("A2:A3", "A4:A20", preview.mode);
+if (receipt.status === "applied") {
+  const changedRanges = receipt.effects
+    .filter((effect) => effect.type === "changedRange" && effect.range)
+    .map((effect) => effect.range);
+}`;
+
 export const apiGuidanceCatalog = [
   {
     id: 'officejs.bootstrap',
@@ -84,6 +201,11 @@ export const apiGuidanceCatalog = [
     suggestion:
       'Mog APIs return real values directly. Await the Mog method that reads or writes the data you need.',
     mogReplacements: [
+      {
+        path: 'ws.getCells',
+        snippet: 'const cells = await ws.getCells("A1:B2");',
+        note: 'Use when you need addresses, absolute row/col, formulas, formats, or range-relative offsets.',
+      },
       { path: 'ws.getValues', snippet: 'const values = await ws.getValues("A1:B2");' },
       { path: 'ws.getRange', snippet: 'const range = await ws.getRange("A1:B2");' },
       { path: 'wb.findSheet', snippet: 'const ws = await wb.findSheet(name);' },
@@ -178,8 +300,14 @@ export const apiGuidanceCatalog = [
     ],
     message:
       'Microsoft Office JavaScript spreadsheet range proxy reads require load/sync; Mog reads return values directly.',
-    suggestion: 'Use `await ws.getValues(range)` or `await ws.getRange(range)`.',
+    suggestion:
+      'Use `await ws.getCells(range)` for address-bearing cells, `await ws.getValues(range)` for a value matrix, or `await ws.getRange(range)` for a cell-data matrix.',
     mogReplacements: [
+      {
+        path: 'ws.getCells',
+        snippet: 'const cells = await ws.getCells("A1:B2");',
+        note: 'Flat records include address, row, col, value, formula, format, and range offsets.',
+      },
       { path: 'ws.getValues', snippet: 'const values = await ws.getValues("A1:B2");' },
       { path: 'ws.getRange', snippet: 'const range = await ws.getRange("A1:B2");' },
     ],
@@ -212,6 +340,109 @@ export const apiGuidanceCatalog = [
       { path: 'wb.addressToIndex', snippet: 'const { row, col } = wb.addressToIndex("A1");' },
     ],
     confidence: 0.9,
+    blocking: true,
+  },
+  {
+    id: 'officejs.what-if-data-table',
+    dialect: 'officejs',
+    category: 'worksheet',
+    matchers: [
+      {
+        id: 'officejs-workbook-application-calculate',
+        kind: 'call',
+        symbol: 'context.workbook.application.calculate',
+        confidence: 0.8,
+      },
+      {
+        id: 'officejs-calculation-type',
+        kind: 'member-chain',
+        symbol: 'Excel.CalculationType',
+        confidence: 0.78,
+      },
+    ],
+    message:
+      'Microsoft Office JavaScript spreadsheet recalculation helpers do not expose Mog Data Table receipt semantics.',
+    suggestion:
+      'Use worksheet what-if APIs and branch on receipt status, diagnostics, and effects before reading results or assuming worksheet writes.',
+    mogReplacements: [
+      {
+        path: 'ws.whatIf.dataTable',
+        snippet: dataTableComputeReceiptSnippet,
+        note: 'Transient Data Table compute returns a receipt and does not mutate the worksheet.',
+      },
+      {
+        path: 'ws.whatIf.createDataTable',
+        snippet: dataTableCreateReceiptSnippet,
+        note: 'Persistent Data Table creation can be applied, partial, failed, or unsupported.',
+      },
+      {
+        path: 'ws.whatIf.refreshDataTable',
+        snippet: dataTableRefreshRepairSnippet,
+        note: 'Use refresh receipts to repair or verify a partial materialized Data Table.',
+      },
+    ],
+    confidence: 0.82,
+    blocking: true,
+  },
+  {
+    id: 'officejs.pivots',
+    dialect: 'officejs',
+    category: 'pivots',
+    matchers: [
+      {
+        id: 'officejs-context-workbook-pivottables',
+        kind: 'member-chain',
+        symbol: 'context.workbook.pivotTables',
+        confidence: 0.86,
+      },
+    ],
+    message:
+      'Microsoft Office JavaScript pivot table APIs do not return Mog materialization receipts.',
+    suggestion:
+      'Use `ws.pivots.add(..., { lifecycle: "materialize" })` and branch on the returned receipt before relying on rendered output.',
+    mogReplacements: [
+      {
+        path: 'ws.pivots.add',
+        snippet: pivotMaterializeReceiptSnippet,
+        note: 'Materialized pivot creation can return applied, partial, or failed receipts.',
+      },
+      {
+        path: 'ws.pivots.refresh',
+        snippet: pivotMaterializeReceiptSnippet,
+        note: 'Refresh is the public repair path when materialization was partial.',
+      },
+    ],
+    confidence: 0.84,
+    blocking: true,
+  },
+  {
+    id: 'officejs.autofill',
+    dialect: 'officejs',
+    category: 'range',
+    matchers: [
+      {
+        id: 'officejs-excel-autofill-type',
+        kind: 'member-chain',
+        symbol: 'Excel.AutoFillType',
+        confidence: 0.86,
+      },
+    ],
+    message: 'Microsoft Office JavaScript autofill does not provide Mog preview receipts.',
+    suggestion:
+      'Preview first with `ws.autoFillPreview(...)`, inspect diagnostics and reference diagnostics, then call `ws.autoFill(...)` only when the preview is acceptable.',
+    mogReplacements: [
+      {
+        path: 'ws.autoFillPreview',
+        snippet: autofillPreviewThenApplySnippet,
+        note: 'Preview uses the same fill engine as apply without changing worksheet cells or undo state.',
+      },
+      {
+        path: 'ws.autoFill',
+        snippet: autofillPreviewThenApplySnippet,
+        note: 'Apply after the preview receipt confirms the formula references are acceptable.',
+      },
+    ],
+    confidence: 0.86,
     blocking: true,
   },
   {

@@ -136,19 +136,19 @@ fn test_affected_cells_levels_with_range_deps() {
     let resolve = |cell: &CellId| -> Option<CellPosition> {
         if *cell == d {
             Some(CellPosition {
-                sheet: sheet,
+                sheet,
                 row: 5,
                 col: 0,
             })
         } else if *cell == f {
             Some(CellPosition {
-                sheet: sheet,
+                sheet,
                 row: 50,
                 col: 1,
             }) // outside the range itself
         } else if *cell == g {
             Some(CellPosition {
-                sheet: sheet,
+                sheet,
                 row: 50,
                 col: 2,
             })
@@ -233,25 +233,25 @@ fn test_affected_cells_levels_with_cycle() {
         let sheet = sid(1);
         if *cell == a {
             Some(CellPosition {
-                sheet: sheet,
+                sheet,
                 row: 0,
                 col: 0,
             })
         } else if *cell == b {
             Some(CellPosition {
-                sheet: sheet,
+                sheet,
                 row: 1,
                 col: 0,
             })
         } else if *cell == c {
             Some(CellPosition {
-                sheet: sheet,
+                sheet,
                 row: 2,
                 col: 0,
             })
         } else if *cell == d {
             Some(CellPosition {
-                sheet: sheet,
+                sheet,
                 row: 3,
                 col: 0,
             })
@@ -366,31 +366,31 @@ fn test_affected_cells_full_ordering_invariant_with_ranges() {
     let resolve = |cell: &CellId| -> Option<CellPosition> {
         if *cell == d1 {
             Some(CellPosition {
-                sheet: sheet,
+                sheet,
                 row: 0,
                 col: 0,
             })
         } else if *cell == d2 {
             Some(CellPosition {
-                sheet: sheet,
+                sheet,
                 row: 1,
                 col: 0,
             })
         } else if *cell == b {
             Some(CellPosition {
-                sheet: sheet,
+                sheet,
                 row: 0,
                 col: 1,
             })
         } else if *cell == c {
             Some(CellPosition {
-                sheet: sheet,
+                sheet,
                 row: 0,
                 col: 2,
             })
         } else if *cell == a {
             Some(CellPosition {
-                sheet: sheet,
+                sheet,
                 row: 0,
                 col: 3,
             })
@@ -485,13 +485,13 @@ fn test_affected_cells_full_includes_volatile() {
     let resolve = |cell: &CellId| -> Option<CellPosition> {
         if *cell == d {
             Some(CellPosition {
-                sheet: sheet,
+                sheet,
                 row: 50,
                 col: 0,
             })
         } else if *cell == f {
             Some(CellPosition {
-                sheet: sheet,
+                sheet,
                 row: 0,
                 col: 1,
             })
@@ -523,13 +523,13 @@ fn test_affected_cells_full_with_cycle() {
     let resolve = |cell: &CellId| -> Option<CellPosition> {
         if *cell == a {
             Some(CellPosition {
-                sheet: sheet,
+                sheet,
                 row: 0,
                 col: 0,
             })
         } else if *cell == b {
             Some(CellPosition {
-                sheet: sheet,
+                sheet,
                 row: 1,
                 col: 0,
             })
@@ -593,19 +593,19 @@ fn test_affected_cells_levels_range_aware_bfs() {
     let resolve = |cell: &CellId| -> Option<CellPosition> {
         if *cell == d {
             Some(CellPosition {
-                sheet: sheet,
+                sheet,
                 row: 5,
                 col: 0,
             })
         } else if *cell == f {
             Some(CellPosition {
-                sheet: sheet,
+                sheet,
                 row: 0,
                 col: 1,
             })
         } else if *cell == g {
             Some(CellPosition {
-                sheet: sheet,
+                sheet,
                 row: 0,
                 col: 2,
             })

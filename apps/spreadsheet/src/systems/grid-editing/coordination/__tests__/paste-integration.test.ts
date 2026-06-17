@@ -324,6 +324,42 @@ describe('Clipboard Paste Integration', () => {
     clipboardActor.stop();
   });
 
+  it('pastes external literal text without a pre-value General format write', async () => {
+    const sheetId = 'sheet-1' as SheetId;
+    const setCellValues = jest.fn();
+    const setCellFormat = jest.fn();
+    const store: PasteStoreOperations = {
+      setCellValues,
+      setCellFormat,
+      getCellData: jest.fn(),
+    };
+
+    const clipboardActor = createActor(clipboardMachine);
+    clipboardActor.start();
+
+    const cleanup = setupClipboardPasteIntegration({
+      clipboardActor,
+      store,
+      getActiveSheetId: () => sheetId,
+    });
+
+    clipboardActor.send({
+      type: 'EXTERNAL_PASTE',
+      text: 'atlas91 paste alpha',
+      targetCell: { row: 10, col: 12 },
+      options: createDefaultPasteOptions(),
+    });
+    await waitForPendingClipboardPaste();
+
+    expect(setCellFormat).not.toHaveBeenCalled();
+    expect(setCellValues).toHaveBeenCalledWith(sheetId, [
+      { row: 10, col: 12, value: 'atlas91 paste alpha' },
+    ]);
+
+    cleanup();
+    clipboardActor.stop();
+  });
+
   it('tiles normal copy paste across an exact-multiple selected target range', async () => {
     const sheetId = 'sheet-1' as SheetId;
     const sourceRange = { startRow: 0, startCol: 0, endRow: 1, endCol: 2 };

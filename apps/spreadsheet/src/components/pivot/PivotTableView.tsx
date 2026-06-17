@@ -14,7 +14,7 @@ import type {
   PivotTableConfig,
   PivotTableResult,
 } from '@mog-sdk/contracts/pivot';
-import { PIVOT_READBACK_REVISION } from '../../systems/pivot';
+import { pivotFieldLabel, pivotPlacementsFor, pivotReadbackAttributes } from '../../systems/pivot';
 import { Button } from '@mog/shell/components/ui';
 
 // =============================================================================
@@ -87,40 +87,6 @@ function getColumnKey(columnHeaders: PivotColumnHeader[], colIndex: number): str
   return keys.join('|');
 }
 
-function fieldLabel(config: PivotTableConfig, fieldId: string): string {
-  return config.fields.find((field) => field.id === fieldId)?.name ?? fieldId;
-}
-
-function placementsFor(config: PivotTableConfig, area: 'row' | 'column' | 'value' | 'filter') {
-  return config.placements
-    .filter((placement) => placement.area === area)
-    .sort((a, b) => a.position - b.position);
-}
-
-function placementFieldNames(config: PivotTableConfig, area: 'row' | 'column' | 'filter'): string {
-  return JSON.stringify(
-    placementsFor(config, area).map((placement) => fieldLabel(config, placement.fieldId)),
-  );
-}
-
-function valueFieldReadback(config: PivotTableConfig): string {
-  return JSON.stringify(
-    placementsFor(config, 'value').map((placement) => {
-      const sourceField = placement.calculatedFieldId
-        ? (config.calculatedFields ?? []).find(
-            (field) => (field.calculatedFieldId ?? field.fieldId) === placement.calculatedFieldId,
-          )?.name
-        : fieldLabel(config, placement.fieldId);
-      const name = placement.displayName ?? sourceField ?? placement.fieldId;
-      return {
-        name,
-        sourceField: sourceField ?? name,
-        aggregation: placement.aggregateFunction ?? 'sum',
-      };
-    }),
-  );
-}
-
 function leafColumnCount(columnHeaders: PivotColumnHeader[]): number {
   const lastLevel = columnHeaders[columnHeaders.length - 1];
   if (!lastLevel) return 0;
@@ -173,14 +139,14 @@ export function PivotTableView({
   style,
 }: PivotTableViewProps) {
   const { columnHeaders, rows, grandTotals, sourceRowCount } = result;
-  const rowPlacements = placementsFor(config, 'row');
-  const columnPlacements = placementsFor(config, 'column');
-  const valuePlacements = placementsFor(config, 'value');
+  const rowPlacements = pivotPlacementsFor(config, 'row');
+  const columnPlacements = pivotPlacementsFor(config, 'column');
+  const valuePlacements = pivotPlacementsFor(config, 'value');
   const hasRowFields = rowPlacements.length > 0;
   const hasColumnFields = columnPlacements.length > 0;
   const hasValueFields = valuePlacements.length > 0;
   const isNoValuesPivot = !hasValueFields && (hasRowFields || hasColumnFields);
-  const rowHeaderLabel = hasRowFields ? fieldLabel(config, rowPlacements[0].fieldId) : '';
+  const rowHeaderLabel = hasRowFields ? pivotFieldLabel(config, rowPlacements[0].fieldId) : '';
   const grandTotalLabel = grandTotals.rowLabel ?? 'Grand Total';
   const hasColumnGrandTotals = grandTotals.column != null;
   const hasRowGrandTotals = grandTotals.row != null;
@@ -449,11 +415,7 @@ export function PivotTableView({
         data-pivot-target="table-view"
         data-pivot-id={config.id}
         data-pivot-name={config.name}
-        data-pivot-readback-revision={PIVOT_READBACK_REVISION}
-        data-pivot-row-fields={placementFieldNames(config, 'row')}
-        data-pivot-column-fields={placementFieldNames(config, 'column')}
-        data-pivot-filter-fields={placementFieldNames(config, 'filter')}
-        data-pivot-value-fields={valueFieldReadback(config)}
+        {...pivotReadbackAttributes(config)}
       >
         <div
           className="flex flex-col items-center justify-center gap-2 p-10 text-center text-ss-text-secondary min-h-[200px]"
@@ -489,11 +451,7 @@ export function PivotTableView({
       data-pivot-target="table-view"
       data-pivot-id={config.id}
       data-pivot-name={config.name}
-      data-pivot-readback-revision={PIVOT_READBACK_REVISION}
-      data-pivot-row-fields={placementFieldNames(config, 'row')}
-      data-pivot-column-fields={placementFieldNames(config, 'column')}
-      data-pivot-filter-fields={placementFieldNames(config, 'filter')}
-      data-pivot-value-fields={valueFieldReadback(config)}
+      {...pivotReadbackAttributes(config)}
     >
       <table className="border-collapse w-full" data-pivot-target="readback-table">
         <thead>{renderColumnHeaders()}</thead>

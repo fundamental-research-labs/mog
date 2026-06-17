@@ -28,6 +28,16 @@ import { jest } from '@jest/globals';
 import type { IPlatform, PlatformFileHandle } from '@mog-sdk/contracts/platform';
 import type { ShellService } from '@mog-sdk/types-document/shell/types';
 
+export function createChartAddReceipt(id = 'new-chart-id') {
+  return {
+    kind: 'chart.add' as const,
+    status: 'applied' as const,
+    effects: [],
+    diagnostics: [],
+    chart: { id },
+  };
+}
+
 /**
  * Options for {@link createMockFileHandle}. Every field is optional so the
  * default produces a benign read-only handle whose `read()` returns an

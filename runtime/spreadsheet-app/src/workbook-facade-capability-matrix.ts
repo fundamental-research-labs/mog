@@ -12,261 +12,2658 @@ export interface SpreadsheetFacadeMatrixEntry {
   readonly returns?: readonly string[];
 }
 
+export type WorkbookSubApiInterfaces = Record<string, Record<string, unknown>>;
+
 export const WORKBOOK_FACADE_GENERATED_FROM = 'runtime/sdk/src/generated/api-spec.json' as const;
 
-export const WORKBOOK_SUB_API_INTERFACES = {
-  wb: {
-    sheets: 'WorkbookSheets',
-    slicers: 'WorkbookSlicers',
-    slicerStyles: 'WorkbookSlicerStyles',
-    timelineStyles: 'WorkbookTimelineStyles',
-    pivotTableStyles: 'WorkbookPivotTableStyles',
-    functions: 'WorkbookFunctions',
-    names: 'WorkbookNames',
-    scenarios: 'WorkbookScenarios',
-    history: 'WorkbookHistory',
-    tableStyles: 'WorkbookTableStyles',
-    cellStyles: 'WorkbookCellStyles',
-    properties: 'WorkbookProperties',
-    protection: 'WorkbookProtection',
-    security: 'WorkbookSecurity',
-    notifications: 'WorkbookNotifications',
-    theme: 'WorkbookTheme',
-    viewport: 'WorkbookViewport',
-    changes: 'WorkbookChanges',
-    diagnostics: 'WorkbookDiagnostics',
-    links: 'WorkbookLinks',
+export const WORKBOOK_SUB_API_INTERFACES: WorkbookSubApiInterfaces = {
+  workbook: {
+    cellStyles: {
+      signature: 'readonly cellStyles: WorkbookCellStyles;',
+      docstring: 'Cell style management (add, get, update, remove)',
+      usedTypes: ['WorkbookCellStyles'],
+      stableId: 'Workbook.cellStyles',
+      canonicalPath: 'wb.cellStyles',
+      root: 'subApi',
+      parentRoot: 'workbook',
+      interface: 'Workbook',
+      method: 'cellStyles',
+      kind: 'subApiAccessor',
+      visibility: 'public',
+      asyncModel: 'sync',
+      parameters: [],
+      returns: {
+        type: {
+          kind: 'objectRef',
+          name: 'WorkbookCellStyles',
+        },
+        typeText: 'WorkbookCellStyles',
+      },
+      typeScript: {
+        signature: 'readonly cellStyles: WorkbookCellStyles;',
+        parameters: [],
+        returnTypeText: 'WorkbookCellStyles',
+      },
+      ownership: {
+        package: '@mog/types-api',
+      },
+      ownerPackage: '@mog/types-api',
+      alias: {
+        aliasOf: null,
+        aliases: [],
+        replacement: null,
+      },
+      deprecation: {
+        deprecated: false,
+        message: null,
+        replacement: null,
+        since: null,
+      },
+      compatibility: [],
+      source: {
+        file: 'types/api/src/api/workbook.ts',
+      },
+      targetInterface: 'WorkbookCellStyles',
+    },
+    changes: {
+      signature: 'readonly changes: WorkbookChanges;',
+      docstring: 'Workbook-level change tracking (opt-in, cross-sheet).',
+      usedTypes: ['WorkbookChanges'],
+      stableId: 'Workbook.changes',
+      canonicalPath: 'wb.changes',
+      root: 'subApi',
+      parentRoot: 'workbook',
+      interface: 'Workbook',
+      method: 'changes',
+      kind: 'subApiAccessor',
+      visibility: 'public',
+      asyncModel: 'sync',
+      parameters: [],
+      returns: {
+        type: {
+          kind: 'objectRef',
+          name: 'WorkbookChanges',
+        },
+        typeText: 'WorkbookChanges',
+      },
+      typeScript: {
+        signature: 'readonly changes: WorkbookChanges;',
+        parameters: [],
+        returnTypeText: 'WorkbookChanges',
+      },
+      ownership: {
+        package: '@mog/types-api',
+      },
+      ownerPackage: '@mog/types-api',
+      alias: {
+        aliasOf: null,
+        aliases: [],
+        replacement: null,
+      },
+      deprecation: {
+        deprecated: false,
+        message: null,
+        replacement: null,
+        since: null,
+      },
+      compatibility: [],
+      source: {
+        file: 'types/api/src/api/workbook.ts',
+      },
+      targetInterface: 'WorkbookChanges',
+    },
+    diagnostics: {
+      signature: 'readonly diagnostics: WorkbookDiagnostics;',
+      docstring: 'Workbook-level diagnostics and audit surfaces.',
+      usedTypes: ['WorkbookDiagnostics'],
+      stableId: 'Workbook.diagnostics',
+      canonicalPath: 'wb.diagnostics',
+      root: 'subApi',
+      parentRoot: 'workbook',
+      interface: 'Workbook',
+      method: 'diagnostics',
+      kind: 'subApiAccessor',
+      visibility: 'public',
+      asyncModel: 'sync',
+      parameters: [],
+      returns: {
+        type: {
+          kind: 'objectRef',
+          name: 'WorkbookDiagnostics',
+        },
+        typeText: 'WorkbookDiagnostics',
+      },
+      typeScript: {
+        signature: 'readonly diagnostics: WorkbookDiagnostics;',
+        parameters: [],
+        returnTypeText: 'WorkbookDiagnostics',
+      },
+      ownership: {
+        package: '@mog/types-api',
+      },
+      ownerPackage: '@mog/types-api',
+      alias: {
+        aliasOf: null,
+        aliases: [],
+        replacement: null,
+      },
+      deprecation: {
+        deprecated: false,
+        message: null,
+        replacement: null,
+        since: null,
+      },
+      compatibility: [],
+      source: {
+        file: 'types/api/src/api/workbook.ts',
+      },
+      targetInterface: 'WorkbookDiagnostics',
+    },
+    functions: {
+      signature: 'readonly functions: WorkbookFunctions;',
+      docstring: 'Programmatic function invocation (workbook functions).',
+      usedTypes: ['WorkbookFunctions'],
+      stableId: 'Workbook.functions',
+      canonicalPath: 'wb.functions',
+      root: 'subApi',
+      parentRoot: 'workbook',
+      interface: 'Workbook',
+      method: 'functions',
+      kind: 'subApiAccessor',
+      visibility: 'public',
+      asyncModel: 'sync',
+      parameters: [],
+      returns: {
+        type: {
+          kind: 'objectRef',
+          name: 'WorkbookFunctions',
+        },
+        typeText: 'WorkbookFunctions',
+      },
+      typeScript: {
+        signature: 'readonly functions: WorkbookFunctions;',
+        parameters: [],
+        returnTypeText: 'WorkbookFunctions',
+      },
+      ownership: {
+        package: '@mog/types-api',
+      },
+      ownerPackage: '@mog/types-api',
+      alias: {
+        aliasOf: null,
+        aliases: [],
+        replacement: null,
+      },
+      deprecation: {
+        deprecated: false,
+        message: null,
+        replacement: null,
+        since: null,
+      },
+      compatibility: [],
+      source: {
+        file: 'types/api/src/api/workbook.ts',
+      },
+      targetInterface: 'WorkbookFunctions',
+    },
+    history: {
+      signature: 'readonly history: WorkbookHistory;',
+      docstring: 'Undo/redo/history traversal',
+      usedTypes: ['WorkbookHistory'],
+      stableId: 'Workbook.history',
+      canonicalPath: 'wb.history',
+      root: 'subApi',
+      parentRoot: 'workbook',
+      interface: 'Workbook',
+      method: 'history',
+      kind: 'subApiAccessor',
+      visibility: 'public',
+      asyncModel: 'sync',
+      parameters: [],
+      returns: {
+        type: {
+          kind: 'objectRef',
+          name: 'WorkbookHistory',
+        },
+        typeText: 'WorkbookHistory',
+      },
+      typeScript: {
+        signature: 'readonly history: WorkbookHistory;',
+        parameters: [],
+        returnTypeText: 'WorkbookHistory',
+      },
+      ownership: {
+        package: '@mog/types-api',
+      },
+      ownerPackage: '@mog/types-api',
+      alias: {
+        aliasOf: null,
+        aliases: [],
+        replacement: null,
+      },
+      deprecation: {
+        deprecated: false,
+        message: null,
+        replacement: null,
+        since: null,
+      },
+      compatibility: [],
+      source: {
+        file: 'types/api/src/api/workbook.ts',
+      },
+      targetInterface: 'WorkbookHistory',
+    },
+    links: {
+      signature: 'readonly links: WorkbookLinks;',
+      docstring: 'Cross-workbook link registry and principal-scoped runtime status.',
+      usedTypes: ['WorkbookLinks'],
+      stableId: 'Workbook.links',
+      canonicalPath: 'wb.links',
+      root: 'subApi',
+      parentRoot: 'workbook',
+      interface: 'Workbook',
+      method: 'links',
+      kind: 'subApiAccessor',
+      visibility: 'public',
+      asyncModel: 'sync',
+      parameters: [],
+      returns: {
+        type: {
+          kind: 'objectRef',
+          name: 'WorkbookLinks',
+        },
+        typeText: 'WorkbookLinks',
+      },
+      typeScript: {
+        signature: 'readonly links: WorkbookLinks;',
+        parameters: [],
+        returnTypeText: 'WorkbookLinks',
+      },
+      ownership: {
+        package: '@mog/types-api',
+      },
+      ownerPackage: '@mog/types-api',
+      alias: {
+        aliasOf: null,
+        aliases: [],
+        replacement: null,
+      },
+      deprecation: {
+        deprecated: false,
+        message: null,
+        replacement: null,
+        since: null,
+      },
+      compatibility: [],
+      source: {
+        file: 'types/api/src/api/workbook.ts',
+      },
+      targetInterface: 'WorkbookLinks',
+    },
+    names: {
+      signature: 'readonly names: WorkbookNames;',
+      docstring: 'Named range CRUD',
+      usedTypes: ['WorkbookNames'],
+      stableId: 'Workbook.names',
+      canonicalPath: 'wb.names',
+      root: 'subApi',
+      parentRoot: 'workbook',
+      interface: 'Workbook',
+      method: 'names',
+      kind: 'subApiAccessor',
+      visibility: 'public',
+      asyncModel: 'sync',
+      parameters: [],
+      returns: {
+        type: {
+          kind: 'objectRef',
+          name: 'WorkbookNames',
+        },
+        typeText: 'WorkbookNames',
+      },
+      typeScript: {
+        signature: 'readonly names: WorkbookNames;',
+        parameters: [],
+        returnTypeText: 'WorkbookNames',
+      },
+      ownership: {
+        package: '@mog/types-api',
+      },
+      ownerPackage: '@mog/types-api',
+      alias: {
+        aliasOf: null,
+        aliases: [],
+        replacement: null,
+      },
+      deprecation: {
+        deprecated: false,
+        message: null,
+        replacement: null,
+        since: null,
+      },
+      compatibility: [],
+      source: {
+        file: 'types/api/src/api/workbook.ts',
+      },
+      targetInterface: 'WorkbookNames',
+    },
+    notifications: {
+      signature: 'readonly notifications: WorkbookNotifications;',
+      docstring: 'Toast/notification queue (info, warning, error, success)',
+      usedTypes: ['WorkbookNotifications'],
+      stableId: 'Workbook.notifications',
+      canonicalPath: 'wb.notifications',
+      root: 'subApi',
+      parentRoot: 'workbook',
+      interface: 'Workbook',
+      method: 'notifications',
+      kind: 'subApiAccessor',
+      visibility: 'public',
+      asyncModel: 'sync',
+      parameters: [],
+      returns: {
+        type: {
+          kind: 'objectRef',
+          name: 'WorkbookNotifications',
+        },
+        typeText: 'WorkbookNotifications',
+      },
+      typeScript: {
+        signature: 'readonly notifications: WorkbookNotifications;',
+        parameters: [],
+        returnTypeText: 'WorkbookNotifications',
+      },
+      ownership: {
+        package: '@mog/types-api',
+      },
+      ownerPackage: '@mog/types-api',
+      alias: {
+        aliasOf: null,
+        aliases: [],
+        replacement: null,
+      },
+      deprecation: {
+        deprecated: false,
+        message: null,
+        replacement: null,
+        since: null,
+      },
+      compatibility: [],
+      source: {
+        file: 'types/api/src/api/workbook.ts',
+      },
+      targetInterface: 'WorkbookNotifications',
+    },
+    pivotTableStyles: {
+      signature: 'readonly pivotTableStyles: WorkbookPivotTableStyles;',
+      docstring: 'Pivot table style presets and default style management.',
+      usedTypes: ['WorkbookPivotTableStyles'],
+      stableId: 'Workbook.pivotTableStyles',
+      canonicalPath: 'wb.pivotTableStyles',
+      root: 'subApi',
+      parentRoot: 'workbook',
+      interface: 'Workbook',
+      method: 'pivotTableStyles',
+      kind: 'subApiAccessor',
+      visibility: 'public',
+      asyncModel: 'sync',
+      parameters: [],
+      returns: {
+        type: {
+          kind: 'objectRef',
+          name: 'WorkbookPivotTableStyles',
+        },
+        typeText: 'WorkbookPivotTableStyles',
+      },
+      typeScript: {
+        signature: 'readonly pivotTableStyles: WorkbookPivotTableStyles;',
+        parameters: [],
+        returnTypeText: 'WorkbookPivotTableStyles',
+      },
+      ownership: {
+        package: '@mog/types-api',
+      },
+      ownerPackage: '@mog/types-api',
+      alias: {
+        aliasOf: null,
+        aliases: [],
+        replacement: null,
+      },
+      deprecation: {
+        deprecated: false,
+        message: null,
+        replacement: null,
+        since: null,
+      },
+      compatibility: [],
+      source: {
+        file: 'types/api/src/api/workbook.ts',
+      },
+      targetInterface: 'WorkbookPivotTableStyles',
+    },
+    properties: {
+      signature: 'readonly properties: WorkbookProperties;',
+      docstring: 'Document properties (title, author, keywords, custom properties).',
+      usedTypes: ['WorkbookProperties'],
+      stableId: 'Workbook.properties',
+      canonicalPath: 'wb.properties',
+      root: 'subApi',
+      parentRoot: 'workbook',
+      interface: 'Workbook',
+      method: 'properties',
+      kind: 'subApiAccessor',
+      visibility: 'public',
+      asyncModel: 'sync',
+      parameters: [],
+      returns: {
+        type: {
+          kind: 'objectRef',
+          name: 'WorkbookProperties',
+        },
+        typeText: 'WorkbookProperties',
+      },
+      typeScript: {
+        signature: 'readonly properties: WorkbookProperties;',
+        parameters: [],
+        returnTypeText: 'WorkbookProperties',
+      },
+      ownership: {
+        package: '@mog/types-api',
+      },
+      ownerPackage: '@mog/types-api',
+      alias: {
+        aliasOf: null,
+        aliases: [],
+        replacement: null,
+      },
+      deprecation: {
+        deprecated: false,
+        message: null,
+        replacement: null,
+        since: null,
+      },
+      compatibility: [],
+      source: {
+        file: 'types/api/src/api/workbook.ts',
+      },
+      targetInterface: 'WorkbookProperties',
+    },
+    protection: {
+      signature: 'readonly protection: WorkbookProtection;',
+      docstring: 'Workbook-level protection',
+      usedTypes: ['WorkbookProtection'],
+      stableId: 'Workbook.protection',
+      canonicalPath: 'wb.protection',
+      root: 'subApi',
+      parentRoot: 'workbook',
+      interface: 'Workbook',
+      method: 'protection',
+      kind: 'subApiAccessor',
+      visibility: 'public',
+      asyncModel: 'sync',
+      parameters: [],
+      returns: {
+        type: {
+          kind: 'objectRef',
+          name: 'WorkbookProtection',
+        },
+        typeText: 'WorkbookProtection',
+      },
+      typeScript: {
+        signature: 'readonly protection: WorkbookProtection;',
+        parameters: [],
+        returnTypeText: 'WorkbookProtection',
+      },
+      ownership: {
+        package: '@mog/types-api',
+      },
+      ownerPackage: '@mog/types-api',
+      alias: {
+        aliasOf: null,
+        aliases: [],
+        replacement: null,
+      },
+      deprecation: {
+        deprecated: false,
+        message: null,
+        replacement: null,
+        since: null,
+      },
+      compatibility: [],
+      source: {
+        file: 'types/api/src/api/workbook.ts',
+      },
+      targetInterface: 'WorkbookProtection',
+    },
+    scenarios: {
+      signature: 'readonly scenarios: WorkbookScenarios;',
+      docstring: 'What-if scenario CRUD',
+      usedTypes: ['WorkbookScenarios'],
+      stableId: 'Workbook.scenarios',
+      canonicalPath: 'wb.scenarios',
+      root: 'subApi',
+      parentRoot: 'workbook',
+      interface: 'Workbook',
+      method: 'scenarios',
+      kind: 'subApiAccessor',
+      visibility: 'public',
+      asyncModel: 'sync',
+      parameters: [],
+      returns: {
+        type: {
+          kind: 'objectRef',
+          name: 'WorkbookScenarios',
+        },
+        typeText: 'WorkbookScenarios',
+      },
+      typeScript: {
+        signature: 'readonly scenarios: WorkbookScenarios;',
+        parameters: [],
+        returnTypeText: 'WorkbookScenarios',
+      },
+      ownership: {
+        package: '@mog/types-api',
+      },
+      ownerPackage: '@mog/types-api',
+      alias: {
+        aliasOf: null,
+        aliases: [],
+        replacement: null,
+      },
+      deprecation: {
+        deprecated: false,
+        message: null,
+        replacement: null,
+        since: null,
+      },
+      compatibility: [],
+      source: {
+        file: 'types/api/src/api/workbook.ts',
+      },
+      targetInterface: 'WorkbookScenarios',
+    },
+    security: {
+      signature: 'readonly security: WorkbookSecurity;',
+      docstring: 'Data access control policies (Layer 2 security)',
+      usedTypes: ['WorkbookSecurity'],
+      stableId: 'Workbook.security',
+      canonicalPath: 'wb.security',
+      root: 'subApi',
+      parentRoot: 'workbook',
+      interface: 'Workbook',
+      method: 'security',
+      kind: 'subApiAccessor',
+      visibility: 'public',
+      asyncModel: 'sync',
+      parameters: [],
+      returns: {
+        type: {
+          kind: 'objectRef',
+          name: 'WorkbookSecurity',
+        },
+        typeText: 'WorkbookSecurity',
+      },
+      typeScript: {
+        signature: 'readonly security: WorkbookSecurity;',
+        parameters: [],
+        returnTypeText: 'WorkbookSecurity',
+      },
+      ownership: {
+        package: '@mog/types-api',
+      },
+      ownerPackage: '@mog/types-api',
+      alias: {
+        aliasOf: null,
+        aliases: [],
+        replacement: null,
+      },
+      deprecation: {
+        deprecated: false,
+        message: null,
+        replacement: null,
+        since: null,
+      },
+      compatibility: [],
+      source: {
+        file: 'types/api/src/api/workbook.ts',
+      },
+      targetInterface: 'WorkbookSecurity',
+    },
+    sheets: {
+      signature: 'readonly sheets: WorkbookSheets;',
+      docstring: 'Sheet management (add, remove, move, rename, copy, hide, show)',
+      usedTypes: ['WorkbookSheets'],
+      stableId: 'Workbook.sheets',
+      canonicalPath: 'wb.sheets',
+      root: 'subApi',
+      parentRoot: 'workbook',
+      interface: 'Workbook',
+      method: 'sheets',
+      kind: 'subApiAccessor',
+      visibility: 'public',
+      asyncModel: 'sync',
+      parameters: [],
+      returns: {
+        type: {
+          kind: 'objectRef',
+          name: 'WorkbookSheets',
+        },
+        typeText: 'WorkbookSheets',
+      },
+      typeScript: {
+        signature: 'readonly sheets: WorkbookSheets;',
+        parameters: [],
+        returnTypeText: 'WorkbookSheets',
+      },
+      ownership: {
+        package: '@mog/types-api',
+      },
+      ownerPackage: '@mog/types-api',
+      alias: {
+        aliasOf: null,
+        aliases: [],
+        replacement: null,
+      },
+      deprecation: {
+        deprecated: false,
+        message: null,
+        replacement: null,
+        since: null,
+      },
+      compatibility: [],
+      source: {
+        file: 'types/api/src/api/workbook.ts',
+      },
+      targetInterface: 'WorkbookSheets',
+    },
+    slicerStyles: {
+      signature: 'readonly slicerStyles: WorkbookSlicerStyles;',
+      docstring: 'Default slicer style management',
+      usedTypes: ['WorkbookSlicerStyles'],
+      stableId: 'Workbook.slicerStyles',
+      canonicalPath: 'wb.slicerStyles',
+      root: 'subApi',
+      parentRoot: 'workbook',
+      interface: 'Workbook',
+      method: 'slicerStyles',
+      kind: 'subApiAccessor',
+      visibility: 'public',
+      asyncModel: 'sync',
+      parameters: [],
+      returns: {
+        type: {
+          kind: 'objectRef',
+          name: 'WorkbookSlicerStyles',
+        },
+        typeText: 'WorkbookSlicerStyles',
+      },
+      typeScript: {
+        signature: 'readonly slicerStyles: WorkbookSlicerStyles;',
+        parameters: [],
+        returnTypeText: 'WorkbookSlicerStyles',
+      },
+      ownership: {
+        package: '@mog/types-api',
+      },
+      ownerPackage: '@mog/types-api',
+      alias: {
+        aliasOf: null,
+        aliases: [],
+        replacement: null,
+      },
+      deprecation: {
+        deprecated: false,
+        message: null,
+        replacement: null,
+        since: null,
+      },
+      compatibility: [],
+      source: {
+        file: 'types/api/src/api/workbook.ts',
+      },
+      targetInterface: 'WorkbookSlicerStyles',
+    },
+    slicers: {
+      signature: 'readonly slicers: WorkbookSlicers;',
+      docstring: 'Workbook-scoped slicer collection (all slicers across all sheets)',
+      usedTypes: ['WorkbookSlicers'],
+      stableId: 'Workbook.slicers',
+      canonicalPath: 'wb.slicers',
+      root: 'subApi',
+      parentRoot: 'workbook',
+      interface: 'Workbook',
+      method: 'slicers',
+      kind: 'subApiAccessor',
+      visibility: 'public',
+      asyncModel: 'sync',
+      parameters: [],
+      returns: {
+        type: {
+          kind: 'objectRef',
+          name: 'WorkbookSlicers',
+        },
+        typeText: 'WorkbookSlicers',
+      },
+      typeScript: {
+        signature: 'readonly slicers: WorkbookSlicers;',
+        parameters: [],
+        returnTypeText: 'WorkbookSlicers',
+      },
+      ownership: {
+        package: '@mog/types-api',
+      },
+      ownerPackage: '@mog/types-api',
+      alias: {
+        aliasOf: null,
+        aliases: [],
+        replacement: null,
+      },
+      deprecation: {
+        deprecated: false,
+        message: null,
+        replacement: null,
+        since: null,
+      },
+      compatibility: [],
+      source: {
+        file: 'types/api/src/api/workbook.ts',
+      },
+      targetInterface: 'WorkbookSlicers',
+    },
+    tableStyles: {
+      signature: 'readonly tableStyles: WorkbookTableStyles;',
+      docstring: 'Table style management (add, get, update, remove, default, duplicate)',
+      usedTypes: ['WorkbookTableStyles'],
+      stableId: 'Workbook.tableStyles',
+      canonicalPath: 'wb.tableStyles',
+      root: 'subApi',
+      parentRoot: 'workbook',
+      interface: 'Workbook',
+      method: 'tableStyles',
+      kind: 'subApiAccessor',
+      visibility: 'public',
+      asyncModel: 'sync',
+      parameters: [],
+      returns: {
+        type: {
+          kind: 'objectRef',
+          name: 'WorkbookTableStyles',
+        },
+        typeText: 'WorkbookTableStyles',
+      },
+      typeScript: {
+        signature: 'readonly tableStyles: WorkbookTableStyles;',
+        parameters: [],
+        returnTypeText: 'WorkbookTableStyles',
+      },
+      ownership: {
+        package: '@mog/types-api',
+      },
+      ownerPackage: '@mog/types-api',
+      alias: {
+        aliasOf: null,
+        aliases: [],
+        replacement: null,
+      },
+      deprecation: {
+        deprecated: false,
+        message: null,
+        replacement: null,
+        since: null,
+      },
+      compatibility: [],
+      source: {
+        file: 'types/api/src/api/workbook.ts',
+      },
+      targetInterface: 'WorkbookTableStyles',
+    },
+    theme: {
+      signature: 'readonly theme: WorkbookTheme;',
+      docstring: 'Theme management (workbook OOXML theme + chrome UI theme).',
+      usedTypes: ['WorkbookTheme'],
+      stableId: 'Workbook.theme',
+      canonicalPath: 'wb.theme',
+      root: 'subApi',
+      parentRoot: 'workbook',
+      interface: 'Workbook',
+      method: 'theme',
+      kind: 'subApiAccessor',
+      visibility: 'public',
+      asyncModel: 'sync',
+      parameters: [],
+      returns: {
+        type: {
+          kind: 'objectRef',
+          name: 'WorkbookTheme',
+        },
+        typeText: 'WorkbookTheme',
+      },
+      typeScript: {
+        signature: 'readonly theme: WorkbookTheme;',
+        parameters: [],
+        returnTypeText: 'WorkbookTheme',
+      },
+      ownership: {
+        package: '@mog/types-api',
+      },
+      ownerPackage: '@mog/types-api',
+      alias: {
+        aliasOf: null,
+        aliases: [],
+        replacement: null,
+      },
+      deprecation: {
+        deprecated: false,
+        message: null,
+        replacement: null,
+        since: null,
+      },
+      compatibility: [],
+      source: {
+        file: 'types/api/src/api/workbook.ts',
+      },
+      targetInterface: 'WorkbookTheme',
+    },
+    timelineStyles: {
+      signature: 'readonly timelineStyles: WorkbookTimelineStyles;',
+      docstring: 'Timeline slicer style management',
+      usedTypes: ['WorkbookTimelineStyles'],
+      stableId: 'Workbook.timelineStyles',
+      canonicalPath: 'wb.timelineStyles',
+      root: 'subApi',
+      parentRoot: 'workbook',
+      interface: 'Workbook',
+      method: 'timelineStyles',
+      kind: 'subApiAccessor',
+      visibility: 'public',
+      asyncModel: 'sync',
+      parameters: [],
+      returns: {
+        type: {
+          kind: 'objectRef',
+          name: 'WorkbookTimelineStyles',
+        },
+        typeText: 'WorkbookTimelineStyles',
+      },
+      typeScript: {
+        signature: 'readonly timelineStyles: WorkbookTimelineStyles;',
+        parameters: [],
+        returnTypeText: 'WorkbookTimelineStyles',
+      },
+      ownership: {
+        package: '@mog/types-api',
+      },
+      ownerPackage: '@mog/types-api',
+      alias: {
+        aliasOf: null,
+        aliases: [],
+        replacement: null,
+      },
+      deprecation: {
+        deprecated: false,
+        message: null,
+        replacement: null,
+        since: null,
+      },
+      compatibility: [],
+      source: {
+        file: 'types/api/src/api/workbook.ts',
+      },
+      targetInterface: 'WorkbookTimelineStyles',
+    },
+    viewport: {
+      signature: 'readonly viewport: WorkbookViewport;',
+      docstring: 'Viewport region lifecycle (handle-based — create, update, dispose).',
+      usedTypes: ['WorkbookViewport'],
+      stableId: 'Workbook.viewport',
+      canonicalPath: 'wb.viewport',
+      root: 'subApi',
+      parentRoot: 'workbook',
+      interface: 'Workbook',
+      method: 'viewport',
+      kind: 'subApiAccessor',
+      visibility: 'public',
+      asyncModel: 'sync',
+      parameters: [],
+      returns: {
+        type: {
+          kind: 'objectRef',
+          name: 'WorkbookViewport',
+        },
+        typeText: 'WorkbookViewport',
+      },
+      typeScript: {
+        signature: 'readonly viewport: WorkbookViewport;',
+        parameters: [],
+        returnTypeText: 'WorkbookViewport',
+      },
+      ownership: {
+        package: '@mog/types-api',
+      },
+      ownerPackage: '@mog/types-api',
+      alias: {
+        aliasOf: null,
+        aliases: [],
+        replacement: null,
+      },
+      deprecation: {
+        deprecated: false,
+        message: null,
+        replacement: null,
+        since: null,
+      },
+      compatibility: [],
+      source: {
+        file: 'types/api/src/api/workbook.ts',
+      },
+      targetInterface: 'WorkbookViewport',
+    },
   },
-  ws: {
-    cells: 'WorksheetCellsAccessor',
-    whatIf: 'WorksheetWhatIf',
-    diagrams: 'WorksheetDiagrams',
-    changes: 'WorksheetChanges',
-    formats: 'WorksheetFormats',
-    layout: 'WorksheetLayout',
-    view: 'WorksheetView',
-    structure: 'WorksheetStructure',
-    charts: 'WorksheetCharts',
-    objects: 'WorksheetObjectCollection',
-    shapes: 'WorksheetShapeCollection',
-    pictures: 'WorksheetPictureCollection',
-    textBoxes: 'WorksheetTextBoxCollection',
-    drawings: 'WorksheetDrawingCollection',
-    equations: 'WorksheetEquationCollection',
-    textEffects: 'WorksheetTextEffectCollection',
-    connectors: 'WorksheetConnectorCollection',
-    filters: 'WorksheetFilters',
-    formControls: 'WorksheetFormControls',
-    conditionalFormats: 'WorksheetConditionalFormatting',
-    validations: 'WorksheetValidation',
-    tables: 'WorksheetTables',
-    pivots: 'WorksheetPivots',
-    slicers: 'WorksheetSlicers',
-    sparklines: 'WorksheetSparklines',
-    comments: 'WorksheetComments',
-    customProperties: 'WorksheetCustomProperties',
-    hyperlinks: 'WorksheetHyperlinks',
-    outline: 'WorksheetOutline',
-    protection: 'WorksheetProtection',
-    print: 'WorksheetPrint',
-    settings: 'WorksheetSettings',
-    bindings: 'WorksheetBindings',
-    names: 'WorksheetNames',
-    styles: 'WorksheetStyles',
+  worksheet: {
+    bindings: {
+      signature: 'readonly bindings: WorksheetBindings;',
+      docstring: 'Data source bindings and projections',
+      usedTypes: ['WorksheetBindings'],
+      stableId: 'Worksheet.bindings',
+      canonicalPath: 'ws.bindings',
+      root: 'subApi',
+      parentRoot: 'worksheet',
+      interface: 'Worksheet',
+      method: 'bindings',
+      kind: 'subApiAccessor',
+      visibility: 'public',
+      asyncModel: 'sync',
+      parameters: [],
+      returns: {
+        type: {
+          kind: 'objectRef',
+          name: 'WorksheetBindings',
+        },
+        typeText: 'WorksheetBindings',
+      },
+      typeScript: {
+        signature: 'readonly bindings: WorksheetBindings;',
+        parameters: [],
+        returnTypeText: 'WorksheetBindings',
+      },
+      ownership: {
+        package: '@mog/types-api',
+      },
+      ownerPackage: '@mog/types-api',
+      alias: {
+        aliasOf: null,
+        aliases: [],
+        replacement: null,
+      },
+      deprecation: {
+        deprecated: false,
+        message: null,
+        replacement: null,
+        since: null,
+      },
+      compatibility: [],
+      source: {
+        file: 'types/api/src/api/worksheet.ts',
+      },
+      targetInterface: 'WorksheetBindings',
+    },
+    cells: {
+      signature: 'readonly cells: WorksheetCellsAccessor;',
+      docstring:
+        'Typed per-cell readback accessor (A1-only). See {@link CellRecord}.\n\nDistinct from {@link getCell}: `cells.get` returns a record with a\n`valueType` discriminant for every in-bounds cell, exposes the\nunified {@link RegionMeta} for array/Data Table membership, and\nreturns `undefined` (not `{value: null}`) for out-of-bounds reads.',
+      usedTypes: ['WorksheetCellsAccessor'],
+      stableId: 'Worksheet.cells',
+      canonicalPath: 'ws.cells',
+      root: 'subApi',
+      parentRoot: 'worksheet',
+      interface: 'Worksheet',
+      method: 'cells',
+      kind: 'subApiAccessor',
+      visibility: 'public',
+      asyncModel: 'sync',
+      parameters: [],
+      returns: {
+        type: {
+          kind: 'objectRef',
+          name: 'WorksheetCellsAccessor',
+        },
+        typeText: 'WorksheetCellsAccessor',
+      },
+      typeScript: {
+        signature: 'readonly cells: WorksheetCellsAccessor;',
+        parameters: [],
+        returnTypeText: 'WorksheetCellsAccessor',
+      },
+      ownership: {
+        package: '@mog/types-api',
+      },
+      ownerPackage: '@mog/types-api',
+      alias: {
+        aliasOf: null,
+        aliases: [],
+        replacement: null,
+      },
+      deprecation: {
+        deprecated: false,
+        message: null,
+        replacement: null,
+        since: null,
+      },
+      compatibility: [],
+      source: {
+        file: 'types/api/src/api/worksheet.ts',
+      },
+      targetInterface: 'WorksheetCellsAccessor',
+    },
+    changes: {
+      signature: 'readonly changes: WorksheetChanges;',
+      docstring: 'Opt-in change tracking (dirty cells, cascades, collab diffs)',
+      usedTypes: ['WorksheetChanges'],
+      stableId: 'Worksheet.changes',
+      canonicalPath: 'ws.changes',
+      root: 'subApi',
+      parentRoot: 'worksheet',
+      interface: 'Worksheet',
+      method: 'changes',
+      kind: 'subApiAccessor',
+      visibility: 'public',
+      asyncModel: 'sync',
+      parameters: [],
+      returns: {
+        type: {
+          kind: 'objectRef',
+          name: 'WorksheetChanges',
+        },
+        typeText: 'WorksheetChanges',
+      },
+      typeScript: {
+        signature: 'readonly changes: WorksheetChanges;',
+        parameters: [],
+        returnTypeText: 'WorksheetChanges',
+      },
+      ownership: {
+        package: '@mog/types-api',
+      },
+      ownerPackage: '@mog/types-api',
+      alias: {
+        aliasOf: null,
+        aliases: [],
+        replacement: null,
+      },
+      deprecation: {
+        deprecated: false,
+        message: null,
+        replacement: null,
+        since: null,
+      },
+      compatibility: [],
+      source: {
+        file: 'types/api/src/api/worksheet.ts',
+      },
+      targetInterface: 'WorksheetChanges',
+    },
+    charts: {
+      signature: 'readonly charts: WorksheetCharts;',
+      docstring: 'Chart CRUD',
+      usedTypes: ['WorksheetCharts'],
+      stableId: 'Worksheet.charts',
+      canonicalPath: 'ws.charts',
+      root: 'subApi',
+      parentRoot: 'worksheet',
+      interface: 'Worksheet',
+      method: 'charts',
+      kind: 'subApiAccessor',
+      visibility: 'public',
+      asyncModel: 'sync',
+      parameters: [],
+      returns: {
+        type: {
+          kind: 'objectRef',
+          name: 'WorksheetCharts',
+        },
+        typeText: 'WorksheetCharts',
+      },
+      typeScript: {
+        signature: 'readonly charts: WorksheetCharts;',
+        parameters: [],
+        returnTypeText: 'WorksheetCharts',
+      },
+      ownership: {
+        package: '@mog/types-api',
+      },
+      ownerPackage: '@mog/types-api',
+      alias: {
+        aliasOf: null,
+        aliases: [],
+        replacement: null,
+      },
+      deprecation: {
+        deprecated: false,
+        message: null,
+        replacement: null,
+        since: null,
+      },
+      compatibility: [],
+      source: {
+        file: 'types/api/src/api/worksheet.ts',
+      },
+      targetInterface: 'WorksheetCharts',
+    },
+    comments: {
+      signature: 'readonly comments: WorksheetComments;',
+      docstring: 'Notes and threaded comments',
+      usedTypes: ['WorksheetComments'],
+      stableId: 'Worksheet.comments',
+      canonicalPath: 'ws.comments',
+      root: 'subApi',
+      parentRoot: 'worksheet',
+      interface: 'Worksheet',
+      method: 'comments',
+      kind: 'subApiAccessor',
+      visibility: 'public',
+      asyncModel: 'sync',
+      parameters: [],
+      returns: {
+        type: {
+          kind: 'objectRef',
+          name: 'WorksheetComments',
+        },
+        typeText: 'WorksheetComments',
+      },
+      typeScript: {
+        signature: 'readonly comments: WorksheetComments;',
+        parameters: [],
+        returnTypeText: 'WorksheetComments',
+      },
+      ownership: {
+        package: '@mog/types-api',
+      },
+      ownerPackage: '@mog/types-api',
+      alias: {
+        aliasOf: null,
+        aliases: [],
+        replacement: null,
+      },
+      deprecation: {
+        deprecated: false,
+        message: null,
+        replacement: null,
+        since: null,
+      },
+      compatibility: [],
+      source: {
+        file: 'types/api/src/api/worksheet.ts',
+      },
+      targetInterface: 'WorksheetComments',
+    },
+    conditionalFormats: {
+      signature: 'readonly conditionalFormats: WorksheetConditionalFormatting;',
+      docstring: 'Conditional formatting CRUD',
+      usedTypes: ['WorksheetConditionalFormatting'],
+      stableId: 'Worksheet.conditionalFormats',
+      canonicalPath: 'ws.conditionalFormats',
+      root: 'subApi',
+      parentRoot: 'worksheet',
+      interface: 'Worksheet',
+      method: 'conditionalFormats',
+      kind: 'subApiAccessor',
+      visibility: 'public',
+      asyncModel: 'sync',
+      parameters: [],
+      returns: {
+        type: {
+          kind: 'objectRef',
+          name: 'WorksheetConditionalFormatting',
+        },
+        typeText: 'WorksheetConditionalFormatting',
+      },
+      typeScript: {
+        signature: 'readonly conditionalFormats: WorksheetConditionalFormatting;',
+        parameters: [],
+        returnTypeText: 'WorksheetConditionalFormatting',
+      },
+      ownership: {
+        package: '@mog/types-api',
+      },
+      ownerPackage: '@mog/types-api',
+      alias: {
+        aliasOf: null,
+        aliases: [],
+        replacement: null,
+      },
+      deprecation: {
+        deprecated: false,
+        message: null,
+        replacement: null,
+        since: null,
+      },
+      compatibility: [],
+      source: {
+        file: 'types/api/src/api/worksheet.ts',
+      },
+      targetInterface: 'WorksheetConditionalFormatting',
+    },
+    connectors: {
+      signature: 'readonly connectors: WorksheetConnectorCollection;',
+      docstring: 'Connector objects.',
+      usedTypes: ['WorksheetConnectorCollection'],
+      stableId: 'Worksheet.connectors',
+      canonicalPath: 'ws.connectors',
+      root: 'subApi',
+      parentRoot: 'worksheet',
+      interface: 'Worksheet',
+      method: 'connectors',
+      kind: 'subApiAccessor',
+      visibility: 'public',
+      asyncModel: 'sync',
+      parameters: [],
+      returns: {
+        type: {
+          kind: 'objectRef',
+          name: 'WorksheetConnectorCollection',
+        },
+        typeText: 'WorksheetConnectorCollection',
+      },
+      typeScript: {
+        signature: 'readonly connectors: WorksheetConnectorCollection;',
+        parameters: [],
+        returnTypeText: 'WorksheetConnectorCollection',
+      },
+      ownership: {
+        package: '@mog/types-api',
+      },
+      ownerPackage: '@mog/types-api',
+      alias: {
+        aliasOf: null,
+        aliases: [],
+        replacement: null,
+      },
+      deprecation: {
+        deprecated: false,
+        message: null,
+        replacement: null,
+        since: null,
+      },
+      compatibility: [],
+      source: {
+        file: 'types/api/src/api/worksheet.ts',
+      },
+      targetInterface: 'WorksheetConnectorCollection',
+    },
+    customProperties: {
+      signature: 'readonly customProperties: WorksheetCustomProperties;',
+      docstring: 'Sheet-level custom properties (key-value store)',
+      usedTypes: ['WorksheetCustomProperties'],
+      stableId: 'Worksheet.customProperties',
+      canonicalPath: 'ws.customProperties',
+      root: 'subApi',
+      parentRoot: 'worksheet',
+      interface: 'Worksheet',
+      method: 'customProperties',
+      kind: 'subApiAccessor',
+      visibility: 'public',
+      asyncModel: 'sync',
+      parameters: [],
+      returns: {
+        type: {
+          kind: 'objectRef',
+          name: 'WorksheetCustomProperties',
+        },
+        typeText: 'WorksheetCustomProperties',
+      },
+      typeScript: {
+        signature: 'readonly customProperties: WorksheetCustomProperties;',
+        parameters: [],
+        returnTypeText: 'WorksheetCustomProperties',
+      },
+      ownership: {
+        package: '@mog/types-api',
+      },
+      ownerPackage: '@mog/types-api',
+      alias: {
+        aliasOf: null,
+        aliases: [],
+        replacement: null,
+      },
+      deprecation: {
+        deprecated: false,
+        message: null,
+        replacement: null,
+        since: null,
+      },
+      compatibility: [],
+      source: {
+        file: 'types/api/src/api/worksheet.ts',
+      },
+      targetInterface: 'WorksheetCustomProperties',
+    },
+    diagrams: {
+      signature: 'readonly diagrams: WorksheetDiagrams;',
+      docstring: 'Diagram operations (CRUD, node ops, layout, cache).',
+      usedTypes: ['WorksheetDiagrams'],
+      stableId: 'Worksheet.diagrams',
+      canonicalPath: 'ws.diagrams',
+      root: 'subApi',
+      parentRoot: 'worksheet',
+      interface: 'Worksheet',
+      method: 'diagrams',
+      kind: 'subApiAccessor',
+      visibility: 'public',
+      asyncModel: 'sync',
+      parameters: [],
+      returns: {
+        type: {
+          kind: 'objectRef',
+          name: 'WorksheetDiagrams',
+        },
+        typeText: 'WorksheetDiagrams',
+      },
+      typeScript: {
+        signature: 'readonly diagrams: WorksheetDiagrams;',
+        parameters: [],
+        returnTypeText: 'WorksheetDiagrams',
+      },
+      ownership: {
+        package: '@mog/types-api',
+      },
+      ownerPackage: '@mog/types-api',
+      alias: {
+        aliasOf: null,
+        aliases: [],
+        replacement: null,
+      },
+      deprecation: {
+        deprecated: false,
+        message: null,
+        replacement: null,
+        since: null,
+      },
+      compatibility: [],
+      source: {
+        file: 'types/api/src/api/worksheet.ts',
+      },
+      targetInterface: 'WorksheetDiagrams',
+    },
+    drawings: {
+      signature: 'readonly drawings: WorksheetDrawingCollection;',
+      docstring: 'Ink drawing objects.',
+      usedTypes: ['WorksheetDrawingCollection'],
+      stableId: 'Worksheet.drawings',
+      canonicalPath: 'ws.drawings',
+      root: 'subApi',
+      parentRoot: 'worksheet',
+      interface: 'Worksheet',
+      method: 'drawings',
+      kind: 'subApiAccessor',
+      visibility: 'public',
+      asyncModel: 'sync',
+      parameters: [],
+      returns: {
+        type: {
+          kind: 'objectRef',
+          name: 'WorksheetDrawingCollection',
+        },
+        typeText: 'WorksheetDrawingCollection',
+      },
+      typeScript: {
+        signature: 'readonly drawings: WorksheetDrawingCollection;',
+        parameters: [],
+        returnTypeText: 'WorksheetDrawingCollection',
+      },
+      ownership: {
+        package: '@mog/types-api',
+      },
+      ownerPackage: '@mog/types-api',
+      alias: {
+        aliasOf: null,
+        aliases: [],
+        replacement: null,
+      },
+      deprecation: {
+        deprecated: false,
+        message: null,
+        replacement: null,
+        since: null,
+      },
+      compatibility: [],
+      source: {
+        file: 'types/api/src/api/worksheet.ts',
+      },
+      targetInterface: 'WorksheetDrawingCollection',
+    },
+    equations: {
+      signature: 'readonly equations: WorksheetEquationCollection;',
+      docstring: 'Equation objects.',
+      usedTypes: ['WorksheetEquationCollection'],
+      stableId: 'Worksheet.equations',
+      canonicalPath: 'ws.equations',
+      root: 'subApi',
+      parentRoot: 'worksheet',
+      interface: 'Worksheet',
+      method: 'equations',
+      kind: 'subApiAccessor',
+      visibility: 'public',
+      asyncModel: 'sync',
+      parameters: [],
+      returns: {
+        type: {
+          kind: 'objectRef',
+          name: 'WorksheetEquationCollection',
+        },
+        typeText: 'WorksheetEquationCollection',
+      },
+      typeScript: {
+        signature: 'readonly equations: WorksheetEquationCollection;',
+        parameters: [],
+        returnTypeText: 'WorksheetEquationCollection',
+      },
+      ownership: {
+        package: '@mog/types-api',
+      },
+      ownerPackage: '@mog/types-api',
+      alias: {
+        aliasOf: null,
+        aliases: [],
+        replacement: null,
+      },
+      deprecation: {
+        deprecated: false,
+        message: null,
+        replacement: null,
+        since: null,
+      },
+      compatibility: [],
+      source: {
+        file: 'types/api/src/api/worksheet.ts',
+      },
+      targetInterface: 'WorksheetEquationCollection',
+    },
+    filters: {
+      signature: 'readonly filters: WorksheetFilters;',
+      docstring: 'AutoFilter, column filters, sort state',
+      usedTypes: ['WorksheetFilters'],
+      stableId: 'Worksheet.filters',
+      canonicalPath: 'ws.filters',
+      root: 'subApi',
+      parentRoot: 'worksheet',
+      interface: 'Worksheet',
+      method: 'filters',
+      kind: 'subApiAccessor',
+      visibility: 'public',
+      asyncModel: 'sync',
+      parameters: [],
+      returns: {
+        type: {
+          kind: 'objectRef',
+          name: 'WorksheetFilters',
+        },
+        typeText: 'WorksheetFilters',
+      },
+      typeScript: {
+        signature: 'readonly filters: WorksheetFilters;',
+        parameters: [],
+        returnTypeText: 'WorksheetFilters',
+      },
+      ownership: {
+        package: '@mog/types-api',
+      },
+      ownerPackage: '@mog/types-api',
+      alias: {
+        aliasOf: null,
+        aliases: [],
+        replacement: null,
+      },
+      deprecation: {
+        deprecated: false,
+        message: null,
+        replacement: null,
+        since: null,
+      },
+      compatibility: [],
+      source: {
+        file: 'types/api/src/api/worksheet.ts',
+      },
+      targetInterface: 'WorksheetFilters',
+    },
+    formControls: {
+      signature: 'readonly formControls: WorksheetFormControls;',
+      docstring: 'Form controls (Checkbox, Button, ComboBox)',
+      usedTypes: ['WorksheetFormControls'],
+      stableId: 'Worksheet.formControls',
+      canonicalPath: 'ws.formControls',
+      root: 'subApi',
+      parentRoot: 'worksheet',
+      interface: 'Worksheet',
+      method: 'formControls',
+      kind: 'subApiAccessor',
+      visibility: 'public',
+      asyncModel: 'sync',
+      parameters: [],
+      returns: {
+        type: {
+          kind: 'objectRef',
+          name: 'WorksheetFormControls',
+        },
+        typeText: 'WorksheetFormControls',
+      },
+      typeScript: {
+        signature: 'readonly formControls: WorksheetFormControls;',
+        parameters: [],
+        returnTypeText: 'WorksheetFormControls',
+      },
+      ownership: {
+        package: '@mog/types-api',
+      },
+      ownerPackage: '@mog/types-api',
+      alias: {
+        aliasOf: null,
+        aliases: [],
+        replacement: null,
+      },
+      deprecation: {
+        deprecated: false,
+        message: null,
+        replacement: null,
+        since: null,
+      },
+      compatibility: [],
+      source: {
+        file: 'types/api/src/api/worksheet.ts',
+      },
+      targetInterface: 'WorksheetFormControls',
+    },
+    formats: {
+      signature: 'readonly formats: WorksheetFormats;',
+      docstring: 'Cell visual formatting (bold, color, borders, etc.)',
+      usedTypes: ['WorksheetFormats'],
+      stableId: 'Worksheet.formats',
+      canonicalPath: 'ws.formats',
+      root: 'subApi',
+      parentRoot: 'worksheet',
+      interface: 'Worksheet',
+      method: 'formats',
+      kind: 'subApiAccessor',
+      visibility: 'public',
+      asyncModel: 'sync',
+      parameters: [],
+      returns: {
+        type: {
+          kind: 'objectRef',
+          name: 'WorksheetFormats',
+        },
+        typeText: 'WorksheetFormats',
+      },
+      typeScript: {
+        signature: 'readonly formats: WorksheetFormats;',
+        parameters: [],
+        returnTypeText: 'WorksheetFormats',
+      },
+      ownership: {
+        package: '@mog/types-api',
+      },
+      ownerPackage: '@mog/types-api',
+      alias: {
+        aliasOf: null,
+        aliases: [],
+        replacement: null,
+      },
+      deprecation: {
+        deprecated: false,
+        message: null,
+        replacement: null,
+        since: null,
+      },
+      compatibility: [],
+      source: {
+        file: 'types/api/src/api/worksheet.ts',
+      },
+      targetInterface: 'WorksheetFormats',
+    },
+    hyperlinks: {
+      signature: 'readonly hyperlinks: WorksheetHyperlinks;',
+      docstring: 'Hyperlink CRUD',
+      usedTypes: ['WorksheetHyperlinks'],
+      stableId: 'Worksheet.hyperlinks',
+      canonicalPath: 'ws.hyperlinks',
+      root: 'subApi',
+      parentRoot: 'worksheet',
+      interface: 'Worksheet',
+      method: 'hyperlinks',
+      kind: 'subApiAccessor',
+      visibility: 'public',
+      asyncModel: 'sync',
+      parameters: [],
+      returns: {
+        type: {
+          kind: 'objectRef',
+          name: 'WorksheetHyperlinks',
+        },
+        typeText: 'WorksheetHyperlinks',
+      },
+      typeScript: {
+        signature: 'readonly hyperlinks: WorksheetHyperlinks;',
+        parameters: [],
+        returnTypeText: 'WorksheetHyperlinks',
+      },
+      ownership: {
+        package: '@mog/types-api',
+      },
+      ownerPackage: '@mog/types-api',
+      alias: {
+        aliasOf: null,
+        aliases: [],
+        replacement: null,
+      },
+      deprecation: {
+        deprecated: false,
+        message: null,
+        replacement: null,
+        since: null,
+      },
+      compatibility: [],
+      source: {
+        file: 'types/api/src/api/worksheet.ts',
+      },
+      targetInterface: 'WorksheetHyperlinks',
+    },
+    layout: {
+      signature: 'readonly layout: WorksheetLayout;',
+      docstring: 'Row/column sizing and visibility',
+      usedTypes: ['WorksheetLayout'],
+      stableId: 'Worksheet.layout',
+      canonicalPath: 'ws.layout',
+      root: 'subApi',
+      parentRoot: 'worksheet',
+      interface: 'Worksheet',
+      method: 'layout',
+      kind: 'subApiAccessor',
+      visibility: 'public',
+      asyncModel: 'sync',
+      parameters: [],
+      returns: {
+        type: {
+          kind: 'objectRef',
+          name: 'WorksheetLayout',
+        },
+        typeText: 'WorksheetLayout',
+      },
+      typeScript: {
+        signature: 'readonly layout: WorksheetLayout;',
+        parameters: [],
+        returnTypeText: 'WorksheetLayout',
+      },
+      ownership: {
+        package: '@mog/types-api',
+      },
+      ownerPackage: '@mog/types-api',
+      alias: {
+        aliasOf: null,
+        aliases: [],
+        replacement: null,
+      },
+      deprecation: {
+        deprecated: false,
+        message: null,
+        replacement: null,
+        since: null,
+      },
+      compatibility: [],
+      source: {
+        file: 'types/api/src/api/worksheet.ts',
+      },
+      targetInterface: 'WorksheetLayout',
+    },
+    names: {
+      signature: 'readonly names: WorksheetNames;',
+      docstring: 'Sheet-scoped named ranges',
+      usedTypes: ['WorksheetNames'],
+      stableId: 'Worksheet.names',
+      canonicalPath: 'ws.names',
+      root: 'subApi',
+      parentRoot: 'worksheet',
+      interface: 'Worksheet',
+      method: 'names',
+      kind: 'subApiAccessor',
+      visibility: 'public',
+      asyncModel: 'sync',
+      parameters: [],
+      returns: {
+        type: {
+          kind: 'objectRef',
+          name: 'WorksheetNames',
+        },
+        typeText: 'WorksheetNames',
+      },
+      typeScript: {
+        signature: 'readonly names: WorksheetNames;',
+        parameters: [],
+        returnTypeText: 'WorksheetNames',
+      },
+      ownership: {
+        package: '@mog/types-api',
+      },
+      ownerPackage: '@mog/types-api',
+      alias: {
+        aliasOf: null,
+        aliases: [],
+        replacement: null,
+      },
+      deprecation: {
+        deprecated: false,
+        message: null,
+        replacement: null,
+        since: null,
+      },
+      compatibility: [],
+      source: {
+        file: 'types/api/src/api/worksheet.ts',
+      },
+      targetInterface: 'WorksheetNames',
+    },
+    objects: {
+      signature: 'readonly objects: WorksheetObjectCollection;',
+      docstring:
+        'All floating objects: shapes, pictures, text boxes, equations, text-effects, diagram, ink',
+      usedTypes: ['WorksheetObjectCollection'],
+      stableId: 'Worksheet.objects',
+      canonicalPath: 'ws.objects',
+      root: 'subApi',
+      parentRoot: 'worksheet',
+      interface: 'Worksheet',
+      method: 'objects',
+      kind: 'subApiAccessor',
+      visibility: 'public',
+      asyncModel: 'sync',
+      parameters: [],
+      returns: {
+        type: {
+          kind: 'objectRef',
+          name: 'WorksheetObjectCollection',
+        },
+        typeText: 'WorksheetObjectCollection',
+      },
+      typeScript: {
+        signature: 'readonly objects: WorksheetObjectCollection;',
+        parameters: [],
+        returnTypeText: 'WorksheetObjectCollection',
+      },
+      ownership: {
+        package: '@mog/types-api',
+      },
+      ownerPackage: '@mog/types-api',
+      alias: {
+        aliasOf: null,
+        aliases: [],
+        replacement: null,
+      },
+      deprecation: {
+        deprecated: false,
+        message: null,
+        replacement: null,
+        since: null,
+      },
+      compatibility: [],
+      source: {
+        file: 'types/api/src/api/worksheet.ts',
+      },
+      targetInterface: 'WorksheetObjectCollection',
+    },
+    outline: {
+      signature: 'readonly outline: WorksheetOutline;',
+      docstring: 'Row/column grouping, outline levels, subtotals',
+      usedTypes: ['WorksheetOutline'],
+      stableId: 'Worksheet.outline',
+      canonicalPath: 'ws.outline',
+      root: 'subApi',
+      parentRoot: 'worksheet',
+      interface: 'Worksheet',
+      method: 'outline',
+      kind: 'subApiAccessor',
+      visibility: 'public',
+      asyncModel: 'sync',
+      parameters: [],
+      returns: {
+        type: {
+          kind: 'objectRef',
+          name: 'WorksheetOutline',
+        },
+        typeText: 'WorksheetOutline',
+      },
+      typeScript: {
+        signature: 'readonly outline: WorksheetOutline;',
+        parameters: [],
+        returnTypeText: 'WorksheetOutline',
+      },
+      ownership: {
+        package: '@mog/types-api',
+      },
+      ownerPackage: '@mog/types-api',
+      alias: {
+        aliasOf: null,
+        aliases: [],
+        replacement: null,
+      },
+      deprecation: {
+        deprecated: false,
+        message: null,
+        replacement: null,
+        since: null,
+      },
+      compatibility: [],
+      source: {
+        file: 'types/api/src/api/worksheet.ts',
+      },
+      targetInterface: 'WorksheetOutline',
+    },
+    pictures: {
+      signature: 'readonly pictures: WorksheetPictureCollection;',
+      docstring: 'Picture objects.',
+      usedTypes: ['WorksheetPictureCollection'],
+      stableId: 'Worksheet.pictures',
+      canonicalPath: 'ws.pictures',
+      root: 'subApi',
+      parentRoot: 'worksheet',
+      interface: 'Worksheet',
+      method: 'pictures',
+      kind: 'subApiAccessor',
+      visibility: 'public',
+      asyncModel: 'sync',
+      parameters: [],
+      returns: {
+        type: {
+          kind: 'objectRef',
+          name: 'WorksheetPictureCollection',
+        },
+        typeText: 'WorksheetPictureCollection',
+      },
+      typeScript: {
+        signature: 'readonly pictures: WorksheetPictureCollection;',
+        parameters: [],
+        returnTypeText: 'WorksheetPictureCollection',
+      },
+      ownership: {
+        package: '@mog/types-api',
+      },
+      ownerPackage: '@mog/types-api',
+      alias: {
+        aliasOf: null,
+        aliases: [],
+        replacement: null,
+      },
+      deprecation: {
+        deprecated: false,
+        message: null,
+        replacement: null,
+        since: null,
+      },
+      compatibility: [],
+      source: {
+        file: 'types/api/src/api/worksheet.ts',
+      },
+      targetInterface: 'WorksheetPictureCollection',
+    },
+    pivots: {
+      signature: 'readonly pivots: WorksheetPivots;',
+      docstring: 'Pivot table CRUD',
+      usedTypes: ['WorksheetPivots'],
+      stableId: 'Worksheet.pivots',
+      canonicalPath: 'ws.pivots',
+      root: 'subApi',
+      parentRoot: 'worksheet',
+      interface: 'Worksheet',
+      method: 'pivots',
+      kind: 'subApiAccessor',
+      visibility: 'public',
+      asyncModel: 'sync',
+      parameters: [],
+      returns: {
+        type: {
+          kind: 'objectRef',
+          name: 'WorksheetPivots',
+        },
+        typeText: 'WorksheetPivots',
+      },
+      typeScript: {
+        signature: 'readonly pivots: WorksheetPivots;',
+        parameters: [],
+        returnTypeText: 'WorksheetPivots',
+      },
+      ownership: {
+        package: '@mog/types-api',
+      },
+      ownerPackage: '@mog/types-api',
+      alias: {
+        aliasOf: null,
+        aliases: [],
+        replacement: null,
+      },
+      deprecation: {
+        deprecated: false,
+        message: null,
+        replacement: null,
+        since: null,
+      },
+      compatibility: [],
+      source: {
+        file: 'types/api/src/api/worksheet.ts',
+      },
+      targetInterface: 'WorksheetPivots',
+    },
+    print: {
+      signature: 'readonly print: WorksheetPrint;',
+      docstring: 'Print settings and page breaks',
+      usedTypes: ['WorksheetPrint'],
+      stableId: 'Worksheet.print',
+      canonicalPath: 'ws.print',
+      root: 'subApi',
+      parentRoot: 'worksheet',
+      interface: 'Worksheet',
+      method: 'print',
+      kind: 'subApiAccessor',
+      visibility: 'public',
+      asyncModel: 'sync',
+      parameters: [],
+      returns: {
+        type: {
+          kind: 'objectRef',
+          name: 'WorksheetPrint',
+        },
+        typeText: 'WorksheetPrint',
+      },
+      typeScript: {
+        signature: 'readonly print: WorksheetPrint;',
+        parameters: [],
+        returnTypeText: 'WorksheetPrint',
+      },
+      ownership: {
+        package: '@mog/types-api',
+      },
+      ownerPackage: '@mog/types-api',
+      alias: {
+        aliasOf: null,
+        aliases: [],
+        replacement: null,
+      },
+      deprecation: {
+        deprecated: false,
+        message: null,
+        replacement: null,
+        since: null,
+      },
+      compatibility: [],
+      source: {
+        file: 'types/api/src/api/worksheet.ts',
+      },
+      targetInterface: 'WorksheetPrint',
+    },
+    protection: {
+      signature: 'readonly protection: WorksheetProtection;',
+      docstring: 'Sheet protection',
+      usedTypes: ['WorksheetProtection'],
+      stableId: 'Worksheet.protection',
+      canonicalPath: 'ws.protection',
+      root: 'subApi',
+      parentRoot: 'worksheet',
+      interface: 'Worksheet',
+      method: 'protection',
+      kind: 'subApiAccessor',
+      visibility: 'public',
+      asyncModel: 'sync',
+      parameters: [],
+      returns: {
+        type: {
+          kind: 'objectRef',
+          name: 'WorksheetProtection',
+        },
+        typeText: 'WorksheetProtection',
+      },
+      typeScript: {
+        signature: 'readonly protection: WorksheetProtection;',
+        parameters: [],
+        returnTypeText: 'WorksheetProtection',
+      },
+      ownership: {
+        package: '@mog/types-api',
+      },
+      ownerPackage: '@mog/types-api',
+      alias: {
+        aliasOf: null,
+        aliases: [],
+        replacement: null,
+      },
+      deprecation: {
+        deprecated: false,
+        message: null,
+        replacement: null,
+        since: null,
+      },
+      compatibility: [],
+      source: {
+        file: 'types/api/src/api/worksheet.ts',
+      },
+      targetInterface: 'WorksheetProtection',
+    },
+    settings: {
+      signature: 'readonly settings: WorksheetSettings;',
+      docstring: 'Sheet settings and custom lists',
+      usedTypes: ['WorksheetSettings'],
+      stableId: 'Worksheet.settings',
+      canonicalPath: 'ws.settings',
+      root: 'subApi',
+      parentRoot: 'worksheet',
+      interface: 'Worksheet',
+      method: 'settings',
+      kind: 'subApiAccessor',
+      visibility: 'public',
+      asyncModel: 'sync',
+      parameters: [],
+      returns: {
+        type: {
+          kind: 'objectRef',
+          name: 'WorksheetSettings',
+        },
+        typeText: 'WorksheetSettings',
+      },
+      typeScript: {
+        signature: 'readonly settings: WorksheetSettings;',
+        parameters: [],
+        returnTypeText: 'WorksheetSettings',
+      },
+      ownership: {
+        package: '@mog/types-api',
+      },
+      ownerPackage: '@mog/types-api',
+      alias: {
+        aliasOf: null,
+        aliases: [],
+        replacement: null,
+      },
+      deprecation: {
+        deprecated: false,
+        message: null,
+        replacement: null,
+        since: null,
+      },
+      compatibility: [],
+      source: {
+        file: 'types/api/src/api/worksheet.ts',
+      },
+      targetInterface: 'WorksheetSettings',
+    },
+    shapes: {
+      signature: 'readonly shapes: WorksheetShapeCollection;',
+      docstring: 'Shape objects.',
+      usedTypes: ['WorksheetShapeCollection'],
+      stableId: 'Worksheet.shapes',
+      canonicalPath: 'ws.shapes',
+      root: 'subApi',
+      parentRoot: 'worksheet',
+      interface: 'Worksheet',
+      method: 'shapes',
+      kind: 'subApiAccessor',
+      visibility: 'public',
+      asyncModel: 'sync',
+      parameters: [],
+      returns: {
+        type: {
+          kind: 'objectRef',
+          name: 'WorksheetShapeCollection',
+        },
+        typeText: 'WorksheetShapeCollection',
+      },
+      typeScript: {
+        signature: 'readonly shapes: WorksheetShapeCollection;',
+        parameters: [],
+        returnTypeText: 'WorksheetShapeCollection',
+      },
+      ownership: {
+        package: '@mog/types-api',
+      },
+      ownerPackage: '@mog/types-api',
+      alias: {
+        aliasOf: null,
+        aliases: [],
+        replacement: null,
+      },
+      deprecation: {
+        deprecated: false,
+        message: null,
+        replacement: null,
+        since: null,
+      },
+      compatibility: [],
+      source: {
+        file: 'types/api/src/api/worksheet.ts',
+      },
+      targetInterface: 'WorksheetShapeCollection',
+    },
+    slicers: {
+      signature: 'readonly slicers: WorksheetSlicers;',
+      docstring: 'Slicer CRUD',
+      usedTypes: ['WorksheetSlicers'],
+      stableId: 'Worksheet.slicers',
+      canonicalPath: 'ws.slicers',
+      root: 'subApi',
+      parentRoot: 'worksheet',
+      interface: 'Worksheet',
+      method: 'slicers',
+      kind: 'subApiAccessor',
+      visibility: 'public',
+      asyncModel: 'sync',
+      parameters: [],
+      returns: {
+        type: {
+          kind: 'objectRef',
+          name: 'WorksheetSlicers',
+        },
+        typeText: 'WorksheetSlicers',
+      },
+      typeScript: {
+        signature: 'readonly slicers: WorksheetSlicers;',
+        parameters: [],
+        returnTypeText: 'WorksheetSlicers',
+      },
+      ownership: {
+        package: '@mog/types-api',
+      },
+      ownerPackage: '@mog/types-api',
+      alias: {
+        aliasOf: null,
+        aliases: [],
+        replacement: null,
+      },
+      deprecation: {
+        deprecated: false,
+        message: null,
+        replacement: null,
+        since: null,
+      },
+      compatibility: [],
+      source: {
+        file: 'types/api/src/api/worksheet.ts',
+      },
+      targetInterface: 'WorksheetSlicers',
+    },
+    sparklines: {
+      signature: 'readonly sparklines: WorksheetSparklines;',
+      docstring: 'Sparkline CRUD and groups',
+      usedTypes: ['WorksheetSparklines'],
+      stableId: 'Worksheet.sparklines',
+      canonicalPath: 'ws.sparklines',
+      root: 'subApi',
+      parentRoot: 'worksheet',
+      interface: 'Worksheet',
+      method: 'sparklines',
+      kind: 'subApiAccessor',
+      visibility: 'public',
+      asyncModel: 'sync',
+      parameters: [],
+      returns: {
+        type: {
+          kind: 'objectRef',
+          name: 'WorksheetSparklines',
+        },
+        typeText: 'WorksheetSparklines',
+      },
+      typeScript: {
+        signature: 'readonly sparklines: WorksheetSparklines;',
+        parameters: [],
+        returnTypeText: 'WorksheetSparklines',
+      },
+      ownership: {
+        package: '@mog/types-api',
+      },
+      ownerPackage: '@mog/types-api',
+      alias: {
+        aliasOf: null,
+        aliases: [],
+        replacement: null,
+      },
+      deprecation: {
+        deprecated: false,
+        message: null,
+        replacement: null,
+        since: null,
+      },
+      compatibility: [],
+      source: {
+        file: 'types/api/src/api/worksheet.ts',
+      },
+      targetInterface: 'WorksheetSparklines',
+    },
+    structure: {
+      signature: 'readonly structure: WorksheetStructure;',
+      docstring: 'Insert/delete rows/columns, merges, text-to-columns, dedup',
+      usedTypes: ['WorksheetStructure'],
+      stableId: 'Worksheet.structure',
+      canonicalPath: 'ws.structure',
+      root: 'subApi',
+      parentRoot: 'worksheet',
+      interface: 'Worksheet',
+      method: 'structure',
+      kind: 'subApiAccessor',
+      visibility: 'public',
+      asyncModel: 'sync',
+      parameters: [],
+      returns: {
+        type: {
+          kind: 'objectRef',
+          name: 'WorksheetStructure',
+        },
+        typeText: 'WorksheetStructure',
+      },
+      typeScript: {
+        signature: 'readonly structure: WorksheetStructure;',
+        parameters: [],
+        returnTypeText: 'WorksheetStructure',
+      },
+      ownership: {
+        package: '@mog/types-api',
+      },
+      ownerPackage: '@mog/types-api',
+      alias: {
+        aliasOf: null,
+        aliases: [],
+        replacement: null,
+      },
+      deprecation: {
+        deprecated: false,
+        message: null,
+        replacement: null,
+        since: null,
+      },
+      compatibility: [],
+      source: {
+        file: 'types/api/src/api/worksheet.ts',
+      },
+      targetInterface: 'WorksheetStructure',
+    },
+    styles: {
+      signature: 'readonly styles: WorksheetStyles;',
+      docstring: 'Named cell style application and lookup',
+      usedTypes: ['WorksheetStyles'],
+      stableId: 'Worksheet.styles',
+      canonicalPath: 'ws.styles',
+      root: 'subApi',
+      parentRoot: 'worksheet',
+      interface: 'Worksheet',
+      method: 'styles',
+      kind: 'subApiAccessor',
+      visibility: 'public',
+      asyncModel: 'sync',
+      parameters: [],
+      returns: {
+        type: {
+          kind: 'objectRef',
+          name: 'WorksheetStyles',
+        },
+        typeText: 'WorksheetStyles',
+      },
+      typeScript: {
+        signature: 'readonly styles: WorksheetStyles;',
+        parameters: [],
+        returnTypeText: 'WorksheetStyles',
+      },
+      ownership: {
+        package: '@mog/types-api',
+      },
+      ownerPackage: '@mog/types-api',
+      alias: {
+        aliasOf: null,
+        aliases: [],
+        replacement: null,
+      },
+      deprecation: {
+        deprecated: false,
+        message: null,
+        replacement: null,
+        since: null,
+      },
+      compatibility: [],
+      source: {
+        file: 'types/api/src/api/worksheet.ts',
+      },
+      targetInterface: 'WorksheetStyles',
+    },
+    tables: {
+      signature: 'readonly tables: WorksheetTables;',
+      docstring: 'Table CRUD and metadata',
+      usedTypes: ['WorksheetTables'],
+      stableId: 'Worksheet.tables',
+      canonicalPath: 'ws.tables',
+      root: 'subApi',
+      parentRoot: 'worksheet',
+      interface: 'Worksheet',
+      method: 'tables',
+      kind: 'subApiAccessor',
+      visibility: 'public',
+      asyncModel: 'sync',
+      parameters: [],
+      returns: {
+        type: {
+          kind: 'objectRef',
+          name: 'WorksheetTables',
+        },
+        typeText: 'WorksheetTables',
+      },
+      typeScript: {
+        signature: 'readonly tables: WorksheetTables;',
+        parameters: [],
+        returnTypeText: 'WorksheetTables',
+      },
+      ownership: {
+        package: '@mog/types-api',
+      },
+      ownerPackage: '@mog/types-api',
+      alias: {
+        aliasOf: null,
+        aliases: [],
+        replacement: null,
+      },
+      deprecation: {
+        deprecated: false,
+        message: null,
+        replacement: null,
+        since: null,
+      },
+      compatibility: [],
+      source: {
+        file: 'types/api/src/api/worksheet.ts',
+      },
+      targetInterface: 'WorksheetTables',
+    },
+    textBoxes: {
+      signature: 'readonly textBoxes: WorksheetTextBoxCollection;',
+      docstring: 'Text box objects.',
+      usedTypes: ['WorksheetTextBoxCollection'],
+      stableId: 'Worksheet.textBoxes',
+      canonicalPath: 'ws.textBoxes',
+      root: 'subApi',
+      parentRoot: 'worksheet',
+      interface: 'Worksheet',
+      method: 'textBoxes',
+      kind: 'subApiAccessor',
+      visibility: 'public',
+      asyncModel: 'sync',
+      parameters: [],
+      returns: {
+        type: {
+          kind: 'objectRef',
+          name: 'WorksheetTextBoxCollection',
+        },
+        typeText: 'WorksheetTextBoxCollection',
+      },
+      typeScript: {
+        signature: 'readonly textBoxes: WorksheetTextBoxCollection;',
+        parameters: [],
+        returnTypeText: 'WorksheetTextBoxCollection',
+      },
+      ownership: {
+        package: '@mog/types-api',
+      },
+      ownerPackage: '@mog/types-api',
+      alias: {
+        aliasOf: null,
+        aliases: [],
+        replacement: null,
+      },
+      deprecation: {
+        deprecated: false,
+        message: null,
+        replacement: null,
+        since: null,
+      },
+      compatibility: [],
+      source: {
+        file: 'types/api/src/api/worksheet.ts',
+      },
+      targetInterface: 'WorksheetTextBoxCollection',
+    },
+    textEffects: {
+      signature: 'readonly textEffects: WorksheetTextEffectCollection;',
+      docstring: 'Decorative text-effect objects.',
+      usedTypes: ['WorksheetTextEffectCollection'],
+      stableId: 'Worksheet.textEffects',
+      canonicalPath: 'ws.textEffects',
+      root: 'subApi',
+      parentRoot: 'worksheet',
+      interface: 'Worksheet',
+      method: 'textEffects',
+      kind: 'subApiAccessor',
+      visibility: 'public',
+      asyncModel: 'sync',
+      parameters: [],
+      returns: {
+        type: {
+          kind: 'objectRef',
+          name: 'WorksheetTextEffectCollection',
+        },
+        typeText: 'WorksheetTextEffectCollection',
+      },
+      typeScript: {
+        signature: 'readonly textEffects: WorksheetTextEffectCollection;',
+        parameters: [],
+        returnTypeText: 'WorksheetTextEffectCollection',
+      },
+      ownership: {
+        package: '@mog/types-api',
+      },
+      ownerPackage: '@mog/types-api',
+      alias: {
+        aliasOf: null,
+        aliases: [],
+        replacement: null,
+      },
+      deprecation: {
+        deprecated: false,
+        message: null,
+        replacement: null,
+        since: null,
+      },
+      compatibility: [],
+      source: {
+        file: 'types/api/src/api/worksheet.ts',
+      },
+      targetInterface: 'WorksheetTextEffectCollection',
+    },
+    validations: {
+      signature: 'readonly validations: WorksheetValidation;',
+      docstring: 'Data validation rules for this worksheet.',
+      usedTypes: ['WorksheetValidation'],
+      stableId: 'Worksheet.validations',
+      canonicalPath: 'ws.validations',
+      root: 'subApi',
+      parentRoot: 'worksheet',
+      interface: 'Worksheet',
+      method: 'validations',
+      kind: 'subApiAccessor',
+      visibility: 'public',
+      asyncModel: 'sync',
+      parameters: [],
+      returns: {
+        type: {
+          kind: 'objectRef',
+          name: 'WorksheetValidation',
+        },
+        typeText: 'WorksheetValidation',
+      },
+      typeScript: {
+        signature: 'readonly validations: WorksheetValidation;',
+        parameters: [],
+        returnTypeText: 'WorksheetValidation',
+      },
+      ownership: {
+        package: '@mog/types-api',
+      },
+      ownerPackage: '@mog/types-api',
+      alias: {
+        aliasOf: null,
+        aliases: [],
+        replacement: null,
+      },
+      deprecation: {
+        deprecated: false,
+        message: null,
+        replacement: null,
+        since: null,
+      },
+      compatibility: [],
+      source: {
+        file: 'types/api/src/api/worksheet.ts',
+      },
+      targetInterface: 'WorksheetValidation',
+    },
+    view: {
+      signature: 'readonly view: WorksheetView;',
+      docstring: 'Freeze panes, split, gridlines, headings, tab color',
+      usedTypes: ['WorksheetView'],
+      stableId: 'Worksheet.view',
+      canonicalPath: 'ws.view',
+      root: 'subApi',
+      parentRoot: 'worksheet',
+      interface: 'Worksheet',
+      method: 'view',
+      kind: 'subApiAccessor',
+      visibility: 'public',
+      asyncModel: 'sync',
+      parameters: [],
+      returns: {
+        type: {
+          kind: 'objectRef',
+          name: 'WorksheetView',
+        },
+        typeText: 'WorksheetView',
+      },
+      typeScript: {
+        signature: 'readonly view: WorksheetView;',
+        parameters: [],
+        returnTypeText: 'WorksheetView',
+      },
+      ownership: {
+        package: '@mog/types-api',
+      },
+      ownerPackage: '@mog/types-api',
+      alias: {
+        aliasOf: null,
+        aliases: [],
+        replacement: null,
+      },
+      deprecation: {
+        deprecated: false,
+        message: null,
+        replacement: null,
+        since: null,
+      },
+      compatibility: [],
+      source: {
+        file: 'types/api/src/api/worksheet.ts',
+      },
+      targetInterface: 'WorksheetView',
+    },
+    whatIf: {
+      signature: 'readonly whatIf: WorksheetWhatIf;',
+      docstring: 'What-If analysis: goal seek, data tables, and parametric evaluation',
+      usedTypes: ['WorksheetWhatIf'],
+      stableId: 'Worksheet.whatIf',
+      canonicalPath: 'ws.whatIf',
+      root: 'subApi',
+      parentRoot: 'worksheet',
+      interface: 'Worksheet',
+      method: 'whatIf',
+      kind: 'subApiAccessor',
+      visibility: 'public',
+      asyncModel: 'sync',
+      parameters: [],
+      returns: {
+        type: {
+          kind: 'objectRef',
+          name: 'WorksheetWhatIf',
+        },
+        typeText: 'WorksheetWhatIf',
+      },
+      typeScript: {
+        signature: 'readonly whatIf: WorksheetWhatIf;',
+        parameters: [],
+        returnTypeText: 'WorksheetWhatIf',
+      },
+      ownership: {
+        package: '@mog/types-api',
+      },
+      ownerPackage: '@mog/types-api',
+      alias: {
+        aliasOf: null,
+        aliases: [],
+        replacement: null,
+      },
+      deprecation: {
+        deprecated: false,
+        message: null,
+        replacement: null,
+        since: null,
+      },
+      compatibility: [],
+      source: {
+        file: 'types/api/src/api/worksheet.ts',
+      },
+      targetInterface: 'WorksheetWhatIf',
+    },
   },
-} as const;
+};
 
 export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
   Workbook: {
-    markClean: {
+    '[Symbol.asyncDispose]': {
       decision: 'deny',
       reason: 'raw lifecycle, event, security, persistence, or code execution bypass',
     },
-    getSheet: {
+    activePrincipal: {
+      decision: 'deny',
+      reason: 'raw lifecycle, event, security, persistence, or code execution bypass',
+    },
+    activeSheet: {
       decision: 'allow',
       capability: 'workbook:read',
       returns: ['Worksheet'],
     },
-    getSheetById: {
-      decision: 'allow',
-      capability: 'workbook:read',
-      returns: ['Worksheet'],
-    },
-    findSheet: {
-      decision: 'allow',
-      capability: 'workbook:read',
-      returns: ['Worksheet'],
-    },
-    getSheetByIndex: {
-      decision: 'allow',
-      capability: 'workbook:read',
-      returns: ['Worksheet'],
-    },
-    getOrCreateSheet: {
+    addCustomList: {
       decision: 'allow',
       capability: 'workbook:write',
-      returns: ['Worksheet'],
     },
-    getSheets: {
+    addressToIndex: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    autoSave: {
       decision: 'allow',
       capability: 'workbook:read',
-      returns: ['Worksheet'],
-    },
-    getSheetCount: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getSheetNames: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    undoGroup: {
-      decision: 'allow',
-      capability: 'workbook:undo-group',
     },
     batch: {
       decision: 'allow',
       capability: 'workbook:undo-group',
     },
-    createCheckpoint: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    restoreCheckpoint: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    listCheckpoints: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
     calculate: {
       decision: 'allow',
       capability: 'workbook:write',
     },
-    getCalculationMode: {
+    calculationState: {
       decision: 'allow',
       capability: 'workbook:read',
-    },
-    setCalculationMode: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    getIterativeCalculation: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getUsePrecisionAsDisplayed: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    setUsePrecisionAsDisplayed: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    on: {
-      decision: 'deny',
-      reason: 'raw lifecycle, event, security, persistence, or code execution bypass',
-    },
-    executeCode: {
-      decision: 'deny',
-      reason: 'raw lifecycle, event, security, persistence, or code execution bypass',
-    },
-    getWorkbookSnapshot: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getFunctionCatalog: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getFunctionInfo: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    describeRanges: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    toXlsx: {
-      decision: 'allow',
-      capability: 'workbook:export',
-    },
-    insertWorksheets: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    save: {
-      decision: 'deny',
-      reason: 'raw lifecycle, event, security, persistence, or code execution bypass',
     },
     captureScreenshot: {
       decision: 'allow',
       capability: 'workbook:screenshot',
       returns: ['Worksheet'],
     },
+    close: {
+      decision: 'deny',
+      reason: 'raw lifecycle, event, security, persistence, or code execution bypass',
+    },
     copyRangeFrom: {
       decision: 'allow',
       capability: 'workbook:write',
       returns: ['Worksheet'],
     },
-    indexToAddress: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    addressToIndex: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    union: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getCultureInfo: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getDecimalSeparator: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getThousandsSeparator: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    searchAllSheets: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getChartDataPointTrack: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    setChartDataPointTrack: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    getSettings: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    setSettings: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    replaceSettings: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    getCustomLists: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    addCustomList: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    updateCustomList: {
+    createCheckpoint: {
       decision: 'allow',
       capability: 'workbook:write',
     },
@@ -274,51 +2671,28 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
       decision: 'allow',
       capability: 'workbook:write',
     },
-    setCustomLists: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    getCustomSetting: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    setCustomSetting: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
     deleteCustomSetting: {
       decision: 'allow',
       capability: 'workbook:write',
     },
-    listCustomSettings: {
+    describeRanges: {
       decision: 'allow',
       capability: 'workbook:read',
-    },
-    getCustomSettingCount: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    close: {
-      decision: 'deny',
-      reason: 'raw lifecycle, event, security, persistence, or code execution bypass',
     },
     dispose: {
       decision: 'deny',
       reason: 'raw lifecycle, event, security, persistence, or code execution bypass',
     },
-    '[Symbol.asyncDispose]': {
+    executeCode: {
       decision: 'deny',
       reason: 'raw lifecycle, event, security, persistence, or code execution bypass',
     },
+    findSheet: {
+      decision: 'allow',
+      capability: 'workbook:read',
+      returns: ['Worksheet'],
+    },
     getActiveCell: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getSelectedRanges: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getSelectedRange: {
       decision: 'allow',
       capability: 'workbook:read',
     },
@@ -334,733 +2708,242 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
       decision: 'allow',
       capability: 'workbook:read',
     },
-    setActivePrincipal: {
-      decision: 'deny',
-      reason: 'raw lifecycle, event, security, persistence, or code execution bypass',
+    getCalculationMode: {
+      decision: 'allow',
+      capability: 'workbook:read',
     },
-    activePrincipal: {
-      decision: 'deny',
-      reason: 'raw lifecycle, event, security, persistence, or code execution bypass',
+    getChartDataPointTrack: {
+      decision: 'allow',
+      capability: 'workbook:read',
     },
-    securityActive: {
-      decision: 'deny',
-      reason: 'raw lifecycle, event, security, persistence, or code execution bypass',
+    getCultureInfo: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getCustomLists: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getCustomSetting: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getCustomSettingCount: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getDecimalSeparator: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getFunctionCatalog: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getFunctionInfo: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getIterativeCalculation: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getOrCreateSheet: {
+      decision: 'allow',
+      capability: 'workbook:write',
+      returns: ['Worksheet'],
+    },
+    getSelectedRange: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getSelectedRanges: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getSettings: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getSheet: {
+      decision: 'allow',
+      capability: 'workbook:read',
+      returns: ['Worksheet'],
+    },
+    getSheetById: {
+      decision: 'allow',
+      capability: 'workbook:read',
+      returns: ['Worksheet'],
+    },
+    getSheetByIndex: {
+      decision: 'allow',
+      capability: 'workbook:read',
+      returns: ['Worksheet'],
+    },
+    getSheetCount: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getSheetNames: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getSheets: {
+      decision: 'allow',
+      capability: 'workbook:read',
+      returns: ['Worksheet'],
+    },
+    getThousandsSeparator: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getUsePrecisionAsDisplayed: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getWorkbookSnapshot: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    importWarnings: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    indexToAddress: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    insertWorksheets: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    isDirty: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    isDisposed: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    listCheckpoints: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    listCustomSettings: {
+      decision: 'allow',
+      capability: 'workbook:read',
     },
     makePrincipal: {
       decision: 'deny',
       reason: 'raw lifecycle, event, security, persistence, or code execution bypass',
     },
-  },
-  Worksheet: {
-    getName: {
+    markClean: {
+      decision: 'deny',
+      reason: 'raw lifecycle, event, security, persistence, or code execution bypass',
+    },
+    name: {
       decision: 'allow',
       capability: 'workbook:read',
-    },
-    setName: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    getIndex: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getSheetId: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    setCell: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    setDateValue: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    setTimeValue: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    getCell: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getRange: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getRanges: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    setRange: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    setArrayFormula: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    clearData: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    clear: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    clearOrResetContents: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    getControl: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    setControl: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    getValue: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getData: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getValues: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    evaluate: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    validateFormulaSyntax: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    validateFormulaCircularReference: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getFormula: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getFormulas: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getFormulasR1C1: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getFormulaArray: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getRawCellData: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getRawRangeData: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getRangeWithIdentity: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    describe: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    describeRange: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    summarize: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getUsedRange: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getCurrentRegion: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    findDataEdge: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    findLastRow: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    findLastColumn: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    findCells: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    findByValue: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    findByFormula: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    regexSearch: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    signCheck: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    findInRange: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    replaceAll: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    getExtendedRange: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    isEntireColumn: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    isEntireRow: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getVisibleView: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getSpecialCells: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getValueForEditing: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getDisplayValue: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getDisplayValues: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getValueTypes: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getNumberFormatCategories: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    sortRange: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    sortByColor: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    autoFill: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    fillSeries: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    moveTo: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    copyFrom: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    setCells: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    toCSV: {
-      decision: 'allow',
-      capability: 'workbook:export',
-    },
-    toJSON: {
-      decision: 'allow',
-      capability: 'workbook:export',
-    },
-    getDependents: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getPrecedents: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    enableCalculation: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    calculate: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    getSelectionAggregates: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    formatValues: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getVisibility: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    setVisibility: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    getNext: {
-      decision: 'allow',
-      capability: 'workbook:read',
-      returns: ['Worksheet'],
-    },
-    getNextOrNull: {
-      decision: 'allow',
-      capability: 'workbook:read',
-      returns: ['Worksheet'],
-    },
-    getPrevious: {
-      decision: 'allow',
-      capability: 'workbook:read',
-      returns: ['Worksheet'],
-    },
-    getPreviousOrNull: {
-      decision: 'allow',
-      capability: 'workbook:read',
-      returns: ['Worksheet'],
     },
     on: {
       decision: 'deny',
       reason: 'raw lifecycle, event, security, persistence, or code execution bypass',
     },
-    refreshActiveCellData: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    refreshActiveCellEditSource: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    getActiveCellEditSource: {
+    previouslySaved: {
       decision: 'allow',
       capability: 'workbook:read',
     },
-    setBoundsReader: {
+    readOnly: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    replaceSettings: {
       decision: 'allow',
       capability: 'workbook:write',
     },
-  },
-  WorkbookSheets: {
-    add: {
-      decision: 'allow',
-      capability: 'workbook:write',
-      returns: ['Worksheet'],
-    },
-    remove: {
+    restoreCheckpoint: {
       decision: 'allow',
       capability: 'workbook:write',
     },
-    move: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    rename: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    setActive: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    copy: {
-      decision: 'allow',
-      capability: 'workbook:write',
-      returns: ['Worksheet'],
-    },
-    hide: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    show: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    setSelectedIds: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    on: {
+    save: {
       decision: 'deny',
       reason: 'raw lifecycle, event, security, persistence, or code execution bypass',
     },
-  },
-  WorkbookSlicers: {
-    list: {
+    searchAllSheets: {
       decision: 'allow',
       capability: 'workbook:read',
     },
-    get: {
-      decision: 'allow',
-      capability: 'workbook:read',
+    securityActive: {
+      decision: 'deny',
+      reason: 'raw lifecycle, event, security, persistence, or code execution bypass',
     },
-    getItemAt: {
-      decision: 'allow',
-      capability: 'workbook:read',
+    setActivePrincipal: {
+      decision: 'deny',
+      reason: 'raw lifecycle, event, security, persistence, or code execution bypass',
     },
-    getItems: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getItem: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getItemOrNullObject: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    remove: {
+    setCalculationMode: {
       decision: 'allow',
       capability: 'workbook:write',
     },
-    getCount: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-  },
-  WorkbookSlicerStyles: {
-    getDefault: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    setDefault: {
+    setChartDataPointTrack: {
       decision: 'allow',
       capability: 'workbook:write',
     },
-    getCount: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getItem: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    list: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    add: {
+    setCustomLists: {
       decision: 'allow',
       capability: 'workbook:write',
     },
-    get: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    remove: {
+    setCustomSetting: {
       decision: 'allow',
       capability: 'workbook:write',
     },
-    duplicate: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-  },
-  WorkbookTimelineStyles: {
-    getDefault: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    setDefault: {
+    setSettings: {
       decision: 'allow',
       capability: 'workbook:write',
     },
-    getCount: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getItem: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    list: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    add: {
+    setUsePrecisionAsDisplayed: {
       decision: 'allow',
       capability: 'workbook:write',
     },
-    get: {
+    sheetCount: {
       decision: 'allow',
       capability: 'workbook:read',
     },
-    remove: {
+    sheetNames: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    toXlsx: {
+      decision: 'allow',
+      capability: 'workbook:export',
+    },
+    undoGroup: {
+      decision: 'allow',
+      capability: 'workbook:undo-group',
+    },
+    union: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    updateCustomList: {
       decision: 'allow',
       capability: 'workbook:write',
     },
-    duplicate: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-  },
-  WorkbookPivotTableStyles: {
-    getDefault: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    setDefault: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    getCount: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getItem: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    list: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-  },
-  WorkbookFunctions: {
-    invoke: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    vlookup: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    sum: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    average: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    count: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    max: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    min: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    concatenate: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-  },
-  WorkbookNames: {
-    add: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    has: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getCount: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    get: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getRange: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    remove: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    update: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    clear: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    list: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    createFromSelection: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    getValue: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getType: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getArrayValues: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getArrayTypes: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getValueAsJson: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    recalculateDependents: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-  },
-  WorkbookScenarios: {
-    add: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    list: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getActiveScenarioId: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getActiveScenarioState: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    apply: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    restore: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    update: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    remove: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-  },
-  WorkbookHistory: {
-    undo: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    redo: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    canUndo: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    canRedo: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    list: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    goToIndex: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getState: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    subscribe: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    setNextDescription: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-  },
-  WorkbookTableStyles: {
-    list: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    add: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    update: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    remove: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    getDefault: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    setDefault: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    duplicate: {
+    useSystemSeparators: {
       decision: 'allow',
       capability: 'workbook:read',
     },
   },
   WorkbookCellStyles: {
+    add: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
     get: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getCatalog: {
       decision: 'allow',
       capability: 'workbook:read',
     },
@@ -1072,11 +2955,7 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
       decision: 'allow',
       capability: 'workbook:read',
     },
-    getCatalog: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    add: {
+    remove: {
       decision: 'allow',
       capability: 'workbook:write',
     },
@@ -1084,43 +2963,371 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
       decision: 'allow',
       capability: 'workbook:write',
     },
+  },
+  WorkbookChanges: {
+    track: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+  },
+  WorkbookDiagnostics: {
+    checkBlankRegions: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    checkErrors: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    checkExternalReferences: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    checkFormulaErrorValues: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    checkFormulaErrors: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    checkFormulaShape: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    checkOpenXmlLoadability: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    checkStaleCachedValues: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    checkWorkbookDirtyState: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getFormulaReferences: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getResolvedChartSpec: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    import: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    materialization: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    runtime: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    validateWorkbook: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+  },
+  WorkbookFunctions: {
+    average: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    concatenate: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    count: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    invoke: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    max: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    min: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    sum: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    vlookup: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+  },
+  WorkbookHistory: {
+    canRedo: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    canUndo: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getState: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    goToIndex: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    list: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    redo: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    setNextDescription: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    subscribe: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    undo: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+  },
+  WorkbookLinks: {
+    add: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    break: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    copySource: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    create: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    delete: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    get: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getStatus: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getUsages: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    list: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    listPackageDiagnostics: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    refresh: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    refreshAll: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    retarget: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    update: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    watchStatus: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+  },
+  WorkbookNames: {
+    add: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    clear: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    createFromSelection: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    get: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getArrayTypes: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getArrayValues: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getCount: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getRange: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getType: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getValue: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getValueAsJson: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    has: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    list: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    recalculateDependents: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
     remove: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    removeById: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    update: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+  },
+  WorkbookNotifications: {
+    dismiss: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    dismissAll: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    error: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getAll: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    info: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    notify: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    subscribe: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    success: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    warning: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+  },
+  WorkbookPivotTableStyles: {
+    getCount: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getDefault: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getItem: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    list: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    setDefault: {
       decision: 'allow',
       capability: 'workbook:write',
     },
   },
   WorkbookProperties: {
-    getDocumentProperties: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    setDocumentProperties: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
     getCustomProperty: {
       decision: 'allow',
       capability: 'workbook:read',
     },
-    setCustomProperty: {
+    getDocumentProperties: {
       decision: 'allow',
-      capability: 'workbook:write',
-    },
-    removeCustomProperty: {
-      decision: 'allow',
-      capability: 'workbook:write',
+      capability: 'workbook:read',
     },
     listCustomProperties: {
       decision: 'allow',
       capability: 'workbook:read',
     },
+    removeCustomProperty: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    setCustomProperty: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    setDocumentProperties: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
   },
   WorkbookProtection: {
-    isProtected: {
+    getOptions: {
       decision: 'allow',
       capability: 'workbook:read',
     },
-    getOptions: {
+    isProtected: {
       decision: 'allow',
       capability: 'workbook:read',
     },
@@ -1133,28 +3340,42 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
       capability: 'workbook:read',
     },
   },
+  WorkbookScenarios: {
+    add: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    apply: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    getActiveScenarioId: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getActiveScenarioState: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    list: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    remove: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    restore: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    update: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+  },
   WorkbookSecurity: {
     addPolicy: {
-      decision: 'allow',
-      capability: 'workbook:policy-admin',
-    },
-    removePolicy: {
-      decision: 'allow',
-      capability: 'workbook:policy-admin',
-    },
-    updatePolicy: {
-      decision: 'allow',
-      capability: 'workbook:policy-admin',
-    },
-    getPolicies: {
-      decision: 'allow',
-      capability: 'workbook:policy-admin',
-    },
-    getEffectiveAccess: {
-      decision: 'allow',
-      capability: 'workbook:policy-admin',
-    },
-    explainAccess: {
       decision: 'allow',
       capability: 'workbook:policy-admin',
     },
@@ -1162,63 +3383,229 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
       decision: 'allow',
       capability: 'workbook:policy-admin',
     },
+    explainAccess: {
+      decision: 'allow',
+      capability: 'workbook:policy-admin',
+    },
+    getEffectiveAccess: {
+      decision: 'allow',
+      capability: 'workbook:policy-admin',
+    },
+    getPolicies: {
+      decision: 'allow',
+      capability: 'workbook:policy-admin',
+    },
+    removePolicy: {
+      decision: 'allow',
+      capability: 'workbook:policy-admin',
+    },
     removeTemplate: {
       decision: 'allow',
       capability: 'workbook:policy-admin',
     },
+    updatePolicy: {
+      decision: 'allow',
+      capability: 'workbook:policy-admin',
+    },
   },
-  WorkbookNotifications: {
-    getAll: {
+  WorkbookSheets: {
+    add: {
+      decision: 'allow',
+      capability: 'workbook:write',
+      returns: ['Worksheet'],
+    },
+    copy: {
+      decision: 'allow',
+      capability: 'workbook:write',
+      returns: ['Worksheet'],
+    },
+    hide: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    move: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    on: {
+      decision: 'deny',
+      reason: 'raw lifecycle, event, security, persistence, or code execution bypass',
+    },
+    remove: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    rename: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    setActive: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    setSelectedIds: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    show: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+  },
+  WorkbookSlicerStyles: {
+    add: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    duplicate: {
       decision: 'allow',
       capability: 'workbook:read',
     },
-    subscribe: {
+    get: {
       decision: 'allow',
       capability: 'workbook:read',
     },
-    notify: {
+    getCount: {
       decision: 'allow',
       capability: 'workbook:read',
     },
-    info: {
+    getDefault: {
       decision: 'allow',
       capability: 'workbook:read',
     },
-    success: {
+    getItem: {
       decision: 'allow',
       capability: 'workbook:read',
     },
-    warning: {
+    list: {
       decision: 'allow',
       capability: 'workbook:read',
     },
-    error: {
+    remove: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    setDefault: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+  },
+  WorkbookSlicers: {
+    get: {
       decision: 'allow',
       capability: 'workbook:read',
     },
-    dismiss: {
+    getCount: {
       decision: 'allow',
       capability: 'workbook:read',
     },
-    dismissAll: {
+    getItem: {
       decision: 'allow',
       capability: 'workbook:read',
+    },
+    getItemAt: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getItemOrNullObject: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getItems: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    list: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    remove: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+  },
+  WorkbookTableStyles: {
+    add: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    duplicate: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getDefault: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    list: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    remove: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    setDefault: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    update: {
+      decision: 'allow',
+      capability: 'workbook:write',
     },
   },
   WorkbookTheme: {
+    getChromeTheme: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
     getWorkbookTheme: {
       decision: 'allow',
       capability: 'workbook:read',
+    },
+    setChromeTheme: {
+      decision: 'allow',
+      capability: 'workbook:write',
     },
     setWorkbookTheme: {
       decision: 'allow',
       capability: 'workbook:write',
     },
-    getChromeTheme: {
+  },
+  WorkbookTimelineStyles: {
+    add: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    duplicate: {
       decision: 'allow',
       capability: 'workbook:read',
     },
-    setChromeTheme: {
+    get: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getCount: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getDefault: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getItem: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    list: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    remove: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    setDefault: {
       decision: 'allow',
       capability: 'workbook:write',
     },
@@ -1236,127 +3623,435 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
       decision: 'allow',
       capability: 'workbook:write',
     },
-    subscribe: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
     setShowFormulas: {
       decision: 'allow',
       capability: 'workbook:write',
     },
-  },
-  WorkbookChanges: {
-    track: {
+    subscribe: {
       decision: 'allow',
       capability: 'workbook:read',
     },
   },
-  WorkbookDiagnostics: {
-    getFormulaReferences: {
+  Worksheet: {
+    addPivotTable: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    autoFill: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    autoFillPreview: {
       decision: 'allow',
       capability: 'workbook:read',
     },
-    getResolvedChartSpec: {
+    calculate: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    clear: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    clearData: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    clearOrResetContents: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    copyFrom: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    describe: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    describeRange: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    enableCalculation: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    evaluate: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    evaluateFormula: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    fillSeries: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    findByFormula: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    findByValue: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    findCells: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    findDataEdge: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    findInRange: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    findLastColumn: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    findLastRow: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    forEachCell: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    formatValues: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getActiveCellEditSource: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getCell: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getCells: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getChart: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getCharts: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getControl: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getCurrentRegion: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getData: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getDependents: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getDisplayValue: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getDisplayValues: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getExtendedRange: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getFormula: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getFormulaArray: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getFormulas: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getFormulasR1C1: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getIndex: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getName: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getNext: {
+      decision: 'allow',
+      capability: 'workbook:read',
+      returns: ['Worksheet'],
+    },
+    getNextOrNull: {
+      decision: 'allow',
+      capability: 'workbook:read',
+      returns: ['Worksheet'],
+    },
+    getNumberFormatCategories: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getPivotTable: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getPrecedents: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getPrevious: {
+      decision: 'allow',
+      capability: 'workbook:read',
+      returns: ['Worksheet'],
+    },
+    getPreviousOrNull: {
+      decision: 'allow',
+      capability: 'workbook:read',
+      returns: ['Worksheet'],
+    },
+    getRange: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getRangeWithIdentity: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getRanges: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getRawCellData: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getRawRangeData: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getSelectionAggregates: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getSheetId: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getSpecialCells: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getUsedRange: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getValue: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getValueForEditing: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getValueTypes: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getValues: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getVisibility: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getVisibleView: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    index: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    isEntireColumn: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    isEntireRow: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    listCharts: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    listPivotTables: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    moveTo: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    name: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    on: {
+      decision: 'deny',
+      reason: 'raw lifecycle, event, security, persistence, or code execution bypass',
+    },
+    refreshActiveCellData: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    refreshActiveCellEditSource: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    regexSearch: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    removeChart: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    removePivotTable: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    replaceAll: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    setArrayFormula: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    setBoundsReader: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    setCell: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    setCells: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    setControl: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    setDateValue: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    setFormula: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    setFormulaConditionalFormat: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    setFormulas: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    setListValidation: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    setName: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    setRange: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    setTimeValue: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    setValue: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    setVisibility: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    sheetId: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    signCheck: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    sortByColor: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    sortRange: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    summarize: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    toCSV: {
+      decision: 'allow',
+      capability: 'workbook:export',
+    },
+    toJSON: {
+      decision: 'allow',
+      capability: 'workbook:export',
+    },
+    updateChart: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    validateFormulaCircularReference: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    validateFormulaSyntax: {
       decision: 'allow',
       capability: 'workbook:read',
     },
   },
-  WorkbookLinks: {
+  WorksheetAllowEditRanges: {
+    add: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
     list: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    get: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    add: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    create: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    retarget: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    update: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    break: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    delete: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    getStatus: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    refresh: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    refreshAll: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    watchStatus: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getUsages: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    copySource: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    listPackageDiagnostics: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-  },
-  WorksheetCellsAccessor: {
-    get: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-  },
-  WorksheetWhatIf: {
-    goalSeek: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    dataTable: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    createDataTable: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-  },
-  WorksheetDiagrams: {
-    add: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    get: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    has: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getCount: {
       decision: 'allow',
       capability: 'workbook:read',
     },
@@ -1364,67 +4059,55 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
       decision: 'allow',
       capability: 'workbook:write',
     },
-    list: {
+  },
+  WorksheetBindings: {
+    add: {
       decision: 'allow',
-      capability: 'workbook:read',
+      capability: 'workbook:write',
     },
     clear: {
       decision: 'allow',
       capability: 'workbook:write',
     },
-    duplicate: {
+    get: {
       decision: 'allow',
       capability: 'workbook:read',
     },
-    addNode: {
+    getCount: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getProjectionRange: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getProjectionSource: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getViewportProjectionData: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    isProjectedPosition: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    list: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    remove: {
       decision: 'allow',
       capability: 'workbook:write',
     },
-    removeNode: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    updateNode: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    moveNode: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    getNode: {
+  },
+  WorksheetCellsAccessor: {
+    get: {
       decision: 'allow',
       capability: 'workbook:read',
     },
-    getDiagram: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getDiagramsOnSheet: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    changeLayout: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    changeQuickStyle: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    changeColorTheme: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getComputedLayout: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    invalidateLayout: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    invalidateAllLayouts: {
+    list: {
       decision: 'allow',
       capability: 'workbook:read',
     },
@@ -1435,374 +4118,38 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
       capability: 'workbook:read',
     },
   },
-  WorksheetFormats: {
-    set: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    setRange: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    setRanges: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    hasExplicit: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    clearCell: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    clear: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    clearRange: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    clearRanges: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    get: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getDisplayedCellProperties: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getDisplayedRangeProperties: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    adjustIndent: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    clearFill: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    clearFillForRanges: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    getNumberFormatCategory: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getNumberFormatLocal: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    setNumberFormatLocal: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    applyPattern: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    getCellProperties: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    setCellProperties: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    getRowProperties: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    setRowProperties: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    getColumnProperties: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    setColumnProperties: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-  },
-  WorksheetLayout: {
-    getRowHeight: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    setRowHeight: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    getColumnWidth: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    setColumnWidth: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    getColumnWidthChars: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    setColumnWidthChars: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    setColumnWidths: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    setColumnWidthsChars: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    autoFitColumn: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    autoFitColumns: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    autoFitRow: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    autoFitRows: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getRowHeightsBatch: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getColWidthsBatch: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getColWidthsBatchChars: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    setRowVisible: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    setColumnVisible: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    isRowHidden: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    isColumnHidden: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    unhideRows: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    unhideColumns: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    hideRows: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    hideColumns: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    getHiddenRowsBitmap: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getHiddenColumnsBitmap: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    resetRowHeight: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    resetColumnWidth: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getRowPosition: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getColPosition: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getRangePosition: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-  },
-  WorksheetView: {
-    freezeRows: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    freezeColumns: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    freezePanes: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    unfreeze: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getFrozenPanes: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    freezeAt: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getSplitConfig: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    setSplitConfig: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    setGridlines: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    setHeadings: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    getViewOptions: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    setShowFormulas: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    getTabColor: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    setTabColor: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    getScrollPosition: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    setScrollPosition: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-  },
-  WorksheetStructure: {
-    insertRows: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    deleteRows: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    insertColumns: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    deleteColumns: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    insertCellsWithShift: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    deleteCellsWithShift: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    getRowCount: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getColumnCount: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    textToColumns: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    removeDuplicates: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    merge: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    unmerge: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getMergedRegions: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getMergeAtCell: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-  },
   WorksheetCharts: {
+    activate: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
     add: {
       decision: 'allow',
       capability: 'workbook:write',
     },
-    get: {
+    addSeries: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    addTrendline: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    bringForward: {
       decision: 'allow',
       capability: 'workbook:read',
     },
-    update: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    remove: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    list: {
+    bringToFront: {
       decision: 'allow',
       capability: 'workbook:read',
     },
     clear: {
       decision: 'allow',
       capability: 'workbook:write',
+    },
+    describe: {
+      decision: 'allow',
+      capability: 'workbook:read',
     },
     duplicate: {
       decision: 'allow',
@@ -1812,19 +4159,19 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
       decision: 'allow',
       capability: 'workbook:read',
     },
-    setDataRange: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    setType: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    has: {
+    findBySourceRange: {
       decision: 'allow',
       capability: 'workbook:read',
     },
-    getCount: {
+    formatPoint: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    get: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getAxisItem: {
       decision: 'allow',
       capability: 'workbook:read',
     },
@@ -1832,103 +4179,15 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
       decision: 'allow',
       capability: 'workbook:read',
     },
-    bringToFront: {
+    getCount: {
       decision: 'allow',
       capability: 'workbook:read',
     },
-    sendToBack: {
+    getDataLabelSubstring: {
       decision: 'allow',
       capability: 'workbook:read',
     },
-    bringForward: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    sendBackward: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    linkToTable: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    unlinkFromTable: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    isLinkedToTable: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    addSeries: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    removeSeries: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    getSeries: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    updateSeries: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    getSeriesCount: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    reorderSeries: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    setSeriesValues: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    setSeriesCategories: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    getSeriesBinOptions: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    setSeriesBinOptions: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    getSeriesBoxwhiskerOptions: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    setSeriesBoxwhiskerOptions: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    formatPoint: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    setPointDataLabel: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    addTrendline: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    removeTrendline: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    getTrendline: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getTrendlineCount: {
+    getDataLabelTailAnchor: {
       decision: 'allow',
       capability: 'workbook:read',
     },
@@ -1940,31 +4199,19 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
       decision: 'allow',
       capability: 'workbook:read',
     },
-    setBubbleSizes: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    onActivated: {
+    getSeries: {
       decision: 'allow',
       capability: 'workbook:read',
     },
-    onDeactivated: {
+    getSeriesBinOptions: {
       decision: 'allow',
       capability: 'workbook:read',
     },
-    getAxisItem: {
+    getSeriesBoxwhiskerOptions: {
       decision: 'allow',
       capability: 'workbook:read',
     },
-    setAxisTitle: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    setCategoryNames: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    getSeriesDimensionValues: {
+    getSeriesCount: {
       decision: 'allow',
       capability: 'workbook:read',
     },
@@ -1976,9 +4223,85 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
       decision: 'allow',
       capability: 'workbook:read',
     },
-    getDataLabelSubstring: {
+    getSeriesDimensionValues: {
       decision: 'allow',
       capability: 'workbook:read',
+    },
+    getSourceData: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getTitleSubstring: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getTrendline: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getTrendlineCount: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    has: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    isLinkedToTable: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    linkToTable: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    list: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    onActivated: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    onDeactivated: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    remove: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    removeSeries: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    removeTrendline: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    reorderSeries: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    sendBackward: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    sendToBack: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    setAxisTitle: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    setBubbleSizes: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    setCategoryNames: {
+      decision: 'allow',
+      capability: 'workbook:write',
     },
     setDataLabelHeight: {
       decision: 'allow',
@@ -1988,57 +4311,43 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
       decision: 'allow',
       capability: 'workbook:write',
     },
-    getDataLabelTailAnchor: {
+    setDataRange: {
       decision: 'allow',
-      capability: 'workbook:read',
+      capability: 'workbook:write',
+    },
+    setPointDataLabel: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    setSeriesBinOptions: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    setSeriesBoxwhiskerOptions: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    setSeriesCategories: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    setSeriesValues: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    setSourceData: {
+      decision: 'allow',
+      capability: 'workbook:write',
     },
     setTitleFormula: {
       decision: 'allow',
       capability: 'workbook:write',
     },
-    getTitleSubstring: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    activate: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-  },
-  WorksheetObjectCollection: {
-    get: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getInfo: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    list: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    removeMany: {
+    setType: {
       decision: 'allow',
       capability: 'workbook:write',
     },
-    remove: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    bringToFront: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    sendToBack: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    bringForward: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    sendBackward: {
+    unlinkFromTable: {
       decision: 'allow',
       capability: 'workbook:read',
     },
@@ -2046,33 +4355,89 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
       decision: 'allow',
       capability: 'workbook:write',
     },
-    convertToTextEffect: {
+    updateSeries: {
       decision: 'allow',
-      capability: 'workbook:read',
+      capability: 'workbook:write',
     },
-    convertToTextBox: {
+    updateTrendline: {
       decision: 'allow',
-      capability: 'workbook:read',
+      capability: 'workbook:write',
     },
-    computeObjectBounds: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    computeAllObjectBounds: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    group: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    ungroup: {
+    usesRange: {
       decision: 'allow',
       capability: 'workbook:read',
     },
   },
-  WorksheetShapeCollection: {
-    get: {
+  WorksheetComments: {
+    add: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    addNote: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    addReply: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    clean: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    clear: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    convertNoteToThread: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getById: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getCount: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getForCell: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getLocation: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getNote: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getNoteAt: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getNoteLocation: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getParentByReplyId: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getReplyAt: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getReplyCount: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getThread: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    hasComment: {
       decision: 'allow',
       capability: 'workbook:read',
     },
@@ -2080,17 +4445,93 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
       decision: 'allow',
       capability: 'workbook:read',
     },
+    listNotes: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    noteCount: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    remove: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    removeForCell: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    removeNote: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    resolveThread: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    setNote: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    setNoteHeight: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    setNoteVisible: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    setNoteWidth: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    update: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+  },
+  WorksheetConditionalFormatting: {
     add: {
       decision: 'allow',
       capability: 'workbook:write',
+    },
+    addFormula: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    changeRuleType: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    clear: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    clearInRanges: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    clearRuleStyle: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    cloneForPaste: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    get: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getCount: {
+      decision: 'allow',
+      capability: 'workbook:read',
     },
     getItemAt: {
       decision: 'allow',
       capability: 'workbook:read',
     },
-  },
-  WorksheetPictureCollection: {
-    get: {
+    has: {
       decision: 'allow',
       capability: 'workbook:read',
     },
@@ -2098,12 +4539,24 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
       decision: 'allow',
       capability: 'workbook:read',
     },
-    add: {
+    remove: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    removeRule: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    reorder: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    update: {
       decision: 'allow',
       capability: 'workbook:write',
     },
   },
-  WorksheetTextBoxCollection: {
+  WorksheetConnectorCollection: {
     get: {
       decision: 'allow',
       capability: 'workbook:read',
@@ -2112,12 +4565,120 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
       decision: 'allow',
       capability: 'workbook:read',
     },
+  },
+  WorksheetCustomProperties: {
+    count: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    delete: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    get: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getAll: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    set: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+  },
+  WorksheetDiagrams: {
     add: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    addNode: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    changeColorTheme: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    changeLayout: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    changeQuickStyle: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    clear: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    duplicate: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    get: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getComputedLayout: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getCount: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getDiagram: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getDiagramsOnSheet: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getNode: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    has: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    invalidateAllLayouts: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    invalidateLayout: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    list: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    moveNode: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    remove: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    removeNode: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    updateNode: {
       decision: 'allow',
       capability: 'workbook:write',
     },
   },
   WorksheetDrawingCollection: {
+    add: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
     get: {
       decision: 'allow',
       capability: 'workbook:read',
@@ -2125,58 +4686,22 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
     list: {
       decision: 'allow',
       capability: 'workbook:read',
-    },
-    add: {
-      decision: 'allow',
-      capability: 'workbook:write',
     },
   },
   WorksheetEquationCollection: {
-    get: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    list: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
     add: {
       decision: 'allow',
       capability: 'workbook:write',
+    },
+    get: {
+      decision: 'allow',
+      capability: 'workbook:read',
     },
     getDefaultStyle: {
       decision: 'allow',
       capability: 'workbook:read',
     },
     getDefaults: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-  },
-  WorksheetTextEffectCollection: {
-    get: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    list: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    add: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    getDefaultConfig: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getDefaults: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-  },
-  WorksheetConnectorCollection: {
-    get: {
       decision: 'allow',
       capability: 'workbook:read',
     },
@@ -2190,43 +4715,11 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
       decision: 'allow',
       capability: 'workbook:write',
     },
+    apply: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
     applyAdvanced: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    byColor: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    get: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    clear: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    setAutoFilter: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    clearAutoFilter: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    getAutoFilter: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getForRange: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    remove: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    setColumnFilter: {
       decision: 'allow',
       capability: 'workbook:write',
     },
@@ -2234,23 +4727,11 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
       decision: 'allow',
       capability: 'workbook:write',
     },
-    clearColumnFilter: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    getUniqueValues: {
+    byColor: {
       decision: 'allow',
       capability: 'workbook:read',
     },
-    getFilterDropdownData: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    setCriteria: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    clearCriteria: {
+    clear: {
       decision: 'allow',
       capability: 'workbook:write',
     },
@@ -2258,11 +4739,27 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
       decision: 'allow',
       capability: 'workbook:write',
     },
-    apply: {
+    clearAutoFilter: {
       decision: 'allow',
       capability: 'workbook:write',
     },
-    getInfo: {
+    clearColumnFilter: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    clearCriteria: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    get: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getAutoFilter: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getFilterDropdownData: {
       decision: 'allow',
       capability: 'workbook:read',
     },
@@ -2270,11 +4767,19 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
       decision: 'allow',
       capability: 'workbook:read',
     },
-    list: {
+    getForRange: {
       decision: 'allow',
       capability: 'workbook:read',
     },
-    isEnabled: {
+    getInfo: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getSortState: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getUniqueValues: {
       decision: 'allow',
       capability: 'workbook:read',
     },
@@ -2282,13 +4787,45 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
       decision: 'allow',
       capability: 'workbook:read',
     },
+    isEnabled: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    list: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
     listDetails: {
       decision: 'allow',
       capability: 'workbook:read',
     },
-    getSortState: {
+    listHeaderInfo: {
       decision: 'allow',
       capability: 'workbook:read',
+    },
+    listSummaries: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    reapply: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    remove: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    setAutoFilter: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    setColumnFilter: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    setCriteria: {
+      decision: 'allow',
+      capability: 'workbook:write',
     },
     setSortState: {
       decision: 'allow',
@@ -2308,10 +4845,6 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
       decision: 'allow',
       capability: 'workbook:write',
     },
-    list: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
     get: {
       decision: 'allow',
       capability: 'workbook:read',
@@ -2320,11 +4853,15 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
       decision: 'allow',
       capability: 'workbook:read',
     },
-    update: {
+    list: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    move: {
       decision: 'allow',
       capability: 'workbook:write',
     },
-    move: {
+    remove: {
       decision: 'allow',
       capability: 'workbook:write',
     },
@@ -2332,12 +4869,424 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
       decision: 'allow',
       capability: 'workbook:read',
     },
-    remove: {
+    update: {
       decision: 'allow',
       capability: 'workbook:write',
     },
   },
-  WorksheetConditionalFormatting: {
+  WorksheetFormats: {
+    adjustIndent: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    applyPattern: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    clear: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    clearCell: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    clearFill: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    clearFillForRanges: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    clearRange: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    clearRanges: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    get: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getCellProperties: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getColumnProperties: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getDisplayedCellProperties: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getDisplayedRangeProperties: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getNumberFormatCategory: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getNumberFormatLocal: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getRowProperties: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    hasExplicit: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    set: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    setCellProperties: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    setColumnProperties: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    setNumberFormatLocal: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    setRange: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    setRanges: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    setRowProperties: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+  },
+  WorksheetHyperlinks: {
+    clear: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    get: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    has: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    list: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    remove: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    set: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+  },
+  WorksheetLayout: {
+    autoFitColumn: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    autoFitColumns: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    autoFitRow: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    autoFitRows: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getColPosition: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getColWidthsBatch: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getColWidthsBatchChars: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getColumnWidth: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getColumnWidthChars: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getHiddenColumnsBitmap: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getHiddenRowsBitmap: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getRangePosition: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getRowHeight: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getRowHeightsBatch: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getRowPosition: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    hideColumns: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    hideRows: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    isColumnHidden: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    isRowHidden: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    resetColumnWidth: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    resetRowHeight: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    setColumnVisible: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    setColumnWidth: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    setColumnWidthChars: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    setColumnWidths: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    setColumnWidthsChars: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    setRowHeight: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    setRowVisible: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    unhideColumns: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    unhideRows: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+  },
+  WorksheetNames: {
+    add: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    clear: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    get: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getCount: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getRange: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    has: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    list: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    remove: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    update: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+  },
+  WorksheetObjectCollection: {
+    bringForward: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    bringToFront: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    computeAllObjectBounds: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    computeObjectBounds: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    convertToTextBox: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    convertToTextEffect: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    get: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getFullObject: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getInfo: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    group: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    list: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    remove: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    removeMany: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    sendBackward: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    sendToBack: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    ungroup: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    update: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+  },
+  WorksheetOutline: {
+    collapseAll: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    expandAll: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getLevel: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getMaxLevel: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getSettings: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getState: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    groupColumns: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    groupRows: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    setSettings: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    showOutlineLevels: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    subtotal: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    toggleCollapsed: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    ungroupColumns: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    ungroupRows: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+  },
+  WorksheetPictureCollection: {
     add: {
       decision: 'allow',
       capability: 'workbook:write',
@@ -2346,7 +5295,61 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
       decision: 'allow',
       capability: 'workbook:read',
     },
-    has: {
+    list: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+  },
+  WorksheetPivots: {
+    add: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    addCalculatedField: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    addField: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    addWithSheet: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    clear: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    compute: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    detectFields: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    get: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getAll: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getAllPivotItems: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getAllowMultipleFiltersPerField: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getAutoFormat: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getColumnLabelRange: {
       decision: 'allow',
       capability: 'workbook:read',
     },
@@ -2354,57 +5357,352 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
       decision: 'allow',
       capability: 'workbook:read',
     },
-    update: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    clearRuleStyle: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    changeRuleType: {
+    getDataBodyRange: {
       decision: 'allow',
       capability: 'workbook:read',
     },
-    getItemAt: {
+    getDataHierarchy: {
       decision: 'allow',
       capability: 'workbook:read',
     },
-    remove: {
+    getDataSourceType: {
       decision: 'allow',
-      capability: 'workbook:write',
+      capability: 'workbook:read',
     },
-    removeRule: {
+    getDrillDownData: {
       decision: 'allow',
-      capability: 'workbook:write',
+      capability: 'workbook:read',
+    },
+    getEnableMultipleFilterItems: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getExpansionState: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getFilterAxisRange: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getImportedViewRecords: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getInfo: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getPivotItems: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getPreserveFormatting: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getRange: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getRowLabelRange: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    has: {
+      decision: 'allow',
+      capability: 'workbook:read',
     },
     list: {
       decision: 'allow',
       capability: 'workbook:read',
     },
-    clear: {
+    moveField: {
       decision: 'allow',
       capability: 'workbook:write',
     },
-    clearInRanges: {
+    queryPivot: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    refresh: {
       decision: 'allow',
       capability: 'workbook:write',
     },
-    reorder: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    cloneForPaste: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-  },
-  WorksheetValidation: {
-    set: {
+    refreshAll: {
       decision: 'allow',
       capability: 'workbook:write',
     },
     remove: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    removeCalculatedField: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    removeField: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    removeFilter: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    rename: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    resetField: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    setAggregateFunction: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    setAllExpanded: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    setAllowMultipleFiltersPerField: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    setAutoFormat: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    setDataSource: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    setEnableMultipleFilterItems: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    setFilter: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    setItemVisibility: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    setLayout: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    setPivotItemVisibility: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    setPreserveFormatting: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    setShowValuesAs: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    setSortOrder: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    setStyle: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    toggleExpanded: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    updateCalculatedField: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+  },
+  WorksheetPrint: {
+    addPageBreak: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    clearArea: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    clearPageBreaks: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    clearPrintTitles: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    getArea: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getCellAfterBreak: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getHeaderFooterImages: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getPageBreaks: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getPrintTitleColumns: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getPrintTitleRows: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getSettings: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    removeHeaderFooterImage: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    removePageBreak: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    setArea: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    setHeaderFooterImage: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    setPrintMargins: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    setPrintTitleColumns: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    setPrintTitleRows: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    setSettings: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+  },
+  WorksheetProtection: {
+    allowEditRanges: {
+      decision: 'allow',
+      capability: 'workbook:read',
+      returns: ['WorksheetAllowEditRanges'],
+    },
+    canDoStructureOp: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    canEditCell: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    canEditCellFast: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    canPauseProtection: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    canSort: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    checkPassword: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getConfig: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getSelectionMode: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    isPaused: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    isProtected: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    pauseProtection: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    protect: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    protectWithOptions: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    resumeProtection: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    setPassword: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    setSelectionMode: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    unprotect: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    updateOptions: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+  },
+  WorksheetSettings: {
+    get: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getStandardHeight: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getStandardWidth: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    set: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    setStandardWidth: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+  },
+  WorksheetShapeCollection: {
+    add: {
       decision: 'allow',
       capability: 'workbook:write',
     },
@@ -2412,23 +5710,7 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
       decision: 'allow',
       capability: 'workbook:read',
     },
-    peek: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    has: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getCount: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getDropdownItems: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getDropdownItemsWithRevision: {
+    getItemAt: {
       decision: 'allow',
       capability: 'workbook:read',
     },
@@ -2436,7 +5718,95 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
       decision: 'allow',
       capability: 'workbook:read',
     },
+  },
+  WorksheetSlicers: {
+    add: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
     clear: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    clearSelection: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    duplicate: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    get: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getByName: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getCount: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getItem: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getItemAt: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getItemOrNullObject: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getItems: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getState: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    has: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    list: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    remove: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    setSelection: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    update: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+  },
+  WorksheetSparklines: {
+    add: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    addGroup: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    addToGroup: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    clear: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    clearAll: {
       decision: 'allow',
       capability: 'workbook:write',
     },
@@ -2444,15 +5814,163 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
       decision: 'allow',
       capability: 'workbook:write',
     },
-    removeById: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    validate: {
+    get: {
       decision: 'allow',
       capability: 'workbook:read',
     },
-    getErrorsInRange: {
+    getAtCell: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getCount: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getGroup: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getWithDataInRange: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    has: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    list: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    listGroups: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    remove: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    removeFromGroup: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    removeGroup: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    ungroupAll: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    update: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    updateGroup: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+  },
+  WorksheetStructure: {
+    deleteCellsWithShift: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    deleteColumns: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    deleteRows: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    getColumnCount: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getMergeAtCell: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getMergedRegions: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getRowCount: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    insertCellsWithShift: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    insertColumns: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    insertRows: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    merge: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    removeDuplicates: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    textToColumns: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    unmerge: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+  },
+  WorksheetStyles: {
+    applyStyle: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    applyStyleToRange: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    getStyle: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+  },
+  WorksheetTableEvents: {
+    onSelectionChanged: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    onTableAdded: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    onTableChanged: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    onTableDeleted: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+  },
+  WorksheetTableSort: {
+    apply: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    clear: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    reapply: {
       decision: 'allow',
       capability: 'workbook:read',
     },
@@ -2462,95 +5980,23 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
       decision: 'allow',
       capability: 'workbook:write',
     },
-    get: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    has: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    list: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getCount: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getItemAt: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getFirst: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getColumnByName: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    remove: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    convertToRange: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    clear: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    rename: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    update: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    getAtCell: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    clearFilters: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    setStylePreset: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    resize: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
     addColumn: {
       decision: 'allow',
       capability: 'workbook:write',
     },
-    renameColumn: {
+    addRow: {
       decision: 'allow',
       capability: 'workbook:write',
-    },
-    removeColumn: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    toggleTotalsRow: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    toggleHeaderRow: {
-      decision: 'allow',
-      capability: 'workbook:read',
     },
     applyAutoExpansion: {
       decision: 'allow',
       capability: 'workbook:write',
     },
-    setCalculatedColumn: {
+    applyIconFilter: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    clear: {
       decision: 'allow',
       capability: 'workbook:write',
     },
@@ -2558,21 +6004,13 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
       decision: 'allow',
       capability: 'workbook:write',
     },
-    getDataBodyRange: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getHeaderRowRange: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getTotalRowRange: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    addRow: {
+    clearFilters: {
       decision: 'allow',
       capability: 'workbook:write',
+    },
+    convertToRange: {
+      decision: 'allow',
+      capability: 'workbook:read',
     },
     deleteRow: {
       decision: 'allow',
@@ -2586,21 +6024,26 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
       decision: 'allow',
       capability: 'workbook:write',
     },
-    getRowCount: {
+    events: {
+      decision: 'allow',
+      capability: 'workbook:read',
+      returns: ['WorksheetTableEvents'],
+    },
+    get: {
       decision: 'allow',
       capability: 'workbook:read',
     },
-    getRowRange: {
+    getAtCell: {
       decision: 'allow',
       capability: 'workbook:read',
     },
-    getRowValues: {
+    getAutoFilter: {
       decision: 'allow',
       capability: 'workbook:read',
     },
-    setRowValues: {
+    getColumnByName: {
       decision: 'allow',
-      capability: 'workbook:write',
+      capability: 'workbook:read',
     },
     getColumnDataBodyRange: {
       decision: 'allow',
@@ -2622,6 +6065,78 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
       decision: 'allow',
       capability: 'workbook:read',
     },
+    getCount: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getDataBodyRange: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getFirst: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getHeaderRowRange: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getItemAt: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getRowCount: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getRowRange: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getRowValues: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getRows: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getTotalRowRange: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    has: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    list: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    remove: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    removeColumn: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    rename: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    renameColumn: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    resize: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    setCalculatedColumn: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
     setColumnValues: {
       decision: 'allow',
       capability: 'workbook:write',
@@ -2631,6 +6146,10 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
       capability: 'workbook:write',
     },
     setHighlightLastColumn: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    setRowValues: {
       decision: 'allow',
       capability: 'workbook:write',
     },
@@ -2654,319 +6173,20 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
       decision: 'allow',
       capability: 'workbook:write',
     },
-    applyIconFilter: {
+    setStylePreset: {
       decision: 'allow',
       capability: 'workbook:write',
     },
-    getAutoFilter: {
+    sort: {
+      decision: 'allow',
+      capability: 'workbook:write',
+      returns: ['WorksheetTableSort'],
+    },
+    toggleHeaderRow: {
       decision: 'allow',
       capability: 'workbook:read',
     },
-    getRows: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-  },
-  WorksheetPivots: {
-    add: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    addWithSheet: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    remove: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    clear: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    rename: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    list: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    get: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getInfo: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    has: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getCount: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    addPlacement: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    updatePlacement: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    removePlacement: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    movePlacement: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    renameValuePlacement: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    setSortByValue: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    addField: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    removeField: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    moveField: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    setAggregateFunction: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    setShowValuesAs: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    setSortOrder: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    resetPlacement: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    setFilter: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    removeFilter: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    resetField: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    setLayout: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    setStyle: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    detectFields: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    compute: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    queryPivot: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    refresh: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    refreshAll: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    getDrillDownData: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    addCalculatedField: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    addCalculatedFieldAndPlace: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    updateCalculatedField: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    removeCalculatedField: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    getRange: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getDataBodyRange: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getColumnLabelRange: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getRowLabelRange: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getFilterAxisRange: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getAllPivotItems: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    setPivotItemVisibility: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    toggleExpanded: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    setAllExpanded: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    getExpansionState: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getDataSourceType: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    setDataSource: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    getAllowMultipleFiltersPerField: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    setAllowMultipleFiltersPerField: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    getAutoFormat: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    setAutoFormat: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    getPreserveFormatting: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    setPreserveFormatting: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    getDataHierarchy: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getPivotItems: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getEnableMultipleFilterItems: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    setEnableMultipleFilterItems: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-  },
-  WorksheetSlicers: {
-    add: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    remove: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    clear: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    list: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    has: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getCount: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    get: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getByName: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getItemAt: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getItems: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getItem: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getItemOrNullObject: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    setSelection: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    clearSelection: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    duplicate: {
+    toggleTotalsRow: {
       decision: 'allow',
       capability: 'workbook:read',
     },
@@ -2974,17 +6194,9 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
       decision: 'allow',
       capability: 'workbook:write',
     },
-    getState: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
   },
-  WorksheetSparklines: {
+  WorksheetTextBoxCollection: {
     add: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    addGroup: {
       decision: 'allow',
       capability: 'workbook:write',
     },
@@ -2992,7 +6204,25 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
       decision: 'allow',
       capability: 'workbook:read',
     },
-    getAtCell: {
+    list: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+  },
+  WorksheetTextEffectCollection: {
+    add: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    get: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getDefaultConfig: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getDefaults: {
       decision: 'allow',
       capability: 'workbook:read',
     },
@@ -3000,27 +6230,9 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
       decision: 'allow',
       capability: 'workbook:read',
     },
-    getGroup: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    listGroups: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    update: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    updateGroup: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    remove: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    removeGroup: {
+  },
+  WorksheetValidation: {
+    clear: {
       decision: 'allow',
       capability: 'workbook:write',
     },
@@ -3028,23 +6240,23 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
       decision: 'allow',
       capability: 'workbook:write',
     },
-    clear: {
+    get: {
       decision: 'allow',
-      capability: 'workbook:write',
+      capability: 'workbook:read',
     },
-    clearAll: {
+    getCount: {
       decision: 'allow',
-      capability: 'workbook:write',
+      capability: 'workbook:read',
     },
-    addToGroup: {
+    getDropdownItems: {
       decision: 'allow',
-      capability: 'workbook:write',
+      capability: 'workbook:read',
     },
-    removeFromGroup: {
+    getDropdownItemsWithRevision: {
       decision: 'allow',
-      capability: 'workbook:write',
+      capability: 'workbook:read',
     },
-    ungroupAll: {
+    getErrorsInRange: {
       decision: 'allow',
       capability: 'workbook:read',
     },
@@ -3052,501 +6264,125 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
       decision: 'allow',
       capability: 'workbook:read',
     },
-    getCount: {
+    list: {
       decision: 'allow',
       capability: 'workbook:read',
     },
-    getWithDataInRange: {
+    peek: {
       decision: 'allow',
       capability: 'workbook:read',
-    },
-  },
-  WorksheetComments: {
-    addNote: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    setNote: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    getNote: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    removeNote: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    getCount: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    noteCount: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    listNotes: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getNoteAt: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    setNoteVisible: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    setNoteHeight: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    setNoteWidth: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    add: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    update: {
-      decision: 'allow',
-      capability: 'workbook:write',
     },
     remove: {
       decision: 'allow',
       capability: 'workbook:write',
     },
-    resolveThread: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    list: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getForCell: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    addReply: {
+    removeById: {
       decision: 'allow',
       capability: 'workbook:write',
-    },
-    convertNoteToThread: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getThread: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getById: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getLocation: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getParentByReplyId: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getReplyCount: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getReplyAt: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getNoteLocation: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    hasComment: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    removeForCell: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    clear: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    clean: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-  },
-  WorksheetCustomProperties: {
-    get: {
-      decision: 'allow',
-      capability: 'workbook:read',
     },
     set: {
       decision: 'allow',
       capability: 'workbook:write',
     },
-    delete: {
+    setList: {
       decision: 'allow',
       capability: 'workbook:write',
     },
-    getAll: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    count: {
+    validate: {
       decision: 'allow',
       capability: 'workbook:read',
     },
   },
-  WorksheetHyperlinks: {
-    set: {
+  WorksheetView: {
+    freezeAt: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    freezeColumns: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    freezePanes: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    freezeRows: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getFrozenPanes: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getScrollPosition: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getSplitConfig: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getTabColor: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    getViewOptions: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
+    setGridlines: {
       decision: 'allow',
       capability: 'workbook:write',
     },
-    get: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    has: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    remove: {
+    setHeadings: {
       decision: 'allow',
       capability: 'workbook:write',
     },
-    list: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    clear: {
+    setScrollPosition: {
       decision: 'allow',
       capability: 'workbook:write',
     },
-  },
-  WorksheetOutline: {
-    groupRows: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    ungroupRows: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    groupColumns: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    ungroupColumns: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    toggleCollapsed: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    expandAll: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    collapseAll: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getState: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getLevel: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getMaxLevel: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    subtotal: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getSettings: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    setSettings: {
+    setShowFormulas: {
       decision: 'allow',
       capability: 'workbook:write',
     },
-    showOutlineLevels: {
+    setSplitConfig: {
       decision: 'allow',
       capability: 'workbook:write',
     },
-  },
-  WorksheetProtection: {
-    isProtected: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    protect: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    protectWithOptions: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    unprotect: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    canEditCell: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    canEditCellFast: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    canDoStructureOp: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    canSort: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getConfig: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getSelectionMode: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    setSelectionMode: {
+    setTabColor: {
       decision: 'allow',
       capability: 'workbook:write',
     },
-    pauseProtection: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    resumeProtection: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    checkPassword: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    setPassword: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    updateOptions: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-  },
-  WorksheetPrint: {
-    getSettings: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    setSettings: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    getArea: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    setArea: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    clearArea: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    addPageBreak: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    removePageBreak: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    getPageBreaks: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    clearPageBreaks: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    setPrintTitleRows: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    setPrintTitleColumns: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    getPrintTitleRows: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getPrintTitleColumns: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    clearPrintTitles: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    setPrintMargins: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    getCellAfterBreak: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getHeaderFooterImages: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    setHeaderFooterImage: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    removeHeaderFooterImage: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-  },
-  WorksheetSettings: {
-    get: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    set: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    getStandardHeight: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getStandardWidth: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    setStandardWidth: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-  },
-  WorksheetBindings: {
-    list: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    get: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getCount: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    clear: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    add: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    remove: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    getProjectionRange: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getProjectionSource: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    isProjectedPosition: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    getViewportProjectionData: {
+    unfreeze: {
       decision: 'allow',
       capability: 'workbook:read',
     },
   },
-  WorksheetNames: {
-    add: {
+  WorksheetWhatIf: {
+    createDataTable: {
       decision: 'allow',
       capability: 'workbook:write',
     },
-    has: {
+    dataTable: {
       decision: 'allow',
       capability: 'workbook:read',
     },
-    getCount: {
+    describeDataTables: {
       decision: 'allow',
       capability: 'workbook:read',
     },
-    get: {
+    goalSeek: {
       decision: 'allow',
       capability: 'workbook:read',
     },
-    getRange: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-    remove: {
+    refreshDataTable: {
       decision: 'allow',
       capability: 'workbook:write',
     },
-    update: {
+    writeDataTableValues: {
       decision: 'allow',
       capability: 'workbook:write',
-    },
-    clear: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    list: {
-      decision: 'allow',
-      capability: 'workbook:read',
-    },
-  },
-  WorksheetStyles: {
-    applyStyle: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    applyStyleToRange: {
-      decision: 'allow',
-      capability: 'workbook:write',
-    },
-    getStyle: {
-      decision: 'allow',
-      capability: 'workbook:read',
     },
   },
 } as const satisfies Record<string, Record<string, SpreadsheetFacadeMatrixEntry>>;

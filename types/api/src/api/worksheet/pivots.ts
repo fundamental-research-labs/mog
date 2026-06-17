@@ -8,10 +8,34 @@
  * Operations on this sub-API operate on the worksheet's sheet (no sheetId parameter needed).
  */
 import type {
-  PivotCommandReceipt,
+  PivotAddCalculatedFieldReceipt,
+  PivotAddFieldReceipt,
+  PivotAddReceipt,
+  PivotAddWithSheetReceipt,
+  PivotClearReceipt,
+  PivotComputeReceipt,
+  PivotCreationLifecycle,
   PivotKernelMutationReceipt,
+  PivotMoveFieldReceipt,
+  PivotQueryReceipt,
   PivotReadbackRevision,
+  PivotRefreshAllReceipt,
   PivotRefreshReceipt,
+  PivotRemoveCalculatedFieldReceipt,
+  PivotRemoveFieldReceipt,
+  PivotRemoveFilterReceipt,
+  PivotRemoveReceipt,
+  PivotRenameReceipt,
+  PivotResetFieldReceipt,
+  PivotSetAllowMultipleFiltersPerFieldReceipt,
+  PivotSetAllExpandedReceipt,
+  PivotSetAutoFormatReceipt,
+  PivotSetDataSourceReceipt,
+  PivotSetEnableMultipleFilterItemsReceipt,
+  PivotSetFilterReceipt,
+  PivotSetItemVisibilityReceipt,
+  PivotSetPivotItemVisibilityReceipt,
+  PivotSetPreserveFormattingReceipt,
 } from '../mutation-receipt';
 import type { CellRange, CellValue } from '@mog/types-core';
 import type {
@@ -37,7 +61,6 @@ import type {
 } from '@mog/types-data/data/pivot';
 import type {
   PivotTableConfig as SimplePivotTableConfig,
-  PivotQueryResult,
   PivotTableHandle,
   PivotTableInfo,
 } from '../types';
@@ -64,6 +87,14 @@ import type {
 export type PivotCreateConfig =
   | SimplePivotTableConfig
   | Omit<PivotTableConfig, 'id' | 'createdAt' | 'updatedAt' | 'schemaVersion'>;
+
+export interface PivotCreateOptions {
+  /**
+   * `defineOnly` stores the pivot metadata without writing rendered cells.
+   * `materialize` stores metadata and refreshes the rendered worksheet output.
+   */
+  lifecycle?: PivotCreationLifecycle;
+}
 
 export interface PivotPlacementSpec {
   placementId?: PlacementId;
@@ -227,9 +258,10 @@ export interface WorksheetPivots {
    *   Direct wire format — no conversion needed.
    *
    * @param config - Pivot table configuration
-   * @returns The created pivot table configuration (with generated id, timestamps)
+   * @param options - Creation lifecycle; defaults to defineOnly.
+   * @returns A receipt containing the created pivot table configuration.
    */
-  add(config: PivotCreateConfig): Promise<PivotTableConfig>;
+  add(config: PivotCreateConfig, options?: PivotCreateOptions): Promise<PivotAddReceipt>;
 
   /**
    * Atomically create a new sheet AND a pivot table on it.
@@ -239,12 +271,14 @@ export interface WorksheetPivots {
    *
    * @param sheetName - Name for the new sheet
    * @param config - Pivot table configuration
-   * @returns The new sheet ID and the created pivot config
+   * @param options - Creation lifecycle; defaults to defineOnly.
+   * @returns A receipt containing the new sheet ID and created pivot config.
    */
   addWithSheet(
     sheetName: string,
     config: PivotCreateConfig,
-  ): Promise<{ sheetId: string; config: PivotTableConfig }>;
+    options?: PivotCreateOptions,
+  ): Promise<PivotAddWithSheetReceipt>;
 
   /**
    * List full pivot configs rendered on this worksheet.
@@ -264,12 +298,12 @@ export interface WorksheetPivots {
    *
    * @param name - Pivot table name
    */
-  remove(name: string): Promise<void>;
+  remove(name: string): Promise<PivotRemoveReceipt>;
 
   /**
    * Remove all pivot tables from this worksheet.
    */
-  clear(): Promise<void>;
+  clear(): Promise<PivotClearReceipt>;
 
   /**
    * Rename a pivot table by name.
@@ -277,7 +311,7 @@ export interface WorksheetPivots {
    * @param name - Pivot table name
    * @param newName - New name for the pivot table
    */
-  rename(name: string, newName: string): Promise<void>;
+  rename(name: string, newName: string): Promise<PivotRenameReceipt>;
 
   /**
    * List all pivot tables on this worksheet.
@@ -340,7 +374,7 @@ export interface WorksheetPivots {
       displayName?: string;
       showValuesAs?: ShowValuesAsConfig;
     },
-  ): Promise<void>;
+  ): Promise<PivotAddFieldReceipt>;
 
   /**
    * Remove a field from a pivot table area, resolved by pivot name.
@@ -349,7 +383,11 @@ export interface WorksheetPivots {
    * @param fieldId - Field ID to remove
    * @param area - Area to remove the field from
    */
-  removeField(name: string, fieldId: string, area: PivotFieldArea): Promise<void>;
+  removeField(
+    name: string,
+    fieldId: string,
+    area: PivotFieldArea,
+  ): Promise<PivotRemoveFieldReceipt>;
 
   /**
    * Move a field to a different area or position, resolved by pivot name.
@@ -366,7 +404,7 @@ export interface WorksheetPivots {
     fromArea: PivotFieldArea,
     toArea: PivotFieldArea,
     toPosition: number,
-  ): Promise<void>;
+  ): Promise<PivotMoveFieldReceipt>;
 
   // ===========================================================================
   // Field Configuration
@@ -418,7 +456,11 @@ export interface WorksheetPivots {
    * @param fieldId - Field ID to filter
    * @param filter - Filter configuration (without fieldId)
    */
-  setFilter(name: string, fieldId: string, filter: Omit<PivotFilter, 'fieldId'>): Promise<void>;
+  setFilter(
+    name: string,
+    fieldId: string,
+    filter: Omit<PivotFilter, 'fieldId'>,
+  ): Promise<PivotSetFilterReceipt>;
 
   /**
    * Remove a filter from a field, resolved by pivot name.
@@ -426,7 +468,7 @@ export interface WorksheetPivots {
    * @param name - Pivot table name
    * @param fieldId - Field ID whose filter should be removed
    */
-  removeFilter(name: string, fieldId: string): Promise<void>;
+  removeFilter(name: string, fieldId: string): Promise<PivotRemoveFilterReceipt>;
 
   /**
    * Reset a field placement to defaults, resolved by pivot name.
@@ -434,7 +476,7 @@ export interface WorksheetPivots {
    * @param name - Pivot table name
    * @param fieldId - Field ID to reset
    */
-  resetField(name: string, fieldId: string): Promise<void>;
+  resetField(name: string, fieldId: string): Promise<PivotResetFieldReceipt>;
 
   // ===========================================================================
   // Layout and Style
@@ -477,9 +519,9 @@ export interface WorksheetPivots {
    *
    * @param name - Pivot table name
    * @param forceRefresh - Force recomputation ignoring cache
-   * @returns Computed pivot table result
+   * @returns A read-only receipt preserving the computed result when available
    */
-  compute(name: string, forceRefresh?: boolean): Promise<PivotTableResult | null>;
+  compute(name: string, forceRefresh?: boolean): Promise<PivotComputeReceipt>;
 
   /**
    * Query a pivot table by name, returning flat records optionally filtered by dimension values.
@@ -487,24 +529,24 @@ export interface WorksheetPivots {
    *
    * @param pivotName - Pivot table name
    * @param filters - Optional dimension filters: field name → value or array of values to include
-   * @returns Flat query result, or null if pivot not found or not computable
+   * @returns A read-only receipt preserving the flat query result when available
    */
   queryPivot(
     pivotName: string,
     filters?: Record<string, CellValue | CellValue[]>,
-  ): Promise<PivotQueryResult | null>;
+  ): Promise<PivotQueryReceipt>;
 
   /**
    * Refresh a pivot table by name (recompute without cache).
    *
    * @param name - Pivot table name
    */
-  refresh(name: string): Promise<PivotRefreshReceipt | PivotCommandReceipt>;
+  refresh(name: string): Promise<PivotRefreshReceipt>;
 
   /**
    * Refresh all pivot tables on this worksheet.
    */
-  refreshAll(): Promise<void>;
+  refreshAll(): Promise<PivotRefreshAllReceipt>;
 
   /**
    * Get drill-down data for a pivot table cell, resolved by pivot name.
@@ -520,7 +562,7 @@ export interface WorksheetPivots {
   // Calculated Fields
   // ===========================================================================
 
-  addCalculatedField(name: string, field: CalculatedField): Promise<void>;
+  addCalculatedField(name: string, field: CalculatedField): Promise<PivotAddCalculatedFieldReceipt>;
 
   updateCalculatedField(
     name: string,
@@ -528,7 +570,7 @@ export interface WorksheetPivots {
     updates: Partial<Pick<CalculatedField, 'name' | 'formula'>>,
   ): Promise<void>;
 
-  removeCalculatedField(name: string, fieldId: string): Promise<void>;
+  removeCalculatedField(name: string, fieldId: string): Promise<PivotRemoveCalculatedFieldReceipt>;
 
   // ===========================================================================
   // Sub-Range Access
@@ -597,7 +639,7 @@ export interface WorksheetPivots {
     name: string,
     fieldId: string,
     visibleItems: Record<string, boolean>,
-  ): Promise<void>;
+  ): Promise<PivotSetPivotItemVisibilityReceipt>;
 
   /**
    * Supported compatibility alias for {@link setPivotItemVisibility}.
@@ -608,7 +650,7 @@ export interface WorksheetPivots {
     name: string,
     fieldId: string,
     visibleItems: Record<string, boolean>,
-  ): Promise<void>;
+  ): Promise<PivotSetItemVisibilityReceipt>;
 
   // ===========================================================================
   // Expansion State
@@ -630,7 +672,7 @@ export interface WorksheetPivots {
    * @param name - Pivot table name
    * @param expanded - Whether all headers should be expanded (true) or collapsed (false)
    */
-  setAllExpanded(name: string, expanded: boolean): Promise<void>;
+  setAllExpanded(name: string, expanded: boolean): Promise<PivotSetAllExpandedReceipt>;
 
   /**
    * Get the current expansion state, resolved by pivot name.
@@ -658,7 +700,7 @@ export interface WorksheetPivots {
    * `dataSource` must be a qualified A1 range such as `Sheet1!A1:D100` or
    * `'Bob''s Data'!A1:D100`.
    */
-  setDataSource(name: string, dataSource: string): Promise<void>;
+  setDataSource(name: string, dataSource: string): Promise<PivotSetDataSourceReceipt>;
 
   // ===========================================================================
   // Formatting Options
@@ -678,7 +720,10 @@ export interface WorksheetPivots {
    * @param name - Pivot table name
    * @param allow - True to allow multiple filters per field
    */
-  setAllowMultipleFiltersPerField(name: string, allow: boolean): Promise<void>;
+  setAllowMultipleFiltersPerField(
+    name: string,
+    allow: boolean,
+  ): Promise<PivotSetAllowMultipleFiltersPerFieldReceipt>;
 
   /**
    * Get whether the pivot table auto-formats when refreshed.
@@ -694,7 +739,7 @@ export interface WorksheetPivots {
    * @param name - Pivot table name
    * @param autoFormat - True to enable auto-formatting
    */
-  setAutoFormat(name: string, autoFormat: boolean): Promise<void>;
+  setAutoFormat(name: string, autoFormat: boolean): Promise<PivotSetAutoFormatReceipt>;
 
   /**
    * Get whether custom formatting is preserved on refresh.
@@ -710,7 +755,10 @@ export interface WorksheetPivots {
    * @param name - Pivot table name
    * @param preserve - True to preserve custom formatting
    */
-  setPreserveFormatting(name: string, preserve: boolean): Promise<void>;
+  setPreserveFormatting(
+    name: string,
+    preserve: boolean,
+  ): Promise<PivotSetPreserveFormattingReceipt>;
 
   // ===========================================================================
   // Cell Provenance (B2)
@@ -774,5 +822,9 @@ export interface WorksheetPivots {
    * @param fieldId - Field ID to configure
    * @param enabled - True to enable multiple filter items
    */
-  setEnableMultipleFilterItems(name: string, fieldId: string, enabled: boolean): Promise<void>;
+  setEnableMultipleFilterItems(
+    name: string,
+    fieldId: string,
+    enabled: boolean,
+  ): Promise<PivotSetEnableMultipleFilterItemsReceipt>;
 }

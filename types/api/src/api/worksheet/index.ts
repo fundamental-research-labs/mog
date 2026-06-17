@@ -6,6 +6,18 @@
 
 export type { WorksheetBindings } from './bindings';
 export type {
+  WorksheetCellVisitor,
+  WorksheetGetCellsFormulasOnlyOptions,
+  WorksheetGetCellsFullOptions,
+  WorksheetGetCellsOptions,
+  WorksheetGetCellsValuesOnlyOptions,
+  WorksheetRangeCell,
+  WorksheetRangeCellBase,
+  WorksheetRangeFormulaCell,
+  WorksheetRangeOrigin,
+  WorksheetRangeValueCell,
+} from './cell-reads';
+export type {
   ChangeOrigin,
   ChangeRecord,
   ChangeTracker,
@@ -13,11 +25,21 @@ export type {
   WorksheetChanges,
 } from './changes';
 export type {
+  ChartAxisDescription,
+  ChartCachedPoint,
+  ChartDescription,
   ChartImageExporter,
   ChartReadMaterialization,
   ChartReadOptions,
+  ChartSeriesDescription,
+  ChartSeriesSourceDataUpdate,
+  ChartSourceData,
+  ChartSourceDataUpdate,
+  ChartSourceRangeKind,
+  ChartSourceRangeMatch,
   WorksheetCharts,
 } from './charts';
+export type { ChartMutationReceipt } from '../mutation-receipt';
 export type { WorksheetComments } from './comments';
 export type { WorksheetCustomProperties } from './custom-properties';
 export type {
@@ -41,6 +63,12 @@ export type {
   WorksheetFilters,
 } from './filters';
 export type { WorksheetFormControls } from './form-controls';
+export type {
+  AutoFillApplyReceipt,
+  AutoFillPreviewReceipt,
+  FillSeriesApplyReceipt,
+  WorksheetFill,
+} from './fill';
 export type { WorksheetFormats } from './formats';
 export type { WorksheetHyperlink, WorksheetHyperlinks } from './hyperlinks';
 export type { WorksheetInternal } from './internal';
@@ -49,7 +77,12 @@ export type { WorksheetNames } from './names';
 /** @internal — kept for kernel WorksheetObjectsImpl; not part of the public Worksheet interface. */
 export type { WorksheetObjects } from './objects';
 export type { WorksheetOutline } from './outline';
-export type { ImportedPivotViewRecord, PivotCreateConfig, WorksheetPivots } from './pivots';
+export type {
+  ImportedPivotViewRecord,
+  PivotCreateConfig,
+  PivotCreateOptions,
+  WorksheetPivots,
+} from './pivots';
 export type { WorksheetPrint } from './print';
 export type {
   AllowEditRange,
@@ -58,6 +91,14 @@ export type {
   WorksheetProtection,
 } from './protection';
 export type { WorksheetSettings } from './settings';
+export type {
+  FindCellsFormatQuery,
+  FindCellsInclude,
+  FindCellsQuery,
+  FindCellsResult,
+  FindCellsValueType,
+  FoundCell,
+} from './search';
 export type { WorksheetSlicers } from './slicers';
 export type { NodeMoveDirection, NodePosition, WorksheetDiagrams } from './diagrams';
 export type { WorksheetSparklines } from './sparklines';
@@ -71,6 +112,8 @@ export type {
 } from './tables';
 export type {
   DropdownItemsWithRevision,
+  ListValidationOptions,
+  ListValidationSource,
   WorksheetValidation,
   ValidationCheckResult,
 } from './validation';

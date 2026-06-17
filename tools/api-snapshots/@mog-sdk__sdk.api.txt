@@ -6,7 +6,9 @@ export class CollaborativeEngine { private readonly _inner; private readonly _co
 export class HeadlessEngine { private readonly lifecycle; /** Cached unified Workbook instance (owns sheet cache, create once) */ private _workbook; private _unregisterExternalSession; /** @internal * ...
 export const MogDocumentFactory: IMogDocumentFactory
 export const Utils: PublicUtils
-export const api: { describe: { (): OverviewResult; (path: string): DescribeResult; }; guidance: ApiGuidanceApi; compatibility: ApiCompatibilityIndex; wb: RootNode; ws: RootNode; types: TypesNode; }
+export const a1: PublicA1Utils
+export const address: (row: number, col: number) => string
+export const api: { describe: { (): OverviewResult; (path: string): DescribeResult; }; guidance: ApiGuidanceApi; compatibility: ApiCompatibilityIndex; a1: PublicA1Utils; utils: PublicUtils; wb: RootNo ...
 export const apiCompatibility: ApiCompatibilityIndex
 export const apiGuidance: ApiGuidanceApi
 export const apiGuidanceCatalog: readonly [{ readonly id: "officejs.bootstrap"; readonly dialect: "officejs"; readonly category: "bootstrap"; readonly matchers: readonly [{ readonly id: "officejs.exce ...
@@ -14,8 +16,15 @@ export const apiGuidanceCatalogValidation: ApiGuidanceCatalogValidation
 export const apiGuidanceTargets: readonly ApiGuidanceTarget[]
 export const apiSpec: ApiSpec
 export const colToLetter: (col: number) => string
+export const column: (index: number) => string
+export const columnIndex: (name: string) => number
+export const columnName: (index: number) => string
+export const offset: (ref: string, dr: number, dc: number) => string
+export const parse: (ref: string) => ParsedCellAddress | null
+export const parseAddress: (ref: string) => ParsedCellAddress | null
 export const parseCellAddress: (ref: string) => ParsedCellAddress | null
 export const parseCellRange: (ref: string) => ParsedCellRange | null
+export const rangeAddress: (row1: number, col1: number, row2: number, col2: number) => string
 export const rangeToA1: (range: CellRange, includeSheet?: boolean, sheetName?: string) => string
 export const toA1: (row: number, col: number) => string
 export function analyzeMogCode(code: string): ApiGuidanceDiagnostic[]
@@ -62,7 +71,7 @@ export interface ForeignApiGuidanceExplanation { readonly kind: 'foreign-api-dia
 export interface HeadlessOptions { /** Pre-loaded napi addon module from the public native platform package. */ computeAddon: NapiAddonModule; /** Document ID (defaults to random UUID) */ docId?: stri ...
 export interface IMogDocumentFactory { create(options?: MogDocumentCreateOptions): Promise<MogDocument>; open(options: MogDocumentImportOptions): Promise<MogDocumentOpenResult>; }
 export interface IMogDocumentHistory { undo(): Promise<void>; redo(): Promise<void>; canUndo(): boolean; canRedo(): boolean; getState(): Promise<MogUndoState>; setNextDescription(description: string): ...
-export interface IMogSdkError extends Error { readonly code: MogSdkErrorCode; readonly details?: Record<string, unknown>; readonly operation?: string; readonly diagnostics?: MogSdkDiagnostics; toJSON( ...
+export interface IMogSdkError extends Error { readonly code: MogSdkErrorCode; readonly details?: Record<string, unknown> | MogSdkSavePathErrorDetails; readonly operation?: string; readonly diagnostics ...
 export interface IMogSdkEventFacade { /** * Subscribe to a specific stable event type. * Returns a disposable subscription handle. */ on<K extends MogSdkEventType>(type: K, handler: (event: TypedMogSd ...
 export interface InterfaceResult { name: string; path: string; docstring: string; methods: MethodSummary[]; }
 export interface MethodNode { readonly name: string; readonly path: string; readonly signature: string; readonly docstring: string; readonly compatibility: ApiCompatibilityReference[]; readonly types: ...
@@ -90,19 +99,23 @@ export interface MogReplacement { readonly path: string; readonly snippet?: stri
 export interface MogSdkCollaborationProvider { readonly url: string; readonly participantId: string; }
 export interface MogSdkDiagnostics { readonly domain?: string; readonly property?: string; readonly issueCode?: string; readonly severity?: 'error' | 'warning' | 'info'; }
 export interface MogSdkError extends IMogSdkError { }
-export interface MogSdkErrorJSON { readonly code: MogSdkErrorCode; readonly message: string; readonly operation?: string; readonly details?: Record<string, unknown>; readonly diagnostics?: MogSdkDiagn ...
-export interface MogSdkErrorOptions { details?: Record<string, unknown>; operation?: string; diagnostics?: MogSdkDiagnostics; cause?: unknown; }
+export interface MogSdkErrorJSON { readonly code: MogSdkErrorCode; readonly message: string; readonly operation?: string; readonly details?: Record<string, unknown> | MogSdkSavePathErrorDetails; reado ...
+export interface MogSdkErrorOptions { details?: Record<string, unknown> | MogSdkSavePathErrorDetails; operation?: string; diagnostics?: MogSdkDiagnostics; cause?: unknown; }
 export interface MogSdkEvent<TPayload = unknown> { readonly type: MogSdkEventType; readonly version: 1; readonly documentId: string; readonly operationId?: string; readonly batchId?: string; readonly  ...
 export interface MogSdkEventFacade extends IMogSdkEventFacade { }
 export interface MogSdkLogger { debug?(...args: unknown[]): void; info?(...args: unknown[]): void; warn?(...args: unknown[]): void; error?(...args: unknown[]): void; }
 export interface MogSdkRuntimeProvider { readonly kind: 'browser' | 'headless' | 'tauri'; readonly userTimezone?: string; }
+export interface MogSdkSavePathErrorDetails { readonly issue: MogSdkSavePathIssue; readonly operation: 'workbook.save'; readonly requestedPath?: string; readonly absolutePath?: string; readonly cwd?:  ...
 export interface MogSdkSecurityProvider { resolvePrincipal(): MogSdkAccessPrincipal; }
 export interface MogSdkStorageProvider { readonly name: string; attach(doc: MogSdkProviderDoc): Promise<MogSdkProviderAttachResult>; appendUpdate(update: Uint8Array): void; flush(): Promise<void>; che ...
 export interface MogSdkSubscription { dispose(): void; }
 export interface MogSdkWorkbookStateProvider { getActiveSheetId(): SheetId | undefined; setActiveSheetId(sheetId: SheetId): void; getMetadata?(key: string): unknown; setMetadata?(key: string, value: u ...
 export interface MogUndoState { readonly canUndo: boolean; readonly canRedo: boolean; readonly undoDepth: number; readonly redoDepth: number; readonly nextUndoDescription?: string; readonly nextRedoDe ...
 export interface NapiAddonModule { ComputeEngine: (new (snapshotJson: string) => ComputeEngineInstance) & { /** Factory method: create engine from raw Yrs state bytes (collaboration). */ initFromYrsSt ...
-export interface OverviewResult { workbook: { methods: string[]; subApis: string[]; }; worksheet: { methods: string[]; subApis: string[]; }; }
+export interface OverviewResult { workbook: { methods: string[]; subApis: string[]; }; worksheet: { methods: string[]; subApis: string[]; }; utilities: { namespaces: string[]; methods: string[]; }; }
+export interface PublicA1Utils { readonly [name: string]: unknown; address(row: number, col: number): string; column(index: number): string; columnIndex(name: string): number; columnName(index: number ...
+export interface PublicRangeUtils { readonly [name: string]: unknown; }
+export interface PublicUtils { readonly a1: PublicA1Utils; readonly range: PublicRangeUtils; address(row: number, col: number): string; column(index: number): string; columnIndex(name: string): number ...
 export interface RootNode { readonly name: string; readonly methods: MethodSummary[]; readonly subApis: string[]; readonly [key: string]: SubApiNode | MethodNode | unknown; }
 export interface ScreenshotOptions { /** Device pixel ratio (1 = standard, 2 = Retina). Default: 1. */ dpr?: number; /** Whether to render row/column headers. Default: true. */ showHeaders?: boolean;  ...
 export interface SourceSpan { readonly start: number; readonly end: number; readonly line?: number; readonly column?: number; }
@@ -113,7 +126,7 @@ export interface TypeResult { name: string; definition?: string; isEnum?: boolea
 export interface TypesNode { readonly [typeName: string]: TypeResult; }
 export interface Workbook { /** Whether the workbook is in auto-save mode. Always false until auto-save is implemented. */ readonly autoSave: boolean; /** Whether the workbook uses system (culture-der ...
 export interface WorkbookSecurity { /** * Add a new access policy. Rust enforces capability attenuation: the * caller's effective workbook level must be >= the granted level. * * @returns The assigned ...
-export interface Worksheet { /** The internal sheet ID (immutable). */ readonly sheetId: SheetId; /** Sheet name. SYNC — cached, updated on sheet mutations. */ readonly name: string; /** 0-based sheet ...
+export interface Worksheet extends WorksheetFill { /** The internal sheet ID (immutable). */ readonly sheetId: SheetId; /** Sheet name. SYNC — cached, updated on sheet mutations. */ readonly name: str ...
 export type AccessLevel = 'none' | 'structure' | 'read' | 'write' | 'admin'
 export type AccessTarget = { readonly kind: 'workbook'; } | { readonly kind: 'sheet'; readonly sheetId: SheetId; } | { readonly kind: 'column'; readonly colId: ColId; readonly sheetId: SheetId; }
 export type ApiCompatibilityStatus = 'canonical' | 'contract_extension' | 'supported_alias' | 'input_alias' | 'deprecated_alias' | 'semantic_compatibility' | 'structured_diagnostic' | 'rejected'
@@ -144,6 +157,7 @@ export type MogSdkEventOrigin = 'local' | 'remote' | 'system'
 export type MogSdkEventScope = { readonly kind: 'document'; } | { readonly kind: 'sheet'; readonly sheetId: SheetId; } | { readonly kind: 'range'; readonly sheetId: SheetId; readonly range: string; }
 export type MogSdkEventType = 'document.created' | 'document.ready' | 'document.saving' | 'document.saved' | 'document.dirtyChanged' | 'document.closing' | 'document.closed' | 'document.error' | 'shee ...
 export type MogSdkProviderOwnership = 'sdk' | 'host'
+export type MogSdkSavePathIssue = 'save-path-invalid' | 'save-path-writer-unavailable' | 'save-path-write-failed' | 'save-callback-failed'
 export type PolicyId = string & { readonly __brand?: 'PolicyId'; }
 export type RecordValues = { [key: string]: CellValue; }
 export type SyncMode = 'immediate' | 'batch' | 'manual'
@@ -156,7 +170,9 @@ export class CollaborativeEngine { private readonly _inner; private readonly _co
 export class HeadlessEngine { private readonly lifecycle; /** Cached unified Workbook instance (owns sheet cache, create once) */ private _workbook; private _unregisterExternalSession; /** @internal * ...
 export const MogDocumentFactory: IMogDocumentFactory
 export const Utils: PublicUtils
-export const api: { describe: { (): OverviewResult; (path: string): DescribeResult; }; guidance: ApiGuidanceApi; compatibility: ApiCompatibilityIndex; wb: RootNode; ws: RootNode; types: TypesNode; }
+export const a1: PublicA1Utils
+export const address: (row: number, col: number) => string
+export const api: { describe: { (): OverviewResult; (path: string): DescribeResult; }; guidance: ApiGuidanceApi; compatibility: ApiCompatibilityIndex; a1: PublicA1Utils; utils: PublicUtils; wb: RootNo ...
 export const apiCompatibility: ApiCompatibilityIndex
 export const apiGuidance: ApiGuidanceApi
 export const apiGuidanceCatalog: readonly [{ readonly id: "officejs.bootstrap"; readonly dialect: "officejs"; readonly category: "bootstrap"; readonly matchers: readonly [{ readonly id: "officejs.exce ...
@@ -164,8 +180,15 @@ export const apiGuidanceCatalogValidation: ApiGuidanceCatalogValidation
 export const apiGuidanceTargets: readonly ApiGuidanceTarget[]
 export const apiSpec: ApiSpec
 export const colToLetter: (col: number) => string
+export const column: (index: number) => string
+export const columnIndex: (name: string) => number
+export const columnName: (index: number) => string
+export const offset: (ref: string, dr: number, dc: number) => string
+export const parse: (ref: string) => ParsedCellAddress | null
+export const parseAddress: (ref: string) => ParsedCellAddress | null
 export const parseCellAddress: (ref: string) => ParsedCellAddress | null
 export const parseCellRange: (ref: string) => ParsedCellRange | null
+export const rangeAddress: (row1: number, col1: number, row2: number, col2: number) => string
 export const rangeToA1: (range: CellRange, includeSheet?: boolean, sheetName?: string) => string
 export const toA1: (row: number, col: number) => string
 export function analyzeMogCode(code: string): ApiGuidanceDiagnostic[]
@@ -212,7 +235,7 @@ export interface ForeignApiGuidanceExplanation { readonly kind: 'foreign-api-dia
 export interface HeadlessOptions { /** Pre-loaded napi addon module from the public native platform package. */ computeAddon: NapiAddonModule; /** Document ID (defaults to random UUID) */ docId?: stri ...
 export interface IMogDocumentFactory { create(options?: MogDocumentCreateOptions): Promise<MogDocument>; open(options: MogDocumentImportOptions): Promise<MogDocumentOpenResult>; }
 export interface IMogDocumentHistory { undo(): Promise<void>; redo(): Promise<void>; canUndo(): boolean; canRedo(): boolean; getState(): Promise<MogUndoState>; setNextDescription(description: string): ...
-export interface IMogSdkError extends Error { readonly code: MogSdkErrorCode; readonly details?: Record<string, unknown>; readonly operation?: string; readonly diagnostics?: MogSdkDiagnostics; toJSON( ...
+export interface IMogSdkError extends Error { readonly code: MogSdkErrorCode; readonly details?: Record<string, unknown> | MogSdkSavePathErrorDetails; readonly operation?: string; readonly diagnostics ...
 export interface IMogSdkEventFacade { /** * Subscribe to a specific stable event type. * Returns a disposable subscription handle. */ on<K extends MogSdkEventType>(type: K, handler: (event: TypedMogSd ...
 export interface InterfaceResult { name: string; path: string; docstring: string; methods: MethodSummary[]; }
 export interface MethodNode { readonly name: string; readonly path: string; readonly signature: string; readonly docstring: string; readonly compatibility: ApiCompatibilityReference[]; readonly types: ...
@@ -240,19 +263,23 @@ export interface MogReplacement { readonly path: string; readonly snippet?: stri
 export interface MogSdkCollaborationProvider { readonly url: string; readonly participantId: string; }
 export interface MogSdkDiagnostics { readonly domain?: string; readonly property?: string; readonly issueCode?: string; readonly severity?: 'error' | 'warning' | 'info'; }
 export interface MogSdkError extends IMogSdkError { }
-export interface MogSdkErrorJSON { readonly code: MogSdkErrorCode; readonly message: string; readonly operation?: string; readonly details?: Record<string, unknown>; readonly diagnostics?: MogSdkDiagn ...
-export interface MogSdkErrorOptions { details?: Record<string, unknown>; operation?: string; diagnostics?: MogSdkDiagnostics; cause?: unknown; }
+export interface MogSdkErrorJSON { readonly code: MogSdkErrorCode; readonly message: string; readonly operation?: string; readonly details?: Record<string, unknown> | MogSdkSavePathErrorDetails; reado ...
+export interface MogSdkErrorOptions { details?: Record<string, unknown> | MogSdkSavePathErrorDetails; operation?: string; diagnostics?: MogSdkDiagnostics; cause?: unknown; }
 export interface MogSdkEvent<TPayload = unknown> { readonly type: MogSdkEventType; readonly version: 1; readonly documentId: string; readonly operationId?: string; readonly batchId?: string; readonly  ...
 export interface MogSdkEventFacade extends IMogSdkEventFacade { }
 export interface MogSdkLogger { debug?(...args: unknown[]): void; info?(...args: unknown[]): void; warn?(...args: unknown[]): void; error?(...args: unknown[]): void; }
 export interface MogSdkRuntimeProvider { readonly kind: 'browser' | 'headless' | 'tauri'; readonly userTimezone?: string; }
+export interface MogSdkSavePathErrorDetails { readonly issue: MogSdkSavePathIssue; readonly operation: 'workbook.save'; readonly requestedPath?: string; readonly absolutePath?: string; readonly cwd?:  ...
 export interface MogSdkSecurityProvider { resolvePrincipal(): MogSdkAccessPrincipal; }
 export interface MogSdkStorageProvider { readonly name: string; attach(doc: MogSdkProviderDoc): Promise<MogSdkProviderAttachResult>; appendUpdate(update: Uint8Array): void; flush(): Promise<void>; che ...
 export interface MogSdkSubscription { dispose(): void; }
 export interface MogSdkWorkbookStateProvider { getActiveSheetId(): SheetId | undefined; setActiveSheetId(sheetId: SheetId): void; getMetadata?(key: string): unknown; setMetadata?(key: string, value: u ...
 export interface MogUndoState { readonly canUndo: boolean; readonly canRedo: boolean; readonly undoDepth: number; readonly redoDepth: number; readonly nextUndoDescription?: string; readonly nextRedoDe ...
 export interface NapiAddonModule { ComputeEngine: (new (snapshotJson: string) => ComputeEngineInstance) & { /** Factory method: create engine from raw Yrs state bytes (collaboration). */ initFromYrsSt ...
-export interface OverviewResult { workbook: { methods: string[]; subApis: string[]; }; worksheet: { methods: string[]; subApis: string[]; }; }
+export interface OverviewResult { workbook: { methods: string[]; subApis: string[]; }; worksheet: { methods: string[]; subApis: string[]; }; utilities: { namespaces: string[]; methods: string[]; }; }
+export interface PublicA1Utils { readonly [name: string]: unknown; address(row: number, col: number): string; column(index: number): string; columnIndex(name: string): number; columnName(index: number ...
+export interface PublicRangeUtils { readonly [name: string]: unknown; }
+export interface PublicUtils { readonly a1: PublicA1Utils; readonly range: PublicRangeUtils; address(row: number, col: number): string; column(index: number): string; columnIndex(name: string): number ...
 export interface RootNode { readonly name: string; readonly methods: MethodSummary[]; readonly subApis: string[]; readonly [key: string]: SubApiNode | MethodNode | unknown; }
 export interface ScreenshotOptions { /** Device pixel ratio (1 = standard, 2 = Retina). Default: 1. */ dpr?: number; /** Whether to render row/column headers. Default: true. */ showHeaders?: boolean;  ...
 export interface SourceSpan { readonly start: number; readonly end: number; readonly line?: number; readonly column?: number; }
@@ -263,7 +290,7 @@ export interface TypeResult { name: string; definition?: string; isEnum?: boolea
 export interface TypesNode { readonly [typeName: string]: TypeResult; }
 export interface Workbook { /** Whether the workbook is in auto-save mode. Always false until auto-save is implemented. */ readonly autoSave: boolean; /** Whether the workbook uses system (culture-der ...
 export interface WorkbookSecurity { /** * Add a new access policy. Rust enforces capability attenuation: the * caller's effective workbook level must be >= the granted level. * * @returns The assigned ...
-export interface Worksheet { /** The internal sheet ID (immutable). */ readonly sheetId: SheetId; /** Sheet name. SYNC — cached, updated on sheet mutations. */ readonly name: string; /** 0-based sheet ...
+export interface Worksheet extends WorksheetFill { /** The internal sheet ID (immutable). */ readonly sheetId: SheetId; /** Sheet name. SYNC — cached, updated on sheet mutations. */ readonly name: str ...
 export type AccessLevel = 'none' | 'structure' | 'read' | 'write' | 'admin'
 export type AccessTarget = { readonly kind: 'workbook'; } | { readonly kind: 'sheet'; readonly sheetId: SheetId; } | { readonly kind: 'column'; readonly colId: ColId; readonly sheetId: SheetId; }
 export type ApiCompatibilityStatus = 'canonical' | 'contract_extension' | 'supported_alias' | 'input_alias' | 'deprecated_alias' | 'semantic_compatibility' | 'structured_diagnostic' | 'rejected'
@@ -294,6 +321,7 @@ export type MogSdkEventOrigin = 'local' | 'remote' | 'system'
 export type MogSdkEventScope = { readonly kind: 'document'; } | { readonly kind: 'sheet'; readonly sheetId: SheetId; } | { readonly kind: 'range'; readonly sheetId: SheetId; readonly range: string; }
 export type MogSdkEventType = 'document.created' | 'document.ready' | 'document.saving' | 'document.saved' | 'document.dirtyChanged' | 'document.closing' | 'document.closed' | 'document.error' | 'shee ...
 export type MogSdkProviderOwnership = 'sdk' | 'host'
+export type MogSdkSavePathIssue = 'save-path-invalid' | 'save-path-writer-unavailable' | 'save-path-write-failed' | 'save-callback-failed'
 export type PolicyId = string & { readonly __brand?: 'PolicyId'; }
 export type RecordValues = { [key: string]: CellValue; }
 export type SyncMode = 'immediate' | 'batch' | 'manual'
@@ -302,6 +330,21 @@ export type TypedMogSdkEvent<K extends MogSdkEventType> = K extends keyof MogSdk
 export type { SheetId }
 
 ## dist/wasm.d.ts
+export const Utils: PublicUtils
+export const a1: PublicA1Utils
+export const address: (row: number, col: number) => string
+export const colToLetter: (col: number) => string
+export const column: (index: number) => string
+export const columnIndex: (name: string) => number
+export const columnName: (index: number) => string
+export const offset: (ref: string, dr: number, dc: number) => string
+export const parse: (ref: string) => ParsedCellAddress | null
+export const parseAddress: (ref: string) => ParsedCellAddress | null
+export const parseCellAddress: (ref: string) => ParsedCellAddress | null
+export const parseCellRange: (ref: string) => ParsedCellRange | null
+export const rangeAddress: (row1: number, col1: number, row2: number, col2: number) => string
+export const rangeToA1: (range: CellRange, includeSheet?: boolean, sheetName?: string) => string
+export const toA1: (row: number, col: number) => string
 export function createWorkbook(): Promise<Workbook>
 export function createWorkbook(options: CreateWorkbookOptions): Promise<Workbook>
 export function createWorkbook(xlsx: Uint8Array): Promise<Workbook>
@@ -314,10 +357,13 @@ export interface ChartRenderingOptions { /** * Explicit raster backend. When pre
 export interface CreateWorkbookOptions { documentId?: string; wasmModule?: WebAssembly.Module | Promise<WebAssembly.Module>; xlsx?: Uint8Array; source?: Extract<NativeCreateWorkbookOptions['source'],  ...
 export interface DocumentImportOptions extends CreateDocumentOptions { /** * Maximum number of cells to import. * Default: 1,000,000 * Files exceeding this limit will fail the pre-flight check. */ max ...
 export interface MogSdkLogger { debug?(...args: unknown[]): void; info?(...args: unknown[]): void; warn?(...args: unknown[]): void; error?(...args: unknown[]): void; }
+export interface PublicA1Utils { readonly [name: string]: unknown; address(row: number, col: number): string; column(index: number): string; columnIndex(name: string): number; columnName(index: number ...
+export interface PublicRangeUtils { readonly [name: string]: unknown; }
+export interface PublicUtils { readonly a1: PublicA1Utils; readonly range: PublicRangeUtils; address(row: number, col: number): string; column(index: number): string; columnIndex(name: string): number ...
 export interface ScreenshotOptions { /** Device pixel ratio (1 = standard, 2 = Retina). Default: 1. */ dpr?: number; /** Whether to render row/column headers. Default: true. */ showHeaders?: boolean;  ...
 export interface Workbook { /** Whether the workbook is in auto-save mode. Always false until auto-save is implemented. */ readonly autoSave: boolean; /** Whether the workbook uses system (culture-der ...
 export interface WorkbookSecurity { /** * Add a new access policy. Rust enforces capability attenuation: the * caller's effective workbook level must be >= the granted level. * * @returns The assigned ...
-export interface Worksheet { /** The internal sheet ID (immutable). */ readonly sheetId: SheetId; /** Sheet name. SYNC — cached, updated on sheet mutations. */ readonly name: string; /** 0-based sheet ...
+export interface Worksheet extends WorksheetFill { /** The internal sheet ID (immutable). */ readonly sheetId: SheetId; /** Sheet name. SYNC — cached, updated on sheet mutations. */ readonly name: str ...
 export type CellRawValue = CellValuePrimitive | RichText
 export type CellValue = CellValuePrimitive | CellError
 export type ChartRenderingConfig = 'auto' | ChartRenderingOptions
@@ -326,7 +372,22 @@ export type FormulaA1 = string & { readonly [formulaA1Brand]: true; }
 export type { SheetId }
 
 ## dist/workerd.d.ts
+export const Utils: PublicUtils
+export const a1: PublicA1Utils
+export const address: (row: number, col: number) => string
+export const colToLetter: (col: number) => string
+export const column: (index: number) => string
+export const columnIndex: (name: string) => number
+export const columnName: (index: number) => string
 export const createWorkbook: CreateWasmWorkbook
+export const offset: (ref: string, dr: number, dc: number) => string
+export const parse: (ref: string) => ParsedCellAddress | null
+export const parseAddress: (ref: string) => ParsedCellAddress | null
+export const parseCellAddress: (ref: string) => ParsedCellAddress | null
+export const parseCellRange: (ref: string) => ParsedCellRange | null
+export const rangeAddress: (row1: number, col1: number, row2: number, col2: number) => string
+export const rangeToA1: (range: CellRange, includeSheet?: boolean, sheetName?: string) => string
+export const toA1: (row: number, col: number) => string
 export function createWorkbook(): Promise<Workbook>
 export function createWorkbook(options: CreateWorkbookOptions): Promise<Workbook>
 export function createWorkbook(xlsx: Uint8Array): Promise<Workbook>
@@ -339,10 +400,13 @@ export interface ChartRenderingOptions { /** * Explicit raster backend. When pre
 export interface CreateWorkbookOptions { documentId?: string; wasmModule?: WebAssembly.Module | Promise<WebAssembly.Module>; xlsx?: Uint8Array; source?: Extract<NativeCreateWorkbookOptions['source'],  ...
 export interface DocumentImportOptions extends CreateDocumentOptions { /** * Maximum number of cells to import. * Default: 1,000,000 * Files exceeding this limit will fail the pre-flight check. */ max ...
 export interface MogSdkLogger { debug?(...args: unknown[]): void; info?(...args: unknown[]): void; warn?(...args: unknown[]): void; error?(...args: unknown[]): void; }
+export interface PublicA1Utils { readonly [name: string]: unknown; address(row: number, col: number): string; column(index: number): string; columnIndex(name: string): number; columnName(index: number ...
+export interface PublicRangeUtils { readonly [name: string]: unknown; }
+export interface PublicUtils { readonly a1: PublicA1Utils; readonly range: PublicRangeUtils; address(row: number, col: number): string; column(index: number): string; columnIndex(name: string): number ...
 export interface ScreenshotOptions { /** Device pixel ratio (1 = standard, 2 = Retina). Default: 1. */ dpr?: number; /** Whether to render row/column headers. Default: true. */ showHeaders?: boolean;  ...
 export interface Workbook { /** Whether the workbook is in auto-save mode. Always false until auto-save is implemented. */ readonly autoSave: boolean; /** Whether the workbook uses system (culture-der ...
 export interface WorkbookSecurity { /** * Add a new access policy. Rust enforces capability attenuation: the * caller's effective workbook level must be >= the granted level. * * @returns The assigned ...
-export interface Worksheet { /** The internal sheet ID (immutable). */ readonly sheetId: SheetId; /** Sheet name. SYNC — cached, updated on sheet mutations. */ readonly name: string; /** 0-based sheet ...
+export interface Worksheet extends WorksheetFill { /** The internal sheet ID (immutable). */ readonly sheetId: SheetId; /** Sheet name. SYNC — cached, updated on sheet mutations. */ readonly name: str ...
 export type CellRawValue = CellValuePrimitive | RichText
 export type CellValue = CellValuePrimitive | CellError
 export type ChartRenderingConfig = 'auto' | ChartRenderingOptions

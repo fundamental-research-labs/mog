@@ -9,6 +9,7 @@ import type {
   AdvancedFilterOptions,
   AdvancedFilterResult,
   CellRange,
+  FilterMutationReceipt,
   FilterByColorOptions,
   FilterDetailInfo,
   FilterDropdownColumnType,
@@ -42,6 +43,14 @@ import { KernelError } from '../../errors';
 import type { DocumentContext } from '../../context';
 import { parseCellRange, toA1 } from '../internal/utils';
 import { resolveFilterRange } from './filter-range-resolution';
+import {
+  applyDynamicFilterWithReceipt,
+  applyFilterWithReceipt,
+  clearAllCriteriaWithReceipt,
+  clearColumnFilterWithReceipt,
+  reapplyFilterWithReceipt,
+  setColumnFilterWithReceipt,
+} from './filters/mutation-receipts';
 import {
   assertFilterMutationAllowed,
   assertNoProtectedTableFilterCreation,
@@ -342,9 +351,9 @@ export class WorksheetFiltersImpl implements WorksheetFilters {
   }
 
   /** Standard alias for {@link setAutoFilter}. */
-  async add(range: string | CellRange): Promise<void> {
+  async add(range: string | CellRange): Promise<AutoFilterSetReceipt> {
     this._ensureWritable('filters.add');
-    await this.setAutoFilter(range);
+    return this.setAutoFilter(range);
   }
 
   /**
@@ -402,8 +411,8 @@ export class WorksheetFiltersImpl implements WorksheetFilters {
   }
 
   /** Standard alias for {@link clearAutoFilter}. */
-  async clear(): Promise<void> {
-    await this.clearAutoFilter();
+  async clear(): Promise<AutoFilterClearReceipt> {
+    return this.clearAutoFilter();
   }
 
   /** @deprecated Use {@link add} instead. */
@@ -420,7 +429,25 @@ export class WorksheetFiltersImpl implements WorksheetFilters {
         endRow: parsed.endRow,
         endCol: parsed.endCol,
       });
-      return { kind: 'autoFilterSet', range };
+      return {
+        kind: 'autoFilterSet',
+        status: 'applied',
+        effects: [
+          {
+            type: 'createdObject',
+            sheetId: this.sheetId,
+            range,
+            details: { objectType: 'filter' },
+          },
+          {
+            type: 'changedFilterProjection',
+            sheetId: this.sheetId,
+            range,
+          },
+        ],
+        diagnostics: [],
+        range,
+      };
     } else {
       if (
         range.startRow < 0 ||
@@ -442,7 +469,25 @@ export class WorksheetFiltersImpl implements WorksheetFilters {
         endCol: range.endCol,
       });
       const rangeStr = `${toA1(range.startRow, range.startCol)}:${toA1(range.endRow, range.endCol)}`;
-      return { kind: 'autoFilterSet', range: rangeStr };
+      return {
+        kind: 'autoFilterSet',
+        status: 'applied',
+        effects: [
+          {
+            type: 'createdObject',
+            sheetId: this.sheetId,
+            range: rangeStr,
+            details: { objectType: 'filter' },
+          },
+          {
+            type: 'changedFilterProjection',
+            sheetId: this.sheetId,
+            range: rangeStr,
+          },
+        ],
+        diagnostics: [],
+        range: rangeStr,
+      };
     }
   }
 
@@ -456,7 +501,28 @@ export class WorksheetFiltersImpl implements WorksheetFilters {
     for (const filter of filters) {
       await this.ctx.computeBridge.deleteFilter(this.sheetId, filter.id);
     }
-    return { kind: 'autoFilterClear' };
+    return {
+      kind: 'autoFilterClear',
+      status: filters.length === 0 ? 'noOp' : 'applied',
+      effects:
+        filters.length === 0
+          ? []
+          : [
+              {
+                type: 'removedObject',
+                sheetId: this.sheetId,
+                count: filters.length,
+                details: { objectType: 'filter' },
+              },
+              {
+                type: 'changedFilterProjection',
+                sheetId: this.sheetId,
+                count: filters.length,
+              },
+            ],
+      diagnostics: [],
+      clearedCount: filters.length,
+    };
   }
 
   /** @deprecated Use {@link get} instead. */
@@ -518,91 +584,20 @@ export class WorksheetFiltersImpl implements WorksheetFilters {
     col: number,
     criteria: ColumnFilterCriteria,
     filterId?: string,
-  ): Promise<void> {
-    await this.awaitAllMaterialized();
-    const resolvedId = await this.resolveFilterId(filterId);
-    await assertFilterMutationAllowed(
-      this.ctx,
-      this.sheetId,
-      'filters.setColumnFilter',
-      resolvedId,
-    );
-    await this.ctx.computeBridge.setColumnFilter(
-      this.sheetId,
-      resolvedId,
-      col,
-      columnFilterCriteriaToCompute(criteria),
-    );
+  ): Promise<FilterMutationReceipt> {
+    return setColumnFilterWithReceipt(this.ctx, this.sheetId, col, criteria, filterId);
   }
 
-  async applyDynamicFilter(col: number, rule: DynamicFilterRule, filterId?: string): Promise<void> {
-    await this.awaitAllMaterialized();
-    const resolvedId = await this.resolveFilterId(filterId);
-    await assertFilterMutationAllowed(
-      this.ctx,
-      this.sheetId,
-      'filters.setColumnFilter',
-      resolvedId,
-    );
-
-    // Date columns are stored as Excel serial numbers, so the column-filter
-    // value space must be Excel serials too. Rather than re-implementing the
-    // date-rule math in TypeScript (which inevitably drifts from the Rust
-    // source of truth in `compute-table::filter_resolve::compute_date_range`),
-    // ask the engine to resolve the rule to an inclusive serial range and
-    // dispatch as a concrete `between` condition filter.
-    //
-    // For non-date rules (`aboveAverage`/`belowAverage`) the bridge returns
-    // `null` — those rules need column data to compute a threshold and
-    // remain delegated to the engine as a `dynamic` criterion.
-    const serialRange = await this.ctx.computeBridge.computeDynamicFilterSerialRange(rule);
-
-    let criteria: ColumnFilterCriteria;
-    if (serialRange !== null) {
-      const [start, end] = serialRange;
-      criteria = {
-        type: 'condition',
-        conditions: [
-          {
-            operator: 'between',
-            value: start,
-            value2: end,
-          },
-        ],
-        conditionLogic: 'and',
-      };
-    } else {
-      criteria = {
-        type: 'dynamic',
-        dynamicFilter: { rule },
-      };
-    }
-
-    await this.ctx.computeBridge.setColumnFilter(
-      this.sheetId,
-      resolvedId,
-      col,
-      columnFilterCriteriaToCompute(criteria),
-    );
+  async applyDynamicFilter(
+    col: number,
+    rule: DynamicFilterRule,
+    filterId?: string,
+  ): Promise<FilterMutationReceipt> {
+    return applyDynamicFilterWithReceipt(this.ctx, this.sheetId, col, rule, filterId);
   }
 
-  async clearColumnFilter(col: number, filterId?: string): Promise<void> {
-    await this.awaitAllMaterialized();
-    let resolvedId: string;
-    if (filterId) {
-      resolvedId = filterId;
-    } else {
-      const filters = await this.ctx.computeBridge.getFiltersInSheet(this.sheetId);
-      if (filters.length === 0) return;
-      resolvedId = filters[0].id;
-    }
-    await assertFilterMutationAllowed(
-      this.ctx,
-      this.sheetId,
-      'filters.clearColumnFilter',
-      resolvedId,
-    );
-    await this.ctx.computeBridge.clearColumnFilter(this.sheetId, resolvedId, col);
+  async clearColumnFilter(col: number, filterId?: string): Promise<FilterMutationReceipt> {
+    return clearColumnFilterWithReceipt(this.ctx, this.sheetId, col, filterId);
   }
 
   async getUniqueValues(col: number, filterId?: string): Promise<any[]> {
@@ -704,27 +699,16 @@ export class WorksheetFiltersImpl implements WorksheetFilters {
     await this.ctx.computeBridge.clearColumnFilter(this.sheetId, filterId, col);
   }
 
-  async clearAllCriteria(filterId: string): Promise<void> {
-    await this.awaitAllMaterialized();
-    await assertFilterMutationAllowed(
-      this.ctx,
-      this.sheetId,
-      'filters.clearAllColumnFilters',
-      filterId,
-    );
-    await this.ctx.computeBridge.clearAllColumnFilters(this.sheetId, filterId);
+  async clearAllCriteria(filterId: string): Promise<FilterMutationReceipt> {
+    return clearAllCriteriaWithReceipt(this.ctx, this.sheetId, filterId);
   }
 
-  async apply(filterId: string): Promise<void> {
-    await this.awaitAllMaterialized();
-    await assertFilterMutationAllowed(this.ctx, this.sheetId, 'filters.apply', filterId);
-    await this.ctx.computeBridge.applyFilter(this.sheetId, filterId);
+  async apply(filterId: string): Promise<FilterMutationReceipt> {
+    return applyFilterWithReceipt(this.ctx, this.sheetId, filterId);
   }
 
-  async reapply(filterId: string): Promise<void> {
-    await this.awaitAllMaterialized();
-    await assertFilterMutationAllowed(this.ctx, this.sheetId, 'filters.reapply', filterId);
-    await this.ctx.computeBridge.reapplyFilter(this.sheetId, filterId);
+  async reapply(filterId: string): Promise<FilterMutationReceipt> {
+    return reapplyFilterWithReceipt(this.ctx, this.sheetId, filterId);
   }
 
   async getInfo(filterId: string, options?: FilterListOptions): Promise<FilterDetailInfo | null> {

@@ -1,6 +1,6 @@
 //! Regression test: `XLOOKUP` with a multi-cell return array must spill.
 //!
-//! Bug (origin/dev HEAD): `=XLOOKUP("k2", A1:A3, B1:D3)` placed at F1 should
+//! Bug: `=XLOOKUP("k2", A1:A3, B1:D3)` placed at F1 should
 //! spill across F1:H1 with the matched row `["a2","b2","c2"]`. Today F1 picks
 //! up just `"a2"` (the top-left of the produced 1x3 array) and G1, H1 stay
 //! blank — spill is never registered.
@@ -70,7 +70,7 @@ fn assert_pos_blank(mirror: &CellMirror, si: u32, row: u32, col: u32) {
 /// Pre-fix: F1 carries `"a2"` as a scalar (top-left of the 1x3 array, surfaced
 /// via the implicit-intersection branch of the spill scheduler) but G1/H1
 /// remain blank because `is_dynamic_array=false` suppresses spill registration.
-/// The G1 assertion below is the one that fails on `origin/dev` HEAD.
+/// The G1 assertion below is the one that fails before this regression is fixed.
 #[test]
 fn xlookup_multi_cell_return_spills_across_row() {
     let mut core = ComputeCore::new();

@@ -111,4 +111,87 @@ describe('WorkbookScenariosImpl', () => {
       }),
     ]);
   });
+
+  it('returns an operation receipt when applying a scenario', async () => {
+    const deps = createDeps();
+    (ScenarioOps.applyScenarioFull as jest.Mock).mockResolvedValue({
+      success: true,
+      data: {
+        baselineId: 'baseline-1',
+        documentId: 'doc-1',
+        cellsUpdated: 2,
+        skippedCells: ['missing-cell'],
+        originalValues: [],
+      },
+    });
+    const scenarios = new WorkbookScenariosImpl(deps);
+
+    await expect(scenarios.apply('sc-1')).resolves.toMatchObject({
+      kind: 'workbook.scenarios.apply',
+      status: 'partial',
+      scenarioId: 'sc-1',
+      baselineId: 'baseline-1',
+      cellsUpdated: 2,
+      result: {
+        baselineId: 'baseline-1',
+        cellsUpdated: 2,
+      },
+      diagnostics: [
+        expect.objectContaining({
+          code: 'SCENARIO_APPLY_SKIPPED_CELLS',
+        }),
+      ],
+    });
+  });
+
+  it('returns a failed receipt when scenario apply fails', async () => {
+    const deps = createDeps();
+    (ScenarioOps.applyScenarioFull as jest.Mock).mockResolvedValue({
+      success: false,
+      error: new Error('scenario not found'),
+    });
+    const scenarios = new WorkbookScenariosImpl(deps);
+
+    await expect(scenarios.apply('missing')).resolves.toMatchObject({
+      kind: 'workbook.scenarios.apply',
+      status: 'failed',
+      scenarioId: 'missing',
+      result: null,
+      diagnostics: [
+        expect.objectContaining({
+          code: 'SCENARIO_APPLY_FAILED',
+          message: 'scenario not found',
+        }),
+      ],
+    });
+  });
+
+  it('returns a no-op receipt when scenario apply updates no cells', async () => {
+    const deps = createDeps();
+    (ScenarioOps.applyScenarioFull as jest.Mock).mockResolvedValue({
+      success: true,
+      data: {
+        baselineId: 'baseline-empty',
+        cellsUpdated: 0,
+        skippedCells: [],
+        originalValues: [],
+      },
+    });
+    const scenarios = new WorkbookScenariosImpl(deps);
+
+    await expect(scenarios.apply('sc-empty')).resolves.toMatchObject({
+      kind: 'workbook.scenarios.apply',
+      status: 'noOp',
+      scenarioId: 'sc-empty',
+      result: {
+        baselineId: 'baseline-empty',
+        cellsUpdated: 0,
+      },
+      effects: [
+        expect.objectContaining({ type: 'computedGrid' }),
+        expect.objectContaining({ type: 'updatedRuntimeMetadata' }),
+        expect.objectContaining({ type: 'worksheetUnchanged' }),
+      ],
+    });
+  });
 });

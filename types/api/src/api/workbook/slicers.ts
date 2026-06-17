@@ -8,6 +8,7 @@
  */
 import type { CellValue } from '@mog/types-core/core';
 import type { Slicer, SlicerInfo, SlicerItem } from '../types';
+import type { SlicerRemoveReceipt } from '../mutation-receipt';
 
 /** Sub-API for workbook-scoped slicer operations. */
 export interface WorkbookSlicers {
@@ -66,7 +67,7 @@ export interface WorkbookSlicers {
    *
    * @param slicerId - ID of the slicer to remove
    */
-  remove(slicerId: string): Promise<void>;
+  remove(slicerId: string): Promise<SlicerRemoveReceipt>;
 
   /**
    * Get the total count of slicers across all sheets.

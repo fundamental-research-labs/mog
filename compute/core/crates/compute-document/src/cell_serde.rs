@@ -234,9 +234,9 @@ mod tests {
 
     #[test]
     fn to_any_number_negative() {
-        let v = CellValue::number(-3.14);
+        let v = CellValue::number(-12.34);
         match cell_value_to_any(&v) {
-            Any::Number(n) => assert!((n - (-3.14)).abs() < f64::EPSILON),
+            Any::Number(n) => assert!((n - (-12.34)).abs() < f64::EPSILON),
             other => panic!("expected Any::Number, got {:?}", other),
         }
     }

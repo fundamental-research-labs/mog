@@ -1,6 +1,34 @@
 import { jest } from '@jest/globals';
 import { KernelError } from '../../../errors';
 
+export function mockTableReceipt(kind: string) {
+  return jest.fn((input: unknown = {}, maybeTable?: unknown) => {
+    const record =
+      typeof input === 'object' && input !== null ? (input as Record<string, unknown>) : {};
+    const tableValue = maybeTable ?? record.table;
+    const table =
+      typeof tableValue === 'object' && tableValue !== null
+        ? (tableValue as { id?: unknown; name?: unknown; range?: unknown })
+        : undefined;
+
+    return {
+      kind,
+      status: record.status ?? 'applied',
+      effects: [],
+      diagnostics: [],
+      table,
+      tableId: record.tableId ?? table?.id,
+      tableName: record.tableName ?? table?.name,
+      name: record.name ?? table?.name,
+      range: record.range ?? record.newRange ?? table?.range,
+    };
+  });
+}
+
+export function mockEffectiveTableUpdateOptions() {
+  return jest.fn((_table: unknown, updates: Record<string, unknown> | undefined) => updates ?? {});
+}
+
 const VALID_CLEAR_MODES = ['all', 'contents', 'formats', 'hyperlinks'] as const;
 const VALID_CLEAR_MODE_SET: ReadonlySet<string> = new Set(VALID_CLEAR_MODES);
 
@@ -67,7 +95,62 @@ export const worksheetRangeQueryOpsMock = {
 
 export const worksheetFillOpsMock = {
   autoFill: jest.fn(),
+  autoFillPreview: jest.fn(),
   fillSeries: jest.fn(),
+};
+
+export const worksheetValidationOpsMock = {
+  updateColumnSchema: jest.fn().mockResolvedValue({ success: true, data: true }),
+  removeColumnSchema: jest.fn().mockResolvedValue({ success: true, data: true }),
+  validateCellValue: jest.fn().mockResolvedValue({ valid: true, errors: [] }),
+  inferSchemaType: jest.fn().mockResolvedValue({ type: 'text' }),
+  inferColumnSchema: jest.fn().mockResolvedValue({ schema: { type: 'text' }, confidence: 1 }),
+  getRangeSchema: jest.fn().mockResolvedValue(null),
+  getRangeSchemasForSheet: jest.fn().mockResolvedValue([]),
+  getRangeSchemasInViewport: jest.fn().mockResolvedValue([]),
+  setRangeSchema: jest.fn().mockResolvedValue(undefined),
+  deleteRangeSchema: jest.fn().mockResolvedValue(undefined),
+  validateCellValueAtPosition: jest.fn().mockResolvedValue({ valid: true, errors: [] }),
+  getDropdownItems: jest.fn().mockResolvedValue([]),
+  resolveDropdownItems: jest.fn().mockResolvedValue({ items: [], resolved: false }),
+  generateSchemaId: jest.fn(() => 'rs-test'),
+};
+
+export const worksheetTableOpsMock = {
+  buildTableAddColumnReceipt: mockTableReceipt('tableAddColumn'),
+  buildTableAddReceipt: mockTableReceipt('tableAdd'),
+  buildTableAddRowReceipt: mockTableReceipt('tableAddRow'),
+  buildTableClearReceipt: mockTableReceipt('tableClear'),
+  buildTableConvertToRangeReceipt: mockTableReceipt('tableConvertToRange'),
+  buildTableDeleteRowReceipt: mockTableReceipt('tableDeleteRow'),
+  buildTableRemoveColumnReceipt: mockTableReceipt('tableRemoveColumn'),
+  buildTableRemoveReceipt: mockTableReceipt('tableRemove'),
+  buildTableRenameColumnReceipt: mockTableReceipt('tableRenameColumn'),
+  buildTableRenameReceipt: mockTableReceipt('tableRename'),
+  buildTableResizeReceipt: mockTableReceipt('tableResize'),
+  buildTableUpdateReceipt: mockTableReceipt('tableUpdate'),
+  bridgeTableToTableInfo: jest.fn(),
+  effectiveTableUpdateOptions: mockEffectiveTableUpdateOptions(),
+  getTableAtCell: jest.fn(),
+  getTableByName: jest.fn(),
+  getAllTablesInSheet: jest.fn(),
+  getTableHitRegion: jest.fn(),
+  removeTable: jest.fn(),
+  resizeTable: jest.fn(),
+  setTableStyle: jest.fn(),
+  renameTable: jest.fn(),
+  addTableColumn: jest.fn(),
+  removeTableColumn: jest.fn(),
+  createTable: jest.fn(),
+  toggleTotalsRow: jest.fn(),
+  toggleHeaderRow: jest.fn(),
+  applyAutoExpansion: jest.fn(),
+  getTableColumnDataCellsFromInfo: jest.fn(),
+  getDataBodyRangeFromInfo: jest.fn(),
+  getHeaderRowRangeFromInfo: jest.fn(),
+  getTotalRowRangeFromInfo: jest.fn(),
+  setCalculatedColumnFormula: jest.fn(),
+  clearCalculatedColumnFormula: jest.fn(),
 };
 
 export const worksheetSheetMetaMock = {
@@ -131,6 +214,7 @@ export function installWorksheetImplEsmMocks(): void {
   jest.unstable_mockModule('../../internal/value-conversions', () => ({
     normalizeCellValue: jest.fn(),
     cellValueToString: jest.fn(),
+    classifyRangeValueType: jest.fn(),
   }));
 
   jest.unstable_mockModule(
@@ -183,10 +267,10 @@ export function installWorksheetImplEsmMocks(): void {
     getPrecedents: jest.fn(),
     getDependents: jest.fn(),
   }));
-  jest.unstable_mockModule('../../worksheet/operations/validation-operations', () => ({
-    getDropdownItems: jest.fn(),
-    resolveDropdownItems: jest.fn(),
-  }));
+  jest.unstable_mockModule(
+    '../../worksheet/operations/validation-operations',
+    () => worksheetValidationOpsMock,
+  );
   jest.unstable_mockModule('../../worksheet/operations/filter-operations', () => ({}));
   jest.unstable_mockModule('../../worksheet/operations/shape-operations', () => ({}));
   jest.unstable_mockModule('../../worksheet/operations/floating-object-operations', () => ({}));
@@ -207,29 +291,10 @@ export function installWorksheetImplEsmMocks(): void {
     convertToTextBox: jest.fn(),
   }));
   jest.unstable_mockModule('../../worksheet/operations/sheet-management-operations', () => ({}));
-  jest.unstable_mockModule('../../worksheet/operations/table-operations', () => ({
-    bridgeTableToTableInfo: jest.fn(),
-    getTableAtCell: jest.fn(),
-    getTableByName: jest.fn(),
-    getAllTablesInSheet: jest.fn(),
-    getTableHitRegion: jest.fn(),
-    removeTable: jest.fn(),
-    resizeTable: jest.fn(),
-    setTableStyle: jest.fn(),
-    renameTable: jest.fn(),
-    addTableColumn: jest.fn(),
-    removeTableColumn: jest.fn(),
-    createTable: jest.fn(),
-    toggleTotalsRow: jest.fn(),
-    toggleHeaderRow: jest.fn(),
-    applyAutoExpansion: jest.fn(),
-    getTableColumnDataCellsFromInfo: jest.fn(),
-    getDataBodyRangeFromInfo: jest.fn(),
-    getHeaderRowRangeFromInfo: jest.fn(),
-    getTotalRowRangeFromInfo: jest.fn(),
-    setCalculatedColumnFormula: jest.fn(),
-    clearCalculatedColumnFormula: jest.fn(),
-  }));
+  jest.unstable_mockModule(
+    '../../worksheet/operations/table-operations',
+    () => worksheetTableOpsMock,
+  );
   jest.unstable_mockModule('../../worksheet/operations/drawing-operations', () => ({}));
   jest.unstable_mockModule(
     '../../worksheet/operations/fill-operations',

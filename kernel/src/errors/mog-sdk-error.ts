@@ -13,6 +13,7 @@ import type {
   MogSdkDiagnostics,
   MogSdkErrorCode,
   MogSdkErrorJSON,
+  MogSdkSavePathErrorDetails,
 } from '@mog-sdk/contracts/sdk';
 
 import type { KernelErrorCode } from './codes';
@@ -172,7 +173,7 @@ export function mapKernelCodeToSdkCode(code: KernelErrorCode): MogSdkErrorCode {
 // ---------------------------------------------------------------------------
 
 export interface MogSdkErrorOptions {
-  details?: Record<string, unknown>;
+  details?: Record<string, unknown> | MogSdkSavePathErrorDetails;
   operation?: string;
   diagnostics?: MogSdkDiagnostics;
   cause?: unknown;
@@ -180,7 +181,7 @@ export interface MogSdkErrorOptions {
 
 export class MogSdkError extends Error implements IMogSdkError {
   readonly code: MogSdkErrorCode;
-  readonly details?: Record<string, unknown>;
+  readonly details?: Record<string, unknown> | MogSdkSavePathErrorDetails;
   readonly operation?: string;
   readonly diagnostics?: MogSdkDiagnostics;
 

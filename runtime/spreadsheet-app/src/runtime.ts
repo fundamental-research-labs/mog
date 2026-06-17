@@ -12,7 +12,7 @@ import {
 import { cloneBytes, hashBytes, makeCleanState } from './bytes';
 import { createRuntimeId, noopDisposable } from './deferred';
 import { InternalDecorationHandle } from './decorations';
-import { isWorkbookMutationEvent } from './dirty-events';
+import { shouldTrackWorkbookDirtyEvent } from './dirty-events';
 import {
   SPREADSHEET_RUNTIME_ATTACHMENT_CONTROLLER,
   type SpreadsheetAttachmentCommandRequest,
@@ -1043,7 +1043,12 @@ class SpreadsheetRuntimeController
     };
     record.facade = createWorkbookFacade(record);
     record.unsubscribeEvents = handle.eventBus.onAll((event: unknown) => {
-      if (isWorkbookMutationEvent(event)) {
+      if (
+        shouldTrackWorkbookDirtyEvent(event, {
+          workbookAlreadyDirty: record.dirtyEpoch !== null,
+          importDurabilityPending: handle.isImportDurabilityPending === true,
+        })
+      ) {
         this.markRecordDirty(record);
       }
     });

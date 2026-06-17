@@ -36,6 +36,29 @@ export interface MogSdkDiagnostics {
 }
 
 // ---------------------------------------------------------------------------
+// Structured details for agent-facing save-path failures
+// ---------------------------------------------------------------------------
+
+export type MogSdkSavePathIssue =
+  | 'save-path-invalid'
+  | 'save-path-writer-unavailable'
+  | 'save-path-write-failed'
+  | 'save-callback-failed';
+
+export interface MogSdkSavePathErrorDetails {
+  readonly issue: MogSdkSavePathIssue;
+  readonly operation: 'workbook.save';
+  readonly requestedPath?: string;
+  readonly absolutePath?: string;
+  readonly cwd?: string;
+  readonly parentDirectory?: string;
+  readonly filesystemCode?: string;
+  readonly causeName?: string;
+  readonly causeMessage?: string;
+  readonly examples?: readonly string[];
+}
+
+// ---------------------------------------------------------------------------
 // Serialized error shape (HTTP/server SDKs, AI agent tools)
 // ---------------------------------------------------------------------------
 
@@ -43,7 +66,7 @@ export interface MogSdkErrorJSON {
   readonly code: MogSdkErrorCode;
   readonly message: string;
   readonly operation?: string;
-  readonly details?: Record<string, unknown>;
+  readonly details?: Record<string, unknown> | MogSdkSavePathErrorDetails;
   readonly diagnostics?: MogSdkDiagnostics;
   readonly cause?: MogSdkErrorJSON;
 }
@@ -54,7 +77,7 @@ export interface MogSdkErrorJSON {
 
 export interface IMogSdkError extends Error {
   readonly code: MogSdkErrorCode;
-  readonly details?: Record<string, unknown>;
+  readonly details?: Record<string, unknown> | MogSdkSavePathErrorDetails;
   readonly operation?: string;
   readonly diagnostics?: MogSdkDiagnostics;
   toJSON(): MogSdkErrorJSON;

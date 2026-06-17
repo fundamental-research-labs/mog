@@ -34,6 +34,11 @@ function makeWs(bridge: Partial<Bridge>): WorksheetImpl {
   return new WorksheetImpl(SHEET_ID, ctx);
 }
 
+function makeNamedWs(bridge: Partial<Bridge>, name = 'Sheet1'): WorksheetImpl {
+  const ctx = buildCtx(bridge);
+  return new WorksheetImpl(SHEET_ID, ctx, { name });
+}
+
 describe('Worksheet.cells.get(addr)', () => {
   // --------------------------------------------------------------------
   // Out-of-bounds + invalid-address handling
@@ -371,5 +376,167 @@ describe('Worksheet.cells.get(addr)', () => {
       expect(result?.valueType).toBe(RangeValueType.Error);
       expect(result?.value).toBe('#N/A');
     });
+  });
+});
+
+describe('Worksheet address-bearing bulk cell reads', () => {
+  it('getCells returns a dense flat list with sheet, address, absolute coordinates, and range origin', async () => {
+    const queryRange = jest.fn(async () => ({
+      cells: [
+        {
+          row: 1,
+          col: 1,
+          cellId: 'b2',
+          value: 42,
+          formatted: '42',
+          format: { numberFormat: '0' },
+        },
+        {
+          row: 2,
+          col: 2,
+          cellId: 'c3',
+          value: true,
+          formula: '=A1=1',
+          formatted: 'TRUE',
+        },
+      ],
+      merges: [],
+    }));
+    const ws = makeNamedWs({ queryRange } as unknown as Partial<Bridge>);
+
+    const cells = await ws.getCells('B2:C3');
+
+    expect(queryRange).toHaveBeenCalledWith(SHEET_ID, 1, 1, 2, 2);
+    expect(cells).toHaveLength(4);
+    expect(cells[0]).toEqual({
+      sheet: 'Sheet1',
+      sheetId: SHEET_ID,
+      address: 'B2',
+      row: 1,
+      col: 1,
+      offsetRow: 0,
+      offsetCol: 0,
+      range: { address: 'B2:C3', startRow: 1, startCol: 1, endRow: 2, endCol: 2 },
+      value: 42,
+      valueType: RangeValueType.Double,
+      formula: null,
+      format: { numberFormat: '0' },
+      formatted: '42',
+    });
+    expect(cells[1]).toMatchObject({
+      address: 'C2',
+      row: 1,
+      col: 2,
+      offsetRow: 0,
+      offsetCol: 1,
+      value: null,
+      valueType: RangeValueType.Empty,
+      formula: null,
+    });
+    expect(cells[3]).toMatchObject({
+      address: 'C3',
+      row: 2,
+      col: 2,
+      offsetRow: 1,
+      offsetCol: 1,
+      value: true,
+      valueType: RangeValueType.Boolean,
+      formula: '=A1=1',
+      formatted: 'TRUE',
+    });
+  });
+
+  it('getCells sparse mode omits empty coordinates but keeps formatted or formula cells', async () => {
+    const queryRange = jest.fn(async () => ({
+      cells: [
+        { row: 0, col: 1, cellId: 'b1', value: null, formatted: '-' },
+        { row: 1, col: 0, cellId: 'a2', value: null, formula: '=NA()' },
+      ],
+      merges: [],
+    }));
+    const ws = makeNamedWs({ queryRange } as unknown as Partial<Bridge>);
+
+    const cells = await ws.getCells('A1:B2', { sparse: true });
+
+    expect(cells.map((cell) => cell.address)).toEqual(['B1', 'A2']);
+    expect(cells[0].formatted).toBe('-');
+    expect(cells[1].formula).toBe('=NA()');
+  });
+
+  it('cells.list valuesOnly keeps address metadata without formula or format fields', async () => {
+    const queryRange = jest.fn(async () => ({
+      cells: [{ row: 0, col: 0, cellId: 'a1', value: 7, formula: '=3+4', formatted: '7' }],
+      merges: [],
+    }));
+    const ws = makeNamedWs({ queryRange } as unknown as Partial<Bridge>);
+
+    const cells = await ws.cells.list('A1:A1', { valuesOnly: true });
+
+    expect(cells).toEqual([
+      {
+        sheet: 'Sheet1',
+        sheetId: SHEET_ID,
+        address: 'A1',
+        row: 0,
+        col: 0,
+        offsetRow: 0,
+        offsetCol: 0,
+        range: { address: 'A1:A1', startRow: 0, startCol: 0, endRow: 0, endCol: 0 },
+        value: 7,
+        valueType: RangeValueType.Double,
+        formatted: '7',
+      },
+    ]);
+    expect(cells[0]).not.toHaveProperty('formula');
+    expect(cells[0]).not.toHaveProperty('format');
+  });
+
+  it('getCells formulasOnly returns only formula cells with non-null formula text', async () => {
+    const queryRange = jest.fn(async () => ({
+      cells: [
+        { row: 0, col: 0, cellId: 'a1', value: 10 },
+        { row: 0, col: 1, cellId: 'b1', value: 20, formula: '=A1*2' },
+      ],
+      merges: [],
+    }));
+    const ws = makeNamedWs({ queryRange } as unknown as Partial<Bridge>);
+
+    const cells = await ws.getCells('A1:B1', { formulasOnly: true });
+
+    expect(cells).toHaveLength(1);
+    expect(cells[0]).toMatchObject({
+      address: 'B1',
+      value: 20,
+      valueType: RangeValueType.Double,
+      formula: '=A1*2',
+    });
+  });
+
+  it('getCells rejects mutually exclusive valuesOnly and formulasOnly modes', async () => {
+    const queryRange = jest.fn(async () => ({ cells: [], merges: [] }));
+    const ws = makeNamedWs({ queryRange } as unknown as Partial<Bridge>);
+
+    await expect(
+      ws.getCells('A1:A1', { valuesOnly: true, formulasOnly: true } as never),
+    ).rejects.toMatchObject({
+      code: 'API_INVALID_ARGUMENT',
+      path: ['options'],
+    });
+    expect(queryRange).not.toHaveBeenCalled();
+  });
+
+  it('forEachCell iterates full address-bearing cells sequentially', async () => {
+    const queryRange = jest.fn(async () => ({
+      cells: [{ row: 0, col: 1, cellId: 'b1', value: 'tail' }],
+      merges: [],
+    }));
+    const ws = makeNamedWs({ queryRange } as unknown as Partial<Bridge>);
+    const seen: string[] = [];
+
+    await ws.forEachCell('A1:B1', async (cell, index) => {
+      seen.push(`${index}:${cell.address}:${cell.value ?? ''}`);
+    });
+
+    expect(seen).toEqual(['0:A1:', '1:B1:tail']);
   });
 });

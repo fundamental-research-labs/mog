@@ -85,15 +85,7 @@
       "asyncModel": "sync",
       "signature": "addressToIndex(address: string): { row: number; col: number };",
       "typeText": "{row:number;col:number}",
-      "compatibility": [
-        {
-          "id": "mog-api.worksheet.addressToIndex.unsupported",
-          "observedPath": "ws.addressToIndex",
-          "canonicalPath": "wb.addressToIndex",
-          "status": "structured_diagnostic",
-          "appliesTo": "method"
-        }
-      ],
+      "compatibility": [],
       "source": {
         "file": "types/api/src/api/workbook.ts"
       },
@@ -511,6 +503,177 @@
     },
     {
       "schemaVersion": "1",
+      "path": "wb.diagnostics.checkBlankRegions",
+      "stableId": "WorkbookDiagnostics.checkBlankRegions",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookDiagnostics",
+      "member": "checkBlankRegions",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "checkBlankRegions(input: WorkbookBlankRegionCheckInput): Promise<WorkbookValidationResult>;",
+      "typeText": "Promise<WorkbookValidationResult>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/diagnostics.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "wb.diagnostics.checkErrors",
+      "stableId": "WorkbookDiagnostics.checkErrors",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookDiagnostics",
+      "member": "checkErrors",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "checkErrors(options?: CheckErrorsOptions): Promise<WorkbookValidationResult>;",
+      "typeText": "Promise<WorkbookValidationResult>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/diagnostics.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "wb.diagnostics.checkExternalReferences",
+      "stableId": "WorkbookDiagnostics.checkExternalReferences",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookDiagnostics",
+      "member": "checkExternalReferences",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "checkExternalReferences(\n    options?: WorkbookExternalReferenceCheckOptions,\n  ): Promise<WorkbookValidationResult>;",
+      "typeText": "Promise<WorkbookValidationResult>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/diagnostics.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "wb.diagnostics.checkFormulaErrors",
+      "stableId": "WorkbookDiagnostics.checkFormulaErrors",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookDiagnostics",
+      "member": "checkFormulaErrors",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "checkFormulaErrors(options?: WorkbookValidationScanOptions): Promise<WorkbookValidationResult>;",
+      "typeText": "Promise<WorkbookValidationResult>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/diagnostics.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "wb.diagnostics.checkFormulaErrorValues",
+      "stableId": "WorkbookDiagnostics.checkFormulaErrorValues",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookDiagnostics",
+      "member": "checkFormulaErrorValues",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "checkFormulaErrorValues(\n    options?: WorkbookValidationScanOptions,\n  ): Promise<WorkbookValidationResult>;",
+      "typeText": "Promise<WorkbookValidationResult>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/diagnostics.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "wb.diagnostics.checkFormulaShape",
+      "stableId": "WorkbookDiagnostics.checkFormulaShape",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookDiagnostics",
+      "member": "checkFormulaShape",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "checkFormulaShape(input: WorkbookFormulaShapeCheckInput): Promise<WorkbookValidationResult>;",
+      "typeText": "Promise<WorkbookValidationResult>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/diagnostics.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "wb.diagnostics.checkOpenXmlLoadability",
+      "stableId": "WorkbookDiagnostics.checkOpenXmlLoadability",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookDiagnostics",
+      "member": "checkOpenXmlLoadability",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "checkOpenXmlLoadability(): Promise<WorkbookValidationResult>;",
+      "typeText": "Promise<WorkbookValidationResult>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/diagnostics.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "wb.diagnostics.checkStaleCachedValues",
+      "stableId": "WorkbookDiagnostics.checkStaleCachedValues",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookDiagnostics",
+      "member": "checkStaleCachedValues",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "checkStaleCachedValues(): Promise<WorkbookValidationResult>;",
+      "typeText": "Promise<WorkbookValidationResult>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/diagnostics.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "wb.diagnostics.checkWorkbookDirtyState",
+      "stableId": "WorkbookDiagnostics.checkWorkbookDirtyState",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookDiagnostics",
+      "member": "checkWorkbookDirtyState",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "checkWorkbookDirtyState(): Promise<WorkbookValidationResult>;",
+      "typeText": "Promise<WorkbookValidationResult>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/diagnostics.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
       "path": "wb.diagnostics.getFormulaReferences",
       "stableId": "WorkbookDiagnostics.getFormulaReferences",
       "root": "subApi",
@@ -598,6 +761,25 @@
       "asyncModel": "promise",
       "signature": "runtime(options?: RuntimeDiagnosticsOptions): Promise<RuntimeDiagnosticsPage>;",
       "typeText": "Promise<RuntimeDiagnosticsPage>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/diagnostics.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "wb.diagnostics.validateWorkbook",
+      "stableId": "WorkbookDiagnostics.validateWorkbook",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookDiagnostics",
+      "member": "validateWorkbook",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "validateWorkbook(options?: ValidateWorkbookOptions): Promise<WorkbookValidationResult>;",
+      "typeText": "Promise<WorkbookValidationResult>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/workbook/diagnostics.ts"
@@ -1537,22 +1719,7 @@
       "asyncModel": "sync",
       "signature": "indexToAddress(row: number, col: number): string;",
       "typeText": "string",
-      "compatibility": [
-        {
-          "id": "mog-api.worksheet.indexToAddress.unsupported",
-          "observedPath": "ws.indexToAddress",
-          "canonicalPath": "wb.indexToAddress",
-          "status": "structured_diagnostic",
-          "appliesTo": "method"
-        },
-        {
-          "id": "mog-api.worksheet.privateColLetter.unsupported",
-          "observedPath": "ws._colLetter",
-          "canonicalPath": "wb.indexToAddress",
-          "status": "structured_diagnostic",
-          "appliesTo": "method"
-        }
-      ],
+      "compatibility": [],
       "source": {
         "file": "types/api/src/api/workbook.ts"
       },
@@ -2057,8 +2224,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "clear(): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "clear(): Promise<NameClearReceipt>;",
+      "typeText": "Promise<NameClearReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/workbook/names.ts"
@@ -2314,6 +2481,25 @@
     },
     {
       "schemaVersion": "1",
+      "path": "wb.names.removeById",
+      "stableId": "WorkbookNames.removeById",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookNames",
+      "member": "removeById",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "removeById(id: string): Promise<NameRemoveReceipt>;",
+      "typeText": "Promise<NameRemoveReceipt>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/names.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
       "path": "wb.names.update",
       "stableId": "WorkbookNames.update",
       "root": "subApi",
@@ -2323,8 +2509,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "update(name: string, updates: NamedRangeUpdateOptions, scope?: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "update(\n    name: string,\n    updates: NamedRangeUpdateOptions,\n    scope?: string,\n  ): Promise<NameUpdateReceipt>;",
+      "typeText": "Promise<NameUpdateReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/workbook/names.ts"
@@ -3025,8 +3211,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "apply(id: string): Promise<ApplyScenarioResult>;",
-      "typeText": "Promise<ApplyScenarioResult>",
+      "signature": "apply(id: string): Promise<WorkbookScenarioApplyReceipt>;",
+      "typeText": "Promise<WorkbookScenarioApplyReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/workbook/scenarios.ts"
@@ -3891,8 +4077,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "remove(slicerId: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "remove(slicerId: string): Promise<SlicerRemoveReceipt>;",
+      "typeText": "Promise<SlicerRemoveReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/workbook/slicers.ts"
@@ -4771,11 +4957,29 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "autoFill(\n    sourceRange: string,\n    targetRange: string,\n    fillMode?: AutoFillMode,\n  ): Promise<AutoFillResult>;",
-      "typeText": "Promise<AutoFillResult>",
+      "signature": "autoFill(\n    sourceRange: string,\n    targetRange: string,\n    fillMode?: AutoFillMode,\n  ): Promise<AutoFillApplyReceipt>;",
+      "typeText": "Promise<AutoFillApplyReceipt>",
       "compatibility": [],
       "source": {
-        "file": "types/api/src/api/worksheet.ts"
+        "file": "types/api/src/api/worksheet/fill.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "ws.autoFillPreview",
+      "stableId": "Worksheet.autoFillPreview",
+      "root": "worksheet",
+      "interface": "Worksheet",
+      "member": "autoFillPreview",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "autoFillPreview(\n    sourceRange: string,\n    targetRange: string,\n    fillMode?: AutoFillMode,\n  ): Promise<AutoFillPreviewReceipt>;",
+      "typeText": "Promise<AutoFillPreviewReceipt>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet/fill.ts"
       },
       "ownerPackage": "@mog/types-api"
     },
@@ -5048,6 +5252,25 @@
     },
     {
       "schemaVersion": "1",
+      "path": "ws.cells.list",
+      "stableId": "WorksheetCellsAccessor.list",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetCellsAccessor",
+      "member": "list",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "list(\n    range: string | CellRange,\n    options?: WorksheetGetCellsFullOptions,\n  ): Promise<WorksheetRangeCell[]>;",
+      "typeText": "Promise<WorksheetRangeCell[]>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
       "path": "ws.changes",
       "stableId": "Worksheet.changes",
       "root": "subApi",
@@ -5116,8 +5339,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "activate(chartId: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "activate(chartId: string): Promise<ChartActivateReceipt>;",
+      "typeText": "Promise<ChartActivateReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/charts.ts"
@@ -5135,8 +5358,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "add(config: ChartConfig): Promise<Chart>;",
-      "typeText": "Promise<Chart>",
+      "signature": "add(config: ChartConfig): Promise<ChartAddReceipt>;",
+      "typeText": "Promise<ChartAddReceipt>",
       "compatibility": [
         {
           "id": "mog-api.chart.root.addChart.unsupported",
@@ -5162,8 +5385,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "addSeries(chartId: string, config: SeriesConfig): Promise<number>;",
-      "typeText": "Promise<number>",
+      "signature": "addSeries(chartId: string, config: SeriesConfig): Promise<ChartMutationReceipt>;",
+      "typeText": "Promise<ChartMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/charts.ts"
@@ -5181,8 +5404,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "addTrendline(chartId: string, seriesIndex: number, config: TrendlineConfig): Promise<number>;",
-      "typeText": "Promise<number>",
+      "signature": "addTrendline(\n    chartId: string,\n    seriesIndex: number,\n    config: TrendlineConfig,\n  ): Promise<ChartMutationReceipt>;",
+      "typeText": "Promise<ChartMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/charts.ts"
@@ -5248,6 +5471,25 @@
     },
     {
       "schemaVersion": "1",
+      "path": "ws.charts.describe",
+      "stableId": "WorksheetCharts.describe",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetCharts",
+      "member": "describe",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "describe(chartId: string, options?: ImageExportOptions): Promise<ChartDescription>;",
+      "typeText": "Promise<ChartDescription>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet/charts.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
       "path": "ws.charts.duplicate",
       "stableId": "WorksheetCharts.duplicate",
       "root": "subApi",
@@ -5257,8 +5499,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "duplicate(chartId: string): Promise<string>;",
-      "typeText": "Promise<string>",
+      "signature": "duplicate(chartId: string): Promise<ChartDuplicateReceipt>;",
+      "typeText": "Promise<ChartDuplicateReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/charts.ts"
@@ -5286,6 +5528,25 @@
     },
     {
       "schemaVersion": "1",
+      "path": "ws.charts.findBySourceRange",
+      "stableId": "WorksheetCharts.findBySourceRange",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetCharts",
+      "member": "findBySourceRange",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "findBySourceRange(range: string | CellRange): Promise<ChartSourceRangeMatch[]>;",
+      "typeText": "Promise<ChartSourceRangeMatch[]>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet/charts.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
       "path": "ws.charts.formatPoint",
       "stableId": "WorksheetCharts.formatPoint",
       "root": "subApi",
@@ -5295,8 +5556,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "formatPoint(\n    chartId: string,\n    seriesIndex: number,\n    pointIndex: number,\n    format: { fill?: string; border?: ChartBorder },\n  ): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "formatPoint(\n    chartId: string,\n    seriesIndex: number,\n    pointIndex: number,\n    format: { fill?: string; border?: ChartBorder },\n  ): Promise<ChartMutationReceipt>;",
+      "typeText": "Promise<ChartMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/charts.ts"
@@ -5598,6 +5859,25 @@
     },
     {
       "schemaVersion": "1",
+      "path": "ws.charts.getSourceData",
+      "stableId": "WorksheetCharts.getSourceData",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetCharts",
+      "member": "getSourceData",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "getSourceData(chartId: string, options?: ImageExportOptions): Promise<ChartSourceData>;",
+      "typeText": "Promise<ChartSourceData>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet/charts.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
       "path": "ws.charts.getTitleSubstring",
       "stableId": "WorksheetCharts.getTitleSubstring",
       "root": "subApi",
@@ -5800,8 +6080,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "remove(chartId: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "remove(chartId: string): Promise<ChartRemoveReceipt>;",
+      "typeText": "Promise<ChartRemoveReceipt>",
       "compatibility": [
         {
           "id": "mog-api.chart.root.removeChart.deprecated",
@@ -5827,8 +6107,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "removeSeries(chartId: string, index: number): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "removeSeries(chartId: string, index: number): Promise<ChartMutationReceipt>;",
+      "typeText": "Promise<ChartMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/charts.ts"
@@ -5846,8 +6126,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "removeTrendline(chartId: string, seriesIndex: number, trendlineIndex: number): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "removeTrendline(\n    chartId: string,\n    seriesIndex: number,\n    trendlineIndex: number,\n  ): Promise<ChartMutationReceipt>;",
+      "typeText": "Promise<ChartMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/charts.ts"
@@ -5865,8 +6145,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "reorderSeries(chartId: string, fromIndex: number, toIndex: number): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "reorderSeries(chartId: string, fromIndex: number, toIndex: number): Promise<ChartMutationReceipt>;",
+      "typeText": "Promise<ChartMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/charts.ts"
@@ -5922,8 +6202,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setAxisTitle(chartId: string, axisType: 'category' | 'value', formula: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setAxisTitle(\n    chartId: string,\n    axisType: 'category' | 'value',\n    formula: string,\n  ): Promise<ChartMutationReceipt>;",
+      "typeText": "Promise<ChartMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/charts.ts"
@@ -5941,8 +6221,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setBubbleSizes(chartId: string, seriesIndex: number, range: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setBubbleSizes(\n    chartId: string,\n    seriesIndex: number,\n    range: string,\n  ): Promise<ChartMutationReceipt>;",
+      "typeText": "Promise<ChartMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/charts.ts"
@@ -5960,8 +6240,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setCategoryNames(chartId: string, range: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setCategoryNames(chartId: string, range: string): Promise<ChartMutationReceipt>;",
+      "typeText": "Promise<ChartMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/charts.ts"
@@ -5979,8 +6259,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setDataLabelHeight(\n    chartId: string,\n    seriesIndex: number,\n    pointIndex: number,\n    value: number,\n  ): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setDataLabelHeight(\n    chartId: string,\n    seriesIndex: number,\n    pointIndex: number,\n    value: number,\n  ): Promise<ChartMutationReceipt>;",
+      "typeText": "Promise<ChartMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/charts.ts"
@@ -5998,8 +6278,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setDataLabelWidth(\n    chartId: string,\n    seriesIndex: number,\n    pointIndex: number,\n    value: number,\n  ): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setDataLabelWidth(\n    chartId: string,\n    seriesIndex: number,\n    pointIndex: number,\n    value: number,\n  ): Promise<ChartMutationReceipt>;",
+      "typeText": "Promise<ChartMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/charts.ts"
@@ -6036,8 +6316,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setPointDataLabel(\n    chartId: string,\n    seriesIndex: number,\n    pointIndex: number,\n    config: DataLabelConfig,\n  ): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setPointDataLabel(\n    chartId: string,\n    seriesIndex: number,\n    pointIndex: number,\n    config: DataLabelConfig,\n  ): Promise<ChartMutationReceipt>;",
+      "typeText": "Promise<ChartMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/charts.ts"
@@ -6055,8 +6335,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setSeriesBinOptions(\n    chartId: string,\n    seriesIndex: number,\n    options: HistogramConfig,\n  ): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setSeriesBinOptions(\n    chartId: string,\n    seriesIndex: number,\n    options: HistogramConfig,\n  ): Promise<ChartMutationReceipt>;",
+      "typeText": "Promise<ChartMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/charts.ts"
@@ -6074,8 +6354,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setSeriesBoxwhiskerOptions(\n    chartId: string,\n    seriesIndex: number,\n    options: BoxplotConfig,\n  ): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setSeriesBoxwhiskerOptions(\n    chartId: string,\n    seriesIndex: number,\n    options: BoxplotConfig,\n  ): Promise<ChartMutationReceipt>;",
+      "typeText": "Promise<ChartMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/charts.ts"
@@ -6093,8 +6373,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setSeriesCategories(chartId: string, index: number, range: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setSeriesCategories(chartId: string, index: number, range: string): Promise<ChartMutationReceipt>;",
+      "typeText": "Promise<ChartMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/charts.ts"
@@ -6112,7 +6392,26 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setSeriesValues(chartId: string, index: number, range: string): Promise<void>;",
+      "signature": "setSeriesValues(chartId: string, index: number, range: string): Promise<ChartMutationReceipt>;",
+      "typeText": "Promise<ChartMutationReceipt>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet/charts.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "ws.charts.setSourceData",
+      "stableId": "WorksheetCharts.setSourceData",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetCharts",
+      "member": "setSourceData",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "setSourceData(chartId: string, sourceData: ChartSourceDataUpdate): Promise<void>;",
       "typeText": "Promise<void>",
       "compatibility": [],
       "source": {
@@ -6188,8 +6487,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "update(chartId: string, updates: Partial<ChartConfig>): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "update(chartId: string, updates: Partial<ChartConfig>): Promise<ChartUpdateReceipt>;",
+      "typeText": "Promise<ChartUpdateReceipt>",
       "compatibility": [
         {
           "id": "mog-api.chart.root.updateChart.deprecated",
@@ -6215,8 +6514,46 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "updateSeries(chartId: string, index: number, updates: Partial<SeriesConfig>): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "updateSeries(\n    chartId: string,\n    index: number,\n    updates: Partial<SeriesConfig>,\n  ): Promise<ChartMutationReceipt>;",
+      "typeText": "Promise<ChartMutationReceipt>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet/charts.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "ws.charts.updateTrendline",
+      "stableId": "WorksheetCharts.updateTrendline",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetCharts",
+      "member": "updateTrendline",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "updateTrendline(\n    chartId: string,\n    seriesIndex: number,\n    trendlineIndex: number,\n    updates: Partial<TrendlineConfig>,\n  ): Promise<ChartMutationReceipt>;",
+      "typeText": "Promise<ChartMutationReceipt>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet/charts.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "ws.charts.usesRange",
+      "stableId": "WorksheetCharts.usesRange",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetCharts",
+      "member": "usesRange",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "usesRange(range: string | CellRange): Promise<boolean>;",
+      "typeText": "Promise<boolean>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/charts.ts"
@@ -6308,8 +6645,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "add(cell: string, options: { text: string; author?: string }): Promise<Comment>;",
-      "typeText": "Promise<Comment>",
+      "signature": "add(cell: string, options: { text: string; author?: string }): Promise<CommentAddReceipt>;",
+      "typeText": "Promise<CommentAddReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/comments.ts"
@@ -6327,8 +6664,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "addNote(cell: string, options: { text: string; author?: string }): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "addNote(cell: string, options: { text: string; author?: string }): Promise<CommentAddReceipt>;",
+      "typeText": "Promise<CommentAddReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/comments.ts"
@@ -6346,8 +6683,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "addReply(commentId: string, text: string, author: string): Promise<Comment>;",
-      "typeText": "Promise<Comment>",
+      "signature": "addReply(commentId: string, text: string, author: string): Promise<CommentAddReceipt>;",
+      "typeText": "Promise<CommentAddReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/comments.ts"
@@ -6384,8 +6721,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "clear(): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "clear(): Promise<CommentRemoveReceipt>;",
+      "typeText": "Promise<CommentRemoveReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/comments.ts"
@@ -6403,8 +6740,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "convertNoteToThread(commentId: string): Promise<Comment>;",
-      "typeText": "Promise<Comment>",
+      "signature": "convertNoteToThread(commentId: string): Promise<CommentUpdateReceipt>;",
+      "typeText": "Promise<CommentUpdateReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/comments.ts"
@@ -6707,8 +7044,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "remove(commentId: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "remove(commentId: string): Promise<CommentRemoveReceipt>;",
+      "typeText": "Promise<CommentRemoveReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/comments.ts"
@@ -6745,8 +7082,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "removeNote(address: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "removeNote(address: string): Promise<CommentRemoveReceipt>;",
+      "typeText": "Promise<CommentRemoveReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/comments.ts"
@@ -6764,8 +7101,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "resolveThread(threadId: string, resolved: boolean): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "resolveThread(threadId: string, resolved: boolean): Promise<CommentUpdateReceipt>;",
+      "typeText": "Promise<CommentUpdateReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/comments.ts"
@@ -6783,8 +7120,8 @@
       "kind": "method",
       "visibility": "deprecated",
       "asyncModel": "promise",
-      "signature": "setNote(address: string, text: string, author?: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setNote(address: string, text: string, author?: string): Promise<CommentAddReceipt>;",
+      "typeText": "Promise<CommentAddReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/comments.ts"
@@ -6802,8 +7139,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setNoteHeight(address: string, height: number): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setNoteHeight(address: string, height: number): Promise<CommentUpdateReceipt>;",
+      "typeText": "Promise<CommentUpdateReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/comments.ts"
@@ -6821,8 +7158,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setNoteVisible(address: string, visible: boolean): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setNoteVisible(address: string, visible: boolean): Promise<CommentUpdateReceipt>;",
+      "typeText": "Promise<CommentUpdateReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/comments.ts"
@@ -6840,8 +7177,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setNoteWidth(address: string, width: number): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setNoteWidth(address: string, width: number): Promise<CommentUpdateReceipt>;",
+      "typeText": "Promise<CommentUpdateReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/comments.ts"
@@ -6859,8 +7196,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "update(commentId: string, updates: CommentUpdate): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "update(commentId: string, updates: CommentUpdate): Promise<CommentUpdateReceipt>;",
+      "typeText": "Promise<CommentUpdateReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/comments.ts"
@@ -6898,8 +7235,27 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "add(ranges: (string | CellRange)[], rules: CFRuleInput[]): Promise<ConditionalFormat>;",
-      "typeText": "Promise<ConditionalFormat>",
+      "signature": "add(\n    ranges: (string | CellRange)[],\n    rules: CFRuleInput[],\n  ): Promise<ConditionalFormatMutationReceipt & ConditionalFormat>;",
+      "typeText": "Promise<ConditionalFormatMutationReceipt&ConditionalFormat>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet/conditional-formats.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "ws.conditionalFormats.addFormula",
+      "stableId": "WorksheetConditionalFormatting.addFormula",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetConditionalFormatting",
+      "member": "addFormula",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "addFormula(\n    range: string | CellRange | (string | CellRange)[],\n    formula: string,\n    style: CFStyle,\n  ): Promise<ConditionalFormatMutationReceipt & ConditionalFormat>;",
+      "typeText": "Promise<ConditionalFormatMutationReceipt&ConditionalFormat>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/conditional-formats.ts"
@@ -6917,8 +7273,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "changeRuleType(formatId: string, ruleId: string, newRule: CFRuleInput): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "changeRuleType(\n    formatId: string,\n    ruleId: string,\n    newRule: CFRuleInput,\n  ): Promise<ConditionalFormatMutationReceipt>;",
+      "typeText": "Promise<ConditionalFormatMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/conditional-formats.ts"
@@ -6936,8 +7292,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "clear(): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "clear(): Promise<ConditionalFormatMutationReceipt>;",
+      "typeText": "Promise<ConditionalFormatMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/conditional-formats.ts"
@@ -6955,8 +7311,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "clearInRanges(ranges: (string | CellRange)[]): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "clearInRanges(ranges: (string | CellRange)[]): Promise<ConditionalFormatMutationReceipt>;",
+      "typeText": "Promise<ConditionalFormatMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/conditional-formats.ts"
@@ -6974,8 +7330,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "clearRuleStyle(formatId: string, ruleId: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "clearRuleStyle(formatId: string, ruleId: string): Promise<ConditionalFormatMutationReceipt>;",
+      "typeText": "Promise<ConditionalFormatMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/conditional-formats.ts"
@@ -6993,8 +7349,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "cloneForPaste(\n    sourceSheetId: string,\n    relativeCFs: Array<{\n      rules: any[];\n      rangeOffsets: Array<{\n        startRowOffset: number;\n        startColOffset: number;\n        endRowOffset: number;\n        endColOffset: number;\n      }>;\n    }>,\n    origin: { row: number; col: number },\n    isCut: boolean,\n  ): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "cloneForPaste(\n    sourceSheetId: string,\n    relativeCFs: Array<{\n      rules: any[];\n      rangeOffsets: Array<{\n        startRowOffset: number;\n        startColOffset: number;\n        endRowOffset: number;\n        endColOffset: number;\n      }>;\n    }>,\n    origin: { row: number; col: number },\n    isCut: boolean,\n  ): Promise<ConditionalFormatMutationReceipt>;",
+      "typeText": "Promise<ConditionalFormatMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/conditional-formats.ts"
@@ -7107,8 +7463,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "remove(formatId: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "remove(formatId: string): Promise<ConditionalFormatMutationReceipt>;",
+      "typeText": "Promise<ConditionalFormatMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/conditional-formats.ts"
@@ -7126,8 +7482,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "removeRule(formatId: string, ruleId: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "removeRule(formatId: string, ruleId: string): Promise<ConditionalFormatMutationReceipt>;",
+      "typeText": "Promise<ConditionalFormatMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/conditional-formats.ts"
@@ -7145,8 +7501,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "reorder(formatIds: string[]): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "reorder(formatIds: string[]): Promise<ConditionalFormatMutationReceipt>;",
+      "typeText": "Promise<ConditionalFormatMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/conditional-formats.ts"
@@ -7164,8 +7520,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "update(formatId: string, updates: ConditionalFormatUpdate): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "update(\n    formatId: string,\n    updates: ConditionalFormatUpdate,\n  ): Promise<ConditionalFormatMutationReceipt>;",
+      "typeText": "Promise<ConditionalFormatMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/conditional-formats.ts"
@@ -7857,8 +8213,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "add(position: Partial<ObjectPosition>, options?: CreateDrawingOptions): Promise<DrawingHandle>;",
-      "typeText": "Promise<DrawingHandle>",
+      "signature": "add(\n    position: Partial<ObjectPosition>,\n    options?: CreateDrawingOptions,\n  ): Promise<FloatingObjectHandleMutationReceipt<DrawingHandle>>;",
+      "typeText": "Promise<FloatingObjectHandleMutationReceipt<DrawingHandle>>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/collections/drawing-collection.ts"
@@ -7952,8 +8308,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "add(config: EquationConfig): Promise<EquationHandle>;",
-      "typeText": "Promise<EquationHandle>",
+      "signature": "add(config: EquationConfig): Promise<FloatingObjectHandleMutationReceipt<EquationHandle>>;",
+      "typeText": "Promise<FloatingObjectHandleMutationReceipt<EquationHandle>>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/collections/equation-collection.ts"
@@ -8056,6 +8412,24 @@
     },
     {
       "schemaVersion": "1",
+      "path": "ws.evaluateFormula",
+      "stableId": "Worksheet.evaluateFormula",
+      "root": "worksheet",
+      "interface": "Worksheet",
+      "member": "evaluateFormula",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "evaluateFormula(formula: string, options?: { sheet?: string | SheetId }): Promise<CellValue>;",
+      "typeText": "Promise<CellValue>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
       "path": "ws.fillSeries",
       "stableId": "Worksheet.fillSeries",
       "root": "worksheet",
@@ -8064,11 +8438,11 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "fillSeries(range: string, options: FillSeriesOptions): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "fillSeries(range: string, options: FillSeriesOptions): Promise<FillSeriesApplyReceipt>;",
+      "typeText": "Promise<FillSeriesApplyReceipt>",
       "compatibility": [],
       "source": {
-        "file": "types/api/src/api/worksheet.ts"
+        "file": "types/api/src/api/worksheet/fill.ts"
       },
       "ownerPackage": "@mog/types-api"
     },
@@ -8103,8 +8477,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "add(range: string | CellRange): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "add(range: string | CellRange): Promise<AutoFilterSetReceipt>;",
+      "typeText": "Promise<AutoFilterSetReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/filters.ts"
@@ -8122,8 +8496,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "apply(filterId: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "apply(filterId: string): Promise<FilterMutationReceipt>;",
+      "typeText": "Promise<FilterMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/filters.ts"
@@ -8160,8 +8534,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "applyDynamicFilter(col: number, rule: DynamicFilterRule, filterId?: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "applyDynamicFilter(\n    col: number,\n    rule: DynamicFilterRule,\n    filterId?: string,\n  ): Promise<FilterMutationReceipt>;",
+      "typeText": "Promise<FilterMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/filters.ts"
@@ -8198,8 +8572,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "clear(): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "clear(): Promise<AutoFilterClearReceipt>;",
+      "typeText": "Promise<AutoFilterClearReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/filters.ts"
@@ -8217,8 +8591,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "clearAllCriteria(filterId: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "clearAllCriteria(filterId: string): Promise<FilterMutationReceipt>;",
+      "typeText": "Promise<FilterMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/filters.ts"
@@ -8255,8 +8629,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "clearColumnFilter(col: number, filterId?: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "clearColumnFilter(col: number, filterId?: string): Promise<FilterMutationReceipt>;",
+      "typeText": "Promise<FilterMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/filters.ts"
@@ -8559,8 +8933,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "reapply(filterId: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "reapply(filterId: string): Promise<FilterMutationReceipt>;",
+      "typeText": "Promise<FilterMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/filters.ts"
@@ -8616,8 +8990,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setColumnFilter(col: number, criteria: ColumnFilterCriteria, filterId?: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setColumnFilter(\n    col: number,\n    criteria: ColumnFilterCriteria,\n    filterId?: string,\n  ): Promise<FilterMutationReceipt>;",
+      "typeText": "Promise<FilterMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/filters.ts"
@@ -8708,8 +9082,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "findCells(predicate: (cell: CellData) => boolean, range?: string): Promise<string[]>;",
-      "typeText": "Promise<string[]>",
+      "signature": "findCells(query: FindCellsQuery): Promise<FindCellsResult>;",
+      "typeText": "Promise<FindCellsResult>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet.ts"
@@ -8782,6 +9156,24 @@
       "asyncModel": "promise",
       "signature": "findLastRow(col: number): Promise<{ lastDataRow: number | null; lastFormatRow: number | null }>;",
       "typeText": "Promise<{lastDataRow:number|null;lastFormatRow:number|null}>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "ws.forEachCell",
+      "stableId": "Worksheet.forEachCell",
+      "root": "worksheet",
+      "interface": "Worksheet",
+      "member": "forEachCell",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "forEachCell(\n    range: string | CellRange,\n    visitor: WorksheetCellVisitor,\n    options?: { readonly sparse?: boolean },\n  ): Promise<void>;",
+      "typeText": "Promise<void>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet.ts"
@@ -9530,6 +9922,24 @@
       "asyncModel": "promise",
       "signature": "getCell(address: string): Promise<CellData>;",
       "typeText": "Promise<CellData>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "ws.getCells",
+      "stableId": "Worksheet.getCells",
+      "root": "worksheet",
+      "interface": "Worksheet",
+      "member": "getCells",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "getCells(\n    range: string | CellRange,\n    options?: WorksheetGetCellsFullOptions,\n  ): Promise<WorksheetRangeCell[]>;",
+      "typeText": "Promise<WorksheetRangeCell[]>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet.ts"
@@ -11634,8 +12044,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "update(objectId: string, updates: Record<string, unknown>): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "update(\n    objectId: string,\n    updates: Record<string, unknown>,\n  ): Promise<FloatingObjectMutationReceipt>;",
+      "typeText": "Promise<FloatingObjectMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/collections/object-collection.ts"
@@ -11977,8 +12387,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "add(config: PictureConfig): Promise<PictureHandle>;",
-      "typeText": "Promise<PictureHandle>",
+      "signature": "add(config: PictureConfig): Promise<FloatingObjectHandleMutationReceipt<PictureHandle>>;",
+      "typeText": "Promise<FloatingObjectHandleMutationReceipt<PictureHandle>>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/collections/picture-collection.ts"
@@ -12054,8 +12464,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "add(config: PivotCreateConfig): Promise<PivotTableConfig>;",
-      "typeText": "Promise<PivotTableConfig>",
+      "signature": "add(config: PivotCreateConfig, options?: PivotCreateOptions): Promise<PivotAddReceipt>;",
+      "typeText": "Promise<PivotAddReceipt>",
       "compatibility": [
         {
           "id": "mog-api.pivot.root.addPivotTable.deprecated",
@@ -12081,8 +12491,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "addCalculatedField(name: string, field: CalculatedField): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "addCalculatedField(name: string, field: CalculatedField): Promise<PivotAddCalculatedFieldReceipt>;",
+      "typeText": "Promise<PivotAddCalculatedFieldReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -12100,8 +12510,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "addField(\n    name: string,\n    fieldId: string,\n    area: PivotFieldArea,\n    options?: {\n      position?: number;\n      aggregateFunction?: AggregateFunction;\n      sortOrder?: SortOrder;\n      displayName?: string;\n      showValuesAs?: ShowValuesAsConfig;\n    },\n  ): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "addField(\n    name: string,\n    fieldId: string,\n    area: PivotFieldArea,\n    options?: {\n      position?: number;\n      aggregateFunction?: AggregateFunction;\n      sortOrder?: SortOrder;\n      displayName?: string;\n      showValuesAs?: ShowValuesAsConfig;\n    },\n  ): Promise<PivotAddFieldReceipt>;",
+      "typeText": "Promise<PivotAddFieldReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -12119,8 +12529,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "addWithSheet(\n    sheetName: string,\n    config: PivotCreateConfig,\n  ): Promise<{ sheetId: string; config: PivotTableConfig }>;",
-      "typeText": "Promise<{sheetId:string;config:PivotTableConfig}>",
+      "signature": "addWithSheet(\n    sheetName: string,\n    config: PivotCreateConfig,\n    options?: PivotCreateOptions,\n  ): Promise<PivotAddWithSheetReceipt>;",
+      "typeText": "Promise<PivotAddWithSheetReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -12138,8 +12548,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "clear(): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "clear(): Promise<PivotClearReceipt>;",
+      "typeText": "Promise<PivotClearReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -12157,8 +12567,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "compute(name: string, forceRefresh?: boolean): Promise<PivotTableResult | null>;",
-      "typeText": "Promise<PivotTableResult|null>",
+      "signature": "compute(name: string, forceRefresh?: boolean): Promise<PivotComputeReceipt>;",
+      "typeText": "Promise<PivotComputeReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -12629,8 +13039,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "moveField(\n    name: string,\n    fieldId: string,\n    fromArea: PivotFieldArea,\n    toArea: PivotFieldArea,\n    toPosition: number,\n  ): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "moveField(\n    name: string,\n    fieldId: string,\n    fromArea: PivotFieldArea,\n    toArea: PivotFieldArea,\n    toPosition: number,\n  ): Promise<PivotMoveFieldReceipt>;",
+      "typeText": "Promise<PivotMoveFieldReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -12648,8 +13058,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "queryPivot(\n    pivotName: string,\n    filters?: Record<string, CellValue | CellValue[]>,\n  ): Promise<PivotQueryResult | null>;",
-      "typeText": "Promise<PivotQueryResult|null>",
+      "signature": "queryPivot(\n    pivotName: string,\n    filters?: Record<string, CellValue | CellValue[]>,\n  ): Promise<PivotQueryReceipt>;",
+      "typeText": "Promise<PivotQueryReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -12667,8 +13077,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "refresh(name: string): Promise<PivotRefreshReceipt | PivotCommandReceipt>;",
-      "typeText": "Promise<PivotRefreshReceipt|PivotCommandReceipt>",
+      "signature": "refresh(name: string): Promise<PivotRefreshReceipt>;",
+      "typeText": "Promise<PivotRefreshReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -12686,8 +13096,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "refreshAll(): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "refreshAll(): Promise<PivotRefreshAllReceipt>;",
+      "typeText": "Promise<PivotRefreshAllReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -12705,8 +13115,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "remove(name: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "remove(name: string): Promise<PivotRemoveReceipt>;",
+      "typeText": "Promise<PivotRemoveReceipt>",
       "compatibility": [
         {
           "id": "mog-api.pivot.root.removePivotTable.deprecated",
@@ -12732,8 +13142,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "removeCalculatedField(name: string, fieldId: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "removeCalculatedField(name: string, fieldId: string): Promise<PivotRemoveCalculatedFieldReceipt>;",
+      "typeText": "Promise<PivotRemoveCalculatedFieldReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -12751,8 +13161,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "removeField(name: string, fieldId: string, area: PivotFieldArea): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "removeField(\n    name: string,\n    fieldId: string,\n    area: PivotFieldArea,\n  ): Promise<PivotRemoveFieldReceipt>;",
+      "typeText": "Promise<PivotRemoveFieldReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -12770,8 +13180,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "removeFilter(name: string, fieldId: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "removeFilter(name: string, fieldId: string): Promise<PivotRemoveFilterReceipt>;",
+      "typeText": "Promise<PivotRemoveFilterReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -12789,8 +13199,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "rename(name: string, newName: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "rename(name: string, newName: string): Promise<PivotRenameReceipt>;",
+      "typeText": "Promise<PivotRenameReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -12808,8 +13218,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "resetField(name: string, fieldId: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "resetField(name: string, fieldId: string): Promise<PivotResetFieldReceipt>;",
+      "typeText": "Promise<PivotResetFieldReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -12846,8 +13256,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setAllExpanded(name: string, expanded: boolean): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setAllExpanded(name: string, expanded: boolean): Promise<PivotSetAllExpandedReceipt>;",
+      "typeText": "Promise<PivotSetAllExpandedReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -12865,8 +13275,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setAllowMultipleFiltersPerField(name: string, allow: boolean): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setAllowMultipleFiltersPerField(\n    name: string,\n    allow: boolean,\n  ): Promise<PivotSetAllowMultipleFiltersPerFieldReceipt>;",
+      "typeText": "Promise<PivotSetAllowMultipleFiltersPerFieldReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -12884,8 +13294,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setAutoFormat(name: string, autoFormat: boolean): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setAutoFormat(name: string, autoFormat: boolean): Promise<PivotSetAutoFormatReceipt>;",
+      "typeText": "Promise<PivotSetAutoFormatReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -12903,8 +13313,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setDataSource(name: string, dataSource: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setDataSource(name: string, dataSource: string): Promise<PivotSetDataSourceReceipt>;",
+      "typeText": "Promise<PivotSetDataSourceReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -12922,8 +13332,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setEnableMultipleFilterItems(name: string, fieldId: string, enabled: boolean): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setEnableMultipleFilterItems(\n    name: string,\n    fieldId: string,\n    enabled: boolean,\n  ): Promise<PivotSetEnableMultipleFilterItemsReceipt>;",
+      "typeText": "Promise<PivotSetEnableMultipleFilterItemsReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -12941,8 +13351,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setFilter(name: string, fieldId: string, filter: Omit<PivotFilter, 'fieldId'>): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setFilter(\n    name: string,\n    fieldId: string,\n    filter: Omit<PivotFilter, 'fieldId'>,\n  ): Promise<PivotSetFilterReceipt>;",
+      "typeText": "Promise<PivotSetFilterReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -12960,8 +13370,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setItemVisibility(\n    name: string,\n    fieldId: string,\n    visibleItems: Record<string, boolean>,\n  ): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setItemVisibility(\n    name: string,\n    fieldId: string,\n    visibleItems: Record<string, boolean>,\n  ): Promise<PivotSetItemVisibilityReceipt>;",
+      "typeText": "Promise<PivotSetItemVisibilityReceipt>",
       "compatibility": [
         {
           "id": "mog-api.pivot.collection.setItemVisibility.alias",
@@ -13006,8 +13416,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setPivotItemVisibility(\n    name: string,\n    fieldId: string,\n    visibleItems: Record<string, boolean>,\n  ): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setPivotItemVisibility(\n    name: string,\n    fieldId: string,\n    visibleItems: Record<string, boolean>,\n  ): Promise<PivotSetPivotItemVisibilityReceipt>;",
+      "typeText": "Promise<PivotSetPivotItemVisibilityReceipt>",
       "compatibility": [
         {
           "id": "mog-api.pivot.collection.setItemVisibility.alias",
@@ -13033,8 +13443,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setPreserveFormatting(name: string, preserve: boolean): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setPreserveFormatting(\n    name: string,\n    preserve: boolean,\n  ): Promise<PivotSetPreserveFormattingReceipt>;",
+      "typeText": "Promise<PivotSetPreserveFormattingReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -14020,8 +14430,8 @@
       "kind": "method",
       "visibility": "deprecated",
       "asyncModel": "promise",
-      "signature": "removeChart(chartId: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "removeChart(chartId: string): Promise<ChartRemoveReceipt>;",
+      "typeText": "Promise<ChartRemoveReceipt>",
       "compatibility": [
         {
           "id": "mog-api.chart.root.removeChart.deprecated",
@@ -14182,6 +14592,78 @@
       "asyncModel": "promise",
       "signature": "setDateValue(row: number, col: number, year: number, month: number, day: number): Promise<void>;",
       "typeText": "Promise<void>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "ws.setFormula",
+      "stableId": "Worksheet.setFormula",
+      "root": "worksheet",
+      "interface": "Worksheet",
+      "member": "setFormula",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "setFormula(address: string, formula: string): Promise<void>;",
+      "typeText": "Promise<void>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "ws.setFormulaConditionalFormat",
+      "stableId": "Worksheet.setFormulaConditionalFormat",
+      "root": "worksheet",
+      "interface": "Worksheet",
+      "member": "setFormulaConditionalFormat",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "setFormulaConditionalFormat(\n    range: string | CellRange | (string | CellRange)[],\n    formula: string,\n    style: CFStyle,\n  ): Promise<ConditionalFormat>;",
+      "typeText": "Promise<ConditionalFormat>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "ws.setFormulas",
+      "stableId": "Worksheet.setFormulas",
+      "root": "worksheet",
+      "interface": "Worksheet",
+      "member": "setFormulas",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "setFormulas(range: string, formulas: string[][]): Promise<void>;",
+      "typeText": "Promise<void>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "ws.setListValidation",
+      "stableId": "Worksheet.setListValidation",
+      "root": "worksheet",
+      "interface": "Worksheet",
+      "member": "setListValidation",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "setListValidation(\n    range: string | CellRange,\n    source: ListValidationSource,\n    options?: ListValidationOptions,\n  ): Promise<ValidationSetReceipt>;",
+      "typeText": "Promise<ValidationSetReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet.ts"
@@ -14359,6 +14841,24 @@
     },
     {
       "schemaVersion": "1",
+      "path": "ws.setValue",
+      "stableId": "Worksheet.setValue",
+      "root": "worksheet",
+      "interface": "Worksheet",
+      "member": "setValue",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "setValue(\n    address: string,\n    value: CellValuePrimitive | Date,\n    options?: Pick<CellWriteOptions, 'literal' | 'asText'>,\n  ): Promise<void>;",
+      "typeText": "Promise<void>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
       "path": "ws.setVisibility",
       "stableId": "Worksheet.setVisibility",
       "root": "worksheet",
@@ -14406,8 +14906,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "add(config: ShapeConfig): Promise<ShapeHandle>;",
-      "typeText": "Promise<ShapeHandle>",
+      "signature": "add(config: ShapeConfig): Promise<FloatingObjectHandleMutationReceipt<ShapeHandle>>;",
+      "typeText": "Promise<FloatingObjectHandleMutationReceipt<ShapeHandle>>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/collections/shape-collection.ts"
@@ -14538,8 +15038,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "add(config: SlicerConfig): Promise<Slicer>;",
-      "typeText": "Promise<Slicer>",
+      "signature": "add(config: SlicerConfig): Promise<SlicerAddReceipt>;",
+      "typeText": "Promise<SlicerAddReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/slicers.ts"
@@ -14557,8 +15057,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "clear(): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "clear(): Promise<SlicerClearReceipt>;",
+      "typeText": "Promise<SlicerClearReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/slicers.ts"
@@ -14576,8 +15076,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "clearSelection(slicerId: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "clearSelection(slicerId: string): Promise<SlicerSelectionClearReceipt>;",
+      "typeText": "Promise<SlicerSelectionClearReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/slicers.ts"
@@ -14595,8 +15095,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "duplicate(slicerId: string, offset?: { x?: number; y?: number }): Promise<string>;",
-      "typeText": "Promise<string>",
+      "signature": "duplicate(slicerId: string, offset?: { x?: number; y?: number }): Promise<SlicerDuplicateReceipt>;",
+      "typeText": "Promise<SlicerDuplicateReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/slicers.ts"
@@ -14804,8 +15304,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "remove(slicerId: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "remove(slicerId: string): Promise<SlicerRemoveReceipt>;",
+      "typeText": "Promise<SlicerRemoveReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/slicers.ts"
@@ -14823,8 +15323,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setSelection(slicerId: string, selectedItems: CellValue[]): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setSelection(slicerId: string, selectedItems: CellValue[]): Promise<SlicerSelectionSetReceipt>;",
+      "typeText": "Promise<SlicerSelectionSetReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/slicers.ts"
@@ -14842,8 +15342,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "update(slicerId: string, updates: Partial<SlicerConfig>): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "update(slicerId: string, updates: Partial<SlicerConfig>): Promise<SlicerUpdateReceipt>;",
+      "typeText": "Promise<SlicerUpdateReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/slicers.ts"
@@ -15698,8 +16198,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "add(range: string | CellRange, options?: TableOptions): Promise<TableInfo>;",
-      "typeText": "Promise<TableInfo>",
+      "signature": "add(range: string | CellRange, options?: TableOptions): Promise<TableAddReceipt>;",
+      "typeText": "Promise<TableAddReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/tables.ts"
@@ -15755,8 +16255,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "applyAutoExpansion(tableName: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "applyAutoExpansion(tableName: string): Promise<TableAutoExpansionReceipt>;",
+      "typeText": "Promise<TableAutoExpansionReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/tables.ts"
@@ -15793,8 +16293,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "clear(): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "clear(): Promise<TableClearReceipt>;",
+      "typeText": "Promise<TableClearReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/tables.ts"
@@ -15812,8 +16312,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "clearCalculatedColumn(tableName: string, colIndex: number): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "clearCalculatedColumn(\n    tableName: string,\n    colIndex: number,\n  ): Promise<TableClearCalculatedColumnReceipt>;",
+      "typeText": "Promise<TableClearCalculatedColumnReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/tables.ts"
@@ -15850,8 +16350,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "convertToRange(name: string): Promise<number>;",
-      "typeText": "Promise<number>",
+      "signature": "convertToRange(name: string): Promise<TableConvertToRangeReceipt>;",
+      "typeText": "Promise<TableConvertToRangeReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/tables.ts"
@@ -16421,8 +16921,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "remove(name: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "remove(name: string): Promise<TableRemoveReceipt>;",
+      "typeText": "Promise<TableRemoveReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/tables.ts"
@@ -16459,8 +16959,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "rename(oldName: string, newName: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "rename(oldName: string, newName: string): Promise<TableRenameReceipt>;",
+      "typeText": "Promise<TableRenameReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/tables.ts"
@@ -16478,8 +16978,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "renameColumn(name: string, columnIndex: number, newColumnName: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "renameColumn(\n    name: string,\n    columnIndex: number,\n    newColumnName: string,\n  ): Promise<TableRenameColumnReceipt>;",
+      "typeText": "Promise<TableRenameColumnReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/tables.ts"
@@ -16516,8 +17016,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setCalculatedColumn(tableName: string, colIndex: number, formula: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setCalculatedColumn(\n    tableName: string,\n    colIndex: number,\n    formula: string,\n  ): Promise<TableSetCalculatedColumnReceipt>;",
+      "typeText": "Promise<TableSetCalculatedColumnReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/tables.ts"
@@ -16554,8 +17054,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setHighlightFirstColumn(tableName: string, value: boolean): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setHighlightFirstColumn(tableName: string, value: boolean): Promise<TableUpdateReceipt>;",
+      "typeText": "Promise<TableUpdateReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/tables.ts"
@@ -16573,8 +17073,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setHighlightLastColumn(tableName: string, value: boolean): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setHighlightLastColumn(tableName: string, value: boolean): Promise<TableUpdateReceipt>;",
+      "typeText": "Promise<TableUpdateReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/tables.ts"
@@ -16611,8 +17111,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setShowBandedColumns(tableName: string, value: boolean): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setShowBandedColumns(tableName: string, value: boolean): Promise<TableUpdateReceipt>;",
+      "typeText": "Promise<TableUpdateReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/tables.ts"
@@ -16630,8 +17130,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setShowBandedRows(tableName: string, value: boolean): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setShowBandedRows(tableName: string, value: boolean): Promise<TableUpdateReceipt>;",
+      "typeText": "Promise<TableUpdateReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/tables.ts"
@@ -16649,8 +17149,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setShowFilterButton(tableName: string, value: boolean): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setShowFilterButton(tableName: string, value: boolean): Promise<TableUpdateReceipt>;",
+      "typeText": "Promise<TableUpdateReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/tables.ts"
@@ -16668,8 +17168,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setShowHeaders(tableName: string, visible: boolean): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setShowHeaders(tableName: string, visible: boolean): Promise<TableUpdateReceipt>;",
+      "typeText": "Promise<TableUpdateReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/tables.ts"
@@ -16687,8 +17187,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setShowTotals(tableName: string, visible: boolean): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setShowTotals(tableName: string, visible: boolean): Promise<TableUpdateReceipt>;",
+      "typeText": "Promise<TableUpdateReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/tables.ts"
@@ -16706,8 +17206,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setStylePreset(tableName: string, preset: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setStylePreset(tableName: string, preset: string): Promise<TableUpdateReceipt>;",
+      "typeText": "Promise<TableUpdateReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/tables.ts"
@@ -16802,8 +17302,8 @@
       "kind": "method",
       "visibility": "deprecated",
       "asyncModel": "promise",
-      "signature": "toggleHeaderRow(name: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "toggleHeaderRow(name: string): Promise<TableUpdateReceipt>;",
+      "typeText": "Promise<TableUpdateReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/tables.ts"
@@ -16821,8 +17321,8 @@
       "kind": "method",
       "visibility": "deprecated",
       "asyncModel": "promise",
-      "signature": "toggleTotalsRow(name: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "toggleTotalsRow(name: string): Promise<TableUpdateReceipt>;",
+      "typeText": "Promise<TableUpdateReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/tables.ts"
@@ -16840,8 +17340,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "update(tableName: string, updates: TableUpdateOptions): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "update(tableName: string, updates: TableUpdateOptions): Promise<TableUpdateReceipt>;",
+      "typeText": "Promise<TableUpdateReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/tables.ts"
@@ -16879,8 +17379,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "add(config: TextBoxConfig): Promise<TextBoxHandle>;",
-      "typeText": "Promise<TextBoxHandle>",
+      "signature": "add(config: TextBoxConfig): Promise<FloatingObjectHandleMutationReceipt<TextBoxHandle>>;",
+      "typeText": "Promise<FloatingObjectHandleMutationReceipt<TextBoxHandle>>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/collections/textbox-collection.ts"
@@ -16956,8 +17456,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "add(config: CreateTextEffectInput): Promise<TextEffectHandle>;",
-      "typeText": "Promise<TextEffectHandle>",
+      "signature": "add(\n    config: CreateTextEffectInput,\n  ): Promise<FloatingObjectHandleMutationReceipt<TextEffectHandle>>;",
+      "typeText": "Promise<FloatingObjectHandleMutationReceipt<TextEffectHandle>>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/collections/text-effects-collection.ts"
@@ -17086,8 +17586,8 @@
       "kind": "method",
       "visibility": "deprecated",
       "asyncModel": "promise",
-      "signature": "updateChart(chartId: string, updates: Partial<ChartConfig>): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "updateChart(chartId: string, updates: Partial<ChartConfig>): Promise<ChartUpdateReceipt>;",
+      "typeText": "Promise<ChartUpdateReceipt>",
       "compatibility": [
         {
           "id": "mog-api.chart.root.updateChart.deprecated",
@@ -17169,8 +17669,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "clear(range?: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "clear(range?: string | CellRange): Promise<ValidationClearReceipt>;",
+      "typeText": "Promise<ValidationClearReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/validation.ts"
@@ -17188,8 +17688,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "clearInRange(range: string | CellRange): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "clearInRange(range: string | CellRange): Promise<ValidationClearReceipt>;",
+      "typeText": "Promise<ValidationClearReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/validation.ts"
@@ -17359,8 +17859,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "remove(address: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "remove(address: string): Promise<ValidationRemoveReceipt>;",
+      "typeText": "Promise<ValidationRemoveReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/validation.ts"
@@ -17378,8 +17878,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "removeById(id: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "removeById(id: string): Promise<ValidationRemoveReceipt>;",
+      "typeText": "Promise<ValidationRemoveReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/validation.ts"
@@ -17400,6 +17900,40 @@
       "signature": "set(address: string, rule: ValidationRule): Promise<ValidationSetReceipt>;",
       "typeText": "Promise<ValidationSetReceipt>",
       "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet/validation.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "ws.validations.setList",
+      "stableId": "WorksheetValidation.setList",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetValidation",
+      "member": "setList",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "setList(\n    address: string,\n    source: ListValidationSource,\n    options?: ListValidationOptions,\n  ): Promise<ValidationSetReceipt>;",
+      "typeText": "Promise<ValidationSetReceipt>",
+      "compatibility": [
+        {
+          "id": "mog-api.validation.dataValidationAdd.unsupported",
+          "observedPath": "ws.dataValidation.add",
+          "canonicalPath": "ws.validations.setList",
+          "status": "structured_diagnostic",
+          "appliesTo": "method"
+        },
+        {
+          "id": "mog-api.validation.validationsAdd.unsupported",
+          "observedPath": "ws.validations.add",
+          "canonicalPath": "ws.validations.setList",
+          "status": "structured_diagnostic",
+          "appliesTo": "method"
+        }
+      ],
       "source": {
         "file": "types/api/src/api/worksheet/validation.ts"
       },
@@ -17808,6 +18342,25 @@
     },
     {
       "schemaVersion": "1",
+      "path": "ws.whatIf.describeDataTables",
+      "stableId": "WorksheetWhatIf.describeDataTables",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetWhatIf",
+      "member": "describeDataTables",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "describeDataTables(range?: string): Promise<DataTableDescriptor[]>;",
+      "typeText": "Promise<DataTableDescriptor[]>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet/what-if.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
       "path": "ws.whatIf.goalSeek",
       "stableId": "WorksheetWhatIf.goalSeek",
       "root": "subApi",
@@ -17819,6 +18372,44 @@
       "asyncModel": "promise",
       "signature": "goalSeek(targetCell: string, targetValue: number, changingCell: string): Promise<GoalSeekResult>;",
       "typeText": "Promise<GoalSeekResult>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet/what-if.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "ws.whatIf.refreshDataTable",
+      "stableId": "WorksheetWhatIf.refreshDataTable",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetWhatIf",
+      "member": "refreshDataTable",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "refreshDataTable(\n    regionIdOrRange: string,\n    options?: RefreshDataTableOptions,\n  ): Promise<DataTableRefreshReceipt>;",
+      "typeText": "Promise<DataTableRefreshReceipt>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet/what-if.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "ws.whatIf.writeDataTableValues",
+      "stableId": "WorksheetWhatIf.writeDataTableValues",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetWhatIf",
+      "member": "writeDataTableValues",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "writeDataTableValues(\n    formulaCell: string,\n    options: WriteDataTableValuesOptions,\n  ): Promise<DataTableWriteStaticValuesReceipt>;",
+      "typeText": "Promise<DataTableWriteStaticValuesReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/what-if.ts"
@@ -17911,15 +18502,7 @@
       "asyncModel": "sync",
       "signature": "addressToIndex(address: string): { row: number; col: number };",
       "typeText": "{row:number;col:number}",
-      "compatibility": [
-        {
-          "id": "mog-api.worksheet.addressToIndex.unsupported",
-          "observedPath": "ws.addressToIndex",
-          "canonicalPath": "wb.addressToIndex",
-          "status": "structured_diagnostic",
-          "appliesTo": "method"
-        }
-      ],
+      "compatibility": [],
       "source": {
         "file": "types/api/src/api/workbook.ts"
       },
@@ -18335,6 +18918,177 @@
       },
       "ownerPackage": "@mog/types-api"
     },
+    "wb.diagnostics.checkBlankRegions": {
+      "schemaVersion": "1",
+      "path": "wb.diagnostics.checkBlankRegions",
+      "stableId": "WorkbookDiagnostics.checkBlankRegions",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookDiagnostics",
+      "member": "checkBlankRegions",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "checkBlankRegions(input: WorkbookBlankRegionCheckInput): Promise<WorkbookValidationResult>;",
+      "typeText": "Promise<WorkbookValidationResult>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/diagnostics.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "wb.diagnostics.checkErrors": {
+      "schemaVersion": "1",
+      "path": "wb.diagnostics.checkErrors",
+      "stableId": "WorkbookDiagnostics.checkErrors",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookDiagnostics",
+      "member": "checkErrors",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "checkErrors(options?: CheckErrorsOptions): Promise<WorkbookValidationResult>;",
+      "typeText": "Promise<WorkbookValidationResult>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/diagnostics.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "wb.diagnostics.checkExternalReferences": {
+      "schemaVersion": "1",
+      "path": "wb.diagnostics.checkExternalReferences",
+      "stableId": "WorkbookDiagnostics.checkExternalReferences",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookDiagnostics",
+      "member": "checkExternalReferences",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "checkExternalReferences(\n    options?: WorkbookExternalReferenceCheckOptions,\n  ): Promise<WorkbookValidationResult>;",
+      "typeText": "Promise<WorkbookValidationResult>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/diagnostics.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "wb.diagnostics.checkFormulaErrors": {
+      "schemaVersion": "1",
+      "path": "wb.diagnostics.checkFormulaErrors",
+      "stableId": "WorkbookDiagnostics.checkFormulaErrors",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookDiagnostics",
+      "member": "checkFormulaErrors",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "checkFormulaErrors(options?: WorkbookValidationScanOptions): Promise<WorkbookValidationResult>;",
+      "typeText": "Promise<WorkbookValidationResult>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/diagnostics.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "wb.diagnostics.checkFormulaErrorValues": {
+      "schemaVersion": "1",
+      "path": "wb.diagnostics.checkFormulaErrorValues",
+      "stableId": "WorkbookDiagnostics.checkFormulaErrorValues",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookDiagnostics",
+      "member": "checkFormulaErrorValues",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "checkFormulaErrorValues(\n    options?: WorkbookValidationScanOptions,\n  ): Promise<WorkbookValidationResult>;",
+      "typeText": "Promise<WorkbookValidationResult>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/diagnostics.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "wb.diagnostics.checkFormulaShape": {
+      "schemaVersion": "1",
+      "path": "wb.diagnostics.checkFormulaShape",
+      "stableId": "WorkbookDiagnostics.checkFormulaShape",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookDiagnostics",
+      "member": "checkFormulaShape",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "checkFormulaShape(input: WorkbookFormulaShapeCheckInput): Promise<WorkbookValidationResult>;",
+      "typeText": "Promise<WorkbookValidationResult>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/diagnostics.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "wb.diagnostics.checkOpenXmlLoadability": {
+      "schemaVersion": "1",
+      "path": "wb.diagnostics.checkOpenXmlLoadability",
+      "stableId": "WorkbookDiagnostics.checkOpenXmlLoadability",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookDiagnostics",
+      "member": "checkOpenXmlLoadability",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "checkOpenXmlLoadability(): Promise<WorkbookValidationResult>;",
+      "typeText": "Promise<WorkbookValidationResult>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/diagnostics.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "wb.diagnostics.checkStaleCachedValues": {
+      "schemaVersion": "1",
+      "path": "wb.diagnostics.checkStaleCachedValues",
+      "stableId": "WorkbookDiagnostics.checkStaleCachedValues",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookDiagnostics",
+      "member": "checkStaleCachedValues",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "checkStaleCachedValues(): Promise<WorkbookValidationResult>;",
+      "typeText": "Promise<WorkbookValidationResult>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/diagnostics.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "wb.diagnostics.checkWorkbookDirtyState": {
+      "schemaVersion": "1",
+      "path": "wb.diagnostics.checkWorkbookDirtyState",
+      "stableId": "WorkbookDiagnostics.checkWorkbookDirtyState",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookDiagnostics",
+      "member": "checkWorkbookDirtyState",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "checkWorkbookDirtyState(): Promise<WorkbookValidationResult>;",
+      "typeText": "Promise<WorkbookValidationResult>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/diagnostics.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
     "wb.diagnostics.getFormulaReferences": {
       "schemaVersion": "1",
       "path": "wb.diagnostics.getFormulaReferences",
@@ -18424,6 +19178,25 @@
       "asyncModel": "promise",
       "signature": "runtime(options?: RuntimeDiagnosticsOptions): Promise<RuntimeDiagnosticsPage>;",
       "typeText": "Promise<RuntimeDiagnosticsPage>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/diagnostics.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "wb.diagnostics.validateWorkbook": {
+      "schemaVersion": "1",
+      "path": "wb.diagnostics.validateWorkbook",
+      "stableId": "WorkbookDiagnostics.validateWorkbook",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookDiagnostics",
+      "member": "validateWorkbook",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "validateWorkbook(options?: ValidateWorkbookOptions): Promise<WorkbookValidationResult>;",
+      "typeText": "Promise<WorkbookValidationResult>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/workbook/diagnostics.ts"
@@ -19363,22 +20136,7 @@
       "asyncModel": "sync",
       "signature": "indexToAddress(row: number, col: number): string;",
       "typeText": "string",
-      "compatibility": [
-        {
-          "id": "mog-api.worksheet.indexToAddress.unsupported",
-          "observedPath": "ws.indexToAddress",
-          "canonicalPath": "wb.indexToAddress",
-          "status": "structured_diagnostic",
-          "appliesTo": "method"
-        },
-        {
-          "id": "mog-api.worksheet.privateColLetter.unsupported",
-          "observedPath": "ws._colLetter",
-          "canonicalPath": "wb.indexToAddress",
-          "status": "structured_diagnostic",
-          "appliesTo": "method"
-        }
-      ],
+      "compatibility": [],
       "source": {
         "file": "types/api/src/api/workbook.ts"
       },
@@ -19883,8 +20641,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "clear(): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "clear(): Promise<NameClearReceipt>;",
+      "typeText": "Promise<NameClearReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/workbook/names.ts"
@@ -20138,6 +20896,25 @@
       },
       "ownerPackage": "@mog/types-api"
     },
+    "wb.names.removeById": {
+      "schemaVersion": "1",
+      "path": "wb.names.removeById",
+      "stableId": "WorkbookNames.removeById",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookNames",
+      "member": "removeById",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "removeById(id: string): Promise<NameRemoveReceipt>;",
+      "typeText": "Promise<NameRemoveReceipt>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/names.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
     "wb.names.update": {
       "schemaVersion": "1",
       "path": "wb.names.update",
@@ -20149,8 +20926,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "update(name: string, updates: NamedRangeUpdateOptions, scope?: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "update(\n    name: string,\n    updates: NamedRangeUpdateOptions,\n    scope?: string,\n  ): Promise<NameUpdateReceipt>;",
+      "typeText": "Promise<NameUpdateReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/workbook/names.ts"
@@ -20851,8 +21628,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "apply(id: string): Promise<ApplyScenarioResult>;",
-      "typeText": "Promise<ApplyScenarioResult>",
+      "signature": "apply(id: string): Promise<WorkbookScenarioApplyReceipt>;",
+      "typeText": "Promise<WorkbookScenarioApplyReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/workbook/scenarios.ts"
@@ -21717,8 +22494,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "remove(slicerId: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "remove(slicerId: string): Promise<SlicerRemoveReceipt>;",
+      "typeText": "Promise<SlicerRemoveReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/workbook/slicers.ts"
@@ -22597,11 +23374,29 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "autoFill(\n    sourceRange: string,\n    targetRange: string,\n    fillMode?: AutoFillMode,\n  ): Promise<AutoFillResult>;",
-      "typeText": "Promise<AutoFillResult>",
+      "signature": "autoFill(\n    sourceRange: string,\n    targetRange: string,\n    fillMode?: AutoFillMode,\n  ): Promise<AutoFillApplyReceipt>;",
+      "typeText": "Promise<AutoFillApplyReceipt>",
       "compatibility": [],
       "source": {
-        "file": "types/api/src/api/worksheet.ts"
+        "file": "types/api/src/api/worksheet/fill.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "ws.autoFillPreview": {
+      "schemaVersion": "1",
+      "path": "ws.autoFillPreview",
+      "stableId": "Worksheet.autoFillPreview",
+      "root": "worksheet",
+      "interface": "Worksheet",
+      "member": "autoFillPreview",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "autoFillPreview(\n    sourceRange: string,\n    targetRange: string,\n    fillMode?: AutoFillMode,\n  ): Promise<AutoFillPreviewReceipt>;",
+      "typeText": "Promise<AutoFillPreviewReceipt>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet/fill.ts"
       },
       "ownerPackage": "@mog/types-api"
     },
@@ -22872,6 +23667,25 @@
       },
       "ownerPackage": "@mog/types-api"
     },
+    "ws.cells.list": {
+      "schemaVersion": "1",
+      "path": "ws.cells.list",
+      "stableId": "WorksheetCellsAccessor.list",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetCellsAccessor",
+      "member": "list",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "list(\n    range: string | CellRange,\n    options?: WorksheetGetCellsFullOptions,\n  ): Promise<WorksheetRangeCell[]>;",
+      "typeText": "Promise<WorksheetRangeCell[]>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
     "ws.changes": {
       "schemaVersion": "1",
       "path": "ws.changes",
@@ -22942,8 +23756,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "activate(chartId: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "activate(chartId: string): Promise<ChartActivateReceipt>;",
+      "typeText": "Promise<ChartActivateReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/charts.ts"
@@ -22961,8 +23775,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "add(config: ChartConfig): Promise<Chart>;",
-      "typeText": "Promise<Chart>",
+      "signature": "add(config: ChartConfig): Promise<ChartAddReceipt>;",
+      "typeText": "Promise<ChartAddReceipt>",
       "compatibility": [
         {
           "id": "mog-api.chart.root.addChart.unsupported",
@@ -22988,8 +23802,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "addSeries(chartId: string, config: SeriesConfig): Promise<number>;",
-      "typeText": "Promise<number>",
+      "signature": "addSeries(chartId: string, config: SeriesConfig): Promise<ChartMutationReceipt>;",
+      "typeText": "Promise<ChartMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/charts.ts"
@@ -23007,8 +23821,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "addTrendline(chartId: string, seriesIndex: number, config: TrendlineConfig): Promise<number>;",
-      "typeText": "Promise<number>",
+      "signature": "addTrendline(\n    chartId: string,\n    seriesIndex: number,\n    config: TrendlineConfig,\n  ): Promise<ChartMutationReceipt>;",
+      "typeText": "Promise<ChartMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/charts.ts"
@@ -23072,6 +23886,25 @@
       },
       "ownerPackage": "@mog/types-api"
     },
+    "ws.charts.describe": {
+      "schemaVersion": "1",
+      "path": "ws.charts.describe",
+      "stableId": "WorksheetCharts.describe",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetCharts",
+      "member": "describe",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "describe(chartId: string, options?: ImageExportOptions): Promise<ChartDescription>;",
+      "typeText": "Promise<ChartDescription>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet/charts.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
     "ws.charts.duplicate": {
       "schemaVersion": "1",
       "path": "ws.charts.duplicate",
@@ -23083,8 +23916,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "duplicate(chartId: string): Promise<string>;",
-      "typeText": "Promise<string>",
+      "signature": "duplicate(chartId: string): Promise<ChartDuplicateReceipt>;",
+      "typeText": "Promise<ChartDuplicateReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/charts.ts"
@@ -23110,6 +23943,25 @@
       },
       "ownerPackage": "@mog/types-api"
     },
+    "ws.charts.findBySourceRange": {
+      "schemaVersion": "1",
+      "path": "ws.charts.findBySourceRange",
+      "stableId": "WorksheetCharts.findBySourceRange",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetCharts",
+      "member": "findBySourceRange",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "findBySourceRange(range: string | CellRange): Promise<ChartSourceRangeMatch[]>;",
+      "typeText": "Promise<ChartSourceRangeMatch[]>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet/charts.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
     "ws.charts.formatPoint": {
       "schemaVersion": "1",
       "path": "ws.charts.formatPoint",
@@ -23121,8 +23973,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "formatPoint(\n    chartId: string,\n    seriesIndex: number,\n    pointIndex: number,\n    format: { fill?: string; border?: ChartBorder },\n  ): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "formatPoint(\n    chartId: string,\n    seriesIndex: number,\n    pointIndex: number,\n    format: { fill?: string; border?: ChartBorder },\n  ): Promise<ChartMutationReceipt>;",
+      "typeText": "Promise<ChartMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/charts.ts"
@@ -23422,6 +24274,25 @@
       },
       "ownerPackage": "@mog/types-api"
     },
+    "ws.charts.getSourceData": {
+      "schemaVersion": "1",
+      "path": "ws.charts.getSourceData",
+      "stableId": "WorksheetCharts.getSourceData",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetCharts",
+      "member": "getSourceData",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "getSourceData(chartId: string, options?: ImageExportOptions): Promise<ChartSourceData>;",
+      "typeText": "Promise<ChartSourceData>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet/charts.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
     "ws.charts.getTitleSubstring": {
       "schemaVersion": "1",
       "path": "ws.charts.getTitleSubstring",
@@ -23626,8 +24497,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "remove(chartId: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "remove(chartId: string): Promise<ChartRemoveReceipt>;",
+      "typeText": "Promise<ChartRemoveReceipt>",
       "compatibility": [
         {
           "id": "mog-api.chart.root.removeChart.deprecated",
@@ -23653,8 +24524,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "removeSeries(chartId: string, index: number): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "removeSeries(chartId: string, index: number): Promise<ChartMutationReceipt>;",
+      "typeText": "Promise<ChartMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/charts.ts"
@@ -23672,8 +24543,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "removeTrendline(chartId: string, seriesIndex: number, trendlineIndex: number): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "removeTrendline(\n    chartId: string,\n    seriesIndex: number,\n    trendlineIndex: number,\n  ): Promise<ChartMutationReceipt>;",
+      "typeText": "Promise<ChartMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/charts.ts"
@@ -23691,8 +24562,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "reorderSeries(chartId: string, fromIndex: number, toIndex: number): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "reorderSeries(chartId: string, fromIndex: number, toIndex: number): Promise<ChartMutationReceipt>;",
+      "typeText": "Promise<ChartMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/charts.ts"
@@ -23748,8 +24619,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setAxisTitle(chartId: string, axisType: 'category' | 'value', formula: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setAxisTitle(\n    chartId: string,\n    axisType: 'category' | 'value',\n    formula: string,\n  ): Promise<ChartMutationReceipt>;",
+      "typeText": "Promise<ChartMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/charts.ts"
@@ -23767,8 +24638,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setBubbleSizes(chartId: string, seriesIndex: number, range: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setBubbleSizes(\n    chartId: string,\n    seriesIndex: number,\n    range: string,\n  ): Promise<ChartMutationReceipt>;",
+      "typeText": "Promise<ChartMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/charts.ts"
@@ -23786,8 +24657,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setCategoryNames(chartId: string, range: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setCategoryNames(chartId: string, range: string): Promise<ChartMutationReceipt>;",
+      "typeText": "Promise<ChartMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/charts.ts"
@@ -23805,8 +24676,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setDataLabelHeight(\n    chartId: string,\n    seriesIndex: number,\n    pointIndex: number,\n    value: number,\n  ): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setDataLabelHeight(\n    chartId: string,\n    seriesIndex: number,\n    pointIndex: number,\n    value: number,\n  ): Promise<ChartMutationReceipt>;",
+      "typeText": "Promise<ChartMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/charts.ts"
@@ -23824,8 +24695,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setDataLabelWidth(\n    chartId: string,\n    seriesIndex: number,\n    pointIndex: number,\n    value: number,\n  ): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setDataLabelWidth(\n    chartId: string,\n    seriesIndex: number,\n    pointIndex: number,\n    value: number,\n  ): Promise<ChartMutationReceipt>;",
+      "typeText": "Promise<ChartMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/charts.ts"
@@ -23862,8 +24733,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setPointDataLabel(\n    chartId: string,\n    seriesIndex: number,\n    pointIndex: number,\n    config: DataLabelConfig,\n  ): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setPointDataLabel(\n    chartId: string,\n    seriesIndex: number,\n    pointIndex: number,\n    config: DataLabelConfig,\n  ): Promise<ChartMutationReceipt>;",
+      "typeText": "Promise<ChartMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/charts.ts"
@@ -23881,8 +24752,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setSeriesBinOptions(\n    chartId: string,\n    seriesIndex: number,\n    options: HistogramConfig,\n  ): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setSeriesBinOptions(\n    chartId: string,\n    seriesIndex: number,\n    options: HistogramConfig,\n  ): Promise<ChartMutationReceipt>;",
+      "typeText": "Promise<ChartMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/charts.ts"
@@ -23900,8 +24771,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setSeriesBoxwhiskerOptions(\n    chartId: string,\n    seriesIndex: number,\n    options: BoxplotConfig,\n  ): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setSeriesBoxwhiskerOptions(\n    chartId: string,\n    seriesIndex: number,\n    options: BoxplotConfig,\n  ): Promise<ChartMutationReceipt>;",
+      "typeText": "Promise<ChartMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/charts.ts"
@@ -23919,8 +24790,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setSeriesCategories(chartId: string, index: number, range: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setSeriesCategories(chartId: string, index: number, range: string): Promise<ChartMutationReceipt>;",
+      "typeText": "Promise<ChartMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/charts.ts"
@@ -23938,7 +24809,26 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setSeriesValues(chartId: string, index: number, range: string): Promise<void>;",
+      "signature": "setSeriesValues(chartId: string, index: number, range: string): Promise<ChartMutationReceipt>;",
+      "typeText": "Promise<ChartMutationReceipt>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet/charts.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "ws.charts.setSourceData": {
+      "schemaVersion": "1",
+      "path": "ws.charts.setSourceData",
+      "stableId": "WorksheetCharts.setSourceData",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetCharts",
+      "member": "setSourceData",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "setSourceData(chartId: string, sourceData: ChartSourceDataUpdate): Promise<void>;",
       "typeText": "Promise<void>",
       "compatibility": [],
       "source": {
@@ -24014,8 +24904,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "update(chartId: string, updates: Partial<ChartConfig>): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "update(chartId: string, updates: Partial<ChartConfig>): Promise<ChartUpdateReceipt>;",
+      "typeText": "Promise<ChartUpdateReceipt>",
       "compatibility": [
         {
           "id": "mog-api.chart.root.updateChart.deprecated",
@@ -24041,8 +24931,46 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "updateSeries(chartId: string, index: number, updates: Partial<SeriesConfig>): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "updateSeries(\n    chartId: string,\n    index: number,\n    updates: Partial<SeriesConfig>,\n  ): Promise<ChartMutationReceipt>;",
+      "typeText": "Promise<ChartMutationReceipt>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet/charts.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "ws.charts.updateTrendline": {
+      "schemaVersion": "1",
+      "path": "ws.charts.updateTrendline",
+      "stableId": "WorksheetCharts.updateTrendline",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetCharts",
+      "member": "updateTrendline",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "updateTrendline(\n    chartId: string,\n    seriesIndex: number,\n    trendlineIndex: number,\n    updates: Partial<TrendlineConfig>,\n  ): Promise<ChartMutationReceipt>;",
+      "typeText": "Promise<ChartMutationReceipt>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet/charts.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "ws.charts.usesRange": {
+      "schemaVersion": "1",
+      "path": "ws.charts.usesRange",
+      "stableId": "WorksheetCharts.usesRange",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetCharts",
+      "member": "usesRange",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "usesRange(range: string | CellRange): Promise<boolean>;",
+      "typeText": "Promise<boolean>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/charts.ts"
@@ -24134,8 +25062,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "add(cell: string, options: { text: string; author?: string }): Promise<Comment>;",
-      "typeText": "Promise<Comment>",
+      "signature": "add(cell: string, options: { text: string; author?: string }): Promise<CommentAddReceipt>;",
+      "typeText": "Promise<CommentAddReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/comments.ts"
@@ -24153,8 +25081,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "addNote(cell: string, options: { text: string; author?: string }): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "addNote(cell: string, options: { text: string; author?: string }): Promise<CommentAddReceipt>;",
+      "typeText": "Promise<CommentAddReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/comments.ts"
@@ -24172,8 +25100,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "addReply(commentId: string, text: string, author: string): Promise<Comment>;",
-      "typeText": "Promise<Comment>",
+      "signature": "addReply(commentId: string, text: string, author: string): Promise<CommentAddReceipt>;",
+      "typeText": "Promise<CommentAddReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/comments.ts"
@@ -24210,8 +25138,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "clear(): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "clear(): Promise<CommentRemoveReceipt>;",
+      "typeText": "Promise<CommentRemoveReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/comments.ts"
@@ -24229,8 +25157,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "convertNoteToThread(commentId: string): Promise<Comment>;",
-      "typeText": "Promise<Comment>",
+      "signature": "convertNoteToThread(commentId: string): Promise<CommentUpdateReceipt>;",
+      "typeText": "Promise<CommentUpdateReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/comments.ts"
@@ -24533,8 +25461,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "remove(commentId: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "remove(commentId: string): Promise<CommentRemoveReceipt>;",
+      "typeText": "Promise<CommentRemoveReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/comments.ts"
@@ -24571,8 +25499,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "removeNote(address: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "removeNote(address: string): Promise<CommentRemoveReceipt>;",
+      "typeText": "Promise<CommentRemoveReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/comments.ts"
@@ -24590,8 +25518,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "resolveThread(threadId: string, resolved: boolean): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "resolveThread(threadId: string, resolved: boolean): Promise<CommentUpdateReceipt>;",
+      "typeText": "Promise<CommentUpdateReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/comments.ts"
@@ -24609,8 +25537,8 @@
       "kind": "method",
       "visibility": "deprecated",
       "asyncModel": "promise",
-      "signature": "setNote(address: string, text: string, author?: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setNote(address: string, text: string, author?: string): Promise<CommentAddReceipt>;",
+      "typeText": "Promise<CommentAddReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/comments.ts"
@@ -24628,8 +25556,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setNoteHeight(address: string, height: number): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setNoteHeight(address: string, height: number): Promise<CommentUpdateReceipt>;",
+      "typeText": "Promise<CommentUpdateReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/comments.ts"
@@ -24647,8 +25575,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setNoteVisible(address: string, visible: boolean): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setNoteVisible(address: string, visible: boolean): Promise<CommentUpdateReceipt>;",
+      "typeText": "Promise<CommentUpdateReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/comments.ts"
@@ -24666,8 +25594,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setNoteWidth(address: string, width: number): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setNoteWidth(address: string, width: number): Promise<CommentUpdateReceipt>;",
+      "typeText": "Promise<CommentUpdateReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/comments.ts"
@@ -24685,8 +25613,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "update(commentId: string, updates: CommentUpdate): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "update(commentId: string, updates: CommentUpdate): Promise<CommentUpdateReceipt>;",
+      "typeText": "Promise<CommentUpdateReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/comments.ts"
@@ -24724,8 +25652,27 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "add(ranges: (string | CellRange)[], rules: CFRuleInput[]): Promise<ConditionalFormat>;",
-      "typeText": "Promise<ConditionalFormat>",
+      "signature": "add(\n    ranges: (string | CellRange)[],\n    rules: CFRuleInput[],\n  ): Promise<ConditionalFormatMutationReceipt & ConditionalFormat>;",
+      "typeText": "Promise<ConditionalFormatMutationReceipt&ConditionalFormat>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet/conditional-formats.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "ws.conditionalFormats.addFormula": {
+      "schemaVersion": "1",
+      "path": "ws.conditionalFormats.addFormula",
+      "stableId": "WorksheetConditionalFormatting.addFormula",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetConditionalFormatting",
+      "member": "addFormula",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "addFormula(\n    range: string | CellRange | (string | CellRange)[],\n    formula: string,\n    style: CFStyle,\n  ): Promise<ConditionalFormatMutationReceipt & ConditionalFormat>;",
+      "typeText": "Promise<ConditionalFormatMutationReceipt&ConditionalFormat>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/conditional-formats.ts"
@@ -24743,8 +25690,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "changeRuleType(formatId: string, ruleId: string, newRule: CFRuleInput): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "changeRuleType(\n    formatId: string,\n    ruleId: string,\n    newRule: CFRuleInput,\n  ): Promise<ConditionalFormatMutationReceipt>;",
+      "typeText": "Promise<ConditionalFormatMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/conditional-formats.ts"
@@ -24762,8 +25709,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "clear(): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "clear(): Promise<ConditionalFormatMutationReceipt>;",
+      "typeText": "Promise<ConditionalFormatMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/conditional-formats.ts"
@@ -24781,8 +25728,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "clearInRanges(ranges: (string | CellRange)[]): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "clearInRanges(ranges: (string | CellRange)[]): Promise<ConditionalFormatMutationReceipt>;",
+      "typeText": "Promise<ConditionalFormatMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/conditional-formats.ts"
@@ -24800,8 +25747,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "clearRuleStyle(formatId: string, ruleId: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "clearRuleStyle(formatId: string, ruleId: string): Promise<ConditionalFormatMutationReceipt>;",
+      "typeText": "Promise<ConditionalFormatMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/conditional-formats.ts"
@@ -24819,8 +25766,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "cloneForPaste(\n    sourceSheetId: string,\n    relativeCFs: Array<{\n      rules: any[];\n      rangeOffsets: Array<{\n        startRowOffset: number;\n        startColOffset: number;\n        endRowOffset: number;\n        endColOffset: number;\n      }>;\n    }>,\n    origin: { row: number; col: number },\n    isCut: boolean,\n  ): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "cloneForPaste(\n    sourceSheetId: string,\n    relativeCFs: Array<{\n      rules: any[];\n      rangeOffsets: Array<{\n        startRowOffset: number;\n        startColOffset: number;\n        endRowOffset: number;\n        endColOffset: number;\n      }>;\n    }>,\n    origin: { row: number; col: number },\n    isCut: boolean,\n  ): Promise<ConditionalFormatMutationReceipt>;",
+      "typeText": "Promise<ConditionalFormatMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/conditional-formats.ts"
@@ -24933,8 +25880,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "remove(formatId: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "remove(formatId: string): Promise<ConditionalFormatMutationReceipt>;",
+      "typeText": "Promise<ConditionalFormatMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/conditional-formats.ts"
@@ -24952,8 +25899,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "removeRule(formatId: string, ruleId: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "removeRule(formatId: string, ruleId: string): Promise<ConditionalFormatMutationReceipt>;",
+      "typeText": "Promise<ConditionalFormatMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/conditional-formats.ts"
@@ -24971,8 +25918,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "reorder(formatIds: string[]): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "reorder(formatIds: string[]): Promise<ConditionalFormatMutationReceipt>;",
+      "typeText": "Promise<ConditionalFormatMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/conditional-formats.ts"
@@ -24990,8 +25937,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "update(formatId: string, updates: ConditionalFormatUpdate): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "update(\n    formatId: string,\n    updates: ConditionalFormatUpdate,\n  ): Promise<ConditionalFormatMutationReceipt>;",
+      "typeText": "Promise<ConditionalFormatMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/conditional-formats.ts"
@@ -25683,8 +26630,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "add(position: Partial<ObjectPosition>, options?: CreateDrawingOptions): Promise<DrawingHandle>;",
-      "typeText": "Promise<DrawingHandle>",
+      "signature": "add(\n    position: Partial<ObjectPosition>,\n    options?: CreateDrawingOptions,\n  ): Promise<FloatingObjectHandleMutationReceipt<DrawingHandle>>;",
+      "typeText": "Promise<FloatingObjectHandleMutationReceipt<DrawingHandle>>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/collections/drawing-collection.ts"
@@ -25778,8 +26725,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "add(config: EquationConfig): Promise<EquationHandle>;",
-      "typeText": "Promise<EquationHandle>",
+      "signature": "add(config: EquationConfig): Promise<FloatingObjectHandleMutationReceipt<EquationHandle>>;",
+      "typeText": "Promise<FloatingObjectHandleMutationReceipt<EquationHandle>>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/collections/equation-collection.ts"
@@ -25880,6 +26827,24 @@
       },
       "ownerPackage": "@mog/types-api"
     },
+    "ws.evaluateFormula": {
+      "schemaVersion": "1",
+      "path": "ws.evaluateFormula",
+      "stableId": "Worksheet.evaluateFormula",
+      "root": "worksheet",
+      "interface": "Worksheet",
+      "member": "evaluateFormula",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "evaluateFormula(formula: string, options?: { sheet?: string | SheetId }): Promise<CellValue>;",
+      "typeText": "Promise<CellValue>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
     "ws.fillSeries": {
       "schemaVersion": "1",
       "path": "ws.fillSeries",
@@ -25890,11 +26855,11 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "fillSeries(range: string, options: FillSeriesOptions): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "fillSeries(range: string, options: FillSeriesOptions): Promise<FillSeriesApplyReceipt>;",
+      "typeText": "Promise<FillSeriesApplyReceipt>",
       "compatibility": [],
       "source": {
-        "file": "types/api/src/api/worksheet.ts"
+        "file": "types/api/src/api/worksheet/fill.ts"
       },
       "ownerPackage": "@mog/types-api"
     },
@@ -25929,8 +26894,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "add(range: string | CellRange): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "add(range: string | CellRange): Promise<AutoFilterSetReceipt>;",
+      "typeText": "Promise<AutoFilterSetReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/filters.ts"
@@ -25948,8 +26913,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "apply(filterId: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "apply(filterId: string): Promise<FilterMutationReceipt>;",
+      "typeText": "Promise<FilterMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/filters.ts"
@@ -25986,8 +26951,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "applyDynamicFilter(col: number, rule: DynamicFilterRule, filterId?: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "applyDynamicFilter(\n    col: number,\n    rule: DynamicFilterRule,\n    filterId?: string,\n  ): Promise<FilterMutationReceipt>;",
+      "typeText": "Promise<FilterMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/filters.ts"
@@ -26024,8 +26989,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "clear(): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "clear(): Promise<AutoFilterClearReceipt>;",
+      "typeText": "Promise<AutoFilterClearReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/filters.ts"
@@ -26043,8 +27008,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "clearAllCriteria(filterId: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "clearAllCriteria(filterId: string): Promise<FilterMutationReceipt>;",
+      "typeText": "Promise<FilterMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/filters.ts"
@@ -26081,8 +27046,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "clearColumnFilter(col: number, filterId?: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "clearColumnFilter(col: number, filterId?: string): Promise<FilterMutationReceipt>;",
+      "typeText": "Promise<FilterMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/filters.ts"
@@ -26385,8 +27350,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "reapply(filterId: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "reapply(filterId: string): Promise<FilterMutationReceipt>;",
+      "typeText": "Promise<FilterMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/filters.ts"
@@ -26442,8 +27407,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setColumnFilter(col: number, criteria: ColumnFilterCriteria, filterId?: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setColumnFilter(\n    col: number,\n    criteria: ColumnFilterCriteria,\n    filterId?: string,\n  ): Promise<FilterMutationReceipt>;",
+      "typeText": "Promise<FilterMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/filters.ts"
@@ -26534,8 +27499,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "findCells(predicate: (cell: CellData) => boolean, range?: string): Promise<string[]>;",
-      "typeText": "Promise<string[]>",
+      "signature": "findCells(query: FindCellsQuery): Promise<FindCellsResult>;",
+      "typeText": "Promise<FindCellsResult>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet.ts"
@@ -26608,6 +27573,24 @@
       "asyncModel": "promise",
       "signature": "findLastRow(col: number): Promise<{ lastDataRow: number | null; lastFormatRow: number | null }>;",
       "typeText": "Promise<{lastDataRow:number|null;lastFormatRow:number|null}>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "ws.forEachCell": {
+      "schemaVersion": "1",
+      "path": "ws.forEachCell",
+      "stableId": "Worksheet.forEachCell",
+      "root": "worksheet",
+      "interface": "Worksheet",
+      "member": "forEachCell",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "forEachCell(\n    range: string | CellRange,\n    visitor: WorksheetCellVisitor,\n    options?: { readonly sparse?: boolean },\n  ): Promise<void>;",
+      "typeText": "Promise<void>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet.ts"
@@ -27356,6 +28339,24 @@
       "asyncModel": "promise",
       "signature": "getCell(address: string): Promise<CellData>;",
       "typeText": "Promise<CellData>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "ws.getCells": {
+      "schemaVersion": "1",
+      "path": "ws.getCells",
+      "stableId": "Worksheet.getCells",
+      "root": "worksheet",
+      "interface": "Worksheet",
+      "member": "getCells",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "getCells(\n    range: string | CellRange,\n    options?: WorksheetGetCellsFullOptions,\n  ): Promise<WorksheetRangeCell[]>;",
+      "typeText": "Promise<WorksheetRangeCell[]>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet.ts"
@@ -29460,8 +30461,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "update(objectId: string, updates: Record<string, unknown>): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "update(\n    objectId: string,\n    updates: Record<string, unknown>,\n  ): Promise<FloatingObjectMutationReceipt>;",
+      "typeText": "Promise<FloatingObjectMutationReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/collections/object-collection.ts"
@@ -29803,8 +30804,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "add(config: PictureConfig): Promise<PictureHandle>;",
-      "typeText": "Promise<PictureHandle>",
+      "signature": "add(config: PictureConfig): Promise<FloatingObjectHandleMutationReceipt<PictureHandle>>;",
+      "typeText": "Promise<FloatingObjectHandleMutationReceipt<PictureHandle>>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/collections/picture-collection.ts"
@@ -29880,8 +30881,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "add(config: PivotCreateConfig): Promise<PivotTableConfig>;",
-      "typeText": "Promise<PivotTableConfig>",
+      "signature": "add(config: PivotCreateConfig, options?: PivotCreateOptions): Promise<PivotAddReceipt>;",
+      "typeText": "Promise<PivotAddReceipt>",
       "compatibility": [
         {
           "id": "mog-api.pivot.root.addPivotTable.deprecated",
@@ -29907,8 +30908,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "addCalculatedField(name: string, field: CalculatedField): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "addCalculatedField(name: string, field: CalculatedField): Promise<PivotAddCalculatedFieldReceipt>;",
+      "typeText": "Promise<PivotAddCalculatedFieldReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -29926,8 +30927,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "addField(\n    name: string,\n    fieldId: string,\n    area: PivotFieldArea,\n    options?: {\n      position?: number;\n      aggregateFunction?: AggregateFunction;\n      sortOrder?: SortOrder;\n      displayName?: string;\n      showValuesAs?: ShowValuesAsConfig;\n    },\n  ): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "addField(\n    name: string,\n    fieldId: string,\n    area: PivotFieldArea,\n    options?: {\n      position?: number;\n      aggregateFunction?: AggregateFunction;\n      sortOrder?: SortOrder;\n      displayName?: string;\n      showValuesAs?: ShowValuesAsConfig;\n    },\n  ): Promise<PivotAddFieldReceipt>;",
+      "typeText": "Promise<PivotAddFieldReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -29945,8 +30946,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "addWithSheet(\n    sheetName: string,\n    config: PivotCreateConfig,\n  ): Promise<{ sheetId: string; config: PivotTableConfig }>;",
-      "typeText": "Promise<{sheetId:string;config:PivotTableConfig}>",
+      "signature": "addWithSheet(\n    sheetName: string,\n    config: PivotCreateConfig,\n    options?: PivotCreateOptions,\n  ): Promise<PivotAddWithSheetReceipt>;",
+      "typeText": "Promise<PivotAddWithSheetReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -29964,8 +30965,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "clear(): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "clear(): Promise<PivotClearReceipt>;",
+      "typeText": "Promise<PivotClearReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -29983,8 +30984,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "compute(name: string, forceRefresh?: boolean): Promise<PivotTableResult | null>;",
-      "typeText": "Promise<PivotTableResult|null>",
+      "signature": "compute(name: string, forceRefresh?: boolean): Promise<PivotComputeReceipt>;",
+      "typeText": "Promise<PivotComputeReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -30455,8 +31456,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "moveField(\n    name: string,\n    fieldId: string,\n    fromArea: PivotFieldArea,\n    toArea: PivotFieldArea,\n    toPosition: number,\n  ): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "moveField(\n    name: string,\n    fieldId: string,\n    fromArea: PivotFieldArea,\n    toArea: PivotFieldArea,\n    toPosition: number,\n  ): Promise<PivotMoveFieldReceipt>;",
+      "typeText": "Promise<PivotMoveFieldReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -30474,8 +31475,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "queryPivot(\n    pivotName: string,\n    filters?: Record<string, CellValue | CellValue[]>,\n  ): Promise<PivotQueryResult | null>;",
-      "typeText": "Promise<PivotQueryResult|null>",
+      "signature": "queryPivot(\n    pivotName: string,\n    filters?: Record<string, CellValue | CellValue[]>,\n  ): Promise<PivotQueryReceipt>;",
+      "typeText": "Promise<PivotQueryReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -30493,8 +31494,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "refresh(name: string): Promise<PivotRefreshReceipt | PivotCommandReceipt>;",
-      "typeText": "Promise<PivotRefreshReceipt|PivotCommandReceipt>",
+      "signature": "refresh(name: string): Promise<PivotRefreshReceipt>;",
+      "typeText": "Promise<PivotRefreshReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -30512,8 +31513,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "refreshAll(): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "refreshAll(): Promise<PivotRefreshAllReceipt>;",
+      "typeText": "Promise<PivotRefreshAllReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -30531,8 +31532,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "remove(name: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "remove(name: string): Promise<PivotRemoveReceipt>;",
+      "typeText": "Promise<PivotRemoveReceipt>",
       "compatibility": [
         {
           "id": "mog-api.pivot.root.removePivotTable.deprecated",
@@ -30558,8 +31559,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "removeCalculatedField(name: string, fieldId: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "removeCalculatedField(name: string, fieldId: string): Promise<PivotRemoveCalculatedFieldReceipt>;",
+      "typeText": "Promise<PivotRemoveCalculatedFieldReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -30577,8 +31578,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "removeField(name: string, fieldId: string, area: PivotFieldArea): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "removeField(\n    name: string,\n    fieldId: string,\n    area: PivotFieldArea,\n  ): Promise<PivotRemoveFieldReceipt>;",
+      "typeText": "Promise<PivotRemoveFieldReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -30596,8 +31597,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "removeFilter(name: string, fieldId: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "removeFilter(name: string, fieldId: string): Promise<PivotRemoveFilterReceipt>;",
+      "typeText": "Promise<PivotRemoveFilterReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -30615,8 +31616,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "rename(name: string, newName: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "rename(name: string, newName: string): Promise<PivotRenameReceipt>;",
+      "typeText": "Promise<PivotRenameReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -30634,8 +31635,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "resetField(name: string, fieldId: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "resetField(name: string, fieldId: string): Promise<PivotResetFieldReceipt>;",
+      "typeText": "Promise<PivotResetFieldReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -30672,8 +31673,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setAllExpanded(name: string, expanded: boolean): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setAllExpanded(name: string, expanded: boolean): Promise<PivotSetAllExpandedReceipt>;",
+      "typeText": "Promise<PivotSetAllExpandedReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -30691,8 +31692,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setAllowMultipleFiltersPerField(name: string, allow: boolean): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setAllowMultipleFiltersPerField(\n    name: string,\n    allow: boolean,\n  ): Promise<PivotSetAllowMultipleFiltersPerFieldReceipt>;",
+      "typeText": "Promise<PivotSetAllowMultipleFiltersPerFieldReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -30710,8 +31711,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setAutoFormat(name: string, autoFormat: boolean): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setAutoFormat(name: string, autoFormat: boolean): Promise<PivotSetAutoFormatReceipt>;",
+      "typeText": "Promise<PivotSetAutoFormatReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -30729,8 +31730,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setDataSource(name: string, dataSource: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setDataSource(name: string, dataSource: string): Promise<PivotSetDataSourceReceipt>;",
+      "typeText": "Promise<PivotSetDataSourceReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -30748,8 +31749,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setEnableMultipleFilterItems(name: string, fieldId: string, enabled: boolean): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setEnableMultipleFilterItems(\n    name: string,\n    fieldId: string,\n    enabled: boolean,\n  ): Promise<PivotSetEnableMultipleFilterItemsReceipt>;",
+      "typeText": "Promise<PivotSetEnableMultipleFilterItemsReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -30767,8 +31768,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setFilter(name: string, fieldId: string, filter: Omit<PivotFilter, 'fieldId'>): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setFilter(\n    name: string,\n    fieldId: string,\n    filter: Omit<PivotFilter, 'fieldId'>,\n  ): Promise<PivotSetFilterReceipt>;",
+      "typeText": "Promise<PivotSetFilterReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -30786,8 +31787,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setItemVisibility(\n    name: string,\n    fieldId: string,\n    visibleItems: Record<string, boolean>,\n  ): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setItemVisibility(\n    name: string,\n    fieldId: string,\n    visibleItems: Record<string, boolean>,\n  ): Promise<PivotSetItemVisibilityReceipt>;",
+      "typeText": "Promise<PivotSetItemVisibilityReceipt>",
       "compatibility": [
         {
           "id": "mog-api.pivot.collection.setItemVisibility.alias",
@@ -30832,8 +31833,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setPivotItemVisibility(\n    name: string,\n    fieldId: string,\n    visibleItems: Record<string, boolean>,\n  ): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setPivotItemVisibility(\n    name: string,\n    fieldId: string,\n    visibleItems: Record<string, boolean>,\n  ): Promise<PivotSetPivotItemVisibilityReceipt>;",
+      "typeText": "Promise<PivotSetPivotItemVisibilityReceipt>",
       "compatibility": [
         {
           "id": "mog-api.pivot.collection.setItemVisibility.alias",
@@ -30859,8 +31860,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setPreserveFormatting(name: string, preserve: boolean): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setPreserveFormatting(\n    name: string,\n    preserve: boolean,\n  ): Promise<PivotSetPreserveFormattingReceipt>;",
+      "typeText": "Promise<PivotSetPreserveFormattingReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -31846,8 +32847,8 @@
       "kind": "method",
       "visibility": "deprecated",
       "asyncModel": "promise",
-      "signature": "removeChart(chartId: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "removeChart(chartId: string): Promise<ChartRemoveReceipt>;",
+      "typeText": "Promise<ChartRemoveReceipt>",
       "compatibility": [
         {
           "id": "mog-api.chart.root.removeChart.deprecated",
@@ -32008,6 +33009,78 @@
       "asyncModel": "promise",
       "signature": "setDateValue(row: number, col: number, year: number, month: number, day: number): Promise<void>;",
       "typeText": "Promise<void>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "ws.setFormula": {
+      "schemaVersion": "1",
+      "path": "ws.setFormula",
+      "stableId": "Worksheet.setFormula",
+      "root": "worksheet",
+      "interface": "Worksheet",
+      "member": "setFormula",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "setFormula(address: string, formula: string): Promise<void>;",
+      "typeText": "Promise<void>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "ws.setFormulaConditionalFormat": {
+      "schemaVersion": "1",
+      "path": "ws.setFormulaConditionalFormat",
+      "stableId": "Worksheet.setFormulaConditionalFormat",
+      "root": "worksheet",
+      "interface": "Worksheet",
+      "member": "setFormulaConditionalFormat",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "setFormulaConditionalFormat(\n    range: string | CellRange | (string | CellRange)[],\n    formula: string,\n    style: CFStyle,\n  ): Promise<ConditionalFormat>;",
+      "typeText": "Promise<ConditionalFormat>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "ws.setFormulas": {
+      "schemaVersion": "1",
+      "path": "ws.setFormulas",
+      "stableId": "Worksheet.setFormulas",
+      "root": "worksheet",
+      "interface": "Worksheet",
+      "member": "setFormulas",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "setFormulas(range: string, formulas: string[][]): Promise<void>;",
+      "typeText": "Promise<void>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "ws.setListValidation": {
+      "schemaVersion": "1",
+      "path": "ws.setListValidation",
+      "stableId": "Worksheet.setListValidation",
+      "root": "worksheet",
+      "interface": "Worksheet",
+      "member": "setListValidation",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "setListValidation(\n    range: string | CellRange,\n    source: ListValidationSource,\n    options?: ListValidationOptions,\n  ): Promise<ValidationSetReceipt>;",
+      "typeText": "Promise<ValidationSetReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet.ts"
@@ -32183,6 +33256,24 @@
       },
       "ownerPackage": "@mog/types-api"
     },
+    "ws.setValue": {
+      "schemaVersion": "1",
+      "path": "ws.setValue",
+      "stableId": "Worksheet.setValue",
+      "root": "worksheet",
+      "interface": "Worksheet",
+      "member": "setValue",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "setValue(\n    address: string,\n    value: CellValuePrimitive | Date,\n    options?: Pick<CellWriteOptions, 'literal' | 'asText'>,\n  ): Promise<void>;",
+      "typeText": "Promise<void>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
     "ws.setVisibility": {
       "schemaVersion": "1",
       "path": "ws.setVisibility",
@@ -32232,8 +33323,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "add(config: ShapeConfig): Promise<ShapeHandle>;",
-      "typeText": "Promise<ShapeHandle>",
+      "signature": "add(config: ShapeConfig): Promise<FloatingObjectHandleMutationReceipt<ShapeHandle>>;",
+      "typeText": "Promise<FloatingObjectHandleMutationReceipt<ShapeHandle>>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/collections/shape-collection.ts"
@@ -32364,8 +33455,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "add(config: SlicerConfig): Promise<Slicer>;",
-      "typeText": "Promise<Slicer>",
+      "signature": "add(config: SlicerConfig): Promise<SlicerAddReceipt>;",
+      "typeText": "Promise<SlicerAddReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/slicers.ts"
@@ -32383,8 +33474,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "clear(): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "clear(): Promise<SlicerClearReceipt>;",
+      "typeText": "Promise<SlicerClearReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/slicers.ts"
@@ -32402,8 +33493,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "clearSelection(slicerId: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "clearSelection(slicerId: string): Promise<SlicerSelectionClearReceipt>;",
+      "typeText": "Promise<SlicerSelectionClearReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/slicers.ts"
@@ -32421,8 +33512,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "duplicate(slicerId: string, offset?: { x?: number; y?: number }): Promise<string>;",
-      "typeText": "Promise<string>",
+      "signature": "duplicate(slicerId: string, offset?: { x?: number; y?: number }): Promise<SlicerDuplicateReceipt>;",
+      "typeText": "Promise<SlicerDuplicateReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/slicers.ts"
@@ -32630,8 +33721,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "remove(slicerId: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "remove(slicerId: string): Promise<SlicerRemoveReceipt>;",
+      "typeText": "Promise<SlicerRemoveReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/slicers.ts"
@@ -32649,8 +33740,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setSelection(slicerId: string, selectedItems: CellValue[]): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setSelection(slicerId: string, selectedItems: CellValue[]): Promise<SlicerSelectionSetReceipt>;",
+      "typeText": "Promise<SlicerSelectionSetReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/slicers.ts"
@@ -32668,8 +33759,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "update(slicerId: string, updates: Partial<SlicerConfig>): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "update(slicerId: string, updates: Partial<SlicerConfig>): Promise<SlicerUpdateReceipt>;",
+      "typeText": "Promise<SlicerUpdateReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/slicers.ts"
@@ -33524,8 +34615,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "add(range: string | CellRange, options?: TableOptions): Promise<TableInfo>;",
-      "typeText": "Promise<TableInfo>",
+      "signature": "add(range: string | CellRange, options?: TableOptions): Promise<TableAddReceipt>;",
+      "typeText": "Promise<TableAddReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/tables.ts"
@@ -33581,8 +34672,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "applyAutoExpansion(tableName: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "applyAutoExpansion(tableName: string): Promise<TableAutoExpansionReceipt>;",
+      "typeText": "Promise<TableAutoExpansionReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/tables.ts"
@@ -33619,8 +34710,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "clear(): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "clear(): Promise<TableClearReceipt>;",
+      "typeText": "Promise<TableClearReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/tables.ts"
@@ -33638,8 +34729,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "clearCalculatedColumn(tableName: string, colIndex: number): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "clearCalculatedColumn(\n    tableName: string,\n    colIndex: number,\n  ): Promise<TableClearCalculatedColumnReceipt>;",
+      "typeText": "Promise<TableClearCalculatedColumnReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/tables.ts"
@@ -33676,8 +34767,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "convertToRange(name: string): Promise<number>;",
-      "typeText": "Promise<number>",
+      "signature": "convertToRange(name: string): Promise<TableConvertToRangeReceipt>;",
+      "typeText": "Promise<TableConvertToRangeReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/tables.ts"
@@ -34247,8 +35338,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "remove(name: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "remove(name: string): Promise<TableRemoveReceipt>;",
+      "typeText": "Promise<TableRemoveReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/tables.ts"
@@ -34285,8 +35376,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "rename(oldName: string, newName: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "rename(oldName: string, newName: string): Promise<TableRenameReceipt>;",
+      "typeText": "Promise<TableRenameReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/tables.ts"
@@ -34304,8 +35395,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "renameColumn(name: string, columnIndex: number, newColumnName: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "renameColumn(\n    name: string,\n    columnIndex: number,\n    newColumnName: string,\n  ): Promise<TableRenameColumnReceipt>;",
+      "typeText": "Promise<TableRenameColumnReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/tables.ts"
@@ -34342,8 +35433,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setCalculatedColumn(tableName: string, colIndex: number, formula: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setCalculatedColumn(\n    tableName: string,\n    colIndex: number,\n    formula: string,\n  ): Promise<TableSetCalculatedColumnReceipt>;",
+      "typeText": "Promise<TableSetCalculatedColumnReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/tables.ts"
@@ -34380,8 +35471,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setHighlightFirstColumn(tableName: string, value: boolean): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setHighlightFirstColumn(tableName: string, value: boolean): Promise<TableUpdateReceipt>;",
+      "typeText": "Promise<TableUpdateReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/tables.ts"
@@ -34399,8 +35490,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setHighlightLastColumn(tableName: string, value: boolean): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setHighlightLastColumn(tableName: string, value: boolean): Promise<TableUpdateReceipt>;",
+      "typeText": "Promise<TableUpdateReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/tables.ts"
@@ -34437,8 +35528,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setShowBandedColumns(tableName: string, value: boolean): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setShowBandedColumns(tableName: string, value: boolean): Promise<TableUpdateReceipt>;",
+      "typeText": "Promise<TableUpdateReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/tables.ts"
@@ -34456,8 +35547,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setShowBandedRows(tableName: string, value: boolean): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setShowBandedRows(tableName: string, value: boolean): Promise<TableUpdateReceipt>;",
+      "typeText": "Promise<TableUpdateReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/tables.ts"
@@ -34475,8 +35566,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setShowFilterButton(tableName: string, value: boolean): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setShowFilterButton(tableName: string, value: boolean): Promise<TableUpdateReceipt>;",
+      "typeText": "Promise<TableUpdateReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/tables.ts"
@@ -34494,8 +35585,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setShowHeaders(tableName: string, visible: boolean): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setShowHeaders(tableName: string, visible: boolean): Promise<TableUpdateReceipt>;",
+      "typeText": "Promise<TableUpdateReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/tables.ts"
@@ -34513,8 +35604,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setShowTotals(tableName: string, visible: boolean): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setShowTotals(tableName: string, visible: boolean): Promise<TableUpdateReceipt>;",
+      "typeText": "Promise<TableUpdateReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/tables.ts"
@@ -34532,8 +35623,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setStylePreset(tableName: string, preset: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "setStylePreset(tableName: string, preset: string): Promise<TableUpdateReceipt>;",
+      "typeText": "Promise<TableUpdateReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/tables.ts"
@@ -34628,8 +35719,8 @@
       "kind": "method",
       "visibility": "deprecated",
       "asyncModel": "promise",
-      "signature": "toggleHeaderRow(name: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "toggleHeaderRow(name: string): Promise<TableUpdateReceipt>;",
+      "typeText": "Promise<TableUpdateReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/tables.ts"
@@ -34647,8 +35738,8 @@
       "kind": "method",
       "visibility": "deprecated",
       "asyncModel": "promise",
-      "signature": "toggleTotalsRow(name: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "toggleTotalsRow(name: string): Promise<TableUpdateReceipt>;",
+      "typeText": "Promise<TableUpdateReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/tables.ts"
@@ -34666,8 +35757,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "update(tableName: string, updates: TableUpdateOptions): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "update(tableName: string, updates: TableUpdateOptions): Promise<TableUpdateReceipt>;",
+      "typeText": "Promise<TableUpdateReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/tables.ts"
@@ -34705,8 +35796,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "add(config: TextBoxConfig): Promise<TextBoxHandle>;",
-      "typeText": "Promise<TextBoxHandle>",
+      "signature": "add(config: TextBoxConfig): Promise<FloatingObjectHandleMutationReceipt<TextBoxHandle>>;",
+      "typeText": "Promise<FloatingObjectHandleMutationReceipt<TextBoxHandle>>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/collections/textbox-collection.ts"
@@ -34782,8 +35873,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "add(config: CreateTextEffectInput): Promise<TextEffectHandle>;",
-      "typeText": "Promise<TextEffectHandle>",
+      "signature": "add(\n    config: CreateTextEffectInput,\n  ): Promise<FloatingObjectHandleMutationReceipt<TextEffectHandle>>;",
+      "typeText": "Promise<FloatingObjectHandleMutationReceipt<TextEffectHandle>>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/collections/text-effects-collection.ts"
@@ -34912,8 +36003,8 @@
       "kind": "method",
       "visibility": "deprecated",
       "asyncModel": "promise",
-      "signature": "updateChart(chartId: string, updates: Partial<ChartConfig>): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "updateChart(chartId: string, updates: Partial<ChartConfig>): Promise<ChartUpdateReceipt>;",
+      "typeText": "Promise<ChartUpdateReceipt>",
       "compatibility": [
         {
           "id": "mog-api.chart.root.updateChart.deprecated",
@@ -34995,8 +36086,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "clear(range?: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "clear(range?: string | CellRange): Promise<ValidationClearReceipt>;",
+      "typeText": "Promise<ValidationClearReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/validation.ts"
@@ -35014,8 +36105,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "clearInRange(range: string | CellRange): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "clearInRange(range: string | CellRange): Promise<ValidationClearReceipt>;",
+      "typeText": "Promise<ValidationClearReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/validation.ts"
@@ -35185,8 +36276,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "remove(address: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "remove(address: string): Promise<ValidationRemoveReceipt>;",
+      "typeText": "Promise<ValidationRemoveReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/validation.ts"
@@ -35204,8 +36295,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "removeById(id: string): Promise<void>;",
-      "typeText": "Promise<void>",
+      "signature": "removeById(id: string): Promise<ValidationRemoveReceipt>;",
+      "typeText": "Promise<ValidationRemoveReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/validation.ts"
@@ -35226,6 +36317,40 @@
       "signature": "set(address: string, rule: ValidationRule): Promise<ValidationSetReceipt>;",
       "typeText": "Promise<ValidationSetReceipt>",
       "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet/validation.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "ws.validations.setList": {
+      "schemaVersion": "1",
+      "path": "ws.validations.setList",
+      "stableId": "WorksheetValidation.setList",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetValidation",
+      "member": "setList",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "setList(\n    address: string,\n    source: ListValidationSource,\n    options?: ListValidationOptions,\n  ): Promise<ValidationSetReceipt>;",
+      "typeText": "Promise<ValidationSetReceipt>",
+      "compatibility": [
+        {
+          "id": "mog-api.validation.dataValidationAdd.unsupported",
+          "observedPath": "ws.dataValidation.add",
+          "canonicalPath": "ws.validations.setList",
+          "status": "structured_diagnostic",
+          "appliesTo": "method"
+        },
+        {
+          "id": "mog-api.validation.validationsAdd.unsupported",
+          "observedPath": "ws.validations.add",
+          "canonicalPath": "ws.validations.setList",
+          "status": "structured_diagnostic",
+          "appliesTo": "method"
+        }
+      ],
       "source": {
         "file": "types/api/src/api/worksheet/validation.ts"
       },
@@ -35632,6 +36757,25 @@
       },
       "ownerPackage": "@mog/types-api"
     },
+    "ws.whatIf.describeDataTables": {
+      "schemaVersion": "1",
+      "path": "ws.whatIf.describeDataTables",
+      "stableId": "WorksheetWhatIf.describeDataTables",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetWhatIf",
+      "member": "describeDataTables",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "describeDataTables(range?: string): Promise<DataTableDescriptor[]>;",
+      "typeText": "Promise<DataTableDescriptor[]>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet/what-if.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
     "ws.whatIf.goalSeek": {
       "schemaVersion": "1",
       "path": "ws.whatIf.goalSeek",
@@ -35645,6 +36789,44 @@
       "asyncModel": "promise",
       "signature": "goalSeek(targetCell: string, targetValue: number, changingCell: string): Promise<GoalSeekResult>;",
       "typeText": "Promise<GoalSeekResult>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet/what-if.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "ws.whatIf.refreshDataTable": {
+      "schemaVersion": "1",
+      "path": "ws.whatIf.refreshDataTable",
+      "stableId": "WorksheetWhatIf.refreshDataTable",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetWhatIf",
+      "member": "refreshDataTable",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "refreshDataTable(\n    regionIdOrRange: string,\n    options?: RefreshDataTableOptions,\n  ): Promise<DataTableRefreshReceipt>;",
+      "typeText": "Promise<DataTableRefreshReceipt>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet/what-if.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "ws.whatIf.writeDataTableValues": {
+      "schemaVersion": "1",
+      "path": "ws.whatIf.writeDataTableValues",
+      "stableId": "WorksheetWhatIf.writeDataTableValues",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetWhatIf",
+      "member": "writeDataTableValues",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "writeDataTableValues(\n    formulaCell: string,\n    options: WriteDataTableValuesOptions,\n  ): Promise<DataTableWriteStaticValuesReceipt>;",
+      "typeText": "Promise<DataTableWriteStaticValuesReceipt>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/what-if.ts"

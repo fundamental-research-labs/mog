@@ -14,13 +14,13 @@ fn test_evaluation_order_with_positions_cycle() {
     let resolve = |cell: &CellId| -> Option<CellPosition> {
         if *cell == a {
             Some(CellPosition {
-                sheet: sheet,
+                sheet,
                 row: 0,
                 col: 0,
             })
         } else if *cell == b {
             Some(CellPosition {
-                sheet: sheet,
+                sheet,
                 row: 1,
                 col: 0,
             })

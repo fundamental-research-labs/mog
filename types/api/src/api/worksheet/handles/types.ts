@@ -18,6 +18,7 @@ import type {
 } from '@mog/types-objects/objects/floating-objects';
 import type { ObjectBounds } from '@mog/types-objects/objects/object-bounds-reader';
 import type {
+  FloatingObjectHandleMutationReceipt,
   FloatingObjectRemoveReceipt,
   FloatingObjectMutationReceipt,
 } from '../../mutation-receipt';
@@ -50,7 +51,10 @@ export interface FloatingObjectHandle {
 
   // -- Lifecycle (all types) -----------------------------------
   delete(): Promise<FloatingObjectRemoveReceipt>;
-  duplicate(offsetX?: number, offsetY?: number): Promise<FloatingObjectHandle>;
+  duplicate(
+    offsetX?: number,
+    offsetY?: number,
+  ): Promise<FloatingObjectHandleMutationReceipt<FloatingObjectHandle>>;
 
   // -- Reads (all types) --------------------------------------
   /** Sync pixel bounds from scene graph. Null if not rendered yet. */

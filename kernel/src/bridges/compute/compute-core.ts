@@ -19,6 +19,7 @@ import type { BridgeTransport } from '@rust-bridge/client';
 import { TrapError, resetWasmModule } from '@mog/transport';
 import { asFormulaA1 } from '@mog/spreadsheet-utils/cells/formula-string';
 import type { SchemaChangedEvent } from '@mog-sdk/contracts/events';
+import type { ViewportRefreshDetails } from '@mog-sdk/contracts/api';
 import type { IKernelContext, ISpreadsheetKernelContext } from '@mog-sdk/contracts/kernel';
 import type { ColumnSchema } from '@mog-sdk/contracts/schema';
 import { type SheetId, sheetId as toSheetId } from '@mog-sdk/contracts/core';
@@ -41,6 +42,7 @@ import {
 
 import { ViewportFetchManager } from './viewport-fetch-manager';
 import { refreshViewportForCfSiblings } from './cf-sibling-refresh';
+import { refreshViewportsAfterHistoryReplay } from './history-replay-refresh';
 import {
   admitPublicMutation as admitPublicMutationForCore,
   type DirectEditPosition,
@@ -88,38 +90,6 @@ export function extractMutationData<T>(result: MutationResult): T | undefined {
 
 function isShowFormulasChange(change: SheetSettingsChange): boolean {
   return change.changedKey === 'showFormulas';
-}
-
-function historyReplayNeedsFullViewportRefresh(result: MutationResult): boolean {
-  return Boolean(
-    result.dimensionChanges?.length ||
-    result.mergeChanges?.length ||
-    result.visibilityChanges?.length ||
-    result.commentChanges?.length ||
-    result.filterChanges?.length ||
-    result.tableChanges?.length ||
-    result.slicerChanges?.length ||
-    result.sheetChanges?.length ||
-    result.settingsChanges?.length ||
-    result.pageBreakChanges?.length ||
-    result.printAreaChanges?.length ||
-    result.printTitlesChanges?.length ||
-    result.printSettingsChanges?.length ||
-    result.splitConfigChanges?.length ||
-    result.scrollPositionChanges?.length ||
-    result.viewSelectionChanges?.length ||
-    result.workbookSettingsChanges?.length ||
-    result.cfChanges?.length ||
-    result.namedRangeChanges?.length ||
-    result.groupingChanges?.length ||
-    result.sparklineChanges?.length ||
-    result.sortingChanges?.length ||
-    result.structureChanges?.length ||
-    result.floatingObjectChanges?.length ||
-    result.floatingObjectGroupChanges?.length ||
-    result.pivotChanges?.length ||
-    result.rangeChanges?.length,
-  );
 }
 
 // ---------------------------------------------------------------------------
@@ -279,6 +249,7 @@ export class ComputeCore {
    * a polling loop.
    */
   private afterMutationHook: (() => Promise<void>) | null = null;
+  private undoGroupDepth = 0;
 
   /** Coordinator registry — single owner of per-viewport state. */
   private coordinatorRegistry: ViewportCoordinatorRegistry;
@@ -1013,7 +984,9 @@ export class ComputeCore {
     operation = 'mutate',
   ): Promise<MutationResult> {
     const result = await this.mutateCore(promise, directEdits, operation);
-    await this.ctx.services?.undo.notifyForwardMutation();
+    if (this.undoGroupDepth === 0) {
+      await this.ctx.services?.undo.notifyForwardMutation();
+    }
     return result;
   }
 
@@ -1324,7 +1297,7 @@ export class ComputeCore {
     sheetId: SheetId,
     bounds: { startRow: number; startCol: number; endRow: number; endCol: number },
     scrollBehavior: ViewportScrollBehavior = 'free',
-  ): Promise<void> {
+  ): Promise<ViewportRefreshDetails> {
     this.ensureInitialized();
     return this.fetchManager!.refresh(
       viewportId,
@@ -1665,9 +1638,7 @@ export class ComputeCore {
       undefined,
       'compute_undo',
     );
-    if (historyReplayNeedsFullViewportRefresh(result)) {
-      await this.forceRefreshAllViewports();
-    }
+    await refreshViewportsAfterHistoryReplay(this.fetchManager, result);
     return result;
   }
 
@@ -1678,9 +1649,7 @@ export class ComputeCore {
       undefined,
       'compute_redo',
     );
-    if (historyReplayNeedsFullViewportRefresh(result)) {
-      await this.forceRefreshAllViewports();
-    }
+    await refreshViewportsAfterHistoryReplay(this.fetchManager, result);
     return result;
   }
 
@@ -1702,11 +1671,16 @@ export class ComputeCore {
   async beginUndoGroup(): Promise<void> {
     this.ensureInitialized();
     await this.transport.call<void>('compute_begin_undo_group', { docId: this.docId });
+    this.undoGroupDepth += 1;
   }
 
   async endUndoGroup(): Promise<void> {
     this.ensureInitialized();
     await this.transport.call<void>('compute_end_undo_group', { docId: this.docId });
+    this.undoGroupDepth = Math.max(0, this.undoGroupDepth - 1);
+    if (this.undoGroupDepth === 0) {
+      await this.ctx.services?.undo.notifyForwardMutation();
+    }
   }
 
   // ===========================================================================

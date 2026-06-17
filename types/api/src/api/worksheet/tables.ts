@@ -15,11 +15,21 @@ import type {
   TableUpdateOptions,
 } from '../types';
 import type {
+  TableAddReceipt,
   TableAddColumnReceipt,
   TableAddRowReceipt,
+  TableAutoExpansionReceipt,
+  TableClearReceipt,
+  TableClearCalculatedColumnReceipt,
+  TableConvertToRangeReceipt,
   TableDeleteRowReceipt,
+  TableRenameColumnReceipt,
+  TableRenameReceipt,
   TableRemoveColumnReceipt,
+  TableRemoveReceipt,
   TableResizeReceipt,
+  TableSetCalculatedColumnReceipt,
+  TableUpdateReceipt,
 } from '../mutation-receipt';
 import type { CallableDisposable } from '@mog/types-core/disposable';
 import type {
@@ -110,9 +120,9 @@ export interface WorksheetTables {
    *
    * @param range - A1-style range string (e.g. "A1:D10") or CellRange object
    * @param options - Optional table creation settings (name, headers, style)
-   * @returns The created table information
+   * @returns A receipt containing the created table information.
    */
-  add(range: string | CellRange, options?: TableOptions): Promise<TableInfo>;
+  add(range: string | CellRange, options?: TableOptions): Promise<TableAddReceipt>;
 
   /**
    * Get a table by name.
@@ -179,7 +189,7 @@ export interface WorksheetTables {
    *
    * @param name - Table name
    */
-  remove(name: string): Promise<void>;
+  remove(name: string): Promise<TableRemoveReceipt>;
 
   /**
    * Convert a table to a plain range using the table conversion path.
@@ -189,14 +199,14 @@ export interface WorksheetTables {
    * compute engine can resolve them.
    *
    * @param name - Table name
-   * @returns Number of structured references converted
+   * @returns A receipt containing the number of structured references converted.
    */
-  convertToRange(name: string): Promise<number>;
+  convertToRange(name: string): Promise<TableConvertToRangeReceipt>;
 
   /**
    * Remove all tables from this worksheet.
    */
-  clear(): Promise<void>;
+  clear(): Promise<TableClearReceipt>;
 
   /**
    * Rename a table.
@@ -204,7 +214,7 @@ export interface WorksheetTables {
    * @param oldName - Current table name
    * @param newName - New table name
    */
-  rename(oldName: string, newName: string): Promise<void>;
+  rename(oldName: string, newName: string): Promise<TableRenameReceipt>;
 
   /**
    * Update a table's properties.
@@ -212,7 +222,7 @@ export interface WorksheetTables {
    * @param tableName - Table name
    * @param updates - Key-value pairs of properties to update
    */
-  update(tableName: string, updates: TableUpdateOptions): Promise<void>;
+  update(tableName: string, updates: TableUpdateOptions): Promise<TableUpdateReceipt>;
 
   /**
    * Get the table at a specific cell position, if one exists.
@@ -243,7 +253,7 @@ export interface WorksheetTables {
    * @param tableName - Table name
    * @param preset - Style preset name (e.g. "TableStyleLight1")
    */
-  setStylePreset(tableName: string, preset: string): Promise<void>;
+  setStylePreset(tableName: string, preset: string): Promise<TableUpdateReceipt>;
 
   /**
    * Resize a table to a new range.
@@ -269,7 +279,11 @@ export interface WorksheetTables {
    * @param columnIndex - Column index within the table (0-based)
    * @param newColumnName - New column header name
    */
-  renameColumn(name: string, columnIndex: number, newColumnName: string): Promise<void>;
+  renameColumn(
+    name: string,
+    columnIndex: number,
+    newColumnName: string,
+  ): Promise<TableRenameColumnReceipt>;
 
   /**
    * Remove a column from a table by index.
@@ -285,7 +299,7 @@ export interface WorksheetTables {
    *
    * @param name - Table name
    */
-  toggleTotalsRow(name: string): Promise<void>;
+  toggleTotalsRow(name: string): Promise<TableUpdateReceipt>;
 
   /**
    * @deprecated Use {@link setShowHeaders} instead.
@@ -293,14 +307,15 @@ export interface WorksheetTables {
    *
    * @param name - Table name
    */
-  toggleHeaderRow(name: string): Promise<void>;
+  toggleHeaderRow(name: string): Promise<TableUpdateReceipt>;
 
   /**
    * Apply auto-expansion to a table, extending it to include adjacent data.
    *
    * @param tableName - Table name
+   * @returns Receipt describing whether expansion was applied, skipped, unsupported, or failed
    */
-  applyAutoExpansion(tableName: string): Promise<void>;
+  applyAutoExpansion(tableName: string): Promise<TableAutoExpansionReceipt>;
 
   /**
    * Set a calculated column formula for all data cells in a table column.
@@ -309,7 +324,11 @@ export interface WorksheetTables {
    * @param colIndex - Column index within the table (0-based)
    * @param formula - The formula to set (e.g. "=[@Price]*[@Quantity]")
    */
-  setCalculatedColumn(tableName: string, colIndex: number, formula: string): Promise<void>;
+  setCalculatedColumn(
+    tableName: string,
+    colIndex: number,
+    formula: string,
+  ): Promise<TableSetCalculatedColumnReceipt>;
 
   /**
    * Clear the calculated column formula from a table column, replacing with empty values.
@@ -317,7 +336,10 @@ export interface WorksheetTables {
    * @param tableName - Table name
    * @param colIndex - Column index within the table (0-based)
    */
-  clearCalculatedColumn(tableName: string, colIndex: number): Promise<void>;
+  clearCalculatedColumn(
+    tableName: string,
+    colIndex: number,
+  ): Promise<TableClearCalculatedColumnReceipt>;
 
   /**
    * Get the A1-notation range covering the data body of a table (excludes header and totals rows).
@@ -486,7 +508,7 @@ export interface WorksheetTables {
    * @param tableName - Table name
    * @param value - Whether to highlight the first column
    */
-  setHighlightFirstColumn(tableName: string, value: boolean): Promise<void>;
+  setHighlightFirstColumn(tableName: string, value: boolean): Promise<TableUpdateReceipt>;
 
   /**
    * Set whether the last column is highlighted.
@@ -494,7 +516,7 @@ export interface WorksheetTables {
    * @param tableName - Table name
    * @param value - Whether to highlight the last column
    */
-  setHighlightLastColumn(tableName: string, value: boolean): Promise<void>;
+  setHighlightLastColumn(tableName: string, value: boolean): Promise<TableUpdateReceipt>;
 
   /**
    * Set whether banded columns are shown.
@@ -502,7 +524,7 @@ export interface WorksheetTables {
    * @param tableName - Table name
    * @param value - Whether to show banded columns
    */
-  setShowBandedColumns(tableName: string, value: boolean): Promise<void>;
+  setShowBandedColumns(tableName: string, value: boolean): Promise<TableUpdateReceipt>;
 
   /**
    * Set whether banded rows are shown.
@@ -510,7 +532,7 @@ export interface WorksheetTables {
    * @param tableName - Table name
    * @param value - Whether to show banded rows
    */
-  setShowBandedRows(tableName: string, value: boolean): Promise<void>;
+  setShowBandedRows(tableName: string, value: boolean): Promise<TableUpdateReceipt>;
 
   /**
    * Set whether filter buttons are shown on the header row.
@@ -518,7 +540,7 @@ export interface WorksheetTables {
    * @param tableName - Table name
    * @param value - Whether to show filter buttons
    */
-  setShowFilterButton(tableName: string, value: boolean): Promise<void>;
+  setShowFilterButton(tableName: string, value: boolean): Promise<TableUpdateReceipt>;
 
   /**
    * Set whether the header row is visible.
@@ -526,7 +548,7 @@ export interface WorksheetTables {
    * @param tableName - Table name
    * @param visible - Whether to show the header row
    */
-  setShowHeaders(tableName: string, visible: boolean): Promise<void>;
+  setShowHeaders(tableName: string, visible: boolean): Promise<TableUpdateReceipt>;
 
   /**
    * Set whether the totals row is visible.
@@ -534,7 +556,7 @@ export interface WorksheetTables {
    * @param tableName - Table name
    * @param visible - Whether to show the totals row
    */
-  setShowTotals(tableName: string, visible: boolean): Promise<void>;
+  setShowTotals(tableName: string, visible: boolean): Promise<TableUpdateReceipt>;
 
   // ---------------------------------------------------------------------------
   // Filter & collection access

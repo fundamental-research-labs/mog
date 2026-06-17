@@ -28,11 +28,65 @@ import type { IObjectBoundsReader } from '@mog-sdk/contracts/objects/object-boun
 
 function createMockObjectsImpl(): jest.Mocked<WorksheetObjectsImpl> {
   const receipt = {
+    kind: 'floatingObject.update' as const,
+    status: 'applied' as const,
+    effects: [
+      {
+        type: 'updatedObject' as const,
+        sheetId: 'sheet-1',
+        objectId: 'dup-1',
+        details: { objectType: 'shape' },
+      },
+      {
+        type: 'invalidatedCache' as const,
+        sheetId: 'sheet-1',
+        objectId: 'dup-1',
+        details: { cache: 'floatingObjects' },
+      },
+    ],
+    diagnostics: [],
+    sheetId: 'sheet-1',
     domain: 'floatingObject' as const,
     action: 'update' as const,
     id: 'dup-1',
     object: {},
     bounds: { x: 0, y: 0, width: 100, height: 50, rotation: 0 },
+  };
+  const duplicateReceipt = {
+    ...receipt,
+    kind: 'floatingObject.create' as const,
+    action: 'create' as const,
+    effects: [
+      {
+        type: 'createdObject' as const,
+        sheetId: 'sheet-1',
+        objectId: 'dup-1',
+        details: { objectType: 'shape' },
+      },
+      {
+        type: 'invalidatedCache' as const,
+        sheetId: 'sheet-1',
+        objectId: 'dup-1',
+        details: { cache: 'floatingObjects' },
+      },
+    ],
+  };
+  const removeReceipt = {
+    kind: 'floatingObject.remove' as const,
+    status: 'applied' as const,
+    effects: [
+      {
+        type: 'removedObject' as const,
+        sheetId: 'sheet-1',
+        objectId: 'test-1',
+        details: { objectType: 'floatingObject' },
+      },
+    ],
+    diagnostics: [],
+    sheetId: 'sheet-1',
+    domain: 'floatingObject' as const,
+    action: 'remove' as const,
+    id: 'test-1',
   };
 
   return {
@@ -44,17 +98,16 @@ function createMockObjectsImpl(): jest.Mocked<WorksheetObjectsImpl> {
     sendToBack: jest.fn().mockResolvedValue(undefined),
     bringForward: jest.fn().mockResolvedValue(undefined),
     sendBackward: jest.fn().mockResolvedValue(undefined),
-    remove: jest
-      .fn()
-      .mockResolvedValue({ domain: 'floatingObject', action: 'remove', id: 'test-1' }),
-    duplicate: jest.fn().mockResolvedValue({ ...receipt, id: 'dup-1' }),
+    remove: jest.fn().mockResolvedValue(removeReceipt),
+    duplicate: jest.fn().mockResolvedValue(duplicateReceipt),
     get: jest.fn().mockResolvedValue({ id: 'test-1', type: 'shape' }),
     getFullObject: jest.fn().mockResolvedValue({ id: 'test-1', type: 'shape' }),
-    update: jest.fn().mockResolvedValue(undefined),
+    update: jest.fn().mockResolvedValue(receipt),
     updateShape: jest.fn().mockResolvedValue(receipt),
     getShape: jest.fn().mockResolvedValue({ id: 'shape-1', shapeType: 'rect' }),
-    updatePicture: jest.fn().mockResolvedValue(undefined),
-    updateTextEffect: jest.fn().mockResolvedValue(undefined),
+    updatePicture: jest.fn().mockResolvedValue(receipt),
+    updateEquation: jest.fn().mockResolvedValue(receipt),
+    updateTextEffect: jest.fn().mockResolvedValue(receipt),
     addDrawingStroke: jest.fn().mockResolvedValue(undefined),
     eraseDrawingStrokes: jest.fn().mockResolvedValue(undefined),
     clearDrawingStrokes: jest.fn().mockResolvedValue(undefined),
@@ -202,6 +255,12 @@ describe('FloatingObjectHandleImpl', () => {
       expect(mockObjects.duplicate).toHaveBeenCalledWith('test-1');
       expect(dup.id).toBe('dup-1');
       expect(dup.type).toBe('shape');
+      expect(dup.kind).toBe('floatingObject.create');
+      expect(dup.status).toBe('applied');
+      expect(dup.effects).toEqual(
+        expect.arrayContaining([expect.objectContaining({ type: 'createdObject' })]),
+      );
+      expect(dup.handle.id).toBe('dup-1');
     });
 
     it('duplicate() returns a FloatingObjectHandleImpl', async () => {

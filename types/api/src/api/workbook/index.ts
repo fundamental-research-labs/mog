@@ -26,7 +26,21 @@ export type {
   RuntimeDiagnosticsOptions,
   RuntimeDiagnosticsPage,
   RuntimeOperationDiagnostic,
+  CheckErrorsOptions,
+  ValidateWorkbookOptions,
+  WorkbookBlankRegionCheckInput,
   WorkbookDiagnostics,
+  WorkbookExternalReferenceCheckOptions,
+  WorkbookFormulaShapeCheckInput,
+  WorkbookFormulaShapeRangeRequest,
+  WorkbookValidationCheckKind,
+  WorkbookValidationCheckResult,
+  WorkbookValidationCheckStatus,
+  WorkbookValidationFinding,
+  WorkbookValidationRangeRequest,
+  WorkbookValidationResult,
+  WorkbookValidationScanOptions,
+  WorkbookValidationSeverity,
 } from './diagnostics';
 export type { WorkbookNames } from './names';
 export type { NotificationId, WorkbookNotifications } from './notifications';

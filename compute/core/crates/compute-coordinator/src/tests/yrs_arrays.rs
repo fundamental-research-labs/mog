@@ -25,15 +25,13 @@ fn coord_state_as_doc(coord: &SyncCoordinator) -> Doc {
 fn read_col_order_len(doc: &Doc) -> u32 {
     let sheets: MapRef = doc.get_or_insert_map("sheets");
     let txn = doc.transact();
-    // Find the first sheet key
-    for (key, value) in sheets.iter(&txn) {
-        if let yrs::Out::YMap(sheet_map) = value {
-            if let Some(yrs::Out::YArray(arr)) = sheet_map.get(&txn, "colOrder") {
-                return arr.len(&txn);
-            }
+    // Find the first sheet.
+    if let Some((_key, value)) = sheets.iter(&txn).next() {
+        if let yrs::Out::YMap(sheet_map) = value
+            && let Some(yrs::Out::YArray(arr)) = sheet_map.get(&txn, "colOrder")
+        {
+            return arr.len(&txn);
         }
-        let _ = key; // use the first sheet
-        break;
     }
     0
 }
@@ -42,14 +40,12 @@ fn read_col_order_len(doc: &Doc) -> u32 {
 fn push_col_order(doc: &Doc, value: &str) {
     let sheets: MapRef = doc.get_or_insert_map("sheets");
     let mut txn = doc.transact_mut();
-    for (_key, val) in sheets.iter(&txn) {
-        if let yrs::Out::YMap(sheet_map) = val {
-            if let Some(yrs::Out::YArray(arr)) = sheet_map.get(&txn, "colOrder") {
-                arr.push_back(&mut txn, value);
-                return;
-            }
+    if let Some((_key, val)) = sheets.iter(&txn).next() {
+        if let yrs::Out::YMap(sheet_map) = val
+            && let Some(yrs::Out::YArray(arr)) = sheet_map.get(&txn, "colOrder")
+        {
+            arr.push_back(&mut txn, value);
         }
-        break;
     }
 }
 

@@ -62,8 +62,8 @@
     "build": "tsup && node scripts/rollup-public-types.mjs && node scripts/copy-wasm-assets.mjs",
     "build:dev": "tsup --no-dts",
     "test": "jest --config jest.config.cjs",
-    "typecheck": "tsc -b .",
-    "check-types": "tsc -b .",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "check-types": "tsc -p tsconfig.json --noEmit",
     "dev": "vite"
   },
   "dependencies": {

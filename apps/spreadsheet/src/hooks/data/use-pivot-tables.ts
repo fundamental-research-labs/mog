@@ -46,21 +46,16 @@ import { getUniqueSheetName } from '../../infra/utils/naming';
 import type { WorkbookWithImportedPivots } from '../../pivot/imported-pivot-runtime';
 import type { PivotViewModel } from '../../pivot/pivot-capabilities';
 import { loadPivotConfigEntries, type PivotConfigEntry } from '../../pivot/pivot-view-records';
-
-interface WorkbookWithPivotMaterialization {
-  readonly ctx?: {
-    awaitMaterialized?: (scope?: SheetId | 'allSheets') => Promise<void>;
-  };
-}
+import {
+  assertPivotMaterialized,
+  awaitPivotMaterialization,
+  inspectPivotMutationReceipt,
+  pivotReceiptMessage,
+  warnPivotRefresh,
+} from './pivot-receipt-utils';
 
 function pivotEntryMatchesId(entry: PivotConfigEntry, pivotId: string): boolean {
   return entry.config.id === pivotId || entry.alternateIds?.includes(pivotId) === true;
-}
-
-async function awaitPivotMaterialization(workbook: unknown): Promise<void> {
-  const awaitMaterialized = (workbook as WorkbookWithPivotMaterialization).ctx?.awaitMaterialized;
-  if (typeof awaitMaterialized !== 'function') return;
-  await awaitMaterialized('allSheets');
 }
 
 // =============================================================================
@@ -553,17 +548,20 @@ export function usePivotTables({ sheetId }: UsePivotTablesOptions): UsePivotTabl
         const sheetName = getUniqueSheetName(name, existingNames);
 
         // Use the atomic addWithSheet method for undo atomicity
-        const result = await ws.pivots.addWithSheet(sheetName, {
-          ...baseConfig,
-          outputSheetName: sheetName,
-          outputLocation: { row: 0, col: 0 },
-        });
-        const outputSheetId = toSheetId(result.sheetId);
-        const handle = await wb.getSheetById(outputSheetId).pivots.get(result.config);
-        await handle?.refresh();
+        const receipt = await ws.pivots.addWithSheet(
+          sheetName,
+          {
+            ...baseConfig,
+            outputSheetName: sheetName,
+            outputLocation: { row: 0, col: 0 },
+          },
+          { lifecycle: 'materialize' },
+        );
+        assertPivotMaterialized(receipt);
+        const outputSheetId = toSheetId(receipt.sheetId);
 
         return {
-          config: { ...result.config, outputSheetId },
+          config: { ...receipt.config, outputSheetId },
           outputSheetId,
         };
       } else {
@@ -581,17 +579,20 @@ export function usePivotTables({ sheetId }: UsePivotTablesOptions): UsePivotTabl
           throw new Error(`Target sheet "${targetSheetId}" does not exist`);
         }
 
-        // Create pivot on the target sheet via ws.pivots
+        // Create pivot on the target sheet via ws.pivots.
         const targetWs = wb.getSheetById(targetSheetId);
         const targetSheetName = await targetWs.getName();
-        const config = await targetWs.pivots.add({
-          ...baseConfig,
-          outputSheetId: targetSheetId,
-          outputSheetName: targetSheetName,
-          outputLocation: targetCell,
-        });
-        const handle = await targetWs.pivots.get(config);
-        await handle?.refresh();
+        const receipt = await targetWs.pivots.add(
+          {
+            ...baseConfig,
+            outputSheetId: targetSheetId,
+            outputSheetName: targetSheetName,
+            outputLocation: targetCell,
+          },
+          { lifecycle: 'materialize' },
+        );
+        assertPivotMaterialized(receipt);
+        const config = receipt.config;
 
         return {
           config,
@@ -621,15 +622,29 @@ export function usePivotTables({ sheetId }: UsePivotTablesOptions): UsePivotTabl
   // Delete pivot table via ws.pivots (fire-and-forget async)
   const deletePivotTable = useCallback(
     (pivotId: string) => {
-      void pivotHandleFromId(pivotId)?.delete();
+      const deleteMutation = pivotHandleFromId(pivotId)?.delete();
+      if (!deleteMutation) return;
+      void deleteMutation
+        .then((receipt) => {
+          if (receipt.status !== 'applied' || receipt.deleted === false) {
+            console.warn(pivotReceiptMessage(receipt), receipt);
+            return;
+          }
 
-      // Clear selection if deleted pivot was selected
-      if (selectedPivotId === pivotId) {
-        selectPivotAction(null);
-      }
-      if (editingPivotId === pivotId) {
-        stopEditingPivotAction();
-      }
+          // Clear selection if deleted pivot was selected
+          if (selectedPivotId === pivotId) {
+            selectPivotAction(null);
+          }
+          if (editingPivotId === pivotId) {
+            stopEditingPivotAction();
+          }
+        })
+        .catch((error) =>
+          console.warn(
+            `Pivot delete failed: ${error instanceof Error ? error.message : String(error)}`,
+            error,
+          ),
+        );
     },
     [pivotHandleFromId, selectedPivotId, editingPivotId, selectPivotAction, stopEditingPivotAction],
   );
@@ -665,7 +680,7 @@ export function usePivotTables({ sheetId }: UsePivotTablesOptions): UsePivotTabl
   // Add a field as a placement at a specific position.
   const addPlacement = useCallback(
     (pivotId: string, spec: PivotHandlePlacementSpec) => {
-      void pivotHandleFromId(pivotId)?.addPlacement(spec);
+      inspectPivotMutationReceipt('add placement', pivotHandleFromId(pivotId)?.addPlacement(spec));
     },
     [pivotHandleFromId],
   );
@@ -683,7 +698,10 @@ export function usePivotTables({ sheetId }: UsePivotTablesOptions): UsePivotTabl
   // Remove a specific placement by placementId.
   const removePlacement = useCallback(
     (pivotId: string, placementId: PlacementId) => {
-      void pivotHandleFromId(pivotId)?.removePlacement(placementId);
+      inspectPivotMutationReceipt(
+        'remove placement',
+        pivotHandleFromId(pivotId)?.removePlacement(placementId),
+      );
     },
     [pivotHandleFromId],
   );
@@ -707,7 +725,10 @@ export function usePivotTables({ sheetId }: UsePivotTablesOptions): UsePivotTabl
   // Move a specific placement by placementId.
   const movePlacement = useCallback(
     (pivotId: string, placementId: PlacementId, toArea: PivotFieldArea, toPosition: number) => {
-      void pivotHandleFromId(pivotId)?.movePlacement(placementId, toArea, toPosition);
+      inspectPivotMutationReceipt(
+        'move placement',
+        pivotHandleFromId(pivotId)?.movePlacement(placementId, toArea, toPosition),
+      );
     },
     [pivotHandleFromId],
   );
@@ -726,9 +747,9 @@ export function usePivotTables({ sheetId }: UsePivotTablesOptions): UsePivotTabl
   // Set aggregate function for a specific value placement.
   const setPlacementAggregateFunction = useCallback(
     (pivotId: string, placementId: PlacementId, aggregateFunction: AggregateFunction) => {
-      void pivotHandleFromId(pivotId)?.setPlacementAggregateFunction(
-        placementId,
-        aggregateFunction,
+      inspectPivotMutationReceipt(
+        'set placement aggregate function',
+        pivotHandleFromId(pivotId)?.setPlacementAggregateFunction(placementId, aggregateFunction),
       );
     },
     [pivotHandleFromId],
@@ -753,7 +774,10 @@ export function usePivotTables({ sheetId }: UsePivotTablesOptions): UsePivotTabl
   // Set row/column label sort for a specific placement.
   const setPlacementSortOrder = useCallback(
     (pivotId: string, placementId: PlacementId, sortOrder: SortOrder | null) => {
-      void pivotHandleFromId(pivotId)?.setPlacementSortOrder(placementId, sortOrder);
+      inspectPivotMutationReceipt(
+        'set placement sort order',
+        pivotHandleFromId(pivotId)?.setPlacementSortOrder(placementId, sortOrder),
+      );
     },
     [pivotHandleFromId],
   );
@@ -766,10 +790,13 @@ export function usePivotTables({ sheetId }: UsePivotTablesOptions): UsePivotTabl
       valuePlacementId: PlacementId,
       valueSortConfig: PivotValueSortConfig | null,
     ) => {
-      void pivotHandleFromId(pivotId)?.setSortByValue(
-        axisPlacementId,
-        valuePlacementId,
-        valueSortConfig,
+      inspectPivotMutationReceipt(
+        'set value sort',
+        pivotHandleFromId(pivotId)?.setSortByValue(
+          axisPlacementId,
+          valuePlacementId,
+          valueSortConfig,
+        ),
       );
     },
     [pivotHandleFromId],
@@ -844,7 +871,26 @@ export function usePivotTables({ sheetId }: UsePivotTablesOptions): UsePivotTabl
   // Refresh pivot table via ws.pivots (fire-and-forget async)
   const refreshPivotTable = useCallback(
     (pivotId: string) => {
-      void pivotHandleFromId(pivotId)?.refresh();
+      void (async () => {
+        const receipt = await pivotHandleFromId(pivotId)?.refresh();
+        warnPivotRefresh(receipt);
+        if (!receipt) return;
+        if (receipt.config) {
+          setPivotEntries((prev) =>
+            prev.map((entry) =>
+              pivotEntryMatchesId(entry, receipt.pivotId)
+                ? { ...entry, config: receipt.config ?? entry.config }
+                : entry,
+            ),
+          );
+        }
+        setResults((prev) =>
+          new Map(prev).set(receipt.pivotId, {
+            result: receipt.result ?? null,
+            error: receipt.status === 'applied' ? undefined : pivotReceiptMessage(receipt),
+          }),
+        );
+      })();
     },
     [pivotHandleFromId],
   );

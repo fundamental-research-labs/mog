@@ -20,6 +20,10 @@ import { jest } from '@jest/globals';
 
 import { sheetId } from '@mog-sdk/contracts/core';
 import { KernelError } from '../../errors';
+import {
+  worksheetTableOpsMock,
+  worksheetValidationOpsMock,
+} from './helpers/worksheet-impl-esm-mocks';
 
 // ---------------------------------------------------------------------------
 // Mock operation modules
@@ -58,6 +62,7 @@ jest.unstable_mockModule('../worksheet/operations/cell-operations', () => ({
 }));
 jest.unstable_mockModule('../worksheet/operations/range-operations', () => ({
   getRange: jest.fn(),
+  getCells: jest.fn(),
   setRange: jest.fn(),
   clearRange: jest.fn(),
 }));
@@ -84,6 +89,7 @@ jest.unstable_mockModule('../worksheet/operations/merge-operations', () => ({
 jest.unstable_mockModule('../worksheet/operations/query-operations', () => ({
   getUsedRange: jest.fn(),
   findCells: jest.fn(),
+  findCellsByQuery: jest.fn(),
   findByValue: jest.fn(),
   findByFormula: jest.fn(),
   getSelectionAggregates: jest.fn(),
@@ -98,10 +104,10 @@ jest.unstable_mockModule('../worksheet/operations/dependency-operations', () => 
   getPrecedents: jest.fn(),
   getDependents: jest.fn(),
 }));
-jest.unstable_mockModule('../worksheet/operations/validation-operations', () => ({
-  getDropdownItems: jest.fn(),
-  resolveDropdownItems: jest.fn(),
-}));
+jest.unstable_mockModule(
+  '../worksheet/operations/validation-operations',
+  () => worksheetValidationOpsMock,
+);
 jest.unstable_mockModule('../worksheet/operations/filter-operations', () => ({}));
 jest.unstable_mockModule('../worksheet/operations/shape-operations', () => ({}));
 jest.unstable_mockModule('../worksheet/operations/floating-object-operations', () => ({}));
@@ -122,29 +128,7 @@ jest.unstable_mockModule('../worksheet/operations/text-effects-operations', () =
   convertToTextBox: jest.fn(),
 }));
 jest.unstable_mockModule('../worksheet/operations/sheet-management-operations', () => ({}));
-jest.unstable_mockModule('../worksheet/operations/table-operations', () => ({
-  bridgeTableToTableInfo: jest.fn(),
-  getTableAtCell: jest.fn(),
-  getTableByName: jest.fn(),
-  getAllTablesInSheet: jest.fn(),
-  getTableHitRegion: jest.fn(),
-  removeTable: jest.fn(),
-  resizeTable: jest.fn(),
-  setTableStyle: jest.fn(),
-  renameTable: jest.fn(),
-  addTableColumn: jest.fn(),
-  removeTableColumn: jest.fn(),
-  createTable: jest.fn(),
-  toggleTotalsRow: jest.fn(),
-  toggleHeaderRow: jest.fn(),
-  applyAutoExpansion: jest.fn(),
-  getTableColumnDataCellsFromInfo: jest.fn(),
-  getDataBodyRangeFromInfo: jest.fn(),
-  getHeaderRowRangeFromInfo: jest.fn(),
-  getTotalRowRangeFromInfo: jest.fn(),
-  setCalculatedColumnFormula: jest.fn(),
-  clearCalculatedColumnFormula: jest.fn(),
-}));
+jest.unstable_mockModule('../worksheet/operations/table-operations', () => worksheetTableOpsMock);
 jest.unstable_mockModule('../worksheet/operations/drawing-operations', () => ({}));
 jest.unstable_mockModule('../worksheet/operations/fill-operations', () => ({}));
 
@@ -2050,8 +2034,44 @@ describe('WorksheetImpl', () => {
 
       const result = await ws.findCells(predicate);
 
-      expect(QueryOps.findCells).toHaveBeenCalledWith(ctx, SHEET_ID, predicate);
+      expect(QueryOps.findCells).toHaveBeenCalledWith(ctx, SHEET_ID, predicate, undefined);
       expect(result).toEqual(['A1', 'C2']);
+    });
+
+    it('findCells callback passes validated range bounds to query ops', async () => {
+      const predicate = (cell: any) => cell.value > 10;
+      (QueryOps.findCells as jest.Mock).mockResolvedValue([{ row: 1, col: 2 }]);
+
+      const result = await ws.findCells(predicate, 'B2:D4');
+
+      expect(QueryOps.findCells).toHaveBeenCalledWith(ctx, SHEET_ID, predicate, {
+        startRow: 1,
+        startCol: 1,
+        endRow: 3,
+        endCol: 3,
+      });
+      expect(result).toEqual(['C2']);
+    });
+
+    it('findCells query object delegates and returns structured results', async () => {
+      const query = { range: 'A1:C3', blank: true, hasFormula: false, pageSize: 25 };
+      const structured = {
+        addresses: ['B2'],
+        cells: [{ address: 'B2', row: 1, col: 1 }],
+        ranges: ['B2'],
+        truncated: false,
+      };
+      (QueryOps.findCellsByQuery as jest.Mock).mockResolvedValue(structured);
+
+      const result = await ws.findCells(query);
+
+      expect(QueryOps.findCellsByQuery).toHaveBeenCalledWith(ctx, SHEET_ID, query, {
+        startRow: 0,
+        startCol: 0,
+        endRow: 2,
+        endCol: 2,
+      });
+      expect(result).toBe(structured);
     });
 
     it('findByValue delegates and returns A1 addresses', async () => {

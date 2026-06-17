@@ -27,7 +27,7 @@ export async function setCalculatedColumnFormula(
 
   if (columnIndex < 0 || columnIndex >= table.columns.length) return;
 
-  void ctx.computeBridge.setCalculatedColumnFormula(table.name, columnIndex, formula);
+  await ctx.computeBridge.setCalculatedColumnFormula(table.name, columnIndex, formula);
 }
 
 /**
@@ -44,7 +44,7 @@ export async function clearCalculatedColumnFormula(
   if (columnIndex < 0 || columnIndex >= table.columns.length) return;
 
   // Clear by setting empty formula
-  void ctx.computeBridge.setCalculatedColumnFormula(table.name, columnIndex, '');
+  await ctx.computeBridge.setCalculatedColumnFormula(table.name, columnIndex, '');
 }
 
 /**

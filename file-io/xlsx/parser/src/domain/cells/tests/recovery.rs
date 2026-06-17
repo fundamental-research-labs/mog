@@ -1,5 +1,13 @@
-use crate::domain::cells::{CELL_TYPE_STRING, CellData, parse_worksheet_with_context};
+use crate::domain::cells::{
+    CELL_TYPE_STRING, CellData, VALUE_TYPE_SHARED_STRING, parse_worksheet_with_context,
+};
 use crate::infra::error::{ErrorCode, ParseContext};
+
+fn value_bytes<'a>(cell: &CellData, strings: &'a [u8]) -> &'a [u8] {
+    let start = cell.get_value_offset() as usize;
+    let end = start + cell.get_value_len() as usize;
+    &strings[start..end]
+}
 
 #[test]
 fn test_parse_with_context_basic() {
@@ -30,6 +38,40 @@ fn test_parse_with_context_basic() {
     assert_eq!(skipped, 0);
     assert_eq!(ctx.error_count(), 0);
     assert_eq!(ctx.warning_count(), 0);
+}
+
+#[test]
+fn test_parse_with_context_prefixed_tags_imports_cells() {
+    let xml = br#"<x:worksheet xmlns:x="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><x:sheetData>
+    <x:row r="1">
+      <x:c r="A1" t="s"><x:v>0</x:v></x:c>
+      <x:c r="B1"><x:v>2</x:v></x:c>
+    </x:row>
+  </x:sheetData></x:worksheet>"#;
+
+    let shared_strings: Vec<&str> = vec!["Hello"];
+    let mut cells = vec![CellData::default(); 10];
+    let mut strings = Vec::new();
+    let mut ctx = ParseContext::lenient();
+    ctx.set_current_part("sheet1.xml");
+
+    let (parsed, skipped) = parse_worksheet_with_context(
+        xml,
+        &shared_strings,
+        &mut cells,
+        &mut strings,
+        &mut ctx,
+        &mut Vec::new(),
+        &[],
+    );
+
+    assert_eq!(parsed, 2);
+    assert_eq!(skipped, 0);
+    assert_eq!(ctx.error_count(), 0);
+    assert_eq!(cells[0].get_cell_type(), CELL_TYPE_STRING);
+    assert_eq!(cells[0].get_value_type(), VALUE_TYPE_SHARED_STRING);
+    assert_eq!(value_bytes(&cells[0], &strings), b"Hello");
+    assert_eq!(value_bytes(&cells[1], &strings), b"2");
 }
 
 #[test]

@@ -56,6 +56,38 @@ fn source_formula_at(
     (formula, ref_positions)
 }
 
+fn source_formula_at_readonly(
+    stores: &EngineStores,
+    mirror: &CellMirror,
+    sheet_id: &SheetId,
+    row: u32,
+    col: u32,
+) -> (
+    Option<formula_types::IdentityFormula>,
+    Vec<compute_fill::formula_adjust::RefPosition>,
+) {
+    let pos = SheetPos::new(row, col);
+    let cell_id = stores
+        .grid_indexes
+        .get(sheet_id)
+        .and_then(|grid| grid.cell_id_at(row, col))
+        .or_else(|| mirror.resolve_cell_id(sheet_id, pos));
+
+    let formula = cell_id.and_then(|id| mirror.get_formula(&id).cloned());
+    let ref_positions = formula
+        .as_ref()
+        .map(|id_formula| {
+            id_formula
+                .refs
+                .iter()
+                .map(|r| resolve_identity_ref_to_fill_position(mirror, sheet_id, r, row, col))
+                .collect()
+        })
+        .unwrap_or_default();
+
+    (formula, ref_positions)
+}
+
 fn source_format_at(
     stores: &EngineStores,
     mirror: &CellMirror,
@@ -97,6 +129,93 @@ fn source_format_at(
     }
 }
 
+fn build_fill_input(
+    stores: &EngineStores,
+    sheet_id: &SheetId,
+    request: compute_fill::types::FillRequest,
+    source_cells: Vec<compute_fill::types::SourceCell>,
+) -> compute_fill::types::FillInput {
+    use crate::storage::sheet::{dimensions, merges};
+    use compute_fill::types::{LocaleNames, MergeRegion as FillMerge};
+
+    let src = request.source_range;
+    let combined_start_row = src.start_row.min(request.target_range.start_row);
+    let combined_start_col = src.start_col.min(request.target_range.start_col);
+    let combined_end_row = src.end_row.max(request.target_range.end_row);
+    let combined_end_col = src.end_col.max(request.target_range.end_col);
+
+    let resolved_merges = match stores.grid_indexes.get(sheet_id) {
+        Some(grid) => merges::get_merges_in_range(
+            stores.storage.doc(),
+            stores.storage.sheets(),
+            *sheet_id,
+            grid,
+            combined_start_row,
+            combined_start_col,
+            combined_end_row,
+            combined_end_col,
+        ),
+        None => Vec::new(),
+    };
+    let fill_merges: Vec<FillMerge> = resolved_merges
+        .iter()
+        .map(|m| FillMerge {
+            start_row: m.start_row,
+            start_col: m.start_col,
+            end_row: m.end_row,
+            end_col: m.end_col,
+        })
+        .collect();
+
+    let hidden_rows_vec =
+        dimensions::get_hidden_rows(stores.storage.doc(), stores.storage.sheets(), sheet_id);
+    let hidden_cols_vec =
+        dimensions::get_hidden_columns(stores.storage.doc(), stores.storage.sheets(), sheet_id);
+    let hidden_rows: std::collections::BTreeSet<u32> = hidden_rows_vec.into_iter().collect();
+    let hidden_cols: std::collections::BTreeSet<u32> = hidden_cols_vec.into_iter().collect();
+
+    compute_fill::types::FillInput {
+        request,
+        source_cells,
+        merges: fill_merges,
+        hidden_rows,
+        hidden_cols,
+        custom_lists: Vec::new(),
+        locale: LocaleNames::default(),
+    }
+}
+
+fn fill_result_summary(
+    fill_result: &compute_fill::types::FillResult,
+) -> compute_fill::types::FillResultSummary {
+    use compute_fill::types::{FillChangeSummary, FillResultSummary, FillUpdate};
+
+    let changes: Vec<FillChangeSummary> = fill_result
+        .updates
+        .iter()
+        .map(|u| {
+            let (row, col, change_type) = match u {
+                FillUpdate::Value { row, col, .. } => (*row, *col, "value"),
+                FillUpdate::Formula { row, col, .. } => (*row, *col, "formula"),
+                FillUpdate::Format { row, col, .. } => (*row, *col, "format"),
+                FillUpdate::Clear { row, col } => (*row, *col, "clear"),
+            };
+            FillChangeSummary {
+                row,
+                col,
+                change_type: change_type.to_string(),
+            }
+        })
+        .collect();
+
+    FillResultSummary {
+        pattern_type: fill_result.detected_pattern.pattern_type.clone(),
+        filled_cell_count: fill_result.filled_cell_count,
+        warnings: fill_result.warnings.clone(),
+        changes,
+    }
+}
+
 // ---------------------------------------------------------------------------
 // mutation_auto_fill
 // ---------------------------------------------------------------------------
@@ -112,10 +231,7 @@ pub(in crate::storage::engine) fn mutation_auto_fill(
     sheet_id: &SheetId,
     request: crate::engine_types::fill::BridgeAutoFillRequest,
 ) -> Result<(RecalcResult, compute_fill::types::FillResultSummary), ComputeError> {
-    use crate::storage::sheet::{dimensions, merges};
-    use compute_fill::types::{
-        FillInput, FillResultSummary, FillUpdate, LocaleNames, MergeRegion as FillMerge, SourceCell,
-    };
+    use compute_fill::types::{FillUpdate, SourceCell};
 
     let fill_request = request.to_fill_request();
     let src = fill_request.source_range;
@@ -147,82 +263,12 @@ pub(in crate::storage::engine) fn mutation_auto_fill(
         }
     }
 
-    // -- 2. Gather merges overlapping source+target area --
-    let combined_start_row = src.start_row.min(fill_request.target_range.start_row);
-    let combined_start_col = src.start_col.min(fill_request.target_range.start_col);
-    let combined_end_row = src.end_row.max(fill_request.target_range.end_row);
-    let combined_end_col = src.end_col.max(fill_request.target_range.end_col);
-
-    let resolved_merges = match stores.grid_indexes.get(sheet_id) {
-        Some(grid) => merges::get_merges_in_range(
-            stores.storage.doc(),
-            stores.storage.sheets(),
-            *sheet_id,
-            grid,
-            combined_start_row,
-            combined_start_col,
-            combined_end_row,
-            combined_end_col,
-        ),
-        None => Vec::new(),
-    };
-    let fill_merges: Vec<FillMerge> = resolved_merges
-        .iter()
-        .map(|m| FillMerge {
-            start_row: m.start_row,
-            start_col: m.start_col,
-            end_row: m.end_row,
-            end_col: m.end_col,
-        })
-        .collect();
-
-    // -- 3. Gather hidden rows/cols --
-    let hidden_rows_vec =
-        dimensions::get_hidden_rows(stores.storage.doc(), stores.storage.sheets(), sheet_id);
-    let hidden_cols_vec =
-        dimensions::get_hidden_columns(stores.storage.doc(), stores.storage.sheets(), sheet_id);
-    let hidden_rows: std::collections::BTreeSet<u32> = hidden_rows_vec.into_iter().collect();
-    let hidden_cols: std::collections::BTreeSet<u32> = hidden_cols_vec.into_iter().collect();
-
-    // -- 4. Build fill input and compute --
-    let fill_input = FillInput {
-        request: fill_request,
-        source_cells,
-        merges: fill_merges,
-        hidden_rows,
-        hidden_cols,
-        custom_lists: Vec::new(),
-        locale: LocaleNames::default(),
-    };
-
+    // -- 2. Build fill input and compute --
+    let fill_input = build_fill_input(stores, sheet_id, fill_request, source_cells);
     let fill_result = compute_fill::engine::compute_fill(&fill_input);
+    let summary = fill_result_summary(&fill_result);
 
-    let changes: Vec<compute_fill::types::FillChangeSummary> = fill_result
-        .updates
-        .iter()
-        .map(|u| {
-            let (row, col, change_type) = match u {
-                FillUpdate::Value { row, col, .. } => (*row, *col, "value"),
-                FillUpdate::Formula { row, col, .. } => (*row, *col, "formula"),
-                FillUpdate::Format { row, col, .. } => (*row, *col, "format"),
-                FillUpdate::Clear { row, col } => (*row, *col, "clear"),
-            };
-            compute_fill::types::FillChangeSummary {
-                row,
-                col,
-                change_type: change_type.to_string(),
-            }
-        })
-        .collect();
-
-    let summary = FillResultSummary {
-        pattern_type: fill_result.detected_pattern.pattern_type.clone(),
-        filled_cell_count: fill_result.filled_cell_count,
-        warnings: fill_result.warnings.clone(),
-        changes,
-    };
-
-    // -- 5. Apply fill updates to storage --
+    // -- 3. Apply fill updates to storage --
     let mut cell_edits: Vec<(SheetId, u32, u32, CellValue, Option<String>)> = Vec::new();
     let mut format_edits: Vec<(u32, u32, domain_types::CellFormat)> = Vec::new();
 
@@ -341,6 +387,112 @@ pub(in crate::storage::engine) fn mutation_auto_fill(
         }
     }
     Ok((recalc, summary))
+}
+
+pub(in crate::storage::engine) fn auto_fill_preview(
+    stores: &EngineStores,
+    mirror: &CellMirror,
+    sheet_id: &SheetId,
+    request: crate::engine_types::fill::BridgeAutoFillRequest,
+) -> Result<crate::engine_types::fill::BridgeAutoFillPreviewResult, ComputeError> {
+    use compute_fill::types::{FillUpdate, SourceCell};
+
+    let fill_request = request.to_fill_request();
+    let src = fill_request.source_range;
+    let mut source_cells: Vec<SourceCell> = Vec::new();
+
+    for row in src.start_row..=src.end_row {
+        for col in src.start_col..=src.end_col {
+            let pos = SheetPos::new(row, col);
+            let value = mirror
+                .get_cell_value_at(sheet_id, pos)
+                .cloned()
+                .unwrap_or(CellValue::Null);
+            let (formula, ref_positions) =
+                source_formula_at_readonly(stores, mirror, sheet_id, row, col);
+            let format = Some(source_format_at(stores, mirror, sheet_id, row, col));
+
+            source_cells.push(SourceCell {
+                row,
+                col,
+                value,
+                formula,
+                format,
+                ref_positions,
+            });
+        }
+    }
+
+    let fill_input = build_fill_input(stores, sheet_id, fill_request, source_cells);
+    let fill_result = compute_fill::engine::compute_fill(&fill_input);
+    let summary = fill_result_summary(&fill_result);
+
+    let mut formulas = Vec::new();
+    let mut reference_diagnostics = Vec::new();
+    for update in &fill_result.updates {
+        let FillUpdate::Formula {
+            row,
+            col,
+            source_formula,
+            adjusted_refs,
+        } = update
+        else {
+            continue;
+        };
+
+        let source_formula_text =
+            super::fill_preview::source_formula_text(mirror, sheet_id, source_formula);
+        let (formula, bridge_refs) = super::fill_preview::render_preview_formula(
+            mirror,
+            sheet_id,
+            source_formula,
+            adjusted_refs,
+        );
+
+        for adjusted_ref in adjusted_refs {
+            reference_diagnostics.push(
+                crate::engine_types::fill::BridgeAutoFillReferenceDiagnostic {
+                    row: *row,
+                    col: *col,
+                    ref_index: adjusted_ref.ref_index,
+                    target_row: adjusted_ref.target_row,
+                    target_col: adjusted_ref.target_col,
+                    target_end_row: adjusted_ref.target_end_row,
+                    target_end_col: adjusted_ref.target_end_col,
+                    out_of_bounds: adjusted_ref.out_of_bounds,
+                },
+            );
+        }
+
+        formulas.push(crate::engine_types::fill::BridgeAutoFillFormulaPreview {
+            row: *row,
+            col: *col,
+            formula,
+            source_formula: source_formula_text,
+            adjusted_refs: bridge_refs,
+        });
+    }
+
+    Ok(crate::engine_types::fill::BridgeAutoFillPreviewResult {
+        pattern_type: super::fill_preview::pattern_type_to_wire(&summary.pattern_type),
+        filled_cell_count: summary.filled_cell_count,
+        warnings: summary
+            .warnings
+            .iter()
+            .map(super::fill_preview::warning_to_bridge)
+            .collect::<Vec<_>>(),
+        changes: summary
+            .changes
+            .iter()
+            .map(|change| crate::engine_types::fill::BridgeAutoFillChange {
+                row: change.row,
+                col: change.col,
+                change_type: change.change_type.clone(),
+            })
+            .collect(),
+        formulas,
+        reference_diagnostics,
+    })
 }
 
 /// Flash fill mutation handler.

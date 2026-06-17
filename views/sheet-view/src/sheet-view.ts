@@ -44,6 +44,7 @@ import type {
 } from '@mog-sdk/contracts/viewport';
 
 import { ViewportWiring } from './viewport-wiring';
+import { throwOnFailedViewportRefresh } from './viewport-refresh-receipts';
 
 // Capability interfaces and implementations
 import type {
@@ -1438,15 +1439,15 @@ export class SheetView {
     if (this._disposed) return;
     if (this._isStaleViewportRefresh(generation)) return;
     try {
-      const promises: Promise<void>[] = [];
+      const refreshes: Array<ReturnType<ViewportRegion['refresh']>> = [];
       for (const [, region] of this._regions) {
         const layoutVp = this._viewportLayout?.viewports.find((vp) => vp.id === region.id);
         const scrollBehavior = layoutVp
           ? this._mapScrollBehavior(layoutVp.scrollBehavior.type)
           : 'free';
-        promises.push(region.refresh(scrollBehavior));
+        refreshes.push(region.refresh(scrollBehavior));
       }
-      await Promise.all(promises);
+      throwOnFailedViewportRefresh(await Promise.all(refreshes));
       if (this._isStaleViewportRefresh(generation)) return;
       this._renderer.invalidateAll();
     } catch (error) {

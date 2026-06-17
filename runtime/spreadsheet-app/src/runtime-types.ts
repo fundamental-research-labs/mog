@@ -40,6 +40,7 @@ type SpreadsheetAppChartImageExporterRegistrationTarget = {
 };
 
 export type SpreadsheetAppDocumentHandle = SpreadsheetAppChartImageExporterRegistrationTarget & {
+  readonly isImportDurabilityPending?: boolean;
   readonly eventBus: {
     onAll(handler: (event: unknown) => void): (() => void) | undefined;
   };

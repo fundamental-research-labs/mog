@@ -58,6 +58,19 @@ pub(super) fn auto_fill(
     }
 }
 
+pub(super) fn auto_fill_preview(
+    engine: &YrsComputeEngine,
+    sheet_id: &SheetId,
+    request: crate::engine_types::fill::BridgeAutoFillRequest,
+) -> Result<crate::engine_types::fill::BridgeAutoFillPreviewResult, ComputeError> {
+    super::super::services::mutation_handlers::auto_fill_preview(
+        &engine.stores,
+        &engine.mirror,
+        sheet_id,
+        request,
+    )
+}
+
 pub(super) fn flash_fill(
     engine: &mut YrsComputeEngine,
     sheet_id: &SheetId,

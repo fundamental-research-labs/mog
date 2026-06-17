@@ -19,7 +19,8 @@ pub(in crate::storage::engine) use conditional_formats::{
     has_cf_for_cell, reorder_cf_rules, update_cf_ranges, update_cf_rule, update_rule_in_cf,
 };
 pub(in crate::storage::engine) use range_formats::{
-    clear_format_for_ranges, set_format_for_ranges, toggle_format_property,
+    clear_format_for_ranges, set_format_for_ranges, set_format_for_ranges_with_origin,
+    toggle_format_property,
 };
 pub(in crate::storage::engine) use row_col_formats::{
     clear_col_format, set_col_format, set_col_format_range, set_row_format,

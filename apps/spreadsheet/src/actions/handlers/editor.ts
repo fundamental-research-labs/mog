@@ -696,7 +696,7 @@ export const CLEAR_COMMENTS: AsyncActionHandler = async (deps) => {
   await deps.workbook.undoGroup(async () => {
     for (const sheetId of targetSheetIds) {
       const ws = getWorksheet(deps, sheetId);
-      const removals: Promise<void>[] = [];
+      const removals: Promise<unknown>[] = [];
       for (const range of ranges) {
         for (let row = range.startRow; row <= range.endRow; row++) {
           for (let col = range.startCol; col <= range.endCol; col++) {

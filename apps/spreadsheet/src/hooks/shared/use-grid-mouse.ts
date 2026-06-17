@@ -31,15 +31,15 @@ import { useUIStore, useUIStoreApi, useWorkbook } from '../../infra/context';
 import { formatRangeSelectionRange } from '../../systems/grid-editing/coordination/range-selection-format';
 import { isValidDropTarget } from '../../systems/grid-editing/features/drag-drop';
 import {
-  getAutofitColumnsForResize,
-  getAutofitRowsForResize,
-} from '../../systems/grid-editing/features/autofit/selection-targets';
-import {
   createFillHandleDragAnchor,
   getRangeBottomRightCell,
   resolveFillHandleDragCell,
   type FillHandleDragAnchor,
 } from './fill-handle-drag-cell';
+import {
+  trackColumnResizeAutofit,
+  trackRowResizeAutofit,
+} from '../grid-mouse/helpers/autofit-resize';
 import {
   getCachedTableHitRegion,
   resolvePendingTableClickSelection,
@@ -1750,42 +1750,22 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
 
       // Handle column resize border double-click -> auto-fit column
       if (hit.type === 'column-resize-handle') {
-        Promise.all([
-          import('../../systems/grid-editing/features/autofit'),
-          import('@mog/grid-renderer'),
-        ]).then(async ([{ autoFitColumns }, { getTextMeasurementService }]) => {
-          const textMeasurement = getTextMeasurementService();
-          const ws = wb.getSheetById(activeSheetId);
-          const usedRange = await ws.getUsedRange();
-          const columnsToFit = getAutofitColumnsForResize(hit.col, selection.ranges, usedRange);
-          await autoFitColumns(
-            activeSheetId,
-            columnsToFit,
-            textMeasurement,
-            (entries) => ws.formatValues(entries),
-            wb ?? undefined,
-          );
+        trackColumnResizeAutofit({
+          activeSheetId,
+          col: hit.col,
+          ranges: selection.ranges,
+          workbook: wb,
         });
         return;
       }
 
       // Handle row resize border double-click -> auto-fit row
       if (hit.type === 'row-resize-handle') {
-        Promise.all([
-          import('../../systems/grid-editing/features/autofit'),
-          import('@mog/grid-renderer'),
-        ]).then(async ([{ autoFitRows }, { getTextMeasurementService }]) => {
-          const textMeasurement = getTextMeasurementService();
-          const ws = wb.getSheetById(activeSheetId);
-          const usedRange = await ws.getUsedRange();
-          const rowsToFit = getAutofitRowsForResize(hit.row, selection.ranges, usedRange);
-          await autoFitRows(
-            activeSheetId,
-            rowsToFit,
-            textMeasurement,
-            (entries) => ws.formatValues(entries),
-            wb ?? undefined,
-          );
+        trackRowResizeAutofit({
+          activeSheetId,
+          ranges: selection.ranges,
+          row: hit.row,
+          workbook: wb,
         });
         return;
       }

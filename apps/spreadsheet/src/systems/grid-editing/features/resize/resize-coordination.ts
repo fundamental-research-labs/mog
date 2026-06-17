@@ -23,6 +23,12 @@ import type { SheetId } from '@mog-sdk/contracts/core';
 
 import type { SelectionActor, SelectionState } from '../../../shared/actor-types';
 
+const RESIZE_NOOP_EPSILON_PX = 0.5;
+
+function isNoopResize(startSize: number, nextSize: number): boolean {
+  return Math.abs(nextSize - startSize) <= RESIZE_NOOP_EPSILON_PX;
+}
+
 // =============================================================================
 // Types
 // =============================================================================
@@ -117,6 +123,7 @@ export class ResizeCoordinator {
       return;
     }
 
+    const { selectionActor } = this.deps;
     const wasResizing = this.previousState.matches('resizingHeader');
     const isResizing = currentState.matches('resizingHeader');
 
@@ -129,6 +136,7 @@ export class ResizeCoordinator {
         resizeIndex,
         resizeIndexes,
         resizeStartPosition,
+        resizeStartSize,
         resizeStartSizes,
         resizeCurrentSize,
       } = this.previousState.context;
@@ -149,10 +157,23 @@ export class ResizeCoordinator {
         const firstIndex = resizeIndexes[0];
         const firstStartSize = resizeStartSizes.get(firstIndex) ?? 0;
         const delta = resizeCurrentSize - firstStartSize;
-        void this.executeMultiResize(resizeType, resizeIndexes, resizeStartSizes, delta);
-      } else if (resizeType !== null && resizeIndex !== null && resizeCurrentSize !== null) {
+        if (isNoopResize(firstStartSize, resizeCurrentSize)) {
+          this.clearResize(selectionActor);
+        } else {
+          void this.executeMultiResize(resizeType, resizeIndexes, resizeStartSizes, delta);
+        }
+      } else if (
+        resizeType !== null &&
+        resizeIndex !== null &&
+        resizeStartSize !== null &&
+        resizeCurrentSize !== null
+      ) {
         // Fallback to single resize for backwards compatibility
-        void this.executeResize(resizeType, resizeIndex, resizeCurrentSize);
+        if (isNoopResize(resizeStartSize, resizeCurrentSize)) {
+          this.clearResize(selectionActor);
+        } else {
+          void this.executeResize(resizeType, resizeIndex, resizeCurrentSize);
+        }
       } else {
       }
     }
@@ -221,6 +242,7 @@ export class ResizeCoordinator {
 
       // Calculate new size: startSize + delta, with minimum of 10px
       const newSize = Math.max(10, startSize + delta);
+      if (isNoopResize(startSize, newSize)) continue;
 
       if (resizeType === 'column') {
         writes.push([index, newSize]);
@@ -231,6 +253,9 @@ export class ResizeCoordinator {
 
     return (async () => {
       try {
+        if (writes.length === 0 && rowWrites.length === 0) {
+          return;
+        }
         if (resizeType === 'column') {
           await ws.layout.setColumnWidths(writes);
         } else {

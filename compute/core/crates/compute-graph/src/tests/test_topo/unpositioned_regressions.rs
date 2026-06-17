@@ -32,12 +32,12 @@ fn test_unpositioned_cell_must_not_create_false_cycle() {
     let resolve = |cell: &CellId| -> Option<CellPosition> {
         match cell.as_u128() {
             2 => Some(CellPosition {
-                sheet: sheet,
+                sheet,
                 row: 5,
                 col: 3,
             }), // B at row 5, col 3
             4 => Some(CellPosition {
-                sheet: sheet,
+                sheet,
                 row: 0,
                 col: 0,
             }), // D at row 0, col 0
@@ -82,7 +82,7 @@ fn test_unpositioned_cell_must_not_corrupt_affected_levels() {
     let resolve = |cell: &CellId| -> Option<CellPosition> {
         match cell.as_u128() {
             2 => Some(CellPosition {
-                sheet: sheet,
+                sheet,
                 row: 5,
                 col: 3,
             }),

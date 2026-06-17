@@ -229,6 +229,22 @@
         "disposition": "public-host-facade",
         "reason": "Current public kernel facade export; must remain self-contained and covered by API/declaration gates.",
       },
+      "address": {
+        "disposition": "public-host-facade",
+        "reason": "Current public kernel A1 utility facade export; stable convenience alias for host consumers.",
+      },
+      "column": {
+        "disposition": "public-host-facade",
+        "reason": "Current public kernel A1 utility facade export; stable convenience alias for host consumers.",
+      },
+      "columnIndex": {
+        "disposition": "public-host-facade",
+        "reason": "Current public kernel A1 utility facade export; stable convenience alias for host consumers.",
+      },
+      "columnName": {
+        "disposition": "public-host-facade",
+        "reason": "Current public kernel A1 utility facade export; stable convenience alias for host consumers.",
+      },
       "colToLetter": {
         "disposition": "public-host-facade",
         "reason": "Current public kernel facade export; must remain self-contained and covered by API/declaration gates.",
@@ -249,6 +265,18 @@
         "disposition": "public-host-facade",
         "reason": "Current public kernel facade export; must remain self-contained and covered by API/declaration gates.",
       },
+      "offset": {
+        "disposition": "public-host-facade",
+        "reason": "Current public kernel A1 utility facade export; stable convenience alias for host consumers.",
+      },
+      "parse": {
+        "disposition": "public-host-facade",
+        "reason": "Current public kernel A1 utility facade export; stable convenience alias for host consumers.",
+      },
+      "parseAddress": {
+        "disposition": "public-host-facade",
+        "reason": "Current public kernel A1 utility facade export; stable convenience alias for host consumers.",
+      },
       "parseCellAddress": {
         "disposition": "public-host-facade",
         "reason": "Current public kernel facade export; must remain self-contained and covered by API/declaration gates.",
@@ -256,6 +284,10 @@
       "parseCellRange": {
         "disposition": "public-host-facade",
         "reason": "Current public kernel facade export; must remain self-contained and covered by API/declaration gates.",
+      },
+      "rangeAddress": {
+        "disposition": "public-host-facade",
+        "reason": "Current public kernel A1 utility facade export; stable convenience alias for host consumers.",
       },
       "rangeToA1": {
         "disposition": "public-host-facade",

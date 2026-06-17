@@ -6,6 +6,11 @@
 
 import type {
   Comment,
+  CommentAddReceipt,
+  CommentConversionEffect,
+  CommentMutationTarget,
+  CommentRemoveReceipt,
+  CommentUpdateReceipt,
   CommentUpdate,
   Note,
   SheetId,
@@ -17,6 +22,16 @@ import { extractMutationData } from '../../bridges/compute/compute-core';
 import type { DocumentContext } from '../../context';
 import { KernelError } from '../../errors';
 import { resolveCell, resolveCellArgs } from '../internal/address-resolver';
+import {
+  changedRangeEffect,
+  commentObjectEffect,
+  fallbackComment,
+  removedCommentEffects,
+  targetFromCellRef,
+  targetFromPosition,
+  worksheetTarget,
+  worksheetUnchangedEffect,
+} from './comments-receipts';
 
 /**
  * Propagate resolved state from thread roots to replies.
@@ -77,26 +92,127 @@ export class WorksheetCommentsImpl implements WorksheetComments {
     this.ctx.writeGate.assertWritable(op);
   }
 
+  private async _targetForComment(comment: Comment): Promise<CommentMutationTarget> {
+    const target = targetFromCellRef(this.sheetId, comment.cellRef);
+    if (target.row !== undefined && target.col !== undefined) {
+      return target;
+    }
+    try {
+      const position = await this.ctx.computeBridge.getCellPosition(this.sheetId, comment.cellRef);
+      if (position) {
+        return targetFromPosition(this.sheetId, position.row, position.col);
+      }
+    } catch {
+      // Fall back to the stable cellRef when the bridge cannot resolve a display address.
+    }
+    return target;
+  }
+
+  private async _updatedCommentReceipt(
+    kind: CommentUpdateReceipt['kind'],
+    comment: Comment,
+    details?: Record<string, unknown>,
+    extra?: Partial<
+      Pick<CommentUpdateReceipt, 'comments' | 'commentIds' | 'resolved' | 'conversion' | 'threadId'>
+    >,
+  ): Promise<CommentUpdateReceipt> {
+    const normalized = normalizeComment(comment);
+    const target = await this._targetForComment(normalized);
+    return {
+      kind,
+      status: 'applied',
+      sheetId: this.sheetId,
+      commentId: normalized.id,
+      threadId: extra?.threadId ?? normalized.threadId,
+      target,
+      comment: normalized,
+      effects: [
+        commentObjectEffect('updatedObject', this.sheetId, normalized, details),
+        changedRangeEffect(this.sheetId, target),
+      ],
+      diagnostics: [],
+      ...extra,
+    };
+  }
+
+  private _noOpUpdateReceipt(
+    kind: CommentUpdateReceipt['kind'],
+    input: {
+      commentId?: string;
+      threadId?: string | null;
+      target?: CommentMutationTarget;
+      comment?: Comment;
+      resolved?: boolean;
+    } = {},
+  ): CommentUpdateReceipt {
+    return {
+      kind,
+      status: 'noOp',
+      sheetId: this.sheetId,
+      commentId: input.commentId,
+      threadId: input.threadId,
+      target: input.target,
+      comment: input.comment ? normalizeComment(input.comment) : undefined,
+      resolved: input.resolved,
+      effects: [worksheetUnchangedEffect(this.sheetId, input.target)],
+      diagnostics: [],
+    };
+  }
+
+  private _removeReceipt(
+    kind: CommentRemoveReceipt['kind'],
+    input: {
+      target?: CommentMutationTarget;
+      comments: Comment[];
+      commentId?: string;
+      threadId?: string | null;
+    },
+  ): CommentRemoveReceipt {
+    const comments = normalizeComments(input.comments);
+    const removedCommentIds = comments.map((comment) => comment.id);
+    return {
+      kind,
+      status: removedCommentIds.length === 0 ? 'noOp' : 'applied',
+      sheetId: this.sheetId,
+      commentId: input.commentId,
+      threadId: input.threadId,
+      target: input.target,
+      removedCount: removedCommentIds.length,
+      removedCommentIds,
+      comments,
+      effects: removedCommentEffects(this.sheetId, input.target, removedCommentIds.length),
+      diagnostics: [],
+    };
+  }
+
   // ===========================================================================
   // Notes (simple, single string per cell)
   // ===========================================================================
 
-  async addNote(cell: string, options: { text: string; author?: string }): Promise<void>;
+  async addNote(
+    cell: string,
+    options: { text: string; author?: string },
+  ): Promise<CommentAddReceipt>;
   async addNote(
     row: number,
     col: number,
     options: { text: string; author?: string },
-  ): Promise<void>;
+  ): Promise<CommentAddReceipt>;
   /** @deprecated Use the options-object overload instead. */
-  async addNote(address: string, text: string, author?: string): Promise<void>;
+  async addNote(address: string, text: string, author?: string): Promise<CommentAddReceipt>;
   /** @deprecated Use the options-object overload instead. */
-  async addNote(row: number, col: number, text: string, author?: string): Promise<void>;
+  async addNote(
+    row: number,
+    col: number,
+    text: string,
+    author?: string,
+  ): Promise<CommentAddReceipt>;
   async addNote(
     a: string | number,
     b: string | number | { text: string; author?: string },
     c?: string | { text: string; author?: string },
     d?: string,
-  ): Promise<void> {
+  ): Promise<CommentAddReceipt> {
     let row: number, col: number, text: string, author: string;
     if (typeof a === 'string' && typeof b === 'object') {
       // Options-object form: addNote("A1", { text, author })
@@ -136,7 +252,7 @@ export class WorksheetCommentsImpl implements WorksheetComments {
         await this.ctx.computeBridge.deleteComment(this.sheetId, comment.id);
       }
     }
-    await this.ctx.computeBridge.addCommentByPosition(
+    const result = await this.ctx.computeBridge.addCommentByPosition(
       this.sheetId,
       row,
       col,
@@ -146,6 +262,54 @@ export class WorksheetCommentsImpl implements WorksheetComments {
       null,
       'note',
     );
+    const comment =
+      result == null
+        ? fallbackComment({
+            id: '',
+            row,
+            col,
+            text,
+            author,
+            commentType: 'note',
+          })
+        : extractMutationData<Comment>(result);
+    if (!comment) {
+      throw new KernelError(
+        'COMPUTE_ERROR',
+        'addCommentByPosition: no note returned in MutationResult.data',
+      );
+    }
+    const normalized = normalizeComment(comment);
+    const target = targetFromPosition(this.sheetId, row, col);
+    const removedCommentIds = existing.map((comment) => comment.id).filter(Boolean);
+    const effects = [
+      ...(removedCommentIds.length > 0
+        ? [
+            {
+              type: 'removedObject' as const,
+              sheetId: this.sheetId,
+              count: removedCommentIds.length,
+              details: { objectType: 'comment' },
+            },
+          ]
+        : []),
+      commentObjectEffect('createdObject', this.sheetId, normalized),
+      changedRangeEffect(this.sheetId, target, 1 + removedCommentIds.length),
+    ];
+    return {
+      kind: 'comment.addNote',
+      status: 'applied',
+      sheetId: this.sheetId,
+      id: normalized.id,
+      commentId: normalized.id,
+      threadId: normalized.threadId,
+      target,
+      comment: normalized,
+      removedCommentIds,
+      removedCount: removedCommentIds.length,
+      effects,
+      diagnostics: [],
+    };
   }
 
   /** @deprecated Use {@link addNote} instead. */
@@ -154,7 +318,7 @@ export class WorksheetCommentsImpl implements WorksheetComments {
     b: string | number | { text: string; author?: string },
     c?: string | { text: string; author?: string },
     d?: string,
-  ): Promise<void> {
+  ): Promise<CommentAddReceipt> {
     return this.addNote(a as any, b as any, c as any, d);
   }
 
@@ -179,8 +343,9 @@ export class WorksheetCommentsImpl implements WorksheetComments {
     };
   }
 
-  async removeNote(a: string | number, b?: number): Promise<void> {
+  async removeNote(a: string | number, b?: number): Promise<CommentRemoveReceipt> {
     const { row, col } = resolveCell(a, b);
+    const target = targetFromPosition(this.sheetId, row, col);
     const comments = await this.ctx.computeBridge.getCommentsForCellByPosition(
       this.sheetId,
       row,
@@ -191,24 +356,29 @@ export class WorksheetCommentsImpl implements WorksheetComments {
         await this.ctx.computeBridge.deleteComment(this.sheetId, comment.id);
       }
     }
+    return this._removeReceipt('comment.removeNote', { target, comments });
   }
 
   // ===========================================================================
   // Threaded Comments
   // ===========================================================================
 
-  async add(cell: string, options: { text: string; author?: string }): Promise<Comment>;
-  async add(row: number, col: number, options: { text: string; author?: string }): Promise<Comment>;
+  async add(cell: string, options: { text: string; author?: string }): Promise<CommentAddReceipt>;
+  async add(
+    row: number,
+    col: number,
+    options: { text: string; author?: string },
+  ): Promise<CommentAddReceipt>;
   /** @deprecated Use the options-object overload instead. */
-  async add(address: string, text: string, author: string): Promise<Comment>;
+  async add(address: string, text: string, author: string): Promise<CommentAddReceipt>;
   /** @deprecated Use the options-object overload instead. */
-  async add(row: number, col: number, text: string, author: string): Promise<Comment>;
+  async add(row: number, col: number, text: string, author: string): Promise<CommentAddReceipt>;
   async add(
     a: string | number,
     b: string | number | { text: string; author?: string },
     c?: string | { text: string; author?: string },
     d?: string,
-  ): Promise<Comment> {
+  ): Promise<CommentAddReceipt> {
     let row: number, col: number, text: string, author: string;
     if (typeof a === 'string' && typeof b === 'object') {
       // Options-object form: add("A1", { text, author })
@@ -257,37 +427,123 @@ export class WorksheetCommentsImpl implements WorksheetComments {
         'addCommentByPosition: no comment returned in MutationResult.data',
       );
     }
-    return comment;
+    const normalized = normalizeComment(comment);
+    const target = targetFromPosition(this.sheetId, row, col);
+    return {
+      kind: 'comment.add',
+      status: 'applied',
+      sheetId: this.sheetId,
+      id: normalized.id,
+      commentId: normalized.id,
+      threadId: normalized.threadId,
+      target,
+      comment: normalized,
+      effects: [
+        commentObjectEffect('createdObject', this.sheetId, normalized),
+        changedRangeEffect(this.sheetId, target),
+      ],
+      diagnostics: [],
+    };
   }
 
-  async update(commentId: string, updates: CommentUpdate): Promise<void> {
+  async update(commentId: string, updates: CommentUpdate): Promise<CommentUpdateReceipt> {
     const text = updates.text;
     if (text !== undefined && (!text || text.trim().length === 0)) {
       throw new KernelError('COMPUTE_ERROR', 'Comment text cannot be empty');
     }
+    if (updates.mentions && updates.mentions.length > 0 && !text) {
+      throw new KernelError('COMPUTE_ERROR', 'Comment text is required when providing mentions');
+    }
+    const existing = await this.ctx.computeBridge.getComment(this.sheetId, commentId);
+    const target = existing ? await this._targetForComment(existing) : undefined;
+    if (!existing || (text === undefined && (!updates.mentions || updates.mentions.length === 0))) {
+      return this._noOpUpdateReceipt('comment.update', {
+        commentId,
+        threadId: existing?.threadId,
+        target,
+        comment: existing ?? undefined,
+      });
+    }
     if (updates.mentions && updates.mentions.length > 0) {
       // Mentions path: sets content, content_type to Mention, and mentions array atomically
-      if (!text) {
-        throw new KernelError('COMPUTE_ERROR', 'Comment text is required when providing mentions');
-      }
       await this.ctx.computeBridge.updateCommentMentions(
         this.sheetId,
         commentId,
-        text,
+        text!,
         updates.mentions,
       );
     } else if (text !== undefined) {
       // Plain text update
       await this.ctx.computeBridge.updateComment(this.sheetId, commentId, text);
     }
+    const updated = await this.ctx.computeBridge.getComment(this.sheetId, commentId);
+    return this._updatedCommentReceipt('comment.update', updated ?? existing, {
+      updatedFields: {
+        text: text !== undefined,
+        mentions: Boolean(updates.mentions?.length),
+      },
+    });
   }
 
-  async remove(commentId: string): Promise<void> {
+  async remove(commentId: string): Promise<CommentRemoveReceipt> {
+    const existing = await this.ctx.computeBridge.getComment(this.sheetId, commentId);
+    if (!existing) {
+      return this._removeReceipt('comment.remove', { comments: [], commentId });
+    }
+    const target = await this._targetForComment(existing);
     await this.ctx.computeBridge.deleteComment(this.sheetId, commentId);
+    return this._removeReceipt('comment.remove', {
+      target,
+      comments: [existing],
+      commentId,
+      threadId: existing.threadId,
+    });
   }
 
-  async resolveThread(threadId: string, resolved: boolean): Promise<void> {
+  async resolveThread(threadId: string, resolved: boolean): Promise<CommentUpdateReceipt> {
+    const before = await this.ctx.computeBridge.getCommentThread(this.sheetId, threadId);
+    if (before.length === 0) {
+      return this._noOpUpdateReceipt('comment.resolveThread', {
+        threadId,
+        resolved,
+      });
+    }
     await this.ctx.computeBridge.setThreadResolved(this.sheetId, threadId, resolved);
+    const comments = normalizeComments(
+      await this.ctx.computeBridge.getCommentThread(this.sheetId, threadId),
+    );
+    const representative =
+      comments.find((comment) => comment.id === threadId) ??
+      comments[0] ??
+      normalizeComment(before[0]!);
+    const target = await this._targetForComment(representative);
+    const commentIds = comments.map((comment) => comment.id);
+    return {
+      kind: 'comment.resolveThread',
+      status: 'applied',
+      sheetId: this.sheetId,
+      commentId: representative.id,
+      threadId,
+      target,
+      comment: representative,
+      comments,
+      commentIds,
+      resolved,
+      effects: [
+        {
+          type: 'updatedObject',
+          sheetId: this.sheetId,
+          objectId: threadId,
+          details: {
+            objectType: 'commentThread',
+            resolved,
+            commentIds,
+          },
+        },
+        changedRangeEffect(this.sheetId, target, Math.max(1, comments.length)),
+      ],
+      diagnostics: [],
+    };
   }
 
   async getCount(): Promise<number> {
@@ -322,8 +578,13 @@ export class WorksheetCommentsImpl implements WorksheetComments {
     return notes[index] ?? null;
   }
 
-  async setNoteVisible(a: string | number, b: boolean | number, c?: boolean): Promise<void> {
+  async setNoteVisible(
+    a: string | number,
+    b: boolean | number,
+    c?: boolean,
+  ): Promise<CommentUpdateReceipt> {
     const { row, col, value: visible } = resolveCellArgs<boolean>(a, b, c);
+    const target = targetFromPosition(this.sheetId, row, col);
     // Find the note at the given position
     const comments = await this.ctx.computeBridge.getCommentsForCellByPosition(
       this.sheetId,
@@ -334,11 +595,20 @@ export class WorksheetCommentsImpl implements WorksheetComments {
     const note = comments.find((c) => c.commentType === 'note');
     if (note && note.id) {
       await this.ctx.computeBridge.setNoteVisible(this.sheetId, note.id, visible);
+      const updated = (await this.ctx.computeBridge.getComment(this.sheetId, note.id)) ?? {
+        ...note,
+        visible,
+      };
+      return this._updatedCommentReceipt('comment.updateNote', updated, {
+        noteProperty: 'visible',
+      });
     }
+    return this._noOpUpdateReceipt('comment.updateNote', { target });
   }
 
-  async setNoteHeight(a: string | number, b: number, c?: number): Promise<void> {
+  async setNoteHeight(a: string | number, b: number, c?: number): Promise<CommentUpdateReceipt> {
     const { row, col, value: height } = resolveCellArgs<number>(a, b, c);
+    const target = targetFromPosition(this.sheetId, row, col);
     const comments = await this.ctx.computeBridge.getCommentsForCellByPosition(
       this.sheetId,
       row,
@@ -347,11 +617,20 @@ export class WorksheetCommentsImpl implements WorksheetComments {
     const note = comments.find((c) => c.commentType === 'note');
     if (note?.id) {
       await this.ctx.computeBridge.setNoteDimensions(this.sheetId, note.id, height, null);
+      const updated = (await this.ctx.computeBridge.getComment(this.sheetId, note.id)) ?? {
+        ...note,
+        noteHeight: height,
+      };
+      return this._updatedCommentReceipt('comment.updateNote', updated, {
+        noteProperty: 'height',
+      });
     }
+    return this._noOpUpdateReceipt('comment.updateNote', { target });
   }
 
-  async setNoteWidth(a: string | number, b: number, c?: number): Promise<void> {
+  async setNoteWidth(a: string | number, b: number, c?: number): Promise<CommentUpdateReceipt> {
     const { row, col, value: width } = resolveCellArgs<number>(a, b, c);
+    const target = targetFromPosition(this.sheetId, row, col);
     const comments = await this.ctx.computeBridge.getCommentsForCellByPosition(
       this.sheetId,
       row,
@@ -360,7 +639,15 @@ export class WorksheetCommentsImpl implements WorksheetComments {
     const note = comments.find((c) => c.commentType === 'note');
     if (note?.id) {
       await this.ctx.computeBridge.setNoteDimensions(this.sheetId, note.id, null, width);
+      const updated = (await this.ctx.computeBridge.getComment(this.sheetId, note.id)) ?? {
+        ...note,
+        noteWidth: width,
+      };
+      return this._updatedCommentReceipt('comment.updateNote', updated, {
+        noteProperty: 'width',
+      });
     }
+    return this._noOpUpdateReceipt('comment.updateNote', { target });
   }
 
   async list(): Promise<Comment[]> {
@@ -378,7 +665,7 @@ export class WorksheetCommentsImpl implements WorksheetComments {
     return normalizeComments(comments);
   }
 
-  async addReply(commentId: string, text: string, author: string): Promise<Comment> {
+  async addReply(commentId: string, text: string, author: string): Promise<CommentAddReceipt> {
     const parent = await this.ctx.computeBridge.getComment(this.sheetId, commentId);
     if (!parent) {
       throw new KernelError('COMMENT_NOT_FOUND', `Comment not found: ${commentId}`);
@@ -386,8 +673,9 @@ export class WorksheetCommentsImpl implements WorksheetComments {
     if (!text || text.trim().length === 0) {
       throw new KernelError('COMPUTE_ERROR', 'Comment text cannot be empty');
     }
-    const replyParent =
-      parent.commentType === 'note' ? await this.convertNoteToThread(commentId) : parent;
+    const conversionReceipt =
+      parent.commentType === 'note' ? await this._convertNoteToThreadReceipt(commentId) : undefined;
+    const replyParent = conversionReceipt?.comment ?? parent;
     const comment = await this.ctx.computeBridge.addComment(
       this.sheetId,
       replyParent.cellRef,
@@ -395,10 +683,39 @@ export class WorksheetCommentsImpl implements WorksheetComments {
       author,
       { parentId: replyParent.id, commentType: 'threadedComment' },
     );
-    return normalizeComment(comment);
+    const normalized = normalizeComment(comment);
+    const target = await this._targetForComment(normalized);
+    return {
+      kind: 'comment.addReply',
+      status: 'applied',
+      sheetId: this.sheetId,
+      id: normalized.id,
+      commentId: normalized.id,
+      threadId: normalized.threadId,
+      parentId: replyParent.id,
+      target,
+      comment: normalized,
+      conversion: conversionReceipt?.conversion,
+      effects: [
+        ...(conversionReceipt ? [...conversionReceipt.effects] : []),
+        commentObjectEffect('createdObject', this.sheetId, normalized),
+        changedRangeEffect(this.sheetId, target),
+      ],
+      diagnostics: [],
+    };
   }
 
-  async convertNoteToThread(commentId: string): Promise<Comment> {
+  private async _convertNoteToThreadReceipt(commentId: string): Promise<CommentUpdateReceipt> {
+    const before = await this.ctx.computeBridge.getComment(this.sheetId, commentId);
+    if (before?.commentType === 'threadedComment') {
+      const target = await this._targetForComment(before);
+      return this._noOpUpdateReceipt('comment.convertNoteToThread', {
+        commentId,
+        threadId: before.threadId,
+        target,
+        comment: before,
+      });
+    }
     const result = await this.ctx.computeBridge.convertNoteToThread(this.sheetId, commentId);
     const comment = extractMutationData<Comment>(result);
     if (!comment) {
@@ -407,7 +724,31 @@ export class WorksheetCommentsImpl implements WorksheetComments {
         'convertNoteToThread: no comment returned in MutationResult.data',
       );
     }
-    return normalizeComment(comment);
+    const normalized = normalizeComment(comment);
+    const target = await this._targetForComment(normalized);
+    const conversion: CommentConversionEffect | undefined =
+      before?.commentType === 'note'
+        ? {
+            commentId: normalized.id,
+            from: 'note',
+            to: 'threadedComment',
+            comment: normalized,
+            target,
+          }
+        : undefined;
+    return this._updatedCommentReceipt(
+      'comment.convertNoteToThread',
+      normalized,
+      {
+        previousCommentType: before?.commentType,
+        conversion: conversion ? { from: conversion.from, to: conversion.to } : undefined,
+      },
+      { conversion },
+    );
+  }
+
+  async convertNoteToThread(commentId: string): Promise<CommentUpdateReceipt> {
+    return this._convertNoteToThreadReceipt(commentId);
   }
 
   async getThread(commentId: string): Promise<Comment[]> {
@@ -470,29 +811,36 @@ export class WorksheetCommentsImpl implements WorksheetComments {
   }
 
   async removeForCell(a: string | number, b?: number): Promise<number> {
-    if (typeof a === 'number') {
-      const result = await this.ctx.computeBridge.deleteCommentsForCellByPosition(
-        this.sheetId,
-        a,
-        b!,
-      );
-      return (result.data as number) ?? 0;
-    }
-    const { row, col } = resolveCell(a);
+    const { row, col } = resolveCell(a, b);
+    const comments = await this.ctx.computeBridge.getCommentsForCellByPosition(
+      this.sheetId,
+      row,
+      col,
+    );
     const result = await this.ctx.computeBridge.deleteCommentsForCellByPosition(
       this.sheetId,
       row,
       col,
     );
-    return (result.data as number) ?? 0;
+    return (result?.data as number | undefined) ?? comments.length;
   }
 
-  async clear(): Promise<void> {
+  async clear(): Promise<CommentRemoveReceipt> {
+    const comments = await this.ctx.computeBridge.getAllComments(this.sheetId);
     await this.ctx.computeBridge.clearAllComments(this.sheetId);
+    return this._removeReceipt('comment.clear', {
+      target: worksheetTarget(this.sheetId),
+      comments,
+    });
   }
 
   async clean(): Promise<number> {
+    const before = await this.ctx.computeBridge.getAllComments(this.sheetId);
     const result = await this.ctx.computeBridge.validateAndCleanComments(this.sheetId);
-    return (result.data as number) ?? 0;
+    const removedCount = result?.data;
+    if (typeof removedCount === 'number') return removedCount;
+
+    const after = await this.ctx.computeBridge.getAllComments(this.sheetId);
+    return Math.max(0, before.length - after.length);
   }
 }

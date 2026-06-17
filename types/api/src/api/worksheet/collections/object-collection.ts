@@ -7,6 +7,7 @@
  */
 import type { ObjectBounds } from '@mog/types-objects/objects/floating-object-manager';
 import type { FloatingObject } from '@mog/types-objects/objects/floating-objects';
+import type { FloatingObjectMutationReceipt } from '../../mutation-receipt';
 import type { TextWarpPreset } from '@mog/types-objects/text-effects';
 import type { FloatingObjectInfo } from '../../types';
 import type { FloatingObjectHandle } from '../handles/floating-object-handle';
@@ -26,7 +27,7 @@ export interface WorksheetObjectCollection {
   // ── Single-ID convenience methods ──────────────────────────
   // Thin wrappers over get→handle.method() for fire-and-forget callers.
 
-  /** Remove a single floating object by ID. Returns true if removed. */
+  /** Remove a single floating object by ID. */
   remove(id: string): Promise<boolean>;
   /** Bring a floating object to the front (highest z-order). */
   bringToFront(id: string): Promise<void>;
@@ -37,7 +38,10 @@ export interface WorksheetObjectCollection {
   /** Send a floating object backward by one layer. */
   sendBackward(id: string): Promise<void>;
   /** Update arbitrary properties of a floating object. */
-  update(objectId: string, updates: Record<string, unknown>): Promise<void>;
+  update(
+    objectId: string,
+    updates: Record<string, unknown>,
+  ): Promise<FloatingObjectMutationReceipt>;
 
   // ── TextEffect conversion ─────────────────────────────────────
 

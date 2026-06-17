@@ -7,7 +7,12 @@
  */
 import type { FormulaA1 } from '@mog/types-core/formula-string';
 import type { FunctionArgument } from '@mog/types-core/function-registry';
-import type { CodeExecutionDiagnostic } from '../core/execution';
+import type {
+  CodeExecutionDiagnostic,
+  DirtyCell,
+  ExecutionMutationPolicy,
+  ExecutionMutationStatus,
+} from '../core/execution';
 import type {
   CellBorders,
   CellFormat,
@@ -48,6 +53,13 @@ import type {
 } from '@mog/types-data/data/pivot';
 import type { TotalFunction } from '@mog/types-data/data/tables';
 import type { SpreadsheetEvent as InternalSpreadsheetEvent } from '@mog/types-events/events';
+import type {
+  PivotHandleCalculatedFieldReceipt,
+  PivotHandleDeleteReceipt,
+  PivotHandleExpansionReceipt,
+  PivotHandleMutationReceipt,
+  PivotRefreshReceipt,
+} from './mutation-receipt';
 import type {
   CellChangedEvent,
   CellsBatchChangedEvent,
@@ -400,6 +412,8 @@ export interface CellWriteOptions {
   asFormula?: boolean;
   /** If true, string values starting with "=" are stored as literal text, not formulas. */
   literal?: boolean;
+  /** Alias for `literal`; use when formula-shaped text should be stored as text. */
+  asText?: boolean;
 }
 
 // =============================================================================
@@ -945,9 +959,11 @@ export interface PivotTableHandle {
   /** Get the current configuration including all fields */
   getConfig(): PivotTableConfig;
   /** Update the pivot table data configuration. */
-  update(updates: Partial<Omit<DataPivotTableConfig, 'id' | 'createdAt'>>): Promise<void>;
+  update(
+    updates: Partial<Omit<DataPivotTableConfig, 'id' | 'createdAt'>>,
+  ): Promise<PivotHandleMutationReceipt>;
   /** Delete the pivot table. */
-  delete(): Promise<boolean>;
+  delete(): Promise<PivotHandleDeleteReceipt>;
   /** Subscribe to computed result updates for this pivot. */
   subscribeResult(callback: (result: PivotTableResult | null, error?: string) => void): () => void;
   /** Compute this pivot table result. */
@@ -955,94 +971,105 @@ export interface PivotTableHandle {
   /** Get the full range occupied by the rendered pivot table. */
   getRange(): Promise<CellRange | null>;
   /** Add a field to the row, column, or filter area */
-  addField(field: string, area: 'row' | 'column' | 'filter', position?: number): Promise<void>;
+  addField(
+    field: string,
+    area: 'row' | 'column' | 'filter',
+    position?: number,
+  ): Promise<PivotHandleMutationReceipt>;
   /** Add a value field with aggregation */
   addValueField(
     field: string,
     aggregation: PivotValueField['aggregation'],
     label?: string,
-  ): Promise<void>;
+  ): Promise<PivotHandleMutationReceipt>;
   /** Add a placement to a row, column, value, or filter area. */
-  addPlacement(spec: PivotHandlePlacementSpec): Promise<PivotPlacementMutationReceipt>;
+  addPlacement(spec: PivotHandlePlacementSpec): Promise<PivotHandleMutationReceipt>;
   /** Remove a field by name */
-  removeField(fieldName: string, area?: PivotFieldArea): Promise<void>;
+  removeField(fieldName: string, area?: PivotFieldArea): Promise<PivotHandleMutationReceipt>;
   /** Remove a specific placement by stable placement ID. */
-  removePlacement(placementId: PlacementId): Promise<PivotKernelMutationReceipt>;
+  removePlacement(placementId: PlacementId): Promise<PivotHandleMutationReceipt>;
   /** Move a field to a different area or position. */
   moveField(
     fieldName: string,
     fromArea: PivotFieldArea,
     toArea: PivotFieldArea,
     toPosition: number,
-  ): Promise<void>;
+  ): Promise<PivotHandleMutationReceipt>;
   /** Move a specific placement to a different area or ordered position. */
   movePlacement(
     placementId: PlacementId,
     toArea: PivotFieldArea,
     toPosition: number,
-  ): Promise<PivotKernelMutationReceipt>;
+  ): Promise<PivotHandleMutationReceipt>;
   /** Change the aggregation function of a value field */
   changeAggregation(
     valueFieldLabel: string,
     newAggregation: PivotValueField['aggregation'],
-  ): Promise<void>;
+  ): Promise<PivotHandleMutationReceipt>;
   /** Change the aggregation function of a specific value placement. */
   setPlacementAggregateFunction(
     placementId: PlacementId,
     aggregateFunction: AggregateFunction,
-  ): Promise<PivotKernelMutationReceipt>;
+  ): Promise<PivotHandleMutationReceipt>;
   /** Rename a value field's display label */
-  renameValueField(currentLabel: string, newLabel: string): Promise<void>;
+  renameValueField(currentLabel: string, newLabel: string): Promise<PivotHandleMutationReceipt>;
   /** Rename a value placement by stable placement ID. */
   renameValuePlacement(
     placementId: PlacementId,
     displayName: string | null,
-  ): Promise<PivotKernelMutationReceipt>;
-  /** Refresh the pivot table from its data source */
-  refresh(): Promise<void>;
+  ): Promise<PivotHandleMutationReceipt>;
+  /** Refresh/materialize the pivot table from its data source. */
+  refresh(): Promise<PivotRefreshReceipt>;
   /** Get all items for all non-value fields */
   getAllItems(): Promise<PivotFieldItems[]>;
   /** Set the "Show Values As" calculation for a value field. Pass null to clear. */
-  setShowValuesAs(valueFieldLabel: string, showValuesAs: ShowValuesAsConfig | null): Promise<void>;
+  setShowValuesAs(
+    valueFieldLabel: string,
+    showValuesAs: ShowValuesAsConfig | null,
+  ): Promise<PivotHandleMutationReceipt>;
   /** Set the sort order for a row or column field. */
-  setSortOrder(fieldOrPlacement: string, sortOrder: SortOrder): Promise<void>;
+  setSortOrder(fieldOrPlacement: string, sortOrder: SortOrder): Promise<PivotHandleMutationReceipt>;
   /** Set the sort order for a row or column placement. */
   setPlacementSortOrder(
     placementId: PlacementId,
     sortOrder: SortOrder | null,
-  ): Promise<PivotKernelMutationReceipt>;
+  ): Promise<PivotHandleMutationReceipt>;
   /** Set or clear value sorting on a row or column axis placement. */
   setSortByValue(
     axisPlacementId: PlacementId,
     valuePlacementId: PlacementId,
     config: PivotValueSortConfig | null,
-  ): Promise<PivotKernelMutationReceipt>;
+  ): Promise<PivotHandleMutationReceipt>;
   /** Set a filter on a field. */
-  setFilter(fieldId: string, filter: Omit<PivotFilter, 'fieldId'>): Promise<void>;
+  setFilter(
+    fieldId: string,
+    filter: Omit<PivotFilter, 'fieldId'>,
+  ): Promise<PivotHandleMutationReceipt>;
   /** Remove a filter from a field. */
-  removeFilter(fieldId: string): Promise<void>;
+  removeFilter(fieldId: string): Promise<PivotHandleMutationReceipt>;
   /** Set layout options. */
-  setLayout(layout: Partial<PivotTableLayout>): Promise<void>;
+  setLayout(layout: Partial<PivotTableLayout>): Promise<PivotHandleMutationReceipt>;
   /** Set style options. */
-  setStyle(style: Partial<PivotTableStyle>): Promise<void>;
+  setStyle(style: Partial<PivotTableStyle>): Promise<PivotHandleMutationReceipt>;
   /** Toggle expansion state for a header. */
-  toggleExpanded(headerKey: string, isRow: boolean): Promise<boolean>;
+  toggleExpanded(headerKey: string, isRow: boolean): Promise<PivotHandleExpansionReceipt>;
   /** Set expansion state for all headers. */
-  setAllExpanded(expanded: boolean): Promise<void>;
+  setAllExpanded(expanded: boolean): Promise<PivotHandleExpansionReceipt>;
   /** Read expansion state. */
   getExpansionState(): Promise<PivotExpansionState>;
   /** Get drill-down data for a pivot cell. */
   getDrillDownData(rowKey: string, columnKey: string): Promise<CellValue[][]>;
   /** Add a calculated field to this pivot. */
-  addCalculatedField(
-    field: CalculatedField,
-  ): Promise<PivotKernelMutationReceipt & { calculatedFieldId: CalculatedFieldId }>;
+  addCalculatedField(field: CalculatedField): Promise<PivotHandleCalculatedFieldReceipt>;
   /** Set item visibility by value string -> boolean map */
-  setItemVisibility(fieldId: string, visibleItems: Record<string, boolean>): Promise<void>;
+  setItemVisibility(
+    fieldId: string,
+    visibleItems: Record<string, boolean>,
+  ): Promise<PivotHandleMutationReceipt>;
   /** Get the data source type (range, table, or external). */
   getDataSourceType(): DataSourceType;
   /** Change the source data range without refreshing/materializing. */
-  setDataSource(dataSource: string): Promise<void>;
+  setDataSource(dataSource: string): Promise<PivotHandleMutationReceipt>;
 }
 
 /** Summary information about an existing pivot table. */
@@ -1377,6 +1404,8 @@ export interface CheckpointInfo {
 export interface ExecuteOptions {
   /** Maximum execution time in milliseconds */
   timeout?: number;
+  /** Workbook mutation policy (default: rollbackOnError) */
+  mutationPolicy?: ExecutionMutationPolicy;
   /** Whether to run in a sandboxed environment */
   sandbox?: boolean;
 }
@@ -1391,6 +1420,22 @@ export interface CodeResult {
   error?: string;
   /** Structured diagnostics produced by the executor */
   diagnostics?: readonly CodeExecutionDiagnostic[];
+  /** Explicit workbook mutation outcome for this execution */
+  mutationStatus: ExecutionMutationStatus;
+  /** Total number of cells changed or attempted */
+  changeCount: number;
+  /** Number of cells directly modified by code */
+  directCount: number;
+  /** Number of cells indirectly changed by recalculation */
+  indirectCount: number;
+  /** Ranges that were edited or attempted */
+  editRanges: string[];
+  /** Detailed list of modified or attempted cells */
+  dirtyCells: DirtyCell[];
+  /** Pre-formatted LLM-readable summary of cell changes */
+  formattedSummary?: string;
+  /** Error encountered while attempting rollback, if rollback failed */
+  rollbackError?: string;
   /** Execution duration in milliseconds */
   duration?: number;
 }

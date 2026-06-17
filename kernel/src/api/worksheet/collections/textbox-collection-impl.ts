@@ -1,4 +1,5 @@
 import type {
+  FloatingObjectHandleMutationReceipt,
   TextBoxConfig,
   TextBoxHandle,
   WorksheetTextBoxCollection,
@@ -6,6 +7,7 @@ import type {
 import type { IObjectBoundsReader } from '@mog-sdk/contracts/objects/object-bounds-reader';
 
 import type { WorksheetObjectsImpl } from '../objects';
+import { attachFloatingObjectHandle } from '../objects-receipts';
 import { TextBoxHandleImpl } from '../handles/textbox-handle-impl';
 
 /**
@@ -33,8 +35,9 @@ export class WorksheetTextBoxCollectionImpl implements WorksheetTextBoxCollectio
       .map((info) => new TextBoxHandleImpl(info.id, this.objectsImpl, this.boundsReader));
   }
 
-  async add(config: TextBoxConfig): Promise<TextBoxHandle> {
+  async add(config: TextBoxConfig): Promise<FloatingObjectHandleMutationReceipt<TextBoxHandle>> {
     const receipt = await this.objectsImpl.addTextBox(config);
-    return new TextBoxHandleImpl(receipt.id, this.objectsImpl, this.boundsReader);
+    const handle = new TextBoxHandleImpl(receipt.id, this.objectsImpl, this.boundsReader);
+    return attachFloatingObjectHandle(receipt, handle);
   }
 }

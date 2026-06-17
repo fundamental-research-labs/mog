@@ -1,9 +1,11 @@
+import type { FloatingObjectHandleMutationReceipt } from '@mog-sdk/contracts/api';
 import type { OleObjectHandle } from '@mog-sdk/contracts/api/worksheet/handles/index';
 import type { OleObjectObject } from '@mog-sdk/contracts/floating-objects';
 import type { IObjectBoundsReader } from '@mog-sdk/contracts/objects/object-bounds-reader';
 
 import { KernelError } from '../../../errors';
 import type { WorksheetObjectsImpl } from '../objects';
+import { attachFloatingObjectHandle } from '../objects-receipts';
 import { FloatingObjectHandleImpl } from './floating-object-handle-impl';
 
 /**
@@ -18,9 +20,13 @@ export class OleObjectHandleImpl extends FloatingObjectHandleImpl implements Ole
     super(id, 'oleObject', objectsImpl, boundsReader);
   }
 
-  async duplicate(_offsetX?: number, _offsetY?: number): Promise<OleObjectHandle> {
+  async duplicate(
+    _offsetX?: number,
+    _offsetY?: number,
+  ): Promise<FloatingObjectHandleMutationReceipt<OleObjectHandle>> {
     const receipt = await this.objectsImpl.duplicate(this.id);
-    return new OleObjectHandleImpl(receipt.id, this.objectsImpl, this.boundsReader);
+    const handle = new OleObjectHandleImpl(receipt.id, this.objectsImpl, this.boundsReader);
+    return attachFloatingObjectHandle(receipt, handle);
   }
 
   async getData(): Promise<OleObjectObject> {

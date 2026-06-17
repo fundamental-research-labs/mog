@@ -175,8 +175,8 @@ fn test_average_all_non_numeric_is_null() {
 
 #[test]
 fn test_average_large_equal_values() {
-    let vals: Vec<CellValue> = (0..1000).map(|_| CellValue::number(3.14159)).collect();
-    assert_num(pivot_average(&vals), 3.14159);
+    let vals: Vec<CellValue> = (0..1000).map(|_| CellValue::number(12.34567)).collect();
+    assert_num(pivot_average(&vals), 12.34567);
 }
 
 #[test]

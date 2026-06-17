@@ -201,6 +201,7 @@ fn make_config(num_rows: usize, placements: Vec<PivotFieldPlacement>) -> PivotTa
         auto_format: None,
         preserve_formatting: None,
         cache_id: None,
+        data_on_rows: None,
         ref_range: None,
         first_data_row: None,
         first_header_row: None,

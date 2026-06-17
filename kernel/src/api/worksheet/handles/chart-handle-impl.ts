@@ -1,9 +1,11 @@
+import type { FloatingObjectHandleMutationReceipt } from '@mog-sdk/contracts/api';
 import type { ChartHandle } from '@mog-sdk/contracts/api/worksheet/handles/index';
 import type { ChartObject } from '@mog-sdk/contracts/floating-objects';
 import type { IObjectBoundsReader } from '@mog-sdk/contracts/objects/object-bounds-reader';
 
 import { KernelError } from '../../../errors';
 import type { WorksheetObjectsImpl } from '../objects';
+import { attachFloatingObjectHandle } from '../objects-receipts';
 import { FloatingObjectHandleImpl } from './floating-object-handle-impl';
 
 /**
@@ -19,9 +21,13 @@ export class ChartHandleImpl extends FloatingObjectHandleImpl implements ChartHa
     super(id, 'chart', objectsImpl, boundsReader);
   }
 
-  async duplicate(_offsetX?: number, _offsetY?: number): Promise<ChartHandle> {
+  async duplicate(
+    _offsetX?: number,
+    _offsetY?: number,
+  ): Promise<FloatingObjectHandleMutationReceipt<ChartHandle>> {
     const receipt = await this.objectsImpl.duplicate(this.id);
-    return new ChartHandleImpl(receipt.id, this.objectsImpl, this.boundsReader);
+    const handle = new ChartHandleImpl(receipt.id, this.objectsImpl, this.boundsReader);
+    return attachFloatingObjectHandle(receipt, handle);
   }
 
   async getData(): Promise<ChartObject> {

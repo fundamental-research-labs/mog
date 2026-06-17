@@ -31,6 +31,7 @@ const ROUTE_SCREENSHOT = new Set(['captureScreenshot']);
 const UNDO_GROUP = new Set(['undoGroup', 'batch']);
 const POLICY_ADMIN_INTERFACES = new Set(['WorkbookSecurity']);
 const EXPORT_NAMES = new Set(['toCSV', 'toJSON']);
+const READ_NAMES = new Set(['autoFillPreview']);
 const WRITE_NAMES = new Set(['getOrCreateSheet']);
 const WRITE_PREFIXES = [
   'add',
@@ -54,6 +55,7 @@ const WRITE_PREFIXES = [
   'show',
   'sort',
   'update',
+  'write',
 ];
 
 function classify(interfaceName, methodName) {
@@ -77,6 +79,9 @@ function classify(interfaceName, methodName) {
   }
   if (methodName === 'calculate') {
     return { decision: 'allow', capability: 'workbook:write' };
+  }
+  if (READ_NAMES.has(methodName)) {
+    return { decision: 'allow', capability: 'workbook:read' };
   }
   if (WRITE_NAMES.has(methodName)) {
     return { decision: 'allow', capability: 'workbook:write' };
@@ -168,9 +173,11 @@ export interface SpreadsheetFacadeMatrixEntry {
   readonly returns?: readonly string[];
 }
 
+export type WorkbookSubApiInterfaces = Record<string, Record<string, unknown>>;
+
 export const WORKBOOK_FACADE_GENERATED_FROM = 'runtime/sdk/src/generated/api-spec.json' as const;
 
-export const WORKBOOK_SUB_API_INTERFACES = ${formatValue(spec.subApis)} as const;
+export const WORKBOOK_SUB_API_INTERFACES: WorkbookSubApiInterfaces = ${formatValue(spec.subApis)};
 
 export const WORKBOOK_FACADE_CAPABILITY_MATRIX = ${formatValue(matrix)} as const satisfies Record<string, Record<string, SpreadsheetFacadeMatrixEntry>>;
 `;

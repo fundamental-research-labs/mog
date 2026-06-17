@@ -3,6 +3,7 @@
 use super::super::*;
 use super::helpers::*;
 use crate::snapshot::{CellData, SheetSnapshot};
+use domain_types::CellFormat;
 use value_types::CellValue;
 
 #[test]
@@ -49,6 +50,155 @@ fn bulk_set_cells_by_position_undoes_atomically() {
     assert!(
         !engine.can_undo(),
         "bulk set-by-position must be one undo stack item, not one item per cell"
+    );
+}
+
+#[test]
+fn nested_grouped_bulk_set_cells_by_position_redoes_atomically() {
+    let snap = simple_snapshot();
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let sid = sheet_id();
+
+    engine.begin_undo_group().unwrap();
+    engine
+        .batch_set_cells_by_position(
+            vec![
+                (
+                    sid,
+                    17,
+                    0,
+                    crate::storage::engine::mutation::CellInput::Parse {
+                        text: "atlas91 paste alpha".into(),
+                    },
+                ),
+                (
+                    sid,
+                    17,
+                    1,
+                    crate::storage::engine::mutation::CellInput::Parse { text: "101".into() },
+                ),
+            ],
+            true,
+        )
+        .unwrap();
+    engine.end_undo_group().unwrap();
+
+    assert_eq!(
+        cell_value_at(&engine, &sid, 17, 0),
+        CellValue::Text("atlas91 paste alpha".into())
+    );
+    assert_eq!(cell_value_at(&engine, &sid, 17, 1), num(101.0));
+    assert_eq!(engine.get_undo_state().undo_depth, 1);
+
+    engine.undo().unwrap();
+    assert_eq!(cell_value_at(&engine, &sid, 17, 0), CellValue::Null);
+    assert_eq!(cell_value_at(&engine, &sid, 17, 1), CellValue::Null);
+    assert_eq!(engine.get_undo_state().redo_depth, 1);
+
+    engine.redo().unwrap();
+    assert_eq!(
+        cell_value_at(&engine, &sid, 17, 0),
+        CellValue::Text("atlas91 paste alpha".into())
+    );
+    assert_eq!(cell_value_at(&engine, &sid, 17, 1), num(101.0));
+    assert_eq!(engine.get_undo_state().undo_depth, 1);
+    assert_eq!(engine.get_undo_state().redo_depth, 0);
+}
+
+#[test]
+fn grouped_single_text_paste_after_preformat_undoes_atomically() {
+    let snap = simple_snapshot();
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let sid = sheet_id();
+
+    engine.begin_undo_group().unwrap();
+    engine
+        .set_format_for_ranges(
+            &sid,
+            &[(9, 12, 9, 12)],
+            &CellFormat {
+                number_format: Some("General".to_string()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    engine
+        .batch_set_cells_by_position(
+            vec![(
+                sid,
+                9,
+                12,
+                crate::storage::engine::mutation::CellInput::Parse {
+                    text: "atlas91 paste alpha".into(),
+                },
+            )],
+            true,
+        )
+        .unwrap();
+    engine.end_undo_group().unwrap();
+
+    assert_eq!(
+        cell_value_at(&engine, &sid, 9, 12),
+        CellValue::Text("atlas91 paste alpha".into())
+    );
+    assert_eq!(engine.get_undo_state().undo_depth, 1);
+
+    engine.undo().unwrap();
+    assert_eq!(cell_value_at(&engine, &sid, 9, 12), CellValue::Null);
+    assert_eq!(engine.get_undo_state().redo_depth, 1);
+
+    engine.redo().unwrap();
+    assert_eq!(
+        cell_value_at(&engine, &sid, 9, 12),
+        CellValue::Text("atlas91 paste alpha".into())
+    );
+}
+
+#[test]
+fn ui_state_format_write_after_undo_preserves_redo_stack() {
+    let snap = simple_snapshot();
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let sid = sheet_id();
+
+    engine
+        .batch_set_cells_by_position(
+            vec![(
+                sid,
+                17,
+                0,
+                crate::storage::engine::mutation::CellInput::Parse {
+                    text: "atlas91 paste alpha".into(),
+                },
+            )],
+            true,
+        )
+        .unwrap();
+
+    engine.undo().unwrap();
+    assert_eq!(cell_value_at(&engine, &sid, 17, 0), CellValue::Null);
+    assert_eq!(engine.get_undo_state().redo_depth, 1);
+
+    engine
+        .set_format_for_ranges_ui_state(
+            &sid,
+            &[(2, 1, 2, 1)],
+            &CellFormat {
+                number_format: Some("0.00".to_string()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
+    assert_eq!(
+        engine.get_undo_state().redo_depth,
+        1,
+        "UI-state formatting must not clear redo after undo"
+    );
+
+    engine.redo().unwrap();
+    assert_eq!(
+        cell_value_at(&engine, &sid, 17, 0),
+        CellValue::Text("atlas91 paste alpha".into())
     );
 }
 

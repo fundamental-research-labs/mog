@@ -9,16 +9,26 @@ import type {
   CellValue,
   FilterInfo,
   SheetId,
+  TableAddReceipt,
   TableAddColumnReceipt,
   TableAddRowReceipt,
+  TableAutoExpansionReceipt,
+  TableClearReceipt,
+  TableClearCalculatedColumnReceipt,
+  TableConvertToRangeReceipt,
   TableColumn,
   TableDeleteRowReceipt,
   TableInfo,
   TableOptions,
+  TableRenameColumnReceipt,
+  TableRenameReceipt,
   TableUpdateOptions,
   TableRemoveColumnReceipt,
+  TableRemoveReceipt,
   TableResizeReceipt,
+  TableUpdateReceipt,
   TableRowCollection,
+  TableSetCalculatedColumnReceipt,
   WorksheetTableEvents,
   WorksheetTableSort,
   WorksheetTables,
@@ -41,15 +51,32 @@ import { normalizeCellValue } from '../internal/value-conversions';
 import { resolveCell, resolveRange, resolveRangeToA1 } from '../internal/address-resolver';
 import { colToLetter, letterToCol, parseCellRange } from '../internal/utils';
 import {
+  buildTableAddColumnReceipt,
+  buildTableAddReceipt,
+  buildTableAddRowReceipt,
+  buildTableClearReceipt,
+  buildTableConvertToRangeReceipt,
+  buildTableDeleteRowReceipt,
+  buildTableRemoveColumnReceipt,
+  buildTableRemoveReceipt,
+  buildTableRenameColumnReceipt,
+  buildTableRenameReceipt,
+  buildTableResizeReceipt,
+  buildTableUpdateReceipt,
   bridgeTableToTableInfo,
+  effectiveTableUpdateOptions,
   getDataBodyRangeFromInfo,
   getHeaderRowRangeFromInfo,
   getTableColumnDataCellsFromInfo,
   getTotalRowRangeFromInfo,
 } from './operations/table-operations';
+import { applyAutoExpansion as applyAutoExpansionOperation } from './operations/table-auto-expansion';
+import {
+  applyClearCalculatedColumnWithReceipt,
+  applySetCalculatedColumnWithReceipt,
+} from './operations/table-calculated-columns';
 import { columnFilterCriteriaToCompute } from '../../bridges/compute/compute-wire-converters';
 import * as FilterOps from './operations/filter-operations';
-import * as FillOps from './operations/fill-operations';
 import { toCellInput } from './operations/cell-input';
 import {
   assertCalculatedColumnAllowed,
@@ -286,7 +313,7 @@ export class WorksheetTablesImpl implements WorksheetTables {
     return this._events;
   }
 
-  async add(range: string | CellRange, options?: TableOptions): Promise<TableInfo> {
+  async add(range: string | CellRange, options?: TableOptions): Promise<TableAddReceipt> {
     this._ensureWritable('tables.add');
     const bounds = resolveRange(range);
     await assertUnprotectedTableDefinition(
@@ -327,11 +354,11 @@ export class WorksheetTablesImpl implements WorksheetTables {
       const updated = await this.get(tableInfo.name);
       if (updated) {
         this.emitTableCreated(updated);
-        return updated;
+        return buildTableAddReceipt(this.sheetId, updated);
       }
     }
     this.emitTableCreated(tableInfo);
-    return tableInfo;
+    return buildTableAddReceipt(this.sheetId, tableInfo);
   }
 
   async get(name: string): Promise<TableInfo | null> {
@@ -357,7 +384,9 @@ export class WorksheetTablesImpl implements WorksheetTables {
 
       // Bind operational methods so callers can do `table.setTotalsRow(true)`.
       const tables = this;
-      info.setTotalsRow = (visible: boolean) => tables.setShowTotals(name, visible);
+      info.setTotalsRow = async (visible: boolean) => {
+        await tables.setShowTotals(name, visible);
+      };
       info.setTotalsFunction = (columnName: string, func: string) =>
         tables.setColumnTotalsFunction(name, columnName, func as TotalsFunction);
 
@@ -409,28 +438,31 @@ export class WorksheetTablesImpl implements WorksheetTables {
     return table.columns.find((c) => c.name === columnName) ?? null;
   }
 
-  async remove(name: string): Promise<void> {
+  async remove(name: string): Promise<TableRemoveReceipt> {
     const table = await this.get(name);
+    if (!table) throw new KernelError('COMPUTE_ERROR', `Table not found: ${name}`);
     await assertUnprotectedTableDefinition(
       this.ctx,
       this.sheetId,
       'tables.remove',
       name,
-      table?.range,
+      table.range,
     );
     await this.ctx.computeBridge.deleteTable(name);
     this.sortSpecCache.delete(name);
-    this.emitTableDeleted(this.tableIdForEvent(table, name));
+    this.emitTableDeleted(table.id);
+    return buildTableRemoveReceipt(this.sheetId, table);
   }
 
-  async convertToRange(name: string): Promise<number> {
+  async convertToRange(name: string): Promise<TableConvertToRangeReceipt> {
     const table = await this.get(name);
+    if (!table) throw new KernelError('COMPUTE_ERROR', `Table not found: ${name}`);
     await assertUnprotectedTableDefinition(
       this.ctx,
       this.sheetId,
       'tables.convertToRange',
       name,
-      table?.range,
+      table.range,
     );
     const result = await this.ctx.computeBridge.convertTableToRange(name);
     this.sortSpecCache.delete(name);
@@ -444,18 +476,25 @@ export class WorksheetTablesImpl implements WorksheetTables {
       type: 'table:converted-to-range',
       timestamp: Date.now(),
       sheetId: this.sheetId,
-      tableId: this.tableIdForEvent(table, name),
+      tableId: table.id,
       tableName: name,
-      range: table ? this.tableRangeFromA1(table.range) : this.tableRangeFromA1('A1:A1'),
+      range: this.tableRangeFromA1(table.range),
       affectedFormulaCount: Number.isFinite(convertedCount) ? convertedCount : 0,
       source: 'api',
     });
-    this.emitTableDeleted(this.tableIdForEvent(table, name));
-    return Number.isFinite(convertedCount) ? convertedCount : 0;
+    this.emitTableDeleted(table.id);
+    return buildTableConvertToRangeReceipt({
+      sheetId: this.sheetId,
+      table,
+      affectedFormulaCount: Number.isFinite(convertedCount) ? convertedCount : 0,
+    });
   }
 
-  async clear(): Promise<void> {
+  async clear(): Promise<TableClearReceipt> {
     const tables = await this.list();
+    if (tables.length === 0) {
+      return buildTableClearReceipt(this.sheetId, tables);
+    }
     for (const table of tables) {
       await assertUnprotectedTableDefinition(
         this.ctx,
@@ -468,16 +507,27 @@ export class WorksheetTablesImpl implements WorksheetTables {
     for (const table of tables) {
       await this.remove(table.name);
     }
+    return buildTableClearReceipt(this.sheetId, tables);
   }
 
-  async rename(oldName: string, newName: string): Promise<void> {
+  async rename(oldName: string, newName: string): Promise<TableRenameReceipt> {
     const table = await this.get(oldName);
+    if (!table) throw new KernelError('COMPUTE_ERROR', `Table not found: ${oldName}`);
+    if (oldName === newName) {
+      return buildTableRenameReceipt({
+        sheetId: this.sheetId,
+        table,
+        oldName,
+        newName,
+        status: 'noOp',
+      });
+    }
     await assertUnprotectedTableDefinition(
       this.ctx,
       this.sheetId,
       'tables.rename',
       oldName,
-      table?.range,
+      table.range,
     );
     await this.assertValidTableNameForRename(oldName, newName);
     await this.ctx.computeBridge.renameTable(oldName, newName);
@@ -486,17 +536,33 @@ export class WorksheetTablesImpl implements WorksheetTables {
       this.sortSpecCache.delete(oldName);
       this.sortSpecCache.set(newName, cached);
     }
-    this.emitTableUpdated(this.tableIdForEvent(table, newName), { name: newName });
+    this.emitTableUpdated(table.id, { name: newName });
+    return buildTableRenameReceipt({
+      sheetId: this.sheetId,
+      table,
+      oldName,
+      newName,
+      status: 'applied',
+    });
   }
 
-  async update(tableName: string, updates: TableUpdateOptions): Promise<void> {
+  async update(tableName: string, updates: TableUpdateOptions): Promise<TableUpdateReceipt> {
     const table = await this.get(tableName);
     if (!table) throw new KernelError('COMPUTE_ERROR', `Table not found: ${tableName}`);
+    const effectiveUpdates = effectiveTableUpdateOptions(table, updates);
+    if (Object.keys(effectiveUpdates).length === 0) {
+      return buildTableUpdateReceipt({
+        sheetId: this.sheetId,
+        table,
+        updates: effectiveUpdates,
+        status: 'noOp',
+      });
+    }
     if (
-      updates.name !== undefined ||
-      updates.showFilterButtons !== undefined ||
-      updates.hasHeaderRow !== undefined ||
-      updates.hasTotalsRow !== undefined
+      effectiveUpdates.name !== undefined ||
+      effectiveUpdates.showFilterButtons !== undefined ||
+      effectiveUpdates.hasHeaderRow !== undefined ||
+      effectiveUpdates.hasTotalsRow !== undefined
     ) {
       await assertUnprotectedTableDefinition(
         this.ctx,
@@ -506,7 +572,10 @@ export class WorksheetTablesImpl implements WorksheetTables {
         table.range,
       );
     }
-    if (updates.autoExpand !== undefined || updates.autoCalculatedColumns !== undefined) {
+    if (
+      effectiveUpdates.autoExpand !== undefined ||
+      effectiveUpdates.autoCalculatedColumns !== undefined
+    ) {
       await assertUnprotectedTableDefinition(
         this.ctx,
         this.sheetId,
@@ -516,25 +585,25 @@ export class WorksheetTablesImpl implements WorksheetTables {
       );
     }
     if (
-      updates.style !== undefined ||
-      updates.emphasizeFirstColumn !== undefined ||
-      updates.emphasizeLastColumn !== undefined ||
-      updates.bandedColumns !== undefined ||
-      updates.bandedRows !== undefined
+      effectiveUpdates.style !== undefined ||
+      effectiveUpdates.emphasizeFirstColumn !== undefined ||
+      effectiveUpdates.emphasizeLastColumn !== undefined ||
+      effectiveUpdates.bandedColumns !== undefined ||
+      effectiveUpdates.bandedRows !== undefined
     ) {
       await assertTableStyleAllowed(this.ctx, this.sheetId, 'tables.update.style', table);
     }
-    if (updates.name !== undefined) {
-      await this.assertValidTableNameForRename(tableName, updates.name);
+    if (effectiveUpdates.name !== undefined) {
+      await this.assertValidTableNameForRename(tableName, effectiveUpdates.name);
     }
-    if (updates.style !== undefined) {
+    if (effectiveUpdates.style !== undefined) {
       await this.ctx.computeBridge.setTableStyle(
         tableName,
-        tableStyleIdForCompute(updates.style) ?? updates.style,
+        tableStyleIdForCompute(effectiveUpdates.style) ?? effectiveUpdates.style,
       );
     }
-    if (updates.name !== undefined) {
-      await this.ctx.computeBridge.renameTable(tableName, updates.name);
+    if (effectiveUpdates.name !== undefined) {
+      await this.ctx.computeBridge.renameTable(tableName, effectiveUpdates.name);
     }
     // Boolean option updates via setTableBoolOption
     // Keys match Rust TableBoolOption names directly
@@ -546,27 +615,33 @@ export class WorksheetTablesImpl implements WorksheetTables {
       'showFilterButtons',
     ] as const;
     for (const key of boolOptions) {
-      if (updates[key] !== undefined) {
-        await this.ctx.computeBridge.setTableBoolOption(tableName, key, updates[key]);
+      if (effectiveUpdates[key] !== undefined) {
+        await this.ctx.computeBridge.setTableBoolOption(tableName, key, effectiveUpdates[key]);
       }
     }
-    if (updates.autoExpand !== undefined) {
-      await this.ctx.computeBridge.setTableAutoExpand(tableName, updates.autoExpand);
+    if (effectiveUpdates.autoExpand !== undefined) {
+      await this.ctx.computeBridge.setTableAutoExpand(tableName, effectiveUpdates.autoExpand);
     }
-    if (updates.autoCalculatedColumns !== undefined) {
+    if (effectiveUpdates.autoCalculatedColumns !== undefined) {
       await this.ctx.computeBridge.setTableAutoCalculatedColumns(
         tableName,
-        updates.autoCalculatedColumns,
+        effectiveUpdates.autoCalculatedColumns,
       );
     }
     // Headers/totals with set semantics (not toggle)
-    if (updates.hasHeaderRow !== undefined) {
-      await this.setShowHeaders(tableName, updates.hasHeaderRow);
+    if (effectiveUpdates.hasHeaderRow !== undefined) {
+      await this.setShowHeaders(tableName, effectiveUpdates.hasHeaderRow);
     }
-    if (updates.hasTotalsRow !== undefined) {
-      await this.setShowTotals(tableName, updates.hasTotalsRow);
+    if (effectiveUpdates.hasTotalsRow !== undefined) {
+      await this.setShowTotals(tableName, effectiveUpdates.hasTotalsRow);
     }
-    this.emitTableUpdated(table.id, this.tableUpdateOptionsToEventChanges(updates));
+    this.emitTableUpdated(table.id, this.tableUpdateOptionsToEventChanges(effectiveUpdates));
+    return buildTableUpdateReceipt({
+      sheetId: this.sheetId,
+      table,
+      updates: effectiveUpdates,
+      status: 'applied',
+    });
   }
 
   async getAtCell(a: string | number, b?: number): Promise<TableInfo | null> {
@@ -676,19 +751,45 @@ export class WorksheetTablesImpl implements WorksheetTables {
     await this.ctx.computeBridge.applyFilter(this.sheetId, filter.id);
   }
 
-  async setStylePreset(tableName: string, preset: string): Promise<void> {
+  async setStylePreset(tableName: string, preset: string): Promise<TableUpdateReceipt> {
     const table = await this.get(tableName);
     if (!table) throw new KernelError('COMPUTE_ERROR', `Table not found: ${tableName}`);
+    const effectiveUpdates = effectiveTableUpdateOptions(table, { style: preset });
+    if (Object.keys(effectiveUpdates).length === 0) {
+      return buildTableUpdateReceipt({
+        sheetId: this.sheetId,
+        table,
+        updates: effectiveUpdates,
+        status: 'noOp',
+      });
+    }
     await assertTableStyleAllowed(this.ctx, this.sheetId, 'tables.update.style', table);
     const style = tableStyleIdForCompute(preset) ?? preset;
     await this.ctx.computeBridge.setTableStyle(tableName, style);
     this.emitTableUpdated(table.id, { style: this.tableStyleFromPreset(style) });
+    return buildTableUpdateReceipt({
+      sheetId: this.sheetId,
+      table,
+      updates: effectiveUpdates,
+      status: 'applied',
+      details: { style },
+    });
   }
 
   async resize(name: string, newRange: string | CellRange): Promise<TableResizeReceipt> {
     const bounds = resolveRange(newRange);
     const table = await this.get(name);
     if (!table) throw new KernelError('COMPUTE_ERROR', `Table not found: ${name}`);
+    const rangeStr = resolveRangeToA1(bounds);
+    if (rangeStr === table.range) {
+      return buildTableResizeReceipt({
+        sheetId: this.sheetId,
+        table,
+        oldRange: table.range,
+        newRange: rangeStr,
+        status: 'noOp',
+      });
+    }
     await assertTableResizeAllowed(this.ctx, this.sheetId, table, bounds);
     await this.ctx.computeBridge.resizeTable(
       name,
@@ -697,9 +798,14 @@ export class WorksheetTablesImpl implements WorksheetTables {
       bounds.endRow,
       bounds.endCol,
     );
-    const rangeStr = typeof newRange === 'string' ? newRange : resolveRangeToA1(newRange);
     this.emitTableUpdated(table.id, { range: bounds });
-    return { kind: 'tableResize', tableName: name, newRange: rangeStr };
+    return buildTableResizeReceipt({
+      sheetId: this.sheetId,
+      table: { ...table, range: rangeStr },
+      oldRange: table.range,
+      newRange: rangeStr,
+      status: 'applied',
+    });
   }
 
   async addColumn(
@@ -740,12 +846,47 @@ export class WorksheetTablesImpl implements WorksheetTables {
       await this.ctx.computeBridge.endUndoGroup();
     }
     this.emitTableUpdated(table.id);
-    return { kind: 'tableAddColumn', tableName: name, columnName, position: actualPosition };
+    const columnLetter = colToLetter(targetCol);
+    const columnRange = `${columnLetter}${bounds.startRow + 1}:${columnLetter}${bounds.endRow + 1}`;
+    const newTableRange = `${colToLetter(bounds.startCol)}${bounds.startRow + 1}:${colToLetter(
+      bounds.endCol + 1,
+    )}${bounds.endRow + 1}`;
+    return buildTableAddColumnReceipt({
+      sheetId: this.sheetId,
+      table: {
+        ...table,
+        range: newTableRange,
+      },
+      columnName,
+      position: actualPosition,
+      range: columnRange,
+    });
   }
 
-  async renameColumn(name: string, columnIndex: number, newColumnName: string): Promise<void> {
+  async renameColumn(
+    name: string,
+    columnIndex: number,
+    newColumnName: string,
+  ): Promise<TableRenameColumnReceipt> {
     const table = await this.get(name);
     if (!table) throw new KernelError('COMPUTE_ERROR', `Table not found: ${name}`);
+    const oldColumnName = table.columns[columnIndex]?.name;
+    if (oldColumnName === undefined) {
+      throw new KernelError(
+        'COMPUTE_ERROR',
+        `Column index ${columnIndex} out of range (table has ${table.columns.length} columns)`,
+      );
+    }
+    if (oldColumnName === newColumnName) {
+      return buildTableRenameColumnReceipt({
+        sheetId: this.sheetId,
+        table,
+        columnIndex,
+        oldColumnName,
+        newColumnName,
+        status: 'noOp',
+      });
+    }
     await assertUnprotectedTableDefinition(
       this.ctx,
       this.sheetId,
@@ -755,6 +896,14 @@ export class WorksheetTablesImpl implements WorksheetTables {
     );
     await this.ctx.computeBridge.renameTableColumn(name, columnIndex, newColumnName);
     this.emitTableUpdated(table.id);
+    return buildTableRenameColumnReceipt({
+      sheetId: this.sheetId,
+      table,
+      columnIndex,
+      oldColumnName,
+      newColumnName,
+      status: 'applied',
+    });
   }
 
   async removeColumn(name: string, columnIndex: number): Promise<TableRemoveColumnReceipt> {
@@ -801,51 +950,101 @@ export class WorksheetTablesImpl implements WorksheetTables {
       await this.ctx.computeBridge.endUndoGroup();
     }
     this.emitTableUpdated(table.id);
-    return { kind: 'tableRemoveColumn', tableName: name, columnIndex };
+    const columnName = table.columns[columnIndex]?.name ?? '';
+    const columnLetter = colToLetter(bounds.startCol + columnIndex);
+    const columnRange = `${columnLetter}${bounds.startRow + 1}:${columnLetter}${bounds.endRow + 1}`;
+    const newTableRange = `${colToLetter(bounds.startCol)}${bounds.startRow + 1}:${colToLetter(
+      bounds.endCol - 1,
+    )}${bounds.endRow + 1}`;
+    return buildTableRemoveColumnReceipt({
+      sheetId: this.sheetId,
+      table: {
+        ...table,
+        range: newTableRange,
+      },
+      columnIndex,
+      columnName,
+      range: columnRange,
+    });
   }
 
   /** @deprecated Use {@link setShowTotals} instead. */
-  async toggleTotalsRow(name: string): Promise<void> {
+  async toggleTotalsRow(name: string): Promise<TableUpdateReceipt> {
     const table = await this.get(name);
+    if (!table) throw new KernelError('COMPUTE_ERROR', `Table not found: ${name}`);
     await assertUnprotectedTableDefinition(
       this.ctx,
       this.sheetId,
       'tables.toggleTotalsRow',
       name,
-      table?.range,
+      table.range,
     );
     await this.ctx.computeBridge.toggleTotalsRow(name);
-    this.emitTableUpdated(this.tableIdForEvent(table, name));
+    const updates = { hasTotalsRow: !table.hasTotalsRow };
+    this.emitTableUpdated(table.id, { hasTotalRow: updates.hasTotalsRow });
+    return buildTableUpdateReceipt({
+      sheetId: this.sheetId,
+      table,
+      updates,
+      status: 'applied',
+    });
   }
 
   /** @deprecated Use {@link setShowHeaders} instead. */
-  async toggleHeaderRow(name: string): Promise<void> {
+  async toggleHeaderRow(name: string): Promise<TableUpdateReceipt> {
     const table = await this.get(name);
+    if (!table) throw new KernelError('COMPUTE_ERROR', `Table not found: ${name}`);
     await assertUnprotectedTableDefinition(
       this.ctx,
       this.sheetId,
       'tables.toggleHeaderRow',
       name,
-      table?.range,
+      table.range,
     );
     await this.ctx.computeBridge.toggleHeaderRow(name);
-    this.emitTableUpdated(this.tableIdForEvent(table, name));
+    const updates = { hasHeaderRow: !table.hasHeaderRow };
+    this.emitTableUpdated(table.id, { hasHeaderRow: updates.hasHeaderRow });
+    return buildTableUpdateReceipt({
+      sheetId: this.sheetId,
+      table,
+      updates,
+      status: 'applied',
+    });
   }
 
-  async applyAutoExpansion(tableName: string): Promise<void> {
-    const table = await this.get(tableName);
-    await assertUnprotectedTableDefinition(
-      this.ctx,
-      this.sheetId,
-      'tables.applyAutoExpansion',
-      tableName,
-      table?.range,
-    );
-    await this.ctx.computeBridge.applyAutoExpansion(this.sheetId, tableName);
-    this.emitTableUpdated(this.tableIdForEvent(table, tableName));
+  async applyAutoExpansion(tableName: string): Promise<TableAutoExpansionReceipt> {
+    const result = await applyAutoExpansionOperation(this.ctx, this.sheetId, tableName, {
+      assertAllowed: (table) =>
+        assertUnprotectedTableDefinition(
+          this.ctx,
+          this.sheetId,
+          'tables.applyAutoExpansion',
+          tableName,
+          table.range,
+        ),
+      unsupportedReasonForAssertError: 'protectedRegion',
+    });
+    if (!result.success) {
+      throw result.error;
+    }
+
+    const receipt = result.data;
+    if (
+      receipt.tableId &&
+      receipt.previousRange &&
+      receipt.newRange &&
+      receipt.newRange !== receipt.previousRange
+    ) {
+      this.emitTableUpdated(receipt.tableId, { range: this.tableRangeFromA1(receipt.newRange) });
+    }
+    return receipt;
   }
 
-  async setCalculatedColumn(tableName: string, colIndex: number, formula: string): Promise<void> {
+  async setCalculatedColumn(
+    tableName: string,
+    colIndex: number,
+    formula: string,
+  ): Promise<TableSetCalculatedColumnReceipt> {
     const table = await this.get(tableName);
     if (!table) {
       throw new KernelError('COMPUTE_ERROR', `Table not found: ${tableName}`);
@@ -861,50 +1060,31 @@ export class WorksheetTablesImpl implements WorksheetTables {
       table,
       cells,
     );
-    await this.ctx.computeBridge.beginUndoGroup();
-    try {
-      await this.ctx.computeBridge.updateCalculatedColumn(tableName, colIndex, formula);
-      if (cells.length > 0) {
-        const sourceCell = cells[0]!;
-        await this.ctx.computeBridge.setCellsByPosition(this.sheetId, [
-          { row: sourceCell.row, col: sourceCell.col, input: toCellInput(formula) },
-        ]);
-        if (cells.length > 1) {
-          const firstTargetCell = cells[1]!;
-          const lastCell = cells[cells.length - 1]!;
-          await FillOps.autoFill(
-            this.ctx,
-            this.sheetId,
-            {
-              startRow: sourceCell.row,
-              startCol: sourceCell.col,
-              endRow: sourceCell.row,
-              endCol: sourceCell.col,
-            },
-            {
-              startRow: firstTargetCell.row,
-              startCol: firstTargetCell.col,
-              endRow: lastCell.row,
-              endCol: lastCell.col,
-            },
-            'withoutFormats',
-            { undoGroup: false },
-          );
-        }
-      }
-    } finally {
-      await this.ctx.computeBridge.endUndoGroup();
-    }
-    this.emitTableUpdated(table.id);
+    const receipt = await applySetCalculatedColumnWithReceipt(
+      this.ctx,
+      this.sheetId,
+      table,
+      tableName,
+      colIndex,
+      formula,
+      cells,
+    );
+    if (receipt.status !== 'noOp') this.emitTableUpdated(table.id);
+    return receipt;
   }
 
-  async clearCalculatedColumn(tableName: string, colIndex: number): Promise<void> {
+  async clearCalculatedColumn(
+    tableName: string,
+    colIndex: number,
+  ): Promise<TableClearCalculatedColumnReceipt> {
     const table = await this.get(tableName);
     if (!table) {
       throw new KernelError('COMPUTE_ERROR', `Table not found: ${tableName}`);
     }
 
-    const cells = getTableColumnDataCellsFromInfo(table, colIndex);
+    const cells = [...getTableColumnDataCellsFromInfo(table, colIndex)].sort((a, b) =>
+      a.row === b.row ? a.col - b.col : a.row - b.row,
+    );
     await assertCalculatedColumnAllowed(
       this.ctx,
       this.sheetId,
@@ -912,11 +1092,16 @@ export class WorksheetTablesImpl implements WorksheetTables {
       table,
       cells,
     );
-    await this.ctx.computeBridge.removeCalculatedColumn(tableName, colIndex);
-    if (cells.length === 0) return;
-
-    const edits = cells.map(({ row, col }) => ({ row, col, input: toCellInput(null) }));
-    await this.ctx.computeBridge.setCellsByPosition(this.sheetId, edits);
+    const receipt = await applyClearCalculatedColumnWithReceipt(
+      this.ctx,
+      this.sheetId,
+      table,
+      tableName,
+      colIndex,
+      cells,
+    );
+    if (receipt.status !== 'noOp') this.emitTableUpdated(table.id);
+    return receipt;
   }
 
   async getDataBodyRange(name: string): Promise<string | null> {
@@ -941,85 +1126,117 @@ export class WorksheetTablesImpl implements WorksheetTables {
   // Boolean option setters
   // ---------------------------------------------------------------------------
 
-  async setHighlightFirstColumn(tableName: string, value: boolean): Promise<void> {
+  async setHighlightFirstColumn(tableName: string, value: boolean): Promise<TableUpdateReceipt> {
     const table = await this.get(tableName);
     if (!table) throw new KernelError('COMPUTE_ERROR', `Table not found: ${tableName}`);
+    const updates = effectiveTableUpdateOptions(table, { emphasizeFirstColumn: value });
+    if (Object.keys(updates).length === 0) {
+      return buildTableUpdateReceipt({ sheetId: this.sheetId, table, updates, status: 'noOp' });
+    }
     await assertTableStyleAllowed(this.ctx, this.sheetId, 'tables.update.style', table);
     await this.ctx.computeBridge.setTableBoolOption(tableName, 'emphasizeFirstColumn', value);
     this.emitTableUpdated(table.id, { style: { showFirstColumnHighlight: value } });
+    return buildTableUpdateReceipt({ sheetId: this.sheetId, table, updates, status: 'applied' });
   }
 
-  async setHighlightLastColumn(tableName: string, value: boolean): Promise<void> {
+  async setHighlightLastColumn(tableName: string, value: boolean): Promise<TableUpdateReceipt> {
     const table = await this.get(tableName);
     if (!table) throw new KernelError('COMPUTE_ERROR', `Table not found: ${tableName}`);
+    const updates = effectiveTableUpdateOptions(table, { emphasizeLastColumn: value });
+    if (Object.keys(updates).length === 0) {
+      return buildTableUpdateReceipt({ sheetId: this.sheetId, table, updates, status: 'noOp' });
+    }
     await assertTableStyleAllowed(this.ctx, this.sheetId, 'tables.update.style', table);
     await this.ctx.computeBridge.setTableBoolOption(tableName, 'emphasizeLastColumn', value);
     this.emitTableUpdated(table.id, { style: { showLastColumnHighlight: value } });
+    return buildTableUpdateReceipt({ sheetId: this.sheetId, table, updates, status: 'applied' });
   }
 
-  async setShowBandedColumns(tableName: string, value: boolean): Promise<void> {
+  async setShowBandedColumns(tableName: string, value: boolean): Promise<TableUpdateReceipt> {
     const table = await this.get(tableName);
     if (!table) throw new KernelError('COMPUTE_ERROR', `Table not found: ${tableName}`);
+    const updates = effectiveTableUpdateOptions(table, { bandedColumns: value });
+    if (Object.keys(updates).length === 0) {
+      return buildTableUpdateReceipt({ sheetId: this.sheetId, table, updates, status: 'noOp' });
+    }
     await assertTableStyleAllowed(this.ctx, this.sheetId, 'tables.update.style', table);
     await this.ctx.computeBridge.setTableBoolOption(tableName, 'bandedColumns', value);
     this.emitTableUpdated(table.id, { style: { showBandedColumns: value } });
+    return buildTableUpdateReceipt({ sheetId: this.sheetId, table, updates, status: 'applied' });
   }
 
-  async setShowBandedRows(tableName: string, value: boolean): Promise<void> {
+  async setShowBandedRows(tableName: string, value: boolean): Promise<TableUpdateReceipt> {
     const table = await this.get(tableName);
     if (!table) throw new KernelError('COMPUTE_ERROR', `Table not found: ${tableName}`);
+    const updates = effectiveTableUpdateOptions(table, { bandedRows: value });
+    if (Object.keys(updates).length === 0) {
+      return buildTableUpdateReceipt({ sheetId: this.sheetId, table, updates, status: 'noOp' });
+    }
     await assertTableStyleAllowed(this.ctx, this.sheetId, 'tables.update.style', table);
     await this.ctx.computeBridge.setTableBoolOption(tableName, 'bandedRows', value);
     this.emitTableUpdated(table.id, { style: { showBandedRows: value } });
+    return buildTableUpdateReceipt({ sheetId: this.sheetId, table, updates, status: 'applied' });
   }
 
-  async setShowFilterButton(tableName: string, value: boolean): Promise<void> {
+  async setShowFilterButton(tableName: string, value: boolean): Promise<TableUpdateReceipt> {
     const table = await this.get(tableName);
+    if (!table) throw new KernelError('COMPUTE_ERROR', `Table not found: ${tableName}`);
+    const updates = effectiveTableUpdateOptions(table, { showFilterButtons: value });
+    if (Object.keys(updates).length === 0) {
+      return buildTableUpdateReceipt({ sheetId: this.sheetId, table, updates, status: 'noOp' });
+    }
     await assertUnprotectedTableDefinition(
       this.ctx,
       this.sheetId,
       'tables.update.definition',
       tableName,
-      table?.range,
+      table.range,
     );
     await this.ctx.computeBridge.setTableBoolOption(tableName, 'showFilterButtons', value);
-    this.emitTableUpdated(this.tableIdForEvent(table, tableName), { showFilterButtons: value });
+    this.emitTableUpdated(table.id, { showFilterButtons: value });
+    return buildTableUpdateReceipt({ sheetId: this.sheetId, table, updates, status: 'applied' });
   }
 
   // ---------------------------------------------------------------------------
   // Set semantics for headers/totals
   // ---------------------------------------------------------------------------
 
-  async setShowHeaders(tableName: string, visible: boolean): Promise<void> {
+  async setShowHeaders(tableName: string, visible: boolean): Promise<TableUpdateReceipt> {
     const table = await this.get(tableName);
     if (!table) throw new KernelError('COMPUTE_ERROR', `Table not found: ${tableName}`);
-    if (table.hasHeaderRow !== visible) {
-      await assertUnprotectedTableDefinition(
-        this.ctx,
-        this.sheetId,
-        'tables.toggleHeaderRow',
-        tableName,
-        table.range,
-      );
-      await this.ctx.computeBridge.toggleHeaderRow(tableName);
-      this.emitTableUpdated(table.id, { hasHeaderRow: visible });
+    const updates = effectiveTableUpdateOptions(table, { hasHeaderRow: visible });
+    if (Object.keys(updates).length === 0) {
+      return buildTableUpdateReceipt({ sheetId: this.sheetId, table, updates, status: 'noOp' });
     }
+    await assertUnprotectedTableDefinition(
+      this.ctx,
+      this.sheetId,
+      'tables.toggleHeaderRow',
+      tableName,
+      table.range,
+    );
+    await this.ctx.computeBridge.toggleHeaderRow(tableName);
+    this.emitTableUpdated(table.id, { hasHeaderRow: visible });
+    return buildTableUpdateReceipt({ sheetId: this.sheetId, table, updates, status: 'applied' });
   }
 
-  async setShowTotals(tableName: string, visible: boolean): Promise<void> {
+  async setShowTotals(tableName: string, visible: boolean): Promise<TableUpdateReceipt> {
     const table = await this.get(tableName);
     if (!table) throw new KernelError('COMPUTE_ERROR', `Table not found: ${tableName}`);
-    if (table.hasTotalsRow !== visible) {
-      await assertUnprotectedTableDefinition(
-        this.ctx,
-        this.sheetId,
-        'tables.toggleTotalsRow',
-        tableName,
-        table.range,
-      );
-      await this.ctx.computeBridge.toggleTotalsRow(tableName);
-      this.emitTableUpdated(table.id, { hasTotalRow: visible });
+    const updates = effectiveTableUpdateOptions(table, { hasTotalsRow: visible });
+    if (Object.keys(updates).length === 0) {
+      return buildTableUpdateReceipt({ sheetId: this.sheetId, table, updates, status: 'noOp' });
     }
+    await assertUnprotectedTableDefinition(
+      this.ctx,
+      this.sheetId,
+      'tables.toggleTotalsRow',
+      tableName,
+      table.range,
+    );
+    await this.ctx.computeBridge.toggleTotalsRow(tableName);
+    this.emitTableUpdated(table.id, { hasTotalRow: visible });
+    return buildTableUpdateReceipt({ sheetId: this.sheetId, table, updates, status: 'applied' });
   }
 
   /**
@@ -1118,12 +1335,13 @@ export class WorksheetTablesImpl implements WorksheetTables {
     if (!before) throw new KernelError('COMPUTE_ERROR', `Table not found: ${tableName}`);
     const beforeRange = parseTableRange(before);
     const rowCount = await this.getRowCount(tableName);
+    const insertedDataRowIndex = index == null ? rowCount : Math.max(0, Math.min(index, rowCount));
     const preflightInsertRow =
       index == null
         ? before.hasTotalsRow
           ? beforeRange.endRow
           : beforeRange.endRow + 1
-        : dataRowToSheetRow(before, Math.max(0, Math.min(index, rowCount)));
+        : dataRowToSheetRow(before, insertedDataRowIndex);
     await assertTableRowsInsertAllowed(
       this.ctx,
       this.sheetId,
@@ -1194,18 +1412,28 @@ export class WorksheetTablesImpl implements WorksheetTables {
 
     // Write values if provided
     if (values && values.length > 0) {
-      const table = await this.get(tableName);
-      if (!table) return { kind: 'tableAddRow', tableName, index: insertRow };
-      const parsed = parseCellRange(table.range);
-      if (!parsed) return { kind: 'tableAddRow', tableName, index: insertRow };
       const edits = values.map((val, i) => ({
         row: insertRow,
-        col: parsed.startCol + i,
+        col: beforeRange.startCol + i,
         input: toCellInput(val),
       }));
       await this.ctx.computeBridge.setCellsByPosition(this.sheetId, edits);
     }
-    return { kind: 'tableAddRow', tableName, index: insertRow };
+    const rowRange = `${colToLetter(beforeRange.startCol)}${insertRow + 1}:${colToLetter(
+      beforeRange.endCol,
+    )}${insertRow + 1}`;
+    const newTableRange = `${colToLetter(beforeRange.startCol)}${beforeRange.startRow + 1}:${colToLetter(
+      beforeRange.endCol,
+    )}${beforeRange.endRow + 2}`;
+    return buildTableAddRowReceipt({
+      sheetId: this.sheetId,
+      table: {
+        ...before,
+        range: newTableRange,
+      },
+      index: insertedDataRowIndex,
+      range: rowRange,
+    });
   }
 
   async deleteRow(tableName: string, index: number): Promise<TableDeleteRowReceipt> {
@@ -1233,7 +1461,27 @@ export class WorksheetTablesImpl implements WorksheetTables {
       typeof result.data === 'number' ? result.data : parseInt(result.data as string, 10);
     await Structures.deleteRows(this.ctx, this.sheetId, null, removedRow, 1, 'api');
     this.emitTableUpdated(table.id);
-    return { kind: 'tableDeleteRow', tableName, index };
+    const parsed = parseCellRange(table.range);
+    const rowRange = parsed
+      ? `${colToLetter(parsed.startCol)}${removedRow + 1}:${colToLetter(parsed.endCol)}${
+          removedRow + 1
+        }`
+      : table.range;
+    const receiptTable =
+      parsed == null
+        ? table
+        : {
+            ...table,
+            range: `${colToLetter(parsed.startCol)}${parsed.startRow + 1}:${colToLetter(
+              parsed.endCol,
+            )}${parsed.endRow}`,
+          };
+    return buildTableDeleteRowReceipt({
+      sheetId: this.sheetId,
+      table: receiptTable,
+      index,
+      range: rowRange,
+    });
   }
 
   async deleteRows(tableName: string, indices: number[]): Promise<void> {

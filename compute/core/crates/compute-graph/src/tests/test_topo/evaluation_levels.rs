@@ -44,25 +44,25 @@ fn test_evaluation_levels_diamond_with_range() {
     let resolve = |cell: &CellId| -> Option<CellPosition> {
         if *cell == d {
             Some(CellPosition {
-                sheet: sheet,
+                sheet,
                 row: 0,
                 col: 0,
             })
         } else if *cell == b {
             Some(CellPosition {
-                sheet: sheet,
+                sheet,
                 row: 0,
                 col: 1,
             })
         } else if *cell == c {
             Some(CellPosition {
-                sheet: sheet,
+                sheet,
                 row: 0,
                 col: 2,
             })
         } else if *cell == a {
             Some(CellPosition {
-                sheet: sheet,
+                sheet,
                 row: 0,
                 col: 3,
             })

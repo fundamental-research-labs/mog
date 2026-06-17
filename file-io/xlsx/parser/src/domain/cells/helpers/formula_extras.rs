@@ -1,6 +1,6 @@
-use super::super::adapters::find_sequence;
 use super::bytes::{find_byte_in, parse_u32};
 use super::shared_formula::SharedFormulaExtract;
+use super::tags::{find_closing_tag_span, find_start_tag};
 
 /// Result of the fused single-pass formula extras extraction.
 ///
@@ -60,114 +60,42 @@ pub fn extract_formula_extras_fused(xml: &[u8]) -> FormulaExtras<'_> {
     let mut pos = 0;
 
     // ── Scan for <f element ──
-    while pos < len {
-        if xml[pos] == b'<' && pos + 1 < len && xml[pos + 1] == b'f' {
-            // Check it's actually `<f ` or `<f>` or `<f/` (not `<fo...` etc.)
-            if pos + 2 >= len
-                || xml[pos + 2] == b' '
-                || xml[pos + 2] == b'>'
-                || xml[pos + 2] == b'/'
-            {
-                // Found <f element — extract everything from the tag
-                let f_start = pos;
+    if let Some(f_tag) = find_start_tag(xml, b"f", pos) {
+        let tag_bytes = &xml[f_tag.lt..=f_tag.tag_end];
 
-                // Find the end of the opening tag
-                let mut tag_end = pos + 2;
-                let mut is_self_closing_f = false;
-                while tag_end < len {
-                    if xml[tag_end] == b'>' {
-                        is_self_closing_f = tag_end > 0 && xml[tag_end - 1] == b'/';
-                        break;
-                    }
-                    tag_end += 1;
+        // Parse attributes from the <f> tag in a single scan
+        parse_f_tag_attrs(tag_bytes, &mut result);
+
+        // Extract formula text if not self-closing
+        if !f_tag.is_self_closing {
+            if let Some(f_close) = find_closing_tag_span(xml, b"f", f_tag.content_start) {
+                let text = &xml[f_tag.content_start..f_close.lt];
+                if !text.is_empty() {
+                    result.formula_text = Some(text);
                 }
-                if tag_end >= len {
-                    break;
-                }
-
-                let f_tag = &xml[f_start..=tag_end];
-
-                // Parse attributes from the <f> tag in a single scan
-                parse_f_tag_attrs(f_tag, &mut result);
-
-                // Extract formula text if not self-closing
-                if !is_self_closing_f {
-                    let content_start = tag_end + 1;
-                    if let Some(f_close) = find_sequence(xml, b"</f>", content_start) {
-                        let text = &xml[content_start..f_close];
-                        if !text.is_empty() {
-                            result.formula_text = Some(text);
-                        }
-                        pos = f_close + 4;
-                    } else {
-                        pos = tag_end + 1;
-                    }
-                } else {
-                    pos = tag_end + 1;
-                }
-
-                // Build SharedFormulaExtract if t="shared"
-                if result.shared.is_some() {
-                    // Already partially filled by parse_f_tag_attrs; finish it
-                    // The formula_text and ref_range are set there.
-                }
-
-                // Now scan for <v element after the <f> element
-                break;
+                pos = f_close.end;
+            } else {
+                pos = f_tag.content_start;
             }
+        } else {
+            pos = f_tag.content_start;
         }
-        pos += 1;
     }
 
     // ── Scan for <v element ──
-    while pos < len {
-        if xml[pos] == b'<' && pos + 1 < len && xml[pos + 1] == b'v' {
-            // Check it's actually `<v ` or `<v>` or `<v/` (not `<va...` etc.)
-            if pos + 2 >= len
-                || xml[pos + 2] == b' '
-                || xml[pos + 2] == b'>'
-                || xml[pos + 2] == b'/'
-            {
-                let v_start = pos;
-
-                // Check for self-closing <v/>
-                if pos + 3 < len
-                    && xml[pos + 1] == b'v'
-                    && xml[pos + 2] == b'/'
-                    && xml[pos + 3] == b'>'
-                {
-                    result.v_self_closing = true;
-                    break;
-                }
-
-                // Find end of opening tag
-                let mut tag_end = pos + 2;
-                while tag_end < len {
-                    if xml[tag_end] == b'>' {
-                        break;
-                    }
-                    tag_end += 1;
-                }
-                if tag_end >= len {
-                    break;
-                }
-
-                // Check for xml:space in the <v> tag
-                let v_tag = &xml[v_start..=tag_end];
-                if v_tag.windows(9).any(|w| w == b"xml:space") {
-                    result.v_xml_space = true;
-                }
-
-                // Extract content between <v...> and </v>
-                let content_start = tag_end + 1;
-                if let Some(v_close) = find_sequence(xml, b"</v>", content_start) {
-                    result.v_content = Some(&xml[content_start..v_close]);
-                }
-
-                break;
-            }
+    if pos < len
+        && let Some(v_tag) = find_start_tag(xml, b"v", pos)
+    {
+        let tag_bytes = &xml[v_tag.lt..=v_tag.tag_end];
+        if tag_bytes.windows(9).any(|w| w == b"xml:space") {
+            result.v_xml_space = true;
         }
-        pos += 1;
+
+        if v_tag.is_self_closing {
+            result.v_self_closing = true;
+        } else if let Some(v_close) = find_closing_tag_span(xml, b"v", v_tag.content_start) {
+            result.v_content = Some(&xml[v_tag.content_start..v_close.lt]);
+        }
     }
 
     result

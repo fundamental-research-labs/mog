@@ -498,7 +498,7 @@ mod tests {
     fn test_format_real_decimal() {
         assert_eq!(format_real(1.5), "1.5");
         assert_eq!(format_real(0.001), "0.001");
-        assert_eq!(format_real(3.14159), "3.14159");
+        assert_eq!(format_real(12.34567), "12.34567");
     }
 
     #[test]

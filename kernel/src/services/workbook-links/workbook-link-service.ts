@@ -1,10 +1,17 @@
 import type {
+  OperationDiagnostic,
+  OperationEffect,
+  WorkbookLinkRefreshReceipt,
+  WorkbookLinksRefreshAllReceipt,
+} from '@mog-sdk/contracts/api';
+import type {
   CreateWorkbookLinkInput,
   DisposableWatchHandle,
   LinkId,
   LinkStatusView,
   PersistedWorkbookLinkRecord,
   PersistedLinkTarget,
+  ResolvedWorkbookLink,
   RuntimeLinkStatus,
   UpdateWorkbookLinkInput,
   WorkbookExternalLinkUsageView,
@@ -69,6 +76,158 @@ function statusMessage(
   if (status === 'broken') return 'Broken';
   if (status === 'ambiguous') return 'Ambiguous';
   return 'Not checked';
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function linkRefreshStatus(statusView: LinkStatusView): WorkbookLinkRefreshReceipt['status'] {
+  if (statusView.statusReason === 'unsupportedLinkKind') return 'unsupported';
+  if (statusView.status === 'ready' || statusView.status === 'stale') return 'applied';
+  if (statusView.status === 'ambiguous') return 'partial';
+  return 'failed';
+}
+
+function linkRefreshDiagnostic(input: {
+  statusView: LinkStatusView;
+  error?: unknown;
+}): OperationDiagnostic[] {
+  const { statusView } = input;
+  const status = linkRefreshStatus(statusView);
+  if (status === 'applied') return [];
+
+  const message = input.error
+    ? `Workbook link refresh failed: ${errorMessage(input.error)}`
+    : statusView.displayMessage;
+
+  return [
+    {
+      severity: status === 'partial' || status === 'unsupported' ? 'warning' : 'error',
+      code:
+        status === 'partial'
+          ? 'WORKBOOK_LINK_AMBIGUOUS'
+          : status === 'unsupported'
+            ? 'WORKBOOK_LINK_UNSUPPORTED'
+            : 'WORKBOOK_LINK_REFRESH_FAILED',
+      message,
+      target: {
+        objectId: statusView.linkId,
+        stage: 'refresh',
+      },
+      recoverable: status !== 'unsupported',
+      nextAction:
+        status === 'unsupported'
+          ? 'Use a supported workbook link kind before refreshing this link.'
+          : 'Update the workbook link target or permissions, then refresh again.',
+      details: {
+        linkStatus: statusView.status,
+        statusReason: statusView.statusReason,
+      },
+    },
+  ];
+}
+
+function linkRefreshEffects(input: {
+  record?: PersistedWorkbookLinkRecord;
+  scope: WorkbookLinkStatusScope;
+  statusView: LinkStatusView;
+}): OperationEffect[] {
+  const { record, scope, statusView } = input;
+  const effects: OperationEffect[] = [
+    {
+      type: 'invalidatedCache',
+      objectId: statusView.linkId,
+      details: {
+        cache: 'workbookLinkStatus',
+        durable: false,
+        scope: 'runtime',
+      },
+    },
+    {
+      type: 'updatedRuntimeMetadata',
+      objectId: statusView.linkId,
+      details: {
+        metadata: 'workbookLinkStatus',
+        durable: false,
+        requestingSessionId: scope.requestingSessionId,
+        actor: scope.actor,
+        linkStatus: statusView.status,
+        statusReason: statusView.statusReason,
+      },
+    },
+  ];
+
+  if (record && statusView.statusReason !== 'unsupportedLinkKind') {
+    effects.unshift({
+      type: 'readExternalSource',
+      objectId: statusView.linkId,
+      details: {
+        sourceKind: record.sourceKind,
+        targetKind: record.target.kind,
+        authorizationScoped: true,
+      },
+    });
+  }
+
+  return effects;
+}
+
+function buildWorkbookLinkRefreshReceipt(input: {
+  record?: PersistedWorkbookLinkRecord;
+  scope: WorkbookLinkStatusScope;
+  statusView: LinkStatusView;
+  error?: unknown;
+}): WorkbookLinkRefreshReceipt {
+  return {
+    kind: 'workbook.links.refresh',
+    status: linkRefreshStatus(input.statusView),
+    effects: linkRefreshEffects(input),
+    diagnostics: linkRefreshDiagnostic(input),
+    linkId: input.statusView.linkId,
+    statusView: input.statusView,
+  };
+}
+
+function buildWorkbookLinksRefreshAllReceipt(
+  receipts: readonly WorkbookLinkRefreshReceipt[],
+): WorkbookLinksRefreshAllReceipt {
+  const failedCount = receipts.filter((receipt) => receipt.status === 'failed').length;
+  const unsupportedCount = receipts.filter((receipt) => receipt.status === 'unsupported').length;
+  const refreshedCount = receipts.length - failedCount - unsupportedCount;
+  const status: WorkbookLinksRefreshAllReceipt['status'] =
+    receipts.length === 0
+      ? 'noOp'
+      : failedCount === receipts.length
+        ? 'failed'
+        : unsupportedCount === receipts.length
+          ? 'unsupported'
+          : failedCount > 0 || unsupportedCount > 0
+            ? 'partial'
+            : 'applied';
+
+  return {
+    kind: 'workbook.links.refreshAll',
+    status,
+    effects:
+      receipts.length === 0
+        ? [
+            {
+              type: 'workbookUnchanged',
+              details: {
+                reason: 'noWorkbookLinks',
+              },
+            },
+          ]
+        : receipts.flatMap((receipt) => [...receipt.effects]),
+    diagnostics: receipts.flatMap((receipt) => [...receipt.diagnostics]),
+    linkIds: receipts.map((receipt) => receipt.linkId),
+    statusViews: receipts.map((receipt) => receipt.statusView),
+    receipts,
+    refreshedCount,
+    failedCount,
+    unsupportedCount,
+  };
 }
 
 function unresolvedStatus(linkId: LinkId, scope: WorkbookLinkStatusScope): RuntimeLinkStatus {
@@ -263,7 +422,10 @@ export class WorkbookLinkService implements WorkbookLinksAPI {
     return toStatusView(status);
   }
 
-  async refresh(linkId: LinkId, scope: WorkbookLinkStatusScope): Promise<LinkStatusView> {
+  async refresh(
+    linkId: LinkId,
+    scope: WorkbookLinkStatusScope,
+  ): Promise<WorkbookLinkRefreshReceipt> {
     const record = this.records.get(linkId);
     if (!record) {
       const broken: RuntimeLinkStatus = {
@@ -273,7 +435,10 @@ export class WorkbookLinkService implements WorkbookLinksAPI {
         lastResolvedAt: this.now(),
       };
       this.setStatus(broken);
-      return toStatusView(broken);
+      return buildWorkbookLinkRefreshReceipt({
+        scope,
+        statusView: toStatusView(broken),
+      });
     }
     if (isUnsupported(record)) {
       const unsupported: RuntimeLinkStatus = {
@@ -283,7 +448,11 @@ export class WorkbookLinkService implements WorkbookLinksAPI {
         lastResolvedAt: this.now(),
       };
       this.setStatus(unsupported);
-      return toStatusView(unsupported);
+      return buildWorkbookLinkRefreshReceipt({
+        record,
+        scope,
+        statusView: toStatusView(unsupported),
+      });
     }
 
     const loading: RuntimeLinkStatus = {
@@ -293,22 +462,40 @@ export class WorkbookLinkService implements WorkbookLinksAPI {
     };
     this.setStatus(loading);
 
-    const resolved = this.options.resolver
-      ? await this.options.resolver.resolve({
-          linkId,
-          requestingDocumentId: scope.requestingDocumentId,
-          requestingSessionId: scope.requestingSessionId,
-          actor: scope.actor,
-          principal: scope.principal,
-          target: record.target,
-          expectedWorkbookId: record.expectedWorkbookId,
-        })
-      : {
-          linkId,
-          status: 'unresolved' as const,
-          statusReason: 'missingTarget' as const,
-          authorization: 'denied' as const,
-        };
+    let resolved: ResolvedWorkbookLink;
+    try {
+      resolved = this.options.resolver
+        ? await this.options.resolver.resolve({
+            linkId,
+            requestingDocumentId: scope.requestingDocumentId,
+            requestingSessionId: scope.requestingSessionId,
+            actor: scope.actor,
+            principal: scope.principal,
+            target: record.target,
+            expectedWorkbookId: record.expectedWorkbookId,
+          })
+        : {
+            linkId,
+            status: 'unresolved' as const,
+            statusReason: 'missingTarget' as const,
+            authorization: 'denied' as const,
+          };
+    } catch (error) {
+      const broken: RuntimeLinkStatus = {
+        ...unresolvedStatus(linkId, scope),
+        status: 'broken',
+        statusReason: 'sourceUnavailable',
+        lastResolvedAt: this.now(),
+        cachedValuesVersion: record.materializedCacheMetadata?.cachedValuesVersion,
+      };
+      this.setStatus(broken);
+      return buildWorkbookLinkRefreshReceipt({
+        record,
+        scope,
+        statusView: toStatusView(broken),
+        error,
+      });
+    }
 
     const mismatchedWorkbook =
       resolved.authorization !== 'denied' &&
@@ -341,16 +528,20 @@ export class WorkbookLinkService implements WorkbookLinksAPI {
     const key = this.statusKey(linkId, scope);
     this.watches.replace(key, resolved.watch);
     this.setStatus(status);
-    return toStatusView(status);
+    return buildWorkbookLinkRefreshReceipt({
+      record,
+      scope,
+      statusView: toStatusView(status),
+    });
   }
 
   async refreshAll(
     scope: WorkbookLinkStatusScope,
     options: { readonly concurrency?: number } = {},
-  ): Promise<readonly LinkStatusView[]> {
+  ): Promise<WorkbookLinksRefreshAllReceipt> {
     const records = [...this.records.values()];
     const concurrency = Math.max(1, options.concurrency ?? 4);
-    const results = new Array<LinkStatusView>(records.length);
+    const results = new Array<WorkbookLinkRefreshReceipt>(records.length);
     let cursor = 0;
     const worker = async (): Promise<void> => {
       while (cursor < records.length) {
@@ -359,7 +550,7 @@ export class WorkbookLinkService implements WorkbookLinksAPI {
       }
     };
     await Promise.all(Array.from({ length: Math.min(concurrency, records.length) }, worker));
-    return results;
+    return buildWorkbookLinksRefreshAllReceipt(results);
   }
 
   getRuntimeStatus(linkId: LinkId, scope: WorkbookLinkStatusScope): RuntimeLinkStatus | null {

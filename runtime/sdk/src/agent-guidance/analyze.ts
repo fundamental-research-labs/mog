@@ -87,9 +87,13 @@ function spanFor(source: string, start: number, end: number): SourceSpan {
 }
 
 function hasLocalDeclaration(stripped: string, name: string): boolean {
-  return new RegExp(`\\b(?:const|let|var|function|class)\\s+${escapeRegExp(name)}\\b`).test(
-    stripped,
+  const escaped = escapeRegExp(name);
+  const declaration = new RegExp(`\\b(?:const|let|var|function|class)\\s+${escaped}\\b`);
+  const imported = new RegExp(
+    `\\bimport\\s+(?:[^;]*\\{[^}]*\\b${escaped}\\b[^}]*\\}|\\*\\s+as\\s+${escaped}\\b|${escaped}\\b)`,
+    'm',
   );
+  return declaration.test(stripped) || imported.test(stripped);
 }
 
 function chainPattern(symbol: string): RegExp {
@@ -120,14 +124,16 @@ function patternFor(matcher: ApiGuidanceSymbolMatcher): RegExp {
 
 function compatibilityPattern(entry: ApiCompatibilityEntry): RegExp | null {
   const path = entry.observedPath.trim();
-  if (!path.startsWith('ws.') && !path.startsWith('wb.')) return null;
+  if (!path.startsWith('ws.') && !path.startsWith('wb.') && !path.startsWith('workbook.')) {
+    return null;
+  }
 
   if (isPivotHandleDescribePath(path)) {
     return /\bws\s*\.\s*pivots\s*\.\s*get\s*\([^)]*\)\s*\.\s*describe\s*\(/g;
   }
 
   const normalized = path.replace(/\(\s*\)$/, '');
-  if (!/^(ws|wb)(?:\.[A-Za-z_$][\w$]*)+$/.test(normalized)) return null;
+  if (!/^(ws|wb|workbook)(?:\.[A-Za-z_$][\w$]*)+$/.test(normalized)) return null;
   return callPattern(normalized);
 }
 
@@ -223,7 +229,25 @@ function replacementsForCompatibility(entry: ApiCompatibilityEntry): MogReplacem
       ? [entry.canonicalPath]
       : [];
   return paths
-    .filter((path) => path.startsWith('ws.') || path.startsWith('wb.') || path.startsWith('type:'))
+    .filter(
+      (path) =>
+        path.startsWith('ws.') ||
+        path.startsWith('wb.') ||
+        path.startsWith('workbook.') ||
+        path.startsWith('a1.') ||
+        path.startsWith('api.utils.') ||
+        path.startsWith('Utils.') ||
+        path.startsWith('type:') ||
+        [
+          'a1',
+          'address',
+          'rangeAddress',
+          'columnName',
+          'columnIndex',
+          'offset',
+          'parseAddress',
+        ].includes(path),
+    )
     .map((path) => ({ path }));
 }
 
@@ -233,18 +257,240 @@ function compatibilityReferences(entry: ApiCompatibilityEntry): string[] {
   return refs;
 }
 
+interface SourceMatch {
+  readonly start: number;
+  readonly end: number;
+}
+
+interface RootCallMatch extends SourceMatch {
+  readonly name: string;
+}
+
+interface WorkbookMemberCallMatch extends SourceMatch {
+  readonly workbookAlias: 'workbook' | 'wb';
+  readonly member: string;
+}
+
+interface NamespaceGuess {
+  readonly id: string;
+  readonly category: ApiGuidanceDiagnostic['category'];
+  readonly globalCalls?: readonly string[];
+  readonly workbookMethods?: readonly string[];
+  readonly message: string;
+  readonly suggestion: string;
+  readonly replacements: readonly MogReplacement[];
+}
+
+const PROMISE_METHODS = new Set(['then', 'catch', 'finally']);
+
+const COMMON_WORKSHEET_METHODS = new Set([
+  'setCell',
+  'setValue',
+  'getCell',
+  'getValue',
+  'setRange',
+  'getRange',
+  'getValues',
+  'setFormula',
+  'setFormulas',
+  'evaluate',
+  'evaluateFormula',
+  'validateFormula',
+  'describe',
+  'describeRange',
+  'summarize',
+]);
+
+const NAMESPACE_GUESSES: readonly NamespaceGuess[] = [
+  {
+    id: 'mog-api.namespace.loadWorkbook.unsupported',
+    category: 'bootstrap',
+    globalCalls: ['loadWorkbook'],
+    workbookMethods: ['loadWorkbook'],
+    message: '`loadWorkbook` is not a workbook method or execute_code sandbox global.',
+    suggestion:
+      'Inside execute_code, use the injected `workbook` / `wb`. At the SDK boundary, open files with `const wb = await createWorkbook(pathOrBytes)`.',
+    replacements: [
+      {
+        path: 'createWorkbook',
+        snippet: 'const wb = await createWorkbook(pathOrBytes);',
+        note: 'Use outside execute_code when opening a workbook from a file path or bytes.',
+      },
+      {
+        path: 'wb.activeSheet',
+        snippet: 'const ws = wb.activeSheet;',
+        note: 'Inside execute_code the active workbook is already injected.',
+      },
+    ],
+  },
+  {
+    id: 'mog-api.namespace.saveWorkbook.unsupported',
+    category: 'workbook',
+    globalCalls: ['saveWorkbook'],
+    workbookMethods: ['saveWorkbook'],
+    message: '`saveWorkbook` is not a Mog workbook method or sandbox global.',
+    suggestion:
+      'Save the active workbook with `await wb.save(path)` or get bytes with `await wb.toXlsx()`.',
+    replacements: [
+      { path: 'wb.save', snippet: 'await wb.save(path);' },
+      { path: 'wb.toXlsx', snippet: 'const bytes = await wb.toXlsx();' },
+    ],
+  },
+  {
+    id: 'mog-api.namespace.errorCheck.unsupported',
+    category: 'workbook',
+    globalCalls: ['errorCheck'],
+    workbookMethods: ['errorCheck'],
+    message: '`errorCheck` is not a Mog workbook method or sandbox global.',
+    suggestion:
+      'Use workbook diagnostics explicitly: formula-reference diagnostics, import diagnostics, or runtime diagnostics under `wb.diagnostics`.',
+    replacements: [
+      {
+        path: 'wb.diagnostics.getFormulaReferences',
+        snippet: 'const page = await wb.diagnostics.getFormulaReferences();',
+      },
+      {
+        path: 'wb.diagnostics.import',
+        snippet: 'const importDiagnostics = await wb.diagnostics.import();',
+      },
+      {
+        path: 'wb.diagnostics.runtime',
+        snippet: 'const runtimeDiagnostics = await wb.diagnostics.runtime();',
+      },
+    ],
+  },
+  {
+    id: 'mog-api.namespace.calculate.global',
+    category: 'workbook',
+    globalCalls: ['calculate'],
+    message: '`calculate()` is not a sandbox global.',
+    suggestion: 'Recalculate through the active workbook: `await wb.calculate()`.',
+    replacements: [{ path: 'wb.calculate', snippet: 'await wb.calculate();' }],
+  },
+  {
+    id: 'mog-api.namespace.getSheet.global',
+    category: 'workbook',
+    globalCalls: ['getSheet'],
+    message: '`getSheet(...)` is not a sandbox global.',
+    suggestion:
+      'Resolve sheets from the workbook with `await wb.getSheet(name)`, or use `ws` / `worksheet` for the active sheet.',
+    replacements: [
+      { path: 'wb.getSheet', snippet: 'const ws = await wb.getSheet(name);' },
+      { path: 'wb.activeSheet', snippet: 'const ws = wb.activeSheet;' },
+    ],
+  },
+];
+
+function rootCallMatches(stripped: string, name: string): RootCallMatch[] {
+  if (hasLocalDeclaration(stripped, name)) return [];
+
+  const pattern = new RegExp(`(^|[^\\w$.])(${escapeRegExp(name)}\\s*\\()`, 'g');
+  const matches: RootCallMatch[] = [];
+  for (const match of stripped.matchAll(pattern)) {
+    const start = (match.index ?? 0) + match[1].length;
+    matches.push({ name, start, end: start + match[2].length });
+  }
+  return matches;
+}
+
+function workbookMemberCallMatches(stripped: string, member: string): WorkbookMemberCallMatch[] {
+  const pattern = new RegExp(`\\b(workbook|wb)\\s*\\.\\s*${escapeRegExp(member)}\\s*\\(`, 'g');
+  const matches: WorkbookMemberCallMatch[] = [];
+  for (const match of stripped.matchAll(pattern)) {
+    const start = match.index ?? 0;
+    matches.push({
+      workbookAlias: match[1] as 'workbook' | 'wb',
+      member,
+      start,
+      end: start + match[0].length,
+    });
+  }
+  return matches;
+}
+
+function namespaceGuessMatches(stripped: string): Array<{
+  readonly guess: NamespaceGuess;
+  readonly matcherId: string;
+  readonly offendingSymbol: string;
+  readonly start: number;
+  readonly end: number;
+}> {
+  const matches: Array<{
+    guess: NamespaceGuess;
+    matcherId: string;
+    offendingSymbol: string;
+    start: number;
+    end: number;
+  }> = [];
+
+  for (const guess of NAMESPACE_GUESSES) {
+    for (const name of guess.globalCalls ?? []) {
+      for (const match of rootCallMatches(stripped, name)) {
+        matches.push({
+          guess,
+          matcherId: `${guess.id}.global.${name}`,
+          offendingSymbol: `${name}(...)`,
+          start: match.start,
+          end: match.end,
+        });
+      }
+    }
+
+    for (const member of guess.workbookMethods ?? []) {
+      for (const match of workbookMemberCallMatches(stripped, member)) {
+        matches.push({
+          guess,
+          matcherId: `${guess.id}.${match.workbookAlias}.${member}`,
+          offendingSymbol: `${match.workbookAlias}.${member}(...)`,
+          start: match.start,
+          end: match.end,
+        });
+      }
+    }
+  }
+
+  return matches;
+}
+
+function workbookWorksheetMethodMatches(stripped: string): WorkbookMemberCallMatch[] {
+  const pattern = /\b(workbook|wb)\s*\.\s*([A-Za-z_$][\w$]*)\s*\(/g;
+  const matches: WorkbookMemberCallMatch[] = [];
+
+  for (const match of stripped.matchAll(pattern)) {
+    const member = match[2];
+    if (!COMMON_WORKSHEET_METHODS.has(member)) continue;
+    const start = match.index ?? 0;
+    matches.push({
+      workbookAlias: match[1] as 'workbook' | 'wb',
+      member,
+      start,
+      end: start + match[0].length,
+    });
+  }
+
+  return matches;
+}
+
 function getSheetMissingAwaitMatches(stripped: string): Array<{
   workbookAlias: 'workbook' | 'wb';
+  worksheetMethod: string;
   start: number;
   end: number;
 }> {
-  const matches: Array<{ workbookAlias: 'workbook' | 'wb'; start: number; end: number }> = [];
-  const pattern = /\b(workbook|wb)\s*\.\s*getSheet\s*\([^)]*\)\s*\.\s*getValue\s*\(/g;
+  const matches: Array<{
+    workbookAlias: 'workbook' | 'wb';
+    worksheetMethod: string;
+    start: number;
+    end: number;
+  }> = [];
+  const pattern = /\b(workbook|wb)\s*\.\s*getSheet\s*\([^)]*\)\s*\.\s*([A-Za-z_$][\w$]*)\s*\(/g;
 
   for (const match of stripped.matchAll(pattern)) {
     const workbookAlias = match[1] as 'workbook' | 'wb';
+    const worksheetMethod = match[2];
+    if (PROMISE_METHODS.has(worksheetMethod)) continue;
     const start = match.index ?? 0;
-    matches.push({ workbookAlias, start, end: start + match[0].length });
+    matches.push({ workbookAlias, worksheetMethod, start, end: start + match[0].length });
   }
 
   return matches;
@@ -359,9 +605,11 @@ export function diagnosticFromCompatibilityEntry(
 
 function diagnosticFromGetSheetMissingAwait(
   workbookAlias: 'workbook' | 'wb',
+  worksheetMethod: string,
   span?: SourceSpan,
 ): ApiGuidanceDiagnostic {
   const getSheetPath = `${workbookAlias}.getSheet`;
+  const worksheetPath = `ws.${worksheetMethod}`;
   return {
     code: 'MOG002_MOG_API_USAGE',
     severity: 'error',
@@ -369,20 +617,85 @@ function diagnosticFromGetSheetMissingAwait(
     category: 'workbook',
     entryId: 'mog-api.workbook.getSheet.missing-await',
     matcherId: `compatibility.mog-api.workbook.getSheet.missing-await.${workbookAlias}`,
-    offendingSymbol: `${getSheetPath}(...).getValue`,
-    message:
-      'getSheet is async, so workbook.getSheet(...).getValue(...) tries to call getValue on a Promise instead of a worksheet.',
-    suggestion:
-      'Await getSheet first: const ws = await wb.getSheet(name); await ws.getValue("A1");',
+    offendingSymbol: `${getSheetPath}(...).${worksheetMethod}`,
+    message: `getSheet is async, so ${getSheetPath}(...).${worksheetMethod}(...) tries to call ${worksheetMethod} on a Promise instead of a worksheet.`,
+    suggestion: `Await getSheet first: const ws = await ${workbookAlias}.getSheet(name); await ws.${worksheetMethod}(...);`,
     mogReplacements: [
       {
         path: getSheetPath,
         snippet: `const ws = await ${workbookAlias}.getSheet(name);`,
         note: 'Resolve the worksheet before calling worksheet methods.',
       },
-      { path: 'ws.getValue', snippet: 'await ws.getValue("A1");' },
+      { path: worksheetPath, snippet: `await ws.${worksheetMethod}(...);` },
     ],
-    references: [`api.guidance.explain("${getSheetPath}")`, 'api.guidance.explain("ws.getValue")'],
+    references: [
+      `api.guidance.explain("${getSheetPath}")`,
+      `api.guidance.explain("${worksheetPath}")`,
+    ],
+    confidence: 0.99,
+    blocking: true,
+    compatibilityStatus: 'structured_diagnostic',
+    ...(span ? { span } : {}),
+  };
+}
+
+function diagnosticFromNamespaceGuess(
+  guess: NamespaceGuess,
+  matcherId: string,
+  offendingSymbol: string,
+  span?: SourceSpan,
+): ApiGuidanceDiagnostic {
+  return {
+    code: 'MOG002_MOG_API_USAGE',
+    severity: 'error',
+    dialect: 'mog-version',
+    category: guess.category,
+    entryId: guess.id,
+    matcherId,
+    offendingSymbol,
+    message: guess.message,
+    suggestion: guess.suggestion,
+    mogReplacements: guess.replacements,
+    references: referencesFor(guess.replacements),
+    confidence: 0.99,
+    blocking: true,
+    compatibilityStatus: 'structured_diagnostic',
+    ...(span ? { span } : {}),
+  };
+}
+
+function diagnosticFromWorkbookWorksheetMethod(
+  match: WorkbookMemberCallMatch,
+  span?: SourceSpan,
+): ApiGuidanceDiagnostic {
+  const workbookPath = `${match.workbookAlias}.${match.member}`;
+  const worksheetPath = `ws.${match.member}`;
+  return {
+    code: 'MOG002_MOG_API_USAGE',
+    severity: 'error',
+    dialect: 'mog-version',
+    category: 'workbook',
+    entryId: 'mog-api.namespace.workbook-worksheet-method',
+    matcherId: `compatibility.mog-api.namespace.workbook-worksheet-method.${match.workbookAlias}.${match.member}`,
+    offendingSymbol: `${workbookPath}(...)`,
+    message: `${workbookPath}(...) treats the workbook as a worksheet. Worksheet cell/range methods live on a worksheet object.`,
+    suggestion: `Use the active sheet via \`const ws = ${match.workbookAlias}.activeSheet\`, or resolve a named sheet with \`const ws = await ${match.workbookAlias}.getSheet(name)\`, then call \`await ws.${match.member}(...)\`.`,
+    mogReplacements: [
+      {
+        path: 'wb.activeSheet',
+        snippet: `const ws = ${match.workbookAlias}.activeSheet;`,
+      },
+      {
+        path: `${match.workbookAlias}.getSheet`,
+        snippet: `const ws = await ${match.workbookAlias}.getSheet(name);`,
+      },
+      { path: worksheetPath, snippet: `await ws.${match.member}(...);` },
+    ],
+    references: [
+      'api.guidance.explain("wb.activeSheet")',
+      `api.guidance.explain("${match.workbookAlias}.getSheet")`,
+      `api.guidance.explain("${worksheetPath}")`,
+    ],
     confidence: 0.99,
     blocking: true,
     compatibilityStatus: 'structured_diagnostic',
@@ -433,7 +746,27 @@ export function analyzeMogCode(code: string): ApiGuidanceDiagnostic[] {
     const key = `mog-api.workbook.getSheet.missing-await:${span.start}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    diagnostics.push(diagnosticFromGetSheetMissingAwait(match.workbookAlias, span));
+    diagnostics.push(
+      diagnosticFromGetSheetMissingAwait(match.workbookAlias, match.worksheetMethod, span),
+    );
+  }
+
+  for (const match of namespaceGuessMatches(stripped)) {
+    const span = spanFor(code, match.start, match.end);
+    const key = `${match.guess.id}:${match.matcherId}:${span.start}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    diagnostics.push(
+      diagnosticFromNamespaceGuess(match.guess, match.matcherId, match.offendingSymbol, span),
+    );
+  }
+
+  for (const match of workbookWorksheetMethodMatches(stripped)) {
+    const span = spanFor(code, match.start, match.end);
+    const key = `mog-api.namespace.workbook-worksheet-method:${match.member}:${span.start}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    diagnostics.push(diagnosticFromWorkbookWorksheetMethod(match, span));
   }
 
   for (const entry of apiCompatibility.entries) {

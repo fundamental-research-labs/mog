@@ -51,6 +51,7 @@ import type {
   LinkId,
   ActorId,
 } from './types';
+import type { LinkStatus, LinkStatusReason, LinkStatusView } from './receipt-payloads';
 import type { CultureInfo } from '@mog/types-culture/types';
 import type {
   WorkbookHistory,
@@ -80,6 +81,7 @@ import type { CodeExecutionResult, CodeExecutionOptions } from '@mog/types-comma
 
 export type { CustomList } from '@mog/types-editor/fill/custom-lists';
 export type { WorkbookId, WorkbookSessionId, DocumentId, LinkId, ActorId } from './types';
+export type { LinkStatus, LinkStatusReason, LinkStatusView } from './receipt-payloads';
 
 /** Options for wb.calculate() — all optional, backward compatible. */
 export interface CalculateOptions {
@@ -156,33 +158,6 @@ export interface PersistedWorkbookLinkRecord {
   readonly sourceKind: WorkbookLinkSourceKind;
   readonly importedExcelIdentity?: ImportedExternalLinkIdentity;
   readonly materializedCacheMetadata?: AuthorizedMaterializedCacheMetadata;
-}
-
-export type LinkStatus =
-  | 'unresolved'
-  | 'loading'
-  | 'ready'
-  | 'stale'
-  | 'denied'
-  | 'broken'
-  | 'ambiguous';
-
-export type LinkStatusReason =
-  | 'wrongWorkbookId'
-  | 'missingTarget'
-  | 'unsupportedLinkKind'
-  | 'permissionDenied'
-  | 'sourceUnavailable';
-
-export interface LinkStatusView {
-  readonly linkId: LinkId;
-  readonly status: LinkStatus;
-  readonly statusReason?: LinkStatusReason;
-  readonly lastResolvedAt?: string;
-  readonly cachedValuesVersion?: string;
-  readonly canRefresh: boolean;
-  readonly retryable: boolean;
-  readonly displayMessage: string;
 }
 
 export type UsageKind =
@@ -557,7 +532,18 @@ export interface Workbook {
    */
   insertWorksheets(data: string | Uint8Array, options?: InsertWorksheetOptions): Promise<string[]>;
 
-  /** Save the workbook to a file path or buffer. Marks the workbook as clean. */
+  /**
+   * Export the workbook as XLSX bytes and optionally write those bytes to a file.
+   *
+   * `save()` returns the XLSX bytes without filesystem side effects.
+   * `save(path)` writes to the platform file writer and still returns the same
+   * bytes. In the Node SDK, relative paths resolve from the current working directory and
+   * missing parent directories are created. Invalid paths and host write
+   * failures reject with `MogSdkError` details containing `requestedPath`,
+   * `cwd`, and, when available, `absolutePath` and `filesystemCode`.
+   *
+   * Marks the workbook as clean after all configured save sinks succeed.
+   */
   save(path: string): Promise<Uint8Array>;
   save(): Promise<Uint8Array>;
 

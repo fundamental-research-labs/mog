@@ -22,6 +22,7 @@ import {
 } from '@mog-sdk/contracts/core';
 import { toCellId } from '@mog-sdk/contracts/cell-identity';
 import type { RawSecurityEvent } from '@mog-sdk/contracts/events';
+import type { ViewportRefreshDetails } from '@mog-sdk/contracts/api';
 import type { IKernelContext } from '@mog-sdk/contracts/kernel';
 import type { SheetProtectionOptions } from '@mog-sdk/contracts/protection';
 import { DEFAULT_PROTECTION_OPTIONS } from '@mog-sdk/contracts/protection';
@@ -625,7 +626,7 @@ export class ComputeBridge extends GeneratedBridgeBase {
     sheetId: SheetId,
     bounds: { startRow: number; startCol: number; endRow: number; endCol: number },
     scrollBehavior: ViewportScrollBehavior = 'free',
-  ): Promise<void> {
+  ): Promise<ViewportRefreshDetails> {
     return this.core.refreshViewportForRegion(viewportId, sheetId, bounds, scrollBehavior);
   }
 

@@ -1,4 +1,8 @@
-import type { TextEffectUpdates } from '@mog-sdk/contracts/api';
+import type {
+  FloatingObjectHandleMutationReceipt,
+  FloatingObjectMutationReceipt,
+  TextEffectUpdates,
+} from '@mog-sdk/contracts/api';
 import type {
   TextEffectHandle,
   TextBoxHandle,
@@ -8,6 +12,7 @@ import type { IObjectBoundsReader } from '@mog-sdk/contracts/objects/object-boun
 
 import { KernelError } from '../../../errors';
 import type { WorksheetObjectsImpl } from '../objects';
+import { attachFloatingObjectHandle } from '../objects-receipts';
 import { FloatingObjectHandleImpl } from './floating-object-handle-impl';
 
 /**
@@ -41,13 +46,17 @@ export class TextEffectHandleImpl extends FloatingObjectHandleImpl implements Te
     );
   }
 
-  async update(props: TextEffectUpdates): Promise<void> {
-    await this.objectsImpl.updateTextEffect(this.id, props);
+  async update(props: TextEffectUpdates): Promise<FloatingObjectMutationReceipt> {
+    return this.objectsImpl.updateTextEffect(this.id, props);
   }
 
-  async duplicate(_offsetX?: number, _offsetY?: number): Promise<TextEffectHandle> {
+  async duplicate(
+    _offsetX?: number,
+    _offsetY?: number,
+  ): Promise<FloatingObjectHandleMutationReceipt<TextEffectHandle>> {
     const receipt = await this.objectsImpl.duplicate(this.id);
-    return new TextEffectHandleImpl(receipt.id, this.objectsImpl, this.boundsReader);
+    const handle = new TextEffectHandleImpl(receipt.id, this.objectsImpl, this.boundsReader);
+    return attachFloatingObjectHandle(receipt, handle);
   }
 
   async getData(): Promise<TextBoxObject> {

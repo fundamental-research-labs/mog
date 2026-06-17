@@ -7,7 +7,12 @@
  */
 import type { FormulaA1 } from '@mog/types-core/formula-string';
 import type { FunctionArgument } from '@mog/types-core/function-registry';
-import type { CodeExecutionDiagnostic } from '@mog/types-commands/execution';
+import type {
+  CodeExecutionDiagnostic,
+  DirtyCell,
+  ExecutionMutationPolicy,
+  ExecutionMutationStatus,
+} from '@mog/types-commands/execution';
 import type {
   CellBorders,
   CellFormat,
@@ -35,19 +40,32 @@ import type {
   PivotFieldArea,
   PivotFieldItems,
   PivotFilter,
-  PivotKernelMutationReceipt,
-  PivotPlacementMutationReceipt,
-  PivotMemberRef,
   PivotTableConfig as DataPivotTableConfig,
   PivotTableLayout,
   PivotTableResult,
   PivotTableStyle,
-  PivotValueRecord,
   ShowValuesAsConfig,
   SortOrder,
 } from '@mog/types-data/data/pivot';
 import type { TotalFunction } from '@mog/types-data/data/tables';
 import type { SpreadsheetEvent as InternalSpreadsheetEvent } from '@mog/types-events/events';
+import type {
+  PivotHandleCalculatedFieldReceipt,
+  PivotHandleDeleteReceipt,
+  PivotHandleExpansionReceipt,
+  PivotHandleMutationReceipt,
+  PivotRefreshReceipt,
+} from './mutation-receipt';
+import type {
+  ApplyScenarioResult,
+  CommentMention,
+  LinkId,
+  PivotQueryResult,
+  Slicer,
+  SlicerInfo,
+  TableInfo,
+  TableUpdateOptions,
+} from './receipt-payloads';
 import type {
   CellChangedEvent,
   CellsBatchChangedEvent,
@@ -129,6 +147,25 @@ import type {
 // === Re-export core types that are part of the unified API surface ===
 
 export type {
+  ApplyScenarioResult,
+  Comment,
+  CommentContentType,
+  CommentMention,
+  CommentType,
+  LinkId,
+  OriginalCellValue,
+  PivotQueryRecord,
+  PivotQueryResult,
+  RichTextRun,
+  Slicer,
+  SlicerInfo,
+  TableColumn,
+  TableInfo,
+  TableUpdateOptions,
+  TotalsFunction,
+} from './receipt-payloads';
+
+export type {
   CellAddress,
   CellBorders,
   CellData,
@@ -151,7 +188,6 @@ export type { PrintSettings } from '@mog/types-core/core';
 export type WorkbookId = string;
 export type WorkbookSessionId = string;
 export type DocumentId = string;
-export type LinkId = string;
 export type ActorId = string;
 
 // === Shape types ===
@@ -315,66 +351,6 @@ export type {
 } from '@mog/types-bridges/chart-bridge';
 
 // =============================================================================
-// Comment (thread-aware — Rust-generated type is source of truth)
-// =============================================================================
-
-// Comment type (copied from Rust-generated compute-types.gen).
-// Consumers see Rust field names: cellRef (not cellId), runs (not content), etc.
-
-export interface RichTextRun {
-  text: string;
-  fontName: string | null;
-  fontSize: number | null;
-  bold: boolean;
-  italic: boolean;
-  underline: boolean;
-  strikethrough: boolean;
-  color: string | null;
-  colorIndexed?: number;
-  colorTheme?: number;
-  colorTint?: number;
-  charset: number | null;
-  family: number | null;
-  scheme: string | null;
-  vertAlign?: string;
-  preserveSpace?: boolean;
-}
-
-export interface Comment {
-  id: string;
-  cellRef: string;
-  author: string;
-  authorId?: string;
-  authorEmail?: string;
-  content: string | null;
-  runs: RichTextRun[];
-  threadId: string | null;
-  parentId: string | null;
-  personId?: string;
-  resolved?: boolean;
-  timestamp?: string;
-  createdAt: number | null;
-  modifiedAt: number | null;
-  xrUid?: string;
-  shapeId?: number;
-  extLstXml?: string;
-  contentType?: CommentContentType;
-  mentions?: CommentMention[];
-  commentType: CommentType;
-  visible?: boolean;
-  noteHeight?: number;
-  noteWidth?: number;
-}
-
-/** A mention of a user within a comment's rich text content. */
-export interface CommentMention {
-  displayText: string;
-  userId: string;
-  email?: string;
-  startIndex: number;
-  length: number;
-}
-
 /** Options for updating an existing comment via `comments.update()`. */
 export interface CommentUpdate {
   /** New plain-text content for the comment. */
@@ -382,12 +358,6 @@ export interface CommentUpdate {
   /** @mentions to embed in the comment (implies content_type = Mention). */
   mentions?: CommentMention[];
 }
-
-/** Whether a comment is a legacy note or a modern threaded comment. */
-export type CommentType = 'note' | 'threadedComment';
-
-/** Distinguishes plain text comments from those containing @mentions. */
-export type CommentContentType = 'plain' | 'mention';
 
 /** A cell note (simple, single string per cell). API-only type (no Rust equivalent). */
 export interface Note {
@@ -412,6 +382,8 @@ export interface CellWriteOptions {
   asFormula?: boolean;
   /** If true, string values starting with "=" are stored as literal text, not formulas. */
   literal?: boolean;
+  /** Alias for `literal`; use when formula-shaped text should be stored as text. */
+  asText?: boolean;
 }
 
 // =============================================================================
@@ -711,32 +683,6 @@ export interface TableOptions {
   autoCalculatedColumns?: boolean;
 }
 
-/** Options for updating a table's properties via `WorksheetTables.update()`. */
-export interface TableUpdateOptions {
-  /** Table style preset name (e.g. "TableStyleLight1"). */
-  style?: string;
-  /** New table name (renames the table). */
-  name?: string;
-  /** Whether the first column is emphasized. */
-  emphasizeFirstColumn?: boolean;
-  /** Whether the last column is emphasized. */
-  emphasizeLastColumn?: boolean;
-  /** Whether banded columns are shown. */
-  bandedColumns?: boolean;
-  /** Whether banded rows are shown. */
-  bandedRows?: boolean;
-  /** Whether filter buttons are shown on the header row. */
-  showFilterButtons?: boolean;
-  /** Whether the header row is visible. */
-  hasHeaderRow?: boolean;
-  /** Whether the totals row is visible. */
-  hasTotalsRow?: boolean;
-  /** Whether the table automatically expands when adjacent user input is entered. */
-  autoExpand?: boolean;
-  /** Whether formulas entered in table data columns automatically create/fill calculated columns. */
-  autoCalculatedColumns?: boolean;
-}
-
 /** Options for the one-liner createTable() convenience method. */
 export interface CreateTableOptions {
   /** Column header names. */
@@ -746,80 +692,6 @@ export interface CreateTableOptions {
   /** Top-left cell address to start writing (default: "A1"). */
   startCell?: string;
 }
-
-/**
- * Information about an existing table.
- *
- * Field names match the Rust-generated `Table` type (compute-types.gen.ts)
- * except `range` which is converted from `SheetRange` to A1 notation string.
- */
-export interface TableInfo {
-  /** Internal table identifier */
-  id: string;
-  /** Table name */
-  name: string;
-  /** Display name */
-  displayName: string;
-  /** Sheet the table belongs to */
-  sheetId: string;
-  /** Table range in A1 notation (converted from Rust SheetRange) */
-  range: string;
-  /** Column definitions */
-  columns: TableColumn[];
-  /** Whether the table has a header row */
-  hasHeaderRow: boolean;
-  /** Whether the totals row is visible */
-  hasTotalsRow: boolean;
-  /** Table style name */
-  style: string;
-  /** Whether banded rows are shown */
-  bandedRows: boolean;
-  /** Whether banded columns are shown */
-  bandedColumns: boolean;
-  /** Whether first column is emphasized */
-  emphasizeFirstColumn: boolean;
-  /** Whether last column is emphasized */
-  emphasizeLastColumn: boolean;
-  /** Whether filter buttons are shown */
-  showFilterButtons: boolean;
-  /** Whether the table automatically expands when adjacent user input is entered */
-  autoExpand: boolean;
-  /** Whether formulas entered in table data columns automatically create/fill calculated columns */
-  autoCalculatedColumns: boolean;
-}
-
-/**
- * A single column in a table.
- *
- * Field names match the Rust-generated `TableColumn` type (compute-types.gen.ts).
- */
-export interface TableColumn {
-  /** Unique column ID */
-  id: string;
-  /** Column header name */
-  name: string;
-  /** Column index within the table (0-based) */
-  index: number;
-  /** Total row function type */
-  totalsFunction: TotalsFunction | null;
-  /** Total row label */
-  totalsLabel: string | null;
-  /** Calculated column formula */
-  calculatedFormula?: string;
-}
-
-/** Totals function type (matches Rust TotalsFunction). */
-export type TotalsFunction =
-  | 'average'
-  | 'count'
-  | 'countNums'
-  | 'max'
-  | 'min'
-  | 'stdDev'
-  | 'sum'
-  | 'var'
-  | 'custom'
-  | 'none';
 
 // =============================================================================
 // Pivot Table Types
@@ -957,9 +829,11 @@ export interface PivotTableHandle {
   /** Get the current configuration including all fields */
   getConfig(): PivotTableConfig;
   /** Update the pivot table data configuration. */
-  update(updates: Partial<Omit<DataPivotTableConfig, 'id' | 'createdAt'>>): Promise<void>;
+  update(
+    updates: Partial<Omit<DataPivotTableConfig, 'id' | 'createdAt'>>,
+  ): Promise<PivotHandleMutationReceipt>;
   /** Delete the pivot table. */
-  delete(): Promise<boolean>;
+  delete(): Promise<PivotHandleDeleteReceipt>;
   /** Subscribe to computed result updates for this pivot. */
   subscribeResult(callback: (result: PivotTableResult | null, error?: string) => void): () => void;
   /** Compute this pivot table result. */
@@ -967,94 +841,105 @@ export interface PivotTableHandle {
   /** Get the full range occupied by the rendered pivot table. */
   getRange(): Promise<CellRange | null>;
   /** Add a field to the row, column, or filter area */
-  addField(field: string, area: 'row' | 'column' | 'filter', position?: number): Promise<void>;
+  addField(
+    field: string,
+    area: 'row' | 'column' | 'filter',
+    position?: number,
+  ): Promise<PivotHandleMutationReceipt>;
   /** Add a value field with aggregation */
   addValueField(
     field: string,
     aggregation: PivotValueField['aggregation'],
     label?: string,
-  ): Promise<void>;
+  ): Promise<PivotHandleMutationReceipt>;
   /** Add a placement to a row, column, value, or filter area. */
-  addPlacement(spec: PivotHandlePlacementSpec): Promise<PivotPlacementMutationReceipt>;
+  addPlacement(spec: PivotHandlePlacementSpec): Promise<PivotHandleMutationReceipt>;
   /** Remove a field by name */
-  removeField(fieldName: string, area?: PivotFieldArea): Promise<void>;
+  removeField(fieldName: string, area?: PivotFieldArea): Promise<PivotHandleMutationReceipt>;
   /** Remove a specific placement by stable placement ID. */
-  removePlacement(placementId: PlacementId): Promise<PivotKernelMutationReceipt>;
+  removePlacement(placementId: PlacementId): Promise<PivotHandleMutationReceipt>;
   /** Move a field to a different area or position. */
   moveField(
     fieldName: string,
     fromArea: PivotFieldArea,
     toArea: PivotFieldArea,
     toPosition: number,
-  ): Promise<void>;
+  ): Promise<PivotHandleMutationReceipt>;
   /** Move a specific placement to a different area or ordered position. */
   movePlacement(
     placementId: PlacementId,
     toArea: PivotFieldArea,
     toPosition: number,
-  ): Promise<PivotKernelMutationReceipt>;
+  ): Promise<PivotHandleMutationReceipt>;
   /** Change the aggregation function of a value field */
   changeAggregation(
     valueFieldLabel: string,
     newAggregation: PivotValueField['aggregation'],
-  ): Promise<void>;
+  ): Promise<PivotHandleMutationReceipt>;
   /** Change the aggregation function of a specific value placement. */
   setPlacementAggregateFunction(
     placementId: PlacementId,
     aggregateFunction: AggregateFunction,
-  ): Promise<PivotKernelMutationReceipt>;
+  ): Promise<PivotHandleMutationReceipt>;
   /** Rename a value field's display label */
-  renameValueField(currentLabel: string, newLabel: string): Promise<void>;
+  renameValueField(currentLabel: string, newLabel: string): Promise<PivotHandleMutationReceipt>;
   /** Rename a value placement by stable placement ID. */
   renameValuePlacement(
     placementId: PlacementId,
     displayName: string | null,
-  ): Promise<PivotKernelMutationReceipt>;
-  /** Refresh the pivot table from its data source */
-  refresh(): Promise<void>;
+  ): Promise<PivotHandleMutationReceipt>;
+  /** Refresh/materialize the pivot table from its data source. */
+  refresh(): Promise<PivotRefreshReceipt>;
   /** Get all items for all non-value fields */
   getAllItems(): Promise<PivotFieldItems[]>;
   /** Set the "Show Values As" calculation for a value field. Pass null to clear. */
-  setShowValuesAs(valueFieldLabel: string, showValuesAs: ShowValuesAsConfig | null): Promise<void>;
+  setShowValuesAs(
+    valueFieldLabel: string,
+    showValuesAs: ShowValuesAsConfig | null,
+  ): Promise<PivotHandleMutationReceipt>;
   /** Set the sort order for a row or column field. */
-  setSortOrder(fieldOrPlacement: string, sortOrder: SortOrder): Promise<void>;
+  setSortOrder(fieldOrPlacement: string, sortOrder: SortOrder): Promise<PivotHandleMutationReceipt>;
   /** Set the sort order for a row or column placement. */
   setPlacementSortOrder(
     placementId: PlacementId,
     sortOrder: SortOrder | null,
-  ): Promise<PivotKernelMutationReceipt>;
+  ): Promise<PivotHandleMutationReceipt>;
   /** Set or clear value sorting on a row or column axis placement. */
   setSortByValue(
     axisPlacementId: PlacementId,
     valuePlacementId: PlacementId,
     config: PivotValueSortConfig | null,
-  ): Promise<PivotKernelMutationReceipt>;
+  ): Promise<PivotHandleMutationReceipt>;
   /** Set a filter on a field. */
-  setFilter(fieldId: string, filter: Omit<PivotFilter, 'fieldId'>): Promise<void>;
+  setFilter(
+    fieldId: string,
+    filter: Omit<PivotFilter, 'fieldId'>,
+  ): Promise<PivotHandleMutationReceipt>;
   /** Remove a filter from a field. */
-  removeFilter(fieldId: string): Promise<void>;
+  removeFilter(fieldId: string): Promise<PivotHandleMutationReceipt>;
   /** Set layout options. */
-  setLayout(layout: Partial<PivotTableLayout>): Promise<void>;
+  setLayout(layout: Partial<PivotTableLayout>): Promise<PivotHandleMutationReceipt>;
   /** Set style options. */
-  setStyle(style: Partial<PivotTableStyle>): Promise<void>;
+  setStyle(style: Partial<PivotTableStyle>): Promise<PivotHandleMutationReceipt>;
   /** Toggle expansion state for a header. */
-  toggleExpanded(headerKey: string, isRow: boolean): Promise<boolean>;
+  toggleExpanded(headerKey: string, isRow: boolean): Promise<PivotHandleExpansionReceipt>;
   /** Set expansion state for all headers. */
-  setAllExpanded(expanded: boolean): Promise<void>;
+  setAllExpanded(expanded: boolean): Promise<PivotHandleExpansionReceipt>;
   /** Read expansion state. */
   getExpansionState(): Promise<PivotExpansionState>;
   /** Get drill-down data for a pivot cell. */
   getDrillDownData(rowKey: string, columnKey: string): Promise<CellValue[][]>;
   /** Add a calculated field to this pivot. */
-  addCalculatedField(
-    field: CalculatedField,
-  ): Promise<PivotKernelMutationReceipt & { calculatedFieldId: CalculatedFieldId }>;
+  addCalculatedField(field: CalculatedField): Promise<PivotHandleCalculatedFieldReceipt>;
   /** Set item visibility by value string -> boolean map */
-  setItemVisibility(fieldId: string, visibleItems: Record<string, boolean>): Promise<void>;
+  setItemVisibility(
+    fieldId: string,
+    visibleItems: Record<string, boolean>,
+  ): Promise<PivotHandleMutationReceipt>;
   /** Get the data source type (range, table, or external). */
   getDataSourceType(): DataSourceType;
   /** Change the source data range without refreshing/materializing. */
-  setDataSource(dataSource: string): Promise<void>;
+  setDataSource(dataSource: string): Promise<PivotHandleMutationReceipt>;
 }
 
 /** Summary information about an existing pivot table. */
@@ -1077,34 +962,6 @@ export interface PivotTableInfo {
   valueFields?: PivotValueField[];
   /** Filter field names */
   filterFields?: string[];
-}
-
-/** A single flat record from a pivot query result. */
-export interface PivotQueryRecord {
-  /** Dimension values keyed by field name (e.g., { Region: "North", Year: 2021 }) */
-  dimensions: Record<string, CellValue>;
-  /** Aggregated values keyed by value field label (e.g., { "Sum of Amount": 110 }) */
-  values: Record<string, CellValue>;
-  /** Measure-aware values with stable placement provenance. */
-  valueRecords?: PivotValueRecord[];
-  rowMemberPath?: PivotMemberRef[];
-  columnMemberPath?: PivotMemberRef[];
-}
-
-/** Result of queryPivot() — flat, agent-friendly records instead of hierarchy trees. */
-export interface PivotQueryResult {
-  /** Pivot table name */
-  pivotName: string;
-  /** Row dimension field names */
-  rowFields: string[];
-  /** Column dimension field names */
-  columnFields: string[];
-  /** Value field labels */
-  valueFields: string[];
-  /** Flat records — one per data intersection, excluding subtotals and grand totals */
-  records: PivotQueryRecord[];
-  /** Total source row count */
-  sourceRowCount: number;
 }
 
 // =============================================================================
@@ -1192,32 +1049,6 @@ export interface SlicerConfig {
   timelineLevel?: TimelineLevel;
 }
 
-/** Summary information about a slicer. */
-export interface SlicerInfo {
-  /** Unique slicer ID */
-  id: string;
-  /** Programmatic name (unique within workbook). Falls back to caption if not set. */
-  name: string;
-  /** Display caption (header text). */
-  caption: string;
-  /** Connected table name */
-  tableName: string;
-  /** Connected column name */
-  columnName: string;
-  /** Source type — 'table' for table slicers, 'pivot' for pivot table slicers */
-  source?: { type: 'table' | 'pivot' };
-  /** Discriminator for timeline slicers (matches TimelineSlicerConfig.sourceType) */
-  sourceType?: 'timeline';
-}
-
-/** Full slicer state including selection and position. */
-export interface Slicer extends SlicerInfo {
-  /** Currently selected filter items */
-  selectedItems: CellValue[];
-  /** Position and dimensions in pixels */
-  position: { x: number; y: number; width: number; height: number };
-}
-
 /** A single item in a slicer's value list. */
 export interface SlicerItem {
   /** The display value */
@@ -1288,29 +1119,6 @@ export interface Scenario extends ScenarioConfig {
   id: string;
   /** Creation timestamp (Unix ms) */
   createdAt: number;
-}
-
-/** A saved original cell value from before scenario application. */
-export interface OriginalCellValue {
-  sheetId: SheetId;
-  cellId: string;
-  value: string | number | boolean | null;
-  /** Original formula, if the cell had one. */
-  formula?: string;
-}
-
-/** Result returned from applyScenario(). */
-export interface ApplyScenarioResult {
-  /** Session baseline token to pass to restoreScenario(). */
-  baselineId: string;
-  /** Document/session handle this baseline belongs to. */
-  documentId?: string;
-  /** Number of cells that were updated with scenario values. */
-  cellsUpdated: number;
-  /** CellIds that could not be found (deleted cells). */
-  skippedCells: string[];
-  /** Original values to pass to restoreScenario() later. */
-  originalValues: OriginalCellValue[];
 }
 
 /** Session-scoped state for an applied scenario. */
@@ -1389,6 +1197,8 @@ export interface CheckpointInfo {
 export interface ExecuteOptions {
   /** Maximum execution time in milliseconds */
   timeout?: number;
+  /** Workbook mutation policy (default: rollbackOnError) */
+  mutationPolicy?: ExecutionMutationPolicy;
   /** Whether to run in a sandboxed environment */
   sandbox?: boolean;
 }
@@ -1403,6 +1213,22 @@ export interface CodeResult {
   error?: string;
   /** Structured diagnostics produced by the executor */
   diagnostics?: readonly CodeExecutionDiagnostic[];
+  /** Explicit workbook mutation outcome for this execution */
+  mutationStatus: ExecutionMutationStatus;
+  /** Total number of cells changed or attempted */
+  changeCount: number;
+  /** Number of cells directly modified by code */
+  directCount: number;
+  /** Number of cells indirectly changed by recalculation */
+  indirectCount: number;
+  /** Ranges that were edited or attempted */
+  editRanges: string[];
+  /** Detailed list of modified or attempted cells */
+  dirtyCells: DirtyCell[];
+  /** Pre-formatted LLM-readable summary of cell changes */
+  formattedSummary?: string;
+  /** Error encountered while attempting rollback, if rollback failed */
+  rollbackError?: string;
   /** Execution duration in milliseconds */
   duration?: number;
 }

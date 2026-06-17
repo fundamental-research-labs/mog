@@ -8,5 +8,9 @@ export {
   DEFAULT_PROTECTION_OPTIONS,
   DEFAULT_WORKBOOK_PROTECTION_OPTIONS,
 } from '../document/protection';
-export { API_CALL_TIMEOUT, DEFAULT_EXECUTION_TIMEOUT } from './execution';
+export {
+  API_CALL_TIMEOUT,
+  DEFAULT_EXECUTION_MUTATION_POLICY,
+  DEFAULT_EXECUTION_TIMEOUT,
+} from './execution';
 export { ValidationErrorCodes } from './schema';

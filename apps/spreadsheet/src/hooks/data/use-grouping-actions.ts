@@ -218,6 +218,10 @@ function isImportedHiddenGroup(
   return group.collapsedOnMember === true || group.hidden === true;
 }
 
+function canShowGroupDetail(group: Pick<GroupDefinition, 'collapsed' | 'hidden'>): boolean {
+  return group.collapsed || group.hidden === true;
+}
+
 function detailIndexes(group: Pick<GroupDefinition, 'start' | 'end'>): number[] {
   return Array.from(
     { length: group.end - group.start + 1 },
@@ -431,7 +435,7 @@ export function useGroupingActions(): UseGroupingActionsReturn {
 
   // Can show detail - any groups are collapsed (can be expanded)
   const canShowDetail = useMemo(
-    () => rowGroups.some((g) => g.collapsed) || columnGroups.some((g) => g.collapsed),
+    () => rowGroups.some(canShowGroupDetail) || columnGroups.some(canShowGroupDetail),
     [rowGroups, columnGroups],
   );
 
@@ -573,9 +577,12 @@ export function useGroupingActions(): UseGroupingActionsReturn {
       const currentRowGroups = state.rowGroups as GroupDefinition[];
       const currentColumnGroups = state.columnGroups as GroupDefinition[];
 
-      // Find all collapsed groups containing the selection and expand them
+      // Find all effectively collapsed groups containing the selection and expand them.
       for (const group of currentRowGroups) {
-        if (group.collapsed && selectionMatchesRowGroupForDetail(group, bounds, settings)) {
+        if (
+          canShowGroupDetail(group) &&
+          selectionMatchesRowGroupForDetail(group, bounds, settings)
+        ) {
           // Toggle to expand (collapsed -> expanded)
           await ws.outline.toggleCollapsed(group.id);
           await setImportedDetailVisibility(ws, group, 'rows', true);
@@ -583,7 +590,10 @@ export function useGroupingActions(): UseGroupingActionsReturn {
       }
 
       for (const group of currentColumnGroups) {
-        if (group.collapsed && selectionMatchesColumnGroupForDetail(group, bounds, settings)) {
+        if (
+          canShowGroupDetail(group) &&
+          selectionMatchesColumnGroupForDetail(group, bounds, settings)
+        ) {
           await ws.outline.toggleCollapsed(group.id);
           await setImportedDetailVisibility(ws, group, 'columns', true);
         }

@@ -527,9 +527,28 @@ describe('refreshViewportForRegion — sheet-scoped viewport IDs', () => {
     expect(refreshOrder).toBeLessThan(emitOrder);
   });
 
-  it('undo skips full viewport refresh for cell-only history replay', async () => {
+  it('undo refreshes affected sheet viewports for cell-only history replay', async () => {
+    const initialBuffer = buildTestViewportBuffer({
+      rows: 100,
+      cols: 40,
+      startRow: 0,
+      startCol: 0,
+      cells: [{ display: 'before undo' }],
+    });
+    const undoBuffer = buildTestViewportBuffer({
+      rows: 100,
+      cols: 40,
+      startRow: 0,
+      startCol: 0,
+      cells: [{ display: 'after undo' }],
+    });
+    let viewportFetchCount = 0;
     const transport = {
       call: jest.fn(async (command: string): Promise<any> => {
+        if (command === 'compute_get_viewport_binary') {
+          viewportFetchCount += 1;
+          return viewportFetchCount === 1 ? initialBuffer : undoBuffer;
+        }
         if (command === 'compute_undo') {
           return [
             new Uint8Array(),
@@ -545,13 +564,77 @@ describe('refreshViewportForRegion — sheet-scoped viewport IDs', () => {
     } as BridgeTransport & { call: jest.Mock };
     const core = createStartedCore(transport);
 
+    await core.refreshViewportForRegion('main:sheet-1', sheetId('sheet-1'), bounds);
+    transport.call.mockClear();
+
     await core.undo();
 
     expect(transport.call).toHaveBeenCalledWith('compute_undo', { docId: 'test-doc' });
-    expect(transport.call).not.toHaveBeenCalledWith(
+    expect(transport.call).toHaveBeenCalledWith(
       'compute_get_viewport_binary',
-      expect.anything(),
+      expect.objectContaining({
+        docId: 'test-doc',
+        sheetId: 'sheet-1',
+      }),
     );
+    const undoAccessor = core.getViewportBuffer('main:sheet-1')?.createAccessor();
+    expect(undoAccessor?.moveTo(0, 0)).toBe(true);
+    expect(undoAccessor?.displayText).toBe('after undo');
+  });
+
+  it('redo refreshes affected sheet viewports for cell-only history replay', async () => {
+    const initialBuffer = buildTestViewportBuffer({
+      rows: 100,
+      cols: 40,
+      startRow: 0,
+      startCol: 0,
+      cells: [{ display: 'before redo' }],
+    });
+    const redoBuffer = buildTestViewportBuffer({
+      rows: 100,
+      cols: 40,
+      startRow: 0,
+      startCol: 0,
+      cells: [{ display: 'after redo' }],
+    });
+    let viewportFetchCount = 0;
+    const transport = {
+      call: jest.fn(async (command: string): Promise<any> => {
+        if (command === 'compute_get_viewport_binary') {
+          viewportFetchCount += 1;
+          return viewportFetchCount === 1 ? initialBuffer : redoBuffer;
+        }
+        if (command === 'compute_redo') {
+          return [
+            new Uint8Array(),
+            {
+              recalc: makeRecalcResult({
+                changedCells: [{ sheetId: 'sheet-1', row: 0, col: 0 }],
+              }),
+            },
+          ];
+        }
+        return undefined;
+      }) as any,
+    } as BridgeTransport & { call: jest.Mock };
+    const core = createStartedCore(transport);
+
+    await core.refreshViewportForRegion('main:sheet-1', sheetId('sheet-1'), bounds);
+    transport.call.mockClear();
+
+    await core.redo();
+
+    expect(transport.call).toHaveBeenCalledWith('compute_redo', { docId: 'test-doc' });
+    expect(transport.call).toHaveBeenCalledWith(
+      'compute_get_viewport_binary',
+      expect.objectContaining({
+        docId: 'test-doc',
+        sheetId: 'sheet-1',
+      }),
+    );
+    const redoAccessor = core.getViewportBuffer('main:sheet-1')?.createAccessor();
+    expect(redoAccessor?.moveTo(0, 0)).toBe(true);
+    expect(redoAccessor?.displayText).toBe('after redo');
   });
 
   it('undo skips full viewport refresh for property-only history replay', async () => {

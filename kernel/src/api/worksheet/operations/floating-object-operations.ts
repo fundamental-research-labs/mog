@@ -35,6 +35,10 @@ import {
 } from '../../../bridges/compute/floating-object-mapper';
 import { objectNotFound, operationFailed } from '../../../errors/api';
 import type { ComputeBridge } from '../../../bridges/compute/compute-bridge';
+import {
+  withFloatingObjectMutationReceiptBase,
+  withFloatingObjectRemoveReceiptBase,
+} from '../objects-receipts';
 
 import type { DocumentContext } from './shared';
 
@@ -137,13 +141,16 @@ async function buildMutationReceipt(
       }
     }
   }
-  return {
-    domain: 'floatingObject',
-    action,
-    id: objectId,
-    object: (obj ?? { id: objectId }) as FloatingObject,
-    bounds,
-  };
+  return withFloatingObjectMutationReceiptBase(
+    {
+      domain: 'floatingObject',
+      action,
+      id: objectId,
+      object: (obj ?? { id: objectId }) as FloatingObject,
+      bounds,
+    },
+    sheetId,
+  );
 }
 
 // =============================================================================
@@ -163,7 +170,10 @@ export async function deleteFloatingObject(
 ): Promise<FloatingObjectRemoveReceipt> {
   await requireObject(ctx.computeBridge, sheetId, objectId);
   await ctx.computeBridge.deleteFloatingObject(sheetId, objectId);
-  return { domain: 'floatingObject', action: 'remove', id: objectId };
+  return withFloatingObjectRemoveReceiptBase(
+    { domain: 'floatingObject', action: 'remove', id: objectId },
+    sheetId,
+  );
 }
 
 /**
@@ -837,9 +847,13 @@ function buildBridgeMutationReceipt(
   change: FloatingObjectChange | undefined,
   action: 'create' | 'update',
   fallbackId: string,
-  fallbackSheetId: string,
+  fallbackSheetId: SheetId,
   fallbackType: 'shape' | 'connector' | 'picture' = 'shape',
 ): FloatingObjectMutationReceipt {
+  const objectId = change?.objectId ?? fallbackId;
+  if (!objectId) {
+    throw operationFailed('floatingObjectMutation', 'mutation returned no object ID');
+  }
   const bounds: ObjectBounds = change?.bounds
     ? {
         x: change.bounds.x,
@@ -850,15 +864,18 @@ function buildBridgeMutationReceipt(
       }
     : { x: 0, y: 0, width: 0, height: 0, rotation: 0 };
 
-  return {
-    domain: 'floatingObject',
-    action,
-    id: change?.objectId ?? fallbackId,
-    object: change?.data
-      ? toFloatingObject(change.data as WireFloatingObject)
-      : createMinimalFloatingObject(fallbackType, fallbackId, fallbackSheetId),
-    bounds,
-  };
+  return withFloatingObjectMutationReceiptBase(
+    {
+      domain: 'floatingObject',
+      action,
+      id: objectId,
+      object: change?.data
+        ? toFloatingObject(change.data as WireFloatingObject)
+        : createMinimalFloatingObject(fallbackType, objectId, fallbackSheetId),
+      bounds,
+    },
+    fallbackSheetId,
+  );
 }
 
 /**

@@ -611,7 +611,7 @@ mod tests {
             (PdfValue::Boolean(false), "false"),
             (PdfValue::Integer(42), "42"),
             (PdfValue::Integer(-7), "-7"),
-            (PdfValue::Real(3.14), "3.14"),
+            (PdfValue::Real(12.34), "12.34"),
             (PdfValue::Null, "null"),
         ];
 

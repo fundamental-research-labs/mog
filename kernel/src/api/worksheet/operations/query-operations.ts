@@ -19,9 +19,30 @@
 import { colToLetter, toA1, parseCellRange } from '@mog/spreadsheet-utils/a1';
 import type { FormulaA1 } from '@mog-sdk/contracts/cells';
 import type { SheetId } from '@mog-sdk/contracts/core';
-import { normalizeCellValue, cellValueToString } from '../../internal/value-conversions';
-import type { SelectionAggregates } from '../../../bridges/compute/compute-types.gen';
-import type { CellAddress, CellData, CellRange, CellValue, DocumentContext } from './shared';
+import {
+  classifyRangeValueType,
+  normalizeCellValue,
+  cellValueToString,
+} from '../../internal/value-conversions';
+import type {
+  RangeCellData,
+  SelectionAggregates,
+} from '../../../bridges/compute/compute-types.gen';
+import type {
+  CellAddress,
+  CellData,
+  CellFormat,
+  CellRange,
+  CellValue,
+  DocumentContext,
+} from './shared';
+import {
+  RangeValueType,
+  type FindCellsQuery,
+  type FindCellsResult,
+  type FindCellsValueType,
+  type FoundCell,
+} from '@mog-sdk/contracts/api';
 
 // =============================================================================
 // Search Result Types
@@ -38,6 +59,11 @@ export interface SearchResult {
   /** The regex pattern that matched */
   matchedPattern: string;
 }
+
+type RangeBounds = Pick<CellRange, 'startRow' | 'startCol' | 'endRow' | 'endCol'>;
+
+const DEFAULT_FIND_CELLS_PAGE_SIZE = 1000;
+const MAX_FIND_CELLS_PAGE_SIZE = 5000;
 
 // =============================================================================
 // Query Operations
@@ -89,16 +115,17 @@ export async function findCells(
   ctx: DocumentContext,
   sheetId: SheetId,
   predicate: (cell: CellData, row: number, col: number) => boolean,
+  bounds?: RangeBounds,
 ): Promise<CellAddress[]> {
-  const bounds = await ctx.computeBridge.getDataBounds(sheetId);
-  if (!bounds) return [];
+  const searchBounds = bounds ?? (await dataBoundsAsRange(ctx, sheetId));
+  if (!searchBounds) return [];
 
   const rangeResult = await ctx.computeBridge.queryRange(
     sheetId,
-    bounds.minRow,
-    bounds.minCol,
-    bounds.maxRow,
-    bounds.maxCol,
+    searchBounds.startRow,
+    searchBounds.startCol,
+    searchBounds.endRow,
+    searchBounds.endCol,
   );
 
   const results: CellAddress[] = [];
@@ -114,6 +141,221 @@ export async function findCells(
   }
 
   return results;
+}
+
+export async function findCellsByQuery(
+  ctx: DocumentContext,
+  sheetId: SheetId,
+  query: FindCellsQuery,
+  bounds?: RangeBounds,
+): Promise<FindCellsResult> {
+  const searchBounds = bounds ?? (await dataBoundsAsRange(ctx, sheetId));
+  if (!searchBounds) {
+    return { addresses: [], cells: [], ranges: [], truncated: false };
+  }
+
+  const pageSize = clampFindCellsPageSize(query.pageSize);
+  const startOffset = parseFindCellsCursor(query.cursor);
+  const rowCount = searchBounds.endRow - searchBounds.startRow + 1;
+  const colCount = searchBounds.endCol - searchBounds.startCol + 1;
+  const totalCells = rowCount * colCount;
+
+  if (startOffset >= totalCells) {
+    return { addresses: [], cells: [], ranges: [], truncated: false };
+  }
+
+  const rangeResult = await ctx.computeBridge.queryRange(
+    sheetId,
+    searchBounds.startRow,
+    searchBounds.startCol,
+    searchBounds.endRow,
+    searchBounds.endCol,
+  );
+  const cellMap = new Map<string, RangeCellData>();
+  for (const cell of rangeResult.cells) {
+    cellMap.set(`${cell.row},${cell.col}`, cell);
+  }
+
+  const includes = new Set<string>(query.include ?? []);
+  const cells: FoundCell[] = [];
+  let offset = startOffset;
+
+  for (; offset < totalCells && cells.length < pageSize; offset++) {
+    const row = searchBounds.startRow + Math.floor(offset / colCount);
+    const col = searchBounds.startCol + (offset % colCount);
+    const cell = cellMap.get(`${row},${col}`);
+    if (!matchesFindCellsQuery(cell, query)) continue;
+
+    cells.push(projectFoundCell(row, col, cell, includes));
+  }
+
+  const truncated = offset < totalCells;
+  const addresses = cells.map((cell) => cell.address);
+  return {
+    addresses,
+    cells,
+    ranges: compactAddressesToRowRanges(cells),
+    truncated,
+    ...(truncated ? { nextCursor: String(offset) } : {}),
+  };
+}
+
+async function dataBoundsAsRange(
+  ctx: DocumentContext,
+  sheetId: SheetId,
+): Promise<RangeBounds | null> {
+  const bounds = await ctx.computeBridge.getDataBounds(sheetId);
+  if (!bounds) return null;
+  return {
+    startRow: bounds.minRow,
+    startCol: bounds.minCol,
+    endRow: bounds.maxRow,
+    endCol: bounds.maxCol,
+  };
+}
+
+function clampFindCellsPageSize(pageSize: number | undefined): number {
+  if (pageSize == null) return DEFAULT_FIND_CELLS_PAGE_SIZE;
+  if (!Number.isFinite(pageSize) || pageSize <= 0) return DEFAULT_FIND_CELLS_PAGE_SIZE;
+  return Math.min(Math.floor(pageSize), MAX_FIND_CELLS_PAGE_SIZE);
+}
+
+function parseFindCellsCursor(cursor: string | undefined): number {
+  if (!cursor) return 0;
+  const n = Number(cursor);
+  return Number.isInteger(n) && n > 0 ? n : 0;
+}
+
+function matchesFindCellsQuery(cell: RangeCellData | undefined, query: FindCellsQuery): boolean {
+  const value = cell ? normalizeCellValue(cell.value as CellValue) : null;
+  const formula = cell?.formula as FormulaA1 | undefined;
+  const isBlank = !formula && (value == null || value === '');
+
+  if (query.blank != null && isBlank !== query.blank) return false;
+  if (query.hasFormula != null && Boolean(formula) !== query.hasFormula) return false;
+
+  if (query.valueType != null) {
+    const type = classifyRangeValueType(value);
+    if (!valueTypeSet(query.valueType).has(type)) return false;
+  }
+
+  if (query.format && !matchesFormat(cell?.format as CellFormat | undefined, query.format)) {
+    return false;
+  }
+
+  return true;
+}
+
+function valueTypeSet(valueType: FindCellsValueType | FindCellsValueType[]): Set<RangeValueType> {
+  const values = Array.isArray(valueType) ? valueType : [valueType];
+  const result = new Set<RangeValueType>();
+  for (const value of values) {
+    switch (value) {
+      case RangeValueType.Empty:
+      case 'empty':
+        result.add(RangeValueType.Empty);
+        break;
+      case RangeValueType.String:
+      case 'string':
+        result.add(RangeValueType.String);
+        break;
+      case RangeValueType.Double:
+      case 'number':
+        result.add(RangeValueType.Double);
+        break;
+      case RangeValueType.Boolean:
+      case 'boolean':
+        result.add(RangeValueType.Boolean);
+        break;
+      case RangeValueType.Error:
+      case 'error':
+        result.add(RangeValueType.Error);
+        break;
+    }
+  }
+  return result;
+}
+
+function matchesFormat(
+  format: CellFormat | undefined,
+  query: NonNullable<FindCellsQuery['format']>,
+): boolean {
+  if (!format) return false;
+
+  const backgroundColors = colorSet(query.backgroundColor ?? query.fillColor);
+  const backgroundColor = normalizeColor(format.backgroundColor);
+  if (backgroundColors && (backgroundColor == null || !backgroundColors.has(backgroundColor))) {
+    return false;
+  }
+
+  const fontColors = colorSet(query.fontColor);
+  const fontColor = normalizeColor(format.fontColor);
+  if (fontColors && (fontColor == null || !fontColors.has(fontColor))) {
+    return false;
+  }
+
+  if (query.bold != null && format.bold !== query.bold) return false;
+
+  return true;
+}
+
+function colorSet(value: string | string[] | undefined): Set<string> | null {
+  if (value == null) return null;
+  const values = Array.isArray(value) ? value : [value];
+  return new Set(values.map(normalizeColor).filter((v): v is string => v != null));
+}
+
+function normalizeColor(value: string | undefined): string | null {
+  return value?.trim().toLowerCase() || null;
+}
+
+function projectFoundCell(
+  row: number,
+  col: number,
+  cell: RangeCellData | undefined,
+  includes: ReadonlySet<string>,
+): FoundCell {
+  const found: FoundCell = { address: toA1(row, col), row, col };
+  if (includes.has('value')) {
+    found.value = cell ? normalizeCellValue(cell.value as CellValue) : null;
+  }
+  if (includes.has('formula') && cell?.formula) {
+    found.formula = cell.formula as FormulaA1;
+  }
+  if (includes.has('formatted') && cell?.formatted != null) {
+    found.formatted = cell.formatted;
+  }
+  if (includes.has('format') && cell?.format) {
+    found.format = cell.format as CellFormat;
+  }
+  return found;
+}
+
+function compactAddressesToRowRanges(cells: readonly FoundCell[]): string[] {
+  if (cells.length === 0) return [];
+
+  const ranges: string[] = [];
+  let start = cells[0];
+  let end = cells[0];
+
+  for (let i = 1; i < cells.length; i++) {
+    const cell = cells[i];
+    if (cell.row === end.row && cell.col === end.col + 1) {
+      end = cell;
+      continue;
+    }
+
+    ranges.push(cellRangeLabel(start, end));
+    start = cell;
+    end = cell;
+  }
+
+  ranges.push(cellRangeLabel(start, end));
+  return ranges;
+}
+
+function cellRangeLabel(start: FoundCell, end: FoundCell): string {
+  return start.address === end.address ? start.address : `${start.address}:${end.address}`;
 }
 
 /**

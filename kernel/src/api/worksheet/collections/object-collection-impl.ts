@@ -7,6 +7,7 @@ import type {
   FloatingObjectHandle,
   FloatingObjectInfo,
   FloatingObjectType,
+  FloatingObjectMutationReceipt,
   WorksheetObjectCollection,
 } from '@mog-sdk/contracts/api';
 import type { IObjectBoundsReader } from '@mog-sdk/contracts/objects/object-bounds-reader';
@@ -75,7 +76,10 @@ export class WorksheetObjectCollectionImpl implements WorksheetObjectCollection 
     if (handle) await handle.sendBackward();
   }
 
-  async update(objectId: string, updates: Record<string, unknown>): Promise<void> {
+  async update(
+    objectId: string,
+    updates: Record<string, unknown>,
+  ): Promise<FloatingObjectMutationReceipt> {
     return this.objectsImpl.update(objectId, updates);
   }
 

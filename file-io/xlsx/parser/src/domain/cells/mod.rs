@@ -41,6 +41,10 @@ pub(crate) use full_convert::{
     apply_parse_extras, build_col_style_ranges_from_widths, coalesce_authored_style_only_cells,
     col_style_range_at, convert_cell_data, data_table_info,
 };
+pub(crate) use helpers::{
+    count_worksheet_cell_elements, find_closing_tag_span, find_start_tag, post_sheet_data_region,
+    pre_sheet_data_region,
+};
 
 // Re-export public helper functions
 pub use helpers::{

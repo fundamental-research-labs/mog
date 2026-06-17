@@ -31,15 +31,23 @@ export const range = _rangeModule;
 
 // Re-export A1 parsing and validation from the canonical source (spreadsheet-utils)
 export {
+  address,
+  column,
+  columnIndex,
+  columnName,
   colToLetter,
   createRange,
   getRangeDimensions,
   isValidAddress,
   isValidCellRange as isValidRange,
   letterToCol,
+  offset,
+  parse,
+  parseAddress,
   parseCellAddress,
   parseCellRange,
   quoteSheetName,
+  rangeAddress,
   toA1,
   toSheetA1,
 } from '@mog/spreadsheet-utils/a1';

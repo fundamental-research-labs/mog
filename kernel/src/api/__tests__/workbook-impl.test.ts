@@ -46,7 +46,10 @@ const copySheetMock = jest.fn();
 const moveSheetMock = jest.fn();
 const setSheetHiddenMock = jest.fn();
 const namedRangesGetByNameMock = jest.fn();
+const namedRangesGetByIdMock = jest.fn();
+const namedRangesGetRefersToA1Mock = jest.fn();
 const namedRangesCreateMock = jest.fn();
+const namedRangesUpdateMock = jest.fn();
 const namedRangesRemoveMock = jest.fn();
 const namedRangesExportNamesMock = jest.fn();
 const getFunctionCatalogMock = jest.fn();
@@ -68,7 +71,10 @@ jest.unstable_mockModule('../worksheet/worksheet-impl', () => ({
 
 jest.unstable_mockModule('../../domain/formulas/named-ranges', () => ({
   getByName: namedRangesGetByNameMock,
+  getById: namedRangesGetByIdMock,
+  getRefersToA1: namedRangesGetRefersToA1Mock,
   create: namedRangesCreateMock,
+  update: namedRangesUpdateMock,
   remove: namedRangesRemoveMock,
   exportNames: namedRangesExportNamesMock,
 }));
@@ -349,6 +355,11 @@ let mockCheckpointMethods: {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  (NamedRanges.getRefersToA1 as jest.Mock).mockImplementation(
+    async (_ctx: unknown, defined: any) => {
+      return defined.refersToA1 ?? '=Sheet1!A1';
+    },
+  );
 
   // Default mock for createCheckpointManager factory.
   // We store a reference to the mocked methods so tests can assert on them.
@@ -1211,11 +1222,15 @@ describe('WorkbookImpl - Named Ranges', () => {
   });
 
   it('addNamedRange() delegates to NamedRanges.create on success', async () => {
-    (NamedRanges.getByName as jest.Mock).mockResolvedValue(undefined);
+    (NamedRanges.getByName as jest.Mock).mockResolvedValueOnce(undefined).mockResolvedValueOnce({
+      id: 'nr-revenue',
+      name: 'Revenue',
+      refersToA1: '=Sheet1!A1:B10',
+    });
     (NamedRanges.create as jest.Mock).mockResolvedValue(undefined);
     const { wb } = await createWorkbook();
 
-    await wb.names.add('Revenue', '=Sheet1!A1:B10');
+    const receipt = await wb.names.add('Revenue', '=Sheet1!A1:B10');
 
     expect(NamedRanges.create).toHaveBeenCalledWith(
       expect.anything(),
@@ -1223,10 +1238,24 @@ describe('WorkbookImpl - Named Ranges', () => {
       'sheet1',
       'api',
     );
+    expect(receipt).toMatchObject({
+      kind: 'nameAdd',
+      status: 'applied',
+      name: 'Revenue',
+      created: {
+        id: 'nr-revenue',
+        name: 'Revenue',
+        reference: 'Sheet1!A1:B10',
+      },
+    });
   });
 
   it('addNamedRange() prepends = to reference if missing', async () => {
-    (NamedRanges.getByName as jest.Mock).mockResolvedValue(undefined);
+    (NamedRanges.getByName as jest.Mock).mockResolvedValueOnce(undefined).mockResolvedValueOnce({
+      id: 'nr-revenue',
+      name: 'Revenue',
+      refersToA1: '=Sheet1!A1:B10',
+    });
     (NamedRanges.create as jest.Mock).mockResolvedValue(undefined);
     const { wb } = await createWorkbook();
 
@@ -1711,23 +1740,36 @@ describe('WorkbookImpl - Scenarios', () => {
   it('applyScenario() delegates to ScenarioOps.applyScenarioFull', async () => {
     (ScenarioOps.applyScenarioFull as jest.Mock).mockResolvedValue({
       success: true,
-      data: { cellsUpdated: 2, skippedCells: [], originalValues: [] },
+      data: { baselineId: 'baseline-1', cellsUpdated: 2, skippedCells: [], originalValues: [] },
     });
     const { wb } = await createWorkbook();
 
     const result = await wb.scenarios.apply('sc-1');
+    expect(result).toMatchObject({
+      kind: 'workbook.scenarios.apply',
+      status: 'applied',
+      result: {
+        baselineId: 'baseline-1',
+        cellsUpdated: 2,
+      },
+    });
     expect(result.cellsUpdated).toBe(2);
     expect(ScenarioOps.applyScenarioFull).toHaveBeenCalledWith(expect.anything(), 'sc-1');
   });
 
-  it('applyScenario() throws KernelError on failure', async () => {
+  it('applyScenario() returns a failed receipt on failure', async () => {
     (ScenarioOps.applyScenarioFull as jest.Mock).mockResolvedValue({
       success: false,
       error: 'not found',
     });
     const { wb } = await createWorkbook();
 
-    await expect(wb.scenarios.apply('sc-bad')).rejects.toThrow(KernelError);
+    await expect(wb.scenarios.apply('sc-bad')).resolves.toMatchObject({
+      kind: 'workbook.scenarios.apply',
+      status: 'failed',
+      scenarioId: 'sc-bad',
+      result: null,
+    });
   });
 
   it('restoreScenario() delegates to ScenarioOps.restoreScenarioValues', async () => {
@@ -1858,6 +1900,12 @@ describe('WorkbookImpl - Code Execution', () => {
     const mockExecute = jest.fn().mockResolvedValue({
       status: 'success',
       logs: ['hello'],
+      mutationStatus: 'none',
+      changeCount: 0,
+      directCount: 0,
+      indirectCount: 0,
+      editRanges: [],
+      dirtyCells: [],
       timing: { total: 50 },
     });
     const mockFactory = jest.fn().mockReturnValue({
@@ -1872,7 +1920,13 @@ describe('WorkbookImpl - Code Execution', () => {
     const result = await wb.executeCode('console.log("hello")');
     expect(result.success).toBe(true);
     expect(result.output).toBe('hello');
+    expect(result.mutationStatus).toBe('none');
+    expect(result.changeCount).toBe(0);
     expect(result.duration).toBe(50);
+    expect(mockExecute).toHaveBeenCalledWith('console.log("hello")', {
+      timeout: undefined,
+      mutationPolicy: 'rollbackOnError',
+    });
   });
 
   it('executeCode() returns error result on failure', async () => {
@@ -1880,6 +1934,12 @@ describe('WorkbookImpl - Code Execution', () => {
       status: 'error',
       error: 'SyntaxError',
       logs: [],
+      mutationStatus: 'none',
+      changeCount: 0,
+      directCount: 0,
+      indirectCount: 0,
+      editRanges: [],
+      dirtyCells: [],
     });
     const mockFactory = jest.fn().mockReturnValue({
       execute: mockExecute,
@@ -1893,6 +1953,60 @@ describe('WorkbookImpl - Code Execution', () => {
     const result = await wb.executeCode('bad code');
     expect(result.success).toBe(false);
     expect(result.error).toBe('SyntaxError');
+    expect(result.mutationStatus).toBe('none');
+  });
+
+  it('executeCode() forwards explicit mutation policy and preserves mutation receipts', async () => {
+    const dirtyCells = [
+      {
+        sheet: 'Sheet1',
+        address: 'A1',
+        oldValue: null,
+        value: 1,
+        changeType: 'direct' as const,
+      },
+    ];
+    const mockExecute = jest.fn().mockResolvedValue({
+      status: 'error',
+      error: 'stop',
+      logs: ['before stop'],
+      mutationStatus: 'partial',
+      changeCount: 1,
+      directCount: 1,
+      indirectCount: 0,
+      editRanges: ['Sheet1!A1'],
+      dirtyCells,
+      formattedSummary: 'Workbook state changed before the error.',
+      rollbackError: 'rollback unavailable',
+      timing: { total: 25 },
+    });
+    const mockFactory = jest.fn().mockReturnValue({
+      execute: mockExecute,
+      dispose: jest.fn(),
+    });
+
+    const { wb } = await createWorkbook({
+      codeExecutorFactory: mockFactory as any,
+    });
+
+    const result = await wb.executeCode('bad code', {
+      timeout: 123,
+      mutationPolicy: 'allowPartial',
+    });
+
+    expect(mockExecute).toHaveBeenCalledWith('bad code', {
+      timeout: 123,
+      mutationPolicy: 'allowPartial',
+    });
+    expect(result.success).toBe(false);
+    expect(result.mutationStatus).toBe('partial');
+    expect(result.changeCount).toBe(1);
+    expect(result.directCount).toBe(1);
+    expect(result.indirectCount).toBe(0);
+    expect(result.editRanges).toEqual(['Sheet1!A1']);
+    expect(result.dirtyCells).toEqual(dirtyCells);
+    expect(result.formattedSummary).toContain('Workbook state changed');
+    expect(result.rollbackError).toBe('rollback unavailable');
   });
 
   it('executeCode() preserves structured executor diagnostics', async () => {
@@ -1918,6 +2032,12 @@ describe('WorkbookImpl - Code Execution', () => {
       error: 'This looks like OfficeJS. You are writing Mog code.',
       logs: [],
       diagnostics,
+      mutationStatus: 'none',
+      changeCount: 0,
+      directCount: 0,
+      indirectCount: 0,
+      editRanges: [],
+      dirtyCells: [],
     });
     const mockFactory = jest.fn().mockReturnValue({
       execute: mockExecute,

@@ -257,7 +257,7 @@ mod tests {
             CellValue::number(0.0),
             CellValue::number(-0.0),
             CellValue::number(42.0),
-            CellValue::number(3.14),
+            CellValue::number(12.34),
             CellValue::Boolean(true),
             CellValue::Boolean(false),
             CellValue::Error(CellError::Div0, None),
@@ -326,8 +326,8 @@ mod tests {
 
     #[test]
     fn filter_keys_for_decimal_number_includes_decimal_text_key() {
-        let keys = cell_value_filter_keys(&CellValue::number(3.14));
-        assert!(keys.iter().any(|k| k == "T:3.14"), "{keys:?}");
+        let keys = cell_value_filter_keys(&CellValue::number(12.34));
+        assert!(keys.iter().any(|k| k == "T:12.34"), "{keys:?}");
     }
 
     #[test]

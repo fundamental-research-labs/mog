@@ -266,12 +266,12 @@ fn test_decimal_greater_than() {
 #[test]
 fn test_decimal_formatting() {
     let mut writer = DataValidationWriter::new();
-    writer.add_decimal("K1", ValidationOperator::LessThan, 3.14159265358979);
+    writer.add_decimal("K1", ValidationOperator::LessThan, 12.3456789012345);
 
     let xml = String::from_utf8(writer.to_xml()).unwrap();
 
     // Should have reasonable precision
-    assert!(xml.contains("3.14159265358979"));
+    assert!(xml.contains("12.3456789012345"));
 }
 
 // -------------------------------------------------------------------------
@@ -648,9 +648,9 @@ fn test_format_f64_integer() {
 
 #[test]
 fn test_format_f64_decimal() {
-    assert_eq!(format_f64(3.14), "3.14");
+    assert_eq!(format_f64(12.34), "12.34");
     assert_eq!(format_f64(0.5), "0.5");
-    assert_eq!(format_f64(-2.718), "-2.718");
+    assert_eq!(format_f64(-12.718), "-12.718");
 }
 
 // -------------------------------------------------------------------------

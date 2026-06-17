@@ -118,8 +118,8 @@ fn test_parse_f64_attr() {
         Some(8.5)
     );
     assert_eq!(
-        parse_f64_attr(b"<col width=\"-3.14\">", b"width=\""),
-        Some(-3.14)
+        parse_f64_attr(b"<col width=\"-12.34\">", b"width=\""),
+        Some(-12.34)
     );
     assert_eq!(parse_f64_attr(b"<col>", b"width=\""), None);
 }

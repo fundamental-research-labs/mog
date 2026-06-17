@@ -7,12 +7,23 @@
 
 import type {
   AutoFillChange,
+  AutoFillFormulaPreview,
   AutoFillMode,
+  AutoFillPreviewResult,
+  AutoFillReferenceDiagnostic,
   AutoFillResult,
   AutoFillWarning,
   FillPatternType,
   FillSeriesOptions,
 } from '@mog-sdk/contracts/fill';
+import type {
+  AutoFillApplyReceipt,
+  AutoFillPreviewReceipt,
+  FillSeriesApplyReceipt,
+  OperationDiagnostic,
+  OperationEffect,
+} from '@mog-sdk/contracts/api';
+import { cellRangeToA1 } from '@mog/spreadsheet-utils/a1';
 import { KernelError } from '../../../errors';
 import type { CellRange, SheetId } from '@mog-sdk/contracts/core';
 import type { DocumentContext } from '../../../context';
@@ -64,6 +75,35 @@ function modeToFlags(mode: AutoFillMode): {
   }
 }
 
+function buildAutoFillBridgeRequest(
+  sourceRange: CellRange,
+  targetRange: CellRange,
+  mode: AutoFillMode,
+  stepValue = 1,
+) {
+  const direction = computeDirection(sourceRange, targetRange);
+  const flags = modeToFlags(mode);
+
+  return {
+    sourceRange: {
+      startRow: sourceRange.startRow,
+      startCol: sourceRange.startCol,
+      endRow: sourceRange.endRow,
+      endCol: sourceRange.endCol,
+    },
+    targetRange: {
+      startRow: targetRange.startRow,
+      startCol: targetRange.startCol,
+      endRow: targetRange.endRow,
+      endCol: targetRange.endCol,
+    },
+    direction,
+    mode,
+    stepValue,
+    ...flags,
+  };
+}
+
 async function runAsSingleUndoStep<T>(
   ctx: DocumentContext,
   operation: () => Promise<T>,
@@ -74,6 +114,245 @@ async function runAsSingleUndoStep<T>(
   } finally {
     await ctx.computeBridge.endUndoGroup();
   }
+}
+
+type BridgeFillChangeLike = {
+  row: number;
+  col: number;
+  type?: string;
+  changeType?: string;
+};
+
+function normalizeFillChangeType(type: string | undefined): AutoFillChange['type'] {
+  switch (type) {
+    case 'formula':
+    case 'format':
+    case 'clear':
+      return type;
+    case 'value':
+    default:
+      return 'value';
+  }
+}
+
+function normalizeFillChanges(
+  changes: readonly BridgeFillChangeLike[] | undefined,
+): AutoFillChange[] {
+  return (changes ?? []).map((change) => ({
+    row: change.row,
+    col: change.col,
+    type: normalizeFillChangeType(change.type ?? change.changeType),
+  }));
+}
+
+function extractFillResult(bridgeResult: { data?: unknown } | null | undefined): AutoFillResult {
+  const fillData = bridgeResult?.data as
+    | {
+        patternType?: string;
+        filledCellCount?: number;
+        warnings?: AutoFillWarning[];
+        changes?: BridgeFillChangeLike[];
+      }
+    | undefined;
+
+  return {
+    patternType: (fillData?.patternType ?? 'copy') as FillPatternType,
+    filledCellCount: fillData?.filledCellCount ?? 0,
+    warnings: fillData?.warnings ?? [],
+    changes: normalizeFillChanges(fillData?.changes),
+  };
+}
+
+function extractFillPreviewResult(
+  bridgeResult:
+    | {
+        patternType?: string;
+        filledCellCount?: number;
+        warnings?: AutoFillWarning[];
+        changes?: BridgeFillChangeLike[];
+        formulas?: AutoFillFormulaPreview[];
+        referenceDiagnostics?: AutoFillReferenceDiagnostic[];
+      }
+    | null
+    | undefined,
+): AutoFillPreviewResult {
+  return {
+    patternType: (bridgeResult?.patternType ?? 'copy') as FillPatternType,
+    filledCellCount: bridgeResult?.filledCellCount ?? 0,
+    warnings: bridgeResult?.warnings ?? [],
+    changes: normalizeFillChanges(bridgeResult?.changes),
+    formulas: bridgeResult?.formulas ?? [],
+    referenceDiagnostics: bridgeResult?.referenceDiagnostics ?? [],
+  };
+}
+
+function filledChangeCount(result: AutoFillResult): number {
+  return result.filledCellCount > 0 ? result.filledCellCount : result.changes.length;
+}
+
+function effectsForFillApply(params: {
+  sheetId: SheetId;
+  targetRange: CellRange;
+  changedCellCount: number;
+  undoGroup: boolean;
+}): OperationEffect[] {
+  const range = cellRangeToA1(params.targetRange);
+  if (params.changedCellCount === 0) {
+    return [{ type: 'worksheetUnchanged', sheetId: params.sheetId, range }];
+  }
+
+  const effects: OperationEffect[] = [
+    {
+      type: 'materializedCells',
+      sheetId: params.sheetId,
+      range,
+      count: params.changedCellCount,
+    },
+    {
+      type: 'changedRange',
+      sheetId: params.sheetId,
+      range,
+      count: params.changedCellCount,
+    },
+  ];
+
+  if (params.undoGroup) {
+    effects.push({ type: 'createdUndoEntry', sheetId: params.sheetId, range });
+  }
+
+  return effects;
+}
+
+function diagnosticForAutoFillWarning(
+  warning: AutoFillWarning,
+  sheetId: SheetId,
+): OperationDiagnostic {
+  const target = { sheetId, row: warning.row, col: warning.col };
+
+  switch (warning.kind.type) {
+    case 'mergedCellsInTarget':
+      return {
+        severity: 'warning',
+        code: 'AUTOFILL_MERGED_CELLS_IN_TARGET',
+        message: 'Target range contains merged cells.',
+        target,
+        recoverable: true,
+        nextAction: 'Unmerge the target cells or choose a target range without merged cells.',
+      };
+    case 'formulaRefOutOfBounds':
+      return {
+        severity: 'warning',
+        code: 'AUTOFILL_REF_OUT_OF_BOUNDS',
+        message: 'A formula reference moved outside the worksheet bounds during autofill.',
+        target,
+        recoverable: true,
+        nextAction: 'Review the filled formula references before relying on the result.',
+        details: { refIndex: warning.kind.refIndex },
+      };
+    case 'sourceCellEmpty':
+      return {
+        severity: 'warning',
+        code: 'AUTOFILL_SOURCE_CELL_EMPTY',
+        message: 'The source cell used for autofill is empty.',
+        target,
+        recoverable: true,
+        nextAction: 'Enter a source value or adjust the source range.',
+      };
+  }
+}
+
+function diagnosticsForAutoFillWarnings(
+  warnings: readonly AutoFillWarning[],
+  sheetId: SheetId,
+): OperationDiagnostic[] {
+  return warnings.map((warning) => diagnosticForAutoFillWarning(warning, sheetId));
+}
+
+function autoFillApplyReceipt(params: {
+  sheetId: SheetId;
+  targetRange: CellRange;
+  mode: AutoFillMode;
+  result: AutoFillResult;
+  undoGroup: boolean;
+}): AutoFillApplyReceipt {
+  const changedCellCount = filledChangeCount(params.result);
+  return {
+    kind: 'autofill.apply',
+    status: changedCellCount > 0 ? 'applied' : 'noOp',
+    effects: effectsForFillApply({
+      sheetId: params.sheetId,
+      targetRange: params.targetRange,
+      changedCellCount,
+      undoGroup: params.undoGroup,
+    }),
+    diagnostics: diagnosticsForAutoFillWarnings(params.result.warnings, params.sheetId),
+    mode: params.mode,
+    patternType: params.result.patternType,
+    filledCellCount: params.result.filledCellCount,
+    warnings: params.result.warnings,
+    changes: params.result.changes,
+  };
+}
+
+function autoFillPreviewReceipt(params: {
+  sheetId: SheetId;
+  sourceRange: CellRange;
+  targetRange: CellRange;
+  mode: AutoFillMode;
+  result: AutoFillPreviewResult;
+}): AutoFillPreviewReceipt {
+  return {
+    kind: 'autofill.preview',
+    status: 'completed',
+    effects: [
+      {
+        type: 'worksheetUnchanged',
+        sheetId: params.sheetId,
+        range: cellRangeToA1(params.targetRange),
+        details: {
+          dryRun: true,
+          sourceRange: cellRangeToA1(params.sourceRange),
+        },
+      },
+    ],
+    diagnostics: diagnosticsForAutoFillWarnings(params.result.warnings, params.sheetId),
+    mode: params.mode,
+    worksheetChanged: false,
+    undoChanged: false,
+    patternType: params.result.patternType,
+    filledCellCount: params.result.filledCellCount,
+    warnings: params.result.warnings,
+    changes: params.result.changes,
+    formulas: params.result.formulas,
+    referenceDiagnostics: params.result.referenceDiagnostics,
+  };
+}
+
+function fillSeriesApplyReceipt(params: {
+  sheetId: SheetId;
+  targetRange: CellRange;
+  mode: AutoFillMode;
+  options: FillSeriesOptions;
+  result: AutoFillResult;
+}): FillSeriesApplyReceipt {
+  const changedCellCount = filledChangeCount(params.result);
+  return {
+    kind: 'fillSeries.apply',
+    status: changedCellCount > 0 ? 'applied' : 'noOp',
+    effects: effectsForFillApply({
+      sheetId: params.sheetId,
+      targetRange: params.targetRange,
+      changedCellCount,
+      undoGroup: true,
+    }),
+    diagnostics: diagnosticsForAutoFillWarnings(params.result.warnings, params.sheetId),
+    mode: params.mode,
+    options: params.options,
+    patternType: params.result.patternType,
+    filledCellCount: params.result.filledCellCount,
+    warnings: params.result.warnings,
+    changes: params.result.changes,
+  };
 }
 
 /**
@@ -97,7 +376,7 @@ export async function autoFill(
   targetRange: CellRange,
   mode: AutoFillMode,
   options: { undoGroup?: boolean } = {},
-): Promise<AutoFillResult> {
+): Promise<AutoFillApplyReceipt> {
   // Validate ranges
   if (
     sourceRange.startRow < 0 ||
@@ -110,47 +389,57 @@ export async function autoFill(
 
   await ctx.awaitMaterialized?.('allSheets');
 
-  const direction = computeDirection(sourceRange, targetRange);
-  const flags = modeToFlags(mode);
-
-  const bridgeRequest = {
-    sourceRange: {
-      startRow: sourceRange.startRow,
-      startCol: sourceRange.startCol,
-      endRow: sourceRange.endRow,
-      endCol: sourceRange.endCol,
-    },
-    targetRange: {
-      startRow: targetRange.startRow,
-      startCol: targetRange.startCol,
-      endRow: targetRange.endRow,
-      endCol: targetRange.endCol,
-    },
-    direction,
-    mode,
-    stepValue: 1,
-    ...flags,
-  };
+  const bridgeRequest = buildAutoFillBridgeRequest(sourceRange, targetRange, mode);
 
   const operation = () => ctx.computeBridge.autoFill(sheetId, bridgeRequest);
   const bridgeResult =
     options.undoGroup === false ? await operation() : await runAsSingleUndoStep(ctx, operation);
+  const result = extractFillResult(bridgeResult);
 
-  const fillData = bridgeResult?.data as
-    | {
-        patternType?: string;
-        filledCellCount?: number;
-        warnings?: AutoFillWarning[];
-        changes?: AutoFillChange[];
-      }
-    | undefined;
+  return autoFillApplyReceipt({
+    sheetId,
+    targetRange,
+    mode,
+    result,
+    undoGroup: options.undoGroup !== false,
+  });
+}
 
-  return {
-    patternType: (fillData?.patternType ?? 'copy') as FillPatternType,
-    filledCellCount: fillData?.filledCellCount ?? 0,
-    warnings: fillData?.warnings ?? [],
-    changes: fillData?.changes ?? [],
-  };
+/**
+ * Preview autofill from source range into target range without mutating cells.
+ *
+ * Delegates to ComputeBridge.autoFillPreview, a generated read/query bridge
+ * method backed by the same Rust fill engine used by autoFill().
+ */
+export async function autoFillPreview(
+  ctx: DocumentContext,
+  sheetId: SheetId,
+  sourceRange: CellRange,
+  targetRange: CellRange,
+  mode: AutoFillMode,
+): Promise<AutoFillPreviewReceipt> {
+  if (
+    sourceRange.startRow < 0 ||
+    sourceRange.startCol < 0 ||
+    targetRange.startRow < 0 ||
+    targetRange.startCol < 0
+  ) {
+    throw new KernelError('COMPUTE_ERROR', 'Range coordinates must be non-negative');
+  }
+
+  await ctx.awaitMaterialized?.('allSheets');
+
+  const bridgeRequest = buildAutoFillBridgeRequest(sourceRange, targetRange, mode);
+  const bridgeResult = await ctx.computeBridge.autoFillPreview(sheetId, bridgeRequest);
+  const result = extractFillPreviewResult(bridgeResult);
+
+  return autoFillPreviewReceipt({
+    sheetId,
+    sourceRange,
+    targetRange,
+    mode,
+    result,
+  });
 }
 
 // ==========================================================================
@@ -286,7 +575,7 @@ export async function fillSeries(
   sheetId: SheetId,
   range: CellRange,
   options: FillSeriesOptions,
-): Promise<void> {
+): Promise<FillSeriesApplyReceipt> {
   // Validate that the range has enough rows/cols to split
   const isVertical = options.direction === 'down' || options.direction === 'up';
   if (isVertical && range.startRow === range.endRow) {
@@ -305,7 +594,7 @@ export async function fillSeries(
   const { sourceRange, targetRange } = splitRangeForSeries(range, options.direction);
   const mode = seriesOptionsToMode(options);
 
-  await runAsSingleUndoStep(ctx, () =>
+  const bridgeResult = await runAsSingleUndoStep(ctx, () =>
     ctx.computeBridge.autoFill(sheetId, {
       sourceRange: {
         startRow: sourceRange.startRow,
@@ -327,4 +616,13 @@ export async function fillSeries(
       stepValue: options.stepValue ?? 1,
     }),
   );
+  const result = extractFillResult(bridgeResult);
+
+  return fillSeriesApplyReceipt({
+    sheetId,
+    targetRange,
+    mode,
+    options,
+    result,
+  });
 }

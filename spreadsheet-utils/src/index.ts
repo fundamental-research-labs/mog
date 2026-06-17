@@ -4,13 +4,22 @@
 
 // A1 notation utilities
 export {
+  address,
+  column,
+  columnIndex,
+  columnName,
   cellRangeToA1,
   cellRangeToSheetA1,
   colToLetter,
   letterToCol,
+  offset,
+  parse,
   parseA1,
   parseA1Range,
+  parseAddress,
   quoteSheetName,
+  range,
+  rangeAddress,
   toA1,
   toSheetA1,
 } from './a1';

@@ -1,10 +1,15 @@
-import type { EquationUpdates } from '@mog-sdk/contracts/api';
+import type {
+  EquationUpdates,
+  FloatingObjectHandleMutationReceipt,
+  FloatingObjectMutationReceipt,
+} from '@mog-sdk/contracts/api';
 import type { EquationHandle } from '@mog-sdk/contracts/api/worksheet/handles/index';
 import type { EquationObject } from '@mog-sdk/contracts/floating-objects';
 import type { IObjectBoundsReader } from '@mog-sdk/contracts/objects/object-bounds-reader';
 
 import { KernelError } from '../../../errors';
 import type { WorksheetObjectsImpl } from '../objects';
+import { attachFloatingObjectHandle } from '../objects-receipts';
 import { FloatingObjectHandleImpl } from './floating-object-handle-impl';
 
 export class EquationHandleImpl extends FloatingObjectHandleImpl implements EquationHandle {
@@ -16,13 +21,17 @@ export class EquationHandleImpl extends FloatingObjectHandleImpl implements Equa
     super(id, 'equation', objectsImpl, boundsReader);
   }
 
-  async update(props: EquationUpdates): Promise<void> {
-    await this.objectsImpl.updateEquation(this.id, props);
+  async update(props: EquationUpdates): Promise<FloatingObjectMutationReceipt> {
+    return this.objectsImpl.updateEquation(this.id, props);
   }
 
-  async duplicate(_offsetX?: number, _offsetY?: number): Promise<EquationHandle> {
+  async duplicate(
+    _offsetX?: number,
+    _offsetY?: number,
+  ): Promise<FloatingObjectHandleMutationReceipt<EquationHandle>> {
     const receipt = await this.objectsImpl.duplicate(this.id);
-    return new EquationHandleImpl(receipt.id, this.objectsImpl, this.boundsReader);
+    const handle = new EquationHandleImpl(receipt.id, this.objectsImpl, this.boundsReader);
+    return attachFloatingObjectHandle(receipt, handle);
   }
 
   async getData(): Promise<EquationObject> {

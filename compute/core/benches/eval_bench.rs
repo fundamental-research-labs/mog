@@ -71,7 +71,7 @@ fn build_snapshot(
         data_table_regions: vec![],
         iterative_calc: false,
         max_iterations: 100,
-        max_change: 0.001,
+        max_change: value_types::FiniteF64::must(0.001),
         calculation_settings: None,
     }
 }

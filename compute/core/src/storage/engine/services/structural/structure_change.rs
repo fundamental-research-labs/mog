@@ -3,9 +3,11 @@ use std::collections::HashSet;
 use cell_types::{CellId, SheetId};
 use compute_document::hex::id_to_hex;
 use compute_document::identity::GridIndex;
+use compute_document::undo::ORIGIN_USER_EDIT;
 use domain_types::units::Points;
 use formula_types::StructureChange;
 use value_types::ComputeError;
+use yrs::{Map, Origin, Out, Transact};
 
 use crate::mirror::CellMirror;
 use crate::snapshot::{CellChange, RecalcResult, StructureChangeResult, StructureChangeType};
@@ -14,6 +16,7 @@ use crate::storage::engine::stores::EngineStores;
 use crate::storage::engine::validation;
 use crate::storage::sheet::dimensions;
 use crate::storage::sheet::structural::StructuralOps;
+use crate::storage::sheet_dimensions::SheetDimensionsMut;
 
 use super::super::metadata_shift;
 use super::super::mutation::{rebuild_merge_index, sync_mirror_merge_regions};
@@ -49,6 +52,7 @@ pub(in crate::storage::engine) fn apply_structure_change(
     change: &StructureChange,
 ) -> Result<RecalcResult, ComputeError> {
     let preflight = preflight_structure_change(stores, mirror, sheet_id, change)?;
+    ensure_insert_axis_capacity(stores, sheet_id, change)?;
     let doc = stores.storage.doc();
     let sheets_map = doc.get_or_insert_map("sheets");
     let grid =
@@ -191,6 +195,105 @@ pub(in crate::storage::engine) fn apply_structure_change(
     regenerate_named_range_yrs_refs(stores, mirror);
 
     Ok(result)
+}
+
+fn ensure_insert_axis_capacity(
+    stores: &mut EngineStores,
+    sheet_id: &SheetId,
+    change: &StructureChange,
+) -> Result<(), ComputeError> {
+    match change {
+        StructureChange::InsertRows { at, .. } => {
+            ensure_row_capacity_before_insert(stores, sheet_id, at.checked_sub(1))
+        }
+        StructureChange::InsertCols { at, .. } => {
+            ensure_col_capacity_before_insert(stores, sheet_id, at.checked_sub(1))
+        }
+        _ => Ok(()),
+    }
+}
+
+fn sheet_has_compact_axes<T: yrs::ReadTxn>(txn: &T, sheet_map: &yrs::MapRef) -> bool {
+    use compute_document::schema::{KEY_GRID_COL_AXIS, KEY_GRID_INDEX, KEY_GRID_ROW_AXIS};
+    match sheet_map.get(txn, KEY_GRID_INDEX) {
+        Some(Out::YMap(grid_index)) => {
+            grid_index.get(txn, KEY_GRID_ROW_AXIS).is_some()
+                || grid_index.get(txn, KEY_GRID_COL_AXIS).is_some()
+        }
+        _ => false,
+    }
+}
+
+fn ensure_row_capacity_before_insert(
+    stores: &mut EngineStores,
+    sheet_id: &SheetId,
+    preceding_row: Option<u32>,
+) -> Result<(), ComputeError> {
+    let sheet_hex = id_to_hex(sheet_id.as_u128());
+    let doc = stores.storage.doc();
+    let sheets = stores.storage.sheets();
+    let mut txn = doc.transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
+
+    let compact_axes = match sheets.get(&txn, sheet_hex.as_str()) {
+        Some(Out::YMap(sheet_map)) => sheet_has_compact_axes(&txn, &sheet_map),
+        _ => {
+            return Err(ComputeError::SheetNotFound {
+                sheet_id: sheet_id.to_uuid_string(),
+            });
+        }
+    };
+
+    let grid =
+        stores
+            .grid_indexes
+            .get_mut(sheet_id)
+            .ok_or_else(|| ComputeError::SheetNotFound {
+                sheet_id: sheet_id.to_uuid_string(),
+            })?;
+    let mut dims = SheetDimensionsMut::from_grid_index(doc, sheets, grid);
+    if let Some(row) = preceding_row {
+        dims.ensure_row_capacity(&mut txn, *sheet_id, row)?;
+    }
+    if compact_axes {
+        dims.materialize_dense_axes_and_remove_compact_keys(&mut txn, *sheet_id)?;
+    }
+    Ok(())
+}
+
+fn ensure_col_capacity_before_insert(
+    stores: &mut EngineStores,
+    sheet_id: &SheetId,
+    preceding_col: Option<u32>,
+) -> Result<(), ComputeError> {
+    let sheet_hex = id_to_hex(sheet_id.as_u128());
+    let doc = stores.storage.doc();
+    let sheets = stores.storage.sheets();
+    let mut txn = doc.transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
+
+    let compact_axes = match sheets.get(&txn, sheet_hex.as_str()) {
+        Some(Out::YMap(sheet_map)) => sheet_has_compact_axes(&txn, &sheet_map),
+        _ => {
+            return Err(ComputeError::SheetNotFound {
+                sheet_id: sheet_id.to_uuid_string(),
+            });
+        }
+    };
+
+    let grid =
+        stores
+            .grid_indexes
+            .get_mut(sheet_id)
+            .ok_or_else(|| ComputeError::SheetNotFound {
+                sheet_id: sheet_id.to_uuid_string(),
+            })?;
+    let mut dims = SheetDimensionsMut::from_grid_index(doc, sheets, grid);
+    if let Some(col) = preceding_col {
+        dims.ensure_col_capacity(&mut txn, *sheet_id, col)?;
+    }
+    if compact_axes {
+        dims.materialize_dense_axes_and_remove_compact_keys(&mut txn, *sheet_id)?;
+    }
+    Ok(())
 }
 
 fn preflight_structure_change(

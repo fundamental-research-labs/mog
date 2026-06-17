@@ -44,6 +44,11 @@ import * as EquationOps from './operations/equation-operations';
 import * as FloatingObjectOps from './operations/floating-object-operations';
 import * as ShapeOps from './operations/shape-operations';
 import * as TextEffectOps from './operations/text-effects-operations';
+import {
+  buildFloatingObjectMutationReceipt,
+  withFloatingObjectMutationReceiptBase,
+  withFloatingObjectRemoveReceiptBase,
+} from './objects-receipts';
 
 export class WorksheetObjectsImpl implements WorksheetObjects {
   constructor(
@@ -63,20 +68,33 @@ export class WorksheetObjectsImpl implements WorksheetObjects {
     return this.manager;
   }
 
+  sheetIdForReceipts(): SheetId {
+    return this.sheetId;
+  }
+
   // ===========================================================================
   // Generic floating object operations (direct bridge calls via ctx)
   // ===========================================================================
 
   async remove(id: string): Promise<FloatingObjectRemoveReceipt> {
-    return await FloatingObjectOps.deleteFloatingObject(this.ctx, this.sheetId, id);
+    const receipt = await FloatingObjectOps.deleteFloatingObject(this.ctx, this.sheetId, id);
+    return withFloatingObjectRemoveReceiptBase(receipt, this.sheetId);
   }
 
   async move(id: string, x: number, y: number): Promise<FloatingObjectMutationReceipt> {
-    return await FloatingObjectOps.moveFloatingObject(this.ctx, this.sheetId, id, x, y);
+    const receipt = await FloatingObjectOps.moveFloatingObject(this.ctx, this.sheetId, id, x, y);
+    return withFloatingObjectMutationReceiptBase(receipt, this.sheetId);
   }
 
   async resize(id: string, width: number, height: number): Promise<FloatingObjectMutationReceipt> {
-    return await FloatingObjectOps.resizeFloatingObject(this.ctx, this.sheetId, id, width, height);
+    const receipt = await FloatingObjectOps.resizeFloatingObject(
+      this.ctx,
+      this.sheetId,
+      id,
+      width,
+      height,
+    );
+    return withFloatingObjectMutationReceiptBase(receipt, this.sheetId);
   }
 
   async rotate(id: string, angle: number): Promise<void> {
@@ -88,7 +106,8 @@ export class WorksheetObjectsImpl implements WorksheetObjects {
   }
 
   async duplicate(id: string): Promise<FloatingObjectMutationReceipt> {
-    return await FloatingObjectOps.duplicateFloatingObject(this.ctx, this.sheetId, id);
+    const receipt = await FloatingObjectOps.duplicateFloatingObject(this.ctx, this.sheetId, id);
+    return withFloatingObjectMutationReceiptBase(receipt, this.sheetId);
   }
 
   async list(): Promise<FloatingObjectInfo[]> {
@@ -142,8 +161,17 @@ export class WorksheetObjectsImpl implements WorksheetObjects {
     return map;
   }
 
-  async update(objectId: string, updates: Record<string, unknown>): Promise<void> {
+  async update(
+    objectId: string,
+    updates: Record<string, unknown>,
+  ): Promise<FloatingObjectMutationReceipt> {
     await FloatingObjectOps.updateFloatingObject(this.ctx, this.sheetId, objectId, updates);
+    return buildFloatingObjectMutationReceipt({
+      ctx: this.ctx,
+      sheetId: this.sheetId,
+      objectId,
+      action: 'update',
+    });
   }
 
   async removeMany(objectIds: string[]): Promise<number> {
@@ -187,7 +215,8 @@ export class WorksheetObjectsImpl implements WorksheetObjects {
   // ===========================================================================
 
   async addShape(config: ShapeConfig): Promise<FloatingObjectMutationReceipt> {
-    return await ShapeOps.createShape(this.ctx, this.sheetId, config);
+    const receipt = await ShapeOps.createShape(this.ctx, this.sheetId, config);
+    return withFloatingObjectMutationReceiptBase(receipt, this.sheetId);
   }
 
   async getShape(shapeId: string): Promise<Shape | null> {
@@ -198,7 +227,8 @@ export class WorksheetObjectsImpl implements WorksheetObjects {
     shapeId: string,
     updates: Partial<ShapeConfig>,
   ): Promise<FloatingObjectMutationReceipt> {
-    return await ShapeOps.updateShape(this.ctx, this.sheetId, shapeId, updates);
+    const receipt = await ShapeOps.updateShape(this.ctx, this.sheetId, shapeId, updates);
+    return withFloatingObjectMutationReceiptBase(receipt, this.sheetId);
   }
 
   async listShapes(): Promise<Shape[]> {
@@ -210,11 +240,22 @@ export class WorksheetObjectsImpl implements WorksheetObjects {
   // ===========================================================================
 
   async addPicture(config: PictureConfig): Promise<FloatingObjectMutationReceipt> {
-    return await FloatingObjectOps.addPicture(this.ctx, this.sheetId, config);
+    const receipt = await FloatingObjectOps.addPicture(this.ctx, this.sheetId, config);
+    return withFloatingObjectMutationReceiptBase(receipt, this.sheetId);
   }
 
-  async updatePicture(id: string, updates: Partial<PictureConfig>): Promise<void> {
+  async updatePicture(
+    id: string,
+    updates: Partial<PictureConfig>,
+  ): Promise<FloatingObjectMutationReceipt> {
     await FloatingObjectOps.updatePicture(this.ctx, this.sheetId, id, updates);
+    return buildFloatingObjectMutationReceipt({
+      ctx: this.ctx,
+      sheetId: this.sheetId,
+      objectId: id,
+      action: 'update',
+      fallbackType: 'picture',
+    });
   }
 
   // ===========================================================================
@@ -222,31 +263,66 @@ export class WorksheetObjectsImpl implements WorksheetObjects {
   // ===========================================================================
 
   async addTextBox(config: TextBoxConfig): Promise<FloatingObjectMutationReceipt> {
-    return await FloatingObjectOps.addTextBox(this.ctx, this.sheetId, config);
+    const receipt = await FloatingObjectOps.addTextBox(this.ctx, this.sheetId, config);
+    return withFloatingObjectMutationReceiptBase(receipt, this.sheetId);
   }
 
   // ===========================================================================
   // Equations
   // ===========================================================================
 
-  async addEquation(config: EquationConfig): Promise<string> {
-    return await EquationOps.createEquation(this.mgr, this.ctx, this.sheetId, config);
+  async addEquation(config: EquationConfig): Promise<FloatingObjectMutationReceipt> {
+    const id = await EquationOps.createEquation(this.mgr, this.ctx, this.sheetId, config);
+    return buildFloatingObjectMutationReceipt({
+      ctx: this.ctx,
+      sheetId: this.sheetId,
+      objectId: id,
+      action: 'create',
+      fallbackType: 'equation',
+    });
   }
 
-  async updateEquation(id: string, updates: EquationUpdates): Promise<void> {
+  async updateEquation(
+    id: string,
+    updates: EquationUpdates,
+  ): Promise<FloatingObjectMutationReceipt> {
     await EquationOps.updateEquation(this.mgr, this.ctx, this.sheetId, id, updates);
+    return buildFloatingObjectMutationReceipt({
+      ctx: this.ctx,
+      sheetId: this.sheetId,
+      objectId: id,
+      action: 'update',
+      fallbackType: 'equation',
+    });
   }
 
   // ===========================================================================
   // TextEffect
   // ===========================================================================
 
-  async addTextEffect(config: CreateTextEffectInput): Promise<string> {
-    return await TextEffectOps.createTextEffect(this.mgr, this.ctx, this.sheetId, config);
+  async addTextEffect(config: CreateTextEffectInput): Promise<FloatingObjectMutationReceipt> {
+    const id = await TextEffectOps.createTextEffect(this.mgr, this.ctx, this.sheetId, config);
+    return buildFloatingObjectMutationReceipt({
+      ctx: this.ctx,
+      sheetId: this.sheetId,
+      objectId: id,
+      action: 'create',
+      fallbackType: 'textbox',
+    });
   }
 
-  async updateTextEffect(id: string, updates: TextEffectUpdates): Promise<void> {
+  async updateTextEffect(
+    id: string,
+    updates: TextEffectUpdates,
+  ): Promise<FloatingObjectMutationReceipt> {
     await TextEffectOps.updateTextEffect(this.mgr, this.ctx, this.sheetId, id, updates);
+    return buildFloatingObjectMutationReceipt({
+      ctx: this.ctx,
+      sheetId: this.sheetId,
+      objectId: id,
+      action: 'update',
+      fallbackType: 'textbox',
+    });
   }
 
   async convertToTextEffect(objectId: string, warpPreset?: TextWarpPreset): Promise<void> {
@@ -331,8 +407,15 @@ export class WorksheetObjectsImpl implements WorksheetObjects {
   async createDrawing(
     position: Partial<ObjectPosition>,
     options?: CreateDrawingOptions,
-  ): Promise<string> {
-    return await DrawingOps.createDrawing(this.mgr, this.ctx, this.sheetId, position, options);
+  ): Promise<FloatingObjectMutationReceipt> {
+    const id = await DrawingOps.createDrawing(this.mgr, this.ctx, this.sheetId, position, options);
+    return buildFloatingObjectMutationReceipt({
+      ctx: this.ctx,
+      sheetId: this.sheetId,
+      objectId: id,
+      action: 'create',
+      fallbackType: 'drawing',
+    });
   }
 
   async addDrawingStroke(drawingId: string, stroke: InkStroke): Promise<void> {

@@ -195,6 +195,116 @@ impl<'a> SheetDimensionsMut<'a> {
         Ok(())
     }
 
+    pub(crate) fn ensure_row_capacity(
+        &mut self,
+        txn: &mut yrs::TransactionMut<'_>,
+        sheet_id: SheetId,
+        row: u32,
+    ) -> Result<(), ComputeError> {
+        let row = row.min(MAX_ROWS.saturating_sub(1));
+
+        let grid: &mut GridIndex = match &mut self.target {
+            Target::ByMap { grid_indexes } => {
+                grid_indexes
+                    .get_mut(&sheet_id)
+                    .ok_or_else(|| ComputeError::SheetNotFound {
+                        sheet_id: sheet_id.to_uuid_string(),
+                    })?
+            }
+            Target::Direct { grid } => grid,
+        };
+
+        if row < grid.row_count() {
+            return Ok(());
+        }
+
+        let new_row_ids = grid.ensure_row_capacity_returning(row);
+        if new_row_ids.is_empty() {
+            return Ok(());
+        }
+
+        let sheet_hex = id_to_hex(sheet_id.as_u128());
+        let sheet_map = match self.sheets.get(&*txn, sheet_hex.as_str()) {
+            Some(Out::YMap(m)) => m,
+            _ => {
+                return Err(ComputeError::SheetNotFound {
+                    sheet_id: sheet_id.to_uuid_string(),
+                });
+            }
+        };
+
+        let row_order = get_row_order_array(&sheet_map, &*txn).unwrap_or_else(|| {
+            sheet_map.insert(
+                txn,
+                compute_document::schema::KEY_ROW_ORDER,
+                ArrayPrelim::default(),
+            )
+        });
+        let start = row_order.len(&*txn);
+        let values = new_row_ids.iter().map(|rid| {
+            let hex = id_to_hex(rid.as_u128());
+            Any::String(Arc::from(hex.as_str()))
+        });
+        row_order.insert_range(txn, start, values);
+
+        Ok(())
+    }
+
+    pub(crate) fn ensure_col_capacity(
+        &mut self,
+        txn: &mut yrs::TransactionMut<'_>,
+        sheet_id: SheetId,
+        col: u32,
+    ) -> Result<(), ComputeError> {
+        let col = col.min(MAX_COLS.saturating_sub(1));
+
+        let grid: &mut GridIndex = match &mut self.target {
+            Target::ByMap { grid_indexes } => {
+                grid_indexes
+                    .get_mut(&sheet_id)
+                    .ok_or_else(|| ComputeError::SheetNotFound {
+                        sheet_id: sheet_id.to_uuid_string(),
+                    })?
+            }
+            Target::Direct { grid } => grid,
+        };
+
+        if col < grid.col_count() {
+            return Ok(());
+        }
+
+        let new_col_ids = grid.ensure_col_capacity_returning(col);
+        if new_col_ids.is_empty() {
+            return Ok(());
+        }
+
+        let sheet_hex = id_to_hex(sheet_id.as_u128());
+        let sheet_map = match self.sheets.get(&*txn, sheet_hex.as_str()) {
+            Some(Out::YMap(m)) => m,
+            _ => {
+                return Err(ComputeError::SheetNotFound {
+                    sheet_id: sheet_id.to_uuid_string(),
+                });
+            }
+        };
+
+        let col_order = get_col_order_array(&sheet_map, &*txn).unwrap_or_else(|| {
+            sheet_map.insert(
+                txn,
+                compute_document::schema::KEY_COL_ORDER,
+                ArrayPrelim::default(),
+            )
+        });
+        let start = col_order.len(&*txn);
+        let values = new_col_ids.iter().map(|cid| {
+            let hex = id_to_hex(cid.as_u128());
+            Any::String(Arc::from(hex.as_str()))
+        });
+        col_order.insert_range(txn, start, values);
+
+        Ok(())
+    }
+
     pub(crate) fn materialize_dense_axes_and_remove_compact_keys(
         &mut self,
         txn: &mut yrs::TransactionMut<'_>,

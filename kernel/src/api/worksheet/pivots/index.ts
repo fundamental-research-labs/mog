@@ -1,15 +1,13 @@
-/**
- * WorksheetPivotsImpl — facade for the WorksheetPivots sub-API.
- *
- * The worksheet instance owns sheetId and delegates behavior to focused
- * worksheet pivot modules.
- */
 import type {
   PivotTableConfig as ApiPivotTableConfig,
+  PivotAddReceipt,
+  PivotAddWithSheetReceipt,
+  PivotComputeReceipt,
+  PivotRefreshAllReceipt,
   PivotRefreshReceipt,
   PivotTableHandle,
   PivotTableInfo,
-  PivotQueryResult,
+  PivotQueryReceipt,
   SheetId,
   Workbook,
   WorkbookInternal,
@@ -58,7 +56,6 @@ import {
   placementId,
   resolvePlacement,
 } from '../../../domain/pivots/placements';
-import { queryPivotByName } from '../../../domain/pivots/query';
 import {
   addPivotCalculatedFieldByName,
   addPivotCalculatedFieldToId,
@@ -103,10 +100,23 @@ import {
   getPivotRowLabelRangeByName,
 } from '../../../domain/pivots/ranges';
 import type { HandleLiveness } from '../../lifecycle/handle-liveness';
+import {
+  applyPivotClearReceipt,
+  applyPivotRemoveReceipt,
+  applyPivotRenameReceipt,
+  buildPivotAddReceipt,
+  buildPivotAddWithSheetReceipt,
+  buildPivotRefreshAllReceipt,
+  buildPivotRefreshReceipt,
+  materializePivotForReceipt,
+  runPivotMutationReceipt,
+} from './receipts';
+import { computePivotForReceipt, queryPivotForReceipt } from './read-receipts';
 
 type PivotSnapshotEntry =
   | { readonly status: 'live'; readonly config: DataPivotTableConfig }
   | { readonly status: 'deleted' };
+type PivotCreateOptions = Parameters<WorksheetPivots['add']>[1];
 
 export class WorksheetPivotsImpl implements WorksheetPivots {
   private readonly pivotSnapshots = new Map<string, PivotSnapshotEntry>();
@@ -169,10 +179,6 @@ export class WorksheetPivotsImpl implements WorksheetPivots {
     this.pivotSnapshots.set(pivotId, { status: 'deleted' });
   }
 
-  // ---------------------------------------------------------------------------
-  // Name → ID resolution
-  // ---------------------------------------------------------------------------
-
   /**
    * Resolve a pivot table name to its ID.
    * Throws KernelError if not found.
@@ -186,14 +192,13 @@ export class WorksheetPivotsImpl implements WorksheetPivots {
     return pivot.id ?? pivot.name;
   }
 
-  // ===========================================================================
-  // CRUD
-  // ===========================================================================
-
   /** Monotonic counter to ensure unique pivot IDs within the same millisecond. */
   private static _idCounter = 0;
 
-  async add(config: PivotCreateDataConfig | ApiPivotTableConfig): Promise<DataPivotTableConfig> {
+  async add(
+    config: PivotCreateDataConfig | ApiPivotTableConfig,
+    options?: PivotCreateOptions,
+  ): Promise<PivotAddReceipt> {
     this._ensureWritable('pivots.add');
     let dataConfig: PivotCreateDataConfig;
 
@@ -217,13 +222,25 @@ export class WorksheetPivotsImpl implements WorksheetPivots {
       dataConfig,
       `pivot-${Date.now()}-${WorksheetPivotsImpl._idCounter++}`,
     );
-    return this.cachePivot(await this.ctx.pivot.createPivot(configWithId));
+    const created = this.cachePivot(await this.ctx.pivot.createPivot(configWithId));
+    const pivotId = this.pivotId(created);
+    const materialization = await materializePivotForReceipt(options?.lifecycle, () =>
+      this.ctx.pivot.refresh(this.sheetId, pivotId),
+    );
+    return buildPivotAddReceipt({
+      sheetId: this.sheetId,
+      config: created,
+      lifecycle: options?.lifecycle ?? 'defineOnly',
+      result: materialization.result,
+      materializationError: materialization.error,
+    });
   }
 
   async addWithSheet(
     sheetName: string,
     config: PivotCreateDataConfig | ApiPivotTableConfig,
-  ): Promise<{ sheetId: SheetId; config: DataPivotTableConfig }> {
+    options?: PivotCreateOptions,
+  ): Promise<PivotAddWithSheetReceipt> {
     let dataConfig: PivotCreateDataConfig;
 
     if (isSimplePivotConfig(config as Record<string, unknown>)) {
@@ -250,7 +267,20 @@ export class WorksheetPivotsImpl implements WorksheetPivots {
     if (this.workbook) {
       await (this.workbook as WorkbookInternal).refreshSheetMetadata();
     }
-    return { sheetId: toSheetId(result.sheetId), config: this.cachePivot(result.config) };
+    const sheetId = toSheetId(result.sheetId);
+    const created = this.cachePivot(result.config);
+    const pivotId = this.pivotId(created);
+    const materialization = await materializePivotForReceipt(options?.lifecycle, () =>
+      this.ctx.pivot.refresh(sheetId, pivotId),
+    );
+    return buildPivotAddWithSheetReceipt({
+      sheetId,
+      sheetName,
+      config: created,
+      lifecycle: options?.lifecycle ?? 'defineOnly',
+      result: materialization.result,
+      materializationError: materialization.error,
+    });
   }
 
   async getAll(): Promise<DataPivotTableConfig[]> {
@@ -273,38 +303,33 @@ export class WorksheetPivotsImpl implements WorksheetPivots {
     }
   }
 
-  async rename(name: string, newName: string): Promise<void> {
-    const pivotId = await this.resolveNameToId(name, 'rename');
-    const updated = await this.ctx.pivot.updatePivot(
-      this.sheetId,
-      pivotId,
-      { name: newName },
-      { reason: 'renamed', refreshPolicy: 'refreshAndMaterialize' },
-    );
-    if (updated) {
-      this.cachePivot(updated);
-    }
+  async rename(name: string, newName: string) {
+    return applyPivotRenameReceipt({
+      ctx: this.ctx,
+      sheetId: this.sheetId,
+      pivotName: name,
+      newName,
+      cachePivot: (config) => this.cachePivot(config),
+    });
   }
 
-  async remove(name: string): Promise<void> {
+  async remove(name: string) {
     this._assertLive('remove');
-    const pivot = await findPivotByName(this.ctx, this.sheetId, name);
-    if (!pivot) {
-      throw new KernelError('COMPUTE_ERROR', `Pivot table "${name}" not found`);
-    }
-    if (!pivot.id) {
-      throw new KernelError('COMPUTE_ERROR', 'Pivot ID is required');
-    }
-    await this.ctx.pivot.deletePivot(this.sheetId, pivot.id);
-    this.markPivotDeleted(pivot.id);
+    return applyPivotRemoveReceipt({
+      ctx: this.ctx,
+      sheetId: this.sheetId,
+      pivotName: name,
+      markPivotDeleted: (pivotId) => this.markPivotDeleted(pivotId),
+    });
   }
 
-  async clear(): Promise<void> {
+  async clear() {
     this._assertLive('clear');
-    const pivots = await this.list();
-    for (const pivot of pivots) {
-      await this.remove(pivot.name);
-    }
+    return applyPivotClearReceipt({
+      ctx: this.ctx,
+      sheetId: this.sheetId,
+      markPivotDeleted: (pivotId) => this.markPivotDeleted(pivotId),
+    });
   }
 
   async list(): Promise<PivotTableInfo[]> {
@@ -378,24 +403,38 @@ export class WorksheetPivotsImpl implements WorksheetPivots {
       displayName?: string;
       showValuesAs?: ShowValuesAsConfig;
     },
-  ): Promise<void> {
-    await addPivotField({
+  ) {
+    return runPivotMutationReceipt({
+      kind: 'pivot.addField',
       ctx: this.ctx,
       sheetId: this.sheetId,
       pivotName: name,
-      fieldId,
-      area,
-      placementOptions: options,
+      mutate: () =>
+        addPivotField({
+          ctx: this.ctx,
+          sheetId: this.sheetId,
+          pivotName: name,
+          fieldId,
+          area,
+          placementOptions: options,
+        }),
+      cachePivot: (config) => this.cachePivot(config),
     });
   }
 
-  async removeField(name: string, fieldId: string, area: PivotFieldArea): Promise<void> {
-    await removePivotField({
+  async removeField(name: string, fieldId: string, area: PivotFieldArea) {
+    return runPivotMutationReceipt({
+      kind: 'pivot.removeField',
       ctx: this.ctx,
       sheetId: this.sheetId,
       pivotName: name,
-      fieldId,
-      area,
+      noOp: (config) =>
+        config && !config.placements.some((p) => p.fieldId === fieldId && p.area === area)
+          ? 'fieldNotPlaced'
+          : null,
+      mutate: () =>
+        removePivotField({ ctx: this.ctx, sheetId: this.sheetId, pivotName: name, fieldId, area }),
+      cachePivot: (config) => this.cachePivot(config),
     });
   }
 
@@ -405,15 +444,29 @@ export class WorksheetPivotsImpl implements WorksheetPivots {
     fromArea: PivotFieldArea,
     toArea: PivotFieldArea,
     toPosition: number,
-  ): Promise<void> {
-    await movePivotField({
+  ) {
+    return runPivotMutationReceipt({
+      kind: 'pivot.moveField',
       ctx: this.ctx,
       sheetId: this.sheetId,
       pivotName: name,
-      fieldId,
-      fromArea,
-      toArea,
-      toPosition,
+      noOp: (config) => {
+        const p = config?.placements.find(
+          (candidate) => candidate.fieldId === fieldId && candidate.area === fromArea,
+        );
+        return p && p.area === toArea && p.position === toPosition ? 'alreadyAtTarget' : null;
+      },
+      mutate: () =>
+        movePivotField({
+          ctx: this.ctx,
+          sheetId: this.sheetId,
+          pivotName: name,
+          fieldId,
+          fromArea,
+          toArea,
+          toPosition,
+        }),
+      cachePivot: (config) => this.cachePivot(config),
     });
   }
 
@@ -478,35 +531,49 @@ export class WorksheetPivotsImpl implements WorksheetPivots {
     });
   }
 
-  async setFilter(
-    name: string,
-    fieldId: string,
-    filter: Omit<PivotFilter, 'fieldId'>,
-  ): Promise<void> {
-    await setPivotFilterByName({
+  async setFilter(name: string, fieldId: string, filter: Omit<PivotFilter, 'fieldId'>) {
+    return runPivotMutationReceipt({
+      kind: 'pivot.setFilter',
       ctx: this.ctx,
       sheetId: this.sheetId,
       pivotName: name,
-      fieldId,
-      filter,
+      mutate: () =>
+        setPivotFilterByName({
+          ctx: this.ctx,
+          sheetId: this.sheetId,
+          pivotName: name,
+          fieldId,
+          filter,
+        }),
+      cachePivot: (config) => this.cachePivot(config),
     });
   }
 
-  async removeFilter(name: string, fieldId: string): Promise<void> {
-    await removePivotFilterByName({
+  async removeFilter(name: string, fieldId: string) {
+    return runPivotMutationReceipt({
+      kind: 'pivot.removeFilter',
       ctx: this.ctx,
       sheetId: this.sheetId,
       pivotName: name,
-      fieldId,
+      noOp: (config) =>
+        config && !config.filters.some((filter) => filter.fieldId === fieldId)
+          ? 'filterNotSet'
+          : null,
+      mutate: () =>
+        removePivotFilterByName({ ctx: this.ctx, sheetId: this.sheetId, pivotName: name, fieldId }),
+      cachePivot: (config) => this.cachePivot(config),
     });
   }
 
-  async resetField(name: string, fieldId: string): Promise<void> {
-    await resetPivotField({
+  async resetField(name: string, fieldId: string) {
+    return runPivotMutationReceipt({
+      kind: 'pivot.resetField',
       ctx: this.ctx,
       sheetId: this.sheetId,
       pivotName: name,
-      fieldId,
+      mutate: () =>
+        resetPivotField({ ctx: this.ctx, sheetId: this.sheetId, pivotName: name, fieldId }),
+      cachePivot: (config) => this.cachePivot(config),
     });
   }
 
@@ -532,10 +599,6 @@ export class WorksheetPivotsImpl implements WorksheetPivots {
     });
   }
 
-  // ===========================================================================
-  // Computation
-  // ===========================================================================
-
   async detectFields(
     sourceSheetId: SheetId,
     range: { startRow: number; startCol: number; endRow: number; endCol: number },
@@ -543,9 +606,9 @@ export class WorksheetPivotsImpl implements WorksheetPivots {
     return await this.ctx.pivot.detectFields(sourceSheetId, range);
   }
 
-  async compute(name: string, forceRefresh?: boolean): Promise<PivotTableResult | null> {
-    const pivotId = await this.resolveNameToId(name, 'compute');
-    return await this.ctx.pivot.compute(this.sheetId, pivotId, forceRefresh);
+  async compute(name: string, forceRefresh?: boolean): Promise<PivotComputeReceipt> {
+    this._assertLive('compute');
+    return computePivotForReceipt({ ctx: this.ctx, sheetId: this.sheetId, name, forceRefresh });
   }
 
   async refresh(name: string): Promise<PivotRefreshReceipt> {
@@ -553,19 +616,48 @@ export class WorksheetPivotsImpl implements WorksheetPivots {
     return this._refreshByPivotId(pivotId);
   }
 
-  async refreshAll(): Promise<void> {
+  async refreshAll(): Promise<PivotRefreshAllReceipt> {
     let pivots: DataPivotTableConfig[];
     try {
       pivots = await this.ctx.pivot.getAllPivots(this.sheetId);
-    } catch {
-      return;
+    } catch (error) {
+      return buildPivotRefreshAllReceipt({
+        sheetId: this.sheetId,
+        receipts: [],
+        listError: error,
+      });
     }
-    await Promise.all(pivots.map((p) => this._refreshByPivotId(p.id ?? p.name)));
+    const receipts = await Promise.all(pivots.map((p) => this._refreshByPivotId(p.id ?? p.name)));
+    return buildPivotRefreshAllReceipt({
+      sheetId: this.sheetId,
+      receipts,
+    });
   }
 
   private async _refreshByPivotId(pivotId: string): Promise<PivotRefreshReceipt> {
-    await this.ctx.pivot.refresh(this.sheetId, pivotId);
-    return { kind: 'pivotRefresh', pivotId };
+    let result: PivotTableResult | null = null;
+    let config: DataPivotTableConfig | null = null;
+    let error: unknown;
+    try {
+      result = await this.ctx.pivot.refresh(this.sheetId, pivotId);
+    } catch (caught) {
+      error = caught;
+    }
+    try {
+      config = await this.ctx.pivot.getPivot(this.sheetId, pivotId);
+    } catch (caught) {
+      error ??= caught;
+    }
+    if (config) {
+      this.cachePivot(config);
+    }
+    return buildPivotRefreshReceipt({
+      sheetId: this.sheetId,
+      pivotId,
+      config,
+      result,
+      materializationError: error,
+    });
   }
 
   async getDrillDownData(name: string, rowKey: string, columnKey: string): Promise<CellValue[][]> {
@@ -576,13 +668,9 @@ export class WorksheetPivotsImpl implements WorksheetPivots {
   async queryPivot(
     pivotName: string,
     filters?: Record<string, CellValue | CellValue[]>,
-  ): Promise<PivotQueryResult | null> {
-    return queryPivotByName({
-      ctx: this.ctx,
-      sheetId: this.sheetId,
-      pivotName,
-      filters,
-    });
+  ): Promise<PivotQueryReceipt> {
+    this._assertLive('queryPivot');
+    return queryPivotForReceipt({ ctx: this.ctx, sheetId: this.sheetId, pivotName, filters });
   }
 
   // ===========================================================================
@@ -598,22 +686,46 @@ export class WorksheetPivotsImpl implements WorksheetPivots {
     name: string,
     fieldId: string,
     visibleItems: Record<string, boolean>,
-  ): Promise<void> {
-    await setPivotItemVisibilityByName({
+  ) {
+    return runPivotMutationReceipt({
+      kind: 'pivot.setPivotItemVisibility',
       ctx: this.ctx,
       sheetId: this.sheetId,
       pivotName: name,
-      fieldId,
-      visibleItems,
+      noOp: (config) =>
+        config &&
+        Object.keys(visibleItems).length === 0 &&
+        !config.filters.some((f) => f.fieldId === fieldId)
+          ? 'emptyVisibilityUnchanged'
+          : null,
+      mutate: () =>
+        setPivotItemVisibilityByName({
+          ctx: this.ctx,
+          sheetId: this.sheetId,
+          pivotName: name,
+          fieldId,
+          visibleItems,
+        }),
+      cachePivot: (config) => this.cachePivot(config),
     });
   }
 
-  async setItemVisibility(
-    name: string,
-    fieldId: string,
-    visibleItems: Record<string, boolean>,
-  ): Promise<void> {
-    await this.setPivotItemVisibility(name, fieldId, visibleItems);
+  async setItemVisibility(name: string, fieldId: string, visibleItems: Record<string, boolean>) {
+    return runPivotMutationReceipt({
+      kind: 'pivot.setItemVisibility',
+      ctx: this.ctx,
+      sheetId: this.sheetId,
+      pivotName: name,
+      mutate: () =>
+        setPivotItemVisibilityByName({
+          ctx: this.ctx,
+          sheetId: this.sheetId,
+          pivotName: name,
+          fieldId,
+          visibleItems,
+        }),
+      cachePivot: (config) => this.cachePivot(config),
+    });
   }
 
   // ===========================================================================
@@ -627,9 +739,20 @@ export class WorksheetPivotsImpl implements WorksheetPivots {
     return provider.toggleExpanded(pivotId, headerKey, isRow, this.sheetId);
   }
 
-  async setAllExpanded(name: string, expanded: boolean): Promise<void> {
-    const pivotId = await this.resolveNameToId(name, 'setAllExpanded');
-    this.ctx.pivotExpansionProvider?.setAllExpanded(pivotId, expanded);
+  async setAllExpanded(name: string, expanded: boolean) {
+    return runPivotMutationReceipt({
+      kind: 'pivot.setAllExpanded',
+      ctx: this.ctx,
+      sheetId: this.sheetId,
+      pivotName: name,
+      noOp: (config) => (config && !this.ctx.pivotExpansionProvider ? 'noExpansionProvider' : null),
+      mutate: async (config) => {
+        if (!config)
+          throw new KernelError('COMPUTE_ERROR', `setAllExpanded: Pivot table "${name}" not found`);
+        this.ctx.pivotExpansionProvider?.setAllExpanded(this.pivotId(config), expanded);
+      },
+      extra: { expanded },
+    });
   }
 
   async getExpansionState(name: string): Promise<PivotExpansionState> {
@@ -653,16 +776,20 @@ export class WorksheetPivotsImpl implements WorksheetPivots {
     return 'range';
   }
 
-  async setDataSource(name: string, dataSource: string): Promise<void> {
-    const pivotId = await this.resolveNameToId(name, 'setDataSource');
-    const config =
-      (await findPivotByName(this.ctx, this.sheetId, name)) ??
-      (await requirePivot(this.ctx, this.sheetId, pivotId, 'setDataSource'));
-    await this._setDataSourceByPivotId(pivotId, config, dataSource, name);
-    const updated = await this.ctx.pivot.getPivot(this.sheetId, pivotId);
-    if (updated) {
-      this.cachePivot(updated);
-    }
+  async setDataSource(name: string, dataSource: string) {
+    return runPivotMutationReceipt({
+      kind: 'pivot.setDataSource',
+      ctx: this.ctx,
+      sheetId: this.sheetId,
+      pivotName: name,
+      mutate: async (config) => {
+        if (!config)
+          throw new KernelError('COMPUTE_ERROR', `setDataSource: Pivot table "${name}" not found`);
+        await this._setDataSourceByPivotId(this.pivotId(config), config, dataSource, name);
+      },
+      cachePivot: (config) => this.cachePivot(config),
+      extra: { dataSource },
+    });
   }
 
   private async setDataSourceForHandle(pivotId: string, dataSource: string): Promise<void> {
@@ -698,12 +825,25 @@ export class WorksheetPivotsImpl implements WorksheetPivots {
     });
   }
 
-  async setAllowMultipleFiltersPerField(name: string, allow: boolean): Promise<void> {
-    await setPivotAllowMultipleFiltersPerField({
+  async setAllowMultipleFiltersPerField(name: string, allow: boolean) {
+    return runPivotMutationReceipt({
+      kind: 'pivot.setAllowMultipleFiltersPerField',
       ctx: this.ctx,
       sheetId: this.sheetId,
       pivotName: name,
-      allow,
+      noOp: (config) =>
+        config && (config.allowMultipleFiltersPerField ?? false) === allow
+          ? 'unchangedOption'
+          : null,
+      mutate: () =>
+        setPivotAllowMultipleFiltersPerField({
+          ctx: this.ctx,
+          sheetId: this.sheetId,
+          pivotName: name,
+          allow,
+        }),
+      cachePivot: (config) => this.cachePivot(config),
+      extra: { allowMultipleFiltersPerField: allow },
     });
   }
 
@@ -715,12 +855,18 @@ export class WorksheetPivotsImpl implements WorksheetPivots {
     });
   }
 
-  async setAutoFormat(name: string, autoFormat: boolean): Promise<void> {
-    await setPivotAutoFormat({
+  async setAutoFormat(name: string, autoFormat: boolean) {
+    return runPivotMutationReceipt({
+      kind: 'pivot.setAutoFormat',
       ctx: this.ctx,
       sheetId: this.sheetId,
       pivotName: name,
-      autoFormat,
+      noOp: (config) =>
+        config && (config.autoFormat ?? true) === autoFormat ? 'unchangedOption' : null,
+      mutate: () =>
+        setPivotAutoFormat({ ctx: this.ctx, sheetId: this.sheetId, pivotName: name, autoFormat }),
+      cachePivot: (config) => this.cachePivot(config),
+      extra: { autoFormat },
     });
   }
 
@@ -732,12 +878,23 @@ export class WorksheetPivotsImpl implements WorksheetPivots {
     });
   }
 
-  async setPreserveFormatting(name: string, preserve: boolean): Promise<void> {
-    await setPivotPreserveFormatting({
+  async setPreserveFormatting(name: string, preserve: boolean) {
+    return runPivotMutationReceipt({
+      kind: 'pivot.setPreserveFormatting',
       ctx: this.ctx,
       sheetId: this.sheetId,
       pivotName: name,
-      preserve,
+      noOp: (config) =>
+        config && (config.preserveFormatting ?? true) === preserve ? 'unchangedOption' : null,
+      mutate: () =>
+        setPivotPreserveFormatting({
+          ctx: this.ctx,
+          sheetId: this.sheetId,
+          pivotName: name,
+          preserve,
+        }),
+      cachePivot: (config) => this.cachePivot(config),
+      extra: { preserveFormatting: preserve },
     });
   }
 
@@ -787,16 +944,25 @@ export class WorksheetPivotsImpl implements WorksheetPivots {
     });
   }
 
-  async setEnableMultipleFilterItems(
-    name: string,
-    _fieldId: string,
-    enabled: boolean,
-  ): Promise<void> {
-    await setPivotEnableMultipleFilterItems({
+  async setEnableMultipleFilterItems(name: string, _fieldId: string, enabled: boolean) {
+    return runPivotMutationReceipt({
+      kind: 'pivot.setEnableMultipleFilterItems',
       ctx: this.ctx,
       sheetId: this.sheetId,
       pivotName: name,
-      enabled,
+      noOp: (config) =>
+        config && (config.allowMultipleFiltersPerField ?? false) === enabled
+          ? 'unchangedOption'
+          : null,
+      mutate: () =>
+        setPivotEnableMultipleFilterItems({
+          ctx: this.ctx,
+          sheetId: this.sheetId,
+          pivotName: name,
+          enabled,
+        }),
+      cachePivot: (config) => this.cachePivot(config),
+      extra: { fieldId: _fieldId, enableMultipleFilterItems: enabled },
     });
   }
 
@@ -804,23 +970,44 @@ export class WorksheetPivotsImpl implements WorksheetPivots {
   // Calculated Fields
   // ===========================================================================
 
-  addCalculatedField(name: string, field: CalculatedField): Promise<void>;
-  async addCalculatedField(name: string, field: CalculatedField): Promise<void> {
-    await addPivotCalculatedFieldByName({
+  async addCalculatedField(name: string, field: CalculatedField) {
+    return runPivotMutationReceipt({
+      kind: 'pivot.addCalculatedField',
       ctx: this.ctx,
       sheetId: this.sheetId,
       pivotName: name,
-      field,
+      mutate: () =>
+        addPivotCalculatedFieldByName({
+          ctx: this.ctx,
+          sheetId: this.sheetId,
+          pivotName: name,
+          field,
+        }),
+      cachePivot: (config) => this.cachePivot(config),
+      extra: { calculatedFieldId: field.calculatedFieldId },
     });
   }
 
-  removeCalculatedField(name: string, fieldId: string): Promise<void>;
-  async removeCalculatedField(name: string, fieldId: string): Promise<void> {
-    await removePivotCalculatedFieldByName({
+  async removeCalculatedField(name: string, fieldId: string) {
+    return runPivotMutationReceipt({
+      kind: 'pivot.removeCalculatedField',
       ctx: this.ctx,
       sheetId: this.sheetId,
       pivotName: name,
-      fieldId,
+      noOp: (config) =>
+        config &&
+        !(config.calculatedFields ?? []).some((field) => field.fieldId === fieldId) &&
+        !config.placements.some((p) => p.fieldId === fieldId || p.calculatedFieldId === fieldId)
+          ? 'calculatedFieldNotPresent'
+          : null,
+      mutate: () =>
+        removePivotCalculatedFieldByName({
+          ctx: this.ctx,
+          sheetId: this.sheetId,
+          pivotName: name,
+          fieldId,
+        }),
+      cachePivot: (config) => this.cachePivot(config),
     });
   }
 

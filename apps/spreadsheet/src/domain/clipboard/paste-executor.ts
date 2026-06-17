@@ -35,6 +35,7 @@ import {
   type CreateConditionalFormat,
 } from './conditional-format-paste';
 import { parseCellKey } from './clipboard-utils';
+import { shouldResetNumberFormatBeforeExternalPaste } from './external-paste-format-reset';
 import { isDenseCoreCopyUnsafeForSource } from './full-shape-ranges';
 
 // =============================================================================
@@ -1095,7 +1096,8 @@ export async function executePaste(
       // Handle value/formula paste
       // Skipped for the core copy_range fast path (engine owns the write).
       if (!useCoreCopyRange && (pasteAll || valuesOnly || formulasOnly)) {
-        let pastedRawValue = false;
+        let didPasteRawValue = false;
+        let pastedRawValue: unknown;
         if (cellData.formula && !valuesOnly) {
           // Paste formula
           const formulaStr = cellData.formula;
@@ -1114,10 +1116,17 @@ export async function executePaste(
               value: rawValue as string | number | boolean,
             });
           }
-          pastedRawValue = true;
+          didPasteRawValue = true;
+          pastedRawValue = rawValue;
         }
 
-        if (pastedRawValue && isExternalSource && pasteAll && !cellData.format) {
+        if (
+          didPasteRawValue &&
+          isExternalSource &&
+          pasteAll &&
+          !cellData.format &&
+          shouldResetNumberFormatBeforeExternalPaste(pastedRawValue)
+        ) {
           preValueFormatUpdates.push({
             row: targetRow,
             col: targetCol,

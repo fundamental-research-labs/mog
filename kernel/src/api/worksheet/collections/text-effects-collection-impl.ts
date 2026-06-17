@@ -1,5 +1,6 @@
 import type {
   CreateTextEffectInput,
+  FloatingObjectHandleMutationReceipt,
   TextEffectDefaults,
   TextEffectHandle,
   TextEffectObjectConfig,
@@ -13,6 +14,7 @@ import {
   DEFAULT_TEXT_EFFECT_HEIGHT,
   DEFAULT_TEXT_EFFECT_WIDTH,
 } from '../operations/text-effects-operations';
+import { attachFloatingObjectHandle } from '../objects-receipts';
 import { TextEffectHandleImpl } from '../handles/text-effects-handle-impl';
 
 export class WorksheetTextEffectCollectionImpl implements WorksheetTextEffectCollection {
@@ -35,9 +37,12 @@ export class WorksheetTextEffectCollectionImpl implements WorksheetTextEffectCol
       .map((info) => new TextEffectHandleImpl(info.id, this.objectsImpl, this.boundsReader));
   }
 
-  async add(config: CreateTextEffectInput): Promise<TextEffectHandle> {
-    const id = await this.objectsImpl.addTextEffect(config);
-    return new TextEffectHandleImpl(id, this.objectsImpl, this.boundsReader);
+  async add(
+    config: CreateTextEffectInput,
+  ): Promise<FloatingObjectHandleMutationReceipt<TextEffectHandle>> {
+    const receipt = await this.objectsImpl.addTextEffect(config);
+    const handle = new TextEffectHandleImpl(receipt.id, this.objectsImpl, this.boundsReader);
+    return attachFloatingObjectHandle(receipt, handle);
   }
 
   async getDefaultConfig(): Promise<TextEffectObjectConfig> {

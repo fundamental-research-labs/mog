@@ -9,6 +9,16 @@ import type { ParsedCellAddress, ParsedCellRange } from '@mog-sdk/contracts/util
 
 import { normalizeRange } from './range';
 
+function assertAddressIndex(value: number, name: string): number {
+  if (!Number.isInteger(value)) {
+    throw new Error(`${name} must be an integer`);
+  }
+  if (value < 0) {
+    throw new Error(`${name} must be >= 0`);
+  }
+  return value;
+}
+
 /**
  * Convert column index to letter(s): 0 = 'A', 25 = 'Z', 26 = 'AA'
  */
@@ -101,6 +111,82 @@ export function cellRangeToA1(range: CellRange): string {
  */
 export function toA1(row: number, col: number): string {
   return `${colToLetter(col)}${row + 1}`;
+}
+
+/**
+ * Convert row/column coordinates to an A1 cell address.
+ *
+ * Uses Mog's zero-based coordinates: (0, 0) -> "A1".
+ */
+export function address(row: number, col: number): string {
+  return toA1(assertAddressIndex(row, 'row'), assertAddressIndex(col, 'col'));
+}
+
+/** Convert two row/column coordinate pairs to an A1 range address. */
+export function range(row1: number, col1: number, row2: number, col2: number): string {
+  return cellRangeToA1({
+    startRow: assertAddressIndex(row1, 'row1'),
+    startCol: assertAddressIndex(col1, 'col1'),
+    endRow: assertAddressIndex(row2, 'row2'),
+    endCol: assertAddressIndex(col2, 'col2'),
+  });
+}
+
+/**
+ * Convert a column index to its spreadsheet column name.
+ * Uses Mog's zero-based column indexes: 0 -> "A".
+ */
+export function column(index: number): string {
+  return colToLetter(assertAddressIndex(index, 'index'));
+}
+
+/**
+ * Convert a spreadsheet column name to a column index.
+ * Uses Mog's zero-based column indexes: "A" -> 0.
+ */
+export function columnIndex(name: string): number {
+  if (!/^[A-Za-z]+$/.test(name)) {
+    throw new Error(`Invalid column name: ${name}`);
+  }
+  return letterToCol(name);
+}
+
+/**
+ * Parse an A1 cell address into row/column coordinates.
+ *
+ * Returns null for invalid addresses, mirroring parseCellAddress(). Parsed
+ * coordinates are zero-based to match Mog APIs.
+ */
+export function parse(ref: string): ParsedCellAddress | null {
+  return parseCellAddress(ref);
+}
+
+/** Descriptive alias for a1.range(). */
+export const rangeAddress = range;
+
+/** Descriptive alias for a1.column(). */
+export const columnName = column;
+
+/** Descriptive alias for a1.parse(). */
+export const parseAddress = parse;
+
+/** Offset an A1 cell address by row/column deltas and return the resulting A1 address. */
+export function offset(ref: string, dr: number, dc: number): string {
+  if (!Number.isInteger(dr)) throw new Error('dr must be an integer');
+  if (!Number.isInteger(dc)) throw new Error('dc must be an integer');
+
+  const parsed = parseCellAddress(ref);
+  if (!parsed) {
+    throw new Error(`Invalid cell address: ${ref}`);
+  }
+
+  const row = parsed.row + dr;
+  const col = parsed.col + dc;
+  if (row < 0 || col < 0) {
+    throw new Error(`Offset moves address before A1: ${ref}`);
+  }
+
+  return parsed.sheetName ? toSheetA1(row, col, parsed.sheetName) : toA1(row, col);
 }
 
 /**

@@ -124,6 +124,11 @@
       "suggestion": "Mog APIs return real values directly. Await the Mog method that reads or writes the data you need.",
       "mogReplacements": [
         {
+          "path": "ws.getCells",
+          "snippet": "const cells = await ws.getCells(\"A1:B2\");",
+          "note": "Use when you need addresses, absolute row/col, formulas, formats, or range-relative offsets."
+        },
+        {
           "path": "ws.getValues",
           "snippet": "const values = await ws.getValues(\"A1:B2\");"
         },
@@ -263,8 +268,13 @@
         }
       ],
       "message": "Microsoft Office JavaScript spreadsheet range proxy reads require load/sync; Mog reads return values directly.",
-      "suggestion": "Use `await ws.getValues(range)` or `await ws.getRange(range)`.",
+      "suggestion": "Use `await ws.getCells(range)` for address-bearing cells, `await ws.getValues(range)` for a value matrix, or `await ws.getRange(range)` for a cell-data matrix.",
       "mogReplacements": [
+        {
+          "path": "ws.getCells",
+          "snippet": "const cells = await ws.getCells(\"A1:B2\");",
+          "note": "Flat records include address, row, col, value, formula, format, and range offsets."
+        },
         {
           "path": "ws.getValues",
           "snippet": "const values = await ws.getValues(\"A1:B2\");"
@@ -329,6 +339,104 @@
         }
       ],
       "confidence": 0.9,
+      "blocking": true
+    },
+    {
+      "id": "officejs.what-if-data-table",
+      "dialect": "officejs",
+      "category": "worksheet",
+      "matchers": [
+        {
+          "id": "officejs-workbook-application-calculate",
+          "kind": "call",
+          "symbol": "context.workbook.application.calculate",
+          "confidence": 0.8
+        },
+        {
+          "id": "officejs-calculation-type",
+          "kind": "member-chain",
+          "symbol": "Excel.CalculationType",
+          "confidence": 0.78
+        }
+      ],
+      "message": "Microsoft Office JavaScript spreadsheet recalculation helpers do not expose Mog Data Table receipt semantics.",
+      "suggestion": "Use worksheet what-if APIs and branch on receipt status, diagnostics, and effects before reading results or assuming worksheet writes.",
+      "mogReplacements": [
+        {
+          "path": "ws.whatIf.dataTable",
+          "snippet": "const receipt = await ws.whatIf.dataTable(\"B3\", {\n  rowInputCell: \"B1\",\n  colInputCell: \"B2\",\n  rowValues: [0.08, 0.09, 0.1],\n  colValues: [0.02, 0.025, 0.03],\n});\nconst diagnosticMessage = receipt.diagnostics\n  .map((diagnostic) => diagnostic.message)\n  .join(\"\\n\");\nif (receipt.status === \"failed\" || receipt.status === \"unsupported\") {\n  throw new Error(diagnosticMessage || \"Data Table compute \" + receipt.status);\n}\nif (receipt.status !== \"completed\") {\n  throw new Error(diagnosticMessage || \"Data Table compute \" + receipt.status);\n}\nif (!receipt.effects.some((effect) => effect.type === \"computedGrid\")) {\n  throw new Error(\"Data Table compute did not report a computed grid\");\n}\nconst computedGrid = receipt.results;",
+          "note": "Transient Data Table compute returns a receipt and does not mutate the worksheet."
+        },
+        {
+          "path": "ws.whatIf.createDataTable",
+          "snippet": "const receipt = await ws.whatIf.createDataTable({\n  tableRange: \"B3:F8\",\n  rowInputCell: \"B1\",\n  colInputCell: \"B2\",\n});\nconst diagnosticMessage = receipt.diagnostics\n  .map((diagnostic) => diagnostic.message)\n  .join(\"\\n\");\nif (receipt.status === \"failed\" || receipt.status === \"unsupported\") {\n  throw new Error(diagnosticMessage || \"Data Table create \" + receipt.status);\n}\nif (receipt.status === \"partial\" || !receipt.materialized) {\n  const repairHint = receipt.diagnostics.find((diagnostic) => diagnostic.recoverable)?.nextAction;\n  const repair = await ws.whatIf.refreshDataTable(receipt.regionId, { force: true });\n  const repairDiagnostics = repair.diagnostics\n    .map((diagnostic) => diagnostic.message)\n    .join(\"\\n\");\n  if (\n    repair.status === \"failed\" ||\n    repair.status === \"unsupported\" ||\n    repair.status === \"partial\"\n  ) {\n    throw new Error(repairDiagnostics || repairHint || \"Data Table repair \" + repair.status);\n  }\n}\nconst materializedRanges = receipt.effects\n  .filter((effect) => effect.type === \"materializedCells\" && effect.range)\n  .map((effect) => effect.range);",
+          "note": "Persistent Data Table creation can be applied, partial, failed, or unsupported."
+        },
+        {
+          "path": "ws.whatIf.refreshDataTable",
+          "snippet": "const repair = await ws.whatIf.refreshDataTable(\"B3:F8\", {\n  force: true,\n});\nconst diagnosticMessage = repair.diagnostics\n  .map((diagnostic) => diagnostic.message)\n  .join(\"\\n\");\nif (\n  repair.status === \"failed\" ||\n  repair.status === \"unsupported\" ||\n  repair.status === \"partial\"\n) {\n  throw new Error(diagnosticMessage || \"Data Table repair \" + repair.status);\n}\nconst refreshedRanges = repair.effects\n  .filter((effect) => effect.type === \"materializedCells\" && effect.range)\n  .map((effect) => effect.range);",
+          "note": "Use refresh receipts to repair or verify a partial materialized Data Table."
+        }
+      ],
+      "confidence": 0.82,
+      "blocking": true
+    },
+    {
+      "id": "officejs.pivots",
+      "dialect": "officejs",
+      "category": "pivots",
+      "matchers": [
+        {
+          "id": "officejs-context-workbook-pivottables",
+          "kind": "member-chain",
+          "symbol": "context.workbook.pivotTables",
+          "confidence": 0.86
+        }
+      ],
+      "message": "Microsoft Office JavaScript pivot table APIs do not return Mog materialization receipts.",
+      "suggestion": "Use `ws.pivots.add(..., { lifecycle: \"materialize\" })` and branch on the returned receipt before relying on rendered output.",
+      "mogReplacements": [
+        {
+          "path": "ws.pivots.add",
+          "snippet": "const receipt = await ws.pivots.add(\n  {\n    name: \"SalesPivot\",\n    dataSource: \"Sales!A1:E500\",\n    targetSheet: \"Summary\",\n    targetAddress: \"A3\",\n    rowFields: [\"Region\"],\n    columnFields: [\"Quarter\"],\n    valueFields: [{ field: \"Revenue\", aggregation: \"sum\" }],\n  },\n  { lifecycle: \"materialize\" },\n);\nconst diagnosticMessage = receipt.diagnostics\n  .map((diagnostic) => diagnostic.message)\n  .join(\"\\n\");\nif (receipt.status === \"failed\") {\n  throw new Error(diagnosticMessage || \"Pivot materialization failed\");\n}\nif (receipt.status === \"partial\" || !receipt.materialized) {\n  const repair = await ws.pivots.refresh(receipt.config.name);\n  const repairDiagnostics = repair.diagnostics\n    .map((diagnostic) => diagnostic.message)\n    .join(\"\\n\");\n  if (repair.status !== \"applied\") {\n    throw new Error(repairDiagnostics || \"Pivot repair \" + repair.status);\n  }\n}\nconst changedRanges = receipt.effects\n  .filter((effect) => effect.range)\n  .map((effect) => effect.range);",
+          "note": "Materialized pivot creation can return applied, partial, or failed receipts."
+        },
+        {
+          "path": "ws.pivots.refresh",
+          "snippet": "const receipt = await ws.pivots.add(\n  {\n    name: \"SalesPivot\",\n    dataSource: \"Sales!A1:E500\",\n    targetSheet: \"Summary\",\n    targetAddress: \"A3\",\n    rowFields: [\"Region\"],\n    columnFields: [\"Quarter\"],\n    valueFields: [{ field: \"Revenue\", aggregation: \"sum\" }],\n  },\n  { lifecycle: \"materialize\" },\n);\nconst diagnosticMessage = receipt.diagnostics\n  .map((diagnostic) => diagnostic.message)\n  .join(\"\\n\");\nif (receipt.status === \"failed\") {\n  throw new Error(diagnosticMessage || \"Pivot materialization failed\");\n}\nif (receipt.status === \"partial\" || !receipt.materialized) {\n  const repair = await ws.pivots.refresh(receipt.config.name);\n  const repairDiagnostics = repair.diagnostics\n    .map((diagnostic) => diagnostic.message)\n    .join(\"\\n\");\n  if (repair.status !== \"applied\") {\n    throw new Error(repairDiagnostics || \"Pivot repair \" + repair.status);\n  }\n}\nconst changedRanges = receipt.effects\n  .filter((effect) => effect.range)\n  .map((effect) => effect.range);",
+          "note": "Refresh is the public repair path when materialization was partial."
+        }
+      ],
+      "confidence": 0.84,
+      "blocking": true
+    },
+    {
+      "id": "officejs.autofill",
+      "dialect": "officejs",
+      "category": "range",
+      "matchers": [
+        {
+          "id": "officejs-excel-autofill-type",
+          "kind": "member-chain",
+          "symbol": "Excel.AutoFillType",
+          "confidence": 0.86
+        }
+      ],
+      "message": "Microsoft Office JavaScript autofill does not provide Mog preview receipts.",
+      "suggestion": "Preview first with `ws.autoFillPreview(...)`, inspect diagnostics and reference diagnostics, then call `ws.autoFill(...)` only when the preview is acceptable.",
+      "mogReplacements": [
+        {
+          "path": "ws.autoFillPreview",
+          "snippet": "const preview = await ws.autoFillPreview(\"A2:A3\", \"A4:A20\", \"series\");\nconst previewDiagnostics = [\n  ...preview.diagnostics.map((diagnostic) => diagnostic.message),\n  ...preview.referenceDiagnostics\n    .filter((diagnostic) => diagnostic.outOfBounds)\n    .map((diagnostic) => \"Reference out of bounds at \" + diagnostic.row + \",\" + diagnostic.col),\n];\nif (previewDiagnostics.length > 0) {\n  throw new Error(previewDiagnostics.join(\"\\n\"));\n}\nif (preview.status !== \"completed\" || preview.worksheetChanged || preview.undoChanged) {\n  throw new Error(\"Autofill preview did not remain read-only\");\n}\nconst receipt = await ws.autoFill(\"A2:A3\", \"A4:A20\", preview.mode);\nif (receipt.status === \"applied\") {\n  const changedRanges = receipt.effects\n    .filter((effect) => effect.type === \"changedRange\" && effect.range)\n    .map((effect) => effect.range);\n}",
+          "note": "Preview uses the same fill engine as apply without changing worksheet cells or undo state."
+        },
+        {
+          "path": "ws.autoFill",
+          "snippet": "const preview = await ws.autoFillPreview(\"A2:A3\", \"A4:A20\", \"series\");\nconst previewDiagnostics = [\n  ...preview.diagnostics.map((diagnostic) => diagnostic.message),\n  ...preview.referenceDiagnostics\n    .filter((diagnostic) => diagnostic.outOfBounds)\n    .map((diagnostic) => \"Reference out of bounds at \" + diagnostic.row + \",\" + diagnostic.col),\n];\nif (previewDiagnostics.length > 0) {\n  throw new Error(previewDiagnostics.join(\"\\n\"));\n}\nif (preview.status !== \"completed\" || preview.worksheetChanged || preview.undoChanged) {\n  throw new Error(\"Autofill preview did not remain read-only\");\n}\nconst receipt = await ws.autoFill(\"A2:A3\", \"A4:A20\", preview.mode);\nif (receipt.status === \"applied\") {\n  const changedRanges = receipt.effects\n    .filter((effect) => effect.type === \"changedRange\" && effect.range)\n    .map((effect) => effect.range);\n}",
+          "note": "Apply after the preview receipt confirms the formula references are acceptable."
+        }
+      ],
+      "confidence": 0.86,
       "blocking": true
     },
     {
@@ -565,6 +673,330 @@
   "compatibility": {
     "schemaVersion": "1",
     "entries": [
+      {
+        "id": "mog-api.address.indexToIndex.unsupported",
+        "observedPath": "workbook.indexToIndex",
+        "canonicalPath": "a1.address",
+        "status": "structured_diagnostic",
+        "appliesTo": "method",
+        "ownerTheme": "sdk-agent-guidance/address-helper-ergonomics",
+        "ownerPackage": "@mog-sdk/sdk",
+        "firstObservedVersion": "0.9.4",
+        "canonicalSince": "0.9.5",
+        "deprecatedSince": null,
+        "removeAfter": null,
+        "evidence": [
+          {
+            "source": "source",
+            "reference": "api-compatibility:mog-api/worksheet-method-guidance"
+          }
+        ],
+        "behavior": "indexToIndex is a guessed address helper name. Use the canonical a1 helpers to format addresses or parse coordinates.",
+        "runtimeSurfaces": [
+          "executeCode-preflight",
+          "agent-guidance",
+          "docs",
+          "api-eval"
+        ],
+        "surfaceDisposition": {
+          "typescript": "structured_diagnostic",
+          "kernel": "structured_diagnostic",
+          "executeCode-preflight": "structured_diagnostic",
+          "api-describe": "structured_diagnostic",
+          "agent-guidance": "structured_diagnostic",
+          "docs": "structured_diagnostic",
+          "python": "structured_diagnostic",
+          "api-eval": "structured_diagnostic"
+        },
+        "diagnostics": {
+          "code": "MOG002_MOG_API_USAGE",
+          "message": "workbook.indexToIndex(row, col) is not a Mog API. Use a1.address(row, col) for row/column to A1 conversion, or a1.parse(address) for A1 to row/column conversion.",
+          "replacements": [
+            "a1.address",
+            "a1.parse"
+          ]
+        },
+        "verification": [
+          "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe"
+        ]
+      },
+      {
+        "id": "mog-api.address.wbIndexToIndex.unsupported",
+        "observedPath": "wb.indexToIndex",
+        "canonicalPath": "a1.address",
+        "status": "structured_diagnostic",
+        "appliesTo": "method",
+        "ownerTheme": "sdk-agent-guidance/address-helper-ergonomics",
+        "ownerPackage": "@mog-sdk/sdk",
+        "firstObservedVersion": "0.9.4",
+        "canonicalSince": "0.9.5",
+        "deprecatedSince": null,
+        "removeAfter": null,
+        "evidence": [
+          {
+            "source": "source",
+            "reference": "api-compatibility:mog-api/worksheet-method-guidance"
+          }
+        ],
+        "behavior": "indexToIndex is a guessed address helper name. Use the canonical a1 helpers to format addresses or parse coordinates.",
+        "runtimeSurfaces": [
+          "executeCode-preflight",
+          "agent-guidance",
+          "docs",
+          "api-eval"
+        ],
+        "surfaceDisposition": {
+          "typescript": "structured_diagnostic",
+          "kernel": "structured_diagnostic",
+          "executeCode-preflight": "structured_diagnostic",
+          "api-describe": "structured_diagnostic",
+          "agent-guidance": "structured_diagnostic",
+          "docs": "structured_diagnostic",
+          "python": "structured_diagnostic",
+          "api-eval": "structured_diagnostic"
+        },
+        "diagnostics": {
+          "code": "MOG002_MOG_API_USAGE",
+          "message": "wb.indexToIndex(row, col) is not a Mog API. Use a1.address(row, col) for row/column to A1 conversion, or a1.parse(address) for A1 to row/column conversion.",
+          "replacements": [
+            "a1.address",
+            "a1.parse"
+          ]
+        },
+        "verification": [
+          "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe"
+        ]
+      },
+      {
+        "id": "mog-api.address.worksheetAddressHelper.unsupported",
+        "observedPath": "ws.address",
+        "canonicalPath": "a1.address",
+        "status": "structured_diagnostic",
+        "appliesTo": "method",
+        "ownerTheme": "sdk-agent-guidance/address-helper-ergonomics",
+        "ownerPackage": "@mog-sdk/sdk",
+        "firstObservedVersion": "0.9.4",
+        "canonicalSince": "0.9.5",
+        "deprecatedSince": null,
+        "removeAfter": null,
+        "evidence": [
+          {
+            "source": "source",
+            "reference": "api-compatibility:mog-api/worksheet-method-guidance"
+          }
+        ],
+        "behavior": "Address helpers are stateless utilities, not worksheet methods. Use a1.address(row, col) for A1 formatting.",
+        "runtimeSurfaces": [
+          "executeCode-preflight",
+          "agent-guidance",
+          "docs",
+          "api-eval"
+        ],
+        "surfaceDisposition": {
+          "typescript": "structured_diagnostic",
+          "kernel": "structured_diagnostic",
+          "executeCode-preflight": "structured_diagnostic",
+          "api-describe": "structured_diagnostic",
+          "agent-guidance": "structured_diagnostic",
+          "docs": "structured_diagnostic",
+          "python": "structured_diagnostic",
+          "api-eval": "structured_diagnostic"
+        },
+        "diagnostics": {
+          "code": "MOG002_MOG_API_USAGE",
+          "message": "ws.address(row, col) is not a Mog worksheet method. Use a1.address(row, col).",
+          "replacements": [
+            "a1.address"
+          ]
+        },
+        "verification": [
+          "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe"
+        ]
+      },
+      {
+        "id": "mog-api.address.worksheetColumnIndexHelper.unsupported",
+        "observedPath": "ws.columnIndex",
+        "canonicalPath": "a1.columnIndex",
+        "status": "structured_diagnostic",
+        "appliesTo": "method",
+        "ownerTheme": "sdk-agent-guidance/address-helper-ergonomics",
+        "ownerPackage": "@mog-sdk/sdk",
+        "firstObservedVersion": "0.9.4",
+        "canonicalSince": "0.9.5",
+        "deprecatedSince": null,
+        "removeAfter": null,
+        "evidence": [
+          {
+            "source": "source",
+            "reference": "api-compatibility:mog-api/worksheet-method-guidance"
+          }
+        ],
+        "behavior": "Column-index helpers are stateless utilities, not worksheet methods. Use a1.columnIndex(name).",
+        "runtimeSurfaces": [
+          "executeCode-preflight",
+          "agent-guidance",
+          "docs",
+          "api-eval"
+        ],
+        "surfaceDisposition": {
+          "typescript": "structured_diagnostic",
+          "kernel": "structured_diagnostic",
+          "executeCode-preflight": "structured_diagnostic",
+          "api-describe": "structured_diagnostic",
+          "agent-guidance": "structured_diagnostic",
+          "docs": "structured_diagnostic",
+          "python": "structured_diagnostic",
+          "api-eval": "structured_diagnostic"
+        },
+        "diagnostics": {
+          "code": "MOG002_MOG_API_USAGE",
+          "message": "ws.columnIndex(name) is not a Mog worksheet method. Use a1.columnIndex(name).",
+          "replacements": [
+            "a1.columnIndex"
+          ]
+        },
+        "verification": [
+          "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe"
+        ]
+      },
+      {
+        "id": "mog-api.address.worksheetColumnNameHelper.unsupported",
+        "observedPath": "ws.columnName",
+        "canonicalPath": "a1.column",
+        "status": "structured_diagnostic",
+        "appliesTo": "method",
+        "ownerTheme": "sdk-agent-guidance/address-helper-ergonomics",
+        "ownerPackage": "@mog-sdk/sdk",
+        "firstObservedVersion": "0.9.4",
+        "canonicalSince": "0.9.5",
+        "deprecatedSince": null,
+        "removeAfter": null,
+        "evidence": [
+          {
+            "source": "source",
+            "reference": "api-compatibility:mog-api/worksheet-method-guidance"
+          }
+        ],
+        "behavior": "Column-name helpers are stateless utilities, not worksheet methods. Use a1.column(index).",
+        "runtimeSurfaces": [
+          "executeCode-preflight",
+          "agent-guidance",
+          "docs",
+          "api-eval"
+        ],
+        "surfaceDisposition": {
+          "typescript": "structured_diagnostic",
+          "kernel": "structured_diagnostic",
+          "executeCode-preflight": "structured_diagnostic",
+          "api-describe": "structured_diagnostic",
+          "agent-guidance": "structured_diagnostic",
+          "docs": "structured_diagnostic",
+          "python": "structured_diagnostic",
+          "api-eval": "structured_diagnostic"
+        },
+        "diagnostics": {
+          "code": "MOG002_MOG_API_USAGE",
+          "message": "ws.columnName(index) is not a Mog worksheet method. Use a1.column(index).",
+          "replacements": [
+            "a1.column"
+          ]
+        },
+        "verification": [
+          "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe"
+        ]
+      },
+      {
+        "id": "mog-api.address.worksheetOffsetHelper.unsupported",
+        "observedPath": "ws.offset",
+        "canonicalPath": "a1.offset",
+        "status": "structured_diagnostic",
+        "appliesTo": "method",
+        "ownerTheme": "sdk-agent-guidance/address-helper-ergonomics",
+        "ownerPackage": "@mog-sdk/sdk",
+        "firstObservedVersion": "0.9.4",
+        "canonicalSince": "0.9.5",
+        "deprecatedSince": null,
+        "removeAfter": null,
+        "evidence": [
+          {
+            "source": "source",
+            "reference": "api-compatibility:mog-api/worksheet-method-guidance"
+          }
+        ],
+        "behavior": "Address offset helpers are stateless utilities, not worksheet methods. Use a1.offset(address, dr, dc).",
+        "runtimeSurfaces": [
+          "executeCode-preflight",
+          "agent-guidance",
+          "docs",
+          "api-eval"
+        ],
+        "surfaceDisposition": {
+          "typescript": "structured_diagnostic",
+          "kernel": "structured_diagnostic",
+          "executeCode-preflight": "structured_diagnostic",
+          "api-describe": "structured_diagnostic",
+          "agent-guidance": "structured_diagnostic",
+          "docs": "structured_diagnostic",
+          "python": "structured_diagnostic",
+          "api-eval": "structured_diagnostic"
+        },
+        "diagnostics": {
+          "code": "MOG002_MOG_API_USAGE",
+          "message": "ws.offset(address, dr, dc) is not a Mog worksheet method. Use a1.offset(address, dr, dc).",
+          "replacements": [
+            "a1.offset"
+          ]
+        },
+        "verification": [
+          "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe"
+        ]
+      },
+      {
+        "id": "mog-api.address.worksheetRangeAddressHelper.unsupported",
+        "observedPath": "ws.rangeAddress",
+        "canonicalPath": "a1.range",
+        "status": "structured_diagnostic",
+        "appliesTo": "method",
+        "ownerTheme": "sdk-agent-guidance/address-helper-ergonomics",
+        "ownerPackage": "@mog-sdk/sdk",
+        "firstObservedVersion": "0.9.4",
+        "canonicalSince": "0.9.5",
+        "deprecatedSince": null,
+        "removeAfter": null,
+        "evidence": [
+          {
+            "source": "source",
+            "reference": "api-compatibility:mog-api/worksheet-method-guidance"
+          }
+        ],
+        "behavior": "Range address helpers are stateless utilities, not worksheet methods. Use a1.range(row1, col1, row2, col2).",
+        "runtimeSurfaces": [
+          "executeCode-preflight",
+          "agent-guidance",
+          "docs",
+          "api-eval"
+        ],
+        "surfaceDisposition": {
+          "typescript": "structured_diagnostic",
+          "kernel": "structured_diagnostic",
+          "executeCode-preflight": "structured_diagnostic",
+          "api-describe": "structured_diagnostic",
+          "agent-guidance": "structured_diagnostic",
+          "docs": "structured_diagnostic",
+          "python": "structured_diagnostic",
+          "api-eval": "structured_diagnostic"
+        },
+        "diagnostics": {
+          "code": "MOG002_MOG_API_USAGE",
+          "message": "ws.rangeAddress(row1, col1, row2, col2) is not a Mog worksheet method. Use a1.range(row1, col1, row2, col2).",
+          "replacements": [
+            "a1.range"
+          ]
+        },
+        "verification": [
+          "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe"
+        ]
+      },
       {
         "id": "mog-api.chart.imported-short-id.input-alias",
         "observedPath": "chart-import-N",
@@ -1264,24 +1696,24 @@
         ]
       },
       {
-        "id": "mog-api.worksheet.addressToIndex.unsupported",
-        "observedPath": "ws.addressToIndex",
-        "canonicalPath": "wb.addressToIndex",
+        "id": "mog-api.validation.dataValidationAdd.unsupported",
+        "observedPath": "ws.dataValidation.add",
+        "canonicalPath": "ws.validations.setList",
         "status": "structured_diagnostic",
         "appliesTo": "method",
-        "ownerTheme": "sdk-agent-guidance/worksheet-api-usage",
+        "ownerTheme": "api-compatibility/validation-conditional-formatting-helpers",
         "ownerPackage": "@mog-sdk/sdk",
-        "firstObservedVersion": "0.9.2",
+        "firstObservedVersion": "0.9.4",
         "canonicalSince": null,
         "deprecatedSince": null,
         "removeAfter": null,
         "evidence": [
           {
             "source": "source",
-            "reference": "api-compatibility:mog-api/worksheet-method-guidance"
+            "reference": "api-compatibility:validation-conditional-formatting-helpers"
           }
         ],
-        "behavior": "Address conversion helpers are workbook APIs; worksheets do not expose addressToIndex().",
+        "behavior": "Mog exposes worksheet data validation under ws.validations, not ws.dataValidation. List validation should use ws.validations.setList(range, source, options).",
         "runtimeSurfaces": [
           "executeCode-preflight",
           "agent-guidance",
@@ -1300,8 +1732,102 @@
         },
         "diagnostics": {
           "code": "MOG002_MOG_API_USAGE",
-          "message": "ws.addressToIndex(address) is not a Mog worksheet method. Use wb.addressToIndex(address).",
+          "message": "ws.dataValidation.add(...) is not a Mog worksheet method. Use ws.validations.setList(range, source, options) for list validation.",
           "replacements": [
+            "ws.validations.setList"
+          ]
+        },
+        "verification": [
+          "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe"
+        ]
+      },
+      {
+        "id": "mog-api.validation.validationsAdd.unsupported",
+        "observedPath": "ws.validations.add",
+        "canonicalPath": "ws.validations.setList",
+        "status": "structured_diagnostic",
+        "appliesTo": "method",
+        "ownerTheme": "api-compatibility/validation-conditional-formatting-helpers",
+        "ownerPackage": "@mog-sdk/sdk",
+        "firstObservedVersion": "0.9.4",
+        "canonicalSince": null,
+        "deprecatedSince": null,
+        "removeAfter": null,
+        "evidence": [
+          {
+            "source": "source",
+            "reference": "api-compatibility:validation-conditional-formatting-helpers"
+          }
+        ],
+        "behavior": "Worksheet validation mutations are set-style operations. For list validation, agents should use the intent-level ws.validations.setList(range, source, options) helper; for advanced schemas, use ws.validations.set(range, rule).",
+        "runtimeSurfaces": [
+          "executeCode-preflight",
+          "agent-guidance",
+          "docs",
+          "api-eval"
+        ],
+        "surfaceDisposition": {
+          "typescript": "structured_diagnostic",
+          "kernel": "structured_diagnostic",
+          "executeCode-preflight": "structured_diagnostic",
+          "api-describe": "structured_diagnostic",
+          "agent-guidance": "structured_diagnostic",
+          "docs": "structured_diagnostic",
+          "python": "structured_diagnostic",
+          "api-eval": "structured_diagnostic"
+        },
+        "diagnostics": {
+          "code": "MOG002_MOG_API_USAGE",
+          "message": "ws.validations.add(...) is not a Mog worksheet validation method. Use ws.validations.setList(range, source, options) for list validation, or ws.validations.set(range, rule) for an explicit validation rule.",
+          "replacements": [
+            "ws.validations.setList",
+            "ws.validations.set"
+          ]
+        },
+        "verification": [
+          "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe"
+        ]
+      },
+      {
+        "id": "mog-api.worksheet.addressToIndex.unsupported",
+        "observedPath": "ws.addressToIndex",
+        "canonicalPath": "a1.parse",
+        "status": "structured_diagnostic",
+        "appliesTo": "method",
+        "ownerTheme": "sdk-agent-guidance/worksheet-api-usage",
+        "ownerPackage": "@mog-sdk/sdk",
+        "firstObservedVersion": "0.9.2",
+        "canonicalSince": "0.9.5",
+        "deprecatedSince": null,
+        "removeAfter": null,
+        "evidence": [
+          {
+            "source": "source",
+            "reference": "api-compatibility:mog-api/worksheet-method-guidance"
+          }
+        ],
+        "behavior": "Address parsing helpers live under the canonical a1 namespace; worksheets do not expose addressToIndex().",
+        "runtimeSurfaces": [
+          "executeCode-preflight",
+          "agent-guidance",
+          "docs",
+          "api-eval"
+        ],
+        "surfaceDisposition": {
+          "typescript": "structured_diagnostic",
+          "kernel": "structured_diagnostic",
+          "executeCode-preflight": "structured_diagnostic",
+          "api-describe": "structured_diagnostic",
+          "agent-guidance": "structured_diagnostic",
+          "docs": "structured_diagnostic",
+          "python": "structured_diagnostic",
+          "api-eval": "structured_diagnostic"
+        },
+        "diagnostics": {
+          "code": "MOG002_MOG_API_USAGE",
+          "message": "ws.addressToIndex(address) is not a Mog worksheet method. Use a1.parse(address).",
+          "replacements": [
+            "a1.parse",
             "wb.addressToIndex"
           ]
         },
@@ -1500,13 +2026,13 @@
       {
         "id": "mog-api.worksheet.indexToAddress.unsupported",
         "observedPath": "ws.indexToAddress",
-        "canonicalPath": "wb.indexToAddress",
+        "canonicalPath": "a1.address",
         "status": "structured_diagnostic",
         "appliesTo": "method",
         "ownerTheme": "sdk-agent-guidance/worksheet-api-usage",
         "ownerPackage": "@mog-sdk/sdk",
         "firstObservedVersion": "0.9.2",
-        "canonicalSince": null,
+        "canonicalSince": "0.9.5",
         "deprecatedSince": null,
         "removeAfter": null,
         "evidence": [
@@ -1515,7 +2041,7 @@
             "reference": "api-compatibility:mog-api/worksheet-method-guidance"
           }
         ],
-        "behavior": "Address conversion helpers are workbook APIs; worksheets do not expose indexToAddress().",
+        "behavior": "Address conversion helpers live under the canonical a1 namespace; worksheets do not expose indexToAddress().",
         "runtimeSurfaces": [
           "executeCode-preflight",
           "agent-guidance",
@@ -1534,8 +2060,9 @@
         },
         "diagnostics": {
           "code": "MOG002_MOG_API_USAGE",
-          "message": "ws.indexToAddress(row, col) is not a Mog worksheet method. Use wb.indexToAddress(row, col).",
+          "message": "ws.indexToAddress(row, col) is not a Mog worksheet method. Use a1.address(row, col).",
           "replacements": [
+            "a1.address",
             "wb.indexToAddress"
           ]
         },
@@ -1546,13 +2073,13 @@
       {
         "id": "mog-api.worksheet.privateColLetter.unsupported",
         "observedPath": "ws._colLetter",
-        "canonicalPath": "wb.indexToAddress",
+        "canonicalPath": "a1.column",
         "status": "structured_diagnostic",
         "appliesTo": "method",
         "ownerTheme": "sdk-agent-guidance/worksheet-api-usage",
         "ownerPackage": "@mog-sdk/sdk",
         "firstObservedVersion": "0.9.2",
-        "canonicalSince": null,
+        "canonicalSince": "0.9.5",
         "deprecatedSince": null,
         "removeAfter": null,
         "evidence": [
@@ -1561,7 +2088,7 @@
             "reference": "api-compatibility:mog-api/worksheet-method-guidance"
           }
         ],
-        "behavior": "Private worksheet/helper guesses such as _colLetter are not public Mog APIs; use workbook address helpers where possible.",
+        "behavior": "Private worksheet/helper guesses such as _colLetter are not public Mog APIs; use the canonical a1 column/address helpers.",
         "runtimeSurfaces": [
           "executeCode-preflight",
           "agent-guidance",
@@ -1580,9 +2107,9 @@
         },
         "diagnostics": {
           "code": "MOG002_MOG_API_USAGE",
-          "message": "ws._colLetter(index) is not a public Mog worksheet method. Use wb.indexToAddress(row, col) when converting indexes to addresses.",
+          "message": "ws._colLetter(index) is not a public Mog worksheet method. Use a1.column(index).",
           "replacements": [
-            "wb.indexToAddress"
+            "a1.column"
           ]
         },
         "verification": [
@@ -1637,6 +2164,330 @@
       }
     ],
     "byId": {
+      "mog-api.address.indexToIndex.unsupported": {
+        "id": "mog-api.address.indexToIndex.unsupported",
+        "observedPath": "workbook.indexToIndex",
+        "canonicalPath": "a1.address",
+        "status": "structured_diagnostic",
+        "appliesTo": "method",
+        "ownerTheme": "sdk-agent-guidance/address-helper-ergonomics",
+        "ownerPackage": "@mog-sdk/sdk",
+        "firstObservedVersion": "0.9.4",
+        "canonicalSince": "0.9.5",
+        "deprecatedSince": null,
+        "removeAfter": null,
+        "evidence": [
+          {
+            "source": "source",
+            "reference": "api-compatibility:mog-api/worksheet-method-guidance"
+          }
+        ],
+        "behavior": "indexToIndex is a guessed address helper name. Use the canonical a1 helpers to format addresses or parse coordinates.",
+        "runtimeSurfaces": [
+          "executeCode-preflight",
+          "agent-guidance",
+          "docs",
+          "api-eval"
+        ],
+        "surfaceDisposition": {
+          "typescript": "structured_diagnostic",
+          "kernel": "structured_diagnostic",
+          "executeCode-preflight": "structured_diagnostic",
+          "api-describe": "structured_diagnostic",
+          "agent-guidance": "structured_diagnostic",
+          "docs": "structured_diagnostic",
+          "python": "structured_diagnostic",
+          "api-eval": "structured_diagnostic"
+        },
+        "diagnostics": {
+          "code": "MOG002_MOG_API_USAGE",
+          "message": "workbook.indexToIndex(row, col) is not a Mog API. Use a1.address(row, col) for row/column to A1 conversion, or a1.parse(address) for A1 to row/column conversion.",
+          "replacements": [
+            "a1.address",
+            "a1.parse"
+          ]
+        },
+        "verification": [
+          "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe"
+        ]
+      },
+      "mog-api.address.wbIndexToIndex.unsupported": {
+        "id": "mog-api.address.wbIndexToIndex.unsupported",
+        "observedPath": "wb.indexToIndex",
+        "canonicalPath": "a1.address",
+        "status": "structured_diagnostic",
+        "appliesTo": "method",
+        "ownerTheme": "sdk-agent-guidance/address-helper-ergonomics",
+        "ownerPackage": "@mog-sdk/sdk",
+        "firstObservedVersion": "0.9.4",
+        "canonicalSince": "0.9.5",
+        "deprecatedSince": null,
+        "removeAfter": null,
+        "evidence": [
+          {
+            "source": "source",
+            "reference": "api-compatibility:mog-api/worksheet-method-guidance"
+          }
+        ],
+        "behavior": "indexToIndex is a guessed address helper name. Use the canonical a1 helpers to format addresses or parse coordinates.",
+        "runtimeSurfaces": [
+          "executeCode-preflight",
+          "agent-guidance",
+          "docs",
+          "api-eval"
+        ],
+        "surfaceDisposition": {
+          "typescript": "structured_diagnostic",
+          "kernel": "structured_diagnostic",
+          "executeCode-preflight": "structured_diagnostic",
+          "api-describe": "structured_diagnostic",
+          "agent-guidance": "structured_diagnostic",
+          "docs": "structured_diagnostic",
+          "python": "structured_diagnostic",
+          "api-eval": "structured_diagnostic"
+        },
+        "diagnostics": {
+          "code": "MOG002_MOG_API_USAGE",
+          "message": "wb.indexToIndex(row, col) is not a Mog API. Use a1.address(row, col) for row/column to A1 conversion, or a1.parse(address) for A1 to row/column conversion.",
+          "replacements": [
+            "a1.address",
+            "a1.parse"
+          ]
+        },
+        "verification": [
+          "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe"
+        ]
+      },
+      "mog-api.address.worksheetAddressHelper.unsupported": {
+        "id": "mog-api.address.worksheetAddressHelper.unsupported",
+        "observedPath": "ws.address",
+        "canonicalPath": "a1.address",
+        "status": "structured_diagnostic",
+        "appliesTo": "method",
+        "ownerTheme": "sdk-agent-guidance/address-helper-ergonomics",
+        "ownerPackage": "@mog-sdk/sdk",
+        "firstObservedVersion": "0.9.4",
+        "canonicalSince": "0.9.5",
+        "deprecatedSince": null,
+        "removeAfter": null,
+        "evidence": [
+          {
+            "source": "source",
+            "reference": "api-compatibility:mog-api/worksheet-method-guidance"
+          }
+        ],
+        "behavior": "Address helpers are stateless utilities, not worksheet methods. Use a1.address(row, col) for A1 formatting.",
+        "runtimeSurfaces": [
+          "executeCode-preflight",
+          "agent-guidance",
+          "docs",
+          "api-eval"
+        ],
+        "surfaceDisposition": {
+          "typescript": "structured_diagnostic",
+          "kernel": "structured_diagnostic",
+          "executeCode-preflight": "structured_diagnostic",
+          "api-describe": "structured_diagnostic",
+          "agent-guidance": "structured_diagnostic",
+          "docs": "structured_diagnostic",
+          "python": "structured_diagnostic",
+          "api-eval": "structured_diagnostic"
+        },
+        "diagnostics": {
+          "code": "MOG002_MOG_API_USAGE",
+          "message": "ws.address(row, col) is not a Mog worksheet method. Use a1.address(row, col).",
+          "replacements": [
+            "a1.address"
+          ]
+        },
+        "verification": [
+          "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe"
+        ]
+      },
+      "mog-api.address.worksheetColumnIndexHelper.unsupported": {
+        "id": "mog-api.address.worksheetColumnIndexHelper.unsupported",
+        "observedPath": "ws.columnIndex",
+        "canonicalPath": "a1.columnIndex",
+        "status": "structured_diagnostic",
+        "appliesTo": "method",
+        "ownerTheme": "sdk-agent-guidance/address-helper-ergonomics",
+        "ownerPackage": "@mog-sdk/sdk",
+        "firstObservedVersion": "0.9.4",
+        "canonicalSince": "0.9.5",
+        "deprecatedSince": null,
+        "removeAfter": null,
+        "evidence": [
+          {
+            "source": "source",
+            "reference": "api-compatibility:mog-api/worksheet-method-guidance"
+          }
+        ],
+        "behavior": "Column-index helpers are stateless utilities, not worksheet methods. Use a1.columnIndex(name).",
+        "runtimeSurfaces": [
+          "executeCode-preflight",
+          "agent-guidance",
+          "docs",
+          "api-eval"
+        ],
+        "surfaceDisposition": {
+          "typescript": "structured_diagnostic",
+          "kernel": "structured_diagnostic",
+          "executeCode-preflight": "structured_diagnostic",
+          "api-describe": "structured_diagnostic",
+          "agent-guidance": "structured_diagnostic",
+          "docs": "structured_diagnostic",
+          "python": "structured_diagnostic",
+          "api-eval": "structured_diagnostic"
+        },
+        "diagnostics": {
+          "code": "MOG002_MOG_API_USAGE",
+          "message": "ws.columnIndex(name) is not a Mog worksheet method. Use a1.columnIndex(name).",
+          "replacements": [
+            "a1.columnIndex"
+          ]
+        },
+        "verification": [
+          "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe"
+        ]
+      },
+      "mog-api.address.worksheetColumnNameHelper.unsupported": {
+        "id": "mog-api.address.worksheetColumnNameHelper.unsupported",
+        "observedPath": "ws.columnName",
+        "canonicalPath": "a1.column",
+        "status": "structured_diagnostic",
+        "appliesTo": "method",
+        "ownerTheme": "sdk-agent-guidance/address-helper-ergonomics",
+        "ownerPackage": "@mog-sdk/sdk",
+        "firstObservedVersion": "0.9.4",
+        "canonicalSince": "0.9.5",
+        "deprecatedSince": null,
+        "removeAfter": null,
+        "evidence": [
+          {
+            "source": "source",
+            "reference": "api-compatibility:mog-api/worksheet-method-guidance"
+          }
+        ],
+        "behavior": "Column-name helpers are stateless utilities, not worksheet methods. Use a1.column(index).",
+        "runtimeSurfaces": [
+          "executeCode-preflight",
+          "agent-guidance",
+          "docs",
+          "api-eval"
+        ],
+        "surfaceDisposition": {
+          "typescript": "structured_diagnostic",
+          "kernel": "structured_diagnostic",
+          "executeCode-preflight": "structured_diagnostic",
+          "api-describe": "structured_diagnostic",
+          "agent-guidance": "structured_diagnostic",
+          "docs": "structured_diagnostic",
+          "python": "structured_diagnostic",
+          "api-eval": "structured_diagnostic"
+        },
+        "diagnostics": {
+          "code": "MOG002_MOG_API_USAGE",
+          "message": "ws.columnName(index) is not a Mog worksheet method. Use a1.column(index).",
+          "replacements": [
+            "a1.column"
+          ]
+        },
+        "verification": [
+          "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe"
+        ]
+      },
+      "mog-api.address.worksheetOffsetHelper.unsupported": {
+        "id": "mog-api.address.worksheetOffsetHelper.unsupported",
+        "observedPath": "ws.offset",
+        "canonicalPath": "a1.offset",
+        "status": "structured_diagnostic",
+        "appliesTo": "method",
+        "ownerTheme": "sdk-agent-guidance/address-helper-ergonomics",
+        "ownerPackage": "@mog-sdk/sdk",
+        "firstObservedVersion": "0.9.4",
+        "canonicalSince": "0.9.5",
+        "deprecatedSince": null,
+        "removeAfter": null,
+        "evidence": [
+          {
+            "source": "source",
+            "reference": "api-compatibility:mog-api/worksheet-method-guidance"
+          }
+        ],
+        "behavior": "Address offset helpers are stateless utilities, not worksheet methods. Use a1.offset(address, dr, dc).",
+        "runtimeSurfaces": [
+          "executeCode-preflight",
+          "agent-guidance",
+          "docs",
+          "api-eval"
+        ],
+        "surfaceDisposition": {
+          "typescript": "structured_diagnostic",
+          "kernel": "structured_diagnostic",
+          "executeCode-preflight": "structured_diagnostic",
+          "api-describe": "structured_diagnostic",
+          "agent-guidance": "structured_diagnostic",
+          "docs": "structured_diagnostic",
+          "python": "structured_diagnostic",
+          "api-eval": "structured_diagnostic"
+        },
+        "diagnostics": {
+          "code": "MOG002_MOG_API_USAGE",
+          "message": "ws.offset(address, dr, dc) is not a Mog worksheet method. Use a1.offset(address, dr, dc).",
+          "replacements": [
+            "a1.offset"
+          ]
+        },
+        "verification": [
+          "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe"
+        ]
+      },
+      "mog-api.address.worksheetRangeAddressHelper.unsupported": {
+        "id": "mog-api.address.worksheetRangeAddressHelper.unsupported",
+        "observedPath": "ws.rangeAddress",
+        "canonicalPath": "a1.range",
+        "status": "structured_diagnostic",
+        "appliesTo": "method",
+        "ownerTheme": "sdk-agent-guidance/address-helper-ergonomics",
+        "ownerPackage": "@mog-sdk/sdk",
+        "firstObservedVersion": "0.9.4",
+        "canonicalSince": "0.9.5",
+        "deprecatedSince": null,
+        "removeAfter": null,
+        "evidence": [
+          {
+            "source": "source",
+            "reference": "api-compatibility:mog-api/worksheet-method-guidance"
+          }
+        ],
+        "behavior": "Range address helpers are stateless utilities, not worksheet methods. Use a1.range(row1, col1, row2, col2).",
+        "runtimeSurfaces": [
+          "executeCode-preflight",
+          "agent-guidance",
+          "docs",
+          "api-eval"
+        ],
+        "surfaceDisposition": {
+          "typescript": "structured_diagnostic",
+          "kernel": "structured_diagnostic",
+          "executeCode-preflight": "structured_diagnostic",
+          "api-describe": "structured_diagnostic",
+          "agent-guidance": "structured_diagnostic",
+          "docs": "structured_diagnostic",
+          "python": "structured_diagnostic",
+          "api-eval": "structured_diagnostic"
+        },
+        "diagnostics": {
+          "code": "MOG002_MOG_API_USAGE",
+          "message": "ws.rangeAddress(row1, col1, row2, col2) is not a Mog worksheet method. Use a1.range(row1, col1, row2, col2).",
+          "replacements": [
+            "a1.range"
+          ]
+        },
+        "verification": [
+          "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe"
+        ]
+      },
       "mog-api.chart.imported-short-id.input-alias": {
         "id": "mog-api.chart.imported-short-id.input-alias",
         "observedPath": "chart-import-N",
@@ -2335,25 +3186,25 @@
           "pnpm --filter @mog-sdk/kernel test -- worksheet-pivots worksheet-impl"
         ]
       },
-      "mog-api.worksheet.addressToIndex.unsupported": {
-        "id": "mog-api.worksheet.addressToIndex.unsupported",
-        "observedPath": "ws.addressToIndex",
-        "canonicalPath": "wb.addressToIndex",
+      "mog-api.validation.dataValidationAdd.unsupported": {
+        "id": "mog-api.validation.dataValidationAdd.unsupported",
+        "observedPath": "ws.dataValidation.add",
+        "canonicalPath": "ws.validations.setList",
         "status": "structured_diagnostic",
         "appliesTo": "method",
-        "ownerTheme": "sdk-agent-guidance/worksheet-api-usage",
+        "ownerTheme": "api-compatibility/validation-conditional-formatting-helpers",
         "ownerPackage": "@mog-sdk/sdk",
-        "firstObservedVersion": "0.9.2",
+        "firstObservedVersion": "0.9.4",
         "canonicalSince": null,
         "deprecatedSince": null,
         "removeAfter": null,
         "evidence": [
           {
             "source": "source",
-            "reference": "api-compatibility:mog-api/worksheet-method-guidance"
+            "reference": "api-compatibility:validation-conditional-formatting-helpers"
           }
         ],
-        "behavior": "Address conversion helpers are workbook APIs; worksheets do not expose addressToIndex().",
+        "behavior": "Mog exposes worksheet data validation under ws.validations, not ws.dataValidation. List validation should use ws.validations.setList(range, source, options).",
         "runtimeSurfaces": [
           "executeCode-preflight",
           "agent-guidance",
@@ -2372,8 +3223,102 @@
         },
         "diagnostics": {
           "code": "MOG002_MOG_API_USAGE",
-          "message": "ws.addressToIndex(address) is not a Mog worksheet method. Use wb.addressToIndex(address).",
+          "message": "ws.dataValidation.add(...) is not a Mog worksheet method. Use ws.validations.setList(range, source, options) for list validation.",
           "replacements": [
+            "ws.validations.setList"
+          ]
+        },
+        "verification": [
+          "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe"
+        ]
+      },
+      "mog-api.validation.validationsAdd.unsupported": {
+        "id": "mog-api.validation.validationsAdd.unsupported",
+        "observedPath": "ws.validations.add",
+        "canonicalPath": "ws.validations.setList",
+        "status": "structured_diagnostic",
+        "appliesTo": "method",
+        "ownerTheme": "api-compatibility/validation-conditional-formatting-helpers",
+        "ownerPackage": "@mog-sdk/sdk",
+        "firstObservedVersion": "0.9.4",
+        "canonicalSince": null,
+        "deprecatedSince": null,
+        "removeAfter": null,
+        "evidence": [
+          {
+            "source": "source",
+            "reference": "api-compatibility:validation-conditional-formatting-helpers"
+          }
+        ],
+        "behavior": "Worksheet validation mutations are set-style operations. For list validation, agents should use the intent-level ws.validations.setList(range, source, options) helper; for advanced schemas, use ws.validations.set(range, rule).",
+        "runtimeSurfaces": [
+          "executeCode-preflight",
+          "agent-guidance",
+          "docs",
+          "api-eval"
+        ],
+        "surfaceDisposition": {
+          "typescript": "structured_diagnostic",
+          "kernel": "structured_diagnostic",
+          "executeCode-preflight": "structured_diagnostic",
+          "api-describe": "structured_diagnostic",
+          "agent-guidance": "structured_diagnostic",
+          "docs": "structured_diagnostic",
+          "python": "structured_diagnostic",
+          "api-eval": "structured_diagnostic"
+        },
+        "diagnostics": {
+          "code": "MOG002_MOG_API_USAGE",
+          "message": "ws.validations.add(...) is not a Mog worksheet validation method. Use ws.validations.setList(range, source, options) for list validation, or ws.validations.set(range, rule) for an explicit validation rule.",
+          "replacements": [
+            "ws.validations.setList",
+            "ws.validations.set"
+          ]
+        },
+        "verification": [
+          "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe"
+        ]
+      },
+      "mog-api.worksheet.addressToIndex.unsupported": {
+        "id": "mog-api.worksheet.addressToIndex.unsupported",
+        "observedPath": "ws.addressToIndex",
+        "canonicalPath": "a1.parse",
+        "status": "structured_diagnostic",
+        "appliesTo": "method",
+        "ownerTheme": "sdk-agent-guidance/worksheet-api-usage",
+        "ownerPackage": "@mog-sdk/sdk",
+        "firstObservedVersion": "0.9.2",
+        "canonicalSince": "0.9.5",
+        "deprecatedSince": null,
+        "removeAfter": null,
+        "evidence": [
+          {
+            "source": "source",
+            "reference": "api-compatibility:mog-api/worksheet-method-guidance"
+          }
+        ],
+        "behavior": "Address parsing helpers live under the canonical a1 namespace; worksheets do not expose addressToIndex().",
+        "runtimeSurfaces": [
+          "executeCode-preflight",
+          "agent-guidance",
+          "docs",
+          "api-eval"
+        ],
+        "surfaceDisposition": {
+          "typescript": "structured_diagnostic",
+          "kernel": "structured_diagnostic",
+          "executeCode-preflight": "structured_diagnostic",
+          "api-describe": "structured_diagnostic",
+          "agent-guidance": "structured_diagnostic",
+          "docs": "structured_diagnostic",
+          "python": "structured_diagnostic",
+          "api-eval": "structured_diagnostic"
+        },
+        "diagnostics": {
+          "code": "MOG002_MOG_API_USAGE",
+          "message": "ws.addressToIndex(address) is not a Mog worksheet method. Use a1.parse(address).",
+          "replacements": [
+            "a1.parse",
             "wb.addressToIndex"
           ]
         },
@@ -2572,13 +3517,13 @@
       "mog-api.worksheet.indexToAddress.unsupported": {
         "id": "mog-api.worksheet.indexToAddress.unsupported",
         "observedPath": "ws.indexToAddress",
-        "canonicalPath": "wb.indexToAddress",
+        "canonicalPath": "a1.address",
         "status": "structured_diagnostic",
         "appliesTo": "method",
         "ownerTheme": "sdk-agent-guidance/worksheet-api-usage",
         "ownerPackage": "@mog-sdk/sdk",
         "firstObservedVersion": "0.9.2",
-        "canonicalSince": null,
+        "canonicalSince": "0.9.5",
         "deprecatedSince": null,
         "removeAfter": null,
         "evidence": [
@@ -2587,7 +3532,7 @@
             "reference": "api-compatibility:mog-api/worksheet-method-guidance"
           }
         ],
-        "behavior": "Address conversion helpers are workbook APIs; worksheets do not expose indexToAddress().",
+        "behavior": "Address conversion helpers live under the canonical a1 namespace; worksheets do not expose indexToAddress().",
         "runtimeSurfaces": [
           "executeCode-preflight",
           "agent-guidance",
@@ -2606,8 +3551,9 @@
         },
         "diagnostics": {
           "code": "MOG002_MOG_API_USAGE",
-          "message": "ws.indexToAddress(row, col) is not a Mog worksheet method. Use wb.indexToAddress(row, col).",
+          "message": "ws.indexToAddress(row, col) is not a Mog worksheet method. Use a1.address(row, col).",
           "replacements": [
+            "a1.address",
             "wb.indexToAddress"
           ]
         },
@@ -2618,13 +3564,13 @@
       "mog-api.worksheet.privateColLetter.unsupported": {
         "id": "mog-api.worksheet.privateColLetter.unsupported",
         "observedPath": "ws._colLetter",
-        "canonicalPath": "wb.indexToAddress",
+        "canonicalPath": "a1.column",
         "status": "structured_diagnostic",
         "appliesTo": "method",
         "ownerTheme": "sdk-agent-guidance/worksheet-api-usage",
         "ownerPackage": "@mog-sdk/sdk",
         "firstObservedVersion": "0.9.2",
-        "canonicalSince": null,
+        "canonicalSince": "0.9.5",
         "deprecatedSince": null,
         "removeAfter": null,
         "evidence": [
@@ -2633,7 +3579,7 @@
             "reference": "api-compatibility:mog-api/worksheet-method-guidance"
           }
         ],
-        "behavior": "Private worksheet/helper guesses such as _colLetter are not public Mog APIs; use workbook address helpers where possible.",
+        "behavior": "Private worksheet/helper guesses such as _colLetter are not public Mog APIs; use the canonical a1 column/address helpers.",
         "runtimeSurfaces": [
           "executeCode-preflight",
           "agent-guidance",
@@ -2652,9 +3598,9 @@
         },
         "diagnostics": {
           "code": "MOG002_MOG_API_USAGE",
-          "message": "ws._colLetter(index) is not a public Mog worksheet method. Use wb.indexToAddress(row, col) when converting indexes to addresses.",
+          "message": "ws._colLetter(index) is not a public Mog worksheet method. Use a1.column(index).",
           "replacements": [
-            "wb.indexToAddress"
+            "a1.column"
           ]
         },
         "verification": [
@@ -2993,17 +3939,17 @@
           ]
         }
       ],
-      "ws._colLetter": [
+      "wb.indexToIndex": [
         {
-          "id": "mog-api.worksheet.privateColLetter.unsupported",
-          "observedPath": "ws._colLetter",
-          "canonicalPath": "wb.indexToAddress",
+          "id": "mog-api.address.wbIndexToIndex.unsupported",
+          "observedPath": "wb.indexToIndex",
+          "canonicalPath": "a1.address",
           "status": "structured_diagnostic",
           "appliesTo": "method",
-          "ownerTheme": "sdk-agent-guidance/worksheet-api-usage",
+          "ownerTheme": "sdk-agent-guidance/address-helper-ergonomics",
           "ownerPackage": "@mog-sdk/sdk",
-          "firstObservedVersion": "0.9.2",
-          "canonicalSince": null,
+          "firstObservedVersion": "0.9.4",
+          "canonicalSince": "0.9.5",
           "deprecatedSince": null,
           "removeAfter": null,
           "evidence": [
@@ -3012,7 +3958,7 @@
               "reference": "api-compatibility:mog-api/worksheet-method-guidance"
             }
           ],
-          "behavior": "Private worksheet/helper guesses such as _colLetter are not public Mog APIs; use workbook address helpers where possible.",
+          "behavior": "indexToIndex is a guessed address helper name. Use the canonical a1 helpers to format addresses or parse coordinates.",
           "runtimeSurfaces": [
             "executeCode-preflight",
             "agent-guidance",
@@ -3031,9 +3977,205 @@
           },
           "diagnostics": {
             "code": "MOG002_MOG_API_USAGE",
-            "message": "ws._colLetter(index) is not a public Mog worksheet method. Use wb.indexToAddress(row, col) when converting indexes to addresses.",
+            "message": "wb.indexToIndex(row, col) is not a Mog API. Use a1.address(row, col) for row/column to A1 conversion, or a1.parse(address) for A1 to row/column conversion.",
             "replacements": [
-              "wb.indexToAddress"
+              "a1.address",
+              "a1.parse"
+            ]
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe"
+          ]
+        }
+      ],
+      "wb.indexToIndex()": [
+        {
+          "id": "mog-api.address.wbIndexToIndex.unsupported",
+          "observedPath": "wb.indexToIndex",
+          "canonicalPath": "a1.address",
+          "status": "structured_diagnostic",
+          "appliesTo": "method",
+          "ownerTheme": "sdk-agent-guidance/address-helper-ergonomics",
+          "ownerPackage": "@mog-sdk/sdk",
+          "firstObservedVersion": "0.9.4",
+          "canonicalSince": "0.9.5",
+          "deprecatedSince": null,
+          "removeAfter": null,
+          "evidence": [
+            {
+              "source": "source",
+              "reference": "api-compatibility:mog-api/worksheet-method-guidance"
+            }
+          ],
+          "behavior": "indexToIndex is a guessed address helper name. Use the canonical a1 helpers to format addresses or parse coordinates.",
+          "runtimeSurfaces": [
+            "executeCode-preflight",
+            "agent-guidance",
+            "docs",
+            "api-eval"
+          ],
+          "surfaceDisposition": {
+            "typescript": "structured_diagnostic",
+            "kernel": "structured_diagnostic",
+            "executeCode-preflight": "structured_diagnostic",
+            "api-describe": "structured_diagnostic",
+            "agent-guidance": "structured_diagnostic",
+            "docs": "structured_diagnostic",
+            "python": "structured_diagnostic",
+            "api-eval": "structured_diagnostic"
+          },
+          "diagnostics": {
+            "code": "MOG002_MOG_API_USAGE",
+            "message": "wb.indexToIndex(row, col) is not a Mog API. Use a1.address(row, col) for row/column to A1 conversion, or a1.parse(address) for A1 to row/column conversion.",
+            "replacements": [
+              "a1.address",
+              "a1.parse"
+            ]
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe"
+          ]
+        }
+      ],
+      "workbook.indexToIndex": [
+        {
+          "id": "mog-api.address.indexToIndex.unsupported",
+          "observedPath": "workbook.indexToIndex",
+          "canonicalPath": "a1.address",
+          "status": "structured_diagnostic",
+          "appliesTo": "method",
+          "ownerTheme": "sdk-agent-guidance/address-helper-ergonomics",
+          "ownerPackage": "@mog-sdk/sdk",
+          "firstObservedVersion": "0.9.4",
+          "canonicalSince": "0.9.5",
+          "deprecatedSince": null,
+          "removeAfter": null,
+          "evidence": [
+            {
+              "source": "source",
+              "reference": "api-compatibility:mog-api/worksheet-method-guidance"
+            }
+          ],
+          "behavior": "indexToIndex is a guessed address helper name. Use the canonical a1 helpers to format addresses or parse coordinates.",
+          "runtimeSurfaces": [
+            "executeCode-preflight",
+            "agent-guidance",
+            "docs",
+            "api-eval"
+          ],
+          "surfaceDisposition": {
+            "typescript": "structured_diagnostic",
+            "kernel": "structured_diagnostic",
+            "executeCode-preflight": "structured_diagnostic",
+            "api-describe": "structured_diagnostic",
+            "agent-guidance": "structured_diagnostic",
+            "docs": "structured_diagnostic",
+            "python": "structured_diagnostic",
+            "api-eval": "structured_diagnostic"
+          },
+          "diagnostics": {
+            "code": "MOG002_MOG_API_USAGE",
+            "message": "workbook.indexToIndex(row, col) is not a Mog API. Use a1.address(row, col) for row/column to A1 conversion, or a1.parse(address) for A1 to row/column conversion.",
+            "replacements": [
+              "a1.address",
+              "a1.parse"
+            ]
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe"
+          ]
+        }
+      ],
+      "workbook.indexToIndex()": [
+        {
+          "id": "mog-api.address.indexToIndex.unsupported",
+          "observedPath": "workbook.indexToIndex",
+          "canonicalPath": "a1.address",
+          "status": "structured_diagnostic",
+          "appliesTo": "method",
+          "ownerTheme": "sdk-agent-guidance/address-helper-ergonomics",
+          "ownerPackage": "@mog-sdk/sdk",
+          "firstObservedVersion": "0.9.4",
+          "canonicalSince": "0.9.5",
+          "deprecatedSince": null,
+          "removeAfter": null,
+          "evidence": [
+            {
+              "source": "source",
+              "reference": "api-compatibility:mog-api/worksheet-method-guidance"
+            }
+          ],
+          "behavior": "indexToIndex is a guessed address helper name. Use the canonical a1 helpers to format addresses or parse coordinates.",
+          "runtimeSurfaces": [
+            "executeCode-preflight",
+            "agent-guidance",
+            "docs",
+            "api-eval"
+          ],
+          "surfaceDisposition": {
+            "typescript": "structured_diagnostic",
+            "kernel": "structured_diagnostic",
+            "executeCode-preflight": "structured_diagnostic",
+            "api-describe": "structured_diagnostic",
+            "agent-guidance": "structured_diagnostic",
+            "docs": "structured_diagnostic",
+            "python": "structured_diagnostic",
+            "api-eval": "structured_diagnostic"
+          },
+          "diagnostics": {
+            "code": "MOG002_MOG_API_USAGE",
+            "message": "workbook.indexToIndex(row, col) is not a Mog API. Use a1.address(row, col) for row/column to A1 conversion, or a1.parse(address) for A1 to row/column conversion.",
+            "replacements": [
+              "a1.address",
+              "a1.parse"
+            ]
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe"
+          ]
+        }
+      ],
+      "ws._colLetter": [
+        {
+          "id": "mog-api.worksheet.privateColLetter.unsupported",
+          "observedPath": "ws._colLetter",
+          "canonicalPath": "a1.column",
+          "status": "structured_diagnostic",
+          "appliesTo": "method",
+          "ownerTheme": "sdk-agent-guidance/worksheet-api-usage",
+          "ownerPackage": "@mog-sdk/sdk",
+          "firstObservedVersion": "0.9.2",
+          "canonicalSince": "0.9.5",
+          "deprecatedSince": null,
+          "removeAfter": null,
+          "evidence": [
+            {
+              "source": "source",
+              "reference": "api-compatibility:mog-api/worksheet-method-guidance"
+            }
+          ],
+          "behavior": "Private worksheet/helper guesses such as _colLetter are not public Mog APIs; use the canonical a1 column/address helpers.",
+          "runtimeSurfaces": [
+            "executeCode-preflight",
+            "agent-guidance",
+            "docs",
+            "api-eval"
+          ],
+          "surfaceDisposition": {
+            "typescript": "structured_diagnostic",
+            "kernel": "structured_diagnostic",
+            "executeCode-preflight": "structured_diagnostic",
+            "api-describe": "structured_diagnostic",
+            "agent-guidance": "structured_diagnostic",
+            "docs": "structured_diagnostic",
+            "python": "structured_diagnostic",
+            "api-eval": "structured_diagnostic"
+          },
+          "diagnostics": {
+            "code": "MOG002_MOG_API_USAGE",
+            "message": "ws._colLetter(index) is not a public Mog worksheet method. Use a1.column(index).",
+            "replacements": [
+              "a1.column"
             ]
           },
           "verification": [
@@ -3045,13 +4187,13 @@
         {
           "id": "mog-api.worksheet.privateColLetter.unsupported",
           "observedPath": "ws._colLetter",
-          "canonicalPath": "wb.indexToAddress",
+          "canonicalPath": "a1.column",
           "status": "structured_diagnostic",
           "appliesTo": "method",
           "ownerTheme": "sdk-agent-guidance/worksheet-api-usage",
           "ownerPackage": "@mog-sdk/sdk",
           "firstObservedVersion": "0.9.2",
-          "canonicalSince": null,
+          "canonicalSince": "0.9.5",
           "deprecatedSince": null,
           "removeAfter": null,
           "evidence": [
@@ -3060,7 +4202,7 @@
               "reference": "api-compatibility:mog-api/worksheet-method-guidance"
             }
           ],
-          "behavior": "Private worksheet/helper guesses such as _colLetter are not public Mog APIs; use workbook address helpers where possible.",
+          "behavior": "Private worksheet/helper guesses such as _colLetter are not public Mog APIs; use the canonical a1 column/address helpers.",
           "runtimeSurfaces": [
             "executeCode-preflight",
             "agent-guidance",
@@ -3079,9 +4221,9 @@
           },
           "diagnostics": {
             "code": "MOG002_MOG_API_USAGE",
-            "message": "ws._colLetter(index) is not a public Mog worksheet method. Use wb.indexToAddress(row, col) when converting indexes to addresses.",
+            "message": "ws._colLetter(index) is not a public Mog worksheet method. Use a1.column(index).",
             "replacements": [
-              "wb.indexToAddress"
+              "a1.column"
             ]
           },
           "verification": [
@@ -3283,17 +4425,17 @@
           ]
         }
       ],
-      "ws.addressToIndex": [
+      "ws.address": [
         {
-          "id": "mog-api.worksheet.addressToIndex.unsupported",
-          "observedPath": "ws.addressToIndex",
-          "canonicalPath": "wb.addressToIndex",
+          "id": "mog-api.address.worksheetAddressHelper.unsupported",
+          "observedPath": "ws.address",
+          "canonicalPath": "a1.address",
           "status": "structured_diagnostic",
           "appliesTo": "method",
-          "ownerTheme": "sdk-agent-guidance/worksheet-api-usage",
+          "ownerTheme": "sdk-agent-guidance/address-helper-ergonomics",
           "ownerPackage": "@mog-sdk/sdk",
-          "firstObservedVersion": "0.9.2",
-          "canonicalSince": null,
+          "firstObservedVersion": "0.9.4",
+          "canonicalSince": "0.9.5",
           "deprecatedSince": null,
           "removeAfter": null,
           "evidence": [
@@ -3302,7 +4444,7 @@
               "reference": "api-compatibility:mog-api/worksheet-method-guidance"
             }
           ],
-          "behavior": "Address conversion helpers are workbook APIs; worksheets do not expose addressToIndex().",
+          "behavior": "Address helpers are stateless utilities, not worksheet methods. Use a1.address(row, col) for A1 formatting.",
           "runtimeSurfaces": [
             "executeCode-preflight",
             "agent-guidance",
@@ -3321,8 +4463,105 @@
           },
           "diagnostics": {
             "code": "MOG002_MOG_API_USAGE",
-            "message": "ws.addressToIndex(address) is not a Mog worksheet method. Use wb.addressToIndex(address).",
+            "message": "ws.address(row, col) is not a Mog worksheet method. Use a1.address(row, col).",
             "replacements": [
+              "a1.address"
+            ]
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe"
+          ]
+        }
+      ],
+      "ws.address()": [
+        {
+          "id": "mog-api.address.worksheetAddressHelper.unsupported",
+          "observedPath": "ws.address",
+          "canonicalPath": "a1.address",
+          "status": "structured_diagnostic",
+          "appliesTo": "method",
+          "ownerTheme": "sdk-agent-guidance/address-helper-ergonomics",
+          "ownerPackage": "@mog-sdk/sdk",
+          "firstObservedVersion": "0.9.4",
+          "canonicalSince": "0.9.5",
+          "deprecatedSince": null,
+          "removeAfter": null,
+          "evidence": [
+            {
+              "source": "source",
+              "reference": "api-compatibility:mog-api/worksheet-method-guidance"
+            }
+          ],
+          "behavior": "Address helpers are stateless utilities, not worksheet methods. Use a1.address(row, col) for A1 formatting.",
+          "runtimeSurfaces": [
+            "executeCode-preflight",
+            "agent-guidance",
+            "docs",
+            "api-eval"
+          ],
+          "surfaceDisposition": {
+            "typescript": "structured_diagnostic",
+            "kernel": "structured_diagnostic",
+            "executeCode-preflight": "structured_diagnostic",
+            "api-describe": "structured_diagnostic",
+            "agent-guidance": "structured_diagnostic",
+            "docs": "structured_diagnostic",
+            "python": "structured_diagnostic",
+            "api-eval": "structured_diagnostic"
+          },
+          "diagnostics": {
+            "code": "MOG002_MOG_API_USAGE",
+            "message": "ws.address(row, col) is not a Mog worksheet method. Use a1.address(row, col).",
+            "replacements": [
+              "a1.address"
+            ]
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe"
+          ]
+        }
+      ],
+      "ws.addressToIndex": [
+        {
+          "id": "mog-api.worksheet.addressToIndex.unsupported",
+          "observedPath": "ws.addressToIndex",
+          "canonicalPath": "a1.parse",
+          "status": "structured_diagnostic",
+          "appliesTo": "method",
+          "ownerTheme": "sdk-agent-guidance/worksheet-api-usage",
+          "ownerPackage": "@mog-sdk/sdk",
+          "firstObservedVersion": "0.9.2",
+          "canonicalSince": "0.9.5",
+          "deprecatedSince": null,
+          "removeAfter": null,
+          "evidence": [
+            {
+              "source": "source",
+              "reference": "api-compatibility:mog-api/worksheet-method-guidance"
+            }
+          ],
+          "behavior": "Address parsing helpers live under the canonical a1 namespace; worksheets do not expose addressToIndex().",
+          "runtimeSurfaces": [
+            "executeCode-preflight",
+            "agent-guidance",
+            "docs",
+            "api-eval"
+          ],
+          "surfaceDisposition": {
+            "typescript": "structured_diagnostic",
+            "kernel": "structured_diagnostic",
+            "executeCode-preflight": "structured_diagnostic",
+            "api-describe": "structured_diagnostic",
+            "agent-guidance": "structured_diagnostic",
+            "docs": "structured_diagnostic",
+            "python": "structured_diagnostic",
+            "api-eval": "structured_diagnostic"
+          },
+          "diagnostics": {
+            "code": "MOG002_MOG_API_USAGE",
+            "message": "ws.addressToIndex(address) is not a Mog worksheet method. Use a1.parse(address).",
+            "replacements": [
+              "a1.parse",
               "wb.addressToIndex"
             ]
           },
@@ -3335,13 +4574,13 @@
         {
           "id": "mog-api.worksheet.addressToIndex.unsupported",
           "observedPath": "ws.addressToIndex",
-          "canonicalPath": "wb.addressToIndex",
+          "canonicalPath": "a1.parse",
           "status": "structured_diagnostic",
           "appliesTo": "method",
           "ownerTheme": "sdk-agent-guidance/worksheet-api-usage",
           "ownerPackage": "@mog-sdk/sdk",
           "firstObservedVersion": "0.9.2",
-          "canonicalSince": null,
+          "canonicalSince": "0.9.5",
           "deprecatedSince": null,
           "removeAfter": null,
           "evidence": [
@@ -3350,7 +4589,7 @@
               "reference": "api-compatibility:mog-api/worksheet-method-guidance"
             }
           ],
-          "behavior": "Address conversion helpers are workbook APIs; worksheets do not expose addressToIndex().",
+          "behavior": "Address parsing helpers live under the canonical a1 namespace; worksheets do not expose addressToIndex().",
           "runtimeSurfaces": [
             "executeCode-preflight",
             "agent-guidance",
@@ -3369,9 +4608,298 @@
           },
           "diagnostics": {
             "code": "MOG002_MOG_API_USAGE",
-            "message": "ws.addressToIndex(address) is not a Mog worksheet method. Use wb.addressToIndex(address).",
+            "message": "ws.addressToIndex(address) is not a Mog worksheet method. Use a1.parse(address).",
             "replacements": [
+              "a1.parse",
               "wb.addressToIndex"
+            ]
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe"
+          ]
+        }
+      ],
+      "ws.columnIndex": [
+        {
+          "id": "mog-api.address.worksheetColumnIndexHelper.unsupported",
+          "observedPath": "ws.columnIndex",
+          "canonicalPath": "a1.columnIndex",
+          "status": "structured_diagnostic",
+          "appliesTo": "method",
+          "ownerTheme": "sdk-agent-guidance/address-helper-ergonomics",
+          "ownerPackage": "@mog-sdk/sdk",
+          "firstObservedVersion": "0.9.4",
+          "canonicalSince": "0.9.5",
+          "deprecatedSince": null,
+          "removeAfter": null,
+          "evidence": [
+            {
+              "source": "source",
+              "reference": "api-compatibility:mog-api/worksheet-method-guidance"
+            }
+          ],
+          "behavior": "Column-index helpers are stateless utilities, not worksheet methods. Use a1.columnIndex(name).",
+          "runtimeSurfaces": [
+            "executeCode-preflight",
+            "agent-guidance",
+            "docs",
+            "api-eval"
+          ],
+          "surfaceDisposition": {
+            "typescript": "structured_diagnostic",
+            "kernel": "structured_diagnostic",
+            "executeCode-preflight": "structured_diagnostic",
+            "api-describe": "structured_diagnostic",
+            "agent-guidance": "structured_diagnostic",
+            "docs": "structured_diagnostic",
+            "python": "structured_diagnostic",
+            "api-eval": "structured_diagnostic"
+          },
+          "diagnostics": {
+            "code": "MOG002_MOG_API_USAGE",
+            "message": "ws.columnIndex(name) is not a Mog worksheet method. Use a1.columnIndex(name).",
+            "replacements": [
+              "a1.columnIndex"
+            ]
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe"
+          ]
+        }
+      ],
+      "ws.columnIndex()": [
+        {
+          "id": "mog-api.address.worksheetColumnIndexHelper.unsupported",
+          "observedPath": "ws.columnIndex",
+          "canonicalPath": "a1.columnIndex",
+          "status": "structured_diagnostic",
+          "appliesTo": "method",
+          "ownerTheme": "sdk-agent-guidance/address-helper-ergonomics",
+          "ownerPackage": "@mog-sdk/sdk",
+          "firstObservedVersion": "0.9.4",
+          "canonicalSince": "0.9.5",
+          "deprecatedSince": null,
+          "removeAfter": null,
+          "evidence": [
+            {
+              "source": "source",
+              "reference": "api-compatibility:mog-api/worksheet-method-guidance"
+            }
+          ],
+          "behavior": "Column-index helpers are stateless utilities, not worksheet methods. Use a1.columnIndex(name).",
+          "runtimeSurfaces": [
+            "executeCode-preflight",
+            "agent-guidance",
+            "docs",
+            "api-eval"
+          ],
+          "surfaceDisposition": {
+            "typescript": "structured_diagnostic",
+            "kernel": "structured_diagnostic",
+            "executeCode-preflight": "structured_diagnostic",
+            "api-describe": "structured_diagnostic",
+            "agent-guidance": "structured_diagnostic",
+            "docs": "structured_diagnostic",
+            "python": "structured_diagnostic",
+            "api-eval": "structured_diagnostic"
+          },
+          "diagnostics": {
+            "code": "MOG002_MOG_API_USAGE",
+            "message": "ws.columnIndex(name) is not a Mog worksheet method. Use a1.columnIndex(name).",
+            "replacements": [
+              "a1.columnIndex"
+            ]
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe"
+          ]
+        }
+      ],
+      "ws.columnName": [
+        {
+          "id": "mog-api.address.worksheetColumnNameHelper.unsupported",
+          "observedPath": "ws.columnName",
+          "canonicalPath": "a1.column",
+          "status": "structured_diagnostic",
+          "appliesTo": "method",
+          "ownerTheme": "sdk-agent-guidance/address-helper-ergonomics",
+          "ownerPackage": "@mog-sdk/sdk",
+          "firstObservedVersion": "0.9.4",
+          "canonicalSince": "0.9.5",
+          "deprecatedSince": null,
+          "removeAfter": null,
+          "evidence": [
+            {
+              "source": "source",
+              "reference": "api-compatibility:mog-api/worksheet-method-guidance"
+            }
+          ],
+          "behavior": "Column-name helpers are stateless utilities, not worksheet methods. Use a1.column(index).",
+          "runtimeSurfaces": [
+            "executeCode-preflight",
+            "agent-guidance",
+            "docs",
+            "api-eval"
+          ],
+          "surfaceDisposition": {
+            "typescript": "structured_diagnostic",
+            "kernel": "structured_diagnostic",
+            "executeCode-preflight": "structured_diagnostic",
+            "api-describe": "structured_diagnostic",
+            "agent-guidance": "structured_diagnostic",
+            "docs": "structured_diagnostic",
+            "python": "structured_diagnostic",
+            "api-eval": "structured_diagnostic"
+          },
+          "diagnostics": {
+            "code": "MOG002_MOG_API_USAGE",
+            "message": "ws.columnName(index) is not a Mog worksheet method. Use a1.column(index).",
+            "replacements": [
+              "a1.column"
+            ]
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe"
+          ]
+        }
+      ],
+      "ws.columnName()": [
+        {
+          "id": "mog-api.address.worksheetColumnNameHelper.unsupported",
+          "observedPath": "ws.columnName",
+          "canonicalPath": "a1.column",
+          "status": "structured_diagnostic",
+          "appliesTo": "method",
+          "ownerTheme": "sdk-agent-guidance/address-helper-ergonomics",
+          "ownerPackage": "@mog-sdk/sdk",
+          "firstObservedVersion": "0.9.4",
+          "canonicalSince": "0.9.5",
+          "deprecatedSince": null,
+          "removeAfter": null,
+          "evidence": [
+            {
+              "source": "source",
+              "reference": "api-compatibility:mog-api/worksheet-method-guidance"
+            }
+          ],
+          "behavior": "Column-name helpers are stateless utilities, not worksheet methods. Use a1.column(index).",
+          "runtimeSurfaces": [
+            "executeCode-preflight",
+            "agent-guidance",
+            "docs",
+            "api-eval"
+          ],
+          "surfaceDisposition": {
+            "typescript": "structured_diagnostic",
+            "kernel": "structured_diagnostic",
+            "executeCode-preflight": "structured_diagnostic",
+            "api-describe": "structured_diagnostic",
+            "agent-guidance": "structured_diagnostic",
+            "docs": "structured_diagnostic",
+            "python": "structured_diagnostic",
+            "api-eval": "structured_diagnostic"
+          },
+          "diagnostics": {
+            "code": "MOG002_MOG_API_USAGE",
+            "message": "ws.columnName(index) is not a Mog worksheet method. Use a1.column(index).",
+            "replacements": [
+              "a1.column"
+            ]
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe"
+          ]
+        }
+      ],
+      "ws.dataValidation.add": [
+        {
+          "id": "mog-api.validation.dataValidationAdd.unsupported",
+          "observedPath": "ws.dataValidation.add",
+          "canonicalPath": "ws.validations.setList",
+          "status": "structured_diagnostic",
+          "appliesTo": "method",
+          "ownerTheme": "api-compatibility/validation-conditional-formatting-helpers",
+          "ownerPackage": "@mog-sdk/sdk",
+          "firstObservedVersion": "0.9.4",
+          "canonicalSince": null,
+          "deprecatedSince": null,
+          "removeAfter": null,
+          "evidence": [
+            {
+              "source": "source",
+              "reference": "api-compatibility:validation-conditional-formatting-helpers"
+            }
+          ],
+          "behavior": "Mog exposes worksheet data validation under ws.validations, not ws.dataValidation. List validation should use ws.validations.setList(range, source, options).",
+          "runtimeSurfaces": [
+            "executeCode-preflight",
+            "agent-guidance",
+            "docs",
+            "api-eval"
+          ],
+          "surfaceDisposition": {
+            "typescript": "structured_diagnostic",
+            "kernel": "structured_diagnostic",
+            "executeCode-preflight": "structured_diagnostic",
+            "api-describe": "structured_diagnostic",
+            "agent-guidance": "structured_diagnostic",
+            "docs": "structured_diagnostic",
+            "python": "structured_diagnostic",
+            "api-eval": "structured_diagnostic"
+          },
+          "diagnostics": {
+            "code": "MOG002_MOG_API_USAGE",
+            "message": "ws.dataValidation.add(...) is not a Mog worksheet method. Use ws.validations.setList(range, source, options) for list validation.",
+            "replacements": [
+              "ws.validations.setList"
+            ]
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe"
+          ]
+        }
+      ],
+      "ws.dataValidation.add()": [
+        {
+          "id": "mog-api.validation.dataValidationAdd.unsupported",
+          "observedPath": "ws.dataValidation.add",
+          "canonicalPath": "ws.validations.setList",
+          "status": "structured_diagnostic",
+          "appliesTo": "method",
+          "ownerTheme": "api-compatibility/validation-conditional-formatting-helpers",
+          "ownerPackage": "@mog-sdk/sdk",
+          "firstObservedVersion": "0.9.4",
+          "canonicalSince": null,
+          "deprecatedSince": null,
+          "removeAfter": null,
+          "evidence": [
+            {
+              "source": "source",
+              "reference": "api-compatibility:validation-conditional-formatting-helpers"
+            }
+          ],
+          "behavior": "Mog exposes worksheet data validation under ws.validations, not ws.dataValidation. List validation should use ws.validations.setList(range, source, options).",
+          "runtimeSurfaces": [
+            "executeCode-preflight",
+            "agent-guidance",
+            "docs",
+            "api-eval"
+          ],
+          "surfaceDisposition": {
+            "typescript": "structured_diagnostic",
+            "kernel": "structured_diagnostic",
+            "executeCode-preflight": "structured_diagnostic",
+            "api-describe": "structured_diagnostic",
+            "agent-guidance": "structured_diagnostic",
+            "docs": "structured_diagnostic",
+            "python": "structured_diagnostic",
+            "api-eval": "structured_diagnostic"
+          },
+          "diagnostics": {
+            "code": "MOG002_MOG_API_USAGE",
+            "message": "ws.dataValidation.add(...) is not a Mog worksheet method. Use ws.validations.setList(range, source, options) for list validation.",
+            "replacements": [
+              "ws.validations.setList"
             ]
           },
           "verification": [
@@ -3971,13 +5499,13 @@
         {
           "id": "mog-api.worksheet.indexToAddress.unsupported",
           "observedPath": "ws.indexToAddress",
-          "canonicalPath": "wb.indexToAddress",
+          "canonicalPath": "a1.address",
           "status": "structured_diagnostic",
           "appliesTo": "method",
           "ownerTheme": "sdk-agent-guidance/worksheet-api-usage",
           "ownerPackage": "@mog-sdk/sdk",
           "firstObservedVersion": "0.9.2",
-          "canonicalSince": null,
+          "canonicalSince": "0.9.5",
           "deprecatedSince": null,
           "removeAfter": null,
           "evidence": [
@@ -3986,7 +5514,7 @@
               "reference": "api-compatibility:mog-api/worksheet-method-guidance"
             }
           ],
-          "behavior": "Address conversion helpers are workbook APIs; worksheets do not expose indexToAddress().",
+          "behavior": "Address conversion helpers live under the canonical a1 namespace; worksheets do not expose indexToAddress().",
           "runtimeSurfaces": [
             "executeCode-preflight",
             "agent-guidance",
@@ -4005,8 +5533,9 @@
           },
           "diagnostics": {
             "code": "MOG002_MOG_API_USAGE",
-            "message": "ws.indexToAddress(row, col) is not a Mog worksheet method. Use wb.indexToAddress(row, col).",
+            "message": "ws.indexToAddress(row, col) is not a Mog worksheet method. Use a1.address(row, col).",
             "replacements": [
+              "a1.address",
               "wb.indexToAddress"
             ]
           },
@@ -4019,13 +5548,13 @@
         {
           "id": "mog-api.worksheet.indexToAddress.unsupported",
           "observedPath": "ws.indexToAddress",
-          "canonicalPath": "wb.indexToAddress",
+          "canonicalPath": "a1.address",
           "status": "structured_diagnostic",
           "appliesTo": "method",
           "ownerTheme": "sdk-agent-guidance/worksheet-api-usage",
           "ownerPackage": "@mog-sdk/sdk",
           "firstObservedVersion": "0.9.2",
-          "canonicalSince": null,
+          "canonicalSince": "0.9.5",
           "deprecatedSince": null,
           "removeAfter": null,
           "evidence": [
@@ -4034,7 +5563,7 @@
               "reference": "api-compatibility:mog-api/worksheet-method-guidance"
             }
           ],
-          "behavior": "Address conversion helpers are workbook APIs; worksheets do not expose indexToAddress().",
+          "behavior": "Address conversion helpers live under the canonical a1 namespace; worksheets do not expose indexToAddress().",
           "runtimeSurfaces": [
             "executeCode-preflight",
             "agent-guidance",
@@ -4053,8 +5582,9 @@
           },
           "diagnostics": {
             "code": "MOG002_MOG_API_USAGE",
-            "message": "ws.indexToAddress(row, col) is not a Mog worksheet method. Use wb.indexToAddress(row, col).",
+            "message": "ws.indexToAddress(row, col) is not a Mog worksheet method. Use a1.address(row, col).",
             "replacements": [
+              "a1.address",
               "wb.indexToAddress"
             ]
           },
@@ -4256,6 +5786,102 @@
           },
           "verification": [
             "pnpm --filter @mog-sdk/kernel test -- worksheet-pivots worksheet-impl"
+          ]
+        }
+      ],
+      "ws.offset": [
+        {
+          "id": "mog-api.address.worksheetOffsetHelper.unsupported",
+          "observedPath": "ws.offset",
+          "canonicalPath": "a1.offset",
+          "status": "structured_diagnostic",
+          "appliesTo": "method",
+          "ownerTheme": "sdk-agent-guidance/address-helper-ergonomics",
+          "ownerPackage": "@mog-sdk/sdk",
+          "firstObservedVersion": "0.9.4",
+          "canonicalSince": "0.9.5",
+          "deprecatedSince": null,
+          "removeAfter": null,
+          "evidence": [
+            {
+              "source": "source",
+              "reference": "api-compatibility:mog-api/worksheet-method-guidance"
+            }
+          ],
+          "behavior": "Address offset helpers are stateless utilities, not worksheet methods. Use a1.offset(address, dr, dc).",
+          "runtimeSurfaces": [
+            "executeCode-preflight",
+            "agent-guidance",
+            "docs",
+            "api-eval"
+          ],
+          "surfaceDisposition": {
+            "typescript": "structured_diagnostic",
+            "kernel": "structured_diagnostic",
+            "executeCode-preflight": "structured_diagnostic",
+            "api-describe": "structured_diagnostic",
+            "agent-guidance": "structured_diagnostic",
+            "docs": "structured_diagnostic",
+            "python": "structured_diagnostic",
+            "api-eval": "structured_diagnostic"
+          },
+          "diagnostics": {
+            "code": "MOG002_MOG_API_USAGE",
+            "message": "ws.offset(address, dr, dc) is not a Mog worksheet method. Use a1.offset(address, dr, dc).",
+            "replacements": [
+              "a1.offset"
+            ]
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe"
+          ]
+        }
+      ],
+      "ws.offset()": [
+        {
+          "id": "mog-api.address.worksheetOffsetHelper.unsupported",
+          "observedPath": "ws.offset",
+          "canonicalPath": "a1.offset",
+          "status": "structured_diagnostic",
+          "appliesTo": "method",
+          "ownerTheme": "sdk-agent-guidance/address-helper-ergonomics",
+          "ownerPackage": "@mog-sdk/sdk",
+          "firstObservedVersion": "0.9.4",
+          "canonicalSince": "0.9.5",
+          "deprecatedSince": null,
+          "removeAfter": null,
+          "evidence": [
+            {
+              "source": "source",
+              "reference": "api-compatibility:mog-api/worksheet-method-guidance"
+            }
+          ],
+          "behavior": "Address offset helpers are stateless utilities, not worksheet methods. Use a1.offset(address, dr, dc).",
+          "runtimeSurfaces": [
+            "executeCode-preflight",
+            "agent-guidance",
+            "docs",
+            "api-eval"
+          ],
+          "surfaceDisposition": {
+            "typescript": "structured_diagnostic",
+            "kernel": "structured_diagnostic",
+            "executeCode-preflight": "structured_diagnostic",
+            "api-describe": "structured_diagnostic",
+            "agent-guidance": "structured_diagnostic",
+            "docs": "structured_diagnostic",
+            "python": "structured_diagnostic",
+            "api-eval": "structured_diagnostic"
+          },
+          "diagnostics": {
+            "code": "MOG002_MOG_API_USAGE",
+            "message": "ws.offset(address, dr, dc) is not a Mog worksheet method. Use a1.offset(address, dr, dc).",
+            "replacements": [
+              "a1.offset"
+            ]
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe"
           ]
         }
       ],
@@ -4548,6 +6174,102 @@
           "verification": [
             "pnpm --filter @mog-sdk/kernel test -- worksheet-pivots",
             "dev/api-eval/scenarios/pivots/pivot-item-visibility.ts"
+          ]
+        }
+      ],
+      "ws.rangeAddress": [
+        {
+          "id": "mog-api.address.worksheetRangeAddressHelper.unsupported",
+          "observedPath": "ws.rangeAddress",
+          "canonicalPath": "a1.range",
+          "status": "structured_diagnostic",
+          "appliesTo": "method",
+          "ownerTheme": "sdk-agent-guidance/address-helper-ergonomics",
+          "ownerPackage": "@mog-sdk/sdk",
+          "firstObservedVersion": "0.9.4",
+          "canonicalSince": "0.9.5",
+          "deprecatedSince": null,
+          "removeAfter": null,
+          "evidence": [
+            {
+              "source": "source",
+              "reference": "api-compatibility:mog-api/worksheet-method-guidance"
+            }
+          ],
+          "behavior": "Range address helpers are stateless utilities, not worksheet methods. Use a1.range(row1, col1, row2, col2).",
+          "runtimeSurfaces": [
+            "executeCode-preflight",
+            "agent-guidance",
+            "docs",
+            "api-eval"
+          ],
+          "surfaceDisposition": {
+            "typescript": "structured_diagnostic",
+            "kernel": "structured_diagnostic",
+            "executeCode-preflight": "structured_diagnostic",
+            "api-describe": "structured_diagnostic",
+            "agent-guidance": "structured_diagnostic",
+            "docs": "structured_diagnostic",
+            "python": "structured_diagnostic",
+            "api-eval": "structured_diagnostic"
+          },
+          "diagnostics": {
+            "code": "MOG002_MOG_API_USAGE",
+            "message": "ws.rangeAddress(row1, col1, row2, col2) is not a Mog worksheet method. Use a1.range(row1, col1, row2, col2).",
+            "replacements": [
+              "a1.range"
+            ]
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe"
+          ]
+        }
+      ],
+      "ws.rangeAddress()": [
+        {
+          "id": "mog-api.address.worksheetRangeAddressHelper.unsupported",
+          "observedPath": "ws.rangeAddress",
+          "canonicalPath": "a1.range",
+          "status": "structured_diagnostic",
+          "appliesTo": "method",
+          "ownerTheme": "sdk-agent-guidance/address-helper-ergonomics",
+          "ownerPackage": "@mog-sdk/sdk",
+          "firstObservedVersion": "0.9.4",
+          "canonicalSince": "0.9.5",
+          "deprecatedSince": null,
+          "removeAfter": null,
+          "evidence": [
+            {
+              "source": "source",
+              "reference": "api-compatibility:mog-api/worksheet-method-guidance"
+            }
+          ],
+          "behavior": "Range address helpers are stateless utilities, not worksheet methods. Use a1.range(row1, col1, row2, col2).",
+          "runtimeSurfaces": [
+            "executeCode-preflight",
+            "agent-guidance",
+            "docs",
+            "api-eval"
+          ],
+          "surfaceDisposition": {
+            "typescript": "structured_diagnostic",
+            "kernel": "structured_diagnostic",
+            "executeCode-preflight": "structured_diagnostic",
+            "api-describe": "structured_diagnostic",
+            "agent-guidance": "structured_diagnostic",
+            "docs": "structured_diagnostic",
+            "python": "structured_diagnostic",
+            "api-eval": "structured_diagnostic"
+          },
+          "diagnostics": {
+            "code": "MOG002_MOG_API_USAGE",
+            "message": "ws.rangeAddress(row1, col1, row2, col2) is not a Mog worksheet method. Use a1.range(row1, col1, row2, col2).",
+            "replacements": [
+              "a1.range"
+            ]
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe"
           ]
         }
       ],
@@ -4940,9 +6662,1059 @@
             "pnpm --filter @mog-sdk/kernel test -- worksheet-charts worksheet-impl"
           ]
         }
+      ],
+      "ws.validations.add": [
+        {
+          "id": "mog-api.validation.validationsAdd.unsupported",
+          "observedPath": "ws.validations.add",
+          "canonicalPath": "ws.validations.setList",
+          "status": "structured_diagnostic",
+          "appliesTo": "method",
+          "ownerTheme": "api-compatibility/validation-conditional-formatting-helpers",
+          "ownerPackage": "@mog-sdk/sdk",
+          "firstObservedVersion": "0.9.4",
+          "canonicalSince": null,
+          "deprecatedSince": null,
+          "removeAfter": null,
+          "evidence": [
+            {
+              "source": "source",
+              "reference": "api-compatibility:validation-conditional-formatting-helpers"
+            }
+          ],
+          "behavior": "Worksheet validation mutations are set-style operations. For list validation, agents should use the intent-level ws.validations.setList(range, source, options) helper; for advanced schemas, use ws.validations.set(range, rule).",
+          "runtimeSurfaces": [
+            "executeCode-preflight",
+            "agent-guidance",
+            "docs",
+            "api-eval"
+          ],
+          "surfaceDisposition": {
+            "typescript": "structured_diagnostic",
+            "kernel": "structured_diagnostic",
+            "executeCode-preflight": "structured_diagnostic",
+            "api-describe": "structured_diagnostic",
+            "agent-guidance": "structured_diagnostic",
+            "docs": "structured_diagnostic",
+            "python": "structured_diagnostic",
+            "api-eval": "structured_diagnostic"
+          },
+          "diagnostics": {
+            "code": "MOG002_MOG_API_USAGE",
+            "message": "ws.validations.add(...) is not a Mog worksheet validation method. Use ws.validations.setList(range, source, options) for list validation, or ws.validations.set(range, rule) for an explicit validation rule.",
+            "replacements": [
+              "ws.validations.setList",
+              "ws.validations.set"
+            ]
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe"
+          ]
+        }
+      ],
+      "ws.validations.add()": [
+        {
+          "id": "mog-api.validation.validationsAdd.unsupported",
+          "observedPath": "ws.validations.add",
+          "canonicalPath": "ws.validations.setList",
+          "status": "structured_diagnostic",
+          "appliesTo": "method",
+          "ownerTheme": "api-compatibility/validation-conditional-formatting-helpers",
+          "ownerPackage": "@mog-sdk/sdk",
+          "firstObservedVersion": "0.9.4",
+          "canonicalSince": null,
+          "deprecatedSince": null,
+          "removeAfter": null,
+          "evidence": [
+            {
+              "source": "source",
+              "reference": "api-compatibility:validation-conditional-formatting-helpers"
+            }
+          ],
+          "behavior": "Worksheet validation mutations are set-style operations. For list validation, agents should use the intent-level ws.validations.setList(range, source, options) helper; for advanced schemas, use ws.validations.set(range, rule).",
+          "runtimeSurfaces": [
+            "executeCode-preflight",
+            "agent-guidance",
+            "docs",
+            "api-eval"
+          ],
+          "surfaceDisposition": {
+            "typescript": "structured_diagnostic",
+            "kernel": "structured_diagnostic",
+            "executeCode-preflight": "structured_diagnostic",
+            "api-describe": "structured_diagnostic",
+            "agent-guidance": "structured_diagnostic",
+            "docs": "structured_diagnostic",
+            "python": "structured_diagnostic",
+            "api-eval": "structured_diagnostic"
+          },
+          "diagnostics": {
+            "code": "MOG002_MOG_API_USAGE",
+            "message": "ws.validations.add(...) is not a Mog worksheet validation method. Use ws.validations.setList(range, source, options) for list validation, or ws.validations.set(range, rule) for an explicit validation rule.",
+            "replacements": [
+              "ws.validations.setList",
+              "ws.validations.set"
+            ]
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe"
+          ]
+        }
       ]
     },
     "byCanonicalPath": {
+      "a1.address": [
+        {
+          "id": "mog-api.address.indexToIndex.unsupported",
+          "observedPath": "workbook.indexToIndex",
+          "canonicalPath": "a1.address",
+          "status": "structured_diagnostic",
+          "appliesTo": "method",
+          "ownerTheme": "sdk-agent-guidance/address-helper-ergonomics",
+          "ownerPackage": "@mog-sdk/sdk",
+          "firstObservedVersion": "0.9.4",
+          "canonicalSince": "0.9.5",
+          "deprecatedSince": null,
+          "removeAfter": null,
+          "evidence": [
+            {
+              "source": "source",
+              "reference": "api-compatibility:mog-api/worksheet-method-guidance"
+            }
+          ],
+          "behavior": "indexToIndex is a guessed address helper name. Use the canonical a1 helpers to format addresses or parse coordinates.",
+          "runtimeSurfaces": [
+            "executeCode-preflight",
+            "agent-guidance",
+            "docs",
+            "api-eval"
+          ],
+          "surfaceDisposition": {
+            "typescript": "structured_diagnostic",
+            "kernel": "structured_diagnostic",
+            "executeCode-preflight": "structured_diagnostic",
+            "api-describe": "structured_diagnostic",
+            "agent-guidance": "structured_diagnostic",
+            "docs": "structured_diagnostic",
+            "python": "structured_diagnostic",
+            "api-eval": "structured_diagnostic"
+          },
+          "diagnostics": {
+            "code": "MOG002_MOG_API_USAGE",
+            "message": "workbook.indexToIndex(row, col) is not a Mog API. Use a1.address(row, col) for row/column to A1 conversion, or a1.parse(address) for A1 to row/column conversion.",
+            "replacements": [
+              "a1.address",
+              "a1.parse"
+            ]
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe"
+          ]
+        },
+        {
+          "id": "mog-api.address.wbIndexToIndex.unsupported",
+          "observedPath": "wb.indexToIndex",
+          "canonicalPath": "a1.address",
+          "status": "structured_diagnostic",
+          "appliesTo": "method",
+          "ownerTheme": "sdk-agent-guidance/address-helper-ergonomics",
+          "ownerPackage": "@mog-sdk/sdk",
+          "firstObservedVersion": "0.9.4",
+          "canonicalSince": "0.9.5",
+          "deprecatedSince": null,
+          "removeAfter": null,
+          "evidence": [
+            {
+              "source": "source",
+              "reference": "api-compatibility:mog-api/worksheet-method-guidance"
+            }
+          ],
+          "behavior": "indexToIndex is a guessed address helper name. Use the canonical a1 helpers to format addresses or parse coordinates.",
+          "runtimeSurfaces": [
+            "executeCode-preflight",
+            "agent-guidance",
+            "docs",
+            "api-eval"
+          ],
+          "surfaceDisposition": {
+            "typescript": "structured_diagnostic",
+            "kernel": "structured_diagnostic",
+            "executeCode-preflight": "structured_diagnostic",
+            "api-describe": "structured_diagnostic",
+            "agent-guidance": "structured_diagnostic",
+            "docs": "structured_diagnostic",
+            "python": "structured_diagnostic",
+            "api-eval": "structured_diagnostic"
+          },
+          "diagnostics": {
+            "code": "MOG002_MOG_API_USAGE",
+            "message": "wb.indexToIndex(row, col) is not a Mog API. Use a1.address(row, col) for row/column to A1 conversion, or a1.parse(address) for A1 to row/column conversion.",
+            "replacements": [
+              "a1.address",
+              "a1.parse"
+            ]
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe"
+          ]
+        },
+        {
+          "id": "mog-api.address.worksheetAddressHelper.unsupported",
+          "observedPath": "ws.address",
+          "canonicalPath": "a1.address",
+          "status": "structured_diagnostic",
+          "appliesTo": "method",
+          "ownerTheme": "sdk-agent-guidance/address-helper-ergonomics",
+          "ownerPackage": "@mog-sdk/sdk",
+          "firstObservedVersion": "0.9.4",
+          "canonicalSince": "0.9.5",
+          "deprecatedSince": null,
+          "removeAfter": null,
+          "evidence": [
+            {
+              "source": "source",
+              "reference": "api-compatibility:mog-api/worksheet-method-guidance"
+            }
+          ],
+          "behavior": "Address helpers are stateless utilities, not worksheet methods. Use a1.address(row, col) for A1 formatting.",
+          "runtimeSurfaces": [
+            "executeCode-preflight",
+            "agent-guidance",
+            "docs",
+            "api-eval"
+          ],
+          "surfaceDisposition": {
+            "typescript": "structured_diagnostic",
+            "kernel": "structured_diagnostic",
+            "executeCode-preflight": "structured_diagnostic",
+            "api-describe": "structured_diagnostic",
+            "agent-guidance": "structured_diagnostic",
+            "docs": "structured_diagnostic",
+            "python": "structured_diagnostic",
+            "api-eval": "structured_diagnostic"
+          },
+          "diagnostics": {
+            "code": "MOG002_MOG_API_USAGE",
+            "message": "ws.address(row, col) is not a Mog worksheet method. Use a1.address(row, col).",
+            "replacements": [
+              "a1.address"
+            ]
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe"
+          ]
+        },
+        {
+          "id": "mog-api.worksheet.indexToAddress.unsupported",
+          "observedPath": "ws.indexToAddress",
+          "canonicalPath": "a1.address",
+          "status": "structured_diagnostic",
+          "appliesTo": "method",
+          "ownerTheme": "sdk-agent-guidance/worksheet-api-usage",
+          "ownerPackage": "@mog-sdk/sdk",
+          "firstObservedVersion": "0.9.2",
+          "canonicalSince": "0.9.5",
+          "deprecatedSince": null,
+          "removeAfter": null,
+          "evidence": [
+            {
+              "source": "source",
+              "reference": "api-compatibility:mog-api/worksheet-method-guidance"
+            }
+          ],
+          "behavior": "Address conversion helpers live under the canonical a1 namespace; worksheets do not expose indexToAddress().",
+          "runtimeSurfaces": [
+            "executeCode-preflight",
+            "agent-guidance",
+            "docs",
+            "api-eval"
+          ],
+          "surfaceDisposition": {
+            "typescript": "structured_diagnostic",
+            "kernel": "structured_diagnostic",
+            "executeCode-preflight": "structured_diagnostic",
+            "api-describe": "structured_diagnostic",
+            "agent-guidance": "structured_diagnostic",
+            "docs": "structured_diagnostic",
+            "python": "structured_diagnostic",
+            "api-eval": "structured_diagnostic"
+          },
+          "diagnostics": {
+            "code": "MOG002_MOG_API_USAGE",
+            "message": "ws.indexToAddress(row, col) is not a Mog worksheet method. Use a1.address(row, col).",
+            "replacements": [
+              "a1.address",
+              "wb.indexToAddress"
+            ]
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe"
+          ]
+        }
+      ],
+      "a1.address()": [
+        {
+          "id": "mog-api.address.indexToIndex.unsupported",
+          "observedPath": "workbook.indexToIndex",
+          "canonicalPath": "a1.address",
+          "status": "structured_diagnostic",
+          "appliesTo": "method",
+          "ownerTheme": "sdk-agent-guidance/address-helper-ergonomics",
+          "ownerPackage": "@mog-sdk/sdk",
+          "firstObservedVersion": "0.9.4",
+          "canonicalSince": "0.9.5",
+          "deprecatedSince": null,
+          "removeAfter": null,
+          "evidence": [
+            {
+              "source": "source",
+              "reference": "api-compatibility:mog-api/worksheet-method-guidance"
+            }
+          ],
+          "behavior": "indexToIndex is a guessed address helper name. Use the canonical a1 helpers to format addresses or parse coordinates.",
+          "runtimeSurfaces": [
+            "executeCode-preflight",
+            "agent-guidance",
+            "docs",
+            "api-eval"
+          ],
+          "surfaceDisposition": {
+            "typescript": "structured_diagnostic",
+            "kernel": "structured_diagnostic",
+            "executeCode-preflight": "structured_diagnostic",
+            "api-describe": "structured_diagnostic",
+            "agent-guidance": "structured_diagnostic",
+            "docs": "structured_diagnostic",
+            "python": "structured_diagnostic",
+            "api-eval": "structured_diagnostic"
+          },
+          "diagnostics": {
+            "code": "MOG002_MOG_API_USAGE",
+            "message": "workbook.indexToIndex(row, col) is not a Mog API. Use a1.address(row, col) for row/column to A1 conversion, or a1.parse(address) for A1 to row/column conversion.",
+            "replacements": [
+              "a1.address",
+              "a1.parse"
+            ]
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe"
+          ]
+        },
+        {
+          "id": "mog-api.address.wbIndexToIndex.unsupported",
+          "observedPath": "wb.indexToIndex",
+          "canonicalPath": "a1.address",
+          "status": "structured_diagnostic",
+          "appliesTo": "method",
+          "ownerTheme": "sdk-agent-guidance/address-helper-ergonomics",
+          "ownerPackage": "@mog-sdk/sdk",
+          "firstObservedVersion": "0.9.4",
+          "canonicalSince": "0.9.5",
+          "deprecatedSince": null,
+          "removeAfter": null,
+          "evidence": [
+            {
+              "source": "source",
+              "reference": "api-compatibility:mog-api/worksheet-method-guidance"
+            }
+          ],
+          "behavior": "indexToIndex is a guessed address helper name. Use the canonical a1 helpers to format addresses or parse coordinates.",
+          "runtimeSurfaces": [
+            "executeCode-preflight",
+            "agent-guidance",
+            "docs",
+            "api-eval"
+          ],
+          "surfaceDisposition": {
+            "typescript": "structured_diagnostic",
+            "kernel": "structured_diagnostic",
+            "executeCode-preflight": "structured_diagnostic",
+            "api-describe": "structured_diagnostic",
+            "agent-guidance": "structured_diagnostic",
+            "docs": "structured_diagnostic",
+            "python": "structured_diagnostic",
+            "api-eval": "structured_diagnostic"
+          },
+          "diagnostics": {
+            "code": "MOG002_MOG_API_USAGE",
+            "message": "wb.indexToIndex(row, col) is not a Mog API. Use a1.address(row, col) for row/column to A1 conversion, or a1.parse(address) for A1 to row/column conversion.",
+            "replacements": [
+              "a1.address",
+              "a1.parse"
+            ]
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe"
+          ]
+        },
+        {
+          "id": "mog-api.address.worksheetAddressHelper.unsupported",
+          "observedPath": "ws.address",
+          "canonicalPath": "a1.address",
+          "status": "structured_diagnostic",
+          "appliesTo": "method",
+          "ownerTheme": "sdk-agent-guidance/address-helper-ergonomics",
+          "ownerPackage": "@mog-sdk/sdk",
+          "firstObservedVersion": "0.9.4",
+          "canonicalSince": "0.9.5",
+          "deprecatedSince": null,
+          "removeAfter": null,
+          "evidence": [
+            {
+              "source": "source",
+              "reference": "api-compatibility:mog-api/worksheet-method-guidance"
+            }
+          ],
+          "behavior": "Address helpers are stateless utilities, not worksheet methods. Use a1.address(row, col) for A1 formatting.",
+          "runtimeSurfaces": [
+            "executeCode-preflight",
+            "agent-guidance",
+            "docs",
+            "api-eval"
+          ],
+          "surfaceDisposition": {
+            "typescript": "structured_diagnostic",
+            "kernel": "structured_diagnostic",
+            "executeCode-preflight": "structured_diagnostic",
+            "api-describe": "structured_diagnostic",
+            "agent-guidance": "structured_diagnostic",
+            "docs": "structured_diagnostic",
+            "python": "structured_diagnostic",
+            "api-eval": "structured_diagnostic"
+          },
+          "diagnostics": {
+            "code": "MOG002_MOG_API_USAGE",
+            "message": "ws.address(row, col) is not a Mog worksheet method. Use a1.address(row, col).",
+            "replacements": [
+              "a1.address"
+            ]
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe"
+          ]
+        },
+        {
+          "id": "mog-api.worksheet.indexToAddress.unsupported",
+          "observedPath": "ws.indexToAddress",
+          "canonicalPath": "a1.address",
+          "status": "structured_diagnostic",
+          "appliesTo": "method",
+          "ownerTheme": "sdk-agent-guidance/worksheet-api-usage",
+          "ownerPackage": "@mog-sdk/sdk",
+          "firstObservedVersion": "0.9.2",
+          "canonicalSince": "0.9.5",
+          "deprecatedSince": null,
+          "removeAfter": null,
+          "evidence": [
+            {
+              "source": "source",
+              "reference": "api-compatibility:mog-api/worksheet-method-guidance"
+            }
+          ],
+          "behavior": "Address conversion helpers live under the canonical a1 namespace; worksheets do not expose indexToAddress().",
+          "runtimeSurfaces": [
+            "executeCode-preflight",
+            "agent-guidance",
+            "docs",
+            "api-eval"
+          ],
+          "surfaceDisposition": {
+            "typescript": "structured_diagnostic",
+            "kernel": "structured_diagnostic",
+            "executeCode-preflight": "structured_diagnostic",
+            "api-describe": "structured_diagnostic",
+            "agent-guidance": "structured_diagnostic",
+            "docs": "structured_diagnostic",
+            "python": "structured_diagnostic",
+            "api-eval": "structured_diagnostic"
+          },
+          "diagnostics": {
+            "code": "MOG002_MOG_API_USAGE",
+            "message": "ws.indexToAddress(row, col) is not a Mog worksheet method. Use a1.address(row, col).",
+            "replacements": [
+              "a1.address",
+              "wb.indexToAddress"
+            ]
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe"
+          ]
+        }
+      ],
+      "a1.column": [
+        {
+          "id": "mog-api.address.worksheetColumnNameHelper.unsupported",
+          "observedPath": "ws.columnName",
+          "canonicalPath": "a1.column",
+          "status": "structured_diagnostic",
+          "appliesTo": "method",
+          "ownerTheme": "sdk-agent-guidance/address-helper-ergonomics",
+          "ownerPackage": "@mog-sdk/sdk",
+          "firstObservedVersion": "0.9.4",
+          "canonicalSince": "0.9.5",
+          "deprecatedSince": null,
+          "removeAfter": null,
+          "evidence": [
+            {
+              "source": "source",
+              "reference": "api-compatibility:mog-api/worksheet-method-guidance"
+            }
+          ],
+          "behavior": "Column-name helpers are stateless utilities, not worksheet methods. Use a1.column(index).",
+          "runtimeSurfaces": [
+            "executeCode-preflight",
+            "agent-guidance",
+            "docs",
+            "api-eval"
+          ],
+          "surfaceDisposition": {
+            "typescript": "structured_diagnostic",
+            "kernel": "structured_diagnostic",
+            "executeCode-preflight": "structured_diagnostic",
+            "api-describe": "structured_diagnostic",
+            "agent-guidance": "structured_diagnostic",
+            "docs": "structured_diagnostic",
+            "python": "structured_diagnostic",
+            "api-eval": "structured_diagnostic"
+          },
+          "diagnostics": {
+            "code": "MOG002_MOG_API_USAGE",
+            "message": "ws.columnName(index) is not a Mog worksheet method. Use a1.column(index).",
+            "replacements": [
+              "a1.column"
+            ]
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe"
+          ]
+        },
+        {
+          "id": "mog-api.worksheet.privateColLetter.unsupported",
+          "observedPath": "ws._colLetter",
+          "canonicalPath": "a1.column",
+          "status": "structured_diagnostic",
+          "appliesTo": "method",
+          "ownerTheme": "sdk-agent-guidance/worksheet-api-usage",
+          "ownerPackage": "@mog-sdk/sdk",
+          "firstObservedVersion": "0.9.2",
+          "canonicalSince": "0.9.5",
+          "deprecatedSince": null,
+          "removeAfter": null,
+          "evidence": [
+            {
+              "source": "source",
+              "reference": "api-compatibility:mog-api/worksheet-method-guidance"
+            }
+          ],
+          "behavior": "Private worksheet/helper guesses such as _colLetter are not public Mog APIs; use the canonical a1 column/address helpers.",
+          "runtimeSurfaces": [
+            "executeCode-preflight",
+            "agent-guidance",
+            "docs",
+            "api-eval"
+          ],
+          "surfaceDisposition": {
+            "typescript": "structured_diagnostic",
+            "kernel": "structured_diagnostic",
+            "executeCode-preflight": "structured_diagnostic",
+            "api-describe": "structured_diagnostic",
+            "agent-guidance": "structured_diagnostic",
+            "docs": "structured_diagnostic",
+            "python": "structured_diagnostic",
+            "api-eval": "structured_diagnostic"
+          },
+          "diagnostics": {
+            "code": "MOG002_MOG_API_USAGE",
+            "message": "ws._colLetter(index) is not a public Mog worksheet method. Use a1.column(index).",
+            "replacements": [
+              "a1.column"
+            ]
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe"
+          ]
+        }
+      ],
+      "a1.column()": [
+        {
+          "id": "mog-api.address.worksheetColumnNameHelper.unsupported",
+          "observedPath": "ws.columnName",
+          "canonicalPath": "a1.column",
+          "status": "structured_diagnostic",
+          "appliesTo": "method",
+          "ownerTheme": "sdk-agent-guidance/address-helper-ergonomics",
+          "ownerPackage": "@mog-sdk/sdk",
+          "firstObservedVersion": "0.9.4",
+          "canonicalSince": "0.9.5",
+          "deprecatedSince": null,
+          "removeAfter": null,
+          "evidence": [
+            {
+              "source": "source",
+              "reference": "api-compatibility:mog-api/worksheet-method-guidance"
+            }
+          ],
+          "behavior": "Column-name helpers are stateless utilities, not worksheet methods. Use a1.column(index).",
+          "runtimeSurfaces": [
+            "executeCode-preflight",
+            "agent-guidance",
+            "docs",
+            "api-eval"
+          ],
+          "surfaceDisposition": {
+            "typescript": "structured_diagnostic",
+            "kernel": "structured_diagnostic",
+            "executeCode-preflight": "structured_diagnostic",
+            "api-describe": "structured_diagnostic",
+            "agent-guidance": "structured_diagnostic",
+            "docs": "structured_diagnostic",
+            "python": "structured_diagnostic",
+            "api-eval": "structured_diagnostic"
+          },
+          "diagnostics": {
+            "code": "MOG002_MOG_API_USAGE",
+            "message": "ws.columnName(index) is not a Mog worksheet method. Use a1.column(index).",
+            "replacements": [
+              "a1.column"
+            ]
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe"
+          ]
+        },
+        {
+          "id": "mog-api.worksheet.privateColLetter.unsupported",
+          "observedPath": "ws._colLetter",
+          "canonicalPath": "a1.column",
+          "status": "structured_diagnostic",
+          "appliesTo": "method",
+          "ownerTheme": "sdk-agent-guidance/worksheet-api-usage",
+          "ownerPackage": "@mog-sdk/sdk",
+          "firstObservedVersion": "0.9.2",
+          "canonicalSince": "0.9.5",
+          "deprecatedSince": null,
+          "removeAfter": null,
+          "evidence": [
+            {
+              "source": "source",
+              "reference": "api-compatibility:mog-api/worksheet-method-guidance"
+            }
+          ],
+          "behavior": "Private worksheet/helper guesses such as _colLetter are not public Mog APIs; use the canonical a1 column/address helpers.",
+          "runtimeSurfaces": [
+            "executeCode-preflight",
+            "agent-guidance",
+            "docs",
+            "api-eval"
+          ],
+          "surfaceDisposition": {
+            "typescript": "structured_diagnostic",
+            "kernel": "structured_diagnostic",
+            "executeCode-preflight": "structured_diagnostic",
+            "api-describe": "structured_diagnostic",
+            "agent-guidance": "structured_diagnostic",
+            "docs": "structured_diagnostic",
+            "python": "structured_diagnostic",
+            "api-eval": "structured_diagnostic"
+          },
+          "diagnostics": {
+            "code": "MOG002_MOG_API_USAGE",
+            "message": "ws._colLetter(index) is not a public Mog worksheet method. Use a1.column(index).",
+            "replacements": [
+              "a1.column"
+            ]
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe"
+          ]
+        }
+      ],
+      "a1.columnIndex": [
+        {
+          "id": "mog-api.address.worksheetColumnIndexHelper.unsupported",
+          "observedPath": "ws.columnIndex",
+          "canonicalPath": "a1.columnIndex",
+          "status": "structured_diagnostic",
+          "appliesTo": "method",
+          "ownerTheme": "sdk-agent-guidance/address-helper-ergonomics",
+          "ownerPackage": "@mog-sdk/sdk",
+          "firstObservedVersion": "0.9.4",
+          "canonicalSince": "0.9.5",
+          "deprecatedSince": null,
+          "removeAfter": null,
+          "evidence": [
+            {
+              "source": "source",
+              "reference": "api-compatibility:mog-api/worksheet-method-guidance"
+            }
+          ],
+          "behavior": "Column-index helpers are stateless utilities, not worksheet methods. Use a1.columnIndex(name).",
+          "runtimeSurfaces": [
+            "executeCode-preflight",
+            "agent-guidance",
+            "docs",
+            "api-eval"
+          ],
+          "surfaceDisposition": {
+            "typescript": "structured_diagnostic",
+            "kernel": "structured_diagnostic",
+            "executeCode-preflight": "structured_diagnostic",
+            "api-describe": "structured_diagnostic",
+            "agent-guidance": "structured_diagnostic",
+            "docs": "structured_diagnostic",
+            "python": "structured_diagnostic",
+            "api-eval": "structured_diagnostic"
+          },
+          "diagnostics": {
+            "code": "MOG002_MOG_API_USAGE",
+            "message": "ws.columnIndex(name) is not a Mog worksheet method. Use a1.columnIndex(name).",
+            "replacements": [
+              "a1.columnIndex"
+            ]
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe"
+          ]
+        }
+      ],
+      "a1.columnIndex()": [
+        {
+          "id": "mog-api.address.worksheetColumnIndexHelper.unsupported",
+          "observedPath": "ws.columnIndex",
+          "canonicalPath": "a1.columnIndex",
+          "status": "structured_diagnostic",
+          "appliesTo": "method",
+          "ownerTheme": "sdk-agent-guidance/address-helper-ergonomics",
+          "ownerPackage": "@mog-sdk/sdk",
+          "firstObservedVersion": "0.9.4",
+          "canonicalSince": "0.9.5",
+          "deprecatedSince": null,
+          "removeAfter": null,
+          "evidence": [
+            {
+              "source": "source",
+              "reference": "api-compatibility:mog-api/worksheet-method-guidance"
+            }
+          ],
+          "behavior": "Column-index helpers are stateless utilities, not worksheet methods. Use a1.columnIndex(name).",
+          "runtimeSurfaces": [
+            "executeCode-preflight",
+            "agent-guidance",
+            "docs",
+            "api-eval"
+          ],
+          "surfaceDisposition": {
+            "typescript": "structured_diagnostic",
+            "kernel": "structured_diagnostic",
+            "executeCode-preflight": "structured_diagnostic",
+            "api-describe": "structured_diagnostic",
+            "agent-guidance": "structured_diagnostic",
+            "docs": "structured_diagnostic",
+            "python": "structured_diagnostic",
+            "api-eval": "structured_diagnostic"
+          },
+          "diagnostics": {
+            "code": "MOG002_MOG_API_USAGE",
+            "message": "ws.columnIndex(name) is not a Mog worksheet method. Use a1.columnIndex(name).",
+            "replacements": [
+              "a1.columnIndex"
+            ]
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe"
+          ]
+        }
+      ],
+      "a1.offset": [
+        {
+          "id": "mog-api.address.worksheetOffsetHelper.unsupported",
+          "observedPath": "ws.offset",
+          "canonicalPath": "a1.offset",
+          "status": "structured_diagnostic",
+          "appliesTo": "method",
+          "ownerTheme": "sdk-agent-guidance/address-helper-ergonomics",
+          "ownerPackage": "@mog-sdk/sdk",
+          "firstObservedVersion": "0.9.4",
+          "canonicalSince": "0.9.5",
+          "deprecatedSince": null,
+          "removeAfter": null,
+          "evidence": [
+            {
+              "source": "source",
+              "reference": "api-compatibility:mog-api/worksheet-method-guidance"
+            }
+          ],
+          "behavior": "Address offset helpers are stateless utilities, not worksheet methods. Use a1.offset(address, dr, dc).",
+          "runtimeSurfaces": [
+            "executeCode-preflight",
+            "agent-guidance",
+            "docs",
+            "api-eval"
+          ],
+          "surfaceDisposition": {
+            "typescript": "structured_diagnostic",
+            "kernel": "structured_diagnostic",
+            "executeCode-preflight": "structured_diagnostic",
+            "api-describe": "structured_diagnostic",
+            "agent-guidance": "structured_diagnostic",
+            "docs": "structured_diagnostic",
+            "python": "structured_diagnostic",
+            "api-eval": "structured_diagnostic"
+          },
+          "diagnostics": {
+            "code": "MOG002_MOG_API_USAGE",
+            "message": "ws.offset(address, dr, dc) is not a Mog worksheet method. Use a1.offset(address, dr, dc).",
+            "replacements": [
+              "a1.offset"
+            ]
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe"
+          ]
+        }
+      ],
+      "a1.offset()": [
+        {
+          "id": "mog-api.address.worksheetOffsetHelper.unsupported",
+          "observedPath": "ws.offset",
+          "canonicalPath": "a1.offset",
+          "status": "structured_diagnostic",
+          "appliesTo": "method",
+          "ownerTheme": "sdk-agent-guidance/address-helper-ergonomics",
+          "ownerPackage": "@mog-sdk/sdk",
+          "firstObservedVersion": "0.9.4",
+          "canonicalSince": "0.9.5",
+          "deprecatedSince": null,
+          "removeAfter": null,
+          "evidence": [
+            {
+              "source": "source",
+              "reference": "api-compatibility:mog-api/worksheet-method-guidance"
+            }
+          ],
+          "behavior": "Address offset helpers are stateless utilities, not worksheet methods. Use a1.offset(address, dr, dc).",
+          "runtimeSurfaces": [
+            "executeCode-preflight",
+            "agent-guidance",
+            "docs",
+            "api-eval"
+          ],
+          "surfaceDisposition": {
+            "typescript": "structured_diagnostic",
+            "kernel": "structured_diagnostic",
+            "executeCode-preflight": "structured_diagnostic",
+            "api-describe": "structured_diagnostic",
+            "agent-guidance": "structured_diagnostic",
+            "docs": "structured_diagnostic",
+            "python": "structured_diagnostic",
+            "api-eval": "structured_diagnostic"
+          },
+          "diagnostics": {
+            "code": "MOG002_MOG_API_USAGE",
+            "message": "ws.offset(address, dr, dc) is not a Mog worksheet method. Use a1.offset(address, dr, dc).",
+            "replacements": [
+              "a1.offset"
+            ]
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe"
+          ]
+        }
+      ],
+      "a1.parse": [
+        {
+          "id": "mog-api.worksheet.addressToIndex.unsupported",
+          "observedPath": "ws.addressToIndex",
+          "canonicalPath": "a1.parse",
+          "status": "structured_diagnostic",
+          "appliesTo": "method",
+          "ownerTheme": "sdk-agent-guidance/worksheet-api-usage",
+          "ownerPackage": "@mog-sdk/sdk",
+          "firstObservedVersion": "0.9.2",
+          "canonicalSince": "0.9.5",
+          "deprecatedSince": null,
+          "removeAfter": null,
+          "evidence": [
+            {
+              "source": "source",
+              "reference": "api-compatibility:mog-api/worksheet-method-guidance"
+            }
+          ],
+          "behavior": "Address parsing helpers live under the canonical a1 namespace; worksheets do not expose addressToIndex().",
+          "runtimeSurfaces": [
+            "executeCode-preflight",
+            "agent-guidance",
+            "docs",
+            "api-eval"
+          ],
+          "surfaceDisposition": {
+            "typescript": "structured_diagnostic",
+            "kernel": "structured_diagnostic",
+            "executeCode-preflight": "structured_diagnostic",
+            "api-describe": "structured_diagnostic",
+            "agent-guidance": "structured_diagnostic",
+            "docs": "structured_diagnostic",
+            "python": "structured_diagnostic",
+            "api-eval": "structured_diagnostic"
+          },
+          "diagnostics": {
+            "code": "MOG002_MOG_API_USAGE",
+            "message": "ws.addressToIndex(address) is not a Mog worksheet method. Use a1.parse(address).",
+            "replacements": [
+              "a1.parse",
+              "wb.addressToIndex"
+            ]
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe"
+          ]
+        }
+      ],
+      "a1.parse()": [
+        {
+          "id": "mog-api.worksheet.addressToIndex.unsupported",
+          "observedPath": "ws.addressToIndex",
+          "canonicalPath": "a1.parse",
+          "status": "structured_diagnostic",
+          "appliesTo": "method",
+          "ownerTheme": "sdk-agent-guidance/worksheet-api-usage",
+          "ownerPackage": "@mog-sdk/sdk",
+          "firstObservedVersion": "0.9.2",
+          "canonicalSince": "0.9.5",
+          "deprecatedSince": null,
+          "removeAfter": null,
+          "evidence": [
+            {
+              "source": "source",
+              "reference": "api-compatibility:mog-api/worksheet-method-guidance"
+            }
+          ],
+          "behavior": "Address parsing helpers live under the canonical a1 namespace; worksheets do not expose addressToIndex().",
+          "runtimeSurfaces": [
+            "executeCode-preflight",
+            "agent-guidance",
+            "docs",
+            "api-eval"
+          ],
+          "surfaceDisposition": {
+            "typescript": "structured_diagnostic",
+            "kernel": "structured_diagnostic",
+            "executeCode-preflight": "structured_diagnostic",
+            "api-describe": "structured_diagnostic",
+            "agent-guidance": "structured_diagnostic",
+            "docs": "structured_diagnostic",
+            "python": "structured_diagnostic",
+            "api-eval": "structured_diagnostic"
+          },
+          "diagnostics": {
+            "code": "MOG002_MOG_API_USAGE",
+            "message": "ws.addressToIndex(address) is not a Mog worksheet method. Use a1.parse(address).",
+            "replacements": [
+              "a1.parse",
+              "wb.addressToIndex"
+            ]
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe"
+          ]
+        }
+      ],
+      "a1.range": [
+        {
+          "id": "mog-api.address.worksheetRangeAddressHelper.unsupported",
+          "observedPath": "ws.rangeAddress",
+          "canonicalPath": "a1.range",
+          "status": "structured_diagnostic",
+          "appliesTo": "method",
+          "ownerTheme": "sdk-agent-guidance/address-helper-ergonomics",
+          "ownerPackage": "@mog-sdk/sdk",
+          "firstObservedVersion": "0.9.4",
+          "canonicalSince": "0.9.5",
+          "deprecatedSince": null,
+          "removeAfter": null,
+          "evidence": [
+            {
+              "source": "source",
+              "reference": "api-compatibility:mog-api/worksheet-method-guidance"
+            }
+          ],
+          "behavior": "Range address helpers are stateless utilities, not worksheet methods. Use a1.range(row1, col1, row2, col2).",
+          "runtimeSurfaces": [
+            "executeCode-preflight",
+            "agent-guidance",
+            "docs",
+            "api-eval"
+          ],
+          "surfaceDisposition": {
+            "typescript": "structured_diagnostic",
+            "kernel": "structured_diagnostic",
+            "executeCode-preflight": "structured_diagnostic",
+            "api-describe": "structured_diagnostic",
+            "agent-guidance": "structured_diagnostic",
+            "docs": "structured_diagnostic",
+            "python": "structured_diagnostic",
+            "api-eval": "structured_diagnostic"
+          },
+          "diagnostics": {
+            "code": "MOG002_MOG_API_USAGE",
+            "message": "ws.rangeAddress(row1, col1, row2, col2) is not a Mog worksheet method. Use a1.range(row1, col1, row2, col2).",
+            "replacements": [
+              "a1.range"
+            ]
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe"
+          ]
+        }
+      ],
+      "a1.range()": [
+        {
+          "id": "mog-api.address.worksheetRangeAddressHelper.unsupported",
+          "observedPath": "ws.rangeAddress",
+          "canonicalPath": "a1.range",
+          "status": "structured_diagnostic",
+          "appliesTo": "method",
+          "ownerTheme": "sdk-agent-guidance/address-helper-ergonomics",
+          "ownerPackage": "@mog-sdk/sdk",
+          "firstObservedVersion": "0.9.4",
+          "canonicalSince": "0.9.5",
+          "deprecatedSince": null,
+          "removeAfter": null,
+          "evidence": [
+            {
+              "source": "source",
+              "reference": "api-compatibility:mog-api/worksheet-method-guidance"
+            }
+          ],
+          "behavior": "Range address helpers are stateless utilities, not worksheet methods. Use a1.range(row1, col1, row2, col2).",
+          "runtimeSurfaces": [
+            "executeCode-preflight",
+            "agent-guidance",
+            "docs",
+            "api-eval"
+          ],
+          "surfaceDisposition": {
+            "typescript": "structured_diagnostic",
+            "kernel": "structured_diagnostic",
+            "executeCode-preflight": "structured_diagnostic",
+            "api-describe": "structured_diagnostic",
+            "agent-guidance": "structured_diagnostic",
+            "docs": "structured_diagnostic",
+            "python": "structured_diagnostic",
+            "api-eval": "structured_diagnostic"
+          },
+          "diagnostics": {
+            "code": "MOG002_MOG_API_USAGE",
+            "message": "ws.rangeAddress(row1, col1, row2, col2) is not a Mog worksheet method. Use a1.range(row1, col1, row2, col2).",
+            "replacements": [
+              "a1.range"
+            ]
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe"
+          ]
+        }
+      ],
       "type:PivotTableHandle.getInfo": [
         {
           "id": "mog-api.pivot.handle.describe.unsupported",
@@ -5224,290 +7996,6 @@
             "cargo test -p compute-pivot",
             "pnpm --filter @mog-sdk/kernel test -- worksheet-pivots",
             "dev/api-eval/scenarios/pivots/pivot-item-visibility.ts"
-          ]
-        }
-      ],
-      "wb.addressToIndex": [
-        {
-          "id": "mog-api.worksheet.addressToIndex.unsupported",
-          "observedPath": "ws.addressToIndex",
-          "canonicalPath": "wb.addressToIndex",
-          "status": "structured_diagnostic",
-          "appliesTo": "method",
-          "ownerTheme": "sdk-agent-guidance/worksheet-api-usage",
-          "ownerPackage": "@mog-sdk/sdk",
-          "firstObservedVersion": "0.9.2",
-          "canonicalSince": null,
-          "deprecatedSince": null,
-          "removeAfter": null,
-          "evidence": [
-            {
-              "source": "source",
-              "reference": "api-compatibility:mog-api/worksheet-method-guidance"
-            }
-          ],
-          "behavior": "Address conversion helpers are workbook APIs; worksheets do not expose addressToIndex().",
-          "runtimeSurfaces": [
-            "executeCode-preflight",
-            "agent-guidance",
-            "docs",
-            "api-eval"
-          ],
-          "surfaceDisposition": {
-            "typescript": "structured_diagnostic",
-            "kernel": "structured_diagnostic",
-            "executeCode-preflight": "structured_diagnostic",
-            "api-describe": "structured_diagnostic",
-            "agent-guidance": "structured_diagnostic",
-            "docs": "structured_diagnostic",
-            "python": "structured_diagnostic",
-            "api-eval": "structured_diagnostic"
-          },
-          "diagnostics": {
-            "code": "MOG002_MOG_API_USAGE",
-            "message": "ws.addressToIndex(address) is not a Mog worksheet method. Use wb.addressToIndex(address).",
-            "replacements": [
-              "wb.addressToIndex"
-            ]
-          },
-          "verification": [
-            "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe"
-          ]
-        }
-      ],
-      "wb.addressToIndex()": [
-        {
-          "id": "mog-api.worksheet.addressToIndex.unsupported",
-          "observedPath": "ws.addressToIndex",
-          "canonicalPath": "wb.addressToIndex",
-          "status": "structured_diagnostic",
-          "appliesTo": "method",
-          "ownerTheme": "sdk-agent-guidance/worksheet-api-usage",
-          "ownerPackage": "@mog-sdk/sdk",
-          "firstObservedVersion": "0.9.2",
-          "canonicalSince": null,
-          "deprecatedSince": null,
-          "removeAfter": null,
-          "evidence": [
-            {
-              "source": "source",
-              "reference": "api-compatibility:mog-api/worksheet-method-guidance"
-            }
-          ],
-          "behavior": "Address conversion helpers are workbook APIs; worksheets do not expose addressToIndex().",
-          "runtimeSurfaces": [
-            "executeCode-preflight",
-            "agent-guidance",
-            "docs",
-            "api-eval"
-          ],
-          "surfaceDisposition": {
-            "typescript": "structured_diagnostic",
-            "kernel": "structured_diagnostic",
-            "executeCode-preflight": "structured_diagnostic",
-            "api-describe": "structured_diagnostic",
-            "agent-guidance": "structured_diagnostic",
-            "docs": "structured_diagnostic",
-            "python": "structured_diagnostic",
-            "api-eval": "structured_diagnostic"
-          },
-          "diagnostics": {
-            "code": "MOG002_MOG_API_USAGE",
-            "message": "ws.addressToIndex(address) is not a Mog worksheet method. Use wb.addressToIndex(address).",
-            "replacements": [
-              "wb.addressToIndex"
-            ]
-          },
-          "verification": [
-            "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe"
-          ]
-        }
-      ],
-      "wb.indexToAddress": [
-        {
-          "id": "mog-api.worksheet.indexToAddress.unsupported",
-          "observedPath": "ws.indexToAddress",
-          "canonicalPath": "wb.indexToAddress",
-          "status": "structured_diagnostic",
-          "appliesTo": "method",
-          "ownerTheme": "sdk-agent-guidance/worksheet-api-usage",
-          "ownerPackage": "@mog-sdk/sdk",
-          "firstObservedVersion": "0.9.2",
-          "canonicalSince": null,
-          "deprecatedSince": null,
-          "removeAfter": null,
-          "evidence": [
-            {
-              "source": "source",
-              "reference": "api-compatibility:mog-api/worksheet-method-guidance"
-            }
-          ],
-          "behavior": "Address conversion helpers are workbook APIs; worksheets do not expose indexToAddress().",
-          "runtimeSurfaces": [
-            "executeCode-preflight",
-            "agent-guidance",
-            "docs",
-            "api-eval"
-          ],
-          "surfaceDisposition": {
-            "typescript": "structured_diagnostic",
-            "kernel": "structured_diagnostic",
-            "executeCode-preflight": "structured_diagnostic",
-            "api-describe": "structured_diagnostic",
-            "agent-guidance": "structured_diagnostic",
-            "docs": "structured_diagnostic",
-            "python": "structured_diagnostic",
-            "api-eval": "structured_diagnostic"
-          },
-          "diagnostics": {
-            "code": "MOG002_MOG_API_USAGE",
-            "message": "ws.indexToAddress(row, col) is not a Mog worksheet method. Use wb.indexToAddress(row, col).",
-            "replacements": [
-              "wb.indexToAddress"
-            ]
-          },
-          "verification": [
-            "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe"
-          ]
-        },
-        {
-          "id": "mog-api.worksheet.privateColLetter.unsupported",
-          "observedPath": "ws._colLetter",
-          "canonicalPath": "wb.indexToAddress",
-          "status": "structured_diagnostic",
-          "appliesTo": "method",
-          "ownerTheme": "sdk-agent-guidance/worksheet-api-usage",
-          "ownerPackage": "@mog-sdk/sdk",
-          "firstObservedVersion": "0.9.2",
-          "canonicalSince": null,
-          "deprecatedSince": null,
-          "removeAfter": null,
-          "evidence": [
-            {
-              "source": "source",
-              "reference": "api-compatibility:mog-api/worksheet-method-guidance"
-            }
-          ],
-          "behavior": "Private worksheet/helper guesses such as _colLetter are not public Mog APIs; use workbook address helpers where possible.",
-          "runtimeSurfaces": [
-            "executeCode-preflight",
-            "agent-guidance",
-            "docs",
-            "api-eval"
-          ],
-          "surfaceDisposition": {
-            "typescript": "structured_diagnostic",
-            "kernel": "structured_diagnostic",
-            "executeCode-preflight": "structured_diagnostic",
-            "api-describe": "structured_diagnostic",
-            "agent-guidance": "structured_diagnostic",
-            "docs": "structured_diagnostic",
-            "python": "structured_diagnostic",
-            "api-eval": "structured_diagnostic"
-          },
-          "diagnostics": {
-            "code": "MOG002_MOG_API_USAGE",
-            "message": "ws._colLetter(index) is not a public Mog worksheet method. Use wb.indexToAddress(row, col) when converting indexes to addresses.",
-            "replacements": [
-              "wb.indexToAddress"
-            ]
-          },
-          "verification": [
-            "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe"
-          ]
-        }
-      ],
-      "wb.indexToAddress()": [
-        {
-          "id": "mog-api.worksheet.indexToAddress.unsupported",
-          "observedPath": "ws.indexToAddress",
-          "canonicalPath": "wb.indexToAddress",
-          "status": "structured_diagnostic",
-          "appliesTo": "method",
-          "ownerTheme": "sdk-agent-guidance/worksheet-api-usage",
-          "ownerPackage": "@mog-sdk/sdk",
-          "firstObservedVersion": "0.9.2",
-          "canonicalSince": null,
-          "deprecatedSince": null,
-          "removeAfter": null,
-          "evidence": [
-            {
-              "source": "source",
-              "reference": "api-compatibility:mog-api/worksheet-method-guidance"
-            }
-          ],
-          "behavior": "Address conversion helpers are workbook APIs; worksheets do not expose indexToAddress().",
-          "runtimeSurfaces": [
-            "executeCode-preflight",
-            "agent-guidance",
-            "docs",
-            "api-eval"
-          ],
-          "surfaceDisposition": {
-            "typescript": "structured_diagnostic",
-            "kernel": "structured_diagnostic",
-            "executeCode-preflight": "structured_diagnostic",
-            "api-describe": "structured_diagnostic",
-            "agent-guidance": "structured_diagnostic",
-            "docs": "structured_diagnostic",
-            "python": "structured_diagnostic",
-            "api-eval": "structured_diagnostic"
-          },
-          "diagnostics": {
-            "code": "MOG002_MOG_API_USAGE",
-            "message": "ws.indexToAddress(row, col) is not a Mog worksheet method. Use wb.indexToAddress(row, col).",
-            "replacements": [
-              "wb.indexToAddress"
-            ]
-          },
-          "verification": [
-            "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe"
-          ]
-        },
-        {
-          "id": "mog-api.worksheet.privateColLetter.unsupported",
-          "observedPath": "ws._colLetter",
-          "canonicalPath": "wb.indexToAddress",
-          "status": "structured_diagnostic",
-          "appliesTo": "method",
-          "ownerTheme": "sdk-agent-guidance/worksheet-api-usage",
-          "ownerPackage": "@mog-sdk/sdk",
-          "firstObservedVersion": "0.9.2",
-          "canonicalSince": null,
-          "deprecatedSince": null,
-          "removeAfter": null,
-          "evidence": [
-            {
-              "source": "source",
-              "reference": "api-compatibility:mog-api/worksheet-method-guidance"
-            }
-          ],
-          "behavior": "Private worksheet/helper guesses such as _colLetter are not public Mog APIs; use workbook address helpers where possible.",
-          "runtimeSurfaces": [
-            "executeCode-preflight",
-            "agent-guidance",
-            "docs",
-            "api-eval"
-          ],
-          "surfaceDisposition": {
-            "typescript": "structured_diagnostic",
-            "kernel": "structured_diagnostic",
-            "executeCode-preflight": "structured_diagnostic",
-            "api-describe": "structured_diagnostic",
-            "agent-guidance": "structured_diagnostic",
-            "docs": "structured_diagnostic",
-            "python": "structured_diagnostic",
-            "api-eval": "structured_diagnostic"
-          },
-          "diagnostics": {
-            "code": "MOG002_MOG_API_USAGE",
-            "message": "ws._colLetter(index) is not a public Mog worksheet method. Use wb.indexToAddress(row, col) when converting indexes to addresses.",
-            "replacements": [
-              "wb.indexToAddress"
-            ]
-          },
-          "verification": [
-            "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe"
           ]
         }
       ],
@@ -7156,6 +9644,196 @@
           "verification": [
             "pnpm --filter @mog-sdk/kernel test -- worksheet-pivots",
             "dev/api-eval/scenarios/pivots/pivot-item-visibility.ts"
+          ]
+        }
+      ],
+      "ws.validations.setList": [
+        {
+          "id": "mog-api.validation.dataValidationAdd.unsupported",
+          "observedPath": "ws.dataValidation.add",
+          "canonicalPath": "ws.validations.setList",
+          "status": "structured_diagnostic",
+          "appliesTo": "method",
+          "ownerTheme": "api-compatibility/validation-conditional-formatting-helpers",
+          "ownerPackage": "@mog-sdk/sdk",
+          "firstObservedVersion": "0.9.4",
+          "canonicalSince": null,
+          "deprecatedSince": null,
+          "removeAfter": null,
+          "evidence": [
+            {
+              "source": "source",
+              "reference": "api-compatibility:validation-conditional-formatting-helpers"
+            }
+          ],
+          "behavior": "Mog exposes worksheet data validation under ws.validations, not ws.dataValidation. List validation should use ws.validations.setList(range, source, options).",
+          "runtimeSurfaces": [
+            "executeCode-preflight",
+            "agent-guidance",
+            "docs",
+            "api-eval"
+          ],
+          "surfaceDisposition": {
+            "typescript": "structured_diagnostic",
+            "kernel": "structured_diagnostic",
+            "executeCode-preflight": "structured_diagnostic",
+            "api-describe": "structured_diagnostic",
+            "agent-guidance": "structured_diagnostic",
+            "docs": "structured_diagnostic",
+            "python": "structured_diagnostic",
+            "api-eval": "structured_diagnostic"
+          },
+          "diagnostics": {
+            "code": "MOG002_MOG_API_USAGE",
+            "message": "ws.dataValidation.add(...) is not a Mog worksheet method. Use ws.validations.setList(range, source, options) for list validation.",
+            "replacements": [
+              "ws.validations.setList"
+            ]
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe"
+          ]
+        },
+        {
+          "id": "mog-api.validation.validationsAdd.unsupported",
+          "observedPath": "ws.validations.add",
+          "canonicalPath": "ws.validations.setList",
+          "status": "structured_diagnostic",
+          "appliesTo": "method",
+          "ownerTheme": "api-compatibility/validation-conditional-formatting-helpers",
+          "ownerPackage": "@mog-sdk/sdk",
+          "firstObservedVersion": "0.9.4",
+          "canonicalSince": null,
+          "deprecatedSince": null,
+          "removeAfter": null,
+          "evidence": [
+            {
+              "source": "source",
+              "reference": "api-compatibility:validation-conditional-formatting-helpers"
+            }
+          ],
+          "behavior": "Worksheet validation mutations are set-style operations. For list validation, agents should use the intent-level ws.validations.setList(range, source, options) helper; for advanced schemas, use ws.validations.set(range, rule).",
+          "runtimeSurfaces": [
+            "executeCode-preflight",
+            "agent-guidance",
+            "docs",
+            "api-eval"
+          ],
+          "surfaceDisposition": {
+            "typescript": "structured_diagnostic",
+            "kernel": "structured_diagnostic",
+            "executeCode-preflight": "structured_diagnostic",
+            "api-describe": "structured_diagnostic",
+            "agent-guidance": "structured_diagnostic",
+            "docs": "structured_diagnostic",
+            "python": "structured_diagnostic",
+            "api-eval": "structured_diagnostic"
+          },
+          "diagnostics": {
+            "code": "MOG002_MOG_API_USAGE",
+            "message": "ws.validations.add(...) is not a Mog worksheet validation method. Use ws.validations.setList(range, source, options) for list validation, or ws.validations.set(range, rule) for an explicit validation rule.",
+            "replacements": [
+              "ws.validations.setList",
+              "ws.validations.set"
+            ]
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe"
+          ]
+        }
+      ],
+      "ws.validations.setList()": [
+        {
+          "id": "mog-api.validation.dataValidationAdd.unsupported",
+          "observedPath": "ws.dataValidation.add",
+          "canonicalPath": "ws.validations.setList",
+          "status": "structured_diagnostic",
+          "appliesTo": "method",
+          "ownerTheme": "api-compatibility/validation-conditional-formatting-helpers",
+          "ownerPackage": "@mog-sdk/sdk",
+          "firstObservedVersion": "0.9.4",
+          "canonicalSince": null,
+          "deprecatedSince": null,
+          "removeAfter": null,
+          "evidence": [
+            {
+              "source": "source",
+              "reference": "api-compatibility:validation-conditional-formatting-helpers"
+            }
+          ],
+          "behavior": "Mog exposes worksheet data validation under ws.validations, not ws.dataValidation. List validation should use ws.validations.setList(range, source, options).",
+          "runtimeSurfaces": [
+            "executeCode-preflight",
+            "agent-guidance",
+            "docs",
+            "api-eval"
+          ],
+          "surfaceDisposition": {
+            "typescript": "structured_diagnostic",
+            "kernel": "structured_diagnostic",
+            "executeCode-preflight": "structured_diagnostic",
+            "api-describe": "structured_diagnostic",
+            "agent-guidance": "structured_diagnostic",
+            "docs": "structured_diagnostic",
+            "python": "structured_diagnostic",
+            "api-eval": "structured_diagnostic"
+          },
+          "diagnostics": {
+            "code": "MOG002_MOG_API_USAGE",
+            "message": "ws.dataValidation.add(...) is not a Mog worksheet method. Use ws.validations.setList(range, source, options) for list validation.",
+            "replacements": [
+              "ws.validations.setList"
+            ]
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe"
+          ]
+        },
+        {
+          "id": "mog-api.validation.validationsAdd.unsupported",
+          "observedPath": "ws.validations.add",
+          "canonicalPath": "ws.validations.setList",
+          "status": "structured_diagnostic",
+          "appliesTo": "method",
+          "ownerTheme": "api-compatibility/validation-conditional-formatting-helpers",
+          "ownerPackage": "@mog-sdk/sdk",
+          "firstObservedVersion": "0.9.4",
+          "canonicalSince": null,
+          "deprecatedSince": null,
+          "removeAfter": null,
+          "evidence": [
+            {
+              "source": "source",
+              "reference": "api-compatibility:validation-conditional-formatting-helpers"
+            }
+          ],
+          "behavior": "Worksheet validation mutations are set-style operations. For list validation, agents should use the intent-level ws.validations.setList(range, source, options) helper; for advanced schemas, use ws.validations.set(range, rule).",
+          "runtimeSurfaces": [
+            "executeCode-preflight",
+            "agent-guidance",
+            "docs",
+            "api-eval"
+          ],
+          "surfaceDisposition": {
+            "typescript": "structured_diagnostic",
+            "kernel": "structured_diagnostic",
+            "executeCode-preflight": "structured_diagnostic",
+            "api-describe": "structured_diagnostic",
+            "agent-guidance": "structured_diagnostic",
+            "docs": "structured_diagnostic",
+            "python": "structured_diagnostic",
+            "api-eval": "structured_diagnostic"
+          },
+          "diagnostics": {
+            "code": "MOG002_MOG_API_USAGE",
+            "message": "ws.validations.add(...) is not a Mog worksheet validation method. Use ws.validations.setList(range, source, options) for list validation, or ws.validations.set(range, rule) for an explicit validation rule.",
+            "replacements": [
+              "ws.validations.setList",
+              "ws.validations.set"
+            ]
+          },
+          "verification": [
+            "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe"
           ]
         }
       ]

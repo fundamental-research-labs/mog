@@ -8,6 +8,8 @@
 import type { ActionHandler, ActionResult, AsyncActionHandler } from '@mog-sdk/contracts/actions';
 import type { CellValue, CellValuePrimitive, ErrorVariant } from '@mog-sdk/contracts/core';
 import { sheetId } from '@mog-sdk/contracts/core';
+import type { OperationDiagnostic } from '@mog-sdk/contracts/api';
+import type { DataTableWriteStaticValuesReceipt } from '@mog-sdk/contracts/what-if';
 import { parseA1, toA1 } from '@mog/spreadsheet-utils/a1';
 import { errorDisplayString, isCellError } from '@mog/spreadsheet-utils/errors';
 // Unified API: setCellValue replaced with ws.setCell in APPLY_GOAL_SEEK_RESULT
@@ -731,8 +733,48 @@ export const CLOSE_DATA_TABLE_DIALOG: ActionHandler = (deps): ActionResult => {
   return { handled: true };
 };
 
+const DATA_TABLE_LIFECYCLE = 'staticValues' as const;
+
+function diagnosticMessage(diagnostics: readonly OperationDiagnostic[]): string | null {
+  const diagnostic = diagnostics.find((item) => item.severity === 'error') ?? diagnostics[0];
+  return diagnostic?.message ?? null;
+}
+
+function dataTableWriteError(receipt: DataTableWriteStaticValuesReceipt): string {
+  return (
+    diagnosticMessage(receipt.diagnostics) ??
+    `Data Table static value write did not apply: ${receipt.status}.`
+  );
+}
+
+function assertStaticDataTableReceiptApplied(receipt: DataTableWriteStaticValuesReceipt): void {
+  if (
+    receipt.kind !== 'dataTable.writeStaticValues' ||
+    receipt.lifecycle !== DATA_TABLE_LIFECYCLE
+  ) {
+    throw new Error(
+      `Data Table action expected a static values receipt but received ${receipt.kind}.`,
+    );
+  }
+
+  const diagnosticError = diagnosticMessage(
+    receipt.diagnostics.filter((diagnostic) => diagnostic.severity === 'error'),
+  );
+  if (diagnosticError) throw new Error(diagnosticError);
+  if (receipt.status === 'applied' || receipt.status === 'noOp') return;
+
+  if (receipt.status === 'partial') {
+    throw new Error(
+      diagnosticMessage(receipt.diagnostics) ??
+        'Data Table static value write only partially applied.',
+    );
+  }
+
+  throw new Error(dataTableWriteError(receipt));
+}
+
 /**
- * Execute Data Table creation through the production worksheet API.
+ * Execute a static-values Data Table write through the production worksheet API.
  */
 export const EXECUTE_DATA_TABLE: AsyncActionHandler = async (deps): Promise<ActionResult> => {
   const state = getUIStore(deps).getState();
@@ -776,11 +818,12 @@ export const EXECUTE_DATA_TABLE: AsyncActionHandler = async (deps): Promise<Acti
         ((cell as { value?: CellValue } | null)?.value ?? null) as CellValue,
       );
     };
+    const toRangeA1 = (sRow: number, sCol: number, eRow: number, eCol: number): string =>
+      `${toA1(sRow, sCol)}:${toA1(eRow, eCol)}`;
 
     const rowInput = rowInputCellRef.trim() || null;
     const colInput = colInputCellRef.trim() || null;
-    let result: { results: CellValue[][]; cellCount?: number; cancelled?: boolean };
-    const writes: Array<{ row: number; col: number; value: CellValuePrimitive }> = [];
+    let receipt: DataTableWriteStaticValuesReceipt;
 
     if (rowInput && colInput) {
       if (endRow <= startRow || endCol <= startCol) {
@@ -800,24 +843,15 @@ export const EXECUTE_DATA_TABLE: AsyncActionHandler = async (deps): Promise<Acti
         ),
       );
 
-      result = await ws.whatIf.dataTable(toA1(startRow, startCol), {
+      receipt = await ws.whatIf.writeDataTableValues(toA1(startRow, startCol), {
         // Excel row input consumes top-row values; the legacy evaluator's
         // rowValues dimension is output rows, so the two axes are swapped here.
         rowInputCell: colInput,
         colInputCell: rowInput,
         rowValues: leftColumnValues,
         colValues: topRowValues,
+        targetRange: toRangeA1(startRow + 1, startCol + 1, endRow, endCol),
       });
-
-      for (let rowIndex = 0; rowIndex < result.results.length; rowIndex++) {
-        for (let colIndex = 0; colIndex < (result.results[rowIndex]?.length ?? 0); colIndex++) {
-          writes.push({
-            row: startRow + 1 + rowIndex,
-            col: startCol + 1 + colIndex,
-            value: toPrimitiveCellValue(result.results[rowIndex][colIndex]),
-          });
-        }
-      }
     } else if (colInput) {
       if (endRow <= startRow) {
         throw new Error(
@@ -831,20 +865,13 @@ export const EXECUTE_DATA_TABLE: AsyncActionHandler = async (deps): Promise<Acti
         ),
       );
 
-      result = await ws.whatIf.dataTable(toA1(startRow, startCol), {
+      receipt = await ws.whatIf.writeDataTableValues(toA1(startRow, startCol), {
         rowInputCell: colInput,
         colInputCell: null,
         rowValues: leftColumnValues,
         colValues: [],
+        targetRange: toRangeA1(startRow + 1, startCol, endRow, startCol),
       });
-
-      for (let rowIndex = 0; rowIndex < result.results.length; rowIndex++) {
-        writes.push({
-          row: startRow + 1 + rowIndex,
-          col: startCol,
-          value: toPrimitiveCellValue(result.results[rowIndex]?.[0] ?? null),
-        });
-      }
     } else if (rowInput) {
       if (endCol <= startCol) {
         throw new Error(
@@ -858,31 +885,22 @@ export const EXECUTE_DATA_TABLE: AsyncActionHandler = async (deps): Promise<Acti
         ),
       );
 
-      result = await ws.whatIf.dataTable(toA1(startRow, startCol), {
+      receipt = await ws.whatIf.writeDataTableValues(toA1(startRow, startCol), {
         rowInputCell: null,
         colInputCell: rowInput,
         rowValues: [],
         colValues: topRowValues,
+        targetRange: toRangeA1(startRow, startCol + 1, startRow, endCol),
       });
-
-      for (let colIndex = 0; colIndex < (result.results[0]?.length ?? 0); colIndex++) {
-        writes.push({
-          row: startRow,
-          col: startCol + 1 + colIndex,
-          value: toPrimitiveCellValue(result.results[0][colIndex]),
-        });
-      }
     } else {
       throw new Error('At least one input cell is required.');
     }
 
-    if (writes.length > 0) {
-      await ws.setCells(writes);
-    }
+    assertStaticDataTableReceiptApplied(receipt);
 
     state.setDataTableResult({
-      cellCount: result.cellCount ?? writes.length,
-      elapsedMs: performance.now() - started,
+      cellCount: receipt.cellsWritten,
+      elapsedMs: receipt.elapsedMs,
       cancelled: false,
     });
   } catch (err) {

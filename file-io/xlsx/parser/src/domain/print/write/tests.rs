@@ -725,7 +725,7 @@ fn test_format_f64_decimal() {
     assert_eq!(format_f64(0.7), "0.7");
     assert_eq!(format_f64(0.75), "0.75");
     assert_eq!(format_f64(0.3), "0.3");
-    assert_eq!(format_f64(3.14), "3.14");
+    assert_eq!(format_f64(12.34), "12.34");
 }
 
 #[test]

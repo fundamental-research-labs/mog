@@ -53,9 +53,17 @@ export type {
 // =============================================================================
 
 export {
+  address,
+  column,
+  columnIndex,
+  columnName,
   colToLetter,
+  offset,
+  parse,
+  parseAddress,
   parseCellAddress,
   parseCellRange,
+  rangeAddress,
   rangeToA1,
   toA1,
 } from './api/internal/utils';
@@ -90,10 +98,10 @@ export type {
   CellData,
   FunctionInfo,
   WorkbookSnapshot,
+  WorkbookLinks,
 } from '@mog-sdk/contracts/api';
 
 export type {
-  WorkbookLinksAPI as WorkbookLinks,
   WorkbookLinkView,
   WorkbookExternalLinkUsageView,
   WorkbookExternalPackageArtifactView,

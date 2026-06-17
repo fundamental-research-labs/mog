@@ -140,6 +140,41 @@ export interface AutoFillResult {
   changes: AutoFillChange[];
 }
 
+/** A single adjusted formula reference reported by the Rust fill engine. */
+export interface AutoFillAdjustedRef {
+  refIndex: number;
+  targetRow: number;
+  targetCol: number;
+  targetEndRow: number | null;
+  targetEndCol: number | null;
+  outOfBounds: boolean;
+}
+
+/** Formula text produced for one target cell during autofill preview. */
+export interface AutoFillFormulaPreview {
+  row: number;
+  col: number;
+  formula: string;
+  sourceFormula: string;
+  adjustedRefs: AutoFillAdjustedRef[];
+}
+
+/** Per-reference diagnostic emitted during autofill preview. */
+export interface AutoFillReferenceDiagnostic extends AutoFillAdjustedRef {
+  row: number;
+  col: number;
+}
+
+/**
+ * Dry-run result from autoFillPreview().
+ */
+export interface AutoFillPreviewResult extends AutoFillResult {
+  /** Target formulas rendered after Rust reference adjustment. */
+  formulas: AutoFillFormulaPreview[];
+  /** Per-reference diagnostics for adjusted formula references. */
+  referenceDiagnostics: AutoFillReferenceDiagnostic[];
+}
+
 export interface AutoFillWarning {
   row: number;
   col: number;

@@ -1,5 +1,6 @@
 use super::super::adapters::{find_byte, find_sequence};
 use super::bytes::parse_u32;
+use super::tags::{find_closing_tag_span, find_start_tag};
 
 #[derive(Debug)]
 pub struct SharedFormulaExtract<'a> {
@@ -23,13 +24,10 @@ pub struct SharedFormulaExtract<'a> {
 /// to `parse_cell_element`, so it only needs to scan the `<f ...>` portion.
 pub fn extract_shared_formula_info(xml: &[u8]) -> Option<SharedFormulaExtract<'_>> {
     // Look for <f with attributes (shared formulas always have attributes)
-    let f_start = find_sequence(xml, b"<f ", 0)?;
+    let f_start = find_start_tag(xml, b"f", 0)?;
 
     // Extract the <f ...> tag region (up to the closing > or />)
-    let f_region_end = find_sequence(xml, b"</f>", f_start)
-        .or_else(|| find_sequence(xml, b"/>", f_start).map(|p| p + 2))
-        .unwrap_or(xml.len());
-    let f_tag = &xml[f_start..f_region_end];
+    let f_tag = &xml[f_start.lt..=f_start.tag_end];
 
     // Check for t="shared" attribute within the <f> tag
     find_sequence(f_tag, b"t=\"shared\"", 0)?;
@@ -45,10 +43,7 @@ pub fn extract_shared_formula_info(xml: &[u8]) -> Option<SharedFormulaExtract<'_
 
     // Check if this is a master cell: has a `ref=` attribute (defines the range)
     // and has formula text (not self-closing)
-    let gt_offset = find_byte(f_tag, b'>', 0)?;
-    let is_self_closing = gt_offset > 0 && f_tag[gt_offset - 1] == b'/';
-
-    if is_self_closing {
+    if f_start.is_self_closing {
         // This is a reference cell (self-closing <f t="shared" si="N"/>)
         Some(SharedFormulaExtract {
             si: si_val,
@@ -67,8 +62,8 @@ pub fn extract_shared_formula_info(xml: &[u8]) -> Option<SharedFormulaExtract<'_
         let has_ref = ref_range.is_some();
         if has_ref {
             // Extract formula text between > and </f>
-            let content_start = f_start + gt_offset + 1;
-            let content_end = find_sequence(xml, b"</f>", content_start)?;
+            let content_start = f_start.content_start;
+            let content_end = find_closing_tag_span(xml, b"f", content_start)?.lt;
             Some(SharedFormulaExtract {
                 si: si_val,
                 is_master: true,

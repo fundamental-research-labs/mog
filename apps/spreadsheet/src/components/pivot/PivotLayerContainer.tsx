@@ -14,6 +14,7 @@ import { pivotBoundsForConfig, type PivotBounds } from '../../pivot/pivot-view-g
 import { useActiveSheetId } from '../../internal-api';
 import { useRendererActions, useRendererStatus, useCoordinator } from '../../hooks';
 import { usePivotTables } from '../../hooks/data/use-pivot-tables';
+import { pivotFieldLabel, pivotPlacementsFor, pivotReadbackAttributes } from '../../systems/pivot';
 
 // =============================================================================
 // DOM marker helpers
@@ -22,6 +23,7 @@ import { usePivotTables } from '../../hooks/data/use-pivot-tables';
 interface PivotMarker {
   id: string;
   name: string;
+  pivot: PivotViewModel;
   bounds: PivotBounds;
   rect: {
     x: number;
@@ -45,6 +47,17 @@ function renderedBoundsForPivot(pivot: PivotViewModel): PivotBounds {
   return pivotBoundsForConfig(pivot.config);
 }
 
+function hasOutputPlacements(config: PivotViewModel['config']): boolean {
+  return config.placements.some(
+    (placement) =>
+      placement.area === 'row' || placement.area === 'column' || placement.area === 'value',
+  );
+}
+
+function hasFilterPlacements(config: PivotViewModel['config']): boolean {
+  return config.placements.some((placement) => placement.area === 'filter');
+}
+
 // =============================================================================
 // Component
 // =============================================================================
@@ -60,7 +73,7 @@ function renderedBoundsForPivot(pivot: PivotViewModel): PivotBounds {
  */
 export function PivotLayerContainer() {
   const activeSheetId = useActiveSheetId();
-  const { pivotTables } = usePivotTables({ sheetId: activeSheetId });
+  const { pivotTables, startEditingPivot } = usePivotTables({ sheetId: activeSheetId });
   const { isReady } = useRendererStatus();
   const { getGeometry, getViewport } = useRendererActions();
   const coordinator = useCoordinator();
@@ -146,6 +159,7 @@ export function PivotLayerContainer() {
         return {
           id: pivot.config.id,
           name: pivot.config.name,
+          pivot,
           bounds,
           rect: {
             x: anchorRect.x,
@@ -165,7 +179,6 @@ export function PivotLayerContainer() {
   return (
     <div
       data-testid="pivot-layer-markers"
-      aria-hidden="true"
       style={{
         position: 'fixed',
         width: 0,
@@ -174,29 +187,113 @@ export function PivotLayerContainer() {
         pointerEvents: 'none',
       }}
     >
-      {markers.map((marker) => (
-        <div
-          key={marker.id}
-          data-pivot-target="wrapper"
-          data-pivot-marker="cell-backed"
-          data-pivot-id={marker.id}
-          data-pivot-name={marker.name}
-          data-testid={`pivot-marker-${marker.id}`}
-          data-pivot-anchor-row={marker.bounds.startRow}
-          data-pivot-anchor-col={marker.bounds.startCol}
-          data-pivot-end-row={marker.bounds.endRow}
-          data-pivot-end-col={marker.bounds.endCol}
-          style={{
-            position: 'fixed',
-            left: marker.rect.x,
-            top: marker.rect.y,
-            width: marker.rect.width,
-            height: marker.rect.height,
-            visibility: 'hidden',
-            pointerEvents: 'none',
-          }}
-        />
-      ))}
+      <div aria-hidden="true">
+        {markers.map((marker) => (
+          <div
+            key={marker.id}
+            data-pivot-target="wrapper"
+            data-pivot-marker="cell-backed"
+            data-pivot-id={marker.id}
+            data-pivot-name={marker.name}
+            data-testid={`pivot-marker-${marker.id}`}
+            data-pivot-anchor-row={marker.bounds.startRow}
+            data-pivot-anchor-col={marker.bounds.startCol}
+            data-pivot-end-row={marker.bounds.endRow}
+            data-pivot-end-col={marker.bounds.endCol}
+            style={{
+              position: 'fixed',
+              left: marker.rect.x,
+              top: marker.rect.y,
+              width: marker.rect.width,
+              height: marker.rect.height,
+              visibility: 'hidden',
+              pointerEvents: 'none',
+            }}
+          />
+        ))}
+      </div>
+      {markers.map((marker) => {
+        const config = marker.pivot.config;
+        const showEmptyState = !hasOutputPlacements(config);
+        const showFilterControls = hasFilterPlacements(config);
+        if (!showEmptyState && !showFilterControls) return null;
+
+        const overlayWidth = showEmptyState
+          ? Math.max(marker.rect.width, 280)
+          : Math.max(marker.rect.width, 220);
+        const overlayHeight = showEmptyState
+          ? Math.max(marker.rect.height, 132)
+          : Math.max(marker.rect.height, 36);
+        const filterPlacements = pivotPlacementsFor(config, 'filter');
+
+        return (
+          <div
+            key={`${marker.id}-visible-overlay`}
+            data-pivot-target="table-view"
+            data-pivot-layer-overlay="true"
+            data-pivot-id={marker.id}
+            data-pivot-name={marker.name}
+            {...pivotReadbackAttributes(config)}
+            style={{
+              position: 'fixed',
+              left: marker.rect.x,
+              top: marker.rect.y,
+              width: overlayWidth,
+              minHeight: overlayHeight,
+              pointerEvents: 'auto',
+              zIndex: 6,
+            }}
+          >
+            {showFilterControls && (
+              <div className="flex flex-wrap items-center gap-2 rounded border border-ss-border bg-ss-surface/95 px-2 py-1 shadow-sm">
+                {filterPlacements.map((placement) => {
+                  const label = pivotFieldLabel(config, placement.fieldId);
+                  return (
+                    <button
+                      key={placement.placementId}
+                      type="button"
+                      className="inline-flex max-w-full min-w-0 items-center gap-1 rounded border border-ss-border bg-ss-surface px-2 py-1 text-caption text-ss-text-primary shadow-sm hover:bg-ss-surface-hover"
+                      data-pivot-target="report-filter-control"
+                      data-pivot-field-id={placement.fieldId}
+                      data-pivot-placement-id={placement.placementId}
+                      title={`Filter ${label}: All`}
+                      aria-label={`Filter ${label}: All`}
+                      onClick={() => startEditingPivot(marker.id)}
+                    >
+                      <span className="min-w-0 truncate">{label}</span>
+                      <span className="shrink-0 text-ss-text-secondary">All</span>
+                      <span className="shrink-0 text-ss-text-secondary" aria-hidden="true">
+                        v
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            {showEmptyState && (
+              <button
+                type="button"
+                className="mt-2 flex h-full min-h-[120px] w-full flex-col items-start justify-center rounded border border-dashed border-ss-border bg-ss-surface/95 px-4 py-3 text-left shadow-sm hover:bg-ss-surface-hover"
+                data-pivot-target="empty-state"
+                data-pivot-id={marker.id}
+                title={`Configure ${marker.name}`}
+                aria-label={`Configure empty pivot table ${marker.name}`}
+                onClick={() => startEditingPivot(marker.id)}
+              >
+                <span
+                  className="text-subtitle font-semibold text-ss-text-primary"
+                  data-pivot-target="empty-state-name"
+                >
+                  {marker.name}
+                </span>
+                <span className="mt-1 text-body-sm text-ss-text-secondary">
+                  Add row, column, or value fields to build this pivot table.
+                </span>
+              </button>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }

@@ -8,14 +8,29 @@
  * @see sheet-api.ts - Main SheetAPI class that delegates to these functions
  */
 
-import type { TableInfo } from '@mog-sdk/contracts/api';
+import type {
+  OperationEffect,
+  TableAddColumnReceipt,
+  TableAddReceipt,
+  TableAddRowReceipt,
+  TableClearReceipt,
+  TableConvertToRangeReceipt,
+  TableDeleteRowReceipt,
+  TableInfo,
+  TableRemoveColumnReceipt,
+  TableRemoveReceipt,
+  TableRenameColumnReceipt,
+  TableRenameReceipt,
+  TableResizeReceipt,
+  TableUpdateOptions,
+  TableUpdateReceipt,
+} from '@mog-sdk/contracts/api';
 import type { CellRange, SheetId } from '@mog-sdk/contracts/core';
 import type { Table, TableHitRegion } from '../../../bridges/compute/compute-types.gen';
 import type { TableDef } from '../../../bridges/compute/compute-wire-types';
 import { colToLetter, letterToCol } from '../../internal/utils';
 import type { DocumentContext, OperationResult } from './shared';
-import { invalidRange, operationFailed, wrapOp } from './shared';
-import { toCellInput } from './cell-input';
+import { invalidRange, wrapOp } from './shared';
 import {
   publicTableStyleId,
   tableStyleIdForCompute,
@@ -41,6 +56,463 @@ function parseA1Range(
     startRow: parseInt(match[2], 10) - 1, // 1-based to 0-based
     endCol: letterToCol(match[3]),
     endRow: parseInt(match[4], 10) - 1,
+  };
+}
+
+function cellCountForRange(range: string): number | undefined {
+  const parsed = parseA1Range(range);
+  if (!parsed) return undefined;
+  return (parsed.endRow - parsed.startRow + 1) * (parsed.endCol - parsed.startCol + 1);
+}
+
+function tableDetails(
+  table: TableInfo,
+  extra: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return { objectType: 'table', name: table.name, ...extra };
+}
+
+function worksheetUnchangedEffect(sheetId: SheetId, range?: string): OperationEffect {
+  return { type: 'worksheetUnchanged', sheetId, ...(range ? { range } : {}) };
+}
+
+function changedRangeEffect(
+  sheetId: SheetId,
+  range: string,
+  details: Record<string, unknown>,
+): OperationEffect {
+  const count = cellCountForRange(range);
+  return {
+    type: 'changedRange',
+    sheetId,
+    range,
+    ...(count !== undefined ? { count } : {}),
+    details,
+  };
+}
+
+export function effectiveTableUpdateOptions(
+  table: TableInfo,
+  updates: TableUpdateOptions,
+): TableUpdateOptions {
+  const effectiveUpdates: TableUpdateOptions = {};
+  if (updates.name !== undefined && updates.name !== table.name) {
+    effectiveUpdates.name = updates.name;
+  }
+  if (
+    updates.style !== undefined &&
+    (publicTableStyleId(updates.style) ?? updates.style) !== table.style
+  ) {
+    effectiveUpdates.style = updates.style;
+  }
+  if (
+    updates.emphasizeFirstColumn !== undefined &&
+    updates.emphasizeFirstColumn !== table.emphasizeFirstColumn
+  ) {
+    effectiveUpdates.emphasizeFirstColumn = updates.emphasizeFirstColumn;
+  }
+  if (
+    updates.emphasizeLastColumn !== undefined &&
+    updates.emphasizeLastColumn !== table.emphasizeLastColumn
+  ) {
+    effectiveUpdates.emphasizeLastColumn = updates.emphasizeLastColumn;
+  }
+  if (updates.bandedColumns !== undefined && updates.bandedColumns !== table.bandedColumns) {
+    effectiveUpdates.bandedColumns = updates.bandedColumns;
+  }
+  if (updates.bandedRows !== undefined && updates.bandedRows !== table.bandedRows) {
+    effectiveUpdates.bandedRows = updates.bandedRows;
+  }
+  if (
+    updates.showFilterButtons !== undefined &&
+    updates.showFilterButtons !== table.showFilterButtons
+  ) {
+    effectiveUpdates.showFilterButtons = updates.showFilterButtons;
+  }
+  if (updates.hasHeaderRow !== undefined && updates.hasHeaderRow !== table.hasHeaderRow) {
+    effectiveUpdates.hasHeaderRow = updates.hasHeaderRow;
+  }
+  if (updates.hasTotalsRow !== undefined && updates.hasTotalsRow !== table.hasTotalsRow) {
+    effectiveUpdates.hasTotalsRow = updates.hasTotalsRow;
+  }
+  if (updates.autoExpand !== undefined && updates.autoExpand !== table.autoExpand) {
+    effectiveUpdates.autoExpand = updates.autoExpand;
+  }
+  if (
+    updates.autoCalculatedColumns !== undefined &&
+    updates.autoCalculatedColumns !== table.autoCalculatedColumns
+  ) {
+    effectiveUpdates.autoCalculatedColumns = updates.autoCalculatedColumns;
+  }
+  return effectiveUpdates;
+}
+
+function storedTableMetadataEffect(
+  sheetId: SheetId,
+  table: TableInfo,
+  extra: Record<string, unknown> = {},
+): OperationEffect {
+  return {
+    type: 'storedMetadata',
+    sheetId,
+    objectId: table.id,
+    range: table.range,
+    details: tableDetails(table, extra),
+  };
+}
+
+function updatedTableEffects(
+  sheetId: SheetId,
+  table: TableInfo,
+  extra: Record<string, unknown> = {},
+): OperationEffect[] {
+  return [
+    {
+      type: 'updatedObject',
+      sheetId,
+      objectId: table.id,
+      range: table.range,
+      details: tableDetails(table, extra),
+    },
+    storedTableMetadataEffect(sheetId, table, extra),
+  ];
+}
+
+export function buildTableAddReceipt(sheetId: SheetId, table: TableInfo): TableAddReceipt {
+  return {
+    kind: 'tableAdd',
+    status: 'applied',
+    effects: [
+      {
+        type: 'createdObject',
+        sheetId,
+        objectId: table.id,
+        range: table.range,
+        details: tableDetails(table),
+      },
+      storedTableMetadataEffect(sheetId, table),
+    ],
+    diagnostics: [],
+    tableId: table.id,
+    name: table.name,
+    range: table.range,
+    table,
+  };
+}
+
+export function buildTableRemoveReceipt(sheetId: SheetId, table: TableInfo): TableRemoveReceipt {
+  return {
+    kind: 'tableRemove',
+    status: 'applied',
+    effects: [
+      {
+        type: 'removedObject',
+        sheetId,
+        objectId: table.id,
+        range: table.range,
+        details: tableDetails(table),
+      },
+    ],
+    diagnostics: [],
+    tableId: table.id,
+    tableName: table.name,
+    range: table.range,
+    table,
+  };
+}
+
+export function buildTableConvertToRangeReceipt(input: {
+  sheetId: SheetId;
+  table: TableInfo;
+  affectedFormulaCount: number;
+}): TableConvertToRangeReceipt {
+  const effects: OperationEffect[] = [
+    {
+      type: 'removedObject',
+      sheetId: input.sheetId,
+      objectId: input.table.id,
+      range: input.table.range,
+      details: tableDetails(input.table, { affectedFormulaCount: input.affectedFormulaCount }),
+    },
+  ];
+  if (input.affectedFormulaCount > 0) {
+    effects.push({
+      type: 'changedRange',
+      sheetId: input.sheetId,
+      count: input.affectedFormulaCount,
+      details: {
+        changeType: 'structuredReferenceRewrite',
+        tableId: input.table.id,
+        tableName: input.table.name,
+      },
+    });
+  }
+
+  return {
+    kind: 'tableConvertToRange',
+    status: 'applied',
+    effects,
+    diagnostics: [],
+    tableId: input.table.id,
+    tableName: input.table.name,
+    range: input.table.range,
+    table: input.table,
+    affectedFormulaCount: input.affectedFormulaCount,
+  };
+}
+
+export function buildTableClearReceipt(
+  sheetId: SheetId,
+  tables: readonly TableInfo[],
+): TableClearReceipt {
+  const tableIds = tables.map((table) => table.id);
+  return {
+    kind: 'tableClear',
+    status: tables.length === 0 ? 'noOp' : 'applied',
+    effects:
+      tables.length === 0
+        ? [worksheetUnchangedEffect(sheetId)]
+        : [
+            {
+              type: 'removedObject',
+              sheetId,
+              count: tables.length,
+              details: {
+                objectType: 'table',
+                tableIds,
+                names: tables.map((table) => table.name),
+              },
+            },
+          ],
+    diagnostics: [],
+    sheetId,
+    removedCount: tables.length,
+    tableIds,
+    tables,
+  };
+}
+
+export function buildTableRenameReceipt(input: {
+  sheetId: SheetId;
+  table: TableInfo;
+  oldName: string;
+  newName: string;
+  status: 'applied' | 'noOp';
+}): TableRenameReceipt {
+  return {
+    kind: 'tableRename',
+    status: input.status,
+    effects:
+      input.status === 'noOp'
+        ? [worksheetUnchangedEffect(input.sheetId, input.table.range)]
+        : [
+            {
+              type: 'renamedObject',
+              sheetId: input.sheetId,
+              objectId: input.table.id,
+              range: input.table.range,
+              details: tableDetails(input.table, {
+                oldName: input.oldName,
+                newName: input.newName,
+              }),
+            },
+            storedTableMetadataEffect(input.sheetId, input.table, { name: input.newName }),
+          ],
+    diagnostics: [],
+    tableId: input.table.id,
+    tableName: input.newName,
+    oldName: input.oldName,
+    newName: input.newName,
+    name: input.newName,
+    range: input.table.range,
+  };
+}
+
+export function buildTableUpdateReceipt(input: {
+  sheetId: SheetId;
+  table: TableInfo;
+  updates: TableUpdateOptions;
+  status: 'applied' | 'noOp';
+  range?: string;
+  details?: Record<string, unknown>;
+}): TableUpdateReceipt {
+  return {
+    kind: 'tableUpdate',
+    status: input.status,
+    effects:
+      input.status === 'noOp'
+        ? [worksheetUnchangedEffect(input.sheetId, input.range ?? input.table.range)]
+        : updatedTableEffects(
+            input.sheetId,
+            input.table,
+            input.details ?? { updates: input.updates },
+          ),
+    diagnostics: [],
+    tableId: input.table.id,
+    tableName: input.table.name,
+    range: input.range ?? input.table.range,
+    updates: input.updates,
+  };
+}
+
+export function buildTableResizeReceipt(input: {
+  sheetId: SheetId;
+  table: TableInfo;
+  oldRange: string;
+  newRange: string;
+  status: 'applied' | 'noOp';
+}): TableResizeReceipt {
+  return {
+    kind: 'tableResize',
+    status: input.status,
+    effects:
+      input.status === 'noOp'
+        ? [worksheetUnchangedEffect(input.sheetId, input.oldRange)]
+        : [
+            changedRangeEffect(input.sheetId, input.newRange, {
+              oldRange: input.oldRange,
+              newRange: input.newRange,
+            }),
+            ...updatedTableEffects(input.sheetId, input.table, {
+              oldRange: input.oldRange,
+              newRange: input.newRange,
+            }),
+          ],
+    diagnostics: [],
+    tableId: input.table.id,
+    tableName: input.table.name,
+    oldRange: input.oldRange,
+    newRange: input.newRange,
+    range: input.newRange,
+  };
+}
+
+export function buildTableAddColumnReceipt(input: {
+  sheetId: SheetId;
+  table: TableInfo;
+  columnName: string;
+  position: number;
+  range: string;
+}): TableAddColumnReceipt {
+  return {
+    kind: 'tableAddColumn',
+    status: 'applied',
+    effects: [
+      changedRangeEffect(input.sheetId, input.range, {
+        changeType: 'insertTableColumn',
+        columnName: input.columnName,
+      }),
+      ...updatedTableEffects(input.sheetId, input.table, {
+        columnName: input.columnName,
+        position: input.position,
+      }),
+    ],
+    diagnostics: [],
+    tableId: input.table.id,
+    tableName: input.table.name,
+    columnName: input.columnName,
+    position: input.position,
+    range: input.range,
+  };
+}
+
+export function buildTableRemoveColumnReceipt(input: {
+  sheetId: SheetId;
+  table: TableInfo;
+  columnIndex: number;
+  columnName: string;
+  range: string;
+}): TableRemoveColumnReceipt {
+  return {
+    kind: 'tableRemoveColumn',
+    status: 'applied',
+    effects: [
+      changedRangeEffect(input.sheetId, input.range, {
+        changeType: 'deleteTableColumn',
+        columnName: input.columnName,
+      }),
+      ...updatedTableEffects(input.sheetId, input.table, {
+        columnIndex: input.columnIndex,
+        columnName: input.columnName,
+      }),
+    ],
+    diagnostics: [],
+    tableId: input.table.id,
+    tableName: input.table.name,
+    columnIndex: input.columnIndex,
+    columnName: input.columnName,
+    range: input.range,
+  };
+}
+
+export function buildTableRenameColumnReceipt(input: {
+  sheetId: SheetId;
+  table: TableInfo;
+  columnIndex: number;
+  oldColumnName: string;
+  newColumnName: string;
+  status: 'applied' | 'noOp';
+}): TableRenameColumnReceipt {
+  return {
+    kind: 'tableRenameColumn',
+    status: input.status,
+    effects:
+      input.status === 'noOp'
+        ? [worksheetUnchangedEffect(input.sheetId, input.table.range)]
+        : updatedTableEffects(input.sheetId, input.table, {
+            columnIndex: input.columnIndex,
+            oldColumnName: input.oldColumnName,
+            newColumnName: input.newColumnName,
+          }),
+    diagnostics: [],
+    tableId: input.table.id,
+    tableName: input.table.name,
+    columnIndex: input.columnIndex,
+    oldColumnName: input.oldColumnName,
+    newColumnName: input.newColumnName,
+    range: input.table.range,
+  };
+}
+
+export function buildTableAddRowReceipt(input: {
+  sheetId: SheetId;
+  table: TableInfo;
+  index: number;
+  range: string;
+}): TableAddRowReceipt {
+  return {
+    kind: 'tableAddRow',
+    status: 'applied',
+    effects: [
+      changedRangeEffect(input.sheetId, input.range, { changeType: 'insertTableRow' }),
+      ...updatedTableEffects(input.sheetId, input.table, { index: input.index }),
+    ],
+    diagnostics: [],
+    tableId: input.table.id,
+    tableName: input.table.name,
+    index: input.index,
+    range: input.range,
+  };
+}
+
+export function buildTableDeleteRowReceipt(input: {
+  sheetId: SheetId;
+  table: TableInfo;
+  index: number;
+  range: string;
+}): TableDeleteRowReceipt {
+  return {
+    kind: 'tableDeleteRow',
+    status: 'applied',
+    effects: [
+      changedRangeEffect(input.sheetId, input.range, { changeType: 'deleteTableRow' }),
+      ...updatedTableEffects(input.sheetId, input.table, { index: input.index }),
+    ],
+    diagnostics: [],
+    tableId: input.table.id,
+    tableName: input.table.name,
+    index: input.index,
+    range: input.range,
   };
 }
 
@@ -324,20 +796,6 @@ export async function toggleHeaderRow(
 }
 
 /**
- * Apply auto-expansion to a table.
- * Bridge: applyAutoExpansion(sheetId, tableName) → MutationResult
- */
-export async function applyAutoExpansion(
-  ctx: DocumentContext,
-  sheetId: SheetId,
-  tableName: string,
-): Promise<OperationResult<void>> {
-  return wrapOp('applyAutoExpansion', async () => {
-    await ctx.computeBridge.applyAutoExpansion(sheetId, tableName);
-  });
-}
-
-/**
  * Get all data cell positions for a table column.
  * Pure computation: reads table def, computes data row range, returns positions.
  *
@@ -434,72 +892,4 @@ export function getTotalRowRangeFromInfo(table: TableInfo): string | null {
   const endLetter = colToLetter(parsed.endCol);
   const totalRow = parsed.endRow + 1; // 0-based to 1-based
   return `${startLetter}${totalRow}:${endLetter}${totalRow}`;
-}
-
-/**
- * Set a calculated column formula for a table column.
- * Fills all data cells in the column with the given formula via batch IPC.
- *
- * @param ctx - Store context
- * @param sheetId - Sheet ID
- * @param tableName - Table name
- * @param colIndex - Column index within the table (0-based)
- * @param formula - The formula to set (e.g., "=[@Price]*[@Quantity]")
- * @returns OperationResult indicating success or failure
- */
-export async function setCalculatedColumnFormula(
-  ctx: DocumentContext,
-  sheetId: SheetId,
-  tableName: string,
-  colIndex: number,
-  formula: string,
-): Promise<OperationResult<void>> {
-  const table = await getTableByName(ctx, tableName);
-  if (!table) {
-    return {
-      success: false,
-      error: operationFailed('setCalculatedColumnFormula', 'Table not found'),
-    };
-  }
-
-  const cells = getTableColumnDataCellsFromInfo(table, colIndex);
-  if (cells.length === 0) return { success: true, data: undefined };
-
-  return wrapOp('setCalculatedColumnFormula', async () => {
-    const edits = cells.map(({ row, col }) => ({ row, col, input: toCellInput(formula) }));
-    await ctx.computeBridge.setCellsByPosition(sheetId, edits);
-  });
-}
-
-/**
- * Clear a calculated column formula from a table column.
- * Clears formulas from all data cells in the column, replacing them with empty values.
- *
- * @param ctx - Store context
- * @param sheetId - Sheet ID
- * @param tableName - Table name
- * @param colIndex - Column index within the table (0-based)
- * @returns OperationResult indicating success or failure
- */
-export async function clearCalculatedColumnFormula(
-  ctx: DocumentContext,
-  sheetId: SheetId,
-  tableName: string,
-  colIndex: number,
-): Promise<OperationResult<void>> {
-  const table = await getTableByName(ctx, tableName);
-  if (!table) {
-    return {
-      success: false,
-      error: operationFailed('clearCalculatedColumnFormula', 'Table not found'),
-    };
-  }
-
-  const cells = getTableColumnDataCellsFromInfo(table, colIndex);
-  if (cells.length === 0) return { success: true, data: undefined };
-
-  return wrapOp('clearCalculatedColumnFormula', async () => {
-    const edits = cells.map(({ row, col }) => ({ row, col, input: toCellInput(null) }));
-    await ctx.computeBridge.setCellsByPosition(sheetId, edits);
-  });
 }

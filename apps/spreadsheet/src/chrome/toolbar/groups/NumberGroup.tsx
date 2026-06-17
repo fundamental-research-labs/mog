@@ -42,6 +42,7 @@ import {
 
 import { Tooltip } from '@mog/shell';
 import { NUMBER_COLLAPSE_CONFIG } from '@mog-sdk/contracts/ribbon';
+import { buildFormatCode, CURRENCY_SYMBOLS } from '@mog/spreadsheet-utils/number-formats';
 import { NumberFormatPanel } from '../../../dialogs/formatting/NumberFormatPanel';
 import { useDispatch } from '../../../hooks/toolbar/use-action-dependencies';
 import { useSheetProtectionPermissions } from '../../../hooks/structure/use-sheet-protection';
@@ -90,7 +91,12 @@ function getFormatDisplayName(formatCode: string): string {
     return formatMap[formatCode];
   }
 
-  if (formatCode.includes('$') || formatCode.includes('€') || formatCode.includes('£')) {
+  if (
+    formatCode.includes('$') ||
+    formatCode.includes('€') ||
+    formatCode.includes('£') ||
+    formatCode.includes('¥')
+  ) {
     return 'Currency';
   }
   if (formatCode.includes('%')) {
@@ -113,6 +119,22 @@ function getFormatDisplayName(formatCode: string): string {
   }
   return 'Custom';
 }
+
+const TOOLBAR_CURRENCY_CODES = ['USD', 'GBP', 'EUR', 'JPY'] as const;
+
+const TOOLBAR_CURRENCY_OPTIONS = TOOLBAR_CURRENCY_CODES.map((code) => {
+  const currency = CURRENCY_SYMBOLS.find((candidate) => candidate.code === code);
+  const symbol = currency?.symbol ?? code;
+  return {
+    code,
+    symbol,
+    format: buildFormatCode({
+      type: 'currency',
+      decimalPlaces: 2,
+      currencySymbol: symbol,
+    }),
+  };
+});
 
 // =============================================================================
 // Component
@@ -353,50 +375,20 @@ export const NumberGroup = React.memo(function NumberGroup() {
               onClose={() => setCurrencyDropdownOpen(false)}
             >
               <div role="menu" className="py-1">
-                <RibbonDropdownItem
-                  closeOnClick={false}
-                  disabled={!canFormatCells}
-                  onClick={() => {
-                    if (!canFormatCells) return;
-                    dispatch('SET_NUMBER_FORMAT', { format: '$#,##0.00' });
-                    setCurrencyDropdownOpen(false);
-                  }}
-                >
-                  $ USD
-                </RibbonDropdownItem>
-                <RibbonDropdownItem
-                  closeOnClick={false}
-                  disabled={!canFormatCells}
-                  onClick={() => {
-                    if (!canFormatCells) return;
-                    dispatch('SET_NUMBER_FORMAT', { format: '£#,##0.00' });
-                    setCurrencyDropdownOpen(false);
-                  }}
-                >
-                  £ GBP
-                </RibbonDropdownItem>
-                <RibbonDropdownItem
-                  closeOnClick={false}
-                  disabled={!canFormatCells}
-                  onClick={() => {
-                    if (!canFormatCells) return;
-                    dispatch('SET_NUMBER_FORMAT', { format: '€#,##0.00' });
-                    setCurrencyDropdownOpen(false);
-                  }}
-                >
-                  € EUR
-                </RibbonDropdownItem>
-                <RibbonDropdownItem
-                  closeOnClick={false}
-                  disabled={!canFormatCells}
-                  onClick={() => {
-                    if (!canFormatCells) return;
-                    dispatch('SET_NUMBER_FORMAT', { format: '¥#,##0' });
-                    setCurrencyDropdownOpen(false);
-                  }}
-                >
-                  ¥ JPY
-                </RibbonDropdownItem>
+                {TOOLBAR_CURRENCY_OPTIONS.map((option) => (
+                  <RibbonDropdownItem
+                    key={option.code}
+                    closeOnClick={false}
+                    disabled={!canFormatCells}
+                    onClick={() => {
+                      if (!canFormatCells) return;
+                      dispatch('SET_NUMBER_FORMAT', { format: option.format });
+                      setCurrencyDropdownOpen(false);
+                    }}
+                  >
+                    {option.symbol} {option.code}
+                  </RibbonDropdownItem>
+                ))}
               </div>
             </RibbonDropdownPanel>
           </div>

@@ -6,7 +6,7 @@
  */
 
 import type { ActionDependencies, ActionResult } from '@mog-sdk/contracts/actions';
-import type { CellRange, SheetId } from '@mog-sdk/contracts/core';
+import { MAX_COLS, MAX_ROWS, type CellRange, type SheetId } from '@mog-sdk/contracts/core';
 
 import {
   handled,
@@ -74,16 +74,46 @@ function singleCellRange(cell: { row: number; col: number }): CellRange {
   };
 }
 
+function isWholeRowRange(range: CellRange): boolean {
+  return range.isFullRow === true || (range.startCol === 0 && range.endCol === MAX_COLS - 1);
+}
+
+function isWholeColumnRange(range: CellRange): boolean {
+  return range.isFullColumn === true || (range.startRow === 0 && range.endRow === MAX_ROWS - 1);
+}
+
+function wholeRowSpanRange(startRow: number, count: number): CellRange {
+  return {
+    startRow,
+    startCol: 0,
+    endRow: startRow + count - 1,
+    endCol: MAX_COLS - 1,
+    isFullRow: true,
+  };
+}
+
+function wholeColumnSpanRange(startCol: number, count: number): CellRange {
+  return {
+    startRow: 0,
+    startCol,
+    endRow: MAX_ROWS - 1,
+    endCol: startCol + count - 1,
+    isFullColumn: true,
+  };
+}
+
 export async function insertRowAboveSelection(deps: ActionDependencies): Promise<ActionResult> {
   const targetSheetIds = getTargetSheetIds(deps);
   const { activeCell, ranges } = getSelectionContext(deps);
   const rows = getSelectedRowsOrActive(ranges, activeCell);
   const insertAt = rows[0];
+  const insertCount = Math.max(1, rows.length);
+  const preserveWholeRowSelection = ranges.some(isWholeRowRange);
 
   try {
     for (const sheetId of targetSheetIds) {
       const ws = deps.workbook.getSheetById(sheetId);
-      await ws.structure.insertRows(insertAt, 1);
+      await ws.structure.insertRows(insertAt, insertCount);
     }
   } catch (err) {
     if (isProtectionRejection(err)) {
@@ -93,8 +123,14 @@ export async function insertRowAboveSelection(deps: ActionDependencies): Promise
     throw err;
   }
 
-  const nextActiveCell = { row: insertAt, col: activeCell.col };
-  deps.commands.selection.setSelection([singleCellRange(nextActiveCell)], nextActiveCell);
+  const nextActiveCell = {
+    row: insertAt,
+    col: preserveWholeRowSelection ? 0 : activeCell.col,
+  };
+  const nextRange = preserveWholeRowSelection
+    ? wholeRowSpanRange(insertAt, insertCount)
+    : singleCellRange(nextActiveCell);
+  deps.commands.selection.setSelection([nextRange], nextActiveCell);
 
   return handled();
 }
@@ -104,11 +140,13 @@ export async function insertColumnLeftSelection(deps: ActionDependencies): Promi
   const { activeCell, ranges } = getSelectionContext(deps);
   const cols = getSelectedColsOrActive(ranges, activeCell);
   const insertAt = cols[0];
+  const insertCount = Math.max(1, cols.length);
+  const preserveWholeColumnSelection = ranges.some(isWholeColumnRange);
 
   try {
     for (const sheetId of targetSheetIds) {
       const ws = deps.workbook.getSheetById(sheetId);
-      await ws.structure.insertColumns(insertAt, 1);
+      await ws.structure.insertColumns(insertAt, insertCount);
     }
   } catch (err) {
     if (isProtectionRejection(err)) {
@@ -118,8 +156,14 @@ export async function insertColumnLeftSelection(deps: ActionDependencies): Promi
     throw err;
   }
 
-  const nextActiveCell = { row: activeCell.row, col: insertAt };
-  deps.commands.selection.setSelection([singleCellRange(nextActiveCell)], nextActiveCell);
+  const nextActiveCell = {
+    row: preserveWholeColumnSelection ? 0 : activeCell.row,
+    col: insertAt,
+  };
+  const nextRange = preserveWholeColumnSelection
+    ? wholeColumnSpanRange(insertAt, insertCount)
+    : singleCellRange(nextActiveCell);
+  deps.commands.selection.setSelection([nextRange], nextActiveCell);
 
   return handled();
 }

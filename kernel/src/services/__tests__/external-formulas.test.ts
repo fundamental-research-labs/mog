@@ -4,8 +4,10 @@ import type { SheetId } from '@mog-sdk/contracts/core';
 import type { DocumentContext } from '../../context/types';
 import {
   applyExternalFormulaReadbacks,
+  getExternalFormulaReferences,
   getTrackedExternalFormula,
   installExternalFormulaReadbacks,
+  localReferenceForExternalRef,
   maskExternalFormulaRefsForValidation,
   materializeExternalFormulas,
   prepareExternalFormulaWrite,
@@ -263,10 +265,60 @@ describe('external formula materialization', () => {
     ).resolves.toBe('=SUM({125;25})');
   });
 
+  it('rejects unbound Excel ordinal references with a matching local-sheet suggestion', async () => {
+    const workbookLinks = createWorkbookLinkService();
+    const ctx = {
+      workbookLinks,
+      workbookLinkScope: scope,
+      computeBridge: {
+        getAllSheetIds: jest.fn(async () => ['model-sheet', 'source-gaap-sheet']),
+        getSheetName: jest.fn(async (id: string) =>
+          id === 'model-sheet' ? 'Model' : 'Source-GAAP',
+        ),
+      },
+    } as unknown as DocumentContext;
+    const sheetId = 'model-sheet' as SheetId;
+
+    await expect(
+      prepareExternalFormulaWrite(ctx, sheetId, 0, 0, "='[1]Source-GAAP'!$L$17"),
+    ).rejects.toMatchObject({
+      code: 'API_INVALID_ARGUMENT',
+      path: ['formula'],
+      suggestion:
+        "Use ='Source-GAAP'!$L$17 for a local reference, or create or bind an external workbook link with a readable name and write the formula with that name instead of [1].",
+      context: expect.objectContaining({
+        diagnosticCode: 'EXTERNAL_REFERENCE_UNBOUND_LOCAL_SHEET_CANDIDATE',
+        tokenKind: 'excel-internal-ordinal',
+        workbookToken: '1',
+        localSheetName: 'Source-GAAP',
+        localReference: "'Source-GAAP'!$L$17",
+        suggestedFormula: "='Source-GAAP'!$L$17",
+      }),
+    });
+    expect(getTrackedExternalFormula(ctx, sheetId, 0, 0)).toBeUndefined();
+  });
+
   it('masks external references for interactive syntax and circular validation', () => {
     expect(maskExternalFormulaRefsForValidation('=[Budget.xlsx]Inputs!A1')).toBe('=0');
     expect(maskExternalFormulaRefsForValidation('=SUM([Budget.xlsx]Inputs!A1:A2)+A1')).toBe(
       '=SUM(0)+A1',
     );
+  });
+
+  it('preserves external reference text for diagnostics and local-reference suggestions', () => {
+    const refs = getExternalFormulaReferences("='[1]Source-GAAP'!$L$17");
+
+    expect(refs).toEqual([
+      expect.objectContaining({
+        text: "'[1]Source-GAAP'!$L$17",
+        start: 1,
+        end: 23,
+        workbookToken: '1',
+        sheetName: 'Source-GAAP',
+        address: 'L17',
+        addressText: '$L$17',
+      }),
+    ]);
+    expect(localReferenceForExternalRef(refs[0]!)).toBe("'Source-GAAP'!$L$17");
   });
 });

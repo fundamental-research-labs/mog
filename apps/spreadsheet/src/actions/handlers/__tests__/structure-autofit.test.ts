@@ -188,6 +188,136 @@ describe('Structure autofit handlers', () => {
     );
   });
 
+  it('whole-row insert keeps the inserted row selected', async () => {
+    const deps = createDeps({
+      activeCell: { row: 6, col: 4 },
+      ranges: [
+        {
+          startRow: 6,
+          startCol: 0,
+          endRow: 6,
+          endCol: MAX_COLS - 1,
+          isFullRow: true,
+        },
+      ],
+    });
+
+    await StructureHandlers.INSERT_ROW_ABOVE(deps);
+
+    const worksheet = getMockWorksheet(deps);
+    expect(worksheet.structure.insertRows).toHaveBeenCalledWith(6, 1);
+    const setSelection = getSelectionSetMock(deps);
+    expect(setSelection).toHaveBeenCalledWith(
+      [
+        {
+          startRow: 6,
+          startCol: 0,
+          endRow: 6,
+          endCol: MAX_COLS - 1,
+          isFullRow: true,
+        },
+      ],
+      { row: 6, col: 0 },
+    );
+  });
+
+  it('whole-row insert matches the selected row span count', async () => {
+    const deps = createDeps({
+      activeCell: { row: 2, col: 0 },
+      ranges: [
+        {
+          startRow: 2,
+          startCol: 0,
+          endRow: 5,
+          endCol: MAX_COLS - 1,
+          isFullRow: true,
+        },
+      ],
+    });
+
+    await StructureHandlers.INSERT_ROW_ABOVE(deps);
+
+    const worksheet = getMockWorksheet(deps);
+    expect(worksheet.structure.insertRows).toHaveBeenCalledWith(2, 4);
+    expect(getSelectionSetMock(deps)).toHaveBeenCalledWith(
+      [
+        {
+          startRow: 2,
+          startCol: 0,
+          endRow: 5,
+          endCol: MAX_COLS - 1,
+          isFullRow: true,
+        },
+      ],
+      { row: 2, col: 0 },
+    );
+  });
+
+  it('whole-column insert keeps the inserted column selected', async () => {
+    const deps = createDeps({
+      activeCell: { row: 8, col: 2 },
+      ranges: [
+        {
+          startRow: 0,
+          startCol: 2,
+          endRow: MAX_ROWS - 1,
+          endCol: 2,
+          isFullColumn: true,
+        },
+      ],
+    });
+
+    await StructureHandlers.INSERT_COLUMN_LEFT(deps);
+
+    const worksheet = getMockWorksheet(deps);
+    expect(worksheet.structure.insertColumns).toHaveBeenCalledWith(2, 1);
+    const setSelection = getSelectionSetMock(deps);
+    expect(setSelection).toHaveBeenCalledWith(
+      [
+        {
+          startRow: 0,
+          startCol: 2,
+          endRow: MAX_ROWS - 1,
+          endCol: 2,
+          isFullColumn: true,
+        },
+      ],
+      { row: 0, col: 2 },
+    );
+  });
+
+  it('whole-column insert matches the selected column span count', async () => {
+    const deps = createDeps({
+      activeCell: { row: 0, col: 3 },
+      ranges: [
+        {
+          startRow: 0,
+          startCol: 3,
+          endRow: MAX_ROWS - 1,
+          endCol: 6,
+          isFullColumn: true,
+        },
+      ],
+    });
+
+    await StructureHandlers.INSERT_COLUMN_LEFT(deps);
+
+    const worksheet = getMockWorksheet(deps);
+    expect(worksheet.structure.insertColumns).toHaveBeenCalledWith(3, 4);
+    expect(getSelectionSetMock(deps)).toHaveBeenCalledWith(
+      [
+        {
+          startRow: 0,
+          startCol: 3,
+          endRow: MAX_ROWS - 1,
+          endCol: 6,
+          isFullColumn: true,
+        },
+      ],
+      { row: 0, col: 3 },
+    );
+  });
+
   it('command-initiated row and column deletes keep the active cell at the vacated index', async () => {
     const deps = createDeps({ activeCell: { row: 4, col: 3 }, ranges: [] });
 

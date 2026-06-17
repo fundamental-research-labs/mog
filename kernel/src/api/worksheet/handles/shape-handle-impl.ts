@@ -1,10 +1,15 @@
-import type { ShapeConfig, FloatingObjectMutationReceipt } from '@mog-sdk/contracts/api';
+import type {
+  FloatingObjectHandleMutationReceipt,
+  FloatingObjectMutationReceipt,
+  ShapeConfig,
+} from '@mog-sdk/contracts/api';
 import type { ShapeHandle } from '@mog-sdk/contracts/api/worksheet/handles/index';
 import type { ShapeObject, ShapeType } from '@mog-sdk/contracts/floating-objects';
 import type { IObjectBoundsReader } from '@mog-sdk/contracts/objects/object-bounds-reader';
 
 import { KernelError } from '../../../errors';
 import type { WorksheetObjectsImpl } from '../objects';
+import { attachFloatingObjectHandle } from '../objects-receipts';
 import { FloatingObjectHandleImpl } from './floating-object-handle-impl';
 
 /**
@@ -76,9 +81,18 @@ export class ShapeHandleImpl extends FloatingObjectHandleImpl implements ShapeHa
     return this.objectsImpl.updateShape(this.id, props);
   }
 
-  async duplicate(_offsetX?: number, _offsetY?: number): Promise<ShapeHandle> {
+  async duplicate(
+    _offsetX?: number,
+    _offsetY?: number,
+  ): Promise<FloatingObjectHandleMutationReceipt<ShapeHandle>> {
     const receipt = await this.objectsImpl.duplicate(this.id);
-    return new ShapeHandleImpl(receipt.id, this.shapeType, this.objectsImpl, this.boundsReader);
+    const handle = new ShapeHandleImpl(
+      receipt.id,
+      this.shapeType,
+      this.objectsImpl,
+      this.boundsReader,
+    );
+    return attachFloatingObjectHandle(receipt, handle);
   }
 
   async getData(): Promise<ShapeObject> {

@@ -162,11 +162,16 @@ const jsonNoHeader = await ws.toJSON({ headerRow: 'none' });
 ```typescript
 // Save to file (returns buffer too)
 await wb.save('output.xlsx');
+await wb.save('./outputs/model.xlsx'); // Node SDK creates missing parent dirs
 
 // Save to buffer only
 const buf = await wb.save();
 const buf = await wb.toXlsx();
 ```
+
+`wb.save(path)` rejects invalid paths and host filesystem failures with
+`MogSdkError` details such as `issue`, `requestedPath`, `cwd`, `absolutePath`,
+and `filesystemCode`.
 
 ### Formulas
 
@@ -204,7 +209,10 @@ The full kernel API is accessible — charts, tables, filters, validation, condi
 await ws.charts.add({ type: 'bar', dataRange: 'A1:B5' });
 
 // Conditional formatting
-await ws.conditionalFormats.add({ range: 'B2:B10', rule: { type: 'greaterThan', value: 100 } });
+await ws.conditionalFormats.addFormula('B2:B10', '=B2>100', { backgroundColor: '#fff2cc' });
+
+// Data validation
+await ws.validations.setList('C2:C10', ['Open', 'Blocked', 'Done']);
 
 // Tables
 await ws.tables.add('A1:C5', { name: 'MyTable', hasHeaders: true });

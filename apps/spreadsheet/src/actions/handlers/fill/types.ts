@@ -5,12 +5,19 @@
  * building FillContext and applying updates manually via setCells.
  */
 
-import type { AutoFillMode, AutoFillResult } from '@mog-sdk/contracts/fill';
-import type { Workbook, Worksheet } from '@mog-sdk/contracts/api';
+import type { AutoFillMode, AutoFillPreviewResult, AutoFillResult } from '@mog-sdk/contracts/fill';
+import type {
+  AutoFillApplyReceipt,
+  AutoFillPreviewReceipt,
+  OperationDiagnostic,
+  OperationReceiptBase,
+  Workbook,
+  Worksheet,
+} from '@mog-sdk/contracts/api';
 import type { SheetId } from '@mog-sdk/contracts/core';
 import { cellRangeToA1 } from '@mog/spreadsheet-utils/a1';
 
-import type { CellRange, ComputedFillResult, FillOptions } from '../../../domain/fill';
+import type { CellRange, ComputedFillResult, FillError, FillOptions } from '../../../domain/fill';
 import { getUIStore, handled, notHandled } from '../handler-utils';
 
 // Re-export shared handler utilities for fill sub-modules
@@ -79,7 +86,113 @@ function fillOptionsToMode(options: FillOptions): AutoFillMode {
  * the update arrays are empty — callers that read updates.errors or updates.pattern
  * still get correct data from the kernel result.
  */
-function mapToComputedFillResult(result: AutoFillResult): ComputedFillResult {
+type FillReceipt = OperationReceiptBase & Partial<AutoFillResult>;
+
+function diagnosticToFillError(diagnostic: OperationDiagnostic): FillError {
+  return {
+    row: diagnostic.target?.row ?? 0,
+    col: diagnostic.target?.col ?? 0,
+    error: diagnostic.message,
+    type: diagnostic.severity === 'error' ? 'error' : 'warning',
+  };
+}
+
+function warningToFillError(warning: AutoFillResult['warnings'][number]): FillError {
+  return {
+    row: warning.row,
+    col: warning.col,
+    error:
+      warning.kind.type === 'mergedCellsInTarget'
+        ? 'Target range contains merged cells'
+        : warning.kind.type === 'formulaRefOutOfBounds'
+          ? `Formula reference out of bounds (ref ${warning.kind.refIndex})`
+          : 'Source cell is empty',
+    type: 'warning',
+  };
+}
+
+function referenceDiagnosticToFillError(
+  diagnostic: AutoFillPreviewResult['referenceDiagnostics'][number],
+): FillError | null {
+  if (!diagnostic.outOfBounds) return null;
+  return {
+    row: diagnostic.row,
+    col: diagnostic.col,
+    error: `Formula reference out of bounds (ref ${diagnostic.refIndex})`,
+    type: 'warning',
+  };
+}
+
+function receiptStatusError(receipt: FillReceipt, label: string): string | null {
+  const diagnostic = receipt.diagnostics.find((item) => item.severity === 'error');
+  if (diagnostic) return diagnostic.message;
+
+  switch (receipt.status) {
+    case 'applied':
+    case 'noOp':
+    case 'completed':
+      return null;
+    case 'partial':
+      return `${label} only partially applied.`;
+    case 'failed':
+      return `${label} failed.`;
+    case 'unsupported':
+      return `${label} is unsupported.`;
+    case 'cancelled':
+      return `${label} was cancelled.`;
+    case 'timedOut':
+      return `${label} timed out.`;
+    default:
+      return `${label} returned unexpected status: ${receipt.status}.`;
+  }
+}
+
+function fillFailure(
+  range: CellRange,
+  error: string,
+  diagnostics: readonly OperationDiagnostic[] = [],
+): ComputedFillResult {
+  const diagnosticErrors = diagnostics.map(diagnosticToFillError);
+  const errors =
+    diagnosticErrors.length === 0 || !diagnosticErrors.some((item) => item.type === 'error')
+      ? [
+          {
+            row: range.startRow,
+            col: range.startCol,
+            error,
+            type: 'error' as const,
+          },
+          ...diagnosticErrors,
+        ]
+      : diagnosticErrors;
+
+  return {
+    success: false,
+    updates: {
+      valueUpdates: [],
+      formulaUpdates: [],
+      formatUpdates: [],
+      filledCellIds: [],
+      overwrittenCellIds: [],
+      pattern: null,
+      errors,
+    },
+  };
+}
+
+export function fillReceiptError(receipt: OperationReceiptBase, label: string): string | null {
+  return receiptStatusError(receipt, label);
+}
+
+function mapToComputedFillResult(
+  result: AutoFillApplyReceipt,
+  preview?: AutoFillPreviewReceipt | null,
+): ComputedFillResult {
+  const previewReferenceErrors =
+    preview?.referenceDiagnostics
+      .map(referenceDiagnosticToFillError)
+      .filter((error): error is FillError => error !== null) ?? [];
+
   return {
     success: true,
     updates: {
@@ -91,17 +204,11 @@ function mapToComputedFillResult(result: AutoFillResult): ComputedFillResult {
       pattern: {
         type: result.patternType,
       },
-      errors: result.warnings.map((w) => ({
-        row: w.row,
-        col: w.col,
-        error:
-          w.kind.type === 'mergedCellsInTarget'
-            ? 'Target range contains merged cells'
-            : w.kind.type === 'formulaRefOutOfBounds'
-              ? `Formula reference out of bounds (ref ${(w.kind as { refIndex: number }).refIndex})`
-              : 'Source cell is empty',
-        type: 'warning' as const,
-      })),
+      errors: [
+        ...(preview?.diagnostics ?? []).map(diagnosticToFillError),
+        ...previewReferenceErrors,
+        ...result.warnings.map(warningToFillError),
+      ],
     },
   };
 }
@@ -147,29 +254,24 @@ export async function executeFillViaWorksheet(
   });
 
   try {
+    let preview: AutoFillPreviewReceipt | null = null;
+    if (typeof ws.autoFillPreview === 'function') {
+      preview = await ws.autoFillPreview(sourceA1, targetA1, mode);
+      const previewError = receiptStatusError(preview, 'AutoFill preview');
+      if (previewError) {
+        return fillFailure(targetRange, previewError, preview.diagnostics);
+      }
+    }
+
     const result = await ws.autoFill(sourceA1, targetA1, mode);
     console.log('[executeFillViaWorksheet] ws.autoFill returned', result);
-    return mapToComputedFillResult(result);
+    const applyError = receiptStatusError(result, 'AutoFill');
+    if (applyError) {
+      return fillFailure(targetRange, applyError, result.diagnostics);
+    }
+    return mapToComputedFillResult(result, preview);
   } catch (err) {
     console.error('[executeFillViaWorksheet] ws.autoFill THREW', err);
-    return {
-      success: false,
-      updates: {
-        valueUpdates: [],
-        formulaUpdates: [],
-        formatUpdates: [],
-        filledCellIds: [],
-        overwrittenCellIds: [],
-        pattern: null,
-        errors: [
-          {
-            row: targetRange.startRow,
-            col: targetRange.startCol,
-            error: err instanceof Error ? err.message : String(err),
-            type: 'error',
-          },
-        ],
-      },
-    };
+    return fillFailure(targetRange, err instanceof Error ? err.message : String(err));
   }
 }

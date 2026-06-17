@@ -3,6 +3,7 @@ import type {
   EquationDefaults,
   EquationHandle,
   EquationStyle,
+  FloatingObjectHandleMutationReceipt,
   WorksheetEquationCollection,
 } from '@mog-sdk/contracts/api';
 import type { IObjectBoundsReader } from '@mog-sdk/contracts/objects/object-bounds-reader';
@@ -10,6 +11,7 @@ import type { IObjectBoundsReader } from '@mog-sdk/contracts/objects/object-boun
 import { getEquationStyleDefaults } from '../../../domain/equations/equation-defaults';
 import { DEFAULT_EQUATION_HEIGHT, DEFAULT_EQUATION_WIDTH } from '../operations/equation-operations';
 import type { WorksheetObjectsImpl } from '../objects';
+import { attachFloatingObjectHandle } from '../objects-receipts';
 import { EquationHandleImpl } from '../handles/equation-handle-impl';
 
 export class WorksheetEquationCollectionImpl implements WorksheetEquationCollection {
@@ -31,9 +33,10 @@ export class WorksheetEquationCollectionImpl implements WorksheetEquationCollect
       .map((info) => new EquationHandleImpl(info.id, this.objectsImpl, this.boundsReader));
   }
 
-  async add(config: EquationConfig): Promise<EquationHandle> {
-    const id = await this.objectsImpl.addEquation(config);
-    return new EquationHandleImpl(id, this.objectsImpl, this.boundsReader);
+  async add(config: EquationConfig): Promise<FloatingObjectHandleMutationReceipt<EquationHandle>> {
+    const receipt = await this.objectsImpl.addEquation(config);
+    const handle = new EquationHandleImpl(receipt.id, this.objectsImpl, this.boundsReader);
+    return attachFloatingObjectHandle(receipt, handle);
   }
 
   async getDefaultStyle(): Promise<EquationStyle> {

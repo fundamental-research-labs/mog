@@ -168,7 +168,7 @@ mod tests {
 
     #[test]
     fn ymd_to_serial_preserves_excel_1900_leap_day() {
-        assert_eq!(ymd_to_serial(1900, 2, 29), 60.0);
+        assert!((ymd_to_serial(1900, 2, 29) - 60.0).abs() < f64::EPSILON);
         assert_eq!(serial_to_ymd(60.0), (1900, 2, 29));
     }
 

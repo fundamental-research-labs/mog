@@ -53,8 +53,8 @@ export const pasteChartFromClipboard: AsyncActionHandler = async (deps): Promise
       uiStore.getState().clearChartClipboard();
     }
 
-    if (newChart?.id) {
-      selectChartObject(deps, newChart.id);
+    if (newChart.chart.id) {
+      selectChartObject(deps, newChart.chart.id);
     }
   } catch (e: any) {
     return { handled: false, error: e.message ?? String(e) };

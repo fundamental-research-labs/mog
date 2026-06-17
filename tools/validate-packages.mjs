@@ -37,6 +37,7 @@ const VALID_EXPORT_DISPOSITIONS = new Set([
   'reserved',
 ]);
 const VALID_PRIVATE_FRIEND_PUBLIC_ARTIFACTS = new Set(['strip']);
+const REQUIRED_MARKETPLACE_PREFIXES = ['vscode', 'open-vsx'];
 const RUNTIME_DEP_FIELDS = [
   'dependencies',
   'peerDependencies',
@@ -343,6 +344,13 @@ function packageNamesInText(text) {
   return new Set(text.match(/@mog-sdk\/[A-Za-z0-9_-]+/g) ?? []);
 }
 
+function marketplaceTargetsForEntry(entry) {
+  if (entry.marketplaceTargets === undefined) {
+    return entry.publicTarget ? [entry.publicTarget] : [];
+  }
+  return Array.isArray(entry.marketplaceTargets) ? entry.marketplaceTargets : [];
+}
+
 function publicPackageNamesFromArtifactDirs(text, packageByOutputDir) {
   const names = new Set();
   const re = /artifacts\/public-packages\/(mog-sdk__[A-Za-z0-9_-]+)/g;
@@ -393,6 +401,9 @@ for (const pkg of workspacePackages) {
   if (entry.publicTarget !== null && typeof entry.publicTarget !== 'string') {
     errors.push(`${name}: publicTarget must be a string or null`);
   }
+  if (entry.marketplaceTargets !== undefined && !Array.isArray(entry.marketplaceTargets)) {
+    errors.push(`${name}: marketplaceTargets must be an array when present`);
+  }
   if (typeof entry.requirePrivate !== 'boolean') {
     errors.push(`${name}: requirePrivate must be a boolean`);
   }
@@ -424,6 +435,46 @@ for (const pkg of workspacePackages) {
   if (NPM_PUBLISHABLE_DISPOSITIONS.has(entry.disposition) && entry.publicTarget) {
     if (!entry.publicTarget.startsWith('@mog-sdk/')) {
       errors.push(`${name}: publicTarget "${entry.publicTarget}" must be in @mog-sdk/* namespace`);
+    }
+  }
+
+  // 2b. Marketplace extensions publish outside npm. Their inventory must
+  // name the exact extension identity in every supported storefront so the
+  // release workflow cannot silently drop a marketplace.
+  if (entry.disposition === 'marketplace-extension') {
+    if (typeof manifest.publisher !== 'string' || manifest.publisher.length === 0) {
+      errors.push(`${name} (${relPath}): marketplace extension must define package.json publisher`);
+    } else {
+      const identity = `${manifest.publisher}.${manifest.name}`;
+      const primaryTarget = `vscode:${identity}`;
+      if (entry.publicTarget !== primaryTarget) {
+        errors.push(
+          `${name} (${relPath}): publicTarget "${entry.publicTarget}" must be "${primaryTarget}"`,
+        );
+      }
+
+      const targets = marketplaceTargetsForEntry(entry);
+      for (const target of targets) {
+        if (typeof target !== 'string') {
+          errors.push(`${name}: marketplaceTargets entries must be strings`);
+          continue;
+        }
+        const [prefix, targetIdentity] = target.split(':');
+        if (!REQUIRED_MARKETPLACE_PREFIXES.includes(prefix) || targetIdentity !== identity) {
+          errors.push(
+            `${name}: marketplace target "${target}" must be one of ${REQUIRED_MARKETPLACE_PREFIXES.map(
+              (marketplace) => `${marketplace}:${identity}`,
+            ).join(', ')}`,
+          );
+        }
+      }
+
+      for (const marketplace of REQUIRED_MARKETPLACE_PREFIXES) {
+        const expectedTarget = `${marketplace}:${identity}`;
+        if (!targets.includes(expectedTarget)) {
+          errors.push(`${name}: missing marketplace target "${expectedTarget}"`);
+        }
+      }
     }
   }
 
@@ -598,10 +649,16 @@ const npmPublicInventory = new Set(
     )
     .map(([name, entry]) => entry.publicTarget ?? name),
 );
+const marketplacePublicInventory = new Set(
+  Object.entries(inventory)
+    .filter(([, entry]) => entry.disposition === 'marketplace-extension' && !entry.requirePrivate)
+    .flatMap(([, entry]) => marketplaceTargetsForEntry(entry)),
+);
 const publicPackageByOutputDir = new Map(
   [...npmPublicInventory].map((name) => [publicPackageOutputDirectoryName(name), name]),
 );
 const publishWorkflowPath = join(ROOT, '.github/workflows/publish-sdk.yml');
+const marketplaceWorkflowPath = join(ROOT, '.github/workflows/publish-vscode-extension.yml');
 let publishWorkflow = '';
 const publishWorkflowPublishedPackages = new Set();
 if (existsSync(publishWorkflowPath)) {
@@ -664,8 +721,52 @@ if (existsSync(publishWorkflowPath)) {
     postPublishPackages,
   );
   assertSetEquals('publish-sdk summary npm package list', npmPublicInventory, summaryPackages);
+
+  if (marketplacePublicInventory.size > 0) {
+    const requiredPublishSdkFragments = [
+      'uses: ./.github/workflows/publish-vscode-extension.yml',
+      'dry-run: false',
+      'publish_vs_marketplace: true',
+      'publish_open_vsx: true',
+      'run_typecheck: true',
+      'wasm_package_version: ${{ needs.version.outputs.version }}',
+      'VSCE_PAT: ${{ secrets.VSCE_PAT }}',
+      'OVSX_PAT: ${{ secrets.OVSX_PAT }}',
+      "needs.publish-vscode-extension.result == 'success'",
+    ];
+    for (const fragment of requiredPublishSdkFragments) {
+      if (!publishWorkflow.includes(fragment)) {
+        errors.push(
+          `publish-sdk workflow must include "${fragment}" for marketplace extension publishing`,
+        );
+      }
+    }
+  }
 } else {
   errors.push('publish-sdk workflow is missing');
+}
+
+if (marketplacePublicInventory.size > 0) {
+  if (!existsSync(marketplaceWorkflowPath)) {
+    errors.push('publish-vscode-extension workflow is missing');
+  } else {
+    const marketplaceWorkflow = readFileSync(marketplaceWorkflowPath, 'utf-8');
+    const requiredMarketplaceWorkflowFragments = [
+      'workflow_call:',
+      'Publish to VS Code Marketplace',
+      'Publish to Open VSX',
+      'VSCE_PAT',
+      'OVSX_PAT',
+      'ovsx@1.0.0',
+    ];
+    for (const fragment of requiredMarketplaceWorkflowFragments) {
+      if (!marketplaceWorkflow.includes(fragment)) {
+        errors.push(
+          `publish-vscode-extension workflow must include "${fragment}" for marketplace publishing`,
+        );
+      }
+    }
+  }
 }
 
 // 11. Native binary wrapper consistency.
@@ -738,6 +839,7 @@ console.log(`  workspace packages discovered: ${workspacePackages.length}`);
 console.log(`  inventory entries: ${Object.keys(inventory).length}`);
 console.log(`  classified workspace packages: ${classified.size}`);
 console.log(`  public npm inventory: ${formatSet(npmPublicInventory)}`);
+console.log(`  marketplace inventory: ${formatSet(marketplacePublicInventory)}`);
 console.log(`  publish workflow packages: ${formatSet(publishWorkflowPublishedPackages)}`);
 console.log(`  native inventory: ${formatSet(nativeInventory)}`);
 console.log(`  node optional deps: ${formatSet(nodeOptional)}`);

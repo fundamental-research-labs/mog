@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { isWorkbookMutationEvent } from '../dirty-events';
+import { isWorkbookMutationEvent, shouldTrackWorkbookDirtyEvent } from '../dirty-events';
 
 test('dirty classifier only treats workbook mutation events as dirty', () => {
   for (const type of [
@@ -44,4 +44,45 @@ test('dirty classifier ignores malformed events', () => {
   assert.equal(isWorkbookMutationEvent(null), false);
   assert.equal(isWorkbookMutationEvent({}), false);
   assert.equal(isWorkbookMutationEvent({ type: 123 }), false);
+});
+
+test('dirty tracker ignores deferred import materialization for clean workbooks', () => {
+  assert.equal(
+    shouldTrackWorkbookDirtyEvent(
+      { type: 'sheet:created', source: 'user' },
+      { workbookAlreadyDirty: false, importDurabilityPending: true },
+    ),
+    false,
+  );
+  assert.equal(
+    shouldTrackWorkbookDirtyEvent(
+      { type: 'workbook:settings-changed', changedKey: 'selectedSheetIds' },
+      { workbookAlreadyDirty: false, importDurabilityPending: true },
+    ),
+    false,
+  );
+});
+
+test('dirty tracker still tracks normal and already-dirty mutations', () => {
+  assert.equal(
+    shouldTrackWorkbookDirtyEvent(
+      { type: 'cell:changed' },
+      { workbookAlreadyDirty: false, importDurabilityPending: false },
+    ),
+    true,
+  );
+  assert.equal(
+    shouldTrackWorkbookDirtyEvent(
+      { type: 'sheet:created' },
+      { workbookAlreadyDirty: true, importDurabilityPending: true },
+    ),
+    true,
+  );
+  assert.equal(
+    shouldTrackWorkbookDirtyEvent(
+      { type: 'selection:changed' },
+      { workbookAlreadyDirty: false, importDurabilityPending: true },
+    ),
+    false,
+  );
 });

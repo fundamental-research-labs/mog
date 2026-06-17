@@ -16,6 +16,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
+import type { PivotHandleMutationReceipt, PivotRefreshReceipt } from '@mog-sdk/contracts/api';
 import type {
   AggregateFunction,
   CalculatedField,
@@ -31,6 +32,37 @@ import { useActiveSheetId, useUIStore } from '../../infra/context';
 import type { PivotCapabilities } from '../../pivot/pivot-capabilities';
 
 import { usePivotTables } from './use-pivot-tables';
+
+function pivotRefreshReceiptMessage(receipt: PivotRefreshReceipt): string {
+  return (
+    receipt.diagnostics.find((diagnostic) => diagnostic.severity === 'error')?.message ??
+    receipt.diagnostics[0]?.message ??
+    `Pivot refresh did not apply: ${receipt.status}.`
+  );
+}
+
+function warnPivotRefresh(receipt: PivotRefreshReceipt | null | undefined): void {
+  if (!receipt || receipt.status === 'applied') return;
+  console.warn(pivotRefreshReceiptMessage(receipt), receipt);
+}
+
+function warnPivotMutation(operation: string, receipt: PivotHandleMutationReceipt): boolean {
+  if (receipt.status === 'applied') return false;
+  console.warn(
+    receipt.diagnostics?.[0]?.message ??
+      receipt.kernelReceipt?.error?.message ??
+      `Pivot ${operation} did not apply: ${receipt.status}.`,
+    receipt,
+  );
+  return true;
+}
+
+function warnPivotOperationError(operation: string, error: unknown): void {
+  console.warn(
+    `Pivot ${operation} failed: ${error instanceof Error ? error.message : String(error)}`,
+    error,
+  );
+}
 
 // =============================================================================
 // Types
@@ -282,8 +314,14 @@ export function usePivotContextMenuActions(
 
   const setDataSource = useCallback(
     (dataSource: string) => {
-      if (!pivot?.handle || !canEditFields) return;
-      void pivot.handle.setDataSource(dataSource);
+      const handle = pivot?.handle;
+      if (!handle || !canEditFields) return;
+      void handle
+        .setDataSource(dataSource)
+        .then((receipt) => {
+          warnPivotMutation('set data source', receipt);
+        })
+        .catch((error) => warnPivotOperationError('set data source', error));
       closeContextMenu();
     },
     [pivot, canEditFields, closeContextMenu],
@@ -291,8 +329,15 @@ export function usePivotContextMenuActions(
 
   const addCalculatedField = useCallback(
     (field: CalculatedField) => {
-      if (!pivot?.handle || !canEditFields) return;
-      void pivot.handle.addCalculatedField(field).then(() => pivot.handle?.refresh());
+      const handle = pivot?.handle;
+      if (!handle || !canEditFields) return;
+      void handle
+        .addCalculatedField(field)
+        .then(async (receipt) => {
+          if (warnPivotMutation('add calculated field', receipt)) return;
+          warnPivotRefresh(await handle.refresh());
+        })
+        .catch((error) => warnPivotOperationError('add calculated field', error));
       closeContextMenu();
     },
     [pivot, canEditFields, closeContextMenu],

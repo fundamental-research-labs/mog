@@ -9,24 +9,40 @@ import {
   OPEN_FORECAST_SHEET_DIALOG,
 } from '../data-analysis';
 
+function dataTableWriteReceipt(cellCount: number, overrides: Record<string, unknown> = {}) {
+  return {
+    kind: 'dataTable.writeStaticValues',
+    status: 'applied',
+    effects: [
+      { type: 'computedGrid', sheetId: 'sheet-1', count: cellCount },
+      { type: 'wroteStaticValues', sheetId: 'sheet-1', range: 'B2:C3', count: cellCount },
+    ],
+    diagnostics: [],
+    lifecycle: 'staticValues',
+    materialized: true,
+    worksheetChanged: true,
+    targetRange: 'B2:C3',
+    results: [
+      [50, 100],
+      [80, 160],
+    ],
+    cellCount,
+    cellsWritten: cellCount,
+    elapsedMs: 0,
+    ...overrides,
+  };
+}
+
 function createDeps(overrides?: {
   ranges?: Array<{ startRow: number; startCol: number; endRow: number; endCol: number }>;
   rowInputCellRef?: string;
   colInputCellRef?: string;
-  dataTable?: jest.Mock;
+  writeDataTableValues?: jest.Mock;
   getCell?: jest.Mock;
   setCells?: jest.Mock;
 }): ActionDependencies {
-  const dataTable =
-    overrides?.dataTable ??
-    jest.fn().mockResolvedValue({
-      results: [
-        [50, 100],
-        [80, 160],
-      ],
-      cellCount: 4,
-      cancelled: false,
-    });
+  const writeDataTableValues =
+    overrides?.writeDataTableValues ?? jest.fn().mockResolvedValue(dataTableWriteReceipt(4));
   const cellValues = new Map([
     ['0,1', 10],
     ['0,2', 20],
@@ -57,7 +73,7 @@ function createDeps(overrides?: {
         getCell,
         setCells,
         whatIf: {
-          dataTable,
+          writeDataTableValues,
         },
       }),
     },
@@ -306,16 +322,9 @@ describe('data analysis actions', () => {
   });
 
   it('calculates a two-variable data table and writes body results', async () => {
-    const dataTable = jest.fn().mockResolvedValue({
-      results: [
-        [50, 100],
-        [80, 160],
-      ],
-      cellCount: 4,
-      cancelled: false,
-    });
-    const setCells = jest.fn().mockResolvedValue({ cellsWritten: 4 });
-    const deps = createDeps({ dataTable, setCells });
+    const writeDataTableValues = jest.fn().mockResolvedValue(dataTableWriteReceipt(4));
+    const setCells = jest.fn();
+    const deps = createDeps({ writeDataTableValues, setCells });
 
     const result = await EXECUTE_DATA_TABLE(deps);
     const state = deps.uiStore.getState() as {
@@ -324,18 +333,14 @@ describe('data analysis actions', () => {
     };
 
     expect(result).toEqual({ handled: true });
-    expect(dataTable).toHaveBeenCalledWith('A1', {
+    expect(writeDataTableValues).toHaveBeenCalledWith('A1', {
       rowInputCell: 'E2',
       colInputCell: 'E1',
       rowValues: [5, 8],
       colValues: [10, 20],
+      targetRange: 'B2:C3',
     });
-    expect(setCells).toHaveBeenCalledWith([
-      { row: 1, col: 1, value: 50 },
-      { row: 1, col: 2, value: 100 },
-      { row: 2, col: 1, value: 80 },
-      { row: 2, col: 2, value: 160 },
-    ]);
+    expect(setCells).not.toHaveBeenCalled();
     expect(state.setDataTableStatus).toHaveBeenCalledWith('running', 0);
     expect(state.setDataTableResult).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -345,10 +350,76 @@ describe('data analysis actions', () => {
     );
   });
 
+  it('reports failed Data Table static write receipts', async () => {
+    const writeDataTableValues = jest.fn().mockResolvedValue(
+      dataTableWriteReceipt(0, {
+        status: 'failed',
+        materialized: false,
+        worksheetChanged: false,
+        cellsWritten: 0,
+        diagnostics: [
+          {
+            severity: 'error',
+            code: 'DATA_TABLE_INPUT_NOT_FOUND',
+            message: 'Input cell must contain a value.',
+          },
+        ],
+      }),
+    );
+    const setCells = jest.fn();
+    const deps = createDeps({ writeDataTableValues, setCells });
+
+    await EXECUTE_DATA_TABLE(deps);
+    const state = deps.uiStore.getState() as {
+      setDataTableResult: jest.Mock;
+    };
+
+    expect(setCells).not.toHaveBeenCalled();
+    expect(state.setDataTableResult).toHaveBeenCalledWith(
+      expect.objectContaining({
+        cellCount: 0,
+        cancelled: false,
+        errorMessage: 'Input cell must contain a value.',
+      }),
+    );
+  });
+
+  it('reports partial Data Table static write receipts', async () => {
+    const writeDataTableValues = jest.fn().mockResolvedValue(
+      dataTableWriteReceipt(2, {
+        status: 'partial',
+        materialized: true,
+        worksheetChanged: true,
+        cellsWritten: 2,
+        diagnostics: [
+          {
+            severity: 'error',
+            code: 'DATA_TABLE_STATIC_WRITE_CELL_FAILED',
+            message: 'Only part of the static Data Table range was written.',
+          },
+        ],
+      }),
+    );
+    const deps = createDeps({ writeDataTableValues });
+
+    await EXECUTE_DATA_TABLE(deps);
+    const state = deps.uiStore.getState() as {
+      setDataTableResult: jest.Mock;
+    };
+
+    expect(state.setDataTableResult).toHaveBeenCalledWith(
+      expect.objectContaining({
+        cellCount: 0,
+        cancelled: false,
+        errorMessage: 'Only part of the static Data Table range was written.',
+      }),
+    );
+  });
+
   it('reports validation errors without calling the bridge', async () => {
-    const dataTable = jest.fn();
+    const writeDataTableValues = jest.fn();
     const deps = createDeps({
-      dataTable,
+      writeDataTableValues,
       ranges: [
         { startRow: 0, startCol: 0, endRow: 2, endCol: 2 },
         { startRow: 4, startCol: 0, endRow: 5, endCol: 1 },
@@ -360,7 +431,7 @@ describe('data analysis actions', () => {
       setDataTableResult: jest.Mock;
     };
 
-    expect(dataTable).not.toHaveBeenCalled();
+    expect(writeDataTableValues).not.toHaveBeenCalled();
     expect(state.setDataTableResult).toHaveBeenCalledWith(
       expect.objectContaining({
         cellCount: 0,

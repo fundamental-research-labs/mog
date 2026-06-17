@@ -7,6 +7,7 @@
 
 import type { CellValue, SheetId } from '@mog-sdk/contracts/core';
 import type { ColumnFilterCriteria } from '@mog-sdk/contracts/filter';
+import type { FilterMutationReceipt } from '@mog-sdk/contracts/api';
 
 import type {
   ColumnFilter,
@@ -18,6 +19,11 @@ import type { DocumentContext, OperationResult } from './shared';
 import { invalidRange, operationFailed } from './shared';
 import { KernelError } from '../../../errors';
 import { resolveFilterRange } from '../filter-range-resolution';
+import {
+  buildFilterMutationReceipt,
+  columnFilterIsClear,
+  getFilterById,
+} from '../filters/mutation-receipts';
 import {
   assertFilterMutationAllowed,
   assertNoProtectedTableFilterCreation,
@@ -132,17 +138,42 @@ export async function setColumnFilter(
   filterId: string,
   headerCol: number,
   criteria: ColumnFilterCriteria,
-): Promise<OperationResult<void>> {
+): Promise<OperationResult<FilterMutationReceipt>> {
   try {
     await ctx.awaitMaterialized?.('allSheets');
+    const filter = await getFilterById(ctx, sheetId, filterId);
+    if (!filter) {
+      return {
+        success: true,
+        data: buildFilterMutationReceipt({
+          kind: 'filter.columnFilter.set',
+          status: 'noOp',
+          sheetId,
+          filterId,
+          column: headerCol,
+        }),
+      };
+    }
     await assertFilterMutationAllowed(ctx, sheetId, 'filters.setColumnFilter', filterId);
-    await ctx.computeBridge.setColumnFilter(
+    const range = await resolveFilterRange(ctx, sheetId, filter);
+    const result = await ctx.computeBridge.setColumnFilter(
       sheetId,
       filterId,
       headerCol,
       columnFilterCriteriaToCompute(criteria),
     );
-    return { success: true, data: undefined };
+    return {
+      success: true,
+      data: buildFilterMutationReceipt({
+        kind: 'filter.columnFilter.set',
+        sheetId,
+        filterId,
+        column: headerCol,
+        filter,
+        range,
+        result,
+      }),
+    };
   } catch (e) {
     return {
       success: false,
@@ -165,12 +196,52 @@ export async function clearColumnFilter(
   sheetId: SheetId,
   filterId: string,
   headerCol: number,
-): Promise<OperationResult<void>> {
+): Promise<OperationResult<FilterMutationReceipt>> {
   try {
     await ctx.awaitMaterialized?.('allSheets');
+    const filter = await getFilterById(ctx, sheetId, filterId);
+    if (!filter) {
+      return {
+        success: true,
+        data: buildFilterMutationReceipt({
+          kind: 'filter.columnFilter.clear',
+          status: 'noOp',
+          sheetId,
+          filterId,
+          column: headerCol,
+          filter,
+        }),
+      };
+    }
+    const range = await resolveFilterRange(ctx, sheetId, filter);
+    if (await columnFilterIsClear(ctx, sheetId, filter, range, headerCol)) {
+      return {
+        success: true,
+        data: buildFilterMutationReceipt({
+          kind: 'filter.columnFilter.clear',
+          status: 'noOp',
+          sheetId,
+          filterId,
+          column: headerCol,
+          filter,
+          range,
+        }),
+      };
+    }
     await assertFilterMutationAllowed(ctx, sheetId, 'filters.clearColumnFilter', filterId);
-    await ctx.computeBridge.clearColumnFilter(sheetId, filterId, headerCol);
-    return { success: true, data: undefined };
+    const result = await ctx.computeBridge.clearColumnFilter(sheetId, filterId, headerCol);
+    return {
+      success: true,
+      data: buildFilterMutationReceipt({
+        kind: 'filter.columnFilter.clear',
+        sheetId,
+        filterId,
+        column: headerCol,
+        filter,
+        range,
+        result,
+      }),
+    };
   } catch (e) {
     return {
       success: false,
@@ -193,12 +264,48 @@ export async function clearAllColumnFilters(
   ctx: DocumentContext,
   sheetId: SheetId,
   filterId: string,
-): Promise<OperationResult<void>> {
+): Promise<OperationResult<FilterMutationReceipt>> {
   try {
     await ctx.awaitMaterialized?.('allSheets');
+    const filter = await getFilterById(ctx, sheetId, filterId);
+    if (!filter) {
+      return {
+        success: true,
+        data: buildFilterMutationReceipt({
+          kind: 'filter.criteria.clearAll',
+          status: 'noOp',
+          sheetId,
+          filterId,
+        }),
+      };
+    }
+    const range = await resolveFilterRange(ctx, sheetId, filter);
+    if (Object.keys(filter.columnFilters ?? {}).length === 0) {
+      return {
+        success: true,
+        data: buildFilterMutationReceipt({
+          kind: 'filter.criteria.clearAll',
+          status: 'noOp',
+          sheetId,
+          filterId,
+          filter,
+          range,
+        }),
+      };
+    }
     await assertFilterMutationAllowed(ctx, sheetId, 'filters.clearAllColumnFilters', filterId);
-    await ctx.computeBridge.clearAllColumnFilters(sheetId, filterId);
-    return { success: true, data: undefined };
+    const result = await ctx.computeBridge.clearAllColumnFilters(sheetId, filterId);
+    return {
+      success: true,
+      data: buildFilterMutationReceipt({
+        kind: 'filter.criteria.clearAll',
+        sheetId,
+        filterId,
+        filter,
+        range,
+        result,
+      }),
+    };
   } catch (e) {
     return {
       success: false,
@@ -233,16 +340,83 @@ export async function applyFilter(
   ctx: DocumentContext,
   sheetId: SheetId,
   filterId: string,
-): Promise<OperationResult<void>> {
+): Promise<OperationResult<FilterMutationReceipt>> {
   try {
     await ctx.awaitMaterialized?.('allSheets');
+    const filter = await getFilterById(ctx, sheetId, filterId);
+    if (!filter) {
+      return {
+        success: true,
+        data: buildFilterMutationReceipt({
+          kind: 'filter.apply',
+          status: 'noOp',
+          sheetId,
+          filterId,
+        }),
+      };
+    }
     await assertFilterMutationAllowed(ctx, sheetId, 'filters.apply', filterId);
-    await ctx.computeBridge.applyFilter(sheetId, filterId);
-    return { success: true, data: undefined };
+    const range = await resolveFilterRange(ctx, sheetId, filter);
+    const result = await ctx.computeBridge.applyFilter(sheetId, filterId);
+    return {
+      success: true,
+      data: buildFilterMutationReceipt({
+        kind: 'filter.apply',
+        sheetId,
+        filterId,
+        filter,
+        range,
+        result,
+      }),
+    };
   } catch (e) {
     return {
       success: false,
       error: e instanceof KernelError ? e : operationFailed('applyFilter', String(e)),
+    };
+  }
+}
+
+/**
+ * Reapply a filter after data changes.
+ */
+export async function reapplyFilter(
+  ctx: DocumentContext,
+  sheetId: SheetId,
+  filterId: string,
+): Promise<OperationResult<FilterMutationReceipt>> {
+  try {
+    await ctx.awaitMaterialized?.('allSheets');
+    const filter = await getFilterById(ctx, sheetId, filterId);
+    if (!filter) {
+      return {
+        success: true,
+        data: buildFilterMutationReceipt({
+          kind: 'filter.reapply',
+          status: 'noOp',
+          sheetId,
+          filterId,
+        }),
+      };
+    }
+    await assertFilterMutationAllowed(ctx, sheetId, 'filters.reapply', filterId);
+    const range = await resolveFilterRange(ctx, sheetId, filter);
+    const result = await ctx.computeBridge.reapplyFilter(sheetId, filterId);
+    return {
+      success: true,
+      data: buildFilterMutationReceipt({
+        kind: 'filter.reapply',
+        sheetId,
+        filterId,
+        filter,
+        range,
+        result,
+      }),
+    };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof KernelError ? e : operationFailed('reapplyFilter', String(e)),
     };
   }
 }

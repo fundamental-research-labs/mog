@@ -14,7 +14,22 @@ export type {
   WorkbookCustomListInput,
   WorkbookCustomListUpdate,
 } from './workbook';
-export type { Worksheet, WorksheetWithInternals } from './worksheet';
+export type {
+  Worksheet,
+  WorksheetWithInternals,
+  AutoFillApplyReceipt,
+  AutoFillPreviewReceipt,
+  FillSeriesApplyReceipt,
+  WorksheetFill,
+  PivotCreateOptions,
+  FindCellsFormatQuery,
+  FindCellsInclude,
+  FindCellsQuery,
+  FindCellsResult,
+  FindCellsValueType,
+  FoundCell,
+} from './worksheet';
+export type * from './operation-receipt';
 export type * from '@mog/types-api/api';
 export type {
   ImportDiagnosticDetails,
@@ -27,7 +42,32 @@ export type {
   RuntimeDiagnosticsOptions,
   RuntimeDiagnosticsPage,
   RuntimeOperationDiagnostic,
+  CheckErrorsOptions,
+  ValidateWorkbookOptions,
+  WorkbookBlankRegionCheckInput,
+  WorkbookExternalReferenceCheckOptions,
+  WorkbookFormulaShapeCheckInput,
+  WorkbookFormulaShapeRangeRequest,
+  WorkbookValidationCheckKind,
+  WorkbookValidationCheckResult,
+  WorkbookValidationCheckStatus,
+  WorkbookValidationFinding,
+  WorkbookValidationRangeRequest,
+  WorkbookValidationResult,
+  WorkbookValidationScanOptions,
+  WorkbookValidationSeverity,
 } from '@mog/types-api/api/workbook/diagnostics';
+export type {
+  ChartAxisDescription,
+  ChartCachedPoint,
+  ChartDescription,
+  ChartSeriesDescription,
+  ChartSeriesSourceDataUpdate,
+  ChartSourceData,
+  ChartSourceDataUpdate,
+  ChartSourceRangeKind,
+  ChartSourceRangeMatch,
+} from '@mog/types-api/api/worksheet/charts';
 export { CellType, CellValueType, NumberFormatCategory, RangeValueType } from './types';
 export {
   isFloatingObjectMutationReceipt,

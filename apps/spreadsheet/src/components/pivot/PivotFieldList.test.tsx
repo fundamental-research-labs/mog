@@ -7,6 +7,7 @@ import type {
   PivotTableConfig,
 } from '@mog-sdk/contracts/pivot';
 
+import { PIVOT_AGGREGATE_FUNCTION_OPTIONS } from '../../systems/pivot';
 import { PivotFieldList, type PivotFieldListProps } from './PivotFieldList';
 
 function pid(id: string): PivotFieldPlacementFlat['placementId'] {
@@ -168,6 +169,26 @@ describe('PivotFieldList placement editor', () => {
     expect(props.onValueSortChange).toHaveBeenCalledWith('value:Amount:0', 'desc');
   });
 
+  it('renders every aggregate function supported by the pivot contract', () => {
+    renderList();
+
+    const aggregateSelect = screen.getByRole('combobox', {
+      name: /Aggregate value field/i,
+    }) as HTMLSelectElement;
+
+    expect(Array.from(aggregateSelect.options).map((option) => option.value)).toEqual(
+      PIVOT_AGGREGATE_FUNCTION_OPTIONS.map((option) => option.type),
+    );
+  });
+
+  it('keeps empty-zone placeholder text out of the drag hit target', () => {
+    const { container } = renderList({ placements: [] });
+
+    expect(within(zone(container, 'row')).getByText('Drop fields here')).toHaveClass(
+      'pointer-events-none',
+    );
+  });
+
   it('reorders placements within the same well by placementId', () => {
     const { container, props } = renderList();
     const transfer = dataTransfer();
@@ -208,6 +229,66 @@ describe('PivotFieldList placement editor', () => {
       position: 0,
       aggregateFunction: 'count',
     });
+  });
+
+  it('starts auto-scroll against the provided pane during field drag', () => {
+    const frameCallbacks: FrameRequestCallback[] = [];
+    const requestAnimationFrameMock = jest.fn((callback: FrameRequestCallback) => {
+      frameCallbacks.push(callback);
+      return frameCallbacks.length;
+    });
+    const cancelAnimationFrameMock = jest.fn();
+    const originalRequestAnimationFrame = window.requestAnimationFrame;
+    const originalCancelAnimationFrame = window.cancelAnimationFrame;
+    Object.defineProperty(window, 'requestAnimationFrame', {
+      configurable: true,
+      value: requestAnimationFrameMock,
+    });
+    Object.defineProperty(window, 'cancelAnimationFrame', {
+      configurable: true,
+      value: cancelAnimationFrameMock,
+    });
+
+    try {
+      const scrollContainer = document.createElement('div');
+      setRect(scrollContainer, { top: 0, bottom: 100, left: 0, right: 240, height: 100 });
+      const getDragScrollContainer = jest.fn(() => scrollContainer);
+      const { container } = renderList({
+        getDragScrollContainer,
+      });
+      const transfer = dataTransfer();
+      const category = container.querySelector<HTMLElement>(
+        '[data-pivot-target="field-chip"][data-pivot-area="available"][data-pivot-field-id="Category"]',
+      );
+      if (!category) throw new Error('Missing Category source chip');
+      const fieldList = container.querySelector<HTMLElement>('[data-pivot-target="field-list"]');
+      if (!fieldList) throw new Error('Missing field list');
+
+      fireEvent.dragStart(category, { dataTransfer: transfer });
+      const accepted = fireEvent.dragOver(fieldList, {
+        dataTransfer: transfer,
+        clientX: 12,
+        clientY: 98,
+      });
+
+      expect(accepted).toBe(false);
+      expect(transfer.dropEffect).toBe('move');
+      expect(requestAnimationFrameMock).toHaveBeenCalled();
+      frameCallbacks[0](1);
+      expect(getDragScrollContainer).toHaveBeenCalled();
+
+      fireEvent.dragEnd(category);
+      expect(cancelAnimationFrameMock).toHaveBeenCalled();
+    } finally {
+      Object.defineProperty(window, 'requestAnimationFrame', {
+        configurable: true,
+        value: originalRequestAnimationFrame,
+      });
+      Object.defineProperty(window, 'cancelAnimationFrame', {
+        configurable: true,
+        value: originalCancelAnimationFrame,
+      });
+    }
   });
 
   it('places a selected source field after a clicked placement chip', () => {
@@ -303,7 +384,11 @@ describe('PivotFieldList placement editor', () => {
     const controls = valueChip.querySelector('[data-pivot-target="placement-controls"]');
 
     expect(valueChip).toHaveClass('w-full', 'max-w-full', 'min-w-0');
+    expect(valueChip).toHaveAttribute('title', longName);
+    expect(valueChip).toHaveAttribute('aria-label', longName);
     expect(label).toHaveClass('min-w-0', 'flex-1', 'truncate');
+    expect(label).toHaveAttribute('title', longName);
+    expect(label).toHaveAttribute('aria-label', longName);
     expect(controls).toHaveClass('w-full', 'min-w-0');
     expect(screen.getByRole('combobox', { name: /Sort values by/i })).toHaveClass('min-w-0');
   });

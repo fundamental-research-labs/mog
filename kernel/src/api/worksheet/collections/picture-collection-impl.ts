@@ -1,4 +1,5 @@
 import type {
+  FloatingObjectHandleMutationReceipt,
   PictureConfig,
   PictureHandle,
   WorksheetPictureCollection,
@@ -6,6 +7,7 @@ import type {
 import type { IObjectBoundsReader } from '@mog-sdk/contracts/objects/object-bounds-reader';
 
 import type { WorksheetObjectsImpl } from '../objects';
+import { attachFloatingObjectHandle } from '../objects-receipts';
 import { PictureHandleImpl } from '../handles/picture-handle-impl';
 
 export class WorksheetPictureCollectionImpl implements WorksheetPictureCollection {
@@ -27,8 +29,9 @@ export class WorksheetPictureCollectionImpl implements WorksheetPictureCollectio
       .map((info) => new PictureHandleImpl(info.id, this.objectsImpl, this.boundsReader));
   }
 
-  async add(config: PictureConfig): Promise<PictureHandle> {
+  async add(config: PictureConfig): Promise<FloatingObjectHandleMutationReceipt<PictureHandle>> {
     const receipt = await this.objectsImpl.addPicture(config);
-    return new PictureHandleImpl(receipt.id, this.objectsImpl, this.boundsReader);
+    const handle = new PictureHandleImpl(receipt.id, this.objectsImpl, this.boundsReader);
+    return attachFloatingObjectHandle(receipt, handle);
   }
 }

@@ -76,7 +76,7 @@ export function DataTableDialog() {
     return true;
   }, [rowInputCellRef, colInputCellRef]);
 
-  // Handle OK - create the Data Table through the action system.
+  // Handle OK - write static Data Table values through the action system.
   const handleOk = useCallback(() => {
     if (!validateInputs()) {
       return;
@@ -132,9 +132,9 @@ export function DataTableDialog() {
             <>
               {/* Description */}
               <p className="text-body-sm text-ss-text-secondary">
-                Create a data table to evaluate a formula with different input values. Select a
-                range where the top-left cell contains a formula, the first row contains row input
-                values, and the first column contains column input values.
+                Calculate a data table and write the results as static values. Select a range where
+                the top-left cell contains a formula, the first row contains row input values, and
+                the first column contains column input values.
               </p>
 
               {/* Row input cell */}
@@ -184,7 +184,7 @@ export function DataTableDialog() {
                 <div className="flex flex-col gap-2">
                   <div className="flex items-center gap-2 text-body-sm text-ss-text-secondary">
                     <div className="w-4 h-4 border-2 border-ss-primary border-t-transparent rounded-full animate-ss-spin" />
-                    <span>Calculating... {progress}%</span>
+                    <span>Writing values... {progress}%</span>
                   </div>
                   {/* Progress bar */}
                   <div className="w-full bg-ss-surface-secondary rounded-full h-2">
@@ -256,12 +256,16 @@ function DataTableResults({ status, result }: DataTableResultsProps) {
   if (status === 'cancelled') {
     return (
       <div className="flex flex-col gap-3">
-        <div className="text-body font-medium text-ss-warning">
-          Data Table calculation cancelled.
+        <div
+          className="text-body font-medium text-ss-warning"
+          role="status"
+          data-testid="data-table-cancelled-message"
+        >
+          Data Table static value write cancelled.
         </div>
         {result && (
           <div className="text-body-sm text-ss-text-secondary">
-            Computed {result.cellCount} cells before cancellation.
+            Wrote {result.cellCount} values before cancellation.
           </div>
         )}
       </div>
@@ -271,7 +275,13 @@ function DataTableResults({ status, result }: DataTableResultsProps) {
   if (status === 'failed') {
     return (
       <div className="flex flex-col gap-3">
-        <div className="text-body font-medium text-ss-error">Data Table calculation failed.</div>
+        <div
+          className="text-body font-medium text-ss-error"
+          role="alert"
+          data-testid="data-table-failure-message"
+        >
+          Data Table static value write failed.
+        </div>
         {result?.errorMessage && (
           <div className="text-body-sm text-ss-text-secondary">{result.errorMessage}</div>
         )}
@@ -290,12 +300,18 @@ function DataTableResults({ status, result }: DataTableResultsProps) {
   // Success
   return (
     <div className="flex flex-col gap-3">
-      <div className="text-body font-medium text-ss-success">Data Table created successfully.</div>
+      <div
+        className="text-body font-medium text-ss-success"
+        role="status"
+        data-testid="data-table-success-message"
+      >
+        Static Data Table values written successfully.
+      </div>
 
       {result && (
         <div className="bg-ss-surface-secondary rounded p-3 space-y-2">
           <div className="flex justify-between text-body-sm">
-            <span className="text-ss-text-secondary">Cells computed:</span>
+            <span className="text-ss-text-secondary">Values written:</span>
             <span className="text-text font-medium">{result.cellCount}</span>
           </div>
           <div className="flex justify-between text-body-sm">

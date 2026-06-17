@@ -83,6 +83,17 @@ pub(in crate::storage::engine) fn ensure_cell_id_mirrored(
     row: u32,
     col: u32,
 ) -> Option<CellId> {
+    ensure_cell_id_mirrored_with_origin(stores, mirror, sheet_id, row, col, ORIGIN_USER_EDIT)
+}
+
+pub(in crate::storage::engine) fn ensure_cell_id_mirrored_with_origin(
+    stores: &mut EngineStores,
+    mirror: &CellMirror,
+    sheet_id: &SheetId,
+    row: u32,
+    col: u32,
+    origin: &'static [u8],
+) -> Option<CellId> {
     let already_registered = stores
         .grid_indexes
         .get(sheet_id)
@@ -105,6 +116,7 @@ pub(in crate::storage::engine) fn ensure_cell_id_mirrored(
         sheet_id,
         row,
         col,
+        origin,
     );
     Some(cell_id)
 }
@@ -116,12 +128,13 @@ fn mirror_cell_position_to_yrs(
     sheet_id: &SheetId,
     row: u32,
     col: u32,
+    origin: &'static [u8],
 ) -> CellId {
     // Metadata-only writes can be the first operation on an empty sheet. Expand
     // row/col axes before reading row_id_hex/col_id_hex, otherwise the in-memory
     // CellId is not persisted to gridIndex and the next value undo can orphan
     // comments or properties that refer to it.
-    let mut txn = doc.transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
+    let mut txn = doc.transact_mut_with(Origin::from(origin));
     {
         let mut dims = crate::storage::sheet_dimensions::SheetDimensionsMut::from_grid_index(
             doc, sheets, grid,

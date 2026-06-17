@@ -24,7 +24,7 @@ import type { Worksheet } from '@mog-sdk/contracts/api';
 import { MAX_COLS, MAX_ROWS, type CellRange } from '@mog-sdk/contracts/core';
 import { cellRangeToA1 } from '@mog/spreadsheet-utils/a1';
 
-import { getUIStore, handled } from './types';
+import { fillReceiptError, getUIStore, handled } from './types';
 
 // =============================================================================
 // Helper Functions
@@ -269,7 +269,15 @@ export const EXECUTE_FILL_SERIES: AsyncActionHandler = async (
   const rangeA1 = cellRangeToA1(executionRange);
 
   try {
-    await ws.fillSeries(rangeA1, options);
+    const receipt = await ws.fillSeries(rangeA1, options);
+    const receiptError = fillReceiptError(receipt, 'Fill Series');
+    if (receiptError) {
+      uiStore.getState().closeFillSeriesDialog();
+      return {
+        handled: true,
+        error: receiptError,
+      };
+    }
   } catch (err) {
     uiStore.getState().closeFillSeriesDialog();
     return {

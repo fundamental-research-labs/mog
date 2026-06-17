@@ -10,6 +10,7 @@ use crate::storage::sheet::schemas::{CellValidationResult, ColumnSchema, RangeSc
 use bridge_core as bridge;
 use cell_types::{CellId, SheetId, SheetPos};
 use compute_document::hex::id_to_hex;
+use compute_document::undo::ORIGIN_UI_STATE;
 use compute_wire::mutation::serialize_multi_viewport_patches;
 use domain_types::CellFormat;
 use domain_types::ResolvedCellFormat;
@@ -139,6 +140,22 @@ impl YrsComputeEngine {
         format: &CellFormat,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
         range_mutations::set_format_for_ranges(self, sheet_id, ranges, format)
+    }
+
+    #[bridge::write(scope = "sheet")]
+    pub fn set_format_for_ranges_ui_state(
+        &mut self,
+        sheet_id: &SheetId,
+        ranges: &[(u32, u32, u32, u32)],
+        format: &CellFormat,
+    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+        range_mutations::set_format_for_ranges_with_origin(
+            self,
+            sheet_id,
+            ranges,
+            format,
+            ORIGIN_UI_STATE,
+        )
     }
 
     #[bridge::write(scope = "sheet")]

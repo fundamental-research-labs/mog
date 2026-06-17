@@ -1,12 +1,5 @@
 use super::super::adapters::{find_byte, find_sequence};
 
-pub(crate) fn find_sheet_data(xml: &[u8], start: usize) -> Option<usize> {
-    find_sequence(xml, b"<sheetData", start).map(|p| {
-        // Skip past the opening tag
-        find_byte(xml, b'>', p).map_or(p, |gt| gt + 1)
-    })
-}
-
 /// Parse row number from <row> element attributes
 pub(crate) fn parse_row_number(xml: &[u8], start: usize) -> Option<u32> {
     // Find r=" attribute

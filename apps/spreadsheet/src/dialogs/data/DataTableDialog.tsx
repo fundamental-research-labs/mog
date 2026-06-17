@@ -220,7 +220,7 @@ export function DataTableDialog() {
               Cancel
             </Button>
             <Button variant="primary" onClick={handleOk} disabled={isCalculating}>
-              Write Values
+              OK
             </Button>
           </>
         ) : (
@@ -256,7 +256,11 @@ function DataTableResults({ status, result }: DataTableResultsProps) {
   if (status === 'cancelled') {
     return (
       <div className="flex flex-col gap-3">
-        <div className="text-body font-medium text-ss-warning">
+        <div
+          className="text-body font-medium text-ss-warning"
+          role="status"
+          data-testid="data-table-cancelled-message"
+        >
           Data Table static value write cancelled.
         </div>
         {result && (
@@ -271,7 +275,11 @@ function DataTableResults({ status, result }: DataTableResultsProps) {
   if (status === 'failed') {
     return (
       <div className="flex flex-col gap-3">
-        <div className="text-body font-medium text-ss-error">
+        <div
+          className="text-body font-medium text-ss-error"
+          role="alert"
+          data-testid="data-table-failure-message"
+        >
           Data Table static value write failed.
         </div>
         {result?.errorMessage && (
@@ -292,7 +300,11 @@ function DataTableResults({ status, result }: DataTableResultsProps) {
   // Success
   return (
     <div className="flex flex-col gap-3">
-      <div className="text-body font-medium text-ss-success">
+      <div
+        className="text-body font-medium text-ss-success"
+        role="status"
+        data-testid="data-table-success-message"
+      >
         Static Data Table values written successfully.
       </div>
 

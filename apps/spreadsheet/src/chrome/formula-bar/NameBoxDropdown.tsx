@@ -403,7 +403,7 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
    * 3. Parse as A1 notation
    */
   const navigateToAddress = useCallback(
-    async (address: string) => {
+    async (address: string, options: { rejectNoOpCellReference?: boolean } = {}) => {
       // First check for named ranges (defined names and tables)
       // This enables typing a name directly to navigate to it
       const trimmedAddress = address.trim();
@@ -551,6 +551,10 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
           activeCell.col === parsed.startCol;
 
         if (isSingleCellRef && isNoOpSelection) {
+          if (options.rejectNoOpCellReference) {
+            setValidationError(INVALID_NAME_MESSAGE);
+            return;
+          }
           setValidationError(null);
           return;
         }
@@ -630,7 +634,9 @@ export const NameBoxDropdown = memo(function NameBoxDropdown({
       if (commitInFlightRef.current) return;
       commitInFlightRef.current = true;
       try {
-        await navigateToAddress(value);
+        await navigateToAddress(value, {
+          rejectNoOpCellReference: true,
+        });
       } catch {
         setValidationError(INVALID_NAME_MESSAGE);
       } finally {

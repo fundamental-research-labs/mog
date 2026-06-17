@@ -167,3 +167,22 @@ export function isWorkbookMutationEvent(event: unknown): boolean {
   if (typeof type !== 'string') return false;
   return WORKBOOK_MUTATION_EVENT_TYPES.has(type);
 }
+
+export function shouldTrackWorkbookDirtyEvent(
+  event: unknown,
+  context: {
+    readonly workbookAlreadyDirty: boolean;
+    readonly importDurabilityPending: boolean;
+  },
+): boolean {
+  if (!isWorkbookMutationEvent(event)) return false;
+  // Browser XLSX opens use a fast first-paint import, then complete durable
+  // workbook materialization in the background. Public workbook mutations are
+  // admitted only after that durability barrier, so mutation events observed
+  // while a clean workbook is still pending are import materialization, not
+  // unsaved user edits.
+  if (!context.workbookAlreadyDirty && context.importDurabilityPending) {
+    return false;
+  }
+  return true;
+}

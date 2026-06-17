@@ -17,6 +17,10 @@
 import { jest } from '@jest/globals';
 
 import { sheetId } from '@mog-sdk/contracts/core';
+import {
+  worksheetTableOpsMock,
+  worksheetValidationOpsMock,
+} from './helpers/worksheet-impl-esm-mocks';
 
 // ---------------------------------------------------------------------------
 // Mock transitive dependencies first to prevent ESM import chain issues
@@ -96,10 +100,10 @@ jest.unstable_mockModule('../worksheet/operations/dependency-operations', () => 
   getPrecedents: jest.fn(),
   getDependents: jest.fn(),
 }));
-jest.unstable_mockModule('../worksheet/operations/validation-operations', () => ({
-  getDropdownItems: jest.fn(),
-  resolveDropdownItems: jest.fn(),
-}));
+jest.unstable_mockModule(
+  '../worksheet/operations/validation-operations',
+  () => worksheetValidationOpsMock,
+);
 jest.unstable_mockModule('../worksheet/operations/filter-operations', () => ({}));
 jest.unstable_mockModule('../worksheet/operations/shape-operations', () => ({}));
 jest.unstable_mockModule('../worksheet/operations/floating-object-operations', () => ({}));
@@ -127,29 +131,7 @@ jest.unstable_mockModule('../worksheet/operations/text-effects-operations', () =
   convertToTextBox: jest.fn(),
 }));
 jest.unstable_mockModule('../worksheet/operations/sheet-management-operations', () => ({}));
-jest.unstable_mockModule('../worksheet/operations/table-operations', () => ({
-  bridgeTableToTableInfo: jest.fn(),
-  getTableAtCell: jest.fn(),
-  getTableByName: jest.fn(),
-  getAllTablesInSheet: jest.fn(),
-  getTableHitRegion: jest.fn(),
-  removeTable: jest.fn(),
-  resizeTable: jest.fn(),
-  setTableStyle: jest.fn(),
-  renameTable: jest.fn(),
-  addTableColumn: jest.fn(),
-  removeTableColumn: jest.fn(),
-  createTable: jest.fn(),
-  toggleTotalsRow: jest.fn(),
-  toggleHeaderRow: jest.fn(),
-  applyAutoExpansion: jest.fn(),
-  getTableColumnDataCellsFromInfo: jest.fn(),
-  getDataBodyRangeFromInfo: jest.fn(),
-  getHeaderRowRangeFromInfo: jest.fn(),
-  getTotalRowRangeFromInfo: jest.fn(),
-  setCalculatedColumnFormula: jest.fn(),
-  clearCalculatedColumnFormula: jest.fn(),
-}));
+jest.unstable_mockModule('../worksheet/operations/table-operations', () => worksheetTableOpsMock);
 jest.unstable_mockModule('../worksheet/operations/drawing-operations', () => ({}));
 
 // Domain modules used directly by WorksheetImpl
@@ -320,6 +302,11 @@ function createMockCtx(): any {
       deleteTable: jest.fn().mockResolvedValue(undefined),
       createTable: jest.fn().mockResolvedValue(undefined),
       createTableLifecycle: jest.fn().mockResolvedValue(undefined),
+      detectAutoExpansion: jest.fn().mockResolvedValue({
+        shouldExpand: false,
+        newEndRow: 9,
+        newEndCol: 3,
+      }),
       applyAutoExpansion: jest.fn().mockResolvedValue(undefined),
       queryRange: jest.fn().mockResolvedValue({ cells: [], merges: [] }),
       getCellPosition: jest.fn().mockResolvedValue(null),
@@ -602,7 +589,9 @@ describe('WorksheetImpl Extended Methods', () => {
     });
 
     it('clearAllFilterCriteria delegates to computeBridge.clearAllColumnFilters', async () => {
-      ctx.computeBridge.getFiltersInSheet.mockResolvedValue([mockAutoFilter]);
+      ctx.computeBridge.getFiltersInSheet.mockResolvedValue([
+        { ...mockAutoFilter, columnFilters: { 'c-start': { type: 'values', values: ['A'] } } },
+      ]);
       await ws.filters.clearAllCriteria('filter-1');
 
       expect(ctx.computeBridge.clearAllColumnFilters).toHaveBeenCalledWith(SHEET_ID, 'filter-1');
@@ -997,7 +986,7 @@ describe('WorksheetImpl Extended Methods', () => {
       expect(ctx.computeBridge.createTable).not.toHaveBeenCalled();
       expect(ctx.computeBridge.setTableStyle).not.toHaveBeenCalled();
       expect(ctx.computeBridge.setCellsByPosition).not.toHaveBeenCalled();
-      expect(result).toEqual(tableInfo);
+      expect(result).toEqual(expect.objectContaining({ kind: 'tableAdd', table: tableInfo }));
       expect(ctx.eventBus.emit).toHaveBeenCalledWith(
         expect.objectContaining({
           type: 'table:created',
@@ -1091,6 +1080,12 @@ describe('WorksheetImpl Extended Methods', () => {
     });
 
     it('applyAutoExpansion delegates to computeBridge.applyAutoExpansion', async () => {
+      ctx.computeBridge.detectAutoExpansion.mockResolvedValue({
+        shouldExpand: true,
+        newEndRow: 10,
+        newEndCol: 3,
+      });
+
       await ws.tables.applyAutoExpansion('Table1');
 
       expect(ctx.computeBridge.applyAutoExpansion).toHaveBeenCalledWith(SHEET_ID, 'Table1');
@@ -1177,7 +1172,14 @@ describe('WorksheetImpl Extended Methods', () => {
 
       const relativeCFs = [
         {
-          rules: [{ type: 'cellIs', operator: 'greaterThan', value: 5 }],
+          rules: [
+            {
+              type: 'cellValue',
+              operator: 'greaterThan',
+              value1: 5,
+              style: { backgroundColor: '#fff2cc' },
+            },
+          ],
           rangeOffsets: [
             { startRowOffset: 0, startColOffset: 0, endRowOffset: 5, endColOffset: 3 },
           ],
@@ -1582,6 +1584,17 @@ describe('WorksheetImpl Extended Methods', () => {
   // =========================================================================
   describe('Filter Migration Methods', () => {
     it('applyFilter delegates to computeBridge.applyFilter', async () => {
+      ctx.computeBridge.getFiltersInSheet.mockResolvedValue([
+        {
+          id: 'filter-1',
+          type: 'autoFilter',
+          headerStartCellId: 'cell-start',
+          headerEndCellId: 'cell-end',
+          dataEndCellId: 'cell-data-end',
+          columnFilters: {},
+        },
+      ]);
+
       await ws.filters.apply('filter-1');
 
       expect(ctx.computeBridge.applyFilter).toHaveBeenCalledWith(SHEET_ID, 'filter-1');

@@ -20,6 +20,10 @@ import { jest } from '@jest/globals';
 
 import { sheetId } from '@mog-sdk/contracts/core';
 import { KernelError } from '../../errors';
+import {
+  worksheetTableOpsMock,
+  worksheetValidationOpsMock,
+} from './helpers/worksheet-impl-esm-mocks';
 
 // ---------------------------------------------------------------------------
 // Mock operation modules
@@ -100,10 +104,10 @@ jest.unstable_mockModule('../worksheet/operations/dependency-operations', () => 
   getPrecedents: jest.fn(),
   getDependents: jest.fn(),
 }));
-jest.unstable_mockModule('../worksheet/operations/validation-operations', () => ({
-  getDropdownItems: jest.fn(),
-  resolveDropdownItems: jest.fn(),
-}));
+jest.unstable_mockModule(
+  '../worksheet/operations/validation-operations',
+  () => worksheetValidationOpsMock,
+);
 jest.unstable_mockModule('../worksheet/operations/filter-operations', () => ({}));
 jest.unstable_mockModule('../worksheet/operations/shape-operations', () => ({}));
 jest.unstable_mockModule('../worksheet/operations/floating-object-operations', () => ({}));
@@ -124,29 +128,7 @@ jest.unstable_mockModule('../worksheet/operations/text-effects-operations', () =
   convertToTextBox: jest.fn(),
 }));
 jest.unstable_mockModule('../worksheet/operations/sheet-management-operations', () => ({}));
-jest.unstable_mockModule('../worksheet/operations/table-operations', () => ({
-  bridgeTableToTableInfo: jest.fn(),
-  getTableAtCell: jest.fn(),
-  getTableByName: jest.fn(),
-  getAllTablesInSheet: jest.fn(),
-  getTableHitRegion: jest.fn(),
-  removeTable: jest.fn(),
-  resizeTable: jest.fn(),
-  setTableStyle: jest.fn(),
-  renameTable: jest.fn(),
-  addTableColumn: jest.fn(),
-  removeTableColumn: jest.fn(),
-  createTable: jest.fn(),
-  toggleTotalsRow: jest.fn(),
-  toggleHeaderRow: jest.fn(),
-  applyAutoExpansion: jest.fn(),
-  getTableColumnDataCellsFromInfo: jest.fn(),
-  getDataBodyRangeFromInfo: jest.fn(),
-  getHeaderRowRangeFromInfo: jest.fn(),
-  getTotalRowRangeFromInfo: jest.fn(),
-  setCalculatedColumnFormula: jest.fn(),
-  clearCalculatedColumnFormula: jest.fn(),
-}));
+jest.unstable_mockModule('../worksheet/operations/table-operations', () => worksheetTableOpsMock);
 jest.unstable_mockModule('../worksheet/operations/drawing-operations', () => ({}));
 jest.unstable_mockModule('../worksheet/operations/fill-operations', () => ({}));
 

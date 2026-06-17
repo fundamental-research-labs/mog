@@ -18,12 +18,14 @@ import type { KernelError } from '../../../src/errors';
 // =============================================================================
 
 const mockGetByName = jest.fn();
+const mockGetById = jest.fn();
 const mockGetRefersToA1 = jest.fn();
 const mockExportNames = jest.fn();
 const mockUpdate = jest.fn();
 
 jest.unstable_mockModule('../../../src/domain/formulas/named-ranges', () => ({
   getByName: (...args: unknown[]) => mockGetByName(...args),
+  getById: (...args: unknown[]) => mockGetById(...args),
   getRefersToA1: (...args: unknown[]) => mockGetRefersToA1(...args),
   exportNames: (...args: unknown[]) => mockExportNames(...args),
   update: (...args: unknown[]) => mockUpdate(...args),
@@ -53,6 +55,9 @@ function createMockDeps(overrides?: Partial<WorkbookNamesDeps>): WorkbookNamesDe
       emit: jest.fn(),
       on: jest.fn(),
       off: jest.fn(),
+    },
+    writeGate: {
+      assertWritable: jest.fn(),
     },
   } as unknown as DocumentContext;
 
@@ -93,7 +98,9 @@ describe('WorkbookNamesImpl', () => {
 
   beforeEach(() => {
     mockGetByName.mockReset();
+    mockGetById.mockReset();
     mockGetRefersToA1.mockReset();
+    mockGetRefersToA1.mockResolvedValue('=Sheet1!$A$1');
     mockExportNames.mockReset();
     mockUpdate.mockReset();
     deps = createMockDeps();
@@ -439,12 +446,14 @@ describe('WorkbookNamesImpl', () => {
 
   describe('update()', () => {
     it('passes visible field through to domain update', async () => {
-      mockGetByName.mockResolvedValue({
+      const defined = {
         id: 'nr-1',
         name: 'Revenue',
         refersTo: { template: '{0}', refs: [] },
         scope: undefined,
-      });
+      };
+      mockGetByName.mockResolvedValue(defined);
+      mockGetById.mockResolvedValue({ ...defined, visible: false });
 
       await names.update('Revenue', { visible: false });
 
@@ -463,11 +472,18 @@ describe('WorkbookNamesImpl', () => {
     });
 
     it('passes all update fields including visible', async () => {
-      mockGetByName.mockResolvedValue({
+      const defined = {
         id: 'nr-2',
         name: 'OldName',
         refersTo: { template: '{0}', refs: [] },
         scope: undefined,
+      };
+      mockGetByName.mockResolvedValue(defined);
+      mockGetById.mockResolvedValue({
+        ...defined,
+        name: 'NewName',
+        comment: 'Updated comment',
+        visible: true,
       });
 
       await names.update('OldName', {

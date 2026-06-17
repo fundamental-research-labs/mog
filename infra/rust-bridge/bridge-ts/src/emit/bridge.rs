@@ -73,6 +73,7 @@ fn is_system_mutation(method: &TsMethod) -> bool {
             | "import_from_csv_bytes"
             | "apply_sync_update"
             | "flush_undo_capture"
+            | "set_format_for_ranges_ui_state"
     )
 }
 

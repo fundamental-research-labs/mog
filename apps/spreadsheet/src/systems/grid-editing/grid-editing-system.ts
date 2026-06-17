@@ -1880,7 +1880,12 @@ export class GridEditingSystem implements IGridEditingSystem {
           await workbook.getSheetById(sourceSheetId).setCells(updates);
         }
       },
-      batch: (fn) => workbook.undoGroup(() => fn()),
+      batch: (fn) =>
+        workbook.undoGroup(async () => {
+          const result = await fn();
+          await this.config.drainPostCellChangeEffects?.();
+          return result;
+        }),
       onPasteComplete: clipboardDeps?.onPasteComplete,
       onSizeMismatch: clipboardDeps?.onSizeMismatch,
       onProtectionError: clipboardDeps?.onProtectionError,

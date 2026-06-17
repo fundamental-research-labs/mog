@@ -36,6 +36,26 @@ function tableFilter(overrides: Record<string, unknown> = {}): any {
   };
 }
 
+function advancedFilter(overrides: Record<string, unknown> = {}): any {
+  return {
+    id: 'advanced-filter-1',
+    type: 'advancedFilter',
+    headerStartCellId: 'advanced-header-start',
+    headerEndCellId: 'advanced-header-end',
+    dataEndCellId: 'advanced-data-end',
+    columnFilters: {},
+    advancedFilter: {
+      criteriaRange: {
+        sheetId: SHEET_ID,
+        startCellId: 'advanced-criteria-start',
+        endCellId: 'advanced-criteria-end',
+      },
+      uniqueRecordsOnly: false,
+    },
+    ...overrides,
+  };
+}
+
 function createMockCtx(opts: { existingFilters?: Array<{ id: string }> } = {}): any {
   const filters = opts.existingFilters ?? [{ id: FILTER_ID }];
   return {
@@ -287,6 +307,66 @@ describe('WorksheetFiltersImpl.byColor', () => {
     );
   });
 
+  it('clears active advanced-filter criteria even when no column filters are set', async () => {
+    ctx = createMockCtx({ existingFilters: [advancedFilter()] });
+    filters = new WorksheetFiltersImpl(ctx, SHEET_ID);
+    ctx.computeBridge.getCellPosition.mockImplementation(
+      async (_sheetId: string, cellId: string) => {
+        const positions: Record<string, { row: number; col: number }> = {
+          'advanced-header-start': { row: 0, col: 0 },
+          'advanced-header-end': { row: 0, col: 1 },
+          'advanced-data-end': { row: 5, col: 1 },
+        };
+        return positions[cellId] ?? null;
+      },
+    );
+    ctx.computeBridge.clearAllColumnFilters.mockResolvedValueOnce(
+      mutationResult({
+        filterChanges: [
+          {
+            sheetId: SHEET_ID,
+            filterId: 'advanced-filter-1',
+            filterKind: 'advancedFilter',
+            action: 'cleared',
+            hiddenRowCount: 0,
+            visibleRowCount: 5,
+            kind: 'Set',
+          },
+        ],
+      }),
+    );
+
+    const receipt = await filters.clearAllCriteria('advanced-filter-1');
+
+    expect(ctx.computeBridge.clearAllColumnFilters).toHaveBeenCalledWith(
+      SHEET_ID,
+      'advanced-filter-1',
+    );
+    expect(receipt).toEqual(
+      expect.objectContaining({
+        kind: 'filter.criteria.clearAll',
+        status: 'applied',
+        sheetId: SHEET_ID,
+        filterId: 'advanced-filter-1',
+        filterKind: 'advancedFilter',
+        range: 'A1:B6',
+        hiddenRowCount: 0,
+        visibleRowCount: 5,
+      }),
+    );
+    expect(receipt.effects).toEqual([
+      expect.objectContaining({
+        type: 'changedFilterProjection',
+        sheetId: SHEET_ID,
+        range: 'A1:B6',
+        details: expect.objectContaining({
+          action: 'cleared',
+          filterKind: 'advancedFilter',
+        }),
+      }),
+    ]);
+  });
+
   it('returns an unsupported receipt with diagnostics for preserved filter shells', async () => {
     const diagnostic = {
       id: 'runtime-diagnostic-1',
@@ -336,9 +416,7 @@ describe('WorksheetFiltersImpl.byColor', () => {
         target: expect.objectContaining({ sheetId: SHEET_ID, objectId: FILTER_ID }),
       }),
     ]);
-    expect(receipt.effects).toEqual([
-      expect.objectContaining({ type: 'changedFilterProjection' }),
-    ]);
+    expect(receipt.effects).toEqual([expect.objectContaining({ type: 'changedFilterProjection' })]);
   });
 
   it('returns failed status when compute reports failure diagnostics', async () => {

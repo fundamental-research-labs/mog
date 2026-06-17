@@ -420,6 +420,110 @@ fn test_undo_row_format_produces_viewport_patches() {
 }
 
 #[test]
+fn test_redo_grouped_bulk_set_cells_reports_changed_cells_and_viewport_patches() {
+    let snap = simple_snapshot();
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let sid = sheet_id();
+
+    engine
+        .register_viewport("main", &sid, 0, 0, 100, 26)
+        .unwrap();
+
+    engine.begin_undo_group().unwrap();
+    engine
+        .batch_set_cells_by_position(
+            vec![
+                (
+                    sid,
+                    17,
+                    0,
+                    crate::storage::engine::mutation::CellInput::Parse {
+                        text: "atlas91 paste alpha".into(),
+                    },
+                ),
+                (
+                    sid,
+                    17,
+                    1,
+                    crate::storage::engine::mutation::CellInput::Parse { text: "101".into() },
+                ),
+            ],
+            true,
+        )
+        .unwrap();
+    engine.end_undo_group().unwrap();
+    engine.undo().unwrap();
+
+    let (patches, result) = engine.redo().unwrap();
+
+    let mut changed_positions: Vec<(u32, u32)> = result
+        .recalc
+        .changed_cells
+        .iter()
+        .filter_map(|change| change.position.as_ref().map(|pos| (pos.row, pos.col)))
+        .collect();
+    changed_positions.sort_unstable();
+    assert!(
+        changed_positions.contains(&(17, 0)) && changed_positions.contains(&(17, 1)),
+        "redo of grouped paste should report restored cell positions; got {:?}",
+        changed_positions
+    );
+
+    let patch_positions = sorted_first_viewport_patch_positions(&patches);
+    assert!(
+        patch_positions.contains(&(17, 0)) && patch_positions.contains(&(17, 1)),
+        "redo of grouped paste should patch restored viewport cells; got {:?}",
+        patch_positions
+    );
+}
+
+#[test]
+fn test_undo_single_position_batch_reports_changed_cell_and_viewport_patch() {
+    let snap = simple_snapshot();
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let sid = sheet_id();
+
+    engine
+        .register_viewport("main", &sid, 0, 0, 20, 20)
+        .unwrap();
+
+    engine
+        .batch_set_cells_by_position(
+            vec![(
+                sid,
+                9,
+                12,
+                crate::storage::engine::mutation::CellInput::Parse {
+                    text: "atlas91 paste alpha".into(),
+                },
+            )],
+            true,
+        )
+        .unwrap();
+
+    let (patches, result) = engine.undo().unwrap();
+
+    let changed_positions: Vec<(u32, u32)> = result
+        .recalc
+        .changed_cells
+        .iter()
+        .filter_map(|change| change.position.as_ref().map(|pos| (pos.row, pos.col)))
+        .collect();
+    assert!(
+        changed_positions.contains(&(9, 12)),
+        "undo of single positioned paste should report the cleared cell; got {:?}",
+        changed_positions
+    );
+
+    let patch_positions = sorted_first_viewport_patch_positions(&patches);
+    assert!(
+        patch_positions.contains(&(9, 12)),
+        "undo of single positioned paste should patch the cleared viewport cell; got {:?}",
+        patch_positions
+    );
+}
+
+#[test]
 fn test_undo_col_format_produces_viewport_patches() {
     use domain_types::CellFormat;
 

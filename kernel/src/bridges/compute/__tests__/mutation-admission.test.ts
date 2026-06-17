@@ -221,4 +221,60 @@ describe('Compute mutation admission', () => {
 
     expect(calls.slice(0, 2)).toEqual(['compute_begin_undo_group', 'compute_delete_sheet']);
   });
+
+  it('refreshes undo state after closing an undo group', async () => {
+    const notifyForwardMutation = jest.fn(async () => undefined);
+    const ctx = makeMockContext({
+      services: {
+        undo: {
+          notifyForwardMutation,
+        },
+      },
+    } as Partial<IKernelContext>);
+    const transport: BridgeTransport & { call: jest.Mock } = {
+      call: jest.fn(async (command: string) => {
+        if (command === 'compute_end_undo_group') return undefined;
+        throw new Error(`unexpected command: ${command}`);
+      }),
+    };
+    const core = createStartedCore(ctx, transport);
+
+    await core.endUndoGroup();
+
+    expect(transport.call).toHaveBeenCalledWith('compute_end_undo_group', { docId: 'test-doc' });
+    expect(notifyForwardMutation).toHaveBeenCalledTimes(1);
+  });
+
+  it('defers forward-mutation undo notifications while an undo group is open', async () => {
+    const notifyForwardMutation = jest.fn(async () => undefined);
+    const ctx = makeMockContext({
+      services: {
+        undo: {
+          notifyForwardMutation,
+        },
+      },
+    } as Partial<IKernelContext>);
+    const transport: BridgeTransport & { call: jest.Mock } = {
+      call: jest.fn(async (command: string) => {
+        if (command === 'compute_begin_undo_group') return undefined;
+        if (command === 'compute_end_undo_group') return undefined;
+        if (command === 'compute_set_cell') return [new Uint8Array(), mutationResult()];
+        throw new Error(`unexpected command: ${command}`);
+      }),
+    };
+    const core = createStartedCore(ctx, transport);
+
+    await core.beginUndoGroup();
+    await core.mutatePublic('compute_set_cell', () =>
+      transport.call('compute_set_cell', { docId: 'test-doc' }) as Promise<
+        [Uint8Array, MutationResult]
+      >,
+    );
+
+    expect(notifyForwardMutation).not.toHaveBeenCalled();
+
+    await core.endUndoGroup();
+
+    expect(notifyForwardMutation).toHaveBeenCalledTimes(1);
+  });
 });

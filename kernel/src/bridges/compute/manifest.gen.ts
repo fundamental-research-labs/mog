@@ -356,6 +356,7 @@ export const BRIDGE_METHOD_KIND: Readonly<Record<string, BridgeMethodKind>> = Ob
   clearCellFormat: 'write',
   toggleFormatProperty: 'write',
   setFormatForRanges: 'write',
+  setFormatForRangesUiState: 'write',
   clearFormatForRanges: 'write',
   setCellPropertiesBatch: 'write',
   addCfRule: 'write',

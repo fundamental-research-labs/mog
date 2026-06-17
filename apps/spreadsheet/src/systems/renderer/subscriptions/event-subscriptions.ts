@@ -208,6 +208,13 @@ export interface EventSubscriptionResult {
   setTableAutoExpansionConfig: (config: TableAutoExpansionConfig) => () => void;
 
   /**
+   * Wait for table auto-expansion tasks spawned from synchronous cell-change
+   * events. Clipboard paste calls this before closing its undo group so
+   * dependent table range mutations remain part of the same user action.
+   */
+  drainTableAutoExpansion: () => Promise<void>;
+
+  /**
    * Main cleanup function - unsubscribes all events.
    */
   cleanup: () => void;
@@ -235,6 +242,7 @@ export function setupEventSubscriptions(config: EventSubscriptionConfig): EventS
 
   // Cleanup registry (mirrors coordinator pattern)
   const cleanups = new Map<string, () => void>();
+  const pendingTableAutoExpansion = new Set<Promise<void>>();
 
   // NOTE: Cell property subscriptions have been moved to cell-property-subscriptions.ts
   // because they are DATA events, not renderer events. See Issue B fix.
@@ -792,8 +800,7 @@ export function setupEventSubscriptions(config: EventSubscriptionConfig): EventS
       // Skip if new value is empty (deletion, not entry)
       if (event.newValue === null || event.newValue === undefined || event.newValue === '') return;
 
-      // Fire-and-forget async handler
-      void (async () => {
+      const task = (async () => {
         const tableToExpand = await checkAutoExpansion(event.sheetId, event.row, event.col);
         if (!tableToExpand) return;
 
@@ -818,6 +825,11 @@ export function setupEventSubscriptions(config: EventSubscriptionConfig): EventS
         // Trigger render invalidation after expansion
         doInvalidateAll();
       })();
+      pendingTableAutoExpansion.add(task);
+      void task.then(
+        () => pendingTableAutoExpansion.delete(task),
+        () => pendingTableAutoExpansion.delete(task),
+      );
     });
     tableCleanups.push(cellChangedUnsub);
 
@@ -828,6 +840,12 @@ export function setupEventSubscriptions(config: EventSubscriptionConfig): EventS
     cleanups.set('tableAutoExpansion', tableCleanup);
 
     return tableCleanup;
+  };
+
+  const drainTableAutoExpansion = async (): Promise<void> => {
+    while (pendingTableAutoExpansion.size > 0) {
+      await Promise.allSettled([...pendingTableAutoExpansion]);
+    }
   };
 
   // ---------------------------------------------------------------------------
@@ -852,6 +870,7 @@ export function setupEventSubscriptions(config: EventSubscriptionConfig): EventS
     setSparklineConfig,
     setCFConfig,
     setTableAutoExpansionConfig,
+    drainTableAutoExpansion,
     cleanup,
   };
 }

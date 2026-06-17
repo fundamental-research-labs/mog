@@ -30,15 +30,32 @@ pub(super) fn set_format_for_ranges(
     ranges: &[(u32, u32, u32, u32)],
     format: &CellFormat,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    set_format_for_ranges_with_origin(
+        engine,
+        sheet_id,
+        ranges,
+        format,
+        compute_document::undo::ORIGIN_USER_EDIT,
+    )
+}
+
+pub(super) fn set_format_for_ranges_with_origin(
+    engine: &mut YrsComputeEngine,
+    sheet_id: &SheetId,
+    ranges: &[(u32, u32, u32, u32)],
+    format: &CellFormat,
+    origin: &'static [u8],
+) -> Result<(Vec<u8>, MutationResult), ComputeError> {
     validation::format::validate_cell_format(format)?;
     let (affected_cells, result) = {
         let _guard = engine.mutation.suppress_guard();
-        services::formatting::set_format_for_ranges(
+        services::formatting::set_format_for_ranges_with_origin(
             &mut engine.stores,
             &engine.mirror,
             sheet_id,
             ranges,
             format,
+            origin,
         )?
     };
     let patches = engine.produce_format_change_patches(sheet_id, &affected_cells);

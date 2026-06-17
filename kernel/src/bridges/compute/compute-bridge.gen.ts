@@ -363,6 +363,7 @@ export interface GeneratedBridgeMethods {
   clearCellFormat(sheetId: SheetId, cellId: CellId): Promise<MutationResult>;
   toggleFormatProperty(sheetId: SheetId, ranges: [number, number, number, number][], property: string, activeRow: number, activeCol: number): Promise<MutationResult>;
   setFormatForRanges(sheetId: SheetId, ranges: [number, number, number, number][], format: CellFormat): Promise<MutationResult>;
+  setFormatForRangesUiState(sheetId: SheetId, ranges: [number, number, number, number][], format: CellFormat): Promise<MutationResult>;
   clearFormatForRanges(sheetId: SheetId, ranges: [number, number, number, number][]): Promise<MutationResult>;
   setCellPropertiesBatch(sheetId: SheetId, updates: [number, number, CellFormat][]): Promise<MutationResult>;
   addCfRule(sheetId: SheetId, rule: unknown): Promise<MutationResult>;
@@ -2062,6 +2063,10 @@ export class GeneratedBridgeBase implements GeneratedBridgeMethods {
 
   setFormatForRanges(sheetId: SheetId, ranges: [number, number, number, number][], format: CellFormat): Promise<MutationResult> {
     return this.core.mutatePublic('compute_set_format_for_ranges', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_format_for_ranges', { docId: this.core.docId, sheetId, ranges, format }));
+  }
+
+  setFormatForRangesUiState(sheetId: SheetId, ranges: [number, number, number, number][], format: CellFormat): Promise<MutationResult> {
+    return this.core.mutateSystem('compute_set_format_for_ranges_ui_state', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_format_for_ranges_ui_state', { docId: this.core.docId, sheetId, ranges, format }));
   }
 
   clearFormatForRanges(sheetId: SheetId, ranges: [number, number, number, number][]): Promise<MutationResult> {

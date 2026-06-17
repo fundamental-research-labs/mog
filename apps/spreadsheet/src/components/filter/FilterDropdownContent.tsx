@@ -64,6 +64,38 @@ type FilterOperationReceipt = {
   readonly diagnostics: readonly { severity?: string; message?: string }[];
 };
 
+type PendingFilterActionGlobal = typeof globalThis & {
+  __MOG_PENDING_FILTER_ACTION__?: Promise<void>;
+};
+
+const FILTER_ACTION_APPLY_DELAY_MS = 100;
+
+function trackPendingFilterAction(action: () => Promise<void>): void {
+  const global = globalThis as PendingFilterActionGlobal;
+  const pending = new Promise<void>((resolve, reject) => {
+    globalThis.setTimeout(() => {
+      Promise.resolve()
+        .then(action)
+        .then(() => resolve(), reject);
+    }, FILTER_ACTION_APPLY_DELAY_MS);
+  });
+  const tracked = pending.then(
+    () => {
+      if (global.__MOG_PENDING_FILTER_ACTION__ === tracked) {
+        delete global.__MOG_PENDING_FILTER_ACTION__;
+      }
+    },
+    (error) => {
+      if (global.__MOG_PENDING_FILTER_ACTION__ === tracked) {
+        delete global.__MOG_PENDING_FILTER_ACTION__;
+      }
+      throw error;
+    },
+  );
+  global.__MOG_PENDING_FILTER_ACTION__ = tracked;
+  void tracked.catch(() => undefined);
+}
+
 function filterReceiptError(receipt: unknown, fallback: string): string | null {
   if (typeof receipt !== 'object' || receipt === null) return null;
   const maybe = receipt as Partial<FilterOperationReceipt>;
@@ -317,22 +349,26 @@ export function FilterDropdownContent({
   }, [wb, activeSheetId, filterId, headerCellId, col, onClose, onFilterApplied]);
 
   // Sort handlers - integrated with sort system
-  const handleSortAsc = useCallback(async () => {
+  const handleSortAsc = useCallback(() => {
     if (!filterId || !headerCellId || col === undefined) return;
 
     const ws = wb.getSheetById(activeSheetId);
-    await sortFilterRange(ws, filterId, col, 'asc');
     onClose();
-    onFilterApplied?.();
+    trackPendingFilterAction(async () => {
+      await sortFilterRange(ws, filterId, col, 'asc');
+      onFilterApplied?.();
+    });
   }, [wb, activeSheetId, filterId, headerCellId, col, onClose, onFilterApplied]);
 
-  const handleSortDesc = useCallback(async () => {
+  const handleSortDesc = useCallback(() => {
     if (!filterId || !headerCellId || col === undefined) return;
 
     const ws = wb.getSheetById(activeSheetId);
-    await sortFilterRange(ws, filterId, col, 'desc');
     onClose();
-    onFilterApplied?.();
+    trackPendingFilterAction(async () => {
+      await sortFilterRange(ws, filterId, col, 'desc');
+      onFilterApplied?.();
+    });
   }, [wb, activeSheetId, filterId, headerCellId, col, onClose, onFilterApplied]);
 
   // Handler for switching to condition panel from submenu with pre-selected operator

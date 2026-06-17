@@ -21,6 +21,7 @@ import type {
   StyleCategory,
 } from '@mog-sdk/contracts/core';
 import { BUILT_IN_STYLES, getBuiltInStyleById, isBuiltInStyle } from './built-in-styles';
+import { writeMetadataViaFormatChannel } from './cell-metadata-writes';
 
 import type { DocumentContext } from '../../context/types';
 import { KernelError } from '../../errors';
@@ -98,7 +99,7 @@ export async function getProperties(
  * @param row - Row index
  * @param col - Column index
  * @param partial - Partial properties to merge
- * @param _origin - Transaction origin (handled by Rust)
+ * @param origin - Transaction origin
  */
 export function setProperties(
   ctx: DocumentContext,
@@ -106,7 +107,7 @@ export function setProperties(
   row: number,
   col: number,
   partial: Partial<CellProperties>,
-  _origin: string = 'user',
+  origin: string = 'user',
 ): void {
   if (partial.format) {
     void ctx.computeBridge.setFormatForRanges(
@@ -123,11 +124,7 @@ export function setProperties(
     // Metadata is stored by Rust as part of cell properties.
     // setFormatForRanges handles format; metadata is set alongside it.
     // For now, metadata fields are passed to Rust via the format channel.
-    void ctx.computeBridge.setFormatForRanges(
-      sheetId,
-      [cellToRangeTuple(row, col)],
-      metadataFields,
-    );
+    writeMetadataViaFormatChannel(ctx, sheetId, [cellToRangeTuple(row, col)], metadataFields, origin);
   }
 }
 
@@ -300,7 +297,7 @@ export async function getMetadata(
  * @param row - Row index
  * @param col - Column index
  * @param partial - Partial metadata to merge
- * @param _origin - Transaction origin (handled by Rust)
+ * @param origin - Transaction origin
  */
 export function setMetadata(
   ctx: DocumentContext,
@@ -308,11 +305,11 @@ export function setMetadata(
   row: number,
   col: number,
   partial: Partial<CellMetadata>,
-  _origin: string = 'user',
+  origin: string = 'user',
 ): void {
   // Metadata is stored by Rust as part of cell properties.
   // Delegate via setFormatForRanges which handles the full property bag.
-  void ctx.computeBridge.setFormatForRanges(sheetId, [cellToRangeTuple(row, col)], partial);
+  writeMetadataViaFormatChannel(ctx, sheetId, [cellToRangeTuple(row, col)], partial, origin);
 }
 
 /**
@@ -324,21 +321,27 @@ export function setMetadata(
  * @param sheetId - Sheet ID
  * @param row - Row index
  * @param col - Column index
- * @param _origin - Transaction origin (handled by Rust)
+ * @param origin - Transaction origin
  */
 export function clearMetadata(
   ctx: DocumentContext,
   sheetId: SheetId,
   row: number,
   col: number,
-  _origin: string = 'user',
+  origin: string = 'user',
 ): void {
   // Clear metadata by setting empty metadata fields.
   // Rust handles preserving format when clearing metadata.
   // validationErrors is a metadata field passed through the format channel to Rust.
-  void ctx.computeBridge.setFormatForRanges(sheetId, [cellToRangeTuple(row, col)], {
-    validationErrors: [],
-  } as unknown as CellFormat);
+  writeMetadataViaFormatChannel(
+    ctx,
+    sheetId,
+    [cellToRangeTuple(row, col)],
+    {
+      validationErrors: [],
+    },
+    origin,
+  );
 }
 
 // =============================================================================

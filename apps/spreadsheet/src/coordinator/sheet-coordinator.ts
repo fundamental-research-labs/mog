@@ -158,6 +158,8 @@ export class SheetCoordinator {
       getGeometry: () => this.renderer.getGeometry(),
       getViewport: () => this.renderer.getViewport(),
       getHitTest: () => this.renderer.getHitTest(),
+      drainPostCellChangeEffects: () =>
+        this.renderer.getEventSubscriptions()?.drainTableAutoExpansion() ?? Promise.resolve(),
       onMetric: config.onMetric,
       onDimensionsChanged: (_sheetId: SheetId) => this.renderer.invalidate('dimensions-changed'),
       readOnly: config.readOnly,

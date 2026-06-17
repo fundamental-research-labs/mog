@@ -4,6 +4,7 @@ use crate::storage::engine::stores::EngineStores;
 use crate::storage::properties;
 use cell_types::SheetId;
 use compute_document::hex::{SmallHex, id_to_hex};
+use compute_document::undo::ORIGIN_USER_EDIT;
 use domain_types::CellFormat;
 use value_types::ComputeError;
 
@@ -199,6 +200,17 @@ pub(in crate::storage::engine) fn set_format_for_ranges(
     ranges: &[(u32, u32, u32, u32)],
     format: &CellFormat,
 ) -> FormatResult {
+    set_format_for_ranges_with_origin(stores, mirror, sheet_id, ranges, format, ORIGIN_USER_EDIT)
+}
+
+pub(in crate::storage::engine) fn set_format_for_ranges_with_origin(
+    stores: &mut EngineStores,
+    mirror: &CellMirror,
+    sheet_id: &SheetId,
+    ranges: &[(u32, u32, u32, u32)],
+    format: &CellFormat,
+    origin: &'static [u8],
+) -> FormatResult {
     if !stores.grid_indexes.contains_key(sheet_id) {
         return Err(ComputeError::Eval {
             message: format!("Sheet not found: {:?}", sheet_id),
@@ -232,13 +244,14 @@ pub(in crate::storage::engine) fn set_format_for_ranges(
                 .map(|(cell_id, _, _)| id_to_hex(cell_id.as_u128()))
                 .collect();
             let cell_hex_refs: Vec<&str> = cell_hexes.iter().map(|s| s.as_str()).collect();
-            properties::set_cell_formats(
+            properties::set_cell_formats_with_origin(
                 stores.storage.doc(),
                 stores.storage.workbook_map(),
                 stores.storage.sheets(),
                 sheet_id,
                 &cell_hex_refs,
                 &format,
+                origin,
             );
 
             for (cell_id, row, col) in existing {
@@ -259,9 +272,11 @@ pub(in crate::storage::engine) fn set_format_for_ranges(
             let mut cell_data: Vec<(SmallHex, u128, u32, u32)> = Vec::new();
             for row in start_row..=end_row {
                 for col in start_col..=end_col {
-                    let Some(cell_id) = super::super::cell_editing::ensure_cell_id_mirrored(
-                        stores, mirror, sheet_id, row, col,
-                    ) else {
+                    let Some(cell_id) =
+                        super::super::cell_editing::ensure_cell_id_mirrored_with_origin(
+                            stores, mirror, sheet_id, row, col, origin,
+                        )
+                    else {
                         continue;
                     };
                     let cell_hex = id_to_hex(cell_id.as_u128());
@@ -273,13 +288,14 @@ pub(in crate::storage::engine) fn set_format_for_ranges(
                 .iter()
                 .map(|(hex, _, _, _)| hex.as_str())
                 .collect();
-            properties::set_cell_formats(
+            properties::set_cell_formats_with_origin(
                 stores.storage.doc(),
                 stores.storage.workbook_map(),
                 stores.storage.sheets(),
                 sheet_id,
                 &cell_hex_refs,
                 &format,
+                origin,
             );
 
             for (cell_hex, cell_id_u128, row, col) in &cell_data {

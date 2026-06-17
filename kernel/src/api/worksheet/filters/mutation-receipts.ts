@@ -37,6 +37,12 @@ function rangeToA1(range: ResolvedFilterRange | string | null | undefined): stri
   return `${toA1(range.startRow, range.startCol)}:${toA1(range.endRow, range.endCol)}`;
 }
 
+function filterHasClearableCriteria(filter: FilterState): boolean {
+  if (Object.keys(filter.columnFilters ?? {}).length > 0) return true;
+  if (filter.type !== 'advancedFilter') return false;
+  return Boolean(filter.advancedFilter?.criteriaRange || filter.advancedFilter?.uniqueRecordsOnly);
+}
+
 function filterChangeForReceipt(
   result: MutationResult | null | undefined,
   sheetId: SheetId,
@@ -177,8 +183,7 @@ export function buildFilterMutationReceipt(
   const dedupedRuntimeDiagnostics = runtimeDiagnostics.filter(
     (diagnostic, index, diagnostics) =>
       diagnostics.findIndex(
-        (candidate) =>
-          candidate.id === diagnostic.id && candidate.sequence === diagnostic.sequence,
+        (candidate) => candidate.id === diagnostic.id && candidate.sequence === diagnostic.sequence,
       ) === index,
   );
   const unsupportedReasons = change?.unsupportedReasons;
@@ -432,7 +437,7 @@ export async function clearAllCriteriaWithReceipt(
     });
   }
   const range = await resolveFilterRange(ctx, sheetId, filter);
-  if (Object.keys(filter.columnFilters ?? {}).length === 0) {
+  if (!filterHasClearableCriteria(filter)) {
     return buildFilterMutationReceipt({
       kind: 'filter.criteria.clearAll',
       status: 'noOp',

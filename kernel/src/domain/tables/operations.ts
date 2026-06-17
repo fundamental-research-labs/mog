@@ -44,7 +44,7 @@ export async function resizeTable(
     throw new KernelError('TABLE_INVALID_RESIZE', validation.error ?? 'Invalid table resize');
   }
 
-  void ctx.computeBridge.resizeTable(
+  await ctx.computeBridge.resizeTable(
     existing.name,
     newRange.startRow,
     newRange.startCol,
@@ -66,7 +66,7 @@ export async function setTotalRow(
 
   // Only toggle if the state is actually changing
   if (existing.hasTotalRow !== enabled) {
-    void ctx.computeBridge.toggleTotalsRow(existing.name);
+    await ctx.computeBridge.toggleTotalsRow(existing.name);
   }
 }
 
@@ -106,7 +106,7 @@ export async function setColumnTotalFunction(
     fn !== 'none' ? `=SUBTOTAL(${funcNum},[${existing.columns[columnIndex].name}])` : '';
 
   // Use setCalculatedColumnFormula for the total row formula
-  void ctx.computeBridge.setCalculatedColumnFormula(existing.name, columnIndex, formula);
+  await ctx.computeBridge.setCalculatedColumnFormula(existing.name, columnIndex, formula);
 }
 
 /**
@@ -131,7 +131,7 @@ export async function renameTable(
 
   const oldName = existing.name;
 
-  void ctx.computeBridge.renameTable(oldName, newName);
+  await ctx.computeBridge.renameTable(oldName, newName);
 
   // Update all formulas that reference this table
   const updatedFormulaCount = updateFormulasForTableRename(ctx, oldName, newName);
@@ -200,7 +200,7 @@ export async function deleteTableColumn(
     );
   }
 
-  void ctx.computeBridge.removeTableColumn(tableName, columnIndex);
+  await ctx.computeBridge.removeTableColumn(tableName, columnIndex);
 
   return affectedFormulaCount;
 }

@@ -335,6 +335,13 @@ export interface GridEditingConfig {
   /** Dependencies for clipboard paste operations */
   clipboardDeps?: ClipboardDependencies;
 
+  /**
+   * Wait for async post-cell-change effects that must stay in the same undo
+   * unit as the originating cell write. Clipboard paste uses this before
+   * closing its workbook undo group.
+   */
+  drainPostCellChangeEffects?: () => Promise<void>;
+
   /** Platform-owned wall clock in Unix milliseconds. */
   wallClockNow?: () => number;
 

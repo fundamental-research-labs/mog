@@ -153,7 +153,8 @@ const A1_UTILITY_METHODS: Record<string, ApiSpecFunctionEntry> = {
     usedTypes: [],
   },
   parseAddress: {
-    signature: 'parseAddress(address: string): { row: number; col: number; sheetName?: string } | null',
+    signature:
+      'parseAddress(address: string): { row: number; col: number; sheetName?: string } | null',
     docstring: 'Descriptive alias for a1.parse().',
     usedTypes: [],
   },

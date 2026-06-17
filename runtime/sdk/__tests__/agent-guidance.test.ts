@@ -111,9 +111,9 @@ describe('SDK agent API guidance', () => {
     expect(formulaFormat.target.signature).toContain('addFormula(');
 
     const listDescription = api.describe('ws.validations.setList');
-    expect(listDescription && 'signature' in listDescription ? listDescription.signature : '').toContain(
-      'setList(',
-    );
+    expect(
+      listDescription && 'signature' in listDescription ? listDescription.signature : '',
+    ).toContain('setList(');
     const formulaDescription = api.describe('ws.conditionalFormats.addFormula');
     expect(
       formulaDescription && 'signature' in formulaDescription ? formulaDescription.signature : '',

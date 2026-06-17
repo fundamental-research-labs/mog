@@ -48,13 +48,11 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 
 function asFilterReceipt(value: unknown): FilterOperationReceipt | null {
   if (!isRecord(value)) return null;
-  return (
-    typeof value.status === 'string' &&
+  return typeof value.status === 'string' &&
     Array.isArray(value.effects) &&
     Array.isArray(value.diagnostics)
-      ? (value as FilterOperationReceipt)
-      : null
-  );
+    ? (value as FilterOperationReceipt)
+    : null;
 }
 
 function filterReceiptOverrides(
@@ -363,7 +361,11 @@ export const FILTER_BY_SELECTED_VALUE: AsyncActionHandler = async (
       endCol: activeCell.col + 1,
     });
     receipts.push(receipt);
-    const receiptError = handledFilterReceiptError(receipt, 'Filter creation did not apply.', receipts);
+    const receiptError = handledFilterReceiptError(
+      receipt,
+      'Filter creation did not apply.',
+      receipts,
+    );
     if (receiptError) return receiptError;
     filter = await resolveCreatedFilter(ws, activeCell, receipt);
   }
@@ -381,7 +383,11 @@ export const FILTER_BY_SELECTED_VALUE: AsyncActionHandler = async (
     filter.id,
   );
   receipts.push(receipt);
-  const receiptError = handledFilterReceiptError(receipt, 'Selected-value filter did not apply.', receipts);
+  const receiptError = handledFilterReceiptError(
+    receipt,
+    'Selected-value filter did not apply.',
+    receipts,
+  );
   if (receiptError) return receiptError;
 
   return handled(filterReceiptOverrides(receipts));
@@ -427,7 +433,11 @@ export const FILTER_BY_COLOR: AsyncActionHandler = async (
       endCol: activeCell.col + 1,
     });
     receipts.push(receipt);
-    const receiptError = handledFilterReceiptError(receipt, 'Filter creation did not apply.', receipts);
+    const receiptError = handledFilterReceiptError(
+      receipt,
+      'Filter creation did not apply.',
+      receipts,
+    );
     if (receiptError) return receiptError;
     filter = await resolveCreatedFilter(ws, activeCell, receipt);
   }
@@ -491,7 +501,11 @@ export const FILTER_BY_FONT_COLOR: AsyncActionHandler = async (
       endCol: activeCell.col + 1,
     });
     receipts.push(receipt);
-    const receiptError = handledFilterReceiptError(receipt, 'Filter creation did not apply.', receipts);
+    const receiptError = handledFilterReceiptError(
+      receipt,
+      'Filter creation did not apply.',
+      receipts,
+    );
     if (receiptError) return receiptError;
     filter = await resolveCreatedFilter(ws, activeCell, receipt);
   }
@@ -509,7 +523,11 @@ export const FILTER_BY_FONT_COLOR: AsyncActionHandler = async (
     filter.id,
   );
   receipts.push(receipt);
-  const receiptError = handledFilterReceiptError(receipt, 'Font color filter did not apply.', receipts);
+  const receiptError = handledFilterReceiptError(
+    receipt,
+    'Font color filter did not apply.',
+    receipts,
+  );
   if (receiptError) return receiptError;
 
   return handled(filterReceiptOverrides(receipts));

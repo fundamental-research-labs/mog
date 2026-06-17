@@ -54,11 +54,9 @@ function createNamesApi() {
 
 beforeEach(() => {
   jest.clearAllMocks();
-  (NamedRanges.getRefersToA1 as jest.Mock).mockImplementation(
-    async (_ctx: unknown, name: any) => {
-      return name.refersToA1 ?? '=Sheet1!A1';
-    },
-  );
+  (NamedRanges.getRefersToA1 as jest.Mock).mockImplementation(async (_ctx: unknown, name: any) => {
+    return name.refersToA1 ?? '=Sheet1!A1';
+  });
 });
 
 describe('WorkbookNamesImpl receipts', () => {

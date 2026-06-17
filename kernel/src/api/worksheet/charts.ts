@@ -446,7 +446,14 @@ export class WorksheetChartsImpl implements WorksheetCharts {
     pointIndex: number,
     format: { fill?: string; border?: ChartBorder },
   ): Promise<ChartMutationReceipt> {
-    return formatChartPointMutation(this.ctx, this.sheetId, chartId, seriesIndex, pointIndex, format);
+    return formatChartPointMutation(
+      this.ctx,
+      this.sheetId,
+      chartId,
+      seriesIndex,
+      pointIndex,
+      format,
+    );
   }
 
   async setPointDataLabel(

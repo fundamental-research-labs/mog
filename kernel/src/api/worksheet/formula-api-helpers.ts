@@ -119,11 +119,7 @@ export function normalizeFormulaExpression(
   return trimmed.startsWith('=') ? trimmed.slice(1) : trimmed;
 }
 
-export function normalizeFormulaA1(
-  formula: unknown,
-  operation: string,
-  path?: string[],
-): string {
+export function normalizeFormulaA1(formula: unknown, operation: string, path?: string[]): string {
   return `=${normalizeFormulaExpression(formula, operation, path)}`;
 }
 
@@ -184,11 +180,7 @@ export function normalizeFormulaGrid(formulas: unknown, operation: string): stri
       );
     }
     return row.map((formula, colIndex) =>
-      normalizeFormulaA1(formula, operation, [
-        'formulas',
-        String(rowIndex),
-        String(colIndex),
-      ]),
+      normalizeFormulaA1(formula, operation, ['formulas', String(rowIndex), String(colIndex)]),
     );
   });
 }
@@ -238,7 +230,8 @@ function formulaTextHint(
   return new KernelError('API_INVALID_ARGUMENT', message, {
     suggestion,
     context: {
-      validationKind: kind === 'startsWithEquals' ? 'formulaTextAsValue' : 'formulaTextMissingEquals',
+      validationKind:
+        kind === 'startsWithEquals' ? 'formulaTextAsValue' : 'formulaTextMissingEquals',
       operation,
       expected: 'explicit formula API call or explicit text write',
       received,
@@ -316,9 +309,7 @@ function looksLikeFormulaTextWithoutEquals(value: string): boolean {
   const cellRef = String.raw`\$?[A-Za-z]{1,3}\$?\d+`;
   const sheetRef = String.raw`(?:'[^']+'|[A-Za-z_][A-Za-z0-9_ .]*)!${cellRef}`;
   if (new RegExp(`^${sheetRef}(?::${cellRef})?$`).test(text)) return true;
-  if (
-    new RegExp(String.raw`^[+@]\s*(?:${cellRef}|${sheetRef}|[A-Z][A-Z0-9_.]*\s*\()`).test(text)
-  ) {
+  if (new RegExp(String.raw`^[+@]\s*(?:${cellRef}|${sheetRef}|[A-Z][A-Z0-9_.]*\s*\()`).test(text)) {
     return true;
   }
   return /^[A-Z][A-Z0-9_.]*\s*\(/.test(text);

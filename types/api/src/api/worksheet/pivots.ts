@@ -383,7 +383,11 @@ export interface WorksheetPivots {
    * @param fieldId - Field ID to remove
    * @param area - Area to remove the field from
    */
-  removeField(name: string, fieldId: string, area: PivotFieldArea): Promise<PivotRemoveFieldReceipt>;
+  removeField(
+    name: string,
+    fieldId: string,
+    area: PivotFieldArea,
+  ): Promise<PivotRemoveFieldReceipt>;
 
   /**
    * Move a field to a different area or position, resolved by pivot name.
@@ -566,10 +570,7 @@ export interface WorksheetPivots {
     updates: Partial<Pick<CalculatedField, 'name' | 'formula'>>,
   ): Promise<void>;
 
-  removeCalculatedField(
-    name: string,
-    fieldId: string,
-  ): Promise<PivotRemoveCalculatedFieldReceipt>;
+  removeCalculatedField(name: string, fieldId: string): Promise<PivotRemoveCalculatedFieldReceipt>;
 
   // ===========================================================================
   // Sub-Range Access

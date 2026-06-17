@@ -308,7 +308,7 @@ function tableAutoExpansionReceipt(
     effects.push({
       type: 'worksheetUnchanged',
       sheetId: input.sheetId,
-      ...(previousRange ?? expectedRange ? { range: previousRange ?? expectedRange } : {}),
+      ...((previousRange ?? expectedRange) ? { range: previousRange ?? expectedRange } : {}),
     });
   }
 

@@ -82,9 +82,7 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-function linkRefreshStatus(
-  statusView: LinkStatusView,
-): WorkbookLinkRefreshReceipt['status'] {
+function linkRefreshStatus(statusView: LinkStatusView): WorkbookLinkRefreshReceipt['status'] {
   if (statusView.statusReason === 'unsupportedLinkKind') return 'unsupported';
   if (statusView.status === 'ready' || statusView.status === 'stale') return 'applied';
   if (statusView.status === 'ambiguous') return 'partial';

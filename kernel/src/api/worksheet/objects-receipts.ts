@@ -167,11 +167,7 @@ export async function buildFloatingObjectMutationReceipt(input: {
   }
   const object = wire
     ? toFloatingObject(wire)
-    : createMinimalFloatingObject(
-        input.fallbackType ?? 'shape',
-        input.objectId,
-        input.sheetId,
-      );
+    : createMinimalFloatingObject(input.fallbackType ?? 'shape', input.objectId, input.sheetId);
   const bounds = wire ? await readBounds(input.ctx, input.sheetId, input.objectId) : DEFAULT_BOUNDS;
   return withFloatingObjectMutationReceiptBase(
     {

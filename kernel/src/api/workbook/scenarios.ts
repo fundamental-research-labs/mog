@@ -70,10 +70,7 @@ function scenarioApplyDiagnostics(
   ];
 }
 
-function scenarioApplyEffects(
-  scenarioId: string,
-  result: ApplyScenarioResult,
-): OperationEffect[] {
+function scenarioApplyEffects(scenarioId: string, result: ApplyScenarioResult): OperationEffect[] {
   const effects: OperationEffect[] = [
     {
       type: 'computedGrid',

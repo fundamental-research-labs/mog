@@ -54,20 +54,18 @@ type PivotReceipt<K extends PivotWorksheetMutationReceipt['kind']> = Extract<
   { kind: K }
 >;
 
-export async function runPivotMutationReceipt<K extends PivotWorksheetMutationReceipt['kind']>(
-  input: {
-    kind: K;
-    ctx: DocumentContext;
-    sheetId: SheetId;
-    pivotName: string;
-    mutate: (
-      currentConfig?: DataPivotTableConfig,
-    ) => Promise<PivotKernelMutationReceipt | void>;
-    cachePivot?: CachePivot;
-    noOp?: (currentConfig?: DataPivotTableConfig) => string | null;
-    extra?: Record<string, unknown>;
-  },
-): Promise<PivotReceipt<K>> {
+export async function runPivotMutationReceipt<
+  K extends PivotWorksheetMutationReceipt['kind'],
+>(input: {
+  kind: K;
+  ctx: DocumentContext;
+  sheetId: SheetId;
+  pivotName: string;
+  mutate: (currentConfig?: DataPivotTableConfig) => Promise<PivotKernelMutationReceipt | void>;
+  cachePivot?: CachePivot;
+  noOp?: (currentConfig?: DataPivotTableConfig) => string | null;
+  extra?: Record<string, unknown>;
+}): Promise<PivotReceipt<K>> {
   let currentConfig: DataPivotTableConfig | undefined;
   try {
     currentConfig = await findPivotByName(input.ctx, input.sheetId, input.pivotName);
@@ -133,7 +131,12 @@ export async function applyPivotRenameReceipt(input: {
   let pivotId: string;
   let config: DataPivotTableConfig;
   try {
-    ({ pivotId, config } = await resolvePivotName(input.ctx, input.sheetId, input.pivotName, 'rename'));
+    ({ pivotId, config } = await resolvePivotName(
+      input.ctx,
+      input.sheetId,
+      input.pivotName,
+      'rename',
+    ));
   } catch (error) {
     return buildPivotMutationReceipt({
       kind: 'pivot.rename',
@@ -655,23 +658,21 @@ export function buildPivotRefreshReceipt(input: {
   };
 }
 
-export function buildPivotMutationReceipt(
-  input: {
-    kind: PivotWorksheetMutationReceipt['kind'];
-    sheetId: SheetId;
-    pivotId?: string;
-    pivotName?: string;
-    config?: DataPivotTableConfig | null;
-    status: 'applied' | 'noOp' | 'failed';
-    updateReason?: string;
-    kernelReceipt?: PivotKernelMutationReceipt;
-    effects?: OperationEffect[];
-    diagnostics?: OperationDiagnostic[];
-    error?: unknown;
-    noOpReason?: string;
-    extra?: Record<string, unknown>;
-  },
-): PivotWorksheetMutationReceipt {
+export function buildPivotMutationReceipt(input: {
+  kind: PivotWorksheetMutationReceipt['kind'];
+  sheetId: SheetId;
+  pivotId?: string;
+  pivotName?: string;
+  config?: DataPivotTableConfig | null;
+  status: 'applied' | 'noOp' | 'failed';
+  updateReason?: string;
+  kernelReceipt?: PivotKernelMutationReceipt;
+  effects?: OperationEffect[];
+  diagnostics?: OperationDiagnostic[];
+  error?: unknown;
+  noOpReason?: string;
+  extra?: Record<string, unknown>;
+}): PivotWorksheetMutationReceipt {
   const pivotId = input.pivotId ?? input.kernelReceipt?.pivotId;
   const kernelFailed = input.kernelReceipt?.status === 'failed';
   const status = kernelFailed ? 'failed' : input.status;

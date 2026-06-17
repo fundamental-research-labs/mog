@@ -140,7 +140,8 @@ const ROOT_IMPORT_TARGETS: readonly ApiGuidanceTarget[] = [
     kind: 'method',
     member: 'parseAddress',
     asyncModel: 'sync',
-    signature: 'parseAddress(address: string): { row: number; col: number; sheetName?: string } | null',
+    signature:
+      'parseAddress(address: string): { row: number; col: number; sheetName?: string } | null',
     typeText: '{row:number;col:number;sheetName?:string}|null',
     visibility: 'public',
     source: { file: 'spreadsheet-utils/src/a1.ts' },

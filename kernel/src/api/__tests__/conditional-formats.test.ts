@@ -283,12 +283,7 @@ describe('WorksheetConditionalFormattingImpl — input shape diagnostics', () =>
       caught = error;
     }
 
-    expectInvalidArrayDiagnostic(
-      caught,
-      'a non-empty formula string',
-      ['formula'],
-      'string',
-    );
+    expectInvalidArrayDiagnostic(caught, 'a non-empty formula string', ['formula'], 'string');
     expect((caught as KernelError).suggestion).toContain('ws.conditionalFormats.addFormula');
     expect(bridge.addCfRule).not.toHaveBeenCalled();
   });

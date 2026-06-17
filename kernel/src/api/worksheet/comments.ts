@@ -113,10 +113,7 @@ export class WorksheetCommentsImpl implements WorksheetComments {
     comment: Comment,
     details?: Record<string, unknown>,
     extra?: Partial<
-      Pick<
-        CommentUpdateReceipt,
-        'comments' | 'commentIds' | 'resolved' | 'conversion' | 'threadId'
-      >
+      Pick<CommentUpdateReceipt, 'comments' | 'commentIds' | 'resolved' | 'conversion' | 'threadId'>
     >,
   ): Promise<CommentUpdateReceipt> {
     const normalized = normalizeComment(comment);
@@ -375,12 +372,7 @@ export class WorksheetCommentsImpl implements WorksheetComments {
   /** @deprecated Use the options-object overload instead. */
   async add(address: string, text: string, author: string): Promise<CommentAddReceipt>;
   /** @deprecated Use the options-object overload instead. */
-  async add(
-    row: number,
-    col: number,
-    text: string,
-    author: string,
-  ): Promise<CommentAddReceipt>;
+  async add(row: number, col: number, text: string, author: string): Promise<CommentAddReceipt>;
   async add(
     a: string | number,
     b: string | number | { text: string; author?: string },
@@ -614,11 +606,7 @@ export class WorksheetCommentsImpl implements WorksheetComments {
     return this._noOpUpdateReceipt('comment.updateNote', { target });
   }
 
-  async setNoteHeight(
-    a: string | number,
-    b: number,
-    c?: number,
-  ): Promise<CommentUpdateReceipt> {
+  async setNoteHeight(a: string | number, b: number, c?: number): Promise<CommentUpdateReceipt> {
     const { row, col, value: height } = resolveCellArgs<number>(a, b, c);
     const target = targetFromPosition(this.sheetId, row, col);
     const comments = await this.ctx.computeBridge.getCommentsForCellByPosition(

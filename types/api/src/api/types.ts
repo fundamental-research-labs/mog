@@ -882,10 +882,7 @@ export interface PivotTableHandle {
     aggregateFunction: AggregateFunction,
   ): Promise<PivotHandleMutationReceipt>;
   /** Rename a value field's display label */
-  renameValueField(
-    currentLabel: string,
-    newLabel: string,
-  ): Promise<PivotHandleMutationReceipt>;
+  renameValueField(currentLabel: string, newLabel: string): Promise<PivotHandleMutationReceipt>;
   /** Rename a value placement by stable placement ID. */
   renameValuePlacement(
     placementId: PlacementId,
@@ -901,10 +898,7 @@ export interface PivotTableHandle {
     showValuesAs: ShowValuesAsConfig | null,
   ): Promise<PivotHandleMutationReceipt>;
   /** Set the sort order for a row or column field. */
-  setSortOrder(
-    fieldOrPlacement: string,
-    sortOrder: SortOrder,
-  ): Promise<PivotHandleMutationReceipt>;
+  setSortOrder(fieldOrPlacement: string, sortOrder: SortOrder): Promise<PivotHandleMutationReceipt>;
   /** Set the sort order for a row or column placement. */
   setPlacementSortOrder(
     placementId: PlacementId,

@@ -1028,7 +1028,11 @@ describe('WorksheetPivotsImpl', () => {
 
     it('compute reads through the pure pivot compute path even when forceRefresh is true', async () => {
       await expect(ws.pivots.compute('SalesPivot', true)).resolves.toEqual(
-        expect.objectContaining({ kind: 'pivot.compute', status: 'completed', result: expect.objectContaining({ sourceRowCount: 1 }) }),
+        expect.objectContaining({
+          kind: 'pivot.compute',
+          status: 'completed',
+          result: expect.objectContaining({ sourceRowCount: 1 }),
+        }),
       );
 
       expect(ctx.pivot.compute).toHaveBeenCalledWith(SHEET_ID, 'pivot-1', true);
@@ -1042,7 +1046,11 @@ describe('WorksheetPivotsImpl', () => {
         expect.objectContaining({
           kind: 'pivot.query',
           status: 'completed',
-          result: expect.objectContaining({ pivotName: 'SalesPivot', rowFields: ['Region'], valueFields: ['Sum of Amount'] }),
+          result: expect.objectContaining({
+            pivotName: 'SalesPivot',
+            rowFields: ['Region'],
+            valueFields: ['Sum of Amount'],
+          }),
         }),
       );
       expect(ctx.pivot.compute).toHaveBeenCalledWith(SHEET_ID, 'pivot-1');

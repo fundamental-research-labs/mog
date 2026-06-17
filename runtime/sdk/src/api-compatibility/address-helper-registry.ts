@@ -63,8 +63,7 @@ export const addressHelperCompatibilityRegistry = [
     canonicalSince: null,
     behavior:
       'Address conversion helpers live under the canonical a1 namespace; worksheets do not expose indexToAddress().',
-    message:
-      'ws.indexToAddress(row, col) is not a Mog worksheet method. Use a1.address(row, col).',
+    message: 'ws.indexToAddress(row, col) is not a Mog worksheet method. Use a1.address(row, col).',
     replacements: ['a1.address', 'wb.indexToAddress'],
   }),
   addressHelperEntry({
@@ -76,8 +75,7 @@ export const addressHelperCompatibilityRegistry = [
     canonicalSince: null,
     behavior:
       'Address parsing helpers live under the canonical a1 namespace; worksheets do not expose addressToIndex().',
-    message:
-      'ws.addressToIndex(address) is not a Mog worksheet method. Use a1.parse(address).',
+    message: 'ws.addressToIndex(address) is not a Mog worksheet method. Use a1.parse(address).',
     replacements: ['a1.parse', 'wb.addressToIndex'],
   }),
   addressHelperEntry({
@@ -89,8 +87,7 @@ export const addressHelperCompatibilityRegistry = [
     canonicalSince: null,
     behavior:
       'Private worksheet/helper guesses such as _colLetter are not public Mog APIs; use the canonical a1 column/address helpers.',
-    message:
-      'ws._colLetter(index) is not a public Mog worksheet method. Use a1.column(index).',
+    message: 'ws._colLetter(index) is not a public Mog worksheet method. Use a1.column(index).',
     replacements: ['a1.column'],
   }),
   addressHelperEntry({
@@ -119,8 +116,7 @@ export const addressHelperCompatibilityRegistry = [
     canonicalPath: 'a1.address',
     behavior:
       'Address helpers are stateless utilities, not worksheet methods. Use a1.address(row, col) for A1 formatting.',
-    message:
-      'ws.address(row, col) is not a Mog worksheet method. Use a1.address(row, col).',
+    message: 'ws.address(row, col) is not a Mog worksheet method. Use a1.address(row, col).',
     replacements: ['a1.address'],
   }),
   addressHelperEntry({
@@ -139,8 +135,7 @@ export const addressHelperCompatibilityRegistry = [
     canonicalPath: 'a1.column',
     behavior:
       'Column-name helpers are stateless utilities, not worksheet methods. Use a1.column(index).',
-    message:
-      'ws.columnName(index) is not a Mog worksheet method. Use a1.column(index).',
+    message: 'ws.columnName(index) is not a Mog worksheet method. Use a1.column(index).',
     replacements: ['a1.column'],
   }),
   addressHelperEntry({
@@ -149,8 +144,7 @@ export const addressHelperCompatibilityRegistry = [
     canonicalPath: 'a1.columnIndex',
     behavior:
       'Column-index helpers are stateless utilities, not worksheet methods. Use a1.columnIndex(name).',
-    message:
-      'ws.columnIndex(name) is not a Mog worksheet method. Use a1.columnIndex(name).',
+    message: 'ws.columnIndex(name) is not a Mog worksheet method. Use a1.columnIndex(name).',
     replacements: ['a1.columnIndex'],
   }),
   addressHelperEntry({

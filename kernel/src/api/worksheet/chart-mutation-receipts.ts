@@ -55,7 +55,9 @@ function compactDetails(details: Record<string, unknown>): Record<string, unknow
   return compact;
 }
 
-function receiptTargetFields(target: ChartMutationTarget = {}): Partial<ChartMutationReceiptFields> {
+function receiptTargetFields(
+  target: ChartMutationTarget = {},
+): Partial<ChartMutationReceiptFields> {
   return compactDetails({
     seriesIndex: target.seriesIndex,
     fromSeriesIndex: target.fromSeriesIndex,
@@ -74,7 +76,9 @@ function addChangedRange(ranges: Set<string>, range: string | null | undefined):
   if (trimmed) ranges.add(trimmed);
 }
 
-export function changedRangesFromSeries(series: Partial<SeriesConfig> | null | undefined): string[] {
+export function changedRangesFromSeries(
+  series: Partial<SeriesConfig> | null | undefined,
+): string[] {
   const ranges = new Set<string>();
   addChangedRange(ranges, series?.nameRef);
   addChangedRange(ranges, series?.values);
@@ -106,7 +110,8 @@ function collectChangedRanges(target: ChartMutationTarget = {}): string[] {
 function chartMutationTargetKind(target: ChartMutationTarget): string {
   if (target.trendlineIndex !== undefined) return 'chartTrendline';
   if (target.pointIndex !== undefined) return 'chartPoint';
-  if (target.seriesIndex !== undefined || target.fromSeriesIndex !== undefined) return 'chartSeries';
+  if (target.seriesIndex !== undefined || target.fromSeriesIndex !== undefined)
+    return 'chartSeries';
   if (target.axisType !== undefined) return 'chartAxis';
   return 'chart';
 }
@@ -373,13 +378,20 @@ export async function addChartSeriesMutation(
 
   read.series.push(config);
   const seriesIndex = read.series.length - 1;
-  return applyChartUpdateAndReceipt(ctx, sheetId, kind, read.resolvedChartId, {
-    series: read.series,
-  }, {
-    seriesIndex,
-    series: config,
-    changedRanges: changedRangesFromSeries(config),
-  });
+  return applyChartUpdateAndReceipt(
+    ctx,
+    sheetId,
+    kind,
+    read.resolvedChartId,
+    {
+      series: read.series,
+    },
+    {
+      seriesIndex,
+      series: config,
+      changedRanges: changedRangesFromSeries(config),
+    },
+  );
 }
 
 export async function removeChartSeriesMutation(
@@ -404,13 +416,20 @@ export async function removeChartSeriesMutation(
   }
 
   const [removed] = read.series.splice(seriesIndex, 1);
-  return applyChartUpdateAndReceipt(ctx, sheetId, kind, read.resolvedChartId, {
-    series: read.series,
-  }, {
-    seriesIndex,
-    series: null,
-    changedRanges: changedRangesFromSeries(removed),
-  });
+  return applyChartUpdateAndReceipt(
+    ctx,
+    sheetId,
+    kind,
+    read.resolvedChartId,
+    {
+      series: read.series,
+    },
+    {
+      seriesIndex,
+      series: null,
+      changedRanges: changedRangesFromSeries(removed),
+    },
+  );
 }
 
 export async function updateChartSeriesMutation(
@@ -429,13 +448,20 @@ export async function updateChartSeriesMutation(
 
   const nextSeries = { ...read.series[seriesIndex], ...updates };
   read.series[seriesIndex] = nextSeries;
-  return applyChartUpdateAndReceipt(ctx, sheetId, kind, read.resolvedChartId, {
-    series: read.series,
-  }, {
-    seriesIndex,
-    series: nextSeries,
-    changedRanges: changedRangesFromSeries(updates),
-  });
+  return applyChartUpdateAndReceipt(
+    ctx,
+    sheetId,
+    kind,
+    read.resolvedChartId,
+    {
+      series: read.series,
+    },
+    {
+      seriesIndex,
+      series: nextSeries,
+      changedRanges: changedRangesFromSeries(updates),
+    },
+  );
 }
 
 export async function reorderChartSeriesMutation(
@@ -473,9 +499,16 @@ export async function reorderChartSeriesMutation(
 
   const [item] = read.series.splice(fromIndex, 1);
   read.series.splice(toIndex, 0, item);
-  return applyChartUpdateAndReceipt(ctx, sheetId, kind, read.resolvedChartId, {
-    series: read.series,
-  }, target);
+  return applyChartUpdateAndReceipt(
+    ctx,
+    sheetId,
+    kind,
+    read.resolvedChartId,
+    {
+      series: read.series,
+    },
+    target,
+  );
 }
 
 export async function formatChartPointMutation(
@@ -506,12 +539,19 @@ export async function formatChartPointMutation(
   points[pointIndex] = { ...points[pointIndex], ...format };
   const nextSeries = { ...read.series[seriesIndex], points };
   read.series[seriesIndex] = nextSeries;
-  return applyChartUpdateAndReceipt(ctx, sheetId, kind, read.resolvedChartId, {
-    series: read.series,
-  }, {
-    ...target,
-    series: nextSeries,
-  });
+  return applyChartUpdateAndReceipt(
+    ctx,
+    sheetId,
+    kind,
+    read.resolvedChartId,
+    {
+      series: read.series,
+    },
+    {
+      ...target,
+      series: nextSeries,
+    },
+  );
 }
 
 export async function setChartPointDataLabelMutation(
@@ -542,12 +582,19 @@ export async function setChartPointDataLabelMutation(
   points[pointIndex] = { ...points[pointIndex], dataLabel: config };
   const nextSeries = { ...read.series[seriesIndex], points };
   read.series[seriesIndex] = nextSeries;
-  return applyChartUpdateAndReceipt(ctx, sheetId, kind, read.resolvedChartId, {
-    series: read.series,
-  }, {
-    ...target,
-    series: nextSeries,
-  });
+  return applyChartUpdateAndReceipt(
+    ctx,
+    sheetId,
+    kind,
+    read.resolvedChartId,
+    {
+      series: read.series,
+    },
+    {
+      ...target,
+      series: nextSeries,
+    },
+  );
 }
 
 export async function addChartTrendlineMutation(
@@ -567,13 +614,20 @@ export async function addChartTrendlineMutation(
   const trendlines = [...(read.series[seriesIndex].trendlines ?? []), trendline];
   const trendlineIndex = trendlines.length - 1;
   read.series[seriesIndex] = { ...read.series[seriesIndex], trendlines };
-  return applyChartUpdateAndReceipt(ctx, sheetId, kind, read.resolvedChartId, {
-    series: read.series,
-  }, {
-    seriesIndex,
-    trendlineIndex,
-    trendline,
-  });
+  return applyChartUpdateAndReceipt(
+    ctx,
+    sheetId,
+    kind,
+    read.resolvedChartId,
+    {
+      series: read.series,
+    },
+    {
+      seriesIndex,
+      trendlineIndex,
+      trendline,
+    },
+  );
 }
 
 export async function updateChartTrendlineMutation(
@@ -590,7 +644,11 @@ export async function updateChartTrendlineMutation(
   if ('receipt' in read) return read.receipt;
 
   const trendlines = [...(read.series[seriesIndex].trendlines ?? [])];
-  if (!Number.isInteger(trendlineIndex) || trendlineIndex < 0 || trendlineIndex >= trendlines.length) {
+  if (
+    !Number.isInteger(trendlineIndex) ||
+    trendlineIndex < 0 ||
+    trendlineIndex >= trendlines.length
+  ) {
     return buildFailedChartMutationReceipt(
       kind,
       sheetId,
@@ -604,13 +662,20 @@ export async function updateChartTrendlineMutation(
   const nextTrendline = { ...trendlines[trendlineIndex], ...updates };
   trendlines[trendlineIndex] = nextTrendline;
   read.series[seriesIndex] = { ...read.series[seriesIndex], trendlines };
-  return applyChartUpdateAndReceipt(ctx, sheetId, kind, read.resolvedChartId, {
-    series: read.series,
-  }, {
-    seriesIndex,
-    trendlineIndex,
-    trendline: nextTrendline,
-  });
+  return applyChartUpdateAndReceipt(
+    ctx,
+    sheetId,
+    kind,
+    read.resolvedChartId,
+    {
+      series: read.series,
+    },
+    {
+      seriesIndex,
+      trendlineIndex,
+      trendline: nextTrendline,
+    },
+  );
 }
 
 export async function removeChartTrendlineMutation(
@@ -626,7 +691,11 @@ export async function removeChartTrendlineMutation(
   if ('receipt' in read) return read.receipt;
 
   const trendlines = [...(read.series[seriesIndex].trendlines ?? [])];
-  if (!Number.isInteger(trendlineIndex) || trendlineIndex < 0 || trendlineIndex >= trendlines.length) {
+  if (
+    !Number.isInteger(trendlineIndex) ||
+    trendlineIndex < 0 ||
+    trendlineIndex >= trendlines.length
+  ) {
     return buildFailedChartMutationReceipt(
       kind,
       sheetId,
@@ -639,13 +708,20 @@ export async function removeChartTrendlineMutation(
 
   trendlines.splice(trendlineIndex, 1);
   read.series[seriesIndex] = { ...read.series[seriesIndex], trendlines };
-  return applyChartUpdateAndReceipt(ctx, sheetId, kind, read.resolvedChartId, {
-    series: read.series,
-  }, {
-    seriesIndex,
-    trendlineIndex,
-    trendline: null,
-  });
+  return applyChartUpdateAndReceipt(
+    ctx,
+    sheetId,
+    kind,
+    read.resolvedChartId,
+    {
+      series: read.series,
+    },
+    {
+      seriesIndex,
+      trendlineIndex,
+      trendline: null,
+    },
+  );
 }
 
 export async function setChartAxisTitleMutation(
@@ -669,10 +745,17 @@ export async function setChartAxisTitleMutation(
     axis.valueAxis = { ...(axis.valueAxis ?? { visible: true }), title: formula };
   }
 
-  return applyChartUpdateAndReceipt(ctx, sheetId, kind, read.resolvedChartId, { axis }, {
-    axisType,
-    changedRanges: [formulaRangeCandidate(formula)],
-  });
+  return applyChartUpdateAndReceipt(
+    ctx,
+    sheetId,
+    kind,
+    read.resolvedChartId,
+    { axis },
+    {
+      axisType,
+      changedRanges: [formulaRangeCandidate(formula)],
+    },
+  );
 }
 
 export async function setChartCategoryNamesMutation(
@@ -686,12 +769,19 @@ export async function setChartCategoryNamesMutation(
   if ('receipt' in read) return read.receipt;
 
   const updatedSeries = read.series.map((series) => ({ ...series, categories: range }));
-  return applyChartUpdateAndReceipt(ctx, sheetId, kind, read.resolvedChartId, {
-    series: updatedSeries,
-  }, {
-    range,
-    changedRanges: [range],
-  });
+  return applyChartUpdateAndReceipt(
+    ctx,
+    sheetId,
+    kind,
+    read.resolvedChartId,
+    {
+      series: updatedSeries,
+    },
+    {
+      range,
+      changedRanges: [range],
+    },
+  );
 }
 
 export async function setChartDataLabelDimensionMutation(
@@ -703,8 +793,7 @@ export async function setChartDataLabelDimensionMutation(
   dimension: 'height' | 'width',
   value: number,
 ): Promise<ChartMutationReceipt> {
-  const kind =
-    dimension === 'height' ? 'chart.dataLabel.setHeight' : 'chart.dataLabel.setWidth';
+  const kind = dimension === 'height' ? 'chart.dataLabel.setHeight' : 'chart.dataLabel.setWidth';
   const target = { seriesIndex, pointIndex };
   if (!Number.isFinite(value) || value < 0) {
     return buildFailedChartMutationReceipt(
@@ -743,12 +832,19 @@ export async function setChartDataLabelDimensionMutation(
   };
   targetSeries.points = points;
   read.series[seriesIndex] = targetSeries;
-  return applyChartUpdateAndReceipt(ctx, sheetId, kind, read.resolvedChartId, {
-    series: read.series,
-  }, {
-    ...target,
-    series: targetSeries,
-  });
+  return applyChartUpdateAndReceipt(
+    ctx,
+    sheetId,
+    kind,
+    read.resolvedChartId,
+    {
+      series: read.series,
+    },
+    {
+      ...target,
+      series: targetSeries,
+    },
+  );
 }
 
 export async function setSeriesBinOptionsMutation(

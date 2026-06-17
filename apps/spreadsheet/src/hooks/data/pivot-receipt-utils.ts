@@ -31,9 +31,7 @@ export function pivotReceiptMessage(receipt: PivotReceiptWithDiagnostics): strin
   );
 }
 
-export function assertPivotMaterialized(
-  receipt: PivotAddReceipt | PivotAddWithSheetReceipt,
-): void {
+export function assertPivotMaterialized(receipt: PivotAddReceipt | PivotAddWithSheetReceipt): void {
   if (receipt.status === 'applied' && receipt.materialized) return;
   throw new Error(pivotReceiptMessage(receipt));
 }

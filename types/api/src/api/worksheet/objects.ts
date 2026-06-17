@@ -78,7 +78,10 @@ export interface WorksheetObjects {
   computeAllObjectBounds(): Promise<Map<string, ObjectBounds>>;
 
   /** Update arbitrary properties of a floating object. */
-  update(objectId: string, updates: Record<string, unknown>): Promise<FloatingObjectMutationReceipt>;
+  update(
+    objectId: string,
+    updates: Record<string, unknown>,
+  ): Promise<FloatingObjectMutationReceipt>;
 
   /** Remove multiple floating objects. Returns count of successfully removed objects. */
   removeMany(objectIds: string[]): Promise<number>;
@@ -136,7 +139,10 @@ export interface WorksheetObjects {
   addPicture(config: PictureConfig): Promise<FloatingObjectMutationReceipt>;
 
   /** Update a picture's properties. */
-  updatePicture(id: string, updates: Partial<PictureConfig>): Promise<FloatingObjectMutationReceipt>;
+  updatePicture(
+    id: string,
+    updates: Partial<PictureConfig>,
+  ): Promise<FloatingObjectMutationReceipt>;
 
   // ===========================================================================
   // Text boxes

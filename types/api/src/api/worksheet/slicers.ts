@@ -128,10 +128,7 @@ export interface WorksheetSlicers {
    * @param slicerId - ID of the slicer
    * @param selectedItems - Array of values to select
    */
-  setSelection(
-    slicerId: string,
-    selectedItems: CellValue[],
-  ): Promise<SlicerSelectionSetReceipt>;
+  setSelection(slicerId: string, selectedItems: CellValue[]): Promise<SlicerSelectionSetReceipt>;
 
   /**
    * Clear all selections in a slicer (show all items).
@@ -147,10 +144,7 @@ export interface WorksheetSlicers {
    * @param offset - Position offset in pixels (defaults to { x: 20, y: 20 })
    * @returns Operation receipt containing the ID of the newly created slicer
    */
-  duplicate(
-    slicerId: string,
-    offset?: { x?: number; y?: number },
-  ): Promise<SlicerDuplicateReceipt>;
+  duplicate(slicerId: string, offset?: { x?: number; y?: number }): Promise<SlicerDuplicateReceipt>;
 
   /**
    * Update a slicer's configuration.

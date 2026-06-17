@@ -144,9 +144,7 @@ export class WorkbookNamesImpl implements WorkbookNames {
   }
 
   private async _toReceiptItem(defined: DefinedName): Promise<NameReceiptItem> {
-    const reference = stripFormulaPrefix(
-      await NamedRanges.getRefersToA1(this.deps.ctx, defined),
-    );
+    const reference = stripFormulaPrefix(await NamedRanges.getRefersToA1(this.deps.ctx, defined));
     const item: NameReceiptItem = {
       id: defined.id,
       name: defined.name,

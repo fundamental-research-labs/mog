@@ -241,10 +241,7 @@ function buildTableSetCalculatedColumnReceipt(
 }
 
 function buildTableClearCalculatedColumnReceipt(
-  params: Omit<
-    BuildTableCalculatedColumnReceiptParams,
-    'action' | 'formula' | 'autofillReceipt'
-  >,
+  params: Omit<BuildTableCalculatedColumnReceiptParams, 'action' | 'formula' | 'autofillReceipt'>,
 ): TableClearCalculatedColumnReceipt {
   return buildTableCalculatedColumnReceipt({
     ...params,

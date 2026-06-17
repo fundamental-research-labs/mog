@@ -47,9 +47,7 @@ import {
   buildPivotHandleKernelReceipt,
   buildPivotHandleMutationReceipt,
 } from './handle-receipts';
-import {
-  buildPivotRefreshReceipt,
-} from './receipts';
+import { buildPivotRefreshReceipt } from './receipts';
 
 type PivotFieldPlacement = PivotFieldPlacementFlat;
 type ValueAggregation = 'sum' | 'count' | 'average' | 'max' | 'min';
@@ -407,7 +405,10 @@ export function buildPivotTableHandle(options: PivotHandleBuilderOptions): Pivot
       });
     },
 
-    async removeField(fieldName: string, area?: PivotFieldArea): Promise<PivotHandleMutationReceipt> {
+    async removeField(
+      fieldName: string,
+      area?: PivotFieldArea,
+    ): Promise<PivotHandleMutationReceipt> {
       const current = await refreshCachedConfig('removeField');
       const config = await updateCachedPivot(
         {
@@ -450,20 +451,14 @@ export function buildPivotTableHandle(options: PivotHandleBuilderOptions): Pivot
       const current = await refreshCachedConfig('moveField');
       const target = resolvePlacement(current, fieldName, fromArea, 'moveField');
       const movedPlacementId = pivotPlacementId(placementId(target));
-      const receipt = await ctx.pivot.movePlacement(
-        pivotId,
-        movedPlacementId,
-        toArea,
-        toPosition,
-      );
+      const receipt = await ctx.pivot.movePlacement(pivotId, movedPlacementId, toArea, toPosition);
       const config = await refreshCachedConfig('moveField');
-      const movedPlacement =
-        config.placements.find((p) => placementId(p) === movedPlacementId) ?? {
-          ...target,
-          placementId: movedPlacementId,
-          area: toArea,
-          position: toPosition,
-        };
+      const movedPlacement = config.placements.find((p) => placementId(p) === movedPlacementId) ?? {
+        ...target,
+        placementId: movedPlacementId,
+        area: toArea,
+        position: toPosition,
+      };
       return buildPivotHandleKernelReceipt({
         kind: 'pivot.handle.moveField',
         sheetId,
@@ -797,9 +792,7 @@ export function buildPivotTableHandle(options: PivotHandleBuilderOptions): Pivot
       return ctx.pivot.getDrillDownData(sheetId, pivotId, rowKey, columnKey);
     },
 
-    async addCalculatedField(
-      field: CalculatedField,
-    ): Promise<PivotHandleCalculatedFieldReceipt> {
+    async addCalculatedField(field: CalculatedField): Promise<PivotHandleCalculatedFieldReceipt> {
       assertLive('addCalculatedField');
       const receipt = await addCalculatedField(pivotId, field);
       const config = await refreshCachedConfig('addCalculatedField');

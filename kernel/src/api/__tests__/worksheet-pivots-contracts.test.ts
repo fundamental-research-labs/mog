@@ -821,7 +821,10 @@ describe('WorksheetPivotsImpl contracts', () => {
     const sortReceipt = await handle!.setSortOrder('Category', 'desc');
     expectHandleConfigReceipt(sortReceipt, 'pivot.handle.setSortOrder');
 
-    const placementSortReceipt = await handle!.setPlacementSortOrder('row:Category:0' as any, 'asc');
+    const placementSortReceipt = await handle!.setPlacementSortOrder(
+      'row:Category:0' as any,
+      'asc',
+    );
     expectHandleConfigReceipt(placementSortReceipt, 'pivot.handle.setPlacementSortOrder');
 
     const sortByValueReceipt = await handle!.setSortByValue(

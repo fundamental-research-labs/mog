@@ -24,12 +24,7 @@ export type ExecutionMutationPolicy = 'rollbackOnError' | 'allowPartial';
 /**
  * Workbook mutation outcome for a code execution.
  */
-export type ExecutionMutationStatus =
-  | 'none'
-  | 'committed'
-  | 'rolledBack'
-  | 'partial'
-  | 'unknown';
+export type ExecutionMutationStatus = 'none' | 'committed' | 'rolledBack' | 'partial' | 'unknown';
 
 /**
  * Type of cell change - direct (by code) or indirect (formula recalc).

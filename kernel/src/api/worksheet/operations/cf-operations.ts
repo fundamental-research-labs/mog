@@ -141,12 +141,10 @@ function noOpEffects(sheetId: SheetId, ranges: readonly CellRange[]): OperationE
   }));
 }
 
-function mutationPrimaryEffect(kind: ConditionalFormatMutationKind):
-  | {
-      type: 'createdObject' | 'updatedObject' | 'removedObject';
-      objectType: string;
-    }
-  | null {
+function mutationPrimaryEffect(kind: ConditionalFormatMutationKind): {
+  type: 'createdObject' | 'updatedObject' | 'removedObject';
+  objectType: string;
+} | null {
   switch (kind) {
     case 'conditionalFormat.add':
     case 'conditionalFormat.addFormula':
@@ -187,12 +185,9 @@ function effectsForConditionalFormatMutation(input: {
           objectEffect({
             type: primary.type,
             sheetId: input.sheetId,
-            ids:
-              primary.objectType === 'conditionalFormatRule' ? input.ruleIds : input.formatIds,
+            ids: primary.objectType === 'conditionalFormatRule' ? input.ruleIds : input.formatIds,
             count:
-              primary.objectType === 'conditionalFormatRule'
-                ? input.ruleCount
-                : input.formatCount,
+              primary.objectType === 'conditionalFormatRule' ? input.ruleCount : input.formatCount,
             objectType: primary.objectType,
             details: {
               formatIds: input.formatIds,
@@ -244,9 +239,7 @@ function unsupportedConditionalFormatDiagnostics(
       const reasons = [
         ...formatReasons,
         ...unsupportedReasonsFor(ruleAny),
-        ...(ruleType && !publicRuleTypes.has(ruleType)
-          ? [`unsupportedRuleType:${ruleType}`]
-          : []),
+        ...(ruleType && !publicRuleTypes.has(ruleType) ? [`unsupportedRuleType:${ruleType}`] : []),
       ];
       if (reasons.length === 0) continue;
       diagnostics.push({
@@ -309,16 +302,18 @@ export function buildConditionalFormatMutationReceipt(input: {
   return {
     kind: input.kind,
     status,
-    effects: input.effects ?? effectsForConditionalFormatMutation({
-      kind: input.kind,
-      status,
-      sheetId: input.sheetId,
-      formatIds,
-      ruleIds,
-      ranges: requestedRanges && ranges.length === 0 ? requestedRanges : ranges,
-      formatCount,
-      ruleCount,
-    }),
+    effects:
+      input.effects ??
+      effectsForConditionalFormatMutation({
+        kind: input.kind,
+        status,
+        sheetId: input.sheetId,
+        formatIds,
+        ruleIds,
+        ranges: requestedRanges && ranges.length === 0 ? requestedRanges : ranges,
+        formatCount,
+        ruleCount,
+      }),
     diagnostics,
     sheetId: input.sheetId,
     formatIds,

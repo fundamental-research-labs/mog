@@ -63,24 +63,14 @@ describe('isNearViewportEdge', () => {
     });
 
     it('should preserve a non-scrolling center in small viewports', () => {
-      const result = isNearViewportEdge(
-        50,
-        32,
-        { left: 0, top: 0, right: 100, bottom: 64 },
-        50,
-      );
+      const result = isNearViewportEdge(50, 32, { left: 0, top: 0, right: 100, bottom: 64 }, 50);
       expect(result.edge).toBeNull();
     });
   });
 
   describe('small viewport threshold capping', () => {
     it('should still detect the closest edge near a small viewport boundary', () => {
-      const result = isNearViewportEdge(
-        50,
-        58,
-        { left: 0, top: 0, right: 100, bottom: 64 },
-        50,
-      );
+      const result = isNearViewportEdge(50, 58, { left: 0, top: 0, right: 100, bottom: 64 }, 50);
       expect(result.edge).toBe('bottom');
       expect(result.distance).toBe(6);
       expect(result.threshold).toBeCloseTo(22.4);

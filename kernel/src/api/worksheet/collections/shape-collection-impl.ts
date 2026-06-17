@@ -31,7 +31,12 @@ export class WorksheetShapeCollectionImpl implements WorksheetShapeCollection {
 
   async add(config: ShapeConfig): Promise<FloatingObjectHandleMutationReceipt<ShapeHandle>> {
     const receipt = await this.objectsImpl.addShape(config);
-    const handle = new ShapeHandleImpl(receipt.id, config.type, this.objectsImpl, this.boundsReader);
+    const handle = new ShapeHandleImpl(
+      receipt.id,
+      config.type,
+      this.objectsImpl,
+      this.boundsReader,
+    );
     return attachFloatingObjectHandle(receipt, handle);
   }
 

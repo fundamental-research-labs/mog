@@ -732,7 +732,7 @@ if (existsSync(publishWorkflowPath)) {
       'wasm_package_version: ${{ needs.version.outputs.version }}',
       'VSCE_PAT: ${{ secrets.VSCE_PAT }}',
       'OVSX_PAT: ${{ secrets.OVSX_PAT }}',
-      'needs.publish-vscode-extension.result == \'success\'',
+      "needs.publish-vscode-extension.result == 'success'",
     ];
     for (const fragment of requiredPublishSdkFragments) {
       if (!publishWorkflow.includes(fragment)) {

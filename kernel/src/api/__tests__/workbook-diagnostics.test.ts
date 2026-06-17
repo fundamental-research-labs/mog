@@ -221,13 +221,7 @@ describe('WorkbookDiagnosticsImpl', () => {
         ),
       },
     };
-    trackExternalFormulaWrite(
-      ctx as any,
-      'model-sheet' as any,
-      0,
-      0,
-      "='[1]Source-GAAP'!$L$17",
-    );
+    trackExternalFormulaWrite(ctx as any, 'model-sheet' as any, 0, 0, "='[1]Source-GAAP'!$L$17");
     const diagnostics = new WorkbookDiagnosticsImpl(ctx as any);
 
     const result = await diagnostics.checkExternalReferences();
@@ -255,7 +249,9 @@ describe('WorkbookDiagnosticsImpl', () => {
     ]);
     expect(result.findings[0]!.message).toContain('Excel internal external-link ordinal');
     expect(result.findings[0]!.message).toContain('Local sheet "Source-GAAP" exists');
-    expect(result.findings[0]!.message).toContain('readable name and write the formula with that name');
+    expect(result.findings[0]!.message).toContain(
+      'readable name and write the formula with that name',
+    );
   });
 
   it('composes validateWorkbook and reports requested unsupported checks instead of passing them', async () => {

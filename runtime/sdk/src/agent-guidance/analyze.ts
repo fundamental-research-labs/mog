@@ -238,9 +238,15 @@ function replacementsForCompatibility(entry: ApiCompatibilityEntry): MogReplacem
         path.startsWith('api.utils.') ||
         path.startsWith('Utils.') ||
         path.startsWith('type:') ||
-        ['a1', 'address', 'rangeAddress', 'columnName', 'columnIndex', 'offset', 'parseAddress'].includes(
-          path,
-        ),
+        [
+          'a1',
+          'address',
+          'rangeAddress',
+          'columnName',
+          'columnIndex',
+          'offset',
+          'parseAddress',
+        ].includes(path),
     )
     .map((path) => ({ path }));
 }

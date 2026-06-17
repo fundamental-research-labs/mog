@@ -265,10 +265,12 @@ describe('Compute mutation admission', () => {
     const core = createStartedCore(ctx, transport);
 
     await core.beginUndoGroup();
-    await core.mutatePublic('compute_set_cell', () =>
-      transport.call('compute_set_cell', { docId: 'test-doc' }) as Promise<
-        [Uint8Array, MutationResult]
-      >,
+    await core.mutatePublic(
+      'compute_set_cell',
+      () =>
+        transport.call('compute_set_cell', { docId: 'test-doc' }) as Promise<
+          [Uint8Array, MutationResult]
+        >,
     );
 
     expect(notifyForwardMutation).not.toHaveBeenCalled();

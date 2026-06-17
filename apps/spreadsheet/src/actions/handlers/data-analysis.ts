@@ -748,7 +748,10 @@ function dataTableWriteError(receipt: DataTableWriteStaticValuesReceipt): string
 }
 
 function assertStaticDataTableReceiptApplied(receipt: DataTableWriteStaticValuesReceipt): void {
-  if (receipt.kind !== 'dataTable.writeStaticValues' || receipt.lifecycle !== DATA_TABLE_LIFECYCLE) {
+  if (
+    receipt.kind !== 'dataTable.writeStaticValues' ||
+    receipt.lifecycle !== DATA_TABLE_LIFECYCLE
+  ) {
     throw new Error(
       `Data Table action expected a static values receipt but received ${receipt.kind}.`,
     );

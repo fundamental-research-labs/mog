@@ -206,18 +206,13 @@ export async function createShape(
   }
 
   // Fallback: construct minimal receipt from config
-  return buildFallbackMutationReceipt(
-    sheetId,
-    'create',
-    '',
-    {
-      x: 0,
-      y: 0,
-      width: config.width ?? 200,
-      height: config.height ?? 200,
-      rotation: config.rotation ?? 0,
-    },
-  );
+  return buildFallbackMutationReceipt(sheetId, 'create', '', {
+    x: 0,
+    y: 0,
+    width: config.width ?? 200,
+    height: config.height ?? 200,
+    rotation: config.rotation ?? 0,
+  });
 }
 
 /**

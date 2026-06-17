@@ -24,9 +24,7 @@ export interface ParsedExternalRef {
 }
 
 export interface ExternalFormulaFeedback {
-  readonly code:
-    | 'EXTERNAL_REFERENCE_UNBOUND_LOCAL_SHEET_CANDIDATE'
-    | 'EXTERNAL_REFERENCE_UNBOUND';
+  readonly code: 'EXTERNAL_REFERENCE_UNBOUND_LOCAL_SHEET_CANDIDATE' | 'EXTERNAL_REFERENCE_UNBOUND';
   readonly message: string;
   readonly suggestion: string;
   readonly details: Record<string, unknown>;

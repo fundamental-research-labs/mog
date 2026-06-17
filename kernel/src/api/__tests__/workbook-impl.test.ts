@@ -1222,13 +1222,11 @@ describe('WorkbookImpl - Named Ranges', () => {
   });
 
   it('addNamedRange() delegates to NamedRanges.create on success', async () => {
-    (NamedRanges.getByName as jest.Mock)
-      .mockResolvedValueOnce(undefined)
-      .mockResolvedValueOnce({
-        id: 'nr-revenue',
-        name: 'Revenue',
-        refersToA1: '=Sheet1!A1:B10',
-      });
+    (NamedRanges.getByName as jest.Mock).mockResolvedValueOnce(undefined).mockResolvedValueOnce({
+      id: 'nr-revenue',
+      name: 'Revenue',
+      refersToA1: '=Sheet1!A1:B10',
+    });
     (NamedRanges.create as jest.Mock).mockResolvedValue(undefined);
     const { wb } = await createWorkbook();
 
@@ -1253,13 +1251,11 @@ describe('WorkbookImpl - Named Ranges', () => {
   });
 
   it('addNamedRange() prepends = to reference if missing', async () => {
-    (NamedRanges.getByName as jest.Mock)
-      .mockResolvedValueOnce(undefined)
-      .mockResolvedValueOnce({
-        id: 'nr-revenue',
-        name: 'Revenue',
-        refersToA1: '=Sheet1!A1:B10',
-      });
+    (NamedRanges.getByName as jest.Mock).mockResolvedValueOnce(undefined).mockResolvedValueOnce({
+      id: 'nr-revenue',
+      name: 'Revenue',
+      refersToA1: '=Sheet1!A1:B10',
+    });
     (NamedRanges.create as jest.Mock).mockResolvedValue(undefined);
     const { wb } = await createWorkbook();
 

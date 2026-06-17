@@ -352,9 +352,7 @@ describe('Worksheet formula API ergonomics', () => {
 
     await ws.setFormulas('A1:B1', [['SUM(C1:C3)', '=D1*2']]);
 
-    expect(RangeOps.setRange).toHaveBeenCalledWith(ctx, SHEET_ID, 0, 0, [
-      ['=SUM(C1:C3)', '=D1*2'],
-    ]);
+    expect(RangeOps.setRange).toHaveBeenCalledWith(ctx, SHEET_ID, 0, 0, [['=SUM(C1:C3)', '=D1*2']]);
   });
 
   it('setFormulas rejects missing or malformed formula grids with exact paths', async () => {
@@ -372,7 +370,8 @@ describe('Worksheet formula API ergonomics', () => {
 
     await expect((ws as any).setFormulas('A1', [1])).rejects.toMatchObject({
       code: 'API_INVALID_ARGUMENT',
-      message: 'worksheet.setFormulas: formulas[0] must be an array of formula strings, received number',
+      message:
+        'worksheet.setFormulas: formulas[0] must be an array of formula strings, received number',
       path: ['formulas', '0'],
       context: expect.objectContaining({
         validationKind: 'invalidFormulaRowType',
@@ -409,11 +408,7 @@ describe('Worksheet formula API ergonomics', () => {
     await expect(ws.evaluateFormula('=SUM(A1:A3)')).resolves.toBe(123);
     await expect(ws.evaluate('=1+6')).resolves.toBe(7);
 
-    expect(ctx.computeBridge.evaluateExpression).toHaveBeenNthCalledWith(
-      1,
-      SHEET_ID,
-      'SUM(A1:A3)',
-    );
+    expect(ctx.computeBridge.evaluateExpression).toHaveBeenNthCalledWith(1, SHEET_ID, 'SUM(A1:A3)');
     expect(ctx.computeBridge.evaluateExpression).toHaveBeenNthCalledWith(2, SHEET_ID, '1+6');
   });
 });

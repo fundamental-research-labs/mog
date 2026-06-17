@@ -328,9 +328,9 @@ export class WorksheetSlicersImpl implements WorksheetSlicers {
     for (const slicer of slicers) {
       await assertSlicerObjectTopologyAllowed(this.ctx, this.sheetId, 'slicers.clear', slicer.name);
     }
-    const removedSlicers = (
-      await Promise.all(slicers.map((slicer) => this.get(slicer.id)))
-    ).filter((slicer): slicer is Slicer => slicer !== null);
+    const removedSlicers = (await Promise.all(slicers.map((slicer) => this.get(slicer.id)))).filter(
+      (slicer): slicer is Slicer => slicer !== null,
+    );
     for (const slicer of slicers) {
       await this.ctx.computeBridge.deleteSlicer(this.sheetId, slicer.id);
     }

@@ -446,7 +446,8 @@ export class WorksheetValidationImpl implements WorksheetValidation {
           receivedType: receivedType(source),
         },
         path: ['source'],
-        suggestion: 'Use ["Red", "Blue"], "Red,Blue", "D1:D10", or { startRow, startCol, endRow, endCol }.',
+        suggestion:
+          'Use ["Red", "Blue"], "Red,Blue", "D1:D10", or { startRow, startCol, endRow, endCol }.',
       });
     }
 

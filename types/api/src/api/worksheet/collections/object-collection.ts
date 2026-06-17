@@ -7,9 +7,7 @@
  */
 import type { ObjectBounds } from '@mog/types-objects/objects/floating-object-manager';
 import type { FloatingObject } from '@mog/types-objects/objects/floating-objects';
-import type {
-  FloatingObjectMutationReceipt,
-} from '../../mutation-receipt';
+import type { FloatingObjectMutationReceipt } from '../../mutation-receipt';
 import type { TextWarpPreset } from '@mog/types-objects/text-effects';
 import type { FloatingObjectInfo } from '../../types';
 import type { FloatingObjectHandle } from '../handles/floating-object-handle';
@@ -40,7 +38,10 @@ export interface WorksheetObjectCollection {
   /** Send a floating object backward by one layer. */
   sendBackward(id: string): Promise<void>;
   /** Update arbitrary properties of a floating object. */
-  update(objectId: string, updates: Record<string, unknown>): Promise<FloatingObjectMutationReceipt>;
+  update(
+    objectId: string,
+    updates: Record<string, unknown>,
+  ): Promise<FloatingObjectMutationReceipt>;
 
   // ── TextEffect conversion ─────────────────────────────────────
 

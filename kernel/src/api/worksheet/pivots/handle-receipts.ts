@@ -22,7 +22,9 @@ import {
   pivotUnchangedEffects,
 } from './receipts';
 
-function placementIdFromKernelReceipt(receipt: PivotKernelMutationReceipt): PlacementId | undefined {
+function placementIdFromKernelReceipt(
+  receipt: PivotKernelMutationReceipt,
+): PlacementId | undefined {
   const placementReceipt = receipt as PivotKernelMutationReceipt & { placementId?: PlacementId };
   if (placementReceipt.placementId) return placementReceipt.placementId;
   return receipt.effects.find((effect) => effect.placementId)?.placementId;

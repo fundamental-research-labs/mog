@@ -63,10 +63,7 @@ const MAX_EDGE_COVERAGE_PER_SIDE = 0.35;
 
 function effectiveAxisThreshold(axisLength: number, requestedThreshold: number): number {
   if (!Number.isFinite(axisLength) || axisLength <= 0) return 0;
-  return Math.max(
-    0,
-    Math.min(requestedThreshold, axisLength * MAX_EDGE_COVERAGE_PER_SIDE),
-  );
+  return Math.max(0, Math.min(requestedThreshold, axisLength * MAX_EDGE_COVERAGE_PER_SIDE));
 }
 
 // =============================================================================

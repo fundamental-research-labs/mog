@@ -82,9 +82,10 @@ describe('WorksheetConditionalFormattingImpl — mutation receipts', () => {
   });
 
   it('add returns an applied receipt with created object, changed CF, and range effects', async () => {
-    const receipt = await cf.add(['A1:A10'], [
-      { type: 'formula', formula: '=A1>0', style: { backgroundColor: '#fff2cc' } },
-    ]);
+    const receipt = await cf.add(
+      ['A1:A10'],
+      [{ type: 'formula', formula: '=A1>0', style: { backgroundColor: '#fff2cc' } }],
+    );
     const created = bridge.addCfRule.mock.calls[0][1] as ConditionalFormat;
 
     expect(receipt).toMatchObject({
@@ -129,7 +130,9 @@ describe('WorksheetConditionalFormattingImpl — mutation receipts', () => {
     const before = makeFormat();
     const updatedRule = { ...before.rules[0], stopIfTrue: true } as CFRule;
     const after = makeFormat({ rules: [updatedRule] });
-    bridge.getAllCfRules.mockResolvedValueOnce([before] as any).mockResolvedValueOnce([after] as any);
+    bridge.getAllCfRules
+      .mockResolvedValueOnce([before] as any)
+      .mockResolvedValueOnce([after] as any);
 
     const receipt = await cf.update('fmt-1', { stopIfTrue: true });
 

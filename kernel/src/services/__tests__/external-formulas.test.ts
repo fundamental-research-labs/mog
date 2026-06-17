@@ -285,7 +285,7 @@ describe('external formula materialization', () => {
       code: 'API_INVALID_ARGUMENT',
       path: ['formula'],
       suggestion:
-        'Use =\'Source-GAAP\'!$L$17 for a local reference, or create or bind an external workbook link with a readable name and write the formula with that name instead of [1].',
+        "Use ='Source-GAAP'!$L$17 for a local reference, or create or bind an external workbook link with a readable name and write the formula with that name instead of [1].",
       context: expect.objectContaining({
         diagnosticCode: 'EXTERNAL_REFERENCE_UNBOUND_LOCAL_SHEET_CANDIDATE',
         tokenKind: 'excel-internal-ordinal',

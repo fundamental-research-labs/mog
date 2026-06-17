@@ -243,7 +243,13 @@ function assertCfRuleInput(
 
   switch (type) {
     case 'cellValue':
-      assertStringField(value, 'operator', path, methodName, 'Use { type: "cellValue", operator: "greaterThan", value1: 100, style: { backgroundColor: "#fff2cc" } }.');
+      assertStringField(
+        value,
+        'operator',
+        path,
+        methodName,
+        'Use { type: "cellValue", operator: "greaterThan", value1: 100, style: { backgroundColor: "#fff2cc" } }.',
+      );
       if (value.value1 == null) {
         throw invalidCfRuleError(
           value.value1,
@@ -254,48 +260,159 @@ function assertCfRuleInput(
           'Use { type: "cellValue", operator: "greaterThan", value1: 100, style: { backgroundColor: "#fff2cc" } }.',
         );
       }
-      assertStyleField(value, path, methodName, 'Use { type: "cellValue", operator: "greaterThan", value1: 100, style: { backgroundColor: "#fff2cc" } }.');
+      assertStyleField(
+        value,
+        path,
+        methodName,
+        'Use { type: "cellValue", operator: "greaterThan", value1: 100, style: { backgroundColor: "#fff2cc" } }.',
+      );
       return;
     case 'formula':
-      assertStringField(value, 'formula', path, methodName, 'Use { type: "formula", formula: "=A1>0", style: { backgroundColor: "#fff2cc" } }.');
-      assertStyleField(value, path, methodName, 'Use { type: "formula", formula: "=A1>0", style: { backgroundColor: "#fff2cc" } }.');
+      assertStringField(
+        value,
+        'formula',
+        path,
+        methodName,
+        'Use { type: "formula", formula: "=A1>0", style: { backgroundColor: "#fff2cc" } }.',
+      );
+      assertStyleField(
+        value,
+        path,
+        methodName,
+        'Use { type: "formula", formula: "=A1>0", style: { backgroundColor: "#fff2cc" } }.',
+      );
       return;
     case 'colorScale':
-      assertObjectField(value, 'colorScale', path, methodName, 'Use { type: "colorScale", colorScale: { minPoint: { type: "min", color: "#f8696b" }, maxPoint: { type: "max", color: "#63be7b" } } }.');
+      assertObjectField(
+        value,
+        'colorScale',
+        path,
+        methodName,
+        'Use { type: "colorScale", colorScale: { minPoint: { type: "min", color: "#f8696b" }, maxPoint: { type: "max", color: "#63be7b" } } }.',
+      );
       return;
     case 'dataBar':
-      assertObjectField(value, 'dataBar', path, methodName, 'Use { type: "dataBar", dataBar: { minPoint: { type: "min", color: "#638ec6" }, maxPoint: { type: "max", color: "#638ec6" }, positiveColor: "#638ec6" } }.');
+      assertObjectField(
+        value,
+        'dataBar',
+        path,
+        methodName,
+        'Use { type: "dataBar", dataBar: { minPoint: { type: "min", color: "#638ec6" }, maxPoint: { type: "max", color: "#638ec6" }, positiveColor: "#638ec6" } }.',
+      );
       return;
     case 'iconSet':
-      assertObjectField(value, 'iconSet', path, methodName, 'Use { type: "iconSet", iconSet: { iconSetName: "3Arrows" } }.');
+      assertObjectField(
+        value,
+        'iconSet',
+        path,
+        methodName,
+        'Use { type: "iconSet", iconSet: { iconSetName: "3Arrows" } }.',
+      );
       return;
     case 'top10':
-      assertNumberField(value, 'rank', path, methodName, 'Use { type: "top10", rank: 10, style: { backgroundColor: "#fff2cc" } }.');
-      assertStyleField(value, path, methodName, 'Use { type: "top10", rank: 10, style: { backgroundColor: "#fff2cc" } }.');
+      assertNumberField(
+        value,
+        'rank',
+        path,
+        methodName,
+        'Use { type: "top10", rank: 10, style: { backgroundColor: "#fff2cc" } }.',
+      );
+      assertStyleField(
+        value,
+        path,
+        methodName,
+        'Use { type: "top10", rank: 10, style: { backgroundColor: "#fff2cc" } }.',
+      );
       return;
     case 'aboveAverage':
-      assertBooleanField(value, 'aboveAverage', path, methodName, 'Use { type: "aboveAverage", aboveAverage: true, style: { backgroundColor: "#fff2cc" } }.');
-      assertStyleField(value, path, methodName, 'Use { type: "aboveAverage", aboveAverage: true, style: { backgroundColor: "#fff2cc" } }.');
+      assertBooleanField(
+        value,
+        'aboveAverage',
+        path,
+        methodName,
+        'Use { type: "aboveAverage", aboveAverage: true, style: { backgroundColor: "#fff2cc" } }.',
+      );
+      assertStyleField(
+        value,
+        path,
+        methodName,
+        'Use { type: "aboveAverage", aboveAverage: true, style: { backgroundColor: "#fff2cc" } }.',
+      );
       return;
     case 'duplicateValues':
-      assertStyleField(value, path, methodName, 'Use { type: "duplicateValues", style: { backgroundColor: "#ffc7ce" } }.');
+      assertStyleField(
+        value,
+        path,
+        methodName,
+        'Use { type: "duplicateValues", style: { backgroundColor: "#ffc7ce" } }.',
+      );
       return;
     case 'containsText':
-      assertStringField(value, 'operator', path, methodName, 'Use { type: "containsText", operator: "contains", text: "urgent", style: { backgroundColor: "#fff2cc" } }.');
-      assertStringField(value, 'text', path, methodName, 'Use { type: "containsText", operator: "contains", text: "urgent", style: { backgroundColor: "#fff2cc" } }.');
-      assertStyleField(value, path, methodName, 'Use { type: "containsText", operator: "contains", text: "urgent", style: { backgroundColor: "#fff2cc" } }.');
+      assertStringField(
+        value,
+        'operator',
+        path,
+        methodName,
+        'Use { type: "containsText", operator: "contains", text: "urgent", style: { backgroundColor: "#fff2cc" } }.',
+      );
+      assertStringField(
+        value,
+        'text',
+        path,
+        methodName,
+        'Use { type: "containsText", operator: "contains", text: "urgent", style: { backgroundColor: "#fff2cc" } }.',
+      );
+      assertStyleField(
+        value,
+        path,
+        methodName,
+        'Use { type: "containsText", operator: "contains", text: "urgent", style: { backgroundColor: "#fff2cc" } }.',
+      );
       return;
     case 'containsBlanks':
-      assertBooleanField(value, 'blanks', path, methodName, 'Use { type: "containsBlanks", blanks: true, style: { backgroundColor: "#fff2cc" } }.');
-      assertStyleField(value, path, methodName, 'Use { type: "containsBlanks", blanks: true, style: { backgroundColor: "#fff2cc" } }.');
+      assertBooleanField(
+        value,
+        'blanks',
+        path,
+        methodName,
+        'Use { type: "containsBlanks", blanks: true, style: { backgroundColor: "#fff2cc" } }.',
+      );
+      assertStyleField(
+        value,
+        path,
+        methodName,
+        'Use { type: "containsBlanks", blanks: true, style: { backgroundColor: "#fff2cc" } }.',
+      );
       return;
     case 'containsErrors':
-      assertBooleanField(value, 'errors', path, methodName, 'Use { type: "containsErrors", errors: true, style: { backgroundColor: "#ffc7ce" } }.');
-      assertStyleField(value, path, methodName, 'Use { type: "containsErrors", errors: true, style: { backgroundColor: "#ffc7ce" } }.');
+      assertBooleanField(
+        value,
+        'errors',
+        path,
+        methodName,
+        'Use { type: "containsErrors", errors: true, style: { backgroundColor: "#ffc7ce" } }.',
+      );
+      assertStyleField(
+        value,
+        path,
+        methodName,
+        'Use { type: "containsErrors", errors: true, style: { backgroundColor: "#ffc7ce" } }.',
+      );
       return;
     case 'timePeriod':
-      assertStringField(value, 'timePeriod', path, methodName, 'Use { type: "timePeriod", timePeriod: "today", style: { backgroundColor: "#fff2cc" } }.');
-      assertStyleField(value, path, methodName, 'Use { type: "timePeriod", timePeriod: "today", style: { backgroundColor: "#fff2cc" } }.');
+      assertStringField(
+        value,
+        'timePeriod',
+        path,
+        methodName,
+        'Use { type: "timePeriod", timePeriod: "today", style: { backgroundColor: "#fff2cc" } }.',
+      );
+      assertStyleField(
+        value,
+        path,
+        methodName,
+        'Use { type: "timePeriod", timePeriod: "today", style: { backgroundColor: "#fff2cc" } }.',
+      );
       return;
     default:
       throw invalidCfRuleError(
@@ -687,10 +804,7 @@ export class WorksheetConditionalFormattingImpl implements WorksheetConditionalF
     });
   }
 
-  async removeRule(
-    formatId: string,
-    ruleId: string,
-  ): Promise<ConditionalFormatMutationReceipt> {
+  async removeRule(formatId: string, ruleId: string): Promise<ConditionalFormatMutationReceipt> {
     const before = await CFOps.getConditionalFormat(this.ctx, this.sheetId, formatId);
     const removedRule = before?.rules.find((rule) => rule.id === ruleId);
     if (!before || !removedRule) {

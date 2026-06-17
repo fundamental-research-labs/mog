@@ -5,8 +5,7 @@ const MONTH_DATE_TEXT_RE =
   /^(?:(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)\.? \d{1,2}(?:,? \d{2,4})?|\d{1,2} (?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)\.?(?: \d{2,4})?)$/i;
 const TIME_TEXT_RE = /^\d{1,2}:\d{2}(?::\d{2})?(?:\s?[ap]m)?$/i;
 const SIMPLE_FRACTION_TEXT_RE = /^[+-]?(?:\d+\s+)?\d+\/\d+$/;
-const EXCEL_ERROR_TEXT_RE =
-  /^#(?:NULL!|DIV\/0!|VALUE!|REF!|NAME\?|NUM!|N\/A|GETTING_DATA)$/i;
+const EXCEL_ERROR_TEXT_RE = /^#(?:NULL!|DIV\/0!|VALUE!|REF!|NAME\?|NUM!|N\/A|GETTING_DATA)$/i;
 const CURRENCY_SYMBOL_RE = /[\u0024\u20ac\u00a3\u00a5\u20b9]/;
 
 export function shouldResetNumberFormatBeforeExternalPaste(value: unknown): boolean {

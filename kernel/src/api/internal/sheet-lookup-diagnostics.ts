@@ -125,7 +125,9 @@ function buildSheetNotFoundMessage(
     typeof options.target === 'string'
       ? quoteVisibleName(options.target)
       : `index ${String(options.target)}`;
-  const suggestion = nearMatches[0] ? ` Did you mean ${quoteVisibleName(nearMatches[0].name)}?` : '';
+  const suggestion = nearMatches[0]
+    ? ` Did you mean ${quoteVisibleName(nearMatches[0].name)}?`
+    : '';
   return `${prefix}: ${target}.${suggestion}`;
 }
 

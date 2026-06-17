@@ -31,9 +31,10 @@ function compactDetails(details: Record<string, unknown>): Record<string, unknow
   return Object.fromEntries(Object.entries(details).filter(([, value]) => value !== undefined));
 }
 
-function sourceFields(
-  source: SlicerSourceLike,
-): { sourceTableId?: string; sourcePivotId?: string } {
+function sourceFields(source: SlicerSourceLike): {
+  sourceTableId?: string;
+  sourcePivotId?: string;
+} {
   if (!source) return {};
   if (source.type === 'table') {
     const tableId = (source as { tableId?: unknown }).tableId;
@@ -48,10 +49,7 @@ function sourceFields(
   return {};
 }
 
-function sourceFor(
-  slicer: Slicer | null | undefined,
-  source?: SlicerSourceLike,
-): SlicerSourceLike {
+function sourceFor(slicer: Slicer | null | undefined, source?: SlicerSourceLike): SlicerSourceLike {
   return source ?? (slicer?.source as SlicerSourceLike);
 }
 
@@ -118,9 +116,7 @@ function worksheetUnchangedEffect(sheetId: SheetId, slicerId?: string): Operatio
   };
 }
 
-function filterProjectionEffect(
-  projection: SlicerFilterProjectionReceiptInput,
-): OperationEffect {
+function filterProjectionEffect(projection: SlicerFilterProjectionReceiptInput): OperationEffect {
   return {
     type: 'changedFilterProjection',
     sheetId: projection.sheetId,

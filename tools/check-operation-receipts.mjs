@@ -12,7 +12,8 @@ const API_SPEC_FILE = path.join(REPO_ROOT, 'runtime/sdk/src/generated/api-spec.j
 const UPDATE = process.argv.includes('--update');
 
 const BASE_OPERATION_RECEIPT_FIELDS = ['kind', 'status', 'effects', 'diagnostics'];
-const DEFAULT_RATIONALE = 'Generated initial disposition; refine as receipt waves migrate this API.';
+const DEFAULT_RATIONALE =
+  'Generated initial disposition; refine as receipt waves migrate this API.';
 const MIGRATED_RECEIPT_RATIONALE =
   'Returns an OperationReceiptBase-derived receipt with the public receipt base fields.';
 const RECEIPT_REQUIRED_DISPOSITIONS = new Set(['receiptRequired', 'lifecycleReceiptRequired']);
@@ -74,7 +75,10 @@ function repoPath(filePath) {
 }
 
 function compact(text) {
-  return text.replace(/\s+/g, ' ').replace(/\s*([{}()[\]<>,:;|&=])\s*/g, '$1').trim();
+  return text
+    .replace(/\s+/g, ' ')
+    .replace(/\s*([{}()[\]<>,:;|&=])\s*/g, '$1')
+    .trim();
 }
 
 function collectTypeRefs(text) {
@@ -242,7 +246,12 @@ function isIgnorableUnionPart(node) {
   return ts.isLiteralTypeNode(node) && node.literal.kind === ts.SyntaxKind.NullKeyword;
 }
 
-function typeNodeReturnsMigratedReceipt(node, sourceFile, interfaceReceiptNames, aliasReceiptNames) {
+function typeNodeReturnsMigratedReceipt(
+  node,
+  sourceFile,
+  interfaceReceiptNames,
+  aliasReceiptNames,
+) {
   const referenceName = typeReferenceName(node, sourceFile);
   if (referenceName) {
     return (
@@ -456,7 +465,10 @@ for (const entry of current) {
     errors.push(`Invalid disposition for ${entry.key}: ${recorded.disposition}`);
   }
   verifyMigratedReceiptDispositions(errors, entry, recorded, migratedReceiptNames);
-  if (recorded.returnCategory !== entry.returnCategory || recorded.returnType !== entry.returnType) {
+  if (
+    recorded.returnCategory !== entry.returnCategory ||
+    recorded.returnType !== entry.returnType
+  ) {
     errors.push(
       `Stale receipt inventory return shape for ${entry.key}: expected ${entry.returnType} (${entry.returnCategory}), found ${recorded.returnType} (${recorded.returnCategory})`,
     );
@@ -474,7 +486,9 @@ verifyGeneratedReceiptDefinitions(errors, migratedReceiptInfo.generatedReceiptNa
 if (errors.length > 0) {
   console.error(`Operation receipt guard failed with ${errors.length} issue(s):`);
   for (const error of errors) console.error(`- ${error}`);
-  console.error('\nRun `node tools/check-operation-receipts.mjs --update` after intentional API changes.');
+  console.error(
+    '\nRun `node tools/check-operation-receipts.mjs --update` after intentional API changes.',
+  );
   process.exit(1);
 }
 

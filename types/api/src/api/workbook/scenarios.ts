@@ -6,12 +6,7 @@
  * Usage: `workbook.scenarios.add(config)` instead of
  *        `workbook.createScenario(config)`
  */
-import type {
-  ActiveScenarioState,
-  OriginalCellValue,
-  Scenario,
-  ScenarioConfig,
-} from '../types';
+import type { ActiveScenarioState, OriginalCellValue, Scenario, ScenarioConfig } from '../types';
 import type { WorkbookScenarioApplyReceipt } from '../mutation-receipt';
 
 export interface WorkbookScenarios {

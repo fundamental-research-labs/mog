@@ -124,7 +124,13 @@ export function setProperties(
     // Metadata is stored by Rust as part of cell properties.
     // setFormatForRanges handles format; metadata is set alongside it.
     // For now, metadata fields are passed to Rust via the format channel.
-    writeMetadataViaFormatChannel(ctx, sheetId, [cellToRangeTuple(row, col)], metadataFields, origin);
+    writeMetadataViaFormatChannel(
+      ctx,
+      sheetId,
+      [cellToRangeTuple(row, col)],
+      metadataFields,
+      origin,
+    );
   }
 }
 

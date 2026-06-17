@@ -1,8 +1,6 @@
 import { jest } from '@jest/globals';
 
-import {
-  bridgeTableToTableInfo,
-} from '../table-operations';
+import { bridgeTableToTableInfo } from '../table-operations';
 import {
   clearCalculatedColumnFormula,
   setCalculatedColumnFormula,

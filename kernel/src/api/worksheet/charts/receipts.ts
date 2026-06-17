@@ -94,10 +94,7 @@ export function buildChartDuplicateReceipt(
   };
 }
 
-export function buildChartActivateReceipt(
-  sheetId: SheetId,
-  chartId: string,
-): ChartActivateReceipt {
+export function buildChartActivateReceipt(sheetId: SheetId, chartId: string): ChartActivateReceipt {
   return {
     kind: 'chart.activate',
     status: 'applied',

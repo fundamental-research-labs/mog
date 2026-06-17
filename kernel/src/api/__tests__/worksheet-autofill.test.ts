@@ -228,7 +228,9 @@ describe('WorksheetImpl — autoFill', () => {
     const mockResult = {
       kind: 'autofill.apply' as const,
       status: 'applied' as const,
-      effects: [{ type: 'materializedCells' as const, sheetId: SHEET_ID, range: 'A4:A10', count: 14 }],
+      effects: [
+        { type: 'materializedCells' as const, sheetId: SHEET_ID, range: 'A4:A10', count: 14 },
+      ],
       diagnostics: [],
       mode: 'auto' as const,
       patternType: 'date' as const,
@@ -359,7 +361,9 @@ describe('WorksheetImpl — fillSeries', () => {
     const mockResult = {
       kind: 'fillSeries.apply' as const,
       status: 'applied' as const,
-      effects: [{ type: 'materializedCells' as const, sheetId: SHEET_ID, range: 'A2:A10', count: 9 }],
+      effects: [
+        { type: 'materializedCells' as const, sheetId: SHEET_ID, range: 'A2:A10', count: 9 },
+      ],
       diagnostics: [],
       mode: 'series' as const,
       options,
@@ -721,7 +725,9 @@ describe('fill-operations — unit tests', () => {
     });
 
     it('autoFill returns an apply receipt with base fields and preserved payload', async () => {
-      const warnings = [{ row: 5, col: 0, kind: { type: 'formulaRefOutOfBounds' as const, refIndex: 2 } }];
+      const warnings = [
+        { row: 5, col: 0, kind: { type: 'formulaRefOutOfBounds' as const, refIndex: 2 } },
+      ];
       const changes = [{ row: 5, col: 0, type: 'formula' as const }];
       ctx.computeBridge.autoFill.mockResolvedValue({
         data: { patternType: 'linear', filledCellCount: 7, warnings, changes },

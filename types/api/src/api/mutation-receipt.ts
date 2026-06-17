@@ -60,10 +60,7 @@ export type {
 // =============================================================================
 
 export interface FloatingObjectReceiptBase extends OperationReceiptBase {
-  readonly kind:
-    | 'floatingObject.create'
-    | 'floatingObject.update'
-    | 'floatingObject.remove';
+  readonly kind: 'floatingObject.create' | 'floatingObject.update' | 'floatingObject.remove';
   readonly sheetId: string;
 }
 
@@ -470,12 +467,7 @@ export type TableCalculatedColumnReceipt =
   | TableSetCalculatedColumnReceipt
   | TableClearCalculatedColumnReceipt;
 
-export type TableAutoExpansionStatus =
-  | 'applied'
-  | 'noOp'
-  | 'unsupported'
-  | 'partial'
-  | 'failed';
+export type TableAutoExpansionStatus = 'applied' | 'noOp' | 'unsupported' | 'partial' | 'failed';
 
 export type TableAutoExpansionUnsupportedReason =
   | 'protectedRegion'
@@ -779,8 +771,7 @@ export interface WorkbookLinksRefreshAllReceipt extends OperationReceiptBase {
 
 /** Successful receipt for applying a workbook what-if scenario. */
 export interface WorkbookScenarioApplySuccessReceipt
-  extends OperationReceiptBase,
-    ApplyScenarioResult {
+  extends OperationReceiptBase, ApplyScenarioResult {
   readonly kind: 'workbook.scenarios.apply';
   readonly status: 'applied' | 'noOp' | 'partial';
   readonly scenarioId: string;
@@ -1077,8 +1068,7 @@ export interface PivotSetPreserveFormattingReceipt extends PivotWorksheetMutatio
   readonly preserveFormatting: boolean;
 }
 
-export interface PivotSetAllowMultipleFiltersPerFieldReceipt
-  extends PivotWorksheetMutationReceiptBase {
+export interface PivotSetAllowMultipleFiltersPerFieldReceipt extends PivotWorksheetMutationReceiptBase {
   readonly kind: 'pivot.setAllowMultipleFiltersPerField';
   readonly allowMultipleFiltersPerField: boolean;
 }
@@ -1156,9 +1146,7 @@ export interface SlicerDuplicateReceipt extends OperationReceiptBase, SlicerRece
   readonly slicer?: Slicer | null;
 }
 
-export interface SlicerSelectionSetReceipt
-  extends OperationReceiptBase,
-    SlicerReceiptSourceFields {
+export interface SlicerSelectionSetReceipt extends OperationReceiptBase, SlicerReceiptSourceFields {
   readonly kind: 'slicer.selection.set';
   readonly status: 'applied';
   readonly slicerId: string;
@@ -1167,8 +1155,7 @@ export interface SlicerSelectionSetReceipt
 }
 
 export interface SlicerSelectionClearReceipt
-  extends OperationReceiptBase,
-    SlicerReceiptSourceFields {
+  extends OperationReceiptBase, SlicerReceiptSourceFields {
   readonly kind: 'slicer.selection.clear';
   readonly status: 'applied';
   readonly slicerId: string;

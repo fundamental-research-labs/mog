@@ -1009,7 +1009,8 @@ export const WORKBOOK_SUB_API_INTERFACES: WorkbookSubApiInterfaces = {
     },
     cells: {
       signature: 'readonly cells: WorksheetCellsAccessor;',
-      docstring: 'Typed per-cell readback accessor (A1-only). See {@link CellRecord}.\n\nDistinct from {@link getCell}: `cells.get` returns a record with a\n`valueType` discriminant for every in-bounds cell, exposes the\nunified {@link RegionMeta} for array/Data Table membership, and\nreturns `undefined` (not `{value: null}`) for out-of-bounds reads.',
+      docstring:
+        'Typed per-cell readback accessor (A1-only). See {@link CellRecord}.\n\nDistinct from {@link getCell}: `cells.get` returns a record with a\n`valueType` discriminant for every in-bounds cell, exposes the\nunified {@link RegionMeta} for array/Data Table membership, and\nreturns `undefined` (not `{value: null}`) for out-of-bounds reads.',
       usedTypes: ['WorksheetCellsAccessor'],
       stableId: 'Worksheet.cells',
       canonicalPath: 'ws.cells',
@@ -1761,7 +1762,8 @@ export const WORKBOOK_SUB_API_INTERFACES: WorkbookSubApiInterfaces = {
     },
     objects: {
       signature: 'readonly objects: WorksheetObjectCollection;',
-      docstring: 'All floating objects: shapes, pictures, text boxes, equations, text-effects, diagram, ink',
+      docstring:
+        'All floating objects: shapes, pictures, text boxes, equations, text-effects, diagram, ink',
       usedTypes: ['WorksheetObjectCollection'],
       stableId: 'Worksheet.objects',
       canonicalPath: 'ws.objects',

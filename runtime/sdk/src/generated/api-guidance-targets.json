@@ -2000,8 +2000,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "refresh(linkId: LinkId): Promise<WorkbookLinkRefreshReceipt>;",
-      "typeText": "Promise<WorkbookLinkRefreshReceipt>",
+      "signature": "refresh(linkId: LinkId): Promise<LinkStatusView>;",
+      "typeText": "Promise<LinkStatusView>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/workbook.ts"
@@ -2019,8 +2019,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "refreshAll(options?: { readonly concurrency?: number }): Promise<WorkbookLinksRefreshAllReceipt>;",
-      "typeText": "Promise<WorkbookLinksRefreshAllReceipt>",
+      "signature": "refreshAll(options?: { readonly concurrency?: number }): Promise<readonly LinkStatusView[]>;",
+      "typeText": "Promise<readonly LinkStatusView[]>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/workbook.ts"
@@ -6702,8 +6702,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "clean(): Promise<CommentRemoveReceipt>;",
-      "typeText": "Promise<CommentRemoveReceipt>",
+      "signature": "clean(): Promise<number>;",
+      "typeText": "Promise<number>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/comments.ts"
@@ -7063,8 +7063,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "removeForCell(address: string): Promise<CommentRemoveReceipt>;",
-      "typeText": "Promise<CommentRemoveReceipt>",
+      "signature": "removeForCell(address: string): Promise<number>;",
+      "typeText": "Promise<number>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/comments.ts"
@@ -11949,8 +11949,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "remove(id: string): Promise<FloatingObjectCollectionRemoveReceipt>;",
-      "typeText": "Promise<FloatingObjectCollectionRemoveReceipt>",
+      "signature": "remove(id: string): Promise<boolean>;",
+      "typeText": "Promise<boolean>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/collections/object-collection.ts"
@@ -12044,7 +12044,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "update(objectId: string, updates: Record<string, unknown>): Promise<FloatingObjectMutationReceipt>;",
+      "signature": "update(\n    objectId: string,\n    updates: Record<string, unknown>,\n  ): Promise<FloatingObjectMutationReceipt>;",
       "typeText": "Promise<FloatingObjectMutationReceipt>",
       "compatibility": [],
       "source": {
@@ -13142,7 +13142,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "removeCalculatedField(\n    name: string,\n    fieldId: string,\n  ): Promise<PivotRemoveCalculatedFieldReceipt>;",
+      "signature": "removeCalculatedField(name: string, fieldId: string): Promise<PivotRemoveCalculatedFieldReceipt>;",
       "typeText": "Promise<PivotRemoveCalculatedFieldReceipt>",
       "compatibility": [],
       "source": {
@@ -13161,7 +13161,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "removeField(name: string, fieldId: string, area: PivotFieldArea): Promise<PivotRemoveFieldReceipt>;",
+      "signature": "removeField(\n    name: string,\n    fieldId: string,\n    area: PivotFieldArea,\n  ): Promise<PivotRemoveFieldReceipt>;",
       "typeText": "Promise<PivotRemoveFieldReceipt>",
       "compatibility": [],
       "source": {
@@ -15095,7 +15095,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "duplicate(\n    slicerId: string,\n    offset?: { x?: number; y?: number },\n  ): Promise<SlicerDuplicateReceipt>;",
+      "signature": "duplicate(slicerId: string, offset?: { x?: number; y?: number }): Promise<SlicerDuplicateReceipt>;",
       "typeText": "Promise<SlicerDuplicateReceipt>",
       "compatibility": [],
       "source": {
@@ -15323,7 +15323,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setSelection(\n    slicerId: string,\n    selectedItems: CellValue[],\n  ): Promise<SlicerSelectionSetReceipt>;",
+      "signature": "setSelection(slicerId: string, selectedItems: CellValue[]): Promise<SlicerSelectionSetReceipt>;",
       "typeText": "Promise<SlicerSelectionSetReceipt>",
       "compatibility": [],
       "source": {
@@ -20417,8 +20417,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "refresh(linkId: LinkId): Promise<WorkbookLinkRefreshReceipt>;",
-      "typeText": "Promise<WorkbookLinkRefreshReceipt>",
+      "signature": "refresh(linkId: LinkId): Promise<LinkStatusView>;",
+      "typeText": "Promise<LinkStatusView>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/workbook.ts"
@@ -20436,8 +20436,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "refreshAll(options?: { readonly concurrency?: number }): Promise<WorkbookLinksRefreshAllReceipt>;",
-      "typeText": "Promise<WorkbookLinksRefreshAllReceipt>",
+      "signature": "refreshAll(options?: { readonly concurrency?: number }): Promise<readonly LinkStatusView[]>;",
+      "typeText": "Promise<readonly LinkStatusView[]>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/workbook.ts"
@@ -25119,8 +25119,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "clean(): Promise<CommentRemoveReceipt>;",
-      "typeText": "Promise<CommentRemoveReceipt>",
+      "signature": "clean(): Promise<number>;",
+      "typeText": "Promise<number>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/comments.ts"
@@ -25480,8 +25480,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "removeForCell(address: string): Promise<CommentRemoveReceipt>;",
-      "typeText": "Promise<CommentRemoveReceipt>",
+      "signature": "removeForCell(address: string): Promise<number>;",
+      "typeText": "Promise<number>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/comments.ts"
@@ -30366,8 +30366,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "remove(id: string): Promise<FloatingObjectCollectionRemoveReceipt>;",
-      "typeText": "Promise<FloatingObjectCollectionRemoveReceipt>",
+      "signature": "remove(id: string): Promise<boolean>;",
+      "typeText": "Promise<boolean>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/collections/object-collection.ts"
@@ -30461,7 +30461,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "update(objectId: string, updates: Record<string, unknown>): Promise<FloatingObjectMutationReceipt>;",
+      "signature": "update(\n    objectId: string,\n    updates: Record<string, unknown>,\n  ): Promise<FloatingObjectMutationReceipt>;",
       "typeText": "Promise<FloatingObjectMutationReceipt>",
       "compatibility": [],
       "source": {
@@ -31559,7 +31559,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "removeCalculatedField(\n    name: string,\n    fieldId: string,\n  ): Promise<PivotRemoveCalculatedFieldReceipt>;",
+      "signature": "removeCalculatedField(name: string, fieldId: string): Promise<PivotRemoveCalculatedFieldReceipt>;",
       "typeText": "Promise<PivotRemoveCalculatedFieldReceipt>",
       "compatibility": [],
       "source": {
@@ -31578,7 +31578,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "removeField(name: string, fieldId: string, area: PivotFieldArea): Promise<PivotRemoveFieldReceipt>;",
+      "signature": "removeField(\n    name: string,\n    fieldId: string,\n    area: PivotFieldArea,\n  ): Promise<PivotRemoveFieldReceipt>;",
       "typeText": "Promise<PivotRemoveFieldReceipt>",
       "compatibility": [],
       "source": {
@@ -33512,7 +33512,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "duplicate(\n    slicerId: string,\n    offset?: { x?: number; y?: number },\n  ): Promise<SlicerDuplicateReceipt>;",
+      "signature": "duplicate(slicerId: string, offset?: { x?: number; y?: number }): Promise<SlicerDuplicateReceipt>;",
       "typeText": "Promise<SlicerDuplicateReceipt>",
       "compatibility": [],
       "source": {
@@ -33740,7 +33740,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setSelection(\n    slicerId: string,\n    selectedItems: CellValue[],\n  ): Promise<SlicerSelectionSetReceipt>;",
+      "signature": "setSelection(slicerId: string, selectedItems: CellValue[]): Promise<SlicerSelectionSetReceipt>;",
       "typeText": "Promise<SlicerSelectionSetReceipt>",
       "compatibility": [],
       "source": {

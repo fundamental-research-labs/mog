@@ -76,23 +76,19 @@ describe('floating object collection receipts', () => {
     expect(receipt).toBeInstanceOf(ShapeHandleImpl);
   });
 
-  it('object remove returns a no-op receipt when the object is missing', async () => {
+  it('object remove returns false when the object is missing', async () => {
     const objects = createMockObjectsImpl();
     objects.get.mockResolvedValue(null);
     const collection = new WorksheetObjectCollectionImpl(objects, null);
 
-    const receipt = await collection.remove('missing-1');
+    await expect(collection.remove('missing-1')).resolves.toBe(false);
+  });
 
-    expect(receipt).toEqual({
-      domain: 'floatingObject',
-      action: 'remove',
-      id: 'missing-1',
-      kind: 'floatingObject.remove',
-      status: 'noOp',
-      effects: [],
-      diagnostics: [],
-      sheetId: 'sheet-1',
-      removed: false,
-    });
+  it('object remove returns true when the object is deleted', async () => {
+    const objects = createMockObjectsImpl();
+    const collection = new WorksheetObjectCollectionImpl(objects, null);
+
+    await expect(collection.remove('shape-1')).resolves.toBe(true);
+    expect(objects.remove).toHaveBeenCalledWith('shape-1');
   });
 });

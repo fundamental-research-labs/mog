@@ -86,9 +86,6 @@ export interface FloatingObjectRemoveReceipt extends FloatingObjectReceiptBase {
 export type FloatingObjectReceipt = FloatingObjectMutationReceipt | FloatingObjectRemoveReceipt;
 export type FloatingObjectHandleMutationReceipt<THandle extends object> =
   FloatingObjectMutationReceipt & THandle & { readonly handle: THandle };
-export type FloatingObjectCollectionRemoveReceipt = FloatingObjectRemoveReceipt & {
-  readonly removed: boolean;
-};
 
 /**
  * @deprecated Use `FloatingObjectRemoveReceipt` instead.
@@ -662,6 +659,7 @@ export interface CommentAddReceipt extends OperationReceiptBase {
   readonly kind: 'comment.add' | 'comment.addNote' | 'comment.addReply';
   readonly status: 'applied';
   readonly sheetId: string;
+  readonly id: string;
   readonly commentId: string;
   readonly threadId: string | null;
   readonly parentId?: string | null;
@@ -693,12 +691,7 @@ export interface CommentUpdateReceipt extends OperationReceiptBase {
 
 /** Receipt for removing comments or clearing comment collections. */
 export interface CommentRemoveReceipt extends OperationReceiptBase {
-  readonly kind:
-    | 'comment.remove'
-    | 'comment.removeNote'
-    | 'comment.removeForCell'
-    | 'comment.clear'
-    | 'comment.clean';
+  readonly kind: 'comment.remove' | 'comment.removeNote' | 'comment.clear';
   readonly status: 'applied' | 'noOp';
   readonly sheetId: string;
   readonly commentId?: string;

@@ -8,7 +8,6 @@
 import type { ObjectBounds } from '@mog/types-objects/objects/floating-object-manager';
 import type { FloatingObject } from '@mog/types-objects/objects/floating-objects';
 import type {
-  FloatingObjectCollectionRemoveReceipt,
   FloatingObjectMutationReceipt,
 } from '../../mutation-receipt';
 import type { TextWarpPreset } from '@mog/types-objects/text-effects';
@@ -31,7 +30,7 @@ export interface WorksheetObjectCollection {
   // Thin wrappers over get→handle.method() for fire-and-forget callers.
 
   /** Remove a single floating object by ID. */
-  remove(id: string): Promise<FloatingObjectCollectionRemoveReceipt>;
+  remove(id: string): Promise<boolean>;
   /** Bring a floating object to the front (highest z-order). */
   bringToFront(id: string): Promise<void>;
   /** Send a floating object to the back (lowest z-order). */

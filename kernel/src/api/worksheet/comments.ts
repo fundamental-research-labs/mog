@@ -303,6 +303,7 @@ export class WorksheetCommentsImpl implements WorksheetComments {
       kind: 'comment.addNote',
       status: 'applied',
       sheetId: this.sheetId,
+      id: normalized.id,
       commentId: normalized.id,
       threadId: normalized.threadId,
       target,
@@ -440,6 +441,7 @@ export class WorksheetCommentsImpl implements WorksheetComments {
       kind: 'comment.add',
       status: 'applied',
       sheetId: this.sheetId,
+      id: normalized.id,
       commentId: normalized.id,
       threadId: normalized.threadId,
       target,
@@ -699,6 +701,7 @@ export class WorksheetCommentsImpl implements WorksheetComments {
       kind: 'comment.addReply',
       status: 'applied',
       sheetId: this.sheetId,
+      id: normalized.id,
       commentId: normalized.id,
       threadId: normalized.threadId,
       parentId: replyParent.id,
@@ -819,9 +822,8 @@ export class WorksheetCommentsImpl implements WorksheetComments {
     return this.ctx.computeBridge.hasCommentsByPosition(this.sheetId, row, col);
   }
 
-  async removeForCell(a: string | number, b?: number): Promise<CommentRemoveReceipt> {
+  async removeForCell(a: string | number, b?: number): Promise<number> {
     const { row, col } = resolveCell(a, b);
-    const target = targetFromPosition(this.sheetId, row, col);
     const comments = await this.ctx.computeBridge.getCommentsForCellByPosition(
       this.sheetId,
       row,
@@ -832,11 +834,7 @@ export class WorksheetCommentsImpl implements WorksheetComments {
       row,
       col,
     );
-    const removedCount = (result?.data as number | undefined) ?? comments.length;
-    return this._removeReceipt('comment.removeForCell', {
-      target,
-      comments: comments.slice(0, removedCount),
-    });
+    return (result?.data as number | undefined) ?? comments.length;
   }
 
   async clear(): Promise<CommentRemoveReceipt> {
@@ -848,22 +846,13 @@ export class WorksheetCommentsImpl implements WorksheetComments {
     });
   }
 
-  async clean(): Promise<CommentRemoveReceipt> {
+  async clean(): Promise<number> {
     const before = await this.ctx.computeBridge.getAllComments(this.sheetId);
     const result = await this.ctx.computeBridge.validateAndCleanComments(this.sheetId);
-    const removedCount = (result?.data as number | undefined) ?? 0;
-    if (removedCount === 0) {
-      return this._removeReceipt('comment.clean', {
-        target: worksheetTarget(this.sheetId),
-        comments: [],
-      });
-    }
+    const removedCount = result?.data;
+    if (typeof removedCount === 'number') return removedCount;
+
     const after = await this.ctx.computeBridge.getAllComments(this.sheetId);
-    const remainingIds = new Set(after.map((comment) => comment.id));
-    const removed = before.filter((comment) => !remainingIds.has(comment.id));
-    return this._removeReceipt('comment.clean', {
-      target: worksheetTarget(this.sheetId),
-      comments: removed.length > 0 ? removed : before.slice(0, removedCount),
-    });
+    return Math.max(0, before.length - after.length);
   }
 }

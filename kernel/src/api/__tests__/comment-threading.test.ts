@@ -75,6 +75,8 @@ function createMockCtx() {
       getCommentCount: jest.fn(),
       getCellPosition: jest.fn(),
       convertNoteToThread: jest.fn(),
+      deleteCommentsForCellByPosition: jest.fn(),
+      validateAndCleanComments: jest.fn(),
     },
   } as any;
 }
@@ -175,6 +177,20 @@ describe('WorksheetCommentsImpl — Comment Threading', () => {
   // add() returns Comment
   // =========================================================================
 
+  describe('addNote()', () => {
+    it('returns created note id alias', async () => {
+      const created = makeComment({ id: 'note-new-1', commentType: 'note', threadId: null });
+      mockCtx.computeBridge.getCommentsForCellByPosition.mockResolvedValue([]);
+      mockCtx.computeBridge.addCommentByPosition.mockResolvedValue({ data: created });
+
+      const result = await ws.addNote('A1', { text: 'Note', author: 'Alice' });
+
+      expect(result.id).toBe('note-new-1');
+      expect(result.commentId).toBe('note-new-1');
+      expect(result.comment.id).toBe('note-new-1');
+    });
+  });
+
   describe('add()', () => {
     it('returns created comment via A1 address', async () => {
       const created = makeComment({ id: 'new-1' });
@@ -194,6 +210,7 @@ describe('WorksheetCommentsImpl — Comment Threading', () => {
       );
       expect(result.kind).toBe('comment.add');
       expect(result.status).toBe('applied');
+      expect(result.id).toBe('new-1');
       expect(result.commentId).toBe('new-1');
       expect(result.threadId).toBe('comment-1');
       expect(result.target).toEqual({
@@ -230,6 +247,7 @@ describe('WorksheetCommentsImpl — Comment Threading', () => {
         'threadedComment',
       );
       expect(result.comment.id).toBe('new-2');
+      expect(result.id).toBe('new-2');
       expect(result.commentId).toBe('new-2');
     });
   });
@@ -261,6 +279,8 @@ describe('WorksheetCommentsImpl — Comment Threading', () => {
         { parentId: 'root-1', commentType: 'threadedComment' },
       );
       expect(result.kind).toBe('comment.addReply');
+      expect(result.id).toBe('reply-1');
+      expect(result.commentId).toBe('reply-1');
       expect(result.comment.parentId).toBe('root-1');
       expect(result.comment.threadId).toBe('root-1');
       expect(result.parentId).toBe('root-1');
@@ -414,6 +434,71 @@ describe('WorksheetCommentsImpl — Comment Threading', () => {
           expect.objectContaining({ type: 'changedRange', range: 'D3' }),
         ]),
       );
+    });
+  });
+
+  // =========================================================================
+  // removeForCell()
+  // =========================================================================
+
+  describe('removeForCell()', () => {
+    it('returns the number of comments removed for a cell', async () => {
+      const existing = makeComment({ id: 'cell-remove-1', cellRef: '2:3' });
+      mockCtx.computeBridge.getCommentsForCellByPosition.mockResolvedValue([existing]);
+      mockCtx.computeBridge.deleteCommentsForCellByPosition.mockResolvedValue({ data: 1 });
+
+      const result = await ws.removeForCell('D3');
+
+      expect(mockCtx.computeBridge.getCommentsForCellByPosition).toHaveBeenCalledWith(
+        SHEET_ID,
+        2,
+        3,
+      );
+      expect(mockCtx.computeBridge.deleteCommentsForCellByPosition).toHaveBeenCalledWith(
+        SHEET_ID,
+        2,
+        3,
+      );
+      expect(result).toBe(1);
+    });
+
+    it('falls back to the pre-delete cell comment count when the bridge omits data', async () => {
+      mockCtx.computeBridge.getCommentsForCellByPosition.mockResolvedValue([
+        makeComment({ id: 'cell-remove-1' }),
+        makeComment({ id: 'cell-remove-2' }),
+      ]);
+      mockCtx.computeBridge.deleteCommentsForCellByPosition.mockResolvedValue({});
+
+      const result = await ws.removeForCell(4, 5);
+
+      expect(result).toBe(2);
+    });
+  });
+
+  // =========================================================================
+  // clean()
+  // =========================================================================
+
+  describe('clean()', () => {
+    it('returns the bridge orphan cleanup count', async () => {
+      mockCtx.computeBridge.getAllComments.mockResolvedValue([makeComment({ id: 'orphan-1' })]);
+      mockCtx.computeBridge.validateAndCleanComments.mockResolvedValue({ data: 1 });
+
+      const result = await ws.clean();
+
+      expect(mockCtx.computeBridge.validateAndCleanComments).toHaveBeenCalledWith(SHEET_ID);
+      expect(result).toBe(1);
+    });
+
+    it('falls back to before/after count delta when the bridge omits data', async () => {
+      mockCtx.computeBridge.getAllComments
+        .mockResolvedValueOnce([makeComment({ id: 'orphan-1' }), makeComment({ id: 'kept-1' })])
+        .mockResolvedValueOnce([makeComment({ id: 'kept-1' })]);
+      mockCtx.computeBridge.validateAndCleanComments.mockResolvedValue({});
+
+      const result = await ws.clean();
+
+      expect(result).toBe(1);
     });
   });
 

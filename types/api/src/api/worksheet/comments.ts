@@ -368,17 +368,17 @@ export interface WorksheetComments {
    * Remove all comments on a cell.
    *
    * @param address - A1-style cell address
-   * @returns Receipt containing the number of comments removed
+   * @returns Number of comments removed
    */
-  removeForCell(address: string): Promise<CommentRemoveReceipt>;
+  removeForCell(address: string): Promise<number>;
   /**
    * Remove all comments on a cell.
    *
    * @param row - Row index (0-based)
    * @param col - Column index (0-based)
-   * @returns Receipt containing the number of comments removed
+   * @returns Number of comments removed
    */
-  removeForCell(row: number, col: number): Promise<CommentRemoveReceipt>;
+  removeForCell(row: number, col: number): Promise<number>;
 
   /**
    * Clear all comments on the worksheet.
@@ -388,7 +388,7 @@ export interface WorksheetComments {
   /**
    * Remove orphaned comments (comments referencing non-existent cells).
    *
-   * @returns Receipt containing the number of orphaned comments removed
+   * @returns Number of orphaned comments removed
    */
-  clean(): Promise<CommentRemoveReceipt>;
+  clean(): Promise<number>;
 }

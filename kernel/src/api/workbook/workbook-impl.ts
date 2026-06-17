@@ -167,6 +167,7 @@ import { WorkbookSecurityImpl } from './security';
 import { WorkbookViewportImpl } from './viewport';
 import { WorkbookChangesImpl } from './changes';
 import { WorkbookDiagnosticsImpl } from './diagnostics';
+import { WorkbookLinksImpl } from './links';
 
 import { DEFAULT_CHROME_THEME } from '@mog-sdk/contracts/rendering';
 import { NO_HOST_OPERATION_GATE, OperationDeniedError } from '../../document/host-operation-gate';
@@ -1929,29 +1930,9 @@ export class WorkbookImpl implements WorkbookInternal {
   }
 
   get links(): WorkbookLinks {
-    return (this._links ??= this.createWorkbookLinksPublicApi());
-  }
-
-  private createWorkbookLinksPublicApi(): WorkbookLinks {
-    const service = this.ctx.workbookLinks;
-    return {
-      list: () => service.list(),
-      get: (linkId) => service.get(linkId),
-      add: (input) => service.create(input),
-      create: (input) => service.create(input),
-      retarget: (linkId, input) => service.update(linkId, input),
-      update: (linkId, input) => service.update(linkId, input),
-      break: (linkId, options) => service.break(linkId, options),
-      delete: (linkId) => service.delete(linkId),
-      getStatus: (linkId) => service.getStatus(linkId, this.workbookLinkScope()),
-      refresh: (linkId) => service.refresh(linkId, this.workbookLinkScope()),
-      refreshAll: (options) => service.refreshAll(this.workbookLinkScope(), options),
-      watchStatus: (linkId, handler) =>
-        service.watchStatus(linkId, this.workbookLinkScope(), handler),
-      getUsages: (linkId) => service.getUsages(linkId),
-      copySource: (linkId) => service.copySource(linkId, this.workbookLinkScope()),
-      listPackageDiagnostics: () => service.listPackageDiagnostics(),
-    };
+    return (this._links ??= new WorkbookLinksImpl(this.ctx.workbookLinks, () =>
+      this.workbookLinkScope(),
+    ));
   }
 
   private workbookLinkScope(): WorkbookLinkStatusScope {

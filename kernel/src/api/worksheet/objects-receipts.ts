@@ -1,5 +1,4 @@
 import type {
-  FloatingObjectCollectionRemoveReceipt,
   FloatingObjectHandleMutationReceipt,
   FloatingObjectMutationReceipt,
   FloatingObjectRemoveReceipt,
@@ -149,30 +148,6 @@ export function withFloatingObjectRemoveReceiptBase(
     diagnostics: receipt.diagnostics ?? [],
     sheetId: receipt.sheetId ?? sheetId,
   };
-}
-
-export function floatingObjectRemoveNoOpReceipt(
-  sheetId: SheetId,
-  objectId: string,
-): FloatingObjectCollectionRemoveReceipt {
-  return {
-    domain: 'floatingObject',
-    action: 'remove',
-    id: objectId,
-    kind: 'floatingObject.remove',
-    status: 'noOp',
-    effects: [],
-    diagnostics: [],
-    sheetId,
-    removed: false,
-  };
-}
-
-export function withFloatingObjectCollectionRemovePayload(
-  receipt: FloatingObjectRemoveReceipt,
-  removed: boolean,
-): FloatingObjectCollectionRemoveReceipt {
-  return { ...receipt, removed };
 }
 
 export async function buildFloatingObjectMutationReceipt(input: {

@@ -98,10 +98,10 @@ export type {
   CellData,
   FunctionInfo,
   WorkbookSnapshot,
+  WorkbookLinks,
 } from '@mog-sdk/contracts/api';
 
 export type {
-  WorkbookLinksAPI as WorkbookLinks,
   WorkbookLinkView,
   WorkbookExternalLinkUsageView,
   WorkbookExternalPackageArtifactView,

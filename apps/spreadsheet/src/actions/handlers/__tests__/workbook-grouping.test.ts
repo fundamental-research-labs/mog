@@ -450,6 +450,52 @@ describe('Workbook SHOW_DETAIL/HIDE_DETAIL summary selections', () => {
     expect(layout.unhideColumns).not.toHaveBeenCalled();
   });
 
+  it('expands an imported hidden-only row group through the outline toggle', async () => {
+    const range: CellRange = { startRow: 4, startCol: 0, endRow: 4, endCol: 0 };
+    const { deps, outline } = createMockDeps([range], {
+      rowGroups: [
+        {
+          id: 'imported-hidden-only-rows-2-4',
+          start: 1,
+          end: 3,
+          level: 1,
+          collapsed: false,
+          hidden: true,
+        },
+      ],
+      columnGroups: [],
+    });
+
+    const result = await SHOW_DETAIL(deps);
+
+    expect(result.handled).toBe(true);
+    expect(outline.toggleCollapsed).toHaveBeenCalledTimes(1);
+    expect(outline.toggleCollapsed).toHaveBeenCalledWith('imported-hidden-only-rows-2-4');
+  });
+
+  it('expands an imported hidden-only column group from the adjacent column on the left', async () => {
+    const range: CellRange = { startRow: 12, startCol: 14, endRow: 12, endCol: 14 };
+    const { deps, outline } = createMockDeps([range], {
+      rowGroups: [],
+      columnGroups: [
+        {
+          id: 'imported-hidden-only-cols-p-aa',
+          start: 15,
+          end: 26,
+          level: 1,
+          collapsed: false,
+          hidden: true,
+        },
+      ],
+    });
+
+    const result = await SHOW_DETAIL(deps);
+
+    expect(result.handled).toBe(true);
+    expect(outline.toggleCollapsed).toHaveBeenCalledTimes(1);
+    expect(outline.toggleCollapsed).toHaveBeenCalledWith('imported-hidden-only-cols-p-aa');
+  });
+
   it('expands a collapsed column group when the selection overlaps hidden detail columns', async () => {
     const range: CellRange = { startRow: 2, startCol: 11, endRow: 20, endCol: 27 };
     const { deps, outline } = createMockDeps([range], {

@@ -374,6 +374,10 @@ function isImportedHiddenGroup(group: GroupRecord): boolean {
   return group.collapsedOnMember === true || group.hidden === true;
 }
 
+function canShowGroupDetail(group: GroupRecord): boolean {
+  return group.collapsed || group.hidden === true;
+}
+
 function compareDetailGroupCollapsePriority(a: GroupRecord, b: GroupRecord): number {
   const levelDelta = b.level - a.level;
   if (levelDelta !== 0) return levelDelta;
@@ -636,7 +640,7 @@ export const SHOW_DETAIL: AsyncActionHandler = async (deps) => {
   if (explicitAxis !== 'columns') {
     for (const group of rowGroups) {
       if (
-        group.collapsed &&
+        canShowGroupDetail(group) &&
         selectionMatchesRowGroupForDetail(group, bounds, settings, rowGroups)
       ) {
         await ws.outline.toggleCollapsed(group.id);
@@ -647,7 +651,7 @@ export const SHOW_DETAIL: AsyncActionHandler = async (deps) => {
   if (explicitAxis !== 'rows') {
     for (const group of columnGroups) {
       if (
-        group.collapsed &&
+        canShowGroupDetail(group) &&
         selectionMatchesColumnGroupForDetail(group, bounds, settings, columnGroups)
       ) {
         await ws.outline.toggleCollapsed(group.id);

@@ -318,7 +318,9 @@ export function usePivotContextMenuActions(
       if (!handle || !canEditFields) return;
       void handle
         .setDataSource(dataSource)
-        .then(async () => warnPivotRefresh(await handle.refresh()))
+        .then((receipt) => {
+          warnPivotMutation('set data source', receipt);
+        })
         .catch((error) => warnPivotOperationError('set data source', error));
       closeContextMenu();
     },

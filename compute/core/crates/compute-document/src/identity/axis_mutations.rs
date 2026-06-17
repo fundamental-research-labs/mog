@@ -194,18 +194,9 @@ impl GridIndex {
         let _ = self.ensure_capacity_returning(row, col);
     }
 
-    /// Expand the grid to accommodate the given (row, col) position, returning
-    /// the newly appended RowIds and ColIds in insertion order.
-    ///
-    /// Unlike [`Self::ensure_capacity`], this variant exposes the generated
-    /// identities so that callers (e.g. `SheetDimensionsMut`) can mirror the
-    /// same hexes into the yrs `rowOrder` / `colOrder` YArrays without
-    /// allocating a second set of IDs that would drift from the in-memory
-    /// index.
-    ///
-    /// Returns `(new_row_ids, new_col_ids)`. Either may be empty if the
-    /// corresponding axis was already large enough.
-    pub fn ensure_capacity_returning(&mut self, row: u32, col: u32) -> (Vec<RowId>, Vec<ColId>) {
+    /// Expand the row axis to accommodate `row`, returning the newly appended
+    /// RowIds in insertion order.
+    pub fn ensure_row_capacity_returning(&mut self, row: u32) -> Vec<RowId> {
         let mut new_row_ids = Vec::new();
         let needed_rows = row.saturating_add(1);
         if needed_rows > self.row_count() {
@@ -224,6 +215,12 @@ impl GridIndex {
                 new_row_ids.iter().copied(),
             );
         }
+        new_row_ids
+    }
+
+    /// Expand the column axis to accommodate `col`, returning the newly
+    /// appended ColIds in insertion order.
+    pub fn ensure_col_capacity_returning(&mut self, col: u32) -> Vec<ColId> {
         let mut new_col_ids = Vec::new();
         let needed_cols = col.saturating_add(1);
         if needed_cols > self.col_count() {
@@ -242,6 +239,23 @@ impl GridIndex {
                 new_col_ids.iter().copied(),
             );
         }
+        new_col_ids
+    }
+
+    /// Expand the grid to accommodate the given (row, col) position, returning
+    /// the newly appended RowIds and ColIds in insertion order.
+    ///
+    /// Unlike [`Self::ensure_capacity`], this variant exposes the generated
+    /// identities so that callers (e.g. `SheetDimensionsMut`) can mirror the
+    /// same hexes into the yrs `rowOrder` / `colOrder` YArrays without
+    /// allocating a second set of IDs that would drift from the in-memory
+    /// index.
+    ///
+    /// Returns `(new_row_ids, new_col_ids)`. Either may be empty if the
+    /// corresponding axis was already large enough.
+    pub fn ensure_capacity_returning(&mut self, row: u32, col: u32) -> (Vec<RowId>, Vec<ColId>) {
+        let new_row_ids = self.ensure_row_capacity_returning(row);
+        let new_col_ids = self.ensure_col_capacity_returning(col);
         (new_row_ids, new_col_ids)
     }
 }

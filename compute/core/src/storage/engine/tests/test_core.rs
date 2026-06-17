@@ -125,6 +125,60 @@ fn test_structure_change_insert_rows() {
     assert_eq!(grid.row_count(), 102); // 100 + 2
 }
 
+#[test]
+fn test_structure_change_insert_rows_auto_grows_sparse_axis() {
+    let snap = empty_bulk_snapshot();
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+
+    let sid = sheet_id();
+
+    let change = StructureChange::InsertRows {
+        at: 14,
+        count: 1,
+        new_row_ids: vec![],
+    };
+    let result = engine.structure_change(&sid, &change);
+    assert!(
+        result.is_ok(),
+        "insert rows beyond the materialized row axis should grow blank row identities first: {result:?}"
+    );
+
+    let grid = engine.grid_index(&sid).unwrap();
+    assert_eq!(grid.row_count(), 15);
+    assert_eq!(grid.col_count(), 0);
+    assert!(
+        grid.row_id(14).is_some(),
+        "the inserted row should have a resolvable row identity"
+    );
+}
+
+#[test]
+fn test_structure_change_insert_cols_auto_grows_sparse_axis() {
+    let snap = empty_bulk_snapshot();
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+
+    let sid = sheet_id();
+
+    let change = StructureChange::InsertCols {
+        at: 4,
+        count: 2,
+        new_col_ids: vec![],
+    };
+    let result = engine.structure_change(&sid, &change);
+    assert!(
+        result.is_ok(),
+        "insert cols beyond the materialized column axis should grow blank column identities first: {result:?}"
+    );
+
+    let grid = engine.grid_index(&sid).unwrap();
+    assert_eq!(grid.row_count(), 0);
+    assert_eq!(grid.col_count(), 6);
+    assert!(
+        grid.col_id(5).is_some(),
+        "the inserted columns should have resolvable column identities"
+    );
+}
+
 // -------------------------------------------------------------------
 // Test 7: Engine debug formatting
 // -------------------------------------------------------------------

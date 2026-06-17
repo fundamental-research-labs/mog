@@ -2,7 +2,7 @@
   {
     "key": "types/api/src/api/types.ts#CellMetadataCache.clear",
     "file": "types/api/src/api/types.ts",
-    "line": 2894,
+    "line": 2671,
     "interface": "CellMetadataCache",
     "method": "clear",
     "signature": "clear():void;",
@@ -14,7 +14,7 @@
   {
     "key": "types/api/src/api/types.ts#IRecordsAPI.create",
     "file": "types/api/src/api/types.ts",
-    "line": 2680,
+    "line": 2457,
     "interface": "IRecordsAPI",
     "method": "create",
     "signature": "create(tableId:string,values:RecordValues):Promise<string>;",
@@ -26,7 +26,7 @@
   {
     "key": "types/api/src/api/types.ts#IRecordsAPI.remove",
     "file": "types/api/src/api/types.ts",
-    "line": 2684,
+    "line": 2461,
     "interface": "IRecordsAPI",
     "method": "remove",
     "signature": "remove(tableId:string,rowId:string):Promise<void>;",
@@ -38,7 +38,7 @@
   {
     "key": "types/api/src/api/types.ts#IRecordsAPI.update",
     "file": "types/api/src/api/types.ts",
-    "line": 2682,
+    "line": 2459,
     "interface": "IRecordsAPI",
     "method": "update",
     "signature": "update(tableId:string,rowId:string,changes:Partial<RecordValues>):Promise<void>;",
@@ -50,7 +50,7 @@
   {
     "key": "types/api/src/api/types.ts#PivotTableHandle.addCalculatedField",
     "file": "types/api/src/api/types.ts",
-    "line": 1079,
+    "line": 933,
     "interface": "PivotTableHandle",
     "method": "addCalculatedField",
     "signature": "addCalculatedField(field:CalculatedField):Promise<PivotHandleCalculatedFieldReceipt>;",
@@ -62,7 +62,7 @@
   {
     "key": "types/api/src/api/types.ts#PivotTableHandle.addField",
     "file": "types/api/src/api/types.ts",
-    "line": 984,
+    "line": 844,
     "interface": "PivotTableHandle",
     "method": "addField",
     "signature": "addField(field:string,area:'row'|'column'|'filter',position?:number,):Promise<PivotHandleMutationReceipt>;",
@@ -74,7 +74,7 @@
   {
     "key": "types/api/src/api/types.ts#PivotTableHandle.addPlacement",
     "file": "types/api/src/api/types.ts",
-    "line": 996,
+    "line": 856,
     "interface": "PivotTableHandle",
     "method": "addPlacement",
     "signature": "addPlacement(spec:PivotHandlePlacementSpec):Promise<PivotHandleMutationReceipt>;",
@@ -86,7 +86,7 @@
   {
     "key": "types/api/src/api/types.ts#PivotTableHandle.addValueField",
     "file": "types/api/src/api/types.ts",
-    "line": 990,
+    "line": 850,
     "interface": "PivotTableHandle",
     "method": "addValueField",
     "signature": "addValueField(field:string,aggregation:PivotValueField['aggregation'],label?:string,):Promise<PivotHandleMutationReceipt>;",
@@ -98,7 +98,7 @@
   {
     "key": "types/api/src/api/types.ts#PivotTableHandle.delete",
     "file": "types/api/src/api/types.ts",
-    "line": 976,
+    "line": 836,
     "interface": "PivotTableHandle",
     "method": "delete",
     "signature": "delete():Promise<PivotHandleDeleteReceipt>;",
@@ -110,7 +110,7 @@
   {
     "key": "types/api/src/api/types.ts#PivotTableHandle.moveField",
     "file": "types/api/src/api/types.ts",
-    "line": 1002,
+    "line": 862,
     "interface": "PivotTableHandle",
     "method": "moveField",
     "signature": "moveField(fieldName:string,fromArea:PivotFieldArea,toArea:PivotFieldArea,toPosition:number,):Promise<PivotHandleMutationReceipt>;",
@@ -122,7 +122,7 @@
   {
     "key": "types/api/src/api/types.ts#PivotTableHandle.movePlacement",
     "file": "types/api/src/api/types.ts",
-    "line": 1009,
+    "line": 869,
     "interface": "PivotTableHandle",
     "method": "movePlacement",
     "signature": "movePlacement(placementId:PlacementId,toArea:PivotFieldArea,toPosition:number,):Promise<PivotHandleMutationReceipt>;",
@@ -134,7 +134,7 @@
   {
     "key": "types/api/src/api/types.ts#PivotTableHandle.refresh",
     "file": "types/api/src/api/types.ts",
-    "line": 1035,
+    "line": 892,
     "interface": "PivotTableHandle",
     "method": "refresh",
     "signature": "refresh():Promise<PivotRefreshReceipt>;",
@@ -146,7 +146,7 @@
   {
     "key": "types/api/src/api/types.ts#PivotTableHandle.removeField",
     "file": "types/api/src/api/types.ts",
-    "line": 998,
+    "line": 858,
     "interface": "PivotTableHandle",
     "method": "removeField",
     "signature": "removeField(fieldName:string,area?:PivotFieldArea):Promise<PivotHandleMutationReceipt>;",
@@ -158,7 +158,7 @@
   {
     "key": "types/api/src/api/types.ts#PivotTableHandle.removeFilter",
     "file": "types/api/src/api/types.ts",
-    "line": 1065,
+    "line": 919,
     "interface": "PivotTableHandle",
     "method": "removeFilter",
     "signature": "removeFilter(fieldId:string):Promise<PivotHandleMutationReceipt>;",
@@ -170,7 +170,7 @@
   {
     "key": "types/api/src/api/types.ts#PivotTableHandle.removePlacement",
     "file": "types/api/src/api/types.ts",
-    "line": 1000,
+    "line": 860,
     "interface": "PivotTableHandle",
     "method": "removePlacement",
     "signature": "removePlacement(placementId:PlacementId):Promise<PivotHandleMutationReceipt>;",
@@ -182,10 +182,10 @@
   {
     "key": "types/api/src/api/types.ts#PivotTableHandle.renameValueField",
     "file": "types/api/src/api/types.ts",
-    "line": 1025,
+    "line": 885,
     "interface": "PivotTableHandle",
     "method": "renameValueField",
-    "signature": "renameValueField(currentLabel:string,newLabel:string,):Promise<PivotHandleMutationReceipt>;",
+    "signature": "renameValueField(currentLabel:string,newLabel:string):Promise<PivotHandleMutationReceipt>;",
     "returnType": "Promise<PivotHandleMutationReceipt>",
     "returnCategory": "receipt",
     "disposition": "noReceiptNeeded",
@@ -194,7 +194,7 @@
   {
     "key": "types/api/src/api/types.ts#PivotTableHandle.renameValuePlacement",
     "file": "types/api/src/api/types.ts",
-    "line": 1030,
+    "line": 887,
     "interface": "PivotTableHandle",
     "method": "renameValuePlacement",
     "signature": "renameValuePlacement(placementId:PlacementId,displayName:string|null,):Promise<PivotHandleMutationReceipt>;",
@@ -206,7 +206,7 @@
   {
     "key": "types/api/src/api/types.ts#PivotTableHandle.setAllExpanded",
     "file": "types/api/src/api/types.ts",
-    "line": 1073,
+    "line": 927,
     "interface": "PivotTableHandle",
     "method": "setAllExpanded",
     "signature": "setAllExpanded(expanded:boolean):Promise<PivotHandleExpansionReceipt>;",
@@ -218,7 +218,7 @@
   {
     "key": "types/api/src/api/types.ts#PivotTableHandle.setDataSource",
     "file": "types/api/src/api/types.ts",
-    "line": 1088,
+    "line": 942,
     "interface": "PivotTableHandle",
     "method": "setDataSource",
     "signature": "setDataSource(dataSource:string):Promise<PivotHandleMutationReceipt>;",
@@ -230,7 +230,7 @@
   {
     "key": "types/api/src/api/types.ts#PivotTableHandle.setFilter",
     "file": "types/api/src/api/types.ts",
-    "line": 1060,
+    "line": 914,
     "interface": "PivotTableHandle",
     "method": "setFilter",
     "signature": "setFilter(fieldId:string,filter:Omit<PivotFilter,'fieldId'>,):Promise<PivotHandleMutationReceipt>;",
@@ -242,7 +242,7 @@
   {
     "key": "types/api/src/api/types.ts#PivotTableHandle.setItemVisibility",
     "file": "types/api/src/api/types.ts",
-    "line": 1081,
+    "line": 935,
     "interface": "PivotTableHandle",
     "method": "setItemVisibility",
     "signature": "setItemVisibility(fieldId:string,visibleItems:Record<string,boolean>,):Promise<PivotHandleMutationReceipt>;",
@@ -254,7 +254,7 @@
   {
     "key": "types/api/src/api/types.ts#PivotTableHandle.setLayout",
     "file": "types/api/src/api/types.ts",
-    "line": 1067,
+    "line": 921,
     "interface": "PivotTableHandle",
     "method": "setLayout",
     "signature": "setLayout(layout:Partial<PivotTableLayout>):Promise<PivotHandleMutationReceipt>;",
@@ -266,7 +266,7 @@
   {
     "key": "types/api/src/api/types.ts#PivotTableHandle.setPlacementAggregateFunction",
     "file": "types/api/src/api/types.ts",
-    "line": 1020,
+    "line": 880,
     "interface": "PivotTableHandle",
     "method": "setPlacementAggregateFunction",
     "signature": "setPlacementAggregateFunction(placementId:PlacementId,aggregateFunction:AggregateFunction,):Promise<PivotHandleMutationReceipt>;",
@@ -278,7 +278,7 @@
   {
     "key": "types/api/src/api/types.ts#PivotTableHandle.setPlacementSortOrder",
     "file": "types/api/src/api/types.ts",
-    "line": 1049,
+    "line": 903,
     "interface": "PivotTableHandle",
     "method": "setPlacementSortOrder",
     "signature": "setPlacementSortOrder(placementId:PlacementId,sortOrder:SortOrder|null,):Promise<PivotHandleMutationReceipt>;",
@@ -290,7 +290,7 @@
   {
     "key": "types/api/src/api/types.ts#PivotTableHandle.setShowValuesAs",
     "file": "types/api/src/api/types.ts",
-    "line": 1039,
+    "line": 896,
     "interface": "PivotTableHandle",
     "method": "setShowValuesAs",
     "signature": "setShowValuesAs(valueFieldLabel:string,showValuesAs:ShowValuesAsConfig|null,):Promise<PivotHandleMutationReceipt>;",
@@ -302,7 +302,7 @@
   {
     "key": "types/api/src/api/types.ts#PivotTableHandle.setSortByValue",
     "file": "types/api/src/api/types.ts",
-    "line": 1054,
+    "line": 908,
     "interface": "PivotTableHandle",
     "method": "setSortByValue",
     "signature": "setSortByValue(axisPlacementId:PlacementId,valuePlacementId:PlacementId,config:PivotValueSortConfig|null,):Promise<PivotHandleMutationReceipt>;",
@@ -314,10 +314,10 @@
   {
     "key": "types/api/src/api/types.ts#PivotTableHandle.setSortOrder",
     "file": "types/api/src/api/types.ts",
-    "line": 1044,
+    "line": 901,
     "interface": "PivotTableHandle",
     "method": "setSortOrder",
-    "signature": "setSortOrder(fieldOrPlacement:string,sortOrder:SortOrder,):Promise<PivotHandleMutationReceipt>;",
+    "signature": "setSortOrder(fieldOrPlacement:string,sortOrder:SortOrder):Promise<PivotHandleMutationReceipt>;",
     "returnType": "Promise<PivotHandleMutationReceipt>",
     "returnCategory": "receipt",
     "disposition": "noReceiptNeeded",
@@ -326,7 +326,7 @@
   {
     "key": "types/api/src/api/types.ts#PivotTableHandle.setStyle",
     "file": "types/api/src/api/types.ts",
-    "line": 1069,
+    "line": 923,
     "interface": "PivotTableHandle",
     "method": "setStyle",
     "signature": "setStyle(style:Partial<PivotTableStyle>):Promise<PivotHandleMutationReceipt>;",
@@ -338,7 +338,7 @@
   {
     "key": "types/api/src/api/types.ts#PivotTableHandle.toggleExpanded",
     "file": "types/api/src/api/types.ts",
-    "line": 1071,
+    "line": 925,
     "interface": "PivotTableHandle",
     "method": "toggleExpanded",
     "signature": "toggleExpanded(headerKey:string,isRow:boolean):Promise<PivotHandleExpansionReceipt>;",
@@ -350,7 +350,7 @@
   {
     "key": "types/api/src/api/types.ts#PivotTableHandle.update",
     "file": "types/api/src/api/types.ts",
-    "line": 972,
+    "line": 832,
     "interface": "PivotTableHandle",
     "method": "update",
     "signature": "update(updates:Partial<Omit<DataPivotTableConfig,'id'|'createdAt'>>,):Promise<PivotHandleMutationReceipt>;",
@@ -362,7 +362,7 @@
   {
     "key": "types/api/src/api/workbook.ts#Workbook.addCustomList",
     "file": "types/api/src/api/workbook.ts",
-    "line": 679,
+    "line": 650,
     "interface": "Workbook",
     "method": "addCustomList",
     "signature": "addCustomList(input:WorkbookCustomListInput):Promise<CustomList>;",
@@ -374,7 +374,7 @@
   {
     "key": "types/api/src/api/workbook.ts#Workbook.addressToIndex",
     "file": "types/api/src/api/workbook.ts",
-    "line": 613,
+    "line": 584,
     "interface": "Workbook",
     "method": "addressToIndex",
     "signature": "addressToIndex(address:string):{row:number;col:number};",
@@ -386,7 +386,7 @@
   {
     "key": "types/api/src/api/workbook.ts#Workbook.copyRangeFrom",
     "file": "types/api/src/api/workbook.ts",
-    "line": 598,
+    "line": 569,
     "interface": "Workbook",
     "method": "copyRangeFrom",
     "signature": "copyRangeFrom(source:Workbook,fromRange:string,toRange:string,options?:{fromSheet?:string|Worksheet;toSheet?:string|Worksheet},):Promise<void>;",
@@ -398,7 +398,7 @@
   {
     "key": "types/api/src/api/workbook.ts#Workbook.createCheckpoint",
     "file": "types/api/src/api/workbook.ts",
-    "line": 418,
+    "line": 389,
     "interface": "Workbook",
     "method": "createCheckpoint",
     "signature": "createCheckpoint(label?:string):string;",
@@ -410,7 +410,7 @@
   {
     "key": "types/api/src/api/workbook.ts#Workbook.deleteCustomList",
     "file": "types/api/src/api/workbook.ts",
-    "line": 693,
+    "line": 664,
     "interface": "Workbook",
     "method": "deleteCustomList",
     "signature": "deleteCustomList(id:string):Promise<boolean>;",
@@ -422,7 +422,7 @@
   {
     "key": "types/api/src/api/workbook.ts#Workbook.deleteCustomSetting",
     "file": "types/api/src/api/workbook.ts",
-    "line": 711,
+    "line": 682,
     "interface": "Workbook",
     "method": "deleteCustomSetting",
     "signature": "deleteCustomSetting(key:string):Promise<void>;",
@@ -434,7 +434,7 @@
   {
     "key": "types/api/src/api/workbook.ts#Workbook.executeCode",
     "file": "types/api/src/api/workbook.ts",
-    "line": 520,
+    "line": 491,
     "interface": "Workbook",
     "method": "executeCode",
     "signature": "executeCode(code:string,options?:ExecuteOptions):Promise<CodeResult>;",
@@ -446,7 +446,7 @@
   {
     "key": "types/api/src/api/workbook.ts#Workbook.insertWorksheets",
     "file": "types/api/src/api/workbook.ts",
-    "line": 562,
+    "line": 533,
     "interface": "Workbook",
     "method": "insertWorksheets",
     "signature": "insertWorksheets(data:string|Uint8Array,options?:InsertWorksheetOptions):Promise<string[]>;",
@@ -458,7 +458,7 @@
   {
     "key": "types/api/src/api/workbook.ts#Workbook.replaceSettings",
     "file": "types/api/src/api/workbook.ts",
-    "line": 668,
+    "line": 639,
     "interface": "Workbook",
     "method": "replaceSettings",
     "signature": "replaceSettings(settings:WorkbookSettings):Promise<void>;",
@@ -470,7 +470,7 @@
   {
     "key": "types/api/src/api/workbook.ts#Workbook.restoreCheckpoint",
     "file": "types/api/src/api/workbook.ts",
-    "line": 421,
+    "line": 392,
     "interface": "Workbook",
     "method": "restoreCheckpoint",
     "signature": "restoreCheckpoint(id:string):Promise<void>;",
@@ -482,7 +482,7 @@
   {
     "key": "types/api/src/api/workbook.ts#Workbook.setActivePrincipal",
     "file": "types/api/src/api/workbook.ts",
-    "line": 824,
+    "line": 795,
     "interface": "Workbook",
     "method": "setActivePrincipal",
     "signature": "setActivePrincipal(principal:string[]|AccessPrincipal|null):Promise<void>;",
@@ -494,7 +494,7 @@
   {
     "key": "types/api/src/api/workbook.ts#Workbook.setCalculationMode",
     "file": "types/api/src/api/workbook.ts",
-    "line": 475,
+    "line": 446,
     "interface": "Workbook",
     "method": "setCalculationMode",
     "signature": "setCalculationMode(mode:'auto'|'autoNoTable'|'manual'):Promise<void>;",
@@ -506,7 +506,7 @@
   {
     "key": "types/api/src/api/workbook.ts#Workbook.setChartDataPointTrack",
     "file": "types/api/src/api/workbook.ts",
-    "line": 658,
+    "line": 629,
     "interface": "Workbook",
     "method": "setChartDataPointTrack",
     "signature": "setChartDataPointTrack(value:boolean):Promise<void>;",
@@ -518,7 +518,7 @@
   {
     "key": "types/api/src/api/workbook.ts#Workbook.setCustomLists",
     "file": "types/api/src/api/workbook.ts",
-    "line": 700,
+    "line": 671,
     "interface": "Workbook",
     "method": "setCustomLists",
     "signature": "setCustomLists(lists:readonly WorkbookCustomListInput[]):Promise<void>;",
@@ -530,7 +530,7 @@
   {
     "key": "types/api/src/api/workbook.ts#Workbook.setCustomSetting",
     "file": "types/api/src/api/workbook.ts",
-    "line": 709,
+    "line": 680,
     "interface": "Workbook",
     "method": "setCustomSetting",
     "signature": "setCustomSetting(key:string,value:string):Promise<void>;",
@@ -542,7 +542,7 @@
   {
     "key": "types/api/src/api/workbook.ts#Workbook.setSettings",
     "file": "types/api/src/api/workbook.ts",
-    "line": 667,
+    "line": 638,
     "interface": "Workbook",
     "method": "setSettings",
     "signature": "setSettings(updates:WorkbookSettingsPatch):Promise<void>;",
@@ -554,7 +554,7 @@
   {
     "key": "types/api/src/api/workbook.ts#Workbook.setUsePrecisionAsDisplayed",
     "file": "types/api/src/api/workbook.ts",
-    "line": 493,
+    "line": 464,
     "interface": "Workbook",
     "method": "setUsePrecisionAsDisplayed",
     "signature": "setUsePrecisionAsDisplayed(value:boolean):Promise<void>;",
@@ -566,7 +566,7 @@
   {
     "key": "types/api/src/api/workbook.ts#Workbook.undoGroup",
     "file": "types/api/src/api/workbook.ts",
-    "line": 406,
+    "line": 377,
     "interface": "Workbook",
     "method": "undoGroup",
     "signature": "undoGroup<T=void>(fn:(wb:Workbook)=>Promise<T>):Promise<T>;",
@@ -578,7 +578,7 @@
   {
     "key": "types/api/src/api/workbook.ts#Workbook.updateCustomList",
     "file": "types/api/src/api/workbook.ts",
-    "line": 686,
+    "line": 657,
     "interface": "Workbook",
     "method": "updateCustomList",
     "signature": "updateCustomList(id:string,updates:WorkbookCustomListUpdate):Promise<boolean>;",
@@ -590,7 +590,7 @@
   {
     "key": "types/api/src/api/workbook.ts#WorkbookInternal.createCalculatorContext",
     "file": "types/api/src/api/workbook.ts",
-    "line": 909,
+    "line": 880,
     "interface": "WorkbookInternal",
     "method": "createCalculatorContext",
     "signature": "createCalculatorContext(sheetId:SheetId):unknown;",
@@ -602,7 +602,7 @@
   {
     "key": "types/api/src/api/workbook.ts#WorkbookInternal.refreshSheetMetadata",
     "file": "types/api/src/api/workbook.ts",
-    "line": 930,
+    "line": 901,
     "interface": "WorkbookInternal",
     "method": "refreshSheetMetadata",
     "signature": "refreshSheetMetadata():Promise<void>;",
@@ -614,7 +614,7 @@
   {
     "key": "types/api/src/api/workbook.ts#WorkbookInternal.setActiveSheetId",
     "file": "types/api/src/api/workbook.ts",
-    "line": 936,
+    "line": 907,
     "interface": "WorkbookInternal",
     "method": "setActiveSheetId",
     "signature": "setActiveSheetId(id:SheetId):void;",
@@ -626,7 +626,7 @@
   {
     "key": "types/api/src/api/workbook.ts#WorkbookInternal.setCodeExecutorFactory",
     "file": "types/api/src/api/workbook.ts",
-    "line": 964,
+    "line": 935,
     "interface": "WorkbookInternal",
     "method": "setCodeExecutorFactory",
     "signature": "setCodeExecutorFactory(factory:(config:{ctx:unknown;eventBus:unknown;getActiveSheetId:()=>SheetId})=>{execute(code:string,options?:CodeExecutionOptions):Promise<CodeExecutionResult>;cancelExecution?(executionId:string):void;dispose():void;},):void;",
@@ -638,7 +638,7 @@
   {
     "key": "types/api/src/api/workbook.ts#WorkbookInternal.setConvergenceThreshold",
     "file": "types/api/src/api/workbook.ts",
-    "line": 924,
+    "line": 895,
     "interface": "WorkbookInternal",
     "method": "setConvergenceThreshold",
     "signature": "setConvergenceThreshold(threshold:number):Promise<void>;",
@@ -650,7 +650,7 @@
   {
     "key": "types/api/src/api/workbook.ts#WorkbookInternal.setIterativeCalculation",
     "file": "types/api/src/api/workbook.ts",
-    "line": 918,
+    "line": 889,
     "interface": "WorkbookInternal",
     "method": "setIterativeCalculation",
     "signature": "setIterativeCalculation(enabled:boolean):Promise<void>;",
@@ -662,7 +662,7 @@
   {
     "key": "types/api/src/api/workbook.ts#WorkbookInternal.setMaxIterations",
     "file": "types/api/src/api/workbook.ts",
-    "line": 921,
+    "line": 892,
     "interface": "WorkbookInternal",
     "method": "setMaxIterations",
     "signature": "setMaxIterations(n:number):Promise<void>;",
@@ -674,7 +674,7 @@
   {
     "key": "types/api/src/api/workbook.ts#WorkbookInternal.setPendingSelectionCheckpoint",
     "file": "types/api/src/api/workbook.ts",
-    "line": 897,
+    "line": 868,
     "interface": "WorkbookInternal",
     "method": "setPendingSelectionCheckpoint",
     "signature": "setPendingSelectionCheckpoint(checkpoint:SelectionCheckpoint):void;",
@@ -686,7 +686,7 @@
   {
     "key": "types/api/src/api/workbook.ts#WorkbookInternal.setPendingUndoDescription",
     "file": "types/api/src/api/workbook.ts",
-    "line": 894,
+    "line": 865,
     "interface": "WorkbookInternal",
     "method": "setPendingUndoDescription",
     "signature": "setPendingUndoDescription(description:string):void;",
@@ -698,7 +698,7 @@
   {
     "key": "types/api/src/api/workbook.ts#WorkbookLinks.add",
     "file": "types/api/src/api/workbook.ts",
-    "line": 303,
+    "line": 274,
     "interface": "WorkbookLinks",
     "method": "add",
     "signature": "add(input:CreateWorkbookLinkInput):WorkbookLinkView;",
@@ -710,7 +710,7 @@
   {
     "key": "types/api/src/api/workbook.ts#WorkbookLinks.copySource",
     "file": "types/api/src/api/workbook.ts",
-    "line": 314,
+    "line": 285,
     "interface": "WorkbookLinks",
     "method": "copySource",
     "signature": "copySource(linkId:LinkId):Promise<CopyWorkbookLinkSourceResult>;",
@@ -722,7 +722,7 @@
   {
     "key": "types/api/src/api/workbook.ts#WorkbookLinks.create",
     "file": "types/api/src/api/workbook.ts",
-    "line": 304,
+    "line": 275,
     "interface": "WorkbookLinks",
     "method": "create",
     "signature": "create(input:CreateWorkbookLinkInput):WorkbookLinkView;",
@@ -734,7 +734,7 @@
   {
     "key": "types/api/src/api/workbook.ts#WorkbookLinks.delete",
     "file": "types/api/src/api/workbook.ts",
-    "line": 308,
+    "line": 279,
     "interface": "WorkbookLinks",
     "method": "delete",
     "signature": "delete(linkId:LinkId):boolean;",
@@ -746,31 +746,31 @@
   {
     "key": "types/api/src/api/workbook.ts#WorkbookLinks.refresh",
     "file": "types/api/src/api/workbook.ts",
-    "line": 310,
+    "line": 281,
     "interface": "WorkbookLinks",
     "method": "refresh",
-    "signature": "refresh(linkId:LinkId):Promise<WorkbookLinkRefreshReceipt>;",
-    "returnType": "Promise<WorkbookLinkRefreshReceipt>",
-    "returnCategory": "receipt",
+    "signature": "refresh(linkId:LinkId):Promise<LinkStatusView>;",
+    "returnType": "Promise<LinkStatusView>",
+    "returnCategory": "other",
     "disposition": "noReceiptNeeded",
     "rationale": "Returns an OperationReceiptBase-derived receipt with the public receipt base fields."
   },
   {
     "key": "types/api/src/api/workbook.ts#WorkbookLinks.refreshAll",
     "file": "types/api/src/api/workbook.ts",
-    "line": 311,
+    "line": 282,
     "interface": "WorkbookLinks",
     "method": "refreshAll",
-    "signature": "refreshAll(options?:{readonly concurrency?:number}):Promise<WorkbookLinksRefreshAllReceipt>;",
-    "returnType": "Promise<WorkbookLinksRefreshAllReceipt>",
-    "returnCategory": "receipt",
+    "signature": "refreshAll(options?:{readonly concurrency?:number}):Promise<readonly LinkStatusView[]>;",
+    "returnType": "Promise<readonly LinkStatusView[]>",
+    "returnCategory": "other",
     "disposition": "noReceiptNeeded",
     "rationale": "Returns an OperationReceiptBase-derived receipt with the public receipt base fields."
   },
   {
     "key": "types/api/src/api/workbook.ts#WorkbookLinks.update",
     "file": "types/api/src/api/workbook.ts",
-    "line": 306,
+    "line": 277,
     "interface": "WorkbookLinks",
     "method": "update",
     "signature": "update(linkId:LinkId,input:UpdateWorkbookLinkInput):WorkbookLinkView;",
@@ -986,7 +986,7 @@
   {
     "key": "types/api/src/api/workbook/scenarios.ts#WorkbookScenarios.add",
     "file": "types/api/src/api/workbook/scenarios.ts",
-    "line": 23,
+    "line": 18,
     "interface": "WorkbookScenarios",
     "method": "add",
     "signature": "add(config:ScenarioConfig):Promise<string>;",
@@ -998,7 +998,7 @@
   {
     "key": "types/api/src/api/workbook/scenarios.ts#WorkbookScenarios.apply",
     "file": "types/api/src/api/workbook/scenarios.ts",
-    "line": 46,
+    "line": 41,
     "interface": "WorkbookScenarios",
     "method": "apply",
     "signature": "apply(id:string):Promise<WorkbookScenarioApplyReceipt>;",
@@ -1010,7 +1010,7 @@
   {
     "key": "types/api/src/api/workbook/scenarios.ts#WorkbookScenarios.remove",
     "file": "types/api/src/api/workbook/scenarios.ts",
-    "line": 67,
+    "line": 62,
     "interface": "WorkbookScenarios",
     "method": "remove",
     "signature": "remove(id:string):Promise<void>;",
@@ -1022,7 +1022,7 @@
   {
     "key": "types/api/src/api/workbook/scenarios.ts#WorkbookScenarios.restore",
     "file": "types/api/src/api/workbook/scenarios.ts",
-    "line": 54,
+    "line": 49,
     "interface": "WorkbookScenarios",
     "method": "restore",
     "signature": "restore(baselineIdOrOriginals:string|OriginalCellValue[]):Promise<void>;",
@@ -1034,7 +1034,7 @@
   {
     "key": "types/api/src/api/workbook/scenarios.ts#WorkbookScenarios.update",
     "file": "types/api/src/api/workbook/scenarios.ts",
-    "line": 61,
+    "line": 56,
     "interface": "WorkbookScenarios",
     "method": "update",
     "signature": "update(scenarioId:string,config:Partial<ScenarioConfig>):Promise<void>;",
@@ -2570,7 +2570,7 @@
   {
     "key": "types/api/src/api/worksheet/collections/object-collection.ts#WorksheetObjectCollection.bringForward",
     "file": "types/api/src/api/worksheet/collections/object-collection.ts",
-    "line": 40,
+    "line": 37,
     "interface": "WorksheetObjectCollection",
     "method": "bringForward",
     "signature": "bringForward(id:string):Promise<void>;",
@@ -2582,7 +2582,7 @@
   {
     "key": "types/api/src/api/worksheet/collections/object-collection.ts#WorksheetObjectCollection.bringToFront",
     "file": "types/api/src/api/worksheet/collections/object-collection.ts",
-    "line": 36,
+    "line": 33,
     "interface": "WorksheetObjectCollection",
     "method": "bringToFront",
     "signature": "bringToFront(id:string):Promise<void>;",
@@ -2618,19 +2618,19 @@
   {
     "key": "types/api/src/api/worksheet/collections/object-collection.ts#WorksheetObjectCollection.remove",
     "file": "types/api/src/api/worksheet/collections/object-collection.ts",
-    "line": 34,
+    "line": 31,
     "interface": "WorksheetObjectCollection",
     "method": "remove",
-    "signature": "remove(id:string):Promise<FloatingObjectCollectionRemoveReceipt>;",
-    "returnType": "Promise<FloatingObjectCollectionRemoveReceipt>",
-    "returnCategory": "receipt",
+    "signature": "remove(id:string):Promise<boolean>;",
+    "returnType": "Promise<boolean>",
+    "returnCategory": "primitive",
     "disposition": "noReceiptNeeded",
     "rationale": "Returns an OperationReceiptBase-derived receipt with the public receipt base fields."
   },
   {
     "key": "types/api/src/api/worksheet/collections/object-collection.ts#WorksheetObjectCollection.removeMany",
     "file": "types/api/src/api/worksheet/collections/object-collection.ts",
-    "line": 28,
+    "line": 25,
     "interface": "WorksheetObjectCollection",
     "method": "removeMany",
     "signature": "removeMany(ids:string[]):Promise<number>;",
@@ -2642,7 +2642,7 @@
   {
     "key": "types/api/src/api/worksheet/collections/object-collection.ts#WorksheetObjectCollection.sendBackward",
     "file": "types/api/src/api/worksheet/collections/object-collection.ts",
-    "line": 42,
+    "line": 39,
     "interface": "WorksheetObjectCollection",
     "method": "sendBackward",
     "signature": "sendBackward(id:string):Promise<void>;",
@@ -2654,7 +2654,7 @@
   {
     "key": "types/api/src/api/worksheet/collections/object-collection.ts#WorksheetObjectCollection.sendToBack",
     "file": "types/api/src/api/worksheet/collections/object-collection.ts",
-    "line": 38,
+    "line": 35,
     "interface": "WorksheetObjectCollection",
     "method": "sendToBack",
     "signature": "sendToBack(id:string):Promise<void>;",
@@ -2666,10 +2666,10 @@
   {
     "key": "types/api/src/api/worksheet/collections/object-collection.ts#WorksheetObjectCollection.update",
     "file": "types/api/src/api/worksheet/collections/object-collection.ts",
-    "line": 44,
+    "line": 41,
     "interface": "WorksheetObjectCollection",
     "method": "update",
-    "signature": "update(objectId:string,updates:Record<string,unknown>):Promise<FloatingObjectMutationReceipt>;",
+    "signature": "update(objectId:string,updates:Record<string,unknown>,):Promise<FloatingObjectMutationReceipt>;",
     "returnType": "Promise<FloatingObjectMutationReceipt>",
     "returnCategory": "receipt",
     "disposition": "noReceiptNeeded",
@@ -2849,9 +2849,9 @@
     "line": 373,
     "interface": "WorksheetComments",
     "method": "removeForCell",
-    "signature": "removeForCell(address:string):Promise<CommentRemoveReceipt>;",
-    "returnType": "Promise<CommentRemoveReceipt>",
-    "returnCategory": "receipt",
+    "signature": "removeForCell(address:string):Promise<number>;",
+    "returnType": "Promise<number>",
+    "returnCategory": "primitive",
     "disposition": "noReceiptNeeded",
     "rationale": "Returns an OperationReceiptBase-derived receipt with the public receipt base fields."
   },
@@ -2861,9 +2861,9 @@
     "line": 381,
     "interface": "WorksheetComments",
     "method": "removeForCell",
-    "signature": "removeForCell(row:number,col:number):Promise<CommentRemoveReceipt>;",
-    "returnType": "Promise<CommentRemoveReceipt>",
-    "returnCategory": "receipt",
+    "signature": "removeForCell(row:number,col:number):Promise<number>;",
+    "returnType": "Promise<number>",
+    "returnCategory": "primitive",
     "disposition": "noReceiptNeeded",
     "rationale": "Returns an OperationReceiptBase-derived receipt with the public receipt base fields."
   },
@@ -4406,7 +4406,7 @@
   {
     "key": "types/api/src/api/worksheet/objects.ts#WorksheetObjects.addDrawingStroke",
     "file": "types/api/src/api/worksheet/objects.ts",
-    "line": 185,
+    "line": 191,
     "interface": "WorksheetObjects",
     "method": "addDrawingStroke",
     "signature": "addDrawingStroke(drawingId:string,stroke:InkStroke):Promise<void>;",
@@ -4418,7 +4418,7 @@
   {
     "key": "types/api/src/api/worksheet/objects.ts#WorksheetObjects.addEquation",
     "file": "types/api/src/api/worksheet/objects.ts",
-    "line": 153,
+    "line": 159,
     "interface": "WorksheetObjects",
     "method": "addEquation",
     "signature": "addEquation(config:EquationConfig):Promise<FloatingObjectMutationReceipt>;",
@@ -4430,7 +4430,7 @@
   {
     "key": "types/api/src/api/worksheet/objects.ts#WorksheetObjects.addPicture",
     "file": "types/api/src/api/worksheet/objects.ts",
-    "line": 136,
+    "line": 139,
     "interface": "WorksheetObjects",
     "method": "addPicture",
     "signature": "addPicture(config:PictureConfig):Promise<FloatingObjectMutationReceipt>;",
@@ -4442,7 +4442,7 @@
   {
     "key": "types/api/src/api/worksheet/objects.ts#WorksheetObjects.addShape",
     "file": "types/api/src/api/worksheet/objects.ts",
-    "line": 117,
+    "line": 120,
     "interface": "WorksheetObjects",
     "method": "addShape",
     "signature": "addShape(config:ShapeConfig):Promise<FloatingObjectMutationReceipt>;",
@@ -4454,7 +4454,7 @@
   {
     "key": "types/api/src/api/worksheet/objects.ts#WorksheetObjects.addTextBox",
     "file": "types/api/src/api/worksheet/objects.ts",
-    "line": 146,
+    "line": 152,
     "interface": "WorksheetObjects",
     "method": "addTextBox",
     "signature": "addTextBox(config:TextBoxConfig):Promise<FloatingObjectMutationReceipt>;",
@@ -4466,7 +4466,7 @@
   {
     "key": "types/api/src/api/worksheet/objects.ts#WorksheetObjects.addTextEffect",
     "file": "types/api/src/api/worksheet/objects.ts",
-    "line": 163,
+    "line": 169,
     "interface": "WorksheetObjects",
     "method": "addTextEffect",
     "signature": "addTextEffect(config:CreateTextEffectInput):Promise<FloatingObjectMutationReceipt>;",
@@ -4478,7 +4478,7 @@
   {
     "key": "types/api/src/api/worksheet/objects.ts#WorksheetObjects.bringForward",
     "file": "types/api/src/api/worksheet/objects.ts",
-    "line": 97,
+    "line": 100,
     "interface": "WorksheetObjects",
     "method": "bringForward",
     "signature": "bringForward(id:string):Promise<void>;",
@@ -4490,7 +4490,7 @@
   {
     "key": "types/api/src/api/worksheet/objects.ts#WorksheetObjects.bringToFront",
     "file": "types/api/src/api/worksheet/objects.ts",
-    "line": 91,
+    "line": 94,
     "interface": "WorksheetObjects",
     "method": "bringToFront",
     "signature": "bringToFront(id:string):Promise<void>;",
@@ -4514,7 +4514,7 @@
   {
     "key": "types/api/src/api/worksheet/objects.ts#WorksheetObjects.clearDrawingStrokes",
     "file": "types/api/src/api/worksheet/objects.ts",
-    "line": 191,
+    "line": 197,
     "interface": "WorksheetObjects",
     "method": "clearDrawingStrokes",
     "signature": "clearDrawingStrokes(drawingId:string):Promise<void>;",
@@ -4526,7 +4526,7 @@
   {
     "key": "types/api/src/api/worksheet/objects.ts#WorksheetObjects.convertToTextBox",
     "file": "types/api/src/api/worksheet/objects.ts",
-    "line": 172,
+    "line": 178,
     "interface": "WorksheetObjects",
     "method": "convertToTextBox",
     "signature": "convertToTextBox(objectId:string):Promise<void>;",
@@ -4538,7 +4538,7 @@
   {
     "key": "types/api/src/api/worksheet/objects.ts#WorksheetObjects.convertToTextEffect",
     "file": "types/api/src/api/worksheet/objects.ts",
-    "line": 169,
+    "line": 175,
     "interface": "WorksheetObjects",
     "method": "convertToTextEffect",
     "signature": "convertToTextEffect(objectId:string,warpPreset?:TextWarpPreset):Promise<void>;",
@@ -4550,7 +4550,7 @@
   {
     "key": "types/api/src/api/worksheet/objects.ts#WorksheetObjects.createDrawing",
     "file": "types/api/src/api/worksheet/objects.ts",
-    "line": 179,
+    "line": 185,
     "interface": "WorksheetObjects",
     "method": "createDrawing",
     "signature": "createDrawing(position:Partial<ObjectPosition>,options?:CreateDrawingOptions,):Promise<FloatingObjectMutationReceipt>;",
@@ -4586,7 +4586,7 @@
   {
     "key": "types/api/src/api/worksheet/objects.ts#WorksheetObjects.moveDrawingStrokes",
     "file": "types/api/src/api/worksheet/objects.ts",
-    "line": 194,
+    "line": 200,
     "interface": "WorksheetObjects",
     "method": "moveDrawingStrokes",
     "signature": "moveDrawingStrokes(drawingId:string,strokeIds:StrokeId[],deltaX:number,deltaY:number,):Promise<void>;",
@@ -4610,7 +4610,7 @@
   {
     "key": "types/api/src/api/worksheet/objects.ts#WorksheetObjects.removeMany",
     "file": "types/api/src/api/worksheet/objects.ts",
-    "line": 84,
+    "line": 87,
     "interface": "WorksheetObjects",
     "method": "removeMany",
     "signature": "removeMany(objectIds:string[]):Promise<number>;",
@@ -4634,7 +4634,7 @@
   {
     "key": "types/api/src/api/worksheet/objects.ts#WorksheetObjects.sendBackward",
     "file": "types/api/src/api/worksheet/objects.ts",
-    "line": 100,
+    "line": 103,
     "interface": "WorksheetObjects",
     "method": "sendBackward",
     "signature": "sendBackward(id:string):Promise<void>;",
@@ -4646,7 +4646,7 @@
   {
     "key": "types/api/src/api/worksheet/objects.ts#WorksheetObjects.sendToBack",
     "file": "types/api/src/api/worksheet/objects.ts",
-    "line": 94,
+    "line": 97,
     "interface": "WorksheetObjects",
     "method": "sendToBack",
     "signature": "sendToBack(id:string):Promise<void>;",
@@ -4661,7 +4661,7 @@
     "line": 81,
     "interface": "WorksheetObjects",
     "method": "update",
-    "signature": "update(objectId:string,updates:Record<string,unknown>):Promise<FloatingObjectMutationReceipt>;",
+    "signature": "update(objectId:string,updates:Record<string,unknown>,):Promise<FloatingObjectMutationReceipt>;",
     "returnType": "Promise<FloatingObjectMutationReceipt>",
     "returnCategory": "receipt",
     "disposition": "noReceiptNeeded",
@@ -4670,7 +4670,7 @@
   {
     "key": "types/api/src/api/worksheet/objects.ts#WorksheetObjects.updateEquation",
     "file": "types/api/src/api/worksheet/objects.ts",
-    "line": 156,
+    "line": 162,
     "interface": "WorksheetObjects",
     "method": "updateEquation",
     "signature": "updateEquation(id:string,updates:EquationUpdates):Promise<FloatingObjectMutationReceipt>;",
@@ -4682,10 +4682,10 @@
   {
     "key": "types/api/src/api/worksheet/objects.ts#WorksheetObjects.updatePicture",
     "file": "types/api/src/api/worksheet/objects.ts",
-    "line": 139,
+    "line": 142,
     "interface": "WorksheetObjects",
     "method": "updatePicture",
-    "signature": "updatePicture(id:string,updates:Partial<PictureConfig>):Promise<FloatingObjectMutationReceipt>;",
+    "signature": "updatePicture(id:string,updates:Partial<PictureConfig>,):Promise<FloatingObjectMutationReceipt>;",
     "returnType": "Promise<FloatingObjectMutationReceipt>",
     "returnCategory": "receipt",
     "disposition": "noReceiptNeeded",
@@ -4694,7 +4694,7 @@
   {
     "key": "types/api/src/api/worksheet/objects.ts#WorksheetObjects.updateShape",
     "file": "types/api/src/api/worksheet/objects.ts",
-    "line": 123,
+    "line": 126,
     "interface": "WorksheetObjects",
     "method": "updateShape",
     "signature": "updateShape(shapeId:string,updates:Partial<ShapeConfig>,):Promise<FloatingObjectMutationReceipt>;",
@@ -4706,7 +4706,7 @@
   {
     "key": "types/api/src/api/worksheet/objects.ts#WorksheetObjects.updateTextEffect",
     "file": "types/api/src/api/worksheet/objects.ts",
-    "line": 166,
+    "line": 172,
     "interface": "WorksheetObjects",
     "method": "updateTextEffect",
     "signature": "updateTextEffect(id:string,updates:TextEffectUpdates):Promise<FloatingObjectMutationReceipt>;",
@@ -4766,7 +4766,7 @@
   {
     "key": "types/api/src/api/worksheet/pivots.ts#WorksheetPivots.addCalculatedField",
     "file": "types/api/src/api/worksheet/pivots.ts",
-    "line": 561,
+    "line": 565,
     "interface": "WorksheetPivots",
     "method": "addCalculatedField",
     "signature": "addCalculatedField(name:string,field:CalculatedField):Promise<PivotAddCalculatedFieldReceipt>;",
@@ -4814,7 +4814,7 @@
   {
     "key": "types/api/src/api/worksheet/pivots.ts#WorksheetPivots.compute",
     "file": "types/api/src/api/worksheet/pivots.ts",
-    "line": 520,
+    "line": 524,
     "interface": "WorksheetPivots",
     "method": "compute",
     "signature": "compute(name:string,forceRefresh?:boolean):Promise<PivotComputeReceipt>;",
@@ -4826,7 +4826,7 @@
   {
     "key": "types/api/src/api/worksheet/pivots.ts#WorksheetPivots.moveField",
     "file": "types/api/src/api/worksheet/pivots.ts",
-    "line": 397,
+    "line": 401,
     "interface": "WorksheetPivots",
     "method": "moveField",
     "signature": "moveField(name:string,fieldId:string,fromArea:PivotFieldArea,toArea:PivotFieldArea,toPosition:number,):Promise<PivotMoveFieldReceipt>;",
@@ -4838,7 +4838,7 @@
   {
     "key": "types/api/src/api/worksheet/pivots.ts#WorksheetPivots.queryPivot",
     "file": "types/api/src/api/worksheet/pivots.ts",
-    "line": 530,
+    "line": 534,
     "interface": "WorksheetPivots",
     "method": "queryPivot",
     "signature": "queryPivot(pivotName:string,filters?:Record<string,CellValue|CellValue[]>,):Promise<PivotQueryReceipt>;",
@@ -4850,7 +4850,7 @@
   {
     "key": "types/api/src/api/worksheet/pivots.ts#WorksheetPivots.refresh",
     "file": "types/api/src/api/worksheet/pivots.ts",
-    "line": 540,
+    "line": 544,
     "interface": "WorksheetPivots",
     "method": "refresh",
     "signature": "refresh(name:string):Promise<PivotRefreshReceipt>;",
@@ -4862,7 +4862,7 @@
   {
     "key": "types/api/src/api/worksheet/pivots.ts#WorksheetPivots.refreshAll",
     "file": "types/api/src/api/worksheet/pivots.ts",
-    "line": 545,
+    "line": 549,
     "interface": "WorksheetPivots",
     "method": "refreshAll",
     "signature": "refreshAll():Promise<PivotRefreshAllReceipt>;",
@@ -4886,10 +4886,10 @@
   {
     "key": "types/api/src/api/worksheet/pivots.ts#WorksheetPivots.removeCalculatedField",
     "file": "types/api/src/api/worksheet/pivots.ts",
-    "line": 569,
+    "line": 573,
     "interface": "WorksheetPivots",
     "method": "removeCalculatedField",
-    "signature": "removeCalculatedField(name:string,fieldId:string,):Promise<PivotRemoveCalculatedFieldReceipt>;",
+    "signature": "removeCalculatedField(name:string,fieldId:string):Promise<PivotRemoveCalculatedFieldReceipt>;",
     "returnType": "Promise<PivotRemoveCalculatedFieldReceipt>",
     "returnCategory": "receipt",
     "disposition": "noReceiptNeeded",
@@ -4901,7 +4901,7 @@
     "line": 386,
     "interface": "WorksheetPivots",
     "method": "removeField",
-    "signature": "removeField(name:string,fieldId:string,area:PivotFieldArea):Promise<PivotRemoveFieldReceipt>;",
+    "signature": "removeField(name:string,fieldId:string,area:PivotFieldArea,):Promise<PivotRemoveFieldReceipt>;",
     "returnType": "Promise<PivotRemoveFieldReceipt>",
     "returnCategory": "receipt",
     "disposition": "noReceiptNeeded",
@@ -4910,7 +4910,7 @@
   {
     "key": "types/api/src/api/worksheet/pivots.ts#WorksheetPivots.removeFilter",
     "file": "types/api/src/api/worksheet/pivots.ts",
-    "line": 467,
+    "line": 471,
     "interface": "WorksheetPivots",
     "method": "removeFilter",
     "signature": "removeFilter(name:string,fieldId:string):Promise<PivotRemoveFilterReceipt>;",
@@ -4934,7 +4934,7 @@
   {
     "key": "types/api/src/api/worksheet/pivots.ts#WorksheetPivots.resetField",
     "file": "types/api/src/api/worksheet/pivots.ts",
-    "line": 475,
+    "line": 479,
     "interface": "WorksheetPivots",
     "method": "resetField",
     "signature": "resetField(name:string,fieldId:string):Promise<PivotResetFieldReceipt>;",
@@ -4946,7 +4946,7 @@
   {
     "key": "types/api/src/api/worksheet/pivots.ts#WorksheetPivots.setAggregateFunction",
     "file": "types/api/src/api/worksheet/pivots.ts",
-    "line": 416,
+    "line": 420,
     "interface": "WorksheetPivots",
     "method": "setAggregateFunction",
     "signature": "setAggregateFunction(pivot:string,fieldOrPlacement:string,aggregateFunction:AggregateFunction,):Promise<PivotKernelMutationReceipt>;",
@@ -4958,7 +4958,7 @@
   {
     "key": "types/api/src/api/worksheet/pivots.ts#WorksheetPivots.setAllExpanded",
     "file": "types/api/src/api/worksheet/pivots.ts",
-    "line": 674,
+    "line": 675,
     "interface": "WorksheetPivots",
     "method": "setAllExpanded",
     "signature": "setAllExpanded(name:string,expanded:boolean):Promise<PivotSetAllExpandedReceipt>;",
@@ -4970,7 +4970,7 @@
   {
     "key": "types/api/src/api/worksheet/pivots.ts#WorksheetPivots.setAllowMultipleFiltersPerField",
     "file": "types/api/src/api/worksheet/pivots.ts",
-    "line": 722,
+    "line": 723,
     "interface": "WorksheetPivots",
     "method": "setAllowMultipleFiltersPerField",
     "signature": "setAllowMultipleFiltersPerField(name:string,allow:boolean,):Promise<PivotSetAllowMultipleFiltersPerFieldReceipt>;",
@@ -4982,7 +4982,7 @@
   {
     "key": "types/api/src/api/worksheet/pivots.ts#WorksheetPivots.setAutoFormat",
     "file": "types/api/src/api/worksheet/pivots.ts",
-    "line": 741,
+    "line": 742,
     "interface": "WorksheetPivots",
     "method": "setAutoFormat",
     "signature": "setAutoFormat(name:string,autoFormat:boolean):Promise<PivotSetAutoFormatReceipt>;",
@@ -4994,7 +4994,7 @@
   {
     "key": "types/api/src/api/worksheet/pivots.ts#WorksheetPivots.setDataSource",
     "file": "types/api/src/api/worksheet/pivots.ts",
-    "line": 702,
+    "line": 703,
     "interface": "WorksheetPivots",
     "method": "setDataSource",
     "signature": "setDataSource(name:string,dataSource:string):Promise<PivotSetDataSourceReceipt>;",
@@ -5006,7 +5006,7 @@
   {
     "key": "types/api/src/api/worksheet/pivots.ts#WorksheetPivots.setEnableMultipleFilterItems",
     "file": "types/api/src/api/worksheet/pivots.ts",
-    "line": 824,
+    "line": 825,
     "interface": "WorksheetPivots",
     "method": "setEnableMultipleFilterItems",
     "signature": "setEnableMultipleFilterItems(name:string,fieldId:string,enabled:boolean,):Promise<PivotSetEnableMultipleFilterItemsReceipt>;",
@@ -5018,7 +5018,7 @@
   {
     "key": "types/api/src/api/worksheet/pivots.ts#WorksheetPivots.setFilter",
     "file": "types/api/src/api/worksheet/pivots.ts",
-    "line": 455,
+    "line": 459,
     "interface": "WorksheetPivots",
     "method": "setFilter",
     "signature": "setFilter(name:string,fieldId:string,filter:Omit<PivotFilter,'fieldId'>,):Promise<PivotSetFilterReceipt>;",
@@ -5030,7 +5030,7 @@
   {
     "key": "types/api/src/api/worksheet/pivots.ts#WorksheetPivots.setItemVisibility",
     "file": "types/api/src/api/worksheet/pivots.ts",
-    "line": 648,
+    "line": 649,
     "interface": "WorksheetPivots",
     "method": "setItemVisibility",
     "signature": "setItemVisibility(name:string,fieldId:string,visibleItems:Record<string,boolean>,):Promise<PivotSetItemVisibilityReceipt>;",
@@ -5042,7 +5042,7 @@
   {
     "key": "types/api/src/api/worksheet/pivots.ts#WorksheetPivots.setLayout",
     "file": "types/api/src/api/worksheet/pivots.ts",
-    "line": 487,
+    "line": 491,
     "interface": "WorksheetPivots",
     "method": "setLayout",
     "signature": "setLayout(name:string,layout:Partial<PivotTableLayout>):Promise<PivotKernelMutationReceipt>;",
@@ -5054,7 +5054,7 @@
   {
     "key": "types/api/src/api/worksheet/pivots.ts#WorksheetPivots.setPivotItemVisibility",
     "file": "types/api/src/api/worksheet/pivots.ts",
-    "line": 637,
+    "line": 638,
     "interface": "WorksheetPivots",
     "method": "setPivotItemVisibility",
     "signature": "setPivotItemVisibility(name:string,fieldId:string,visibleItems:Record<string,boolean>,):Promise<PivotSetPivotItemVisibilityReceipt>;",
@@ -5066,7 +5066,7 @@
   {
     "key": "types/api/src/api/worksheet/pivots.ts#WorksheetPivots.setPreserveFormatting",
     "file": "types/api/src/api/worksheet/pivots.ts",
-    "line": 757,
+    "line": 758,
     "interface": "WorksheetPivots",
     "method": "setPreserveFormatting",
     "signature": "setPreserveFormatting(name:string,preserve:boolean,):Promise<PivotSetPreserveFormattingReceipt>;",
@@ -5078,7 +5078,7 @@
   {
     "key": "types/api/src/api/worksheet/pivots.ts#WorksheetPivots.setShowValuesAs",
     "file": "types/api/src/api/worksheet/pivots.ts",
-    "line": 429,
+    "line": 433,
     "interface": "WorksheetPivots",
     "method": "setShowValuesAs",
     "signature": "setShowValuesAs(pivot:string,fieldOrPlacement:string,showValuesAs:ShowValuesAsConfig|null,):Promise<PivotKernelMutationReceipt>;",
@@ -5090,7 +5090,7 @@
   {
     "key": "types/api/src/api/worksheet/pivots.ts#WorksheetPivots.setSortOrder",
     "file": "types/api/src/api/worksheet/pivots.ts",
-    "line": 442,
+    "line": 446,
     "interface": "WorksheetPivots",
     "method": "setSortOrder",
     "signature": "setSortOrder(pivot:string,fieldOrPlacement:string,sortOrder:SortOrder|null,):Promise<PivotKernelMutationReceipt>;",
@@ -5102,7 +5102,7 @@
   {
     "key": "types/api/src/api/worksheet/pivots.ts#WorksheetPivots.setStyle",
     "file": "types/api/src/api/worksheet/pivots.ts",
-    "line": 495,
+    "line": 499,
     "interface": "WorksheetPivots",
     "method": "setStyle",
     "signature": "setStyle(name:string,style:Partial<PivotTableStyle>):Promise<void>;",
@@ -5114,7 +5114,7 @@
   {
     "key": "types/api/src/api/worksheet/pivots.ts#WorksheetPivots.toggleExpanded",
     "file": "types/api/src/api/worksheet/pivots.ts",
-    "line": 666,
+    "line": 667,
     "interface": "WorksheetPivots",
     "method": "toggleExpanded",
     "signature": "toggleExpanded(name:string,headerKey:string,isRow:boolean):Promise<boolean>;",
@@ -5126,7 +5126,7 @@
   {
     "key": "types/api/src/api/worksheet/pivots.ts#WorksheetPivots.updateCalculatedField",
     "file": "types/api/src/api/worksheet/pivots.ts",
-    "line": 563,
+    "line": 567,
     "interface": "WorksheetPivots",
     "method": "updateCalculatedField",
     "signature": "updateCalculatedField(name:string,fieldId:string,updates:Partial<Pick<CalculatedField,'name'|'formula'>>,):Promise<void>;",
@@ -5390,7 +5390,7 @@
   {
     "key": "types/api/src/api/worksheet/slicers.ts#WorksheetSlicers.clearSelection",
     "file": "types/api/src/api/worksheet/slicers.ts",
-    "line": 141,
+    "line": 138,
     "interface": "WorksheetSlicers",
     "method": "clearSelection",
     "signature": "clearSelection(slicerId:string):Promise<SlicerSelectionClearReceipt>;",
@@ -5402,10 +5402,10 @@
   {
     "key": "types/api/src/api/worksheet/slicers.ts#WorksheetSlicers.duplicate",
     "file": "types/api/src/api/worksheet/slicers.ts",
-    "line": 150,
+    "line": 147,
     "interface": "WorksheetSlicers",
     "method": "duplicate",
-    "signature": "duplicate(slicerId:string,offset?:{x?:number;y?:number},):Promise<SlicerDuplicateReceipt>;",
+    "signature": "duplicate(slicerId:string,offset?:{x?:number;y?:number}):Promise<SlicerDuplicateReceipt>;",
     "returnType": "Promise<SlicerDuplicateReceipt>",
     "returnCategory": "receipt",
     "disposition": "noReceiptNeeded",
@@ -5429,7 +5429,7 @@
     "line": 131,
     "interface": "WorksheetSlicers",
     "method": "setSelection",
-    "signature": "setSelection(slicerId:string,selectedItems:CellValue[],):Promise<SlicerSelectionSetReceipt>;",
+    "signature": "setSelection(slicerId:string,selectedItems:CellValue[]):Promise<SlicerSelectionSetReceipt>;",
     "returnType": "Promise<SlicerSelectionSetReceipt>",
     "returnCategory": "receipt",
     "disposition": "noReceiptNeeded",
@@ -5438,7 +5438,7 @@
   {
     "key": "types/api/src/api/worksheet/slicers.ts#WorksheetSlicers.update",
     "file": "types/api/src/api/worksheet/slicers.ts",
-    "line": 161,
+    "line": 155,
     "interface": "WorksheetSlicers",
     "method": "update",
     "signature": "update(slicerId:string,updates:Partial<SlicerConfig>):Promise<SlicerUpdateReceipt>;",

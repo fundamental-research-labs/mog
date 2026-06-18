@@ -38,7 +38,6 @@ struct SeriesGroupSemantics {
     x_role: Option<domain_types::chart::ChartSeriesXRoleData>,
     show_lines: Option<bool>,
     show_markers: Option<bool>,
-    smooth: Option<bool>,
     stock_role: Option<domain_types::chart::ChartSeriesStockRoleData>,
 }
 
@@ -63,13 +62,13 @@ fn series_group_semantics(
         }
         _ => Some(domain_types::chart::ChartSeriesXRoleData::Category),
     };
-    let (show_lines, show_markers, smooth) = match &group.config {
+    let (show_lines, show_markers) = match &group.config {
         ooxml_types::charts::ChartTypeConfig::Scatter(cfg) => {
             scatter_style_semantics(cfg.scatter_style)
         }
-        ooxml_types::charts::ChartTypeConfig::Line(cfg) => (Some(true), cfg.marker, cfg.smooth),
-        ooxml_types::charts::ChartTypeConfig::Line3D(_) => (Some(true), None, None),
-        _ => (None, None, None),
+        ooxml_types::charts::ChartTypeConfig::Line(cfg) => (Some(true), cfg.marker),
+        ooxml_types::charts::ChartTypeConfig::Line3D(_) => (Some(true), None),
+        _ => (None, None),
     };
 
     SeriesGroupSemantics {
@@ -78,7 +77,6 @@ fn series_group_semantics(
         x_role,
         show_lines,
         show_markers,
-        smooth,
         stock_role: None,
     }
 }
@@ -169,16 +167,16 @@ fn is_stock_volume_group(group: &ooxml_types::charts::ChartGroup) -> bool {
 
 fn scatter_style_semantics(
     style: ooxml_types::charts::ScatterStyle,
-) -> (Option<bool>, Option<bool>, Option<bool>) {
+) -> (Option<bool>, Option<bool>) {
     use ooxml_types::charts::ScatterStyle;
 
     match style {
-        ScatterStyle::None => (Some(false), Some(false), Some(false)),
-        ScatterStyle::Line => (Some(true), Some(false), Some(false)),
-        ScatterStyle::LineMarker => (Some(true), Some(true), Some(false)),
-        ScatterStyle::Marker => (Some(false), Some(true), Some(false)),
-        ScatterStyle::Smooth => (Some(true), Some(false), Some(true)),
-        ScatterStyle::SmoothMarker => (Some(true), Some(true), Some(true)),
+        ScatterStyle::None => (Some(false), Some(false)),
+        ScatterStyle::Line => (Some(true), Some(false)),
+        ScatterStyle::LineMarker => (Some(true), Some(true)),
+        ScatterStyle::Marker => (Some(false), Some(true)),
+        ScatterStyle::Smooth => (Some(true), Some(false)),
+        ScatterStyle::SmoothMarker => (Some(true), Some(true)),
     }
 }
 
@@ -242,7 +240,7 @@ fn extract_single_series_with_semantics(
     let (show_markers, marker_size, marker_style, marker_background_color, marker_foreground_color) =
         extract_marker_config(&s.marker);
     let show_markers = show_markers.or(semantics.show_markers);
-    let smooth = s.smooth.or(semantics.smooth);
+    let smooth = s.smooth;
 
     // Per-point formatting
     let mut point_formats: BTreeMap<u32, domain_types::chart::PointFormatData> = BTreeMap::new();
@@ -499,6 +497,9 @@ fn num_data_source_to_error_bar_source(
         },
     }
 }
+
+#[cfg(test)]
+mod series_regression_tests;
 
 #[cfg(test)]
 mod tests {

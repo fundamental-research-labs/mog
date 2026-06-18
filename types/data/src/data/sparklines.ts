@@ -45,11 +45,16 @@ export interface SparklineDataRange {
 export interface SparklineVisualSettings {
   color: string;
   negativeColor?: string;
+  showNegativePoints?: boolean;
   showMarkers?: boolean;
   markerColor?: string;
+  showHighPoint?: boolean;
   highPointColor?: string;
+  showLowPoint?: boolean;
   lowPointColor?: string;
+  showFirstPoint?: boolean;
   firstPointColor?: string;
+  showLastPoint?: boolean;
   lastPointColor?: string;
   lineWeight?: number;
   columnGap?: number;

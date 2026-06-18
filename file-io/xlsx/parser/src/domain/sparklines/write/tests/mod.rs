@@ -575,6 +575,68 @@ fn test_sparklines_writer_axis_range() {
 }
 
 #[test]
+fn test_domain_sparkline_theme_colors_emit_theme_attrs() {
+    use domain_types::domain::sparkline::{
+        AxisBound, AxisBoundLabel, EmptyCellDisplay, Sparkline as DomainSparkline,
+        SparklineAxisSettings, SparklineCellAddress, SparklineDataRange,
+        SparklineGroup as DomainSparklineGroup, SparklineType as DomainSparklineType,
+        SparklineVisualSettings,
+    };
+
+    let sparkline = DomainSparkline {
+        id: "sparkline-1".to_string(),
+        sheet_id: "Sheet1".to_string(),
+        cell: SparklineCellAddress {
+            sheet_id: "Sheet1".to_string(),
+            row: 0,
+            col: 1,
+        },
+        data_range: SparklineDataRange {
+            start_row: 0,
+            start_col: 0,
+            end_row: 0,
+            end_col: 5,
+        },
+        sparkline_type: DomainSparklineType::Line,
+        data_in_rows: false,
+        group_id: Some("group-1".to_string()),
+        visual: SparklineVisualSettings::default(),
+        axis: SparklineAxisSettings::default(),
+        created_at: None,
+        updated_at: None,
+    };
+    let group = DomainSparklineGroup {
+        id: "group-1".to_string(),
+        sheet_id: "Sheet1".to_string(),
+        sparkline_ids: vec!["sparkline-1".to_string()],
+        sparkline_type: DomainSparklineType::Line,
+        visual: SparklineVisualSettings {
+            color: "theme:4:-0.499984740745262".to_string(),
+            show_first_point: Some(false),
+            first_point_color: Some("theme:accent1:0.3999755851924192".to_string()),
+            ..Default::default()
+        },
+        axis: SparklineAxisSettings {
+            min_value: AxisBound::Label(AxisBoundLabel::Auto),
+            max_value: AxisBound::Label(AxisBoundLabel::Auto),
+            show_axis: None,
+            axis_color: Some("theme:5".to_string()),
+            display_empty_cells: EmptyCellDisplay::Gaps,
+            right_to_left: None,
+        },
+        created_at: None,
+        updated_at: None,
+    };
+
+    let xml = sparkline_groups_xml_from_domain("Sheet1", &[sparkline], &[group]);
+
+    assert!(xml.contains(r#"<x14:colorSeries theme="4" tint="-0.499984740745262"/>"#));
+    assert!(xml.contains(r#"<x14:colorFirst theme="4" tint="0.3999755851924192"/>"#));
+    assert!(xml.contains(r#"<x14:colorAxis theme="5"/>"#));
+    assert!(!xml.contains(r#" first="1""#));
+}
+
+#[test]
 fn test_sparklines_default_attributes_omitted() {
     let mut writer = SparklinesWriter::new();
 

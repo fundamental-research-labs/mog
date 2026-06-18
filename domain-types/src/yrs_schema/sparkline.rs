@@ -35,11 +35,16 @@ pub const KEY_DATA_END_COL: &str = "dataEndCol";
 // Visual settings (flattened with vis* prefix)
 pub const KEY_VIS_COLOR: &str = "visColor";
 pub const KEY_VIS_NEGATIVE_COLOR: &str = "visNegativeColor";
+pub const KEY_VIS_SHOW_NEGATIVE_POINTS: &str = "visShowNegativePoints";
 pub const KEY_VIS_SHOW_MARKERS: &str = "visShowMarkers";
 pub const KEY_VIS_MARKER_COLOR: &str = "visMarkerColor";
+pub const KEY_VIS_SHOW_HIGH_POINT: &str = "visShowHighPoint";
 pub const KEY_VIS_HIGH_POINT_COLOR: &str = "visHighPointColor";
+pub const KEY_VIS_SHOW_LOW_POINT: &str = "visShowLowPoint";
 pub const KEY_VIS_LOW_POINT_COLOR: &str = "visLowPointColor";
+pub const KEY_VIS_SHOW_FIRST_POINT: &str = "visShowFirstPoint";
 pub const KEY_VIS_FIRST_POINT_COLOR: &str = "visFirstPointColor";
+pub const KEY_VIS_SHOW_LAST_POINT: &str = "visShowLastPoint";
 pub const KEY_VIS_LAST_POINT_COLOR: &str = "visLastPointColor";
 pub const KEY_VIS_LINE_WEIGHT: &str = "visLineWeight";
 pub const KEY_VIS_COLUMN_GAP: &str = "visColumnGap";
@@ -178,23 +183,38 @@ pub fn to_yrs_prelim(spark: &Sparkline) -> Vec<(&str, Any)> {
     if let Some(ref c) = spark.visual.negative_color {
         entries.push((KEY_VIS_NEGATIVE_COLOR, Any::String(Arc::from(c.as_str()))));
     }
+    if let Some(b) = spark.visual.show_negative_points {
+        entries.push((KEY_VIS_SHOW_NEGATIVE_POINTS, Any::Bool(b)));
+    }
     if let Some(b) = spark.visual.show_markers {
         entries.push((KEY_VIS_SHOW_MARKERS, Any::Bool(b)));
     }
     if let Some(ref c) = spark.visual.marker_color {
         entries.push((KEY_VIS_MARKER_COLOR, Any::String(Arc::from(c.as_str()))));
     }
+    if let Some(b) = spark.visual.show_high_point {
+        entries.push((KEY_VIS_SHOW_HIGH_POINT, Any::Bool(b)));
+    }
     if let Some(ref c) = spark.visual.high_point_color {
         entries.push((KEY_VIS_HIGH_POINT_COLOR, Any::String(Arc::from(c.as_str()))));
     }
+    if let Some(b) = spark.visual.show_low_point {
+        entries.push((KEY_VIS_SHOW_LOW_POINT, Any::Bool(b)));
+    }
     if let Some(ref c) = spark.visual.low_point_color {
         entries.push((KEY_VIS_LOW_POINT_COLOR, Any::String(Arc::from(c.as_str()))));
+    }
+    if let Some(b) = spark.visual.show_first_point {
+        entries.push((KEY_VIS_SHOW_FIRST_POINT, Any::Bool(b)));
     }
     if let Some(ref c) = spark.visual.first_point_color {
         entries.push((
             KEY_VIS_FIRST_POINT_COLOR,
             Any::String(Arc::from(c.as_str())),
         ));
+    }
+    if let Some(b) = spark.visual.show_last_point {
+        entries.push((KEY_VIS_SHOW_LAST_POINT, Any::Bool(b)));
     }
     if let Some(ref c) = spark.visual.last_point_color {
         entries.push((KEY_VIS_LAST_POINT_COLOR, Any::String(Arc::from(c.as_str()))));
@@ -247,11 +267,16 @@ pub fn from_yrs_map<T: ReadTxn>(map: &MapRef, txn: &T) -> Option<Sparkline> {
         visual: SparklineVisualSettings {
             color: read_string(map, txn, KEY_VIS_COLOR).unwrap_or_default(),
             negative_color: read_string(map, txn, KEY_VIS_NEGATIVE_COLOR),
+            show_negative_points: read_bool(map, txn, KEY_VIS_SHOW_NEGATIVE_POINTS),
             show_markers: read_bool(map, txn, KEY_VIS_SHOW_MARKERS),
             marker_color: read_string(map, txn, KEY_VIS_MARKER_COLOR),
+            show_high_point: read_bool(map, txn, KEY_VIS_SHOW_HIGH_POINT),
             high_point_color: read_string(map, txn, KEY_VIS_HIGH_POINT_COLOR),
+            show_low_point: read_bool(map, txn, KEY_VIS_SHOW_LOW_POINT),
             low_point_color: read_string(map, txn, KEY_VIS_LOW_POINT_COLOR),
+            show_first_point: read_bool(map, txn, KEY_VIS_SHOW_FIRST_POINT),
             first_point_color: read_string(map, txn, KEY_VIS_FIRST_POINT_COLOR),
+            show_last_point: read_bool(map, txn, KEY_VIS_SHOW_LAST_POINT),
             last_point_color: read_string(map, txn, KEY_VIS_LAST_POINT_COLOR),
             line_weight: read_number(map, txn, KEY_VIS_LINE_WEIGHT),
             column_gap: read_number(map, txn, KEY_VIS_COLUMN_GAP),
@@ -325,23 +350,38 @@ pub fn group_to_yrs_prelim(group: &SparklineGroup) -> Vec<(&str, Any)> {
     if let Some(ref c) = group.visual.negative_color {
         entries.push((KEY_VIS_NEGATIVE_COLOR, Any::String(Arc::from(c.as_str()))));
     }
+    if let Some(b) = group.visual.show_negative_points {
+        entries.push((KEY_VIS_SHOW_NEGATIVE_POINTS, Any::Bool(b)));
+    }
     if let Some(b) = group.visual.show_markers {
         entries.push((KEY_VIS_SHOW_MARKERS, Any::Bool(b)));
     }
     if let Some(ref c) = group.visual.marker_color {
         entries.push((KEY_VIS_MARKER_COLOR, Any::String(Arc::from(c.as_str()))));
     }
+    if let Some(b) = group.visual.show_high_point {
+        entries.push((KEY_VIS_SHOW_HIGH_POINT, Any::Bool(b)));
+    }
     if let Some(ref c) = group.visual.high_point_color {
         entries.push((KEY_VIS_HIGH_POINT_COLOR, Any::String(Arc::from(c.as_str()))));
     }
+    if let Some(b) = group.visual.show_low_point {
+        entries.push((KEY_VIS_SHOW_LOW_POINT, Any::Bool(b)));
+    }
     if let Some(ref c) = group.visual.low_point_color {
         entries.push((KEY_VIS_LOW_POINT_COLOR, Any::String(Arc::from(c.as_str()))));
+    }
+    if let Some(b) = group.visual.show_first_point {
+        entries.push((KEY_VIS_SHOW_FIRST_POINT, Any::Bool(b)));
     }
     if let Some(ref c) = group.visual.first_point_color {
         entries.push((
             KEY_VIS_FIRST_POINT_COLOR,
             Any::String(Arc::from(c.as_str())),
         ));
+    }
+    if let Some(b) = group.visual.show_last_point {
+        entries.push((KEY_VIS_SHOW_LAST_POINT, Any::Bool(b)));
     }
     if let Some(ref c) = group.visual.last_point_color {
         entries.push((KEY_VIS_LAST_POINT_COLOR, Any::String(Arc::from(c.as_str()))));
@@ -386,11 +426,16 @@ pub fn group_from_yrs_map<T: ReadTxn>(map: &MapRef, txn: &T) -> Option<Sparkline
         visual: SparklineVisualSettings {
             color: read_string(map, txn, KEY_VIS_COLOR).unwrap_or_default(),
             negative_color: read_string(map, txn, KEY_VIS_NEGATIVE_COLOR),
+            show_negative_points: read_bool(map, txn, KEY_VIS_SHOW_NEGATIVE_POINTS),
             show_markers: read_bool(map, txn, KEY_VIS_SHOW_MARKERS),
             marker_color: read_string(map, txn, KEY_VIS_MARKER_COLOR),
+            show_high_point: read_bool(map, txn, KEY_VIS_SHOW_HIGH_POINT),
             high_point_color: read_string(map, txn, KEY_VIS_HIGH_POINT_COLOR),
+            show_low_point: read_bool(map, txn, KEY_VIS_SHOW_LOW_POINT),
             low_point_color: read_string(map, txn, KEY_VIS_LOW_POINT_COLOR),
+            show_first_point: read_bool(map, txn, KEY_VIS_SHOW_FIRST_POINT),
             first_point_color: read_string(map, txn, KEY_VIS_FIRST_POINT_COLOR),
+            show_last_point: read_bool(map, txn, KEY_VIS_SHOW_LAST_POINT),
             last_point_color: read_string(map, txn, KEY_VIS_LAST_POINT_COLOR),
             line_weight: read_number(map, txn, KEY_VIS_LINE_WEIGHT),
             column_gap: read_number(map, txn, KEY_VIS_COLUMN_GAP),
@@ -478,11 +523,16 @@ mod tests {
             visual: SparklineVisualSettings {
                 color: "#336699".to_string(),
                 negative_color: Some("#CC0000".to_string()),
+                show_negative_points: Some(true),
                 show_markers: Some(true),
                 marker_color: Some("#000000".to_string()),
+                show_high_point: Some(true),
                 high_point_color: Some("#00FF00".to_string()),
+                show_low_point: Some(true),
                 low_point_color: Some("#FF0000".to_string()),
+                show_first_point: Some(true),
                 first_point_color: Some("#0000FF".to_string()),
+                show_last_point: Some(true),
                 last_point_color: Some("#FFFF00".to_string()),
                 line_weight: Some(1.5),
                 column_gap: None,
@@ -549,11 +599,16 @@ mod tests {
             visual: SparklineVisualSettings {
                 color: "#376092".to_string(),
                 negative_color: Some("#D00000".to_string()),
+                show_negative_points: Some(true),
                 show_markers: None,
                 marker_color: None,
+                show_high_point: Some(true),
                 high_point_color: Some("#00B050".to_string()),
+                show_low_point: Some(true),
                 low_point_color: Some("#FF0000".to_string()),
+                show_first_point: None,
                 first_point_color: None,
+                show_last_point: None,
                 last_point_color: None,
                 line_weight: Some(0.75),
                 column_gap: Some(1.0),

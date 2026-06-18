@@ -83,34 +83,39 @@ fn convert_sparkline_type(ooxml: &ooxml_types::sparklines::SparklineType) -> DtS
 
 /// Build `SparklineVisualSettings` from an OOXML `SparklineGroup`.
 fn build_visual_settings(g: &SparklineGroup) -> SparklineVisualSettings {
+    let negative_color = sparkline_color_to_domain_color(&g.color_negative);
+    let high_point_color = sparkline_color_to_domain_color(&g.color_high);
+    let low_point_color = sparkline_color_to_domain_color(&g.color_low);
+    let first_point_color = sparkline_color_to_domain_color(&g.color_first);
+    let last_point_color = sparkline_color_to_domain_color(&g.color_last);
+
     SparklineVisualSettings {
-        color: sparkline_color_to_hex(&g.color_series).unwrap_or_default(),
-        negative_color: sparkline_color_to_hex(&g.color_negative),
+        color: sparkline_color_to_domain_color(&g.color_series).unwrap_or_default(),
+        show_negative_points: sparkline_flag_value(g.negative, negative_color.is_some()),
+        negative_color,
         show_markers: if g.markers { Some(true) } else { None },
-        marker_color: sparkline_color_to_hex(&g.color_markers),
-        high_point_color: if g.high {
-            sparkline_color_to_hex(&g.color_high)
-        } else {
-            None
-        },
-        low_point_color: if g.low {
-            sparkline_color_to_hex(&g.color_low)
-        } else {
-            None
-        },
-        first_point_color: if g.first {
-            sparkline_color_to_hex(&g.color_first)
-        } else {
-            None
-        },
-        last_point_color: if g.last {
-            sparkline_color_to_hex(&g.color_last)
-        } else {
-            None
-        },
+        marker_color: sparkline_color_to_domain_color(&g.color_markers),
+        show_high_point: sparkline_flag_value(g.high, high_point_color.is_some()),
+        high_point_color,
+        show_low_point: sparkline_flag_value(g.low, low_point_color.is_some()),
+        low_point_color,
+        show_first_point: sparkline_flag_value(g.first, first_point_color.is_some()),
+        first_point_color,
+        show_last_point: sparkline_flag_value(g.last, last_point_color.is_some()),
+        last_point_color,
         line_weight: g.line_weight,
         column_gap: None,
         bar_gap: None,
+    }
+}
+
+fn sparkline_flag_value(enabled: bool, has_color: bool) -> Option<bool> {
+    if enabled {
+        Some(true)
+    } else if has_color {
+        Some(false)
+    } else {
+        None
     }
 }
 
@@ -145,7 +150,7 @@ fn build_axis_settings(g: &SparklineGroup) -> SparklineAxisSettings {
         min_value,
         max_value,
         show_axis: if g.display_x_axis { Some(true) } else { None },
-        axis_color: sparkline_color_to_hex(&g.color_axis),
+        axis_color: sparkline_color_to_domain_color(&g.color_axis),
         display_empty_cells,
         right_to_left: if g.right_to_left { Some(true) } else { None },
     }
@@ -185,8 +190,8 @@ fn parse_sparkline_range(range_ref: &str) -> SparklineDataRange {
     }
 }
 
-/// Extract a hex color string from an optional `SparklineColor`.
-pub(crate) fn sparkline_color_to_hex(
+/// Extract a domain color string from an optional `SparklineColor`.
+pub(crate) fn sparkline_color_to_domain_color(
     color: &Option<crate::domain::sparklines::read::SparklineColor>,
 ) -> Option<String> {
     color.as_ref().and_then(|c| {
@@ -197,9 +202,96 @@ pub(crate) fn sparkline_color_to_hex(
             } else {
                 Some(format!("#{rgb}"))
             }
+        } else if let Some(theme) = c.theme {
+            let mut value = format!("theme:{theme}");
+            if let Some(tint) = c.tint {
+                value.push(':');
+                value.push_str(&tint.to_string());
+            }
+            Some(value)
         } else {
-            // Theme-based color — would need theme resolution, return None for now
             None
         }
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sparkline_color_preserves_theme_and_tint_as_domain_color() {
+        let color = Some(crate::domain::sparklines::read::SparklineColor {
+            rgb: None,
+            theme: Some(4),
+            tint: Some(0.3999755851924192),
+        });
+
+        assert_eq!(
+            sparkline_color_to_domain_color(&color).as_deref(),
+            Some("theme:4:0.3999755851924192")
+        );
+    }
+
+    #[test]
+    fn sparkline_color_preserves_rgb_as_hex_domain_color() {
+        let color = Some(crate::domain::sparklines::read::SparklineColor {
+            rgb: Some("FF376092".to_string()),
+            theme: None,
+            tint: None,
+        });
+
+        assert_eq!(
+            sparkline_color_to_domain_color(&color).as_deref(),
+            Some("#376092")
+        );
+    }
+
+    #[test]
+    fn build_visual_settings_preserves_point_colors_without_display_flags() {
+        let group = SparklineGroup {
+            color_first: Some(crate::domain::sparklines::read::SparklineColor {
+                rgb: None,
+                theme: Some(4),
+                tint: Some(0.3999755851924192),
+            }),
+            color_last: Some(crate::domain::sparklines::read::SparklineColor {
+                rgb: None,
+                theme: Some(4),
+                tint: Some(0.3999755851924192),
+            }),
+            color_high: Some(crate::domain::sparklines::read::SparklineColor {
+                rgb: None,
+                theme: Some(4),
+                tint: None,
+            }),
+            color_low: Some(crate::domain::sparklines::read::SparklineColor {
+                rgb: None,
+                theme: Some(4),
+                tint: None,
+            }),
+            first: false,
+            last: false,
+            high: false,
+            low: false,
+            ..Default::default()
+        };
+
+        let visual = build_visual_settings(&group);
+
+        assert_eq!(
+            visual.first_point_color.as_deref(),
+            Some("theme:4:0.3999755851924192")
+        );
+        assert_eq!(visual.show_first_point, Some(false));
+        assert_eq!(
+            visual.last_point_color.as_deref(),
+            Some("theme:4:0.3999755851924192")
+        );
+        assert_eq!(visual.show_last_point, Some(false));
+        assert_eq!(visual.high_point_color.as_deref(), Some("theme:4"));
+        assert_eq!(visual.show_high_point, Some(false));
+        assert_eq!(visual.low_point_color.as_deref(), Some("theme:4"));
+        assert_eq!(visual.show_low_point, Some(false));
+    }
 }

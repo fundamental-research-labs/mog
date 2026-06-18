@@ -94,15 +94,25 @@ pub struct SparklineVisualSettings {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub negative_color: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub show_negative_points: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub show_markers: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub marker_color: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub show_high_point: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub high_point_color: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub show_low_point: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub low_point_color: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub show_first_point: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub first_point_color: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub show_last_point: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_point_color: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -258,11 +268,16 @@ mod tests {
             visual: SparklineVisualSettings {
                 color: "#376092".to_string(),
                 negative_color: Some("#D00000".to_string()),
+                show_negative_points: Some(true),
                 show_markers: Some(true),
                 marker_color: None,
+                show_high_point: Some(true),
                 high_point_color: Some("#00B050".to_string()),
+                show_low_point: Some(true),
                 low_point_color: Some("#FF0000".to_string()),
+                show_first_point: None,
                 first_point_color: None,
+                show_last_point: None,
                 last_point_color: None,
                 line_weight: Some(0.75),
                 column_gap: None,

@@ -9,7 +9,7 @@ use ooxml_types::charts::{
 use ooxml_types::drawings::ShapeProperties;
 
 use super::{
-    elements::{build_chart_text_rich, build_title_element},
+    elements::{build_chart_text_rich, build_title, preserve_imported_title_text_properties},
     formatting::{build_outline, build_shape_properties, build_text_body},
 };
 
@@ -285,6 +285,9 @@ fn apply_imported_axis_fidelity(
     rebuilt.crosses_explicit =
         matches!(sad.crosses_at.as_deref(), Some("min" | "max" | "automatic"));
     rebuilt.auto = original.auto;
+    if let (Some(title), Some(imported_title)) = (rebuilt.title.as_mut(), original.title.as_ref()) {
+        preserve_imported_title_text_properties(title, Some(imported_title));
+    }
     rebuilt.raw_axis_type_attr = original.raw_axis_type_attr.clone();
 }
 
@@ -521,10 +524,15 @@ fn build_single_axis_with_default_position(
         ..Default::default()
     };
 
-    let title = sad
-        .title
-        .as_ref()
-        .map(|t| build_title_element(t, sad.title_format.as_ref(), None, None, None, None));
+    let title = build_title(
+        sad.title.as_deref(),
+        sad.title_format.as_ref(),
+        sad.title_rich_text.as_deref(),
+        None,
+        None,
+        None,
+        None,
+    );
 
     let num_fmt = sad.number_format.as_ref().map(|code| NumFmt {
         format_code: code.clone(),

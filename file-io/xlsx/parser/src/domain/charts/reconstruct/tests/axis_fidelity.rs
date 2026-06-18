@@ -1,6 +1,7 @@
 use super::*;
 use crate::domain::charts::axes::parse_axis;
-use ooxml_types::charts::{AxisCrosses, TickLabelPosition, TickMark};
+use domain_types::chart::ChartFormatStringData;
+use ooxml_types::charts::{self, AxisCrosses, ChartText, TickLabelPosition, TickMark};
 
 #[test]
 fn parse_axis_tracks_optional_shared_element_presence() {
@@ -137,6 +138,64 @@ fn imported_category_axis_preserves_auto() {
     let xml = chart_xml(&spec);
 
     assert!(xml.contains("<c:auto val=\"1\"/>"), "{xml}");
+}
+
+#[test]
+fn imported_axis_title_preserves_unmodeled_rich_text_properties() {
+    let mut spec = minimal_chart_spec(DomainChartType::Column, None);
+    spec.axes = Some(AxisData {
+        category_axis: Some(SingleAxisData {
+            visible: true,
+            ..Default::default()
+        }),
+        value_axis: Some(SingleAxisData {
+            visible: true,
+            title: Some("Rainfall".to_string()),
+            title_rich_text: Some(vec![
+                ChartFormatStringData {
+                    text: "Rain".to_string(),
+                    font: None,
+                },
+                ChartFormatStringData {
+                    text: "fall".to_string(),
+                    font: None,
+                },
+            ]),
+            ..Default::default()
+        }),
+        secondary_category_axis: None,
+        secondary_value_axis: None,
+        series_axis: None,
+    });
+
+    let mut value_axis = imported_left_axis(AxisType::Value, 100, 10);
+    value_axis.title = Some(charts::Title {
+        tx: Some(ChartText::Rich(crate::domain::charts::parse_text_body(
+            br#"<c:rich xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+                      xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+                <a:bodyPr/>
+                <a:p>
+                    <a:r>
+                        <a:rPr lang="en-US"/>
+                        <a:t>Rain</a:t>
+                    </a:r>
+                    <a:r>
+                        <a:rPr lang="en-US"/>
+                        <a:t>fall</a:t>
+                    </a:r>
+                </a:p>
+            </c:rich>"#,
+        ))),
+        ..Default::default()
+    });
+    let spec = with_original_axes(
+        spec,
+        vec![imported_left_axis(AxisType::Category, 10, 100), value_axis],
+    );
+
+    let xml = chart_xml(&spec);
+
+    assert_eq!(xml.matches("lang=\"en-US\"").count(), 2, "{xml}");
 }
 
 #[test]

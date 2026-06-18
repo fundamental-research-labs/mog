@@ -14,7 +14,7 @@ use super::super::reader::raw::{
 use super::super::types::{DrawingContent, SpreadsheetGraphicFrame};
 use super::connectors::parse_connector;
 use super::graphic_frames::{
-    parse_graphic_frame_nv, parse_graphic_frame_xfrm, parse_smartart_graphic_frame,
+    parse_graphic_frame_nv, parse_graphic_frame_xfrm_with_presence, parse_smartart_graphic_frame,
 };
 use super::groups::parse_group_shape;
 use super::pictures::parse_picture;
@@ -108,12 +108,15 @@ pub(crate) fn dispatch_drawing_content(xml: &[u8]) -> DispatchedContent {
             let gf =
                 super::super::reader::elements::first_descendant_slice(gf_xml, b"graphicFrame");
             let nv = gf.map(parse_graphic_frame_nv).unwrap_or_default();
-            let xfrm = gf.map(parse_graphic_frame_xfrm).unwrap_or_default();
+            let (xfrm, has_xfrm) = gf
+                .map(parse_graphic_frame_xfrm_with_presence)
+                .unwrap_or_default();
             let relationship_ids = relationship_ids_in_raw(&raw_xml);
             return DispatchedContent {
                 content: DrawingContent::GraphicFrame(SpreadsheetGraphicFrame {
                     nv_graphic_frame_pr: nv,
                     xfrm,
+                    has_xfrm,
                     graphic_xml: Some(raw_xml),
                     ..Default::default()
                 }),
@@ -177,10 +180,12 @@ pub(crate) fn dispatch_drawing_content(xml: &[u8]) -> DispatchedContent {
                 attr_value(element, b"macro=\"").map(|v| String::from_utf8_lossy(v).into_owned());
             let relationship_ids = relationship_ids_in_raw(&raw_xml);
             let kind = classify_direct_graphic_frame(&raw_xml);
+            let (xfrm, has_xfrm) = parse_graphic_frame_xfrm_with_presence(element);
             return DispatchedContent {
                 content: DrawingContent::GraphicFrame(SpreadsheetGraphicFrame {
                     nv_graphic_frame_pr: parse_graphic_frame_nv(element),
-                    xfrm: parse_graphic_frame_xfrm(element),
+                    xfrm,
+                    has_xfrm,
                     graphic_xml: Some(raw_xml),
                     macro_name,
                     ..Default::default()

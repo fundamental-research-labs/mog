@@ -327,6 +327,10 @@ fn chart_frame_props_match_spec(
     let cnv = &nv.c_nv_pr;
     let name = (!cnv.name.is_empty()).then(|| cnv.name.clone());
     let id = (cnv.id.value() != 0).then_some(cnv.id.value());
+    let xfrm = gf.has_explicit_xfrm().then_some(&gf.xfrm);
+    let current_frame = chart_spec.chart_frame.as_ref();
+    let current_gf = current_frame.map(|current| &current.graphic_frame);
+    let current_xfrm = current_gf.and_then(|gf| gf.has_explicit_xfrm().then_some(&gf.xfrm));
     chart_spec.cnv_pr_name == name
         && chart_spec.cnv_pr_id == id
         && chart_spec.cnv_pr_descr.as_ref() == cnv.descr.as_ref()
@@ -339,41 +343,21 @@ fn chart_frame_props_match_spec(
                 .no_change_aspect_explicit
                 .or_else(|| nv.c_nv_graphic_frame_pr.no_change_aspect.then_some(true))
         && chart_spec.has_graphic_frame_locks == nv.has_graphic_frame_locks
-        && chart_spec.xfrm_off_x == gf.xfrm.off_x()
-        && chart_spec.xfrm_off_y == gf.xfrm.off_y()
-        && chart_spec.xfrm_ext_cx == gf.xfrm.ext_cx() as i64
-        && chart_spec.xfrm_ext_cy == gf.xfrm.ext_cy() as i64
+        && chart_spec.xfrm_off_x == xfrm.map_or(0, |xfrm| xfrm.off_x())
+        && chart_spec.xfrm_off_y == xfrm.map_or(0, |xfrm| xfrm.off_y())
+        && chart_spec.xfrm_ext_cx == xfrm.map_or(0, |xfrm| xfrm.ext_cx() as i64)
+        && chart_spec.xfrm_ext_cy == xfrm.map_or(0, |xfrm| xfrm.ext_cy() as i64)
         && chart_spec.client_data_locks_with_sheet == frame.client_data_locks_with_sheet
         && chart_spec.client_data_prints_with_sheet == frame.client_data_prints_with_sheet
-        && chart_spec
-            .chart_frame
-            .as_ref()
-            .and_then(|current| current.relationship_id.as_deref())
+        && current_frame.and_then(|current| current.relationship_id.as_deref())
             == frame.relationship_id.as_deref()
-        && chart_spec
-            .chart_frame
-            .as_ref()
-            .and_then(|current| current.relationship_target.as_deref())
+        && current_frame.and_then(|current| current.relationship_target.as_deref())
             == frame.relationship_target.as_deref()
-        && chart_spec
-            .chart_frame
-            .as_ref()
-            .map(|current| current.graphic_frame.xfrm.rotation)
-            == Some(frame.graphic_frame.xfrm.rotation)
-        && chart_spec
-            .chart_frame
-            .as_ref()
-            .map(|current| current.graphic_frame.xfrm.flip_h)
-            == Some(frame.graphic_frame.xfrm.flip_h)
-        && chart_spec
-            .chart_frame
-            .as_ref()
-            .map(|current| current.graphic_frame.xfrm.flip_v)
-            == Some(frame.graphic_frame.xfrm.flip_v)
-        && chart_spec
-            .chart_frame
-            .as_ref()
-            .and_then(|current| current.raw_alternate_content.as_deref())
+        && current_gf.map(|current| current.has_explicit_xfrm()) == Some(gf.has_explicit_xfrm())
+        && current_xfrm.and_then(|xfrm| xfrm.rotation) == xfrm.and_then(|xfrm| xfrm.rotation)
+        && current_xfrm.and_then(|xfrm| xfrm.flip_h) == xfrm.and_then(|xfrm| xfrm.flip_h)
+        && current_xfrm.and_then(|xfrm| xfrm.flip_v) == xfrm.and_then(|xfrm| xfrm.flip_v)
+        && current_frame.and_then(|current| current.raw_alternate_content.as_deref())
             == frame.raw_alternate_content.as_deref()
 }
 

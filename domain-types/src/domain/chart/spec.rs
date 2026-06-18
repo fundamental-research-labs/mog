@@ -368,14 +368,16 @@ impl ChartSpec {
             return;
         };
 
-        let frame_rotation_units = frame
+        let frame_xfrm = frame
             .graphic_frame
-            .xfrm
-            .rotation
+            .has_explicit_xfrm()
+            .then_some(&frame.graphic_frame.xfrm);
+        let frame_rotation_units = frame_xfrm
+            .and_then(|xfrm| xfrm.rotation)
             .map(|rot| rot.value())
             .unwrap_or(0);
-        let frame_flip_h = frame.graphic_frame.xfrm.flip_h.unwrap_or(false);
-        let frame_flip_v = frame.graphic_frame.xfrm.flip_v.unwrap_or(false);
+        let frame_flip_h = frame_xfrm.and_then(|xfrm| xfrm.flip_h).unwrap_or(false);
+        let frame_flip_v = frame_xfrm.and_then(|xfrm| xfrm.flip_v).unwrap_or(false);
         let frame_visible = !frame.graphic_frame.nv_graphic_frame_pr.c_nv_pr.hidden;
         let frame_printable = frame.client_data_prints_with_sheet.unwrap_or(true);
         let frame_locked = Self::frame_locked_state(frame, None);
@@ -391,19 +393,20 @@ impl ChartSpec {
         }
 
         if frame_rotation_units != common_rotation_units {
-            frame.graphic_frame.xfrm.rotation = (common_rotation_units != 0
-                || frame.graphic_frame.xfrm.rotation.is_some())
-            .then(|| ooxml_types::drawings::StAngle::new(common_rotation_units));
+            frame.graphic_frame.has_xfrm = true;
+            let xfrm = &mut frame.graphic_frame.xfrm;
+            xfrm.rotation = (common_rotation_units != 0 || xfrm.rotation.is_some())
+                .then(|| ooxml_types::drawings::StAngle::new(common_rotation_units));
         }
         if frame_flip_h != common.flip_h {
-            frame.graphic_frame.xfrm.flip_h = (common.flip_h
-                || frame.graphic_frame.xfrm.flip_h.is_some())
-            .then_some(common.flip_h);
+            frame.graphic_frame.has_xfrm = true;
+            let xfrm = &mut frame.graphic_frame.xfrm;
+            xfrm.flip_h = (common.flip_h || xfrm.flip_h.is_some()).then_some(common.flip_h);
         }
         if frame_flip_v != common.flip_v {
-            frame.graphic_frame.xfrm.flip_v = (common.flip_v
-                || frame.graphic_frame.xfrm.flip_v.is_some())
-            .then_some(common.flip_v);
+            frame.graphic_frame.has_xfrm = true;
+            let xfrm = &mut frame.graphic_frame.xfrm;
+            xfrm.flip_v = (common.flip_v || xfrm.flip_v.is_some()).then_some(common.flip_v);
         }
 
         frame.graphic_frame.nv_graphic_frame_pr.c_nv_pr.hidden = !common.visible;
@@ -447,13 +450,13 @@ impl ChartSpec {
         let nv = &gf.nv_graphic_frame_pr;
         let cnv = &nv.c_nv_pr;
         let locks = &nv.c_nv_graphic_frame_pr;
-        let rotation = gf
-            .xfrm
-            .rotation
+        let xfrm = gf.has_explicit_xfrm().then_some(&gf.xfrm);
+        let rotation = xfrm
+            .and_then(|xfrm| xfrm.rotation)
             .map(|rot| rot.value() as f64 / 60_000.0)
             .unwrap_or(0.0);
-        let flip_h = gf.xfrm.flip_h.unwrap_or(false);
-        let flip_v = gf.xfrm.flip_v.unwrap_or(false);
+        let flip_h = xfrm.and_then(|xfrm| xfrm.flip_h).unwrap_or(false);
+        let flip_v = xfrm.and_then(|xfrm| xfrm.flip_v).unwrap_or(false);
         let locked = frame.client_data_locks_with_sheet.unwrap_or(true)
             || locks.no_grp
             || locks.no_select
@@ -557,6 +560,7 @@ impl ChartSpec {
             let gf = &frame.graphic_frame;
             let nv = &gf.nv_graphic_frame_pr;
             let cnv = &nv.c_nv_pr;
+            let xfrm = gf.has_explicit_xfrm().then_some(&gf.xfrm);
             (
                 (!cnv.name.is_empty()).then(|| cnv.name.clone()),
                 (cnv.id.value() != 0).then_some(cnv.id.value()),
@@ -566,10 +570,10 @@ impl ChartSpec {
                 nv.no_change_aspect_explicit
                     .or_else(|| nv.c_nv_graphic_frame_pr.no_change_aspect.then_some(true)),
                 nv.has_graphic_frame_locks,
-                gf.xfrm.off_x(),
-                gf.xfrm.off_y(),
-                gf.xfrm.ext_cx() as i64,
-                gf.xfrm.ext_cy() as i64,
+                xfrm.map_or(0, |xfrm| xfrm.off_x()),
+                xfrm.map_or(0, |xfrm| xfrm.off_y()),
+                xfrm.map_or(0, |xfrm| xfrm.ext_cx() as i64),
+                xfrm.map_or(0, |xfrm| xfrm.ext_cy() as i64),
                 cnv.ext_lst.clone(),
                 frame.edit_as.clone(),
                 gf.macro_name.clone(),
@@ -746,14 +750,20 @@ impl ChartSpec {
                 nv.c_nv_graphic_frame_pr.no_change_aspect = true;
             }
         }
-        graphic_frame.xfrm = ooxml_types::drawings::Transform2D {
-            offset: Some((self.xfrm_off_x, self.xfrm_off_y)),
-            extent: Some((
-                self.xfrm_ext_cx.max(0) as u64,
-                self.xfrm_ext_cy.max(0) as u64,
-            )),
-            ..Default::default()
-        };
+        graphic_frame.has_xfrm = self.xfrm_off_x != 0
+            || self.xfrm_off_y != 0
+            || self.xfrm_ext_cx != 0
+            || self.xfrm_ext_cy != 0;
+        if graphic_frame.has_xfrm {
+            graphic_frame.xfrm = ooxml_types::drawings::Transform2D {
+                offset: Some((self.xfrm_off_x, self.xfrm_off_y)),
+                extent: Some((
+                    self.xfrm_ext_cx.max(0) as u64,
+                    self.xfrm_ext_cy.max(0) as u64,
+                )),
+                ..Default::default()
+            };
+        }
         graphic_frame.macro_name = self.macro_name.clone();
 
         Some(ChartDrawingFrameOoxmlProps {

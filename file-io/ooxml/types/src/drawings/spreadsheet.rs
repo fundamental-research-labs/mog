@@ -305,6 +305,12 @@ pub struct SpreadsheetGraphicFrame {
     pub nv_graphic_frame_pr: GraphicFrameNonVisual,
     /// 2D transform (xfrm: position, size, rotation).
     pub xfrm: Transform2D,
+    /// Whether an `<xdr:xfrm>` element was present in the original graphic frame.
+    ///
+    /// A missing transform and an explicit zero transform serialize differently,
+    /// so the read/write path must preserve the element presence bit.
+    #[serde(default)]
+    pub has_xfrm: bool,
     /// Inner graphic content — opaque XML for the `<a:graphic>` element.
     /// Actual content (chart, table, diagram) is resolved via relationships.
     pub graphic_xml: Option<String>,
@@ -312,6 +318,13 @@ pub struct SpreadsheetGraphicFrame {
     pub macro_name: Option<String>,
     /// Whether graphic frame is published (@fPublished, default false).
     pub f_published: Option<bool>,
+}
+
+impl SpreadsheetGraphicFrame {
+    /// Whether the graphic frame should serialize an `<xdr:xfrm>` element.
+    pub fn has_explicit_xfrm(&self) -> bool {
+        self.has_xfrm || self.xfrm.has_explicit_content()
+    }
 }
 
 // =============================================================================

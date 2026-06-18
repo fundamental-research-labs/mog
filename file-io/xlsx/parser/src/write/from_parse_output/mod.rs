@@ -12,6 +12,7 @@
 mod assembly;
 mod chart_auxiliary;
 mod chart_extents;
+mod chart_frame_transform;
 mod chart_replay;
 mod differential_formats;
 mod doc_props;
@@ -836,6 +837,13 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
                         .and_then(|nv| nv.no_change_aspect_explicit)
                         .or(chart_spec.no_change_aspect);
                     let frame_extent = chart_extents::frame_extent(chart_spec);
+                    let frame_transform = chart_frame_transform::from_frame_or_defaults(
+                        chart_frame,
+                        chart_spec.position.anchor_col_offset,
+                        chart_spec.position.anchor_row_offset,
+                        frame_extent.cx,
+                        frame_extent.cy,
+                    );
                     let anchor_extent = chart_extents::anchor_extent(chart_spec);
                     let cx_ref = ChartExRef {
                         r_id: cx_r_id,
@@ -851,23 +859,16 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
                         hidden: frame_cnv
                             .map(|cnv| cnv.hidden)
                             .unwrap_or(chart_spec.cnv_pr_hidden),
-                        xfrm_off_x: chart_frame
-                            .map(|frame| frame.graphic_frame.xfrm.off_x())
-                            .unwrap_or(chart_spec.position.anchor_col_offset),
-                        xfrm_off_y: chart_frame
-                            .map(|frame| frame.graphic_frame.xfrm.off_y())
-                            .unwrap_or(chart_spec.position.anchor_row_offset),
-                        xfrm_ext_cx: chart_frame
-                            .map(|frame| frame.graphic_frame.xfrm.ext_cx() as i64)
-                            .unwrap_or(frame_extent.cx),
-                        xfrm_ext_cy: chart_frame
-                            .map(|frame| frame.graphic_frame.xfrm.ext_cy() as i64)
-                            .unwrap_or(frame_extent.cy),
-                        xfrm_rot: chart_frame
-                            .and_then(|frame| frame.graphic_frame.xfrm.rotation)
-                            .map(|rot| rot.value()),
-                        xfrm_flip_h: chart_frame.and_then(|frame| frame.graphic_frame.xfrm.flip_h),
-                        xfrm_flip_v: chart_frame.and_then(|frame| frame.graphic_frame.xfrm.flip_v),
+                        has_xfrm: frame_transform.has_xfrm,
+                        xfrm_has_off: frame_transform.has_off,
+                        xfrm_has_ext: frame_transform.has_ext,
+                        xfrm_off_x: frame_transform.off_x,
+                        xfrm_off_y: frame_transform.off_y,
+                        xfrm_ext_cx: frame_transform.ext_cx,
+                        xfrm_ext_cy: frame_transform.ext_cy,
+                        xfrm_rot: frame_transform.rot,
+                        xfrm_flip_h: frame_transform.flip_h,
+                        xfrm_flip_v: frame_transform.flip_v,
                         macro_name: chart_frame
                             .and_then(|frame| frame.graphic_frame.macro_name.clone())
                             .or_else(|| chart_spec.macro_name.clone()),
@@ -987,6 +988,13 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
                         .and_then(|nv| nv.no_change_aspect_explicit)
                         .or(chart_spec.no_change_aspect);
                     let frame_extent = chart_extents::frame_extent(chart_spec);
+                    let frame_transform = chart_frame_transform::from_frame_or_defaults(
+                        chart_frame,
+                        chart_spec.xfrm_off_x,
+                        chart_spec.xfrm_off_y,
+                        frame_extent.cx,
+                        frame_extent.cy,
+                    );
                     let anchor_extent = chart_extents::anchor_extent(chart_spec);
 
                     let chart_ref = ChartRef {
@@ -1016,23 +1024,16 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
                         no_drilldown: frame_nv.map(|nv| nv.no_drilldown).unwrap_or(false),
                         c_nv_graphic_frame_pr_ext_lst: frame_nv
                             .and_then(|nv| nv.c_nv_graphic_frame_pr_ext_lst.clone()),
-                        xfrm_off_x: chart_frame
-                            .map(|frame| frame.graphic_frame.xfrm.off_x())
-                            .unwrap_or(chart_spec.xfrm_off_x),
-                        xfrm_off_y: chart_frame
-                            .map(|frame| frame.graphic_frame.xfrm.off_y())
-                            .unwrap_or(chart_spec.xfrm_off_y),
-                        xfrm_ext_cx: chart_frame
-                            .map(|frame| frame.graphic_frame.xfrm.ext_cx() as i64)
-                            .unwrap_or(frame_extent.cx),
-                        xfrm_ext_cy: chart_frame
-                            .map(|frame| frame.graphic_frame.xfrm.ext_cy() as i64)
-                            .unwrap_or(frame_extent.cy),
-                        xfrm_rot: chart_frame
-                            .and_then(|frame| frame.graphic_frame.xfrm.rotation)
-                            .map(|rot| rot.value()),
-                        xfrm_flip_h: chart_frame.and_then(|frame| frame.graphic_frame.xfrm.flip_h),
-                        xfrm_flip_v: chart_frame.and_then(|frame| frame.graphic_frame.xfrm.flip_v),
+                        has_xfrm: frame_transform.has_xfrm,
+                        xfrm_has_off: frame_transform.has_off,
+                        xfrm_has_ext: frame_transform.has_ext,
+                        xfrm_off_x: frame_transform.off_x,
+                        xfrm_off_y: frame_transform.off_y,
+                        xfrm_ext_cx: frame_transform.ext_cx,
+                        xfrm_ext_cy: frame_transform.ext_cy,
+                        xfrm_rot: frame_transform.rot,
+                        xfrm_flip_h: frame_transform.flip_h,
+                        xfrm_flip_v: frame_transform.flip_v,
                     };
                     if let (Some(x), Some(y)) = (
                         chart_spec.position.absolute_x,

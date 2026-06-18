@@ -109,17 +109,21 @@ pub(super) fn build_chart_ref_info_from_frame(
     let gf = &frame.graphic_frame;
     let nv = &gf.nv_graphic_frame_pr;
     let cnv = &nv.c_nv_pr;
+    let xfrm = gf.has_explicit_xfrm().then_some(&gf.xfrm);
     let (cx, cy) = if position.end_row.is_none() && position.end_col.is_none() {
         (
             position
                 .extent_cx
-                .unwrap_or_else(|| gf.xfrm.ext_cx() as i64),
+                .unwrap_or_else(|| xfrm.map_or(0, |xfrm| xfrm.ext_cx() as i64)),
             position
                 .extent_cy
-                .unwrap_or_else(|| gf.xfrm.ext_cy() as i64),
+                .unwrap_or_else(|| xfrm.map_or(0, |xfrm| xfrm.ext_cy() as i64)),
         )
     } else {
-        (gf.xfrm.ext_cx() as i64, gf.xfrm.ext_cy() as i64)
+        (
+            xfrm.map_or(0, |xfrm| xfrm.ext_cx() as i64),
+            xfrm.map_or(0, |xfrm| xfrm.ext_cy() as i64),
+        )
     };
 
     ChartRefInfo {
@@ -140,10 +144,10 @@ pub(super) fn build_chart_ref_info_from_frame(
         to_col_off: position.end_col_offset,
         cx,
         cy,
-        xfrm_off_x: gf.xfrm.off_x(),
-        xfrm_off_y: gf.xfrm.off_y(),
-        xfrm_ext_cx: gf.xfrm.ext_cx() as i64,
-        xfrm_ext_cy: gf.xfrm.ext_cy() as i64,
+        xfrm_off_x: xfrm.map_or(0, |xfrm| xfrm.off_x()),
+        xfrm_off_y: xfrm.map_or(0, |xfrm| xfrm.off_y()),
+        xfrm_ext_cx: xfrm.map_or(0, |xfrm| xfrm.ext_cx() as i64),
+        xfrm_ext_cy: xfrm.map_or(0, |xfrm| xfrm.ext_cy() as i64),
         cnv_pr_name: (!cnv.name.is_empty()).then(|| cnv.name.clone()),
         cnv_pr_id: (cnv.id.value() != 0).then_some(cnv.id.value()),
         cnv_pr_descr: cnv.descr.clone(),
@@ -411,10 +415,11 @@ pub(super) fn apply_chart_frame_to_spec(spec: &mut ChartSpec, frame: &ChartDrawi
         .no_change_aspect_explicit
         .or_else(|| nv.c_nv_graphic_frame_pr.no_change_aspect.then_some(true));
     spec.has_graphic_frame_locks = nv.has_graphic_frame_locks;
-    spec.xfrm_off_x = gf.xfrm.off_x();
-    spec.xfrm_off_y = gf.xfrm.off_y();
-    spec.xfrm_ext_cx = gf.xfrm.ext_cx() as i64;
-    spec.xfrm_ext_cy = gf.xfrm.ext_cy() as i64;
+    let xfrm = gf.has_explicit_xfrm().then_some(&gf.xfrm);
+    spec.xfrm_off_x = xfrm.map_or(0, |xfrm| xfrm.off_x());
+    spec.xfrm_off_y = xfrm.map_or(0, |xfrm| xfrm.off_y());
+    spec.xfrm_ext_cx = xfrm.map_or(0, |xfrm| xfrm.ext_cx() as i64);
+    spec.xfrm_ext_cy = xfrm.map_or(0, |xfrm| xfrm.ext_cy() as i64);
     spec.cnv_pr_ext_lst = cnv.ext_lst.clone();
     spec.anchor_edit_as = frame.edit_as.clone();
     spec.macro_name = gf.macro_name.clone();

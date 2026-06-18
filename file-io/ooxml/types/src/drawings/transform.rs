@@ -62,6 +62,15 @@ pub struct Transform2D {
 }
 
 impl Transform2D {
+    /// Whether any transform child or attribute was explicitly populated.
+    pub fn has_explicit_content(&self) -> bool {
+        self.offset.is_some()
+            || self.extent.is_some()
+            || self.rotation.is_some()
+            || self.flip_h.is_some()
+            || self.flip_v.is_some()
+    }
+
     /// Offset X in EMUs (0 if absent).
     pub fn off_x(&self) -> i64 {
         self.offset.map_or(0, |(x, _)| x)

@@ -75,6 +75,10 @@ function defaultAggregate(area: PivotFieldArea, field?: PivotField): AggregateFu
   return area === 'value' && field?.dataType === 'number' ? 'sum' : 'count';
 }
 
+function defaultAreaForField(field: PivotField): PivotFieldArea {
+  return field.dataType === 'number' ? 'value' : 'row';
+}
+
 function serializeDragState(state: DragState): string {
   return JSON.stringify(state);
 }
@@ -473,6 +477,20 @@ export function PivotFieldList({
     [canDragState, fieldById, onAddField, onMovePlacement, placementsByArea, selectedItem],
   );
 
+  const activateSourceField = useCallback(
+    (field: PivotField) => {
+      const state: DragState = { kind: 'field', fieldId: field.id };
+      if (!canDragState(state)) return;
+      const area = defaultAreaForField(field);
+      onAddField(field.id, area, {
+        position: placementsByArea[area].length,
+        aggregateFunction: defaultAggregate(area, field),
+      });
+      setSelectedItem(null);
+    },
+    [canDragState, onAddField, placementsByArea],
+  );
+
   const applySelectedItemAtPosition = useCallback(
     (toArea: PivotFieldArea, position: number) => {
       if (!selectedItem || !canDragState(selectedItem)) return false;
@@ -514,13 +532,21 @@ export function PivotFieldList({
           canDrag ? 'cursor-grab' : 'cursor-default'
         } ${isDragging ? 'opacity-50' : ''} ${isSelected ? 'ring-2 ring-ss-primary' : ''} bg-ss-surface-hover`}
         draggable={canDrag}
+        role="button"
+        tabIndex={canDrag ? 0 : -1}
         title={field.name}
         aria-label={field.name}
         onDragStart={(event) => handleDragStart(event, state)}
         onDragEnd={handleDragEnd}
         onClick={(event) => {
           event.stopPropagation();
-          if (canDrag) setSelectedItem(state);
+          activateSourceField(field);
+        }}
+        onKeyDown={(event) => {
+          if (event.key !== 'Enter' && event.key !== ' ') return;
+          event.preventDefault();
+          event.stopPropagation();
+          activateSourceField(field);
         }}
         data-pivot-target="field-chip"
         data-pivot-field-id={field.id}

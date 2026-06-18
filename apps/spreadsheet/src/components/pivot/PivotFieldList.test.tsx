@@ -291,7 +291,7 @@ describe('PivotFieldList placement editor', () => {
     }
   });
 
-  it('places a selected source field after a clicked placement chip', () => {
+  it('activates a text source field into the row area on click', () => {
     const { container, props } = renderList();
     const category = container.querySelector<HTMLElement>(
       '[data-pivot-target="field-chip"][data-pivot-area="available"][data-pivot-field-id="Category"]',
@@ -299,13 +299,29 @@ describe('PivotFieldList placement editor', () => {
     if (!category) throw new Error('Missing Category source chip');
 
     fireEvent.click(category);
-    expect(category).toHaveAttribute('data-pivot-selected', 'true');
-
-    fireEvent.click(chip(container, 'row:Month:0'));
 
     expect(props.onAddField).toHaveBeenCalledWith('Category', 'row', {
-      position: 1,
+      position: 2,
       aggregateFunction: 'count',
+    });
+  });
+
+  it('activates a numeric source field into the value area from the keyboard', () => {
+    const { container, props } = renderList({
+      placements: [
+        placement({ placementId: 'row:Month:0', fieldId: 'Month', area: 'row', position: 0 }),
+      ],
+    });
+    const amount = container.querySelector<HTMLElement>(
+      '[data-pivot-target="field-chip"][data-pivot-area="available"][data-pivot-field-id="Amount"]',
+    );
+    if (!amount) throw new Error('Missing Amount source chip');
+
+    fireEvent.keyDown(amount, { key: 'Enter' });
+
+    expect(props.onAddField).toHaveBeenCalledWith('Amount', 'value', {
+      position: 0,
+      aggregateFunction: 'sum',
     });
   });
 

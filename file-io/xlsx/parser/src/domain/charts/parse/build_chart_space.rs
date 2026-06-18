@@ -63,7 +63,7 @@ pub(super) fn build_chart_space(chart: &Chart) -> ooxml_types::charts::ChartSpac
             legend: chart.legend.clone(),
             plot_vis_only: Some(chart.display_options.plot_vis_only),
             disp_blanks_as: chart.display_options.disp_blanks_as,
-            show_d_lbls_over_max: Some(chart.display_options.show_data_lbls_over_max),
+            show_d_lbls_over_max: chart.display_options.show_data_lbls_over_max,
             show_all_field_buttons: chart.show_all_field_buttons,
             show_axis_field_buttons: chart.show_axis_field_buttons,
             show_legend_field_buttons: chart.show_legend_field_buttons,
@@ -80,5 +80,29 @@ pub(super) fn build_chart_space(chart: &Chart) -> ooxml_types::charts::ChartSpac
         user_shapes: chart.user_shapes.clone(),
         print_settings: chart.print_settings.clone(),
         extensions: chart.chart_space_extensions.clone(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn build_chart_space_preserves_show_data_labels_over_max_absence() {
+        let chart = Chart::default();
+
+        let chart_space = build_chart_space(&chart);
+
+        assert_eq!(chart_space.chart.show_d_lbls_over_max, None);
+    }
+
+    #[test]
+    fn build_chart_space_preserves_show_data_labels_over_max_explicit_false() {
+        let mut chart = Chart::default();
+        chart.display_options.show_data_lbls_over_max = Some(false);
+
+        let chart_space = build_chart_space(&chart);
+
+        assert_eq!(chart_space.chart.show_d_lbls_over_max, Some(false));
     }
 }

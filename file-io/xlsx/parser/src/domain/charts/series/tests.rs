@@ -152,8 +152,14 @@ fn test_parse_data_labels() {
 
     let labels = parse_data_labels(xml);
     assert!(labels.show_value);
+    assert!(labels.show_value_present);
     assert!(!labels.show_category);
+    assert!(labels.show_category_present);
     assert!(labels.show_series_name);
+    assert!(labels.show_series_name_present);
+    assert!(!labels.show_percent_present);
+    assert!(!labels.show_legend_key_present);
+    assert!(!labels.show_bubble_size_present);
     assert_eq!(labels.position, DataLabelPosition::OutsideEnd);
 }
 

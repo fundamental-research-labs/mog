@@ -18,20 +18,12 @@ pub(in crate::domain::charts::read) fn extract_data_label_data(
         delete: dl.delete,
         position: data_label_position_to_domain(dl.position),
         format: None,
-        show_value: if dl.show_value { Some(true) } else { None },
-        show_category_name: if dl.show_category { Some(true) } else { None },
-        show_series_name: if dl.show_series_name {
-            Some(true)
-        } else {
-            None
-        },
-        show_percentage: if dl.show_percent { Some(true) } else { None },
-        show_bubble_size: if dl.show_bubble_size {
-            Some(true)
-        } else {
-            None
-        },
-        show_legend_key: if dl.show_legend_key { Some(true) } else { None },
+        show_value: present_bool(dl.show_value, dl.show_value_present),
+        show_category_name: present_bool(dl.show_category, dl.show_category_present),
+        show_series_name: present_bool(dl.show_series_name, dl.show_series_name_present),
+        show_percentage: present_bool(dl.show_percent, dl.show_percent_present),
+        show_bubble_size: present_bool(dl.show_bubble_size, dl.show_bubble_size_present),
+        show_legend_key: present_bool(dl.show_legend_key, dl.show_legend_key_present),
         separator: dl.separator.clone(),
         show_leader_lines: dl.show_leader_lines,
         text: None,
@@ -114,22 +106,22 @@ pub(in crate::domain::charts::read) fn extract_individual_data_label_data(
         format: None,
         show_value: label
             .show_value
-            .or_else(|| defaults.map(|dl| dl.show_value)),
-        show_category_name: label
-            .show_category
-            .or_else(|| defaults.map(|dl| dl.show_category)),
-        show_series_name: label
-            .show_series_name
-            .or_else(|| defaults.map(|dl| dl.show_series_name)),
-        show_percentage: label
-            .show_percent
-            .or_else(|| defaults.map(|dl| dl.show_percent)),
-        show_bubble_size: label
-            .show_bubble_size
-            .or_else(|| defaults.map(|dl| dl.show_bubble_size)),
-        show_legend_key: label
-            .show_legend_key
-            .or_else(|| defaults.map(|dl| dl.show_legend_key)),
+            .or_else(|| defaults.and_then(|dl| present_bool(dl.show_value, dl.show_value_present))),
+        show_category_name: label.show_category.or_else(|| {
+            defaults.and_then(|dl| present_bool(dl.show_category, dl.show_category_present))
+        }),
+        show_series_name: label.show_series_name.or_else(|| {
+            defaults.and_then(|dl| present_bool(dl.show_series_name, dl.show_series_name_present))
+        }),
+        show_percentage: label.show_percent.or_else(|| {
+            defaults.and_then(|dl| present_bool(dl.show_percent, dl.show_percent_present))
+        }),
+        show_bubble_size: label.show_bubble_size.or_else(|| {
+            defaults.and_then(|dl| present_bool(dl.show_bubble_size, dl.show_bubble_size_present))
+        }),
+        show_legend_key: label.show_legend_key.or_else(|| {
+            defaults.and_then(|dl| present_bool(dl.show_legend_key, dl.show_legend_key_present))
+        }),
         separator: label
             .separator
             .clone()
@@ -172,6 +164,10 @@ pub(in crate::domain::charts::read) fn extract_individual_data_label_data(
             .map(extract_chart_line),
         layout: label.layout.as_ref().map(Into::into),
     }
+}
+
+fn present_bool(value: bool, present: bool) -> Option<bool> {
+    present.then_some(value)
 }
 
 fn extract_chart_text_formula(ct: &ooxml_types::charts::ChartText) -> Option<String> {

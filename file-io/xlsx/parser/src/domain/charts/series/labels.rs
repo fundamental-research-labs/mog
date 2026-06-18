@@ -59,21 +59,27 @@ pub fn parse_data_labels(xml: &[u8]) -> DataLabelOptions {
     // Parse show flags — only before extLst
     if let Some(start) = find_tag_simd(tail_children, b"showLegendKey", 0) {
         labels.show_legend_key = parse_bool_val(&tail[start..]);
+        labels.show_legend_key_present = true;
     }
     if let Some(start) = find_tag_simd(tail_children, b"showVal", 0) {
         labels.show_value = parse_bool_val(&tail[start..]);
+        labels.show_value_present = true;
     }
     if let Some(start) = find_tag_simd(tail_children, b"showCatName", 0) {
         labels.show_category = parse_bool_val(&tail[start..]);
+        labels.show_category_present = true;
     }
     if let Some(start) = find_tag_simd(tail_children, b"showSerName", 0) {
         labels.show_series_name = parse_bool_val(&tail[start..]);
+        labels.show_series_name_present = true;
     }
     if let Some(start) = find_tag_simd(tail_children, b"showPercent", 0) {
         labels.show_percent = parse_bool_val(&tail[start..]);
+        labels.show_percent_present = true;
     }
     if let Some(start) = find_tag_simd(tail_children, b"showBubbleSize", 0) {
         labels.show_bubble_size = parse_bool_val(&tail[start..]);
+        labels.show_bubble_size_present = true;
     }
     if let Some(start) = find_tag_simd(tail_children, b"showLeaderLines", 0) {
         labels.show_leader_lines = Some(parse_bool_val(&tail[start..]));

@@ -19,6 +19,12 @@ fn data_label_options_default() {
     assert!(!opts.show_percent);
     assert!(!opts.show_legend_key);
     assert!(!opts.show_bubble_size);
+    assert!(!opts.show_value_present);
+    assert!(!opts.show_category_present);
+    assert!(!opts.show_series_name_present);
+    assert!(!opts.show_percent_present);
+    assert!(!opts.show_legend_key_present);
+    assert!(!opts.show_bubble_size_present);
     assert_eq!(opts.position, DataLabelPosition::BestFit);
     assert!(opts.separator.is_none());
     assert!(opts.num_fmt.is_none());

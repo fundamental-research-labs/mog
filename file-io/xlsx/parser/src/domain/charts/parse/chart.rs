@@ -140,8 +140,25 @@ pub(super) fn parse_display_options(xml: &[u8], chart_start: usize) -> DisplayOp
     }
 
     if let Some(start) = find_tag_simd(xml, b"showDLblsOverMax", chart_start) {
-        opts.show_data_lbls_over_max = attrs::parse_bool_attr(&xml[start..], b"val=\"");
+        opts.show_data_lbls_over_max = Some(attrs::parse_bool_attr(&xml[start..], b"val=\""));
     }
 
     opts
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_display_options;
+
+    #[test]
+    fn parse_display_options_preserves_show_data_labels_over_max_absence() {
+        let opts = parse_display_options(b"<c:chart></c:chart>", 0);
+        assert_eq!(opts.show_data_lbls_over_max, None);
+    }
+
+    #[test]
+    fn parse_display_options_preserves_show_data_labels_over_max_explicit_false() {
+        let opts = parse_display_options(br#"<c:chart><c:showDLblsOverMax val="0"/></c:chart>"#, 0);
+        assert_eq!(opts.show_data_lbls_over_max, Some(false));
+    }
 }

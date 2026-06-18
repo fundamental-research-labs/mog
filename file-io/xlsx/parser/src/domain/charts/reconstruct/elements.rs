@@ -207,6 +207,12 @@ pub(super) fn build_data_labels(dl: &DataLabelData) -> DataLabelOptions {
         show_percent: dl.show_percentage.unwrap_or(false),
         show_bubble_size: dl.show_bubble_size.unwrap_or(false),
         show_legend_key: dl.show_legend_key.unwrap_or(false),
+        show_value_present: dl.show_value.is_some(),
+        show_category_present: dl.show_category_name.is_some(),
+        show_series_name_present: dl.show_series_name.is_some(),
+        show_percent_present: dl.show_percentage.is_some(),
+        show_bubble_size_present: dl.show_bubble_size.is_some(),
+        show_legend_key_present: dl.show_legend_key.is_some(),
         position,
         separator: dl.separator.clone(),
         num_fmt,
@@ -353,6 +359,51 @@ mod tests {
             text_vertical_type: None,
             shadow: None,
         }
+    }
+
+    fn data_label_with_flags(
+        show_value: Option<bool>,
+        show_category_name: Option<bool>,
+    ) -> DataLabelData {
+        DataLabelData {
+            show: true,
+            delete: None,
+            position: None,
+            format: None,
+            show_value,
+            show_category_name,
+            show_series_name: None,
+            show_percentage: None,
+            show_bubble_size: None,
+            show_legend_key: None,
+            separator: None,
+            show_leader_lines: None,
+            text: None,
+            visual_format: None,
+            number_format: None,
+            text_orientation: None,
+            rich_text: None,
+            auto_text: None,
+            horizontal_alignment: None,
+            vertical_alignment: None,
+            link_number_format: None,
+            geometric_shape_type: None,
+            formula: None,
+            height: None,
+            width: None,
+            leader_lines_format: None,
+            layout: None,
+        }
+    }
+
+    #[test]
+    fn build_data_labels_preserves_absent_and_explicit_false_show_flags() {
+        let labels = build_data_labels(&data_label_with_flags(Some(false), None));
+
+        assert!(!labels.show_value);
+        assert!(labels.show_value_present);
+        assert!(!labels.show_category);
+        assert!(!labels.show_category_present);
     }
 
     #[test]

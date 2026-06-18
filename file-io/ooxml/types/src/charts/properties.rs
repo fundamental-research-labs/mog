@@ -99,6 +99,24 @@ pub struct DataLabelOptions {
     pub show_legend_key: bool,
     /// Show bubble size (bubble charts)
     pub show_bubble_size: bool,
+    /// Round-trip metadata: whether `showVal` was present in source XML.
+    #[serde(default, skip)]
+    pub show_value_present: bool,
+    /// Round-trip metadata: whether `showCatName` was present in source XML.
+    #[serde(default, skip)]
+    pub show_category_present: bool,
+    /// Round-trip metadata: whether `showSerName` was present in source XML.
+    #[serde(default, skip)]
+    pub show_series_name_present: bool,
+    /// Round-trip metadata: whether `showPercent` was present in source XML.
+    #[serde(default, skip)]
+    pub show_percent_present: bool,
+    /// Round-trip metadata: whether `showLegendKey` was present in source XML.
+    #[serde(default, skip)]
+    pub show_legend_key_present: bool,
+    /// Round-trip metadata: whether `showBubbleSize` was present in source XML.
+    #[serde(default, skip)]
+    pub show_bubble_size_present: bool,
     /// Label position
     pub position: DataLabelPosition,
     /// Separator between label parts

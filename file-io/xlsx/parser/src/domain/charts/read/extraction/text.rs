@@ -87,9 +87,15 @@ pub(super) fn extract_title_show_shadow(title: &ooxml_types::charts::Title) -> O
     title
         .sp_pr
         .as_ref()
-        .and_then(|sp_pr| sp_pr.effects.as_ref())
-        .is_some_and(effect_properties_has_shadow)
+        .is_some_and(shape_properties_has_shadow)
         .then_some(true)
+}
+
+pub(super) fn shape_properties_has_shadow(sp_pr: &ooxml_types::drawings::ShapeProperties) -> bool {
+    sp_pr
+        .effects
+        .as_ref()
+        .is_some_and(effect_properties_has_shadow)
 }
 
 fn chart_text_body(

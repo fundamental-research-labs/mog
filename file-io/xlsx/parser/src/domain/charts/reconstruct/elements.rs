@@ -112,6 +112,13 @@ fn build_title_shape_properties(
     format: Option<&ChartFormatData>,
     show_shadow: Option<bool>,
 ) -> Option<ShapeProperties> {
+    build_shape_properties_with_default_shadow(format, show_shadow)
+}
+
+fn build_shape_properties_with_default_shadow(
+    format: Option<&ChartFormatData>,
+    show_shadow: Option<bool>,
+) -> Option<ShapeProperties> {
     let mut sp_pr = format.and_then(build_shape_properties);
     if show_shadow != Some(true) {
         return sp_pr;
@@ -119,13 +126,13 @@ fn build_title_shape_properties(
 
     let sp_pr = sp_pr.get_or_insert_with(ShapeProperties::default);
     sp_pr.effects = Some(EffectProperties::EffectList(EffectList {
-        outer_shadow: Some(default_title_outer_shadow()),
+        outer_shadow: Some(default_outer_shadow()),
         ..Default::default()
     }));
     Some(sp_pr.clone())
 }
 
-fn default_title_outer_shadow() -> OuterShadow {
+fn default_outer_shadow() -> OuterShadow {
     OuterShadow {
         blur_rad: StPositiveCoordinate::new_clamped(38_100),
         dist: StPositiveCoordinate::new_clamped(38_100),
@@ -252,7 +259,7 @@ pub(super) fn build_legend(ld: &LegendData) -> Option<charts::Legend> {
         .map(|entries| entries.iter().map(build_legend_entry).collect())
         .unwrap_or_default();
 
-    let sp_pr = ld.format.as_ref().and_then(build_shape_properties);
+    let sp_pr = build_shape_properties_with_default_shadow(ld.format.as_ref(), ld.show_shadow);
     let tx_pr = ld.format.as_ref().and_then(build_text_body);
 
     Some(charts::Legend {
@@ -862,6 +869,33 @@ mod tests {
             .expect("title shadow should emit shape effects");
         let EffectProperties::EffectList(list) = effects else {
             panic!("expected title shadow effect list");
+        };
+        assert!(list.outer_shadow.is_some());
+    }
+
+    #[test]
+    fn build_legend_preserves_show_shadow() {
+        let legend = build_legend(&LegendData {
+            show: true,
+            position: "right".to_string(),
+            visible: true,
+            overlay: None,
+            format: None,
+            entries: None,
+            custom_x: None,
+            custom_y: None,
+            layout: None,
+            shadow: None,
+            show_shadow: Some(true),
+        })
+        .expect("visible legend should be reconstructed");
+
+        let effects = legend
+            .sp_pr
+            .and_then(|sp_pr| sp_pr.effects)
+            .expect("legend shadow should emit shape effects");
+        let EffectProperties::EffectList(list) = effects else {
+            panic!("expected legend shadow effect list");
         };
         assert!(list.outer_shadow.is_some());
     }

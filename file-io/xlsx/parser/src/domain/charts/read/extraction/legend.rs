@@ -1,4 +1,4 @@
-use super::formatting::extract_chart_format;
+use super::{formatting::extract_chart_format, text::shape_properties_has_shadow};
 
 pub(super) fn extract_legend_from_chart_space(
     cs: &ooxml_types::charts::ChartSpace,
@@ -15,6 +15,11 @@ pub(super) fn extract_legend_from_chart_space(
         };
 
         let format = extract_chart_format(l.sp_pr.as_ref(), l.tx_pr.as_ref());
+        let show_shadow = l
+            .sp_pr
+            .as_ref()
+            .is_some_and(shape_properties_has_shadow)
+            .then_some(true);
         let layout: Option<domain_types::domain::drawings::ManualLayout> =
             l.layout.as_ref().map(Into::into);
 
@@ -51,7 +56,7 @@ pub(super) fn extract_legend_from_chart_space(
             custom_y: layout.as_ref().and_then(|layout| layout.y),
             layout,
             shadow: None,
-            show_shadow: None,
+            show_shadow,
         }
     })
 }
@@ -104,5 +109,31 @@ mod tests {
         assert_eq!(font.italic, Some(true));
         assert_eq!(font.size, Some(42.0));
         assert_eq!(font.name.as_deref(), Some("Mog chart contract"));
+    }
+
+    #[test]
+    fn legend_shadow_effect_extracts_show_shadow() {
+        let chart_space = ooxml_types::charts::ChartSpace {
+            chart: ooxml_types::charts::Chart {
+                legend: Some(ooxml_types::charts::Legend {
+                    sp_pr: Some(ooxml_types::drawings::ShapeProperties {
+                        effects: Some(ooxml_types::drawings::EffectProperties::EffectList(
+                            ooxml_types::drawings::EffectList {
+                                outer_shadow: Some(ooxml_types::drawings::OuterShadow::default()),
+                                ..Default::default()
+                            },
+                        )),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let legend = extract_legend_from_chart_space(&chart_space).unwrap();
+
+        assert_eq!(legend.show_shadow, Some(true));
     }
 }

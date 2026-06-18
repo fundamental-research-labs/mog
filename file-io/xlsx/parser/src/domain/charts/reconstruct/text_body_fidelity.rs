@@ -8,6 +8,7 @@ pub(super) fn preserve_imported_title_text_properties(
     let Some(imported_title) = imported_title else {
         return;
     };
+    preserve_imported_text_body_properties(&mut title.tx_pr, imported_title.tx_pr.as_ref());
     let Some(ChartText::Rich(target_body)) = title.tx.as_mut() else {
         return;
     };

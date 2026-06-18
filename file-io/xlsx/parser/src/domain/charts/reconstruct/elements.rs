@@ -31,7 +31,6 @@ pub(super) fn build_title(
     vertical_alignment: Option<&str>,
     show_shadow: Option<bool>,
 ) -> Option<charts::Title> {
-    let default_font = format.and_then(|f| f.font.as_ref());
     if let Some(formula) = source.formula.filter(|formula| !formula.trim().is_empty()) {
         return Some(build_title_with_text(
             build_title_str_ref(formula, source.text),
@@ -44,9 +43,18 @@ pub(super) fn build_title(
     }
 
     if let Some(runs) = rich_text.filter(|runs| runs.iter().any(|run| !run.text.is_empty())) {
+        let redundant_font = format.and_then(|f| f.font.as_ref()).is_some_and(|font| {
+            runs.iter().filter(|run| !run.text.is_empty()).all(|run| run.font.as_ref() == Some(font))
+        });
+        let stripped_format = redundant_font.then(|| {
+            let mut format = format.cloned().expect("redundant font requires format");
+            format.font = None;
+            format
+        });
+        let rich_format = stripped_format.as_ref().or(format);
         return Some(build_title_with_text(
-            build_chart_text_rich_runs(runs, default_font),
-            format,
+            build_chart_text_rich_runs(runs, rich_format.and_then(|f| f.font.as_ref())),
+            rich_format,
             layout,
             horizontal_alignment,
             vertical_alignment,

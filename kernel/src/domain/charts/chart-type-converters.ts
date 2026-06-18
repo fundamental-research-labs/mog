@@ -35,8 +35,10 @@ import type { SeriesConfig } from '@mog-sdk/contracts/data/charts';
 import {
   chartColorToWire,
   chartFormatToWire,
+  directHexColorToWire,
   wireToChartColor,
   wireToChartFormat,
+  wireToDirectHexColor,
 } from './chart-format-converters';
 
 import {
@@ -96,6 +98,8 @@ export {
   chartShadowToWire,
   chartStyleContextToWire,
   dataTableConfigToWire,
+  directHexColorToWire,
+  directHexPaletteToWire,
   leaderLinesFormatToWire,
   wireToChartColor,
   wireToChartFill,
@@ -107,6 +111,8 @@ export {
   wireToChartShadow,
   wireToChartStyleContext,
   wireToDataTableConfig,
+  wireToDirectHexColor,
+  wireToDirectHexPalette,
   wireToLeaderLinesFormat,
 } from './chart-format-converters';
 
@@ -135,7 +141,7 @@ export function wireToSeriesConfig(w: ChartSeriesData): SeriesConfig {
     // SeriesConfig.type is an unrestricted string on the contract side —
     // chart-type strings are validated at the chart level, not here.
     type: w.type,
-    color: w.color,
+    color: wireToDirectHexColor(w.color),
     stockRole: w.stockRole,
     values: w.values,
     valueCache: w.valueCache,
@@ -206,7 +212,7 @@ export function seriesConfigToWire(c: SeriesConfig): ChartSeriesData {
     name: c.name,
     nameRef: c.nameRef,
     type: c.type,
-    color: c.color,
+    color: directHexColorToWire(c.color),
     stockRole: c.stockRole,
     values: c.values,
     valueCache: c.valueCache,

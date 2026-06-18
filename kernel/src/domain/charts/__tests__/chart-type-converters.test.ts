@@ -1,9 +1,13 @@
 import {
   axisConfigToWire,
+  chartColorToWire,
   chartFormatToWire,
+  directHexPaletteToWire,
   seriesConfigToWire,
   wireToAxisConfig,
+  wireToChartColor,
   wireToChartFormat,
+  wireToDirectHexPalette,
   wireChartTypeToConfig,
   wireToLegendConfig,
   wireToSeriesConfig,
@@ -89,6 +93,66 @@ describe('chart-type-converters', () => {
         position: 'right',
       }),
     );
+  });
+
+  it('normalizes direct hex chart colors at the wire boundary', () => {
+    expect(wireToChartColor('4472C4')).toBe('#4472C4');
+    expect(wireToChartColor('#ED7D31')).toBe('#ED7D31');
+    expect(chartColorToWire('#4472C4')).toBe('4472C4');
+    expect(chartColorToWire('ED7D31')).toBe('ED7D31');
+    expect(wireToDirectHexPalette(['4472C4', '#ED7D31'])).toEqual(['#4472C4', '#ED7D31']);
+    expect(directHexPaletteToWire(['#4472C4', 'ED7D31'])).toEqual(['4472C4', 'ED7D31']);
+
+    expect(
+      wireToChartFormat({
+        fill: { type: 'solid', color: '4472C4' },
+        line: { color: 'ED7D31' },
+        font: { color: 'A5A5A5' },
+        shadow: { color: 'FFC000' },
+      }),
+    ).toEqual({
+      fill: { type: 'solid', color: '#4472C4', transparency: undefined },
+      line: {
+        color: '#ED7D31',
+        width: undefined,
+        dashStyle: undefined,
+        transparency: undefined,
+        noFill: undefined,
+      },
+      font: {
+        name: undefined,
+        size: undefined,
+        bold: undefined,
+        italic: undefined,
+        color: '#A5A5A5',
+        underline: undefined,
+        strikethrough: undefined,
+      },
+      textRotation: undefined,
+      textVerticalType: undefined,
+      shadow: {
+        visible: undefined,
+        color: '#FFC000',
+        blur: undefined,
+        offsetX: undefined,
+        offsetY: undefined,
+        transparency: undefined,
+      },
+    });
+
+    expect(
+      chartFormatToWire({
+        fill: { type: 'solid', color: '#4472C4' },
+        line: { color: '#ED7D31' },
+        font: { color: '#A5A5A5' },
+        shadow: { color: '#FFC000' },
+      }),
+    ).toEqual({
+      fill: { type: 'solid', color: '4472C4' },
+      line: { color: 'ED7D31' },
+      font: { color: 'A5A5A5' },
+      shadow: { color: 'FFC000' },
+    });
   });
 
   it('converts nested chart format colors between wire tint_shade and contract tintShade', () => {
@@ -314,6 +378,7 @@ describe('chart-type-converters', () => {
   it('round-trips nested series format colors through the wire boundary', () => {
     const seriesConfig = wireToSeriesConfig({
       name: 'Styled',
+      color: '4472C4',
       format: { fill: { type: 'solid', color: { theme: 'accent1', tint_shade: 0.1 } } },
       leaderLineFormat: {
         line: { color: { theme: 'accent2', tint_shade: -0.1 }, width: 2 },
@@ -324,6 +389,8 @@ describe('chart-type-converters', () => {
       points: [
         {
           idx: 0,
+          fill: 'ED7D31',
+          border: { color: 'A5A5A5', width: 1, style: 'solid' },
           visualFormat: {
             line: { color: { theme: 'accent6', tint_shade: -0.2 } },
           },
@@ -338,6 +405,7 @@ describe('chart-type-converters', () => {
       },
       trendlines: [
         {
+          color: 'FFC000',
           lineFormat: { color: { theme: 'accent1', tint_shade: -0.35 } },
           label: {
             format: { shadow: { color: { theme: 'accent2', tint_shade: 0.35 } } },
@@ -346,6 +414,7 @@ describe('chart-type-converters', () => {
       ],
     });
 
+    expect(seriesConfig.color).toBe('#4472C4');
     expect(seriesConfig.format?.fill).toEqual({
       type: 'solid',
       color: { theme: 'accent1', tintShade: 0.1 },
@@ -361,6 +430,8 @@ describe('chart-type-converters', () => {
       theme: 'accent6',
       tintShade: -0.2,
     });
+    expect(seriesConfig.points?.[0]?.fill).toBe('#ED7D31');
+    expect(seriesConfig.points?.[0]?.border?.color).toBe('#A5A5A5');
     expect(seriesConfig.points?.[0]?.markerBackgroundColor).toEqual({
       theme: 'lt1',
       tintShade: 0.5,
@@ -373,6 +444,7 @@ describe('chart-type-converters', () => {
       theme: 'tx2',
       tintShade: -0.15,
     });
+    expect(seriesConfig.trendlines?.[0]?.color).toBe('#FFC000');
     expect(seriesConfig.trendlines?.[0]?.lineFormat?.color).toEqual({
       theme: 'accent1',
       tintShade: -0.35,
@@ -383,6 +455,7 @@ describe('chart-type-converters', () => {
     });
 
     expect(seriesConfigToWire(seriesConfig)).toMatchObject({
+      color: '4472C4',
       format: { fill: { type: 'solid', color: { theme: 'accent1', tint_shade: 0.1 } } },
       leaderLineFormat: {
         line: { color: { theme: 'accent2', tint_shade: -0.1 }, width: 2 },
@@ -392,6 +465,8 @@ describe('chart-type-converters', () => {
       markerForegroundColor: { theme: 'accent5', tint_shade: 0.4 },
       points: [
         expect.objectContaining({
+          fill: 'ED7D31',
+          border: { color: 'A5A5A5', width: 1, style: 'solid' },
           visualFormat: {
             line: { color: { theme: 'accent6', tint_shade: -0.2 } },
           },
@@ -406,6 +481,7 @@ describe('chart-type-converters', () => {
       },
       trendlines: [
         expect.objectContaining({
+          color: 'FFC000',
           lineFormat: { color: { theme: 'accent1', tint_shade: -0.35 } },
           label: {
             format: { shadow: { color: { theme: 'accent2', tint_shade: 0.35 } } },

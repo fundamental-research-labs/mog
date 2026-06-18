@@ -31,6 +31,7 @@ import {
   wireToChartFormat,
   wireToChartFormatString,
   wireToDataTableConfig,
+  wireToDirectHexPalette,
   wireToChartStyleContext,
 } from '../chart-type-converters';
 
@@ -304,7 +305,7 @@ export function toChartConfig(chart: ChartFloatingObject): ChartConfig {
     axis: normalizedChart.axis
       ? normalizeAxisForRendering(wireToAxisConfig(normalizedChart.axis), narrowedType.type)
       : undefined,
-    colors: normalizedChart.colors,
+    colors: wireToDirectHexPalette(normalizedChart.colors),
     series: normalizedChart.series ? wireToSeriesConfigArray(normalizedChart.series) : undefined,
     dataLabels: normalizedChart.dataLabels
       ? wireToDataLabelConfig(normalizedChart.dataLabels)

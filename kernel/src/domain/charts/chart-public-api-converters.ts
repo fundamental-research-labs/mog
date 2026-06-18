@@ -24,6 +24,7 @@ import {
   chartStyleContextToWire,
   dataLabelConfigToWire,
   dataTableConfigToWire,
+  directHexPaletteToWire,
   histogramConfigToWire,
   legendConfigToWire,
   seriesConfigArrayToWire,
@@ -35,6 +36,7 @@ import {
   wireToChartStyleContext,
   wireToDataLabelConfig,
   wireToDataTableConfig,
+  wireToDirectHexPalette,
   wireToHierarchyChartConfig,
   wireToHistogramConfig,
   wireToLegendConfig,
@@ -233,7 +235,7 @@ export function chartConfigToInternal(config: ChartConfig): ChartFloatingObject 
     subtitle: config.subtitle,
     legend,
     axis,
-    colors: config.colors,
+    colors: directHexPaletteToWire(config.colors),
     series,
     dataLabels: config.dataLabels
       ? dataLabelConfigToWire(
@@ -369,7 +371,7 @@ export function chartUpdatesToInternal(updates: Partial<ChartConfig>): ChartUpda
     );
   if (updates.axis !== undefined)
     result.axis = axisConfigToWire(syncAxisFieldsToInternal(updates.axis) as typeof updates.axis);
-  if (updates.colors !== undefined) result.colors = updates.colors;
+  if (updates.colors !== undefined) result.colors = directHexPaletteToWire(updates.colors);
   if (updates.series !== undefined)
     result.series = seriesConfigArrayToWire(updates.series.map(syncSeriesFormatToInternal));
   if (updates.dataLabels !== undefined)
@@ -521,7 +523,7 @@ export function serializedChartToChart(rawChart: ChartFloatingObject): Chart {
     subtitle: chart.subtitle && chart.subtitle !== 'undefined' ? chart.subtitle : undefined,
     legend,
     axis,
-    colors: chart.colors,
+    colors: wireToDirectHexPalette(chart.colors),
     series,
     dataLabels: dataLabelsConfig
       ? (deriveDataLabelsForRead(dataLabelsConfig) as Chart['dataLabels'])

@@ -5,6 +5,13 @@ use ooxml_types::charts::{
 };
 
 fn chart_anchor() -> crate::domain::charts::read::xml_parsing::ChartRefInfo {
+    chart_anchor_with_size(600, 400)
+}
+
+fn chart_anchor_with_size(
+    width_px: i64,
+    height_px: i64,
+) -> crate::domain::charts::read::xml_parsing::ChartRefInfo {
     crate::domain::charts::read::xml_parsing::ChartRefInfo {
         target: "charts/chart1.xml".to_string(),
         from_row: 0,
@@ -17,12 +24,12 @@ fn chart_anchor() -> crate::domain::charts::read::xml_parsing::ChartRefInfo {
         to_col: None,
         to_col_off: None,
         to_row_off: None,
-        cx: 600 * 9525,
-        cy: 400 * 9525,
+        cx: width_px * 9525,
+        cy: height_px * 9525,
         xfrm_off_x: 0,
         xfrm_off_y: 0,
-        xfrm_ext_cx: 600 * 9525,
-        xfrm_ext_cy: 400 * 9525,
+        xfrm_ext_cx: width_px * 9525,
+        xfrm_ext_cy: height_px * 9525,
         cnv_pr_name: Some("Chart 1".to_string()),
         cnv_pr_id: Some(1),
         cnv_pr_descr: None,
@@ -78,4 +85,28 @@ fn data_table_presence_extracts_visible_and_legend_key_alias() {
     assert_eq!(data_table.visible, Some(true));
     assert_eq!(data_table.show_keys, Some(true));
     assert_eq!(data_table.show_legend_key, Some(true));
+}
+
+#[test]
+fn small_chart_extent_extracts_without_minimum_clamp() {
+    let cs = ChartSpace {
+        chart: OoxmlChart {
+            plot_area: PlotArea {
+                chart_groups: vec![chart_group(
+                    ChartType::Bar,
+                    ChartTypeConfig::Bar(BarChartConfig::default()),
+                )],
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+
+    let spec = extract_chart_spec_from_chart_space(&cs, &chart_anchor_with_size(42, 43));
+
+    assert_eq!(spec.size.width, 42.0);
+    assert_eq!(spec.size.height, 43.0);
+    assert_eq!(spec.position.extent_cx, Some(42 * 9525));
+    assert_eq!(spec.position.extent_cy, Some(43 * 9525));
 }

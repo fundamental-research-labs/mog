@@ -478,14 +478,16 @@ describe('toFloatingObject — ChartObject', () => {
           anchorMode: 'oneCell',
         },
         chartType: 'bar',
-        width: 8,
-        height: 15,
+        width: 640,
+        height: 300,
       } as Partial<WireFloatingObject>),
     );
     expect(obj.type).toBe('chart');
     if (obj.type === 'chart') {
       expect(obj.chartType).toBe('bar');
       expect(obj.anchorMode).toBe('oneCell');
+      expect(obj.widthCells).toBe(8);
+      expect(obj.heightCells).toBe(15);
     }
   });
 

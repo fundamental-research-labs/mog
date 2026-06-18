@@ -27,9 +27,8 @@ pub(super) fn convert_chart_to_chart_spec(
         .as_ref()
         .and_then(|t| crate::domain::charts::extract_chart_title_text(t));
 
-    // Convert EMUs to pixels (1 pixel = 9525 EMUs)
-    let width_px = (anchor.cx / 9525).max(100) as f64;
-    let height_px = (anchor.cy / 9525).max(100) as f64;
+    let width_px = super::emu_to_pixels(anchor.cx);
+    let height_px = super::emu_to_pixels(anchor.cy);
 
     // Extract typed series data directly from OOXML types
     let series = extract_chart_series(chart);

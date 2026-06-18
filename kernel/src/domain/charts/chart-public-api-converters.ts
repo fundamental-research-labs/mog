@@ -58,6 +58,12 @@ import {
   syncLegendEntriesToInternal,
   syncSeriesFormatToInternal,
 } from './chart-api-compatibility';
+import {
+  chartHeightCellsToPixels,
+  chartWidthCellsToPixels,
+  resolveChartHeightCells,
+  resolveChartWidthCells,
+} from './chart-size-units';
 
 /** English Metric Units per point (1 pt = 12700 EMU). */
 const EMU_PER_PT = 12700;
@@ -209,8 +215,8 @@ export function chartConfigToInternal(config: ChartConfig): ChartFloatingObject 
     id: (config as { id?: string }).id || `chart-${now}`,
     sheetId: '',
     anchor,
-    width: config.width * 80,
-    height: config.height * 20,
+    width: chartWidthCellsToPixels(config.width) ?? 640,
+    height: chartHeightCellsToPixels(config.height) ?? 300,
     zIndex: 0,
     rotation: 0,
     flipH: false,
@@ -517,8 +523,8 @@ export function serializedChartToChart(rawChart: ChartFloatingObject): Chart {
     seriesOrientation: chart.seriesOrientation as Chart['seriesOrientation'],
     anchorRow: anchor.anchorRow,
     anchorCol: anchor.anchorCol,
-    width: chart.widthCells ?? chart.width ?? 8,
-    height: chart.heightCells ?? chart.height ?? 15,
+    width: resolveChartWidthCells(chart.widthCells, chart.width) ?? 8,
+    height: resolveChartHeightCells(chart.heightCells, chart.height) ?? 15,
     title: chart.title && chart.title !== 'undefined' ? chart.title : undefined,
     subtitle: chart.subtitle && chart.subtitle !== 'undefined' ? chart.subtitle : undefined,
     legend,

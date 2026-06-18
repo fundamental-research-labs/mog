@@ -10,6 +10,7 @@ import type { ObjectPosition } from '@mog-sdk/contracts/floating-objects';
 import { normalizeImportedComboChart } from '../../bridges/compute/chart-import-normalization';
 import type { ChartFloatingObject, ComputeBridge } from '../../bridges/compute/compute-bridge';
 import { cellsToPixels, pixelsToCells } from './chart-manager-dimensions';
+import { resolveChartHeightCells, resolveChartWidthCells } from './chart-size-units';
 import type { ChartObject, ChartPosition } from './chart-manager-types';
 
 /**
@@ -36,8 +37,9 @@ export async function convertChartToFloatingObject(
 
   const anchorRow = normalizedChart.anchor.anchorRow;
   const anchorCol = normalizedChart.anchor.anchorCol;
-  const widthCells = normalizedChart.widthCells ?? normalizedChart.width;
-  const heightCells = normalizedChart.heightCells ?? normalizedChart.height;
+  const widthCells = resolveChartWidthCells(normalizedChart.widthCells, normalizedChart.width) ?? 4;
+  const heightCells =
+    resolveChartHeightCells(normalizedChart.heightCells, normalizedChart.height) ?? 10;
 
   const pixelBounds = await cellsToPixels(
     anchorRow,

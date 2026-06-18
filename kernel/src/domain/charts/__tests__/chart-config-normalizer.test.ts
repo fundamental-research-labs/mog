@@ -26,7 +26,7 @@ describe('chart config normalizer', () => {
       chart({
         chartType: 'line',
         widthCells: undefined,
-        width: 7,
+        width: 560,
         heightCells: 3,
         axis: {
           categoryAxis: { axisType: 'dateAxis', visible: false },
@@ -46,6 +46,20 @@ describe('chart config normalizer', () => {
       show: true,
       position: 't',
     });
+  });
+
+  it('derives missing render cell spans from imported pixel geometry', () => {
+    const config = toChartConfig(
+      chart({
+        widthCells: undefined,
+        heightCells: undefined,
+        width: 3360,
+        height: 840,
+      } as unknown as Partial<ChartFloatingObject>),
+    );
+
+    expect(config.width).toBe(42);
+    expect(config.height).toBe(42);
   });
 
   it('maps imported bubble value-axis pairs to XY axes and suppresses invalid shared-side labels', () => {

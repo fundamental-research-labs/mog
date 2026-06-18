@@ -38,6 +38,10 @@ import {
   normalizeImportedComboChart,
   normalizeImportedDisplayBlanksAsValue,
 } from './chart-import-normalization';
+import {
+  resolveChartHeightCells,
+  resolveChartWidthCells,
+} from '../../domain/charts/chart-size-units';
 
 import type {
   FloatingObject as WireFloatingObject,
@@ -914,8 +918,8 @@ function toChartObject(d: WireChart): ChartObject {
     anchorMode: (chart.anchor.anchorMode === 'twoCell'
       ? 'twoCell'
       : 'oneCell') as ChartObject['anchorMode'],
-    widthCells: chart.widthCells ?? chart.width ?? 8,
-    heightCells: chart.heightCells ?? chart.height ?? 15,
+    widthCells: resolveChartWidthCells(chart.widthCells, chart.width) ?? 8,
+    heightCells: resolveChartHeightCells(chart.heightCells, chart.height) ?? 15,
     chartConfig,
     dataRangeIdentity: chart.dataRangeIdentity,
     seriesRangeIdentity: chart.seriesRangeIdentity,

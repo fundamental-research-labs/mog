@@ -197,8 +197,8 @@ pub fn extract_chart_spec_from_chart_space(
     // -------------------------------------------------------------------------
     // (l) Anchor metadata
     // -------------------------------------------------------------------------
-    let width_px = (anchor.cx / 9525).max(100) as f64;
-    let height_px = (anchor.cy / 9525).max(100) as f64;
+    let width_px = super::super::emu_to_pixels(anchor.cx);
+    let height_px = super::super::emu_to_pixels(anchor.cy);
 
     domain_types::ChartSpec {
         chart_type,

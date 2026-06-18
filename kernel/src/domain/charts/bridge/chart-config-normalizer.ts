@@ -11,6 +11,7 @@ import {
   normalizeImportedComboChart,
   normalizeImportedDisplayBlanksAsValue,
 } from '../../../bridges/compute/chart-import-normalization';
+import { resolveChartHeightCells, resolveChartWidthCells } from '../chart-size-units';
 import { isXYValueAxisChartType } from './axis-role';
 import {
   wireToAxisConfig,
@@ -106,10 +107,7 @@ function normalizeCategoryValueAxisPairForRendering(
 
   const categoryPosition = normalizeAxisPosition(categoryAxis?.position);
   const valuePosition = normalizeAxisPosition(valueAxis?.position);
-  const categoryCompatible = isAxisPositionCompatible(
-    categoryPosition,
-    orientations.category,
-  );
+  const categoryCompatible = isAxisPositionCompatible(categoryPosition, orientations.category);
   const valueCompatible = isAxisPositionCompatible(valuePosition, orientations.value);
   const sharedIncompatiblePosition =
     categoryPosition !== undefined &&
@@ -357,11 +355,11 @@ export function toChartConfig(chart: ChartFloatingObject): ChartConfig {
   const widthCells =
     layoutAuthority === 'chartSheet'
       ? undefined
-      : (normalizedChart.widthCells ?? normalizedChart.width);
+      : resolveChartWidthCells(normalizedChart.widthCells, normalizedChart.width);
   const heightCells =
     layoutAuthority === 'chartSheet'
       ? undefined
-      : (normalizedChart.heightCells ?? normalizedChart.height);
+      : resolveChartHeightCells(normalizedChart.heightCells, normalizedChart.height);
 
   return {
     type: narrowedType.type ?? 'bar',

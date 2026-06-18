@@ -313,8 +313,11 @@ fn apply_imported_axis_fidelity(
     rebuilt.major_tick_mark_explicit = sad.tick_marks.is_some();
     rebuilt.minor_tick_mark_explicit = sad.minor_tick_marks.is_some();
     rebuilt.tick_lbl_pos_explicit = sad.tick_label_position.is_some();
-    rebuilt.crosses_explicit =
-        matches!(sad.crosses_at.as_deref(), Some("min" | "max" | "automatic"));
+    rebuilt.crosses_explicit = if matches!(sad.crosses_at.as_deref(), Some("custom")) {
+        original.crosses_explicit
+    } else {
+        matches!(sad.crosses_at.as_deref(), Some("min" | "max" | "automatic"))
+    };
     rebuilt.auto = original.auto;
     if let (Some(title), Some(imported_title)) = (rebuilt.title.as_mut(), original.title.as_ref()) {
         preserve_imported_title_text_properties(title, Some(imported_title));

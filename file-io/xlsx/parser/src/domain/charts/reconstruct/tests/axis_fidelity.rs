@@ -329,6 +329,38 @@ fn authored_axes_still_emit_explicit_shared_defaults() {
 }
 
 #[test]
+fn imported_custom_crossing_preserves_explicit_auto_zero_crosses() {
+    let mut spec = minimal_chart_spec(DomainChartType::Column, None);
+    spec.axes = Some(AxisData {
+        category_axis: Some(SingleAxisData {
+            visible: true,
+            crosses_at: Some("custom".to_string()),
+            crosses_at_value: Some(7.5),
+            ..Default::default()
+        }),
+        value_axis: Some(SingleAxisData {
+            visible: true,
+            ..Default::default()
+        }),
+        secondary_category_axis: None,
+        secondary_value_axis: None,
+        series_axis: None,
+    });
+    let mut category = imported_left_axis(AxisType::Category, 10, 20);
+    category.crosses_explicit = true;
+    category.crosses_at = Some(7.5);
+    let spec = with_original_axes(
+        spec,
+        vec![category, imported_left_axis(AxisType::Value, 20, 10)],
+    );
+
+    let xml = chart_xml(&spec);
+
+    assert!(xml.contains("<c:crosses val=\"autoZero\"/>"), "{xml}");
+    assert!(xml.contains("<c:crossesAt val=\"7.5\"/>"), "{xml}");
+}
+
+#[test]
 fn authored_bar_axes_without_positions_use_horizontal_bar_axis_sides() {
     let mut spec = minimal_chart_spec(DomainChartType::Bar, None);
     spec.axes = Some(AxisData {

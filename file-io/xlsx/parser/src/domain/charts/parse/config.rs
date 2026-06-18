@@ -2,6 +2,7 @@
 
 use crate::infra::scanner::{find_attr_simd, find_closing_tag, find_tag_simd};
 
+use super::super::xml_helpers::find_direct_child_tag;
 use super::super::*;
 use super::attrs;
 use super::ext::parse_chart_type_ext_lst;
@@ -82,7 +83,7 @@ fn parse_bar3d_config(xml: &[u8]) -> Bar3DChartConfig {
     if let Some(start) = find_tag_simd(xml, b"gapDepth", 0) {
         cfg.gap_depth = attrs::parse_u32_attr(&xml[start..], b"val=\"");
     }
-    if let Some(start) = find_tag_simd(xml, b"shape", 0) {
+    if let Some(start) = find_direct_child_tag(xml, b"bar3DChart", b"shape") {
         if let Some(val) = attrs::parse_string_attr(&xml[start..], b"val=\"") {
             cfg.shape = Some(BarShape::from_ooxml(&val));
         }

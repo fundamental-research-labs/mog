@@ -51,3 +51,82 @@ pub(crate) fn parse_ax_ids(xml: &[u8]) -> Vec<u32> {
     }
     ids
 }
+
+pub(crate) fn find_direct_child_tag(xml: &[u8], parent: &[u8], child: &[u8]) -> Option<usize> {
+    let parent_start = find_tag_simd(xml, parent, 0)?;
+    let parent_close = find_closing_tag(xml, parent, parent_start).unwrap_or(xml.len());
+    let mut pos = find_gt_simd(xml, parent_start).map(|gt| gt + 1)?;
+    let mut depth = 0usize;
+
+    while pos < parent_close {
+        let lt = find_next_byte(xml, b'<', pos, parent_close)?;
+        if lt + 1 >= parent_close {
+            return None;
+        }
+
+        let marker = xml[lt + 1];
+        if marker == b'!' || marker == b'?' {
+            pos = find_gt_simd(xml, lt)
+                .map(|gt| gt + 1)
+                .unwrap_or(parent_close);
+            continue;
+        }
+
+        let closing = marker == b'/';
+        let name_start = lt + if closing { 2 } else { 1 };
+        let name_end = tag_name_end(xml, name_start, parent_close);
+        let gt = find_gt_simd(xml, lt).unwrap_or(parent_close);
+
+        if closing {
+            depth = depth.saturating_sub(1);
+            pos = gt.saturating_add(1);
+            continue;
+        }
+
+        if depth == 0 && local_tag_name_eq(&xml[name_start..name_end], child) {
+            return Some(lt);
+        }
+
+        if !is_self_closing_tag(xml, lt, gt) {
+            depth += 1;
+        }
+        pos = gt.saturating_add(1);
+    }
+
+    None
+}
+
+fn find_next_byte(xml: &[u8], needle: u8, start: usize, end: usize) -> Option<usize> {
+    xml.get(start..end)?
+        .iter()
+        .position(|byte| *byte == needle)
+        .map(|offset| start + offset)
+}
+
+fn tag_name_end(xml: &[u8], start: usize, end: usize) -> usize {
+    let mut pos = start;
+    while pos < end {
+        match xml[pos] {
+            b' ' | b'\t' | b'\n' | b'\r' | b'/' | b'>' => break,
+            _ => pos += 1,
+        }
+    }
+    pos
+}
+
+fn local_tag_name_eq(tag_name: &[u8], expected: &[u8]) -> bool {
+    let local = tag_name
+        .iter()
+        .rposition(|byte| *byte == b':')
+        .map(|index| &tag_name[index + 1..])
+        .unwrap_or(tag_name);
+    local == expected
+}
+
+fn is_self_closing_tag(xml: &[u8], lt: usize, gt: usize) -> bool {
+    xml.get(lt..gt).and_then(|tag| {
+        tag.iter()
+            .rev()
+            .find(|byte| !(**byte).is_ascii_whitespace())
+    }) == Some(&b'/')
+}

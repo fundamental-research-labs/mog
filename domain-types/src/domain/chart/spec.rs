@@ -97,6 +97,8 @@ pub struct ChartSpec {
 
     // -- API-exposed appearance --
     #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub colors: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     pub style: Option<u8>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub rounded_corners: Option<bool>,
@@ -616,6 +618,7 @@ impl ChartSpec {
             data_range: chart_data.data_range.clone(),
             series_range: chart_data.series_range.clone(),
             category_range: chart_data.category_range.clone(),
+            colors: chart_data.colors.clone(),
             // API-exposed appearance
             style: chart_data.style,
             rounded_corners: chart_data.rounded_corners,
@@ -896,7 +899,7 @@ impl ChartSpec {
             subtitle: None,
             legend: self.legend.clone(),
             axis: self.axes.clone(),
-            colors: None,
+            colors: self.colors.clone(),
             series: if self.series.is_empty() {
                 None
             } else {

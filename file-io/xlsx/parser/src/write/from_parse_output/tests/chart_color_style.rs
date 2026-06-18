@@ -1,20 +1,9 @@
-use crate::output::results::FullParsedSheet;
-use domain_types::chart::{AnchorPosition, ObjectSize};
-use domain_types::{ChartDefinition, ChartSpec};
+use super::*;
 
-/// Build a fallback ChartSpec when no ChartSpace is available.
-pub(crate) fn build_fallback_chart_spec(
-    chart: &crate::domain::charts::Chart,
-    _idx: usize,
-    _sheet: &FullParsedSheet,
-) -> ChartSpec {
-    let title = chart
-        .title
-        .as_ref()
-        .and_then(|t| crate::domain::charts::extract_chart_title_text(t));
+fn chart_with_palette() -> ChartSpec {
     ChartSpec {
-        chart_type: domain_types::ChartType::Unknown("unknown".to_string()),
-        title,
+        chart_type: ChartType::Column,
+        title: Some("Revenue".to_string()),
         position: AnchorPosition::default(),
         size: ObjectSize {
             width: 400.0,
@@ -22,18 +11,16 @@ pub(crate) fn build_fallback_chart_spec(
             ..Default::default()
         },
         z_index: 0,
-        definition: Some(ChartDefinition::Chart(
-            ooxml_types::charts::ChartSpace::default(),
-        )),
-        series: vec![],
+        definition: None,
+        series: Vec::new(),
         sub_type: None,
         legend: None,
         axes: None,
         data_labels: None,
-        data_range: None,
+        data_range: Some("Data!A1:B2".to_string()),
         series_range: None,
         category_range: None,
-        colors: None,
+        colors: Some(vec!["4472C4".to_string()]),
         style: None,
         rounded_corners: None,
         auto_title_deleted: None,
@@ -55,10 +42,7 @@ pub(crate) fn build_fallback_chart_spec(
         boxplot: None,
         hierarchy: None,
         region_map: None,
-        display_blanks_as: chart
-            .display_options
-            .disp_blanks_as
-            .map(|value| value.to_ooxml().to_string()),
+        display_blanks_as: None,
         plot_visible_only: None,
         gap_width: None,
         gap_depth: None,
@@ -70,6 +54,12 @@ pub(crate) fn build_fallback_chart_spec(
         size_represents: None,
         split_type: None,
         split_value: None,
+        bar_shape: None,
+        bubble_3d_effect: None,
+        wireframe: None,
+        surface_top_view: None,
+        color_scheme: None,
+        chart_style_context: None,
         category_label_level: None,
         series_name_level: None,
         show_all_field_buttons: None,
@@ -80,12 +70,6 @@ pub(crate) fn build_fallback_chart_spec(
         title_show_shadow: None,
         pivot_options: None,
         pivot_projection: None,
-        bar_shape: None,
-        bubble_3d_effect: None,
-        wireframe: None,
-        surface_top_view: None,
-        color_scheme: None,
-        chart_style_context: None,
         view_3d: None,
         floor_format: None,
         side_wall_format: None,
@@ -117,4 +101,38 @@ pub(crate) fn build_fallback_chart_spec(
         anchor_index: None,
         import_status: None,
     }
+}
+
+#[test]
+fn generated_chart_palette_exports_chart_color_style_part() {
+    let output = make_parse_output(vec![SheetData {
+        name: "Data".to_string(),
+        cells: vec![
+            make_cell(0, 0, DomainValue::Text(Arc::from("Quarter"))),
+            make_cell(0, 1, DomainValue::Text(Arc::from("Revenue"))),
+            make_cell(1, 0, DomainValue::Text(Arc::from("Q1"))),
+            make_cell(1, 1, DomainValue::Number(FiniteF64::new(100.0).unwrap())),
+        ],
+        charts: vec![chart_with_palette()],
+        ..Default::default()
+    }]);
+
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let content_types =
+        String::from_utf8(archive.read_file("[Content_Types].xml").unwrap()).unwrap();
+    let chart_rels = String::from_utf8(
+        archive
+            .read_file("xl/charts/_rels/chart1.xml.rels")
+            .unwrap(),
+    )
+    .unwrap();
+    let color_style =
+        String::from_utf8(archive.read_file("xl/charts/colors1.xml").unwrap()).unwrap();
+
+    assert!(content_types.contains("/xl/charts/colors1.xml"));
+    assert!(chart_rels.contains(crate::infra::opc::REL_CHART_COLOR_STYLE));
+    assert!(chart_rels.contains(r#"Target="colors1.xml""#));
+    assert!(color_style.contains(r#"<a:srgbClr val="4472C4"/>"#));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
 }

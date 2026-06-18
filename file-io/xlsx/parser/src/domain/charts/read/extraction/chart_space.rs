@@ -258,6 +258,7 @@ pub fn extract_chart_spec_from_chart_space(
         boxplot: None,
         hierarchy: None,
         region_map: None,
+        colors: None,
         display_blanks_as,
         plot_visible_only,
         gap_width: scalar_fields.gap_width,
@@ -1738,9 +1739,11 @@ mod tests {
             spec.series[0].stock_role,
             Some(domain_types::chart::ChartSeriesStockRoleData::Volume)
         );
-        assert!(spec.series[1..]
-            .iter()
-            .all(|series| series.r#type == Some(domain_types::ChartType::Stock)));
+        assert!(
+            spec.series[1..]
+                .iter()
+                .all(|series| series.r#type == Some(domain_types::ChartType::Stock))
+        );
         assert_eq!(
             spec.series[1..]
                 .iter()

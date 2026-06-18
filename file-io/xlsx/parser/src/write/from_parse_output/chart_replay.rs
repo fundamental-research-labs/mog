@@ -59,6 +59,10 @@ fn has_modeled_chart_space_state(chart_spec: &domain_types::ChartSpec) -> bool {
             .category_range
             .as_deref()
             .is_some_and(|range| !range.is_empty())
+        || chart_spec
+            .colors
+            .as_ref()
+            .is_some_and(|colors| !colors.is_empty())
         || chart_spec.axes.is_some()
         || chart_spec.legend.is_some()
         || chart_spec.data_labels.is_some()
@@ -108,7 +112,7 @@ fn has_modeled_chart_space_state(chart_spec: &domain_types::ChartSpec) -> bool {
         || chart_spec.back_wall_format.is_some()
 }
 
-pub(super) const STANDARD_CHART_PROJECTION_SCHEMA_VERSION: u32 = 5;
+pub(super) const STANDARD_CHART_PROJECTION_SCHEMA_VERSION: u32 = 6;
 
 pub(super) fn standard_chart_projection_fingerprint(
     chart_spec: &domain_types::ChartSpec,
@@ -124,6 +128,7 @@ pub(super) fn standard_chart_projection_fingerprint(
     fingerprint.write_json(&chart_spec.data_range);
     fingerprint.write_json(&chart_spec.series_range);
     fingerprint.write_json(&chart_spec.category_range);
+    fingerprint.write_json(&chart_spec.colors);
     fingerprint.write_json(&chart_spec.style);
     fingerprint.write_json(&chart_spec.rounded_corners);
     fingerprint.write_json(&chart_spec.auto_title_deleted);

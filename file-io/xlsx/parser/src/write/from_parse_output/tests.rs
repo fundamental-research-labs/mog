@@ -21,6 +21,7 @@ fn make_parse_output(sheets: Vec<SheetData>) -> ParseOutput {
     }
 }
 
+mod chart_color_style;
 mod chart_ex_frame_defaults;
 mod chart_export_defaults;
 mod charts;
@@ -760,6 +761,7 @@ fn make_chart(chart_type: ChartType, data_range: &str) -> ChartSpec {
         data_range: Some(data_range.to_string()),
         series_range: None,
         category_range: None,
+        colors: None,
         style: None,
         rounded_corners: None,
         auto_title_deleted: None,

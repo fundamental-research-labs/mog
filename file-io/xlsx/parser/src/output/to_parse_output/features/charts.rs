@@ -82,6 +82,7 @@ pub(crate) fn convert_parsed_charts_to_chart_specs(sheet: &FullParsedSheet) -> V
                 .unwrap_or_default();
             spec.chart_auxiliary_parts =
                 chart_auxiliary_parts(&spec.chart_relationships, &spec.chart_auxiliary_files);
+            apply_chart_color_style_projection(&mut spec);
             let projection_fingerprint = standard_chart_projection_fingerprint(&spec);
             let relationship_closure = standard_chart_relationship_closure(
                 chart.original_path.as_deref(),
@@ -418,7 +419,7 @@ fn supported_chart_auxiliary_relationship(rel_type: &str, target_path: &str) -> 
     }
 }
 
-const STANDARD_CHART_PROJECTION_SCHEMA_VERSION: u32 = 5;
+const STANDARD_CHART_PROJECTION_SCHEMA_VERSION: u32 = 6;
 
 fn normalize_local_chart_source_references(spec: &mut ChartSpec, sheet_name: &str) {
     strip_local_sheet_prefix(&mut spec.data_range, sheet_name);
@@ -481,6 +482,7 @@ fn standard_chart_projection_fingerprint(spec: &ChartSpec) -> String {
     fingerprint.write_json(&spec.data_range);
     fingerprint.write_json(&spec.series_range);
     fingerprint.write_json(&spec.category_range);
+    fingerprint.write_json(&spec.colors);
     fingerprint.write_json(&spec.style);
     fingerprint.write_json(&spec.rounded_corners);
     fingerprint.write_json(&spec.auto_title_deleted);
@@ -620,6 +622,22 @@ fn chart_auxiliary_parts(
         .collect()
 }
 
+fn apply_chart_color_style_projection(spec: &mut ChartSpec) {
+    for part in &spec.chart_auxiliary_parts {
+        let domain_types::chart::ChartAuxiliaryContent::ColorStyle { xml } = &part.content else {
+            continue;
+        };
+        let projection =
+            crate::domain::charts::color_style::parse_chart_color_style_xml(xml.as_bytes());
+        if spec.colors.is_none() {
+            spec.colors = projection.colors;
+        }
+        if spec.color_scheme.is_none() {
+            spec.color_scheme = projection.color_scheme;
+        }
+    }
+}
+
 /// Build `ChartSpec` list from `parsed_chart_ex` (ChartEx modern chart types).
 ///
 /// ChartEx charts use the `cx:` namespace and cover Waterfall, Treemap, Sunburst, etc.
@@ -677,6 +695,7 @@ pub(crate) fn convert_parsed_chart_ex_to_chart_specs(sheet: &FullParsedSheet) ->
                 data_range: projection.data_range,
                 series_range: None,
                 category_range: None,
+                colors: None,
                 style: None,
                 rounded_corners: None,
                 auto_title_deleted: None,

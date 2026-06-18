@@ -215,6 +215,7 @@ fn chart_spec_to_floating_object_preserves_fields() {
         data_range: Some("A1:D5".to_string()),
         series_range: Some("B1:D1".to_string()),
         category_range: Some("A2:A5".to_string()),
+        colors: Some(vec!["4472C4".to_string(), "ED7D31".to_string()]),
         style: None,
         rounded_corners: None,
         auto_title_deleted: None,
@@ -327,6 +328,7 @@ fn chart_spec_to_floating_object_preserves_fields() {
         assert_eq!(cd.data_range.as_deref(), Some("A1:D5"));
         assert_eq!(cd.series_range.as_deref(), Some("B1:D1"));
         assert_eq!(cd.category_range.as_deref(), Some("A2:A5"));
+        assert_eq!(cd.colors, spec.colors);
         assert_eq!(cd.chart_style_context, spec.chart_style_context);
         let ooxml = cd.ooxml.as_ref().expect("ooxml should be Some");
         assert!(matches!(
@@ -363,6 +365,7 @@ fn chart_spec_to_floating_object_preserves_fields() {
     assert_eq!(roundtripped.data_range.as_deref(), Some("A1:D5"));
     assert_eq!(roundtripped.series_range.as_deref(), Some("B1:D1"));
     assert_eq!(roundtripped.category_range.as_deref(), Some("A2:A5"));
+    assert_eq!(roundtripped.colors, spec.colors);
     assert_eq!(roundtripped.cnv_pr_name.as_deref(), Some("Chart 1"));
     assert_eq!(roundtripped.cnv_pr_id, Some(42));
     assert_eq!(roundtripped.cnv_pr_descr.as_deref(), Some("Alt text"));
@@ -504,6 +507,7 @@ fn chart_spec_to_floating_object_one_cell_anchor() {
         data_range: None,
         series_range: None,
         category_range: None,
+        colors: None,
         style: None,
         rounded_corners: None,
         auto_title_deleted: None,
@@ -639,6 +643,7 @@ fn chart_spec_roundtrip_via_floating_object() {
         data_range: None,
         series_range: None,
         category_range: None,
+        colors: None,
         style: None,
         rounded_corners: None,
         auto_title_deleted: None,
@@ -788,6 +793,7 @@ fn chart_spec_roundtrip_minimal() {
         data_range: None,
         series_range: None,
         category_range: None,
+        colors: None,
         style: None,
         rounded_corners: None,
         auto_title_deleted: None,

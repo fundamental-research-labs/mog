@@ -90,6 +90,7 @@ pub(super) fn convert_chart_to_chart_spec(
         data_range,
         series_range: None,
         category_range: None,
+        colors: None,
         style: None,
         rounded_corners: None,
         auto_title_deleted: None,

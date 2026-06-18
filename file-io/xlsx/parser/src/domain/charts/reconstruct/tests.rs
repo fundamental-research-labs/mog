@@ -33,6 +33,7 @@ fn minimal_chart_spec(chart_type: DomainChartType, data_range: Option<&str>) -> 
         data_range: data_range.map(str::to_string),
         series_range: None,
         category_range: None,
+        colors: None,
         style: None,
         rounded_corners: None,
         auto_title_deleted: None,

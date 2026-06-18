@@ -74,6 +74,12 @@ function createMockCtx(): any {
       pivotUpdate: jest.fn(async (_sheetId: string, _pivotId: string, config: unknown) => ({
         data: config,
       })),
+      pivotUpdateAndMaterialize: jest.fn(
+        async (_sheetId: string, _pivotId: string, config: unknown) => ({
+          config,
+          result: makePivotResult(),
+        }),
+      ),
       getSheetName: jest.fn().mockResolvedValue('Sheet1'),
       getAllSheetIds: jest.fn().mockResolvedValue([SHEET_ID]),
       pivotComputeFromSource: jest.fn().mockResolvedValue(makePivotResult()),
@@ -120,6 +126,12 @@ function createMutationBridge(config: any): {
     async (_sheetId: string, _pivotId: string, nextConfig: any) => {
       currentConfig = nextConfig;
       return { data: nextConfig };
+    },
+  );
+  ctx.computeBridge.pivotUpdateAndMaterialize.mockImplementation(
+    async (_sheetId: string, _pivotId: string, nextConfig: any) => {
+      currentConfig = nextConfig;
+      return { config: nextConfig, result: makePivotResult() };
     },
   );
   return { bridge: new PivotBridge(ctx), ctx, getConfig: () => currentConfig };
@@ -212,7 +224,7 @@ describe('PivotBridge read vs refresh paths', () => {
       expandedRows: {},
       expandedColumns: {},
     });
-    expect(ctx.computeBridge.forceRefreshAllViewports).toHaveBeenCalledTimes(1);
+    expect(ctx.computeBridge.forceRefreshAllViewports).not.toHaveBeenCalled();
     expect(ctx.computeBridge.pivotComputeFromSource).not.toHaveBeenCalled();
     expect(subscriber).toHaveBeenCalledWith('pivot-1', result, undefined);
   });
@@ -238,7 +250,7 @@ describe('PivotBridge read vs refresh paths', () => {
       expandedRows: {},
       expandedColumns: {},
     });
-    expect(ctx.computeBridge.forceRefreshAllViewports).toHaveBeenCalledTimes(1);
+    expect(ctx.computeBridge.forceRefreshAllViewports).not.toHaveBeenCalled();
     expect(ctx.computeBridge.pivotComputeFromSource).not.toHaveBeenCalled();
   });
 
@@ -264,6 +276,44 @@ describe('PivotBridge read vs refresh paths', () => {
     expect(ctx.computeBridge.pivotComputeFromSource).not.toHaveBeenCalled();
   });
 
+  it('refreshAndMaterialize updates combine config writes and materialization', async () => {
+    const ctx = createMockCtx();
+    const withPivotUpdateOptions = jest.fn(async (_options: unknown, fn: () => Promise<unknown>) =>
+      fn(),
+    );
+    ctx.computeBridge.getMutationHandler.mockReturnValue({ withPivotUpdateOptions });
+    ctx.computeBridge.pivotGet.mockResolvedValue(makePivotConfig());
+    const bridge = new PivotBridge(ctx);
+    const subscriber = jest.fn();
+    bridge.subscribe('pivot-1', subscriber);
+
+    const updated = await bridge.updatePivot(
+      SHEET_ID,
+      'pivot-1',
+      { placements: [{ placementId: 'row:Month:0', fieldId: 'Month', area: 'row', position: 0 }] },
+      { reason: 'fieldPlacementChanged', refreshPolicy: 'refreshAndMaterialize' },
+    );
+
+    expect(updated?.placements).toEqual([
+      { placementId: 'row:Month:0', fieldId: 'Month', area: 'row', position: 0 },
+    ]);
+    expect(withPivotUpdateOptions).toHaveBeenCalledWith(
+      { reason: 'fieldPlacementChanged', refreshPolicy: 'dirtyOnly' },
+      expect.any(Function),
+    );
+    expect(ctx.computeBridge.pivotUpdateAndMaterialize).toHaveBeenCalledWith(
+      SHEET_ID,
+      'pivot-1',
+      expect.objectContaining({
+        placements: [{ placementId: 'row:Month:0', fieldId: 'Month', area: 'row', position: 0 }],
+      }),
+      { expandedRows: {}, expandedColumns: {} },
+    );
+    expect(ctx.computeBridge.pivotUpdate).not.toHaveBeenCalled();
+    expect(ctx.computeBridge.pivotMaterialize).not.toHaveBeenCalled();
+    expect(subscriber).toHaveBeenCalledWith('pivot-1', makePublicPivotResult(), undefined);
+  });
+
   it('source cell changes refresh dependent pivots through the materialization path', async () => {
     const ctx = createMockCtx();
     ctx.computeBridge.pivotGetAll.mockResolvedValue([makePivotConfig()]);
@@ -286,7 +336,7 @@ describe('PivotBridge read vs refresh paths', () => {
       expandedRows: {},
       expandedColumns: {},
     });
-    expect(ctx.computeBridge.forceRefreshAllViewports).toHaveBeenCalledTimes(1);
+    expect(ctx.computeBridge.forceRefreshAllViewports).not.toHaveBeenCalled();
     expect(ctx.computeBridge.pivotComputeFromSource).not.toHaveBeenCalled();
   });
 

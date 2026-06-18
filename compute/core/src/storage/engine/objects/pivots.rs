@@ -3,21 +3,161 @@ use crate::engine_types::PivotCreateWithSheetOptions;
 use crate::snapshot::{
     ChangeKind, MutationResult, PivotTableChange, SheetChange, SheetChangeField,
 };
+use crate::storage::engine::YrsComputeEngine;
 use crate::storage::engine::pivot_materialization::apply_pivot_value_number_formats;
 use crate::storage::engine::services;
-use crate::storage::engine::YrsComputeEngine;
 use crate::storage::sheet::order;
 use bridge_core as bridge;
 use cell_types::SheetId;
+use compute_pivot::PivotTableDefExt;
 use compute_pivot::types::validate_pivot_config_json;
 use compute_pivot::types::{PivotExpansionState, PivotFieldItems, PivotTableResult};
-use compute_pivot::PivotTableDefExt;
 use domain_types::domain::pivot::PivotTableConfig;
 use value_types::{CellValue, ComputeError};
 
 use crate::storage::workbook::imported_pivots::ImportedPivotViewRecord;
 
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PivotUpdateMaterializeResult {
+    config: Option<PivotTableConfig>,
+    result: Option<PivotTableResult>,
+}
+
 impl YrsComputeEngine {
+    fn normalize_pivot_update_config(
+        &self,
+        sheet_id: &SheetId,
+        mut config: PivotTableConfig,
+    ) -> Result<PivotTableConfig, ComputeError> {
+        let sheet_uuid = sheet_id.to_uuid_string();
+        if let Some(output_sheet_id) = config.output_sheet_id.as_deref() {
+            if output_sheet_id != sheet_uuid {
+                return Err(ComputeError::InvalidInput {
+                    message: format!(
+                        "pivot_update outputSheetId '{}' does not match containing sheet '{}'",
+                        output_sheet_id, sheet_uuid
+                    ),
+                });
+            }
+        }
+        config.output_sheet_id = Some(sheet_uuid);
+        if let Some(sheet) = self.mirror.get_sheet(sheet_id) {
+            config.output_sheet_name = sheet.name.clone();
+        }
+        self.resolve_pivot_source_identity(config)
+    }
+
+    fn materialize_pivot_table(
+        &mut self,
+        sheet_id: &SheetId,
+        pivot_id: &str,
+        expansion_state: Option<PivotExpansionState>,
+    ) -> Result<(SheetId, PivotTableResult), ComputeError> {
+        // 1. Look up config
+        let config =
+            services::objects::pivot_get(&self.stores, sheet_id, pivot_id).ok_or_else(|| {
+                ComputeError::Eval {
+                    message: format!("Pivot table '{pivot_id}' not found"),
+                }
+            })?;
+
+        // 2. Resolve output sheet
+        let output_sheet_id = if let Some(output_sheet_id) = config.output_sheet_id.as_deref() {
+            let output_id = SheetId::from_uuid_str(output_sheet_id).map_err(|e| {
+                ComputeError::InvalidInput {
+                    message: format!("Invalid pivot outputSheetId '{output_sheet_id}': {e}"),
+                }
+            })?;
+            if self.mirror.get_sheet(&output_id).is_none() {
+                return Err(ComputeError::SheetNotFound {
+                    sheet_id: output_sheet_id.to_string(),
+                });
+            }
+            output_id
+        } else {
+            self.mirror
+                .sheet_by_name(&config.output_sheet_name)
+                .ok_or_else(|| ComputeError::SheetNotFound {
+                    sheet_id: config.output_sheet_name.clone(),
+                })?
+        };
+
+        // 3. Clear old cells if previously materialized
+        {
+            let output_sheet_uuid = output_sheet_id.to_uuid_string();
+            let old_def = self
+                .mirror
+                .find_pivot_table_def(pivot_id, &config.name, &output_sheet_uuid)
+                .cloned();
+            if let Some(def) = old_def {
+                let old_rows = def.rendered_row_count();
+                let old_cols = def.rendered_col_count();
+                if old_rows > 0 && old_cols > 0 {
+                    self.mirror.clear_pivot_region(
+                        &output_sheet_id,
+                        def.start_row,
+                        def.start_col,
+                        old_rows,
+                        old_cols,
+                    );
+                }
+            }
+        }
+
+        // 4. Compute pivot result
+        let result = self.pivot_compute_from_source(sheet_id, pivot_id, expansion_state)?;
+        let engine_config =
+            compute_pivot::PivotEngineConfig::try_from(config.clone()).map_err(|e| {
+                ComputeError::Eval {
+                    message: format!("Pivot config conversion error: {e}"),
+                }
+            })?;
+
+        // 5. Write cells
+        // Collect row field display names for the header row.
+        let row_field_names: Vec<String> = engine_config
+            .row_placements()
+            .iter()
+            .map(|p| {
+                p.display_name()
+                    .map(String::from)
+                    .or_else(|| {
+                        engine_config
+                            .fields
+                            .iter()
+                            .find(|f| f.id == *p.field_id())
+                            .map(|f| f.name.clone())
+                    })
+                    .unwrap_or_else(|| p.field_id().to_string())
+            })
+            .collect();
+        self.mirror.materialize_pivot_with_identities(
+            &output_sheet_id,
+            config.output_location.row,
+            config.output_location.col,
+            &result,
+            &row_field_names,
+            &self.stores.grid_id_alloc,
+        );
+        apply_pivot_value_number_formats(
+            &self.stores,
+            &self.mirror,
+            &output_sheet_id,
+            config.output_location.row,
+            config.output_location.col,
+            &config,
+            &result,
+        );
+
+        // 6. Register bounds for GETPIVOTDATA
+        let bounds = &result.rendered_bounds;
+        let def = engine_config.to_pivot_table_def(bounds, &output_sheet_id);
+        self.mirror.upsert_pivot_table_def(def);
+
+        Ok((output_sheet_id, result))
+    }
+
     fn resolve_pivot_sheet_insert_index(
         &self,
         options: Option<&PivotCreateWithSheetOptions>,
@@ -397,23 +537,7 @@ impl YrsComputeEngine {
         pivot_id: &str,
         config: PivotTableConfig,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        let config = self.resolve_pivot_source_identity(config)?;
-        let sheet_uuid = sheet_id.to_uuid_string();
-        if let Some(output_sheet_id) = config.output_sheet_id.as_deref() {
-            if output_sheet_id != sheet_uuid {
-                return Err(ComputeError::InvalidInput {
-                    message: format!(
-                        "pivot_update outputSheetId '{}' does not match containing sheet '{}'",
-                        output_sheet_id, sheet_uuid
-                    ),
-                });
-            }
-        }
-        let mut config = config;
-        config.output_sheet_id = Some(sheet_uuid);
-        if let Some(sheet) = self.mirror.get_sheet(sheet_id) {
-            config.output_sheet_name = sheet.name.clone();
-        }
+        let config = self.normalize_pivot_update_config(sheet_id, config)?;
         let result = services::objects::pivot_update(&mut self.stores, sheet_id, pivot_id, config)?;
         // Pivot config changes layout/aggregation — next calculate must
         // re-materialize, so don't let the idempotent short-circuit skip it.
@@ -618,107 +742,69 @@ impl YrsComputeEngine {
         pivot_id: &str,
         expansion_state: Option<PivotExpansionState>,
     ) -> Result<PivotTableResult, ComputeError> {
-        // 1. Look up config
-        let config =
-            services::objects::pivot_get(&self.stores, sheet_id, pivot_id).ok_or_else(|| {
-                ComputeError::Eval {
-                    message: format!("Pivot table '{pivot_id}' not found"),
-                }
-            })?;
+        let (_, result) = self.materialize_pivot_table(sheet_id, pivot_id, expansion_state)?;
+        Ok(result)
+    }
 
-        // 2. Resolve output sheet
-        let output_sheet_id = if let Some(output_sheet_id) = config.output_sheet_id.as_deref() {
-            let output_id = SheetId::from_uuid_str(output_sheet_id).map_err(|e| {
-                ComputeError::InvalidInput {
-                    message: format!("Invalid pivot outputSheetId '{output_sheet_id}': {e}"),
-                }
-            })?;
-            if self.mirror.get_sheet(&output_id).is_none() {
-                return Err(ComputeError::SheetNotFound {
-                    sheet_id: output_sheet_id.to_string(),
-                });
-            }
-            output_id
-        } else {
-            self.mirror
-                .sheet_by_name(&config.output_sheet_name)
-                .ok_or_else(|| ComputeError::SheetNotFound {
-                    sheet_id: config.output_sheet_name.clone(),
-                })?
-        };
+    /// Compute and materialize a pivot table, returning viewport patches through
+    /// the standard mutation pipeline.
+    ///
+    /// The generated TS bridge currently treats `pivot_materialize` as a query
+    /// despite the Rust method being a write. This companion command gives the
+    /// handwritten bridge a production-path mutation tuple without changing the
+    /// generated method's public signature.
+    #[bridge::skip(ts_bridge)]
+    #[bridge::write(scope = "sheet")]
+    pub fn pivot_materialize_mutation(
+        &mut self,
+        sheet_id: &SheetId,
+        pivot_id: &str,
+        expansion_state: Option<PivotExpansionState>,
+    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+        let (output_sheet_id, result) =
+            self.materialize_pivot_table(sheet_id, pivot_id, expansion_state)?;
+        let mutation_result = MutationResult::empty().with_data(&result)?;
+        let patches = self.produce_full_viewport_patches(&output_sheet_id);
+        Ok((patches, mutation_result))
+    }
 
-        // 3. Clear old cells if previously materialized
-        {
-            let output_sheet_uuid = output_sheet_id.to_uuid_string();
-            let old_def = self
-                .mirror
-                .find_pivot_table_def(pivot_id, &config.name, &output_sheet_uuid)
-                .cloned();
-            if let Some(def) = old_def {
-                let old_rows = def.rendered_row_count();
-                let old_cols = def.rendered_col_count();
-                if old_rows > 0 && old_cols > 0 {
-                    self.mirror.clear_pivot_region(
-                        &output_sheet_id,
-                        def.start_row,
-                        def.start_col,
-                        old_rows,
-                        old_cols,
-                    );
-                }
-            }
+    /// Replace a pivot config and materialize its output in one mutation.
+    ///
+    /// Pivot field edits are user-visible config mutations whose rendered cells
+    /// should appear as part of the same interaction. Keeping update and
+    /// materialization together avoids a second bridge round trip and lets the
+    /// mutation event update config subscribers without scheduling another
+    /// refresh.
+    #[bridge::skip(ts_bridge)]
+    #[bridge::write(scope = "sheet")]
+    pub fn pivot_update_and_materialize(
+        &mut self,
+        sheet_id: &SheetId,
+        pivot_id: &str,
+        config: PivotTableConfig,
+        expansion_state: Option<PivotExpansionState>,
+    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+        let config = self.normalize_pivot_update_config(sheet_id, config)?;
+        let update_result =
+            services::objects::pivot_update(&mut self.stores, sheet_id, pivot_id, config)?;
+        self.stores.compute.mark_dirty();
+
+        let updated_config: Option<PivotTableConfig> = update_result.extract_data().unwrap_or(None);
+        if updated_config.is_none() {
+            let data = PivotUpdateMaterializeResult {
+                config: None,
+                result: None,
+            };
+            return Ok((shared::empty_patches(), update_result.with_data(&data)?));
         }
 
-        // 4. Compute pivot result
-        let result = self.pivot_compute_from_source(sheet_id, pivot_id, expansion_state)?;
-        let engine_config =
-            compute_pivot::PivotEngineConfig::try_from(config.clone()).map_err(|e| {
-                ComputeError::Eval {
-                    message: format!("Pivot config conversion error: {e}"),
-                }
-            })?;
-
-        // 5. Write cells
-        // Collect row field display names for the header row.
-        let row_field_names: Vec<String> = engine_config
-            .row_placements()
-            .iter()
-            .map(|p| {
-                p.display_name()
-                    .map(String::from)
-                    .or_else(|| {
-                        engine_config
-                            .fields
-                            .iter()
-                            .find(|f| f.id == *p.field_id())
-                            .map(|f| f.name.clone())
-                    })
-                    .unwrap_or_else(|| p.field_id().to_string())
-            })
-            .collect();
-        self.mirror.materialize_pivot_with_identities(
-            &output_sheet_id,
-            config.output_location.row,
-            config.output_location.col,
-            &result,
-            &row_field_names,
-            &self.stores.grid_id_alloc,
-        );
-        apply_pivot_value_number_formats(
-            &self.stores,
-            &self.mirror,
-            &output_sheet_id,
-            config.output_location.row,
-            config.output_location.col,
-            &config,
-            &result,
-        );
-
-        // 6. Register bounds for GETPIVOTDATA
-        let bounds = &result.rendered_bounds;
-        let def = engine_config.to_pivot_table_def(bounds, &output_sheet_id);
-        self.mirror.upsert_pivot_table_def(def);
-
-        Ok(result)
+        let (output_sheet_id, pivot_result) =
+            self.materialize_pivot_table(sheet_id, pivot_id, expansion_state)?;
+        let data = PivotUpdateMaterializeResult {
+            config: updated_config,
+            result: Some(pivot_result),
+        };
+        let patches = self.produce_full_viewport_patches(&output_sheet_id);
+        Ok((patches, update_result.with_data(&data)?))
     }
 }

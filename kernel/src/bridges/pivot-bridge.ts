@@ -922,6 +922,47 @@ export class PivotBridge implements IPivotBridge {
     const computeConfig = toComputePivotConfig(mergedConfig);
 
     const mutationHandler = this.ctx.computeBridge.getMutationHandler();
+    if (options.refreshPolicy === 'refreshAndMaterialize') {
+      const expansionState = this.ctx.pivotExpansionProvider?.getExpansionState(pivotId) ?? {
+        expandedRows: {},
+        expandedColumns: {},
+      };
+      const materialized = mutationHandler
+        ? await mutationHandler.withPivotUpdateOptions(
+            { ...options, refreshPolicy: 'dirtyOnly' },
+            () =>
+              this.ctx.computeBridge.pivotUpdateAndMaterialize(
+                sheetId,
+                pivotId,
+                computeConfig,
+                expansionState ?? null,
+              ),
+          )
+        : await this.ctx.computeBridge.pivotUpdateAndMaterialize(
+            sheetId,
+            pivotId,
+            computeConfig,
+            expansionState ?? null,
+          );
+
+      const result = materialized.config ?? null;
+      if (result) {
+        const currentVersion = this.configVersions.get(pivotId) ?? 0;
+        this.configVersions.set(pivotId, currentVersion + 1);
+      }
+      if (materialized.result) {
+        const publicResult = toPublicPivotTableResult(materialized.result);
+        this.cache.set(pivotId, {
+          result: publicResult,
+          configVersion: this.getConfigVersion(pivotId),
+          dataVersion: this.getDataVersion(sheetId),
+          computedAt: Date.now(),
+        });
+        this.notifySubscribers(pivotId, publicResult);
+      }
+      return result ? toPublicPivotConfig(result) : null;
+    }
+
     const mutationResult = mutationHandler
       ? await mutationHandler.withPivotUpdateOptions(options, () =>
           this.ctx.computeBridge.pivotUpdate(sheetId, pivotId, computeConfig),
@@ -1369,18 +1410,9 @@ export class PivotBridge implements IPivotBridge {
     const dataVersion = this.getDataVersion(sheetId);
 
     try {
-      const mutationHandler = this.ctx.computeBridge.getMutationHandler();
-      const materialize = () =>
-        this.ctx.computeBridge.pivotMaterialize(sheetId, pivotId, expansionState ?? null);
       const result = toPublicPivotTableResult(
-        mutationHandler
-          ? await mutationHandler.withPivotUpdateOptions(
-              { reason: 'sourceRangeChanged', refreshPolicy: 'refreshAndMaterialize' },
-              materialize,
-            )
-          : await materialize(),
+        await this.ctx.computeBridge.pivotMaterialize(sheetId, pivotId, expansionState ?? null),
       );
-      await this.ctx.computeBridge.forceRefreshAllViewports();
 
       this.cache.set(pivotId, {
         result,

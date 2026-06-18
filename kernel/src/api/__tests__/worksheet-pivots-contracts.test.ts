@@ -793,7 +793,7 @@ describe('WorksheetPivotsImpl contracts', () => {
     expectHandleConfigReceipt(dataSourceReceipt, 'pivot.handle.setDataSource');
   });
 
-  it('handle placement and calculated-field mutators wrap kernel receipts with base fields', async () => {
+  it('handle placement and calculated-field mutators expose base fields', async () => {
     const handle = await pivots.get('SalesPivot');
 
     const addPlacementReceipt = await handle!.addPlacement({
@@ -805,9 +805,11 @@ describe('WorksheetPivotsImpl contracts', () => {
     expect(addPlacementReceipt).toEqual(
       expect.objectContaining({
         placementId: 'row:Category:1',
-        kernelReceipt: expect.objectContaining({ kernelReceiptId: expect.any(String) }),
+        placement: expect.objectContaining({ fieldId: 'Category', area: 'row', position: 1 }),
       }),
     );
+    expect(addPlacementReceipt).not.toHaveProperty('kernelReceipt');
+    expect(ctx.pivot.addPlacement).not.toHaveBeenCalled();
 
     const moveFieldReceipt = await handle!.moveField('Category', 'row', 'column', 0);
     expectHandleConfigReceipt(moveFieldReceipt, 'pivot.handle.moveField');

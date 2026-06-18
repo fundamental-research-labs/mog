@@ -35,6 +35,7 @@ import type { DocumentContext } from '../../../context';
 import { createPivotStaleHandleError } from '../../../errors';
 import {
   automaticPivotValueDisplayName,
+  automaticPivotValuePlacementDisplayName,
   valuePlacementWithAggregate,
 } from '../../../domain/pivots/value-labels';
 import { setPivotItemVisibilityForId } from '../../../domain/pivots/filters';
@@ -210,6 +211,110 @@ export function buildPivotTableHandle(options: PivotHandleBuilderOptions): Pivot
       placement: input.placement,
       details: input.details,
     });
+
+  const placementsInArea = (
+    placements: readonly PivotFieldPlacement[],
+    area: PivotFieldArea,
+  ): PivotFieldPlacement[] =>
+    placements
+      .map((placement, originalIndex) => ({ placement, originalIndex }))
+      .filter(({ placement }) => placement.area === area)
+      .sort(
+        (left, right) =>
+          left.placement.position - right.placement.position ||
+          left.originalIndex - right.originalIndex,
+      )
+      .map(({ placement }) => ({ ...placement }));
+
+  const renumberPlacements = (placements: PivotFieldPlacement[]): PivotFieldPlacement[] =>
+    placements.map((placement, position) => ({ ...placement, position }));
+
+  const clampPlacementPosition = (position: number, length: number): number => {
+    if (!Number.isFinite(position)) return length;
+    return Math.max(0, Math.min(Math.trunc(position), length));
+  };
+
+  const calculatedFieldIdFromSpec = (
+    spec: PivotHandlePlacementSpec,
+  ): CalculatedFieldId | undefined =>
+    spec.source?.type === 'calculatedField' ? spec.source.calculatedFieldId : undefined;
+
+  const fieldIdFromSpec = (spec: PivotHandlePlacementSpec): string | undefined =>
+    spec.fieldId ??
+    (spec.source?.type === 'field' ? spec.source.fieldId : undefined) ??
+    calculatedFieldIdFromSpec(spec);
+
+  const toStoredSortOrder = (sortOrder: SortOrder | undefined): PivotFieldPlacement['sortOrder'] =>
+    sortOrder === 'none' ? undefined : sortOrder;
+
+  const makeStablePlacementId = (
+    area: PivotFieldArea,
+    fieldId: string,
+    position: number,
+    existingPlacements: readonly PivotFieldPlacement[],
+  ): NonNullable<PivotFieldPlacement['placementId']> => {
+    const existing = new Set(existingPlacements.map((placement) => placementId(placement)));
+    const base = `${pivotId}:${area}:${fieldId}:${position}`;
+    const baseId = pivotPlacementId(base);
+    if (!existing.has(baseId)) return baseId;
+
+    let suffix = 1;
+    while (existing.has(pivotPlacementId(`${base}:${suffix}`))) suffix += 1;
+    return pivotPlacementId(`${base}:${suffix}`);
+  };
+
+  const buildAddedPlacement = (
+    current: DataPivotTableConfig,
+    spec: PivotHandlePlacementSpec,
+  ): { placement: PivotFieldPlacement; placements: PivotFieldPlacement[] } => {
+    const fieldId = fieldIdFromSpec(spec);
+    if (!fieldId) throw new Error('pivot.handle.addPlacement requires a field source');
+
+    const areaPlacements = placementsInArea(current.placements, spec.area);
+    const position = clampPlacementPosition(
+      spec.position ?? areaPlacements.length,
+      areaPlacements.length,
+    );
+    const calculatedFieldId = calculatedFieldIdFromSpec(spec);
+    const placement: PivotFieldPlacement = {
+      placementId:
+        spec.placementId ?? makeStablePlacementId(spec.area, fieldId, position, current.placements),
+      fieldId,
+      area: spec.area,
+      position,
+    };
+
+    if (calculatedFieldId) placement.calculatedFieldId = calculatedFieldId;
+
+    const aggregateFunction = spec.aggregateFunction ?? (spec.area === 'value' ? 'sum' : undefined);
+    if (aggregateFunction) placement.aggregateFunction = aggregateFunction;
+
+    const sortOrder = toStoredSortOrder(spec.sortOrder);
+    if (sortOrder) placement.sortOrder = sortOrder;
+    if (spec.displayName) placement.displayName = spec.displayName;
+    if (spec.showValuesAs) placement.showValuesAs = spec.showValuesAs;
+    if (spec.numberFormat) placement.numberFormat = spec.numberFormat;
+
+    if (spec.area === 'value') {
+      placement.displayName = automaticPivotValuePlacementDisplayName({
+        config: current,
+        placement,
+        aggregateFunction,
+        displayName: spec.displayName,
+      });
+    }
+
+    areaPlacements.splice(position, 0, placement);
+    return {
+      placement,
+      placements: [
+        ...current.placements
+          .filter((candidate) => candidate.area !== spec.area)
+          .map((p) => ({ ...p })),
+        ...renumberPlacements(areaPlacements),
+      ],
+    };
+  };
 
   return {
     getName(): string {
@@ -392,16 +497,18 @@ export function buildPivotTableHandle(options: PivotHandleBuilderOptions): Pivot
 
     async addPlacement(spec: PivotHandlePlacementSpec) {
       assertLive('addPlacement');
-      const receipt = await ctx.pivot.addPlacement(pivotId, spec);
-      const config = await refreshCachedConfig('addPlacement');
-      return buildPivotHandleKernelReceipt({
+      const current = currentConfig('addPlacement');
+      const { placement, placements } = buildAddedPlacement(current, spec);
+      const config = await updateCachedPivot({ placements }, 'fieldPlacementChanged');
+      return buildPivotHandleMutationReceipt({
         kind: 'pivot.handle.addPlacement',
         sheetId,
-        kernelReceipt: receipt,
+        pivotId,
         config,
-        fieldId: spec.fieldId ?? (spec.source?.type === 'field' ? spec.source.fieldId : undefined),
-        area: spec.area,
-        placementId: receipt.placementId,
+        fieldId: placement.fieldId,
+        area: placement.area,
+        placementId: placement.placementId,
+        placement,
       });
     },
 

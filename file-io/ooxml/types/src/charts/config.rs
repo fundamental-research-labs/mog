@@ -303,7 +303,7 @@ impl Default for BubbleChartConfig {
             ser: Vec::new(),
             d_lbls: None,
             bubble_3d: None,
-            bubble_scale: Some(100),
+            bubble_scale: None,
             show_neg_bubbles: None,
             size_represents: None,
             extensions: Vec::new(),

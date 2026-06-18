@@ -334,4 +334,25 @@ mod tests {
             .and_then(|lines| lines.sp_pr.as_ref())
             .is_some());
     }
+
+    #[test]
+    fn data_labels_parse_direct_shape_properties() {
+        let labels = parse_data_labels(
+            br#"<c:dLbls xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+                         xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+                <c:spPr>
+                    <a:ln><a:noFill/></a:ln>
+                </c:spPr>
+            </c:dLbls>"#,
+        );
+
+        assert!(matches!(
+            labels
+                .sp_pr
+                .as_ref()
+                .and_then(|sp_pr| sp_pr.ln.as_ref())
+                .and_then(|line| line.fill.as_ref()),
+            Some(ooxml_types::drawings::LineFill::NoFill)
+        ));
+    }
 }

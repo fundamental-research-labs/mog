@@ -307,6 +307,52 @@ fn series_data_label_leader_lines_extract_to_series_alias() {
 }
 
 #[test]
+fn series_data_label_visual_line_no_fill_extracts_from_series_options() {
+    let extracted = extract_series_from_chart_space(&ChartSpace {
+        chart: Chart {
+            plot_area: PlotArea {
+                chart_groups: vec![ChartGroup {
+                    chart_type: ChartType::Area,
+                    config: ChartTypeConfig::Area(AreaChartConfig::default()),
+                    series: vec![ooxml_types::charts::ChartSeries {
+                        idx: 0,
+                        order: 0,
+                        d_lbls: Some(DataLabelOptions {
+                            sp_pr: Some(crate::domain::charts::parse_shape_properties(
+                                br#"<c:spPr xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+                                           xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+                                    <a:ln><a:noFill/></a:ln>
+                                </c:spPr>"#,
+                            )),
+                            ..Default::default()
+                        }),
+                        ..Default::default()
+                    }],
+                    d_lbls: None,
+                    ax_id: vec![],
+                    raw_chart_type_attr: None,
+                    raw_chart_element_name: None,
+                    raw_chart_group_xml: None,
+                }],
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+        ..Default::default()
+    });
+
+    assert_eq!(
+        extracted[0]
+            .data_labels
+            .as_ref()
+            .and_then(|labels| labels.visual_format.as_ref())
+            .and_then(|format| format.line.as_ref())
+            .and_then(|line| line.no_fill),
+        Some(true)
+    );
+}
+
+#[test]
 fn scatter_style_does_not_materialize_absent_series_smooth() {
     let extracted = extract_series_from_chart_space(&scatter_chart_space(None));
 

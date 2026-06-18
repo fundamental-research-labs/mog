@@ -2,13 +2,13 @@ use crate::infra::scanner::{
     extract_quoted_value, find_attr_simd, find_closing_tag, find_gt_simd, find_tag_simd,
 };
 
-use super::data_sources::{AxisData, parse_series_text};
+use super::data_sources::{parse_series_text, AxisData};
 use super::error_bars::parse_error_bars;
 use super::labels::parse_data_labels;
 use super::points::{parse_all_data_points, parse_marker};
 use super::trendlines::parse_trendline;
 use super::xml_values::{parse_bool_val, parse_val_attr_u32};
-use super::{ChartSeries, find_top_level_ext_lst, parse_chart_ext_lst_at};
+use super::{find_top_level_ext_lst, parse_chart_ext_lst_at, ChartSeries};
 use crate::domain::charts::parse_shape_properties;
 
 // =============================================================================
@@ -181,7 +181,7 @@ pub fn parse_series(xml: &[u8]) -> ChartSeries {
 
     // Parse data labels → Option<DataLabelOptions>
     if let Some(dlbls_start) = find_tag_simd(child_xml, b"dLbls", 0) {
-        let dlbls_end = find_closing_tag(xml, b"dLbls", dlbls_start).unwrap_or(child_end);
+        let dlbls_end = find_complete_element_end(xml, b"dLbls", dlbls_start, child_end);
         series.d_lbls = Some(parse_data_labels(&xml[dlbls_start..dlbls_end]));
     }
 
@@ -257,6 +257,13 @@ pub fn parse_series(xml: &[u8]) -> ChartSeries {
     }
 
     series
+}
+
+fn find_complete_element_end(xml: &[u8], tag: &[u8], start: usize, fallback_end: usize) -> usize {
+    find_closing_tag(xml, tag, start)
+        .and_then(|close_start| find_gt_simd(xml, close_start).map(|end| end + 1))
+        .map(|end| end.min(fallback_end))
+        .unwrap_or(fallback_end)
 }
 
 fn find_direct_child_tag(xml: &[u8], parent: &[u8], child: &[u8]) -> Option<usize> {

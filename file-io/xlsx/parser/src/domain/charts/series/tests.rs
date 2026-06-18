@@ -540,6 +540,30 @@ fn test_parse_data_labels_with_sp_pr_and_tx_pr() {
 }
 
 #[test]
+fn parse_series_preserves_data_label_direct_shape_properties() {
+    let xml = br#"<c:ser>
+            <c:idx val="0"/>
+            <c:order val="0"/>
+            <c:dLbls>
+                <c:spPr>
+                    <a:ln><a:noFill/></a:ln>
+                </c:spPr>
+            </c:dLbls>
+        </c:ser>"#;
+
+    let series = parse_series(xml);
+    assert!(matches!(
+        series
+            .d_lbls
+            .as_ref()
+            .and_then(|labels| labels.sp_pr.as_ref())
+            .and_then(|sp_pr| sp_pr.ln.as_ref())
+            .and_then(|line| line.fill.as_ref()),
+        Some(ooxml_types::drawings::LineFill::NoFill)
+    ));
+}
+
+#[test]
 fn test_parse_individual_data_label_with_rich_text() {
     let xml = br#"<c:ser>
             <c:idx val="0"/>

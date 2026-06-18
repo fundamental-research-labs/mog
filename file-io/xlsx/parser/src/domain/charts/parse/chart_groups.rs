@@ -1,8 +1,8 @@
 //! Chart type group detection and combo chart grouping.
 
 use crate::infra::scanner::{
-    StartTagEnd, extract_quoted_value, find_attr_simd, find_closing_tag, find_gt_simd,
-    find_lt_simd, find_start_tag_end_quoted, find_tag_simd,
+    extract_quoted_value, find_attr_simd, find_closing_tag, find_gt_simd, find_lt_simd,
+    find_start_tag_end_quoted, find_tag_simd, StartTagEnd,
 };
 
 use super::super::xml_helpers::{find_pos_after_last_ser, parse_ax_ids};
@@ -92,8 +92,7 @@ pub(super) fn parse_chart_type_and_series(xml: &[u8]) -> ParsedChartTypeAndSerie
             let after_last_ser = find_pos_after_last_ser(type_bytes);
             let d_lbls =
                 if let Some(dlbls_start) = find_tag_simd(type_bytes, b"dLbls", after_last_ser) {
-                    let dlbls_end = find_closing_tag(type_bytes, b"dLbls", dlbls_start)
-                        .unwrap_or(type_bytes.len());
+                    let dlbls_end = find_complete_element_end(type_bytes, b"dLbls", dlbls_start);
                     Some(parse_data_labels(&type_bytes[dlbls_start..dlbls_end]))
                 } else {
                     None
@@ -153,8 +152,7 @@ pub(super) fn parse_chart_type_and_series(xml: &[u8]) -> ParsedChartTypeAndSerie
         let after_last_ser = find_pos_after_last_ser(type_bytes);
         let chart_dlbls =
             if let Some(dlbls_start) = find_tag_simd(type_bytes, b"dLbls", after_last_ser) {
-                let dlbls_end =
-                    find_closing_tag(type_bytes, b"dLbls", dlbls_start).unwrap_or(type_bytes.len());
+                let dlbls_end = find_complete_element_end(type_bytes, b"dLbls", dlbls_start);
                 Some(parse_data_labels(&type_bytes[dlbls_start..dlbls_end]))
             } else {
                 None
@@ -180,8 +178,7 @@ pub(super) fn parse_chart_type_and_series(xml: &[u8]) -> ParsedChartTypeAndSerie
         let chart_dlbls = if let Some(dlbls_start) =
             find_tag_simd(type_bytes, b"dLbls", find_pos_after_last_ser(type_bytes))
         {
-            let dlbls_end =
-                find_closing_tag(type_bytes, b"dLbls", dlbls_start).unwrap_or(type_bytes.len());
+            let dlbls_end = find_complete_element_end(type_bytes, b"dLbls", dlbls_start);
             Some(parse_data_labels(&type_bytes[dlbls_start..dlbls_end]))
         } else {
             None
@@ -220,6 +217,12 @@ pub(super) fn parse_chart_type_and_series(xml: &[u8]) -> ParsedChartTypeAndSerie
         None,
         Vec::new(),
     )
+}
+
+fn find_complete_element_end(xml: &[u8], tag: &[u8], start: usize) -> usize {
+    find_closing_tag(xml, tag, start)
+        .and_then(|close_start| find_gt_simd(xml, close_start).map(|end| end + 1))
+        .unwrap_or(xml.len())
 }
 
 struct UnknownChartGroup {
@@ -335,12 +338,10 @@ mod tests {
             groups[0].raw_chart_element_name.as_deref(),
             Some("fooChart")
         );
-        assert!(
-            groups[0]
-                .raw_chart_group_xml
-                .as_deref()
-                .is_some_and(|raw| raw.contains("<c:fooChart>"))
-        );
+        assert!(groups[0]
+            .raw_chart_group_xml
+            .as_deref()
+            .is_some_and(|raw| raw.contains("<c:fooChart>")));
     }
 
     #[test]
@@ -359,6 +360,33 @@ mod tests {
         assert_eq!(chart_type, ChartType::Bar);
         assert_eq!(raw_attr.as_deref(), Some("googleCombo"));
         assert!(groups.is_empty());
+    }
+
+    #[test]
+    fn chart_group_data_labels_preserve_direct_shape_properties() {
+        let xml = br#"
+            <c:plotArea>
+              <c:areaChart>
+                <c:ser><c:idx val="0"/><c:order val="0"/></c:ser>
+                <c:dLbls>
+                  <c:spPr>
+                    <a:ln><a:noFill/></a:ln>
+                  </c:spPr>
+                </c:dLbls>
+              </c:areaChart>
+            </c:plotArea>
+        "#;
+
+        let (_, _, _, _, labels, _, _, _) = parse_chart_type_and_series(xml);
+
+        assert!(matches!(
+            labels
+                .as_ref()
+                .and_then(|labels| labels.sp_pr.as_ref())
+                .and_then(|sp_pr| sp_pr.ln.as_ref())
+                .and_then(|line| line.fill.as_ref()),
+            Some(ooxml_types::drawings::LineFill::NoFill)
+        ));
     }
 }
 

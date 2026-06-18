@@ -170,6 +170,7 @@ export const SpreadsheetGrid = memo(function SpreadsheetGrid({
   // PERFORMANCE: Subscribe only to active sheet's zoom level to prevent re-renders
   // when other sheets' zoom levels change
   const currentZoom = useUIStore((s) => s.zoomLevels[activeSheetId] ?? 1.0);
+  const setZoomLevel = useUIStore((s) => s.setZoomLevel);
   const openEditSparklineDialog = useUIStore((s) => s.openEditSparklineDialog);
 
   // Get UI Store API for per-sheet scroll position restoration
@@ -815,6 +816,7 @@ export const SpreadsheetGrid = memo(function SpreadsheetGrid({
     resume: rendererActions.resume,
     switchSheet: rendererActions.switchSheet,
     setZoom: rendererActions.setZoom,
+    setZoomLevel,
     unmount: rendererActions.unmount,
   });
 

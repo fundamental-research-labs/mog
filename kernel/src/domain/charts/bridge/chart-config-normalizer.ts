@@ -72,13 +72,90 @@ export function normalizeAxisForRendering(
       yAxis,
     };
   }
+  const primary = normalizeCategoryValueAxisPairForRendering(
+    normAxis(axis.categoryAxis ?? axis.xAxis),
+    normAxis(axis.valueAxis ?? axis.yAxis),
+    chartType,
+  );
+  const secondary = normalizeCategoryValueAxisPairForRendering(
+    normAxis(axis.secondaryCategoryAxis),
+    normAxis(axis.secondaryValueAxis ?? axis.secondaryYAxis),
+    chartType,
+  );
   return {
     ...axis,
-    xAxis: normAxis(axis.categoryAxis ?? axis.xAxis),
-    yAxis: normAxis(axis.valueAxis ?? axis.yAxis),
-    secondaryCategoryAxis: normAxis(axis.secondaryCategoryAxis),
-    secondaryYAxis: normAxis(axis.secondaryValueAxis ?? axis.secondaryYAxis),
+    categoryAxis: primary.categoryAxis,
+    valueAxis: primary.valueAxis,
+    xAxis: primary.categoryAxis,
+    yAxis: primary.valueAxis,
+    secondaryCategoryAxis: secondary.categoryAxis,
+    secondaryValueAxis: secondary.valueAxis,
+    secondaryYAxis: secondary.valueAxis,
   };
+}
+
+type AxisOrientation = 'horizontal' | 'vertical';
+
+function normalizeCategoryValueAxisPairForRendering(
+  categoryAxis: SingleAxisConfig | undefined,
+  valueAxis: SingleAxisConfig | undefined,
+  chartType: ChartConfig['type'] | undefined,
+): { categoryAxis: SingleAxisConfig | undefined; valueAxis: SingleAxisConfig | undefined } {
+  const orientations = cartesianAxisOrientations(chartType);
+  if (!orientations) return { categoryAxis, valueAxis };
+
+  const categoryPosition = normalizeAxisPosition(categoryAxis?.position);
+  const valuePosition = normalizeAxisPosition(valueAxis?.position);
+  const categoryCompatible = isAxisPositionCompatible(
+    categoryPosition,
+    orientations.category,
+  );
+  const valueCompatible = isAxisPositionCompatible(valuePosition, orientations.value);
+  const sharedIncompatiblePosition =
+    categoryPosition !== undefined &&
+    valuePosition !== undefined &&
+    categoryPosition === valuePosition &&
+    (!categoryCompatible || !valueCompatible);
+
+  return {
+    categoryAxis:
+      categoryAxis && (!categoryCompatible || sharedIncompatiblePosition)
+        ? hideTickLabels(categoryAxis)
+        : categoryAxis,
+    valueAxis:
+      valueAxis && (!valueCompatible || sharedIncompatiblePosition)
+        ? hideTickLabels(valueAxis)
+        : valueAxis,
+  };
+}
+
+function cartesianAxisOrientations(
+  chartType: ChartConfig['type'] | undefined,
+): { category: AxisOrientation; value: AxisOrientation } | undefined {
+  switch (chartType) {
+    case 'bar':
+    case 'bar3d':
+      return { category: 'vertical', value: 'horizontal' };
+    case 'column':
+    case 'column3d':
+    case 'line':
+    case 'line3d':
+    case 'area':
+    case 'area3d':
+    case 'stock':
+      return { category: 'horizontal', value: 'vertical' };
+    default:
+      return undefined;
+  }
+}
+
+function isAxisPositionCompatible(
+  position: ReturnType<typeof normalizeAxisPosition>,
+  orientation: AxisOrientation,
+): boolean {
+  if (position === undefined) return true;
+  if (orientation === 'horizontal') return position === 'bottom' || position === 'top';
+  return position === 'left' || position === 'right';
 }
 
 function isStandardXYValueAxisPair(

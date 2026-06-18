@@ -55,8 +55,7 @@ pub fn extract_chart_spec_from_chart_space(
     // -------------------------------------------------------------------------
     // (f) axes — from cs.chart.plot_area.axes
     // -------------------------------------------------------------------------
-    let mut axes = extract_axes_from_chart_space(cs);
-    apply_imported_axis_label_positions(&chart_type, axes.as_mut());
+    let axes = extract_axes_from_chart_space(cs);
 
     // -------------------------------------------------------------------------
     // (g) chart-level data_labels — from first chart group's d_lbls
@@ -346,129 +345,6 @@ fn effective_vary_by_categories(
         ooxml_types::charts::ChartTypeConfig::Bubble(_) if single_series => Some(true),
         _ => None,
     }
-}
-
-#[derive(Clone, Copy, PartialEq)]
-enum AxisOrientation {
-    Horizontal,
-    Vertical,
-}
-
-#[derive(Clone, Copy, PartialEq)]
-enum AxisPosition {
-    Bottom,
-    Top,
-    Left,
-    Right,
-}
-
-fn apply_imported_axis_label_positions(
-    chart_type: &domain_types::ChartType,
-    axes: Option<&mut domain_types::chart::AxisData>,
-) {
-    let Some(axes) = axes else {
-        return;
-    };
-    let Some((category_orientation, value_orientation)) = cartesian_axis_orientations(chart_type)
-    else {
-        return;
-    };
-
-    apply_axis_pair_label_position(
-        axes.category_axis.as_mut(),
-        axes.value_axis.as_mut(),
-        category_orientation,
-        value_orientation,
-    );
-    apply_axis_pair_label_position(
-        axes.secondary_category_axis.as_mut(),
-        axes.secondary_value_axis.as_mut(),
-        category_orientation,
-        value_orientation,
-    );
-}
-
-fn cartesian_axis_orientations(
-    chart_type: &domain_types::ChartType,
-) -> Option<(AxisOrientation, AxisOrientation)> {
-    use domain_types::ChartType;
-
-    match chart_type {
-        ChartType::Bar | ChartType::Bar3D => {
-            Some((AxisOrientation::Vertical, AxisOrientation::Horizontal))
-        }
-        ChartType::Column
-        | ChartType::Column3D
-        | ChartType::Line
-        | ChartType::Line3D
-        | ChartType::Area
-        | ChartType::Area3D
-        | ChartType::Stock => Some((AxisOrientation::Horizontal, AxisOrientation::Vertical)),
-        _ => None,
-    }
-}
-
-fn apply_axis_pair_label_position(
-    category_axis: Option<&mut domain_types::chart::SingleAxisData>,
-    value_axis: Option<&mut domain_types::chart::SingleAxisData>,
-    category_orientation: AxisOrientation,
-    value_orientation: AxisOrientation,
-) {
-    let category_position = category_axis
-        .as_ref()
-        .and_then(|axis| normalize_axis_position(axis.position.as_deref()));
-    let value_position = value_axis
-        .as_ref()
-        .and_then(|axis| normalize_axis_position(axis.position.as_deref()));
-    let category_compatible = is_axis_position_compatible(category_position, category_orientation);
-    let value_compatible = is_axis_position_compatible(value_position, value_orientation);
-    let shared_incompatible_position = category_position.is_some()
-        && value_position.is_some()
-        && category_position == value_position
-        && (!category_compatible || !value_compatible);
-
-    if !category_compatible || shared_incompatible_position {
-        if let Some(axis) = category_axis {
-            hide_axis_tick_labels(axis);
-        }
-    }
-    if !value_compatible || shared_incompatible_position {
-        if let Some(axis) = value_axis {
-            hide_axis_tick_labels(axis);
-        }
-    }
-}
-
-fn normalize_axis_position(position: Option<&str>) -> Option<AxisPosition> {
-    match position?.to_ascii_lowercase().as_str() {
-        "b" | "bottom" => Some(AxisPosition::Bottom),
-        "t" | "top" => Some(AxisPosition::Top),
-        "l" | "left" => Some(AxisPosition::Left),
-        "r" | "right" => Some(AxisPosition::Right),
-        _ => None,
-    }
-}
-
-fn is_axis_position_compatible(
-    position: Option<AxisPosition>,
-    orientation: AxisOrientation,
-) -> bool {
-    matches!(
-        (position, orientation),
-        (None, _)
-            | (
-                Some(AxisPosition::Bottom | AxisPosition::Top),
-                AxisOrientation::Horizontal
-            )
-            | (
-                Some(AxisPosition::Left | AxisPosition::Right),
-                AxisOrientation::Vertical
-            )
-    )
-}
-
-fn hide_axis_tick_labels(axis: &mut domain_types::chart::SingleAxisData) {
-    axis.tick_label_position = Some("none".to_string());
 }
 
 fn extract_analysis_fields_from_config(
@@ -1307,7 +1183,7 @@ mod tests {
     }
 
     #[test]
-    fn single_series_column_with_shared_left_axes_hides_axis_labels() {
+    fn single_series_column_with_shared_left_axes_preserves_tick_label_omission() {
         let cs = ChartSpace {
             chart: OoxmlChart {
                 plot_area: PlotArea {
@@ -1357,13 +1233,13 @@ mod tests {
             axes.category_axis
                 .as_ref()
                 .and_then(|axis| axis.tick_label_position.as_deref()),
-            Some("none")
+            None
         );
         assert_eq!(
             axes.value_axis
                 .as_ref()
                 .and_then(|axis| axis.tick_label_position.as_deref()),
-            Some("none")
+            None
         );
     }
 

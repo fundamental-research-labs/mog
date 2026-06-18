@@ -87,6 +87,35 @@ describe('chart config normalizer', () => {
     expect(config.axis?.secondaryValueAxis).toBeUndefined();
   });
 
+  it('suppresses render labels for imported column axes sharing the left side', () => {
+    const config = toChartConfig(
+      chart({
+        chartType: 'column',
+        axis: {
+          categoryAxis: {
+            axisType: 'catAx',
+            visible: true,
+            position: 'l',
+            tickMarks: 'none',
+            minorTickMarks: 'none',
+          },
+          valueAxis: {
+            axisType: 'valAx',
+            visible: true,
+            position: 'l',
+            tickMarks: 'none',
+            minorTickMarks: 'none',
+          },
+        },
+      } as unknown as Partial<ChartFloatingObject>),
+    );
+
+    expect(config.axis?.categoryAxis?.tickLabelPosition).toBe('none');
+    expect(config.axis?.valueAxis?.tickLabelPosition).toBe('none');
+    expect(config.axis?.xAxis).toMatchObject({ position: 'l', tickLabelPosition: 'none' });
+    expect(config.axis?.yAxis).toMatchObject({ position: 'l', tickLabelPosition: 'none' });
+  });
+
   it('keeps imported scatter value-axis pair labels when positions match XY geometry', () => {
     const config = toChartConfig(
       chart({

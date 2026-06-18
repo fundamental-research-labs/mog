@@ -515,6 +515,45 @@ fn test_parse_data_point_with_sp_pr() {
 }
 
 #[test]
+fn test_parse_data_point_marker_sp_pr_does_not_shadow_direct_sp_pr() {
+    let xml = br#"<c:dPt>
+            <c:idx val="2"/>
+            <c:marker>
+                <c:spPr>
+                    <a:ln><a:noFill/></a:ln>
+                </c:spPr>
+            </c:marker>
+            <c:spPr>
+                <a:solidFill>
+                    <a:srgbClr val="00FF00"/>
+                </a:solidFill>
+            </c:spPr>
+        </c:dPt>"#;
+
+    let point = parse_data_point(xml);
+    let marker_line_fill = point
+        .marker
+        .as_ref()
+        .and_then(|marker| marker.sp_pr.as_ref())
+        .and_then(|sp_pr| sp_pr.ln.as_ref())
+        .and_then(|line| line.fill.as_ref());
+    assert!(matches!(
+        marker_line_fill,
+        Some(ooxml_types::drawings::LineFill::NoFill)
+    ));
+
+    let point_fill = point.sp_pr.as_ref().and_then(|sp_pr| sp_pr.fill.as_ref());
+    assert!(matches!(
+        point_fill,
+        Some(ooxml_types::drawings::DrawingFill::Solid(solid))
+            if matches!(
+                &solid.color,
+                ooxml_types::drawings::DrawingColor::SrgbClr { val, .. } if val == "00FF00"
+            )
+    ));
+}
+
+#[test]
 fn test_parse_data_labels_with_sp_pr_and_tx_pr() {
     let xml = br#"<c:dLbls>
             <c:showVal val="1"/>

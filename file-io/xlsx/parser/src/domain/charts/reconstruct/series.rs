@@ -289,13 +289,7 @@ fn build_num_data_source(
     if let Some(formula) = formula {
         return Some(NumDataSource::Ref(NumRef {
             f: formula.to_string(),
-            num_cache: if source_kind == Some(ChartSeriesDimensionSourceKindData::CacheFallback) {
-                cache
-                    .filter(|cache| point_cache_has_payload(cache))
-                    .map(num_data_from_cache)
-            } else {
-                None
-            },
+            num_cache: point_cache_payload(cache).map(num_data_from_cache),
             ..Default::default()
         }));
     }
@@ -348,10 +342,8 @@ fn build_cat_data_source(
         if let Some(levels) = category_levels {
             return Some(CatDataSource::MultiLvlStrRef(charts::MultiLvlStrRef {
                 f: formula.to_string(),
-                multi_lvl_str_cache: (source_kind
-                    == Some(ChartSeriesDimensionSourceKindData::CacheFallback)
-                    && category_levels_cache_has_payload(levels))
-                .then(|| multi_lvl_str_data_from_cache(levels)),
+                multi_lvl_str_cache: category_levels_cache_payload(Some(levels))
+                    .map(multi_lvl_str_data_from_cache),
                 ..Default::default()
             }));
         }
@@ -361,27 +353,14 @@ fn build_cat_data_source(
         return if numeric_category {
             Some(CatDataSource::NumRef(NumRef {
                 f: formula.to_string(),
-                num_cache: if source_kind == Some(ChartSeriesDimensionSourceKindData::CacheFallback)
-                {
-                    cache
-                        .filter(|cache| point_cache_has_payload(cache))
-                        .map(|cache| num_data_from_category_cache(cache, category_label_format))
-                } else {
-                    None
-                },
+                num_cache: point_cache_payload(cache)
+                    .map(|cache| num_data_from_category_cache(cache, category_label_format)),
                 ..Default::default()
             }))
         } else {
             Some(CatDataSource::StrRef(StrRef {
                 f: formula.to_string(),
-                str_cache: if source_kind == Some(ChartSeriesDimensionSourceKindData::CacheFallback)
-                {
-                    cache
-                        .filter(|cache| point_cache_has_payload(cache))
-                        .map(str_data_from_cache)
-                } else {
-                    None
-                },
+                str_cache: point_cache_payload(cache).map(str_data_from_cache),
                 ..Default::default()
             }))
         };
@@ -406,12 +385,24 @@ fn point_cache_has_payload(cache: &ChartSeriesPointCacheData) -> bool {
     cache.point_count.is_some() || cache.format_code.is_some() || !cache.points.is_empty()
 }
 
+fn point_cache_payload(
+    cache: Option<&ChartSeriesPointCacheData>,
+) -> Option<&ChartSeriesPointCacheData> {
+    cache.filter(|cache| point_cache_has_payload(cache))
+}
+
 fn category_levels_cache_has_payload(cache: &ChartSeriesCategoryLevelsCacheData) -> bool {
     cache.point_count.is_some()
         || cache
             .levels
             .iter()
             .any(|level| level.point_count.is_some() || !level.points.is_empty())
+}
+
+fn category_levels_cache_payload(
+    cache: Option<&ChartSeriesCategoryLevelsCacheData>,
+) -> Option<&ChartSeriesCategoryLevelsCacheData> {
+    cache.filter(|cache| category_levels_cache_has_payload(cache))
 }
 
 fn multi_lvl_str_data_from_cache(

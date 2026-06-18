@@ -524,8 +524,8 @@ fn numeric_literal_category_sources_reconstruct_num_lit_with_format_codes() {
 }
 
 #[test]
-fn ref_series_sources_omit_imported_caches_without_live_snapshot() {
-    let mut spec = minimal_chart_spec(DomainChartType::Bubble, None);
+fn ref_series_sources_reconstruct_imported_ref_caches() {
+    let mut spec = minimal_chart_spec(DomainChartType::Column, None);
     let mut series = ranges::chart_series_data(
         None,
         Some("Data!$A$2:$A$3".to_string()),
@@ -548,18 +548,7 @@ fn ref_series_sources_omit_imported_caches_without_live_snapshot() {
         format_code: None,
         points: vec![ChartSeriesPointCachePointData {
             idx: 0,
-            value: "Stale category".to_string(),
-            format_code: None,
-        }],
-    });
-    series.bubble_size = Some("Data!$C$2:$C$3".to_string());
-    series.bubble_size_source_kind = Some(ChartSeriesDimensionSourceKindData::Ref);
-    series.bubble_size_cache = Some(ChartSeriesPointCacheData {
-        point_count: Some(2),
-        format_code: None,
-        points: vec![ChartSeriesPointCachePointData {
-            idx: 0,
-            value: "888".to_string(),
+            value: "Imported category".to_string(),
             format_code: None,
         }],
     });
@@ -569,12 +558,10 @@ fn ref_series_sources_omit_imported_caches_without_live_snapshot() {
 
     assert!(xml.contains("<c:f>Data!$A$2:$A$3</c:f>"), "{xml}");
     assert!(xml.contains("<c:f>Data!$B$2:$B$3</c:f>"), "{xml}");
-    assert!(xml.contains("<c:f>Data!$C$2:$C$3</c:f>"), "{xml}");
-    assert!(!xml.contains("<c:numCache>"), "{xml}");
-    assert!(!xml.contains("<c:strCache>"), "{xml}");
-    assert!(!xml.contains("999"), "{xml}");
-    assert!(!xml.contains("Stale category"), "{xml}");
-    assert!(!xml.contains("888"), "{xml}");
+    assert!(xml.contains("<c:numCache>"), "{xml}");
+    assert!(xml.contains("<c:strCache>"), "{xml}");
+    assert!(xml.contains("<c:v>999</c:v>"), "{xml}");
+    assert!(xml.contains("<c:v>Imported category</c:v>"), "{xml}");
 }
 
 #[test]
@@ -629,7 +616,7 @@ fn cache_fallback_series_sources_reconstruct_ref_caches() {
 }
 
 #[test]
-fn multi_level_ref_sources_omit_imported_level_cache_without_live_snapshot() {
+fn multi_level_ref_sources_reconstruct_imported_level_cache() {
     let mut spec = minimal_chart_spec(DomainChartType::Column, None);
     let mut series = ranges::chart_series_data(
         Some("Imported".to_string()),
@@ -690,12 +677,18 @@ fn multi_level_ref_sources_omit_imported_level_cache_without_live_snapshot() {
 
     assert!(xml.contains("<c:multiLvlStrRef>"), "{xml}");
     assert!(xml.contains("<c:f>Data!$A$2:$B$4</c:f>"), "{xml}");
-    assert!(!xml.contains("<c:multiLvlStrCache>"), "{xml}");
-    assert!(!xml.contains("<c:lvl>"), "{xml}");
+    assert!(xml.contains("<c:multiLvlStrCache>"), "{xml}");
+    assert_eq!(xml.matches("<c:lvl>").count(), 2, "{xml}");
     assert!(!xml.contains("<c:strRef>"), "{xml}");
     assert!(!xml.contains("Flat cache should not win"), "{xml}");
-    assert!(!xml.contains("South"), "{xml}");
-    assert!(!xml.contains("Q2"), "{xml}");
+    assert!(
+        xml.contains("<c:pt idx=\"2\"><c:v>South</c:v></c:pt>"),
+        "{xml}"
+    );
+    assert!(
+        xml.contains("<c:pt idx=\"1\"><c:v>Q2</c:v></c:pt>"),
+        "{xml}"
+    );
 }
 
 #[test]

@@ -6,7 +6,11 @@ use ooxml_types::charts::{
     self, ChartLines, ChartSurface, ChartText, DataLabel, DataLabelOptions, DataLabelPosition,
     DataTableConfig, LegendPosition, NumFmt, StrRef, View3D,
 };
-use ooxml_types::drawings::{Paragraph, ParagraphProperties, TextBody, TextRun, TextRunContent};
+use ooxml_types::drawings::{
+    ColorTransform, DrawingColor, EffectList, EffectProperties, OuterShadow, Paragraph,
+    ParagraphProperties, ShapeProperties, StAngle, StPositiveCoordinate, TextAlign, TextAnchor,
+    TextBody, TextRun, TextRunContent,
+};
 
 use super::formatting::{
     build_outline, build_run_properties, build_shape_properties, build_text_body,
@@ -17,6 +21,9 @@ pub(super) fn build_title(
     format: Option<&ChartFormatData>,
     rich_text: Option<&[ChartFormatStringData]>,
     layout: Option<&domain_types::domain::drawings::ManualLayout>,
+    horizontal_alignment: Option<&str>,
+    vertical_alignment: Option<&str>,
+    show_shadow: Option<bool>,
 ) -> Option<charts::Title> {
     let default_font = format.and_then(|f| f.font.as_ref());
     if let Some(runs) = rich_text.filter(|runs| runs.iter().any(|run| !run.text.is_empty())) {
@@ -24,6 +31,9 @@ pub(super) fn build_title(
             build_chart_text_rich_runs(runs, default_font),
             format,
             layout,
+            horizontal_alignment,
+            vertical_alignment,
+            show_shadow,
         ));
     }
 
@@ -32,33 +42,117 @@ pub(super) fn build_title(
     if text == "undefined" || text.is_empty() {
         return None;
     }
-    Some(build_title_element(text, format, layout))
+    Some(build_title_element(
+        text,
+        format,
+        layout,
+        horizontal_alignment,
+        vertical_alignment,
+        show_shadow,
+    ))
 }
 
 pub(super) fn build_title_element(
     text: &str,
     format: Option<&ChartFormatData>,
     layout: Option<&domain_types::domain::drawings::ManualLayout>,
+    horizontal_alignment: Option<&str>,
+    vertical_alignment: Option<&str>,
+    show_shadow: Option<bool>,
 ) -> charts::Title {
     build_title_with_text(
         build_chart_text_rich(text, format.and_then(|f| f.font.as_ref())),
         format,
         layout,
+        horizontal_alignment,
+        vertical_alignment,
+        show_shadow,
     )
 }
 
 fn build_title_with_text(
-    tx: ChartText,
+    mut tx: ChartText,
     format: Option<&ChartFormatData>,
     layout: Option<&domain_types::domain::drawings::ManualLayout>,
+    horizontal_alignment: Option<&str>,
+    vertical_alignment: Option<&str>,
+    show_shadow: Option<bool>,
 ) -> charts::Title {
-    let sp_pr = format.and_then(build_shape_properties);
+    apply_title_text_alignment(&mut tx, horizontal_alignment, vertical_alignment);
+    let sp_pr = build_title_shape_properties(format, show_shadow);
 
     charts::Title {
         tx: Some(tx),
         layout: layout.cloned().map(Into::into),
         sp_pr,
         ..Default::default()
+    }
+}
+
+fn apply_title_text_alignment(
+    tx: &mut ChartText,
+    horizontal_alignment: Option<&str>,
+    vertical_alignment: Option<&str>,
+) {
+    let ChartText::Rich(body) = tx else {
+        return;
+    };
+    if let Some(anchor) = vertical_alignment.and_then(title_vertical_alignment_to_ooxml) {
+        body.body_props.anchor = Some(anchor);
+    }
+    if let Some(align) = horizontal_alignment.and_then(title_horizontal_alignment_to_ooxml) {
+        for paragraph in &mut body.paragraphs {
+            paragraph.props.align = Some(align);
+        }
+    }
+}
+
+fn build_title_shape_properties(
+    format: Option<&ChartFormatData>,
+    show_shadow: Option<bool>,
+) -> Option<ShapeProperties> {
+    let mut sp_pr = format.and_then(build_shape_properties);
+    if show_shadow != Some(true) {
+        return sp_pr;
+    }
+
+    let sp_pr = sp_pr.get_or_insert_with(ShapeProperties::default);
+    sp_pr.effects = Some(EffectProperties::EffectList(EffectList {
+        outer_shadow: Some(default_title_outer_shadow()),
+        ..Default::default()
+    }));
+    Some(sp_pr.clone())
+}
+
+fn default_title_outer_shadow() -> OuterShadow {
+    OuterShadow {
+        blur_rad: StPositiveCoordinate::new_clamped(38_100),
+        dist: StPositiveCoordinate::new_clamped(38_100),
+        dir: StAngle::new(2_700_000),
+        color: Some(DrawingColor::SrgbClr {
+            val: "000000".to_string(),
+            transforms: vec![ColorTransform::Alpha { val: 43_137 }],
+        }),
+        rot_with_shape: false,
+        ..Default::default()
+    }
+}
+
+fn title_horizontal_alignment_to_ooxml(value: &str) -> Option<TextAlign> {
+    match value {
+        "left" => Some(TextAlign::Left),
+        "center" => Some(TextAlign::Center),
+        "right" => Some(TextAlign::Right),
+        _ => None,
+    }
+}
+
+fn title_vertical_alignment_to_ooxml(value: &str) -> Option<TextAnchor> {
+    match value {
+        "top" => Some(TextAnchor::Top),
+        "middle" => Some(TextAnchor::Center),
+        "bottom" => Some(TextAnchor::Bottom),
+        _ => None,
     }
 }
 
@@ -425,6 +519,9 @@ mod tests {
             Some(&default_format),
             Some(&rich_text),
             None,
+            None,
+            None,
+            None,
         )
         .expect("rich-text title should be reconstructed");
 
@@ -533,7 +630,7 @@ mod tests {
 
     #[test]
     fn build_title_falls_back_to_plain_text_without_rich_runs() {
-        let title = build_title(Some("Plain"), None, Some(&[]), None)
+        let title = build_title(Some("Plain"), None, Some(&[]), None, None, None, None)
             .expect("plain title should be reconstructed");
 
         let Some(ChartText::Rich(body)) = title.tx else {
@@ -543,5 +640,34 @@ mod tests {
             panic!("expected plain title run");
         };
         assert_eq!(run.text, "Plain");
+    }
+
+    #[test]
+    fn build_title_preserves_alignment_and_shadow() {
+        let title = build_title(
+            Some("Aligned"),
+            None,
+            None,
+            None,
+            Some("center"),
+            Some("top"),
+            Some(true),
+        )
+        .expect("title should be reconstructed");
+
+        let Some(ChartText::Rich(body)) = title.tx else {
+            panic!("expected rich chart text");
+        };
+        assert_eq!(body.body_props.anchor, Some(TextAnchor::Top));
+        assert_eq!(body.paragraphs[0].props.align, Some(TextAlign::Center));
+
+        let effects = title
+            .sp_pr
+            .and_then(|sp_pr| sp_pr.effects)
+            .expect("title shadow should emit shape effects");
+        let EffectProperties::EffectList(list) = effects else {
+            panic!("expected title shadow effect list");
+        };
+        assert!(list.outer_shadow.is_some());
     }
 }

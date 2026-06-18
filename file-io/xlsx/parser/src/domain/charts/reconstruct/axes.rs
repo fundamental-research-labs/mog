@@ -1,6 +1,6 @@
 use domain_types::{
-    ChartDefinition,
     chart::{AxisData, ChartSpec, ChartType as DomainChartType, SingleAxisData},
+    ChartDefinition,
 };
 use ooxml_types::charts::{
     self, AxisCrosses, AxisType, ChartAxis, ChartAxisPosition, ChartLines, CrossBetween,
@@ -523,7 +523,7 @@ fn build_single_axis_with_default_position(
     let title = sad
         .title
         .as_ref()
-        .map(|t| build_title_element(t, sad.title_format.as_ref(), None));
+        .map(|t| build_title_element(t, sad.title_format.as_ref(), None, None, None, None));
 
     let num_fmt = sad.number_format.as_ref().map(|code| NumFmt {
         format_code: code.clone(),

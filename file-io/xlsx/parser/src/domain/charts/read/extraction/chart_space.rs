@@ -11,7 +11,10 @@ use super::formatting::{
 use super::labels::extract_data_label_data;
 use super::legend::extract_legend_from_chart_space;
 use super::series::extract_series_from_chart_space;
-use super::text::extract_title_text_from_title;
+use super::text::{
+    extract_title_h_align, extract_title_show_shadow, extract_title_text_from_title,
+    extract_title_v_align,
+};
 
 pub fn extract_chart_spec_from_chart_space(
     cs: &ooxml_types::charts::ChartSpace,
@@ -74,6 +77,9 @@ pub fn extract_chart_spec_from_chart_space(
         .title
         .as_ref()
         .and_then(|title| title.layout.as_ref().map(Into::into));
+    let title_h_align = chart.title.as_ref().and_then(extract_title_h_align);
+    let title_v_align = chart.title.as_ref().and_then(extract_title_v_align);
+    let title_show_shadow = chart.title.as_ref().and_then(extract_title_show_shadow);
 
     // -------------------------------------------------------------------------
     // (i) scalar fields from chart group configs
@@ -270,9 +276,9 @@ pub fn extract_chart_spec_from_chart_space(
         show_all_field_buttons: chart.show_all_field_buttons,
         second_plot_size: None,
         vary_by_categories,
-        title_h_align: None,
-        title_v_align: None,
-        title_show_shadow: None,
+        title_h_align,
+        title_v_align,
+        title_show_shadow,
         pivot_options,
         pivot_projection: None,
         bar_shape: scalar_fields.bar_shape,
@@ -1856,11 +1862,9 @@ mod tests {
             spec.series[0].stock_role,
             Some(domain_types::chart::ChartSeriesStockRoleData::Volume)
         );
-        assert!(
-            spec.series[1..]
-                .iter()
-                .all(|series| series.r#type == Some(domain_types::ChartType::Stock))
-        );
+        assert!(spec.series[1..]
+            .iter()
+            .all(|series| series.r#type == Some(domain_types::ChartType::Stock)));
         assert_eq!(
             spec.series[1..]
                 .iter()

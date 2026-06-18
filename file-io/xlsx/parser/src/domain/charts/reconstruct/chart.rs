@@ -1,6 +1,6 @@
 use domain_types::{
+    chart::{normalize_explicit_display_blanks_as, ChartSpec},
     ChartDefinition,
-    chart::{ChartSpec, normalize_explicit_display_blanks_as},
 };
 use ooxml_types::charts::{self, DisplayBlanksAs};
 
@@ -33,6 +33,9 @@ pub(super) fn build_chart(spec: &ChartSpec) -> charts::Chart {
             spec.title_format.as_ref(),
             spec.title_rich_text.as_deref(),
             title_layout,
+            spec.title_h_align.as_deref(),
+            spec.title_v_align.as_deref(),
+            spec.title_show_shadow,
         ),
         auto_title_deleted: spec.auto_title_deleted,
         view_3d: spec.view_3d.as_ref().map(build_view_3d),

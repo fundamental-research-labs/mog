@@ -37,29 +37,54 @@ pub(super) fn build_axes(spec: &ChartSpec) -> Vec<ChartAxis> {
     let val_id = 222222222u32;
 
     if let Some(ref cat) = axes_data.category_axis {
-        axes.push(build_single_axis(cat, AxisType::Category, cat_id, val_id));
+        axes.push(build_axis_for_slot(
+            spec,
+            cat,
+            AxisSlot::Category,
+            AxisType::Category,
+            cat_id,
+            val_id,
+        ));
     }
     if let Some(ref val) = axes_data.value_axis {
-        axes.push(build_single_axis(val, AxisType::Value, val_id, cat_id));
+        axes.push(build_axis_for_slot(
+            spec,
+            val,
+            AxisSlot::Value,
+            AxisType::Value,
+            val_id,
+            cat_id,
+        ));
     }
     if let Some(ref scat) = axes_data.secondary_category_axis {
-        axes.push(build_single_axis(
+        axes.push(build_axis_for_slot(
+            spec,
             scat,
+            AxisSlot::SecondaryCategory,
             AxisType::Category,
             333333333,
             444444444,
         ));
     }
     if let Some(ref sval) = axes_data.secondary_value_axis {
-        axes.push(build_single_axis(
+        axes.push(build_axis_for_slot(
+            spec,
             sval,
+            AxisSlot::SecondaryValue,
             AxisType::Value,
             444444444,
             333333333,
         ));
     }
     if let Some(ref ser) = axes_data.series_axis {
-        axes.push(build_single_axis(ser, AxisType::Series, 555555555, cat_id));
+        axes.push(build_axis_for_slot(
+            spec,
+            ser,
+            AxisSlot::Series,
+            AxisType::Series,
+            555555555,
+            cat_id,
+        ));
     }
     if modeled_series_needs_secondary_axis(spec) {
         let default_axis = default_visible_axis();
@@ -72,16 +97,20 @@ pub(super) fn build_axes(spec: &ChartSpec) -> Vec<ChartAxis> {
             } else {
                 AxisType::Category
             };
-            axes.push(build_single_axis_with_ids(
+            axes.push(build_axis_for_slot(
+                spec,
                 &default_axis,
+                AxisSlot::SecondaryCategory,
                 axis_type,
                 333333333,
                 444444444,
             ));
         }
         if axes_data.secondary_value_axis.is_none() {
-            axes.push(build_single_axis_with_ids(
+            axes.push(build_axis_for_slot(
+                spec,
                 &default_axis,
+                AxisSlot::SecondaryValue,
                 AxisType::Value,
                 444444444,
                 333333333,
@@ -106,18 +135,36 @@ pub(super) fn build_default_axes(spec: &ChartSpec) -> Vec<ChartAxis> {
         DomainChartType::Scatter | DomainChartType::Bubble
     ) {
         let mut axes = vec![
-            build_single_axis_with_ids(&default_axis, AxisType::Value, cat_id, val_id),
-            build_single_axis_with_ids(&default_axis, AxisType::Value, val_id, cat_id),
+            build_axis_for_slot(
+                spec,
+                &default_axis,
+                AxisSlot::Value,
+                AxisType::Value,
+                cat_id,
+                val_id,
+            ),
+            build_axis_for_slot(
+                spec,
+                &default_axis,
+                AxisSlot::SecondaryValue,
+                AxisType::Value,
+                val_id,
+                cat_id,
+            ),
         ];
         if modeled_series_needs_secondary_axis(spec) {
-            axes.push(build_single_axis_with_ids(
+            axes.push(build_axis_for_slot(
+                spec,
                 &default_axis,
+                AxisSlot::SecondaryCategory,
                 AxisType::Value,
                 333333333,
                 444444444,
             ));
-            axes.push(build_single_axis_with_ids(
+            axes.push(build_axis_for_slot(
+                spec,
                 &default_axis,
+                AxisSlot::SecondaryValue,
                 AxisType::Value,
                 444444444,
                 333333333,
@@ -127,18 +174,36 @@ pub(super) fn build_default_axes(spec: &ChartSpec) -> Vec<ChartAxis> {
     }
 
     let mut axes = vec![
-        build_single_axis_with_ids(&default_axis, AxisType::Category, cat_id, val_id),
-        build_single_axis_with_ids(&default_axis, AxisType::Value, val_id, cat_id),
+        build_axis_for_slot(
+            spec,
+            &default_axis,
+            AxisSlot::Category,
+            AxisType::Category,
+            cat_id,
+            val_id,
+        ),
+        build_axis_for_slot(
+            spec,
+            &default_axis,
+            AxisSlot::Value,
+            AxisType::Value,
+            val_id,
+            cat_id,
+        ),
     ];
     if modeled_series_needs_secondary_axis(spec) {
-        axes.push(build_single_axis_with_ids(
+        axes.push(build_axis_for_slot(
+            spec,
             &default_axis,
+            AxisSlot::SecondaryCategory,
             AxisType::Category,
             333333333,
             444444444,
         ));
-        axes.push(build_single_axis_with_ids(
+        axes.push(build_axis_for_slot(
+            spec,
             &default_axis,
+            AxisSlot::SecondaryValue,
             AxisType::Value,
             444444444,
             333333333,
@@ -195,7 +260,13 @@ pub(super) fn build_axes_from_original(
                         .collect::<Vec<_>>(),
                 )
             };
-            let mut rebuilt = build_single_axis_with_ids(sad, axis.axis_type, axis.ax_id, cross_ax);
+            let mut rebuilt = build_single_axis_with_default_position(
+                sad,
+                axis.axis_type,
+                axis.ax_id,
+                cross_ax,
+                axis.ax_pos,
+            );
             apply_imported_axis_fidelity(&mut rebuilt, axis, sad);
             rebuilt
         })
@@ -321,6 +392,60 @@ fn is_secondary_axis_position(position: ChartAxisPosition) -> bool {
     matches!(position, ChartAxisPosition::Top | ChartAxisPosition::Right)
 }
 
+#[derive(Clone, Copy)]
+enum AxisSlot {
+    Category,
+    Value,
+    SecondaryCategory,
+    SecondaryValue,
+    Series,
+}
+
+fn default_axis_position_for_type(axis_type: AxisType) -> ChartAxisPosition {
+    match axis_type {
+        AxisType::Category | AxisType::Date => ChartAxisPosition::Bottom,
+        AxisType::Value => ChartAxisPosition::Left,
+        AxisType::Series => ChartAxisPosition::Bottom,
+    }
+}
+
+fn default_axis_position_for_slot(
+    chart_type: &DomainChartType,
+    slot: AxisSlot,
+    axis_type: AxisType,
+) -> ChartAxisPosition {
+    if matches!(
+        chart_type,
+        DomainChartType::Scatter | DomainChartType::Bubble
+    ) {
+        return match slot {
+            AxisSlot::Value => ChartAxisPosition::Bottom,
+            AxisSlot::SecondaryValue => ChartAxisPosition::Left,
+            AxisSlot::SecondaryCategory => ChartAxisPosition::Top,
+            AxisSlot::Category => ChartAxisPosition::Bottom,
+            AxisSlot::Series => ChartAxisPosition::Bottom,
+        };
+    }
+
+    if matches!(chart_type, DomainChartType::Bar | DomainChartType::Bar3D) {
+        return match slot {
+            AxisSlot::Category => ChartAxisPosition::Left,
+            AxisSlot::Value => ChartAxisPosition::Bottom,
+            AxisSlot::SecondaryCategory => ChartAxisPosition::Right,
+            AxisSlot::SecondaryValue => ChartAxisPosition::Top,
+            AxisSlot::Series => ChartAxisPosition::Bottom,
+        };
+    }
+
+    match slot {
+        AxisSlot::Category => ChartAxisPosition::Bottom,
+        AxisSlot::Value => ChartAxisPosition::Left,
+        AxisSlot::SecondaryCategory => ChartAxisPosition::Top,
+        AxisSlot::SecondaryValue => ChartAxisPosition::Right,
+        AxisSlot::Series => default_axis_position_for_type(axis_type),
+    }
+}
+
 pub(super) fn determine_cross_ax(id: u32, _axis_type: AxisType, ids: &[u32]) -> u32 {
     // Find the partner axis (cat<->val pairing)
     let idx = ids.iter().position(|&i| i == id).unwrap_or(0);
@@ -334,20 +459,29 @@ pub(super) fn determine_cross_ax(id: u32, _axis_type: AxisType, ids: &[u32]) -> 
     }
 }
 
-pub(super) fn build_single_axis(
+fn build_axis_for_slot(
+    spec: &ChartSpec,
     sad: &SingleAxisData,
+    slot: AxisSlot,
     axis_type: AxisType,
     ax_id: u32,
     cross_ax: u32,
 ) -> ChartAxis {
-    build_single_axis_with_ids(sad, axis_type, ax_id, cross_ax)
+    build_single_axis_with_default_position(
+        sad,
+        axis_type,
+        ax_id,
+        cross_ax,
+        default_axis_position_for_slot(&spec.chart_type, slot, axis_type),
+    )
 }
 
-pub(super) fn build_single_axis_with_ids(
+fn build_single_axis_with_default_position(
     sad: &SingleAxisData,
     axis_type: AxisType,
     ax_id: u32,
     cross_ax: u32,
+    default_position: ChartAxisPosition,
 ) -> ChartAxis {
     let default_axis;
     let sad = if sad == &SingleAxisData::default() {
@@ -447,11 +581,7 @@ pub(super) fn build_single_axis_with_ids(
         .position
         .as_deref()
         .map(ChartAxisPosition::from_ooxml)
-        .unwrap_or_else(|| match effective_type {
-            AxisType::Category | AxisType::Date => ChartAxisPosition::Bottom,
-            AxisType::Value => ChartAxisPosition::Left,
-            AxisType::Series => ChartAxisPosition::Bottom,
-        });
+        .unwrap_or(default_position);
 
     let cross_between = sad.cross_between.as_deref().map(CrossBetween::from_ooxml);
 

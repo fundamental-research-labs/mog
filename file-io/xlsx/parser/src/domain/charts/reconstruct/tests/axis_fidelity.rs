@@ -197,6 +197,33 @@ fn authored_axes_still_emit_explicit_shared_defaults() {
     assert_eq!(xml.matches("<c:crosses val=\"autoZero\"/>").count(), 2);
 }
 
+#[test]
+fn authored_bar_axes_without_positions_use_horizontal_bar_axis_sides() {
+    let mut spec = minimal_chart_spec(DomainChartType::Bar, None);
+    spec.axes = Some(AxisData {
+        category_axis: Some(SingleAxisData {
+            visible: true,
+            tick_label_position: Some("nextTo".to_string()),
+            ..Default::default()
+        }),
+        value_axis: Some(SingleAxisData {
+            visible: true,
+            tick_label_position: Some("nextTo".to_string()),
+            ..Default::default()
+        }),
+        secondary_category_axis: None,
+        secondary_value_axis: None,
+        series_axis: None,
+    });
+
+    let xml = chart_xml(&spec);
+
+    assert!(xml.contains("<c:barDir val=\"bar\"/>"), "{xml}");
+    assert!(xml.contains("<c:catAx><c:axId val=\"111111111\"/><c:scaling><c:orientation val=\"minMax\"/></c:scaling><c:delete val=\"0\"/><c:axPos val=\"l\"/>"), "{xml}");
+    assert!(xml.contains("<c:valAx><c:axId val=\"222222222\"/><c:scaling><c:orientation val=\"minMax\"/></c:scaling><c:delete val=\"0\"/><c:axPos val=\"b\"/>"), "{xml}");
+    assert_eq!(xml.matches("<c:tickLblPos val=\"nextTo\"/>").count(), 2);
+}
+
 fn imported_left_axis(axis_type: AxisType, ax_id: u32, cross_ax: u32) -> ChartAxis {
     ChartAxis {
         axis_type,

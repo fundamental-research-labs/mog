@@ -111,6 +111,35 @@ fn imported_explicit_next_to_tick_label_position_is_preserved() {
 }
 
 #[test]
+fn imported_category_axis_preserves_auto() {
+    let mut spec = minimal_chart_spec(DomainChartType::Column, None);
+    spec.axes = Some(AxisData {
+        category_axis: Some(SingleAxisData {
+            visible: true,
+            ..Default::default()
+        }),
+        value_axis: Some(SingleAxisData {
+            visible: true,
+            ..Default::default()
+        }),
+        secondary_category_axis: None,
+        secondary_value_axis: None,
+        series_axis: None,
+    });
+
+    let mut category_axis = imported_left_axis(AxisType::Category, 10, 100);
+    category_axis.auto = Some(true);
+    let spec = with_original_axes(
+        spec,
+        vec![category_axis, imported_left_axis(AxisType::Value, 100, 10)],
+    );
+
+    let xml = chart_xml(&spec);
+
+    assert!(xml.contains("<c:auto val=\"1\"/>"), "{xml}");
+}
+
+#[test]
 fn imported_explicit_visible_axis_serializes_delete_false_from_domain() {
     let mut spec = minimal_chart_spec(DomainChartType::Column, None);
     spec.axes = Some(AxisData {

@@ -1,6 +1,6 @@
 use domain_types::{
-    chart::{AxisData, ChartSpec, ChartType as DomainChartType, SingleAxisData},
     ChartDefinition,
+    chart::{AxisData, ChartSpec, ChartType as DomainChartType, SingleAxisData},
 };
 use ooxml_types::charts::{
     self, AxisCrosses, AxisType, ChartAxis, ChartAxisPosition, ChartLines, CrossBetween,
@@ -284,6 +284,7 @@ fn apply_imported_axis_fidelity(
     rebuilt.tick_lbl_pos_explicit = sad.tick_label_position.is_some();
     rebuilt.crosses_explicit =
         matches!(sad.crosses_at.as_deref(), Some("min" | "max" | "automatic"));
+    rebuilt.auto = original.auto;
     rebuilt.raw_axis_type_attr = original.raw_axis_type_attr.clone();
 }
 

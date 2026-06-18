@@ -59,6 +59,7 @@ pub fn make_sparkline(id: &str, sheet_id: &str, row: u32, col: u32) -> Sparkline
             col,
         },
         data_range: SparklineDataRange {
+            source_sheet_name: None,
             start_row: row,
             start_col: col + 1,
             end_row: row,

@@ -5082,6 +5082,7 @@ export interface SparklineChange {
 }
 
 export interface SparklineDataRange {
+  sourceSheetName?: string;
   startRow: number;
   startCol: number;
   endRow: number;

@@ -79,6 +79,8 @@ pub struct SparklineCellAddress {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SparklineDataRange {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_sheet_name: Option<String>,
     pub start_row: u32,
     pub start_col: u32,
     pub end_row: u32,
@@ -257,6 +259,7 @@ mod tests {
                 col: 1,
             },
             data_range: SparklineDataRange {
+                source_sheet_name: Some("Data".to_string()),
                 start_row: 0,
                 start_col: 0,
                 end_row: 9,
@@ -405,6 +408,7 @@ mod tests {
                 col: 0,
             },
             data_range: SparklineDataRange {
+                source_sheet_name: None,
                 start_row: 0,
                 start_col: 0,
                 end_row: 0,

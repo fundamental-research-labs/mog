@@ -592,6 +592,7 @@ fn test_domain_sparkline_theme_colors_emit_theme_attrs() {
             col: 1,
         },
         data_range: SparklineDataRange {
+            source_sheet_name: None,
             start_row: 0,
             start_col: 0,
             end_row: 0,
@@ -634,6 +635,43 @@ fn test_domain_sparkline_theme_colors_emit_theme_attrs() {
     assert!(xml.contains(r#"<x14:colorFirst theme="4" tint="0.3999755851924192"/>"#));
     assert!(xml.contains(r#"<x14:colorAxis theme="5"/>"#));
     assert!(!xml.contains(r#" first="1""#));
+}
+
+#[test]
+fn test_domain_sparkline_preserves_data_source_sheet() {
+    use domain_types::domain::sparkline::{
+        Sparkline as DomainSparkline, SparklineAxisSettings, SparklineCellAddress,
+        SparklineDataRange, SparklineType as DomainSparklineType, SparklineVisualSettings,
+    };
+
+    let sparkline = DomainSparkline {
+        id: "sparkline-1".to_string(),
+        sheet_id: "Sparkline Dashboard".to_string(),
+        cell: SparklineCellAddress {
+            sheet_id: "Sparkline Dashboard".to_string(),
+            row: 0,
+            col: 0,
+        },
+        data_range: SparklineDataRange {
+            source_sheet_name: Some("Data".to_string()),
+            start_row: 1,
+            start_col: 1,
+            end_row: 1,
+            end_col: 12,
+        },
+        sparkline_type: DomainSparklineType::Line,
+        data_in_rows: false,
+        group_id: None,
+        visual: SparklineVisualSettings::default(),
+        axis: SparklineAxisSettings::default(),
+        created_at: None,
+        updated_at: None,
+    };
+
+    let xml = sparklines_xml_from_domain("Sparkline Dashboard", &[sparkline]);
+
+    assert!(xml.contains("<xm:f>Data!B2:M2</xm:f>"));
+    assert!(!xml.contains("Sparkline Dashboard&apos;!B2:M2"));
 }
 
 #[test]

@@ -12,6 +12,7 @@ fn test_sparkline_serde_roundtrip() {
             col: 3,
         },
         data_range: SparklineDataRange {
+            source_sheet_name: None,
             start_row: 5,
             start_col: 4,
             end_row: 5,

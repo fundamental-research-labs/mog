@@ -21,6 +21,18 @@ pub(super) fn data_range_to_a1(r: &domain_types::domain::sparkline::SparklineDat
     }
 }
 
+fn data_range_to_formula_ref(
+    fallback_sheet_name: &str,
+    r: &domain_types::domain::sparkline::SparklineDataRange,
+) -> String {
+    let data_range_a1 = data_range_to_a1(r);
+    let source_sheet_name = r
+        .source_sheet_name
+        .as_deref()
+        .unwrap_or(fallback_sheet_name);
+    format_sheet_qualified_ref(source_sheet_name, &data_range_a1)
+}
+
 /// Convert a `SparklineType` enum to its OOXML string representation.
 pub(super) fn domain_sparkline_type_str(t: &DomainSparklineType) -> &'static str {
     match t {
@@ -145,8 +157,7 @@ pub(super) fn append_domain_group_xml(
         xml.push_str("<x14:sparklines>");
         for sp in members {
             xml.push_str("<x14:sparkline>");
-            let data_range_a1 = data_range_to_a1(&sp.data_range);
-            let qualified_range = format_sheet_qualified_ref(sheet_name, &data_range_a1);
+            let qualified_range = data_range_to_formula_ref(sheet_name, &sp.data_range);
             xml.push_str(&format!(
                 "<xm:f>{}</xm:f>",
                 sparkline_xml_escape(&qualified_range)
@@ -376,9 +387,8 @@ pub fn sparklines_xml_from_domain(
         xml.push_str("<x14:sparklines>");
         for sp in group {
             xml.push_str("<x14:sparkline>");
-            // Data range — always qualify with sheet name
-            let data_range_a1 = data_range_to_a1(&sp.data_range);
-            let qualified_range = format_sheet_qualified_ref(sheet_name, &data_range_a1);
+            // Data range — preserve imported source sheet when present.
+            let qualified_range = data_range_to_formula_ref(sheet_name, &sp.data_range);
             xml.push_str(&format!(
                 "<xm:f>{}</xm:f>",
                 sparkline_xml_escape(&qualified_range)

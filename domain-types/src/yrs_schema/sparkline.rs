@@ -28,6 +28,7 @@ pub const KEY_CELL_SHEET_ID: &str = "cellSheetId";
 pub const KEY_CELL_ROW: &str = "cellRow";
 pub const KEY_CELL_COL: &str = "cellCol";
 // Data range (flattened)
+pub const KEY_DATA_SOURCE_SHEET_NAME: &str = "dataSourceSheetName";
 pub const KEY_DATA_START_ROW: &str = "dataStartRow";
 pub const KEY_DATA_START_COL: &str = "dataStartCol";
 pub const KEY_DATA_END_ROW: &str = "dataEndRow";
@@ -179,6 +180,12 @@ pub fn to_yrs_prelim(spark: &Sparkline) -> Vec<(&str, Any)> {
     if let Some(ts) = spark.updated_at {
         entries.push((KEY_UPDATED_AT, Any::Number(ts as f64)));
     }
+    if let Some(ref source_sheet_name) = spark.data_range.source_sheet_name {
+        entries.push((
+            KEY_DATA_SOURCE_SHEET_NAME,
+            Any::String(Arc::from(source_sheet_name.as_str())),
+        ));
+    }
     // Visual optionals
     if let Some(ref c) = spark.visual.negative_color {
         entries.push((KEY_VIS_NEGATIVE_COLOR, Any::String(Arc::from(c.as_str()))));
@@ -259,6 +266,7 @@ pub fn from_yrs_map<T: ReadTxn>(map: &MapRef, txn: &T) -> Option<Sparkline> {
             col: read_u32(map, txn, KEY_CELL_COL).unwrap_or(0),
         },
         data_range: SparklineDataRange {
+            source_sheet_name: read_string(map, txn, KEY_DATA_SOURCE_SHEET_NAME),
             start_row: read_u32(map, txn, KEY_DATA_START_ROW).unwrap_or(0),
             start_col: read_u32(map, txn, KEY_DATA_START_COL).unwrap_or(0),
             end_row: read_u32(map, txn, KEY_DATA_END_ROW).unwrap_or(0),
@@ -512,6 +520,7 @@ mod tests {
                 col: 3,
             },
             data_range: SparklineDataRange {
+                source_sheet_name: Some("Data".to_string()),
                 start_row: 0,
                 start_col: 0,
                 end_row: 9,
@@ -566,6 +575,7 @@ mod tests {
                 col: 0,
             },
             data_range: SparklineDataRange {
+                source_sheet_name: None,
                 start_row: 0,
                 start_col: 0,
                 end_row: 0,
@@ -643,6 +653,7 @@ mod tests {
                 col: 10,
             },
             data_range: SparklineDataRange {
+                source_sheet_name: Some("Data".to_string()),
                 start_row: 0,
                 start_col: 0,
                 end_row: 4,

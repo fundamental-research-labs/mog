@@ -28,6 +28,7 @@ fn roundtrip_sparkline_line() {
             col: 0,
         },
         data_range: SparklineDataRange {
+            source_sheet_name: None,
             start_row: 0,
             start_col: 0,
             end_row: 0,
@@ -82,6 +83,7 @@ fn roundtrip_sparkline_column() {
             col: 0,
         },
         data_range: SparklineDataRange {
+            source_sheet_name: None,
             start_row: 0,
             start_col: 0,
             end_row: 2,

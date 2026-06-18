@@ -165,7 +165,7 @@ fn build_axis_settings(g: &SparklineGroup) -> SparklineAxisSettings {
 /// Strips any sheet prefix (everything before and including `!`), then delegates
 /// to the parser's `parse_a1_cell` utility.
 fn parse_sparkline_cell_ref(cell_ref: &str) -> (u32, u32) {
-    let cell_part = cell_ref.rsplit('!').next().unwrap_or(cell_ref);
+    let (_, cell_part) = split_sparkline_ref(cell_ref);
     crate::infra::a1::parse_a1_cell(cell_part).unwrap_or((0, 0))
 }
 
@@ -174,7 +174,7 @@ fn parse_sparkline_cell_ref(cell_ref: &str) -> (u32, u32) {
 /// Strips any sheet prefix, splits on `:`, and parses each cell reference.
 /// For single-cell references (no `:`), start and end are the same cell.
 fn parse_sparkline_range(range_ref: &str) -> SparklineDataRange {
-    let range_part = range_ref.rsplit('!').next().unwrap_or(range_ref);
+    let (source_sheet_name, range_part) = split_sparkline_ref(range_ref);
     let parts: Vec<&str> = range_part.split(':').collect();
     let (start_row, start_col) = crate::infra::a1::parse_a1_cell(parts[0]).unwrap_or((0, 0));
     let (end_row, end_col) = if parts.len() > 1 {
@@ -183,10 +183,49 @@ fn parse_sparkline_range(range_ref: &str) -> SparklineDataRange {
         (start_row, start_col)
     };
     SparklineDataRange {
+        source_sheet_name,
         start_row,
         start_col,
         end_row,
         end_col,
+    }
+}
+
+fn split_sparkline_ref(reference: &str) -> (Option<String>, &str) {
+    if let Some(separator) = find_sheet_separator(reference) {
+        let sheet = unquote_sheet_name(&reference[..separator]);
+        return (Some(sheet), &reference[separator + 1..]);
+    }
+    (None, reference)
+}
+
+fn find_sheet_separator(reference: &str) -> Option<usize> {
+    let bytes = reference.as_bytes();
+    let mut in_quote = false;
+    let mut i = 0;
+
+    while i < bytes.len() {
+        match bytes[i] {
+            b'\'' if in_quote && i + 1 < bytes.len() && bytes[i + 1] == b'\'' => {
+                i += 2;
+            }
+            b'\'' => {
+                in_quote = !in_quote;
+                i += 1;
+            }
+            b'!' if !in_quote => return Some(i),
+            _ => i += 1,
+        }
+    }
+
+    None
+}
+
+fn unquote_sheet_name(raw_sheet: &str) -> String {
+    if raw_sheet.len() >= 2 && raw_sheet.starts_with('\'') && raw_sheet.ends_with('\'') {
+        raw_sheet[1..raw_sheet.len() - 1].replace("''", "'")
+    } else {
+        raw_sheet.to_string()
     }
 }
 
@@ -293,5 +332,27 @@ mod tests {
         assert_eq!(visual.show_high_point, Some(false));
         assert_eq!(visual.low_point_color.as_deref(), Some("theme:4"));
         assert_eq!(visual.show_low_point, Some(false));
+    }
+
+    #[test]
+    fn parse_sparkline_range_preserves_source_sheet_name() {
+        let range = parse_sparkline_range("'Data Sheet'!B2:M2");
+
+        assert_eq!(range.source_sheet_name.as_deref(), Some("Data Sheet"));
+        assert_eq!(range.start_row, 1);
+        assert_eq!(range.start_col, 1);
+        assert_eq!(range.end_row, 1);
+        assert_eq!(range.end_col, 12);
+    }
+
+    #[test]
+    fn parse_sparkline_range_unescapes_quoted_sheet_name() {
+        let range = parse_sparkline_range("'Bob''s Data'!B2:M2");
+
+        assert_eq!(range.source_sheet_name.as_deref(), Some("Bob's Data"));
+        assert_eq!(range.start_row, 1);
+        assert_eq!(range.start_col, 1);
+        assert_eq!(range.end_row, 1);
+        assert_eq!(range.end_col, 12);
     }
 }

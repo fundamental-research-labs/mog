@@ -86,6 +86,7 @@ fn build_title_with_text(
         tx: Some(tx),
         layout: layout.cloned().map(Into::into),
         sp_pr,
+        tx_pr: format.and_then(build_text_body),
         ..Default::default()
     }
 }
@@ -877,6 +878,32 @@ mod tests {
             panic!("expected title shadow effect list");
         };
         assert!(list.outer_shadow.is_some());
+    }
+
+    #[test]
+    fn build_title_emits_text_body_format() {
+        let format = ChartFormatData {
+            fill: None,
+            line: None,
+            font: None,
+            text_rotation: Some(42.0),
+            text_vertical_type: None,
+            shadow: None,
+        };
+
+        let title = build_title(
+            Some("Rotated"),
+            Some(&format),
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .expect("title should be reconstructed");
+
+        let tx_pr = title.tx_pr.expect("title text properties");
+        assert_eq!(tx_pr.body_props.rot.map(|rot| rot.value()), Some(2520000));
     }
 
     #[test]

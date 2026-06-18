@@ -150,6 +150,8 @@ export function createActorAccessLayerFromBundle(actors: ActorBundle): {
   accessors: ActorAccessors;
   commands: ActorCommands;
 } {
+  const objectCommands = createObjectCommands(actors.objectActor);
+
   return {
     accessors: {
       selection: createSelectionAccessor(
@@ -186,8 +188,8 @@ export function createActorAccessLayerFromBundle(actors: ActorBundle): {
       selection: createSelectionCommands(actors.selectionActor),
       editor: createEditorCommands(actors.editorActor),
       clipboard: createClipboardCommands(actors.clipboardActor),
-      chart: createChartCommands(actors.chartActor),
-      object: createObjectCommands(actors.objectActor),
+      chart: createChartCommands(actors.chartActor, objectCommands),
+      object: objectCommands,
       // Find-replace commands are optional - only include if actor is provided
       findReplace: actors.findReplaceActor
         ? createFindReplaceCommands(

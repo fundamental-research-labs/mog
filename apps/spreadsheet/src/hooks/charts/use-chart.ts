@@ -14,7 +14,7 @@
  *
  * Architecture: Actor Access Layer (
  * - All reactive reads use imported selectors with useSelector
- * - All writes use commands from createChartCommands
+ * - All writes use the coordinator actor-access commands
  * - NO inline selector functions
  * - NO direct .send() calls
  *
@@ -27,7 +27,6 @@ import type { ChartType } from '@mog/charts';
 import { chartSelectors } from '../../selectors';
 import type { ChartElementType, ChartState } from '@mog-sdk/contracts/actors';
 
-import { createChartCommands } from '../../coordinator/actor-access';
 import { useCoordinator } from '../shared/use-coordinator';
 
 // Type-safe selector wrapper to handle XState snapshot type compatibility
@@ -250,10 +249,10 @@ export function useChartUI(): UseChartUIReturn {
   );
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // COMMANDS - Using createChartCommands (Actor Access Layer pattern)
+  // COMMANDS - Using coordinator Actor Access Layer commands
   // ═══════════════════════════════════════════════════════════════════════════
 
-  const commands = useMemo(() => createChartCommands(actor), [actor]);
+  const commands = coordinator.objects.access.commands.chart;
 
   // ═══════════════════════════════════════════════════════════════════════════
   // RETURN VALUE
@@ -298,8 +297,8 @@ export function useChartUI(): UseChartUIReturn {
       cancelCreation: commands.cancel,
       confirmCreation: commands.confirm,
 
-      // Deletion action - using commands
-      deleteSelectedChart: commands.delete,
+      // Deletion action - charts are floating objects, so delete through object coordination.
+      deleteSelectedChart: () => coordinator.objects.deleteSelectedObjects(),
 
       // Element-level selection actions - using commands
       clickElement: commands.clickElement,
@@ -329,6 +328,7 @@ export function useChartUI(): UseChartUIReturn {
       isTitleEditing,
       titleEditOriginalValue,
       commands,
+      coordinator,
     ],
   );
 }

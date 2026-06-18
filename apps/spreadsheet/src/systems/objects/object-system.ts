@@ -183,7 +183,7 @@ export class ObjectSystem implements IObjectSystem {
     this.objectAccessor = createObjectAccessor(this.objectActor);
     this.objectCommands = createObjectCommands(this.objectActor);
     this.chartAccessor = createChartAccessor(this.chartActor);
-    this.chartCommands = createChartCommands(this.chartActor);
+    this.chartCommands = createChartCommands(this.chartActor, this.objectCommands);
     this.diagramAccessor = createDiagramAccessor(this.diagramActor);
     this.diagramCommands = createDiagramCommands(this.diagramActor);
 

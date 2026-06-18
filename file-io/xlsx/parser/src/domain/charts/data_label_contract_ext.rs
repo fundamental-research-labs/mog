@@ -43,7 +43,6 @@ fn build_data_label_contract_extension_impl(
         && data_label.format.is_none()
         && data_label.geometric_shape_type.is_none()
         && data_label.formula.is_none()
-        && data_label.link_number_format.is_none()
         && !force_full_projection
     {
         return None;
@@ -70,9 +69,6 @@ fn build_data_label_contract_extension_impl(
         .attr_if("formula", data_label.formula.as_deref());
     if let Some(auto_text) = data_label.auto_text {
         w.attr_bool("autoText", auto_text);
-    }
-    if let Some(link_number_format) = data_label.link_number_format {
-        w.attr_bool("linkNumberFormat", link_number_format);
     }
     if let Some(json) = full_json.as_deref() {
         w.end_attrs()
@@ -132,6 +128,41 @@ mod tests {
     use super::*;
 
     #[test]
+    fn data_label_contract_extension_omits_natively_serialized_link_number_format() {
+        let label = DataLabelData {
+            show: true,
+            delete: None,
+            position: None,
+            text: None,
+            visual_format: None,
+            number_format: Some("#,##0".to_string()),
+            text_orientation: None,
+            rich_text: None,
+            auto_text: None,
+            format: None,
+            show_value: Some(true),
+            show_category_name: None,
+            show_series_name: None,
+            show_percentage: None,
+            show_bubble_size: None,
+            show_legend_key: None,
+            separator: None,
+            show_leader_lines: None,
+            horizontal_alignment: None,
+            vertical_alignment: None,
+            link_number_format: Some(true),
+            geometric_shape_type: None,
+            formula: None,
+            height: None,
+            width: None,
+            leader_lines_format: None,
+            layout: None,
+        };
+
+        assert_eq!(build_data_label_contract_extension(&label), None);
+    }
+
+    #[test]
     fn data_label_contract_extension_round_trips_projected_fields() {
         let label = DataLabelData {
             show: true,
@@ -172,7 +203,7 @@ mod tests {
         assert_eq!(projection.format.as_deref(), Some("custom"));
         assert_eq!(projection.geometric_shape_type.as_deref(), Some("rect"));
         assert_eq!(projection.formula.as_deref(), Some("Sheet1!$A$1"));
-        assert_eq!(projection.link_number_format, Some(true));
+        assert_eq!(projection.link_number_format, None);
     }
 
     #[test]

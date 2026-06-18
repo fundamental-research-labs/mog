@@ -1116,6 +1116,10 @@ export interface SeriesConfig {
   bubbleSize?: string;
   bubbleSizeCache?: ChartSeriesPointCache;
   bubbleSizeSourceKind?: ChartSeriesDimensionSourceKind;
+  /** 3-D bubble effect for this series. */
+  bubble3d?: boolean;
+  /** 3-D bubble effect for this series. */
+  bubble3D?: boolean;
   smooth?: boolean;
   showLines?: boolean;
   explosion?: number;

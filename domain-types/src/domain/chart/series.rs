@@ -176,6 +176,9 @@ pub struct ChartSeriesData {
     /// Source authority for the bubble-size dimension.
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub bubble_size_source_kind: Option<ChartSeriesDimensionSourceKindData>,
+    /// 3-D bubble effect for this series.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub bubble_3d: Option<bool>,
 
     // -- Visual properties --
     /// Smooth line (line, scatter)

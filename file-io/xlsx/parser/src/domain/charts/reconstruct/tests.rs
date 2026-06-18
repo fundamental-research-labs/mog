@@ -13,6 +13,7 @@ use ooxml_types::charts::{AxisType, Chart, ChartAxis, ChartAxisPosition, ChartSp
 use super::{ranges, reconstruct_chart_space};
 
 mod axis_fidelity;
+mod bubble;
 mod category_source_type;
 mod chart_fidelity;
 mod data_label_fidelity;

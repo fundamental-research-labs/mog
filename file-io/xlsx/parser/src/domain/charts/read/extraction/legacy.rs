@@ -169,6 +169,7 @@ pub(in crate::domain::charts::read) fn extract_chart_series(
                 bubble_size,
                 bubble_size_cache,
                 bubble_size_source_kind,
+                bubble_3d: None,
                 smooth: s.smooth,
                 show_lines: None,
                 explosion: s.explosion,

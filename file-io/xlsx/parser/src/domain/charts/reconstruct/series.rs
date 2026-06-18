@@ -158,6 +158,7 @@ pub(super) fn build_series(
         x_val,
         y_val,
         bubble_size,
+        bubble_3d: sd.bubble_3d,
         marker,
         smooth: sd.smooth,
         explosion: sd.explosion,

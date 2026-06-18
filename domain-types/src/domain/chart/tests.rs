@@ -1010,6 +1010,7 @@ fn chart_data_serde_roundtrip() {
             bubble_size: None,
             bubble_size_cache: None,
             bubble_size_source_kind: None,
+            bubble_3d: None,
             smooth: None,
             show_lines: None,
             explosion: None,

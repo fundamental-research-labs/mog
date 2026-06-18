@@ -22,6 +22,24 @@ fn test_parse_series_basic() {
 }
 
 #[test]
+fn test_parse_series_bubble_3d() {
+    let xml = br#"<c:ser>
+            <c:idx val="0"/>
+            <c:order val="0"/>
+            <c:bubble3D val="1"/>
+            <c:dPt>
+                <c:idx val="0"/>
+                <c:bubble3D val="0"/>
+            </c:dPt>
+        </c:ser>"#;
+
+    let series = parse_series(xml);
+
+    assert_eq!(series.bubble_3d, Some(true));
+    assert_eq!(series.d_pt[0].bubble_3d, Some(false));
+}
+
+#[test]
 fn test_parse_series_with_text() {
     let xml = br#"<c:ser>
             <c:idx val="0"/>

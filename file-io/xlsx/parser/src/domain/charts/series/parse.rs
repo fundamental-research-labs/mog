@@ -139,6 +139,12 @@ pub fn parse_series(xml: &[u8]) -> ChartSeries {
         series.bubble_size = AxisData::parse(&xml[bubble_start..bubble_end]).to_num_source();
     }
 
+    // Parse series-level bubble3D. Per-point bubble3D is parsed separately
+    // from dPt, so this must be constrained to direct children of c:ser.
+    if let Some(b3d_start) = find_direct_child_tag(child_xml, b"ser", b"bubble3D") {
+        series.bubble_3d = Some(parse_bool_val(&xml[b3d_start..]));
+    }
+
     // Parse smooth → Option<bool>
     // Search full xml because some files place smooth after the series-level extLst.
     if let Some(smooth_start) = find_tag_simd(xml, b"smooth", 0) {

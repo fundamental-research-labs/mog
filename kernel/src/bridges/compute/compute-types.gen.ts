@@ -1148,6 +1148,8 @@ export interface ChartSeriesCategoryLevelsCacheData {
   levels: ChartSeriesCategoryLevelCacheData[];
 }
 
+export type ChartSeriesCategorySourceTypeData = "number" | "string" | "multiLevelString";
+
 export interface ChartSeriesData {
   name?: string;
   nameRef?: string;
@@ -1167,6 +1169,7 @@ export interface ChartSeriesData {
   bubbleSize?: string;
   bubbleSizeCache?: ChartSeriesPointCacheData;
   bubbleSizeSourceKind?: ChartSeriesDimensionSourceKindData;
+  bubble3d?: boolean;
   smooth?: boolean;
   showLines?: boolean;
   explosion?: number;
@@ -1206,8 +1209,6 @@ export interface ChartSeriesData {
 }
 
 export type ChartSeriesDimensionSourceKindData = "ref" | "literal" | "cacheFallback";
-
-export type ChartSeriesCategorySourceTypeData = "number" | "string" | "multiLevelString";
 
 export interface ChartSeriesPointCacheData {
   pointCount?: number;
@@ -1268,6 +1269,7 @@ export interface ChartSpec {
   dataRange?: string;
   seriesRange?: string;
   categoryRange?: string;
+  colors?: string[];
   style?: number;
   roundedCorners?: boolean;
   autoTitleDeleted?: boolean;

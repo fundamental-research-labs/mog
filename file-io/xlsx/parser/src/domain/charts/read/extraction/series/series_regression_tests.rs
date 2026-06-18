@@ -1,9 +1,9 @@
 use super::extract_series_from_chart_space;
 use ooxml_types::charts::{
-    AreaChartConfig, AxisType, Chart, ChartAxis, ChartAxisPosition, ChartGroup, ChartSpace,
-    ChartType, ChartTypeConfig, ErrorBarDirection, ErrorBarType, ErrorBars, ErrorValueType,
-    Line3DChartConfig, LineChartConfig, NumDataSource, PlotArea, RadarChartConfig, Scaling,
-    ScatterChartConfig, ScatterStyle, StockChartConfig,
+    AreaChartConfig, AxisType, Chart, ChartAxis, ChartAxisPosition, ChartGroup, ChartLines,
+    ChartSpace, ChartType, ChartTypeConfig, DataLabelOptions, ErrorBarDirection, ErrorBarType,
+    ErrorBars, ErrorValueType, Line3DChartConfig, LineChartConfig, NumDataSource, PlotArea,
+    RadarChartConfig, Scaling, ScatterChartConfig, ScatterStyle, StockChartConfig,
 };
 
 fn axis(axis_type: AxisType, ax_id: u32, cross_ax: u32, ax_pos: ChartAxisPosition) -> ChartAxis {
@@ -252,6 +252,57 @@ fn bubble_sized_series_error_bars_extract_to_directional_slots() {
             .as_ref()
             .and_then(|bars| bars.direction.as_deref()),
         Some("y")
+    );
+}
+
+#[test]
+fn series_data_label_leader_lines_extract_to_series_alias() {
+    let extracted = extract_series_from_chart_space(&ChartSpace {
+        chart: Chart {
+            plot_area: PlotArea {
+                chart_groups: vec![ChartGroup {
+                    chart_type: ChartType::Pie,
+                    config: ChartTypeConfig::Pie(Default::default()),
+                    series: vec![ooxml_types::charts::ChartSeries {
+                        idx: 0,
+                        order: 0,
+                        d_lbls: Some(DataLabelOptions {
+                            show_leader_lines: Some(true),
+                            leader_lines: Some(ChartLines {
+                                sp_pr: Some(crate::domain::charts::parse_shape_properties(
+                                    br#"<c:spPr xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+                                               xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+                                        <a:ln w="25400"><a:solidFill><a:srgbClr val="00FF00"/></a:solidFill></a:ln>
+                                    </c:spPr>"#,
+                                )),
+                            }),
+                            ..Default::default()
+                        }),
+                        ..Default::default()
+                    }],
+                    d_lbls: None,
+                    ax_id: vec![],
+                    raw_chart_type_attr: None,
+                    raw_chart_element_name: None,
+                    raw_chart_group_xml: None,
+                }],
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+        ..Default::default()
+    });
+
+    assert_eq!(extracted[0].show_leader_lines, Some(true));
+    assert_eq!(
+        extracted[0]
+            .leader_line_format
+            .as_ref()
+            .and_then(|format| format.line.as_ref())
+            .and_then(|line| line.color.clone()),
+        Some(domain_types::chart::ChartColorData::Hex(
+            "00FF00".to_string()
+        ))
     );
 }
 

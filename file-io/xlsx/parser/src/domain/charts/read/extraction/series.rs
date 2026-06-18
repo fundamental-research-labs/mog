@@ -356,6 +356,8 @@ fn extract_single_series_with_semantics(
 
     // Series-level data labels
     let data_labels = s.d_lbls.as_ref().map(|dl| extract_data_label_data(dl));
+    let leader_line_format = series_leader_line_format(data_labels.as_ref());
+    let show_leader_lines = data_labels.as_ref().and_then(|dl| dl.show_leader_lines);
 
     // Rich format from sp_pr + tx_pr
     let format = extract_chart_format(s.sp_pr.as_ref(), None);
@@ -415,11 +417,26 @@ fn extract_single_series_with_semantics(
         projection_diagnostics: Vec::new(),
         show_shadow: None,
         show_connector_lines: None,
-        leader_line_format: None,
-        show_leader_lines: None,
+        leader_line_format,
+        show_leader_lines,
         bin_options: None,
         boxwhisker_options: None,
     }
+}
+
+fn series_leader_line_format(
+    data_labels: Option<&domain_types::chart::DataLabelData>,
+) -> Option<domain_types::chart::ChartFormatData> {
+    data_labels
+        .and_then(|labels| labels.leader_lines_format.clone())
+        .map(|line| domain_types::chart::ChartFormatData {
+            fill: None,
+            line: Some(line),
+            font: None,
+            text_rotation: None,
+            text_vertical_type: None,
+            shadow: None,
+        })
 }
 
 fn point_format(idx: u32) -> domain_types::chart::PointFormatData {

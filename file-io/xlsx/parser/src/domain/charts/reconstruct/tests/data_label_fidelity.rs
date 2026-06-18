@@ -1,5 +1,7 @@
 use super::*;
-use domain_types::chart::DataLabelData;
+use domain_types::chart::{
+    ChartColorData, ChartDashStyle, ChartFormatData, ChartLineData, DataLabelData,
+};
 use ooxml_types::charts::{
     ChartGroup, ChartSeries, ChartType as OoxmlChartType, ChartTypeConfig, DataLabelOptions,
     PieChartConfig,
@@ -77,6 +79,37 @@ fn imported_group_data_label_text_properties_preserve_unmodeled_run_properties()
     assert!(xml.contains("<c:pieChart>"), "{xml}");
     assert!(xml.contains("baseline=\"0\""), "{xml}");
     assert!(xml.contains("lang=\"en-US\""), "{xml}");
+}
+
+#[test]
+fn series_leader_line_alias_reconstructs_data_label_leader_lines() {
+    let mut spec = minimal_chart_spec(DomainChartType::Pie, None);
+    let mut series = modeled_series(0, None, "Composition", "Data!$B$2:$B$4");
+    series.show_leader_lines = Some(true);
+    series.leader_line_format = Some(ChartFormatData {
+        fill: None,
+        line: Some(ChartLineData {
+            color: Some(ChartColorData::Hex("FF0000".to_string())),
+            width: Some(2.0),
+            dash_style: Some(ChartDashStyle::Dash),
+            transparency: None,
+            no_fill: None,
+        }),
+        font: None,
+        text_rotation: None,
+        text_vertical_type: None,
+        shadow: None,
+    });
+    spec.series = vec![series];
+
+    let xml = chart_xml(&spec);
+
+    assert!(xml.contains("<c:dLbls>"), "{xml}");
+    assert!(xml.contains("<c:showLeaderLines val=\"1\"/>"), "{xml}");
+    assert!(xml.contains("<c:leaderLines>"), "{xml}");
+    assert!(xml.contains("<a:ln w=\"25400\">"), "{xml}");
+    assert!(xml.contains("<a:srgbClr val=\"FF0000\"/>"), "{xml}");
+    assert!(xml.contains("<a:prstDash val=\"dash\"/>"), "{xml}");
 }
 
 fn imported_data_label_options() -> DataLabelOptions {

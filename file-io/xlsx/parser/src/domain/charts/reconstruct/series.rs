@@ -5,7 +5,7 @@ use domain_types::chart::{
     ErrorBarSourceData, PointFormatData, TrendlineData, TrendlineLabelData,
 };
 use ooxml_types::charts::{
-    self, CatDataSource, DataPointOverride, ErrorBarDirection, ErrorBarType, ErrorBars,
+    self, CatDataSource, ChartLines, DataPointOverride, ErrorBarDirection, ErrorBarType, ErrorBars,
     ErrorValueType, Marker, MarkerStyle, NumData, NumDataSource, NumFmt, NumPoint, NumRef,
     SeriesTextSource, StrData, StrPoint, StrRef, Trendline, TrendlineLabel, TrendlineType,
 };
@@ -111,6 +111,7 @@ pub(super) fn build_series(
 
     // Series-level and per-point data labels
     let mut d_lbls = sd.data_labels.as_ref().map(build_data_labels);
+    apply_series_leader_lines(&mut d_lbls, sd);
     let point_labels: Vec<_> = sd
         .points
         .as_ref()
@@ -169,6 +170,29 @@ pub(super) fn build_series(
         err_bars,
         shape,
         ..Default::default()
+    }
+}
+
+fn apply_series_leader_lines(d_lbls: &mut Option<charts::DataLabelOptions>, sd: &ChartSeriesData) {
+    let line = sd
+        .leader_line_format
+        .as_ref()
+        .and_then(|format| format.line.as_ref());
+    if line.is_none() && sd.show_leader_lines.is_none() {
+        return;
+    }
+
+    let labels = d_lbls.get_or_insert_with(Default::default);
+    if let Some(show) = sd.show_leader_lines {
+        labels.show_leader_lines = Some(show);
+    }
+    if let Some(line) = line {
+        labels.leader_lines = Some(ChartLines {
+            sp_pr: Some(ShapeProperties {
+                ln: Some(build_outline(line)),
+                ..Default::default()
+            }),
+        });
     }
 }
 

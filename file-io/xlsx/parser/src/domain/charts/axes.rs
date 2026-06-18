@@ -131,7 +131,9 @@ pub fn parse_axis(xml: &[u8]) -> ChartAxis {
 
     // Parse majorGridlines
     if let Some(mg_start) = find_tag_simd(xml, b"majorGridlines", 0) {
-        let mg_end = find_closing_tag(xml, b"majorGridlines", mg_start).unwrap_or(xml.len());
+        let mg_end = element_span_from_start(xml, mg_start, b"majorGridlines")
+            .map(|(_, end)| end)
+            .unwrap_or(xml.len());
         let mg_bytes = &xml[mg_start..mg_end];
         let sp_pr = if let Some(sp_start) = find_tag_simd(mg_bytes, b"spPr", 0) {
             let sp_end = find_closing_tag(mg_bytes, b"spPr", sp_start).unwrap_or(mg_bytes.len());
@@ -144,7 +146,9 @@ pub fn parse_axis(xml: &[u8]) -> ChartAxis {
 
     // Parse minorGridlines
     if let Some(mg_start) = find_tag_simd(xml, b"minorGridlines", 0) {
-        let mg_end = find_closing_tag(xml, b"minorGridlines", mg_start).unwrap_or(xml.len());
+        let mg_end = element_span_from_start(xml, mg_start, b"minorGridlines")
+            .map(|(_, end)| end)
+            .unwrap_or(xml.len());
         let mg_bytes = &xml[mg_start..mg_end];
         let sp_pr = if let Some(sp_start) = find_tag_simd(mg_bytes, b"spPr", 0) {
             let sp_end = find_closing_tag(mg_bytes, b"spPr", sp_start).unwrap_or(mg_bytes.len());
@@ -264,10 +268,9 @@ pub fn parse_axis(xml: &[u8]) -> ChartAxis {
         // (majorGridlines, minorGridlines, title) whose spPr we must skip.
         let mut nested_ranges: Vec<(usize, usize)> = Vec::new();
         for tag in &[b"majorGridlines" as &[u8], b"minorGridlines", b"title"] {
-            if let Some(start) = find_tag_simd(xml, tag, 0) {
-                let end = find_closing_tag(xml, tag, start)
-                    .and_then(|lt| find_gt_simd(xml, lt).map(|gt| gt + 1))
-                    .unwrap_or(xml.len());
+            if let Some((start, end)) = find_tag_simd(xml, tag, 0)
+                .and_then(|start| element_span_from_start(xml, start, tag))
+            {
                 nested_ranges.push((start, end));
             }
         }
@@ -592,6 +595,18 @@ fn direct_child_slice<'a>(xml: &'a [u8], local_name: &[u8]) -> Option<&'a [u8]> 
         pos = end;
     }
     None
+}
+
+fn element_span_from_start(xml: &[u8], start: usize, local_name: &[u8]) -> Option<(usize, usize)> {
+    let open_end = find_element_end(xml, start)?;
+    let end = if is_self_closing_open_tag(xml, open_end) {
+        open_end + 1
+    } else {
+        find_closing_tag(xml, local_name, start)
+            .and_then(|close| find_gt_simd(xml, close).map(|gt| gt + 1))
+            .unwrap_or(xml.len())
+    };
+    Some((start, end))
 }
 
 fn start_tag_local_name(xml: &[u8], start: usize) -> Option<&[u8]> {
@@ -1116,3 +1131,6 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+mod gridline_regression_tests;

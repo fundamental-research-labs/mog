@@ -145,10 +145,7 @@ pub(super) fn build_series(
 
     // Shape properties from explicit format, legacy color, or modeled chart defaults.
     let sp_pr = apply_default_shadow_to_shape_properties(
-        sd.format
-            .as_ref()
-            .and_then(build_shape_properties)
-            .or_else(|| build_legacy_series_color_shape_properties(sd, effective_chart_type))
+        build_series_shape_properties(sd, effective_chart_type)
             .or_else(|| {
                 synthesize_modeled_defaults
                     .then(|| {
@@ -224,6 +221,40 @@ pub(super) fn preserve_imported_series_text_body_properties(
             .iter()
             .find(|candidate| candidate.idx == label.idx);
         preserve_imported_data_label_text_properties(label, imported_label);
+    }
+}
+
+fn build_series_shape_properties(
+    sd: &ChartSeriesData,
+    chart_type: &DomainChartType,
+) -> Option<ShapeProperties> {
+    let mut sp_pr = sd.format.as_ref().and_then(build_shape_properties);
+    if let Some(legacy) = build_legacy_series_color_shape_properties(sd, chart_type) {
+        merge_series_shape_properties(&mut sp_pr, legacy);
+    }
+    sp_pr
+}
+
+fn merge_series_shape_properties(target: &mut Option<ShapeProperties>, source: ShapeProperties) {
+    let Some(target) = target.as_mut() else {
+        *target = Some(source);
+        return;
+    };
+
+    if target.fill.is_none() {
+        target.fill = source.fill;
+    }
+    match (&mut target.ln, source.ln) {
+        (None, source_line) => target.ln = source_line,
+        (Some(target_line), Some(source_line)) => {
+            if target_line.fill.is_none() {
+                target_line.fill = source_line.fill;
+            }
+            if target_line.width.is_none() {
+                target_line.width = source_line.width;
+            }
+        }
+        (Some(_), None) => {}
     }
 }
 

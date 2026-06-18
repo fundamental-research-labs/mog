@@ -203,7 +203,9 @@ export function chartConfigToInternal(config: ChartConfig): ChartFloatingObject 
     : undefined;
 
   const series = config.series
-    ? seriesConfigArrayToWire(config.series.map(syncSeriesFormatToInternal))
+    ? seriesConfigArrayToWire(
+        config.series.map((entry) => syncSeriesFormatToInternal(entry, chartType)),
+      )
     : undefined;
 
   const legend = config.legend
@@ -379,7 +381,9 @@ export function chartUpdatesToInternal(updates: Partial<ChartConfig>): ChartUpda
     result.axis = axisConfigToWire(syncAxisFieldsToInternal(updates.axis) as typeof updates.axis);
   if (updates.colors !== undefined) result.colors = directHexPaletteToWire(updates.colors);
   if (updates.series !== undefined)
-    result.series = seriesConfigArrayToWire(updates.series.map(syncSeriesFormatToInternal));
+    result.series = seriesConfigArrayToWire(
+      updates.series.map((entry) => syncSeriesFormatToInternal(entry, updates.type)),
+    );
   if (updates.dataLabels !== undefined)
     result.dataLabels = dataLabelConfigToWire(
       syncDataLabelsToInternal(updates.dataLabels) as typeof updates.dataLabels,
@@ -505,7 +509,7 @@ export function serializedChartToChart(rawChart: ChartFloatingObject): Chart {
   const axis = axisConfig ? (deriveAxisFieldsForRead(axisConfig) as typeof axisConfig) : undefined;
 
   const series = seriesConfigs?.map((s) =>
-    normalizeSeriesRefsForRead(deriveSeriesFormatForRead(s)),
+    normalizeSeriesRefsForRead(deriveSeriesFormatForRead(s, reportedType)),
   );
 
   const legend = legendConfig

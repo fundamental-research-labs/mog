@@ -6,7 +6,7 @@
  * calls, and no API facade state.
  */
 
-import type { ChartConfig, SeriesConfig } from '@mog-sdk/contracts/data/charts';
+import type { ChartConfig, ChartColor, ChartType, SeriesConfig } from '@mog-sdk/contracts/data/charts';
 import { parseCellRange, quoteSheetName, toA1 } from '@mog/spreadsheet-utils/a1';
 
 type AnyAxisConfig = Record<string, unknown>;
@@ -130,19 +130,66 @@ export function syncAxisFieldsToInternal(axis: unknown): typeof axis {
   };
 }
 
+const LINE_COLOR_SERIES_TYPES = new Set<string>([
+  'line',
+  'line3d',
+  'line3D',
+  'lineMarkers',
+  'lineMarkersStacked',
+  'lineMarkersStacked100',
+  'radar',
+  'scatter',
+  'stock',
+]);
+
+function seriesColorPrefersLine(series: SeriesConfig, chartType?: ChartType | string): boolean {
+  const effectiveType = typeof series.type === 'string' ? series.type : chartType;
+  return typeof effectiveType === 'string' && LINE_COLOR_SERIES_TYPES.has(effectiveType);
+}
+
+function directColorString(color: ChartColor | undefined): string | undefined {
+  return typeof color === 'string' ? color : undefined;
+}
+
+function legacyColorFromSeriesFormat(
+  series: SeriesConfig,
+  chartType?: ChartType | string,
+): string | undefined {
+  const fill = series.format?.fill;
+  const fillColor =
+    fill && typeof fill === 'object' && 'type' in fill && fill.type === 'solid'
+      ? directColorString(fill.color)
+      : undefined;
+  const lineColor = directColorString(series.format?.line?.color);
+  const hasLineRenderedTraits =
+    lineColor !== undefined &&
+    fillColor === undefined &&
+    (series.showLines === true || series.showMarkers === true);
+
+  return seriesColorPrefersLine(series, chartType) || hasLineRenderedTraits
+    ? (lineColor ?? fillColor)
+    : fillColor;
+}
+
 /**
- * On read: derive legacy `color` and `lineWidth` from `format.fill` and `format.line.width`.
+ * On read: derive legacy `color` and `lineWidth` from `format`.
+ *
+ * `series.color` is a public compatibility alias over the dominant series
+ * color. Fill-backed chart families read it from solid fill; line-backed
+ * families read it from line color, falling back to fill for legacy files that
+ * stored line-family colors there.
  */
-export function deriveSeriesFormatForRead(series: SeriesConfig): SeriesConfig {
+export function deriveSeriesFormatForRead(
+  series: SeriesConfig,
+  chartType?: ChartType | string,
+): SeriesConfig {
   if (!series) return series;
   const result = { ...series };
-  // D1: If format.fill is solid with a color and series.color is not set, populate color
-  const fill = series.format?.fill;
-  if (fill && typeof fill === 'object' && 'type' in fill && fill.type === 'solid') {
-    const solidFill = fill as { type: 'solid'; color: unknown };
-    if (solidFill.color && !series.color) {
-      result.color = typeof solidFill.color === 'string' ? solidFill.color : undefined;
-    }
+  // D1: If `format` carries the family-appropriate dominant color and
+  // `series.color` is not set, populate the legacy public alias.
+  const color = legacyColorFromSeriesFormat(series, chartType);
+  if (color && !series.color) {
+    result.color = color;
   }
   // D2: If format.line.width is set and series.lineWidth is not, populate lineWidth
   if (series.format?.line?.width != null && series.lineWidth == null) {
@@ -184,19 +231,19 @@ export function normalizeSeriesRefsForRead(series: SeriesConfig): SeriesConfig {
 
 /**
  * On write: if legacy `color` is set and `format` is not, store in `color`.
- * If `format.fill` is set, ensure color stays in sync.
+ * If `format` carries the family-appropriate dominant color, ensure color
+ * stays in sync for backward-compatible readers.
  */
-export function syncSeriesFormatToInternal(series: SeriesConfig): SeriesConfig {
+export function syncSeriesFormatToInternal(
+  series: SeriesConfig,
+  chartType?: ChartType | string,
+): SeriesConfig {
   if (!series) return series;
   const result = { ...series };
-  // D1: If color is set on write and format.fill is not, keep color as-is (backward compat)
-  // If format.fill is solid, also sync color from it for backward compat readers
-  const fill = series.format?.fill;
-  if (fill && typeof fill === 'object' && 'type' in fill && fill.type === 'solid') {
-    const solidFill = fill as { type: 'solid'; color: unknown };
-    if (solidFill.color && !series.color) {
-      result.color = typeof solidFill.color === 'string' ? solidFill.color : undefined;
-    }
+  // D1: If color is set on write, keep it as-is. Otherwise sync from format.
+  const color = legacyColorFromSeriesFormat(series, chartType);
+  if (color && !series.color) {
+    result.color = color;
   }
   // D2: If lineWidth is set on write and format.line is not, keep lineWidth as-is
   // If format.line.width is set, also sync lineWidth

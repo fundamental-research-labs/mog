@@ -1,6 +1,6 @@
 use domain_types::chart::{
-    ChartBorderData, ChartColorData, ChartDashStyle, ChartLineData, ChartType as DomainChartType,
-    PointFormatData,
+    ChartBorderData, ChartColorData, ChartDashStyle, ChartFormatData, ChartLineData,
+    ChartType as DomainChartType, PointFormatData,
 };
 
 use super::{chart_group_xml, chart_xml, minimal_chart_spec, modeled_series};
@@ -92,6 +92,43 @@ fn point_legacy_fill_merges_with_line_format() {
     assert!(
         point_xml.contains(r#"<a:prstDash val="dash"/>"#),
         "{point_xml}"
+    );
+}
+
+#[test]
+fn series_legacy_color_merges_with_explicit_line_format() {
+    let mut spec = minimal_chart_spec(DomainChartType::Area, None);
+    let mut series = modeled_series(0, None, "North", "Data!$B$2:$B$4");
+    series.color = Some("#4472C4".to_string());
+    series.format = Some(ChartFormatData {
+        fill: None,
+        line: Some(ChartLineData {
+            color: None,
+            width: Some(2.0),
+            dash_style: Some(ChartDashStyle::Dash),
+            transparency: None,
+            no_fill: None,
+        }),
+        font: None,
+        text_rotation: None,
+        text_vertical_type: None,
+        shadow: None,
+    });
+    spec.series = vec![series];
+
+    let xml = chart_xml(&spec);
+    let area_xml = chart_group_xml(&xml, "<c:areaChart>", "</c:areaChart>");
+    let series_xml = chart_group_xml(area_xml, "<c:ser>", "</c:ser>");
+
+    assert_eq!(series_xml.matches("<c:spPr>").count(), 1, "{series_xml}");
+    assert!(
+        series_xml.contains(r#"<a:srgbClr val="4472C4"/>"#),
+        "{series_xml}"
+    );
+    assert!(series_xml.contains(r#"<a:ln w="25400">"#), "{series_xml}");
+    assert!(
+        series_xml.contains(r#"<a:prstDash val="dash"/>"#),
+        "{series_xml}"
     );
 }
 

@@ -8,6 +8,8 @@
  * @module @mog-sdk/contracts/context-menu
  */
 
+import type { PivotFieldArea, PlacementId } from '../data/pivot';
+
 // =============================================================================
 // TARGET TYPES
 // =============================================================================
@@ -38,6 +40,8 @@ export interface ContextMenuState {
   pivotId?: string;
   pivotHeaderKey?: string;
   pivotFieldId?: string;
+  pivotPlacementId?: PlacementId;
+  pivotFieldArea?: PivotFieldArea;
   /** Monotonically increasing counter to force React remount on each open */
   instanceId: number;
 }

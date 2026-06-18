@@ -7,6 +7,7 @@
 import type { StateCreator } from 'zustand';
 
 import type { ContextMenuState, ContextMenuTarget } from '@mog-sdk/contracts/context-menu';
+import type { PivotFieldArea, PlacementId } from '@mog-sdk/contracts/pivot';
 import { INITIAL_CONTEXT_MENU_STATE } from '@mog-sdk/contracts/context-menu';
 
 export interface ContextMenuSlice {
@@ -23,6 +24,23 @@ export interface ContextMenuSlice {
     pivotHeaderKey?: string;
     /** Pivot field ID if clicking on a specific field in the pivot */
     pivotFieldId?: string;
+    /** Pivot placement ID if clicking on a concrete pivot placement */
+    pivotPlacementId?: PlacementId;
+    /** Pivot field area if clicking on a concrete pivot placement */
+    pivotFieldArea?: PivotFieldArea;
+  }) => void;
+  setContextMenuPivotContext: (state: {
+    target?: ContextMenuTarget;
+    /** Pivot table ID if clicking on a pivot (for pivot targets) */
+    pivotId: string;
+    /** Pivot header key if clicking on a pivot row/column header */
+    pivotHeaderKey?: string;
+    /** Pivot field ID if clicking on a specific field in the pivot */
+    pivotFieldId?: string;
+    /** Pivot placement ID if clicking on a concrete pivot placement */
+    pivotPlacementId?: PlacementId;
+    /** Pivot field area if clicking on a concrete pivot placement */
+    pivotFieldArea?: PivotFieldArea;
   }) => void;
   closeContextMenu: () => void;
 }
@@ -44,9 +62,40 @@ export const createContextMenuSlice: StateCreator<ContextMenuSlice, [], [], Cont
         pivotId: state.pivotId,
         pivotHeaderKey: state.pivotHeaderKey,
         pivotFieldId: state.pivotFieldId,
+        pivotPlacementId: state.pivotPlacementId,
+        pivotFieldArea: state.pivotFieldArea,
         instanceId: prev.contextMenu.instanceId + 1,
       },
     }));
+  },
+
+  setContextMenuPivotContext: (state) => {
+    set((prev) => {
+      if (!prev.contextMenu.isOpen) return prev;
+      const target = state.target ?? prev.contextMenu.target;
+      if (
+        prev.contextMenu.target === target &&
+        prev.contextMenu.pivotId === state.pivotId &&
+        prev.contextMenu.pivotHeaderKey === state.pivotHeaderKey &&
+        prev.contextMenu.pivotFieldId === state.pivotFieldId &&
+        prev.contextMenu.pivotPlacementId === state.pivotPlacementId &&
+        prev.contextMenu.pivotFieldArea === state.pivotFieldArea
+      ) {
+        return prev;
+      }
+
+      return {
+        contextMenu: {
+          ...prev.contextMenu,
+          target,
+          pivotId: state.pivotId,
+          pivotHeaderKey: state.pivotHeaderKey,
+          pivotFieldId: state.pivotFieldId,
+          pivotPlacementId: state.pivotPlacementId,
+          pivotFieldArea: state.pivotFieldArea,
+        },
+      };
+    });
   },
 
   closeContextMenu: () => {

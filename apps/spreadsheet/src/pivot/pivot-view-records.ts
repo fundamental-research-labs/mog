@@ -8,9 +8,11 @@ import {
   type PivotCapabilities,
   type PivotSourceKind,
 } from './pivot-capabilities';
+import { resolvePivotContextAtCell, type ResolvedPivotContext } from './pivot-context-resolution';
 import {
   pivotBoundsContain,
   pivotBoundsForConfig,
+  pivotBoundsForView,
   pivotBoundsForImportedRecord,
   pivotBoundsOverlap,
   type PivotBounds,
@@ -273,4 +275,43 @@ export async function findPivotAtCell(
     (await findEditablePivotAtCell(workbook, sheetId, row, col)) ??
     (await findImportedPivotAtCell(workbook, sheetId, row, col))
   );
+}
+
+async function boundsForPivotEntry(entry: PivotConfigEntry): Promise<PivotBounds> {
+  if (entry.handle) {
+    return (await entry.handle.getRange().catch(() => null)) ?? pivotBoundsForConfig(entry.config);
+  }
+  return pivotBoundsForView(entry.config, entry.result);
+}
+
+async function resultForPivotEntry(entry: PivotConfigEntry): Promise<PivotTableResult | null> {
+  if (entry.result !== undefined) return entry.result;
+  if (!entry.handle) return null;
+  return entry.handle.compute().catch(() => null);
+}
+
+export async function findPivotContextAtCell(
+  workbook: WorkbookInternal,
+  sheetId: SheetId,
+  row: number,
+  col: number,
+): Promise<ResolvedPivotContext | null> {
+  try {
+    const entries = await loadPivotConfigEntries(workbook, sheetId);
+    for (const entry of entries) {
+      const bounds = await boundsForPivotEntry(entry);
+      if (!pivotBoundsContain(bounds, row, col)) continue;
+
+      const result = await resultForPivotEntry(entry);
+      return (
+        resolvePivotContextAtCell({ config: entry.config, result }, row, col) ?? {
+          target: 'pivot',
+          pivotId: entry.config.id,
+        }
+      );
+    }
+  } catch {
+    return null;
+  }
+  return null;
 }

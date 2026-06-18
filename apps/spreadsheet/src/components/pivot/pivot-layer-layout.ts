@@ -1,7 +1,11 @@
 import type { PivotFieldArea, PivotRenderedBounds, PlacementId } from '@mog-sdk/contracts/pivot';
 
 import type { PivotViewModel } from '../../pivot/pivot-capabilities';
-import { pivotBoundsForConfig, type PivotBounds } from '../../pivot/pivot-view-geometry';
+import {
+  pivotBoundsForView,
+  pivotRenderedBoundsForView,
+  type PivotBounds,
+} from '../../pivot/pivot-view-geometry';
 import { pivotFieldLabel, pivotPlacementsFor } from '../../systems/pivot';
 
 export interface PivotLayerRect {
@@ -59,33 +63,6 @@ interface PivotLayerViewportLike {
 
 type ReadCellPageRect = (cell: { row: number; col: number }) => PivotLayerRect | null;
 
-function renderedBoundsForPivot(pivot: PivotViewModel): PivotBounds {
-  const renderedBounds = pivot.result?.renderedBounds;
-  if (renderedBounds && renderedBounds.totalRows > 0 && renderedBounds.totalCols > 0) {
-    const { row, col } = pivot.config.outputLocation;
-    return {
-      startRow: row,
-      startCol: col,
-      endRow: row + renderedBounds.totalRows - 1,
-      endCol: col + renderedBounds.totalCols - 1,
-    };
-  }
-  return pivotBoundsForConfig(pivot.config);
-}
-
-function fallbackRenderedBounds(config: PivotViewModel['config']): PivotRenderedBounds {
-  const rowFieldCount = pivotPlacementsFor(config, 'row').length;
-  const columnFieldCount = pivotPlacementsFor(config, 'column').length;
-  const valueFieldCount = pivotPlacementsFor(config, 'value').length;
-  return {
-    totalRows: 1,
-    totalCols: 1,
-    firstDataRow: Math.max(columnFieldCount, 1) + (valueFieldCount > 1 ? 1 : 0),
-    firstDataCol: Math.max(rowFieldCount, 1),
-    numDataCols: Math.max(valueFieldCount, 0),
-  };
-}
-
 export function hasPivotOutputPlacements(config: PivotViewModel['config']): boolean {
   return config.placements.some(
     (placement) =>
@@ -129,7 +106,7 @@ export function getVisiblePivotFieldHeaderControls(
   bounds: PivotBounds,
   markerRect: PivotLayerRect,
   getCellPageRect: ReadCellPageRect,
-  renderedBounds: PivotRenderedBounds = fallbackRenderedBounds(config),
+  renderedBounds: PivotRenderedBounds = pivotRenderedBoundsForView(config, null),
 ): PivotFieldHeaderControlLayout[] {
   const controls: PivotFieldHeaderControlLayout[] = [];
   const widthCols = bounds.endCol - bounds.startCol + 1;
@@ -194,7 +171,7 @@ export function getPivotMarker(
   const scrollPosition = viewport?.getScrollPosition() ?? { x: 0, y: 0 };
   const containerRect = geometry.getContainerRect();
   const cellAreaOffset = geometry.getCellAreaOffset();
-  const bounds = renderedBoundsForPivot(pivot);
+  const bounds = pivotBoundsForView(pivot.config, pivot.result);
   const visibleAnchorRect = geometry.getCellPageRect({
     row: bounds.startRow,
     col: bounds.startCol,
@@ -245,7 +222,7 @@ export function getPivotMarker(
       bounds,
       rect,
       (cell) => geometry.getCellPageRect(cell),
-      pivot.result?.renderedBounds,
+      pivotRenderedBoundsForView(pivot.config, pivot.result),
     ),
   };
 }

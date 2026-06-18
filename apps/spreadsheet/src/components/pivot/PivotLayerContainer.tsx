@@ -31,6 +31,20 @@ interface PivotMarker {
     width: number;
     height: number;
   };
+  reportFilterControls: PivotReportFilterControlLayout[];
+}
+
+export interface PivotReportFilterControlLayout {
+  placementId: string;
+  fieldId: string;
+  label: string;
+  row: number;
+  rect: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
 }
 
 function renderedBoundsForPivot(pivot: PivotViewModel): PivotBounds {
@@ -56,6 +70,38 @@ function hasOutputPlacements(config: PivotViewModel['config']): boolean {
 
 function hasFilterPlacements(config: PivotViewModel['config']): boolean {
   return config.placements.some((placement) => placement.area === 'filter');
+}
+
+export function getVisiblePivotReportFilterControls(
+  config: PivotViewModel['config'],
+  bounds: PivotBounds,
+  markerRect: PivotMarker['rect'],
+  getCellPageRect: (cell: { row: number; col: number }) => {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  } | null,
+): PivotReportFilterControlLayout[] {
+  return pivotPlacementsFor(config, 'filter')
+    .map((placement, index): PivotReportFilterControlLayout | null => {
+      const row = bounds.startRow + index;
+      const pageRect = getCellPageRect({ row, col: bounds.startCol });
+      if (!pageRect) return null;
+      return {
+        placementId: placement.placementId,
+        fieldId: placement.fieldId,
+        label: pivotFieldLabel(config, placement.fieldId),
+        row,
+        rect: {
+          x: pageRect.x - markerRect.x,
+          y: pageRect.y - markerRect.y,
+          width: pageRect.width,
+          height: pageRect.height,
+        },
+      };
+    })
+    .filter((control): control is PivotReportFilterControlLayout => control != null);
 }
 
 // =============================================================================
@@ -156,17 +202,25 @@ export function PivotLayerContainer() {
 
         if (width <= 0 || height <= 0) return null;
 
+        const rect = {
+          x: anchorRect.x,
+          y: anchorRect.y,
+          width,
+          height,
+        };
+
         return {
           id: pivot.config.id,
           name: pivot.config.name,
           pivot,
           bounds,
-          rect: {
-            x: anchorRect.x,
-            y: anchorRect.y,
-            width,
-            height,
-          },
+          rect,
+          reportFilterControls: getVisiblePivotReportFilterControls(
+            pivot.config,
+            bounds,
+            rect,
+            (cell) => geometry.getCellPageRect(cell),
+          ),
         };
       })
       .filter((marker): marker is PivotMarker => marker != null);
@@ -224,7 +278,6 @@ export function PivotLayerContainer() {
         const overlayHeight = showEmptyState
           ? Math.max(marker.rect.height, 132)
           : Math.max(marker.rect.height, 36);
-        const filterPlacements = pivotPlacementsFor(config, 'filter');
 
         return (
           <div
@@ -240,34 +293,42 @@ export function PivotLayerContainer() {
               top: marker.rect.y,
               width: overlayWidth,
               minHeight: overlayHeight,
-              pointerEvents: 'auto',
+              pointerEvents:
+                showEmptyState || marker.reportFilterControls.length > 0 ? 'auto' : 'none',
               zIndex: 6,
             }}
           >
             {showFilterControls && (
-              <div className="flex flex-wrap items-center gap-2 rounded border border-ss-border bg-ss-surface/95 px-2 py-1 shadow-sm">
-                {filterPlacements.map((placement) => {
-                  const label = pivotFieldLabel(config, placement.fieldId);
-                  return (
+              <div className="absolute inset-0 pointer-events-none">
+                {marker.reportFilterControls.map((control) => (
+                  <div
+                    key={control.placementId}
+                    className="absolute flex items-center pointer-events-none"
+                    style={{
+                      left: control.rect.x,
+                      top: control.rect.y,
+                      height: control.rect.height,
+                    }}
+                  >
                     <button
-                      key={placement.placementId}
                       type="button"
-                      className="inline-flex max-w-full min-w-0 items-center gap-1 rounded border border-ss-border bg-ss-surface px-2 py-1 text-caption text-ss-text-primary shadow-sm hover:bg-ss-surface-hover"
+                      className="pointer-events-auto inline-flex max-w-full min-w-0 items-center gap-1 rounded border border-ss-border bg-ss-surface/95 px-2 py-1 text-caption text-ss-text-primary shadow-sm hover:bg-ss-surface-hover"
                       data-pivot-target="report-filter-control"
-                      data-pivot-field-id={placement.fieldId}
-                      data-pivot-placement-id={placement.placementId}
-                      title={`Filter ${label}: All`}
-                      aria-label={`Filter ${label}: All`}
+                      data-pivot-field-id={control.fieldId}
+                      data-pivot-placement-id={control.placementId}
+                      data-pivot-row={control.row}
+                      title={`Filter ${control.label}: All`}
+                      aria-label={`Filter ${control.label}: All`}
                       onClick={() => startEditingPivot(marker.id)}
                     >
-                      <span className="min-w-0 truncate">{label}</span>
+                      <span className="min-w-0 truncate">{control.label}</span>
                       <span className="shrink-0 text-ss-text-secondary">All</span>
                       <span className="shrink-0 text-ss-text-secondary" aria-hidden="true">
                         v
                       </span>
                     </button>
-                  );
-                })}
+                  </div>
+                ))}
               </div>
             )}
             {showEmptyState && (

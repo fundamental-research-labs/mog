@@ -108,7 +108,9 @@ function FormulaBarContainerImpl() {
 
   // Formula Bar Expand/Collapse (Ctrl+Shift+U)
   const formulaBarExpanded = useUIStore((s) => s.formulaBarExpanded);
+  const formulaBarHeightPx = useUIStore((s) => s.formulaBarHeightPx);
   const toggleFormulaBarExpand = useUIStore((s) => s.toggleFormulaBarExpand);
+  const setFormulaBarHeightPx = useUIStore((s) => s.setFormulaBarHeightPx);
 
   // NL Formula Bar toggle
   const nlBarVisible = useUIStore((s) => s.nlBarVisible);
@@ -658,7 +660,9 @@ function FormulaBarContainerImpl() {
         onContextMenu={handleContextMenu as (event: React.MouseEvent) => void}
         // Formula Bar Expand/Collapse (Ctrl+Shift+U)
         isExpanded={formulaBarExpanded}
+        heightPx={formulaBarHeightPx}
         onToggleExpand={toggleFormulaBarExpand}
+        onResizeHeight={setFormulaBarHeightPx}
         // IME composition handlers
         onCompositionStart={handleCompositionStart}
         onCompositionUpdate={handleCompositionUpdate}

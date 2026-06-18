@@ -15,26 +15,58 @@
  */
 
 import type { StateCreator } from 'zustand';
+import {
+  FORMULA_BAR_COLLAPSED_HEIGHT_PX,
+  FORMULA_BAR_DEFAULT_EXPANDED_HEIGHT_PX,
+  clampFormulaBarHeight,
+  isFormulaBarHeightExpanded,
+} from '../../../domain/editor/formula-bar-height';
 
 export interface FormulaBarSlice {
   /** Whether the formula bar is expanded (multi-line mode) */
   formulaBarExpanded: boolean;
+  /** Current formula bar chrome height in pixels; user-draggable like Excel. */
+  formulaBarHeightPx: number;
   /** Toggle formula bar between expanded and collapsed */
   toggleFormulaBarExpand: () => void;
   /** Set formula bar expanded state explicitly */
   setFormulaBarExpanded: (expanded: boolean) => void;
+  /** Set formula bar height from drag-resize, clamped to supported chrome bounds. */
+  setFormulaBarHeightPx: (heightPx: number) => void;
 }
 
 export const createFormulaBarSlice: StateCreator<FormulaBarSlice, [], [], FormulaBarSlice> = (
   set,
 ) => ({
   formulaBarExpanded: false,
+  formulaBarHeightPx: FORMULA_BAR_COLLAPSED_HEIGHT_PX,
 
   toggleFormulaBarExpand: () => {
-    set((s) => ({ formulaBarExpanded: !s.formulaBarExpanded }));
+    set((s) => {
+      const expanded = !s.formulaBarExpanded;
+      return {
+        formulaBarExpanded: expanded,
+        formulaBarHeightPx: expanded
+          ? FORMULA_BAR_DEFAULT_EXPANDED_HEIGHT_PX
+          : FORMULA_BAR_COLLAPSED_HEIGHT_PX,
+      };
+    });
   },
 
   setFormulaBarExpanded: (expanded: boolean) => {
-    set({ formulaBarExpanded: expanded });
+    set({
+      formulaBarExpanded: expanded,
+      formulaBarHeightPx: expanded
+        ? FORMULA_BAR_DEFAULT_EXPANDED_HEIGHT_PX
+        : FORMULA_BAR_COLLAPSED_HEIGHT_PX,
+    });
+  },
+
+  setFormulaBarHeightPx: (heightPx: number) => {
+    const clampedHeight = clampFormulaBarHeight(heightPx);
+    set({
+      formulaBarHeightPx: clampedHeight,
+      formulaBarExpanded: isFormulaBarHeightExpanded(clampedHeight),
+    });
   },
 });

@@ -17,12 +17,19 @@ import {
   type ChangeEvent,
   type KeyboardEvent,
   type MouseEvent,
+  type PointerEvent as ReactPointerEvent,
 } from 'react';
 
 import { CheckmarkSvg, CloseSvg } from '@mog/icons';
 import { Input, Textarea } from '@mog/shell';
 import { FormulaHighlighter } from '../../components/editor/FormulaHighlighter';
 import type { FormulaBarProps } from '../../internal-api';
+import {
+  FORMULA_BAR_COLLAPSED_HEIGHT_PX,
+  FORMULA_BAR_DEFAULT_EXPANDED_HEIGHT_PX,
+  clampFormulaBarHeight,
+  isFormulaBarHeightExpanded,
+} from '../../domain/editor/formula-bar-height';
 import { RibbonVisibilityPathItem } from '../toolbar/visibility/RibbonVisibilityContext';
 import { NameBoxDropdown } from './NameBoxDropdown';
 
@@ -45,7 +52,9 @@ export function FormulaBar({
   onContextMenu,
   // Formula Bar Expand/Collapse (Ctrl+Shift+U)
   isExpanded = false,
+  heightPx,
   onToggleExpand,
+  onResizeHeight,
   // IME composition handlers
   onCompositionStart,
   onCompositionUpdate,
@@ -70,8 +79,24 @@ export function FormulaBar({
   // Track cursor position for parentheses matching
   const [cursorPosition, setCursorPosition] = useState(0);
 
-  // D.2: Use textarea when expanded or when content has newlines
-  const isMultiLine = isExpanded || value.includes('\n');
+  const requestedHeightPx =
+    heightPx ?? (isExpanded ? FORMULA_BAR_DEFAULT_EXPANDED_HEIGHT_PX : FORMULA_BAR_COLLAPSED_HEIGHT_PX);
+  const formulaBarHeightPx = clampFormulaBarHeight(requestedHeightPx);
+  const heightExpanded = isFormulaBarHeightExpanded(formulaBarHeightPx);
+  const usesTallLayout = heightExpanded || isExpanded || value.includes('\n');
+  const editorHeightPx = Math.max(
+    FORMULA_BAR_COLLAPSED_HEIGHT_PX - 6,
+    formulaBarHeightPx - (usesTallLayout ? 8 : 6),
+  );
+
+  const resizeDragRef = useRef<{
+    pointerId: number;
+    startY: number;
+    startHeight: number;
+  } | null>(null);
+
+  // D.2: Use textarea when expanded, drag-resized, or when content has newlines
+  const isMultiLine = usesTallLayout;
 
   // Combine internal and external refs
   const setInputRef = useCallback(
@@ -203,18 +228,53 @@ export function FormulaBar({
     [isEditing, onFocus, onSelectionChange],
   );
 
-  const isFormula = value.startsWith('=');
+  const handleResizePointerDown = useCallback(
+    (e: ReactPointerEvent<HTMLDivElement>) => {
+      if (e.button !== 0 || readOnly || !onResizeHeight) return;
+      e.preventDefault();
+      e.stopPropagation();
+      resizeDragRef.current = {
+        pointerId: e.pointerId,
+        startY: e.clientY,
+        startHeight: formulaBarHeightPx,
+      };
+      e.currentTarget.setPointerCapture(e.pointerId);
+    },
+    [formulaBarHeightPx, onResizeHeight, readOnly],
+  );
 
-  // Height changes based on expanded state
-  // Excel shows ~3 lines when expanded (~84px), single line when collapsed (~22px)
-  const expandedHeight = 84;
-  const collapsedHeight = 22;
+  const handleResizePointerMove = useCallback(
+    (e: ReactPointerEvent<HTMLDivElement>) => {
+      const drag = resizeDragRef.current;
+      if (!drag || drag.pointerId !== e.pointerId || !onResizeHeight) return;
+      e.preventDefault();
+      e.stopPropagation();
+      onResizeHeight(drag.startHeight + e.clientY - drag.startY);
+    },
+    [onResizeHeight],
+  );
+
+  const finishResizeDrag = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
+    const drag = resizeDragRef.current;
+    if (!drag || drag.pointerId !== e.pointerId) return;
+    e.preventDefault();
+    e.stopPropagation();
+    resizeDragRef.current = null;
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    }
+  }, []);
+
+  const isFormula = value.startsWith('=');
 
   return (
     <div
       data-formula-bar
       data-testid="formula-bar"
-      className={`flex px-2 bg-ss-surface text-ss-text gap-2 ${isExpanded ? 'items-start py-1' : 'items-center h-7'}`}
+      className={`relative flex px-2 bg-ss-surface text-ss-text gap-2 ${
+        usesTallLayout ? 'items-start py-1' : 'items-center'
+      }`}
+      style={{ height: formulaBarHeightPx }}
     >
       {/* Cell Address / Name Box -.2: Interactive dropdown */}
       <RibbonVisibilityPathItem path={['formulaBar', 'controls', 'nameBox']}>
@@ -289,7 +349,7 @@ export function FormulaBar({
        */}
       <div
         className="flex-1 relative text-ribbon leading-none"
-        style={{ height: isExpanded ? expandedHeight : collapsedHeight }}
+        style={{ height: editorHeightPx }}
       >
         {/* Syntax highlighting overlay for formulas */}
         {isFormula && !isMultiLine && (
@@ -336,17 +396,15 @@ export function FormulaBar({
             onCompositionUpdate={(e) => onCompositionUpdate?.(e.data)}
             onCompositionEnd={(e) => onCompositionEnd?.(e.data)}
             resize="none"
-            rows={isExpanded ? 3 : 1}
+            rows={usesTallLayout ? 3 : 1}
             className={`h-full min-h-0 ${
               isEditing ? 'border-ss-primary ring-2 ring-ss-primary/20' : ''
-            } ${isFormula ? 'text-transparent' : ''}`}
+            }`}
             style={{
               // D.2: Enable word wrapping for long formulas
               wordWrap: 'break-word',
               overflowWrap: 'break-word',
               whiteSpace: 'pre-wrap',
-              // Keep caret visible when text is transparent for syntax highlighting overlay
-              ...(isFormula ? { caretColor: 'var(--color-ss-text)' } : {}),
             }}
             spellCheck={false}
             autoComplete="off"
@@ -441,12 +499,14 @@ export function FormulaBar({
           onClick={onToggleExpand}
           className="w-[22px] h-[22px] flex items-center justify-center text-ss-text-secondary shrink-0 hover:bg-ss-surface-hover rounded cursor-pointer transition-colors"
           title={
-            isExpanded ? 'Collapse Formula Bar (Ctrl+Shift+U)' : 'Expand Formula Bar (Ctrl+Shift+U)'
+            heightExpanded
+              ? 'Collapse Formula Bar (Ctrl+Shift+U)'
+              : 'Expand Formula Bar (Ctrl+Shift+U)'
           }
         >
           {/* Chevron icon: up when expanded, down when collapsed */}
           <svg
-            className={`w-3 h-3 transition-transform ${isExpanded ? '' : 'rotate-180'}`}
+            className={`w-3 h-3 transition-transform ${heightExpanded ? '' : 'rotate-180'}`}
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -455,6 +515,21 @@ export function FormulaBar({
           </svg>
         </button>
       </RibbonVisibilityPathItem>
+      {!readOnly && onResizeHeight && (
+        <div
+          data-testid="formula-bar-resize-handle"
+          role="separator"
+          aria-orientation="horizontal"
+          aria-label="Resize formula bar"
+          className="absolute inset-x-0 bottom-0 z-10 h-1.5 cursor-row-resize"
+          style={{ touchAction: 'none' }}
+          onPointerDown={handleResizePointerDown}
+          onPointerMove={handleResizePointerMove}
+          onPointerUp={finishResizeDrag}
+          onPointerCancel={finishResizeDrag}
+          onLostPointerCapture={finishResizeDrag}
+        />
+      )}
     </div>
   );
 }

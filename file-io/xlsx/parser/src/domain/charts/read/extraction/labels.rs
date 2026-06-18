@@ -1,5 +1,6 @@
 use super::formatting::{extract_chart_format, extract_chart_line, extract_chart_rich_text};
 use super::text::extract_chart_text_string;
+use crate::domain::charts::data_label_contract_ext::parse_data_label_contract_extensions;
 
 pub(in crate::domain::charts::read) fn extract_data_label_data(
     dl: &ooxml_types::charts::DataLabelOptions,
@@ -12,12 +13,16 @@ pub(in crate::domain::charts::read) fn extract_data_label_data(
             || dl.show_bubble_size
             || dl.show_legend_key);
     let visual_format = extract_chart_format(dl.sp_pr.as_ref(), dl.tx_pr.as_ref());
+    let extension_data = parse_data_label_contract_extensions(&dl.extensions);
+    if let Some(full_data_label) = extension_data.full_data_label {
+        return full_data_label;
+    }
 
     domain_types::chart::DataLabelData {
         show,
         delete: dl.delete,
         position: data_label_position_to_domain(dl.position),
-        format: None,
+        format: extension_data.format,
         show_value: present_bool(dl.show_value, dl.show_value_present),
         show_category_name: present_bool(dl.show_category, dl.show_category_present),
         show_series_name: present_bool(dl.show_series_name, dl.show_series_name_present),
@@ -26,7 +31,7 @@ pub(in crate::domain::charts::read) fn extract_data_label_data(
         show_legend_key: present_bool(dl.show_legend_key, dl.show_legend_key_present),
         separator: dl.separator.clone(),
         show_leader_lines: dl.show_leader_lines,
-        text: None,
+        text: extension_data.text,
         text_orientation: visual_format
             .as_ref()
             .and_then(|format| format.text_rotation),
@@ -37,15 +42,16 @@ pub(in crate::domain::charts::read) fn extract_data_label_data(
             .map(|format| format.format_code.clone())
             .or_else(|| dl.num_fmt.clone()),
         rich_text: dl.tx_pr.as_ref().and_then(extract_chart_rich_text),
-        auto_text: None,
-        horizontal_alignment: None,
-        vertical_alignment: None,
+        auto_text: extension_data.auto_text,
+        horizontal_alignment: dl.tx_pr.as_ref().and_then(extract_data_label_h_align),
+        vertical_alignment: dl.tx_pr.as_ref().and_then(extract_data_label_v_align),
         link_number_format: dl
             .num_fmt_obj
             .as_ref()
-            .and_then(|format| format.source_linked),
-        geometric_shape_type: None,
-        formula: None,
+            .and_then(|format| format.source_linked)
+            .or(extension_data.link_number_format),
+        geometric_shape_type: extension_data.geometric_shape_type,
+        formula: extension_data.formula,
         height: None,
         width: None,
         leader_lines_format: dl
@@ -58,11 +64,26 @@ pub(in crate::domain::charts::read) fn extract_data_label_data(
     }
 }
 
+pub(in crate::domain::charts::read) fn extract_data_label_data_from_chart_type_config(
+    config: &ooxml_types::charts::ChartTypeConfig,
+) -> Option<domain_types::chart::DataLabelData> {
+    let extensions = match config {
+        ooxml_types::charts::ChartTypeConfig::Surface(config)
+        | ooxml_types::charts::ChartTypeConfig::Surface3D(config) => &config.extensions,
+        _ => return None,
+    };
+    parse_data_label_contract_extensions(extensions).full_data_label
+}
+
 pub(in crate::domain::charts::read) fn extract_individual_data_label_data(
     label: &ooxml_types::charts::DataLabel,
     defaults: Option<&ooxml_types::charts::DataLabelOptions>,
 ) -> domain_types::chart::DataLabelData {
     let visual_format = extract_chart_format(label.sp_pr.as_ref(), label.tx_pr.as_ref());
+    let extension_data = parse_data_label_contract_extensions(&label.extensions);
+    if let Some(full_data_label) = extension_data.full_data_label {
+        return full_data_label;
+    }
     let text = label.text.as_ref().and_then(extract_chart_text_string);
     let formula = label.text.as_ref().and_then(extract_chart_text_formula);
     let rich_text = label
@@ -103,7 +124,7 @@ pub(in crate::domain::charts::read) fn extract_individual_data_label_data(
             .position
             .and_then(data_label_position_to_domain)
             .or_else(|| defaults.and_then(|dl| data_label_position_to_domain(dl.position))),
-        format: None,
+        format: extension_data.format,
         show_value: label
             .show_value
             .or_else(|| defaults.and_then(|dl| present_bool(dl.show_value, dl.show_value_present))),
@@ -127,7 +148,7 @@ pub(in crate::domain::charts::read) fn extract_individual_data_label_data(
             .clone()
             .or_else(|| defaults.and_then(|dl| dl.separator.clone())),
         show_leader_lines: defaults.and_then(|dl| dl.show_leader_lines),
-        text,
+        text: text.or(extension_data.text),
         text_orientation: visual_format
             .as_ref()
             .and_then(|format| format.text_rotation),
@@ -145,16 +166,29 @@ pub(in crate::domain::charts::read) fn extract_individual_data_label_data(
                 })
             }),
         rich_text,
-        auto_text: None,
-        horizontal_alignment: None,
-        vertical_alignment: None,
+        auto_text: extension_data.auto_text,
+        horizontal_alignment: label
+            .tx_pr
+            .as_ref()
+            .and_then(extract_data_label_h_align)
+            .or_else(|| {
+                defaults.and_then(|dl| dl.tx_pr.as_ref().and_then(extract_data_label_h_align))
+            }),
+        vertical_alignment: label
+            .tx_pr
+            .as_ref()
+            .and_then(extract_data_label_v_align)
+            .or_else(|| {
+                defaults.and_then(|dl| dl.tx_pr.as_ref().and_then(extract_data_label_v_align))
+            }),
         link_number_format: label
             .num_fmt
             .as_ref()
             .and_then(|format| format.source_linked)
-            .or_else(|| defaults.and_then(|dl| dl.num_fmt_obj.as_ref()?.source_linked)),
-        geometric_shape_type: None,
-        formula,
+            .or_else(|| defaults.and_then(|dl| dl.num_fmt_obj.as_ref()?.source_linked))
+            .or(extension_data.link_number_format),
+        geometric_shape_type: extension_data.geometric_shape_type,
+        formula: formula.or(extension_data.formula),
         height: None,
         width: None,
         leader_lines_format: defaults
@@ -168,6 +202,41 @@ pub(in crate::domain::charts::read) fn extract_individual_data_label_data(
 
 fn present_bool(value: bool, present: bool) -> Option<bool> {
     present.then_some(value)
+}
+
+fn extract_data_label_h_align(body: &ooxml_types::drawings::TextBody) -> Option<String> {
+    let align = body
+        .paragraphs
+        .iter()
+        .find_map(|paragraph| paragraph.props.align)?;
+    data_label_horizontal_alignment_from_ooxml(align).map(str::to_string)
+}
+
+fn extract_data_label_v_align(body: &ooxml_types::drawings::TextBody) -> Option<String> {
+    let anchor = body.body_props.anchor?;
+    data_label_vertical_alignment_from_ooxml(anchor).map(str::to_string)
+}
+
+fn data_label_horizontal_alignment_from_ooxml(
+    align: ooxml_types::drawings::TextAlign,
+) -> Option<&'static str> {
+    match align {
+        ooxml_types::drawings::TextAlign::Left => Some("left"),
+        ooxml_types::drawings::TextAlign::Center => Some("center"),
+        ooxml_types::drawings::TextAlign::Right => Some("right"),
+        _ => None,
+    }
+}
+
+fn data_label_vertical_alignment_from_ooxml(
+    anchor: ooxml_types::drawings::TextAnchor,
+) -> Option<&'static str> {
+    match anchor {
+        ooxml_types::drawings::TextAnchor::Top => Some("top"),
+        ooxml_types::drawings::TextAnchor::Center => Some("middle"),
+        ooxml_types::drawings::TextAnchor::Bottom => Some("bottom"),
+        _ => None,
+    }
 }
 
 fn extract_chart_text_formula(ct: &ooxml_types::charts::ChartText) -> Option<String> {
@@ -205,6 +274,8 @@ mod tests {
         let label_options = ooxml_types::charts::DataLabelOptions {
             show_value: true,
             show_legend_key: true,
+            show_value_present: true,
+            show_legend_key_present: true,
             separator: Some(", ".to_string()),
             num_fmt_obj: Some(ooxml_types::charts::NumFmt {
                 format_code: "0.0%".to_string(),

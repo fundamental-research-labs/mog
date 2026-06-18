@@ -4,7 +4,7 @@ use super::data_refs::{
     reconstruct_data_range_from_chart_groups,
 };
 use super::formatting::extract_fill_color;
-use super::labels::extract_data_label_data;
+use super::labels::{extract_data_label_data, extract_data_label_data_from_chart_type_config};
 use super::markers::extract_marker_config;
 use super::series::extract_single_series;
 use super::series_sources::{
@@ -326,6 +326,12 @@ pub(in crate::domain::charts::read) fn extract_chart_data_labels(
         .data_labels
         .as_ref()
         .map(|dl| extract_data_label_data(dl))
+        .or_else(|| {
+            chart
+                .chart_type_config
+                .as_ref()
+                .and_then(extract_data_label_data_from_chart_type_config)
+        })
 }
 
 /// Extract a reconstructed data range from all series references.

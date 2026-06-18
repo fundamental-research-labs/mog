@@ -4,7 +4,7 @@ use domain_types::chart::{
 };
 use ooxml_types::charts::{
     self, ChartLines, ChartSurface, ChartText, DataLabel, DataLabelOptions, DataLabelPosition,
-    DataTableConfig, LegendPosition, NumFmt, StrRef, View3D,
+    DataTableConfig, ExtensionEntry, LegendPosition, NumFmt, StrRef, View3D,
 };
 use ooxml_types::drawings::{
     ColorTransform, DrawingColor, EffectList, EffectProperties, OuterShadow, Paragraph,
@@ -15,6 +15,7 @@ use ooxml_types::drawings::{
 use super::formatting::{
     build_outline, build_run_properties, build_shape_properties, build_text_body,
 };
+use crate::domain::charts::data_label_contract_ext::build_data_label_contract_extension;
 
 pub(super) fn build_title(
     text: Option<&str>,
@@ -124,7 +125,58 @@ pub(super) fn preserve_imported_title_text_properties(
         return;
     }
 
-    merge_missing_text_body_run_properties(target_body, imported_body);
+    merge_missing_text_body_properties(target_body, imported_body);
+}
+
+pub(super) fn preserve_imported_text_body_properties(
+    target: &mut Option<TextBody>,
+    imported: Option<&TextBody>,
+) {
+    match (target, imported) {
+        (Some(target), Some(imported)) => merge_missing_text_body_properties(target, imported),
+        (target @ None, Some(imported)) => *target = Some(imported.clone()),
+        _ => {}
+    }
+}
+
+fn merge_missing_text_body_properties(target: &mut TextBody, imported: &TextBody) {
+    merge_missing_body_properties(&mut target.body_props, &imported.body_props);
+    fill_missing(&mut target.list_style, &imported.list_style);
+    merge_missing_text_body_run_properties(target, imported);
+}
+
+fn merge_missing_body_properties(
+    target: &mut ooxml_types::drawings::TextBodyProperties,
+    imported: &ooxml_types::drawings::TextBodyProperties,
+) {
+    fill_missing(&mut target.rot, &imported.rot);
+    fill_missing(&mut target.anchor, &imported.anchor);
+    fill_missing(&mut target.wrap, &imported.wrap);
+    fill_missing(&mut target.l_ins, &imported.l_ins);
+    fill_missing(&mut target.t_ins, &imported.t_ins);
+    fill_missing(&mut target.r_ins, &imported.r_ins);
+    fill_missing(&mut target.b_ins, &imported.b_ins);
+    fill_missing(&mut target.vert, &imported.vert);
+    fill_missing(&mut target.vert_overflow, &imported.vert_overflow);
+    fill_missing(&mut target.horz_overflow, &imported.horz_overflow);
+    fill_missing(&mut target.anchor_ctr, &imported.anchor_ctr);
+    fill_missing(&mut target.rtl_col, &imported.rtl_col);
+    fill_missing(
+        &mut target.spc_first_last_para,
+        &imported.spc_first_last_para,
+    );
+    fill_missing(&mut target.num_col, &imported.num_col);
+    fill_missing(&mut target.spc_col, &imported.spc_col);
+    fill_missing(&mut target.upright, &imported.upright);
+    fill_missing(&mut target.compat_ln_spc, &imported.compat_ln_spc);
+    fill_missing(&mut target.force_aa, &imported.force_aa);
+    fill_missing(&mut target.from_word_art, &imported.from_word_art);
+    fill_missing(&mut target.autofit, &imported.autofit);
+    fill_missing(&mut target.ext_lst, &imported.ext_lst);
+    fill_missing(&mut target.prst_tx_warp, &imported.prst_tx_warp);
+    fill_missing(&mut target.scene3d, &imported.scene3d);
+    fill_missing(&mut target.sp3d, &imported.sp3d);
+    fill_missing(&mut target.flat_tx, &imported.flat_tx);
 }
 
 fn merge_missing_text_body_run_properties(target: &mut TextBody, imported: &TextBody) {
@@ -313,6 +365,10 @@ fn title_vertical_alignment_to_ooxml(value: &str) -> Option<TextAnchor> {
     }
 }
 
+fn angle_degrees_to_ooxml(value: f64) -> StAngle {
+    StAngle::new((value * 60_000.0).round() as i32)
+}
+
 /// Build a ChartText::Rich from a plain string and optional font.
 pub(super) fn build_chart_text_rich(text: &str, font: Option<&ChartFontData>) -> ChartText {
     let def_rpr = font.map(|f| Box::new(build_run_properties(f)));
@@ -444,11 +500,12 @@ pub(super) fn build_data_labels(dl: &DataLabelData) -> DataLabelOptions {
     let num_fmt = dl.number_format.clone();
     let num_fmt_obj = dl.number_format.as_ref().map(|code| NumFmt {
         format_code: code.clone(),
-        source_linked: Some(false),
+        source_linked: dl.link_number_format.or(Some(false)),
     });
 
     let sp_pr = dl.visual_format.as_ref().and_then(build_shape_properties);
-    let tx_pr = dl.visual_format.as_ref().and_then(build_text_body);
+    let tx_pr = build_data_label_text_body(dl);
+    let extensions = build_data_label_extensions(dl);
 
     DataLabelOptions {
         delete: dl.delete,
@@ -478,6 +535,7 @@ pub(super) fn build_data_labels(dl: &DataLabelData) -> DataLabelOptions {
                 ..Default::default()
             }),
         }),
+        extensions,
         ..Default::default()
     }
 }
@@ -503,7 +561,7 @@ pub(super) fn build_data_label_override(idx: u32, dl: &DataLabelData) -> DataLab
             })
         });
     let sp_pr = dl.visual_format.as_ref().and_then(build_shape_properties);
-    let tx_pr = dl.visual_format.as_ref().and_then(build_text_body);
+    let tx_pr = build_data_label_text_body(dl);
     let num_fmt = dl.number_format.as_ref().map(|code| NumFmt {
         format_code: code.clone(),
         source_linked: dl.link_number_format,
@@ -525,7 +583,114 @@ pub(super) fn build_data_label_override(idx: u32, dl: &DataLabelData) -> DataLab
         show_bubble_size: dl.show_bubble_size,
         position: dl.position.as_deref().map(data_label_position_from_domain),
         separator: dl.separator.clone(),
-        extensions: Vec::new(),
+        extensions: build_data_label_extensions(dl),
+    }
+}
+
+fn build_data_label_extensions(dl: &DataLabelData) -> Vec<ExtensionEntry> {
+    build_data_label_contract_extension(dl)
+        .into_iter()
+        .collect()
+}
+
+fn build_data_label_text_body(dl: &DataLabelData) -> Option<TextBody> {
+    let default_font = dl
+        .visual_format
+        .as_ref()
+        .and_then(|format| format.font.as_ref());
+    let format_body = dl.visual_format.as_ref().and_then(build_text_body);
+    let rich_body = dl
+        .rich_text
+        .as_deref()
+        .filter(|runs| runs.iter().any(|run| !run.text.is_empty()))
+        .and_then(
+            |runs| match build_chart_text_rich_runs(runs, default_font) {
+                ChartText::Rich(body) => Some(body),
+                ChartText::StrRef(_) => None,
+            },
+        );
+
+    let needs_text_properties = dl.horizontal_alignment.is_some()
+        || dl.vertical_alignment.is_some()
+        || dl.text_orientation.is_some();
+    let mut body = match (rich_body, format_body) {
+        (Some(mut rich_body), Some(format_body)) => {
+            merge_data_label_text_body_format(&mut rich_body, &format_body);
+            Some(rich_body)
+        }
+        (Some(rich_body), None) => Some(rich_body),
+        (None, Some(format_body)) => Some(format_body),
+        (None, None) if needs_text_properties => Some(empty_text_body(default_font)),
+        (None, None) => None,
+    }?;
+
+    apply_data_label_text_properties(&mut body, dl);
+    Some(body)
+}
+
+fn merge_data_label_text_body_format(target: &mut TextBody, format: &TextBody) {
+    target.body_props = format.body_props.clone();
+    if target.list_style.is_none() {
+        target.list_style = format.list_style.clone();
+    }
+
+    let default_props = format
+        .paragraphs
+        .first()
+        .and_then(|paragraph| paragraph.props.def_run_props.clone());
+    let end_para_props = format
+        .paragraphs
+        .first()
+        .and_then(|paragraph| paragraph.end_para_rpr.clone());
+    for paragraph in &mut target.paragraphs {
+        if paragraph.props.def_run_props.is_none() {
+            paragraph.props.def_run_props = default_props.clone();
+        }
+        if paragraph.end_para_rpr.is_none() {
+            paragraph.end_para_rpr = end_para_props.clone();
+        }
+    }
+}
+
+fn empty_text_body(default_font: Option<&ChartFontData>) -> TextBody {
+    TextBody {
+        body_props: Default::default(),
+        list_style: None,
+        paragraphs: vec![Paragraph {
+            props: ParagraphProperties {
+                def_run_props: default_font.map(|font| Box::new(build_run_properties(font))),
+                ..Default::default()
+            },
+            runs: Vec::new(),
+            end_para_rpr: None,
+        }],
+    }
+}
+
+fn apply_data_label_text_properties(body: &mut TextBody, dl: &DataLabelData) {
+    if let Some(rotation) = dl.text_orientation {
+        body.body_props.rot = Some(angle_degrees_to_ooxml(rotation));
+    }
+    if let Some(anchor) = dl
+        .vertical_alignment
+        .as_deref()
+        .and_then(title_vertical_alignment_to_ooxml)
+    {
+        body.body_props.anchor = Some(anchor);
+    }
+    let Some(align) = dl
+        .horizontal_alignment
+        .as_deref()
+        .and_then(title_horizontal_alignment_to_ooxml)
+    else {
+        return;
+    };
+
+    if body.paragraphs.is_empty() {
+        body.paragraphs.push(Paragraph::default());
+    }
+    for paragraph in &mut body.paragraphs {
+        paragraph.props.align = Some(align);
     }
 }
 

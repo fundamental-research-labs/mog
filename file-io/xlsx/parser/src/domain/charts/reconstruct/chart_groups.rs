@@ -2,14 +2,18 @@ use domain_types::{
     ChartDefinition,
     chart::{
         ChartLineSettingsData, ChartSeriesData, ChartSeriesStockRoleData, ChartSpec, ChartSubType,
-        ChartType as DomainChartType, UpDownBarsData,
+        ChartType as DomainChartType, DataLabelData, UpDownBarsData,
     },
 };
 use ooxml_types::charts::{
-    self, BarDirection, ChartGroup, ChartType as OoxmlChartType, ChartTypeConfig, Grouping,
+    self, BarDirection, ChartGroup, ChartType as OoxmlChartType, ChartTypeConfig, ExtensionEntry,
+    Grouping,
 };
 
 use super::{
+    super::data_label_contract_ext::{
+        build_full_data_label_contract_extension, is_data_label_contract_extension,
+    },
     elements::build_data_labels,
     formatting::{build_outline, build_shape_properties},
     ranges::series_for_export,
@@ -87,6 +91,21 @@ pub(super) fn build_chart_groups(spec: &ChartSpec) -> Vec<ChartGroup> {
         &spec.chart_type,
         series_data.iter().enumerate().collect(),
     )]
+}
+
+fn surface_data_label_extensions(
+    existing: &[ExtensionEntry],
+    labels: Option<&DataLabelData>,
+) -> Vec<ExtensionEntry> {
+    let mut extensions: Vec<_> = existing
+        .iter()
+        .filter(|extension| !is_data_label_contract_extension(extension))
+        .cloned()
+        .collect();
+    if let Some(extension) = labels.and_then(build_full_data_label_contract_extension) {
+        extensions.push(extension);
+    }
+    extensions
 }
 
 #[derive(Debug)]
@@ -480,10 +499,12 @@ pub(super) fn build_default_config(
         }),
         OoxmlChartType::Surface => ChartTypeConfig::Surface(charts::SurfaceChartConfig {
             wireframe: spec.wireframe,
+            extensions: surface_data_label_extensions(&[], spec.data_labels.as_ref()),
             ..Default::default()
         }),
         OoxmlChartType::Surface3D => ChartTypeConfig::Surface3D(charts::SurfaceChartConfig {
             wireframe: spec.wireframe,
+            extensions: surface_data_label_extensions(&[], spec.data_labels.as_ref()),
             ..Default::default()
         }),
         OoxmlChartType::Stock => ChartTypeConfig::Stock(charts::StockChartConfig {
@@ -611,10 +632,12 @@ pub(super) fn inject_series_into_config(
         }),
         ChartTypeConfig::Surface(c) => ChartTypeConfig::Surface(charts::SurfaceChartConfig {
             wireframe: spec.wireframe.or(c.wireframe),
+            extensions: surface_data_label_extensions(&c.extensions, spec.data_labels.as_ref()),
             ..c.clone()
         }),
         ChartTypeConfig::Surface3D(c) => ChartTypeConfig::Surface3D(charts::SurfaceChartConfig {
             wireframe: spec.wireframe.or(c.wireframe),
+            extensions: surface_data_label_extensions(&c.extensions, spec.data_labels.as_ref()),
             ..c.clone()
         }),
         ChartTypeConfig::Stock(c) => ChartTypeConfig::Stock(charts::StockChartConfig {

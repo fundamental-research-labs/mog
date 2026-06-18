@@ -8,7 +8,7 @@ use super::data_refs::reconstruct_data_range_from_chart_space;
 use super::formatting::{
     extract_chart_format, extract_chart_line, extract_chart_rich_text, extract_title_chart_format,
 };
-use super::labels::extract_data_label_data;
+use super::labels::{extract_data_label_data, extract_data_label_data_from_chart_type_config};
 use super::legend::extract_legend_from_chart_space;
 use super::series::extract_series_from_chart_space;
 use super::text::{
@@ -60,9 +60,12 @@ pub fn extract_chart_spec_from_chart_space(
     // -------------------------------------------------------------------------
     // (g) chart-level data_labels — from first chart group's d_lbls
     // -------------------------------------------------------------------------
-    let data_labels = first_group
-        .and_then(|g| g.d_lbls.as_ref())
-        .map(|dl| extract_data_label_data(dl));
+    let data_labels = first_group.and_then(|g| {
+        g.d_lbls
+            .as_ref()
+            .map(extract_data_label_data)
+            .or_else(|| extract_data_label_data_from_chart_type_config(&g.config))
+    });
 
     // -------------------------------------------------------------------------
     // (h) formatting — chart-level, plot-area, title

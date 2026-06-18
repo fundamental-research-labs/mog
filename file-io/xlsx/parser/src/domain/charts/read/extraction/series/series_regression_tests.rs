@@ -58,6 +58,23 @@ fn scatter_chart_space(series_smooth: Option<bool>) -> ChartSpace {
     }
 }
 
+fn area_group(ax_id: Vec<u32>) -> ChartGroup {
+    ChartGroup {
+        chart_type: ChartType::Area,
+        config: ChartTypeConfig::Area(AreaChartConfig::default()),
+        series: vec![ooxml_types::charts::ChartSeries {
+            idx: 0,
+            order: 0,
+            ..Default::default()
+        }],
+        d_lbls: None,
+        ax_id,
+        raw_chart_type_attr: None,
+        raw_chart_element_name: None,
+        raw_chart_group_xml: None,
+    }
+}
+
 fn colored_line_group(chart_type: ChartType, config: ChartTypeConfig) -> ChartGroup {
     ChartGroup {
         chart_type,
@@ -111,6 +128,55 @@ fn group_with_error_bars(
         raw_chart_element_name: None,
         raw_chart_group_xml: None,
     }
+}
+
+#[test]
+fn single_group_bound_to_secondary_axis_ids_preserves_y_axis_index() {
+    let cs = ChartSpace {
+        chart: Chart {
+            plot_area: PlotArea {
+                chart_groups: vec![area_group(vec![30, 40])],
+                axes: vec![
+                    axis(AxisType::Category, 10, 20, ChartAxisPosition::Bottom),
+                    axis(AxisType::Value, 20, 10, ChartAxisPosition::Left),
+                    axis(AxisType::Category, 30, 40, ChartAxisPosition::Top),
+                    axis(AxisType::Value, 40, 30, ChartAxisPosition::Right),
+                ],
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+
+    let extracted = extract_series_from_chart_space(&cs);
+
+    assert_eq!(extracted.len(), 1);
+    assert_eq!(extracted[0].y_axis_index, Some(1));
+}
+
+#[test]
+fn single_group_bound_only_to_secondary_category_keeps_primary_y_axis() {
+    let cs = ChartSpace {
+        chart: Chart {
+            plot_area: PlotArea {
+                chart_groups: vec![area_group(vec![30, 20])],
+                axes: vec![
+                    axis(AxisType::Category, 10, 20, ChartAxisPosition::Bottom),
+                    axis(AxisType::Value, 20, 10, ChartAxisPosition::Left),
+                    axis(AxisType::Category, 30, 20, ChartAxisPosition::Top),
+                ],
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+
+    let extracted = extract_series_from_chart_space(&cs);
+
+    assert_eq!(extracted.len(), 1);
+    assert_eq!(extracted[0].y_axis_index, None);
 }
 
 #[test]

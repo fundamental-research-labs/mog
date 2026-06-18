@@ -1124,7 +1124,7 @@ export interface SeriesConfig {
   showLines?: boolean;
   explosion?: number;
   invertIfNegative?: boolean;
-  yAxisIndex?: number;
+  yAxisIndex?: 0 | 1;
   showMarkers?: boolean;
   markerSize?: number;
   markerStyle?: string;

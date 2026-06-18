@@ -50,6 +50,21 @@ pub(super) fn preserve_imported_data_label_options_text_properties(
     }
 }
 
+pub(super) fn preserve_imported_optional_data_label_options_text_properties(
+    target: &mut Option<DataLabelOptions>,
+    imported: Option<&DataLabelOptions>,
+) {
+    let Some(imported) = imported else {
+        return;
+    };
+    if target.is_none() && imported.tx_pr.is_some() {
+        *target = Some(DataLabelOptions::default());
+    }
+    if let Some(target) = target.as_mut() {
+        preserve_imported_data_label_options_text_properties(target, Some(imported));
+    }
+}
+
 pub(super) fn preserve_imported_data_label_text_properties(
     target: &mut DataLabel,
     imported: Option<&DataLabel>,

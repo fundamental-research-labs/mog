@@ -564,6 +564,48 @@ fn parse_series_preserves_data_label_direct_shape_properties() {
 }
 
 #[test]
+fn parse_series_preserves_data_label_direct_text_body_properties() {
+    let xml = br#"<c:ser>
+            <c:idx val="0"/>
+            <c:order val="0"/>
+            <c:dLbls>
+                <c:txPr>
+                    <a:bodyPr/>
+                    <a:lstStyle/>
+                    <a:p>
+                        <a:pPr><a:defRPr sz="900" baseline="0"/></a:pPr>
+                        <a:endParaRPr lang="en-US"/>
+                    </a:p>
+                </c:txPr>
+                <c:showCatName val="1"/>
+                <c:showPercent val="1"/>
+            </c:dLbls>
+        </c:ser>"#;
+
+    let series = parse_series(xml);
+    let tx_pr = series
+        .d_lbls
+        .as_ref()
+        .and_then(|labels| labels.tx_pr.as_ref())
+        .expect("series data label txPr");
+    let paragraph = tx_pr.paragraphs.first().expect("paragraph");
+    let def_rpr = paragraph
+        .props
+        .def_run_props
+        .as_ref()
+        .expect("default run properties");
+    assert_eq!(def_rpr.size.map(|size| size.value()), Some(900));
+    assert_eq!(def_rpr.baseline.map(|baseline| baseline.value()), Some(0));
+    assert_eq!(
+        paragraph
+            .end_para_rpr
+            .as_ref()
+            .and_then(|props| props.lang.as_deref()),
+        Some("en-US")
+    );
+}
+
+#[test]
 fn test_parse_individual_data_label_with_rich_text() {
     let xml = br#"<c:ser>
             <c:idx val="0"/>

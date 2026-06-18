@@ -312,6 +312,42 @@ mod tests {
     use super::parse_data_labels;
 
     #[test]
+    fn data_labels_parse_direct_text_body_properties() {
+        let labels = parse_data_labels(
+            br#"<c:dLbls xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+                         xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+                <c:txPr>
+                    <a:bodyPr/>
+                    <a:lstStyle/>
+                    <a:p>
+                        <a:pPr><a:defRPr sz="900" baseline="0"/></a:pPr>
+                        <a:endParaRPr lang="en-US"/>
+                    </a:p>
+                </c:txPr>
+                <c:showCatName val="1"/>
+                <c:showPercent val="1"/>
+            </c:dLbls>"#,
+        );
+
+        let tx_pr = labels.tx_pr.as_ref().expect("parsed dLbls txPr");
+        let paragraph = tx_pr.paragraphs.first().expect("paragraph");
+        let def_rpr = paragraph
+            .props
+            .def_run_props
+            .as_ref()
+            .expect("default run properties");
+        assert_eq!(def_rpr.size.map(|size| size.value()), Some(900));
+        assert_eq!(def_rpr.baseline.map(|baseline| baseline.value()), Some(0));
+        assert_eq!(
+            paragraph
+                .end_para_rpr
+                .as_ref()
+                .and_then(|props| props.lang.as_deref()),
+            Some("en-US")
+        );
+    }
+
+    #[test]
     fn data_labels_do_not_promote_leader_line_shape_properties() {
         let labels = parse_data_labels(
             br#"<c:dLbls xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"

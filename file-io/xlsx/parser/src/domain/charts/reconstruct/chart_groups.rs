@@ -1,9 +1,9 @@
 use domain_types::{
+    ChartDefinition,
     chart::{
         ChartLineSettingsData, ChartSeriesData, ChartSeriesStockRoleData, ChartSpec, ChartSubType,
         ChartType as DomainChartType, DataLabelData, UpDownBarsData,
     },
-    ChartDefinition,
 };
 use ooxml_types::charts::{
     self, BarDirection, ChartGroup, ChartType as OoxmlChartType, ChartTypeConfig, ExtensionEntry,
@@ -18,7 +18,7 @@ use super::{
     formatting::{build_outline, build_shape_properties},
     ranges::series_for_export,
     series::{build_series, preserve_imported_series_text_body_properties},
-    text_body_fidelity::preserve_imported_data_label_options_text_properties,
+    text_body_fidelity::preserve_imported_optional_data_label_options_text_properties,
 };
 
 // =============================================================================
@@ -62,12 +62,10 @@ pub(super) fn build_chart_groups(spec: &ChartSpec) -> Vec<ChartGroup> {
 
                     // Inject chart-level data labels
                     let mut d_lbls = spec.data_labels.as_ref().map(build_data_labels);
-                    if let Some(labels) = d_lbls.as_mut() {
-                        preserve_imported_data_label_options_text_properties(
-                            labels,
-                            group.d_lbls.as_ref(),
-                        );
-                    }
+                    preserve_imported_optional_data_label_options_text_properties(
+                        &mut d_lbls,
+                        group.d_lbls.as_ref(),
+                    );
 
                     // Chart-type discriminant. `ChartType::Unknown(s)`
                     // (from a non-standard @chartType attribute) round-trips

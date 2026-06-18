@@ -1,4 +1,4 @@
-use ooxml_types::charts::{ChartText, Title};
+use ooxml_types::charts::{ChartText, DataLabel, DataLabelOptions, Title};
 use ooxml_types::drawings::{RunProperties, TextBody, TextBodyProperties, TextRunContent};
 
 pub(super) fn preserve_imported_title_text_properties(
@@ -30,6 +30,34 @@ pub(super) fn preserve_imported_text_body_properties(
         (target @ None, Some(imported)) => *target = Some(imported.clone()),
         _ => {}
     }
+}
+
+pub(super) fn preserve_imported_data_label_options_text_properties(
+    target: &mut DataLabelOptions,
+    imported: Option<&DataLabelOptions>,
+) {
+    let Some(imported) = imported else {
+        return;
+    };
+    preserve_imported_text_body_properties(&mut target.tx_pr, imported.tx_pr.as_ref());
+
+    for label in &mut target.d_lbl {
+        let imported_label = imported
+            .d_lbl
+            .iter()
+            .find(|candidate| candidate.idx == label.idx);
+        preserve_imported_data_label_text_properties(label, imported_label);
+    }
+}
+
+pub(super) fn preserve_imported_data_label_text_properties(
+    target: &mut DataLabel,
+    imported: Option<&DataLabel>,
+) {
+    let Some(imported) = imported else {
+        return;
+    };
+    preserve_imported_text_body_properties(&mut target.tx_pr, imported.tx_pr.as_ref());
 }
 
 fn merge_missing_text_body_properties(target: &mut TextBody, imported: &TextBody) {

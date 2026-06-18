@@ -15,6 +15,7 @@ use super::{ranges, reconstruct_chart_space};
 mod axis_fidelity;
 mod category_source_type;
 mod chart_fidelity;
+mod data_label_fidelity;
 mod imported_series_fallback;
 
 fn minimal_chart_spec(chart_type: DomainChartType, data_range: Option<&str>) -> ChartSpec {

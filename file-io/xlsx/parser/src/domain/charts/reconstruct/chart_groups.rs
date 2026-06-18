@@ -1,9 +1,9 @@
 use domain_types::{
-    ChartDefinition,
     chart::{
         ChartLineSettingsData, ChartSeriesData, ChartSeriesStockRoleData, ChartSpec, ChartSubType,
         ChartType as DomainChartType, DataLabelData, UpDownBarsData,
     },
+    ChartDefinition,
 };
 use ooxml_types::charts::{
     self, BarDirection, ChartGroup, ChartType as OoxmlChartType, ChartTypeConfig, ExtensionEntry,
@@ -17,7 +17,8 @@ use super::{
     elements::build_data_labels,
     formatting::{build_outline, build_shape_properties},
     ranges::series_for_export,
-    series::build_series,
+    series::{build_series, preserve_imported_series_text_body_properties},
+    text_body_fidelity::preserve_imported_data_label_options_text_properties,
 };
 
 // =============================================================================
@@ -36,11 +37,21 @@ pub(super) fn build_chart_groups(spec: &ChartSpec) -> Vec<ChartGroup> {
                     let series: Vec<_> = group
                         .series
                         .iter()
-                        .map(|series| series.idx)
-                        .filter_map(|idx| spec.series.iter().find(|s| s.idx == Some(idx)))
+                        .filter_map(|series| {
+                            spec.series
+                                .iter()
+                                .find(|s| s.idx == Some(series.idx))
+                                .map(|sd| (series, sd))
+                        })
                         .enumerate()
-                        .map(|(fallback_idx, sd)| {
-                            build_series(sd, &spec.chart_type, fallback_idx as u32, false)
+                        .map(|(fallback_idx, (imported_series, sd))| {
+                            let mut series =
+                                build_series(sd, &spec.chart_type, fallback_idx as u32, false);
+                            preserve_imported_series_text_body_properties(
+                                &mut series,
+                                imported_series,
+                            );
+                            series
                         })
                         .collect();
 
@@ -50,7 +61,13 @@ pub(super) fn build_chart_groups(spec: &ChartSpec) -> Vec<ChartGroup> {
                     let config = inject_series_into_config(&group.config, &series, spec);
 
                     // Inject chart-level data labels
-                    let d_lbls = spec.data_labels.as_ref().map(build_data_labels);
+                    let mut d_lbls = spec.data_labels.as_ref().map(build_data_labels);
+                    if let Some(labels) = d_lbls.as_mut() {
+                        preserve_imported_data_label_options_text_properties(
+                            labels,
+                            group.d_lbls.as_ref(),
+                        );
+                    }
 
                     // Chart-type discriminant. `ChartType::Unknown(s)`
                     // (from a non-standard @chartType attribute) round-trips

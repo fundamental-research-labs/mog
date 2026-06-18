@@ -14,6 +14,10 @@ use ooxml_types::drawings::{DrawingColor, DrawingFill, ShapeProperties, SolidFil
 use super::{
     elements::{build_chart_text_rich, build_data_label_override, build_data_labels},
     formatting::{build_drawing_color, build_outline, build_shape_properties, build_text_body},
+    text_body_fidelity::{
+        preserve_imported_data_label_options_text_properties,
+        preserve_imported_data_label_text_properties,
+    },
 };
 
 // =============================================================================
@@ -164,6 +168,23 @@ pub(super) fn build_series(
         err_bars,
         shape,
         ..Default::default()
+    }
+}
+
+pub(super) fn preserve_imported_series_text_body_properties(
+    target: &mut charts::ChartSeries,
+    imported: &charts::ChartSeries,
+) {
+    if let Some(labels) = target.d_lbls.as_mut() {
+        preserve_imported_data_label_options_text_properties(labels, imported.d_lbls.as_ref());
+    }
+
+    for label in &mut target.d_lbl {
+        let imported_label = imported
+            .d_lbl
+            .iter()
+            .find(|candidate| candidate.idx == label.idx);
+        preserve_imported_data_label_text_properties(label, imported_label);
     }
 }
 

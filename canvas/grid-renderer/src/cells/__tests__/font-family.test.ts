@@ -35,9 +35,21 @@ describe('font family intrinsic canvas weights', () => {
     );
   });
 
+  it('renders CellFormat font sizes as points converted to CSS pixels', () => {
+    expect(buildCellFont({ fontFamily: 'Arial', fontSize: 11 })).toBe(
+      '14.6667px "Arial", sans-serif',
+    );
+  });
+
   it('renders Arial Black rich text segment overrides with intrinsic heavy weight', () => {
     expect(buildSegmentFont({ fontFamily: 'Arial Black' }, baseStyle)).toBe(
       '900 12px "Arial Black", "Arial", sans-serif',
+    );
+  });
+
+  it('renders rich text segment font size overrides as points converted to CSS pixels', () => {
+    expect(buildSegmentFont({ fontFamily: 'Arial', fontSize: 11 }, baseStyle)).toBe(
+      '14.6667px "Arial", sans-serif',
     );
   });
 

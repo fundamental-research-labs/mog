@@ -15,6 +15,7 @@
  */
 
 import type { TextMeasurer } from '@mog/canvas-engine';
+import { fontSizePointsToCssPx } from '@mog/spreadsheet-utils/cells/cell-style';
 import type { CellTextStyle } from '@mog-sdk/contracts/cell-style';
 import type { CellFormat } from '@mog-sdk/contracts/core';
 import type { RichTextSegment, TextFormat } from '@mog-sdk/contracts/rich-text';
@@ -80,7 +81,10 @@ export function buildSegmentFont(
   }
 
   // Font size: segment overrides base, with superscript/subscript scaling
-  let fontSize = segmentFormat?.fontSize ?? baseStyle.fontSize;
+  let fontSize =
+    segmentFormat?.fontSize === undefined
+      ? baseStyle.fontSize
+      : fontSizePointsToCssPx(segmentFormat.fontSize);
   if (segmentFormat?.superscript || segmentFormat?.subscript) {
     fontSize = Math.round(fontSize * 0.7);
   }

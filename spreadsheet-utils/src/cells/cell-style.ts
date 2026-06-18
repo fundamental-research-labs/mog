@@ -11,6 +11,30 @@ import { DEFAULT_CELL_STYLE } from '@mog-sdk/contracts/cells/cell-style';
 // Re-export so consumers can import from one place
 export { DEFAULT_CELL_STYLE };
 
+const CSS_PIXELS_PER_POINT = 96 / 72;
+
+/**
+ * Convert spreadsheet font sizes from points into CSS pixels.
+ *
+ * CellFormat.fontSize follows the Excel/OOXML point-size contract throughout
+ * storage, import/export, clipboard, and formatting commands. Canvas and DOM
+ * rendering consume CSS pixels, so the conversion belongs at the style
+ * resolution boundary.
+ */
+export function fontSizePointsToCssPx(points: number): number {
+  return Number((points * CSS_PIXELS_PER_POINT).toFixed(4));
+}
+
+export function fontSizeCssPxToPoints(cssPx: number): number {
+  return Number((cssPx / CSS_PIXELS_PER_POINT).toFixed(4));
+}
+
+function resolveFontSizePx(fontSizePoints: number | undefined): number {
+  return fontSizePoints === undefined
+    ? DEFAULT_CELL_STYLE.fontSize
+    : fontSizePointsToCssPx(fontSizePoints);
+}
+
 function normalizeFontColor(value: string): string {
   const trimmed = value.trim().toLowerCase();
   const shortHexMatch = trimmed.match(/^#([0-9a-f])([0-9a-f])([0-9a-f])$/);
@@ -127,7 +151,7 @@ export function resolveCellTextStyle(
 ): CellTextStyle {
   return {
     paddingX: DEFAULT_CELL_STYLE.padding,
-    fontSize: format?.fontSize ?? DEFAULT_CELL_STYLE.fontSize,
+    fontSize: resolveFontSizePx(format?.fontSize),
     fontFamily: format?.fontFamily ?? DEFAULT_CELL_STYLE.fontFamily,
     fontWeight: format?.bold ? 'bold' : 'normal',
     fontStyle: format?.italic ? 'italic' : 'normal',

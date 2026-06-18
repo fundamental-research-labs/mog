@@ -8,7 +8,10 @@ use super::{
     axes::build_axes,
     chart_groups::build_chart_groups,
     chart_space::clean_chart_extensions,
-    elements::{build_data_table, build_legend, build_surface, build_title, build_view_3d},
+    elements::{
+        build_data_table, build_legend, build_surface, build_title, build_view_3d,
+        preserve_imported_title_text_properties,
+    },
     formatting::build_shape_properties,
 };
 
@@ -26,17 +29,24 @@ pub(super) fn build_chart(spec: &ChartSpec) -> charts::Chart {
         .title_layout
         .as_ref()
         .or(imported_title_layout.as_ref());
+    let mut title = build_title(
+        spec.title.as_deref(),
+        spec.title_format.as_ref(),
+        spec.title_rich_text.as_deref(),
+        title_layout,
+        spec.title_h_align.as_deref(),
+        spec.title_v_align.as_deref(),
+        spec.title_show_shadow,
+    );
+    if let Some(title) = title.as_mut() {
+        preserve_imported_title_text_properties(
+            title,
+            imported_chart.and_then(|chart| chart.title.as_ref()),
+        );
+    }
 
     charts::Chart {
-        title: build_title(
-            spec.title.as_deref(),
-            spec.title_format.as_ref(),
-            spec.title_rich_text.as_deref(),
-            title_layout,
-            spec.title_h_align.as_deref(),
-            spec.title_v_align.as_deref(),
-            spec.title_show_shadow,
-        ),
+        title,
         auto_title_deleted: spec.auto_title_deleted,
         view_3d: spec.view_3d.as_ref().map(build_view_3d),
         floor: build_surface(spec.floor_format.as_ref()),

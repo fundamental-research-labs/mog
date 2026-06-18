@@ -8,8 +8,8 @@ use ooxml_types::charts::{
 };
 use ooxml_types::drawings::{
     ColorTransform, DrawingColor, EffectList, EffectProperties, OuterShadow, Paragraph,
-    ParagraphProperties, ShapeProperties, StAngle, StPositiveCoordinate, TextAlign, TextAnchor,
-    TextBody, TextRun, TextRunContent,
+    ParagraphProperties, RunProperties, ShapeProperties, StAngle, StPositiveCoordinate, TextAlign,
+    TextAnchor, TextBody, TextRun, TextRunContent,
 };
 
 use super::formatting::{
@@ -104,6 +104,163 @@ fn apply_title_text_alignment(
         for paragraph in &mut body.paragraphs {
             paragraph.props.align = Some(align);
         }
+    }
+}
+
+pub(super) fn preserve_imported_title_text_properties(
+    title: &mut charts::Title,
+    imported_title: Option<&charts::Title>,
+) {
+    let Some(imported_title) = imported_title else {
+        return;
+    };
+    let Some(ChartText::Rich(target_body)) = title.tx.as_mut() else {
+        return;
+    };
+    let Some(ChartText::Rich(imported_body)) = imported_title.tx.as_ref() else {
+        return;
+    };
+    if text_body_visible_text(target_body) != text_body_visible_text(imported_body) {
+        return;
+    }
+
+    merge_missing_text_body_run_properties(target_body, imported_body);
+}
+
+fn merge_missing_text_body_run_properties(target: &mut TextBody, imported: &TextBody) {
+    for (target_paragraph, imported_paragraph) in
+        target.paragraphs.iter_mut().zip(imported.paragraphs.iter())
+    {
+        merge_missing_boxed_run_properties(
+            &mut target_paragraph.props.def_run_props,
+            &imported_paragraph.props.def_run_props,
+        );
+        merge_missing_optional_run_properties(
+            &mut target_paragraph.end_para_rpr,
+            imported_paragraph.end_para_rpr.as_ref(),
+        );
+
+        for (target_run, imported_run) in target_paragraph
+            .runs
+            .iter_mut()
+            .zip(imported_paragraph.runs.iter())
+        {
+            merge_missing_run_content_properties(target_run, imported_run);
+        }
+    }
+}
+
+fn merge_missing_run_content_properties(target: &mut TextRunContent, imported: &TextRunContent) {
+    if run_content_visible_text(target) != run_content_visible_text(imported) {
+        return;
+    }
+
+    match target {
+        TextRunContent::Run(target_run) => {
+            if let Some(imported_props) = run_content_properties(imported) {
+                merge_missing_run_properties(&mut target_run.props, imported_props);
+            }
+        }
+        TextRunContent::LineBreak { props } => {
+            merge_missing_optional_run_properties(props, run_content_properties(imported));
+        }
+        TextRunContent::Field { run_props, .. } => {
+            merge_missing_optional_run_properties(run_props, run_content_properties(imported));
+        }
+    }
+}
+
+fn run_content_properties(content: &TextRunContent) -> Option<&RunProperties> {
+    match content {
+        TextRunContent::Run(run) => Some(&run.props),
+        TextRunContent::LineBreak { props } => props.as_ref(),
+        TextRunContent::Field { run_props, .. } => run_props.as_ref(),
+    }
+}
+
+fn merge_missing_boxed_run_properties(
+    target: &mut Option<Box<RunProperties>>,
+    imported: &Option<Box<RunProperties>>,
+) {
+    match (target, imported) {
+        (Some(target), Some(imported)) => merge_missing_run_properties(target, imported),
+        (target @ None, Some(imported)) => *target = Some(imported.clone()),
+        _ => {}
+    }
+}
+
+fn merge_missing_optional_run_properties(
+    target: &mut Option<RunProperties>,
+    imported: Option<&RunProperties>,
+) {
+    match (target, imported) {
+        (Some(target), Some(imported)) => merge_missing_run_properties(target, imported),
+        (target @ None, Some(imported)) => *target = Some(imported.clone()),
+        _ => {}
+    }
+}
+
+fn merge_missing_run_properties(target: &mut RunProperties, imported: &RunProperties) {
+    fill_missing(&mut target.size, &imported.size);
+    fill_missing(&mut target.bold, &imported.bold);
+    fill_missing(&mut target.italic, &imported.italic);
+    fill_missing(&mut target.underline, &imported.underline);
+    fill_missing(&mut target.strike, &imported.strike);
+    fill_missing(&mut target.latin, &imported.latin);
+    fill_missing(&mut target.ea, &imported.ea);
+    fill_missing(&mut target.cs, &imported.cs);
+    fill_missing(&mut target.sym, &imported.sym);
+    fill_missing(&mut target.color, &imported.color);
+    fill_missing(&mut target.lang, &imported.lang);
+    fill_missing(&mut target.alt_lang, &imported.alt_lang);
+    fill_missing(&mut target.kern, &imported.kern);
+    fill_missing(&mut target.cap, &imported.cap);
+    fill_missing(&mut target.spacing, &imported.spacing);
+    fill_missing(&mut target.baseline, &imported.baseline);
+    fill_missing(&mut target.highlight, &imported.highlight);
+    fill_missing(&mut target.hlink_click, &imported.hlink_click);
+    fill_missing(&mut target.hlink_mouse_over, &imported.hlink_mouse_over);
+    fill_missing(&mut target.text_fill, &imported.text_fill);
+    fill_missing(&mut target.text_outline, &imported.text_outline);
+    fill_missing(&mut target.effects, &imported.effects);
+    fill_missing(&mut target.underline_line, &imported.underline_line);
+    fill_missing(&mut target.underline_fill, &imported.underline_fill);
+    fill_missing(&mut target.kumimoji, &imported.kumimoji);
+    fill_missing(&mut target.normalize_h, &imported.normalize_h);
+    fill_missing(&mut target.no_proof, &imported.no_proof);
+    fill_missing(&mut target.dirty, &imported.dirty);
+    fill_missing(&mut target.err, &imported.err);
+    fill_missing(&mut target.smt_clean, &imported.smt_clean);
+    fill_missing(&mut target.smt_id, &imported.smt_id);
+    fill_missing(&mut target.bmk, &imported.bmk);
+    fill_missing(&mut target.rtl, &imported.rtl);
+    fill_missing(&mut target.ext_lst, &imported.ext_lst);
+}
+
+fn fill_missing<T: Clone>(target: &mut Option<T>, imported: &Option<T>) {
+    if target.is_none() {
+        *target = imported.clone();
+    }
+}
+
+fn text_body_visible_text(body: &TextBody) -> String {
+    let mut text = String::new();
+    for (index, paragraph) in body.paragraphs.iter().enumerate() {
+        if index > 0 {
+            text.push('\n');
+        }
+        for run in &paragraph.runs {
+            text.push_str(&run_content_visible_text(run));
+        }
+    }
+    text
+}
+
+fn run_content_visible_text(content: &TextRunContent) -> String {
+    match content {
+        TextRunContent::Run(run) => run.text.clone(),
+        TextRunContent::LineBreak { .. } => "\n".to_string(),
+        TextRunContent::Field { text, .. } => text.clone().unwrap_or_default(),
     }
 }
 
@@ -553,6 +710,67 @@ mod tests {
         assert_eq!(second.text, "FY26");
         assert_eq!(second.props.italic, Some(true));
         assert_eq!(second.props.size.map(|size| size.value()), Some(1400));
+    }
+
+    #[test]
+    fn title_preserves_imported_unmodeled_rich_text_properties() {
+        let imported_body = crate::domain::charts::parse_text_body(
+            br#"<c:rich xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+                      xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+                <a:bodyPr/>
+                <a:p>
+                    <a:pPr>
+                        <a:defRPr lang="en-US" baseline="0" sz="1800"/>
+                    </a:pPr>
+                    <a:r>
+                        <a:rPr lang="en-US" baseline="0" sz="2200"/>
+                        <a:t>Revenue</a:t>
+                    </a:r>
+                </a:p>
+            </c:rich>"#,
+        );
+        let imported_title = charts::Title {
+            tx: Some(ChartText::Rich(imported_body)),
+            ..Default::default()
+        };
+        let default_format = format_with_font(font(Some("Aptos"), Some(11.0), None, None));
+        let rich_text = vec![ChartFormatStringData {
+            text: "Revenue".to_string(),
+            font: Some(font(None, Some(14.0), Some(true), None)),
+        }];
+
+        let mut title = build_title(
+            Some("Revenue"),
+            Some(&default_format),
+            Some(&rich_text),
+            None,
+            None,
+            None,
+            None,
+        )
+        .expect("rich-text title should be reconstructed");
+        preserve_imported_title_text_properties(&mut title, Some(&imported_title));
+
+        let Some(ChartText::Rich(body)) = title.tx else {
+            panic!("expected rich chart text");
+        };
+        let paragraph = &body.paragraphs[0];
+        let def_rpr = paragraph
+            .props
+            .def_run_props
+            .as_ref()
+            .expect("default run properties");
+        assert_eq!(def_rpr.lang.as_deref(), Some("en-US"));
+        assert_eq!(def_rpr.baseline.map(|baseline| baseline.value()), Some(0));
+        assert_eq!(def_rpr.size.map(|size| size.value()), Some(1100));
+
+        let TextRunContent::Run(run) = &paragraph.runs[0] else {
+            panic!("expected rich-text run");
+        };
+        assert_eq!(run.props.lang.as_deref(), Some("en-US"));
+        assert_eq!(run.props.baseline.map(|baseline| baseline.value()), Some(0));
+        assert_eq!(run.props.bold, Some(true));
+        assert_eq!(run.props.size.map(|size| size.value()), Some(1400));
     }
 
     #[test]

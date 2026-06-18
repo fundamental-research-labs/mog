@@ -194,7 +194,7 @@ export interface ChartLineFormat {
 export interface ChartBorder {
   color?: string;
   width?: number;
-  style?: string;
+  style?: 'solid' | 'dot' | 'dash' | 'dashDot' | 'longDash' | 'longDashDot' | 'longDashDotDot';
 }
 
 /** Font. Maps to OOXML tx_pr → defRPr. */

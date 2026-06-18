@@ -1,4 +1,5 @@
 use crate::domain::charts::write_canonical::serialize_chart_space;
+use domain_types::ChartDefinition;
 use domain_types::chart::{
     AnchorPosition, AxisData, ChartFormatData, ChartSeriesCategoryLevelCacheData,
     ChartSeriesCategoryLevelsCacheData, ChartSeriesData, ChartSeriesDimensionSourceKindData,
@@ -7,7 +8,6 @@ use domain_types::chart::{
 };
 use domain_types::chart::{CategoryLabelFormatData, CategoryPointLabelFormatData};
 use domain_types::domain::drawings::ManualLayout;
-use domain_types::ChartDefinition;
 use ooxml_types::charts::{AxisType, Chart, ChartAxis, ChartAxisPosition, ChartSpace, PlotArea};
 
 use super::{ranges, reconstruct_chart_space};
@@ -18,6 +18,7 @@ mod category_source_type;
 mod chart_fidelity;
 mod data_label_fidelity;
 mod imported_series_fallback;
+mod point_format_fidelity;
 
 fn minimal_chart_spec(chart_type: DomainChartType, data_range: Option<&str>) -> ChartSpec {
     ChartSpec {

@@ -12,10 +12,12 @@ use super::series_sources::{
 use super::text::extract_chart_text_string;
 use color::extract_legacy_series_color;
 use error_bars::extract_error_bars;
+use points::point_border_from_line;
 use std::collections::BTreeMap;
 
 mod color;
 mod error_bars;
+mod points;
 
 pub(super) fn extract_series_from_chart_space(
     cs: &ooxml_types::charts::ChartSpace,
@@ -272,6 +274,7 @@ fn extract_single_series_with_semantics(
             .as_ref()
             .and_then(|sp| sp.ln.as_ref())
             .map(|ln| extract_chart_line(ln));
+        let border = line_format.as_ref().and_then(point_border_from_line);
         let (
             _point_show_markers,
             point_marker_size,
@@ -286,6 +289,7 @@ fn extract_single_series_with_semantics(
         entry.explosion = pt.explosion;
         entry.bubble_3d = pt.bubble_3d;
         entry.fill = fill;
+        entry.border = border;
         entry.line_format = line_format;
         entry.visual_format = visual_format;
         entry.marker_size = point_marker_size;

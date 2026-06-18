@@ -1,9 +1,10 @@
 use super::extract_series_from_chart_space;
+use domain_types::chart::{ChartColorData, ChartDashStyle};
 use ooxml_types::charts::{
     AreaChartConfig, AxisType, Chart, ChartAxis, ChartAxisPosition, ChartGroup, ChartLines,
-    ChartSpace, ChartType, ChartTypeConfig, DataLabelOptions, ErrorBarDirection, ErrorBarType,
-    ErrorBars, ErrorValueType, Line3DChartConfig, LineChartConfig, NumDataSource, PlotArea,
-    RadarChartConfig, Scaling, ScatterChartConfig, ScatterStyle, StockChartConfig,
+    ChartSpace, ChartType, ChartTypeConfig, DataLabelOptions, DataPointOverride, ErrorBarDirection,
+    ErrorBarType, ErrorBars, ErrorValueType, Line3DChartConfig, LineChartConfig, NumDataSource,
+    PlotArea, RadarChartConfig, Scaling, ScatterChartConfig, ScatterStyle, StockChartConfig,
 };
 
 fn axis(axis_type: AxisType, ax_id: u32, cross_ax: u32, ax_pos: ChartAxisPosition) -> ChartAxis {
@@ -214,6 +215,86 @@ fn xy_chart_error_bars_extract_to_directional_slots() {
             .as_ref()
             .and_then(|bars| bars.direction.as_deref()),
         Some("y")
+    );
+}
+
+#[test]
+fn point_shape_properties_extract_to_format_aliases() {
+    let extracted = extract_series_from_chart_space(&ChartSpace {
+        chart: Chart {
+            plot_area: PlotArea {
+                chart_groups: vec![ChartGroup {
+                    chart_type: ChartType::Area,
+                    config: ChartTypeConfig::Area(AreaChartConfig::default()),
+                    series: vec![ooxml_types::charts::ChartSeries {
+                        idx: 0,
+                        order: 0,
+                        d_pt: vec![DataPointOverride {
+                            idx: 0,
+                            sp_pr: Some(crate::domain::charts::parse_shape_properties(
+                                br#"<c:spPr xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+                                           xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+                                    <a:solidFill><a:srgbClr val="ED7D31"/></a:solidFill>
+                                    <a:ln w="25400">
+                                        <a:solidFill><a:srgbClr val="A5A5A5"/></a:solidFill>
+                                        <a:prstDash val="dash"/>
+                                    </a:ln>
+                                </c:spPr>"#,
+                            )),
+                            ..Default::default()
+                        }],
+                        ..Default::default()
+                    }],
+                    d_lbls: None,
+                    ax_id: vec![],
+                    raw_chart_type_attr: None,
+                    raw_chart_element_name: None,
+                    raw_chart_group_xml: None,
+                }],
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+        ..Default::default()
+    });
+
+    let point = extracted[0]
+        .points
+        .as_ref()
+        .and_then(|points| points.first())
+        .expect("point format");
+    assert_eq!(point.fill.as_deref(), Some("ED7D31"));
+    assert_eq!(
+        point
+            .border
+            .as_ref()
+            .and_then(|border| border.color.as_deref()),
+        Some("A5A5A5")
+    );
+    assert_eq!(
+        point.border.as_ref().and_then(|border| border.width),
+        Some(2.0)
+    );
+    assert_eq!(
+        point
+            .border
+            .as_ref()
+            .and_then(|border| border.style.as_deref()),
+        Some("dash")
+    );
+    assert_eq!(
+        point
+            .line_format
+            .as_ref()
+            .and_then(|line| line.color.as_ref()),
+        Some(&ChartColorData::Hex("A5A5A5".to_string()))
+    );
+    assert_eq!(
+        point
+            .line_format
+            .as_ref()
+            .and_then(|line| line.dash_style.as_ref()),
+        Some(&ChartDashStyle::Dash)
     );
 }
 

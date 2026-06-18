@@ -1,8 +1,9 @@
 use domain_types::chart::{
-    ChartColorData, ChartLineData, ChartSeriesCategoryLevelsCacheData,
-    ChartSeriesCategorySourceTypeData, ChartSeriesData, ChartSeriesDimensionSourceKindData,
-    ChartSeriesPointCacheData, ChartSeriesXRoleData, ChartType as DomainChartType, ErrorBarData,
-    ErrorBarSourceData, PointFormatData, TrendlineData, TrendlineLabelData,
+    ChartBorderData, ChartColorData, ChartDashStyle, ChartFillData, ChartFormatData, ChartLineData,
+    ChartSeriesCategoryLevelsCacheData, ChartSeriesCategorySourceTypeData, ChartSeriesData,
+    ChartSeriesDimensionSourceKindData, ChartSeriesPointCacheData, ChartSeriesXRoleData,
+    ChartType as DomainChartType, ErrorBarData, ErrorBarSourceData, PointFormatData, TrendlineData,
+    TrendlineLabelData,
 };
 use ooxml_types::charts::{
     self, CatDataSource, ChartLines, DataPointOverride, ErrorBarDirection, ErrorBarType, ErrorBars,
@@ -580,28 +581,7 @@ pub(super) fn build_marker(sd: &ChartSeriesData) -> Option<Marker> {
 }
 
 pub(super) fn build_data_point(pt: &PointFormatData) -> DataPointOverride {
-    let sp_pr = pt
-        .visual_format
-        .as_ref()
-        .and_then(build_shape_properties)
-        .or_else(|| {
-            pt.line_format.as_ref().map(|line| ShapeProperties {
-                ln: Some(build_outline(line)),
-                ..Default::default()
-            })
-        })
-        .or_else(|| {
-            // Legacy: simple fill color string
-            pt.fill.as_ref().map(|hex| ShapeProperties {
-                fill: Some(DrawingFill::Solid(SolidFill {
-                    color: DrawingColor::SrgbClr {
-                        val: hex.trim_start_matches('#').to_string(),
-                        transforms: Vec::new(),
-                    },
-                })),
-                ..Default::default()
-            })
-        });
+    let sp_pr = build_point_shape_properties(pt);
 
     DataPointOverride {
         idx: pt.idx,
@@ -612,6 +592,98 @@ pub(super) fn build_data_point(pt: &PointFormatData) -> DataPointOverride {
         sp_pr,
         ..Default::default()
     }
+}
+
+fn build_point_shape_properties(pt: &PointFormatData) -> Option<ShapeProperties> {
+    let mut format = pt.visual_format.clone().unwrap_or(ChartFormatData {
+        fill: None,
+        line: None,
+        font: None,
+        text_rotation: None,
+        text_vertical_type: None,
+        shadow: None,
+    });
+
+    if format.fill.is_none() {
+        format.fill = point_fill_from_legacy_hex(pt.fill.as_deref());
+    }
+    merge_point_line_alias(&mut format.line, pt.line_format.as_ref());
+    if let Some(border_line) = pt.border.as_ref().and_then(point_border_to_line) {
+        merge_point_line_alias(&mut format.line, Some(&border_line));
+    }
+
+    build_shape_properties(&format)
+}
+
+fn point_fill_from_legacy_hex(hex: Option<&str>) -> Option<ChartFillData> {
+    let value = point_hex_color(hex?)?;
+    Some(ChartFillData::Solid {
+        color: ChartColorData::Hex(value),
+        transparency: None,
+    })
+}
+
+fn point_border_to_line(border: &ChartBorderData) -> Option<ChartLineData> {
+    let line = ChartLineData {
+        color: border
+            .color
+            .as_ref()
+            .and_then(|color| point_hex_color(color))
+            .map(ChartColorData::Hex),
+        width: border.width,
+        dash_style: border
+            .style
+            .as_deref()
+            .and_then(chart_dash_style_from_border_style),
+        transparency: None,
+        no_fill: None,
+    };
+
+    point_line_has_content(&line).then_some(line)
+}
+
+fn point_hex_color(value: &str) -> Option<String> {
+    let value = value.trim().trim_start_matches('#');
+    (!value.is_empty()).then(|| value.to_string())
+}
+
+fn chart_dash_style_from_border_style(style: &str) -> Option<ChartDashStyle> {
+    serde_json::from_value(serde_json::Value::String(style.to_string())).ok()
+}
+
+fn merge_point_line_alias(target: &mut Option<ChartLineData>, source: Option<&ChartLineData>) {
+    let Some(source) = source.filter(|line| point_line_has_content(line)) else {
+        return;
+    };
+
+    let Some(target) = target.as_mut() else {
+        *target = Some(source.clone());
+        return;
+    };
+
+    if target.color.is_none() {
+        target.color = source.color.clone();
+    }
+    if target.width.is_none() {
+        target.width = source.width;
+    }
+    if target.dash_style.is_none() {
+        target.dash_style = source.dash_style.clone();
+    }
+    if target.transparency.is_none() {
+        target.transparency = source.transparency;
+    }
+    if target.no_fill.is_none() {
+        target.no_fill = source.no_fill;
+    }
+}
+
+fn point_line_has_content(line: &ChartLineData) -> bool {
+    line.color.is_some()
+        || line.width.is_some()
+        || line.dash_style.is_some()
+        || line.transparency.is_some()
+        || line.no_fill.is_some()
 }
 
 fn build_point_marker(pt: &PointFormatData) -> Option<Marker> {

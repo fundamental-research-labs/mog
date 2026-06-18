@@ -98,7 +98,12 @@ pub(super) fn build_series(
     let trendline: Vec<Trendline> = sd
         .trendlines
         .as_ref()
-        .map(|tls| tls.iter().map(build_trendline).collect())
+        .map(|tls| {
+            tls.iter()
+                .filter(|trendline| trendline.show != Some(false))
+                .map(build_trendline)
+                .collect()
+        })
         .unwrap_or_default();
 
     // Error bars
@@ -765,10 +770,11 @@ pub(super) fn build_trendline(td: &TrendlineData) -> Trendline {
     let trendline_type = td
         .r#type
         .as_deref()
-        .map(TrendlineType::from_ooxml)
+        .map(trendline_type_from_public)
         .unwrap_or_default();
 
-    let sp_pr = td.line_format.as_ref().map(|lf| ShapeProperties {
+    let line_format = trendline_line_format(td);
+    let sp_pr = line_format.as_ref().map(|lf| ShapeProperties {
         ln: Some(build_outline(lf)),
         ..Default::default()
     });
@@ -789,6 +795,41 @@ pub(super) fn build_trendline(td: &TrendlineData) -> Trendline {
         trendline_lbl,
         ..Default::default()
     }
+}
+
+fn trendline_type_from_public(value: &str) -> TrendlineType {
+    match value {
+        "exponential" | "exp" => TrendlineType::Exponential,
+        "linear" => TrendlineType::Linear,
+        "logarithmic" | "log" => TrendlineType::Logarithmic,
+        "moving-average" | "movingAvg" => TrendlineType::MovingAverage,
+        "polynomial" | "poly" => TrendlineType::Polynomial,
+        "power" => TrendlineType::Power,
+        _ => TrendlineType::from_ooxml(value),
+    }
+}
+
+fn trendline_line_format(td: &TrendlineData) -> Option<ChartLineData> {
+    let mut line = td.line_format.clone().unwrap_or(ChartLineData {
+        color: None,
+        width: None,
+        dash_style: None,
+        transparency: None,
+        no_fill: None,
+    });
+
+    if line.color.is_none() {
+        line.color = td
+            .color
+            .as_deref()
+            .and_then(point_hex_color)
+            .map(ChartColorData::Hex);
+    }
+    if line.width.is_none() {
+        line.width = td.line_width;
+    }
+
+    point_line_has_content(&line).then_some(line)
 }
 
 pub(super) fn build_trendline_label(tll: &TrendlineLabelData) -> TrendlineLabel {

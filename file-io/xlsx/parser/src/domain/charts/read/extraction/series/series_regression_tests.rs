@@ -5,7 +5,7 @@ use ooxml_types::charts::{
     ChartSpace, ChartType, ChartTypeConfig, DataLabelOptions, DataPointOverride, ErrorBarDirection,
     ErrorBarType, ErrorBars, ErrorValueType, Line3DChartConfig, LineChartConfig, Marker,
     MarkerStyle, NumDataSource, PlotArea, RadarChartConfig, Scaling, ScatterChartConfig,
-    ScatterStyle, StockChartConfig,
+    ScatterStyle, StockChartConfig, Trendline, TrendlineType,
 };
 use ooxml_types::drawings::{EffectList, EffectProperties, OuterShadow, ShapeProperties};
 
@@ -182,6 +182,63 @@ fn series_shadow_effect_extracts_show_shadow() {
     });
 
     assert_eq!(extracted[0].show_shadow, Some(true));
+}
+
+#[test]
+fn trendline_properties_extract_to_public_type_and_line_aliases() {
+    let extracted = extract_series_from_chart_space(&ChartSpace {
+        chart: Chart {
+            plot_area: PlotArea {
+                chart_groups: vec![ChartGroup {
+                    chart_type: ChartType::Scatter,
+                    config: ChartTypeConfig::Scatter(ScatterChartConfig::default()),
+                    series: vec![ooxml_types::charts::ChartSeries {
+                        idx: 0,
+                        order: 0,
+                        trendline: vec![Trendline {
+                            trendline_type: TrendlineType::Exponential,
+                            sp_pr: Some(crate::domain::charts::parse_shape_properties(
+                                br#"<c:spPr xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+                                           xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+                                    <a:ln w="38100">
+                                        <a:solidFill><a:srgbClr val="FFC000"/></a:solidFill>
+                                    </a:ln>
+                                </c:spPr>"#,
+                            )),
+                            ..Default::default()
+                        }],
+                        ..Default::default()
+                    }],
+                    d_lbls: None,
+                    ax_id: vec![],
+                    raw_chart_type_attr: None,
+                    raw_chart_element_name: None,
+                    raw_chart_group_xml: None,
+                }],
+                axes: vec![
+                    axis(AxisType::Value, 10, 20, ChartAxisPosition::Bottom),
+                    axis(AxisType::Value, 20, 10, ChartAxisPosition::Left),
+                ],
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+        ..Default::default()
+    });
+
+    let trendline = extracted[0]
+        .trendlines
+        .as_ref()
+        .and_then(|trendlines| trendlines.first())
+        .expect("trendline");
+    assert_eq!(trendline.show, Some(true));
+    assert_eq!(trendline.r#type.as_deref(), Some("exponential"));
+    assert_eq!(trendline.color.as_deref(), Some("FFC000"));
+    assert_eq!(trendline.line_width, Some(3.0));
+    assert_eq!(
+        trendline.line_format.as_ref().and_then(|line| line.width),
+        Some(3.0)
+    );
 }
 
 #[test]

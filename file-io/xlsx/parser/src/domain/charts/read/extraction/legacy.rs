@@ -11,6 +11,7 @@ use super::series_sources::{
     extract_cat_point_cache, extract_cat_source_kind, extract_cat_source_type,
     extract_num_point_cache, extract_num_source_kind,
 };
+use super::trendlines::trendline_type_to_public;
 
 pub(in crate::domain::charts::read) fn extract_chart_series(
     chart: &crate::domain::charts::Chart,
@@ -117,8 +118,8 @@ pub(in crate::domain::charts::read) fn extract_chart_series(
                     s.trendline
                         .iter()
                         .map(|t| domain_types::chart::TrendlineData {
-                            show: None,
-                            r#type: Some(t.trendline_type.to_ooxml().to_string()),
+                            show: Some(true),
+                            r#type: Some(trendline_type_to_public(t.trendline_type)),
                             color: None,
                             line_width: None,
                             order: t.order,

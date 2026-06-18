@@ -68,6 +68,16 @@ const MARKER_STYLES = [
   'auto',
 ] as const;
 
+const TRENDLINE_TYPES = [
+  'linear',
+  'exponential',
+  'logarithmic',
+  'polynomial',
+  'power',
+  'moving-average',
+] as const;
+type TrendlineTypeName = NonNullable<TrendlineConfig['type']>;
+
 function narrowEnum<T extends string>(
   value: string | null | undefined,
   allowed: readonly T[],
@@ -81,6 +91,21 @@ function narrowEnum<T extends string>(
     );
   }
   return undefined;
+}
+
+function wireToTrendlineType(value: string | null | undefined): TrendlineTypeName | undefined {
+  switch (value) {
+    case 'exp':
+      return 'exponential';
+    case 'log':
+      return 'logarithmic';
+    case 'poly':
+      return 'polynomial';
+    case 'movingAvg':
+      return 'moving-average';
+    default:
+      return narrowEnum<TrendlineTypeName>(value, TRENDLINE_TYPES, 'Trendline.type');
+  }
 }
 
 /** Convert a wire DataLabelData to the contract DataLabelConfig. */
@@ -165,7 +190,7 @@ export function dataLabelConfigToWire(c: DataLabelConfig): DataLabelData {
 export function wireToTrendlineConfig(w: TrendlineData): TrendlineConfig {
   return {
     show: w.show,
-    type: w.type,
+    type: wireToTrendlineType(w.type),
     color: wireToDirectHexColor(w.color),
     lineWidth: w.lineWidth,
     order: w.order,

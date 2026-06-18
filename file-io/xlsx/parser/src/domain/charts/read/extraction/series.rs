@@ -10,6 +10,9 @@ use super::series_sources::{
     extract_num_source_kind,
 };
 use super::text::{extract_chart_text_string, shape_properties_has_shadow};
+use super::trendlines::{
+    trendline_legacy_color, trendline_legacy_line_width, trendline_type_to_public,
+};
 use color::extract_legacy_series_color;
 use error_bars::extract_error_bars;
 use points::point_border_from_line;
@@ -326,10 +329,10 @@ fn extract_single_series_with_semantics(
                         }
                     });
                     domain_types::chart::TrendlineData {
-                        show: None,
-                        r#type: Some(t.trendline_type.to_ooxml().to_string()),
-                        color: None,
-                        line_width: None,
+                        show: Some(true),
+                        r#type: Some(trendline_type_to_public(t.trendline_type)),
+                        color: trendline_legacy_color(line_format.as_ref()),
+                        line_width: trendline_legacy_line_width(line_format.as_ref()),
                         order: t.order,
                         period: t.period,
                         forward: t.forward,

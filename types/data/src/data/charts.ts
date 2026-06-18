@@ -779,7 +779,7 @@ export interface DataLabelConfig {
  */
 export interface TrendlineConfig {
   show?: boolean;
-  type?: string;
+  type?: TrendlineType;
   color?: string;
   lineWidth?: number;
   order?: number;

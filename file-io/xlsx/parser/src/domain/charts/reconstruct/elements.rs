@@ -509,7 +509,7 @@ pub(super) fn build_data_table(dt: &ChartDataTableData) -> DataTableConfig {
         show_horz_border: dt.show_horz_border,
         show_vert_border: dt.show_vert_border,
         show_outline: dt.show_outline,
-        show_keys: dt.show_keys,
+        show_keys: dt.show_keys.or(dt.show_legend_key),
         sp_pr,
         tx_pr,
         ..Default::default()
@@ -567,6 +567,23 @@ mod tests {
             text_vertical_type: None,
             shadow: None,
         }
+    }
+
+    #[test]
+    fn build_data_table_uses_show_legend_key_alias() {
+        let data_table = ChartDataTableData {
+            show_horz_border: None,
+            show_vert_border: None,
+            show_outline: None,
+            show_keys: None,
+            format: None,
+            show_legend_key: Some(true),
+            visible: Some(true),
+        };
+
+        let config = build_data_table(&data_table);
+
+        assert_eq!(config.show_keys, Some(true));
     }
 
     fn data_label_with_flags(

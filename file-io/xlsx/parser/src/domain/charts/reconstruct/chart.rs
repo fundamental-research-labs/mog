@@ -126,7 +126,11 @@ pub(super) fn build_plot_area(spec: &ChartSpec) -> charts::PlotArea {
             .or_else(|| imported_plot_area.and_then(|plot_area| plot_area.layout.clone())),
         chart_groups: build_chart_groups(spec),
         axes: build_axes(spec),
-        d_table: spec.data_table.as_ref().map(build_data_table),
+        d_table: spec
+            .data_table
+            .as_ref()
+            .filter(|data_table| data_table.visible != Some(false))
+            .map(build_data_table),
         sp_pr: spec.plot_format.as_ref().and_then(build_shape_properties),
         extensions: imported_plot_area
             .map(|plot_area| clean_chart_extensions(&plot_area.extensions))

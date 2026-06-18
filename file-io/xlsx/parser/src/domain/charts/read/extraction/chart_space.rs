@@ -134,8 +134,8 @@ pub fn extract_chart_spec_from_chart_space(
             show_outline: dt.show_outline,
             show_keys: dt.show_keys,
             format: extract_chart_format(dt.sp_pr.as_ref(), dt.tx_pr.as_ref()),
-            show_legend_key: None,
-            visible: None,
+            show_legend_key: dt.show_keys,
+            visible: Some(true),
         });
 
     // -------------------------------------------------------------------------

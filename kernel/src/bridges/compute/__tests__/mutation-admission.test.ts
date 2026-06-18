@@ -169,6 +169,42 @@ describe('Compute mutation admission', () => {
     });
   });
 
+  it('passes pivot sheet insertion options through the handwritten transport call', async () => {
+    const ctx = makeMockContext();
+    const pivotConfig = {
+      id: 'pivot-1',
+      name: 'SalesPivot',
+      fields: [],
+      placements: [],
+      filters: [],
+    };
+    const transport: BridgeTransport & { call: jest.Mock } = {
+      call: jest.fn(async () => ['sheet-created', pivotConfig, mutationResult()]),
+    };
+    const bridge = createStartedBridge(ctx, transport);
+
+    await bridge.pivotCreateWithSheet('Pivot Output', pivotConfig, {
+      insertBeforeSheetId: sheetId('source-sheet'),
+    });
+
+    expect(transport.call).toHaveBeenCalledWith('compute_pivot_create_with_sheet', {
+      docId: 'test-doc',
+      sheetName: 'Pivot Output',
+      config: pivotConfig,
+      options: { insertBeforeSheetId: 'source-sheet' },
+    });
+
+    transport.call.mockClear();
+    await bridge.pivotCreateWithSheet('Pivot Output', pivotConfig);
+
+    expect(transport.call).toHaveBeenCalledWith('compute_pivot_create_with_sheet', {
+      docId: 'test-doc',
+      sheetName: 'Pivot Output',
+      config: pivotConfig,
+      options: null,
+    });
+  });
+
   it('keeps non-UI workbook settings behind the all-sheet materialization barrier', async () => {
     const materialized = deferred<void>();
     const awaitMaterialized = jest.fn(() => materialized.promise);

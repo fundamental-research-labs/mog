@@ -140,7 +140,7 @@ export type {
   FillSeriesApplyReceipt,
   WorksheetFill,
 } from './worksheet/fill';
-export type { PivotCreateOptions } from './worksheet/index';
+export type { PivotCreateOptions, PivotCreateWithSheetOptions } from './worksheet/index';
 
 export type {
   WorksheetCellVisitor,

@@ -117,6 +117,7 @@ type PivotSnapshotEntry =
   | { readonly status: 'live'; readonly config: DataPivotTableConfig }
   | { readonly status: 'deleted' };
 type PivotCreateOptions = Parameters<WorksheetPivots['add']>[1];
+type PivotCreateWithSheetOptions = Parameters<WorksheetPivots['addWithSheet']>[2];
 
 export class WorksheetPivotsImpl implements WorksheetPivots {
   private readonly pivotSnapshots = new Map<string, PivotSnapshotEntry>();
@@ -239,7 +240,7 @@ export class WorksheetPivotsImpl implements WorksheetPivots {
   async addWithSheet(
     sheetName: string,
     config: PivotCreateDataConfig | ApiPivotTableConfig,
-    options?: PivotCreateOptions,
+    options?: PivotCreateWithSheetOptions,
   ): Promise<PivotAddWithSheetReceipt> {
     let dataConfig: PivotCreateDataConfig;
 
@@ -262,7 +263,18 @@ export class WorksheetPivotsImpl implements WorksheetPivots {
       dataConfig,
       `pivot-${Date.now()}-${WorksheetPivotsImpl._idCounter++}`,
     );
-    const result = await this.ctx.pivot.createPivotWithSheet(sheetName, configWithId);
+    const placementOptions =
+      options?.insertBeforeSheetId !== undefined || options?.insertIndex !== undefined
+        ? {
+            ...(options.insertBeforeSheetId !== undefined
+              ? { insertBeforeSheetId: options.insertBeforeSheetId }
+              : {}),
+            ...(options.insertIndex !== undefined ? { insertIndex: options.insertIndex } : {}),
+          }
+        : undefined;
+    const result = placementOptions
+      ? await this.ctx.pivot.createPivotWithSheet(sheetName, configWithId, placementOptions)
+      : await this.ctx.pivot.createPivotWithSheet(sheetName, configWithId);
     // Sync cached sheet metadata so wb.sheetNames reflects the newly created sheet
     if (this.workbook) {
       await (this.workbook as WorkbookInternal).refreshSheetMetadata();

@@ -18,6 +18,7 @@ import type {
   ImportedPivotViewRecord,
   IPivotBridge,
   PivotCacheStats,
+  PivotCreateSheetOptions,
 } from '@mog-sdk/contracts/bridges';
 import { type CellValue, type SheetId, sheetId as toSheetId } from '@mog-sdk/contracts/core';
 import type {
@@ -1264,15 +1265,16 @@ export class PivotBridge implements IPivotBridge {
   async createPivotWithSheet(
     sheetName: string,
     config: PivotTableConfig,
+    options?: PivotCreateSheetOptions,
   ): Promise<{ sheetId: SheetId; config: PivotTableConfig }> {
     const computeConfig = toComputePivotConfig(config);
     const mutationHandler = this.ctx.computeBridge.getMutationHandler();
     const result = mutationHandler
       ? await mutationHandler.withPivotUpdateOptions(
           { reason: 'uiConfigChanged', refreshPolicy: 'dirtyOnly' },
-          () => this.ctx.computeBridge.pivotCreateWithSheet(sheetName, computeConfig),
+          () => this.ctx.computeBridge.pivotCreateWithSheet(sheetName, computeConfig, options),
         )
-      : await this.ctx.computeBridge.pivotCreateWithSheet(sheetName, computeConfig);
+      : await this.ctx.computeBridge.pivotCreateWithSheet(sheetName, computeConfig, options);
     const publicConfig = toPublicPivotConfig(result.config);
     // Bump config version for cache invalidation
     const currentVersion = this.configVersions.get(publicConfig.id) ?? 0;

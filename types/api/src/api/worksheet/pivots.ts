@@ -37,7 +37,7 @@ import type {
   PivotSetPivotItemVisibilityReceipt,
   PivotSetPreserveFormattingReceipt,
 } from '../mutation-receipt';
-import type { CellRange, CellValue } from '@mog/types-core';
+import type { CellRange, CellValue, SheetId } from '@mog/types-core';
 import type {
   AggregateFunction,
   CalculatedField,
@@ -94,6 +94,20 @@ export interface PivotCreateOptions {
    * `materialize` stores metadata and refreshes the rendered worksheet output.
    */
   lifecycle?: PivotCreationLifecycle;
+}
+
+export interface PivotCreateWithSheetOptions extends PivotCreateOptions {
+  /**
+   * Insert the newly-created pivot worksheet immediately before this sheet.
+   * Takes precedence over `insertIndex` when both are provided.
+   */
+  insertBeforeSheetId?: SheetId;
+
+  /**
+   * Optional 0-based worksheet index for the newly-created pivot worksheet.
+   * Values past the current sheet count append at the end.
+   */
+  insertIndex?: number;
 }
 
 export interface PivotPlacementSpec {
@@ -277,7 +291,7 @@ export interface WorksheetPivots {
   addWithSheet(
     sheetName: string,
     config: PivotCreateConfig,
-    options?: PivotCreateOptions,
+    options?: PivotCreateWithSheetOptions,
   ): Promise<PivotAddWithSheetReceipt>;
 
   /**

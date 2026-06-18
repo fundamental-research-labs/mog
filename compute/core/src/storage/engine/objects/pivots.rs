@@ -1,19 +1,98 @@
 use super::shared;
-use crate::snapshot::{ChangeKind, MutationResult, PivotTableChange};
-use crate::storage::engine::YrsComputeEngine;
+use crate::engine_types::PivotCreateWithSheetOptions;
+use crate::snapshot::{
+    ChangeKind, MutationResult, PivotTableChange, SheetChange, SheetChangeField,
+};
 use crate::storage::engine::pivot_materialization::apply_pivot_value_number_formats;
 use crate::storage::engine::services;
+use crate::storage::engine::YrsComputeEngine;
+use crate::storage::sheet::order;
 use bridge_core as bridge;
 use cell_types::SheetId;
-use compute_pivot::PivotTableDefExt;
 use compute_pivot::types::validate_pivot_config_json;
 use compute_pivot::types::{PivotExpansionState, PivotFieldItems, PivotTableResult};
+use compute_pivot::PivotTableDefExt;
 use domain_types::domain::pivot::PivotTableConfig;
 use value_types::{CellValue, ComputeError};
 
 use crate::storage::workbook::imported_pivots::ImportedPivotViewRecord;
 
 impl YrsComputeEngine {
+    fn resolve_pivot_sheet_insert_index(
+        &self,
+        options: Option<&PivotCreateWithSheetOptions>,
+    ) -> Result<Option<u32>, ComputeError> {
+        let Some(options) = options else {
+            return Ok(None);
+        };
+
+        if let Some(before_sheet_id) = options.insert_before_sheet_id.as_deref() {
+            let target = SheetId::from_uuid_str(before_sheet_id).map_err(|e| {
+                ComputeError::InvalidInput {
+                    message: format!("Invalid pivot insertBeforeSheetId '{before_sheet_id}': {e}"),
+                }
+            })?;
+            let order = self.stores.storage.sheet_order();
+            let index = order
+                .iter()
+                .position(|sheet_id| sheet_id == &target)
+                .ok_or_else(|| ComputeError::SheetNotFound {
+                    sheet_id: before_sheet_id.to_string(),
+                })?;
+            return Ok(Some(index as u32));
+        }
+
+        Ok(options.insert_index)
+    }
+
+    fn apply_pivot_sheet_insert_index(
+        &self,
+        sheet_id: &SheetId,
+        insert_index: Option<u32>,
+        result: &mut MutationResult,
+    ) {
+        let Some(insert_index) = insert_index else {
+            return;
+        };
+
+        let order_before_move = self.stores.storage.sheet_order();
+        let Some(old_index) = order_before_move
+            .iter()
+            .position(|candidate| candidate == sheet_id)
+        else {
+            return;
+        };
+        let new_index = insert_index.min(order_before_move.len().saturating_sub(1) as u32);
+        if old_index as u32 == new_index {
+            return;
+        }
+
+        if order::move_sheet(
+            self.stores.storage.doc(),
+            self.stores.storage.workbook_map(),
+            sheet_id,
+            new_index,
+        ) {
+            result.sheet_changes.push(SheetChange {
+                sheet_id: sheet_id.to_uuid_string(),
+                kind: ChangeKind::Set,
+                field: SheetChangeField::Order,
+                name: None,
+                old_name: None,
+                index: Some(new_index as i32),
+                old_index: Some(old_index as i32),
+                hidden: None,
+                source_sheet_id: None,
+                frozen_rows: None,
+                old_frozen_rows: None,
+                frozen_cols: None,
+                old_frozen_cols: None,
+                color: None,
+                old_color: None,
+            });
+        }
+    }
+
     fn resolve_pivot_source_identity(
         &self,
         mut config: PivotTableConfig,
@@ -277,6 +356,7 @@ impl YrsComputeEngine {
         &mut self,
         sheet_name: &str,
         config: serde_json::Value,
+        options: Option<PivotCreateWithSheetOptions>,
     ) -> Result<(String, PivotTableConfig, MutationResult), ComputeError> {
         // Validate all fields upfront — one comprehensive error, not one-at-a-time
         validate_pivot_config_json(&config)
@@ -286,10 +366,12 @@ impl YrsComputeEngine {
                 message: e.to_string(),
             })?;
         config = self.resolve_pivot_source_identity(config)?;
+        let insert_index = self.resolve_pivot_sheet_insert_index(options.as_ref())?;
         let (sheet_hex, mut sheet_result) = self.mutation_create_sheet(sheet_name)?;
         let sheet_id = SheetId::from_uuid_str(&sheet_hex).map_err(|e| ComputeError::Eval {
             message: format!("Invalid SheetId after creation: {e}"),
         })?;
+        self.apply_pivot_sheet_insert_index(&sheet_id, insert_index, &mut sheet_result);
         // Default output_sheet_name to the newly created sheet when empty
         if config.output_sheet_name.is_empty() {
             config.output_sheet_name = sheet_name.to_string();

@@ -45,6 +45,11 @@ import {
   type TableHeaderRename,
 } from './table-header-write-intercept';
 
+export interface PivotCreateWithSheetOptions {
+  insertBeforeSheetId?: SheetId;
+  insertIndex?: number;
+}
+
 // Generated types — source of truth from Rust snapshot-types
 import type {
   ActiveCellData,
@@ -1223,13 +1228,14 @@ export class ComputeBridge extends GeneratedBridgeBase {
   async pivotCreateWithSheet(
     sheetName: string,
     config: Partial<PivotTableConfig>,
+    options?: PivotCreateWithSheetOptions,
   ): Promise<{ sheetId: SheetId; config: PivotTableConfig }> {
     const { raw } = await this.core.mutatePublicResult<[string, PivotTableConfig, MutationResult]>(
       'compute_pivot_create_with_sheet',
       () =>
         this.core.transport.call<[string, PivotTableConfig, MutationResult]>(
           'compute_pivot_create_with_sheet',
-          { docId: this.core.docId, sheetName, config },
+          { docId: this.core.docId, sheetName, config, options: options ?? null },
         ),
       ([, , mutationResult]) => [new Uint8Array(), mutationResult],
     );

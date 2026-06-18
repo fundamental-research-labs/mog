@@ -307,6 +307,19 @@ describe('WorksheetPivotsImpl contracts', () => {
     );
   });
 
+  it('addWithSheet forwards worksheet insertion options to the pivot bridge', async () => {
+    await pivots.addWithSheet('Pivot Output', makePivotConfig(), {
+      insertBeforeSheetId: sheetId('source-sheet'),
+      insertIndex: 0,
+    });
+
+    expect(ctx.pivot.createPivotWithSheet).toHaveBeenCalledWith(
+      'Pivot Output',
+      expect.objectContaining({ name: 'SalesPivot' }),
+      { insertBeforeSheetId: 'source-sheet', insertIndex: 0 },
+    );
+  });
+
   it('refresh returns a materialization receipt with result details', async () => {
     const receipt = await pivots.refresh('SalesPivot');
 

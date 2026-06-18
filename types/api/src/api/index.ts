@@ -154,6 +154,7 @@ export type {
   ImportedPivotViewRecord,
   PivotCreateConfig,
   PivotCreateOptions,
+  PivotCreateWithSheetOptions,
   WorksheetPivots,
   WorksheetPrint,
   AllowEditRange,

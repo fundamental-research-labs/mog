@@ -555,7 +555,7 @@ export function usePivotTables({ sheetId }: UsePivotTablesOptions): UsePivotTabl
             outputSheetName: sheetName,
             outputLocation: { row: 0, col: 0 },
           },
-          { lifecycle: 'materialize' },
+          { lifecycle: 'materialize', insertBeforeSheetId: sourceSheetId },
         );
         assertPivotMaterialized(receipt);
         const outputSheetId = toSheetId(receipt.sheetId);

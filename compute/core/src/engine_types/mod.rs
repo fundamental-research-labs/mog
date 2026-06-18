@@ -18,6 +18,7 @@ pub mod fill;
 pub mod floating_objects;
 pub mod formatting;
 pub mod grouping_render;
+pub mod pivots;
 /// Query-specific return types for engine IPC methods.
 pub mod queries;
 pub mod ranges;
@@ -30,6 +31,7 @@ pub use fill::*;
 pub use floating_objects::*;
 pub use formatting::*;
 pub use grouping_render::*;
+pub use pivots::*;
 pub use queries::*;
 pub use ranges::*;
 pub use sparklines::*;

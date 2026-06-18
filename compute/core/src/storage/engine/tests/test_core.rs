@@ -2,7 +2,9 @@
 
 use super::super::*;
 use super::helpers::*;
-use crate::snapshot::ChangeKind;
+use crate::engine_types::PivotCreateWithSheetOptions;
+use crate::snapshot::{ChangeKind, SheetChangeField};
+use cell_types::SheetId;
 use formula_types::StructureChange;
 use serde_json::json;
 use value_types::{CellValue, FiniteF64};
@@ -292,6 +294,59 @@ fn pivot_create_treats_null_optional_sheet_ids_as_absent() {
     assert_eq!(created.output_sheet_id.as_deref(), Some(sid_str.as_str()));
     assert_eq!(created.source_sheet_name, "Sheet1");
     assert_eq!(created.output_sheet_name, "Sheet1");
+}
+
+#[test]
+fn pivot_create_with_sheet_can_insert_before_source_sheet() {
+    let snap = simple_snapshot();
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (source_hex, _) = engine.create_sheet("Data").expect("create source sheet");
+    let source_id = SheetId::from_uuid_str(&source_hex).expect("source sheet id");
+    let source_uuid = source_id.to_uuid_string();
+
+    let config = json!({
+        "id": "caller-id",
+        "name": "PivotBeforeSource",
+        "sourceSheetId": source_uuid.clone(),
+        "sourceSheetName": "Data",
+        "sourceRange": { "startRow": 0, "startCol": 0, "endRow": 1, "endCol": 1 },
+        "outputSheetName": "Pivot Output",
+        "outputLocation": { "row": 0, "col": 0 },
+        "fields": [],
+        "placements": [],
+        "filters": []
+    });
+
+    let (pivot_hex, pivot, result) = engine
+        .pivot_create_with_sheet(
+            "Pivot Output",
+            config,
+            Some(PivotCreateWithSheetOptions {
+                insert_before_sheet_id: Some(source_uuid.clone()),
+                insert_index: Some(0),
+            }),
+        )
+        .expect("pivot create with sheet");
+    let pivot_sheet_id = SheetId::from_uuid_str(&pivot_hex).expect("pivot sheet id");
+
+    let order = engine.storage().sheet_order();
+    let pivot_index = order
+        .iter()
+        .position(|sheet_id| sheet_id == &pivot_sheet_id)
+        .expect("pivot sheet in order");
+    let source_index = order
+        .iter()
+        .position(|sheet_id| sheet_id == &source_id)
+        .expect("source sheet in order");
+    assert_eq!(pivot_index + 1, source_index);
+    assert_eq!(
+        pivot.output_sheet_id.as_deref(),
+        Some(pivot_sheet_id.to_uuid_string().as_str())
+    );
+    assert!(result.sheet_changes.iter().any(|change| {
+        change.sheet_id == pivot_sheet_id.to_uuid_string()
+            && change.field == SheetChangeField::Order
+    }));
 }
 
 #[test]

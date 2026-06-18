@@ -164,11 +164,18 @@ describe('PivotBridge read vs refresh paths', () => {
     ctx.computeBridge.getMutationHandler.mockReturnValue({ withPivotUpdateOptions });
     const bridge = new PivotBridge(ctx);
 
-    await bridge.createPivotWithSheet('PivotSheet', makePivotConfig());
+    await bridge.createPivotWithSheet('PivotSheet', makePivotConfig(), {
+      insertBeforeSheetId: SHEET_ID,
+    });
 
     expect(withPivotUpdateOptions).toHaveBeenCalledWith(
       { reason: 'uiConfigChanged', refreshPolicy: 'dirtyOnly' },
       expect.any(Function),
+    );
+    expect(ctx.computeBridge.pivotCreateWithSheet).toHaveBeenCalledWith(
+      'PivotSheet',
+      expect.objectContaining({ id: 'pivot-1' }),
+      { insertBeforeSheetId: SHEET_ID },
     );
   });
 

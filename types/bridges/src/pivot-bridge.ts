@@ -47,6 +47,13 @@ export type PivotResultCallback = (
   error?: string,
 ) => void;
 
+export interface PivotCreateSheetOptions {
+  /** Insert the new worksheet before this existing worksheet. */
+  insertBeforeSheetId?: SheetId;
+  /** Optional 0-based worksheet insertion index. */
+  insertIndex?: number;
+}
+
 export interface PivotBridgePlacementSpec {
   placementId?: PlacementId;
   fieldId?: string;
@@ -257,6 +264,7 @@ export interface IPivotBridge {
   createPivotWithSheet(
     sheetName: string,
     config: PivotTableConfig,
+    options?: PivotCreateSheetOptions,
   ): Promise<{ sheetId: string; config: PivotTableConfig }>;
 
   // ===========================================================================

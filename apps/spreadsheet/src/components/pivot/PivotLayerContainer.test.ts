@@ -1,7 +1,7 @@
 import type { PivotFieldPlacementFlat, PivotTableConfig } from '@mog-sdk/contracts/pivot';
 
 import type { PivotBounds } from '../../pivot/pivot-view-geometry';
-import { getVisiblePivotReportFilterControls } from './PivotLayerContainer';
+import { getVisiblePivotReportFilterControls } from './pivot-layer-layout';
 
 function placementId(id: string): PivotFieldPlacementFlat['placementId'] {
   return id as PivotFieldPlacementFlat['placementId'];

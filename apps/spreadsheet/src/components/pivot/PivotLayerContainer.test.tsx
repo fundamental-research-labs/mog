@@ -1,6 +1,6 @@
 import type { PivotTableConfig, PivotRenderedBounds } from '@mog-sdk/contracts/pivot';
 
-import { getVisiblePivotFieldHeaderControls } from './PivotLayerContainer';
+import { getVisiblePivotFieldHeaderControls } from './pivot-layer-layout';
 
 function baseConfig(placements: PivotTableConfig['placements']): PivotTableConfig {
   return {

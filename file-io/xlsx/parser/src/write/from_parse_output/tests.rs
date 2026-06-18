@@ -758,6 +758,8 @@ fn make_chart(chart_type: ChartType, data_range: &str) -> ChartSpec {
         axes: None,
         data_labels: None,
         data_range: Some(data_range.to_string()),
+        series_range: None,
+        category_range: None,
         style: None,
         rounded_corners: None,
         auto_title_deleted: None,

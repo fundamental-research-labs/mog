@@ -1263,6 +1263,8 @@ export interface ChartSpec {
   axes?: AxisData;
   dataLabels?: DataLabelData;
   dataRange?: string;
+  seriesRange?: string;
+  categoryRange?: string;
   style?: number;
   roundedCorners?: boolean;
   autoTitleDeleted?: boolean;

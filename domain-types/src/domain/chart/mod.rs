@@ -6,6 +6,7 @@ mod legend;
 mod ooxml_mirror_types;
 mod position;
 mod series;
+mod source_ranges;
 mod spec;
 mod style_context;
 mod view_3d;

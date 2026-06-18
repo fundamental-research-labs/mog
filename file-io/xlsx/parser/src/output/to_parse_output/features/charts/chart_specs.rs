@@ -31,6 +31,8 @@ pub(crate) fn build_fallback_chart_spec(
         axes: None,
         data_labels: None,
         data_range: None,
+        series_range: None,
+        category_range: None,
         style: None,
         rounded_corners: None,
         auto_title_deleted: None,

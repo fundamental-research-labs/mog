@@ -230,6 +230,8 @@ pub fn extract_chart_spec_from_chart_space(
         axes,
         data_labels,
         data_range,
+        series_range: None,
+        category_range: None,
         style: cs.style,
         rounded_corners: cs.rounded_corners,
         auto_title_deleted: chart.auto_title_deleted,

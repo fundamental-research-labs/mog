@@ -38,6 +38,8 @@ pub fn reconstruct_chart_space_for_sheet(spec: &ChartSpec, sheet_name: &str) -> 
 
 fn qualify_chart_formula_references(spec: &mut ChartSpec, sheet_name: &str) {
     qualify_optional_a1_reference(&mut spec.data_range, sheet_name);
+    qualify_optional_a1_reference(&mut spec.series_range, sheet_name);
+    qualify_optional_a1_reference(&mut spec.category_range, sheet_name);
     qualify_optional_a1_reference(&mut spec.title_formula, sheet_name);
 
     for series in &mut spec.series {

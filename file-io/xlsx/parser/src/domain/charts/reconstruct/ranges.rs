@@ -7,12 +7,48 @@ pub(super) fn series_for_export(spec: &ChartSpec) -> Vec<ChartSeriesData> {
         return spec.series.clone();
     }
 
-    spec.data_range
+    let mut series = spec
+        .data_range
         .as_deref()
         .and_then(|data_range| {
             synthesize_series_from_data_range_for_chart_type(&spec.chart_type, data_range)
         })
-        .unwrap_or_default()
+        .unwrap_or_default();
+    apply_explicit_source_ranges(
+        &mut series,
+        spec.category_range.as_deref(),
+        spec.series_range.as_deref(),
+    );
+    series
+}
+
+fn apply_explicit_source_ranges(
+    series: &mut [ChartSeriesData],
+    category_range: Option<&str>,
+    series_range: Option<&str>,
+) {
+    if let Some(category_range) = category_range
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        for item in series.iter_mut() {
+            item.categories = Some(category_range.to_string());
+        }
+    }
+
+    let Some(parsed_series_range) = series_range
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .and_then(ParsedA1Range::parse)
+    else {
+        return;
+    };
+    let Some(name_refs) = parsed_series_range.cell_refs_for_count(series.len()) else {
+        return;
+    };
+    for (item, name_ref) in series.iter_mut().zip(name_refs) {
+        item.name_ref = Some(name_ref);
+    }
 }
 
 fn synthesize_series_from_data_range_for_chart_type(
@@ -324,6 +360,35 @@ impl ParsedA1Range {
             Some(prefix) => format!("{prefix}!{reference}"),
             None => reference.to_string(),
         }
+    }
+
+    fn cell_refs_for_count(&self, count: usize) -> Option<Vec<String>> {
+        if count == 0 {
+            return None;
+        }
+        if self.start_row == self.end_row {
+            let width = (self.end_col - self.start_col + 1) as usize;
+            if width != count {
+                return None;
+            }
+            return Some(
+                (self.start_col..=self.end_col)
+                    .map(|col| self.cell_ref(col, self.start_row))
+                    .collect(),
+            );
+        }
+        if self.start_col == self.end_col {
+            let height = (self.end_row - self.start_row + 1) as usize;
+            if height != count {
+                return None;
+            }
+            return Some(
+                (self.start_row..=self.end_row)
+                    .map(|row| self.cell_ref(self.start_col, row))
+                    .collect(),
+            );
+        }
+        None
     }
 }
 

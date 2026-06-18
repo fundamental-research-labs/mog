@@ -73,6 +73,7 @@ pub(crate) fn convert_parsed_charts_to_chart_specs(sheet: &FullParsedSheet) -> V
             // Also store the ChartSpace blob in definition for backward compatibility
             // during the transition. This can be removed once all consumers use typed fields.
             spec.definition = Some(ChartDefinition::Chart(chart_space.clone()));
+            normalize_local_chart_source_references(&mut spec, &sheet.name);
             spec.chart_auxiliary_files = chart.auxiliary_files.clone();
             spec.chart_relationships = chart
                 .chart_rels_bytes
@@ -417,7 +418,56 @@ fn supported_chart_auxiliary_relationship(rel_type: &str, target_path: &str) -> 
     }
 }
 
-const STANDARD_CHART_PROJECTION_SCHEMA_VERSION: u32 = 4;
+const STANDARD_CHART_PROJECTION_SCHEMA_VERSION: u32 = 5;
+
+fn normalize_local_chart_source_references(spec: &mut ChartSpec, sheet_name: &str) {
+    strip_local_sheet_prefix(&mut spec.data_range, sheet_name);
+    strip_local_sheet_prefix(&mut spec.series_range, sheet_name);
+    strip_local_sheet_prefix(&mut spec.category_range, sheet_name);
+    for series in &mut spec.series {
+        strip_local_sheet_prefix(&mut series.name_ref, sheet_name);
+        strip_local_sheet_prefix(&mut series.categories, sheet_name);
+        strip_local_sheet_prefix(&mut series.values, sheet_name);
+        strip_local_sheet_prefix(&mut series.bubble_size, sheet_name);
+    }
+}
+
+fn strip_local_sheet_prefix(reference: &mut Option<String>, sheet_name: &str) {
+    let Some(value) = reference.as_deref() else {
+        return;
+    };
+    let Some((sheet, body)) = split_sheet_reference(value.trim()) else {
+        return;
+    };
+    if sheet == sheet_name {
+        *reference = Some(body.to_string());
+    }
+}
+
+fn split_sheet_reference(value: &str) -> Option<(String, &str)> {
+    if value.starts_with('=') {
+        return None;
+    }
+    if let Some(rest) = value.strip_prefix('\'') {
+        let mut sheet = String::new();
+        let mut chars = rest.char_indices().peekable();
+        while let Some((idx, ch)) = chars.next() {
+            if ch == '\'' {
+                if matches!(chars.peek(), Some((_, '\''))) {
+                    sheet.push('\'');
+                    chars.next();
+                    continue;
+                }
+                let body = rest.get(idx + 1..)?.strip_prefix('!')?;
+                return Some((sheet, body));
+            }
+            sheet.push(ch);
+        }
+        return None;
+    }
+    let (sheet, body) = value.rsplit_once('!')?;
+    (!sheet.is_empty() && !body.is_empty()).then(|| (sheet.to_string(), body))
+}
 
 fn standard_chart_projection_fingerprint(spec: &ChartSpec) -> String {
     let mut fingerprint = Fnv1a64::default();
@@ -429,6 +479,8 @@ fn standard_chart_projection_fingerprint(spec: &ChartSpec) -> String {
     fingerprint.write_json(&spec.axes);
     fingerprint.write_json(&spec.data_labels);
     fingerprint.write_json(&spec.data_range);
+    fingerprint.write_json(&spec.series_range);
+    fingerprint.write_json(&spec.category_range);
     fingerprint.write_json(&spec.style);
     fingerprint.write_json(&spec.rounded_corners);
     fingerprint.write_json(&spec.auto_title_deleted);
@@ -623,6 +675,8 @@ pub(crate) fn convert_parsed_chart_ex_to_chart_specs(sheet: &FullParsedSheet) ->
                 axes: projection.axes,
                 data_labels: projection.data_labels,
                 data_range: projection.data_range,
+                series_range: None,
+                category_range: None,
                 style: None,
                 rounded_corners: None,
                 auto_title_deleted: None,
@@ -716,6 +770,7 @@ pub(crate) fn convert_parsed_chart_ex_to_chart_specs(sheet: &FullParsedSheet) ->
                 anchor_index: None,
                 import_status: projection.import_status,
             };
+            normalize_local_chart_source_references(&mut spec, &sheet.name);
             if let Some((_, frame)) = matched_frame {
                 apply_chart_frame_to_spec(&mut spec, frame);
             }

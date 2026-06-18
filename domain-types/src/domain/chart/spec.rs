@@ -8,6 +8,7 @@ use super::floating_object::{
     AnchorMode, ChartData, ChartDrawingFrameOoxmlProps, ChartOoxmlProps, FloatingObject,
     FloatingObjectAnchor, FloatingObjectCommon, FloatingObjectData,
 };
+use super::source_ranges::{infer_common_category_range, infer_series_name_range};
 use super::{
     AnchorPosition, AxisData, ChartAuxiliaryPart, ChartDataTableData, ChartDefinition,
     ChartFormatData, ChartFormatStringData, ChartLineData, ChartRelationshipData,
@@ -89,6 +90,10 @@ pub struct ChartSpec {
     pub data_labels: Option<DataLabelData>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub data_range: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub series_range: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub category_range: Option<String>,
 
     // -- API-exposed appearance --
     #[serde(skip_serializing_if = "Option::is_none", default)]
@@ -605,6 +610,8 @@ impl ChartSpec {
             axes: chart_data.axis.clone(),
             data_labels: chart_data.data_labels.clone(),
             data_range: chart_data.data_range.clone(),
+            series_range: chart_data.series_range.clone(),
+            category_range: chart_data.category_range.clone(),
             // API-exposed appearance
             style: chart_data.style,
             rounded_corners: chart_data.rounded_corners,
@@ -865,9 +872,15 @@ impl ChartSpec {
             series_orientation: None,
             data_range: self.data_range.clone(),
             data_range_identity: None,
-            series_range: None,
+            series_range: self
+                .series_range
+                .clone()
+                .or_else(|| infer_series_name_range(&self.series)),
             series_range_identity: None,
-            category_range: None,
+            category_range: self
+                .category_range
+                .clone()
+                .or_else(|| infer_common_category_range(&self.series)),
             category_range_identity: None,
             title: self.title.clone(),
             subtitle: None,

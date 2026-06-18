@@ -30,6 +30,8 @@ fn minimal_chart_spec(chart_type: DomainChartType, data_range: Option<&str>) -> 
         axes: None,
         data_labels: None,
         data_range: data_range.map(str::to_string),
+        series_range: None,
+        category_range: None,
         style: None,
         rounded_corners: None,
         auto_title_deleted: None,
@@ -186,6 +188,21 @@ fn data_range_chart_reconstructs_series_and_axes() {
     assert!(!xml.contains(r#"<c:delete val="1"/>"#), "{xml}");
     assert!(xml.contains("<c:crossAx val=\"222222222\"/>"));
     assert!(xml.contains("<c:crossAx val=\"111111111\"/>"));
+}
+
+#[test]
+fn data_range_chart_honors_explicit_source_ranges() {
+    let mut spec = minimal_chart_spec(DomainChartType::Column, Some("Data!A1:D5"));
+    spec.category_range = Some("Labels!A2:A5".to_string());
+    spec.series_range = Some("Labels!B1:D1".to_string());
+
+    let xml = chart_xml(&spec);
+
+    assert_eq!(xml.matches("<c:ser>").count(), 3);
+    assert!(xml.contains("<c:f>Labels!A2:A5</c:f>"), "{xml}");
+    assert!(xml.contains("<c:f>Labels!B1</c:f>"), "{xml}");
+    assert!(xml.contains("<c:f>Labels!C1</c:f>"), "{xml}");
+    assert!(xml.contains("<c:f>Labels!D1</c:f>"), "{xml}");
 }
 
 #[test]

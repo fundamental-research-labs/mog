@@ -1,6 +1,6 @@
 use domain_types::{
-    ChartDefinition,
     chart::{AxisData, ChartSpec, ChartType as DomainChartType, SingleAxisData},
+    ChartDefinition,
 };
 use ooxml_types::charts::{
     self, AxisCrosses, AxisType, ChartAxis, ChartAxisPosition, ChartLines, CrossBetween,
@@ -9,8 +9,11 @@ use ooxml_types::charts::{
 use ooxml_types::drawings::ShapeProperties;
 
 use super::{
-    elements::{build_chart_text_rich, build_title, preserve_imported_title_text_properties},
+    elements::{build_chart_text_rich, build_title},
     formatting::{build_outline, build_shape_properties, build_text_body},
+    text_body_fidelity::{
+        preserve_imported_text_body_properties, preserve_imported_title_text_properties,
+    },
 };
 
 // =============================================================================
@@ -288,6 +291,7 @@ fn apply_imported_axis_fidelity(
     if let (Some(title), Some(imported_title)) = (rebuilt.title.as_mut(), original.title.as_ref()) {
         preserve_imported_title_text_properties(title, Some(imported_title));
     }
+    preserve_imported_text_body_properties(&mut rebuilt.tx_pr, original.tx_pr.as_ref());
     rebuilt.raw_axis_type_attr = original.raw_axis_type_attr.clone();
 }
 

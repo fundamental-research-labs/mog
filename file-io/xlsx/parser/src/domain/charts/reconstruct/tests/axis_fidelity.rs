@@ -173,7 +173,7 @@ fn imported_axis_title_preserves_unmodeled_rich_text_properties() {
         tx: Some(ChartText::Rich(crate::domain::charts::parse_text_body(
             br#"<c:rich xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
                       xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
-                <a:bodyPr/>
+                <a:bodyPr rot="5400000" vert="vert"/>
                 <a:p>
                     <a:r>
                         <a:rPr lang="en-US"/>
@@ -195,7 +195,50 @@ fn imported_axis_title_preserves_unmodeled_rich_text_properties() {
 
     let xml = chart_xml(&spec);
 
+    assert!(xml.contains("rot=\"5400000\""), "{xml}");
+    assert!(xml.contains("vert=\"vert\""), "{xml}");
     assert_eq!(xml.matches("lang=\"en-US\"").count(), 2, "{xml}");
+}
+
+#[test]
+fn imported_axis_text_properties_preserve_unmodeled_run_properties() {
+    let mut spec = minimal_chart_spec(DomainChartType::Column, None);
+    spec.axes = Some(AxisData {
+        category_axis: Some(SingleAxisData {
+            visible: true,
+            ..Default::default()
+        }),
+        value_axis: Some(SingleAxisData {
+            visible: true,
+            ..Default::default()
+        }),
+        secondary_category_axis: None,
+        secondary_value_axis: None,
+        series_axis: None,
+    });
+
+    let mut category_axis = imported_left_axis(AxisType::Category, 10, 100);
+    category_axis.tx_pr = Some(crate::domain::charts::parse_text_body(
+        br#"<c:txPr xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+                  xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+            <a:bodyPr/>
+            <a:p>
+                <a:pPr>
+                    <a:defRPr baseline="0"/>
+                </a:pPr>
+                <a:endParaRPr lang="en-US"/>
+            </a:p>
+        </c:txPr>"#,
+    ));
+    let spec = with_original_axes(
+        spec,
+        vec![category_axis, imported_left_axis(AxisType::Value, 100, 10)],
+    );
+
+    let xml = chart_xml(&spec);
+
+    assert!(xml.contains("baseline=\"0\""), "{xml}");
+    assert!(xml.contains("lang=\"en-US\""), "{xml}");
 }
 
 #[test]

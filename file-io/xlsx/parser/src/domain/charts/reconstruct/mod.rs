@@ -17,6 +17,7 @@ mod elements;
 mod formatting;
 mod ranges;
 mod series;
+mod text_body_fidelity;
 
 use domain_types::chart::ChartSpec;
 use ooxml_types::charts::ChartSpace;

@@ -234,6 +234,10 @@ export function PivotFieldList({
   const autoActivatedFieldRef = useRef<{ fieldId: string; area: PivotFieldArea } | null>(null);
 
   const fieldById = useMemo(() => new Map(fields.map((field) => [field.id, field])), [fields]);
+  const placedFieldIds = useMemo(
+    () => new Set(placements.map((placement) => placement.fieldId)),
+    [placements],
+  );
   const placementsByArea = useMemo<Record<PivotFieldArea, PlacedField[]>>(() => {
     const byArea: Record<PivotFieldArea, PlacedField[]> = {
       filter: [],
@@ -528,20 +532,25 @@ export function PivotFieldList({
     [canDragState, fieldById, onAddField, onMovePlacement, placementsByArea, selectedItem],
   );
 
-  const renderSourceFieldChip = (field: PivotField) => {
+  const renderSourceFieldRow = (field: PivotField) => {
     const state: DragState = { kind: 'field', fieldId: field.id };
     const isDragging = dragState?.kind === 'field' && dragState.fieldId === field.id;
     const isSelected = selectedItem?.kind === 'field' && selectedItem.fieldId === field.id;
+    const isChecked = isSelected || placedFieldIds.has(field.id);
     const canDrag = canDragState(state);
 
     return (
       <div
         key={`available-${field.id}`}
-        className={`flex max-w-full min-w-0 items-center gap-1.5 px-2 py-1.5 rounded text-body-sm select-none transition-colors ${
+        className={`flex w-full max-w-full min-w-0 items-center gap-2 px-2 py-1.5 rounded text-body-sm select-none transition-colors ${
           canDrag ? 'cursor-grab' : 'cursor-default'
-        } ${isDragging ? 'opacity-50' : ''} ${isSelected ? 'ring-2 ring-ss-primary' : ''} bg-ss-surface-hover`}
+        } ${isDragging ? 'opacity-50' : ''} ${
+          isSelected ? 'ring-2 ring-ss-primary' : ''
+        } hover:bg-ss-surface-hover`}
         draggable={canDrag}
-        role="button"
+        role="checkbox"
+        aria-checked={isChecked}
+        aria-disabled={!canDrag}
         tabIndex={canDrag ? 0 : -1}
         title={field.name}
         aria-label={field.name}
@@ -564,9 +573,20 @@ export function PivotFieldList({
         data-pivot-placement-id={field.id}
         data-pivot-area="available"
         data-pivot-selected={isSelected ? 'true' : 'false'}
+        data-pivot-checked={isChecked ? 'true' : 'false'}
       >
+        <span
+          aria-hidden="true"
+          className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-sm border text-[10px] leading-none ${
+            isChecked
+              ? 'border-ss-primary bg-ss-primary text-white'
+              : 'border-ss-border bg-ss-surface text-transparent'
+          }`}
+        >
+          ✓
+        </span>
         <DataTypeIcon dataType={field.dataType} />
-        <span className="min-w-0 flex-1 truncate" title={field.name} aria-label={field.name}>
+        <span className="min-w-0 flex-1 truncate" title={field.name}>
           {field.name}
         </span>
       </div>
@@ -738,14 +758,16 @@ export function PivotFieldList({
           Available Fields
         </div>
         <div
-          className="flex flex-wrap gap-1.5 min-h-9 p-1.5 bg-ss-surface border border-dashed border-ss-border rounded"
+          className="flex flex-col gap-0.5 min-h-9 p-1 bg-ss-surface border border-ss-border rounded"
+          role="group"
+          aria-label="Available fields"
           data-pivot-target="available-fields"
           data-pivot-zone="available"
         >
           {fields.length === 0 ? (
             <span className="text-caption text-ss-text-disabled italic p-1">No fields</span>
           ) : (
-            fields.map(renderSourceFieldChip)
+            fields.map(renderSourceFieldRow)
           )}
         </div>
       </div>

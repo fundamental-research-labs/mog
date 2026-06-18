@@ -104,6 +104,32 @@ function chip(container: HTMLElement, placementId: string): HTMLElement {
 }
 
 describe('PivotFieldList placement editor', () => {
+  it('renders available source fields as full-width checkbox rows with stable selectors', () => {
+    const { container } = renderList();
+    const availableFields = container.querySelector<HTMLElement>(
+      '[data-pivot-target="available-fields"][data-pivot-zone="available"]',
+    );
+    if (!availableFields) throw new Error('Missing available fields list');
+
+    const sourceRows = availableFields.querySelectorAll<HTMLElement>(
+      '[data-pivot-target="field-chip"][data-pivot-area="available"]',
+    );
+    const category = screen.getByRole('checkbox', { name: 'Category' });
+    const amount = screen.getByRole('checkbox', { name: 'Amount' });
+
+    expect(availableFields).toHaveClass('flex-col');
+    expect(availableFields).not.toHaveClass('flex-wrap');
+    expect(sourceRows).toHaveLength(fields.length);
+    sourceRows.forEach((row) => expect(row).toHaveClass('w-full'));
+    expect(category).toHaveAttribute('data-pivot-field-id', 'Category');
+    expect(category).toHaveAttribute('data-pivot-selected', 'false');
+    expect(category).toHaveAttribute('data-pivot-checked', 'false');
+    expect(category).toHaveAttribute('aria-checked', 'false');
+    expect(amount).toHaveAttribute('data-pivot-field-id', 'Amount');
+    expect(amount).toHaveAttribute('data-pivot-checked', 'true');
+    expect(amount).toHaveAttribute('aria-checked', 'true');
+  });
+
   it('renders ordered placement wells keyed by placementId with row/value sort controls', () => {
     const { container } = renderList({
       placements: [

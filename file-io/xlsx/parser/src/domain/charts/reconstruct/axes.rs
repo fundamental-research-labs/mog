@@ -1,6 +1,6 @@
 use domain_types::{
-    chart::{AxisData, ChartSpec, ChartType as DomainChartType, SingleAxisData},
     ChartDefinition,
+    chart::{AxisData, ChartSpec, ChartType as DomainChartType, SingleAxisData},
 };
 use ooxml_types::charts::{
     self, AxisCrosses, AxisType, ChartAxis, ChartAxisPosition, ChartLines, CrossBetween,
@@ -9,7 +9,7 @@ use ooxml_types::charts::{
 use ooxml_types::drawings::ShapeProperties;
 
 use super::{
-    elements::{build_chart_text_rich, build_title},
+    elements::{TitleTextSource, build_chart_text_rich, build_title},
     formatting::{build_outline, build_shape_properties, build_text_body},
     text_body_fidelity::{
         preserve_imported_text_body_properties, preserve_imported_title_text_properties,
@@ -529,7 +529,10 @@ fn build_single_axis_with_default_position(
     };
 
     let title = build_title(
-        sad.title.as_deref(),
+        TitleTextSource {
+            text: sad.title.as_deref(),
+            formula: None,
+        },
         sad.title_format.as_ref(),
         sad.title_rich_text.as_deref(),
         None,

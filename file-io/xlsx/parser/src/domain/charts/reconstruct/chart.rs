@@ -8,7 +8,9 @@ use super::{
     axes::build_axes,
     chart_groups::build_chart_groups,
     chart_space::clean_chart_extensions,
-    elements::{build_data_table, build_legend, build_surface, build_title, build_view_3d},
+    elements::{
+        TitleTextSource, build_data_table, build_legend, build_surface, build_title, build_view_3d,
+    },
     formatting::build_shape_properties,
     text_body_fidelity::{
         preserve_imported_text_body_properties, preserve_imported_title_text_properties,
@@ -30,7 +32,10 @@ pub(super) fn build_chart(spec: &ChartSpec) -> charts::Chart {
         .as_ref()
         .or(imported_title_layout.as_ref());
     let mut title = build_title(
-        spec.title.as_deref(),
+        TitleTextSource {
+            text: spec.title.as_deref(),
+            formula: spec.title_formula.as_deref(),
+        },
         spec.title_format.as_ref(),
         spec.title_rich_text.as_deref(),
         title_layout,

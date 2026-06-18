@@ -29,6 +29,19 @@ pub(super) fn extract_title_text_from_title(title: &ooxml_types::charts::Title) 
     }
 }
 
+pub(super) fn extract_title_formula_from_title(
+    title: &ooxml_types::charts::Title,
+) -> Option<String> {
+    use ooxml_types::charts::ChartText;
+
+    match &title.tx {
+        Some(ChartText::StrRef(str_ref)) if !str_ref.f.trim().is_empty() => {
+            Some(str_ref.f.clone())
+        }
+        _ => None,
+    }
+}
+
 pub(super) fn extract_chart_text_string(ct: &ooxml_types::charts::ChartText) -> Option<String> {
     use ooxml_types::charts::ChartText;
     use ooxml_types::drawings::TextRunContent;
@@ -164,13 +177,16 @@ fn dag_effect_has_shadow(effect: &ooxml_types::drawings::DagEffect) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use ooxml_types::charts::{ChartText, Title};
+    use ooxml_types::charts::{ChartText, StrRef, Title};
     use ooxml_types::drawings::{
         EffectList, EffectProperties, OuterShadow, Paragraph, ParagraphProperties, ShapeProperties,
         TextAlign, TextAnchor, TextBody, TextBodyProperties,
     };
 
-    use super::{extract_title_h_align, extract_title_show_shadow, extract_title_v_align};
+    use super::{
+        extract_title_formula_from_title, extract_title_h_align, extract_title_show_shadow,
+        extract_title_v_align,
+    };
 
     #[test]
     fn extracts_title_alignment_and_shadow() {
@@ -202,5 +218,21 @@ mod tests {
         assert_eq!(extract_title_h_align(&title), Some("center".to_string()));
         assert_eq!(extract_title_v_align(&title), Some("top".to_string()));
         assert_eq!(extract_title_show_shadow(&title), Some(true));
+    }
+
+    #[test]
+    fn extracts_title_formula_from_string_reference() {
+        let title = Title {
+            tx: Some(ChartText::StrRef(StrRef {
+                f: "Sheet1!$A$1".to_string(),
+                ..Default::default()
+            })),
+            ..Default::default()
+        };
+
+        assert_eq!(
+            extract_title_formula_from_title(&title),
+            Some("Sheet1!$A$1".to_string())
+        );
     }
 }

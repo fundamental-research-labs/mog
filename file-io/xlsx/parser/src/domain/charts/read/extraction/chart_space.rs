@@ -248,7 +248,7 @@ pub fn extract_chart_spec_from_chart_space(
         plot_format,
         title_format,
         title_rich_text,
-        title_formula: None,
+        title_formula: chart.title.as_ref().and_then(super::text::extract_title_formula_from_title),
         plot_layout,
         title_layout,
         data_table,

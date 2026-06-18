@@ -4,7 +4,7 @@ use domain_types::chart::{
 };
 use ooxml_types::charts::{
     self, ChartLines, ChartSurface, ChartText, DataLabel, DataLabelOptions, DataLabelPosition,
-    DataTableConfig, ExtensionEntry, LegendPosition, NumFmt, StrRef, View3D,
+    DataTableConfig, ExtensionEntry, LegendPosition, NumFmt, StrData, StrPoint, StrRef, View3D,
 };
 use ooxml_types::drawings::{
     ColorTransform, DrawingColor, EffectList, EffectProperties, OuterShadow, Paragraph,
@@ -17,8 +17,13 @@ use super::formatting::{
 };
 use crate::domain::charts::data_label_contract_ext::build_data_label_contract_extension;
 
+pub(super) struct TitleTextSource<'a> {
+    pub text: Option<&'a str>,
+    pub formula: Option<&'a str>,
+}
+
 pub(super) fn build_title(
-    text: Option<&str>,
+    source: TitleTextSource<'_>,
     format: Option<&ChartFormatData>,
     rich_text: Option<&[ChartFormatStringData]>,
     layout: Option<&domain_types::domain::drawings::ManualLayout>,
@@ -27,6 +32,17 @@ pub(super) fn build_title(
     show_shadow: Option<bool>,
 ) -> Option<charts::Title> {
     let default_font = format.and_then(|f| f.font.as_ref());
+    if let Some(formula) = source.formula.filter(|formula| !formula.trim().is_empty()) {
+        return Some(build_title_with_text(
+            build_title_str_ref(formula, source.text),
+            format,
+            layout,
+            horizontal_alignment,
+            vertical_alignment,
+            show_shadow,
+        ));
+    }
+
     if let Some(runs) = rich_text.filter(|runs| runs.iter().any(|run| !run.text.is_empty())) {
         return Some(build_title_with_text(
             build_chart_text_rich_runs(runs, default_font),
@@ -38,9 +54,9 @@ pub(super) fn build_title(
         ));
     }
 
-    let text = text?;
+    let text = source.text?;
     // Guard against the literal string "undefined" leaking from JS bridge serialization.
-    if text == "undefined" || text.is_empty() {
+    if !is_valid_title_text(text) {
         return None;
     }
     Some(build_title_element(
@@ -69,6 +85,25 @@ pub(super) fn build_title_element(
         vertical_alignment,
         show_shadow,
     )
+}
+
+fn is_valid_title_text(text: &str) -> bool {
+    text != "undefined" && !text.is_empty()
+}
+
+fn build_title_str_ref(formula: &str, text: Option<&str>) -> ChartText {
+    ChartText::StrRef(StrRef {
+        f: formula.to_string(),
+        str_cache: text.filter(|text| is_valid_title_text(text)).map(|text| StrData {
+            pt_count: Some(1),
+            pts: vec![StrPoint {
+                idx: 0,
+                v: text.to_string(),
+            }],
+            extensions: Vec::new(),
+        }),
+        extensions: Vec::new(),
+    })
 }
 
 fn build_title_with_text(
@@ -583,6 +618,10 @@ mod tests {
         }
     }
 
+    fn title_source<'a>(text: Option<&'a str>, formula: Option<&'a str>) -> TitleTextSource<'a> {
+        TitleTextSource { text, formula }
+    }
+
     #[test]
     fn build_data_table_uses_show_legend_key_alias() {
         let data_table = ChartDataTableData {
@@ -660,7 +699,7 @@ mod tests {
         ];
 
         let title = build_title(
-            Some("Revenue FY26"),
+            title_source(Some("Revenue FY26"), None),
             Some(&default_format),
             Some(&rich_text),
             None,
@@ -728,7 +767,7 @@ mod tests {
         }];
 
         let mut title = build_title(
-            Some("Revenue"),
+            title_source(Some("Revenue"), None),
             Some(&default_format),
             Some(&rich_text),
             None,
@@ -839,7 +878,9 @@ mod tests {
 
     #[test]
     fn build_title_falls_back_to_plain_text_without_rich_runs() {
-        let title = build_title(Some("Plain"), None, Some(&[]), None, None, None, None)
+        let title = build_title(
+            title_source(Some("Plain"), None), None, Some(&[]), None, None, None, None,
+        )
             .expect("plain title should be reconstructed");
 
         let Some(ChartText::Rich(body)) = title.tx else {
@@ -854,7 +895,7 @@ mod tests {
     #[test]
     fn build_title_preserves_alignment_and_shadow() {
         let title = build_title(
-            Some("Aligned"),
+            title_source(Some("Aligned"), None),
             None,
             None,
             None,
@@ -881,6 +922,23 @@ mod tests {
     }
 
     #[test]
+    fn build_title_emits_formula_reference_with_cached_text() {
+        let title = build_title(
+            title_source(Some("Linked title"), Some("Sheet1!$A$1")), None, None, None, None, None, None,
+        )
+            .expect("linked title should be reconstructed");
+
+        let Some(ChartText::StrRef(str_ref)) = title.tx else {
+            panic!("expected title string reference");
+        };
+        assert_eq!(str_ref.f, "Sheet1!$A$1");
+        let cache = str_ref.str_cache.expect("title string cache");
+        assert_eq!(cache.pt_count, Some(1));
+        assert_eq!(cache.pts[0].idx, 0);
+        assert_eq!(cache.pts[0].v, "Linked title");
+    }
+
+    #[test]
     fn build_title_emits_text_body_format() {
         let format = ChartFormatData {
             fill: None,
@@ -892,15 +950,9 @@ mod tests {
         };
 
         let title = build_title(
-            Some("Rotated"),
-            Some(&format),
-            None,
-            None,
-            None,
-            None,
-            None,
+            title_source(Some("Rotated"), None), Some(&format), None, None, None, None, None,
         )
-        .expect("title should be reconstructed");
+            .expect("title should be reconstructed");
 
         let tx_pr = title.tx_pr.expect("title text properties");
         assert_eq!(tx_pr.body_props.rot.map(|rot| rot.value()), Some(2520000));

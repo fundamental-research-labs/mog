@@ -14,6 +14,7 @@ use super::{
     super::data_label_contract_ext::{
         build_full_data_label_contract_extension, is_data_label_contract_extension,
     },
+    axes::chart_type_supports_series_axis,
     elements::build_data_labels,
     formatting::{build_outline, build_shape_properties},
     ranges::series_for_export,
@@ -337,7 +338,7 @@ fn build_modeled_chart_group(
         .collect();
     let config = build_default_config(ooxml_ct, chart_type, spec, &series);
     let d_lbls = spec.data_labels.as_ref().map(build_data_labels);
-    let ax_id = default_axis_ids_for_series_group(ooxml_ct, &series_data);
+    let ax_id = default_axis_ids_for_series_group(ooxml_ct, chart_type, &series_data);
 
     ChartGroup {
         chart_type: ooxml_ct,
@@ -421,20 +422,25 @@ pub(super) fn default_axis_ids(ct: OoxmlChartType) -> Vec<u32> {
 
 fn default_axis_ids_for_series_group(
     ct: OoxmlChartType,
+    chart_type: &DomainChartType,
     series_data: &[(usize, &ChartSeriesData)],
 ) -> Vec<u32> {
     if default_axis_ids(ct).is_empty() {
         return Vec::new();
     }
 
-    if series_data
+    let mut axis_ids = if series_data
         .iter()
         .any(|(_, series)| series.y_axis_index == Some(1))
     {
         vec![333333333, 444444444]
     } else {
         default_axis_ids(ct)
+    };
+    if chart_type_supports_series_axis(chart_type) {
+        axis_ids.push(555555555);
     }
+    axis_ids
 }
 
 /// Build a default ChartTypeConfig for a single-group chart.

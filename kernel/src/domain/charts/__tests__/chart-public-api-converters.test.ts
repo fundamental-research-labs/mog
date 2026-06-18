@@ -214,4 +214,37 @@ describe('chart public API converters', () => {
       surfaceTopView: false,
     });
   });
+
+  it('syncs series axis text orientation through the native axis text format', () => {
+    const internal = chartConfigToInternal({
+      type: 'area3d',
+      dataRange: 'A1:D5',
+      axis: {
+        seriesAxis: {
+          visible: true,
+          axisType: 'serAx',
+          textOrientation: 45,
+        },
+      },
+    });
+
+    expect(internal.axis?.seriesAxis?.textOrientation).toBe(45);
+    expect(internal.axis?.seriesAxis?.format?.textRotation).toBe(45);
+
+    const publicChart = serializedChartToChart(
+      chart({
+        chartType: 'area3D',
+        axis: {
+          seriesAxis: {
+            visible: true,
+            axisType: 'serAx',
+            format: { textRotation: 45 },
+          },
+        },
+      }),
+    );
+
+    expect(publicChart.axis?.seriesAxis?.textOrientation).toBe(45);
+    expect(publicChart.axis?.seriesAxis?.format?.textRotation).toBe(45);
+  });
 });

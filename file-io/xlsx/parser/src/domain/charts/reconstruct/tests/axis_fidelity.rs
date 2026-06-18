@@ -355,6 +355,30 @@ fn authored_bar_axes_without_positions_use_horizontal_bar_axis_sides() {
     assert_eq!(xml.matches("<c:tickLblPos val=\"nextTo\"/>").count(), 2);
 }
 
+#[test]
+fn authored_3d_series_axis_is_referenced_and_preserves_text_orientation() {
+    let mut spec = minimal_chart_spec(DomainChartType::Area3D, Some("A1:D5"));
+    spec.axes = Some(AxisData {
+        category_axis: None,
+        value_axis: None,
+        secondary_category_axis: None,
+        secondary_value_axis: None,
+        series_axis: Some(SingleAxisData {
+            visible: true,
+            axis_type: Some("serAx".to_string()),
+            text_orientation: Some(45.0),
+            ..Default::default()
+        }),
+    });
+
+    let xml = chart_xml(&spec);
+
+    assert!(xml.contains("<c:area3DChart>"), "{xml}");
+    assert!(xml.contains("<c:axId val=\"555555555\"/></c:area3DChart>"), "{xml}");
+    assert!(xml.contains("<c:serAx><c:axId val=\"555555555\"/>"), "{xml}");
+    assert!(xml.contains("<c:txPr><a:bodyPr rot=\"2700000\"/>"), "{xml}");
+}
+
 fn imported_left_axis(axis_type: AxisType, ax_id: u32, cross_ax: u32) -> ChartAxis {
     ChartAxis {
         axis_type,

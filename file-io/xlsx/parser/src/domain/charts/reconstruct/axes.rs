@@ -6,7 +6,9 @@ use ooxml_types::charts::{
     self, AxisCrosses, AxisType, ChartAxis, ChartAxisPosition, ChartLines, CrossBetween,
     LabelAlignment, NumFmt, Orientation, Scaling, TickLabelPosition, TickMark, TimeUnit,
 };
-use ooxml_types::drawings::ShapeProperties;
+use ooxml_types::drawings::{
+    Paragraph, ParagraphProperties, ShapeProperties, StAngle, TextBody,
+};
 
 use super::{
     elements::{TitleTextSource, build_chart_text_rich, build_title},
@@ -79,7 +81,12 @@ pub(super) fn build_axes(spec: &ChartSpec) -> Vec<ChartAxis> {
             333333333,
         ));
     }
-    if let Some(ref ser) = axes_data.series_axis {
+    let default_axis = default_visible_axis();
+    if let Some(ser) = axes_data
+        .series_axis
+        .as_ref()
+        .or_else(|| chart_type_supports_series_axis(&spec.chart_type).then_some(&default_axis))
+    {
         axes.push(build_axis_for_slot(
             spec,
             ser,
@@ -90,7 +97,6 @@ pub(super) fn build_axes(spec: &ChartSpec) -> Vec<ChartAxis> {
         ));
     }
     if modeled_series_needs_secondary_axis(spec) {
-        let default_axis = default_visible_axis();
         if axes_data.secondary_category_axis.is_none() {
             let axis_type = if matches!(
                 spec.chart_type,
@@ -212,6 +218,16 @@ pub(super) fn build_default_axes(spec: &ChartSpec) -> Vec<ChartAxis> {
             333333333,
         ));
     }
+    if chart_type_supports_series_axis(&spec.chart_type) {
+        axes.push(build_axis_for_slot(
+            spec,
+            &default_axis,
+            AxisSlot::Series,
+            AxisType::Series,
+            555555555,
+            cat_id,
+        ));
+    }
 
     axes
 }
@@ -236,6 +252,18 @@ pub(super) fn chart_type_requires_axes(chart_type: &DomainChartType) -> bool {
             | DomainChartType::Pie3D
             | DomainChartType::Doughnut
             | DomainChartType::OfPie
+    )
+}
+
+pub(super) fn chart_type_supports_series_axis(chart_type: &DomainChartType) -> bool {
+    matches!(
+        chart_type,
+        DomainChartType::Bar3D
+            | DomainChartType::Column3D
+            | DomainChartType::Line3D
+            | DomainChartType::Area3D
+            | DomainChartType::Surface
+            | DomainChartType::Surface3D
     )
 }
 
@@ -613,7 +641,7 @@ fn build_single_axis_with_default_position(
     let (crosses, crosses_at) = reconstruct_crossing(sad);
 
     let sp_pr = sad.format.as_ref().and_then(build_shape_properties);
-    let tx_pr = sad.format.as_ref().and_then(build_text_body);
+    let tx_pr = build_axis_text_body(sad);
 
     // Display units
     let disp_units = build_display_units(sad);
@@ -654,6 +682,29 @@ fn build_single_axis_with_default_position(
         major_time_unit,
         minor_time_unit,
         ..Default::default()
+    }
+}
+
+fn build_axis_text_body(sad: &SingleAxisData) -> Option<TextBody> {
+    let mut tx_pr = sad.format.as_ref().and_then(build_text_body);
+    if let Some(rotation) = sad.text_orientation {
+        tx_pr
+            .get_or_insert_with(empty_axis_text_body)
+            .body_props
+            .rot = Some(StAngle::new((rotation * 60_000.0).round() as i32));
+    }
+    tx_pr
+}
+
+fn empty_axis_text_body() -> TextBody {
+    TextBody {
+        body_props: Default::default(),
+        list_style: None,
+        paragraphs: vec![Paragraph {
+            props: ParagraphProperties::default(),
+            runs: Vec::new(),
+            end_para_rpr: None,
+        }],
     }
 }
 

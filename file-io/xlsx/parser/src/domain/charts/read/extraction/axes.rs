@@ -657,7 +657,7 @@ mod tests {
             format.text_vertical_type,
             Some(domain_types::chart::ChartTextVerticalType::Horizontal)
         );
-        assert_eq!(category.text_orientation, None);
+        assert_eq!(category.text_orientation, Some(-45.0));
     }
 
     #[test]
@@ -777,6 +777,7 @@ fn extract_single_axis(ax: &ooxml_types::charts::ChartAxis) -> domain_types::cha
 
     // Formatting
     let format = extract_chart_format(ax.sp_pr.as_ref(), ax.tx_pr.as_ref());
+    let text_orientation = format.as_ref().and_then(|format| format.text_rotation);
     let title_format = ax.title.as_ref().and_then(extract_title_chart_format);
     let title_rich_text = ax
         .title
@@ -883,6 +884,7 @@ fn extract_single_axis(ax: &ooxml_types::charts::ChartAxis) -> domain_types::cha
         crosses_at,
         crosses_at_value,
         is_between_categories,
+        text_orientation,
         ..Default::default()
     }
 }

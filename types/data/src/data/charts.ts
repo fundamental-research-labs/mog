@@ -1146,6 +1146,8 @@ export interface SeriesConfig {
   markerBackgroundColor?: ChartColor;
   /** Marker border color. */
   markerForegroundColor?: ChartColor;
+  /** Full marker border/outline format. */
+  markerLineFormat?: ChartLineFormat;
   /** Whether this series is hidden/filtered from the chart. */
   filtered?: boolean;
   /** Original chart series index before filtering/projection. */
@@ -1242,6 +1244,8 @@ export interface PointFormat {
   markerBackgroundColor?: ChartColor;
   /** Per-point marker border color. */
   markerForegroundColor?: ChartColor;
+  /** Per-point marker border/outline format. */
+  markerLineFormat?: ChartLineFormat;
   /** Per-point marker size (2-72 points). */
   markerSize?: number;
   /** Per-point marker style. */

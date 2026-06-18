@@ -1192,6 +1192,7 @@ export interface ChartSeriesData {
   invertColor?: ChartColorData;
   markerBackgroundColor?: ChartColorData;
   markerForegroundColor?: ChartColorData;
+  markerLineFormat?: ChartLineData;
   filtered?: boolean;
   sourceSeriesIndex?: number;
   sourceSeriesKey?: string;
@@ -3767,6 +3768,7 @@ export interface PointFormatData {
   visualFormat?: ChartFormatData;
   markerBackgroundColor?: ChartColorData;
   markerForegroundColor?: ChartColorData;
+  markerLineFormat?: ChartLineData;
   markerSize?: number;
   markerStyle?: string;
 }

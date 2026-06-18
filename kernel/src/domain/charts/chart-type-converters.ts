@@ -35,9 +35,11 @@ import type { SeriesConfig } from '@mog-sdk/contracts/data/charts';
 import {
   chartColorToWire,
   chartFormatToWire,
+  chartLineFormatToWire,
   directHexColorToWire,
   wireToChartColor,
   wireToChartFormat,
+  wireToChartLineFormat,
   wireToDirectHexColor,
 } from './chart-format-converters';
 
@@ -182,6 +184,7 @@ export function wireToSeriesConfig(w: ChartSeriesData): SeriesConfig {
     invertColor: wireToChartColor(w.invertColor),
     markerBackgroundColor: wireToChartColor(w.markerBackgroundColor),
     markerForegroundColor: wireToChartColor(w.markerForegroundColor),
+    markerLineFormat: w.markerLineFormat ? wireToChartLineFormat(w.markerLineFormat) : undefined,
     filtered: w.filtered,
     sourceSeriesIndex: w.sourceSeriesIndex,
     sourceSeriesKey: w.sourceSeriesKey,
@@ -253,6 +256,7 @@ export function seriesConfigToWire(c: SeriesConfig): ChartSeriesData {
     invertColor: chartColorToWire(c.invertColor),
     markerBackgroundColor: chartColorToWire(c.markerBackgroundColor),
     markerForegroundColor: chartColorToWire(c.markerForegroundColor),
+    markerLineFormat: c.markerLineFormat ? chartLineFormatToWire(c.markerLineFormat) : undefined,
     filtered: c.filtered,
     sourceSeriesIndex: c.sourceSeriesIndex,
     sourceSeriesKey: c.sourceSeriesKey,

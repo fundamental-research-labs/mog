@@ -250,6 +250,8 @@ pub struct ChartSeriesData {
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub marker_foreground_color: Option<ChartColorData>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub marker_line_format: Option<ChartLineData>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     pub filtered: Option<bool>,
     /// Original chart series index before filtering/projection.
     #[serde(skip_serializing_if = "Option::is_none", default)]
@@ -380,6 +382,8 @@ pub struct PointFormatData {
     pub marker_background_color: Option<ChartColorData>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub marker_foreground_color: Option<ChartColorData>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub marker_line_format: Option<ChartLineData>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub marker_size: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none", default)]

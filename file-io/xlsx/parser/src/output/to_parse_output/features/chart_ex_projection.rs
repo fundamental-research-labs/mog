@@ -637,6 +637,7 @@ fn project_chart_ex_series(
                 invert_color: None,
                 marker_background_color: None,
                 marker_foreground_color: None,
+                marker_line_format: None,
                 filtered: series.hidden,
                 source_series_index: None,
                 source_series_key: None,
@@ -1250,6 +1251,7 @@ fn project_chart_ex_points(series: &ChartExSeries) -> Option<Vec<PointFormatData
                 visual_format: extract_chart_format(Some(sp_pr), None),
                 marker_background_color: None,
                 marker_foreground_color: None,
+                marker_line_format: None,
                 marker_size: None,
                 marker_style: None,
             })
@@ -1750,6 +1752,7 @@ mod tests {
             invert_color: None,
             marker_background_color: None,
             marker_foreground_color: None,
+            marker_line_format: None,
             filtered: None,
             source_series_index: None,
             source_series_key: None,

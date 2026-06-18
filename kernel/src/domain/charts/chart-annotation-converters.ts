@@ -241,6 +241,7 @@ export function wireToPointFormat(w: PointFormatData): PointFormat {
     visualFormat: wireToChartFormat(w.visualFormat),
     markerBackgroundColor: wireToChartColor(w.markerBackgroundColor),
     markerForegroundColor: wireToChartColor(w.markerForegroundColor),
+    markerLineFormat: w.markerLineFormat ? wireToChartLineFormat(w.markerLineFormat) : undefined,
     markerSize: w.markerSize,
     markerStyle: narrowEnum<MarkerStyle>(w.markerStyle, MARKER_STYLES, 'Point.markerStyle'),
   };
@@ -260,6 +261,7 @@ export function pointFormatToWire(c: PointFormat): PointFormatData {
     visualFormat: chartFormatToWire(c.visualFormat),
     markerBackgroundColor: chartColorToWire(c.markerBackgroundColor),
     markerForegroundColor: chartColorToWire(c.markerForegroundColor),
+    markerLineFormat: c.markerLineFormat ? chartLineFormatToWire(c.markerLineFormat) : undefined,
     markerSize: c.markerSize,
     markerStyle: c.markerStyle,
   };

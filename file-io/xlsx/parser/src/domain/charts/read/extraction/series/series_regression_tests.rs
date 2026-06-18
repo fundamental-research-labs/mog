@@ -3,8 +3,9 @@ use domain_types::chart::{ChartColorData, ChartDashStyle};
 use ooxml_types::charts::{
     AreaChartConfig, AxisType, Chart, ChartAxis, ChartAxisPosition, ChartGroup, ChartLines,
     ChartSpace, ChartType, ChartTypeConfig, DataLabelOptions, DataPointOverride, ErrorBarDirection,
-    ErrorBarType, ErrorBars, ErrorValueType, Line3DChartConfig, LineChartConfig, NumDataSource,
-    PlotArea, RadarChartConfig, Scaling, ScatterChartConfig, ScatterStyle, StockChartConfig,
+    ErrorBarType, ErrorBars, ErrorValueType, Line3DChartConfig, LineChartConfig, Marker,
+    MarkerStyle, NumDataSource, PlotArea, RadarChartConfig, Scaling, ScatterChartConfig,
+    ScatterStyle, StockChartConfig,
 };
 
 fn axis(axis_type: AxisType, ax_id: u32, cross_ax: u32, ax_pos: ChartAxisPosition) -> ChartAxis {
@@ -296,6 +297,103 @@ fn point_shape_properties_extract_to_format_aliases() {
             .and_then(|line| line.dash_style.as_ref()),
         Some(&ChartDashStyle::Dash)
     );
+}
+
+#[test]
+fn series_marker_outline_extracts_width_and_dash_without_line_color() {
+    let extracted = extract_series_from_chart_space(&ChartSpace {
+        chart: Chart {
+            plot_area: PlotArea {
+                chart_groups: vec![ChartGroup {
+                    chart_type: ChartType::Line,
+                    config: ChartTypeConfig::Line(LineChartConfig::default()),
+                    series: vec![ooxml_types::charts::ChartSeries {
+                        idx: 0,
+                        order: 0,
+                        marker: Some(Marker {
+                            symbol: Some(MarkerStyle::Circle),
+                            sp_pr: Some(crate::domain::charts::parse_shape_properties(
+                                br#"<c:spPr xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+                                           xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+                                    <a:ln w="25400"><a:prstDash val="solid"/></a:ln>
+                                </c:spPr>"#,
+                            )),
+                            ..Default::default()
+                        }),
+                        ..Default::default()
+                    }],
+                    d_lbls: None,
+                    ax_id: vec![],
+                    raw_chart_type_attr: None,
+                    raw_chart_element_name: None,
+                    raw_chart_group_xml: None,
+                }],
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+        ..Default::default()
+    });
+
+    let line = extracted[0]
+        .marker_line_format
+        .as_ref()
+        .expect("marker line format");
+    assert_eq!(line.width, Some(2.0));
+    assert_eq!(line.dash_style, Some(ChartDashStyle::Solid));
+}
+
+#[test]
+fn point_marker_outline_extracts_width_and_dash_without_line_color() {
+    let extracted = extract_series_from_chart_space(&ChartSpace {
+        chart: Chart {
+            plot_area: PlotArea {
+                chart_groups: vec![ChartGroup {
+                    chart_type: ChartType::Line,
+                    config: ChartTypeConfig::Line(LineChartConfig::default()),
+                    series: vec![ooxml_types::charts::ChartSeries {
+                        idx: 0,
+                        order: 0,
+                        d_pt: vec![DataPointOverride {
+                            idx: 0,
+                            marker: Some(Marker {
+                                symbol: Some(MarkerStyle::Circle),
+                                sp_pr: Some(crate::domain::charts::parse_shape_properties(
+                                    br#"<c:spPr xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+                                               xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+                                        <a:ln w="25400"><a:prstDash val="solid"/></a:ln>
+                                    </c:spPr>"#,
+                                )),
+                                ..Default::default()
+                            }),
+                            ..Default::default()
+                        }],
+                        ..Default::default()
+                    }],
+                    d_lbls: None,
+                    ax_id: vec![],
+                    raw_chart_type_attr: None,
+                    raw_chart_element_name: None,
+                    raw_chart_group_xml: None,
+                }],
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+        ..Default::default()
+    });
+
+    let point = extracted[0]
+        .points
+        .as_ref()
+        .and_then(|points| points.first())
+        .expect("point format");
+    let line = point
+        .marker_line_format
+        .as_ref()
+        .expect("marker line format");
+    assert_eq!(line.width, Some(2.0));
+    assert_eq!(line.dash_style, Some(ChartDashStyle::Solid));
 }
 
 #[test]

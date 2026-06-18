@@ -259,9 +259,8 @@ fn extract_single_series_with_semantics(
     let bubble_size_source_kind = extract_num_source_kind(&s.bubble_size);
 
     // Markers
-    let (show_markers, marker_size, marker_style, marker_background_color, marker_foreground_color) =
-        extract_marker_config(&s.marker);
-    let show_markers = show_markers.or(semantics.show_markers);
+    let marker_config = extract_marker_config(&s.marker);
+    let show_markers = marker_config.show.or(semantics.show_markers);
     let smooth = s.smooth;
 
     // Per-point formatting
@@ -275,13 +274,7 @@ fn extract_single_series_with_semantics(
             .and_then(|sp| sp.ln.as_ref())
             .map(|ln| extract_chart_line(ln));
         let border = line_format.as_ref().and_then(point_border_from_line);
-        let (
-            _point_show_markers,
-            point_marker_size,
-            point_marker_style,
-            point_marker_background_color,
-            point_marker_foreground_color,
-        ) = extract_marker_config(&pt.marker);
+        let point_marker_config = extract_marker_config(&pt.marker);
         let entry = point_formats
             .entry(pt.idx)
             .or_insert_with(|| point_format(pt.idx));
@@ -292,10 +285,11 @@ fn extract_single_series_with_semantics(
         entry.border = border;
         entry.line_format = line_format;
         entry.visual_format = visual_format;
-        entry.marker_size = point_marker_size;
-        entry.marker_style = point_marker_style;
-        entry.marker_background_color = point_marker_background_color;
-        entry.marker_foreground_color = point_marker_foreground_color;
+        entry.marker_size = point_marker_config.size;
+        entry.marker_style = point_marker_config.style;
+        entry.marker_background_color = point_marker_config.background_color;
+        entry.marker_foreground_color = point_marker_config.foreground_color;
+        entry.marker_line_format = point_marker_config.line_format;
     }
     let labels_from_options = s.d_lbls.iter().flat_map(|labels| labels.d_lbl.iter());
     for label in labels_from_options.chain(s.d_lbl.iter()) {
@@ -395,8 +389,8 @@ fn extract_single_series_with_semantics(
         invert_if_negative: s.invert_if_negative,
         y_axis_index: semantics.y_axis_index,
         show_markers,
-        marker_size,
-        marker_style,
+        marker_size: marker_config.size,
+        marker_style: marker_config.style,
         line_width: None,
         points,
         data_labels,
@@ -409,8 +403,9 @@ fn extract_single_series_with_semantics(
         format,
         bar_shape,
         invert_color: None,
-        marker_background_color,
-        marker_foreground_color,
+        marker_background_color: marker_config.background_color,
+        marker_foreground_color: marker_config.foreground_color,
+        marker_line_format: marker_config.line_format,
         filtered: None,
         source_series_index: None,
         source_series_key: None,
@@ -456,6 +451,7 @@ fn point_format(idx: u32) -> domain_types::chart::PointFormatData {
         visual_format: None,
         marker_background_color: None,
         marker_foreground_color: None,
+        marker_line_format: None,
         marker_size: None,
         marker_style: None,
     }

@@ -551,6 +551,7 @@ pub(super) fn build_marker(sd: &ChartSeriesData) -> Option<Marker> {
         && sd.marker_style.is_none()
         && sd.marker_background_color.is_none()
         && sd.marker_foreground_color.is_none()
+        && sd.marker_line_format.is_none()
     {
         return None;
     }
@@ -575,6 +576,7 @@ pub(super) fn build_marker(sd: &ChartSeriesData) -> Option<Marker> {
         sp_pr: build_marker_shape_properties(
             sd.marker_background_color.as_ref(),
             sd.marker_foreground_color.as_ref(),
+            sd.marker_line_format.as_ref(),
         ),
         ..Default::default()
     })
@@ -691,6 +693,7 @@ fn build_point_marker(pt: &PointFormatData) -> Option<Marker> {
         && pt.marker_style.is_none()
         && pt.marker_background_color.is_none()
         && pt.marker_foreground_color.is_none()
+        && pt.marker_line_format.is_none()
     {
         return None;
     }
@@ -701,6 +704,7 @@ fn build_point_marker(pt: &PointFormatData) -> Option<Marker> {
         sp_pr: build_marker_shape_properties(
             pt.marker_background_color.as_ref(),
             pt.marker_foreground_color.as_ref(),
+            pt.marker_line_format.as_ref(),
         ),
         ..Default::default()
     })
@@ -708,8 +712,10 @@ fn build_point_marker(pt: &PointFormatData) -> Option<Marker> {
 
 fn build_marker_shape_properties(
     fill: Option<&domain_types::chart::ChartColorData>,
-    line: Option<&domain_types::chart::ChartColorData>,
+    line_color: Option<&domain_types::chart::ChartColorData>,
+    line_format: Option<&ChartLineData>,
 ) -> Option<ShapeProperties> {
+    let line = marker_line_from_aliases(line_color, line_format);
     if fill.is_none() && line.is_none() {
         return None;
     }
@@ -720,17 +726,28 @@ fn build_marker_shape_properties(
                 color: build_drawing_color(color),
             })
         }),
-        ln: line.map(|color| {
-            build_outline(&domain_types::chart::ChartLineData {
-                color: Some(color.clone()),
-                width: None,
-                dash_style: None,
-                transparency: None,
-                no_fill: None,
-            })
-        }),
+        ln: line.as_ref().map(build_outline),
         ..Default::default()
     })
+}
+
+fn marker_line_from_aliases(
+    color: Option<&domain_types::chart::ChartColorData>,
+    line_format: Option<&ChartLineData>,
+) -> Option<ChartLineData> {
+    let mut line = line_format.cloned().unwrap_or(ChartLineData {
+        color: None,
+        width: None,
+        dash_style: None,
+        transparency: None,
+        no_fill: None,
+    });
+
+    if line.color.is_none() {
+        line.color = color.cloned();
+    }
+
+    point_line_has_content(&line).then_some(line)
 }
 
 // =============================================================================

@@ -18,6 +18,7 @@ fn point_format(idx: u32) -> PointFormatData {
         visual_format: None,
         marker_background_color: None,
         marker_foreground_color: None,
+        marker_line_format: None,
         marker_size: None,
         marker_style: None,
     }
@@ -91,5 +92,60 @@ fn point_legacy_fill_merges_with_line_format() {
     assert!(
         point_xml.contains(r#"<a:prstDash val="dash"/>"#),
         "{point_xml}"
+    );
+}
+
+#[test]
+fn series_marker_line_format_reconstructs_width_and_dash_without_line_color() {
+    let mut spec = minimal_chart_spec(DomainChartType::Line, None);
+    let mut series = modeled_series(0, None, "North", "Data!$B$2:$B$4");
+    series.marker_style = Some("circle".to_string());
+    series.marker_line_format = Some(ChartLineData {
+        color: None,
+        width: Some(2.0),
+        dash_style: Some(ChartDashStyle::Solid),
+        transparency: None,
+        no_fill: None,
+    });
+    spec.series = vec![series];
+
+    let xml = chart_xml(&spec);
+    let line_xml = chart_group_xml(&xml, "<c:lineChart>", "</c:lineChart>");
+    let series_xml = chart_group_xml(line_xml, "<c:ser>", "</c:ser>");
+    let marker_xml = chart_group_xml(series_xml, "<c:marker>", "</c:marker>");
+
+    assert!(marker_xml.contains(r#"<a:ln w="25400">"#), "{marker_xml}");
+    assert!(
+        marker_xml.contains(r#"<a:prstDash val="solid"/>"#),
+        "{marker_xml}"
+    );
+}
+
+#[test]
+fn point_marker_line_format_reconstructs_width_and_dash_without_line_color() {
+    let mut spec = minimal_chart_spec(DomainChartType::Line, None);
+    let mut series = modeled_series(0, None, "North", "Data!$B$2:$B$4");
+    let mut point = point_format(0);
+    point.marker_style = Some("circle".to_string());
+    point.marker_line_format = Some(ChartLineData {
+        color: None,
+        width: Some(2.0),
+        dash_style: Some(ChartDashStyle::Solid),
+        transparency: None,
+        no_fill: None,
+    });
+    series.points = Some(vec![point]);
+    spec.series = vec![series];
+
+    let xml = chart_xml(&spec);
+    let line_xml = chart_group_xml(&xml, "<c:lineChart>", "</c:lineChart>");
+    let series_xml = chart_group_xml(line_xml, "<c:ser>", "</c:ser>");
+    let point_xml = chart_group_xml(series_xml, "<c:dPt>", "</c:dPt>");
+    let marker_xml = chart_group_xml(point_xml, "<c:marker>", "</c:marker>");
+
+    assert!(marker_xml.contains(r#"<a:ln w="25400">"#), "{marker_xml}");
+    assert!(
+        marker_xml.contains(r#"<a:prstDash val="solid"/>"#),
+        "{marker_xml}"
     );
 }

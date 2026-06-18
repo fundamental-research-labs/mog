@@ -77,13 +77,7 @@ pub(in crate::domain::charts::read) fn extract_chart_series(
             let bubble_size_source_kind = extract_num_source_kind(&s.bubble_size);
 
             // Markers
-            let (
-                show_markers,
-                marker_size,
-                marker_style,
-                marker_background_color,
-                marker_foreground_color,
-            ) = extract_marker_config(&s.marker);
+            let marker_config = extract_marker_config(&s.marker);
 
             // Per-point formatting
             let points = if s.d_pt.is_empty() {
@@ -106,6 +100,7 @@ pub(in crate::domain::charts::read) fn extract_chart_series(
                                 visual_format: None,
                                 marker_background_color: None,
                                 marker_foreground_color: None,
+                                marker_line_format: None,
                                 marker_size: None,
                                 marker_style: None,
                             }
@@ -175,9 +170,9 @@ pub(in crate::domain::charts::read) fn extract_chart_series(
                 explosion: s.explosion,
                 invert_if_negative: s.invert_if_negative,
                 y_axis_index: None, // follow-up: derive from c:axId cross-reference
-                show_markers,
-                marker_size,
-                marker_style,
+                show_markers: marker_config.show,
+                marker_size: marker_config.size,
+                marker_style: marker_config.style,
                 line_width: None,
                 points,
                 data_labels,
@@ -190,8 +185,9 @@ pub(in crate::domain::charts::read) fn extract_chart_series(
                 format: None,
                 bar_shape: None,
                 invert_color: None,
-                marker_background_color,
-                marker_foreground_color,
+                marker_background_color: marker_config.background_color,
+                marker_foreground_color: marker_config.foreground_color,
+                marker_line_format: marker_config.line_format,
                 filtered: None,
                 source_series_index: None,
                 source_series_key: None,

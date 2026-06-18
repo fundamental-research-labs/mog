@@ -1,17 +1,21 @@
-use super::formatting::extract_chart_color;
+use super::formatting::{extract_chart_color, extract_chart_line};
+
+#[derive(Debug, Default)]
+pub(super) struct MarkerConfigExtraction {
+    pub show: Option<bool>,
+    pub size: Option<u32>,
+    pub style: Option<String>,
+    pub background_color: Option<domain_types::chart::ChartColorData>,
+    pub foreground_color: Option<domain_types::chart::ChartColorData>,
+    pub line_format: Option<domain_types::chart::ChartLineData>,
+}
 
 pub(super) fn extract_marker_config(
     marker: &Option<ooxml_types::charts::Marker>,
-) -> (
-    Option<bool>,
-    Option<u32>,
-    Option<String>,
-    Option<domain_types::chart::ChartColorData>,
-    Option<domain_types::chart::ChartColorData>,
-) {
+) -> MarkerConfigExtraction {
     let m = match marker {
         Some(m) => m,
-        None => return (None, None, None, None, None),
+        None => return MarkerConfigExtraction::default(),
     };
     let show = m
         .symbol
@@ -34,5 +38,18 @@ pub(super) fn extract_marker_config(
             ooxml_types::drawings::LineFill::Solid(solid) => extract_chart_color(&solid.color),
             _ => None,
         });
-    (show, size, style, background, foreground)
+    let line_format = m
+        .sp_pr
+        .as_ref()
+        .and_then(|sp_pr| sp_pr.ln.as_ref())
+        .map(extract_chart_line);
+
+    MarkerConfigExtraction {
+        show,
+        size,
+        style,
+        background_color: background,
+        foreground_color: foreground,
+        line_format,
+    }
 }

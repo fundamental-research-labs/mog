@@ -291,6 +291,7 @@ pub(super) fn chart_series_data(
         invert_color: None,
         marker_background_color: None,
         marker_foreground_color: None,
+        marker_line_format: None,
         filtered: None,
         source_series_index: None,
         source_series_key: None,

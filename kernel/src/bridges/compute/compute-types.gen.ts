@@ -915,7 +915,7 @@ export interface ChartColorMappingData {
   folHlink?: string;
 }
 
-export type ChartDashStyle = "solid" | "dot" | "dash" | "dashDot" | "longDash" | "longDashDot" | "longDashDotDot";
+export type ChartDashStyle = "solid" | "dot" | "dash" | "dashDot" | "longDash" | "longDashDot" | "longDashDotDot" | "sysDash" | "sysDot" | "sysDashDot" | "sysDashDotDot";
 
 export interface ChartData {
   chartType: string;

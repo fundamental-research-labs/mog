@@ -184,7 +184,7 @@ export type ChartFill =
 export interface ChartLineFormat {
   color?: ChartColor;
   width?: number;
-  dashStyle?: 'solid' | 'dot' | 'dash' | 'dashDot' | 'longDash' | 'longDashDot' | 'longDashDotDot';
+  dashStyle?: 'solid' | 'dot' | 'dash' | 'dashDot' | 'longDash' | 'longDashDot' | 'longDashDotDot' | 'sysDash' | 'sysDot' | 'sysDashDot' | 'sysDashDotDot';
   transparency?: number;
   /** Explicit OOXML a:ln/a:noFill. Absent line formatting is not an explicit no-line. */
   noFill?: boolean;

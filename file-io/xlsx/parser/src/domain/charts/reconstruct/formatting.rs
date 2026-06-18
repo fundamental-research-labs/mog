@@ -165,6 +165,10 @@ pub(super) fn build_outline(line: &ChartLineData) -> Outline {
             ChartDashStyle::LongDash => DashStyle::LongDash,
             ChartDashStyle::LongDashDot => DashStyle::LongDashDot,
             ChartDashStyle::LongDashDotDot => DashStyle::LongDashDotDot,
+            ChartDashStyle::SysDash => DashStyle::SystemDash,
+            ChartDashStyle::SysDot => DashStyle::SystemDot,
+            ChartDashStyle::SysDashDot => DashStyle::SystemDashDot,
+            ChartDashStyle::SysDashDotDot => DashStyle::SystemDashDotDot,
         };
         LineDash::Preset(style)
     });
@@ -277,7 +281,7 @@ pub(super) fn build_run_properties(font: &ChartFontData) -> RunProperties {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use domain_types::chart::{ChartGradientType, ChartLineData};
+    use domain_types::chart::{ChartDashStyle, ChartGradientType, ChartLineData};
 
     fn alpha_transform(color: &DrawingColor) -> Option<i32> {
         let transforms = match color {
@@ -293,6 +297,28 @@ mod tests {
             ColorTransform::Alpha { val } => Some(*val),
             _ => None,
         })
+    }
+
+    #[test]
+    fn builds_system_line_dash_styles() {
+        let cases = [
+            (ChartDashStyle::SysDash, DashStyle::SystemDash),
+            (ChartDashStyle::SysDot, DashStyle::SystemDot),
+            (ChartDashStyle::SysDashDot, DashStyle::SystemDashDot),
+            (ChartDashStyle::SysDashDotDot, DashStyle::SystemDashDotDot),
+        ];
+
+        for (source, expected) in cases {
+            let outline = build_outline(&ChartLineData {
+                color: None,
+                width: None,
+                dash_style: Some(source),
+                transparency: None,
+                no_fill: None,
+            });
+
+            assert_eq!(outline.dash, Some(LineDash::Preset(expected)));
+        }
     }
 
     #[test]

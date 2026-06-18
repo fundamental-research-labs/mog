@@ -61,9 +61,50 @@ export function renderCommentIndicator(
 // =============================================================================
 
 /** Size of the filter button icon in pixels */
-const FILTER_BUTTON_SIZE = 10;
+export const FILTER_BUTTON_SIZE = 10;
 /** Padding from cell edge for filter button */
-const FILTER_BUTTON_PADDING = 3;
+export const FILTER_BUTTON_PADDING = 3;
+/** Gap reserved between header text and the filter icon. */
+export const FILTER_BUTTON_TEXT_GAP = 6;
+/** Minimum DOM hit target for the canvas-rendered filter icon. */
+export const FILTER_BUTTON_HIT_SIZE = 16;
+
+export function getFilterButtonIconBounds(
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+): { x: number; y: number; width: number; height: number } {
+  return {
+    x: x + width - FILTER_BUTTON_SIZE - FILTER_BUTTON_PADDING,
+    y: y + (height - FILTER_BUTTON_SIZE) / 2,
+    width: FILTER_BUTTON_SIZE,
+    height: FILTER_BUTTON_SIZE,
+  };
+}
+
+export function getFilterButtonHitBounds(
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+): { x: number; y: number; width: number; height: number } {
+  const icon = getFilterButtonIconBounds(x, y, width, height);
+  const hitSize = Math.max(1, Math.min(FILTER_BUTTON_HIT_SIZE, width, height));
+  return {
+    x: icon.x - (hitSize - icon.width) / 2,
+    y: icon.y - (hitSize - icon.height) / 2,
+    width: hitSize,
+    height: hitSize,
+  };
+}
+
+export function getFilterButtonTextContentWidth(cellWidth: number): number {
+  return Math.max(
+    0,
+    cellWidth - FILTER_BUTTON_SIZE - FILTER_BUTTON_PADDING - FILTER_BUTTON_TEXT_GAP,
+  );
+}
 
 /**
  * Render filter dropdown button indicator in table or AutoFilter header cell.
@@ -87,10 +128,10 @@ export function renderFilterButton(
   hasActiveFilter: boolean,
   skin?: IndicatorSkin,
 ): void {
-  const buttonSize = FILTER_BUTTON_SIZE;
-  const padding = FILTER_BUTTON_PADDING;
-  const buttonX = x + width - buttonSize - padding;
-  const buttonY = y + (height - buttonSize) / 2;
+  const button = getFilterButtonIconBounds(x, y, width, height);
+  const buttonX = button.x;
+  const buttonY = button.y;
+  const buttonSize = button.width;
 
   if (hasActiveFilter) {
     // Draw funnel icon when filter is active (Excel-style blue color)

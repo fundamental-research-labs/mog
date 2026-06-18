@@ -50,10 +50,12 @@ import {
   renderCommentIndicator,
   renderDropdownIndicator,
   renderFilterButton,
+  getFilterButtonTextContentWidth,
   renderValidationError,
 } from '../cells/indicators';
 import {
   collectInteractiveElements,
+  toInteractiveViewportCellInfo,
   type InteractiveCellInfo,
 } from '../cells/interactive-elements';
 import { collectVisibleInteractiveElements } from '../cells/visible-interactive-elements';
@@ -439,7 +441,7 @@ export class CellsLayer extends BaseLayer implements DirtyCellExpander {
       );
       if (this.interactiveElements) {
         collectInteractiveElements(
-          fallbackCellInfo,
+          toInteractiveViewportCellInfo(fallbackCellInfo, region),
           {
             hasComment: false,
             isCheckbox: false,
@@ -735,21 +737,25 @@ export class CellsLayer extends BaseLayer implements DirtyCellExpander {
         displayText.length > 0;
 
       if (shouldRenderText && !centerAcrossPaintedSources.has(`${row},${col}`)) {
+        const textContentWidth = filterInfo
+          ? getFilterButtonTextContentWidth(contentBounds.width)
+          : contentBounds.width;
+        const baseTextCellInfo: CellRenderInfo = {
+          ...cellInfo,
+          x: contentBounds.x,
+          y: contentBounds.y,
+          width: textContentWidth,
+          height: contentBounds.height,
+        };
         // Apply icon offset to cell info for text rendering
         const textCellInfo: CellRenderInfo =
           iconOffset > 0
             ? {
-                ...cellInfo,
-                x: contentBounds.x + iconOffset,
-                width: contentBounds.width - iconOffset,
+                ...baseTextCellInfo,
+                x: baseTextCellInfo.x + iconOffset,
+                width: Math.max(0, baseTextCellInfo.width - iconOffset),
               }
-            : {
-                ...cellInfo,
-                x: contentBounds.x,
-                y: contentBounds.y,
-                width: contentBounds.width,
-                height: contentBounds.height,
-              };
+            : baseTextCellInfo;
 
         this.renderCellText(
           ctx,
@@ -813,7 +819,11 @@ export class CellsLayer extends BaseLayer implements DirtyCellExpander {
           filterInfo,
           sheetId,
         };
-        collectInteractiveElements(cellInfo, interactiveInfo, this.interactiveElements);
+        collectInteractiveElements(
+          toInteractiveViewportCellInfo(cellInfo, region),
+          interactiveInfo,
+          this.interactiveElements,
+        );
       }
     }
   }

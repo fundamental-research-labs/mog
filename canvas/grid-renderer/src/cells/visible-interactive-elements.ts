@@ -12,7 +12,7 @@ import type { ViewportMergeIndex } from '../coordinates/viewport-merge-index';
 import type { ViewportPositionIndex } from '../coordinates/viewport-position-index';
 import { forEachVisibleCell } from '../layout/for-each-visible-cell';
 import { docToRegionXY } from '../shared/cell-bounds';
-import { collectInteractiveElements } from './interactive-elements';
+import { collectInteractiveElements, toInteractiveViewportCellInfo } from './interactive-elements';
 import type { CellRenderInfo } from './types';
 
 interface InteractiveCellReader {
@@ -108,7 +108,7 @@ export function collectVisibleInteractiveElements(
     };
 
     collectInteractiveElements(
-      cellInfo,
+      toInteractiveViewportCellInfo(cellInfo, region),
       {
         hasComment,
         isCheckbox,

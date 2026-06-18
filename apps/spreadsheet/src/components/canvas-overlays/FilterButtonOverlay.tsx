@@ -43,9 +43,6 @@ export const FilterButtonOverlay = memo(function FilterButtonOverlay({
 }: FilterButtonOverlayProps) {
   const { metadata } = element;
   const { x, y, width, height } = element.bounds;
-  const triggerSize = Math.max(1, Math.min(20, width, height));
-  const triggerLeft = x + Math.max(0, width - triggerSize);
-  const triggerTop = y + Math.max(0, (height - triggerSize) / 2);
 
   // Controlled popover state - we manage open/close to pass onClose to content
   const [isOpen, setIsOpen] = useState(false);
@@ -138,7 +135,7 @@ export const FilterButtonOverlay = memo(function FilterButtonOverlay({
       }
       window.removeEventListener('resize', scheduleMeasure);
     };
-  }, [isOpen, metadata.filterId, metadata.headerCellId, triggerLeft, triggerTop, triggerSize]);
+  }, [isOpen, metadata.filterId, metadata.headerCellId, x, y, width, height]);
 
   // Close handler passed to FilterDropdownContent
   const handleClose = useCallback(() => {
@@ -261,10 +258,10 @@ export const FilterButtonOverlay = memo(function FilterButtonOverlay({
           type="button"
           style={{
             position: 'absolute',
-            left: triggerLeft,
-            top: triggerTop,
-            width: triggerSize,
-            height: triggerSize,
+            left: x,
+            top: y,
+            width,
+            height,
             // Invisible but clickable
             opacity: 0,
             cursor: 'pointer',

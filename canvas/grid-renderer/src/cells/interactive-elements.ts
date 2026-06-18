@@ -9,7 +9,9 @@
  * @module grid-renderer/cells/interactive-elements
  */
 
+import type { RenderRegion } from '@mog/canvas-engine';
 import type { InteractiveElement, InteractiveElementCollector } from '@mog-sdk/contracts/rendering';
+import { getFilterButtonHitBounds } from './indicators';
 import type { CellRenderInfo } from './types';
 
 // =============================================================================
@@ -38,6 +40,40 @@ export interface InteractiveCellInfo {
   };
   /** Sheet ID */
   sheetId: string;
+}
+
+export function toInteractiveViewportCellInfo(
+  cell: CellRenderInfo,
+  region: RenderRegion,
+): CellRenderInfo {
+  const zoom = region.zoom || 1;
+  const xOffset = region.viewportOrigin.x;
+  const yOffset = region.viewportOrigin.y;
+  const scaleRect = (rect: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  }): { x: number; y: number; width: number; height: number } => ({
+    x: (rect.x + xOffset) * zoom,
+    y: (rect.y + yOffset) * zoom,
+    width: rect.width * zoom,
+    height: rect.height * zoom,
+  });
+
+  return {
+    ...cell,
+    ...scaleRect(cell),
+    merge: cell.merge
+      ? {
+          ...cell.merge,
+          mergeX: (cell.merge.mergeX + xOffset) * zoom,
+          mergeY: (cell.merge.mergeY + yOffset) * zoom,
+          mergeWidth: cell.merge.mergeWidth * zoom,
+          mergeHeight: cell.merge.mergeHeight * zoom,
+        }
+      : undefined,
+  };
 }
 
 // =============================================================================
@@ -129,10 +165,11 @@ export function collectInteractiveElements(
   // Filter button
   if (info.filterInfo) {
     const { filterId, headerCellId, hasActiveFilter } = info.filterInfo;
+    const bounds = getFilterButtonHitBounds(x, y, width, height);
     const element: InteractiveElement = {
       id: elementId('filter-button', sheetId, row, col),
       type: 'filter-button',
-      bounds: { x, y, width, height },
+      bounds,
       metadata: {
         type: 'filter-button',
         filterId,

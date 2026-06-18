@@ -43,14 +43,17 @@ function makeMainRegion(opts: {
   sheetId: string;
   viewportId?: string;
   bounds?: { x: number; y: number; width: number; height: number };
+  viewportOrigin?: { x: number; y: number };
+  scrollOffset?: { x: number; y: number };
+  zoom?: number;
   cellRange?: GridRegionMeta['cellRange'];
 }): RenderRegion<GridRegionMeta> {
   return {
     id: opts.viewportId ?? 'main',
     bounds: opts.bounds ?? { x: 50, y: 21, width: 950, height: 579 },
-    viewportOrigin: { x: 0, y: 0 },
-    scrollOffset: { x: 0, y: 0 },
-    zoom: 1.0,
+    viewportOrigin: opts.viewportOrigin ?? { x: 0, y: 0 },
+    scrollOffset: opts.scrollOffset ?? { x: 0, y: 0 },
+    zoom: opts.zoom ?? 1.0,
     metadata: {
       sheetId: opts.sheetId,
       cellRange: opts.cellRange ?? { startRow: 0, startCol: 0, endRow: 30, endCol: 20 },
@@ -573,6 +576,51 @@ describe('CellsLayer', () => {
         `filter-button:${sheetId}:0,2`,
       ]);
       expect(collector.clear).toHaveBeenCalledTimes(1);
+    });
+
+    it('emits filter button bounds in viewport coordinates for horizontally scrolled frozen rows', () => {
+      const sheetId = 'sheet-filter-button-frozen-row';
+      const collector = createInteractiveElementCollector();
+      const cellData: CellDataSource = {
+        ...NULL_CELL_DATA_SOURCE,
+        getFilterHeaderInfo: (_sheetId, cell) =>
+          cell.row === 3 && cell.col === 10
+            ? {
+                filterId: 'auto-filter-1',
+                headerCellId: toCellId('header-k'),
+                hasActiveFilter: false,
+              }
+            : undefined,
+      };
+      const layer = createCellsLayer(
+        createLayerConfig({
+          binaryCellReader: undefined,
+          cellData,
+          interactiveElements: collector,
+          positionIndex: createPositionIndex(100, 20, 25),
+        }),
+      );
+      const ctx = createMockContext();
+      const frozenRowsRegion = makeMainRegion({
+        sheetId,
+        viewportId: 'frozen-rows',
+        viewportOrigin: { x: 800, y: 0 },
+        scrollOffset: { x: 200, y: 0 },
+        cellRange: { startRow: 3, startCol: 10, endRow: 3, endCol: 10 },
+      });
+
+      layer.render(ctx, frozenRowsRegion, createFrame());
+
+      const filterButton = collector
+        .getAll()
+        .find((element) => element.id === `filter-button:${sheetId}:3,10`);
+
+      expect(filterButton?.bounds).toEqual({
+        x: 884,
+        y: 79.5,
+        width: 16,
+        height: 16,
+      });
     });
 
     it('keeps filter button overlays outside dirty cells in partial frames', () => {

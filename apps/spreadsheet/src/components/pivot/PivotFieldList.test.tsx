@@ -300,6 +300,24 @@ describe('PivotFieldList placement editor', () => {
 
     fireEvent.click(category);
 
+    expect(category).toHaveAttribute('data-pivot-selected', 'true');
+    expect(props.onAddField).toHaveBeenCalledWith('Category', 'row', {
+      position: 2,
+      aggregateFunction: 'count',
+    });
+  });
+
+  it('does not double-add when a harness-style zone click follows default activation', () => {
+    const { container, props } = renderList();
+    const category = container.querySelector<HTMLElement>(
+      '[data-pivot-target="field-chip"][data-pivot-area="available"][data-pivot-field-id="Category"]',
+    );
+    if (!category) throw new Error('Missing Category source chip');
+
+    fireEvent.click(category);
+    fireEvent.click(zone(container, 'row'));
+
+    expect(props.onAddField).toHaveBeenCalledTimes(1);
     expect(props.onAddField).toHaveBeenCalledWith('Category', 'row', {
       position: 2,
       aggregateFunction: 'count',

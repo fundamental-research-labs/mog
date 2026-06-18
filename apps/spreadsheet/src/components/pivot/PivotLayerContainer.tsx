@@ -9,6 +9,13 @@
 
 import { useEffect, useMemo, useState } from 'react';
 
+import { ChevronDownSvg } from '@mog/icons';
+import type {
+  PivotFieldArea,
+  PivotRenderedBounds,
+  PlacementId,
+  SortOrder,
+} from '@mog-sdk/contracts/pivot';
 import type { PivotViewModel } from '../../pivot/pivot-capabilities';
 import { pivotBoundsForConfig, type PivotBounds } from '../../pivot/pivot-view-geometry';
 import { useActiveSheetId } from '../../internal-api';
@@ -32,6 +39,7 @@ interface PivotMarker {
     height: number;
   };
   reportFilterControls: PivotReportFilterControlLayout[];
+  fieldHeaderControls: PivotFieldHeaderControlLayout[];
 }
 
 export interface PivotReportFilterControlLayout {
@@ -39,6 +47,21 @@ export interface PivotReportFilterControlLayout {
   fieldId: string;
   label: string;
   row: number;
+  rect: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
+}
+
+export interface PivotFieldHeaderControlLayout {
+  placementId: PlacementId;
+  fieldId: string;
+  area: Extract<PivotFieldArea, 'row' | 'column'>;
+  label: string;
+  row: number;
+  col: number;
   rect: {
     x: number;
     y: number;
@@ -59,6 +82,19 @@ function renderedBoundsForPivot(pivot: PivotViewModel): PivotBounds {
     };
   }
   return pivotBoundsForConfig(pivot.config);
+}
+
+function fallbackRenderedBounds(config: PivotViewModel['config']): PivotRenderedBounds {
+  const rowFieldCount = pivotPlacementsFor(config, 'row').length;
+  const columnFieldCount = pivotPlacementsFor(config, 'column').length;
+  const valueFieldCount = pivotPlacementsFor(config, 'value').length;
+  return {
+    totalRows: 1,
+    totalCols: 1,
+    firstDataRow: Math.max(columnFieldCount, 1) + (valueFieldCount > 1 ? 1 : 0),
+    firstDataCol: Math.max(rowFieldCount, 1),
+    numDataCols: Math.max(valueFieldCount, 0),
+  };
 }
 
 function hasOutputPlacements(config: PivotViewModel['config']): boolean {
@@ -104,6 +140,72 @@ export function getVisiblePivotReportFilterControls(
     .filter((control): control is PivotReportFilterControlLayout => control != null);
 }
 
+export function getVisiblePivotFieldHeaderControls(
+  config: PivotViewModel['config'],
+  bounds: PivotBounds,
+  markerRect: PivotMarker['rect'],
+  getCellPageRect: (cell: { row: number; col: number }) => {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  } | null,
+  renderedBounds: PivotRenderedBounds = fallbackRenderedBounds(config),
+): PivotFieldHeaderControlLayout[] {
+  const controls: PivotFieldHeaderControlLayout[] = [];
+  const widthCols = bounds.endCol - bounds.startCol + 1;
+  if (widthCols <= 0) return controls;
+
+  const firstDataRow = Math.max(0, renderedBounds.firstDataRow);
+  const firstDataCol = Math.max(0, Math.min(renderedBounds.firstDataCol, widthCols - 1));
+  const rowHeaderRow = Math.min(bounds.endRow, bounds.startRow + Math.max(0, firstDataRow - 1));
+
+  for (const [index, placement] of pivotPlacementsFor(config, 'row').entries()) {
+    const col = bounds.startCol + index;
+    if (col > bounds.endCol) continue;
+    const pageRect = getCellPageRect({ row: rowHeaderRow, col });
+    if (!pageRect) continue;
+    controls.push({
+      placementId: placement.placementId,
+      fieldId: placement.fieldId,
+      area: 'row',
+      label: pivotFieldLabel(config, placement.fieldId),
+      row: rowHeaderRow,
+      col,
+      rect: {
+        x: pageRect.x - markerRect.x,
+        y: pageRect.y - markerRect.y,
+        width: pageRect.width,
+        height: pageRect.height,
+      },
+    });
+  }
+
+  for (const [index, placement] of pivotPlacementsFor(config, 'column').entries()) {
+    const row = bounds.startRow + index;
+    if (row > bounds.endRow) continue;
+    const col = bounds.startCol + firstDataCol;
+    const pageRect = getCellPageRect({ row, col });
+    if (!pageRect) continue;
+    controls.push({
+      placementId: placement.placementId,
+      fieldId: placement.fieldId,
+      area: 'column',
+      label: pivotFieldLabel(config, placement.fieldId),
+      row,
+      col,
+      rect: {
+        x: pageRect.x - markerRect.x,
+        y: pageRect.y - markerRect.y,
+        width: pageRect.width,
+        height: pageRect.height,
+      },
+    });
+  }
+
+  return controls;
+}
+
 // =============================================================================
 // Component
 // =============================================================================
@@ -119,11 +221,17 @@ export function getVisiblePivotReportFilterControls(
  */
 export function PivotLayerContainer() {
   const activeSheetId = useActiveSheetId();
-  const { pivotTables, startEditingPivot } = usePivotTables({ sheetId: activeSheetId });
+  const { pivotTables, startEditingPivot, setPlacementSortOrder } = usePivotTables({
+    sheetId: activeSheetId,
+  });
   const { isReady } = useRendererStatus();
   const { getGeometry, getViewport } = useRendererActions();
   const coordinator = useCoordinator();
   const [scrollTick, setScrollTick] = useState(0);
+  const [openHeaderMenu, setOpenHeaderMenu] = useState<{
+    pivotId: string;
+    placementId: string;
+  } | null>(null);
 
   useEffect(() => {
     const inputCoordinator = coordinator.input.inputCoordinator;
@@ -221,10 +329,26 @@ export function PivotLayerContainer() {
             rect,
             (cell) => geometry.getCellPageRect(cell),
           ),
+          fieldHeaderControls: getVisiblePivotFieldHeaderControls(
+            pivot.config,
+            bounds,
+            rect,
+            (cell) => geometry.getCellPageRect(cell),
+            pivot.result?.renderedBounds,
+          ),
         };
       })
       .filter((marker): marker is PivotMarker => marker != null);
   }, [geometry, getViewport, isReady, pivotTables, scrollTick]);
+
+  const applyHeaderSort = (
+    marker: PivotMarker,
+    control: PivotFieldHeaderControlLayout,
+    sortOrder: SortOrder | null,
+  ) => {
+    setPlacementSortOrder(marker.id, control.placementId, sortOrder);
+    setOpenHeaderMenu(null);
+  };
 
   if (markers.length === 0) {
     return null;
@@ -270,7 +394,8 @@ export function PivotLayerContainer() {
         const config = marker.pivot.config;
         const showEmptyState = !hasOutputPlacements(config);
         const showFilterControls = hasFilterPlacements(config);
-        if (!showEmptyState && !showFilterControls) return null;
+        const showHeaderControls = marker.fieldHeaderControls.length > 0;
+        if (!showEmptyState && !showFilterControls && !showHeaderControls) return null;
 
         const overlayWidth = showEmptyState
           ? Math.max(marker.rect.width, 280)
@@ -294,10 +419,111 @@ export function PivotLayerContainer() {
               width: overlayWidth,
               minHeight: overlayHeight,
               pointerEvents:
-                showEmptyState || marker.reportFilterControls.length > 0 ? 'auto' : 'none',
+                showEmptyState ||
+                marker.reportFilterControls.length > 0 ||
+                marker.fieldHeaderControls.length > 0
+                  ? 'auto'
+                  : 'none',
               zIndex: 6,
             }}
           >
+            {showHeaderControls && (
+              <div className="absolute inset-0 pointer-events-none">
+                {marker.fieldHeaderControls.map((control) => {
+                  const isOpen =
+                    openHeaderMenu?.pivotId === marker.id &&
+                    openHeaderMenu?.placementId === control.placementId;
+                  const canSort = marker.pivot.capabilities.canSortLabels;
+                  return (
+                    <div
+                      key={control.placementId}
+                      className="absolute pointer-events-none"
+                      style={{
+                        left: control.rect.x,
+                        top: control.rect.y,
+                        width: control.rect.width,
+                        height: control.rect.height,
+                      }}
+                    >
+                      <button
+                        type="button"
+                        className="pointer-events-auto absolute right-0.5 top-0.5 inline-flex h-5 w-5 items-center justify-center rounded border border-ss-border bg-ss-surface/95 text-ss-text-secondary shadow-sm hover:bg-ss-surface-hover disabled:opacity-50"
+                        data-pivot-target="pivot-field-header-control"
+                        data-pivot-area={control.area}
+                        data-pivot-field-id={control.fieldId}
+                        data-pivot-placement-id={control.placementId}
+                        data-pivot-row={control.row}
+                        data-pivot-col={control.col}
+                        aria-haspopup="menu"
+                        aria-expanded={isOpen ? 'true' : 'false'}
+                        title={`${control.label} field menu`}
+                        aria-label={`${control.label} field menu`}
+                        disabled={!marker.pivot.capabilities.canEditFields}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setOpenHeaderMenu(
+                            isOpen
+                              ? null
+                              : { pivotId: marker.id, placementId: control.placementId },
+                          );
+                        }}
+                      >
+                        <ChevronDownSvg className="h-3 w-3" aria-hidden="true" />
+                      </button>
+                      {isOpen && (
+                        <div
+                          role="menu"
+                          className="pointer-events-auto absolute right-0 top-6 z-10 flex min-w-36 flex-col rounded border border-ss-border bg-ss-surface p-1 text-caption text-ss-text-primary shadow-lg"
+                          data-pivot-target="pivot-field-header-menu"
+                          data-pivot-area={control.area}
+                          data-pivot-field-id={control.fieldId}
+                          data-pivot-placement-id={control.placementId}
+                        >
+                          <button
+                            type="button"
+                            role="menuitem"
+                            className="rounded px-2 py-1 text-left hover:bg-ss-surface-hover disabled:opacity-50"
+                            disabled={!canSort}
+                            onClick={() => applyHeaderSort(marker, control, 'asc')}
+                          >
+                            Sort Ascending
+                          </button>
+                          <button
+                            type="button"
+                            role="menuitem"
+                            className="rounded px-2 py-1 text-left hover:bg-ss-surface-hover disabled:opacity-50"
+                            disabled={!canSort}
+                            onClick={() => applyHeaderSort(marker, control, 'desc')}
+                          >
+                            Sort Descending
+                          </button>
+                          <button
+                            type="button"
+                            role="menuitem"
+                            className="rounded px-2 py-1 text-left hover:bg-ss-surface-hover disabled:opacity-50"
+                            disabled={!canSort}
+                            onClick={() => applyHeaderSort(marker, control, null)}
+                          >
+                            Clear Sort
+                          </button>
+                          <button
+                            type="button"
+                            role="menuitem"
+                            className="rounded px-2 py-1 text-left hover:bg-ss-surface-hover"
+                            onClick={() => {
+                              startEditingPivot(marker.id);
+                              setOpenHeaderMenu(null);
+                            }}
+                          >
+                            Field Settings
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
             {showFilterControls && (
               <div className="absolute inset-0 pointer-events-none">
                 {marker.reportFilterControls.map((control) => (

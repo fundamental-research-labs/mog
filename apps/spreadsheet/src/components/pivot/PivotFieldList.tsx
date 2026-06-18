@@ -231,6 +231,7 @@ export function PivotFieldList({
   const [selectedItem, setSelectedItem] = useState<DragState | null>(null);
   const dragPointRef = useRef<{ x: number; y: number } | null>(null);
   const autoScrollRef = useRef<AutoScrollController | null>(null);
+  const autoActivatedFieldRef = useRef<{ fieldId: string; area: PivotFieldArea } | null>(null);
 
   const fieldById = useMemo(() => new Map(fields.map((field) => [field.id, field])), [fields]);
   const placementsByArea = useMemo<Record<PivotFieldArea, PlacedField[]>>(() => {
@@ -463,6 +464,12 @@ export function PivotFieldList({
           : placementsByArea[toArea].length;
 
       if (selectedItem.kind === 'field') {
+        const autoActivated = autoActivatedFieldRef.current;
+        if (autoActivated?.fieldId === selectedItem.fieldId && autoActivated.area === toArea) {
+          autoActivatedFieldRef.current = null;
+          setSelectedItem(null);
+          return;
+        }
         const field = fieldById.get(selectedItem.fieldId);
         onAddField(selectedItem.fieldId, toArea, {
           position: appendPosition,
@@ -472,6 +479,7 @@ export function PivotFieldList({
         onMovePlacement(selectedItem.placementId, toArea, appendPosition);
       }
 
+      autoActivatedFieldRef.current = null;
       setSelectedItem(null);
     },
     [canDragState, fieldById, onAddField, onMovePlacement, placementsByArea, selectedItem],
@@ -486,7 +494,8 @@ export function PivotFieldList({
         position: placementsByArea[area].length,
         aggregateFunction: defaultAggregate(area, field),
       });
-      setSelectedItem(null);
+      autoActivatedFieldRef.current = { fieldId: field.id, area };
+      setSelectedItem(state);
     },
     [canDragState, onAddField, placementsByArea],
   );

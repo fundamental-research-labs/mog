@@ -7,13 +7,15 @@ use super::markers::extract_marker_config;
 use super::series_sources::{
     extract_cat_level_cache, extract_cat_point_cache, extract_cat_source_kind,
     extract_cat_source_type, extract_category_label_format, extract_num_point_cache,
-    extract_num_source_kind, num_data_to_point_cache,
+    extract_num_source_kind,
 };
 use super::text::extract_chart_text_string;
 use color::extract_legacy_series_color;
+use error_bars::extract_error_bars;
 use std::collections::BTreeMap;
 
 mod color;
+mod error_bars;
 
 pub(super) fn extract_series_from_chart_space(
     cs: &ooxml_types::charts::ChartSpace,
@@ -43,6 +45,7 @@ struct SeriesGroupSemantics {
     show_markers: Option<bool>,
     stock_role: Option<domain_types::chart::ChartSeriesStockRoleData>,
     legacy_color_from_line: bool,
+    uses_directional_error_bars: bool,
 }
 
 fn series_group_semantics(
@@ -81,6 +84,11 @@ fn series_group_semantics(
             | ooxml_types::charts::ChartTypeConfig::Radar(_)
             | ooxml_types::charts::ChartTypeConfig::Stock(_)
     );
+    let uses_directional_error_bars = matches!(
+        &group.config,
+        ooxml_types::charts::ChartTypeConfig::Scatter(_)
+            | ooxml_types::charts::ChartTypeConfig::Bubble(_)
+    );
 
     SeriesGroupSemantics {
         series_type,
@@ -90,6 +98,7 @@ fn series_group_semantics(
         show_markers,
         stock_role: None,
         legacy_color_from_line,
+        uses_directional_error_bars,
     }
 }
 
@@ -340,7 +349,10 @@ fn extract_single_series_with_semantics(
     };
 
     // Error bars
-    let (error_bars, x_error_bars, y_error_bars) = extract_error_bars_new(&s.err_bars);
+    let uses_directional_error_bars =
+        semantics.uses_directional_error_bars || s.x_val.is_some() || s.bubble_size.is_some();
+    let (error_bars, x_error_bars, y_error_bars) =
+        extract_error_bars(&s.err_bars, uses_directional_error_bars);
 
     // Series-level data labels
     let data_labels = s.d_lbls.as_ref().map(|dl| extract_data_label_data(dl));
@@ -370,6 +382,7 @@ fn extract_single_series_with_semantics(
         bubble_size,
         bubble_size_cache,
         bubble_size_source_kind,
+        bubble_3d: s.bubble_3d,
         smooth,
         show_lines: semantics.show_lines,
         explosion: s.explosion,
@@ -453,62 +466,8 @@ fn extract_series_name(
     }
 }
 
-/// Extract error bars with line_format support.
-fn extract_error_bars_new(
-    err_bars: &[ooxml_types::charts::ErrorBars],
-) -> (
-    Option<domain_types::chart::ErrorBarData>,
-    Option<domain_types::chart::ErrorBarData>,
-    Option<domain_types::chart::ErrorBarData>,
-) {
-    let mut general = None;
-    let mut x_bars = None;
-    let mut y_bars = None;
-
-    for eb in err_bars {
-        let line_format = eb
-            .sp_pr
-            .as_ref()
-            .and_then(|sp| sp.ln.as_ref())
-            .map(|ln| extract_chart_line(ln));
-        let data = domain_types::chart::ErrorBarData {
-            visible: None,
-            direction: eb.err_dir.as_ref().map(|d| d.to_ooxml().to_string()),
-            bar_type: Some(eb.err_bar_type.to_ooxml().to_string()),
-            value_type: Some(eb.err_val_type.to_ooxml().to_string()),
-            value: eb.val,
-            no_end_cap: eb.no_end_cap,
-            line_format,
-            plus_source: eb.plus.as_ref().map(num_data_source_to_error_bar_source),
-            minus_source: eb.minus.as_ref().map(num_data_source_to_error_bar_source),
-        };
-        match eb.err_dir {
-            Some(ooxml_types::charts::ErrorBarDirection::X) => x_bars = Some(data),
-            Some(ooxml_types::charts::ErrorBarDirection::Y) => y_bars = Some(data),
-            None => general = Some(data),
-        }
-    }
-
-    (general, x_bars, y_bars)
-}
-
-fn num_data_source_to_error_bar_source(
-    src: &ooxml_types::charts::NumDataSource,
-) -> domain_types::chart::ErrorBarSourceData {
-    use ooxml_types::charts::NumDataSource;
-
-    match src {
-        NumDataSource::Ref(num_ref) => domain_types::chart::ErrorBarSourceData {
-            formula: Some(num_ref.f.clone()),
-            cache: num_ref.num_cache.as_ref().map(num_data_to_point_cache),
-        },
-        NumDataSource::Lit(num_data) => domain_types::chart::ErrorBarSourceData {
-            formula: None,
-            cache: Some(num_data_to_point_cache(num_data)),
-        },
-    }
-}
-
+#[cfg(test)]
+mod bubble;
 #[cfg(test)]
 mod series_regression_tests;
 

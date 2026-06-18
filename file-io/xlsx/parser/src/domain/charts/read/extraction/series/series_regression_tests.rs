@@ -1,7 +1,8 @@
 use super::extract_series_from_chart_space;
 use ooxml_types::charts::{
-    AxisType, Chart, ChartAxis, ChartAxisPosition, ChartGroup, ChartSpace, ChartType,
-    ChartTypeConfig, Line3DChartConfig, LineChartConfig, PlotArea, RadarChartConfig, Scaling,
+    AreaChartConfig, AxisType, Chart, ChartAxis, ChartAxisPosition, ChartGroup, ChartSpace,
+    ChartType, ChartTypeConfig, ErrorBarDirection, ErrorBarType, ErrorBars, ErrorValueType,
+    Line3DChartConfig, LineChartConfig, NumDataSource, PlotArea, RadarChartConfig, Scaling,
     ScatterChartConfig, ScatterStyle, StockChartConfig,
 };
 
@@ -77,6 +78,38 @@ fn colored_line_group(chart_type: ChartType, config: ChartTypeConfig) -> ChartGr
     }
 }
 
+fn error_bars(direction: ErrorBarDirection) -> ErrorBars {
+    ErrorBars {
+        err_dir: Some(direction),
+        err_bar_type: ErrorBarType::Both,
+        err_val_type: ErrorValueType::FixedVal,
+        val: Some(42.0),
+        ..Default::default()
+    }
+}
+
+fn group_with_error_bars(
+    chart_type: ChartType,
+    config: ChartTypeConfig,
+    err_bars: Vec<ErrorBars>,
+) -> ChartGroup {
+    ChartGroup {
+        chart_type,
+        config,
+        series: vec![ooxml_types::charts::ChartSeries {
+            idx: 0,
+            order: 0,
+            err_bars,
+            ..Default::default()
+        }],
+        d_lbls: None,
+        ax_id: vec![],
+        raw_chart_type_attr: None,
+        raw_chart_element_name: None,
+        raw_chart_group_xml: None,
+    }
+}
+
 #[test]
 fn line_family_legacy_series_color_comes_from_line_format() {
     for (chart_type, config) in [
@@ -110,6 +143,116 @@ fn line_family_legacy_series_color_comes_from_line_format() {
 
         assert_eq!(extracted[0].color.as_deref(), Some("4472C4"));
     }
+}
+
+#[test]
+fn standard_chart_y_error_bars_extract_to_general_slot() {
+    let extracted = extract_series_from_chart_space(&ChartSpace {
+        chart: Chart {
+            plot_area: PlotArea {
+                chart_groups: vec![group_with_error_bars(
+                    ChartType::Area,
+                    ChartTypeConfig::Area(AreaChartConfig::default()),
+                    vec![error_bars(ErrorBarDirection::Y)],
+                )],
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+        ..Default::default()
+    });
+
+    assert_eq!(
+        extracted[0]
+            .error_bars
+            .as_ref()
+            .and_then(|bars| bars.direction.as_deref()),
+        Some("y")
+    );
+    assert_eq!(
+        extracted[0]
+            .error_bars
+            .as_ref()
+            .and_then(|bars| bars.visible),
+        Some(true)
+    );
+    assert!(extracted[0].x_error_bars.is_none());
+    assert!(extracted[0].y_error_bars.is_none());
+}
+
+#[test]
+fn xy_chart_error_bars_extract_to_directional_slots() {
+    let extracted = extract_series_from_chart_space(&ChartSpace {
+        chart: Chart {
+            plot_area: PlotArea {
+                chart_groups: vec![group_with_error_bars(
+                    ChartType::Scatter,
+                    ChartTypeConfig::Scatter(ScatterChartConfig::default()),
+                    vec![
+                        error_bars(ErrorBarDirection::X),
+                        error_bars(ErrorBarDirection::Y),
+                    ],
+                )],
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+        ..Default::default()
+    });
+
+    assert!(extracted[0].error_bars.is_none());
+    assert_eq!(
+        extracted[0]
+            .x_error_bars
+            .as_ref()
+            .and_then(|bars| bars.direction.as_deref()),
+        Some("x")
+    );
+    assert_eq!(
+        extracted[0]
+            .y_error_bars
+            .as_ref()
+            .and_then(|bars| bars.direction.as_deref()),
+        Some("y")
+    );
+}
+
+#[test]
+fn bubble_sized_series_error_bars_extract_to_directional_slots() {
+    let extracted = extract_series_from_chart_space(&ChartSpace {
+        chart: Chart {
+            plot_area: PlotArea {
+                chart_groups: vec![ChartGroup {
+                    chart_type: ChartType::Bar,
+                    config: ChartTypeConfig::Bar(Default::default()),
+                    series: vec![ooxml_types::charts::ChartSeries {
+                        idx: 0,
+                        order: 0,
+                        bubble_size: Some(NumDataSource::Lit(Default::default())),
+                        err_bars: vec![error_bars(ErrorBarDirection::Y)],
+                        ..Default::default()
+                    }],
+                    d_lbls: None,
+                    ax_id: vec![],
+                    raw_chart_type_attr: None,
+                    raw_chart_element_name: None,
+                    raw_chart_group_xml: None,
+                }],
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+        ..Default::default()
+    });
+
+    assert!(extracted[0].error_bars.is_none());
+    assert_eq!(
+        extracted[0]
+            .y_error_bars
+            .as_ref()
+            .and_then(|bars| bars.direction.as_deref()),
+        Some("y")
+    );
 }
 
 #[test]

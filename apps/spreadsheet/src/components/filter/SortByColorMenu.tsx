@@ -87,7 +87,7 @@ export function SortByColorMenu({
    * Handle color selection for sorting.
    * Sorts the range by the selected color, placing matched rows on top.
    */
-  const handleColorSort = (color: string, type: 'fill' | 'font') => {
+  const handleColorSort = async (color: string, type: 'fill' | 'font') => {
     if (!range || columnIndex < 0) {
       console.warn('[SortByColorMenu] Cannot sort: missing range or column');
       onClose();
@@ -95,17 +95,21 @@ export function SortByColorMenu({
     }
 
     const ws = wb.getSheetById(sheetId);
-    void ws.sortByColor(cellRangeToA1(range), {
-      column: columnIndex,
-      colorType: type,
-      color,
-      position: 'top',
-      hasHeaders: true,
-      visibleRowsOnly: true,
-    });
+    try {
+      await ws.sortByColor(cellRangeToA1(range), {
+        column: columnIndex,
+        colorType: type,
+        color,
+        position: 'top',
+        hasHeaders: true,
+        visibleRowsOnly: true,
+      });
 
-    onClose();
-    onSortApplied?.();
+      onSortApplied?.();
+      onClose();
+    } catch (error) {
+      console.error('[SortByColorMenu] Failed to sort by color:', error);
+    }
   };
 
   const hasColors = backgroundColors.length > 0 || fontColors.length > 0;
@@ -126,7 +130,7 @@ export function SortByColorMenu({
             Sort by Cell Color
           </div>
           {backgroundColors.map((color) => (
-            <MenuItem key={`bg-${color}`} onSelect={() => handleColorSort(color, 'fill')}>
+            <MenuItem key={`bg-${color}`} onSelect={() => void handleColorSort(color, 'fill')}>
               <div
                 className="w-4 h-4 border border-ss-border rounded mr-2"
                 style={{ backgroundColor: color }}
@@ -146,7 +150,7 @@ export function SortByColorMenu({
             Sort by Font Color
           </div>
           {fontColors.map((color) => (
-            <MenuItem key={`font-${color}`} onSelect={() => handleColorSort(color, 'font')}>
+            <MenuItem key={`font-${color}`} onSelect={() => void handleColorSort(color, 'font')}>
               <div
                 className="w-4 h-4 border border-ss-border rounded flex items-center justify-center mr-2"
                 data-color={color}

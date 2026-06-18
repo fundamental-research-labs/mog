@@ -2,6 +2,8 @@ use crate::mirror::CellMirror;
 use crate::snapshot::{ChangeKind, FilterChange, MutationResult, RuntimeOperationDiagnostic};
 use crate::storage::engine::services::filter_results::append_row_visibility_changes;
 use crate::storage::engine::services::imported_filters;
+use crate::storage::engine::services::resolved_formats;
+use crate::storage::engine::settings::EngineSettings;
 use crate::storage::engine::stores::EngineStores;
 use crate::storage::sheet::{dimensions, filters};
 use cell_types::{CellId, SheetId, SheetPos};
@@ -350,6 +352,7 @@ fn resolve_header_col(
 pub(in crate::storage::engine) fn set_column_filter(
     stores: &mut EngineStores,
     mirror: &mut CellMirror,
+    settings: &EngineSettings,
     sheet_id: &SheetId,
     filter_id: &str,
     header_col: u32,
@@ -371,6 +374,7 @@ pub(in crate::storage::engine) fn set_column_filter(
     apply_filter_with_action(
         stores,
         mirror,
+        settings,
         sheet_id,
         filter_id,
         "applied",
@@ -381,6 +385,7 @@ pub(in crate::storage::engine) fn set_column_filter(
 pub(in crate::storage::engine) fn clear_column_filter(
     stores: &mut EngineStores,
     mirror: &mut CellMirror,
+    settings: &EngineSettings,
     sheet_id: &SheetId,
     filter_id: &str,
     header_col: u32,
@@ -397,12 +402,15 @@ pub(in crate::storage::engine) fn clear_column_filter(
     imported_filters::sync_imported_auto_filter_metadata_after_clear_column(
         stores, mirror, sheet_id, filter_id, header_col,
     );
-    apply_filter_with_action(stores, mirror, sheet_id, filter_id, "cleared", None)
+    apply_filter_with_action(
+        stores, mirror, settings, sheet_id, filter_id, "cleared", None,
+    )
 }
 
 pub(in crate::storage::engine) fn clear_all_column_filters(
     stores: &mut EngineStores,
     mirror: &mut CellMirror,
+    settings: &EngineSettings,
     sheet_id: &SheetId,
     filter_id: &str,
 ) -> Result<MutationResult, ComputeError> {
@@ -415,7 +423,9 @@ pub(in crate::storage::engine) fn clear_all_column_filters(
     imported_filters::sync_imported_auto_filter_metadata_from_runtime(
         stores, mirror, sheet_id, filter_id,
     );
-    apply_filter_with_action(stores, mirror, sheet_id, filter_id, "cleared", None)
+    apply_filter_with_action(
+        stores, mirror, settings, sheet_id, filter_id, "cleared", None,
+    )
 }
 
 pub(in crate::storage::engine) fn get_filter(
@@ -715,12 +725,14 @@ fn imported_filter_button_flags(
 pub(in crate::storage::engine) fn apply_filter(
     stores: &mut EngineStores,
     mirror: &mut CellMirror,
+    settings: &EngineSettings,
     sheet_id: &SheetId,
     filter_id: &str,
 ) -> Result<MutationResult, ComputeError> {
     apply_filter_with_action(
         stores,
         mirror,
+        settings,
         sheet_id,
         filter_id,
         "applied",
@@ -731,12 +743,14 @@ pub(in crate::storage::engine) fn apply_filter(
 pub(in crate::storage::engine) fn reapply_filter(
     stores: &mut EngineStores,
     mirror: &mut CellMirror,
+    settings: &EngineSettings,
     sheet_id: &SheetId,
     filter_id: &str,
 ) -> Result<MutationResult, ComputeError> {
     apply_filter_with_action(
         stores,
         mirror,
+        settings,
         sheet_id,
         filter_id,
         "reapplied",
@@ -747,6 +761,7 @@ pub(in crate::storage::engine) fn reapply_filter(
 fn apply_filter_with_action(
     stores: &mut EngineStores,
     mirror: &mut CellMirror,
+    settings: &EngineSettings,
     sheet_id: &SheetId,
     filter_id: &str,
     action: &str,
@@ -796,7 +811,6 @@ fn apply_filter_with_action(
     }
 
     let sid = *sheet_id;
-    let grid_index = stores.grid_indexes.get(&sid);
     let results = filters::evaluate_filter(
         stores.storage.doc(),
         stores.storage.sheets(),
@@ -810,32 +824,7 @@ fn apply_filter_with_action(
                 .unwrap_or(CellValue::Null)
         },
         |row, col| {
-            let cell_id_opt = grid_index.and_then(|grid| grid.cell_id_at(row, col));
-            match cell_id_opt {
-                Some(cid) => {
-                    let cell_hex = id_to_hex(cid.as_u128());
-                    let table_fmt =
-                        super::tables::resolve_table_format_at_cell(mirror, &sid, row, col);
-                    crate::storage::properties::get_effective_format(
-                        &stores.storage,
-                        &sid,
-                        &cell_hex,
-                        row,
-                        col,
-                        table_fmt.as_ref(),
-                        grid_index,
-                        mirror.get_sheet(&sid),
-                    )
-                }
-                None => crate::storage::properties::get_positional_format(
-                    &stores.storage,
-                    &sid,
-                    row,
-                    col,
-                    grid_index,
-                    mirror.get_sheet(&sid),
-                ),
-            }
+            resolved_formats::get_resolved_cell_format(stores, mirror, settings, sheet_id, row, col)
         },
         |hex| resolve_filter_cell_pos(stores, mirror, sheet_id, hex),
     );
@@ -932,11 +921,11 @@ pub(in crate::storage::engine) fn get_unique_column_values(
 pub(in crate::storage::engine) fn get_filtered_record_count(
     stores: &EngineStores,
     mirror: &CellMirror,
+    settings: &EngineSettings,
     sheet_id: &SheetId,
     filter_id: &str,
 ) -> Option<filters::FilterRecordCount> {
     let sid = *sheet_id;
-    let grid_index = stores.grid_indexes.get(&sid);
     filters::get_filtered_record_count(
         stores.storage.doc(),
         stores.storage.sheets(),
@@ -950,32 +939,7 @@ pub(in crate::storage::engine) fn get_filtered_record_count(
                 .unwrap_or(CellValue::Null)
         },
         |row, col| {
-            let cell_id_opt = grid_index.and_then(|grid| grid.cell_id_at(row, col));
-            match cell_id_opt {
-                Some(cid) => {
-                    let cell_hex = id_to_hex(cid.as_u128());
-                    let table_fmt =
-                        super::tables::resolve_table_format_at_cell(mirror, &sid, row, col);
-                    crate::storage::properties::get_effective_format(
-                        &stores.storage,
-                        &sid,
-                        &cell_hex,
-                        row,
-                        col,
-                        table_fmt.as_ref(),
-                        grid_index,
-                        mirror.get_sheet(&sid),
-                    )
-                }
-                None => crate::storage::properties::get_positional_format(
-                    &stores.storage,
-                    &sid,
-                    row,
-                    col,
-                    grid_index,
-                    mirror.get_sheet(&sid),
-                ),
-            }
+            resolved_formats::get_resolved_cell_format(stores, mirror, settings, sheet_id, row, col)
         },
         |hex| resolve_filter_cell_pos(stores, mirror, sheet_id, hex),
     )

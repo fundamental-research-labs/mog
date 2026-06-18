@@ -6,7 +6,10 @@ use yrs::{Map, Transact};
 use crate::mirror::CellMirror;
 use crate::snapshot::RecalcResult;
 use crate::storage::engine::mutation_coordinator::MutationCoordinator;
+use crate::storage::engine::services::resolved_formats;
+use crate::storage::engine::settings::EngineSettings;
 use crate::storage::engine::stores::EngineStores;
+use crate::storage::sheet::filters;
 
 use super::patches::{merge_recalc_results, synthetic_null_change};
 use super::range_sort::sort_range_backed_rows;
@@ -30,6 +33,165 @@ fn sort_range_intersects_range_view(
         .unwrap_or(false)
 }
 
+#[derive(Debug, Clone)]
+struct FilterRangeAnchor {
+    filter_id: String,
+    header_start: (u32, u32),
+    header_end: (u32, u32),
+    data_end: (u32, u32),
+}
+
+#[derive(Debug, Clone, Copy)]
+struct SortRect {
+    start_row: u32,
+    start_col: u32,
+    end_row: u32,
+    end_col: u32,
+}
+
+impl SortRect {
+    fn intersects(self, other: Self) -> bool {
+        !(self.end_row < other.start_row
+            || self.start_row > other.end_row
+            || self.end_col < other.start_col
+            || self.start_col > other.end_col)
+    }
+}
+
+fn resolve_filter_anchor_pos(
+    stores: &EngineStores,
+    mirror: &CellMirror,
+    sheet_id: &SheetId,
+    cell_id_hex: &str,
+) -> Option<(u32, u32)> {
+    let cell_id = CellId::from_raw(compute_document::hex::hex_to_id(cell_id_hex)?);
+    if let Some(pos) = mirror.resolve_position(&cell_id) {
+        return Some((pos.row(), pos.col()));
+    }
+    stores
+        .grid_indexes
+        .get(sheet_id)
+        .and_then(|grid| grid.cell_position(&cell_id))
+}
+
+fn capture_filter_range_anchors(
+    stores: &EngineStores,
+    mirror: &CellMirror,
+    sheet_id: &SheetId,
+    start_row: u32,
+    start_col: u32,
+    end_row: u32,
+    end_col: u32,
+) -> Vec<FilterRangeAnchor> {
+    let sorted_rect = SortRect {
+        start_row,
+        start_col,
+        end_row,
+        end_col,
+    };
+    filters::get_filters_in_sheet(stores.storage.doc(), stores.storage.sheets(), sheet_id)
+        .into_iter()
+        .filter_map(|filter| {
+            let header_start =
+                resolve_filter_anchor_pos(stores, mirror, sheet_id, &filter.header_start_cell_id)?;
+            let header_end =
+                resolve_filter_anchor_pos(stores, mirror, sheet_id, &filter.header_end_cell_id)?;
+            let data_end =
+                resolve_filter_anchor_pos(stores, mirror, sheet_id, &filter.data_end_cell_id)?;
+
+            let filter_start_row = header_start.0;
+            let filter_start_col = header_start.1.min(header_end.1);
+            let filter_end_row = data_end.0;
+            let filter_end_col = header_start.1.max(header_end.1);
+            let filter_rect = SortRect {
+                start_row: filter_start_row,
+                start_col: filter_start_col,
+                end_row: filter_end_row,
+                end_col: filter_end_col,
+            };
+            if !sorted_rect.intersects(filter_rect) {
+                return None;
+            }
+
+            Some(FilterRangeAnchor {
+                filter_id: filter.id,
+                header_start,
+                header_end,
+                data_end,
+            })
+        })
+        .collect()
+}
+
+fn ensure_filter_anchor_id(
+    stores: &mut EngineStores,
+    mirror: &CellMirror,
+    sheet_id: &SheetId,
+    row: u32,
+    col: u32,
+) -> Option<String> {
+    let cell_id = super::super::super::cell_editing::ensure_cell_id_mirrored(
+        stores, mirror, sheet_id, row, col,
+    )?;
+    Some(id_to_hex(cell_id.as_u128()).to_string())
+}
+
+fn restore_filter_range_anchors(
+    stores: &mut EngineStores,
+    mirror: &CellMirror,
+    sheet_id: &SheetId,
+    anchors: &[FilterRangeAnchor],
+) -> Result<(), ComputeError> {
+    for anchor in anchors {
+        let Some(mut filter) = filters::get_filter(
+            stores.storage.doc(),
+            stores.storage.sheets(),
+            sheet_id,
+            &anchor.filter_id,
+        ) else {
+            continue;
+        };
+        let Some(header_start_cell_id) = ensure_filter_anchor_id(
+            stores,
+            mirror,
+            sheet_id,
+            anchor.header_start.0,
+            anchor.header_start.1,
+        ) else {
+            continue;
+        };
+        let Some(header_end_cell_id) = ensure_filter_anchor_id(
+            stores,
+            mirror,
+            sheet_id,
+            anchor.header_end.0,
+            anchor.header_end.1,
+        ) else {
+            continue;
+        };
+        let Some(data_end_cell_id) = ensure_filter_anchor_id(
+            stores,
+            mirror,
+            sheet_id,
+            anchor.data_end.0,
+            anchor.data_end.1,
+        ) else {
+            continue;
+        };
+
+        filter.header_start_cell_id = header_start_cell_id;
+        filter.header_end_cell_id = header_end_cell_id;
+        filter.data_end_cell_id = data_end_cell_id;
+        filters::upsert_filter_state(
+            stores.storage.doc(),
+            stores.storage.sheets(),
+            sheet_id,
+            &filter,
+        )?;
+    }
+    Ok(())
+}
+
 // ---------------------------------------------------------------------------
 // mutation_sort_range
 // ---------------------------------------------------------------------------
@@ -40,6 +202,7 @@ pub(in crate::storage::engine) fn mutation_sort_range(
     stores: &mut EngineStores,
     mirror: &mut CellMirror,
     mutation: &mut MutationCoordinator,
+    settings: &EngineSettings,
     sheet_id: &SheetId,
     start_row: u32,
     start_col: u32,
@@ -48,7 +211,6 @@ pub(in crate::storage::engine) fn mutation_sort_range(
     options: &crate::storage::engine::mutation::BridgeSortOptions,
 ) -> Result<RecalcResult, ComputeError> {
     use crate::storage::engine::mutation::BridgeSortMode;
-    use crate::storage::properties;
     use crate::storage::sheet::sorting;
 
     let range = sorting::CellRange::new(start_row, start_col, end_row, end_col);
@@ -80,46 +242,17 @@ pub(in crate::storage::engine) fn mutation_sort_range(
         });
     }
 
-    let grid_for_compute =
-        stores
-            .grid_indexes
-            .get(sheet_id)
-            .ok_or_else(|| ComputeError::SheetNotFound {
-                sheet_id: id_to_hex(sheet_id.as_u128()).to_string(),
-            })?;
+    stores
+        .grid_indexes
+        .get(sheet_id)
+        .ok_or_else(|| ComputeError::SheetNotFound {
+            sheet_id: id_to_hex(sheet_id.as_u128()).to_string(),
+        })?;
 
     let sort_result = {
-        // Build the (row, col) → CellFormat accessor used by color-mode
-        // criteria. Mirrors the format cascade the renderer uses.
-        // TODO(consolidate-with-apply-filter): services/features.rs::apply_filter
-        // has a similar closure; once both paths are stable,
-        // hoist into a shared `make_format_accessor` helper.
-        let storage = &stores.storage;
         let sid = *sheet_id;
-        let grid_for_format = grid_for_compute;
         let get_cell_format = |row: u32, col: u32| -> domain_types::CellFormat {
-            let table_fmt =
-                super::super::super::tables::resolve_table_format_at_cell(mirror, &sid, row, col);
-            match grid_for_format.cell_id_at(row, col) {
-                Some(id) => properties::get_effective_format(
-                    storage,
-                    &sid,
-                    &id_to_hex(id.as_u128()),
-                    row,
-                    col,
-                    table_fmt.as_ref(),
-                    Some(grid_for_format),
-                    mirror.get_sheet(&sid),
-                ),
-                None => properties::get_positional_format(
-                    storage,
-                    &sid,
-                    row,
-                    col,
-                    Some(grid_for_format),
-                    mirror.get_sheet(&sid),
-                ),
-            }
+            resolved_formats::get_resolved_cell_format(stores, mirror, settings, &sid, row, col)
         };
 
         let get_cell_value = |row: u32, col: u32| -> CellValue {
@@ -145,6 +278,10 @@ pub(in crate::storage::engine) fn mutation_sort_range(
     if sort_result.sorted_indices.is_empty() || sort_result.rows_moved == 0 {
         return Ok(RecalcResult::empty());
     }
+
+    let filter_range_anchors = capture_filter_range_anchors(
+        stores, mirror, sheet_id, start_row, start_col, end_row, end_col,
+    );
 
     let data_start = if has_headers {
         start_row + 1
@@ -173,7 +310,9 @@ pub(in crate::storage::engine) fn mutation_sort_range(
         sort_range_intersects_range_view(mirror, sheet_id, start_row, start_col, end_row, end_col);
 
     if has_ranges {
-        return sort_range_backed_rows(stores, mirror, mutation, sheet_id, &permutation);
+        let recalc = sort_range_backed_rows(stores, mirror, mutation, sheet_id, &permutation)?;
+        restore_filter_range_anchors(stores, mirror, sheet_id, &filter_range_anchors)?;
+        return Ok(recalc);
     }
 
     // ===================================================================
@@ -379,6 +518,8 @@ pub(in crate::storage::engine) fn mutation_sort_range(
         blank_recalc.changed_cells = blank_slot_clears;
         merge_recalc_results(&mut recalc, blank_recalc);
     }
+
+    restore_filter_range_anchors(stores, mirror, sheet_id, &filter_range_anchors)?;
 
     Ok(recalc)
 }

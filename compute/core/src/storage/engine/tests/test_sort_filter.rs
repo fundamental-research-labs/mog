@@ -87,6 +87,34 @@ fn text_at(engine: &YrsComputeEngine, row: u32, col: u32) -> String {
     }
 }
 
+fn add_score_highlight_cf(engine: &mut YrsComputeEngine, sheet_id: &SheetId, fill: &str) {
+    engine
+        .add_cf_rule(
+            sheet_id,
+            serde_json::json!({
+                "id": "score-highlight",
+                "sheetId": sheet_id.to_uuid_string(),
+                "ranges": [{
+                    "startRow": 1u32,
+                    "startCol": 2u32,
+                    "endRow": 5u32,
+                    "endCol": 2u32,
+                }],
+                "rules": [{
+                    "type": "cellValue",
+                    "id": "score-over-80",
+                    "priority": 1,
+                    "operator": "greaterThan",
+                    "value1": 80,
+                    "style": {
+                        "backgroundColor": fill,
+                    },
+                }],
+            }),
+        )
+        .expect("add conditional format rule");
+}
+
 #[test]
 fn sort_range_visible_rows_only_preserves_hidden_slots() {
     let (mut engine, _) = YrsComputeEngine::from_snapshot(sort_filter_snapshot()).unwrap();
@@ -178,4 +206,157 @@ fn headered_sort_resolves_blank_header_column_from_body_cells() {
     assert_eq!(text_at(&engine, 1, 0), "Small");
     assert_eq!(text_at(&engine, 2, 0), "Medium");
     assert_eq!(text_at(&engine, 3, 0), "Large");
+}
+
+#[test]
+fn color_filter_matches_conditional_format_fill() {
+    use crate::storage::sheet::filters::ColumnFilter;
+
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(sort_filter_snapshot()).unwrap();
+    let sheet_id = sid();
+    let fill = "#ffde59";
+
+    add_score_highlight_cf(&mut engine, &sheet_id, fill);
+    assert_eq!(
+        engine
+            .get_resolved_format(&sheet_id, 1, 2)
+            .background_color
+            .as_deref(),
+        Some(fill),
+        "CF fill should be visible through the resolved-format read path"
+    );
+
+    engine
+        .create_filter(
+            &sheet_id,
+            serde_json::json!({
+                "startRow": 0u32,
+                "startCol": 0u32,
+                "endRow": 5u32,
+                "endCol": 2u32,
+            }),
+        )
+        .expect("create filter");
+    let filter_id = engine.get_filters_in_sheet(&sheet_id)[0].id.clone();
+
+    engine
+        .set_column_filter(
+            &sheet_id,
+            &filter_id,
+            2,
+            ColumnFilter::Color {
+                color: fill.to_string(),
+                by_font: false,
+            },
+        )
+        .expect("apply color filter");
+
+    assert!(!engine.is_row_hidden_query(&sheet_id, 1), "Alice visible");
+    assert!(engine.is_row_hidden_query(&sheet_id, 2), "Bob hidden");
+    assert!(engine.is_row_hidden_query(&sheet_id, 3), "Carol hidden");
+    assert!(engine.is_row_hidden_query(&sheet_id, 4), "Dave hidden");
+    assert!(!engine.is_row_hidden_query(&sheet_id, 5), "Eve visible");
+}
+
+#[test]
+fn color_sort_matches_conditional_format_fill() {
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(sort_filter_snapshot()).unwrap();
+    let sheet_id = sid();
+    let fill = "#ffde59";
+
+    add_score_highlight_cf(&mut engine, &sheet_id, fill);
+
+    let options = mutation::BridgeSortOptions {
+        criteria: vec![mutation::BridgeSortCriterion {
+            column: 2,
+            direction: domain_types::domain::filter::SortOrder::Asc,
+            case_sensitive: false,
+            mode: mutation::BridgeSortMode::CellColor {
+                target: fill.to_string(),
+                position: domain_types::domain::filter::ColorPosition::Top,
+            },
+        }],
+        has_headers: true,
+        visible_rows_only: false,
+    };
+
+    engine
+        .sort_range(&sheet_id, 0, 0, 5, 2, options)
+        .expect("sort by resolved CF fill");
+
+    assert_eq!(text_at(&engine, 1, 0), "Alice");
+    assert_eq!(text_at(&engine, 2, 0), "Eve");
+    assert_eq!(text_at(&engine, 3, 0), "Bob");
+    assert_eq!(text_at(&engine, 4, 0), "Carol");
+    assert_eq!(text_at(&engine, 5, 0), "Dave");
+}
+
+#[test]
+fn sort_preserves_filter_range_for_later_criteria() {
+    use crate::storage::sheet::filters::{
+        ColumnFilter, FilterCondition, FilterLogic, FilterOperator,
+    };
+
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(sort_filter_snapshot()).unwrap();
+    let sheet_id = sid();
+
+    engine
+        .create_filter(
+            &sheet_id,
+            serde_json::json!({
+                "startRow": 0u32,
+                "startCol": 0u32,
+                "endRow": 5u32,
+                "endCol": 2u32,
+            }),
+        )
+        .expect("create filter");
+    let filter_id = engine.get_filters_in_sheet(&sheet_id)[0].id.clone();
+
+    let options = mutation::BridgeSortOptions {
+        criteria: vec![mutation::BridgeSortCriterion {
+            column: 2,
+            direction: domain_types::domain::filter::SortOrder::Desc,
+            case_sensitive: false,
+            mode: mutation::BridgeSortMode::Value { custom_list: None },
+        }],
+        has_headers: true,
+        visible_rows_only: false,
+    };
+
+    engine
+        .sort_range(&sheet_id, 0, 0, 5, 2, options)
+        .expect("sort filtered range");
+
+    let filter = engine
+        .get_filters_in_sheet(&sheet_id)
+        .into_iter()
+        .find(|filter| filter.id == filter_id)
+        .expect("filter remains after sort");
+    assert_eq!(filter.start_row, Some(0));
+    assert_eq!(filter.start_col, Some(0));
+    assert_eq!(filter.end_row, Some(5));
+    assert_eq!(filter.end_col, Some(2));
+
+    engine
+        .set_column_filter(
+            &sheet_id,
+            &filter_id,
+            2,
+            ColumnFilter::Condition {
+                conditions: vec![FilterCondition {
+                    operator: FilterOperator::GreaterThan,
+                    value: Some(num(80.0)),
+                    value2: None,
+                }],
+                logic: FilterLogic::And,
+            },
+        )
+        .expect("apply condition after sort");
+
+    assert!(!engine.is_row_hidden_query(&sheet_id, 1), "Alice visible");
+    assert!(!engine.is_row_hidden_query(&sheet_id, 2), "Eve visible");
+    assert!(engine.is_row_hidden_query(&sheet_id, 3), "Bob hidden");
+    assert!(engine.is_row_hidden_query(&sheet_id, 4), "Carol hidden");
+    assert!(engine.is_row_hidden_query(&sheet_id, 5), "Dave hidden");
 }

@@ -63,6 +63,7 @@ pub(super) fn set_column_filter(
     let result = filter_svc::set_column_filter(
         &mut engine.stores,
         &mut engine.mirror,
+        &engine.settings,
         sheet_id,
         filter_id,
         header_col,
@@ -87,6 +88,7 @@ pub(super) fn clear_column_filter(
     let result = filter_svc::clear_column_filter(
         &mut engine.stores,
         &mut engine.mirror,
+        &engine.settings,
         sheet_id,
         filter_id,
         header_col,
@@ -109,6 +111,7 @@ pub(super) fn clear_all_column_filters(
     let result = filter_svc::clear_all_column_filters(
         &mut engine.stores,
         &mut engine.mirror,
+        &engine.settings,
         sheet_id,
         filter_id,
     )?;
@@ -174,8 +177,13 @@ pub(super) fn apply_filter(
     filter_id: &str,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
     ensure_filter_full_recalc_ready(engine)?;
-    let result =
-        filter_svc::apply_filter(&mut engine.stores, &mut engine.mirror, sheet_id, filter_id)?;
+    let result = filter_svc::apply_filter(
+        &mut engine.stores,
+        &mut engine.mirror,
+        &engine.settings,
+        sheet_id,
+        filter_id,
+    )?;
     finish_filter_apply(engine, sheet_id, result)
 }
 
@@ -185,8 +193,13 @@ pub(super) fn reapply_filter(
     filter_id: &str,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
     ensure_filter_full_recalc_ready(engine)?;
-    let result =
-        filter_svc::reapply_filter(&mut engine.stores, &mut engine.mirror, sheet_id, filter_id)?;
+    let result = filter_svc::reapply_filter(
+        &mut engine.stores,
+        &mut engine.mirror,
+        &engine.settings,
+        sheet_id,
+        filter_id,
+    )?;
     finish_filter_apply(engine, sheet_id, result)
 }
 
@@ -309,5 +322,11 @@ pub(super) fn get_filtered_record_count(
     sheet_id: &SheetId,
     filter_id: &str,
 ) -> Option<filters::FilterRecordCount> {
-    filter_svc::get_filtered_record_count(&engine.stores, &engine.mirror, sheet_id, filter_id)
+    filter_svc::get_filtered_record_count(
+        &engine.stores,
+        &engine.mirror,
+        &engine.settings,
+        sheet_id,
+        filter_id,
+    )
 }

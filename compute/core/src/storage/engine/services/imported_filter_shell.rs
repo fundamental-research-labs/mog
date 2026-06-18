@@ -78,9 +78,12 @@ pub(in crate::storage::engine::services) fn unsupported_reasons_for_filter_type(
             }
             reasons
         }
-        OoxmlFilterType::Color { .. } => {
+        OoxmlFilterType::Color {
+            dxf_id: Some(_), ..
+        } => {
             vec![filters::ImportFilterUnsupportedReason::ColorDxfUnresolved]
         }
+        OoxmlFilterType::Color { dxf_id: None, .. } => Vec::new(),
         OoxmlFilterType::Icon { .. } => {
             vec![filters::ImportFilterUnsupportedReason::IconFilterUnsupported]
         }

@@ -448,6 +448,7 @@ impl YrsComputeEngine {
                     &mut self.stores,
                     &mut self.mirror,
                     &mut self.mutation,
+                    &self.settings,
                     &sheet_id,
                     start_row,
                     start_col,

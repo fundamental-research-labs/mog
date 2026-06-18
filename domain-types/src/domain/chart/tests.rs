@@ -998,6 +998,7 @@ fn chart_data_serde_roundtrip() {
             x_role: None,
             category_cache: None,
             category_source_kind: None,
+            category_source_type: None,
             category_levels: None,
             category_label_format: None,
             bubble_size: None,

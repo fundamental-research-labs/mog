@@ -21,6 +21,15 @@ pub enum ChartSeriesXRoleData {
     Quantitative,
 }
 
+/// Imported category/x source value type.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ChartSeriesCategorySourceTypeData {
+    Number,
+    String,
+    MultiLevelString,
+}
+
 /// Imported stock chart series role.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -149,6 +158,9 @@ pub struct ChartSeriesData {
     /// Source authority for the category/x dimension.
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub category_source_kind: Option<ChartSeriesDimensionSourceKindData>,
+    /// Original OOXML category/x source value type (`numRef`, `strRef`, etc.).
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub category_source_type: Option<ChartSeriesCategorySourceTypeData>,
     /// Imported cached multi-level category labels, keyed by point index.
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub category_levels: Option<ChartSeriesCategoryLevelsCacheData>,

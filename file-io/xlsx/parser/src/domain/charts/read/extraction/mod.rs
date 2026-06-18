@@ -10,6 +10,7 @@ mod legacy;
 mod legend;
 mod markers;
 mod series;
+mod series_sources;
 mod text;
 
 pub use chart_space::extract_chart_spec_from_chart_space;

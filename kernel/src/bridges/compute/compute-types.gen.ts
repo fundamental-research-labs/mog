@@ -1161,6 +1161,7 @@ export interface ChartSeriesData {
   xRole?: ChartSeriesXRoleData;
   categoryCache?: ChartSeriesPointCacheData;
   categorySourceKind?: ChartSeriesDimensionSourceKindData;
+  categorySourceType?: ChartSeriesCategorySourceTypeData;
   categoryLevels?: ChartSeriesCategoryLevelsCacheData;
   categoryLabelFormat?: CategoryLabelFormatData;
   bubbleSize?: string;
@@ -1205,6 +1206,8 @@ export interface ChartSeriesData {
 }
 
 export type ChartSeriesDimensionSourceKindData = "ref" | "literal" | "cacheFallback";
+
+export type ChartSeriesCategorySourceTypeData = "number" | "string" | "multiLevelString";
 
 export interface ChartSeriesPointCacheData {
   pointCount?: number;

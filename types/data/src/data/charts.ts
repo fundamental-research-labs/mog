@@ -869,6 +869,9 @@ export type ChartSeriesDimensionSourceKind = 'ref' | 'literal' | 'cacheFallback'
 /** Imported x/category dimension role for a series. */
 export type ChartSeriesXRole = 'category' | 'quantitative';
 
+/** Imported OOXML category/x source value type. */
+export type ChartSeriesCategorySourceType = 'number' | 'string' | 'multiLevelString';
+
 /** Imported stock chart source role for HLC/OHLC and volume stock charts. */
 export type ChartSeriesStockRole = 'volume' | 'open' | 'high' | 'low' | 'close';
 
@@ -1108,6 +1111,7 @@ export interface SeriesConfig {
   categoryCache?: ChartSeriesPointCache;
   categoryLevels?: ChartSeriesCategoryLevelsCache;
   categorySourceKind?: ChartSeriesDimensionSourceKind;
+  categorySourceType?: ChartSeriesCategorySourceType;
   categoryLabelFormat?: CategoryLabelFormat;
   bubbleSize?: string;
   bubbleSizeCache?: ChartSeriesPointCache;

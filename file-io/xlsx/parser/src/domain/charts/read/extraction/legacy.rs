@@ -6,9 +6,10 @@ use super::data_refs::{
 use super::formatting::extract_fill_color;
 use super::labels::extract_data_label_data;
 use super::markers::extract_marker_config;
-use super::series::{
-    extract_cat_point_cache, extract_cat_source_kind, extract_num_point_cache,
-    extract_num_source_kind, extract_single_series,
+use super::series::extract_single_series;
+use super::series_sources::{
+    extract_cat_point_cache, extract_cat_source_kind, extract_cat_source_type,
+    extract_num_point_cache, extract_num_source_kind,
 };
 
 pub(in crate::domain::charts::read) fn extract_chart_series(
@@ -68,6 +69,8 @@ pub(in crate::domain::charts::read) fn extract_chart_series(
                 extract_cat_point_cache(&s.cat).or_else(|| extract_cat_point_cache(&s.x_val));
             let category_source_kind =
                 extract_cat_source_kind(&s.cat).or_else(|| extract_cat_source_kind(&s.x_val));
+            let category_source_type =
+                extract_cat_source_type(&s.cat).or_else(|| extract_cat_source_type(&s.x_val));
 
             let bubble_size = extract_num_ref_formula(&s.bubble_size);
             let bubble_size_cache = extract_num_point_cache(&s.bubble_size);
@@ -160,6 +163,7 @@ pub(in crate::domain::charts::read) fn extract_chart_series(
                 },
                 category_cache,
                 category_source_kind,
+                category_source_type,
                 category_levels: None,
                 category_label_format: None,
                 bubble_size,

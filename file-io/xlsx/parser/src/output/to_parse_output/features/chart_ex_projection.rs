@@ -582,6 +582,9 @@ fn project_chart_ex_series(
             let category_source_kind = categories
                 .as_ref()
                 .map(|_| domain_types::chart::ChartSeriesDimensionSourceKindData::Ref);
+            let category_source_type = categories
+                .as_ref()
+                .map(|_| domain_types::chart::ChartSeriesCategorySourceTypeData::String);
 
             Some(ChartSeriesData {
                 name: chart_ex_text_text(series.tx.as_ref())
@@ -597,6 +600,7 @@ fn project_chart_ex_series(
                 x_role: None,
                 category_cache: None,
                 category_source_kind,
+                category_source_type,
                 category_levels: None,
                 category_label_format: None,
                 bubble_size: None,
@@ -1715,6 +1719,8 @@ mod tests {
             category_cache: None,
             category_source_kind: categories
                 .map(|_| domain_types::chart::ChartSeriesDimensionSourceKindData::Ref),
+            category_source_type: categories
+                .map(|_| domain_types::chart::ChartSeriesCategorySourceTypeData::String),
             category_levels: None,
             category_label_format: None,
             bubble_size: None,

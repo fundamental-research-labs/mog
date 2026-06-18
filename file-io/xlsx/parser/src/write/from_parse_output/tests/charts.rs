@@ -1664,6 +1664,7 @@ fn chart_ex_projected_series() -> domain_types::chart::ChartSeriesData {
         x_role: Some(domain_types::chart::ChartSeriesXRoleData::Category),
         category_cache: None,
         category_source_kind: Some(domain_types::chart::ChartSeriesDimensionSourceKindData::Ref),
+        category_source_type: Some(domain_types::chart::ChartSeriesCategorySourceTypeData::String),
         category_levels: None,
         category_label_format: None,
         bubble_size: None,

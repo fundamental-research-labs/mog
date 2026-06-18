@@ -1,8 +1,8 @@
 use domain_types::chart::{
-    ChartColorData, ChartLineData, ChartSeriesCategoryLevelsCacheData, ChartSeriesData,
-    ChartSeriesDimensionSourceKindData, ChartSeriesPointCacheData, ChartSeriesXRoleData,
-    ChartType as DomainChartType, ErrorBarData, ErrorBarSourceData, PointFormatData, TrendlineData,
-    TrendlineLabelData,
+    ChartColorData, ChartLineData, ChartSeriesCategoryLevelsCacheData,
+    ChartSeriesCategorySourceTypeData, ChartSeriesData, ChartSeriesDimensionSourceKindData,
+    ChartSeriesPointCacheData, ChartSeriesXRoleData, ChartType as DomainChartType, ErrorBarData,
+    ErrorBarSourceData, PointFormatData, TrendlineData, TrendlineLabelData,
 };
 use ooxml_types::charts::{
     self, CatDataSource, DataPointOverride, ErrorBarDirection, ErrorBarType, ErrorBars,
@@ -60,6 +60,7 @@ pub(super) fn build_series(
         sd.category_levels.as_ref(),
         sd.category_label_format.as_ref(),
         sd.category_source_kind,
+        sd.category_source_type,
         uses_xy,
     );
     let (cat, x_val) = if has_x_val {
@@ -315,9 +316,18 @@ fn build_cat_data_source(
     category_levels: Option<&ChartSeriesCategoryLevelsCacheData>,
     category_label_format: Option<&domain_types::chart::CategoryLabelFormatData>,
     source_kind: Option<ChartSeriesDimensionSourceKindData>,
+    source_type: Option<ChartSeriesCategorySourceTypeData>,
     force_numeric: bool,
 ) -> Option<CatDataSource> {
-    let numeric_category = force_numeric || category_cache_is_numeric(cache, category_label_format);
+    let numeric_category = force_numeric
+        || match source_type {
+            Some(ChartSeriesCategorySourceTypeData::Number) => true,
+            Some(
+                ChartSeriesCategorySourceTypeData::String
+                | ChartSeriesCategorySourceTypeData::MultiLevelString,
+            ) => false,
+            None => category_cache_is_numeric(cache, category_label_format),
+        };
 
     if source_kind == Some(ChartSeriesDimensionSourceKindData::Literal) {
         return cache

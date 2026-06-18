@@ -120,10 +120,7 @@ pub(in crate::domain::charts::read) fn extract_individual_data_label_data(
     domain_types::chart::DataLabelData {
         show,
         delete: label.delete,
-        position: label
-            .position
-            .and_then(data_label_position_to_domain)
-            .or_else(|| defaults.and_then(|dl| data_label_position_to_domain(dl.position))),
+        position: label.position.and_then(data_label_position_to_domain),
         format: extension_data.format,
         show_value: label
             .show_value
@@ -327,5 +324,32 @@ mod tests {
             data.leader_lines_format.and_then(|line| line.color),
             Some(ChartColorData::Hex("00FF00".to_string()))
         );
+    }
+
+    #[test]
+    fn individual_data_label_position_only_uses_explicit_label_position() {
+        let defaults = ooxml_types::charts::DataLabelOptions {
+            position: ooxml_types::charts::DataLabelPosition::OutsideEnd,
+            ..Default::default()
+        };
+
+        let inherited = extract_individual_data_label_data(
+            &ooxml_types::charts::DataLabel {
+                idx: 0,
+                ..Default::default()
+            },
+            Some(&defaults),
+        );
+        assert_eq!(inherited.position, None);
+
+        let explicit = extract_individual_data_label_data(
+            &ooxml_types::charts::DataLabel {
+                idx: 0,
+                position: Some(ooxml_types::charts::DataLabelPosition::InsideEnd),
+                ..Default::default()
+            },
+            Some(&defaults),
+        );
+        assert_eq!(explicit.position.as_deref(), Some("insideEnd"));
     }
 }

@@ -621,7 +621,7 @@ export function ViewRibbon({
         dropdownIcon={<GridlinesIcon />}
       >
         <div
-          className="grid grid-cols-2 gap-x-2 px-0.5 overflow-hidden"
+          className="grid min-w-[230px] grid-cols-[132px_90px] gap-x-2 px-0.5 overflow-hidden"
           style={{
             rowGap: 'var(--ribbon-button-gap)',
             height: 'var(--ribbon-content-height)',

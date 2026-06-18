@@ -8,6 +8,8 @@
  */
 
 import type { SheetId } from '@mog-sdk/contracts/core';
+import type { ContextMenuTarget } from '@mog-sdk/contracts/context-menu';
+import type { PivotFieldArea, PlacementId } from '@mog-sdk/contracts/pivot';
 import type { CellCoord } from '@mog-sdk/contracts/rendering';
 import type { SheetCoordinator } from '../../coordinator';
 import type { SparklineManager } from '../../coordinator/sparklines/sparkline-manager';
@@ -78,11 +80,21 @@ export interface ContextMenuOptions {
   /** Y position in screen coordinates */
   y: number;
   /** What was right-clicked */
-  target: 'cell' | 'row-header' | 'column-header' | 'selection';
+  target: ContextMenuTarget;
   /** Target row index (for row-header or cell clicks) */
   targetRow?: number;
   /** Target column index (for column-header or cell clicks) */
   targetCol?: number;
+  /** Pivot table ID if the context menu is for a pivot surface */
+  pivotId?: string;
+  /** Pivot header key if a concrete pivot row/column member was hit */
+  pivotHeaderKey?: string;
+  /** Pivot field ID if a concrete pivot field was hit */
+  pivotFieldId?: string;
+  /** Pivot placement ID if a concrete pivot placement was hit */
+  pivotPlacementId?: PlacementId;
+  /** Pivot field area if a concrete pivot placement was hit */
+  pivotFieldArea?: PivotFieldArea;
 }
 
 // =============================================================================

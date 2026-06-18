@@ -387,6 +387,79 @@ describe('useContextMenuHandler', () => {
       });
     });
 
+    it('uses pivot DOM context when a pivot overlay target provides placement metadata', () => {
+      const hitResult = createHitResult('cell', { row: 5, col: 3 });
+      const hitTest = createMockHitTest(hitResult);
+      const onContextMenu = jest.fn();
+      const selection = createMockSelectionApi();
+      const pivotWrapper = document.createElement('div');
+      pivotWrapper.dataset.pivotId = 'pivot-1';
+      const fieldButton = document.createElement('button');
+      fieldButton.dataset.pivotArea = 'row';
+      fieldButton.dataset.pivotFieldId = 'Vendor';
+      fieldButton.dataset.pivotPlacementId = 'row:Vendor:1';
+      pivotWrapper.appendChild(fieldButton);
+
+      const deps = createTestDeps({
+        getHitTest: () => hitTest,
+        onContextMenu,
+        selection,
+      });
+
+      const { result } = renderHook(() => useContextMenuHandler(deps));
+      const event = {
+        ...createContextMenuEvent({ clientX: 150, clientY: 200 }),
+        target: fieldButton,
+      } as React.MouseEvent<HTMLDivElement>;
+
+      act(() => {
+        result.current.handleContextMenu(event);
+      });
+
+      expect(onContextMenu).toHaveBeenCalledWith({
+        x: 150,
+        y: 200,
+        target: 'pivot-row-header',
+        pivotId: 'pivot-1',
+        pivotHeaderKey: undefined,
+        pivotFieldId: 'Vendor',
+        pivotPlacementId: 'row:Vendor:1',
+        pivotFieldArea: 'row',
+      });
+      expect(selection.onMouseDown).not.toHaveBeenCalled();
+    });
+
+    it('falls back to cell coordinates when a pivot overlay target has no placement metadata', () => {
+      const hitResult = createHitResult('cell', { row: 5, col: 3 });
+      const hitTest = createMockHitTest(hitResult);
+      const onContextMenu = jest.fn();
+      const pivotOverlay = document.createElement('div');
+      pivotOverlay.dataset.pivotId = 'pivot-1';
+
+      const deps = createTestDeps({
+        getHitTest: () => hitTest,
+        onContextMenu,
+      });
+
+      const { result } = renderHook(() => useContextMenuHandler(deps));
+      const event = {
+        ...createContextMenuEvent({ clientX: 150, clientY: 200 }),
+        target: pivotOverlay,
+      } as React.MouseEvent<HTMLDivElement>;
+
+      act(() => {
+        result.current.handleContextMenu(event);
+      });
+
+      expect(onContextMenu).toHaveBeenCalledWith({
+        x: 150,
+        y: 200,
+        target: 'cell',
+        targetRow: 5,
+        targetCol: 3,
+      });
+    });
+
     it('updates selection when clicking outside current selection', () => {
       const hitResult = createHitResult('cell', { row: 5, col: 3 });
       const hitTest = createMockHitTest(hitResult);

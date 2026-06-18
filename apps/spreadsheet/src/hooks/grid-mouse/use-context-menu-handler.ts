@@ -16,6 +16,7 @@
 import { useCallback } from 'react';
 
 import type { CellRange } from '@mog-sdk/contracts/core';
+import type { PivotFieldArea } from '@mog-sdk/contracts/pivot';
 import type { ISheetViewHitTest } from '@mog-sdk/sheet-view';
 import type { ContextMenuOptions } from './types';
 
@@ -122,6 +123,60 @@ export function isMultiCellSelection(ranges: readonly CellRange[]): boolean {
   return range.startRow !== range.endRow || range.startCol !== range.endCol;
 }
 
+function contextMenuTargetForPivotArea(
+  area: PivotFieldArea | undefined,
+  cellRole: string | undefined,
+): ContextMenuOptions['target'] {
+  if (cellRole === 'value') return 'pivot-value';
+  if (area === 'row') return 'pivot-row-header';
+  if (area === 'column') return 'pivot-column-header';
+  if (area === 'value') return 'pivot-value';
+  return 'pivot';
+}
+
+function getPivotDomContext(target: EventTarget | null): Partial<ContextMenuOptions> | null {
+  if (!(target instanceof HTMLElement)) return null;
+
+  const contextElement = target.closest<HTMLElement>(
+    [
+      '[data-pivot-id]',
+      '[data-pivot-field-id]',
+      '[data-pivot-placement-id]',
+      '[data-pivot-header-key]',
+      '[data-pivot-cell-role]',
+      '[data-pivot-area]',
+    ].join(','),
+  );
+  if (!contextElement) return null;
+
+  const pivotElement = contextElement.closest<HTMLElement>('[data-pivot-id]');
+  const pivotId = contextElement.dataset.pivotId ?? pivotElement?.dataset.pivotId;
+  if (!pivotId) return null;
+
+  const hasConcretePivotContext =
+    contextElement.dataset.pivotFieldId !== undefined ||
+    contextElement.dataset.pivotPlacementId !== undefined ||
+    contextElement.dataset.pivotHeaderKey !== undefined ||
+    contextElement.dataset.pivotCellRole !== undefined ||
+    contextElement.dataset.pivotArea !== undefined;
+  if (!hasConcretePivotContext) return null;
+
+  const area = contextElement.dataset.pivotArea as PivotFieldArea | undefined;
+  const cellRole = contextElement.dataset.pivotCellRole;
+  const targetType = contextMenuTargetForPivotArea(area, cellRole);
+
+  return {
+    target: targetType,
+    pivotId,
+    pivotHeaderKey: contextElement.dataset.pivotHeaderKey,
+    pivotFieldId: contextElement.dataset.pivotFieldId,
+    pivotPlacementId: contextElement.dataset.pivotPlacementId as
+      | ContextMenuOptions['pivotPlacementId']
+      | undefined,
+    pivotFieldArea: area,
+  };
+}
+
 // =============================================================================
 // Hook Implementation
 // =============================================================================
@@ -189,6 +244,21 @@ export function useContextMenuHandler(
       // For cell/header context menu, we need the callback
       if (!onContextMenu) {
         e.preventDefault();
+        return;
+      }
+
+      const pivotDomContext = getPivotDomContext(e.target);
+      if (pivotDomContext?.pivotId) {
+        onContextMenu({
+          x: e.clientX,
+          y: e.clientY,
+          target: pivotDomContext.target ?? 'pivot',
+          pivotId: pivotDomContext.pivotId,
+          pivotHeaderKey: pivotDomContext.pivotHeaderKey,
+          pivotFieldId: pivotDomContext.pivotFieldId,
+          pivotPlacementId: pivotDomContext.pivotPlacementId,
+          pivotFieldArea: pivotDomContext.pivotFieldArea,
+        });
         return;
       }
 

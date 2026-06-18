@@ -1,5 +1,9 @@
 import type { ChartFloatingObject } from '../../../bridges/compute/compute-bridge';
-import { chartConfigToInternal, serializedChartToChart } from '../chart-public-api-converters';
+import {
+  chartConfigToInternal,
+  chartUpdatesToInternal,
+  serializedChartToChart,
+} from '../chart-public-api-converters';
 
 function chart(overrides: Partial<ChartFloatingObject> = {}): ChartFloatingObject {
   return {
@@ -142,5 +146,72 @@ describe('chart public API converters', () => {
     );
 
     expect(publicChart.series?.[0]?.color).toBe('#4472C4');
+  });
+
+  it('stores public chart-type aliases as canonical native chart fields', () => {
+    expect(
+      chartConfigToInternal({
+        type: 'lineMarkersStacked100',
+        anchorRow: 0,
+        anchorCol: 0,
+        dataRange: 'A1:B5',
+        varyByCategories: true,
+      }),
+    ).toMatchObject({
+      chartType: 'line',
+      subType: 'markersPercentStacked',
+      varyByCategories: true,
+    });
+
+    expect(
+      chartConfigToInternal({
+        type: 'coneBarStacked100',
+        anchorRow: 0,
+        anchorCol: 0,
+        dataRange: 'A1:B5',
+      }),
+    ).toMatchObject({
+      chartType: 'bar3d',
+      subType: 'percentStacked',
+      barShape: 'cone',
+    });
+
+    expect(
+      chartConfigToInternal({
+        type: 'bubble3DEffect',
+        anchorRow: 0,
+        anchorCol: 0,
+        dataRange: 'A1:C5',
+      }),
+    ).toMatchObject({
+      chartType: 'bubble',
+      bubble3dEffect: true,
+    });
+
+    expect(
+      chartConfigToInternal({
+        type: 'surfaceTopViewWireframe',
+        anchorRow: 0,
+        anchorCol: 0,
+        dataRange: 'A1:C5',
+      }),
+    ).toMatchObject({
+      chartType: 'surface',
+      wireframe: true,
+      surfaceTopView: true,
+    });
+  });
+
+  it('normalizes public chart-type aliases in chart updates', () => {
+    expect(chartUpdatesToInternal({ type: 'cylinderColStacked' })).toMatchObject({
+      chartType: 'column3d',
+      subType: 'stacked',
+      barShape: 'cylinder',
+    });
+    expect(chartUpdatesToInternal({ type: 'surfaceWireframe' })).toMatchObject({
+      chartType: 'surface3d',
+      wireframe: true,
+      surfaceTopView: false,
+    });
   });
 });

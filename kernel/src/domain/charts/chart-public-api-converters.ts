@@ -75,6 +75,56 @@ export type ChartUpdatePayload = Omit<Partial<ChartFloatingObject>, 'anchor' | '
   title?: string | null;
 };
 
+type InternalChartTypeFields = {
+  chartType: string;
+  subType?: ChartConfig['subType'];
+  barShape?: ChartConfig['barShape'];
+  bubble3dEffect?: ChartFloatingObject['bubble3dEffect'];
+  wireframe?: ChartFloatingObject['wireframe'];
+  surfaceTopView?: ChartFloatingObject['surfaceTopView'];
+};
+
+function internalFieldsForPublicChartType(type: ChartType | string): InternalChartTypeFields {
+  switch (type) {
+    case 'lineMarkers':
+      return { chartType: 'line', subType: 'markers' };
+    case 'lineMarkersStacked':
+      return { chartType: 'line', subType: 'markersStacked' };
+    case 'lineMarkersStacked100':
+      return { chartType: 'line', subType: 'markersPercentStacked' };
+    case 'bubble3DEffect':
+      return { chartType: 'bubble', bubble3dEffect: true };
+    case 'surfaceWireframe':
+      return { chartType: 'surface3d', wireframe: true, surfaceTopView: false };
+    case 'surfaceTopView':
+      return { chartType: 'surface', wireframe: false, surfaceTopView: true };
+    case 'surfaceTopViewWireframe':
+      return { chartType: 'surface', wireframe: true, surfaceTopView: true };
+    default:
+      return internalBarShapeFieldsForPublicChartType(type) ?? { chartType: type };
+  }
+}
+
+function internalBarShapeFieldsForPublicChartType(
+  type: ChartType | string,
+): InternalChartTypeFields | undefined {
+  const match = /^(cylinder|cone|pyramid)(Bar|Col)(Clustered|Stacked|Stacked100)?$/.exec(type);
+  if (!match) return undefined;
+  const [, shape, direction, grouping] = match;
+  return {
+    chartType: direction === 'Bar' ? 'bar3d' : 'column3d',
+    subType:
+      grouping === 'Stacked100'
+        ? 'percentStacked'
+        : grouping === 'Stacked'
+          ? 'stacked'
+          : grouping === 'Clustered'
+            ? 'clustered'
+            : undefined,
+    barShape: shape as ChartConfig['barShape'],
+  };
+}
+
 function numericField(fields: Record<string, unknown>, key: string): number | undefined {
   const value = fields[key];
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
@@ -177,6 +227,8 @@ export function chartConfigToInternal(config: ChartConfig): ChartFloatingObject 
       explosion: pieSlice?.explosion ?? 25,
     };
   }
+  const typeFields = internalFieldsForPublicChartType(chartType);
+  chartType = typeFields.chartType;
 
   const anchor: ChartFloatingObject['anchor'] = {
     anchorRow: config.anchorRow,
@@ -234,7 +286,7 @@ export function chartConfigToInternal(config: ChartConfig): ChartFloatingObject 
     type: 'chart',
     // ChartData fields
     chartType,
-    subType: config.subType,
+    subType: config.subType ?? typeFields.subType,
     dataRange: config.dataRange,
     seriesRange: config.seriesRange,
     categoryRange: config.categoryRange,
@@ -275,12 +327,12 @@ export function chartConfigToInternal(config: ChartConfig): ChartFloatingObject 
     bubbleScale: config.bubbleScale,
     showNegBubbles: config.showNegBubbles,
     sizeRepresents: config.sizeRepresents,
-    bubble3dEffect: config.bubble3DEffect,
+    bubble3dEffect: config.bubble3DEffect ?? typeFields.bubble3dEffect,
     splitType: config.splitType,
     splitValue: config.splitValue,
-    barShape: config.barShape,
-    wireframe: config.wireframe,
-    surfaceTopView: config.surfaceTopView,
+    barShape: config.barShape ?? typeFields.barShape,
+    wireframe: config.wireframe ?? typeFields.wireframe,
+    surfaceTopView: config.surfaceTopView ?? typeFields.surfaceTopView,
     colorScheme: config.colorScheme,
     widthCells: config.width,
     heightCells: config.height,
@@ -332,7 +384,17 @@ export function chartUpdatesToInternal(updates: Partial<ChartConfig>): ChartUpda
         result.pieSlice = { explosion: 25 } as ChartFloatingObject['pieSlice'];
       }
     } else {
-      result.chartType = updates.type;
+      const typeFields = internalFieldsForPublicChartType(updates.type);
+      result.chartType = typeFields.chartType;
+      if (typeFields.subType !== undefined) result.subType = typeFields.subType;
+      if (typeFields.barShape !== undefined) result.barShape = typeFields.barShape;
+      if (typeFields.bubble3dEffect !== undefined) {
+        result.bubble3dEffect = typeFields.bubble3dEffect;
+      }
+      if (typeFields.wireframe !== undefined) result.wireframe = typeFields.wireframe;
+      if (typeFields.surfaceTopView !== undefined) {
+        result.surfaceTopView = typeFields.surfaceTopView;
+      }
     }
   }
   if (updates.subType !== undefined) result.subType = updates.subType;

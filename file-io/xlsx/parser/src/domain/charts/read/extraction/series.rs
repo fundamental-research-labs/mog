@@ -76,9 +76,10 @@ fn series_group_semantics(
     };
     let (show_lines, show_markers) = match &group.config {
         ooxml_types::charts::ChartTypeConfig::Scatter(cfg) => {
-            scatter_style_semantics(cfg.scatter_style)
+            let (show_lines, _) = scatter_style_semantics(cfg.scatter_style);
+            (show_lines, None)
         }
-        ooxml_types::charts::ChartTypeConfig::Line(cfg) => (Some(true), cfg.marker),
+        ooxml_types::charts::ChartTypeConfig::Line(_) => (Some(true), None),
         ooxml_types::charts::ChartTypeConfig::Line3D(_) => (Some(true), None),
         _ => (None, None),
     };

@@ -20,11 +20,11 @@ fn axis(axis_type: AxisType, ax_id: u32, cross_ax: u32, ax_pos: ChartAxisPositio
     }
 }
 
-fn scatter_group(series_smooth: Option<bool>) -> ChartGroup {
+fn scatter_group(scatter_style: ScatterStyle, series_smooth: Option<bool>) -> ChartGroup {
     ChartGroup {
         chart_type: ChartType::Scatter,
         config: ChartTypeConfig::Scatter(ScatterChartConfig {
-            scatter_style: ScatterStyle::Line,
+            scatter_style,
             ..Default::default()
         }),
         series: vec![ooxml_types::charts::ChartSeries {
@@ -41,11 +41,11 @@ fn scatter_group(series_smooth: Option<bool>) -> ChartGroup {
     }
 }
 
-fn scatter_chart_space(series_smooth: Option<bool>) -> ChartSpace {
+fn scatter_chart_space(scatter_style: ScatterStyle, series_smooth: Option<bool>) -> ChartSpace {
     ChartSpace {
         chart: Chart {
             plot_area: PlotArea {
-                chart_groups: vec![scatter_group(series_smooth)],
+                chart_groups: vec![scatter_group(scatter_style, series_smooth)],
                 axes: vec![
                     axis(AxisType::Value, 10, 20, ChartAxisPosition::Bottom),
                     axis(AxisType::Value, 20, 10, ChartAxisPosition::Left),
@@ -693,17 +693,28 @@ fn series_data_label_visual_line_no_fill_extracts_from_series_options() {
 
 #[test]
 fn scatter_style_does_not_materialize_absent_series_smooth() {
-    let extracted = extract_series_from_chart_space(&scatter_chart_space(None));
+    let extracted = extract_series_from_chart_space(&scatter_chart_space(ScatterStyle::Line, None));
 
     assert_eq!(extracted.len(), 1);
     assert_eq!(extracted[0].smooth, None);
     assert_eq!(extracted[0].show_lines, Some(true));
-    assert_eq!(extracted[0].show_markers, Some(false));
+    assert_eq!(extracted[0].show_markers, None);
+}
+
+#[test]
+fn scatter_marker_style_does_not_materialize_absent_series_markers() {
+    let extracted =
+        extract_series_from_chart_space(&scatter_chart_space(ScatterStyle::LineMarker, None));
+
+    assert_eq!(extracted.len(), 1);
+    assert_eq!(extracted[0].show_lines, Some(true));
+    assert_eq!(extracted[0].show_markers, None);
 }
 
 #[test]
 fn preserves_explicit_series_smooth_for_scatter() {
-    let extracted = extract_series_from_chart_space(&scatter_chart_space(Some(false)));
+    let extracted =
+        extract_series_from_chart_space(&scatter_chart_space(ScatterStyle::Line, Some(false)));
 
     assert_eq!(extracted.len(), 1);
     assert_eq!(extracted[0].smooth, Some(false));

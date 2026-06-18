@@ -371,10 +371,25 @@ pub(super) fn sub_type_to_grouping(sub: Option<&ChartSubType>) -> Grouping {
 fn sub_type_to_path_grouping(sub: Option<&ChartSubType>) -> Grouping {
     match sub {
         Some(ChartSubType::Clustered) => Grouping::Clustered,
-        Some(ChartSubType::Stacked) => Grouping::Stacked,
-        Some(ChartSubType::PercentStacked) => Grouping::PercentStacked,
+        Some(ChartSubType::Stacked | ChartSubType::MarkersStacked) => Grouping::Stacked,
+        Some(ChartSubType::PercentStacked | ChartSubType::MarkersPercentStacked) => {
+            Grouping::PercentStacked
+        }
         _ => Grouping::Standard,
     }
+}
+
+fn line_marker_for_sub_type(sub: Option<&ChartSubType>) -> Option<bool> {
+    matches!(
+        sub,
+        Some(
+            ChartSubType::Markers
+                | ChartSubType::MarkersStacked
+                | ChartSubType::MarkersPercentStacked
+                | ChartSubType::SmoothMarkers
+        )
+    )
+    .then_some(true)
 }
 
 fn radar_style_for_sub_type(sub: Option<&ChartSubType>) -> Option<charts::RadarStyle> {
@@ -437,6 +452,7 @@ pub(super) fn build_default_config(
             ChartTypeConfig::Bar(charts::BarChartConfig {
                 bar_dir,
                 grouping: Some(grouping),
+                vary_colors: spec.vary_by_categories,
                 gap_width: spec.gap_width,
                 overlap: spec.overlap,
                 ser_lines: spec
@@ -452,6 +468,7 @@ pub(super) fn build_default_config(
             ChartTypeConfig::Bar3D(charts::Bar3DChartConfig {
                 bar_dir,
                 grouping: Some(grouping),
+                vary_colors: spec.vary_by_categories,
                 gap_width: spec.gap_width,
                 gap_depth: spec.gap_depth,
                 shape: spec.bar_shape.as_deref().map(charts::BarShape::from_ooxml),
@@ -460,13 +477,16 @@ pub(super) fn build_default_config(
         }
         OoxmlChartType::Line => ChartTypeConfig::Line(charts::LineChartConfig {
             grouping: path_grouping,
+            vary_colors: spec.vary_by_categories,
             drop_lines: spec.drop_lines.as_ref().map(build_chart_lines),
             hi_low_lines: spec.high_low_lines.as_ref().map(build_chart_lines),
             up_down_bars: spec.up_down_bars.as_ref().map(build_up_down_bars),
+            marker: line_marker_for_sub_type(spec.sub_type.as_ref()),
             ..Default::default()
         }),
         OoxmlChartType::Line3D => ChartTypeConfig::Line3D(charts::Line3DChartConfig {
             grouping: path_grouping,
+            vary_colors: spec.vary_by_categories,
             drop_lines: spec.drop_lines.as_ref().map(build_chart_lines),
             gap_depth: spec.gap_depth,
             ..Default::default()
@@ -488,17 +508,23 @@ pub(super) fn build_default_config(
         }),
         OoxmlChartType::Area => ChartTypeConfig::Area(charts::AreaChartConfig {
             grouping: Some(path_grouping),
+            vary_colors: spec.vary_by_categories,
             drop_lines: spec.drop_lines.as_ref().map(build_chart_lines),
             ..Default::default()
         }),
         OoxmlChartType::Area3D => ChartTypeConfig::Area3D(charts::Area3DChartConfig {
             grouping: Some(path_grouping),
+            vary_colors: spec.vary_by_categories,
             drop_lines: spec.drop_lines.as_ref().map(build_chart_lines),
             gap_depth: spec.gap_depth,
             ..Default::default()
         }),
-        OoxmlChartType::Scatter => ChartTypeConfig::Scatter(charts::ScatterChartConfig::default()),
+        OoxmlChartType::Scatter => ChartTypeConfig::Scatter(charts::ScatterChartConfig {
+            vary_colors: spec.vary_by_categories,
+            ..Default::default()
+        }),
         OoxmlChartType::Bubble => ChartTypeConfig::Bubble(charts::BubbleChartConfig {
+            vary_colors: spec.vary_by_categories,
             bubble_scale: spec.bubble_scale,
             show_neg_bubbles: spec.show_neg_bubbles,
             size_represents: spec
@@ -510,6 +536,7 @@ pub(super) fn build_default_config(
         }),
         OoxmlChartType::Radar => ChartTypeConfig::Radar(charts::RadarChartConfig {
             radar_style: radar_style_for_sub_type(spec.sub_type.as_ref()).unwrap_or_default(),
+            vary_colors: spec.vary_by_categories,
             ..Default::default()
         }),
         OoxmlChartType::Surface => ChartTypeConfig::Surface(charts::SurfaceChartConfig {

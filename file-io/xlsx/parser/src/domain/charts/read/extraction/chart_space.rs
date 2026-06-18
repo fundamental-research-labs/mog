@@ -769,13 +769,22 @@ fn push_style_owner(
 fn extract_sub_type_from_config(
     config: &ooxml_types::charts::ChartTypeConfig,
 ) -> Option<domain_types::chart::ChartSubType> {
+    use domain_types::chart::ChartSubType;
     use ooxml_types::charts::{ChartTypeConfig as CTC, Grouping, RadarStyle};
 
     if let CTC::Radar(c) = config {
         return match c.radar_style {
-            RadarStyle::Filled => Some(domain_types::chart::ChartSubType::Filled),
-            RadarStyle::Marker => Some(domain_types::chart::ChartSubType::Markers),
+            RadarStyle::Filled => Some(ChartSubType::Filled),
+            RadarStyle::Marker => Some(ChartSubType::Markers),
             RadarStyle::Standard => None,
+        };
+    }
+
+    if let CTC::Line(c) = config && c.marker == Some(true) {
+        return match c.grouping {
+            Grouping::Stacked => Some(ChartSubType::MarkersStacked),
+            Grouping::PercentStacked => Some(ChartSubType::MarkersPercentStacked),
+            _ => Some(ChartSubType::Markers),
         };
     }
 
@@ -790,9 +799,9 @@ fn extract_sub_type_from_config(
     }?;
 
     match grouping {
-        Grouping::Clustered => Some(domain_types::chart::ChartSubType::Clustered),
-        Grouping::Stacked => Some(domain_types::chart::ChartSubType::Stacked),
-        Grouping::PercentStacked => Some(domain_types::chart::ChartSubType::PercentStacked),
+        Grouping::Clustered => Some(ChartSubType::Clustered),
+        Grouping::Stacked => Some(ChartSubType::Stacked),
+        Grouping::PercentStacked => Some(ChartSubType::PercentStacked),
         Grouping::Standard => None, // Default, don't emit
     }
 }

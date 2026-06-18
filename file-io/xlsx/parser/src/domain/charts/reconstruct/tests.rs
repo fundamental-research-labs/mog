@@ -22,6 +22,7 @@ mod point_format_fidelity;
 mod series_shadow_fidelity;
 mod title_rich_text_fidelity;
 mod trendline_fidelity;
+mod vary_by_categories;
 
 fn minimal_chart_spec(chart_type: DomainChartType, data_range: Option<&str>) -> ChartSpec {
     ChartSpec {

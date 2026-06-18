@@ -13,7 +13,10 @@ use ooxml_types::charts::{
 use ooxml_types::drawings::{DrawingColor, DrawingFill, ShapeProperties, SolidFill};
 
 use super::{
-    elements::{build_chart_text_rich, build_data_label_override, build_data_labels},
+    elements::{
+        apply_default_shadow_to_shape_properties, build_chart_text_rich, build_data_label_override,
+        build_data_labels,
+    },
     formatting::{build_drawing_color, build_outline, build_shape_properties, build_text_body},
     text_body_fidelity::{
         preserve_imported_data_label_text_properties,
@@ -136,16 +139,20 @@ pub(super) fn build_series(
     }
 
     // Shape properties from explicit format, legacy color, or modeled chart defaults.
-    let sp_pr = sd
-        .format
-        .as_ref()
-        .and_then(build_shape_properties)
-        .or_else(|| build_legacy_series_color_shape_properties(sd, effective_chart_type))
-        .or_else(|| {
-            synthesize_modeled_defaults
-                .then(|| default_series_shape_properties(sd, effective_chart_type, fallback_idx))
-                .flatten()
-        });
+    let sp_pr = apply_default_shadow_to_shape_properties(
+        sd.format
+            .as_ref()
+            .and_then(build_shape_properties)
+            .or_else(|| build_legacy_series_color_shape_properties(sd, effective_chart_type))
+            .or_else(|| {
+                synthesize_modeled_defaults
+                    .then(|| {
+                        default_series_shape_properties(sd, effective_chart_type, fallback_idx)
+                    })
+                    .flatten()
+            }),
+        sd.show_shadow,
+    );
 
     // Bar shape
     let shape = sd.bar_shape.as_deref().map(charts::BarShape::from_ooxml);

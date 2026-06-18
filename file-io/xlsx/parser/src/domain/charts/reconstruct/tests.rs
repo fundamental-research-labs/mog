@@ -19,6 +19,7 @@ mod chart_fidelity;
 mod data_label_fidelity;
 mod imported_series_fallback;
 mod point_format_fidelity;
+mod series_shadow_fidelity;
 
 fn minimal_chart_spec(chart_type: DomainChartType, data_range: Option<&str>) -> ChartSpec {
     ChartSpec {

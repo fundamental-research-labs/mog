@@ -9,7 +9,7 @@ use super::series_sources::{
     extract_cat_source_type, extract_category_label_format, extract_num_point_cache,
     extract_num_source_kind,
 };
-use super::text::extract_chart_text_string;
+use super::text::{extract_chart_text_string, shape_properties_has_shadow};
 use color::extract_legacy_series_color;
 use error_bars::extract_error_bars;
 use points::point_border_from_line;
@@ -359,6 +359,11 @@ fn extract_single_series_with_semantics(
 
     // Rich format from sp_pr + tx_pr
     let format = extract_chart_format(s.sp_pr.as_ref(), None);
+    let show_shadow = s
+        .sp_pr
+        .as_ref()
+        .is_some_and(shape_properties_has_shadow)
+        .then_some(true);
 
     // Bar shape
     let bar_shape = s.shape.map(|bs| bs.to_ooxml().to_string());
@@ -414,7 +419,7 @@ fn extract_single_series_with_semantics(
         pivot_data_field_index: None,
         projection_authority: None,
         projection_diagnostics: Vec::new(),
-        show_shadow: None,
+        show_shadow,
         show_connector_lines: None,
         leader_line_format,
         show_leader_lines,

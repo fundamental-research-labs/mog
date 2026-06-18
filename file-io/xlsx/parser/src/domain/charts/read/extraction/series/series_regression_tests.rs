@@ -7,6 +7,7 @@ use ooxml_types::charts::{
     MarkerStyle, NumDataSource, PlotArea, RadarChartConfig, Scaling, ScatterChartConfig,
     ScatterStyle, StockChartConfig,
 };
+use ooxml_types::drawings::{EffectList, EffectProperties, OuterShadow, ShapeProperties};
 
 fn axis(axis_type: AxisType, ax_id: u32, cross_ax: u32, ax_pos: ChartAxisPosition) -> ChartAxis {
     ChartAxis {
@@ -145,6 +146,42 @@ fn line_family_legacy_series_color_comes_from_line_format() {
 
         assert_eq!(extracted[0].color.as_deref(), Some("4472C4"));
     }
+}
+
+#[test]
+fn series_shadow_effect_extracts_show_shadow() {
+    let extracted = extract_series_from_chart_space(&ChartSpace {
+        chart: Chart {
+            plot_area: PlotArea {
+                chart_groups: vec![ChartGroup {
+                    chart_type: ChartType::Area,
+                    config: ChartTypeConfig::Area(AreaChartConfig::default()),
+                    series: vec![ooxml_types::charts::ChartSeries {
+                        idx: 0,
+                        order: 0,
+                        sp_pr: Some(ShapeProperties {
+                            effects: Some(EffectProperties::EffectList(EffectList {
+                                outer_shadow: Some(OuterShadow::default()),
+                                ..Default::default()
+                            })),
+                            ..Default::default()
+                        }),
+                        ..Default::default()
+                    }],
+                    d_lbls: None,
+                    ax_id: vec![],
+                    raw_chart_type_attr: None,
+                    raw_chart_element_name: None,
+                    raw_chart_group_xml: None,
+                }],
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+        ..Default::default()
+    });
+
+    assert_eq!(extracted[0].show_shadow, Some(true));
 }
 
 #[test]

@@ -119,17 +119,23 @@ fn build_shape_properties_with_default_shadow(
     format: Option<&ChartFormatData>,
     show_shadow: Option<bool>,
 ) -> Option<ShapeProperties> {
-    let mut sp_pr = format.and_then(build_shape_properties);
+    apply_default_shadow_to_shape_properties(format.and_then(build_shape_properties), show_shadow)
+}
+
+pub(super) fn apply_default_shadow_to_shape_properties(
+    mut sp_pr: Option<ShapeProperties>,
+    show_shadow: Option<bool>,
+) -> Option<ShapeProperties> {
     if show_shadow != Some(true) {
         return sp_pr;
     }
 
-    let sp_pr = sp_pr.get_or_insert_with(ShapeProperties::default);
-    sp_pr.effects = Some(EffectProperties::EffectList(EffectList {
+    let shape = sp_pr.get_or_insert_with(ShapeProperties::default);
+    shape.effects = Some(EffectProperties::EffectList(EffectList {
         outer_shadow: Some(default_outer_shadow()),
         ..Default::default()
     }));
-    Some(sp_pr.clone())
+    sp_pr
 }
 
 fn default_outer_shadow() -> OuterShadow {

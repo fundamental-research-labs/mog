@@ -10,7 +10,10 @@ use super::series_sources::{
     extract_num_source_kind, num_data_to_point_cache,
 };
 use super::text::extract_chart_text_string;
+use color::extract_legacy_series_color;
 use std::collections::BTreeMap;
+
+mod color;
 
 pub(super) fn extract_series_from_chart_space(
     cs: &ooxml_types::charts::ChartSpace,
@@ -39,6 +42,7 @@ struct SeriesGroupSemantics {
     show_lines: Option<bool>,
     show_markers: Option<bool>,
     stock_role: Option<domain_types::chart::ChartSeriesStockRoleData>,
+    legacy_color_from_line: bool,
 }
 
 fn series_group_semantics(
@@ -70,6 +74,13 @@ fn series_group_semantics(
         ooxml_types::charts::ChartTypeConfig::Line3D(_) => (Some(true), None),
         _ => (None, None),
     };
+    let legacy_color_from_line = matches!(
+        &group.config,
+        ooxml_types::charts::ChartTypeConfig::Line(_)
+            | ooxml_types::charts::ChartTypeConfig::Line3D(_)
+            | ooxml_types::charts::ChartTypeConfig::Radar(_)
+            | ooxml_types::charts::ChartTypeConfig::Stock(_)
+    );
 
     SeriesGroupSemantics {
         series_type,
@@ -78,6 +89,7 @@ fn series_group_semantics(
         show_lines,
         show_markers,
         stock_role: None,
+        legacy_color_from_line,
     }
 }
 
@@ -203,8 +215,7 @@ fn extract_single_series_with_semantics(
     // Name
     let (name, name_ref) = extract_series_name(s.tx.as_ref(), s.idx, s.order);
 
-    // Legacy fill color
-    let color = s.sp_pr.as_ref().and_then(|sp| extract_fill_color(sp));
+    let color = extract_legacy_series_color(s, semantics.legacy_color_from_line);
 
     // Values range: val (standard) or y_val (scatter/bubble)
     let values = extract_num_ref_formula(&s.val).or_else(|| extract_num_ref_formula(&s.y_val));

@@ -1,7 +1,8 @@
 use super::extract_series_from_chart_space;
 use ooxml_types::charts::{
     AxisType, Chart, ChartAxis, ChartAxisPosition, ChartGroup, ChartSpace, ChartType,
-    ChartTypeConfig, PlotArea, Scaling, ScatterChartConfig, ScatterStyle,
+    ChartTypeConfig, Line3DChartConfig, LineChartConfig, PlotArea, RadarChartConfig, Scaling,
+    ScatterChartConfig, ScatterStyle, StockChartConfig,
 };
 
 fn axis(axis_type: AxisType, ax_id: u32, cross_ax: u32, ax_pos: ChartAxisPosition) -> ChartAxis {
@@ -50,6 +51,64 @@ fn scatter_chart_space(series_smooth: Option<bool>) -> ChartSpace {
             ..Default::default()
         },
         ..Default::default()
+    }
+}
+
+fn colored_line_group(chart_type: ChartType, config: ChartTypeConfig) -> ChartGroup {
+    ChartGroup {
+        chart_type,
+        config,
+        series: vec![ooxml_types::charts::ChartSeries {
+            idx: 0,
+            order: 0,
+            sp_pr: Some(crate::domain::charts::parse_shape_properties(
+                br#"<c:spPr xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+                           xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+                    <a:ln><a:solidFill><a:srgbClr val="4472C4"/></a:solidFill></a:ln>
+                </c:spPr>"#,
+            )),
+            ..Default::default()
+        }],
+        d_lbls: None,
+        ax_id: vec![],
+        raw_chart_type_attr: None,
+        raw_chart_element_name: None,
+        raw_chart_group_xml: None,
+    }
+}
+
+#[test]
+fn line_family_legacy_series_color_comes_from_line_format() {
+    for (chart_type, config) in [
+        (
+            ChartType::Line,
+            ChartTypeConfig::Line(LineChartConfig::default()),
+        ),
+        (
+            ChartType::Line3D,
+            ChartTypeConfig::Line3D(Line3DChartConfig::default()),
+        ),
+        (
+            ChartType::Radar,
+            ChartTypeConfig::Radar(RadarChartConfig::default()),
+        ),
+        (
+            ChartType::Stock,
+            ChartTypeConfig::Stock(StockChartConfig::default()),
+        ),
+    ] {
+        let extracted = extract_series_from_chart_space(&ChartSpace {
+            chart: Chart {
+                plot_area: PlotArea {
+                    chart_groups: vec![colored_line_group(chart_type, config)],
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            ..Default::default()
+        });
+
+        assert_eq!(extracted[0].color.as_deref(), Some("4472C4"));
     }
 }
 

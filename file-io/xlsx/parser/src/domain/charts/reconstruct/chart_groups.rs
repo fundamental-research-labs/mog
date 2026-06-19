@@ -1,9 +1,9 @@
 use domain_types::{
+    ChartDefinition,
     chart::{
         ChartLineSettingsData, ChartSeriesData, ChartSeriesStockRoleData, ChartSpec, ChartSubType,
         ChartType as DomainChartType, DataLabelData, UpDownBarsData,
     },
-    ChartDefinition,
 };
 use ooxml_types::charts::{
     self, BarDirection, ChartGroup, ChartType as OoxmlChartType, ChartTypeConfig, ExtensionEntry,

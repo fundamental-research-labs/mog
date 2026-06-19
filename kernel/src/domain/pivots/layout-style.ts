@@ -9,6 +9,14 @@ import { pivotStyleIdForCompute } from './style-normalization';
 import { requirePivot, resolvePivotName } from './lookup';
 import { createMutationReceipt } from './receipts';
 
+export type PivotRefreshPolicy = 'dirtyOnly' | 'refreshAndMaterialize';
+
+export function pivotLayoutStyleRefreshPolicy(config: {
+  fields?: readonly unknown[];
+}): PivotRefreshPolicy {
+  return config.fields && config.fields.length > 0 ? 'refreshAndMaterialize' : 'dirtyOnly';
+}
+
 export async function setPivotLayoutByName(options: {
   ctx: DocumentContext;
   sheetId: SheetId;
@@ -30,16 +38,17 @@ export async function setPivotLayoutForId(options: {
   const { ctx, sheetId, pivotId, pivotName, layout } = options;
   const config = await requirePivot(ctx, sheetId, pivotId, 'setLayout');
   const mergedLayout = { ...config.layout, ...layout };
+  const refreshPolicy = pivotLayoutStyleRefreshPolicy(config);
   const result = await ctx.pivot.updatePivot(
     sheetId,
     pivotId,
     { layout: mergedLayout },
-    { reason: 'layoutChanged', refreshPolicy: 'refreshAndMaterialize' },
+    { reason: 'layoutChanged', refreshPolicy },
   );
   return createMutationReceipt(
     pivotId,
     'layoutChanged',
-    'refreshAndMaterialize',
+    refreshPolicy,
     { action: 'setLayout', pivotName, layout },
     [],
     { status: result ? 'applied' : 'noOp' },
@@ -61,10 +70,11 @@ export async function setPivotStyleByName(options: {
       ? { styleName: pivotStyleIdForCompute(style.styleName) ?? style.styleName }
       : {}),
   };
+  const refreshPolicy = pivotLayoutStyleRefreshPolicy(config);
   await ctx.pivot.updatePivot(
     sheetId,
     pivotId,
     { style: mergedStyle },
-    { reason: 'styleChanged', refreshPolicy: 'refreshAndMaterialize' },
+    { reason: 'styleChanged', refreshPolicy },
   );
 }

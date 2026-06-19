@@ -1034,8 +1034,9 @@ fn scatter_style_scalar_fields(
     style: ooxml_types::charts::ScatterStyle,
 ) -> (Option<bool>, Option<bool>) {
     match style {
-        ooxml_types::charts::ScatterStyle::Line
-        | ooxml_types::charts::ScatterStyle::LineMarker => (Some(true), None),
+        ooxml_types::charts::ScatterStyle::Line | ooxml_types::charts::ScatterStyle::LineMarker => {
+            (Some(true), None)
+        }
         ooxml_types::charts::ScatterStyle::Smooth
         | ooxml_types::charts::ScatterStyle::SmoothMarker => (Some(true), Some(true)),
         _ => (None, None),

@@ -1,8 +1,8 @@
 //! Chart type group detection and combo chart grouping.
 
 use crate::infra::scanner::{
-    extract_quoted_value, find_attr_simd, find_closing_tag, find_gt_simd, find_lt_simd,
-    find_start_tag_end_quoted, find_tag_simd, StartTagEnd,
+    StartTagEnd, extract_quoted_value, find_attr_simd, find_closing_tag, find_gt_simd,
+    find_lt_simd, find_start_tag_end_quoted, find_tag_simd,
 };
 
 use super::super::xml_helpers::{find_pos_after_last_ser, parse_ax_ids};
@@ -338,10 +338,12 @@ mod tests {
             groups[0].raw_chart_element_name.as_deref(),
             Some("fooChart")
         );
-        assert!(groups[0]
-            .raw_chart_group_xml
-            .as_deref()
-            .is_some_and(|raw| raw.contains("<c:fooChart>")));
+        assert!(
+            groups[0]
+                .raw_chart_group_xml
+                .as_deref()
+                .is_some_and(|raw| raw.contains("<c:fooChart>"))
+        );
     }
 
     #[test]

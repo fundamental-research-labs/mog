@@ -1,5 +1,6 @@
 use crate::write::pivot_writer::a1::col_to_letters;
-use domain_types::domain::pivot::ParsedPivotTable;
+use domain_types::domain::pivot::{ParsedPivotTable, PivotFieldItem, PivotFilter, PivotItemType};
+use value_types::CellValue;
 
 /// Convert a `ParsedPivotTable` into the `PivotTableDef` that the writer expects.
 pub(super) fn parsed_pivot_to_def(pt: &ParsedPivotTable) -> domain_types::PivotTableDef {
@@ -20,7 +21,8 @@ pub(super) fn parsed_pivot_to_def(pt: &ParsedPivotTable) -> domain_types::PivotT
     let fields: Vec<PivotFieldDef> = config
         .fields
         .iter()
-        .map(|field| {
+        .enumerate()
+        .map(|(field_idx, field)| {
             let axis_placement = config.placements.iter().find(|p| {
                 p.field_id.as_str() == field.id.as_str()
                     && matches!(
@@ -76,7 +78,13 @@ pub(super) fn parsed_pivot_to_def(pt: &ParsedPivotTable) -> domain_types::PivotT
                 subtotal_top: field.subtotal_top.unwrap_or(true),
                 default_subtotal: field.default_subtotal.unwrap_or(true),
                 subtotals: field.subtotals.clone(),
-                items: field.items.clone(),
+                items: pivot_items_for_field_filters(
+                    field.id.as_str(),
+                    field_idx,
+                    &field.items,
+                    &config.filters,
+                    &pt.ooxml_preservation.cache_shared_items,
+                ),
             }
         })
         .collect();
@@ -250,6 +258,112 @@ pub(super) fn parsed_pivot_to_def(pt: &ParsedPivotTable) -> domain_types::PivotT
     }
 }
 
+fn pivot_items_for_field_filters(
+    field_id: &str,
+    field_idx: usize,
+    existing_items: &[PivotFieldItem],
+    filters: &[PivotFilter],
+    cache_shared_items: &[Vec<CellValue>],
+) -> Vec<PivotFieldItem> {
+    let Some(filter) = filters
+        .iter()
+        .find(|filter| filter.field_id.as_str() == field_id)
+    else {
+        return existing_items.to_vec();
+    };
+
+    let mut items = existing_items.to_vec();
+
+    if let Some(include_values) = filter.include_values.as_ref() {
+        if let Some(shared_values) = cache_shared_items.get(field_idx) {
+            for value in include_values {
+                set_filter_item_visibility(&mut items, value, false, field_idx, cache_shared_items);
+            }
+
+            for (shared_idx, value) in shared_values.iter().enumerate() {
+                if include_values.iter().any(|included| included == value) {
+                    continue;
+                }
+                set_cache_item_visibility(&mut items, value, Some(shared_idx as u32), true);
+            }
+        }
+    }
+
+    if let Some(exclude_values) = filter.exclude_values.as_ref() {
+        for value in exclude_values {
+            set_filter_item_visibility(&mut items, value, true, field_idx, cache_shared_items);
+        }
+    }
+
+    items
+}
+
+fn set_filter_item_visibility(
+    items: &mut Vec<PivotFieldItem>,
+    value: &CellValue,
+    hidden: bool,
+    field_idx: usize,
+    cache_shared_items: &[Vec<CellValue>],
+) {
+    if is_blank_filter_value(value) {
+        upsert_pivot_field_item(items, PivotItemType::Blank, None, hidden);
+        return;
+    }
+
+    let Some(shared_idx) = cache_shared_items
+        .get(field_idx)
+        .and_then(|shared_values| {
+            shared_values
+                .iter()
+                .position(|shared_value| shared_value == value)
+        })
+        .map(|idx| idx as u32)
+    else {
+        return;
+    };
+    upsert_pivot_field_item(items, PivotItemType::Data, Some(shared_idx), hidden);
+}
+
+fn set_cache_item_visibility(
+    items: &mut Vec<PivotFieldItem>,
+    value: &CellValue,
+    shared_idx: Option<u32>,
+    hidden: bool,
+) {
+    if is_blank_filter_value(value) {
+        upsert_pivot_field_item(items, PivotItemType::Blank, None, hidden);
+    } else if let Some(shared_idx) = shared_idx {
+        upsert_pivot_field_item(items, PivotItemType::Data, Some(shared_idx), hidden);
+    }
+}
+
+fn upsert_pivot_field_item(
+    items: &mut Vec<PivotFieldItem>,
+    item_type: PivotItemType,
+    value: Option<u32>,
+    hidden: bool,
+) {
+    if let Some(existing) = items
+        .iter_mut()
+        .find(|item| item.item_type == item_type && item.value == value)
+    {
+        existing.hidden = hidden;
+        return;
+    }
+
+    items.push(PivotFieldItem {
+        item_type,
+        value,
+        hidden,
+        show_details: true,
+        s: None,
+    });
+}
+
+fn is_blank_filter_value(value: &CellValue) -> bool {
+    matches!(value, CellValue::Null)
+}
+
 fn sort_type_for_axis_placement(
     placement: &pivot_types::PivotFieldPlacementFlat,
 ) -> Option<String> {
@@ -337,9 +451,14 @@ fn show_values_as_ooxml(config: &pivot_types::ShowValuesAsConfig) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pivot_types::{
-        FieldId, PivotFieldArea, PivotFieldPlacementFlat, SortByValueConfig, SortDirection,
+    use domain_types::domain::pivot::{
+        OutputLocation, PIVOT_CONFIG_SCHEMA_VERSION, PivotFilter, PivotTableConfig,
     };
+    use pivot_types::{
+        DetectedDataType, FieldId, PivotFieldArea, PivotFieldPlacementFlat, SortByValueConfig,
+        SortDirection,
+    };
+    use std::sync::Arc;
 
     fn axis_placement() -> PivotFieldPlacementFlat {
         PivotFieldPlacementFlat {
@@ -359,6 +478,106 @@ mod tests {
             number_format: None,
             show_values_as: None,
         }
+    }
+
+    fn parsed_pivot_with_category_filter(filter: PivotFilter) -> ParsedPivotTable {
+        let mut placement = axis_placement();
+        placement.field_id = FieldId::from("Category");
+
+        ParsedPivotTable {
+            config: PivotTableConfig {
+                schema_version: PIVOT_CONFIG_SCHEMA_VERSION,
+                id: "pivot-1".to_string(),
+                name: "Pivot1".to_string(),
+                source_sheet_id: None,
+                source_sheet_name: "Data".to_string(),
+                source_range: domain_types::domain::pivot::CellRange::new(0, 0, 5, 1),
+                output_sheet_id: None,
+                output_sheet_name: "Data".to_string(),
+                output_location: OutputLocation { row: 0, col: 4 },
+                fields: vec![pivot_types::PivotField {
+                    id: FieldId::from("Category"),
+                    name: "Category".to_string(),
+                    source_column: 0,
+                    data_type: DetectedDataType::String,
+                    ..Default::default()
+                }],
+                placements: vec![placement],
+                filters: vec![filter],
+                layout: None,
+                style: None,
+                data_options: None,
+                created_at: None,
+                updated_at: None,
+                calculated_fields: None,
+                allow_multiple_filters_per_field: None,
+                auto_format: None,
+                preserve_formatting: None,
+                cache_id: None,
+                data_on_rows: None,
+                ref_range: None,
+                first_data_row: None,
+                first_header_row: None,
+                first_data_col: None,
+                rows_per_page: None,
+                cols_per_page: None,
+                row_items: Vec::new(),
+                col_items: Vec::new(),
+            },
+            initial_expansion_state: None,
+            ooxml_preservation: Default::default(),
+        }
+    }
+
+    #[test]
+    fn exclude_null_filter_becomes_hidden_blank_item() {
+        let pt = parsed_pivot_with_category_filter(PivotFilter {
+            field_id: FieldId::from("Category"),
+            include_values: None,
+            exclude_values: Some(vec![CellValue::Null]),
+            condition: None,
+            top_bottom: None,
+            show_items_with_no_data: None,
+        });
+
+        let def = parsed_pivot_to_def(&pt);
+
+        assert_eq!(
+            def.fields[0].items,
+            vec![PivotFieldItem {
+                item_type: PivotItemType::Blank,
+                value: None,
+                hidden: true,
+                show_details: true,
+                s: None,
+            }]
+        );
+    }
+
+    #[test]
+    fn exclude_cached_text_filter_becomes_hidden_data_item() {
+        let mut pt = parsed_pivot_with_category_filter(PivotFilter {
+            field_id: FieldId::from("Category"),
+            include_values: None,
+            exclude_values: Some(vec![CellValue::Text(Arc::from("Travel"))]),
+            condition: None,
+            top_bottom: None,
+            show_items_with_no_data: None,
+        });
+        pt.ooxml_preservation.cache_shared_items = vec![vec![CellValue::Text(Arc::from("Travel"))]];
+
+        let def = parsed_pivot_to_def(&pt);
+
+        assert_eq!(
+            def.fields[0].items,
+            vec![PivotFieldItem {
+                item_type: PivotItemType::Data,
+                value: Some(0),
+                hidden: true,
+                show_details: true,
+                s: None,
+            }]
+        );
     }
 
     #[test]

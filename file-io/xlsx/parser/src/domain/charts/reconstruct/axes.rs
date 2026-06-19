@@ -6,9 +6,7 @@ use ooxml_types::charts::{
     self, AxisCrosses, AxisType, ChartAxis, ChartAxisPosition, ChartLines, CrossBetween,
     LabelAlignment, NumFmt, Orientation, Scaling, TickLabelPosition, TickMark, TimeUnit,
 };
-use ooxml_types::drawings::{
-    Paragraph, ParagraphProperties, ShapeProperties, StAngle, TextBody,
-};
+use ooxml_types::drawings::{Paragraph, ParagraphProperties, ShapeProperties, StAngle, TextBody};
 
 use super::{
     elements::{TitleTextSource, build_chart_text_rich, build_title},

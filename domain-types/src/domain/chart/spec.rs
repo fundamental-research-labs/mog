@@ -1,8 +1,8 @@
 use bridge_types::DescribeSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::domain::drawings::ManualLayout;
 use crate::ImportObjectStatus;
+use crate::domain::drawings::ManualLayout;
 
 use super::floating_object::{
     AnchorMode, ChartData, ChartDrawingFrameOoxmlProps, ChartOoxmlProps, FloatingObject,

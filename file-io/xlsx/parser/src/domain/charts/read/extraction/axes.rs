@@ -177,7 +177,9 @@ fn single_group_uses_secondary_axis_set(
             *id != group_value_id
                 && find_axis_by_id(axes, *id)
                     .filter(|axis| axis.axis_type == ooxml_types::charts::AxisType::Value)
-                    .is_some_and(|axis| axis_has_primary_counterpart_outside_group(axes, group, axis))
+                    .is_some_and(|axis| {
+                        axis_has_primary_counterpart_outside_group(axes, group, axis)
+                    })
         })
 }
 
@@ -202,7 +204,10 @@ fn axis_types_share_public_role(
     use ooxml_types::charts::AxisType;
     matches!(
         (a, b),
-        (AxisType::Category | AxisType::Date, AxisType::Category | AxisType::Date)
+        (
+            AxisType::Category | AxisType::Date,
+            AxisType::Category | AxisType::Date
+        )
     ) || a == b
 }
 

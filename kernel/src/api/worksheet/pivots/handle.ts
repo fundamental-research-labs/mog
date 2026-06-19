@@ -39,6 +39,7 @@ import {
   valuePlacementWithAggregate,
 } from '../../../domain/pivots/value-labels';
 import { setPivotItemVisibilityForId } from '../../../domain/pivots/filters';
+import { pivotLayoutStyleRefreshPolicy } from '../../../domain/pivots/layout-style';
 import { toA1 } from '../../internal/utils';
 import type { HandleLiveness } from '../../lifecycle/handle-liveness';
 import {
@@ -180,9 +181,13 @@ export function buildPivotTableHandle(options: PivotHandleBuilderOptions): Pivot
       | 'styleChanged',
   ): Promise<DataPivotTableConfig> => {
     assertLive(`update.${reason}`);
+    const refreshPolicy =
+      reason === 'layoutChanged' || reason === 'styleChanged'
+        ? pivotLayoutStyleRefreshPolicy(currentConfig(`update.${reason}`))
+        : 'refreshAndMaterialize';
     const result = await ctx.pivot.updatePivot(sheetId, pivotId, updates, {
       reason,
-      refreshPolicy: 'refreshAndMaterialize',
+      refreshPolicy,
     });
     if (!result) {
       snapshots.markDeleted(pivotId);

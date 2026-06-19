@@ -452,8 +452,14 @@ fn authored_3d_series_axis_is_referenced_and_preserves_text_orientation() {
     let xml = chart_xml(&spec);
 
     assert!(xml.contains("<c:area3DChart>"), "{xml}");
-    assert!(xml.contains("<c:axId val=\"555555555\"/></c:area3DChart>"), "{xml}");
-    assert!(xml.contains("<c:serAx><c:axId val=\"555555555\"/>"), "{xml}");
+    assert!(
+        xml.contains("<c:axId val=\"555555555\"/></c:area3DChart>"),
+        "{xml}"
+    );
+    assert!(
+        xml.contains("<c:serAx><c:axId val=\"555555555\"/>"),
+        "{xml}"
+    );
     assert!(xml.contains("<c:txPr><a:bodyPr rot=\"2700000\"/>"), "{xml}");
 }
 

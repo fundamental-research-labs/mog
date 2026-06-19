@@ -35,9 +35,7 @@ pub(super) fn extract_title_formula_from_title(
     use ooxml_types::charts::ChartText;
 
     match &title.tx {
-        Some(ChartText::StrRef(str_ref)) if !str_ref.f.trim().is_empty() => {
-            Some(str_ref.f.clone())
-        }
+        Some(ChartText::StrRef(str_ref)) if !str_ref.f.trim().is_empty() => Some(str_ref.f.clone()),
         _ => None,
     }
 }

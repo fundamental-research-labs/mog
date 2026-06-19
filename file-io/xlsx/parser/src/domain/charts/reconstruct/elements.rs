@@ -44,7 +44,9 @@ pub(super) fn build_title(
 
     if let Some(runs) = rich_text.filter(|runs| runs.iter().any(|run| !run.text.is_empty())) {
         let redundant_font = format.and_then(|f| f.font.as_ref()).is_some_and(|font| {
-            runs.iter().filter(|run| !run.text.is_empty()).all(|run| run.font.as_ref() == Some(font))
+            runs.iter()
+                .filter(|run| !run.text.is_empty())
+                .all(|run| run.font.as_ref() == Some(font))
         });
         let stripped_format = redundant_font.then(|| {
             let mut format = format.cloned().expect("redundant font requires format");
@@ -102,14 +104,16 @@ fn is_valid_title_text(text: &str) -> bool {
 fn build_title_str_ref(formula: &str, text: Option<&str>) -> ChartText {
     ChartText::StrRef(StrRef {
         f: formula.to_string(),
-        str_cache: text.filter(|text| is_valid_title_text(text)).map(|text| StrData {
-            pt_count: Some(1),
-            pts: vec![StrPoint {
-                idx: 0,
-                v: text.to_string(),
-            }],
-            extensions: Vec::new(),
-        }),
+        str_cache: text
+            .filter(|text| is_valid_title_text(text))
+            .map(|text| StrData {
+                pt_count: Some(1),
+                pts: vec![StrPoint {
+                    idx: 0,
+                    v: text.to_string(),
+                }],
+                extensions: Vec::new(),
+            }),
         extensions: Vec::new(),
     })
 }
@@ -887,9 +891,15 @@ mod tests {
     #[test]
     fn build_title_falls_back_to_plain_text_without_rich_runs() {
         let title = build_title(
-            title_source(Some("Plain"), None), None, Some(&[]), None, None, None, None,
+            title_source(Some("Plain"), None),
+            None,
+            Some(&[]),
+            None,
+            None,
+            None,
+            None,
         )
-            .expect("plain title should be reconstructed");
+        .expect("plain title should be reconstructed");
 
         let Some(ChartText::Rich(body)) = title.tx else {
             panic!("expected rich chart text");
@@ -932,9 +942,15 @@ mod tests {
     #[test]
     fn build_title_emits_formula_reference_with_cached_text() {
         let title = build_title(
-            title_source(Some("Linked title"), Some("Sheet1!$A$1")), None, None, None, None, None, None,
+            title_source(Some("Linked title"), Some("Sheet1!$A$1")),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
         )
-            .expect("linked title should be reconstructed");
+        .expect("linked title should be reconstructed");
 
         let Some(ChartText::StrRef(str_ref)) = title.tx else {
             panic!("expected title string reference");
@@ -958,9 +974,15 @@ mod tests {
         };
 
         let title = build_title(
-            title_source(Some("Rotated"), None), Some(&format), None, None, None, None, None,
+            title_source(Some("Rotated"), None),
+            Some(&format),
+            None,
+            None,
+            None,
+            None,
+            None,
         )
-            .expect("title should be reconstructed");
+        .expect("title should be reconstructed");
 
         let tx_pr = title.tx_pr.expect("title text properties");
         assert_eq!(tx_pr.body_props.rot.map(|rot| rot.value()), Some(2520000));

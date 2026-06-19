@@ -41,7 +41,10 @@ fn line_marker_subtypes_reconstruct_marker_grouping_and_vary_colors() {
 
         let xml = chart_xml(&spec);
 
-        assert!(xml.contains(&format!(r#"<c:grouping val="{grouping}"/>"#)), "{xml}");
+        assert!(
+            xml.contains(&format!(r#"<c:grouping val="{grouping}"/>"#)),
+            "{xml}"
+        );
         assert!(xml.contains(r#"<c:varyColors val="1"/>"#), "{xml}");
         assert!(xml.contains(r#"<c:marker val="1"/>"#), "{xml}");
     }

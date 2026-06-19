@@ -54,6 +54,13 @@ type DragState =
       fromIndex: number;
     };
 
+interface PendingAutoActivatedMove {
+  fieldId: string;
+  fromArea: PivotFieldArea;
+  toArea: PivotFieldArea;
+  position: number;
+}
+
 interface PlacedField {
   field: PivotField;
   placement: PivotFieldPlacement;
@@ -232,6 +239,7 @@ export function PivotFieldList({
   const dragPointRef = useRef<{ x: number; y: number } | null>(null);
   const autoScrollRef = useRef<AutoScrollController | null>(null);
   const autoActivatedFieldRef = useRef<{ fieldId: string; area: PivotFieldArea } | null>(null);
+  const pendingAutoActivatedMoveRef = useRef<PendingAutoActivatedMove | null>(null);
 
   const fieldById = useMemo(() => new Map(fields.map((field) => [field.id, field])), [fields]);
   const placedFieldIds = useMemo(
@@ -327,6 +335,20 @@ export function PivotFieldList({
       autoScrollRef.current = null;
     };
   }, []);
+
+  useEffect(() => {
+    const pending = pendingAutoActivatedMoveRef.current;
+    if (!pending) return;
+
+    const activatedPlacement = [...placementsByArea[pending.fromArea]]
+      .reverse()
+      .find((item) => item.field.id === pending.fieldId);
+    if (!activatedPlacement) return;
+
+    pendingAutoActivatedMoveRef.current = null;
+    const position = Math.max(0, Math.min(pending.position, placementsByArea[pending.toArea].length));
+    onMovePlacement(placementId(activatedPlacement.placement), pending.toArea, position);
+  }, [onMovePlacement, placementsByArea]);
 
   const handleDragStart = useCallback(
     (event: DragEvent, state: DragState) => {
@@ -459,6 +481,38 @@ export function PivotFieldList({
     [dragStateFromEvent, handleDropAtPosition],
   );
 
+  const consumeAutoActivatedField = useCallback(
+    (fieldId: string, toArea: PivotFieldArea, position: number): boolean => {
+      const autoActivated = autoActivatedFieldRef.current;
+      if (!autoActivated || autoActivated.fieldId !== fieldId) return false;
+
+      autoActivatedFieldRef.current = null;
+      setSelectedItem(null);
+
+      if (autoActivated.area === toArea) {
+        return true;
+      }
+
+      const activatedPlacement = [...placementsByArea[autoActivated.area]]
+        .reverse()
+        .find((item) => item.field.id === fieldId);
+      if (activatedPlacement) {
+        const finalPosition = Math.max(0, Math.min(position, placementsByArea[toArea].length));
+        onMovePlacement(placementId(activatedPlacement.placement), toArea, finalPosition);
+        return true;
+      }
+
+      pendingAutoActivatedMoveRef.current = {
+        fieldId,
+        fromArea: autoActivated.area,
+        toArea,
+        position,
+      };
+      return true;
+    },
+    [onMovePlacement, placementsByArea],
+  );
+
   const handleZoneClick = useCallback(
     (toArea: PivotFieldArea) => {
       if (!selectedItem || !canDragState(selectedItem)) return;
@@ -468,12 +522,7 @@ export function PivotFieldList({
           : placementsByArea[toArea].length;
 
       if (selectedItem.kind === 'field') {
-        const autoActivated = autoActivatedFieldRef.current;
-        if (autoActivated?.fieldId === selectedItem.fieldId && autoActivated.area === toArea) {
-          autoActivatedFieldRef.current = null;
-          setSelectedItem(null);
-          return;
-        }
+        if (consumeAutoActivatedField(selectedItem.fieldId, toArea, appendPosition)) return;
         const field = fieldById.get(selectedItem.fieldId);
         onAddField(selectedItem.fieldId, toArea, {
           position: appendPosition,
@@ -486,7 +535,15 @@ export function PivotFieldList({
       autoActivatedFieldRef.current = null;
       setSelectedItem(null);
     },
-    [canDragState, fieldById, onAddField, onMovePlacement, placementsByArea, selectedItem],
+    [
+      canDragState,
+      consumeAutoActivatedField,
+      fieldById,
+      onAddField,
+      onMovePlacement,
+      placementsByArea,
+      selectedItem,
+    ],
   );
 
   const activateSourceField = useCallback(
@@ -509,6 +566,7 @@ export function PivotFieldList({
       if (!selectedItem || !canDragState(selectedItem)) return false;
 
       if (selectedItem.kind === 'field') {
+        if (consumeAutoActivatedField(selectedItem.fieldId, toArea, position)) return true;
         const field = fieldById.get(selectedItem.fieldId);
         onAddField(selectedItem.fieldId, toArea, {
           position: Math.max(0, Math.min(position, placementsByArea[toArea].length)),
@@ -529,7 +587,15 @@ export function PivotFieldList({
       setSelectedItem(null);
       return true;
     },
-    [canDragState, fieldById, onAddField, onMovePlacement, placementsByArea, selectedItem],
+    [
+      canDragState,
+      consumeAutoActivatedField,
+      fieldById,
+      onAddField,
+      onMovePlacement,
+      placementsByArea,
+      selectedItem,
+    ],
   );
 
   const renderSourceFieldRow = (field: PivotField) => {

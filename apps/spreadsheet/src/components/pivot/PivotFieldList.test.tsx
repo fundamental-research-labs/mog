@@ -350,6 +350,66 @@ describe('PivotFieldList placement editor', () => {
     });
   });
 
+  it('moves an auto-activated source field when a follow-up click targets another well', () => {
+    const { container, props, rerender } = renderList();
+    const category = container.querySelector<HTMLElement>(
+      '[data-pivot-target="field-chip"][data-pivot-area="available"][data-pivot-field-id="Category"]',
+    );
+    if (!category) throw new Error('Missing Category source chip');
+
+    fireEvent.click(category);
+    rerender(
+      <PivotFieldList
+        {...props}
+        placements={[
+          ...props.placements,
+          placement({
+            placementId: 'row:Category:2',
+            fieldId: 'Category',
+            area: 'row',
+            position: 2,
+          }),
+        ]}
+      />,
+    );
+    fireEvent.click(zone(container, 'column'));
+
+    expect(props.onAddField).toHaveBeenCalledTimes(1);
+    expect(props.onMovePlacement).toHaveBeenCalledWith('row:Category:2', 'column', 0);
+  });
+
+  it('does not double-add when a same-well chip click follows default activation', () => {
+    const { container, props, rerender } = renderList({
+      placements: [
+        placement({ placementId: 'row:Month:0', fieldId: 'Month', area: 'row', position: 0 }),
+      ],
+    });
+    const amount = container.querySelector<HTMLElement>(
+      '[data-pivot-target="field-chip"][data-pivot-area="available"][data-pivot-field-id="Amount"]',
+    );
+    if (!amount) throw new Error('Missing Amount source chip');
+
+    fireEvent.click(amount);
+    rerender(
+      <PivotFieldList
+        {...props}
+        placements={[
+          ...props.placements,
+          placement({
+            placementId: 'value:Amount:0',
+            fieldId: 'Amount',
+            area: 'value',
+            position: 0,
+            aggregateFunction: 'sum',
+          }),
+        ]}
+      />,
+    );
+    fireEvent.click(chip(container, 'value:Amount:0'));
+
+    expect(props.onAddField).toHaveBeenCalledTimes(1);
+  });
+
   it('activates a numeric source field into the value area from the keyboard', () => {
     const { container, props } = renderList({
       placements: [

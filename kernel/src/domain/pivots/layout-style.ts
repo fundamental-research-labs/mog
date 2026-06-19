@@ -7,6 +7,7 @@ import type {
 import type { DocumentContext } from '../../context';
 import { pivotStyleIdForCompute } from './style-normalization';
 import { requirePivot, resolvePivotName } from './lookup';
+import { createMutationReceipt } from './receipts';
 
 export async function setPivotLayoutByName(options: {
   ctx: DocumentContext;
@@ -35,17 +36,14 @@ export async function setPivotLayoutForId(options: {
     { layout: mergedLayout },
     { reason: 'layoutChanged', refreshPolicy: 'refreshAndMaterialize' },
   );
-  return {
-    kernelReceiptId: `${pivotId}:layoutChanged:${Date.now()}`,
+  return createMutationReceipt(
     pivotId,
-    effects: [],
-    mutationResult: { action: 'setLayout', pivotName, layout },
-    updateReason: 'layoutChanged',
-    refreshPolicy: 'refreshAndMaterialize',
-    materialized: true,
-    configRevision: 0,
-    status: result ? 'applied' : 'noOp',
-  };
+    'layoutChanged',
+    'refreshAndMaterialize',
+    { action: 'setLayout', pivotName, layout },
+    [],
+    { status: result ? 'applied' : 'noOp' },
+  );
 }
 
 export async function setPivotStyleByName(options: {

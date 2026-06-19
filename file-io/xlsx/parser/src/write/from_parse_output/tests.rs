@@ -25,6 +25,7 @@ mod chart_color_style;
 mod chart_ex_frame_defaults;
 mod chart_ex_modeled_state;
 mod chart_export_defaults;
+mod chart_user_shapes;
 mod charts;
 mod context_removal_gates;
 mod data_tables;

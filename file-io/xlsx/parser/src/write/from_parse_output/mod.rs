@@ -174,6 +174,9 @@ impl DrawingPathAllocator {
         chart_spec: &domain_types::ChartSpec,
         chart_path: &str,
     ) {
+        if let Some(user_shapes) = chart_auxiliary::chart_user_shapes_data(chart_spec, chart_path) {
+            self.reserve_if_drawing_family(&user_shapes.path);
+        }
         if !chart_replay::chart_allows_current_auxiliary_replay(chart_spec, chart_path) {
             return;
         }

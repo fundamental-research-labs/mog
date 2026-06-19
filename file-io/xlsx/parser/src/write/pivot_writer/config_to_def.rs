@@ -357,20 +357,15 @@ fn page_field_item_for_filter(
         return None;
     };
 
-    let selected_item_position = if is_blank_filter_value(included_value) {
-        existing_items
-            .iter()
-            .position(|item| item.item_type == PivotItemType::Blank)
-    } else {
-        let shared_idx = cache_shared_items
-            .get(field_idx)?
-            .iter()
-            .position(|shared_value| shared_value == included_value)?
-            as u32;
-        existing_items.iter().position(|item| {
-            item.item_type == PivotItemType::Data && item.value == Some(shared_idx)
-        })
-    }?;
+    let (item_type, value) = filter_item_identity(
+        included_value,
+        field_idx,
+        existing_items,
+        cache_shared_items,
+    )?;
+    let selected_item_position = existing_items
+        .iter()
+        .position(|item| item.item_type == item_type && item.value == value)?;
 
     Some(selected_item_position as u32)
 }
@@ -382,23 +377,12 @@ fn set_filter_item_visibility(
     field_idx: usize,
     cache_shared_items: &[Vec<CellValue>],
 ) {
-    if is_blank_filter_value(value) {
-        upsert_pivot_field_item(items, PivotItemType::Blank, None, hidden);
-        return;
-    }
-
-    let Some(shared_idx) = cache_shared_items
-        .get(field_idx)
-        .and_then(|shared_values| {
-            shared_values
-                .iter()
-                .position(|shared_value| shared_value == value)
-        })
-        .map(|idx| idx as u32)
+    let Some((item_type, value)) =
+        filter_item_identity(value, field_idx, items, cache_shared_items)
     else {
         return;
     };
-    upsert_pivot_field_item(items, PivotItemType::Data, Some(shared_idx), hidden);
+    upsert_pivot_field_item(items, item_type, value, hidden);
 }
 
 fn set_cache_item_visibility(
@@ -408,10 +392,63 @@ fn set_cache_item_visibility(
     hidden: bool,
 ) {
     if is_blank_filter_value(value) {
-        upsert_pivot_field_item(items, PivotItemType::Blank, None, hidden);
+        let (item_type, value) = blank_item_identity(items, shared_idx);
+        upsert_pivot_field_item(items, item_type, value, hidden);
     } else if let Some(shared_idx) = shared_idx {
         upsert_pivot_field_item(items, PivotItemType::Data, Some(shared_idx), hidden);
     }
+}
+
+fn filter_item_identity(
+    value: &CellValue,
+    field_idx: usize,
+    existing_items: &[PivotFieldItem],
+    cache_shared_items: &[Vec<CellValue>],
+) -> Option<(PivotItemType, Option<u32>)> {
+    if is_blank_filter_value(value) {
+        let shared_idx = shared_blank_index(field_idx, cache_shared_items);
+        return Some(blank_item_identity(existing_items, shared_idx));
+    }
+
+    let shared_idx = cache_shared_items
+        .get(field_idx)?
+        .iter()
+        .position(|shared_value| shared_value == value)? as u32;
+    Some((PivotItemType::Data, Some(shared_idx)))
+}
+
+fn shared_blank_index(field_idx: usize, cache_shared_items: &[Vec<CellValue>]) -> Option<u32> {
+    cache_shared_items
+        .get(field_idx)?
+        .iter()
+        .position(is_blank_filter_value)
+        .map(|idx| idx as u32)
+}
+
+fn blank_item_identity(
+    existing_items: &[PivotFieldItem],
+    shared_idx: Option<u32>,
+) -> (PivotItemType, Option<u32>) {
+    if let Some(shared_idx) = shared_idx {
+        let value = Some(shared_idx);
+        if existing_items
+            .iter()
+            .any(|item| item.item_type == PivotItemType::Data && item.value == value)
+        {
+            return (PivotItemType::Data, value);
+        }
+    }
+
+    if existing_items
+        .iter()
+        .any(|item| item.item_type == PivotItemType::Blank)
+    {
+        return (PivotItemType::Blank, None);
+    }
+
+    shared_idx
+        .map(|idx| (PivotItemType::Data, Some(idx)))
+        .unwrap_or((PivotItemType::Blank, None))
 }
 
 fn upsert_pivot_field_item(
@@ -659,6 +696,27 @@ mod tests {
     }
 
     #[test]
+    fn exclude_seeded_null_filter_reuses_missing_shared_data_item() {
+        let mut pt = parsed_pivot_with_category_filter(PivotFilter {
+            field_id: FieldId::from("Category"),
+            include_values: None,
+            exclude_values: Some(vec![CellValue::Null]),
+            condition: None,
+            top_bottom: None,
+            show_items_with_no_data: None,
+        });
+        pt.config.fields[0].items = vec![data_item(0, false), default_item()];
+        pt.ooxml_preservation.cache_shared_items = vec![vec![CellValue::Null]];
+
+        let def = parsed_pivot_to_def(&pt);
+
+        assert_eq!(
+            def.fields[0].items,
+            vec![data_item(0, true), default_item()]
+        );
+    }
+
+    #[test]
     fn exclude_cached_text_filter_becomes_hidden_data_item() {
         let mut pt = parsed_pivot_with_category_filter(PivotFilter {
             field_id: FieldId::from("Category"),
@@ -707,6 +765,28 @@ mod tests {
             vec![data_item(0, true), data_item(1, false), default_item()]
         );
         assert!(def.page_fields.is_empty());
+    }
+
+    #[test]
+    fn row_field_include_filter_hides_seeded_null_data_item_without_blank_item() {
+        let mut pt = parsed_pivot_with_category_filter(PivotFilter {
+            field_id: FieldId::from("Category"),
+            include_values: Some(vec![CellValue::Text(Arc::from("Travel"))]),
+            exclude_values: None,
+            condition: None,
+            top_bottom: None,
+            show_items_with_no_data: None,
+        });
+        pt.config.fields[0].items = vec![data_item(0, false), data_item(1, false), default_item()];
+        pt.ooxml_preservation.cache_shared_items =
+            vec![vec![CellValue::Text(Arc::from("Travel")), CellValue::Null]];
+
+        let def = parsed_pivot_to_def(&pt);
+
+        assert_eq!(
+            def.fields[0].items,
+            vec![data_item(0, false), data_item(1, true), default_item()]
+        );
     }
 
     #[test]
@@ -759,6 +839,45 @@ mod tests {
                 data_item(2, false),
                 default_item()
             ]
+        );
+    }
+
+    #[test]
+    fn page_field_include_filter_can_select_seeded_null_data_item() {
+        let mut pt = parsed_pivot_with_category_filter(PivotFilter {
+            field_id: FieldId::from("Category"),
+            include_values: Some(vec![CellValue::Null]),
+            exclude_values: None,
+            condition: None,
+            top_bottom: None,
+            show_items_with_no_data: None,
+        });
+        pt.config.placements = vec![filter_placement()];
+        pt.config.fields[0].items = vec![data_item(0, false), default_item()];
+        pt.ooxml_preservation.cache_shared_items = vec![vec![CellValue::Null]];
+        pt.ooxml_preservation.page_fields = vec![PivotPageFieldDef {
+            field_index: 0,
+            item: None,
+            hierarchy: Some(-1),
+            name: Some("CategoryHierarchy".to_string()),
+            caption: None,
+        }];
+
+        let def = parsed_pivot_to_def(&pt);
+
+        assert_eq!(
+            def.page_fields,
+            vec![PivotPageFieldDef {
+                field_index: 0,
+                item: Some(0),
+                hierarchy: Some(-1),
+                name: Some("CategoryHierarchy".to_string()),
+                caption: None,
+            }]
+        );
+        assert_eq!(
+            def.fields[0].items,
+            vec![data_item(0, false), default_item()]
         );
     }
 

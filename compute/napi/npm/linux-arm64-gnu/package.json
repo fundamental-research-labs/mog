@@ -1,6 +1,6 @@
 {
   "name": "@mog-sdk/linux-arm64-gnu",
-  "version": "0.9.5",
+  "version": "0.9.6",
   "os": [
     "linux"
   ],

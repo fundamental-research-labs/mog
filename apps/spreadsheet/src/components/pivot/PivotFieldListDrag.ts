@@ -103,12 +103,12 @@ export function resolvePointerDropTarget(options: {
     };
   };
 
-  const elements =
-    typeof document.elementsFromPoint === 'function'
-      ? document
-          .elementsFromPoint(clientX, clientY)
-          .filter((element): element is HTMLElement => element instanceof HTMLElement)
-      : [];
+  const elementsFromPoint = document.elementsFromPoint?.bind(document);
+  const elements = elementsFromPoint
+    ? elementsFromPoint(clientX, clientY).filter(
+        (element): element is HTMLElement => element instanceof HTMLElement,
+      )
+    : [];
 
   if (
     state.kind === 'placement' &&

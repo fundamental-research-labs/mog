@@ -1,6 +1,6 @@
 {
   "name": "@mog-sdk/win32-x64-msvc",
-  "version": "0.9.5",
+  "version": "0.9.6",
   "os": [
     "win32"
   ],

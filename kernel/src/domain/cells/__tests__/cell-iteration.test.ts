@@ -6,7 +6,9 @@ import type { DocumentContext } from '../../../context/types';
 
 const SHEET_ID = 'sheet-1' as SheetId;
 
-function makeContext(cells: Array<{ row: number; col: number; value?: unknown; formula?: string }>) {
+function makeContext(
+  cells: Array<{ row: number; col: number; value?: unknown; formula?: string }>,
+) {
   const queryRange = jest.fn(async () => ({ cells, merges: [] }));
   const getDataBounds = jest.fn(async () => ({
     minRow: Math.min(...cells.map((cell) => cell.row)),

@@ -9,7 +9,7 @@
  * @module grid-renderer/cells/interactive-elements
  */
 
-import type { RenderRegion } from '@mog/canvas-engine';
+import { canvasToDocXY, docToCanvasXY, type RenderRegion } from '@mog/canvas-engine';
 import type { InteractiveElement, InteractiveElementCollector } from '@mog-sdk/contracts/rendering';
 import { getFilterButtonHitBounds } from './indicators';
 import type { CellRenderInfo } from './types';
@@ -47,31 +47,45 @@ export function toInteractiveViewportCellInfo(
   region: RenderRegion,
 ): CellRenderInfo {
   const zoom = region.zoom || 1;
-  const xOffset = region.viewportOrigin.x;
-  const yOffset = region.viewportOrigin.y;
+  const viewportSpaceRegion = {
+    bounds: { x: 0, y: 0 },
+    viewportOrigin: { x: 0, y: 0 },
+    scrollOffset: region.scrollOffset,
+    zoom,
+  };
+  const toViewportXY = (x: number, y: number): { x: number; y: number } => {
+    const doc = canvasToDocXY(region.bounds.x + x * zoom, region.bounds.y + y * zoom, region);
+    return docToCanvasXY(doc.x, doc.y, viewportSpaceRegion);
+  };
   const scaleRect = (rect: {
     x: number;
     y: number;
     width: number;
     height: number;
-  }): { x: number; y: number; width: number; height: number } => ({
-    x: (rect.x + xOffset) * zoom,
-    y: (rect.y + yOffset) * zoom,
-    width: rect.width * zoom,
-    height: rect.height * zoom,
-  });
+  }): { x: number; y: number; width: number; height: number } => {
+    const { x, y } = toViewportXY(rect.x, rect.y);
+    return {
+      x,
+      y,
+      width: rect.width * zoom,
+      height: rect.height * zoom,
+    };
+  };
 
   return {
     ...cell,
     ...scaleRect(cell),
     merge: cell.merge
-      ? {
-          ...cell.merge,
-          mergeX: (cell.merge.mergeX + xOffset) * zoom,
-          mergeY: (cell.merge.mergeY + yOffset) * zoom,
-          mergeWidth: cell.merge.mergeWidth * zoom,
-          mergeHeight: cell.merge.mergeHeight * zoom,
-        }
+      ? (() => {
+          const merge = toViewportXY(cell.merge.mergeX, cell.merge.mergeY);
+          return {
+            ...cell.merge,
+            mergeX: merge.x,
+            mergeY: merge.y,
+            mergeWidth: cell.merge.mergeWidth * zoom,
+            mergeHeight: cell.merge.mergeHeight * zoom,
+          };
+        })()
       : undefined,
   };
 }

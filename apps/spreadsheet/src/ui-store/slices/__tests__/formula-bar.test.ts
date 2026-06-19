@@ -12,10 +12,7 @@ import {
   FORMULA_BAR_DEFAULT_EXPANDED_HEIGHT_PX,
   FORMULA_BAR_MAX_HEIGHT_PX,
 } from '../../../domain/editor/formula-bar-height';
-import {
-  createFormulaBarSlice,
-  type FormulaBarSlice,
-} from '../formulas/formula-bar';
+import { createFormulaBarSlice, type FormulaBarSlice } from '../formulas/formula-bar';
 
 function createTestStore() {
   return create<FormulaBarSlice>()(createFormulaBarSlice);

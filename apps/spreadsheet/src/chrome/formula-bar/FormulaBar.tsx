@@ -80,7 +80,8 @@ export function FormulaBar({
   const [cursorPosition, setCursorPosition] = useState(0);
 
   const requestedHeightPx =
-    heightPx ?? (isExpanded ? FORMULA_BAR_DEFAULT_EXPANDED_HEIGHT_PX : FORMULA_BAR_COLLAPSED_HEIGHT_PX);
+    heightPx ??
+    (isExpanded ? FORMULA_BAR_DEFAULT_EXPANDED_HEIGHT_PX : FORMULA_BAR_COLLAPSED_HEIGHT_PX);
   const formulaBarHeightPx = clampFormulaBarHeight(requestedHeightPx);
   const heightExpanded = isFormulaBarHeightExpanded(formulaBarHeightPx);
   const usesTallLayout = heightExpanded || isExpanded || value.includes('\n');
@@ -347,10 +348,7 @@ export function FormulaBar({
        * - text-ribbon: 11px font-size
        * - leading-none: line-height 1 (inputs and spans have different defaults)
        */}
-      <div
-        className="flex-1 relative text-ribbon leading-none"
-        style={{ height: editorHeightPx }}
-      >
+      <div className="flex-1 relative text-ribbon leading-none" style={{ height: editorHeightPx }}>
         {/* Syntax highlighting overlay for formulas */}
         {isFormula && !isMultiLine && (
           <div

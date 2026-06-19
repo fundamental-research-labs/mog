@@ -229,19 +229,19 @@ fn parse_scatter_config(xml: &[u8]) -> ScatterChartConfig {
 /// Parse bubble chart config.
 fn parse_bubble_config(xml: &[u8]) -> BubbleChartConfig {
     let mut cfg = BubbleChartConfig::default();
-    if let Some(start) = find_tag_simd(xml, b"varyColors", 0) {
+    if let Some(start) = find_direct_child_tag(xml, b"bubbleChart", b"varyColors") {
         cfg.vary_colors = Some(attrs::parse_bool_attr(&xml[start..], b"val=\""));
     }
-    if let Some(start) = find_tag_simd(xml, b"bubbleScale", 0) {
+    if let Some(start) = find_direct_child_tag(xml, b"bubbleChart", b"bubbleScale") {
         cfg.bubble_scale = attrs::parse_u32_attr(&xml[start..], b"val=\"");
     }
-    if let Some(start) = find_tag_simd(xml, b"bubble3D", 0) {
+    if let Some(start) = find_direct_child_tag(xml, b"bubbleChart", b"bubble3D") {
         cfg.bubble_3d = Some(attrs::parse_bool_attr(&xml[start..], b"val=\""));
     }
-    if let Some(start) = find_tag_simd(xml, b"showNegBubbles", 0) {
+    if let Some(start) = find_direct_child_tag(xml, b"bubbleChart", b"showNegBubbles") {
         cfg.show_neg_bubbles = Some(attrs::parse_bool_attr(&xml[start..], b"val=\""));
     }
-    if let Some(start) = find_tag_simd(xml, b"sizeRepresents", 0) {
+    if let Some(start) = find_direct_child_tag(xml, b"bubbleChart", b"sizeRepresents") {
         if let Some(val) = attrs::parse_string_attr(&xml[start..], b"val=\"") {
             cfg.size_represents = Some(SizeRepresents::from_ooxml(&val));
         }
@@ -442,5 +442,42 @@ mod tests {
 
         assert_eq!(cfg.marker, Some(true));
         assert_eq!(cfg.smooth, Some(false));
+    }
+
+    #[test]
+    fn bubble_config_ignores_series_level_bubble_3d() {
+        let xml = br#"<c:bubbleChart>
+            <c:varyColors val="1"/>
+            <c:ser>
+                <c:idx val="0"/>
+                <c:bubble3D val="1"/>
+            </c:ser>
+            <c:showNegBubbles val="0"/>
+        </c:bubbleChart>"#;
+
+        let cfg = parse_bubble_config(xml);
+
+        assert_eq!(cfg.bubble_3d, None);
+        assert_eq!(cfg.vary_colors, Some(true));
+        assert_eq!(cfg.show_neg_bubbles, Some(false));
+    }
+
+    #[test]
+    fn bubble_config_reads_direct_chart_level_bubble_3d() {
+        let xml = br#"<c:bubbleChart>
+            <c:ser>
+                <c:idx val="0"/>
+                <c:bubble3D val="0"/>
+            </c:ser>
+            <c:bubble3D val="1"/>
+            <c:bubbleScale val="42"/>
+            <c:sizeRepresents val="w"/>
+        </c:bubbleChart>"#;
+
+        let cfg = parse_bubble_config(xml);
+
+        assert_eq!(cfg.bubble_3d, Some(true));
+        assert_eq!(cfg.bubble_scale, Some(42));
+        assert_eq!(cfg.size_represents, Some(SizeRepresents::Width));
     }
 }

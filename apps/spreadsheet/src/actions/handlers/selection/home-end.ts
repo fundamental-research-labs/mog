@@ -58,7 +58,7 @@ export const MOVE_TO_LAST_USED_CELL: AsyncActionHandler = async (deps) => {
   const sheetId = getActiveSheetId(deps);
   const ws = deps.workbook.getSheetById(sheetId);
 
-  // getUsedRange() returns CellRange | null — endRow/endCol are inclusive (last row/col with data, 0-indexed)
+  // getUsedRange() returns WorksheetRange | null; endRow/endCol are inclusive.
   const usedRange = await ws.getUsedRange();
   const lastUsed: CellCoord = usedRange
     ? { row: usedRange.endRow, col: usedRange.endCol }
@@ -133,7 +133,7 @@ export const EXTEND_TO_LAST_USED_CELL: AsyncActionHandler = async (deps) => {
   const sheetId = getActiveSheetId(deps);
   const ws = deps.workbook.getSheetById(sheetId);
 
-  // getUsedRange() returns CellRange | null — endRow/endCol are inclusive (last row/col with data, 0-indexed)
+  // getUsedRange() returns WorksheetRange | null; endRow/endCol are inclusive.
   const usedRange = await ws.getUsedRange();
   const lastUsed: CellCoord = usedRange
     ? { row: usedRange.endRow, col: usedRange.endCol }

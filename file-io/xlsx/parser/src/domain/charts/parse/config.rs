@@ -307,7 +307,10 @@ fn parse_stock_config(xml: &[u8]) -> StockChartConfig {
 
 /// Parse ofPie chart config.
 fn parse_ofpie_config(xml: &[u8]) -> OfPieChartConfig {
-    let mut cfg = OfPieChartConfig::default();
+    let mut cfg = OfPieChartConfig {
+        second_pie_size: None,
+        ..Default::default()
+    };
     if let Some(start) = find_tag_simd(xml, b"ofPieType", 0) {
         if let Some(val) = attrs::parse_string_attr(&xml[start..], b"val=\"") {
             cfg.of_pie_type = OfPieType::from_ooxml(&val);
@@ -479,5 +482,18 @@ mod tests {
         assert_eq!(cfg.bubble_3d, Some(true));
         assert_eq!(cfg.bubble_scale, Some(42));
         assert_eq!(cfg.size_represents, Some(SizeRepresents::Width));
+    }
+
+    #[test]
+    fn of_pie_config_does_not_materialize_default_second_plot_size() {
+        let xml = br#"<c:ofPieChart>
+            <c:ofPieType val="pie"/>
+            <c:splitType val="cust"/>
+        </c:ofPieChart>"#;
+
+        let cfg = parse_ofpie_config(xml);
+
+        assert_eq!(cfg.split_type, Some(SplitType::Custom));
+        assert_eq!(cfg.second_pie_size, None);
     }
 }

@@ -248,7 +248,10 @@ pub fn extract_chart_spec_from_chart_space(
         plot_format,
         title_format,
         title_rich_text,
-        title_formula: chart.title.as_ref().and_then(super::text::extract_title_formula_from_title),
+        title_formula: chart
+            .title
+            .as_ref()
+            .and_then(super::text::extract_title_formula_from_title),
         plot_layout,
         title_layout,
         data_table,
@@ -277,7 +280,7 @@ pub fn extract_chart_spec_from_chart_space(
         category_label_level: None,
         series_name_level: None,
         show_all_field_buttons: chart.show_all_field_buttons,
-        second_plot_size: None,
+        second_plot_size: scalar_fields.second_plot_size,
         vary_by_categories,
         title_h_align,
         title_v_align,
@@ -780,7 +783,9 @@ fn extract_sub_type_from_config(
         };
     }
 
-    if let CTC::Line(c) = config && c.marker == Some(true) {
+    if let CTC::Line(c) = config
+        && c.marker == Some(true)
+    {
         return match c.grouping {
             Grouping::Stacked => Some(ChartSubType::MarkersStacked),
             Grouping::PercentStacked => Some(ChartSubType::MarkersPercentStacked),
@@ -868,6 +873,7 @@ struct ScalarChartFields {
     bubble_3d_effect: Option<bool>,
     split_type: Option<String>,
     split_value: Option<f64>,
+    second_plot_size: Option<u32>,
     bar_shape: Option<String>,
     wireframe: Option<bool>,
     surface_top_view: Option<bool>,
@@ -955,12 +961,15 @@ fn extract_scalar_fields_from_config(
             ..Default::default()
         },
         CTC::OfPie(c) => {
-            let split_type = c.split_type.map(|st| st.to_ooxml().to_string());
+            let split_type = c
+                .split_type
+                .map(|st| public_split_type_name(st).to_string());
             let split_value = c.split_pos;
             ScalarChartFields {
                 gap_width: c.gap_width,
                 split_type,
                 split_value,
+                second_plot_size: c.second_pie_size,
                 vary_by_categories: c.vary_colors,
                 ..Default::default()
             }
@@ -992,10 +1001,21 @@ impl ScalarChartFields {
         self.bubble_3d_effect = self.bubble_3d_effect.or(other.bubble_3d_effect);
         self.split_type = self.split_type.take().or(other.split_type);
         self.split_value = self.split_value.or(other.split_value);
+        self.second_plot_size = self.second_plot_size.or(other.second_plot_size);
         self.bar_shape = self.bar_shape.take().or(other.bar_shape);
         self.wireframe = self.wireframe.or(other.wireframe);
         self.surface_top_view = self.surface_top_view.or(other.surface_top_view);
         self.vary_by_categories = self.vary_by_categories.or(other.vary_by_categories);
+    }
+}
+
+fn public_split_type_name(split_type: ooxml_types::charts::SplitType) -> &'static str {
+    match split_type {
+        ooxml_types::charts::SplitType::Auto => "auto",
+        ooxml_types::charts::SplitType::Custom => "custom",
+        ooxml_types::charts::SplitType::Percent => "percent",
+        ooxml_types::charts::SplitType::Position => "position",
+        ooxml_types::charts::SplitType::Value => "value",
     }
 }
 

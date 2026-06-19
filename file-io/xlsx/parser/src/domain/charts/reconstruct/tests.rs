@@ -17,6 +17,7 @@ mod category_source_type;
 mod chart_fidelity;
 mod data_label_fidelity;
 mod imported_series_fallback;
+mod of_pie;
 mod point_format_fidelity;
 mod series_shadow_fidelity;
 mod surface;

@@ -1,9 +1,9 @@
 use domain_types::{
-    ChartDefinition,
     chart::{
         ChartLineSettingsData, ChartSeriesData, ChartSeriesStockRoleData, ChartSpec, ChartSubType,
         ChartType as DomainChartType, DataLabelData, UpDownBarsData,
     },
+    ChartDefinition,
 };
 use ooxml_types::charts::{
     self, BarDirection, ChartGroup, ChartType as OoxmlChartType, ChartTypeConfig, ExtensionEntry,
@@ -457,6 +457,17 @@ fn radar_style_for_sub_type(sub: Option<&ChartSubType>) -> Option<charts::RadarS
     }
 }
 
+fn split_type_from_public(value: &str) -> charts::SplitType {
+    match value {
+        "custom" | "cust" => charts::SplitType::Custom,
+        "position" | "pos" => charts::SplitType::Position,
+        "value" | "val" => charts::SplitType::Value,
+        "percent" => charts::SplitType::Percent,
+        "auto" => charts::SplitType::Auto,
+        other => charts::SplitType::from_ooxml(other),
+    }
+}
+
 /// Determine bar direction from domain chart type.
 pub(super) fn bar_direction_for(ct: &DomainChartType) -> BarDirection {
     match ct {
@@ -620,11 +631,9 @@ pub(super) fn build_default_config(
         }),
         OoxmlChartType::OfPie => ChartTypeConfig::OfPie(charts::OfPieChartConfig {
             vary_colors: spec.vary_by_categories.or(Some(true)),
-            split_type: spec
-                .split_type
-                .as_deref()
-                .map(charts::SplitType::from_ooxml),
+            split_type: spec.split_type.as_deref().map(split_type_from_public),
             split_pos: spec.split_value,
+            second_pie_size: spec.second_plot_size,
             gap_width: spec.gap_width,
             ser_lines: spec
                 .series_lines
@@ -770,9 +779,10 @@ pub(super) fn inject_series_into_config(
             split_type: spec
                 .split_type
                 .as_deref()
-                .map(charts::SplitType::from_ooxml)
+                .map(split_type_from_public)
                 .or(c.split_type),
             split_pos: spec.split_value.or(c.split_pos),
+            second_pie_size: spec.second_plot_size.or(c.second_pie_size),
             gap_width: spec.gap_width.or(c.gap_width),
             ser_lines: spec
                 .series_lines

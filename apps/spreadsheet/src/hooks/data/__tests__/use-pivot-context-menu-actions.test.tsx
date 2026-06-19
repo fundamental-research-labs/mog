@@ -156,4 +156,44 @@ describe('usePivotContextMenuActions', () => {
     expect(fns.setPlacementSortOrder).not.toHaveBeenCalled();
     expect(fns.setSortOrder).not.toHaveBeenCalled();
   });
+
+  it('falls back from row placement context to the first value placement for value actions', () => {
+    const fns = setup();
+    const { result } = renderHook(() =>
+      usePivotContextMenuActions({
+        pivotId: 'pivot-1',
+        fieldId: 'Vendor',
+        placementId: pid('row:Vendor:1'),
+      }),
+    );
+
+    expect(result.current.currentAggregateFunction).toBe('sum');
+
+    act(() => {
+      result.current.setShowValuesAs('percentOfGrandTotal');
+    });
+
+    expect(fns.setShowValuesAs).toHaveBeenCalledWith('pivot-1', 'value:Amount:0', {
+      type: 'percentOfGrandTotal',
+    });
+    expect(mockUiStore.closeContextMenu).toHaveBeenCalled();
+  });
+
+  it('routes value placement aggregate changes through the placement id', () => {
+    const fns = setup();
+    const { result } = renderHook(() =>
+      usePivotContextMenuActions({
+        pivotId: 'pivot-1',
+        fieldId: 'Amount',
+        placementId: pid('value:Amount:0'),
+      }),
+    );
+
+    act(() => {
+      result.current.setAggregateFunction('max');
+    });
+
+    expect(fns.setAggregateFunction).toHaveBeenCalledWith('pivot-1', 'value:Amount:0', 'max');
+    expect(mockUiStore.closeContextMenu).toHaveBeenCalled();
+  });
 });

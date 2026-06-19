@@ -254,11 +254,18 @@ export function usePivotContextMenuActions(
   );
   const hasSortContext = !!pivotId && !!sortPlacement;
 
-  const effectiveValueFieldId = useMemo(() => {
-    if (targetPlacement?.area === 'value') return targetPlacement.fieldId;
-    if (fieldId) return fieldId;
-    return pivotConfig?.placements.find((p) => p.area === 'value')?.fieldId;
+  const effectiveValuePlacement = useMemo<PivotFieldPlacementFlat | undefined>(() => {
+    if (!pivotConfig) return undefined;
+    if (targetPlacement?.area === 'value') return targetPlacement;
+    if (fieldId) {
+      const valuePlacementForField = pivotConfig.placements.find(
+        (placement) => placement.area === 'value' && placement.fieldId === fieldId,
+      );
+      if (valuePlacementForField) return valuePlacementForField;
+    }
+    return pivotConfig.placements.find((placement) => placement.area === 'value');
   }, [fieldId, pivotConfig, targetPlacement]);
+  const effectiveValueTargetId = effectiveValuePlacement?.placementId;
 
   // Get expansion state for the header through the selected pivot handle.
   const [isHeaderExpanded, setIsHeaderExpanded] = useState(false);
@@ -304,12 +311,8 @@ export function usePivotContextMenuActions(
 
   // Get current aggregate function for the field
   const currentAggregateFunction = useMemo(() => {
-    if (!pivotConfig || !effectiveValueFieldId) return undefined;
-    const placement = pivotConfig.placements.find(
-      (p) => p.fieldId === effectiveValueFieldId && p.area === 'value',
-    );
-    return placement?.aggregateFunction;
-  }, [pivotConfig, effectiveValueFieldId]);
+    return effectiveValuePlacement?.aggregateFunction;
+  }, [effectiveValuePlacement]);
 
   // Get the area for the current field
   const fieldArea = useMemo(() => {
@@ -486,12 +489,12 @@ export function usePivotContextMenuActions(
 
   const setAggregateFunction = useCallback(
     (aggregateFunction: AggregateFunction) => {
-      if (pivotId && effectiveValueFieldId && canChangeAggregate) {
-        setAggregate(pivotId, effectiveValueFieldId, aggregateFunction);
+      if (pivotId && effectiveValueTargetId && canChangeAggregate) {
+        setAggregate(pivotId, effectiveValueTargetId, aggregateFunction);
         closeContextMenu();
       }
     },
-    [pivotId, effectiveValueFieldId, canChangeAggregate, setAggregate, closeContextMenu],
+    [pivotId, effectiveValueTargetId, canChangeAggregate, setAggregate, closeContextMenu],
   );
 
   // ==========================================================================
@@ -499,23 +502,25 @@ export function usePivotContextMenuActions(
   // ==========================================================================
 
   const currentShowValuesAs: ShowValuesAsType | undefined = useMemo(() => {
-    if (!pivotConfig || !effectiveValueFieldId) return undefined;
-    const placement = pivotConfig.placements.find(
-      (p) => p.fieldId === effectiveValueFieldId && p.area === 'value',
-    );
-    return placement?.showValuesAs?.type;
-  }, [pivotConfig, effectiveValueFieldId]);
+    return effectiveValuePlacement?.showValuesAs?.type;
+  }, [effectiveValuePlacement]);
 
   const setShowValuesAs = useCallback(
     (calculationType: ShowValuesAsType) => {
-      if (pivotId && effectiveValueFieldId && canChangeAggregate) {
+      if (pivotId && effectiveValueTargetId && canChangeAggregate) {
         const showValuesAs: ShowValuesAsConfig | null =
           calculationType === 'noCalculation' ? null : { type: calculationType };
-        setPivotShowValuesAs(pivotId, effectiveValueFieldId, showValuesAs);
+        setPivotShowValuesAs(pivotId, effectiveValueTargetId, showValuesAs);
         closeContextMenu();
       }
     },
-    [pivotId, effectiveValueFieldId, canChangeAggregate, setPivotShowValuesAs, closeContextMenu],
+    [
+      pivotId,
+      effectiveValueTargetId,
+      canChangeAggregate,
+      setPivotShowValuesAs,
+      closeContextMenu,
+    ],
   );
 
   // ==========================================================================

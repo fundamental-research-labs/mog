@@ -1,14 +1,14 @@
 use bridge_types::DescribeSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::ImportObjectStatus;
 use crate::domain::drawings::ManualLayout;
+use crate::ImportObjectStatus;
 
 use super::floating_object::{
     AnchorMode, ChartData, ChartDrawingFrameOoxmlProps, ChartOoxmlProps, FloatingObject,
     FloatingObjectAnchor, FloatingObjectCommon, FloatingObjectData,
 };
-use super::options::radar_flags_from_sub_type;
+use super::options::{effective_sub_type_from_chart_data, radar_flags_from_sub_type};
 use super::source_ranges::{
     chart_series_from_runtime_inputs, infer_common_category_range, infer_series_name_range,
     pie_slice_from_chart_series,
@@ -610,7 +610,7 @@ impl ChartSpec {
             z_index: common.z_index,
             definition,
             series,
-            sub_type: chart_data.sub_type.clone(),
+            sub_type: effective_sub_type_from_chart_data(chart_data),
             legend: chart_data.legend.clone(),
             axes: chart_data.axis.clone(),
             data_labels: chart_data.data_labels.clone(),

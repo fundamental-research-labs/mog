@@ -159,6 +159,7 @@ fn materialized_pivot_output_is_identity_backed_without_overwriting_col_data() {
         4,
         &result,
         &["Region".to_string()],
+        true,
         &id_alloc,
     );
 

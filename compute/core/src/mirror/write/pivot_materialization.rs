@@ -69,6 +69,25 @@ impl CellMirror {
         result: &compute_pivot::types::PivotTableResult,
         row_field_names: &[String],
     ) {
+        self.materialize_pivot_with_row_label_options(
+            sheet,
+            anchor_row,
+            anchor_col,
+            result,
+            row_field_names,
+            true,
+        );
+    }
+
+    pub fn materialize_pivot_with_row_label_options(
+        &mut self,
+        sheet: &SheetId,
+        anchor_row: u32,
+        anchor_col: u32,
+        result: &compute_pivot::types::PivotTableResult,
+        row_field_names: &[String],
+        repeat_row_labels: bool,
+    ) {
         let bounds = &result.rendered_bounds;
         let first_data_row = bounds.first_data_row;
         let first_data_col = bounds.first_data_col;
@@ -203,7 +222,11 @@ impl CellMirror {
                     );
                 }
 
-                // Write row headers and data values
+                // Write row headers and data values. In multi-column row layouts
+                // Excel leaves repeated outer item labels blank unless repeat labels are enabled.
+                let suppress_repeated_row_labels = !repeat_row_labels && first_data_col > 1;
+                let mut previous_visible_row_header_keys: Vec<Option<String>> =
+                    vec![None; first_data_col as usize];
                 for (row_idx, pivot_row) in result.rows.iter().enumerate() {
                     let row_idx = row_idx as u32;
                     // Row headers. In compact layout the engine still carries the
@@ -214,12 +237,29 @@ impl CellMirror {
                         (first_data_col as usize).min(pivot_row.headers.len());
                     let hidden_prefix =
                         pivot_row.headers.len().saturating_sub(visible_header_count);
+                    let mut ancestor_changed = false;
                     for (h_idx, header) in pivot_row.headers[hidden_prefix..].iter().enumerate() {
-                        write_cell(
-                            anchor_col + h_idx as u32,
-                            anchor_row + first_data_row + row_idx,
-                            header.value.clone(),
-                        );
+                        let is_repeated = previous_visible_row_header_keys
+                            .get(h_idx)
+                            .and_then(Option::as_deref)
+                            == Some(header.key.as_str());
+                        let should_write =
+                            !suppress_repeated_row_labels || ancestor_changed || !is_repeated;
+                        if should_write {
+                            write_cell(
+                                anchor_col + h_idx as u32,
+                                anchor_row + first_data_row + row_idx,
+                                header.value.clone(),
+                            );
+                        }
+                        ancestor_changed = ancestor_changed || !is_repeated;
+                        previous_visible_row_header_keys[h_idx] = Some(header.key.clone());
+                    }
+                    for key in previous_visible_row_header_keys
+                        .iter_mut()
+                        .skip(visible_header_count)
+                    {
+                        *key = None;
                     }
                     // Data values
                     for (v_idx, value) in pivot_row.values.iter().enumerate() {
@@ -303,9 +343,17 @@ impl CellMirror {
         anchor_col: u32,
         result: &compute_pivot::types::PivotTableResult,
         row_field_names: &[String],
+        repeat_row_labels: bool,
         id_alloc: &IdAllocator,
     ) {
-        self.materialize_pivot(sheet, anchor_row, anchor_col, result, row_field_names);
+        self.materialize_pivot_with_row_label_options(
+            sheet,
+            anchor_row,
+            anchor_col,
+            result,
+            row_field_names,
+            repeat_row_labels,
+        );
 
         let bounds = &result.rendered_bounds;
         if bounds.total_rows == 0 || bounds.total_cols == 0 {

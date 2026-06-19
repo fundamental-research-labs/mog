@@ -32,7 +32,7 @@ fn num(n: f64) -> CellValue {
 /// A row PivotHeader at the given depth with no children, no special flags.
 fn row_header(value: CellValue, field_id: &str, depth: usize) -> PivotHeader {
     PivotHeader {
-        key: format!("row_{}_{}", field_id, depth),
+        key: format!("row_{}_{}_{}", field_id, depth, value),
         value,
         field_id: FieldId::from(field_id),
         depth,
@@ -261,6 +261,101 @@ fn materialize_compact_multi_row_fields_writes_deepest_visible_label() {
             .cloned(),
         Some(text("Widget")),
         "sibling child rows also show their deepest label",
+    );
+}
+
+#[test]
+fn materialize_outline_multi_row_fields_can_suppress_repeated_outer_labels() {
+    let (mut mirror, sheet_id) = fresh_mirror_with_sheet(20, 20);
+
+    let result = PivotTableResult {
+        column_headers: vec![],
+        rows: vec![
+            pivot_row_with_headers(
+                "Gamma|Jan",
+                vec![("Gamma", "vendor", 0), ("Jan", "month", 1)],
+                vec![num(10.0)],
+            ),
+            pivot_row_with_headers(
+                "Gamma|Feb",
+                vec![("Gamma", "vendor", 0), ("Feb", "month", 1)],
+                vec![num(20.0)],
+            ),
+            pivot_row_with_headers(
+                "Beta|Feb",
+                vec![("Beta", "vendor", 0), ("Feb", "month", 1)],
+                vec![num(30.0)],
+            ),
+        ],
+        grand_totals: PivotGrandTotals {
+            row: None,
+            column: None,
+            grand: None,
+            row_label: None,
+        },
+        rendered_bounds: PivotRenderedBounds {
+            total_rows: 4,
+            total_cols: 3,
+            first_data_row: 1,
+            first_data_col: 2,
+            num_data_cols: 1,
+        },
+        source_row_count: 3,
+        measure_descriptors: vec![],
+        value_records: vec![],
+        errors: None,
+    };
+
+    mirror.materialize_pivot_with_row_label_options(
+        &sheet_id,
+        ANCHOR_ROW,
+        ANCHOR_COL,
+        &result,
+        &["Vendor".to_string(), "Month".to_string()],
+        false,
+    );
+
+    assert_eq!(
+        mirror
+            .get_cell_value_at(&sheet_id, SheetPos::new(ANCHOR_ROW + 1, ANCHOR_COL))
+            .cloned(),
+        Some(text("Gamma")),
+        "first row in a group keeps the outer row label",
+    );
+    assert!(
+        matches!(
+            mirror.get_cell_value_at(&sheet_id, SheetPos::new(ANCHOR_ROW + 2, ANCHOR_COL)),
+            None | Some(CellValue::Null)
+        ),
+        "second row in the same outer group must leave the repeated label blank",
+    );
+    assert_eq!(
+        mirror
+            .get_cell_value_at(&sheet_id, SheetPos::new(ANCHOR_ROW + 3, ANCHOR_COL))
+            .cloned(),
+        Some(text("Beta")),
+        "new groups still write their outer row label",
+    );
+    assert_eq!(
+        mirror
+            .get_cell_value_at(&sheet_id, SheetPos::new(ANCHOR_ROW + 3, ANCHOR_COL + 1))
+            .cloned(),
+        Some(text("Feb")),
+        "inner labels are visible when their parent row label changes",
+    );
+    assert_eq!(
+        mirror
+            .get_cell_value_at(&sheet_id, SheetPos::new(ANCHOR_ROW + 2, ANCHOR_COL + 1))
+            .cloned(),
+        Some(text("Feb")),
+        "inner row labels remain visible when only the outer label repeats",
+    );
+    assert_eq!(
+        mirror
+            .get_cell_value_at(&sheet_id, SheetPos::new(ANCHOR_ROW + 2, ANCHOR_COL + 2))
+            .cloned(),
+        Some(num(20.0)),
+        "suppression never shifts values out of the data column",
     );
 }
 

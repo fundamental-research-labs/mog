@@ -70,6 +70,8 @@ pub(crate) fn build_fallback_chart_spec(
         size_represents: None,
         split_type: None,
         split_value: None,
+        show_lines: None,
+        smooth_lines: None,
         category_label_level: None,
         series_name_level: None,
         show_all_field_buttons: None,

@@ -345,7 +345,7 @@ fn build_modeled_chart_group(
         .iter()
         .map(|(fallback_idx, sd)| build_series(sd, chart_type, *fallback_idx as u32, true))
         .collect();
-    let config = build_default_config(ooxml_ct, chart_type, spec, &series);
+    let config = build_default_config(ooxml_ct, chart_type, spec, &series, &series_data);
     let d_lbls = spec.data_labels.as_ref().map(build_data_labels);
     let ax_id = default_axis_ids_for_series_group(ooxml_ct, chart_type, &series_data);
 
@@ -468,6 +468,34 @@ fn split_type_from_public(value: &str) -> charts::SplitType {
     }
 }
 
+fn scatter_style_for_modeled_state(
+    spec: &ChartSpec,
+    series_data: &[(usize, &ChartSeriesData)],
+) -> Option<charts::ScatterStyle> {
+    if spec.smooth_lines == Some(true)
+        || series_data
+            .iter()
+            .any(|(_, series)| series.smooth == Some(true))
+    {
+        return Some(charts::ScatterStyle::Smooth);
+    }
+    if spec.show_lines == Some(true)
+        || series_data
+            .iter()
+            .any(|(_, series)| series.show_lines == Some(true))
+    {
+        return Some(charts::ScatterStyle::Line);
+    }
+    if spec.show_lines == Some(false)
+        || series_data
+            .iter()
+            .any(|(_, series)| series.show_lines == Some(false))
+    {
+        return Some(charts::ScatterStyle::Marker);
+    }
+    None
+}
+
 /// Determine bar direction from domain chart type.
 pub(super) fn bar_direction_for(ct: &DomainChartType) -> BarDirection {
     match ct {
@@ -516,6 +544,7 @@ pub(super) fn build_default_config(
     chart_type: &DomainChartType,
     spec: &ChartSpec,
     series: &[charts::ChartSeries],
+    series_data: &[(usize, &ChartSeriesData)],
 ) -> ChartTypeConfig {
     let grouping = sub_type_to_grouping(spec.sub_type.as_ref());
     let path_grouping = sub_type_to_path_grouping(spec.sub_type.as_ref());
@@ -594,6 +623,7 @@ pub(super) fn build_default_config(
             ..Default::default()
         }),
         OoxmlChartType::Scatter => ChartTypeConfig::Scatter(charts::ScatterChartConfig {
+            scatter_style: scatter_style_for_modeled_state(spec, series_data).unwrap_or_default(),
             vary_colors: spec.vary_by_categories,
             ..Default::default()
         }),
@@ -731,7 +761,10 @@ pub(super) fn inject_series_into_config(
             gap_depth: spec.gap_depth.or(c.gap_depth),
             ..c.clone()
         }),
-        ChartTypeConfig::Scatter(c) => ChartTypeConfig::Scatter(c.clone()),
+        ChartTypeConfig::Scatter(c) => ChartTypeConfig::Scatter(charts::ScatterChartConfig {
+            scatter_style: scatter_style_for_modeled_state(spec, &[]).unwrap_or(c.scatter_style),
+            ..c.clone()
+        }),
         ChartTypeConfig::Bubble(c) => ChartTypeConfig::Bubble(charts::BubbleChartConfig {
             bubble_scale: spec.bubble_scale.or(c.bubble_scale),
             show_neg_bubbles: spec.show_neg_bubbles.or(c.show_neg_bubbles),

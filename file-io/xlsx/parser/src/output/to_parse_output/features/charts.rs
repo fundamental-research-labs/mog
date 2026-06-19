@@ -729,6 +729,8 @@ pub(crate) fn convert_parsed_chart_ex_to_chart_specs(sheet: &FullParsedSheet) ->
                 size_represents: None,
                 split_type: None,
                 split_value: None,
+                show_lines: None,
+                smooth_lines: None,
                 category_label_level: None,
                 series_name_level: None,
                 show_all_field_buttons: None,

@@ -252,6 +252,8 @@ fn chart_spec_to_floating_object_preserves_fields() {
         category_label_level: None,
         series_name_level: None,
         show_all_field_buttons: None,
+        show_lines: Some(true),
+        smooth_lines: Some(false),
         second_plot_size: None,
         vary_by_categories: None,
         title_h_align: None,
@@ -329,6 +331,8 @@ fn chart_spec_to_floating_object_preserves_fields() {
         assert_eq!(cd.series_range.as_deref(), Some("B1:D1"));
         assert_eq!(cd.category_range.as_deref(), Some("A2:A5"));
         assert_eq!(cd.colors, spec.colors);
+        assert_eq!(cd.show_lines, Some(true));
+        assert_eq!(cd.smooth_lines, Some(false));
         assert_eq!(cd.chart_style_context, spec.chart_style_context);
         let ooxml = cd.ooxml.as_ref().expect("ooxml should be Some");
         assert!(matches!(
@@ -366,6 +370,8 @@ fn chart_spec_to_floating_object_preserves_fields() {
     assert_eq!(roundtripped.series_range.as_deref(), Some("B1:D1"));
     assert_eq!(roundtripped.category_range.as_deref(), Some("A2:A5"));
     assert_eq!(roundtripped.colors, spec.colors);
+    assert_eq!(roundtripped.show_lines, Some(true));
+    assert_eq!(roundtripped.smooth_lines, Some(false));
     assert_eq!(roundtripped.cnv_pr_name.as_deref(), Some("Chart 1"));
     assert_eq!(roundtripped.cnv_pr_id, Some(42));
     assert_eq!(roundtripped.cnv_pr_descr.as_deref(), Some("Alt text"));
@@ -544,6 +550,8 @@ fn chart_spec_to_floating_object_one_cell_anchor() {
         category_label_level: None,
         series_name_level: None,
         show_all_field_buttons: None,
+        show_lines: None,
+        smooth_lines: None,
         second_plot_size: None,
         vary_by_categories: None,
         title_h_align: None,
@@ -680,6 +688,8 @@ fn chart_spec_roundtrip_via_floating_object() {
         category_label_level: None,
         series_name_level: None,
         show_all_field_buttons: None,
+        show_lines: None,
+        smooth_lines: None,
         second_plot_size: None,
         vary_by_categories: None,
         title_h_align: None,
@@ -830,6 +840,8 @@ fn chart_spec_roundtrip_minimal() {
         category_label_level: None,
         series_name_level: None,
         show_all_field_buttons: None,
+        show_lines: None,
+        smooth_lines: None,
         second_plot_size: None,
         vary_by_categories: None,
         title_h_align: None,

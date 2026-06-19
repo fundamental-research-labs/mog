@@ -209,7 +209,10 @@ pub struct ChartSpec {
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub show_all_field_buttons: Option<bool>,
 
-    // -- Chart-level series properties --
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub show_lines: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub smooth_lines: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub second_plot_size: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
@@ -660,7 +663,8 @@ impl ChartSpec {
             category_label_level: chart_data.category_label_level,
             series_name_level: chart_data.series_name_level,
             show_all_field_buttons: chart_data.show_all_field_buttons,
-            // Chart-level series properties
+            show_lines: chart_data.show_lines,
+            smooth_lines: chart_data.smooth_lines,
             second_plot_size: chart_data.second_plot_size,
             vary_by_categories: chart_data.vary_by_categories,
             // Title alignment/shadow
@@ -907,8 +911,8 @@ impl ChartSpec {
             data_labels: self.data_labels.clone(),
             pie_slice: pie_slice_from_chart_series(&self.chart_type, &self.series),
             trendline: None,
-            show_lines: None,
-            smooth_lines: None,
+            show_lines: self.show_lines,
+            smooth_lines: self.smooth_lines,
             radar_filled,
             radar_markers,
             waterfall: self.waterfall.clone(),
@@ -973,9 +977,7 @@ impl ChartSpec {
             high_low_lines: self.high_low_lines.clone(),
             series_lines: self.series_lines.clone(),
             up_down_bars: self.up_down_bars.clone(),
-            // Bar shape
             bar_shape: self.bar_shape.clone(),
-            // 3D
             view_3d: self.view_3d.clone(),
             floor_format: self.floor_format.clone(),
             side_wall_format: self.side_wall_format.clone(),

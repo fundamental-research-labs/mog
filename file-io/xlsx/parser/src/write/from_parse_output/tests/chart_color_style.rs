@@ -54,6 +54,8 @@ fn chart_with_palette() -> ChartSpec {
         size_represents: None,
         split_type: None,
         split_value: None,
+        show_lines: None,
+        smooth_lines: None,
         bar_shape: None,
         bubble_3d_effect: None,
         wireframe: None,

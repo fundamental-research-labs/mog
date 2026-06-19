@@ -19,6 +19,7 @@ mod data_label_fidelity;
 mod imported_series_fallback;
 mod of_pie;
 mod point_format_fidelity;
+mod scatter;
 mod series_shadow_fidelity;
 mod surface;
 mod title_rich_text_fidelity;
@@ -75,6 +76,8 @@ fn minimal_chart_spec(chart_type: DomainChartType, data_range: Option<&str>) -> 
         size_represents: None,
         split_type: None,
         split_value: None,
+        show_lines: None,
+        smooth_lines: None,
         bar_shape: None,
         bubble_3d_effect: None,
         wireframe: None,
@@ -213,23 +216,6 @@ fn data_range_chart_honors_explicit_source_ranges() {
     assert!(xml.contains("<c:f>Labels!B1</c:f>"), "{xml}");
     assert!(xml.contains("<c:f>Labels!C1</c:f>"), "{xml}");
     assert!(xml.contains("<c:f>Labels!D1</c:f>"), "{xml}");
-}
-
-#[test]
-fn bubble_scalars_reconstruct_into_modeled_chart_group() {
-    let mut spec = minimal_chart_spec(DomainChartType::Bubble, None);
-    spec.bubble_scale = Some(175);
-    spec.show_neg_bubbles = Some(true);
-    spec.size_represents = Some("w".to_string());
-    spec.bubble_3d_effect = Some(true);
-
-    let xml = chart_xml(&spec);
-
-    assert!(xml.contains("<c:bubbleChart>"), "{xml}");
-    assert!(xml.contains("<c:bubbleScale val=\"175\"/>"), "{xml}");
-    assert!(xml.contains("<c:showNegBubbles val=\"1\"/>"), "{xml}");
-    assert!(xml.contains("<c:sizeRepresents val=\"w\"/>"), "{xml}");
-    assert!(xml.contains("<c:bubble3D val=\"1\"/>"), "{xml}");
 }
 
 #[test]

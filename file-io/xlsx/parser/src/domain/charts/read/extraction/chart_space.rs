@@ -280,6 +280,8 @@ pub fn extract_chart_spec_from_chart_space(
         category_label_level: None,
         series_name_level: None,
         show_all_field_buttons: chart.show_all_field_buttons,
+        show_lines: scalar_fields.show_lines,
+        smooth_lines: scalar_fields.smooth_lines,
         second_plot_size: scalar_fields.second_plot_size,
         vary_by_categories,
         title_h_align,
@@ -874,6 +876,8 @@ struct ScalarChartFields {
     split_type: Option<String>,
     split_value: Option<f64>,
     second_plot_size: Option<u32>,
+    show_lines: Option<bool>,
+    smooth_lines: Option<bool>,
     bar_shape: Option<String>,
     wireframe: Option<bool>,
     surface_top_view: Option<bool>,
@@ -944,10 +948,15 @@ fn extract_scalar_fields_from_config(
             vary_by_categories: c.vary_colors,
             ..Default::default()
         },
-        CTC::Scatter(c) => ScalarChartFields {
-            vary_by_categories: c.vary_colors,
-            ..Default::default()
-        },
+        CTC::Scatter(c) => {
+            let (show_lines, smooth_lines) = scatter_style_scalar_fields(c.scatter_style);
+            ScalarChartFields {
+                show_lines,
+                smooth_lines,
+                vary_by_categories: c.vary_colors,
+                ..Default::default()
+            }
+        }
         CTC::Bubble(c) => ScalarChartFields {
             bubble_scale: c.bubble_scale,
             show_neg_bubbles: c.show_neg_bubbles,
@@ -1002,6 +1011,8 @@ impl ScalarChartFields {
         self.split_type = self.split_type.take().or(other.split_type);
         self.split_value = self.split_value.or(other.split_value);
         self.second_plot_size = self.second_plot_size.or(other.second_plot_size);
+        self.show_lines = self.show_lines.or(other.show_lines);
+        self.smooth_lines = self.smooth_lines.or(other.smooth_lines);
         self.bar_shape = self.bar_shape.take().or(other.bar_shape);
         self.wireframe = self.wireframe.or(other.wireframe);
         self.surface_top_view = self.surface_top_view.or(other.surface_top_view);
@@ -1016,6 +1027,18 @@ fn public_split_type_name(split_type: ooxml_types::charts::SplitType) -> &'stati
         ooxml_types::charts::SplitType::Percent => "percent",
         ooxml_types::charts::SplitType::Position => "position",
         ooxml_types::charts::SplitType::Value => "value",
+    }
+}
+
+fn scatter_style_scalar_fields(
+    style: ooxml_types::charts::ScatterStyle,
+) -> (Option<bool>, Option<bool>) {
+    match style {
+        ooxml_types::charts::ScatterStyle::Line
+        | ooxml_types::charts::ScatterStyle::LineMarker => (Some(true), None),
+        ooxml_types::charts::ScatterStyle::Smooth
+        | ooxml_types::charts::ScatterStyle::SmoothMarker => (Some(true), Some(true)),
+        _ => (None, None),
     }
 }
 

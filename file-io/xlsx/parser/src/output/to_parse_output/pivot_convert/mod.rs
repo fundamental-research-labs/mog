@@ -18,8 +18,8 @@ mod value_map;
 
 use crate::domain::pivot::read::{PivotCache, PivotTable};
 use domain_types::domain::pivot::{
-    ImportedPivotOoxmlIdentityParts, ParsedPivotTable, imported_pivot_ooxml_identity,
-    native_imported_pivot_id,
+    ImportedPivotOoxmlIdentityParts, ParsedPivotTable, PivotPageFieldDef,
+    imported_pivot_ooxml_identity, native_imported_pivot_id,
 };
 use pivot_types::{
     CellRange, FieldId, LayoutForm, OutputLocation, PIVOT_CONFIG_SCHEMA_VERSION,
@@ -176,6 +176,17 @@ pub(crate) fn parsed_pivot_to_config(
     let initial_expansion_state = build_expansion_state_from_ooxml(pivot, cache);
 
     let mut ooxml_preservation = pivot.ooxml_preservation.clone();
+    ooxml_preservation.page_fields = pivot
+        .page_fields
+        .iter()
+        .map(|field| PivotPageFieldDef {
+            field_index: field.field_index,
+            item: field.item,
+            hierarchy: field.hierarchy,
+            name: field.name.clone(),
+            caption: field.caption.clone(),
+        })
+        .collect();
     ooxml_preservation.cache_source_name = cache.source_name.clone();
     ooxml_preservation.cache_shared_items = cache
         .fields
@@ -240,9 +251,22 @@ fn stable_imported_pivot_id(pivot: &PivotTable) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::pivot::read::{
+        CacheField, PageField, PivotField as ReadPivotField, PivotItem, PivotItemType, SharedItem,
+    };
     use domain_types::domain::pivot::{
         PivotTableOoxmlPreservation, PivotTableRelationshipPreservation,
     };
+
+    fn data_item(x: u32) -> PivotItem {
+        PivotItem {
+            item_type: PivotItemType::Data,
+            x: Some(x),
+            hidden: false,
+            show_details: true,
+            s: None,
+        }
+    }
 
     #[test]
     fn imported_pivot_id_uses_canonical_ooxml_identity_not_name() {
@@ -300,5 +324,61 @@ mod tests {
 
         assert_eq!(id, stable_imported_pivot_id(&pivot));
         assert!(id.starts_with("xlsx-pivot-missing-import-identity-"));
+    }
+
+    #[test]
+    fn parsed_pivot_preserves_page_field_ooxml_state() {
+        let pivot = PivotTable {
+            name: "Pivot A".to_string(),
+            cache_id: 7,
+            location: crate::domain::pivot::read::PivotLocation {
+                ref_: compute_parser::parse_a1_range("D4:F9"),
+                ..Default::default()
+            },
+            page_fields: vec![PageField {
+                field_index: 0,
+                item: Some(1),
+                hierarchy: Some(-1),
+                name: Some("RegionHierarchy".to_string()),
+                caption: Some("Region Caption".to_string()),
+            }],
+            pivot_fields: vec![ReadPivotField {
+                items: vec![data_item(0), data_item(1)],
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let cache = PivotCache {
+            id: 7,
+            source_ref: Some("A1:A3".to_string()),
+            source_sheet: Some("Data".to_string()),
+            fields: vec![CacheField {
+                name: "Region".to_string(),
+                shared_items: vec![
+                    SharedItem::String("West".to_string()),
+                    SharedItem::String("East".to_string()),
+                ],
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+
+        let parsed = parsed_pivot_to_config(&pivot, &cache, "Pivot Sheet", &[])
+            .expect("pivot should convert");
+
+        assert_eq!(
+            parsed.ooxml_preservation.page_fields,
+            vec![PivotPageFieldDef {
+                field_index: 0,
+                item: Some(1),
+                hierarchy: Some(-1),
+                name: Some("RegionHierarchy".to_string()),
+                caption: Some("Region Caption".to_string()),
+            }]
+        );
+        assert_eq!(
+            parsed.config.filters[0].include_values,
+            Some(vec![CellValue::Text("East".into())])
+        );
     }
 }

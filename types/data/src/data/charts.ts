@@ -1330,8 +1330,8 @@ export interface ChartRangeReferenceSnapshot {
   kind: string;
   source: 'identity' | 'a1';
   ref?: string;
+  sheetName?: string;
   range: {
-    sheetId?: string;
     startRow: number;
     startCol: number;
     endRow: number;

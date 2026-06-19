@@ -352,12 +352,20 @@ describe('addressToA1', () => {
     expect(addressToA1({ row: 0, col: 0, sheetId: 'Sheet1' })).toBe('A1');
   });
 
-  it('converts an address with includeSheet=true', () => {
-    expect(addressToA1({ row: 0, col: 0, sheetId: 'Sheet1' }, true)).toBe('Sheet1!A1');
+  it('converts an address with includeSheet=true and explicit sheetName', () => {
+    expect(addressToA1({ row: 0, col: 0, sheetId: 'sheet-1' }, true, 'Sheet1')).toBe('Sheet1!A1');
   });
 
   it('quotes sheet name with spaces when includeSheet=true', () => {
-    expect(addressToA1({ row: 1, col: 1, sheetId: 'My Sheet' }, true)).toBe("'My Sheet'!B2");
+    expect(addressToA1({ row: 1, col: 1, sheetId: 'sheet-1' }, true, 'My Sheet')).toBe(
+      "'My Sheet'!B2",
+    );
+  });
+
+  it('does not treat sheetId as a sheet name when includeSheet=true', () => {
+    expect(
+      addressToA1({ row: 0, col: 0, sheetId: '550e8400-e29b-41d4-a716-446655440000' }, true),
+    ).toBe('A1');
   });
 
   it('does not include sheet prefix when includeSheet is false', () => {
@@ -378,22 +386,49 @@ describe('rangeToA1', () => {
     expect(rangeToA1({ startRow: 0, startCol: 0, endRow: 1, endCol: 1 })).toBe('A1:B2');
   });
 
-  it('converts a range with includeSheet=true to "Sheet1!A1:B2"', () => {
+  it('converts a range with includeSheet=true and explicit sheetName to "Sheet1!A1:B2"', () => {
     expect(
-      rangeToA1({ startRow: 0, startCol: 0, endRow: 1, endCol: 1, sheetId: 'Sheet1' }, true),
+      rangeToA1(
+        { startRow: 0, startCol: 0, endRow: 1, endCol: 1, sheetId: 'sheet-1' },
+        true,
+        'Sheet1',
+      ),
     ).toBe('Sheet1!A1:B2');
   });
 
-  it('converts a range with includeSheet=true to "Sheet1!A1:C10"', () => {
+  it('converts a range with includeSheet=true and explicit sheetName to "Sheet1!A1:C10"', () => {
     expect(
-      rangeToA1({ startRow: 0, startCol: 0, endRow: 9, endCol: 2, sheetId: 'Sheet1' }, true),
+      rangeToA1(
+        { startRow: 0, startCol: 0, endRow: 9, endCol: 2, sheetId: 'sheet-1' },
+        true,
+        'Sheet1',
+      ),
     ).toBe('Sheet1!A1:C10');
   });
 
   it('quotes sheet name with spaces when includeSheet=true', () => {
     expect(
-      rangeToA1({ startRow: 0, startCol: 0, endRow: 2, endCol: 2, sheetId: 'My Sheet' }, true),
+      rangeToA1(
+        { startRow: 0, startCol: 0, endRow: 2, endCol: 2, sheetId: 'sheet-1' },
+        true,
+        'My Sheet',
+      ),
     ).toBe("'My Sheet'!A1:C3");
+  });
+
+  it('does not treat sheetId as a sheet name when includeSheet=true', () => {
+    expect(
+      rangeToA1(
+        {
+          startRow: 0,
+          startCol: 0,
+          endRow: 1,
+          endCol: 1,
+          sheetId: '550e8400-e29b-41d4-a716-446655440000',
+        },
+        true,
+      ),
+    ).toBe('A1:B2');
   });
 
   it('does not include sheet prefix when includeSheet is false', () => {

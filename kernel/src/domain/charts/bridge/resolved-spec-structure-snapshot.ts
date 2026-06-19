@@ -550,8 +550,8 @@ export function snapshotRange(reference: ResolvedChartRangeReference | null): Ra
     kind: reference.kind,
     source: reference.source,
     ref: reference.ref,
+    sheetName: reference.sheetName,
     range: {
-      sheetId: reference.range.sheetId ? String(reference.range.sheetId) : undefined,
       startRow: reference.range.startRow,
       startCol: reference.range.startCol,
       endRow: reference.range.endRow,

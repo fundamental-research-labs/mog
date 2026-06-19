@@ -219,7 +219,6 @@ describe('resolved spec snapshot helpers', () => {
       kind: 'seriesBubbleSizes',
       ref: 'Sheet1!B4:C4',
       range: {
-        sheetId: 'sheet-1',
         startRow: 0,
         startCol: 0,
         endRow: 2,
@@ -230,7 +229,6 @@ describe('resolved spec snapshot helpers', () => {
       kind: 'dataRange',
       ref: 'Sheet1!A1:C3',
       range: {
-        sheetId: 'sheet-1',
         startRow: 0,
         startCol: 0,
         endRow: 2,

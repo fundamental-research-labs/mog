@@ -9,6 +9,7 @@ import type {
   PivotTableInfo,
   PivotQueryReceipt,
   SheetId,
+  WorksheetRange,
   Workbook,
   WorkbookInternal,
   WorksheetPivots,
@@ -36,6 +37,7 @@ import type {
 import type { DocumentContext } from '../../../context';
 import { KernelError, createPivotStaleHandleError } from '../../../errors';
 import { rangeToA1, toA1 } from '../../internal/utils';
+import { toWorksheetRangeOrNull } from '../public-ranges';
 import { buildPivotTableHandle, type PivotHandleSnapshotRegistry } from './handle';
 import { dataConfigToApiConfig } from './config-conversion';
 import {
@@ -118,6 +120,11 @@ type PivotSnapshotEntry =
   | { readonly status: 'deleted' };
 type PivotCreateOptions = Parameters<WorksheetPivots['add']>[1];
 type PivotCreateWithSheetOptions = Parameters<WorksheetPivots['addWithSheet']>[2];
+type PivotRangeByName = (options: {
+  ctx: DocumentContext;
+  sheetId: SheetId;
+  pivotName: string;
+}) => Promise<CellRange | null>;
 
 export class WorksheetPivotsImpl implements WorksheetPivots {
   private readonly pivotSnapshots = new Map<string, PivotSnapshotEntry>();
@@ -1046,44 +1053,24 @@ export class WorksheetPivotsImpl implements WorksheetPivots {
   // Sub-Range Access
   // ===========================================================================
 
-  async getRange(name: string): Promise<CellRange | null> {
-    return getPivotRangeByName({
-      ctx: this.ctx,
-      sheetId: this.sheetId,
-      pivotName: name,
-    });
+  async getRange(name: string): Promise<WorksheetRange | null> {
+    return this.publicRangeForPivot(name, getPivotRangeByName);
   }
 
-  async getDataBodyRange(name: string): Promise<CellRange | null> {
-    return getPivotDataBodyRangeByName({
-      ctx: this.ctx,
-      sheetId: this.sheetId,
-      pivotName: name,
-    });
+  async getDataBodyRange(name: string): Promise<WorksheetRange | null> {
+    return this.publicRangeForPivot(name, getPivotDataBodyRangeByName);
   }
 
-  async getColumnLabelRange(name: string): Promise<CellRange | null> {
-    return getPivotColumnLabelRangeByName({
-      ctx: this.ctx,
-      sheetId: this.sheetId,
-      pivotName: name,
-    });
+  async getColumnLabelRange(name: string): Promise<WorksheetRange | null> {
+    return this.publicRangeForPivot(name, getPivotColumnLabelRangeByName);
   }
 
-  async getRowLabelRange(name: string): Promise<CellRange | null> {
-    return getPivotRowLabelRangeByName({
-      ctx: this.ctx,
-      sheetId: this.sheetId,
-      pivotName: name,
-    });
+  async getRowLabelRange(name: string): Promise<WorksheetRange | null> {
+    return this.publicRangeForPivot(name, getPivotRowLabelRangeByName);
   }
 
-  async getFilterAxisRange(name: string): Promise<CellRange | null> {
-    return getPivotFilterAxisRangeByName({
-      ctx: this.ctx,
-      sheetId: this.sheetId,
-      pivotName: name,
-    });
+  async getFilterAxisRange(name: string): Promise<WorksheetRange | null> {
+    return this.publicRangeForPivot(name, getPivotFilterAxisRangeByName);
   }
 
   // ---------------------------------------------------------------------------
@@ -1104,7 +1091,10 @@ export class WorksheetPivotsImpl implements WorksheetPivots {
       pivotPlacementId,
       resolvePlacement,
       placementId,
-      getRange: (pivotId) => getPivotRangeForId({ ctx: this.ctx, sheetId: this.sheetId, pivotId }),
+      getRange: async (pivotId) =>
+        toWorksheetRangeOrNull(
+          await getPivotRangeForId({ ctx: this.ctx, sheetId: this.sheetId, pivotId }),
+        ),
       getCollectionInfo: (config) => this.infoForPivot(config),
       addCalculatedField: (pivotId, field) =>
         addPivotCalculatedFieldToId({ ctx: this.ctx, sheetId: this.sheetId, pivotId, field }),
@@ -1136,5 +1126,18 @@ export class WorksheetPivotsImpl implements WorksheetPivots {
   private async getContentAreaForPivot(pivotId: string): Promise<string> {
     const range = await getPivotRangeForId({ ctx: this.ctx, sheetId: this.sheetId, pivotId });
     return range ? rangeToA1(range) : '';
+  }
+
+  private async publicRangeForPivot(
+    pivotName: string,
+    getRange: PivotRangeByName,
+  ): Promise<WorksheetRange | null> {
+    return toWorksheetRangeOrNull(
+      await getRange({
+        ctx: this.ctx,
+        sheetId: this.sheetId,
+        pivotName,
+      }),
+    );
   }
 }

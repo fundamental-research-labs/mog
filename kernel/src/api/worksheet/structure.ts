@@ -20,6 +20,7 @@ import type {
   TextToColumnsResult,
   UnmergeReceipt,
   WorksheetStructure,
+  WorksheetRange,
 } from '@mog-sdk/contracts/api';
 
 import type { ProtectionOperation } from '@mog-sdk/contracts/api';
@@ -29,6 +30,7 @@ import type { DocumentContext } from '../../context';
 import { KernelError } from '../../errors';
 import { resolveCell, resolveRange } from '../internal/address-resolver';
 import { normalizeRange, toA1 } from '../internal/utils';
+import { toWorksheetRangeOrNull } from './public-ranges';
 import { WorksheetProtectionImpl } from './protection';
 
 export class WorksheetStructureImpl implements WorksheetStructure {
@@ -377,16 +379,19 @@ export class WorksheetStructureImpl implements WorksheetStructure {
     }));
   }
 
-  async getMergeAtCell(a: string | number, b?: number): Promise<CellRange | null> {
+  async getMergeAtCell(a: string | number, b?: number): Promise<WorksheetRange | null> {
     const { row, col } = resolveCell(a, b);
     const info = await this.ctx.computeBridge.getMergeAtCellQuery(this.sheetId, row, col);
-    if (!info) return null;
-    return {
-      startRow: info.merge.startRow,
-      startCol: info.merge.startCol,
-      endRow: info.merge.endRow,
-      endCol: info.merge.endCol,
-    };
+    return toWorksheetRangeOrNull(
+      info
+        ? {
+            startRow: info.merge.startRow,
+            startCol: info.merge.startCol,
+            endRow: info.merge.endRow,
+            endCol: info.merge.endCol,
+          }
+        : null,
+    );
   }
 }
 

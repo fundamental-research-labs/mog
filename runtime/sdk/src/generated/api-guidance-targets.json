@@ -5090,8 +5090,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "getProjectionRange(row: number, col: number): Promise<CellRange | null>;",
-      "typeText": "Promise<CellRange|null>",
+      "signature": "getProjectionRange(row: number, col: number): Promise<WorksheetRange | null>;",
+      "typeText": "Promise<WorksheetRange|null>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/bindings.ts"
@@ -10026,8 +10026,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "getCurrentRegion(row: number, col: number): Promise<CellRange>;",
-      "typeText": "Promise<CellRange>",
+      "signature": "getCurrentRegion(row: number, col: number): Promise<WorksheetRange>;",
+      "typeText": "Promise<WorksheetRange>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet.ts"
@@ -10116,8 +10116,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "getExtendedRange(\n    range: string,\n    direction: 'up' | 'down' | 'left' | 'right',\n    activeCell?: { row: number; col: number },\n  ): Promise<CellRange>;",
-      "typeText": "Promise<CellRange>",
+      "signature": "getExtendedRange(\n    range: string,\n    direction: 'up' | 'down' | 'left' | 'right',\n    activeCell?: { row: number; col: number },\n  ): Promise<WorksheetRange>;",
+      "typeText": "Promise<WorksheetRange>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet.ts"
@@ -10528,8 +10528,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "getUsedRange(): Promise<CellRange | null>;",
-      "typeText": "Promise<CellRange|null>",
+      "signature": "getUsedRange(): Promise<WorksheetRange | null>;",
+      "typeText": "Promise<WorksheetRange|null>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet.ts"
@@ -12708,8 +12708,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "getColumnLabelRange(name: string): Promise<CellRange | null>;",
-      "typeText": "Promise<CellRange|null>",
+      "signature": "getColumnLabelRange(name: string): Promise<WorksheetRange | null>;",
+      "typeText": "Promise<WorksheetRange|null>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -12746,8 +12746,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "getDataBodyRange(name: string): Promise<CellRange | null>;",
-      "typeText": "Promise<CellRange|null>",
+      "signature": "getDataBodyRange(name: string): Promise<WorksheetRange | null>;",
+      "typeText": "Promise<WorksheetRange|null>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -12860,8 +12860,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "getFilterAxisRange(name: string): Promise<CellRange | null>;",
-      "typeText": "Promise<CellRange|null>",
+      "signature": "getFilterAxisRange(name: string): Promise<WorksheetRange | null>;",
+      "typeText": "Promise<WorksheetRange|null>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -12955,8 +12955,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "getRange(name: string): Promise<CellRange | null>;",
-      "typeText": "Promise<CellRange|null>",
+      "signature": "getRange(name: string): Promise<WorksheetRange | null>;",
+      "typeText": "Promise<WorksheetRange|null>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -12974,8 +12974,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "getRowLabelRange(name: string): Promise<CellRange | null>;",
-      "typeText": "Promise<CellRange|null>",
+      "signature": "getRowLabelRange(name: string): Promise<WorksheetRange | null>;",
+      "typeText": "Promise<WorksheetRange|null>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -15893,8 +15893,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "getMergeAtCell(address: string): Promise<CellRange | null>;",
-      "typeText": "Promise<CellRange|null>",
+      "signature": "getMergeAtCell(address: string): Promise<WorksheetRange | null>;",
+      "typeText": "Promise<WorksheetRange|null>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/structure.ts"
@@ -23507,8 +23507,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "getProjectionRange(row: number, col: number): Promise<CellRange | null>;",
-      "typeText": "Promise<CellRange|null>",
+      "signature": "getProjectionRange(row: number, col: number): Promise<WorksheetRange | null>;",
+      "typeText": "Promise<WorksheetRange|null>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/bindings.ts"
@@ -28443,8 +28443,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "getCurrentRegion(row: number, col: number): Promise<CellRange>;",
-      "typeText": "Promise<CellRange>",
+      "signature": "getCurrentRegion(row: number, col: number): Promise<WorksheetRange>;",
+      "typeText": "Promise<WorksheetRange>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet.ts"
@@ -28533,8 +28533,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "getExtendedRange(\n    range: string,\n    direction: 'up' | 'down' | 'left' | 'right',\n    activeCell?: { row: number; col: number },\n  ): Promise<CellRange>;",
-      "typeText": "Promise<CellRange>",
+      "signature": "getExtendedRange(\n    range: string,\n    direction: 'up' | 'down' | 'left' | 'right',\n    activeCell?: { row: number; col: number },\n  ): Promise<WorksheetRange>;",
+      "typeText": "Promise<WorksheetRange>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet.ts"
@@ -28945,8 +28945,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "getUsedRange(): Promise<CellRange | null>;",
-      "typeText": "Promise<CellRange|null>",
+      "signature": "getUsedRange(): Promise<WorksheetRange | null>;",
+      "typeText": "Promise<WorksheetRange|null>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet.ts"
@@ -31125,8 +31125,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "getColumnLabelRange(name: string): Promise<CellRange | null>;",
-      "typeText": "Promise<CellRange|null>",
+      "signature": "getColumnLabelRange(name: string): Promise<WorksheetRange | null>;",
+      "typeText": "Promise<WorksheetRange|null>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -31163,8 +31163,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "getDataBodyRange(name: string): Promise<CellRange | null>;",
-      "typeText": "Promise<CellRange|null>",
+      "signature": "getDataBodyRange(name: string): Promise<WorksheetRange | null>;",
+      "typeText": "Promise<WorksheetRange|null>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -31277,8 +31277,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "getFilterAxisRange(name: string): Promise<CellRange | null>;",
-      "typeText": "Promise<CellRange|null>",
+      "signature": "getFilterAxisRange(name: string): Promise<WorksheetRange | null>;",
+      "typeText": "Promise<WorksheetRange|null>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -31372,8 +31372,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "getRange(name: string): Promise<CellRange | null>;",
-      "typeText": "Promise<CellRange|null>",
+      "signature": "getRange(name: string): Promise<WorksheetRange | null>;",
+      "typeText": "Promise<WorksheetRange|null>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -31391,8 +31391,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "getRowLabelRange(name: string): Promise<CellRange | null>;",
-      "typeText": "Promise<CellRange|null>",
+      "signature": "getRowLabelRange(name: string): Promise<WorksheetRange | null>;",
+      "typeText": "Promise<WorksheetRange|null>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/pivots.ts"
@@ -34310,8 +34310,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "getMergeAtCell(address: string): Promise<CellRange | null>;",
-      "typeText": "Promise<CellRange|null>",
+      "signature": "getMergeAtCell(address: string): Promise<WorksheetRange | null>;",
+      "typeText": "Promise<WorksheetRange|null>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/structure.ts"

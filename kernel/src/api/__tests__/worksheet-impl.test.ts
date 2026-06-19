@@ -66,6 +66,44 @@ jest.unstable_mockModule('../worksheet/operations/range-operations', () => ({
   setRange: jest.fn(),
   clearRange: jest.fn(),
 }));
+jest.unstable_mockModule('../worksheet/operations/range-query-operations', () => ({
+  getExtendedRange: jest.fn(),
+  validateClearApplyTo: jest.fn((applyTo: unknown) => {
+    const valid = ['all', 'contents', 'formats', 'hyperlinks'];
+    if (typeof applyTo === 'string' && valid.includes(applyTo)) return applyTo;
+    const suggestion =
+      applyTo === 'value' || applyTo === 'values' || applyTo === 'content'
+        ? 'Use "contents" to clear values and formulas while preserving formats and hyperlinks.'
+        : `Use one of: ${valid.join(', ')}.`;
+    throw new KernelError(
+      'API_INVALID_ARGUMENT',
+      `Invalid clear mode for applyTo: ${JSON.stringify(applyTo)}.`,
+      {
+        path: ['applyTo'],
+        suggestion,
+        context: {
+          issueCode: 'UNKNOWN_CLEAR_MODE',
+          received: applyTo,
+          validValues: valid,
+          suggestion,
+        },
+      },
+    );
+  }),
+  clearWithMode: jest.fn(async (ctx: any, sheetId: unknown, range: any, applyTo: unknown) => {
+    const mode = (RangeQueryOps.validateClearApplyTo as jest.Mock)(applyTo);
+    const startRow = Math.min(range.startRow, range.endRow);
+    const startCol = Math.min(range.startCol, range.endCol);
+    const endRow = Math.max(range.startRow, range.endRow);
+    const endCol = Math.max(range.startCol, range.endCol);
+    if (mode === 'contents') {
+      await ctx.computeBridge.clearRange(sheetId, startRow, startCol, endRow, endCol);
+    } else if (mode === 'all') {
+      await ctx.computeBridge.clearRangeByPosition(sheetId, startRow, startCol, endRow, endCol);
+    }
+    return { cellCount: (endRow - startRow + 1) * (endCol - startCol + 1) };
+  }),
+}));
 jest.unstable_mockModule('../worksheet/operations/format-operations', () => ({
   setFormat: jest.fn(),
   setRangeFormat: jest.fn(),
@@ -198,6 +236,8 @@ const HyperlinkOps = await import('../worksheet/operations/hyperlink-operations'
 const MergeOps = await import('../worksheet/operations/merge-operations');
 const QueryOps = await import('../worksheet/operations/query-operations');
 const RangeOps = await import('../worksheet/operations/range-operations');
+const RangeQueryOps = await import('../worksheet/operations/range-query-operations');
+const CellIteration = await import('../../domain/cells/cell-iteration');
 const Structures = await import('../../domain/sheets/structures');
 const Merges = await import('../../domain/formatting/merges');
 
@@ -2005,7 +2045,7 @@ describe('WorksheetImpl', () => {
       expect(result).toBeNull();
     });
 
-    it('getUsedRange returns the used CellRange when cells exist', async () => {
+    it('getUsedRange returns a public worksheet range when cells exist', async () => {
       (QueryOps.getUsedRange as jest.Mock).mockResolvedValue({
         sheetId: SHEET_ID,
         startRow: 0,
@@ -2017,12 +2057,63 @@ describe('WorksheetImpl', () => {
       const result = await ws.getUsedRange();
 
       expect(result).toEqual({
-        sheetId: SHEET_ID,
         startRow: 0,
         startCol: 0,
         endRow: 9,
         endCol: 3,
+        address: 'A1:D10',
       });
+      expect(result).not.toHaveProperty('sheetId');
+    });
+
+    it('getCurrentRegion returns a public worksheet range', async () => {
+      (CellIteration.getCurrentRegion as jest.Mock).mockResolvedValue({
+        sheetId: SHEET_ID,
+        startRow: 1,
+        startCol: 2,
+        endRow: 4,
+        endCol: 5,
+      });
+
+      const result = await ws.getCurrentRegion(2, 3);
+
+      expect(CellIteration.getCurrentRegion).toHaveBeenCalledWith(ctx, SHEET_ID, 2, 3);
+      expect(result).toEqual({
+        startRow: 1,
+        startCol: 2,
+        endRow: 4,
+        endCol: 5,
+        address: 'C2:F5',
+      });
+      expect(result).not.toHaveProperty('sheetId');
+    });
+
+    it('getExtendedRange returns a public worksheet range', async () => {
+      (RangeQueryOps.getExtendedRange as jest.Mock).mockResolvedValue({
+        sheetId: SHEET_ID,
+        startRow: 0,
+        startCol: 0,
+        endRow: 9,
+        endCol: 0,
+      });
+
+      const result = await ws.getExtendedRange('A1', 'down');
+
+      expect(RangeQueryOps.getExtendedRange).toHaveBeenCalledWith(
+        ctx,
+        SHEET_ID,
+        { sheetId: SHEET_ID, startRow: 0, startCol: 0, endRow: 0, endCol: 0 },
+        'down',
+        undefined,
+      );
+      expect(result).toEqual({
+        startRow: 0,
+        startCol: 0,
+        endRow: 9,
+        endCol: 0,
+        address: 'A1:A10',
+      });
+      expect(result).not.toHaveProperty('sheetId');
     });
 
     it('findCells delegates and returns A1 addresses', async () => {

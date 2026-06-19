@@ -11,6 +11,7 @@ import type {
   TextToColumnsOptions,
   TextToColumnsResult,
 } from '../types';
+import type { WorksheetRange } from '../ranges';
 import type {
   DeleteCellsReceipt,
   DeleteColumnsReceipt,
@@ -115,7 +116,7 @@ export interface WorksheetStructure {
   getMergedRegions(): Promise<MergedRegion[]>;
 
   /** Get the merge containing a cell by A1 address, or null if not merged. */
-  getMergeAtCell(address: string): Promise<CellRange | null>;
+  getMergeAtCell(address: string): Promise<WorksheetRange | null>;
   /** Get the merge containing a cell by row/col, or null if not merged. */
-  getMergeAtCell(row: number, col: number): Promise<CellRange | null>;
+  getMergeAtCell(row: number, col: number): Promise<WorksheetRange | null>;
 }

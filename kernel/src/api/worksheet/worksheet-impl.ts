@@ -74,6 +74,7 @@ import type {
   WorksheetGetCellsFullOptions,
   WorksheetGetCellsOptions,
   WorksheetGetCellsValuesOnlyOptions,
+  WorksheetRange,
   WorksheetRangeCell,
   WorksheetRangeFormulaCell,
   WorksheetRangeValueCell,
@@ -125,6 +126,7 @@ import * as RangeQueryOps from './operations/range-query-operations';
 import * as DescribeOps from './operations/describe-operations';
 import * as SortOps from './operations/sort-operations';
 import { deletePivotsContainedByClearRange } from './pivot-clear';
+import { toWorksheetRange, toWorksheetRangeOrNull } from './public-ranges';
 import { createViewportReader } from './viewport-reader';
 import { createHandleLiveness, type HandleLiveness } from '../lifecycle/handle-liveness';
 
@@ -1895,12 +1897,12 @@ export class WorksheetImpl implements Worksheet {
   // Query
   // ===========================================================================
 
-  async getUsedRange(): Promise<CellRange | null> {
-    return QueryOps.getUsedRange(this.ctx, this.sheetId);
+  async getUsedRange(): Promise<WorksheetRange | null> {
+    return toWorksheetRangeOrNull(await QueryOps.getUsedRange(this.ctx, this.sheetId));
   }
 
-  async getCurrentRegion(row: number, col: number): Promise<CellRange> {
-    return getCurrentRegionDomain(this.ctx, this.sheetId, row, col);
+  async getCurrentRegion(row: number, col: number): Promise<WorksheetRange> {
+    return toWorksheetRange(await getCurrentRegionDomain(this.ctx, this.sheetId, row, col));
   }
 
   async findDataEdge(
@@ -2045,15 +2047,17 @@ export class WorksheetImpl implements Worksheet {
     range: string,
     direction: 'up' | 'down' | 'left' | 'right',
     activeCell?: { row: number; col: number },
-  ): Promise<CellRange> {
+  ): Promise<WorksheetRange> {
     const parsed = parseCellRange(range);
     if (!parsed) throw new KernelError('COMPUTE_ERROR', `Invalid range: "${range}"`);
-    return RangeQueryOps.getExtendedRange(
-      this.ctx,
-      this.sheetId,
-      { sheetId: this.sheetId, ...parsed },
-      direction,
-      activeCell,
+    return toWorksheetRange(
+      await RangeQueryOps.getExtendedRange(
+        this.ctx,
+        this.sheetId,
+        { sheetId: this.sheetId, ...parsed },
+        direction,
+        activeCell,
+      ),
     );
   }
 
@@ -2931,7 +2935,10 @@ export class WorksheetImpl implements Worksheet {
       this._cellMetadata = {
         isProjectedPosition: (row, col) => cache.isProjectedPosition(row, col),
         getProjectionSourcePosition: (row, col) => cache.getProjectionSourcePosition(row, col),
-        getProjectionRange: (row, col) => cache.getProjectionRange(row, col),
+        getProjectionRange: (row, col) => {
+          const range = cache.getProjectionRange(row, col);
+          return range ? toWorksheetRange(range) : undefined;
+        },
         hasValidationErrors: (row, col) => cache.hasValidationErrors(row, col),
         evaluateViewport: (sheetId, startRow, startCol, endRow, endCol) =>
           cache.evaluateViewport(toSheetId(sheetId), startRow, startCol, endRow, endCol),

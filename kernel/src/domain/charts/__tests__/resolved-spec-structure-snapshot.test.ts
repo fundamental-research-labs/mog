@@ -78,6 +78,7 @@ describe('resolved spec structure snapshot helpers', () => {
       kind: 'seriesValues',
       source: 'a1',
       ref: 'Sheet1!A1:B2',
+      sheetName: 'Sheet1',
       range: {
         sheetId: toSheetId('sheet-1'),
         startRow: 0,
@@ -96,8 +97,8 @@ describe('resolved spec structure snapshot helpers', () => {
       kind: 'seriesValues',
       source: 'a1',
       ref: 'Sheet1!A1:B2',
+      sheetName: 'Sheet1',
       range: {
-        sheetId: 'sheet-1',
         startRow: 0,
         startCol: 0,
         endRow: 1,

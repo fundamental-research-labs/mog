@@ -18,6 +18,7 @@ import type {
 } from '@mog-sdk/contracts/pivot';
 import type { DocumentContext } from '../../../context';
 import { rangeToA1 } from '../../internal/utils';
+import { toWorksheetRangeOrNull } from '../public-ranges';
 import { findPivotByName, resolvePivotName } from '../../../domain/pivots/lookup';
 
 export function pivotIdFor(config: DataPivotTableConfig): string {
@@ -491,7 +492,8 @@ export function buildPivotAddReceipt(input: {
   materializationError?: unknown;
 }): PivotAddReceipt {
   const pivotId = pivotIdFor(input.config);
-  const renderedRange = renderedRangeFor(input.sheetId, input.config, input.result);
+  const internalRenderedRange = renderedRangeFor(input.sheetId, input.config, input.result);
+  const renderedRange = toWorksheetRangeOrNull(internalRenderedRange);
   const materialized = input.result != null;
   const materializationRequested = input.lifecycle === 'materialize';
   const diagnostics =
@@ -507,7 +509,9 @@ export function buildPivotAddReceipt(input: {
       : [];
   const effects = [
     ...pivotStoredMetadataEffects(input.sheetId, pivotId),
-    ...(materialized ? pivotMaterializationEffects(input.sheetId, pivotId, renderedRange) : []),
+    ...(materialized
+      ? pivotMaterializationEffects(input.sheetId, pivotId, internalRenderedRange)
+      : []),
   ];
 
   return {
@@ -583,7 +587,8 @@ export function buildPivotAddWithSheetReceipt(input: {
   materializationError?: unknown;
 }): PivotAddWithSheetReceipt {
   const pivotId = pivotIdFor(input.config);
-  const renderedRange = renderedRangeFor(input.sheetId, input.config, input.result);
+  const internalRenderedRange = renderedRangeFor(input.sheetId, input.config, input.result);
+  const renderedRange = toWorksheetRangeOrNull(internalRenderedRange);
   const materialized = input.result != null;
   const materializationRequested = input.lifecycle === 'materialize';
   const diagnostics =
@@ -605,7 +610,9 @@ export function buildPivotAddWithSheetReceipt(input: {
       details: { objectType: 'worksheet', name: input.sheetName },
     },
     ...pivotStoredMetadataEffects(input.sheetId, pivotId),
-    ...(materialized ? pivotMaterializationEffects(input.sheetId, pivotId, renderedRange) : []),
+    ...(materialized
+      ? pivotMaterializationEffects(input.sheetId, pivotId, internalRenderedRange)
+      : []),
   ];
 
   return {
@@ -630,7 +637,8 @@ export function buildPivotRefreshReceipt(input: {
   result?: PivotTableResult | null;
   materializationError?: unknown;
 }): PivotRefreshReceipt {
-  const renderedRange = renderedRangeFor(input.sheetId, input.config, input.result);
+  const internalRenderedRange = renderedRangeFor(input.sheetId, input.config, input.result);
+  const renderedRange = toWorksheetRangeOrNull(internalRenderedRange);
   const materialized = input.result != null;
   const diagnostics = materialized
     ? []
@@ -647,7 +655,7 @@ export function buildPivotRefreshReceipt(input: {
     kind: 'pivot.refresh',
     status: materialized ? 'applied' : 'failed',
     effects: materialized
-      ? pivotMaterializationEffects(input.sheetId, input.pivotId, renderedRange)
+      ? pivotMaterializationEffects(input.sheetId, input.pivotId, internalRenderedRange)
       : [],
     diagnostics,
     pivotId: input.pivotId,

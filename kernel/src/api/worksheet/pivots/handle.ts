@@ -11,8 +11,9 @@ import type {
   PivotTableConfig as ApiPivotTableConfig,
   PivotTableHandle,
   SheetId,
+  WorksheetRange,
 } from '@mog-sdk/contracts/api';
-import type { CellRange, CellValue } from '@mog-sdk/contracts/core';
+import type { CellValue } from '@mog-sdk/contracts/core';
 import type {
   AggregateFunction,
   CalculatedField,
@@ -42,6 +43,7 @@ import { setPivotItemVisibilityForId } from '../../../domain/pivots/filters';
 import { pivotLayoutStyleRefreshPolicy } from '../../../domain/pivots/layout-style';
 import { toA1 } from '../../internal/utils';
 import type { HandleLiveness } from '../../lifecycle/handle-liveness';
+import { toWorksheetRange } from '../public-ranges';
 import {
   buildPivotHandleCalculatedFieldReceipt,
   buildPivotHandleDeleteReceipt,
@@ -84,7 +86,7 @@ export interface PivotHandleBuilderOptions {
     operation: string,
   ) => PivotFieldPlacement;
   placementId: (placement: PivotFieldPlacement) => string;
-  getRange: (pivotId: string) => Promise<CellRange | null>;
+  getRange: (pivotId: string) => Promise<WorksheetRange | null>;
   getCollectionInfo: (config: DataPivotTableConfig) => Promise<PivotTableInfo>;
   addCalculatedField: (
     pivotId: string,
@@ -350,7 +352,7 @@ export function buildPivotTableHandle(options: PivotHandleBuilderOptions): Pivot
         valueFields: collectionInfo.valueFields ?? [],
         filterFields: collectionInfo.filterFields ?? [],
         ...(current.sourceSheetName ? { sourceSheetName: current.sourceSheetName } : {}),
-        ...(current.sourceRange ? { sourceRange: current.sourceRange } : {}),
+        ...(current.sourceRange ? { sourceRange: toWorksheetRange(current.sourceRange) } : {}),
         ...(current.outputSheetName ? { outputSheetName: current.outputSheetName } : {}),
         ...(outputLocation ? { outputLocation } : {}),
         fields: current.fields,
@@ -425,7 +427,7 @@ export function buildPivotTableHandle(options: PivotHandleBuilderOptions): Pivot
       return ctx.pivot.compute(sheetId, pivotId, forceRefresh);
     },
 
-    getRange(): Promise<CellRange | null> {
+    getRange(): Promise<WorksheetRange | null> {
       assertLive('getRange');
       return getRange(pivotId);
     },

@@ -59,6 +59,7 @@ function createDeps(
     formatValues: jest.fn(async () => []),
     getUsedRange: jest.fn(async () => options.usedRange ?? null),
     layout: {
+      autoFitRows: jest.fn(async () => undefined),
       setRowVisible: jest.fn(async () => undefined),
       setColumnVisible: jest.fn(async () => undefined),
       setRowHeight: jest.fn(async () => undefined),
@@ -145,13 +146,9 @@ describe('Structure autofit handlers', () => {
     const result = await StructureHandlers.AUTO_FIT_ROW_HEIGHT(deps);
 
     expect(result.handled).toBe(true);
-    expect(autoFitRows).toHaveBeenCalledWith(
-      makeSheetId('sheet1'),
-      [4],
-      expect.anything(),
-      expect.any(Function),
-      deps.workbook,
-    );
+    const worksheet = getMockWorksheet(deps);
+    expect(worksheet.layout.autoFitRows).toHaveBeenCalledWith([4]);
+    expect(autoFitRows).not.toHaveBeenCalled();
   });
 
   it('row and column structure actions target the active cell when no selection ranges are available', async () => {
@@ -586,12 +583,8 @@ describe('Structure autofit handlers', () => {
 
     await StructureHandlers.AUTO_FIT_ROW_HEIGHT(deps);
 
-    expect(autoFitRows).toHaveBeenCalledWith(
-      makeSheetId('sheet1'),
-      [0, 1, 2],
-      expect.anything(),
-      expect.any(Function),
-      deps.workbook,
-    );
+    const worksheet = getMockWorksheet(deps);
+    expect(worksheet.layout.autoFitRows).toHaveBeenCalledWith([0, 1, 2]);
+    expect(autoFitRows).not.toHaveBeenCalled();
   });
 });

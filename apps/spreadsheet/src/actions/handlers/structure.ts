@@ -523,20 +523,7 @@ export const AUTO_FIT_ROW_HEIGHT: AsyncActionHandler = async (deps) => {
   const usedRange = await ws.getUsedRange();
   const rows = getAutofitRowsForSelection(ranges, activeCell, usedRange);
 
-  const [{ autoFitRows }, { getTextMeasurementService }] = await Promise.all([
-    import('../../systems/grid-editing/features/autofit'),
-    import('@mog/grid-renderer'),
-  ]);
-  const textMeasurement = getTextMeasurementService();
-  return withProtectionFeedback(deps, () =>
-    autoFitRows(
-      sheetId,
-      rows,
-      textMeasurement,
-      (entries) => ws.formatValues(entries),
-      deps.workbook,
-    ),
-  );
+  return withProtectionFeedback(deps, () => ws.layout.autoFitRows(rows));
 };
 
 /**

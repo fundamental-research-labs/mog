@@ -56,7 +56,17 @@ export function usesComputedTrendlineRows(trendline: TrendlineConfig): boolean {
   );
 }
 
-function normalizedTrendlineType(type: string | undefined): TrendlineConfig['type'] {
+type LegacyTrendlineType =
+  | NonNullable<TrendlineConfig['type']>
+  | 'exp'
+  | 'log'
+  | 'poly'
+  | 'pow'
+  | 'movingAvg';
+
+function normalizedTrendlineType(
+  type: TrendlineConfig['type'] | LegacyTrendlineType | string | undefined,
+): TrendlineConfig['type'] {
   switch (type) {
     case 'exp':
       return 'exponential';
@@ -68,13 +78,20 @@ function normalizedTrendlineType(type: string | undefined): TrendlineConfig['typ
       return 'power';
     case 'movingAvg':
       return 'moving-average';
-    default:
+    case 'linear':
+    case 'exponential':
+    case 'logarithmic':
+    case 'polynomial':
+    case 'power':
+    case 'moving-average':
       return type;
+    default:
+      return undefined;
   }
 }
 
 function isMovingAverageTrendline(trendline: TrendlineConfig): boolean {
-  return trendline.type === 'moving-average' || trendline.type === 'movingAvg';
+  return normalizedTrendlineType(trendline.type) === 'moving-average';
 }
 
 function numeric(value: unknown): number | undefined {

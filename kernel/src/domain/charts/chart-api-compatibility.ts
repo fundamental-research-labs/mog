@@ -6,7 +6,12 @@
  * calls, and no API facade state.
  */
 
-import type { ChartConfig, ChartColor, ChartType, SeriesConfig } from '@mog-sdk/contracts/data/charts';
+import type {
+  ChartConfig,
+  ChartColor,
+  ChartType,
+  SeriesConfig,
+} from '@mog-sdk/contracts/data/charts';
 import { parseCellRange, quoteSheetName, toA1 } from '@mog/spreadsheet-utils/a1';
 
 type AnyAxisConfig = Record<string, unknown>;

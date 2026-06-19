@@ -18,9 +18,9 @@ describe('spreadsheet chrome navigation routing', () => {
     (navKey) => {
       const target = document.createElement('button');
 
-      expect(
-        shouldRouteSpreadsheetChromeNavigationShortcut(key({ key: navKey }), target),
-      ).toBe(true);
+      expect(shouldRouteSpreadsheetChromeNavigationShortcut(key({ key: navKey }), target)).toBe(
+        true,
+      );
       expect(
         shouldRouteSpreadsheetChromeNavigationShortcut(
           key({ key: navKey, ctrlKey: false, metaKey: true }),

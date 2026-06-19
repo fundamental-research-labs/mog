@@ -25,10 +25,7 @@ interface MinimalActor {
   send(event: any): void;
 }
 
-type ChartObjectCommands = Pick<
-  ObjectCommands,
-  'selectObject' | 'deselectAll' | 'keyDelete'
->;
+type ChartObjectCommands = Pick<ObjectCommands, 'selectObject' | 'deselectAll' | 'keyDelete'>;
 
 // =============================================================================
 // FACTORY

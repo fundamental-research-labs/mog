@@ -1,4 +1,5 @@
 import type {
+  ChartBorderData,
   DataLabelData,
   ErrorBarData,
   PointFormatData,
@@ -6,6 +7,7 @@ import type {
 } from '../../bridges/compute/compute-types.gen';
 
 import type {
+  ChartBorder,
   DataLabelConfig,
   ErrorBarConfig,
   MarkerStyle,
@@ -68,6 +70,17 @@ export const MARKER_STYLES = [
   'auto',
 ] as const;
 
+const CHART_BORDER_STYLES = [
+  'solid',
+  'dot',
+  'dash',
+  'dashDot',
+  'longDash',
+  'longDashDot',
+  'longDashDotDot',
+] as const;
+type ChartBorderStyle = NonNullable<ChartBorder['style']>;
+
 const TRENDLINE_TYPES = [
   'linear',
   'exponential',
@@ -91,6 +104,24 @@ export function narrowEnum<T extends string>(
     );
   }
   return undefined;
+}
+
+function wireToChartBorder(w: ChartBorderData | undefined): ChartBorder | undefined {
+  if (!w) return undefined;
+  return {
+    color: wireToDirectHexColor(w.color),
+    width: w.width,
+    style: narrowEnum<ChartBorderStyle>(w.style, CHART_BORDER_STYLES, 'ChartBorder.style'),
+  };
+}
+
+function chartBorderToWire(c: ChartBorder | undefined): ChartBorderData | undefined {
+  if (!c) return undefined;
+  return {
+    color: directHexColorToWire(c.color),
+    width: c.width,
+    style: c.style,
+  };
 }
 
 function wireToTrendlineType(value: string | null | undefined): TrendlineTypeName | undefined {
@@ -260,7 +291,7 @@ export function wireToPointFormat(w: PointFormatData): PointFormat {
     bubble3d: w.bubble3d,
     bubble3D: w.bubble3d,
     fill: wireToDirectHexColor(w.fill),
-    border: w.border ? { ...w.border, color: wireToDirectHexColor(w.border.color) } : undefined,
+    border: wireToChartBorder(w.border),
     lineFormat: w.lineFormat ? wireToChartLineFormat(w.lineFormat) : undefined,
     dataLabel: w.dataLabel ? wireToDataLabelConfig(w.dataLabel) : undefined,
     visualFormat: wireToChartFormat(w.visualFormat),
@@ -280,7 +311,7 @@ export function pointFormatToWire(c: PointFormat): PointFormatData {
     explosion: c.explosion,
     bubble3d: c.bubble3d ?? c.bubble3D,
     fill: directHexColorToWire(c.fill),
-    border: c.border ? { ...c.border, color: directHexColorToWire(c.border.color) } : undefined,
+    border: chartBorderToWire(c.border),
     lineFormat: c.lineFormat ? chartLineFormatToWire(c.lineFormat) : undefined,
     dataLabel: c.dataLabel ? dataLabelConfigToWire(c.dataLabel) : undefined,
     visualFormat: chartFormatToWire(c.visualFormat),

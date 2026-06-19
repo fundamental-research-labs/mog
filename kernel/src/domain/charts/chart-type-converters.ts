@@ -133,6 +133,24 @@ export {
   wireToTrendlineConfigArray,
 } from './chart-annotation-converters';
 
+const Y_AXIS_INDICES = [0, 1] as const;
+type YAxisIndex = NonNullable<SeriesConfig['yAxisIndex']>;
+
+function narrowNumberEnum<T extends number>(
+  value: number | null | undefined,
+  allowed: readonly T[],
+  fieldName: string,
+): T | undefined {
+  if (value == null) return undefined;
+  if ((allowed as readonly number[]).includes(value)) return value as T;
+  if (typeof console !== 'undefined' && typeof console.warn === 'function') {
+    console.warn(
+      `[chart-type-converters] dropping unknown ${fieldName}="${value}" - not in allowed set`,
+    );
+  }
+  return undefined;
+}
+
 // =============================================================================
 // Wire → Config (narrowing — validates enum strings against contract unions)
 // =============================================================================
@@ -166,7 +184,7 @@ export function wireToSeriesConfig(w: ChartSeriesData): SeriesConfig {
     showLines: w.showLines,
     explosion: w.explosion,
     invertIfNegative: w.invertIfNegative,
-    yAxisIndex: w.yAxisIndex,
+    yAxisIndex: narrowNumberEnum<YAxisIndex>(w.yAxisIndex, Y_AXIS_INDICES, 'Series.yAxisIndex'),
     showMarkers: w.showMarkers,
     markerSize: w.markerSize,
     markerStyle: narrowEnum<MarkerStyle>(w.markerStyle, MARKER_STYLES, 'Series.markerStyle'),

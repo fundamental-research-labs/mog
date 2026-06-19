@@ -112,6 +112,52 @@ fn imported_explicit_next_to_tick_label_position_is_preserved() {
 }
 
 #[test]
+fn imported_unmodeled_scatter_axes_preserve_explicit_defaults() {
+    let mut spec = minimal_chart_spec(DomainChartType::Scatter, None);
+    spec.axes = Some(AxisData {
+        category_axis: None,
+        value_axis: Some(explicit_default_value_axis_data()),
+        secondary_category_axis: None,
+        secondary_value_axis: Some(explicit_default_value_axis_data()),
+        series_axis: None,
+    });
+    let spec = with_original_axes(
+        spec,
+        vec![
+            imported_explicit_value_axis(10, 20, ChartAxisPosition::Bottom),
+            imported_explicit_value_axis(20, 10, ChartAxisPosition::Left),
+            imported_explicit_value_axis(30, 40, ChartAxisPosition::Top),
+            imported_explicit_value_axis(40, 30, ChartAxisPosition::Right),
+        ],
+    );
+
+    let xml = chart_xml(&spec);
+
+    assert_eq!(xml.matches("<c:valAx>").count(), 4, "{xml}");
+    assert_eq!(xml.matches("<c:delete val=\"0\"/>").count(), 4, "{xml}");
+    assert_eq!(
+        xml.matches("<c:majorTickMark val=\"cross\"/>").count(),
+        4,
+        "{xml}"
+    );
+    assert_eq!(
+        xml.matches("<c:minorTickMark val=\"cross\"/>").count(),
+        4,
+        "{xml}"
+    );
+    assert_eq!(
+        xml.matches("<c:tickLblPos val=\"nextTo\"/>").count(),
+        4,
+        "{xml}"
+    );
+    assert_eq!(
+        xml.matches("<c:crosses val=\"autoZero\"/>").count(),
+        4,
+        "{xml}"
+    );
+}
+
+#[test]
 fn imported_category_axis_preserves_auto() {
     let mut spec = minimal_chart_spec(DomainChartType::Column, None);
     spec.axes = Some(AxisData {
@@ -427,6 +473,39 @@ fn imported_left_axis(axis_type: AxisType, ax_id: u32, cross_ax: u32) -> ChartAx
         crosses_explicit: false,
         delete: false,
         delete_explicit: false,
+        ..Default::default()
+    }
+}
+
+fn imported_explicit_value_axis(ax_id: u32, cross_ax: u32, ax_pos: ChartAxisPosition) -> ChartAxis {
+    ChartAxis {
+        axis_type: AxisType::Value,
+        ax_id,
+        cross_ax,
+        ax_pos,
+        major_tick_mark: TickMark::Cross,
+        major_tick_mark_explicit: true,
+        minor_tick_mark: TickMark::Cross,
+        minor_tick_mark_explicit: true,
+        tick_lbl_pos: TickLabelPosition::NextTo,
+        tick_lbl_pos_explicit: true,
+        crosses: AxisCrosses::AutoZero,
+        crosses_explicit: true,
+        delete: false,
+        delete_explicit: true,
+        ..Default::default()
+    }
+}
+
+fn explicit_default_value_axis_data() -> SingleAxisData {
+    SingleAxisData {
+        visible: true,
+        visible_explicit: true,
+        axis_type: Some("valAx".to_string()),
+        tick_marks: Some("cross".to_string()),
+        minor_tick_marks: Some("cross".to_string()),
+        tick_label_position: Some("nextTo".to_string()),
+        crosses_at: Some("automatic".to_string()),
         ..Default::default()
     }
 }

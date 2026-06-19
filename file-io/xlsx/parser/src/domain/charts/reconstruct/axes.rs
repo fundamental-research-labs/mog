@@ -272,13 +272,13 @@ pub(super) fn build_axes_from_original(
     original_axes: &[ChartAxis],
 ) -> Vec<ChartAxis> {
     let role_ids = original_axis_role_ids(original_axes);
-    let default_sad = default_visible_axis();
 
     original_axes
         .iter()
         .map(|axis| {
-            let sad = single_axis_data_for_original_axis(axes_data, &role_ids, axis)
-                .unwrap_or(&default_sad);
+            let Some(sad) = single_axis_data_for_original_axis(axes_data, &role_ids, axis) else {
+                return preserve_unmodeled_original_axis(axis, original_axes);
+            };
             let cross_ax = if axis.cross_ax != 0 {
                 axis.cross_ax
             } else {
@@ -302,6 +302,21 @@ pub(super) fn build_axes_from_original(
             rebuilt
         })
         .collect()
+}
+
+fn preserve_unmodeled_original_axis(axis: &ChartAxis, original_axes: &[ChartAxis]) -> ChartAxis {
+    let mut preserved = axis.clone();
+    if preserved.cross_ax == 0 {
+        preserved.cross_ax = determine_cross_ax(
+            preserved.ax_id,
+            preserved.axis_type,
+            &original_axes
+                .iter()
+                .map(|original| original.ax_id)
+                .collect::<Vec<_>>(),
+        );
+    }
+    preserved
 }
 
 fn apply_imported_axis_fidelity(

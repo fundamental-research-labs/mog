@@ -160,7 +160,9 @@ fn apply_pie_slice_to_chart_series(series: &mut [ChartSeriesData], pie_slice: &P
     } else {
         None
     };
-    if pie_slice.explode_all == Some(true) || series_explosion.is_some() {
+    if first.explosion.is_none()
+        && (pie_slice.explode_all == Some(true) || series_explosion.is_some())
+    {
         first.explosion = Some(series_explosion.unwrap_or(DEFAULT_PIE_SLICE_EXPLOSION));
     }
 
@@ -174,7 +176,11 @@ fn apply_pie_slice_to_chart_series(series: &mut [ChartSeriesData], pie_slice: &P
     let points = first.points.get_or_insert_with(Vec::new);
     for idx in indices {
         match points.iter_mut().find(|point| point.idx == *idx) {
-            Some(point) => point.explosion = Some(point_explosion),
+            Some(point) => {
+                if point.explosion.is_none() {
+                    point.explosion = Some(point_explosion);
+                }
+            }
             None => points.push(PointFormatData {
                 idx: *idx,
                 explosion: Some(point_explosion),
@@ -728,6 +734,48 @@ mod tests {
         );
 
         assert_eq!(series[0].explosion, Some(42));
+    }
+
+    #[test]
+    fn runtime_pie_slice_does_not_override_explicit_series_explosion() {
+        let series = chart_series_from_runtime_inputs(
+            &ChartType::Pie,
+            Some(vec![ChartSeriesData {
+                explosion: Some(42),
+                points: Some(vec![PointFormatData {
+                    idx: 2,
+                    explosion: Some(42),
+                    ..Default::default()
+                }]),
+                ..Default::default()
+            }]),
+            None,
+            None,
+            None,
+            Some(&PieSliceData {
+                explosion: Some(25),
+                exploded_indices: Some(vec![2, 3]),
+                explode_offset: Some(25),
+                explode_all: Some(true),
+            }),
+        );
+
+        assert_eq!(series[0].explosion, Some(42));
+        let points = series[0].points.as_deref().unwrap_or(&[]);
+        assert_eq!(
+            points
+                .iter()
+                .find(|point| point.idx == 2)
+                .and_then(|point| point.explosion),
+            Some(42)
+        );
+        assert_eq!(
+            points
+                .iter()
+                .find(|point| point.idx == 3)
+                .and_then(|point| point.explosion),
+            Some(25)
+        );
     }
 
     #[test]

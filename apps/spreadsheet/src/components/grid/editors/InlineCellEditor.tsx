@@ -485,8 +485,8 @@ export function InlineCellEditor({ workbookSettings, rendererSkin }: InlineCellE
   const scaledFontSize = textPosition ? textPosition.scaledFontSize : style.fontSize;
   const scaledLineHeight = scaledFontSize * 1.2; // DEFAULT_LINE_HEIGHT_FACTOR
   const totalTextHeight = lineCount * scaledLineHeight;
-  const lineBoxLeading = Math.max(0, scaledLineHeight - scaledFontSize);
   const paddingY = style.paddingX; // Canvas uses paddingX for vertical too
+  const remainingLineBoxSpace = effectiveCellRect.height - totalTextHeight;
 
   let verticalPaddingTop: number;
   switch (style.verticalAlign) {
@@ -494,14 +494,11 @@ export function InlineCellEditor({ workbookSettings, rendererSkin }: InlineCellE
       verticalPaddingTop = paddingY;
       break;
     case 'middle':
-      verticalPaddingTop = Math.max(0, (effectiveCellRect.height - totalTextHeight) / 2);
+      verticalPaddingTop = Math.max(0, remainingLineBoxSpace / 2);
       break;
     case 'bottom':
     default:
-      verticalPaddingTop = Math.max(
-        0,
-        effectiveCellRect.height - totalTextHeight - paddingY + lineBoxLeading / 2,
-      );
+      verticalPaddingTop = Math.max(0, remainingLineBoxSpace);
       break;
   }
 

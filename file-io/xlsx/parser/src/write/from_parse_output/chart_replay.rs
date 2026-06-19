@@ -1,4 +1,5 @@
 use super::chart_auxiliary;
+use crate::domain::charts::chart_ex::chart_ex_title_text;
 use crate::write::write_error::WriteError;
 
 pub(super) fn should_reconstruct_chart_space(chart_spec: &domain_types::ChartSpec) -> bool {
@@ -385,10 +386,8 @@ fn chart_ex_title_matches_import(chart_spec: &domain_types::ChartSpec) -> bool {
         .chart
         .title
         .as_ref()
-        .and_then(|title| title.tx.as_ref())
-        .and_then(|tx| tx.tx_data.as_ref())
-        .and_then(|tx_data| tx_data.value.as_deref());
-    chart_spec.title.as_deref() == imported_title
+        .and_then(chart_ex_title_text);
+    chart_spec.title.as_deref() == imported_title.as_deref()
 }
 
 fn chart_ex_relationships_are_policy_allowed(

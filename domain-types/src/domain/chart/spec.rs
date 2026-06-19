@@ -10,8 +10,7 @@ use super::floating_object::{
 };
 use super::options::{effective_sub_type_from_chart_data, radar_flags_from_sub_type};
 use super::source_ranges::{
-    chart_series_from_runtime_inputs, infer_common_category_range, infer_series_name_range,
-    pie_slice_from_chart_series, trendline_from_chart_series,
+    chart_series_from_runtime_inputs, pie_slice_from_chart_series, trendline_from_chart_series,
 };
 use super::{
     AnchorPosition, AxisData, ChartAuxiliaryPart, ChartDataTableData, ChartDefinition,
@@ -256,7 +255,7 @@ pub struct ChartSpec {
     /// Typed chart-owned auxiliary package parts.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub chart_auxiliary_parts: Vec<ChartAuxiliaryPart>,
-    #[serde(skip)]
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     pub chart_ex_replay: Option<ChartExReplayData>,
     /// Durable standard chart import provenance used by XLSX export planning.
     #[serde(skip_serializing_if = "Option::is_none", default)]
@@ -888,15 +887,9 @@ impl ChartSpec {
             series_orientation: None,
             data_range: self.data_range.clone(),
             data_range_identity: None,
-            series_range: self
-                .series_range
-                .clone()
-                .or_else(|| infer_series_name_range(&self.series)),
+            series_range: self.series_range.clone(),
             series_range_identity: None,
-            category_range: self
-                .category_range
-                .clone()
-                .or_else(|| infer_common_category_range(&self.series)),
+            category_range: self.category_range.clone(),
             category_range_identity: None,
             title: self.title.clone(),
             subtitle: None,

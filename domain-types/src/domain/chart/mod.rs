@@ -13,6 +13,8 @@ mod style_context;
 mod view_3d;
 
 #[cfg(test)]
+mod spec_tests;
+#[cfg(test)]
 mod tests;
 
 pub use axis::*;

@@ -13,4 +13,6 @@ mod types;
 pub use types::*;
 
 #[cfg(test)]
+mod chart_ooxml_tests;
+#[cfg(test)]
 mod tests;

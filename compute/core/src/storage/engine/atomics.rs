@@ -220,6 +220,14 @@ impl YrsComputeEngine {
     /// protected but the cell is explicitly unlocked.
     #[bridge::read(scope = "cell")]
     pub fn can_edit_cell(&self, sheet_id: &SheetId, row: u32, col: u32) -> bool {
+        if self
+            .mirror
+            .find_pivot_table_at(sheet_id, row, col)
+            .is_some()
+        {
+            return false;
+        }
+
         if !super::services::queries::is_sheet_protected(&self.stores, sheet_id) {
             return true;
         }

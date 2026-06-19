@@ -20,6 +20,22 @@ pub(super) enum RegionGuardOutcome {
     Continue,
 }
 
+fn pivot_output_write_error(
+    mirror: &CellMirror,
+    sheet_id: &SheetId,
+    row: u32,
+    col: u32,
+) -> Option<ComputeError> {
+    let pivot = mirror.find_pivot_table_at(sheet_id, row, col)?;
+    Some(ComputeError::PartialArrayWrite {
+        sheet_id: sheet_id.to_uuid_string(),
+        row,
+        col,
+        anchor_row: pivot.start_row,
+        anchor_col: pivot.start_col,
+    })
+}
+
 /// Excel rejection family: edits inside CSE arrays, dynamic spill members, or
 /// Data Table regions are rejected atomically before storage is mutated. The
 /// one allowed CSE case is clearing the CSE anchor, which tears down the CSE.
@@ -65,6 +81,10 @@ pub(super) fn check_region_partial_write(
             anchor_row: dt.start_row,
             anchor_col: dt.start_col,
         });
+    }
+
+    if let Some(err) = pivot_output_write_error(mirror, sheet_id, row, col) {
+        return Err(err);
     }
 
     Ok(RegionGuardOutcome::Continue)
@@ -140,6 +160,10 @@ impl ComputeCore {
                     anchor_col: dt.start_col,
                 });
             }
+
+            if let Some(err) = pivot_output_write_error(mirror, sheet_id, *row, *col) {
+                return Err(err);
+            }
         }
 
         Ok(())
@@ -184,6 +208,10 @@ impl ComputeCore {
                     anchor_row: dt.start_row,
                     anchor_col: dt.start_col,
                 });
+            }
+
+            if let Some(err) = pivot_output_write_error(mirror, sheet_id, *row, *col) {
+                return Err(err);
             }
         }
 

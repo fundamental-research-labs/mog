@@ -403,6 +403,7 @@ impl YrsStorage {
         let cols;
         let mut top_entries: Vec<(String, YValue)> = Vec::new();
         let mut cell_id_remap: HashMap<String, String> = HashMap::new();
+        let source_pivots;
 
         {
             let txn = self.doc.transact();
@@ -465,12 +466,22 @@ impl YrsStorage {
                 }
             }
 
+            source_pivots = super::pivots::get_all_pivots_in_txn(&txn, &self.sheets, source_id);
+
             for (key, value) in source_map.iter(&txn) {
                 if let Some(y) = read_y_out(value, &txn) {
                     top_entries.push((key.to_string(), y));
                 }
             }
         }
+
+        let copied_pivots = super::pivots::remap_pivots_for_sheet_copy(
+            source_pivots,
+            source_id,
+            &new_id,
+            new_name,
+            id_alloc,
+        );
 
         // Pass 2: Write the tree into the new sheet. `cells` and `gridIndex`
         // get bespoke handling for CellId-hex remapping; everything else uses
@@ -496,9 +507,14 @@ impl YrsStorage {
                     KEY_COMMENTS => {
                         write_comments_remapped(&new_sheet, &mut txn, value, &cell_id_remap)
                     }
+                    KEY_PIVOT_TABLES => {
+                        let _: MapRef =
+                            new_sheet.insert(&mut txn, KEY_PIVOT_TABLES, MapPrelim::default());
+                    }
                     _ => write_y_value_into_map(&new_sheet, &mut txn, key, value),
                 }
             }
+            super::pivots::write_pivots_in_txn(&mut txn, &self.sheets, &new_id, &copied_pivots)?;
 
             // Override meta fields for new sheet
             if let Some(Out::YMap(new_meta)) = new_sheet.get(&txn, KEY_PROPERTIES) {

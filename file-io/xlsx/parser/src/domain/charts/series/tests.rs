@@ -332,6 +332,42 @@ fn test_parse_series_with_values() {
 }
 
 #[test]
+fn test_parse_series_values_ignore_nested_error_bar_values() {
+    let xml = br#"<c:ser>
+            <c:idx val="0"/>
+            <c:order val="0"/>
+            <c:xVal>
+                <c:strRef>
+                    <c:f>Sheet1!$A$2:$A$5</c:f>
+                </c:strRef>
+            </c:xVal>
+            <c:yVal>
+                <c:numRef>
+                    <c:f>Sheet1!$B$2:$B$5</c:f>
+                </c:numRef>
+            </c:yVal>
+            <c:errBars>
+                <c:errDir val="y"/>
+                <c:errBarType val="both"/>
+                <c:errValType val="cust"/>
+                <c:val val="5"/>
+                <c:plus>
+                    <c:numRef>
+                        <c:f>=Sheet1!$A$1</c:f>
+                    </c:numRef>
+                </c:plus>
+            </c:errBars>
+        </c:ser>"#;
+
+    let series = parse_series(xml);
+    assert!(series.val.is_none());
+    match series.y_val.unwrap() {
+        NumDataSource::Ref(nr) => assert_eq!(nr.f, "Sheet1!$B$2:$B$5"),
+        other => panic!("Expected NumDataSource::Ref, got {:?}", other),
+    }
+}
+
+#[test]
 fn test_parse_series_with_multi_level_categories() {
     let xml = br#"<c:ser>
             <c:idx val="0"/>

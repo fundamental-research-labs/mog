@@ -69,6 +69,7 @@ import {
   automaticPivotValuePlacementDisplayName,
   valuePlacementWithAggregate,
 } from '../domain/pivots/value-labels';
+import { createMutationReceipt } from '../domain/pivots/receipts';
 import { extractMutationData } from './compute/compute-core';
 
 type PublicPivotPlacement = PivotTableConfig['placements'][number];
@@ -774,22 +775,15 @@ function toPublicPivotFieldItems(fieldItems: ComputePivotFieldItems): PivotField
 function buildPivotBridgeReceipt(
   pivotId: string,
   action: string,
-  nowMs: number,
+  configRevision: number,
   placementId?: PlacementId,
 ): PivotKernelMutationReceipt {
-  return {
-    kernelReceiptId: `${pivotId}:${action}:${nowMs}`,
-    pivotId,
-    effects: placementId
-      ? [{ type: action === 'addPlacement' ? 'placementAdded' : 'placementUpdated', placementId }]
-      : [],
-    mutationResult: { action },
-    updateReason: action,
-    refreshPolicy: 'refreshAndMaterialize',
-    materialized: true,
-    configRevision: nowMs,
-    status: 'applied',
-  };
+  const effects: PivotKernelMutationReceipt['effects'] = placementId
+    ? [{ type: action === 'addPlacement' ? 'placementAdded' : 'placementUpdated', placementId }]
+    : [];
+  return createMutationReceipt(pivotId, action, 'refreshAndMaterialize', { action }, effects, {
+    configRevision,
+  });
 }
 
 // =============================================================================
@@ -1055,7 +1049,12 @@ export class PivotBridge implements IPivotBridge {
     );
     const placementId = getBridgePlacementId(placement);
     return {
-      ...buildPivotBridgeReceipt(pivotId, 'addPlacement', this.ctx.clock.now(), placementId),
+      ...buildPivotBridgeReceipt(
+        pivotId,
+        'addPlacement',
+        this.getConfigVersion(pivotId),
+        placementId,
+      ),
       status: 'applied',
       placementId,
     };
@@ -1088,7 +1087,12 @@ export class PivotBridge implements IPivotBridge {
       { placements },
       { reason: 'fieldPlacementChanged', refreshPolicy: 'refreshAndMaterialize' },
     );
-    return buildPivotBridgeReceipt(pivotId, 'updatePlacement', this.ctx.clock.now(), placementId);
+    return buildPivotBridgeReceipt(
+      pivotId,
+      'updatePlacement',
+      this.getConfigVersion(pivotId),
+      placementId,
+    );
   }
 
   async removePlacement(
@@ -1111,7 +1115,7 @@ export class PivotBridge implements IPivotBridge {
       { reason: 'fieldPlacementChanged', refreshPolicy: 'refreshAndMaterialize' },
     );
     return {
-      ...buildPivotBridgeReceipt(pivotId, 'removePlacement', this.ctx.clock.now()),
+      ...buildPivotBridgeReceipt(pivotId, 'removePlacement', this.getConfigVersion(pivotId)),
       effects: [{ type: 'placementRemoved', placementId }],
     };
   }
@@ -1149,7 +1153,12 @@ export class PivotBridge implements IPivotBridge {
       { placements },
       { reason: 'fieldPlacementChanged', refreshPolicy: 'refreshAndMaterialize' },
     );
-    return buildPivotBridgeReceipt(pivotId, 'movePlacement', this.ctx.clock.now(), placementId);
+    return buildPivotBridgeReceipt(
+      pivotId,
+      'movePlacement',
+      this.getConfigVersion(pivotId),
+      placementId,
+    );
   }
 
   async setAggregateFunction(
@@ -1246,7 +1255,12 @@ export class PivotBridge implements IPivotBridge {
       { placements },
       { reason: 'fieldReset', refreshPolicy: 'refreshAndMaterialize' },
     );
-    return buildPivotBridgeReceipt(pivotId, 'resetPlacement', this.ctx.clock.now(), placementId);
+    return buildPivotBridgeReceipt(
+      pivotId,
+      'resetPlacement',
+      this.getConfigVersion(pivotId),
+      placementId,
+    );
   }
 
   async setExpansion(
@@ -1256,7 +1270,12 @@ export class PivotBridge implements IPivotBridge {
     expanded: boolean,
   ): Promise<PivotKernelMutationReceipt> {
     return {
-      ...buildPivotBridgeReceipt(pivotId, 'setExpansion', this.ctx.clock.now(), axisPlacementId),
+      ...buildPivotBridgeReceipt(
+        pivotId,
+        'setExpansion',
+        this.getConfigVersion(pivotId),
+        axisPlacementId,
+      ),
       mutationResult: { action: 'setExpansion', expanded },
     };
   }

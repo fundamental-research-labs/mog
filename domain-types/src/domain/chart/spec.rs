@@ -528,7 +528,7 @@ impl ChartSpec {
             matches!(
                 ooxml.and_then(|o| o.definition.as_ref()),
                 Some(ChartDefinition::ChartEx(_))
-            )
+            ) || chart_data.chart_type.is_chart_ex_family()
         });
 
         let (

@@ -832,7 +832,8 @@ fn project_chart_formula<'a>(
         );
         return None;
     }
-    if trimmed.starts_with("_xlchart.") {
+    let reference = trimmed.strip_prefix('=').unwrap_or(trimmed);
+    if reference.starts_with("_xlchart.") {
         push_projection_diagnostic(
             diagnostics,
             domain_types::ImportDiagnosticCode::UnsupportedFeature,
@@ -842,7 +843,7 @@ fn project_chart_formula<'a>(
         );
         return None;
     }
-    if synthesize_rectangular_data_range(&[trimmed]).is_none() {
+    if synthesize_rectangular_data_range(&[reference]).is_none() {
         push_projection_diagnostic(
             diagnostics,
             domain_types::ImportDiagnosticCode::InvalidRangeReference,

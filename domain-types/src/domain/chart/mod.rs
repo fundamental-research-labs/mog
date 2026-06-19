@@ -301,6 +301,22 @@ impl ChartType {
         layout_id.to_public_chart_type().map(ChartType::from_str)
     }
 
+    /// Whether this public chart type is authored through the ChartEx OOXML
+    /// part family instead of a standard `c:chartSpace` chart group.
+    pub fn is_chart_ex_family(&self) -> bool {
+        matches!(
+            self,
+            ChartType::Waterfall
+                | ChartType::Treemap
+                | ChartType::Sunburst
+                | ChartType::Funnel
+                | ChartType::RegionMap
+                | ChartType::Histogram
+                | ChartType::Pareto
+                | ChartType::Boxplot
+        )
+    }
+
     /// Convert to the OOXML chart-type enum. Variants that don't have a
     /// direct OOXML mapping (ChartEx-only types — waterfall/treemap/
     /// sunburst/funnel/regionMap/histogram/pareto/boxplot, plus `Column`
@@ -334,8 +350,8 @@ impl ChartType {
             | ChartType::RegionMap
             | ChartType::Histogram
             | ChartType::Pareto
-            | ChartType::Boxplot
-            | ChartType::Unknown(_) => Oct::Unknown,
+            | ChartType::Boxplot => Oct::Unknown,
+            ChartType::Unknown(_) => Oct::Unknown,
         }
     }
 }

@@ -11,7 +11,7 @@ use super::floating_object::{
 use super::options::{effective_sub_type_from_chart_data, radar_flags_from_sub_type};
 use super::source_ranges::{
     chart_series_from_runtime_inputs, infer_common_category_range, infer_series_name_range,
-    pie_slice_from_chart_series,
+    pie_slice_from_chart_series, trendline_from_chart_series,
 };
 use super::{
     AnchorPosition, AxisData, ChartAuxiliaryPart, ChartDataTableData, ChartDefinition,
@@ -598,6 +598,7 @@ impl ChartSpec {
             chart_data.category_range.as_deref(),
             chart_data.series_range.as_deref(),
             chart_data.pie_slice.as_ref(),
+            chart_data.trendline.as_deref(),
         );
 
         Some(ChartSpec {
@@ -643,7 +644,6 @@ impl ChartSpec {
             boxplot: chart_data.boxplot.clone(),
             hierarchy: chart_data.hierarchy.clone(),
             region_map: chart_data.region_map.clone(),
-            // Chart-level properties
             display_blanks_as: chart_data
                 .display_blanks_as
                 .as_deref()
@@ -910,7 +910,7 @@ impl ChartSpec {
             },
             data_labels: self.data_labels.clone(),
             pie_slice: pie_slice_from_chart_series(&self.chart_type, &self.series),
-            trendline: None,
+            trendline: trendline_from_chart_series(&self.series),
             show_lines: self.show_lines,
             smooth_lines: self.smooth_lines,
             radar_filled,

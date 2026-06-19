@@ -573,6 +573,9 @@ export function serializedChartToChart(rawChart: ChartFloatingObject): Chart {
   const series = seriesConfigs?.map((s) =>
     normalizeSeriesRefsForRead(deriveSeriesFormatForRead(s, reportedType)),
   );
+  const chartTrendlines = wireToTrendlineConfigArray(chart.trendline);
+  const publicTrendlines =
+    chartTrendlines && chartTrendlines.length > 0 ? chartTrendlines : series?.[0]?.trendlines;
 
   const legend = legendConfig
     ? (deriveLegendEntriesForRead(legendConfig) as typeof legendConfig)
@@ -601,8 +604,8 @@ export function serializedChartToChart(rawChart: ChartFloatingObject): Chart {
       ? (deriveDataLabelsForRead(dataLabelsConfig) as Chart['dataLabels'])
       : undefined,
     pieSlice: chart.pieSlice,
-    trendline: wireToTrendlineConfigArray(chart.trendline)?.[0],
-    trendlines: wireToTrendlineConfigArray(chart.trendline),
+    trendline: publicTrendlines?.[0],
+    trendlines: publicTrendlines,
     showLines: chart.showLines,
     smoothLines: chart.smoothLines,
     radarFilled: chart.radarFilled,

@@ -1,4 +1,6 @@
-use super::{ChartSeriesData, ChartSeriesXRoleData, ChartType, PieSliceData, PointFormatData};
+use super::{
+    ChartSeriesData, ChartSeriesXRoleData, ChartType, PieSliceData, PointFormatData, TrendlineData,
+};
 
 const DEFAULT_PIE_SLICE_EXPLOSION: u32 = 25;
 
@@ -91,20 +93,36 @@ pub fn chart_series_from_runtime_inputs(
     category_range: Option<&str>,
     series_range: Option<&str>,
     pie_slice: Option<&PieSliceData>,
+    trendline: Option<&[TrendlineData]>,
 ) -> Vec<ChartSeriesData> {
     let mut series = series.unwrap_or_default();
-    let Some(pie_slice) = pie_slice.filter(|_| chart_type_supports_pie_slice(chart_type)) else {
-        return series;
-    };
+    let pie_slice = pie_slice.filter(|_| chart_type_supports_pie_slice(chart_type));
+    let trendline = trendline.filter(|trendlines| !trendlines.is_empty());
 
-    if series.is_empty() {
+    if series.is_empty() && (pie_slice.is_some() || trendline.is_some()) {
         series = data_range
             .and_then(|data_range| synthesize_chart_series_from_data_range(chart_type, data_range))
             .unwrap_or_default();
         apply_explicit_chart_source_ranges(&mut series, category_range, series_range);
     }
-    apply_pie_slice_to_chart_series(series.as_mut_slice(), pie_slice);
+    if series.is_empty() && trendline.is_some() {
+        series.push(ChartSeriesData::default());
+    }
+    if let Some(trendline) = trendline {
+        apply_trendline_to_chart_series(series.as_mut_slice(), trendline);
+    }
+    if let Some(pie_slice) = pie_slice {
+        apply_pie_slice_to_chart_series(series.as_mut_slice(), pie_slice);
+    }
     series
+}
+
+pub fn trendline_from_chart_series(series: &[ChartSeriesData]) -> Option<Vec<TrendlineData>> {
+    series
+        .first()
+        .and_then(|first| first.trendlines.as_ref())
+        .filter(|trendlines| !trendlines.is_empty())
+        .cloned()
 }
 
 pub fn pie_slice_from_chart_series(
@@ -189,6 +207,13 @@ fn apply_pie_slice_to_chart_series(series: &mut [ChartSeriesData], pie_slice: &P
         }
     }
     points.sort_by_key(|point| point.idx);
+}
+
+fn apply_trendline_to_chart_series(series: &mut [ChartSeriesData], trendline: &[TrendlineData]) {
+    let Some(first) = series.first_mut() else {
+        return;
+    };
+    first.trendlines = Some(trendline.to_vec());
 }
 
 fn is_single_category_value_chart(chart_type: &ChartType) -> bool {
@@ -700,6 +725,7 @@ mod tests {
                 explode_offset: Some(42),
                 explode_all: Some(true),
             }),
+            None,
         );
 
         assert_eq!(series.len(), 1);
@@ -731,6 +757,7 @@ mod tests {
                 explode_offset: Some(42),
                 explode_all: None,
             }),
+            None,
         );
 
         assert_eq!(series[0].explosion, Some(42));
@@ -758,6 +785,7 @@ mod tests {
                 explode_offset: Some(25),
                 explode_all: Some(true),
             }),
+            None,
         );
 
         assert_eq!(series[0].explosion, Some(42));
@@ -792,6 +820,7 @@ mod tests {
                 explode_offset: Some(25),
                 explode_all: None,
             }),
+            None,
         );
 
         assert_eq!(series[0].explosion, None);
@@ -825,5 +854,48 @@ mod tests {
         assert_eq!(pie_slice.explode_all, Some(true));
         assert_eq!(pie_slice.explode_offset, Some(42));
         assert_eq!(pie_slice.exploded_indices.as_deref(), Some(&[2][..]));
+    }
+
+    #[test]
+    fn runtime_trendline_alias_synthesizes_first_series_with_data_refs() {
+        let trendlines = vec![TrendlineData {
+            show: Some(true),
+            r#type: Some("linear".to_string()),
+            color: None,
+            line_width: None,
+            order: None,
+            period: None,
+            forward: None,
+            backward: None,
+            intercept: None,
+            display_equation: None,
+            display_r_squared: None,
+            name: None,
+            line_format: None,
+            label: None,
+        }];
+        let series = chart_series_from_runtime_inputs(
+            &ChartType::Scatter,
+            None,
+            Some("Data!A1:B5"),
+            Some("Data!A2:A5"),
+            Some("Data!B1:B1"),
+            None,
+            Some(&trendlines),
+        );
+
+        assert_eq!(series.len(), 1);
+        assert_eq!(series[0].name_ref.as_deref(), Some("Data!B1"));
+        assert_eq!(series[0].categories.as_deref(), Some("Data!A2:A5"));
+        assert_eq!(series[0].values.as_deref(), Some("Data!B2:B5"));
+        assert_eq!(
+            series[0]
+                .trendlines
+                .as_deref()
+                .and_then(|trendlines| trendlines.first())
+                .and_then(|trendline| trendline.r#type.as_deref()),
+            Some("linear")
+        );
+        assert_eq!(trendline_from_chart_series(&series), Some(trendlines));
     }
 }

@@ -129,6 +129,43 @@ describe('chart public API converters', () => {
     expect(internal.series?.[0]?.format?.line?.color).toBe('ED7D31');
   });
 
+  it('reports chart-level trendline aliases from first-series trendlines', () => {
+    const publicChart = serializedChartToChart(
+      chart({
+        chartType: 'scatter',
+        series: [
+          {
+            name: 'Series 1',
+            values: 'Sheet1!B2:B5',
+            categories: 'Sheet1!A2:A5',
+            trendlines: [
+              {
+                show: true,
+                type: 'linear',
+                lineFormat: { noFill: true },
+                label: {
+                  text: 'Fit',
+                  format: { line: { noFill: true } },
+                },
+              },
+            ],
+          },
+        ],
+      }),
+    );
+
+    expect(publicChart.trendline).toMatchObject({
+      show: true,
+      type: 'linear',
+      lineFormat: { noFill: true },
+      label: {
+        text: 'Fit',
+        format: { line: { noFill: true } },
+      },
+    });
+    expect(publicChart.trendlines).toEqual([publicChart.trendline]);
+  });
+
   it('derives series color from line-rendering series traits when chart family metadata is degraded', () => {
     const publicChart = serializedChartToChart(
       chart({

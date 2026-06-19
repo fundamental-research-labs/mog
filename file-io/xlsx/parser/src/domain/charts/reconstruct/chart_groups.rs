@@ -59,7 +59,9 @@ pub(super) fn build_chart_groups(spec: &ChartSpec) -> Vec<ChartGroup> {
                     // Inject series into the config template. The template is
                     // stored as a domain `ChartTypeConfig`; convert back to
                     // the ooxml form for the writer helpers to consume.
+                    let chart_type = apply_surface_top_view_to_chart_type(group.chart_type, spec);
                     let config = inject_series_into_config(&group.config, &series, spec);
+                    let config = coerce_surface_config_to_chart_type(config, chart_type);
 
                     // Inject chart-level data labels
                     let mut d_lbls = spec.data_labels.as_ref().map(build_data_labels);
@@ -73,14 +75,18 @@ pub(super) fn build_chart_groups(spec: &ChartSpec) -> Vec<ChartGroup> {
                     // as the raw attribute on `ChartGroup`; everything else
                     // maps to the OOXML enum (row 2.13 + 2.21 fold).
                     ChartGroup {
-                        chart_type: group.chart_type,
+                        chart_type,
                         config,
                         series,
                         d_lbls,
                         ax_id: group.ax_id.clone(),
                         raw_chart_type_attr: group.raw_chart_type_attr.clone(),
                         raw_chart_element_name: group.raw_chart_element_name.clone(),
-                        raw_chart_group_xml: group.raw_chart_group_xml.clone(),
+                        raw_chart_group_xml: if chart_type == group.chart_type {
+                            group.raw_chart_group_xml.clone()
+                        } else {
+                            None
+                        },
                     }
                 })
                 .collect();
@@ -331,7 +337,10 @@ fn build_modeled_chart_group(
     chart_type: &DomainChartType,
     series_data: Vec<(usize, &ChartSeriesData)>,
 ) -> ChartGroup {
-    let ooxml_ct = domain_to_ooxml_chart_type(chart_type, spec.sub_type.as_ref());
+    let ooxml_ct = apply_surface_top_view_to_chart_type(
+        domain_to_ooxml_chart_type(chart_type, spec.sub_type.as_ref()),
+        spec,
+    );
     let series: Vec<_> = series_data
         .iter()
         .map(|(fallback_idx, sd)| build_series(sd, chart_type, *fallback_idx as u32, true))
@@ -357,6 +366,37 @@ pub(super) fn domain_to_ooxml_chart_type(
     _sub_type: Option<&ChartSubType>,
 ) -> OoxmlChartType {
     ct.to_ooxml()
+}
+
+fn apply_surface_top_view_to_chart_type(
+    chart_type: OoxmlChartType,
+    spec: &ChartSpec,
+) -> OoxmlChartType {
+    match (chart_type, spec.surface_top_view) {
+        (OoxmlChartType::Surface | OoxmlChartType::Surface3D, Some(true)) => {
+            OoxmlChartType::Surface
+        }
+        (OoxmlChartType::Surface | OoxmlChartType::Surface3D, Some(false)) => {
+            OoxmlChartType::Surface3D
+        }
+        _ => chart_type,
+    }
+}
+
+fn coerce_surface_config_to_chart_type(
+    config: ChartTypeConfig,
+    chart_type: OoxmlChartType,
+) -> ChartTypeConfig {
+    match (config, chart_type) {
+        (ChartTypeConfig::Surface(c) | ChartTypeConfig::Surface3D(c), OoxmlChartType::Surface) => {
+            ChartTypeConfig::Surface(c)
+        }
+        (
+            ChartTypeConfig::Surface(c) | ChartTypeConfig::Surface3D(c),
+            OoxmlChartType::Surface3D,
+        ) => ChartTypeConfig::Surface3D(c),
+        (config, _) => config,
+    }
 }
 
 /// Map domain sub-type to OOXML Grouping.

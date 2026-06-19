@@ -1,4 +1,5 @@
 use super::*;
+use domain_types::ChartDefinition;
 use ooxml_types::charts::{
     BarChartConfig, ChartGroup, ChartType as OoxmlChartType, ChartTypeConfig,
 };

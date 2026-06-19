@@ -1,4 +1,5 @@
 use super::*;
+use domain_types::ChartDefinition;
 use domain_types::chart::{
     ChartColorData, ChartDashStyle, ChartFormatData, ChartLineData, DataLabelData,
 };

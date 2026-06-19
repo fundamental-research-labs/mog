@@ -1,12 +1,11 @@
 use crate::domain::charts::write_canonical::serialize_chart_space;
-use domain_types::ChartDefinition;
 use domain_types::chart::{
-    AnchorPosition, AxisData, ChartFormatData, ChartSeriesCategoryLevelCacheData,
-    ChartSeriesCategoryLevelsCacheData, ChartSeriesData, ChartSeriesDimensionSourceKindData,
-    ChartSeriesPointCacheData, ChartSeriesPointCachePointData, ChartSeriesStockRoleData, ChartSpec,
-    ChartSubType, ChartType as DomainChartType, ObjectSize, PivotChartOptionsData, SingleAxisData,
+    AnchorPosition, AxisData, CategoryLabelFormatData, CategoryPointLabelFormatData,
+    ChartFormatData, ChartSeriesCategoryLevelCacheData, ChartSeriesCategoryLevelsCacheData,
+    ChartSeriesData, ChartSeriesDimensionSourceKindData, ChartSeriesPointCacheData,
+    ChartSeriesPointCachePointData, ChartSeriesStockRoleData, ChartSpec, ChartSubType,
+    ChartType as DomainChartType, ObjectSize, PivotChartOptionsData, SingleAxisData,
 };
-use domain_types::chart::{CategoryLabelFormatData, CategoryPointLabelFormatData};
 use domain_types::domain::drawings::ManualLayout;
 use ooxml_types::charts::{AxisType, Chart, ChartAxis, ChartAxisPosition, ChartSpace, PlotArea};
 
@@ -20,6 +19,7 @@ mod data_label_fidelity;
 mod imported_series_fallback;
 mod point_format_fidelity;
 mod series_shadow_fidelity;
+mod surface;
 mod title_rich_text_fidelity;
 mod trendline_fidelity;
 mod vary_by_categories;
@@ -129,7 +129,7 @@ fn chart_xml(spec: &ChartSpec) -> String {
 }
 
 fn with_original_axes(mut spec: ChartSpec, axes: Vec<ChartAxis>) -> ChartSpec {
-    spec.definition = Some(ChartDefinition::Chart(ChartSpace {
+    spec.definition = Some(domain_types::ChartDefinition::Chart(ChartSpace {
         chart: Chart {
             plot_area: PlotArea {
                 axes,

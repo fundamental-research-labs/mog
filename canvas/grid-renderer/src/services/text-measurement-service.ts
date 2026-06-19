@@ -12,7 +12,11 @@
  * @module canvas/services/text-measurement-service
  */
 
-import { DEFAULT_CELL_STYLE, resolveCellTextStyle } from '@mog/spreadsheet-utils/cells/cell-style';
+import {
+  DEFAULT_CELL_STYLE,
+  fontSizePointsToCssPx,
+  resolveCellTextStyle,
+} from '@mog/spreadsheet-utils/cells/cell-style';
 import type { CellFormat, CellValue } from '@mog-sdk/contracts/core';
 import type { CultureInfo } from '@mog-sdk/contracts/culture';
 import type {
@@ -552,7 +556,10 @@ export class TextMeasurementServiceImpl implements TextMeasurementService {
 
     // Issue 11 fix: pass displayText for CJK fallback font resolution
     const font = buildCellFont(format, undefined, displayText);
-    const fontSize = format?.fontSize ?? 11;
+    const fontSize =
+      format?.fontSize === undefined
+        ? DEFAULT_CELL_STYLE.fontSize
+        : fontSizePointsToCssPx(format.fontSize);
     const lineHeight = fontSize * DEFAULT_LINE_HEIGHT_FACTOR;
     const hasHardLineBreaks = /[\r\n]/.test(displayText);
 
@@ -605,7 +612,10 @@ export class TextMeasurementServiceImpl implements TextMeasurementService {
 
     // Issue 11 fix: pass displayText for CJK fallback font resolution
     const font = buildCellFont(format, undefined, displayText);
-    const fontSize = format?.fontSize ?? 11;
+    const fontSize =
+      format?.fontSize === undefined
+        ? DEFAULT_CELL_STYLE.fontSize
+        : fontSizePointsToCssPx(format.fontSize);
 
     // Measure unrotated text dimensions
     const textWidth = this.textCache.measure(ctx, displayText, font);

@@ -9,7 +9,7 @@ use crate::snapshot::{
 use crate::storage::engine::YrsComputeEngine;
 use crate::storage::engine::mutation::{EngineMutation, MutationOutput};
 use crate::storage::engine::mutation_coordinator::SheetLifecycleHistoryHint;
-use crate::storage::engine::{mutation, services};
+use crate::storage::engine::{construction, mutation, services};
 use crate::storage::sheet::bindings;
 use crate::storage::sheet::{
     order, print, properties, protection, settings, split_view, view, visibility,
@@ -52,6 +52,7 @@ pub(in crate::storage::engine) fn set_sheet_setting(
         key,
         value,
     );
+    rebuild_layout_index_if_dimension_default_changed(engine, sheet_id, key);
     let settings = settings::get_sheet_settings(
         engine.stores.storage.doc(),
         engine.stores.storage.sheets(),
@@ -65,6 +66,30 @@ pub(in crate::storage::engine) fn set_sheet_setting(
         settings: serde_json::to_value(&settings).expect("SheetSettings must serialize"),
     });
     Ok((serialize_multi_viewport_patches(&[]), result))
+}
+
+fn rebuild_layout_index_if_dimension_default_changed(
+    engine: &mut YrsComputeEngine,
+    sheet_id: &SheetId,
+    key: &str,
+) {
+    if !matches!(key, "defaultRowHeight" | "defaultColWidth") {
+        return;
+    }
+
+    let (rows, cols) = properties::get_sheet_dimensions(
+        engine.stores.storage.doc(),
+        engine.stores.storage.sheets(),
+        sheet_id,
+    );
+    let layout = construction::build_layout_index_for_sheet(
+        &engine.stores.storage,
+        sheet_id,
+        rows,
+        cols,
+        engine.stores.grid_indexes.get(sheet_id),
+    );
+    engine.stores.layout_indexes.insert(*sheet_id, layout);
 }
 
 pub(in crate::storage::engine) fn protect_sheet(

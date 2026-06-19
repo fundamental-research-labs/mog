@@ -42,21 +42,11 @@ export function trackColumnResizeAutofit(args: AutofitResizeArgs & { col: number
 export function trackRowResizeAutofit(args: AutofitResizeArgs & { row: number }): void {
   const ranges = snapshotRanges(args.ranges);
   trackPendingAutofit(
-    Promise.all([
-      import('../../../systems/grid-editing/features/autofit'),
-      import('@mog/grid-renderer'),
-    ]).then(async ([{ autoFitRows }, { getTextMeasurementService }]) => {
-      const textMeasurement = getTextMeasurementService();
+    (async () => {
       const ws = args.workbook.getSheetById(args.activeSheetId);
       const usedRange = await ws.getUsedRange();
       const rowsToFit = getAutofitRowsForResize(args.row, ranges, usedRange);
-      await autoFitRows(
-        args.activeSheetId,
-        rowsToFit,
-        textMeasurement,
-        (entries) => ws.formatValues(entries),
-        args.workbook,
-      );
-    }),
+      await ws.layout.autoFitRows(rowsToFit);
+    })(),
   );
 }

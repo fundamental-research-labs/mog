@@ -12,7 +12,13 @@ mod plot_area;
 mod surfaces;
 mod title;
 
-use crate::infra::scanner::{find_closing_tag, find_gt_simd, find_tag_simd};
+#[cfg(test)]
+mod bar3d_regression_tests;
+
+#[cfg(test)]
+mod surface_regression_tests;
+
+use crate::infra::scanner::{find_closing_tag, find_element_end, find_gt_simd, find_tag_simd};
 
 use super::*;
 use ext::is_self_closing_tag;
@@ -119,25 +125,25 @@ impl Chart {
 
         // Parse view3D
         if let Some(v3d_start) = find_tag_simd(xml, b"view3D", chart_start) {
-            let v3d_end = find_closing_tag(xml, b"view3D", v3d_start).unwrap_or(xml.len());
+            let v3d_end = element_end_from_start(xml, v3d_start, b"view3D").unwrap_or(xml.len());
             chart.view_3d = Some(surfaces::parse_view_3d(&xml[v3d_start..v3d_end]));
         }
 
         // Parse floor
         if let Some(floor_start) = find_tag_simd(xml, b"floor", chart_start) {
-            let floor_end = find_closing_tag(xml, b"floor", floor_start).unwrap_or(xml.len());
+            let floor_end = element_end_from_start(xml, floor_start, b"floor").unwrap_or(xml.len());
             chart.floor = Some(surfaces::parse_chart_surface(&xml[floor_start..floor_end]));
         }
 
         // Parse sideWall
         if let Some(sw_start) = find_tag_simd(xml, b"sideWall", chart_start) {
-            let sw_end = find_closing_tag(xml, b"sideWall", sw_start).unwrap_or(xml.len());
+            let sw_end = element_end_from_start(xml, sw_start, b"sideWall").unwrap_or(xml.len());
             chart.side_wall = Some(surfaces::parse_chart_surface(&xml[sw_start..sw_end]));
         }
 
         // Parse backWall
         if let Some(bw_start) = find_tag_simd(xml, b"backWall", chart_start) {
-            let bw_end = find_closing_tag(xml, b"backWall", bw_start).unwrap_or(xml.len());
+            let bw_end = element_end_from_start(xml, bw_start, b"backWall").unwrap_or(xml.len());
             chart.back_wall = Some(surfaces::parse_chart_surface(&xml[bw_start..bw_end]));
         }
 
@@ -272,4 +278,22 @@ fn parse_chart_bool_child(xml: &[u8], start: usize, end: usize, tag: &[u8]) -> O
             .map(|value| matches!(value.as_str(), "1" | "true" | "True"))
             .unwrap_or(true),
     )
+}
+
+fn element_end_from_start(xml: &[u8], start: usize, local_name: &[u8]) -> Option<usize> {
+    let open_end = find_element_end(xml, start)?;
+    if is_self_closing_open_tag(xml, open_end) {
+        Some(open_end + 1)
+    } else {
+        find_closing_tag(xml, local_name, start)
+            .and_then(|close| find_gt_simd(xml, close).map(|gt| gt + 1))
+            .or(Some(xml.len()))
+    }
+}
+
+fn is_self_closing_open_tag(xml: &[u8], open_end: usize) -> bool {
+    xml[..open_end]
+        .iter()
+        .rposition(|b| !b.is_ascii_whitespace())
+        .is_some_and(|pos| xml[pos] == b'/')
 }

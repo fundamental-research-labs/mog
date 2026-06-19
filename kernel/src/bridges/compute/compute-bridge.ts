@@ -26,6 +26,7 @@ import type { ViewportRefreshDetails } from '@mog-sdk/contracts/api';
 import type { IKernelContext } from '@mog-sdk/contracts/kernel';
 import type { SheetProtectionOptions } from '@mog-sdk/contracts/protection';
 import { DEFAULT_PROTECTION_OPTIONS } from '@mog-sdk/contracts/protection';
+import type { PivotExpansionState } from '@mog-sdk/contracts/pivot';
 
 import type { BridgeTransport } from '@rust-bridge/client';
 import { createTransport, normalizeBytesTuple, TransportError } from '@mog/transport';
@@ -35,6 +36,7 @@ import type { ReadonlyBinaryViewportBuffer } from '../wire/viewport-coordinator'
 import type { CellMetadataCache } from '../wire/cell-metadata-cache';
 import type { RangeMetadataCache } from '../wire/range-metadata-cache';
 import type { ViewportPrefetchState, ViewportScrollBehavior } from '../wire/viewport-prefetch';
+import { SHEET_META_DEFAULT_COL_WIDTH } from '../../domain/sheets/sheet-meta-defaults';
 import {
   normalizeFloatingObjectForStorage,
   normalizeFloatingObjectUpdateForStorage,
@@ -44,6 +46,11 @@ import {
   type PositionedCellInput,
   type TableHeaderRename,
 } from './table-header-write-intercept';
+
+export interface PivotCreateWithSheetOptions {
+  insertBeforeSheetId?: SheetId;
+  insertIndex?: number;
+}
 
 // Generated types — source of truth from Rust snapshot-types
 import type {
@@ -101,6 +108,7 @@ import type {
   PivotTableChange,
   PivotTableConfig,
   PivotTableDef,
+  PivotTableResult,
   // Sheet/print config types
   PrintRange,
   PrintTitles,
@@ -165,6 +173,11 @@ import type {
  * since the gen file only exports the full `FloatingObject` union type.
  */
 export type ChartFloatingObject = FloatingObjectCommon & { type: 'chart' } & ChartData;
+
+export interface PivotUpdateAndMaterializeResult {
+  config: PivotTableConfig | null;
+  result: PivotTableResult | null;
+}
 
 // Re-export generated types for consumers
 export type {
@@ -1089,12 +1102,16 @@ export class ComputeBridge extends GeneratedBridgeBase {
     // See `copySheet` above: route through public admission and the normal
     // mutation pipeline so the undo service refreshes its cached state.
     const { raw } = await this.core.mutatePublicResult<[string, MutationResult]>(
-      'compute_create_sheet',
+      'compute_create_sheet_with_default_col_width',
       () =>
-        this.core.transport.call<[string, MutationResult]>('compute_create_sheet', {
-          docId: this.core.docId,
-          name,
-        }),
+        this.core.transport.call<[string, MutationResult]>(
+          'compute_create_sheet_with_default_col_width',
+          {
+            docId: this.core.docId,
+            name,
+            defaultColWidthPx: SHEET_META_DEFAULT_COL_WIDTH,
+          },
+        ),
       ([, mutationResult]) => [new Uint8Array(0), mutationResult],
     );
     const [rawId] = raw;
@@ -1115,12 +1132,16 @@ export class ComputeBridge extends GeneratedBridgeBase {
    */
   async createDefaultSheet(name: string): Promise<{ sheetId: SheetId }> {
     const { raw } = await this.core.mutateSystemResult<[string, MutationResult]>(
-      'compute_create_default_sheet',
+      'compute_create_default_sheet_with_default_col_width',
       () =>
-        this.core.transport.call<[string, MutationResult]>('compute_create_default_sheet', {
-          docId: this.core.docId,
-          name,
-        }),
+        this.core.transport.call<[string, MutationResult]>(
+          'compute_create_default_sheet_with_default_col_width',
+          {
+            docId: this.core.docId,
+            name,
+            defaultColWidthPx: SHEET_META_DEFAULT_COL_WIDTH,
+          },
+        ),
       ([, mutationResult]) => [new Uint8Array(0), mutationResult],
     );
     const [rawId] = raw;
@@ -1223,18 +1244,85 @@ export class ComputeBridge extends GeneratedBridgeBase {
   async pivotCreateWithSheet(
     sheetName: string,
     config: Partial<PivotTableConfig>,
+    options?: PivotCreateWithSheetOptions,
   ): Promise<{ sheetId: SheetId; config: PivotTableConfig }> {
     const { raw } = await this.core.mutatePublicResult<[string, PivotTableConfig, MutationResult]>(
       'compute_pivot_create_with_sheet',
       () =>
         this.core.transport.call<[string, PivotTableConfig, MutationResult]>(
           'compute_pivot_create_with_sheet',
-          { docId: this.core.docId, sheetName, config },
+          { docId: this.core.docId, sheetName, config, options: options ?? null },
         ),
       ([, , mutationResult]) => [new Uint8Array(), mutationResult],
     );
     const [rawId, pivotConfig] = raw;
     return { sheetId: toSheetId(rawId), config: pivotConfig };
+  }
+
+  /**
+   * Materialize pivot output through the mutation pipeline.
+   *
+   * The generated bridge currently routes `compute_pivot_materialize` through
+   * `query()` even though the Rust method writes materialized cells. Use the
+   * handwritten mutation command so viewport patches apply before the result is
+   * returned, without adding a user-visible undo entry for this derived render.
+   */
+  async pivotMaterialize(
+    sheetId: SheetId,
+    pivotId: string,
+    expansionState: PivotExpansionState | null,
+  ): Promise<PivotTableResult> {
+    await this.core.admitPublicMutation('compute_pivot_materialize_mutation');
+    const raw = await this.core.transport.call<[Uint8Array, MutationResult] | Uint8Array>(
+      'compute_pivot_materialize_mutation',
+      {
+        docId: this.core.docId,
+        sheetId,
+        pivotId,
+        expansionState,
+      },
+    );
+    const mutationResult = await this.core.mutateCore(
+      Promise.resolve(normalizeBytesTuple(raw as [Uint8Array, MutationResult] | Uint8Array)),
+      undefined,
+      'compute_pivot_materialize_mutation',
+    );
+    const result = extractMutationData<PivotTableResult>(mutationResult);
+    if (!result) {
+      throw new Error('pivotMaterialize: no pivot result returned in MutationResult.data');
+    }
+    return result;
+  }
+
+  async pivotUpdateAndMaterialize(
+    sheetId: SheetId,
+    pivotId: string,
+    config: PivotTableConfig,
+    expansionState: PivotExpansionState | null,
+  ): Promise<PivotUpdateAndMaterializeResult> {
+    const mutationResult = await this.core.mutatePublic(
+      'compute_pivot_update_and_materialize',
+      async () => {
+        const raw = await this.core.transport.call<[Uint8Array, MutationResult] | Uint8Array>(
+          'compute_pivot_update_and_materialize',
+          {
+            docId: this.core.docId,
+            sheetId,
+            pivotId,
+            config,
+            expansionState,
+          },
+        );
+        return normalizeBytesTuple(raw as [Uint8Array, MutationResult] | Uint8Array);
+      },
+    );
+    const result = extractMutationData<PivotUpdateAndMaterializeResult>(mutationResult);
+    if (!result) {
+      throw new Error(
+        'pivotUpdateAndMaterialize: no pivot payload returned in MutationResult.data',
+      );
+    }
+    return result;
   }
 
   /**

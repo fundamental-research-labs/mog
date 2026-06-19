@@ -47,6 +47,7 @@ pub(crate) fn merge_formats(lower: &CellFormat, higher: &CellFormat) -> CellForm
         locked: higher.locked.or(lower.locked),
         hidden: higher.hidden.or(lower.hidden),
         quote_prefix: higher.quote_prefix.or(lower.quote_prefix),
+        pivot_button: higher.pivot_button.or(lower.pivot_button),
     };
 
     // Clean up any invalid legacy lower layer that already carries both flags.

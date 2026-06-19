@@ -1,20 +1,30 @@
 use crate::domain::charts::write_canonical::serialize_chart_space;
-use domain_types::ChartDefinition;
 use domain_types::chart::{
-    AnchorPosition, AxisData, ChartFormatData, ChartSeriesCategoryLevelCacheData,
-    ChartSeriesCategoryLevelsCacheData, ChartSeriesData, ChartSeriesDimensionSourceKindData,
-    ChartSeriesPointCacheData, ChartSeriesPointCachePointData, ChartSeriesStockRoleData, ChartSpec,
-    ChartSubType, ChartType as DomainChartType, DataLabelData, LegendData, ObjectSize,
-    PivotChartOptionsData, SingleAxisData,
+    AnchorPosition, AxisData, CategoryLabelFormatData, CategoryPointLabelFormatData,
+    ChartFormatData, ChartSeriesCategoryLevelCacheData, ChartSeriesCategoryLevelsCacheData,
+    ChartSeriesData, ChartSeriesDimensionSourceKindData, ChartSeriesPointCacheData,
+    ChartSeriesPointCachePointData, ChartSeriesStockRoleData, ChartSpec, ChartSubType,
+    ChartType as DomainChartType, ObjectSize, PivotChartOptionsData, SingleAxisData,
 };
-use domain_types::chart::{CategoryLabelFormatData, CategoryPointLabelFormatData};
-use domain_types::domain::drawings::{LayoutMode, LayoutTarget, ManualLayout};
+use domain_types::domain::drawings::ManualLayout;
 use ooxml_types::charts::{AxisType, Chart, ChartAxis, ChartAxisPosition, ChartSpace, PlotArea};
 
 use super::{ranges, reconstruct_chart_space};
 
 mod axis_fidelity;
+mod bubble;
+mod category_source_type;
+mod chart_fidelity;
+mod data_label_fidelity;
 mod imported_series_fallback;
+mod of_pie;
+mod point_format_fidelity;
+mod scatter;
+mod series_shadow_fidelity;
+mod surface;
+mod title_rich_text_fidelity;
+mod trendline_fidelity;
+mod vary_by_categories;
 
 fn minimal_chart_spec(chart_type: DomainChartType, data_range: Option<&str>) -> ChartSpec {
     ChartSpec {
@@ -30,6 +40,9 @@ fn minimal_chart_spec(chart_type: DomainChartType, data_range: Option<&str>) -> 
         axes: None,
         data_labels: None,
         data_range: data_range.map(str::to_string),
+        series_range: None,
+        category_range: None,
+        colors: None,
         style: None,
         rounded_corners: None,
         auto_title_deleted: None,
@@ -63,6 +76,8 @@ fn minimal_chart_spec(chart_type: DomainChartType, data_range: Option<&str>) -> 
         size_represents: None,
         split_type: None,
         split_value: None,
+        show_lines: None,
+        smooth_lines: None,
         bar_shape: None,
         bubble_3d_effect: None,
         wireframe: None,
@@ -118,7 +133,7 @@ fn chart_xml(spec: &ChartSpec) -> String {
 }
 
 fn with_original_axes(mut spec: ChartSpec, axes: Vec<ChartAxis>) -> ChartSpec {
-    spec.definition = Some(ChartDefinition::Chart(ChartSpace {
+    spec.definition = Some(domain_types::ChartDefinition::Chart(ChartSpace {
         chart: Chart {
             plot_area: PlotArea {
                 axes,
@@ -189,20 +204,18 @@ fn data_range_chart_reconstructs_series_and_axes() {
 }
 
 #[test]
-fn bubble_scalars_reconstruct_into_modeled_chart_group() {
-    let mut spec = minimal_chart_spec(DomainChartType::Bubble, None);
-    spec.bubble_scale = Some(175);
-    spec.show_neg_bubbles = Some(true);
-    spec.size_represents = Some("w".to_string());
-    spec.bubble_3d_effect = Some(true);
+fn data_range_chart_honors_explicit_source_ranges() {
+    let mut spec = minimal_chart_spec(DomainChartType::Column, Some("Data!A1:D5"));
+    spec.category_range = Some("Labels!A2:A5".to_string());
+    spec.series_range = Some("Labels!B1:D1".to_string());
 
     let xml = chart_xml(&spec);
 
-    assert!(xml.contains("<c:bubbleChart>"), "{xml}");
-    assert!(xml.contains("<c:bubbleScale val=\"175\"/>"), "{xml}");
-    assert!(xml.contains("<c:showNegBubbles val=\"1\"/>"), "{xml}");
-    assert!(xml.contains("<c:sizeRepresents val=\"w\"/>"), "{xml}");
-    assert!(xml.contains("<c:bubble3D val=\"1\"/>"), "{xml}");
+    assert_eq!(xml.matches("<c:ser>").count(), 3);
+    assert!(xml.contains("<c:f>Labels!A2:A5</c:f>"), "{xml}");
+    assert!(xml.contains("<c:f>Labels!B1</c:f>"), "{xml}");
+    assert!(xml.contains("<c:f>Labels!C1</c:f>"), "{xml}");
+    assert!(xml.contains("<c:f>Labels!D1</c:f>"), "{xml}");
 }
 
 #[test]
@@ -505,8 +518,8 @@ fn numeric_literal_category_sources_reconstruct_num_lit_with_format_codes() {
 }
 
 #[test]
-fn ref_series_sources_omit_imported_caches_without_live_snapshot() {
-    let mut spec = minimal_chart_spec(DomainChartType::Bubble, None);
+fn ref_series_sources_reconstruct_imported_ref_caches() {
+    let mut spec = minimal_chart_spec(DomainChartType::Column, None);
     let mut series = ranges::chart_series_data(
         None,
         Some("Data!$A$2:$A$3".to_string()),
@@ -529,18 +542,7 @@ fn ref_series_sources_omit_imported_caches_without_live_snapshot() {
         format_code: None,
         points: vec![ChartSeriesPointCachePointData {
             idx: 0,
-            value: "Stale category".to_string(),
-            format_code: None,
-        }],
-    });
-    series.bubble_size = Some("Data!$C$2:$C$3".to_string());
-    series.bubble_size_source_kind = Some(ChartSeriesDimensionSourceKindData::Ref);
-    series.bubble_size_cache = Some(ChartSeriesPointCacheData {
-        point_count: Some(2),
-        format_code: None,
-        points: vec![ChartSeriesPointCachePointData {
-            idx: 0,
-            value: "888".to_string(),
+            value: "Imported category".to_string(),
             format_code: None,
         }],
     });
@@ -550,12 +552,10 @@ fn ref_series_sources_omit_imported_caches_without_live_snapshot() {
 
     assert!(xml.contains("<c:f>Data!$A$2:$A$3</c:f>"), "{xml}");
     assert!(xml.contains("<c:f>Data!$B$2:$B$3</c:f>"), "{xml}");
-    assert!(xml.contains("<c:f>Data!$C$2:$C$3</c:f>"), "{xml}");
-    assert!(!xml.contains("<c:numCache>"), "{xml}");
-    assert!(!xml.contains("<c:strCache>"), "{xml}");
-    assert!(!xml.contains("999"), "{xml}");
-    assert!(!xml.contains("Stale category"), "{xml}");
-    assert!(!xml.contains("888"), "{xml}");
+    assert!(xml.contains("<c:numCache>"), "{xml}");
+    assert!(xml.contains("<c:strCache>"), "{xml}");
+    assert!(xml.contains("<c:v>999</c:v>"), "{xml}");
+    assert!(xml.contains("<c:v>Imported category</c:v>"), "{xml}");
 }
 
 #[test]
@@ -610,7 +610,7 @@ fn cache_fallback_series_sources_reconstruct_ref_caches() {
 }
 
 #[test]
-fn multi_level_ref_sources_omit_imported_level_cache_without_live_snapshot() {
+fn multi_level_ref_sources_reconstruct_imported_level_cache() {
     let mut spec = minimal_chart_spec(DomainChartType::Column, None);
     let mut series = ranges::chart_series_data(
         Some("Imported".to_string()),
@@ -671,12 +671,18 @@ fn multi_level_ref_sources_omit_imported_level_cache_without_live_snapshot() {
 
     assert!(xml.contains("<c:multiLvlStrRef>"), "{xml}");
     assert!(xml.contains("<c:f>Data!$A$2:$B$4</c:f>"), "{xml}");
-    assert!(!xml.contains("<c:multiLvlStrCache>"), "{xml}");
-    assert!(!xml.contains("<c:lvl>"), "{xml}");
+    assert!(xml.contains("<c:multiLvlStrCache>"), "{xml}");
+    assert_eq!(xml.matches("<c:lvl>").count(), 2, "{xml}");
     assert!(!xml.contains("<c:strRef>"), "{xml}");
     assert!(!xml.contains("Flat cache should not win"), "{xml}");
-    assert!(!xml.contains("South"), "{xml}");
-    assert!(!xml.contains("Q2"), "{xml}");
+    assert!(
+        xml.contains("<c:pt idx=\"2\"><c:v>South</c:v></c:pt>"),
+        "{xml}"
+    );
+    assert!(
+        xml.contains("<c:pt idx=\"1\"><c:v>Q2</c:v></c:pt>"),
+        "{xml}"
+    );
 }
 
 #[test]
@@ -807,90 +813,6 @@ fn data_range_preserves_quoted_sheet_names_and_escaped_quotes() {
     assert_eq!(xml.matches("<c:ser>").count(), 1);
     assert!(xml.contains("<c:f>'Bob''s Data'!A2:A3</c:f>"));
     assert!(xml.contains("<c:f>'Bob''s Data'!B2:B3</c:f>"));
-}
-
-#[test]
-fn manual_layouts_reconstruct_for_chart_level_surfaces() {
-    let mut spec = minimal_chart_spec(DomainChartType::Column, Some("Data!A1:B3"));
-    spec.plot_layout = Some(ManualLayout {
-        layout_target: Some(LayoutTarget::Inner),
-        x: Some(0.125),
-        y: Some(0.25),
-        w: Some(0.75),
-        h: Some(0.5),
-        ..Default::default()
-    });
-    spec.title_layout = Some(ManualLayout {
-        x_mode: Some(LayoutMode::Edge),
-        x: Some(0.375),
-        y: Some(0.0625),
-        ..Default::default()
-    });
-    spec.legend = Some(LegendData {
-        show: true,
-        position: "right".to_string(),
-        visible: true,
-        overlay: None,
-        format: None,
-        entries: None,
-        custom_x: None,
-        custom_y: None,
-        layout: Some(ManualLayout {
-            layout_target: Some(LayoutTarget::Outer),
-            x: Some(0.875),
-            y: Some(0.125),
-            ..Default::default()
-        }),
-        shadow: None,
-        show_shadow: None,
-    });
-    spec.data_labels = Some(DataLabelData {
-        show: true,
-        delete: None,
-        position: None,
-        format: None,
-        show_value: Some(true),
-        show_category_name: None,
-        show_series_name: None,
-        show_percentage: None,
-        show_bubble_size: None,
-        show_legend_key: None,
-        separator: None,
-        show_leader_lines: None,
-        text: None,
-        visual_format: None,
-        number_format: None,
-        text_orientation: None,
-        rich_text: None,
-        auto_text: None,
-        horizontal_alignment: None,
-        vertical_alignment: None,
-        link_number_format: None,
-        geometric_shape_type: None,
-        formula: None,
-        height: None,
-        width: None,
-        leader_lines_format: None,
-        layout: Some(ManualLayout {
-            y_mode: Some(LayoutMode::Edge),
-            x: Some(0.3125),
-            y: Some(0.4375),
-            ..Default::default()
-        }),
-    });
-
-    let xml = chart_xml(&spec);
-
-    assert_eq!(xml.matches("<c:layout>").count(), 4);
-    assert!(xml.contains("<c:layoutTarget val=\"inner\"/>"));
-    assert!(xml.contains("<c:layoutTarget val=\"outer\"/>"));
-    assert!(xml.contains("<c:xMode val=\"edge\"/>"));
-    assert!(xml.contains("<c:yMode val=\"edge\"/>"));
-    assert!(xml.contains("<c:x val=\"0.125\"/>"));
-    assert!(xml.contains("<c:x val=\"0.375\"/>"));
-    assert!(xml.contains("<c:x val=\"0.3125\"/>"));
-    assert!(xml.contains("<c:x val=\"0.875\"/>"));
-    assert!(xml.contains("<c:showVal val=\"1\"/>"));
 }
 
 #[test]

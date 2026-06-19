@@ -385,6 +385,9 @@ pub struct CellFormat {
     /// Quote prefix flag (ECMA-376 §18.8.1, quotePrefix attribute).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub quote_prefix: Option<bool>,
+    /// Pivot button flag (ECMA-376 §18.8.1, pivotButton attribute).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pivot_button: Option<bool>,
 }
 
 /// Manual `Eq` impl: treats NaN-bit-identical f64 fields as equal via `to_bits()`.
@@ -437,6 +440,7 @@ impl std::hash::Hash for CellFormat {
         self.locked.hash(state);
         self.hidden.hash(state);
         self.quote_prefix.hash(state);
+        self.pivot_button.hash(state);
     }
 }
 
@@ -496,6 +500,7 @@ pub struct ResolvedCellFormat {
     pub locked: Option<bool>,
     pub hidden: Option<bool>,
     pub quote_prefix: Option<bool>,
+    pub pivot_button: Option<bool>,
 }
 
 impl From<CellFormat> for ResolvedCellFormat {
@@ -535,6 +540,7 @@ impl From<CellFormat> for ResolvedCellFormat {
             locked: cf.locked,
             hidden: cf.hidden,
             quote_prefix: cf.quote_prefix,
+            pivot_button: cf.pivot_button,
         }
     }
 }
@@ -589,6 +595,7 @@ mod tests {
             locked: Some(true),
             hidden: Some(false),
             quote_prefix: Some(false),
+            pivot_button: Some(true),
         };
 
         let resolved: ResolvedCellFormat = cf.clone().into();
@@ -623,8 +630,8 @@ mod tests {
         // test (skip_serializing_if would silently omit it, making both sides look equal).
         assert_eq!(
             cf_keys.len(),
-            34,
-            "Expected 34 CellFormat fields. If you added a field, update this count \
+            35,
+            "Expected 35 CellFormat fields. If you added a field, update this count \
              AND add a Some(...) value above AND add it to ResolvedCellFormat.",
         );
     }

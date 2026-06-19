@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 
 import { useActiveSheetId, useUIStore, useWorkbook } from '../../internal-api';
-import { findPivotAtCell } from '../../pivot/pivot-view-records';
+import { findPivotContextAtCell } from '../../pivot/pivot-view-records';
 import { PivotContextMenu } from '../pivot/PivotContextMenu';
 import { CellContextMenu } from './CellContextMenu';
 import { ObjectContextMenu } from './ObjectContextMenu';
@@ -12,7 +12,10 @@ export function GridContextMenuContent() {
   const contextMenuState = useUIStore((s) => s.contextMenu);
   const objectContextMenuIsOpen = useUIStore((s) => s.objectContextMenu.isOpen);
   const closeContextMenu = useUIStore((s) => s.closeContextMenu);
-  const [pivotId, setPivotId] = useState<string | null>(null);
+  const setContextMenuPivotContext = useUIStore((s) => s.setContextMenuPivotContext);
+  const [pendingPivotResolutionInstanceId, setPendingPivotResolutionInstanceId] = useState<
+    number | null
+  >(null);
 
   useEffect(() => {
     if (
@@ -21,15 +24,21 @@ export function GridContextMenuContent() {
       contextMenuState.targetCol == null ||
       (contextMenuState.target !== 'cell' && contextMenuState.target !== 'selection')
     ) {
-      setPivotId(null);
+      setPendingPivotResolutionInstanceId(null);
       return;
     }
 
     let cancelled = false;
-    const { targetRow, targetCol } = contextMenuState;
+    const { instanceId, targetRow, targetCol } = contextMenuState;
+    setPendingPivotResolutionInstanceId(instanceId);
     void (async () => {
-      const nextPivotId = await findPivotAtCell(wb, activeSheetId, targetRow, targetCol);
-      if (!cancelled) setPivotId(nextPivotId);
+      const pivotContext = await findPivotContextAtCell(wb, activeSheetId, targetRow, targetCol);
+      if (!cancelled && pivotContext) {
+        setContextMenuPivotContext(pivotContext);
+      }
+      if (!cancelled) {
+        setPendingPivotResolutionInstanceId((current) => (current === instanceId ? null : current));
+      }
     })();
 
     return () => {
@@ -38,9 +47,11 @@ export function GridContextMenuContent() {
   }, [
     activeSheetId,
     contextMenuState.isOpen,
+    contextMenuState.instanceId,
     contextMenuState.target,
     contextMenuState.targetCol,
     contextMenuState.targetRow,
+    setContextMenuPivotContext,
     wb,
   ]);
 
@@ -48,8 +59,26 @@ export function GridContextMenuContent() {
     return <ObjectContextMenu />;
   }
 
-  if (contextMenuState.isOpen && pivotId) {
-    return <PivotContextMenu target="pivot" pivotId={pivotId} onClose={closeContextMenu} />;
+  if (contextMenuState.isOpen && contextMenuState.pivotId) {
+    return (
+      <PivotContextMenu
+        target={contextMenuState.target}
+        pivotId={contextMenuState.pivotId}
+        headerKey={contextMenuState.pivotHeaderKey}
+        fieldId={contextMenuState.pivotFieldId}
+        placementId={contextMenuState.pivotPlacementId}
+        onClose={closeContextMenu}
+      />
+    );
+  }
+
+  if (
+    contextMenuState.isOpen &&
+    contextMenuState.targetRow != null &&
+    contextMenuState.targetCol != null &&
+    pendingPivotResolutionInstanceId === contextMenuState.instanceId
+  ) {
+    return null;
   }
 
   if (contextMenuState.isOpen) {

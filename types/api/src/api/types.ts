@@ -56,6 +56,7 @@ import type {
   PivotHandleMutationReceipt,
   PivotRefreshReceipt,
 } from './mutation-receipt';
+import type { WorksheetRange } from './ranges';
 import type {
   ApplyScenarioResult,
   CommentMention,
@@ -787,8 +788,8 @@ export interface PivotHandleInfo {
   filterFields: string[];
   /** Source sheet name when known. */
   sourceSheetName?: string;
-  /** Source range in zero-based coordinates. */
-  sourceRange?: CellRange;
+  /** Source range in zero-based coordinates with worksheet-relative A1 address. */
+  sourceRange?: WorksheetRange;
   /** Output sheet name when known. */
   outputSheetName?: string;
   /** Output anchor location. */
@@ -804,7 +805,7 @@ export interface PivotHandleInfo {
   /** Style settings when present. */
   style?: PivotTableStyle;
   /** Current rendered range, when requested and available. */
-  renderedRange?: CellRange | null;
+  renderedRange?: WorksheetRange | null;
   /** Current expansion state. */
   expansionState: PivotExpansionState;
   /** Data source type for this pivot. */
@@ -839,7 +840,7 @@ export interface PivotTableHandle {
   /** Compute this pivot table result. */
   compute(forceRefresh?: boolean): Promise<PivotTableResult | null>;
   /** Get the full range occupied by the rendered pivot table. */
-  getRange(): Promise<CellRange | null>;
+  getRange(): Promise<WorksheetRange | null>;
   /** Add a field to the row, column, or filter area */
   addField(
     field: string,
@@ -1496,7 +1497,7 @@ export interface SheetSnapshot {
   /** Sheet index (0-based) */
   index: number;
   /** Range containing all non-empty cells, or null if sheet is empty */
-  usedRange: CellRange | null;
+  usedRange: WorksheetRange | null;
   /** Number of cells with data */
   cellCount: number;
   /** Number of cells with formulas */
@@ -2212,7 +2213,7 @@ export interface SubtotalResult {
   /** Number of subtotal rows inserted */
   subtotalRowsInserted: number;
   /** Range affected by the subtotal operation */
-  affectedRange: CellRange;
+  affectedRange: WorksheetRange;
 }
 
 // Filter Sort State (1e: Filter Sort State)
@@ -2654,7 +2655,7 @@ export interface CellMetadataCache {
   /** Get the source cell of a projection. */
   getProjectionSourcePosition(row: number, col: number): { row: number; col: number } | undefined;
   /** Get the full range of a projection (dynamic array spill range). */
-  getProjectionRange(row: number, col: number): CellRange | undefined;
+  getProjectionRange(row: number, col: number): WorksheetRange | undefined;
   /** Check if a cell has validation errors. */
   hasValidationErrors(row: number, col: number): boolean;
   /** Evaluate metadata for the visible viewport range. */

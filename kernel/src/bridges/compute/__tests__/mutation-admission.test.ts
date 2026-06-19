@@ -169,6 +169,177 @@ describe('Compute mutation admission', () => {
     });
   });
 
+  it('passes pivot sheet insertion options through the handwritten transport call', async () => {
+    const ctx = makeMockContext();
+    const pivotConfig = {
+      id: 'pivot-1',
+      name: 'SalesPivot',
+      fields: [],
+      placements: [],
+      filters: [],
+    };
+    const transport: BridgeTransport & { call: jest.Mock } = {
+      call: jest.fn(async () => ['sheet-created', pivotConfig, mutationResult()]),
+    };
+    const bridge = createStartedBridge(ctx, transport);
+
+    await bridge.pivotCreateWithSheet('Pivot Output', pivotConfig, {
+      insertBeforeSheetId: sheetId('source-sheet'),
+    });
+
+    expect(transport.call).toHaveBeenCalledWith('compute_pivot_create_with_sheet', {
+      docId: 'test-doc',
+      sheetName: 'Pivot Output',
+      config: pivotConfig,
+      options: { insertBeforeSheetId: 'source-sheet' },
+    });
+
+    transport.call.mockClear();
+    await bridge.pivotCreateWithSheet('Pivot Output', pivotConfig);
+
+    expect(transport.call).toHaveBeenCalledWith('compute_pivot_create_with_sheet', {
+      docId: 'test-doc',
+      sheetName: 'Pivot Output',
+      config: pivotConfig,
+      options: null,
+    });
+  });
+
+  it('materializes pivots through public admission without recording an undo mutation', async () => {
+    const materialized = deferred<void>();
+    const awaitMaterialized = jest.fn(() => materialized.promise);
+    const notifyForwardMutation = jest.fn(async () => undefined);
+    const ctx = makeMockContext({
+      awaitMaterialized,
+      services: {
+        undo: {
+          notifyForwardMutation,
+        },
+      },
+    } as Partial<IKernelContext>);
+    const pivotResult = {
+      rows: [],
+      columnHeaders: [],
+      grandTotals: {},
+      sourceRowCount: 0,
+      renderedBounds: {
+        totalRows: 1,
+        totalCols: 1,
+        firstDataRow: 0,
+        firstDataCol: 0,
+        numDataRows: 0,
+        numDataCols: 0,
+      },
+    };
+    const transport: BridgeTransport & { call: jest.Mock } = {
+      call: jest.fn(async (command: string) => {
+        if (command === 'compute_pivot_materialize_mutation') {
+          return [new Uint8Array(), mutationResult({ data: pivotResult } as any)];
+        }
+        if (command === 'compute_drain_pending_updates') return [];
+        throw new Error(`unexpected command: ${command}`);
+      }),
+    };
+    const bridge = createStartedBridge(ctx, transport);
+
+    const promise = bridge.pivotMaterialize(sheetId('sheet-1'), 'pivot-1', {
+      expandedRows: {},
+      expandedColumns: {},
+    });
+    await Promise.resolve();
+
+    expect(awaitMaterialized).toHaveBeenCalledWith('allSheets');
+    expect(transport.call).not.toHaveBeenCalled();
+
+    materialized.resolve();
+    await expect(promise).resolves.toEqual(pivotResult);
+
+    expect(transport.call).toHaveBeenCalledWith('compute_pivot_materialize_mutation', {
+      docId: 'test-doc',
+      sheetId: 'sheet-1',
+      pivotId: 'pivot-1',
+      expansionState: {
+        expandedRows: {},
+        expandedColumns: {},
+      },
+    });
+    expect(notifyForwardMutation).not.toHaveBeenCalled();
+  });
+
+  it('updates and materializes pivots through one public undo mutation', async () => {
+    const materialized = deferred<void>();
+    const awaitMaterialized = jest.fn(() => materialized.promise);
+    const notifyForwardMutation = jest.fn(async () => undefined);
+    const ctx = makeMockContext({
+      awaitMaterialized,
+      services: {
+        undo: {
+          notifyForwardMutation,
+        },
+      },
+    } as Partial<IKernelContext>);
+    const pivotConfig = {
+      id: 'pivot-1',
+      name: 'SalesPivot',
+      fields: [],
+      placements: [
+        { placementId: 'row:Category:0', fieldId: 'Category', area: 'row', position: 0 },
+      ],
+      filters: [],
+    };
+    const pivotResult = {
+      rows: [],
+      columnHeaders: [],
+      grandTotals: {},
+      sourceRowCount: 0,
+      renderedBounds: {
+        totalRows: 1,
+        totalCols: 1,
+        firstDataRow: 0,
+        firstDataCol: 0,
+        numDataRows: 0,
+        numDataCols: 0,
+      },
+    };
+    const transport: BridgeTransport & { call: jest.Mock } = {
+      call: jest.fn(async (command: string) => {
+        if (command === 'compute_pivot_update_and_materialize') {
+          return [
+            new Uint8Array(),
+            mutationResult({ data: { config: pivotConfig, result: pivotResult } } as any),
+          ];
+        }
+        if (command === 'compute_drain_pending_updates') return [];
+        throw new Error(`unexpected command: ${command}`);
+      }),
+    };
+    const bridge = createStartedBridge(ctx, transport);
+
+    const promise = bridge.pivotUpdateAndMaterialize(sheetId('sheet-1'), 'pivot-1', pivotConfig, {
+      expandedRows: {},
+      expandedColumns: {},
+    });
+    await Promise.resolve();
+
+    expect(awaitMaterialized).toHaveBeenCalledWith('allSheets');
+    expect(transport.call).not.toHaveBeenCalled();
+
+    materialized.resolve();
+    await expect(promise).resolves.toEqual({ config: pivotConfig, result: pivotResult });
+
+    expect(transport.call).toHaveBeenCalledWith('compute_pivot_update_and_materialize', {
+      docId: 'test-doc',
+      sheetId: 'sheet-1',
+      pivotId: 'pivot-1',
+      config: pivotConfig,
+      expansionState: {
+        expandedRows: {},
+        expandedColumns: {},
+      },
+    });
+    expect(notifyForwardMutation).toHaveBeenCalledTimes(1);
+  });
+
   it('keeps non-UI workbook settings behind the all-sheet materialization barrier', async () => {
     const materialized = deferred<void>();
     const awaitMaterialized = jest.fn(() => materialized.promise);

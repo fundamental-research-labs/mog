@@ -277,6 +277,8 @@ describe('WorksheetChartsImpl source diagnostics', () => {
           makeChart({ id: 'chart-1' }),
           makeChart({ id: 'chart-2' }),
         ]),
+        getSheetName: jest.fn(async () => 'Sheet1'),
+        getSheetOrder: jest.fn(async () => [SHEET_ID]),
       },
     };
     const charts = new WorksheetChartsImpl(ctx as any, SHEET_ID);

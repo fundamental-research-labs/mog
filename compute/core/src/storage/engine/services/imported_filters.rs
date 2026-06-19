@@ -31,14 +31,24 @@ pub(in crate::storage::engine) fn normalize_imported_auto_filter_visibility(
     mut import_report: Option<&mut domain_types::ImportReport>,
     import_phase: domain_types::ImportPhase,
 ) {
-    crate::storage::engine::construction::materialize_table_auto_filters_from_preserved_specs(
-        stores,
-        mirror,
-        import_report.as_deref_mut(),
-        import_phase,
-    );
+    let mut profile =
+        crate::xlsx_profile::PhaseTimer::new("import", "normalize_imported_auto_filter_visibility");
+    let had_import_report = import_report.is_some();
+    {
+        let mut materialize_profile =
+            crate::xlsx_profile::PhaseTimer::new("import", "materialize_table_auto_filters");
+        crate::storage::engine::construction::materialize_table_auto_filters_from_preserved_specs(
+            stores,
+            mirror,
+            import_report.as_deref_mut(),
+            import_phase,
+        );
+        materialize_profile.counter("had_import_report", u64::from(had_import_report));
+    }
 
     let sheet_ids: Vec<SheetId> = stores.grid_indexes.keys().copied().collect();
+    profile.counter("sheets", sheet_ids.len() as u64);
+    profile.counter("had_import_report", u64::from(had_import_report));
     for sheet_id in sheet_ids {
         normalize_imported_auto_filter_visibility_for_sheet(
             stores,
@@ -104,7 +114,22 @@ pub(in crate::storage::engine) fn normalize_imported_auto_filter_visibility_for_
             }
         }
 
-        let results = evaluate_runtime_filter(stores, mirror, sheet_id, &filter.id);
+        let results = {
+            let mut eval_profile =
+                crate::xlsx_profile::PhaseTimer::new("import", "evaluate_imported_filter");
+            let results = evaluate_runtime_filter(stores, mirror, sheet_id, &filter.id);
+            eval_profile.counter("rows", results.len() as u64);
+            eval_profile.counter("column_filters", filter.column_filters.len() as u64);
+            eval_profile.counter(
+                "kind",
+                match filter.filter_kind {
+                    filters::FilterKind::AutoFilter => 1_u64,
+                    filters::FilterKind::TableFilter => 2_u64,
+                    filters::FilterKind::AdvancedFilter => 3_u64,
+                },
+            );
+            results
+        };
         if results.is_empty() {
             continue;
         }
@@ -119,15 +144,23 @@ pub(in crate::storage::engine) fn normalize_imported_auto_filter_visibility_for_
             }
         }
 
-        let transitions = dimensions::normalize_imported_filter_hidden_rows(
-            stores.storage.doc(),
-            stores.storage.sheets(),
-            sheet_id,
-            &filter.id,
-            &rows_excluded,
-            &rows_included,
-            stores.grid_indexes.get(sheet_id),
-        );
+        let transitions = {
+            let mut visibility_profile =
+                crate::xlsx_profile::PhaseTimer::new("import", "normalize_filter_hidden_rows");
+            let transitions = dimensions::normalize_imported_filter_hidden_rows(
+                stores.storage.doc(),
+                stores.storage.sheets(),
+                sheet_id,
+                &filter.id,
+                &rows_excluded,
+                &rows_included,
+                stores.grid_indexes.get(sheet_id),
+            );
+            visibility_profile.counter("rows_excluded", rows_excluded.len() as u64);
+            visibility_profile.counter("rows_included", rows_included.len() as u64);
+            visibility_profile.counter("transitions", transitions.len() as u64);
+            transitions
+        };
         apply_visibility_transitions(stores, mirror, sheet_id, &transitions);
         remove_filter_only_rows_from_explicit_hidden_metadata(
             stores,
@@ -805,6 +838,12 @@ fn evaluate_runtime_filter(
         sheet_id,
         filter_id,
         |row, col| {
+            if let Some(col_slice) = mirror.get_column_slice(&sid, col) {
+                return col_slice
+                    .get(row as usize)
+                    .cloned()
+                    .unwrap_or(CellValue::Null);
+            }
             let pos = SheetPos::new(row, col);
             mirror
                 .get_cell_value_at(&sid, pos)

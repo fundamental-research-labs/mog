@@ -146,7 +146,7 @@ fn external_worksheet_pivot_cache_exports_snapshot_and_relationship() {
         vec![
             vec![
                 DomainValue::Text(Arc::from("A")),
-                DomainValue::Number(FiniteF64::new(10.0).unwrap()),
+                DomainValue::Number(FiniteF64::new(999.0).unwrap()),
             ],
             vec![
                 DomainValue::Text(Arc::from("B")),
@@ -183,7 +183,7 @@ fn external_worksheet_pivot_cache_exports_snapshot_and_relationship() {
     );
     assert!(definition_xml.contains(r#"<s v="B"/><s v="A"/>"#));
     assert!(records_xml.contains(r#"<x v="1"/>"#));
-    assert!(records_xml.contains(r#"<n v="10"/>"#));
+    assert!(records_xml.contains(r#"<n v="999"/>"#));
     assert!(definition_rels.contains(r#"Id="rIdExternalSource""#));
     assert!(definition_rels.contains(r#"Target="file:///tmp/source.xlsx""#));
     assert!(definition_rels.contains(r#"TargetMode="External""#));
@@ -311,7 +311,7 @@ fn pivot_cache_records_xml_uses_typed_records_when_source_matches() {
         vec![
             vec![
                 DomainValue::Text(Arc::from("A")),
-                DomainValue::Number(FiniteF64::new(10.0).unwrap()),
+                DomainValue::Number(FiniteF64::new(999.0).unwrap()),
             ],
             vec![
                 DomainValue::Text(Arc::from("B")),
@@ -331,12 +331,12 @@ fn pivot_cache_records_xml_uses_typed_records_when_source_matches() {
 
     assert!(records_xml.contains("count=\"2\""));
     assert!(records_xml.contains("<x v=\"0\"/>"));
-    assert!(records_xml.contains("<n v=\"10\"/>"));
+    assert!(records_xml.contains("<n v=\"999\"/>"));
 }
 
 #[test]
-fn stale_pivot_cache_records_are_recomputed_when_source_changes() {
-    let mut output = pivot_package_output(vec![make_pivot_config(
+fn missing_pivot_cache_records_are_recomputed_from_source() {
+    let output = pivot_package_output(vec![make_pivot_config(
         "pivot-1",
         "PivotTable1",
         "Data",
@@ -344,19 +344,6 @@ fn stale_pivot_cache_records_are_recomputed_when_source_changes() {
         "Pivot",
         Some(11),
     )]);
-    output.pivot_cache_records.insert(
-        11,
-        vec![
-            vec![
-                DomainValue::Text(Arc::from("A")),
-                DomainValue::Number(FiniteF64::new(999.0).unwrap()),
-            ],
-            vec![
-                DomainValue::Text(Arc::from("B")),
-                DomainValue::Number(FiniteF64::new(20.0).unwrap()),
-            ],
-        ],
-    );
 
     let bytes = write_xlsx_from_parse_output(&output).unwrap();
     let archive = crate::XlsxArchive::new(&bytes).unwrap();

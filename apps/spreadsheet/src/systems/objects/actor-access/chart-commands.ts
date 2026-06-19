@@ -1,7 +1,7 @@
 /**
  * Chart Command Factory
  *
- * Type-safe wrappers around actor.send() for chart state machine events.
+ * Commands for chart UI state and chart-as-floating-object selection.
  *
  * Extracted from coordinator/actor-access/commands.ts
  *
@@ -11,6 +11,7 @@
 import type {
   ChartCommands,
   ChartElementType,
+  ObjectCommands,
   ChartType,
   ResizeHandle,
 } from '@mog-sdk/contracts/actors';
@@ -24,33 +25,41 @@ interface MinimalActor {
   send(event: any): void;
 }
 
+type ChartObjectCommands = Pick<ObjectCommands, 'selectObject' | 'deselectAll' | 'keyDelete'>;
+
 // =============================================================================
 // FACTORY
 // =============================================================================
 
 /**
  * Create chart commands from a chart actor.
- * Wraps actor.send() with type-safe methods for chart events.
+ * Chart object selection is owned by objectInteraction. Chart-machine commands
+ * only cover chart-specific UI state like editing, creation, and element
+ * selection.
  *
  * @param actor - The chart state machine actor
+ * @param objectCommands - Object interaction commands for chart object selection
  * @returns ChartCommands interface implementation
  *
  * @see state-machines/src/chart-machine.ts for event definitions
  */
-export function createChartCommands(actor: MinimalActor): ChartCommands {
+export function createChartCommands(
+  actor: MinimalActor,
+  objectCommands: ChartObjectCommands,
+): ChartCommands {
   return {
     // -------------------------------------------------------------------------
     // Selection
     // -------------------------------------------------------------------------
-    select: (chartId: string) => actor.send({ type: 'SELECT', chartId }),
+    select: (chartId: string) => objectCommands.selectObject(chartId, false, false),
 
-    deselect: () => actor.send({ type: 'DESELECT' }),
+    deselect: () => objectCommands.deselectAll(),
 
-    deselectAll: () => actor.send({ type: 'DESELECT_ALL' }),
+    deselectAll: () => objectCommands.deselectAll(),
 
-    addToSelection: (chartId: string) => actor.send({ type: 'ADD_TO_SELECTION', chartId }),
+    addToSelection: (chartId: string) => objectCommands.selectObject(chartId, true, false),
 
-    toggleSelection: (chartId: string) => actor.send({ type: 'TOGGLE_SELECTION', chartId }),
+    toggleSelection: (chartId: string) => objectCommands.selectObject(chartId, false, true),
 
     // -------------------------------------------------------------------------
     // Editing
@@ -79,7 +88,7 @@ export function createChartCommands(actor: MinimalActor): ChartCommands {
     // -------------------------------------------------------------------------
     // Deletion
     // -------------------------------------------------------------------------
-    delete: () => actor.send({ type: 'DELETE' }),
+    delete: () => objectCommands.keyDelete(),
 
     // -------------------------------------------------------------------------
     // Drag/Resize

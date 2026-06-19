@@ -49,10 +49,16 @@ fn rel_id(xml: &[u8], namespaced: &[u8], unqualified: &[u8]) -> String {
 
 /// Parse `<xdr:xfrm>` inside a graphicFrame element into a `Transform2D`.
 pub(crate) fn parse_graphic_frame_xfrm(element: &[u8]) -> ooxml_types::drawings::Transform2D {
+    parse_graphic_frame_xfrm_with_presence(element).0
+}
+
+pub(crate) fn parse_graphic_frame_xfrm_with_presence(
+    element: &[u8],
+) -> (ooxml_types::drawings::Transform2D, bool) {
     let mut xfrm = ooxml_types::drawings::Transform2D::default();
 
     let Some(xfrm_el) = direct_child_slice(element, b"xfrm") else {
-        return xfrm;
+        return (xfrm, false);
     };
 
     xfrm.rotation = attr_value(xfrm_el, b"rot=\"")
@@ -86,7 +92,7 @@ pub(crate) fn parse_graphic_frame_xfrm(element: &[u8]) -> ooxml_types::drawings:
         xfrm.extent = Some((cx, cy));
     }
 
-    xfrm
+    (xfrm, true)
 }
 
 /// Parse non-visual properties for a graphic frame (`nvGraphicFramePr`).
@@ -132,16 +138,18 @@ mod tests {
     #[test]
     fn graphic_frame_transform_uses_direct_xfrm_only() {
         let xml = br#"<xdr:graphicFrame><xdr:nvGraphicFramePr/><a:graphic><a:xfrm><a:off x="999" y="999"/></a:xfrm></a:graphic></xdr:graphicFrame>"#;
-        let xfrm = parse_graphic_frame_xfrm(xml);
+        let (xfrm, has_xfrm) = parse_graphic_frame_xfrm_with_presence(xml);
 
+        assert!(!has_xfrm);
         assert_eq!(xfrm.offset, None);
     }
 
     #[test]
     fn graphic_frame_transform_reads_direct_xfrm() {
         let xml = br#"<xdr:graphicFrame><xdr:xfrm flipH="1"><a:off x="10" y="20"/><a:ext cx="30" cy="40"/></xdr:xfrm><a:graphic/></xdr:graphicFrame>"#;
-        let xfrm = parse_graphic_frame_xfrm(xml);
+        let (xfrm, has_xfrm) = parse_graphic_frame_xfrm_with_presence(xml);
 
+        assert!(has_xfrm);
         assert_eq!(xfrm.flip_h, Some(true));
         assert_eq!(xfrm.offset, Some((10, 20)));
         assert_eq!(xfrm.extent, Some((30, 40)));

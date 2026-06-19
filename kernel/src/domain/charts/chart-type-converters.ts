@@ -30,18 +30,24 @@
 
 import type { ChartSeriesData } from '../../bridges/compute/compute-types.gen';
 
-import type { SeriesConfig } from '@mog-sdk/contracts/data/charts';
+import type { MarkerStyle, SeriesConfig } from '@mog-sdk/contracts/data/charts';
 
 import {
   chartColorToWire,
   chartFormatToWire,
+  chartLineFormatToWire,
+  directHexColorToWire,
   wireToChartColor,
   wireToChartFormat,
+  wireToChartLineFormat,
+  wireToDirectHexColor,
 } from './chart-format-converters';
 
 import {
   dataLabelConfigToWire,
   errorBarConfigToWire,
+  MARKER_STYLES,
+  narrowEnum,
   pointFormatToWire,
   trendlineConfigArrayToWire,
   wireToDataLabelConfig,
@@ -96,6 +102,8 @@ export {
   chartShadowToWire,
   chartStyleContextToWire,
   dataTableConfigToWire,
+  directHexColorToWire,
+  directHexPaletteToWire,
   leaderLinesFormatToWire,
   wireToChartColor,
   wireToChartFill,
@@ -107,6 +115,8 @@ export {
   wireToChartShadow,
   wireToChartStyleContext,
   wireToDataTableConfig,
+  wireToDirectHexColor,
+  wireToDirectHexPalette,
   wireToLeaderLinesFormat,
 } from './chart-format-converters';
 
@@ -123,6 +133,24 @@ export {
   wireToTrendlineConfigArray,
 } from './chart-annotation-converters';
 
+const Y_AXIS_INDICES = [0, 1] as const;
+type YAxisIndex = NonNullable<SeriesConfig['yAxisIndex']>;
+
+function narrowNumberEnum<T extends number>(
+  value: number | null | undefined,
+  allowed: readonly T[],
+  fieldName: string,
+): T | undefined {
+  if (value == null) return undefined;
+  if ((allowed as readonly number[]).includes(value)) return value as T;
+  if (typeof console !== 'undefined' && typeof console.warn === 'function') {
+    console.warn(
+      `[chart-type-converters] dropping unknown ${fieldName}="${value}" - not in allowed set`,
+    );
+  }
+  return undefined;
+}
+
 // =============================================================================
 // Wire → Config (narrowing — validates enum strings against contract unions)
 // =============================================================================
@@ -135,7 +163,7 @@ export function wireToSeriesConfig(w: ChartSeriesData): SeriesConfig {
     // SeriesConfig.type is an unrestricted string on the contract side —
     // chart-type strings are validated at the chart level, not here.
     type: w.type,
-    color: w.color,
+    color: wireToDirectHexColor(w.color),
     stockRole: w.stockRole,
     values: w.values,
     valueCache: w.valueCache,
@@ -144,21 +172,22 @@ export function wireToSeriesConfig(w: ChartSeriesData): SeriesConfig {
     xRole: w.xRole,
     categoryCache: w.categoryCache,
     categorySourceKind: w.categorySourceKind,
+    categorySourceType: w.categorySourceType,
     categoryLevels: w.categoryLevels,
     categoryLabelFormat: w.categoryLabelFormat,
     bubbleSize: w.bubbleSize,
     bubbleSizeCache: w.bubbleSizeCache,
     bubbleSizeSourceKind: w.bubbleSizeSourceKind,
+    bubble3d: w.bubble3d,
+    bubble3D: w.bubble3d,
     smooth: w.smooth,
     showLines: w.showLines,
     explosion: w.explosion,
     invertIfNegative: w.invertIfNegative,
-    yAxisIndex: w.yAxisIndex,
+    yAxisIndex: narrowNumberEnum<YAxisIndex>(w.yAxisIndex, Y_AXIS_INDICES, 'Series.yAxisIndex'),
     showMarkers: w.showMarkers,
     markerSize: w.markerSize,
-    // SeriesConfig.markerStyle is an unrestricted string on the contract;
-    // per-point `PointFormat.markerStyle` is the narrowed one.
-    markerStyle: w.markerStyle,
+    markerStyle: narrowEnum<MarkerStyle>(w.markerStyle, MARKER_STYLES, 'Series.markerStyle'),
     lineWidth: w.lineWidth,
     points: w.points?.map(wireToPointFormat),
     dataLabels: w.dataLabels ? wireToDataLabelConfig(w.dataLabels) : undefined,
@@ -173,6 +202,7 @@ export function wireToSeriesConfig(w: ChartSeriesData): SeriesConfig {
     invertColor: wireToChartColor(w.invertColor),
     markerBackgroundColor: wireToChartColor(w.markerBackgroundColor),
     markerForegroundColor: wireToChartColor(w.markerForegroundColor),
+    markerLineFormat: w.markerLineFormat ? wireToChartLineFormat(w.markerLineFormat) : undefined,
     filtered: w.filtered,
     sourceSeriesIndex: w.sourceSeriesIndex,
     sourceSeriesKey: w.sourceSeriesKey,
@@ -206,7 +236,7 @@ export function seriesConfigToWire(c: SeriesConfig): ChartSeriesData {
     name: c.name,
     nameRef: c.nameRef,
     type: c.type,
-    color: c.color,
+    color: directHexColorToWire(c.color),
     stockRole: c.stockRole,
     values: c.values,
     valueCache: c.valueCache,
@@ -215,11 +245,13 @@ export function seriesConfigToWire(c: SeriesConfig): ChartSeriesData {
     xRole: c.xRole,
     categoryCache: c.categoryCache,
     categorySourceKind: c.categorySourceKind,
+    categorySourceType: c.categorySourceType,
     categoryLevels: c.categoryLevels,
     categoryLabelFormat: c.categoryLabelFormat,
     bubbleSize: c.bubbleSize,
     bubbleSizeCache: c.bubbleSizeCache,
     bubbleSizeSourceKind: c.bubbleSizeSourceKind,
+    bubble3d: c.bubble3d ?? c.bubble3D,
     smooth: c.smooth,
     showLines: c.showLines,
     explosion: c.explosion,
@@ -242,6 +274,7 @@ export function seriesConfigToWire(c: SeriesConfig): ChartSeriesData {
     invertColor: chartColorToWire(c.invertColor),
     markerBackgroundColor: chartColorToWire(c.markerBackgroundColor),
     markerForegroundColor: chartColorToWire(c.markerForegroundColor),
+    markerLineFormat: c.markerLineFormat ? chartLineFormatToWire(c.markerLineFormat) : undefined,
     filtered: c.filtered,
     sourceSeriesIndex: c.sourceSeriesIndex,
     sourceSeriesKey: c.sourceSeriesKey,

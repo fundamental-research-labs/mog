@@ -323,12 +323,18 @@ impl YrsComputeEngine {
                                 .unwrap_or_else(|| p.field_id().to_string())
                         })
                         .collect();
+                    let repeat_row_labels = engine_config
+                        .layout
+                        .as_ref()
+                        .and_then(|layout| layout.repeat_row_labels)
+                        .unwrap_or(false);
                     mirror.materialize_pivot_with_identities(
                         &output_sheet_id,
                         config.output_location.row,
                         config.output_location.col,
                         &result,
                         &row_field_names,
+                        repeat_row_labels,
                         &stores.grid_id_alloc,
                     );
                     apply_pivot_value_number_formats(
@@ -436,12 +442,18 @@ impl YrsComputeEngine {
                                 .unwrap_or_else(|| p.field_id().to_string())
                         })
                         .collect();
+                    let repeat_row_labels = engine_config
+                        .layout
+                        .as_ref()
+                        .and_then(|layout| layout.repeat_row_labels)
+                        .unwrap_or(false);
                     self.mirror.materialize_pivot_with_identities(
                         &output_sheet_id,
                         config.output_location.row,
                         config.output_location.col,
                         &result,
                         &row_field_names,
+                        repeat_row_labels,
                         &self.stores.grid_id_alloc,
                     );
                     apply_pivot_value_number_formats(

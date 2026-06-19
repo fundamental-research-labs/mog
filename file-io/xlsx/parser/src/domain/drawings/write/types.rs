@@ -264,6 +264,12 @@ pub struct ChartExRef {
     pub id: u32,
     /// Whether hidden (cNvPr/@hidden)
     pub hidden: bool,
+    /// Whether to emit the graphicFrame `<xdr:xfrm>` element.
+    pub has_xfrm: bool,
+    /// Whether to emit the transform `<a:off>` child.
+    pub xfrm_has_off: bool,
+    /// Whether to emit the transform `<a:ext>` child.
+    pub xfrm_has_ext: bool,
     /// Graphic frame transform offset x.
     pub xfrm_off_x: i64,
     /// xfrm offset y
@@ -332,6 +338,12 @@ pub struct ChartRef {
     /// Extension list from cNvGraphicFramePr — opaque XML passthrough
     /// (CT_NonVisualGraphicFrameProperties extLst).
     pub c_nv_graphic_frame_pr_ext_lst: Option<String>,
+    /// Whether to emit the graphicFrame `<xdr:xfrm>` element.
+    pub has_xfrm: bool,
+    /// Whether to emit the transform `<a:off>` child.
+    pub xfrm_has_off: bool,
+    /// Whether to emit the transform `<a:ext>` child.
+    pub xfrm_has_ext: bool,
     /// Transform: offset x
     pub xfrm_off_x: i64,
     /// Transform: offset y

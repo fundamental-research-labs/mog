@@ -2,18 +2,24 @@ use domain_types::{
     ChartDefinition,
     chart::{
         ChartLineSettingsData, ChartSeriesData, ChartSeriesStockRoleData, ChartSpec, ChartSubType,
-        ChartType as DomainChartType, UpDownBarsData,
+        ChartType as DomainChartType, DataLabelData, UpDownBarsData,
     },
 };
 use ooxml_types::charts::{
-    self, BarDirection, ChartGroup, ChartType as OoxmlChartType, ChartTypeConfig, Grouping,
+    self, BarDirection, ChartGroup, ChartType as OoxmlChartType, ChartTypeConfig, ExtensionEntry,
+    Grouping,
 };
 
 use super::{
+    super::data_label_contract_ext::{
+        build_full_data_label_contract_extension, is_data_label_contract_extension,
+    },
+    axes::chart_type_supports_series_axis,
     elements::build_data_labels,
     formatting::{build_outline, build_shape_properties},
     ranges::series_for_export,
-    series::build_series,
+    series::{build_series, preserve_imported_series_text_body_properties},
+    text_body_fidelity::preserve_imported_optional_data_label_options_text_properties,
 };
 
 // =============================================================================
@@ -32,35 +38,55 @@ pub(super) fn build_chart_groups(spec: &ChartSpec) -> Vec<ChartGroup> {
                     let series: Vec<_> = group
                         .series
                         .iter()
-                        .map(|series| series.idx)
-                        .filter_map(|idx| spec.series.iter().find(|s| s.idx == Some(idx)))
+                        .filter_map(|series| {
+                            spec.series
+                                .iter()
+                                .find(|s| s.idx == Some(series.idx))
+                                .map(|sd| (series, sd))
+                        })
                         .enumerate()
-                        .map(|(fallback_idx, sd)| {
-                            build_series(sd, &spec.chart_type, fallback_idx as u32, false)
+                        .map(|(fallback_idx, (imported_series, sd))| {
+                            let mut series =
+                                build_series(sd, &spec.chart_type, fallback_idx as u32, false);
+                            preserve_imported_series_text_body_properties(
+                                &mut series,
+                                imported_series,
+                            );
+                            series
                         })
                         .collect();
 
                     // Inject series into the config template. The template is
                     // stored as a domain `ChartTypeConfig`; convert back to
                     // the ooxml form for the writer helpers to consume.
+                    let chart_type = apply_surface_top_view_to_chart_type(group.chart_type, spec);
                     let config = inject_series_into_config(&group.config, &series, spec);
+                    let config = coerce_surface_config_to_chart_type(config, chart_type);
 
                     // Inject chart-level data labels
-                    let d_lbls = spec.data_labels.as_ref().map(build_data_labels);
+                    let mut d_lbls = spec.data_labels.as_ref().map(build_data_labels);
+                    preserve_imported_optional_data_label_options_text_properties(
+                        &mut d_lbls,
+                        group.d_lbls.as_ref(),
+                    );
 
                     // Chart-type discriminant. `ChartType::Unknown(s)`
                     // (from a non-standard @chartType attribute) round-trips
                     // as the raw attribute on `ChartGroup`; everything else
                     // maps to the OOXML enum (row 2.13 + 2.21 fold).
                     ChartGroup {
-                        chart_type: group.chart_type,
+                        chart_type,
                         config,
                         series,
                         d_lbls,
                         ax_id: group.ax_id.clone(),
                         raw_chart_type_attr: group.raw_chart_type_attr.clone(),
                         raw_chart_element_name: group.raw_chart_element_name.clone(),
-                        raw_chart_group_xml: group.raw_chart_group_xml.clone(),
+                        raw_chart_group_xml: if chart_type == group.chart_type {
+                            group.raw_chart_group_xml.clone()
+                        } else {
+                            None
+                        },
                     }
                 })
                 .collect();
@@ -87,6 +113,21 @@ pub(super) fn build_chart_groups(spec: &ChartSpec) -> Vec<ChartGroup> {
         &spec.chart_type,
         series_data.iter().enumerate().collect(),
     )]
+}
+
+fn surface_data_label_extensions(
+    existing: &[ExtensionEntry],
+    labels: Option<&DataLabelData>,
+) -> Vec<ExtensionEntry> {
+    let mut extensions: Vec<_> = existing
+        .iter()
+        .filter(|extension| !is_data_label_contract_extension(extension))
+        .cloned()
+        .collect();
+    if let Some(extension) = labels.and_then(build_full_data_label_contract_extension) {
+        extensions.push(extension);
+    }
+    extensions
 }
 
 #[derive(Debug)]
@@ -296,14 +337,17 @@ fn build_modeled_chart_group(
     chart_type: &DomainChartType,
     series_data: Vec<(usize, &ChartSeriesData)>,
 ) -> ChartGroup {
-    let ooxml_ct = domain_to_ooxml_chart_type(chart_type, spec.sub_type.as_ref());
+    let ooxml_ct = apply_surface_top_view_to_chart_type(
+        domain_to_ooxml_chart_type(chart_type, spec.sub_type.as_ref()),
+        spec,
+    );
     let series: Vec<_> = series_data
         .iter()
         .map(|(fallback_idx, sd)| build_series(sd, chart_type, *fallback_idx as u32, true))
         .collect();
-    let config = build_default_config(ooxml_ct, chart_type, spec, &series);
+    let config = build_default_config(ooxml_ct, chart_type, spec, &series, &series_data);
     let d_lbls = spec.data_labels.as_ref().map(build_data_labels);
-    let ax_id = default_axis_ids_for_series_group(ooxml_ct, &series_data);
+    let ax_id = default_axis_ids_for_series_group(ooxml_ct, chart_type, &series_data);
 
     ChartGroup {
         chart_type: ooxml_ct,
@@ -324,6 +368,37 @@ pub(super) fn domain_to_ooxml_chart_type(
     ct.to_ooxml()
 }
 
+fn apply_surface_top_view_to_chart_type(
+    chart_type: OoxmlChartType,
+    spec: &ChartSpec,
+) -> OoxmlChartType {
+    match (chart_type, spec.surface_top_view) {
+        (OoxmlChartType::Surface | OoxmlChartType::Surface3D, Some(true)) => {
+            OoxmlChartType::Surface
+        }
+        (OoxmlChartType::Surface | OoxmlChartType::Surface3D, Some(false)) => {
+            OoxmlChartType::Surface3D
+        }
+        _ => chart_type,
+    }
+}
+
+fn coerce_surface_config_to_chart_type(
+    config: ChartTypeConfig,
+    chart_type: OoxmlChartType,
+) -> ChartTypeConfig {
+    match (config, chart_type) {
+        (ChartTypeConfig::Surface(c) | ChartTypeConfig::Surface3D(c), OoxmlChartType::Surface) => {
+            ChartTypeConfig::Surface(c)
+        }
+        (
+            ChartTypeConfig::Surface(c) | ChartTypeConfig::Surface3D(c),
+            OoxmlChartType::Surface3D,
+        ) => ChartTypeConfig::Surface3D(c),
+        (config, _) => config,
+    }
+}
+
 /// Map domain sub-type to OOXML Grouping.
 pub(super) fn sub_type_to_grouping(sub: Option<&ChartSubType>) -> Grouping {
     match sub {
@@ -337,10 +412,41 @@ pub(super) fn sub_type_to_grouping(sub: Option<&ChartSubType>) -> Grouping {
 fn sub_type_to_path_grouping(sub: Option<&ChartSubType>) -> Grouping {
     match sub {
         Some(ChartSubType::Clustered) => Grouping::Clustered,
-        Some(ChartSubType::Stacked) => Grouping::Stacked,
-        Some(ChartSubType::PercentStacked) => Grouping::PercentStacked,
+        Some(ChartSubType::Stacked | ChartSubType::MarkersStacked) => Grouping::Stacked,
+        Some(ChartSubType::PercentStacked | ChartSubType::MarkersPercentStacked) => {
+            Grouping::PercentStacked
+        }
         _ => Grouping::Standard,
     }
+}
+
+fn line_marker_for_sub_type(sub: Option<&ChartSubType>) -> Option<bool> {
+    matches!(
+        sub,
+        Some(
+            ChartSubType::Markers
+                | ChartSubType::MarkersStacked
+                | ChartSubType::MarkersPercentStacked
+                | ChartSubType::SmoothMarkers
+        )
+    )
+    .then_some(true)
+}
+
+fn line_marker_for_series(series: &[charts::ChartSeries]) -> Option<bool> {
+    let mut has_explicit_none = false;
+    for series in series {
+        let Some(marker) = series.marker.as_ref() else {
+            continue;
+        };
+        match marker.symbol {
+            Some(charts::MarkerStyle::None) => has_explicit_none = true,
+            Some(_) => return Some(true),
+            None if marker.size.is_some() || marker.sp_pr.is_some() => return Some(true),
+            None => {}
+        }
+    }
+    has_explicit_none.then_some(false)
 }
 
 fn radar_style_for_sub_type(sub: Option<&ChartSubType>) -> Option<charts::RadarStyle> {
@@ -349,6 +455,45 @@ fn radar_style_for_sub_type(sub: Option<&ChartSubType>) -> Option<charts::RadarS
         Some(ChartSubType::Markers) => Some(charts::RadarStyle::Marker),
         _ => None,
     }
+}
+
+fn split_type_from_public(value: &str) -> charts::SplitType {
+    match value {
+        "custom" | "cust" => charts::SplitType::Custom,
+        "position" | "pos" => charts::SplitType::Position,
+        "value" | "val" => charts::SplitType::Value,
+        "percent" => charts::SplitType::Percent,
+        "auto" => charts::SplitType::Auto,
+        other => charts::SplitType::from_ooxml(other),
+    }
+}
+
+fn scatter_style_for_modeled_state(
+    spec: &ChartSpec,
+    series_data: &[(usize, &ChartSeriesData)],
+) -> Option<charts::ScatterStyle> {
+    if spec.smooth_lines == Some(true)
+        || series_data
+            .iter()
+            .any(|(_, series)| series.smooth == Some(true))
+    {
+        return Some(charts::ScatterStyle::Smooth);
+    }
+    if spec.show_lines == Some(true)
+        || series_data
+            .iter()
+            .any(|(_, series)| series.show_lines == Some(true))
+    {
+        return Some(charts::ScatterStyle::Line);
+    }
+    if spec.show_lines == Some(false)
+        || series_data
+            .iter()
+            .any(|(_, series)| series.show_lines == Some(false))
+    {
+        return Some(charts::ScatterStyle::Marker);
+    }
+    None
 }
 
 /// Determine bar direction from domain chart type.
@@ -372,20 +517,25 @@ pub(super) fn default_axis_ids(ct: OoxmlChartType) -> Vec<u32> {
 
 fn default_axis_ids_for_series_group(
     ct: OoxmlChartType,
+    chart_type: &DomainChartType,
     series_data: &[(usize, &ChartSeriesData)],
 ) -> Vec<u32> {
     if default_axis_ids(ct).is_empty() {
         return Vec::new();
     }
 
-    if series_data
+    let mut axis_ids = if series_data
         .iter()
         .any(|(_, series)| series.y_axis_index == Some(1))
     {
         vec![333333333, 444444444]
     } else {
         default_axis_ids(ct)
+    };
+    if chart_type_supports_series_axis(chart_type) {
+        axis_ids.push(555555555);
     }
+    axis_ids
 }
 
 /// Build a default ChartTypeConfig for a single-group chart.
@@ -393,7 +543,8 @@ pub(super) fn build_default_config(
     ct: OoxmlChartType,
     chart_type: &DomainChartType,
     spec: &ChartSpec,
-    _series: &[charts::ChartSeries],
+    series: &[charts::ChartSeries],
+    series_data: &[(usize, &ChartSeriesData)],
 ) -> ChartTypeConfig {
     let grouping = sub_type_to_grouping(spec.sub_type.as_ref());
     let path_grouping = sub_type_to_path_grouping(spec.sub_type.as_ref());
@@ -403,6 +554,7 @@ pub(super) fn build_default_config(
             ChartTypeConfig::Bar(charts::BarChartConfig {
                 bar_dir,
                 grouping: Some(grouping),
+                vary_colors: spec.vary_by_categories,
                 gap_width: spec.gap_width,
                 overlap: spec.overlap,
                 ser_lines: spec
@@ -418,6 +570,7 @@ pub(super) fn build_default_config(
             ChartTypeConfig::Bar3D(charts::Bar3DChartConfig {
                 bar_dir,
                 grouping: Some(grouping),
+                vary_colors: spec.vary_by_categories,
                 gap_width: spec.gap_width,
                 gap_depth: spec.gap_depth,
                 shape: spec.bar_shape.as_deref().map(charts::BarShape::from_ooxml),
@@ -426,13 +579,17 @@ pub(super) fn build_default_config(
         }
         OoxmlChartType::Line => ChartTypeConfig::Line(charts::LineChartConfig {
             grouping: path_grouping,
+            vary_colors: spec.vary_by_categories,
             drop_lines: spec.drop_lines.as_ref().map(build_chart_lines),
             hi_low_lines: spec.high_low_lines.as_ref().map(build_chart_lines),
             up_down_bars: spec.up_down_bars.as_ref().map(build_up_down_bars),
+            marker: line_marker_for_sub_type(spec.sub_type.as_ref())
+                .or_else(|| line_marker_for_series(series)),
             ..Default::default()
         }),
         OoxmlChartType::Line3D => ChartTypeConfig::Line3D(charts::Line3DChartConfig {
             grouping: path_grouping,
+            vary_colors: spec.vary_by_categories,
             drop_lines: spec.drop_lines.as_ref().map(build_chart_lines),
             gap_depth: spec.gap_depth,
             ..Default::default()
@@ -454,17 +611,24 @@ pub(super) fn build_default_config(
         }),
         OoxmlChartType::Area => ChartTypeConfig::Area(charts::AreaChartConfig {
             grouping: Some(path_grouping),
+            vary_colors: spec.vary_by_categories,
             drop_lines: spec.drop_lines.as_ref().map(build_chart_lines),
             ..Default::default()
         }),
         OoxmlChartType::Area3D => ChartTypeConfig::Area3D(charts::Area3DChartConfig {
             grouping: Some(path_grouping),
+            vary_colors: spec.vary_by_categories,
             drop_lines: spec.drop_lines.as_ref().map(build_chart_lines),
             gap_depth: spec.gap_depth,
             ..Default::default()
         }),
-        OoxmlChartType::Scatter => ChartTypeConfig::Scatter(charts::ScatterChartConfig::default()),
+        OoxmlChartType::Scatter => ChartTypeConfig::Scatter(charts::ScatterChartConfig {
+            scatter_style: scatter_style_for_modeled_state(spec, series_data).unwrap_or_default(),
+            vary_colors: spec.vary_by_categories,
+            ..Default::default()
+        }),
         OoxmlChartType::Bubble => ChartTypeConfig::Bubble(charts::BubbleChartConfig {
+            vary_colors: spec.vary_by_categories,
             bubble_scale: spec.bubble_scale,
             show_neg_bubbles: spec.show_neg_bubbles,
             size_represents: spec
@@ -476,14 +640,17 @@ pub(super) fn build_default_config(
         }),
         OoxmlChartType::Radar => ChartTypeConfig::Radar(charts::RadarChartConfig {
             radar_style: radar_style_for_sub_type(spec.sub_type.as_ref()).unwrap_or_default(),
+            vary_colors: spec.vary_by_categories,
             ..Default::default()
         }),
         OoxmlChartType::Surface => ChartTypeConfig::Surface(charts::SurfaceChartConfig {
             wireframe: spec.wireframe,
+            extensions: surface_data_label_extensions(&[], spec.data_labels.as_ref()),
             ..Default::default()
         }),
         OoxmlChartType::Surface3D => ChartTypeConfig::Surface3D(charts::SurfaceChartConfig {
             wireframe: spec.wireframe,
+            extensions: surface_data_label_extensions(&[], spec.data_labels.as_ref()),
             ..Default::default()
         }),
         OoxmlChartType::Stock => ChartTypeConfig::Stock(charts::StockChartConfig {
@@ -494,11 +661,9 @@ pub(super) fn build_default_config(
         }),
         OoxmlChartType::OfPie => ChartTypeConfig::OfPie(charts::OfPieChartConfig {
             vary_colors: spec.vary_by_categories.or(Some(true)),
-            split_type: spec
-                .split_type
-                .as_deref()
-                .map(charts::SplitType::from_ooxml),
+            split_type: spec.split_type.as_deref().map(split_type_from_public),
             split_pos: spec.split_value,
+            second_pie_size: spec.second_plot_size,
             gap_width: spec.gap_width,
             ser_lines: spec
                 .series_lines
@@ -515,7 +680,7 @@ pub(super) fn build_default_config(
 /// The config_template stores non-series fields; we overlay series + spec-level values.
 pub(super) fn inject_series_into_config(
     template: &ChartTypeConfig,
-    _series: &[charts::ChartSeries],
+    series: &[charts::ChartSeries],
     spec: &ChartSpec,
 ) -> ChartTypeConfig {
     match template {
@@ -540,6 +705,9 @@ pub(super) fn inject_series_into_config(
             ..c.clone()
         }),
         ChartTypeConfig::Line(c) => ChartTypeConfig::Line(charts::LineChartConfig {
+            marker: line_marker_for_sub_type(spec.sub_type.as_ref())
+                .or_else(|| line_marker_for_series(series))
+                .or(c.marker),
             drop_lines: spec
                 .drop_lines
                 .as_ref()
@@ -593,7 +761,10 @@ pub(super) fn inject_series_into_config(
             gap_depth: spec.gap_depth.or(c.gap_depth),
             ..c.clone()
         }),
-        ChartTypeConfig::Scatter(c) => ChartTypeConfig::Scatter(c.clone()),
+        ChartTypeConfig::Scatter(c) => ChartTypeConfig::Scatter(charts::ScatterChartConfig {
+            scatter_style: scatter_style_for_modeled_state(spec, &[]).unwrap_or(c.scatter_style),
+            ..c.clone()
+        }),
         ChartTypeConfig::Bubble(c) => ChartTypeConfig::Bubble(charts::BubbleChartConfig {
             bubble_scale: spec.bubble_scale.or(c.bubble_scale),
             show_neg_bubbles: spec.show_neg_bubbles.or(c.show_neg_bubbles),
@@ -611,10 +782,12 @@ pub(super) fn inject_series_into_config(
         }),
         ChartTypeConfig::Surface(c) => ChartTypeConfig::Surface(charts::SurfaceChartConfig {
             wireframe: spec.wireframe.or(c.wireframe),
+            extensions: surface_data_label_extensions(&c.extensions, spec.data_labels.as_ref()),
             ..c.clone()
         }),
         ChartTypeConfig::Surface3D(c) => ChartTypeConfig::Surface3D(charts::SurfaceChartConfig {
             wireframe: spec.wireframe.or(c.wireframe),
+            extensions: surface_data_label_extensions(&c.extensions, spec.data_labels.as_ref()),
             ..c.clone()
         }),
         ChartTypeConfig::Stock(c) => ChartTypeConfig::Stock(charts::StockChartConfig {
@@ -639,9 +812,10 @@ pub(super) fn inject_series_into_config(
             split_type: spec
                 .split_type
                 .as_deref()
-                .map(charts::SplitType::from_ooxml)
+                .map(split_type_from_public)
                 .or(c.split_type),
             split_pos: spec.split_value.or(c.split_pos),
+            second_pie_size: spec.second_plot_size.or(c.second_pie_size),
             gap_width: spec.gap_width.or(c.gap_width),
             ser_lines: spec
                 .series_lines

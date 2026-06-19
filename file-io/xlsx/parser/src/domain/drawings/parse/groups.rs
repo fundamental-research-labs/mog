@@ -11,7 +11,7 @@ use super::super::types::{
 };
 use super::connectors::parse_connector;
 use super::content::opaque_content_from_element;
-use super::graphic_frames::{parse_graphic_frame_nv, parse_graphic_frame_xfrm};
+use super::graphic_frames::{parse_graphic_frame_nv, parse_graphic_frame_xfrm_with_presence};
 use super::non_visual::parse_nv_props;
 use super::pictures::parse_picture;
 use super::shapes::parse_shape;
@@ -104,11 +104,13 @@ pub fn parse_group_shape(xml: &[u8], start: usize) -> Option<GroupShape> {
                 let macro_name = extract_attr_value_in_element(element, b"macro=\"")
                     .map(|v| String::from_utf8_lossy(v).into_owned());
                 if let Ok(raw_xml) = std::str::from_utf8(element) {
+                    let (xfrm, has_xfrm) = parse_graphic_frame_xfrm_with_presence(element);
                     group
                         .children
                         .push(DrawingContent::GraphicFrame(SpreadsheetGraphicFrame {
                             nv_graphic_frame_pr: parse_graphic_frame_nv(element),
-                            xfrm: parse_graphic_frame_xfrm(element),
+                            xfrm,
+                            has_xfrm,
                             graphic_xml: Some(raw_xml.to_string()),
                             macro_name,
                             ..Default::default()

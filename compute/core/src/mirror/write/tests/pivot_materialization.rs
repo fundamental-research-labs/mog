@@ -30,6 +30,67 @@ fn clear_pivot_region_touches_only_existing_columns() {
 }
 
 #[test]
+fn clear_pivot_region_removes_authored_overrides_that_mask_output() {
+    let (mut mirror, sheet_id) = make_mirror();
+    let pos = SheetPos::new(2, 3);
+    mirror.apply_edit(
+        &sheet_id,
+        cell_types::CellId::from_raw(851),
+        pos,
+        CellValue::from("stale vendor"),
+        None,
+    );
+
+    mirror.clear_pivot_region(&sheet_id, 2, 3, 1, 1);
+
+    assert_eq!(
+        mirror.get_cell_value_at(&sheet_id, pos),
+        Some(&CellValue::Null)
+    );
+
+    mirror.materialize_pivot(
+        &sheet_id,
+        2,
+        3,
+        &PivotTableResult {
+            column_headers: Vec::new(),
+            rows: vec![PivotRow {
+                key: "fresh".to_string(),
+                headers: Vec::new(),
+                values: vec![CellValue::from("fresh vendor")],
+                depth: 0,
+                is_subtotal: false,
+                is_grand_total: false,
+                source_row_indices: None,
+            }],
+            grand_totals: PivotGrandTotals {
+                row: None,
+                column: None,
+                grand: None,
+                row_label: None,
+            },
+            source_row_count: 1,
+            rendered_bounds: PivotRenderedBounds {
+                total_rows: 1,
+                total_cols: 1,
+                first_data_row: 0,
+                first_data_col: 0,
+                num_data_cols: 1,
+            },
+            measure_descriptors: Vec::new(),
+            value_records: Vec::new(),
+            errors: None,
+        },
+        &[],
+    );
+
+    assert_eq!(
+        mirror.get_cell_value_at(&sheet_id, pos),
+        Some(&CellValue::from("fresh vendor"))
+    );
+}
+
+#[test]
 fn materialized_pivot_output_is_identity_backed_without_overwriting_col_data() {
     let (mut mirror, sheet_id) = make_mirror();
     let id_alloc = cell_types::IdAllocator::new();
@@ -98,6 +159,7 @@ fn materialized_pivot_output_is_identity_backed_without_overwriting_col_data() {
         4,
         &result,
         &["Region".to_string()],
+        true,
         &id_alloc,
     );
 

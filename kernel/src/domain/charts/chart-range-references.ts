@@ -27,6 +27,7 @@ export interface ResolvedChartRangeReference {
   range: CellRange;
   source: 'identity' | 'a1';
   ref?: string;
+  sheetName?: string;
 }
 
 export interface ChartRangeDiagnostic {
@@ -95,18 +96,34 @@ function normalizedRange(range: CellRange, sheetId: SheetId): CellRange {
   };
 }
 
-async function resolveSheetName(ctx: DocumentContext, sheetName: string): Promise<SheetId | null> {
+interface ResolvedChartSheet {
+  sheetId: SheetId;
+  sheetName?: string;
+}
+
+async function getSheetDisplayName(
+  ctx: DocumentContext,
+  sheetId: SheetId,
+): Promise<string | undefined> {
+  return (await ctx.computeBridge.getSheetName(sheetId)) ?? undefined;
+}
+
+async function resolveSheetName(
+  ctx: DocumentContext,
+  sheetName: string,
+): Promise<ResolvedChartSheet | null> {
   const sheetIds = await ctx.computeBridge.getSheetOrder();
   const names = await Promise.all(
     sheetIds.map(async (id) => ({
-      id: toSheetId(id),
-      name: await ctx.computeBridge.getSheetName(toSheetId(id)),
+      sheetId: toSheetId(id),
+      sheetName: await ctx.computeBridge.getSheetName(toSheetId(id)),
     })),
   );
-  const exact = names.find((s) => s.name === sheetName);
-  if (exact) return exact.id;
+  const exact = names.find((s) => s.sheetName === sheetName);
+  if (exact) return { sheetId: exact.sheetId, sheetName: exact.sheetName ?? undefined };
   const folded = sheetName.toLocaleLowerCase();
-  return names.find((s) => s.name?.toLocaleLowerCase() === folded)?.id ?? null;
+  const matched = names.find((s) => s.sheetName?.toLocaleLowerCase() === folded);
+  return matched ? { sheetId: matched.sheetId, sheetName: matched.sheetName ?? undefined } : null;
 }
 
 export async function resolveA1ChartRange(
@@ -139,9 +156,10 @@ export async function resolveA1ChartRange(
   }
 
   let sheetId = chartSheetId;
+  let sheetName: string | undefined;
   if (parsed.sheetName) {
-    sheetId = await resolveSheetName(ctx, parsed.sheetName);
-    if (!sheetId) {
+    const resolvedSheet = await resolveSheetName(ctx, parsed.sheetName);
+    if (!resolvedSheet) {
       diagnostics.push({
         kind,
         code: 'UNKNOWN_SHEET',
@@ -151,6 +169,8 @@ export async function resolveA1ChartRange(
       });
       return null;
     }
+    sheetId = resolvedSheet.sheetId;
+    sheetName = resolvedSheet.sheetName;
   } else if (!sheetId) {
     diagnostics.push({
       kind,
@@ -159,6 +179,8 @@ export async function resolveA1ChartRange(
       message: `Chart ${kind} is unqualified and the chart has no owning sheet`,
     });
     return null;
+  } else {
+    sheetName = await getSheetDisplayName(ctx, sheetId);
   }
 
   return {
@@ -166,6 +188,7 @@ export async function resolveA1ChartRange(
     range: normalizedRange(parsed, sheetId),
     source: 'a1',
     ref,
+    sheetName,
   };
 }
 
@@ -206,7 +229,12 @@ async function resolveChartRangeReference(
       });
       return null;
     }
-    return { kind, range: normalizedRange(range, chartSheetId), source: 'identity' };
+    return {
+      kind,
+      range: normalizedRange(range, chartSheetId),
+      source: 'identity',
+      sheetName: await getSheetDisplayName(ctx, chartSheetId),
+    };
   }
 
   const ref =

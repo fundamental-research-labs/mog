@@ -24,9 +24,35 @@ import type {
   DataTableConfig,
 } from '@mog-sdk/contracts/data/charts';
 
+const DIRECT_HEX_COLOR_RE = /^#?[0-9a-fA-F]{6}$/;
+
+/** Convert wire/storage direct RGB hex to the public contract color string. */
+export function wireToDirectHexColor(color: string | undefined): string | undefined {
+  if (color === undefined) return undefined;
+  const trimmed = color.trim();
+  if (!DIRECT_HEX_COLOR_RE.test(trimmed)) return trimmed;
+  return trimmed.startsWith('#') ? trimmed : `#${trimmed}`;
+}
+
+/** Convert public contract direct RGB hex to the wire/storage color string. */
+export function directHexColorToWire(color: string | undefined): string | undefined {
+  if (color === undefined) return undefined;
+  const trimmed = color.trim();
+  if (!DIRECT_HEX_COLOR_RE.test(trimmed)) return trimmed;
+  return trimmed.startsWith('#') ? trimmed.slice(1) : trimmed;
+}
+
+export function wireToDirectHexPalette(colors: string[] | undefined): string[] | undefined {
+  return colors?.map((color) => wireToDirectHexColor(color)!);
+}
+
+export function directHexPaletteToWire(colors: string[] | undefined): string[] | undefined {
+  return colors?.map((color) => directHexColorToWire(color)!);
+}
+
 /** Convert wire chart colors to the public contract color shape. */
 export function wireToChartColor(color: ChartColorData | undefined): ChartColor | undefined {
-  if (typeof color === 'string') return color;
+  if (typeof color === 'string') return wireToDirectHexColor(color);
   if (!color || typeof color !== 'object') return undefined;
   return {
     theme: color.theme,
@@ -36,7 +62,7 @@ export function wireToChartColor(color: ChartColorData | undefined): ChartColor 
 
 /** Convert public chart colors back to the wire shape. */
 export function chartColorToWire(color: ChartColor | undefined): ChartColorData | undefined {
-  if (typeof color === 'string') return color;
+  if (typeof color === 'string') return directHexColorToWire(color);
   if (!color || typeof color !== 'object') return undefined;
   return {
     theme: color.theme,

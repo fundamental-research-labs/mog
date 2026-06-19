@@ -8,11 +8,16 @@ use super::floating_object::{
     AnchorMode, ChartData, ChartDrawingFrameOoxmlProps, ChartOoxmlProps, FloatingObject,
     FloatingObjectAnchor, FloatingObjectCommon, FloatingObjectData,
 };
+use super::options::{effective_sub_type_from_chart_data, radar_flags_from_sub_type};
+use super::source_ranges::{
+    chart_series_from_runtime_inputs, pie_slice_from_chart_series, trendline_from_chart_series,
+};
 use super::{
     AnchorPosition, AxisData, ChartAuxiliaryPart, ChartDataTableData, ChartDefinition,
     ChartFormatData, ChartFormatStringData, ChartLineData, ChartRelationshipData,
     ChartStyleContextData, ChartSubType, ChartType, ChartView3DData, DataLabelData, LegendData,
-    ObjectSize, StandardChartExportAuthority, StandardChartProvenance, WaterfallOptions,
+    ObjectSize, PivotChartOptionsData, StandardChartExportAuthority, StandardChartProvenance,
+    WaterfallOptions,
 };
 use super::{
     BoxplotConfigData, ChartSeriesData, HierarchyChartConfigData, HistogramConfigData,
@@ -89,8 +94,14 @@ pub struct ChartSpec {
     pub data_labels: Option<DataLabelData>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub data_range: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub series_range: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub category_range: Option<String>,
 
     // -- API-exposed appearance --
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub colors: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub style: Option<u8>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
@@ -197,7 +208,10 @@ pub struct ChartSpec {
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub show_all_field_buttons: Option<bool>,
 
-    // -- Chart-level series properties --
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub show_lines: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub smooth_lines: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub second_plot_size: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
@@ -241,7 +255,7 @@ pub struct ChartSpec {
     /// Typed chart-owned auxiliary package parts.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub chart_auxiliary_parts: Vec<ChartAuxiliaryPart>,
-    #[serde(skip)]
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     pub chart_ex_replay: Option<ChartExReplayData>,
     /// Durable standard chart import provenance used by XLSX export planning.
     #[serde(skip_serializing_if = "Option::is_none", default)]
@@ -315,20 +329,6 @@ pub struct ChartSpec {
     pub import_status: Option<ImportObjectStatus>,
 }
 
-/// Pivot chart display options (field button visibility).
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PivotChartOptionsData {
-    #[serde(skip_serializing_if = "Option::is_none", default)]
-    pub show_axis_field_buttons: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none", default)]
-    pub show_legend_field_buttons: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none", default)]
-    pub show_report_filter_field_buttons: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none", default)]
-    pub show_value_field_buttons: Option<bool>,
-}
-
 impl ChartSpec {
     fn rotation_units_from_degrees(rotation: f64) -> Option<i32> {
         if !rotation.is_finite() {
@@ -363,14 +363,16 @@ impl ChartSpec {
             return;
         };
 
-        let frame_rotation_units = frame
+        let frame_xfrm = frame
             .graphic_frame
-            .xfrm
-            .rotation
+            .has_explicit_xfrm()
+            .then_some(&frame.graphic_frame.xfrm);
+        let frame_rotation_units = frame_xfrm
+            .and_then(|xfrm| xfrm.rotation)
             .map(|rot| rot.value())
             .unwrap_or(0);
-        let frame_flip_h = frame.graphic_frame.xfrm.flip_h.unwrap_or(false);
-        let frame_flip_v = frame.graphic_frame.xfrm.flip_v.unwrap_or(false);
+        let frame_flip_h = frame_xfrm.and_then(|xfrm| xfrm.flip_h).unwrap_or(false);
+        let frame_flip_v = frame_xfrm.and_then(|xfrm| xfrm.flip_v).unwrap_or(false);
         let frame_visible = !frame.graphic_frame.nv_graphic_frame_pr.c_nv_pr.hidden;
         let frame_printable = frame.client_data_prints_with_sheet.unwrap_or(true);
         let frame_locked = Self::frame_locked_state(frame, None);
@@ -386,19 +388,20 @@ impl ChartSpec {
         }
 
         if frame_rotation_units != common_rotation_units {
-            frame.graphic_frame.xfrm.rotation = (common_rotation_units != 0
-                || frame.graphic_frame.xfrm.rotation.is_some())
-            .then(|| ooxml_types::drawings::StAngle::new(common_rotation_units));
+            frame.graphic_frame.has_xfrm = true;
+            let xfrm = &mut frame.graphic_frame.xfrm;
+            xfrm.rotation = (common_rotation_units != 0 || xfrm.rotation.is_some())
+                .then(|| ooxml_types::drawings::StAngle::new(common_rotation_units));
         }
         if frame_flip_h != common.flip_h {
-            frame.graphic_frame.xfrm.flip_h = (common.flip_h
-                || frame.graphic_frame.xfrm.flip_h.is_some())
-            .then_some(common.flip_h);
+            frame.graphic_frame.has_xfrm = true;
+            let xfrm = &mut frame.graphic_frame.xfrm;
+            xfrm.flip_h = (common.flip_h || xfrm.flip_h.is_some()).then_some(common.flip_h);
         }
         if frame_flip_v != common.flip_v {
-            frame.graphic_frame.xfrm.flip_v = (common.flip_v
-                || frame.graphic_frame.xfrm.flip_v.is_some())
-            .then_some(common.flip_v);
+            frame.graphic_frame.has_xfrm = true;
+            let xfrm = &mut frame.graphic_frame.xfrm;
+            xfrm.flip_v = (common.flip_v || xfrm.flip_v.is_some()).then_some(common.flip_v);
         }
 
         frame.graphic_frame.nv_graphic_frame_pr.c_nv_pr.hidden = !common.visible;
@@ -442,13 +445,13 @@ impl ChartSpec {
         let nv = &gf.nv_graphic_frame_pr;
         let cnv = &nv.c_nv_pr;
         let locks = &nv.c_nv_graphic_frame_pr;
-        let rotation = gf
-            .xfrm
-            .rotation
+        let xfrm = gf.has_explicit_xfrm().then_some(&gf.xfrm);
+        let rotation = xfrm
+            .and_then(|xfrm| xfrm.rotation)
             .map(|rot| rot.value() as f64 / 60_000.0)
             .unwrap_or(0.0);
-        let flip_h = gf.xfrm.flip_h.unwrap_or(false);
-        let flip_v = gf.xfrm.flip_v.unwrap_or(false);
+        let flip_h = xfrm.and_then(|xfrm| xfrm.flip_h).unwrap_or(false);
+        let flip_v = xfrm.and_then(|xfrm| xfrm.flip_v).unwrap_or(false);
         let locked = frame.client_data_locks_with_sheet.unwrap_or(true)
             || locks.no_grp
             || locks.no_select
@@ -527,7 +530,7 @@ impl ChartSpec {
             matches!(
                 ooxml.and_then(|o| o.definition.as_ref()),
                 Some(ChartDefinition::ChartEx(_))
-            )
+            ) || chart_data.chart_type.is_chart_ex_family()
         });
 
         let (
@@ -552,6 +555,7 @@ impl ChartSpec {
             let gf = &frame.graphic_frame;
             let nv = &gf.nv_graphic_frame_pr;
             let cnv = &nv.c_nv_pr;
+            let xfrm = gf.has_explicit_xfrm().then_some(&gf.xfrm);
             (
                 (!cnv.name.is_empty()).then(|| cnv.name.clone()),
                 (cnv.id.value() != 0).then_some(cnv.id.value()),
@@ -561,10 +565,10 @@ impl ChartSpec {
                 nv.no_change_aspect_explicit
                     .or_else(|| nv.c_nv_graphic_frame_pr.no_change_aspect.then_some(true)),
                 nv.has_graphic_frame_locks,
-                gf.xfrm.off_x(),
-                gf.xfrm.off_y(),
-                gf.xfrm.ext_cx() as i64,
-                gf.xfrm.ext_cy() as i64,
+                xfrm.map_or(0, |xfrm| xfrm.off_x()),
+                xfrm.map_or(0, |xfrm| xfrm.off_y()),
+                xfrm.map_or(0, |xfrm| xfrm.ext_cx() as i64),
+                xfrm.map_or(0, |xfrm| xfrm.ext_cy() as i64),
                 cnv.ext_lst.clone(),
                 frame.edit_as.clone(),
                 gf.macro_name.clone(),
@@ -586,6 +590,15 @@ impl ChartSpec {
                 ChartDefinition::Chart(ooxml_types::charts::ChartSpace::default())
             })
         });
+        let series = chart_series_from_runtime_inputs(
+            &chart_data.chart_type,
+            chart_data.series.clone(),
+            chart_data.data_range.as_deref(),
+            chart_data.category_range.as_deref(),
+            chart_data.series_range.as_deref(),
+            chart_data.pie_slice.as_ref(),
+            chart_data.trendline.as_deref(),
+        );
 
         Some(ChartSpec {
             chart_type: chart_data.chart_type.clone(),
@@ -599,12 +612,15 @@ impl ChartSpec {
             size,
             z_index: common.z_index,
             definition,
-            series: chart_data.series.clone().unwrap_or_default(),
-            sub_type: chart_data.sub_type.clone(),
+            series,
+            sub_type: effective_sub_type_from_chart_data(chart_data),
             legend: chart_data.legend.clone(),
             axes: chart_data.axis.clone(),
             data_labels: chart_data.data_labels.clone(),
             data_range: chart_data.data_range.clone(),
+            series_range: chart_data.series_range.clone(),
+            category_range: chart_data.category_range.clone(),
+            colors: chart_data.colors.clone(),
             // API-exposed appearance
             style: chart_data.style,
             rounded_corners: chart_data.rounded_corners,
@@ -627,7 +643,6 @@ impl ChartSpec {
             boxplot: chart_data.boxplot.clone(),
             hierarchy: chart_data.hierarchy.clone(),
             region_map: chart_data.region_map.clone(),
-            // Chart-level properties
             display_blanks_as: chart_data
                 .display_blanks_as
                 .as_deref()
@@ -647,7 +662,8 @@ impl ChartSpec {
             category_label_level: chart_data.category_label_level,
             series_name_level: chart_data.series_name_level,
             show_all_field_buttons: chart_data.show_all_field_buttons,
-            // Chart-level series properties
+            show_lines: chart_data.show_lines,
+            smooth_lines: chart_data.smooth_lines,
             second_plot_size: chart_data.second_plot_size,
             vary_by_categories: chart_data.vary_by_categories,
             // Title alignment/shadow
@@ -739,14 +755,20 @@ impl ChartSpec {
                 nv.c_nv_graphic_frame_pr.no_change_aspect = true;
             }
         }
-        graphic_frame.xfrm = ooxml_types::drawings::Transform2D {
-            offset: Some((self.xfrm_off_x, self.xfrm_off_y)),
-            extent: Some((
-                self.xfrm_ext_cx.max(0) as u64,
-                self.xfrm_ext_cy.max(0) as u64,
-            )),
-            ..Default::default()
-        };
+        graphic_frame.has_xfrm = self.xfrm_off_x != 0
+            || self.xfrm_off_y != 0
+            || self.xfrm_ext_cx != 0
+            || self.xfrm_ext_cy != 0;
+        if graphic_frame.has_xfrm {
+            graphic_frame.xfrm = ooxml_types::drawings::Transform2D {
+                offset: Some((self.xfrm_off_x, self.xfrm_off_y)),
+                extent: Some((
+                    self.xfrm_ext_cx.max(0) as u64,
+                    self.xfrm_ext_cy.max(0) as u64,
+                )),
+                ..Default::default()
+            };
+        }
         graphic_frame.macro_name = self.macro_name.clone();
 
         Some(ChartDrawingFrameOoxmlProps {
@@ -865,25 +887,25 @@ impl ChartSpec {
             series_orientation: None,
             data_range: self.data_range.clone(),
             data_range_identity: None,
-            series_range: None,
+            series_range: self.series_range.clone(),
             series_range_identity: None,
-            category_range: None,
+            category_range: self.category_range.clone(),
             category_range_identity: None,
             title: self.title.clone(),
             subtitle: None,
             legend: self.legend.clone(),
             axis: self.axes.clone(),
-            colors: None,
+            colors: self.colors.clone(),
             series: if self.series.is_empty() {
                 None
             } else {
                 Some(self.series.clone())
             },
             data_labels: self.data_labels.clone(),
-            pie_slice: None,
-            trendline: None,
-            show_lines: None,
-            smooth_lines: None,
+            pie_slice: pie_slice_from_chart_series(&self.chart_type, &self.series),
+            trendline: trendline_from_chart_series(&self.series),
+            show_lines: self.show_lines,
+            smooth_lines: self.smooth_lines,
             radar_filled,
             radar_markers,
             waterfall: self.waterfall.clone(),
@@ -948,9 +970,7 @@ impl ChartSpec {
             high_low_lines: self.high_low_lines.clone(),
             series_lines: self.series_lines.clone(),
             up_down_bars: self.up_down_bars.clone(),
-            // Bar shape
             bar_shape: self.bar_shape.clone(),
-            // 3D
             view_3d: self.view_3d.clone(),
             floor_format: self.floor_format.clone(),
             side_wall_format: self.side_wall_format.clone(),
@@ -969,20 +989,5 @@ impl ChartSpec {
             common,
             data: FloatingObjectData::Chart(chart_data),
         }
-    }
-}
-
-fn radar_flags_from_sub_type(
-    chart_type: &ChartType,
-    sub_type: Option<&ChartSubType>,
-) -> (Option<bool>, Option<bool>) {
-    if !matches!(chart_type, ChartType::Radar) {
-        return (None, None);
-    }
-
-    match sub_type {
-        Some(ChartSubType::Filled) => (Some(true), None),
-        Some(ChartSubType::Markers) => (None, Some(true)),
-        _ => (None, None),
     }
 }

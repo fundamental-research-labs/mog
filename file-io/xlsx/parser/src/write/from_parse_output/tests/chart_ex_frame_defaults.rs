@@ -23,6 +23,7 @@ fn imported_chart_ex_zero_graphic_frame_extents_are_preserved() {
         flip_h: None,
         flip_v: None,
     };
+    graphic_frame.has_xfrm = true;
     chart_ex.chart_frame = Some(
         domain_types::domain::floating_object::ChartDrawingFrameOoxmlProps {
             graphic_frame,

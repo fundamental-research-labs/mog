@@ -104,39 +104,45 @@ pub fn parse_series(xml: &[u8]) -> ChartSeries {
     }
 
     // Parse series text (tx) — only in the child region, not inside extensions
-    if let Some(tx_start) = find_tag_simd(child_xml, b"tx", 0) {
+    if let Some(tx_start) = find_direct_child_tag(child_xml, b"ser", b"tx") {
         let tx_end = find_closing_tag(xml, b"tx", tx_start).unwrap_or(child_end);
         series.tx = parse_series_text(&xml[tx_start..tx_end]);
     }
 
     // Parse category data (cat) → CatDataSource — only in the child region
-    if let Some(cat_start) = find_tag_simd(child_xml, b"cat", 0) {
+    if let Some(cat_start) = find_direct_child_tag(child_xml, b"ser", b"cat") {
         let cat_end = find_closing_tag(xml, b"cat", cat_start).unwrap_or(child_end);
         series.cat = AxisData::parse(&xml[cat_start..cat_end]).to_cat_source();
     }
 
     // Parse value data (val) → NumDataSource — only in the child region
-    if let Some(val_start) = find_tag_simd(child_xml, b"val", 0) {
+    if let Some(val_start) = find_direct_child_tag(child_xml, b"ser", b"val") {
         let val_end = find_closing_tag(xml, b"val", val_start).unwrap_or(child_end);
         series.val = AxisData::parse(&xml[val_start..val_end]).to_num_source();
     }
 
     // Parse X values (xVal) for scatter charts → CatDataSource
-    if let Some(xval_start) = find_tag_simd(child_xml, b"xVal", 0) {
+    if let Some(xval_start) = find_direct_child_tag(child_xml, b"ser", b"xVal") {
         let xval_end = find_closing_tag(xml, b"xVal", xval_start).unwrap_or(child_end);
         series.x_val = AxisData::parse(&xml[xval_start..xval_end]).to_cat_source();
     }
 
     // Parse Y values (yVal) for scatter charts → NumDataSource
-    if let Some(yval_start) = find_tag_simd(child_xml, b"yVal", 0) {
+    if let Some(yval_start) = find_direct_child_tag(child_xml, b"ser", b"yVal") {
         let yval_end = find_closing_tag(xml, b"yVal", yval_start).unwrap_or(child_end);
         series.y_val = AxisData::parse(&xml[yval_start..yval_end]).to_num_source();
     }
 
     // Parse bubble size → NumDataSource
-    if let Some(bubble_start) = find_tag_simd(child_xml, b"bubbleSize", 0) {
+    if let Some(bubble_start) = find_direct_child_tag(child_xml, b"ser", b"bubbleSize") {
         let bubble_end = find_closing_tag(xml, b"bubbleSize", bubble_start).unwrap_or(child_end);
         series.bubble_size = AxisData::parse(&xml[bubble_start..bubble_end]).to_num_source();
+    }
+
+    // Parse series-level bubble3D. Per-point bubble3D is parsed separately
+    // from dPt, so this must be constrained to direct children of c:ser.
+    if let Some(b3d_start) = find_direct_child_tag(child_xml, b"ser", b"bubble3D") {
+        series.bubble_3d = Some(parse_bool_val(&xml[b3d_start..]));
     }
 
     // Parse smooth → Option<bool>
@@ -175,7 +181,7 @@ pub fn parse_series(xml: &[u8]) -> ChartSeries {
 
     // Parse data labels → Option<DataLabelOptions>
     if let Some(dlbls_start) = find_tag_simd(child_xml, b"dLbls", 0) {
-        let dlbls_end = find_closing_tag(xml, b"dLbls", dlbls_start).unwrap_or(child_end);
+        let dlbls_end = find_complete_element_end(xml, b"dLbls", dlbls_start, child_end);
         series.d_lbls = Some(parse_data_labels(&xml[dlbls_start..dlbls_end]));
     }
 
@@ -251,6 +257,13 @@ pub fn parse_series(xml: &[u8]) -> ChartSeries {
     }
 
     series
+}
+
+fn find_complete_element_end(xml: &[u8], tag: &[u8], start: usize, fallback_end: usize) -> usize {
+    find_closing_tag(xml, tag, start)
+        .and_then(|close_start| find_gt_simd(xml, close_start).map(|end| end + 1))
+        .map(|end| end.min(fallback_end))
+        .unwrap_or(fallback_end)
 }
 
 fn find_direct_child_tag(xml: &[u8], parent: &[u8], child: &[u8]) -> Option<usize> {

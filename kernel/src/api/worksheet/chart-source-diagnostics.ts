@@ -186,13 +186,38 @@ export async function resolveWorksheetSourceRangeInput(
 export function sourceRangeMatches(
   description: ChartDescription,
   targetRange: ComparableRange,
+  sheetIdByName?: ReadonlyMap<string, string>,
 ): ChartSourceRangeMatch[] {
   const matches: ChartSourceRangeMatch[] = [];
   const sourceData = description.sourceData;
 
-  pushRangeMatch(matches, description, 'dataRange', sourceData.dataRange, targetRange);
-  pushRangeMatch(matches, description, 'categoryRange', sourceData.categoryRange, targetRange);
-  pushRangeMatch(matches, description, 'seriesRange', sourceData.seriesRange, targetRange);
+  pushRangeMatch(
+    matches,
+    description,
+    'dataRange',
+    sourceData.dataRange,
+    targetRange,
+    undefined,
+    sheetIdByName,
+  );
+  pushRangeMatch(
+    matches,
+    description,
+    'categoryRange',
+    sourceData.categoryRange,
+    targetRange,
+    undefined,
+    sheetIdByName,
+  );
+  pushRangeMatch(
+    matches,
+    description,
+    'seriesRange',
+    sourceData.seriesRange,
+    targetRange,
+    undefined,
+    sheetIdByName,
+  );
 
   for (const seriesReference of sourceData.seriesReferences) {
     pushRangeMatch(
@@ -202,6 +227,7 @@ export function sourceRangeMatches(
       seriesReference.name,
       targetRange,
       seriesReference.index,
+      sheetIdByName,
     );
     pushRangeMatch(
       matches,
@@ -210,6 +236,7 @@ export function sourceRangeMatches(
       seriesReference.values,
       targetRange,
       seriesReference.index,
+      sheetIdByName,
     );
     pushRangeMatch(
       matches,
@@ -218,6 +245,7 @@ export function sourceRangeMatches(
       seriesReference.categories,
       targetRange,
       seriesReference.index,
+      sheetIdByName,
     );
     pushRangeMatch(
       matches,
@@ -226,6 +254,7 @@ export function sourceRangeMatches(
       seriesReference.bubbleSize,
       targetRange,
       seriesReference.index,
+      sheetIdByName,
     );
   }
 
@@ -246,10 +275,11 @@ export async function findWorksheetChartsBySourceRange(
     'findChartsBySourceRange',
   );
   const charts = await listCharts();
+  const sheetIdByName = await loadSheetIdByDisplayName(ctx);
   const matches: ChartSourceRangeMatch[] = [];
 
   for (const chart of charts) {
-    matches.push(...sourceRangeMatches(await describeChart(chart.id), targetRange));
+    matches.push(...sourceRangeMatches(await describeChart(chart.id), targetRange, sheetIdByName));
   }
 
   return matches;
@@ -342,6 +372,21 @@ function applyNullableSeriesField<K extends keyof SeriesConfig>(
   target[key] = value;
 }
 
+async function loadSheetIdByDisplayName(ctx: DocumentContext): Promise<Map<string, string>> {
+  const ids = await ctx.computeBridge.getSheetOrder();
+  const entries = await Promise.all(
+    ids.map(async (id) => ({
+      sheetId: String(id),
+      sheetName: await ctx.computeBridge.getSheetName(id),
+    })),
+  );
+  const sheetIdByName = new Map<string, string>();
+  for (const entry of entries) {
+    if (entry.sheetName) sheetIdByName.set(entry.sheetName.toLowerCase(), entry.sheetId);
+  }
+  return sheetIdByName;
+}
+
 function pushRangeMatch(
   matches: ChartSourceRangeMatch[],
   description: ChartDescription,
@@ -349,9 +394,13 @@ function pushRangeMatch(
   reference: NonNullable<ChartSourceData['dataRange']> | null | undefined,
   targetRange: ComparableRange,
   seriesIndex?: number,
+  sheetIdByName?: ReadonlyMap<string, string>,
 ): void {
   if (!reference) return;
-  const sourceRange = normalizeComparableRange(reference.range, description.sheetId);
+  const sourceRange = normalizeComparableRange(
+    reference.range,
+    sourceSheetIdForReference(reference, description.sheetId, sheetIdByName),
+  );
   if (!rangesOverlap(sourceRange, targetRange)) return;
   matches.push({
     chartId: description.chartId,
@@ -365,8 +414,19 @@ function pushRangeMatch(
   });
 }
 
+function sourceSheetIdForReference(
+  reference: NonNullable<ChartSourceData['dataRange']>,
+  fallbackSheetId: string,
+  sheetIdByName?: ReadonlyMap<string, string>,
+): string {
+  const legacySheetId = (reference.range as { sheetId?: string }).sheetId;
+  if (legacySheetId) return legacySheetId;
+  if (!reference.sheetName) return fallbackSheetId;
+  return sheetIdByName?.get(reference.sheetName.toLowerCase()) ?? fallbackSheetId;
+}
+
 function normalizeComparableRange(
-  range: CellRange,
+  range: Pick<CellRange, 'startRow' | 'startCol' | 'endRow' | 'endCol'> & { sheetId?: string },
   fallbackSheetId: SheetId | string,
 ): ComparableRange {
   return {

@@ -22,6 +22,7 @@ export type {
   FillSeriesApplyReceipt,
   WorksheetFill,
   PivotCreateOptions,
+  PivotCreateWithSheetOptions,
   FindCellsFormatQuery,
   FindCellsInclude,
   FindCellsQuery,

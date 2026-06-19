@@ -21,6 +21,18 @@ pub(super) fn data_range_to_a1(r: &domain_types::domain::sparkline::SparklineDat
     }
 }
 
+fn data_range_to_formula_ref(
+    fallback_sheet_name: &str,
+    r: &domain_types::domain::sparkline::SparklineDataRange,
+) -> String {
+    let data_range_a1 = data_range_to_a1(r);
+    let source_sheet_name = r
+        .source_sheet_name
+        .as_deref()
+        .unwrap_or(fallback_sheet_name);
+    format_sheet_qualified_ref(source_sheet_name, &data_range_a1)
+}
+
 /// Convert a `SparklineType` enum to its OOXML string representation.
 pub(super) fn domain_sparkline_type_str(t: &DomainSparklineType) -> &'static str {
     match t {
@@ -80,19 +92,19 @@ pub(super) fn append_domain_group_xml(
     if visual.show_markers.unwrap_or(false) {
         xml.push_str(" markers=\"1\"");
     }
-    if visual.high_point_color.is_some() {
+    if sparkline_flag_enabled(visual.show_high_point, visual.high_point_color.is_some()) {
         xml.push_str(" high=\"1\"");
     }
-    if visual.low_point_color.is_some() {
+    if sparkline_flag_enabled(visual.show_low_point, visual.low_point_color.is_some()) {
         xml.push_str(" low=\"1\"");
     }
-    if visual.first_point_color.is_some() {
+    if sparkline_flag_enabled(visual.show_first_point, visual.first_point_color.is_some()) {
         xml.push_str(" first=\"1\"");
     }
-    if visual.last_point_color.is_some() {
+    if sparkline_flag_enabled(visual.show_last_point, visual.last_point_color.is_some()) {
         xml.push_str(" last=\"1\"");
     }
-    if visual.negative_color.is_some() {
+    if sparkline_flag_enabled(visual.show_negative_points, visual.negative_color.is_some()) {
         xml.push_str(" negative=\"1\"");
     }
     if axis.show_axis.unwrap_or(false) {
@@ -117,39 +129,35 @@ pub(super) fn append_domain_group_xml(
     xml.push('>');
 
     if !visual.color.is_empty() {
-        xml.push_str(&format!(
-            "<x14:colorSeries rgb=\"{}\"/>",
-            hex_to_argb(&visual.color)
-        ));
+        append_domain_color_element(xml, "colorSeries", &visual.color);
     }
     if let Some(ref c) = visual.negative_color {
-        xml.push_str(&format!("<x14:colorNegative rgb=\"{}\"/>", hex_to_argb(c)));
+        append_domain_color_element(xml, "colorNegative", c);
     }
     if let Some(ref c) = axis.axis_color {
-        xml.push_str(&format!("<x14:colorAxis rgb=\"{}\"/>", hex_to_argb(c)));
+        append_domain_color_element(xml, "colorAxis", c);
     }
     if let Some(ref c) = visual.marker_color {
-        xml.push_str(&format!("<x14:colorMarkers rgb=\"{}\"/>", hex_to_argb(c)));
+        append_domain_color_element(xml, "colorMarkers", c);
     }
     if let Some(ref c) = visual.first_point_color {
-        xml.push_str(&format!("<x14:colorFirst rgb=\"{}\"/>", hex_to_argb(c)));
+        append_domain_color_element(xml, "colorFirst", c);
     }
     if let Some(ref c) = visual.last_point_color {
-        xml.push_str(&format!("<x14:colorLast rgb=\"{}\"/>", hex_to_argb(c)));
+        append_domain_color_element(xml, "colorLast", c);
     }
     if let Some(ref c) = visual.high_point_color {
-        xml.push_str(&format!("<x14:colorHigh rgb=\"{}\"/>", hex_to_argb(c)));
+        append_domain_color_element(xml, "colorHigh", c);
     }
     if let Some(ref c) = visual.low_point_color {
-        xml.push_str(&format!("<x14:colorLow rgb=\"{}\"/>", hex_to_argb(c)));
+        append_domain_color_element(xml, "colorLow", c);
     }
 
     if !members.is_empty() {
         xml.push_str("<x14:sparklines>");
         for sp in members {
             xml.push_str("<x14:sparkline>");
-            let data_range_a1 = data_range_to_a1(&sp.data_range);
-            let qualified_range = format_sheet_qualified_ref(sheet_name, &data_range_a1);
+            let qualified_range = data_range_to_formula_ref(sheet_name, &sp.data_range);
             xml.push_str(&format!(
                 "<xm:f>{}</xm:f>",
                 sparkline_xml_escape(&qualified_range)
@@ -165,6 +173,58 @@ pub(super) fn append_domain_group_xml(
     }
 
     xml.push_str("</x14:sparklineGroup>");
+}
+
+fn append_domain_color_element(xml: &mut String, element_name: &str, color: &str) {
+    if let Some((theme, tint)) = parse_theme_color_ref(color) {
+        xml.push_str(&format!("<x14:{element_name} theme=\"{theme}\""));
+        if let Some(tint) = tint {
+            xml.push_str(&format!(" tint=\"{tint}\""));
+        }
+        xml.push_str("/>");
+    } else {
+        xml.push_str(&format!(
+            "<x14:{element_name} rgb=\"{}\"/>",
+            hex_to_argb(color)
+        ));
+    }
+}
+
+fn sparkline_flag_enabled(explicit: Option<bool>, has_color: bool) -> bool {
+    explicit.unwrap_or(has_color)
+}
+
+fn parse_theme_color_ref(color: &str) -> Option<(u32, Option<f64>)> {
+    let rest = color.strip_prefix("theme:")?;
+    let mut parts = rest.split(':');
+    let theme_part = parts.next()?;
+    let theme = theme_part
+        .parse::<u32>()
+        .ok()
+        .or_else(|| theme_slot_to_index(theme_part))?;
+    let tint = match parts.next() {
+        Some(raw) if !raw.is_empty() => Some(raw.parse::<f64>().ok()?),
+        _ => None,
+    };
+    parts.next().is_none().then_some((theme, tint))
+}
+
+fn theme_slot_to_index(slot: &str) -> Option<u32> {
+    match slot {
+        "light1" | "lt1" => Some(0),
+        "dark1" | "dk1" => Some(1),
+        "light2" | "lt2" => Some(2),
+        "dark2" | "dk2" => Some(3),
+        "accent1" => Some(4),
+        "accent2" => Some(5),
+        "accent3" => Some(6),
+        "accent4" => Some(7),
+        "accent5" => Some(8),
+        "accent6" => Some(9),
+        "hyperlink" | "hlink" => Some(10),
+        "followedHyperlink" | "folHlink" | "fol_hlink" => Some(11),
+        _ => None,
+    }
 }
 
 pub(super) fn append_sparkline_ext_lst_open(xml: &mut String) {
@@ -245,19 +305,34 @@ pub fn sparklines_xml_from_domain(
         if leader.visual.show_markers.unwrap_or(false) {
             xml.push_str(" markers=\"1\"");
         }
-        if leader.visual.high_point_color.is_some() {
+        if sparkline_flag_enabled(
+            leader.visual.show_high_point,
+            leader.visual.high_point_color.is_some(),
+        ) {
             xml.push_str(" high=\"1\"");
         }
-        if leader.visual.low_point_color.is_some() {
+        if sparkline_flag_enabled(
+            leader.visual.show_low_point,
+            leader.visual.low_point_color.is_some(),
+        ) {
             xml.push_str(" low=\"1\"");
         }
-        if leader.visual.first_point_color.is_some() {
+        if sparkline_flag_enabled(
+            leader.visual.show_first_point,
+            leader.visual.first_point_color.is_some(),
+        ) {
             xml.push_str(" first=\"1\"");
         }
-        if leader.visual.last_point_color.is_some() {
+        if sparkline_flag_enabled(
+            leader.visual.show_last_point,
+            leader.visual.last_point_color.is_some(),
+        ) {
             xml.push_str(" last=\"1\"");
         }
-        if leader.visual.negative_color.is_some() {
+        if sparkline_flag_enabled(
+            leader.visual.show_negative_points,
+            leader.visual.negative_color.is_some(),
+        ) {
             xml.push_str(" negative=\"1\"");
         }
         if leader.axis.right_to_left.unwrap_or(false) {
@@ -285,39 +360,35 @@ pub fn sparklines_xml_from_domain(
         // Color elements — use ARGB format
         // Series color is always present in unified type
         if !leader.visual.color.is_empty() {
-            xml.push_str(&format!(
-                "<x14:colorSeries rgb=\"{}\"/>",
-                hex_to_argb(&leader.visual.color)
-            ));
+            append_domain_color_element(&mut xml, "colorSeries", &leader.visual.color);
         }
         if let Some(ref c) = leader.visual.negative_color {
-            xml.push_str(&format!("<x14:colorNegative rgb=\"{}\"/>", hex_to_argb(c)));
+            append_domain_color_element(&mut xml, "colorNegative", c);
         }
         // Axis color is always black
         xml.push_str("<x14:colorAxis rgb=\"FF000000\"/>");
         if let Some(ref c) = leader.visual.marker_color {
-            xml.push_str(&format!("<x14:colorMarkers rgb=\"{}\"/>", hex_to_argb(c)));
+            append_domain_color_element(&mut xml, "colorMarkers", c);
         }
         if let Some(ref c) = leader.visual.first_point_color {
-            xml.push_str(&format!("<x14:colorFirst rgb=\"{}\"/>", hex_to_argb(c)));
+            append_domain_color_element(&mut xml, "colorFirst", c);
         }
         if let Some(ref c) = leader.visual.last_point_color {
-            xml.push_str(&format!("<x14:colorLast rgb=\"{}\"/>", hex_to_argb(c)));
+            append_domain_color_element(&mut xml, "colorLast", c);
         }
         if let Some(ref c) = leader.visual.high_point_color {
-            xml.push_str(&format!("<x14:colorHigh rgb=\"{}\"/>", hex_to_argb(c)));
+            append_domain_color_element(&mut xml, "colorHigh", c);
         }
         if let Some(ref c) = leader.visual.low_point_color {
-            xml.push_str(&format!("<x14:colorLow rgb=\"{}\"/>", hex_to_argb(c)));
+            append_domain_color_element(&mut xml, "colorLow", c);
         }
 
         // Sparkline entries
         xml.push_str("<x14:sparklines>");
         for sp in group {
             xml.push_str("<x14:sparkline>");
-            // Data range — always qualify with sheet name
-            let data_range_a1 = data_range_to_a1(&sp.data_range);
-            let qualified_range = format_sheet_qualified_ref(sheet_name, &data_range_a1);
+            // Data range — preserve imported source sheet when present.
+            let qualified_range = data_range_to_formula_ref(sheet_name, &sp.data_range);
             xml.push_str(&format!(
                 "<xm:f>{}</xm:f>",
                 sparkline_xml_escape(&qualified_range)

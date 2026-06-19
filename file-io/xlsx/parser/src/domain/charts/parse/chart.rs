@@ -87,6 +87,12 @@ pub(super) fn parse_legend(xml: &[u8]) -> Legend {
             entry.delete = Some(val);
         }
 
+        if let Some(txpr_start) = find_tag_simd(entry_bytes, b"txPr", 0) {
+            let txpr_end =
+                find_closing_tag(entry_bytes, b"txPr", txpr_start).unwrap_or(entry_bytes.len());
+            entry.tx_pr = Some(parse_text_body(&entry_bytes[txpr_start..txpr_end]));
+        }
+
         legend.legend_entry.push(entry);
         pos = entry_end;
     }
@@ -111,13 +117,13 @@ pub(super) fn parse_legend(xml: &[u8]) -> Legend {
     }
 
     // Parse spPr
-    if let Some(sp_start) = find_tag_simd(xml, b"spPr", 0) {
+    if let Some(sp_start) = find_tag_simd(xml, b"spPr", pos) {
         let sp_end = find_closing_tag(xml, b"spPr", sp_start).unwrap_or(xml.len());
         legend.sp_pr = Some(parse_shape_properties(&xml[sp_start..sp_end]));
     }
 
     // Parse txPr
-    if let Some(txpr_start) = find_tag_simd(xml, b"txPr", 0) {
+    if let Some(txpr_start) = find_tag_simd(xml, b"txPr", pos) {
         let txpr_end = find_closing_tag(xml, b"txPr", txpr_start).unwrap_or(xml.len());
         legend.tx_pr = Some(parse_text_body(&xml[txpr_start..txpr_end]));
     }
@@ -140,8 +146,63 @@ pub(super) fn parse_display_options(xml: &[u8], chart_start: usize) -> DisplayOp
     }
 
     if let Some(start) = find_tag_simd(xml, b"showDLblsOverMax", chart_start) {
-        opts.show_data_lbls_over_max = attrs::parse_bool_attr(&xml[start..], b"val=\"");
+        opts.show_data_lbls_over_max = Some(attrs::parse_bool_attr(&xml[start..], b"val=\""));
     }
 
     opts
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{parse_display_options, parse_legend};
+
+    #[test]
+    fn parse_display_options_preserves_show_data_labels_over_max_absence() {
+        let opts = parse_display_options(b"<c:chart></c:chart>", 0);
+        assert_eq!(opts.show_data_lbls_over_max, None);
+    }
+
+    #[test]
+    fn parse_display_options_preserves_show_data_labels_over_max_explicit_false() {
+        let opts = parse_display_options(br#"<c:chart><c:showDLblsOverMax val="0"/></c:chart>"#, 0);
+        assert_eq!(opts.show_data_lbls_over_max, Some(false));
+    }
+
+    #[test]
+    fn parse_legend_entry_preserves_text_properties() {
+        let legend = parse_legend(
+            br#"<c:legend xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+                       xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+                <c:legendEntry>
+                    <c:idx val="1"/>
+                    <c:txPr>
+                        <a:bodyPr rot="2520000"/>
+                        <a:lstStyle/>
+                        <a:p>
+                            <a:pPr>
+                                <a:defRPr b="1" i="1" sz="4200" u="sng" strike="sngStrike">
+                                    <a:solidFill><a:srgbClr val="4472C4"/></a:solidFill>
+                                    <a:latin typeface="Mog chart contract"/>
+                                </a:defRPr>
+                            </a:pPr>
+                        </a:p>
+                    </c:txPr>
+                </c:legendEntry>
+            </c:legend>"#,
+        );
+
+        assert_eq!(legend.legend_entry.len(), 1);
+        assert_eq!(legend.legend_entry[0].idx, 1);
+        assert!(legend.legend_entry[0].delete.is_none());
+        assert!(legend.tx_pr.is_none());
+        let tx_pr = legend.legend_entry[0].tx_pr.as_ref().unwrap();
+        assert_eq!(
+            tx_pr.body_props.rot,
+            Some(ooxml_types::drawings::StAngle::new(2520000))
+        );
+        let default_run = tx_pr.paragraphs[0].props.def_run_props.as_ref().unwrap();
+        assert_eq!(default_run.size.map(|size| size.value()), Some(4200));
+        assert_eq!(default_run.bold, Some(true));
+        assert_eq!(default_run.italic, Some(true));
+    }
 }

@@ -915,7 +915,7 @@ export interface ChartColorMappingData {
   folHlink?: string;
 }
 
-export type ChartDashStyle = "solid" | "dot" | "dash" | "dashDot" | "longDash" | "longDashDot" | "longDashDotDot";
+export type ChartDashStyle = "solid" | "dot" | "dash" | "dashDot" | "longDash" | "longDashDot" | "longDashDotDot" | "sysDash" | "sysDot" | "sysDashDot" | "sysDashDotDot";
 
 export interface ChartData {
   chartType: string;
@@ -1148,6 +1148,8 @@ export interface ChartSeriesCategoryLevelsCacheData {
   levels: ChartSeriesCategoryLevelCacheData[];
 }
 
+export type ChartSeriesCategorySourceTypeData = "number" | "string" | "multiLevelString";
+
 export interface ChartSeriesData {
   name?: string;
   nameRef?: string;
@@ -1161,11 +1163,13 @@ export interface ChartSeriesData {
   xRole?: ChartSeriesXRoleData;
   categoryCache?: ChartSeriesPointCacheData;
   categorySourceKind?: ChartSeriesDimensionSourceKindData;
+  categorySourceType?: ChartSeriesCategorySourceTypeData;
   categoryLevels?: ChartSeriesCategoryLevelsCacheData;
   categoryLabelFormat?: CategoryLabelFormatData;
   bubbleSize?: string;
   bubbleSizeCache?: ChartSeriesPointCacheData;
   bubbleSizeSourceKind?: ChartSeriesDimensionSourceKindData;
+  bubble3d?: boolean;
   smooth?: boolean;
   showLines?: boolean;
   explosion?: number;
@@ -1188,6 +1192,7 @@ export interface ChartSeriesData {
   invertColor?: ChartColorData;
   markerBackgroundColor?: ChartColorData;
   markerForegroundColor?: ChartColorData;
+  markerLineFormat?: ChartLineData;
   filtered?: boolean;
   sourceSeriesIndex?: number;
   sourceSeriesKey?: string;
@@ -1263,6 +1268,9 @@ export interface ChartSpec {
   axes?: AxisData;
   dataLabels?: DataLabelData;
   dataRange?: string;
+  seriesRange?: string;
+  categoryRange?: string;
+  colors?: string[];
   style?: number;
   roundedCorners?: boolean;
   autoTitleDeleted?: boolean;
@@ -3760,6 +3768,7 @@ export interface PointFormatData {
   visualFormat?: ChartFormatData;
   markerBackgroundColor?: ChartColorData;
   markerForegroundColor?: ChartColorData;
+  markerLineFormat?: ChartLineData;
   markerSize?: number;
   markerStyle?: string;
 }
@@ -5077,6 +5086,7 @@ export interface SparklineChange {
 }
 
 export interface SparklineDataRange {
+  sourceSheetName?: string;
   startRow: number;
   startCol: number;
   endRow: number;
@@ -5110,11 +5120,16 @@ export interface SparklineUpdate {
 export interface SparklineVisualSettings {
   color: string;
   negativeColor?: string;
+  showNegativePoints?: boolean;
   showMarkers?: boolean;
   markerColor?: string;
+  showHighPoint?: boolean;
   highPointColor?: string;
+  showLowPoint?: boolean;
   lowPointColor?: string;
+  showFirstPoint?: boolean;
   firstPointColor?: string;
+  showLastPoint?: boolean;
   lastPointColor?: string;
   lineWeight?: number;
   columnGap?: number;

@@ -143,7 +143,7 @@ pub struct PivotDataFieldDef {
 }
 
 /// Page (filter) field definition.
-#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PivotPageFieldDef {
     pub field_index: i32,
@@ -247,6 +247,12 @@ pub struct PivotTableOoxmlPreservation {
     pub row_item_attributes: Vec<Vec<PivotRawXmlAttribute>>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub col_item_attributes: Vec<Vec<PivotRawXmlAttribute>>,
+    /// Imported `<pageFields>` entries. These are modeled as OOXML state
+    /// because compute evaluates page selections through `config.filters`,
+    /// while export must keep page-field item selection separate from pivot
+    /// item visibility flags.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub page_fields: Vec<PivotPageFieldDef>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub relationship: Option<PivotTableRelationshipPreservation>,
     /// Named range/table source from pivot cache `<worksheetSource name="...">`.
@@ -275,6 +281,7 @@ impl PivotTableOoxmlPreservation {
                 .all(PivotFieldOoxmlPreservation::is_empty)
             && self.row_item_attributes.iter().all(Vec::is_empty)
             && self.col_item_attributes.iter().all(Vec::is_empty)
+            && self.page_fields.is_empty()
             && self.relationship.is_none()
             && self.cache_source_name.is_none()
             && self.cache_shared_items.is_empty()

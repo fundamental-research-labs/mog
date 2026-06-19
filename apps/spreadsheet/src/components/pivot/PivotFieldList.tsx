@@ -1,12 +1,12 @@
-/**
- * PivotFieldList Component
- *
- * Displays available source fields and ordered placement wells for pivot table
- * configuration. Placed chips are keyed and mutated by placementId so duplicate
- * source fields remain independently addressable.
- */
-
-import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type DragEvent,
+  type MouseEvent,
+} from 'react';
 
 import type {
   AggregateFunction,
@@ -19,7 +19,25 @@ import {
   setupAutoScroll,
   type AutoScrollController,
 } from '../../systems/input/coordination/auto-scroll-service';
-import { PIVOT_AGGREGATE_FUNCTION_OPTIONS } from '../../systems/pivot';
+import {
+  AggregateSelector,
+  DataTypeIcon,
+  LabelSortSelector,
+  ValueSortSelector,
+} from './PivotFieldListControls';
+import { PivotFieldDropZone, type PlacedField } from './PivotFieldListDropZone';
+import {
+  DROP_PAYLOAD_TYPE,
+  dragStateFromPoint,
+  POINTER_DRAG_THRESHOLD_PX,
+  parseDragState,
+  placementId,
+  resolvePointerDropTarget,
+  serializeDragState,
+  type DragState,
+  type DropIndicator,
+  type PointerDropTarget,
+} from './PivotFieldListDrag';
 
 export interface PivotFieldListProps {
   fields: PivotField[];
@@ -44,28 +62,16 @@ export interface PivotFieldListProps {
   getDragScrollContainer?: () => HTMLElement | null;
 }
 
-type DragState =
-  | { kind: 'field'; fieldId: string }
-  | {
-      kind: 'placement';
-      placementId: string;
-      fieldId: string;
-      fromArea: PivotFieldArea;
-      fromIndex: number;
-    };
-
-interface PlacedField {
-  field: PivotField;
-  placement: PivotFieldPlacement;
+interface PendingAutoActivatedMove {
+  fieldId: string;
+  fromArea: PivotFieldArea;
+  toArea: PivotFieldArea;
+  position: number;
 }
 
-const PIVOT_AREAS: PivotFieldArea[] = ['filter', 'column', 'row', 'value'];
-const DROP_PAYLOAD_TYPE = 'application/x-mog-pivot-field-pane';
 const DRAG_SCROLL_EDGE_PX = 48;
-
-function placementId(placement: PivotFieldPlacement): string {
-  return String(placement.placementId);
-}
+const POINTER_DRAG_IGNORED_SELECTOR =
+  'button, select, input, textarea, [data-pivot-target="placement-controls"], [data-pivot-target="remove-field"]';
 
 function displayName(field: PivotField, placement: PivotFieldPlacement): string {
   return placement.displayName || field.name;
@@ -75,133 +81,8 @@ function defaultAggregate(area: PivotFieldArea, field?: PivotField): AggregateFu
   return area === 'value' && field?.dataType === 'number' ? 'sum' : 'count';
 }
 
-function serializeDragState(state: DragState): string {
-  return JSON.stringify(state);
-}
-
-function parseDragState(value: string): DragState | null {
-  if (!value) return null;
-  try {
-    const parsed = JSON.parse(value) as Partial<DragState>;
-    if (parsed.kind === 'field' && typeof parsed.fieldId === 'string') {
-      return { kind: 'field', fieldId: parsed.fieldId };
-    }
-    if (
-      parsed.kind === 'placement' &&
-      typeof parsed.placementId === 'string' &&
-      typeof parsed.fieldId === 'string' &&
-      typeof parsed.fromArea === 'string' &&
-      PIVOT_AREAS.includes(parsed.fromArea as PivotFieldArea) &&
-      typeof parsed.fromIndex === 'number'
-    ) {
-      return {
-        kind: 'placement',
-        placementId: parsed.placementId,
-        fieldId: parsed.fieldId,
-        fromArea: parsed.fromArea as PivotFieldArea,
-        fromIndex: parsed.fromIndex,
-      };
-    }
-  } catch {
-    return null;
-  }
-  return null;
-}
-
-function DataTypeIcon({ dataType }: { dataType: string }) {
-  const icons: Record<string, string> = {
-    string: 'Aa',
-    number: '#',
-    date: 'D',
-    boolean: '?',
-  };
-  return <span className="shrink-0 text-hint text-ss-text-disabled">{icons[dataType] || '?'}</span>;
-}
-
-function AggregateSelector({
-  value,
-  disabled,
-  onChange,
-}: {
-  value: AggregateFunction;
-  disabled?: boolean;
-  onChange: (value: AggregateFunction) => void;
-}) {
-  return (
-    <select
-      className="min-w-0 flex-1 px-1.5 py-0.5 border border-ss-border rounded-ss-sm text-caption bg-ss-surface"
-      value={value}
-      aria-label="Aggregate value field"
-      disabled={disabled}
-      onChange={(event) => onChange(event.target.value as AggregateFunction)}
-      onClick={(event) => event.stopPropagation()}
-      data-pivot-target="aggregate-selector"
-    >
-      {PIVOT_AGGREGATE_FUNCTION_OPTIONS.map((option) => (
-        <option key={option.type} value={option.type}>
-          {option.label}
-        </option>
-      ))}
-    </select>
-  );
-}
-
-function LabelSortSelector({
-  value,
-  label,
-  disabled,
-  onChange,
-}: {
-  value: SortOrder;
-  label: string;
-  disabled?: boolean;
-  onChange: (value: SortOrder) => void;
-}) {
-  return (
-    <select
-      className="min-w-0 flex-1 px-1.5 py-0.5 border border-ss-border rounded-ss-sm text-caption bg-ss-surface"
-      value={value}
-      aria-label={`Sort ${label}`}
-      title={`Sort ${label}`}
-      disabled={disabled}
-      onChange={(event) => onChange(event.target.value as SortOrder)}
-      onClick={(event) => event.stopPropagation()}
-      data-pivot-target="label-sort-control"
-    >
-      <option value="none">No sort</option>
-      <option value="asc">Sort Ascending</option>
-      <option value="desc">Sort Descending</option>
-    </select>
-  );
-}
-
-function ValueSortSelector({
-  value,
-  label,
-  disabled,
-  onChange,
-}: {
-  value: SortOrder;
-  label: string;
-  disabled?: boolean;
-  onChange: (value: SortOrder) => void;
-}) {
-  return (
-    <select
-      className="min-w-0 flex-1 px-1.5 py-0.5 border border-ss-border rounded-ss-sm text-caption bg-ss-surface"
-      value={value}
-      aria-label={`Sort values by ${label}`}
-      title={`Sort values by ${label}`}
-      disabled={disabled}
-      onChange={(event) => onChange(event.target.value as SortOrder)}
-      onClick={(event) => event.stopPropagation()}
-      data-pivot-target="value-sort-control"
-    >
-      <option value="none">No value sort</option>
-      <option value="desc">Largest to Smallest</option>
-      <option value="asc">Smallest to Largest</option>
-    </select>
-  );
+function defaultAreaForField(field: PivotField): PivotFieldArea {
+  return field.dataType === 'number' ? 'value' : 'row';
 }
 
 export function PivotFieldList({
@@ -224,11 +105,24 @@ export function PivotFieldList({
 }: PivotFieldListProps) {
   const [dragState, setDragState] = useState<DragState | null>(null);
   const [dragOverArea, setDragOverArea] = useState<PivotFieldArea | null>(null);
+  const [dropIndicator, setDropIndicator] = useState<DropIndicator | null>(null);
   const [selectedItem, setSelectedItem] = useState<DragState | null>(null);
   const dragPointRef = useRef<{ x: number; y: number } | null>(null);
   const autoScrollRef = useRef<AutoScrollController | null>(null);
+  const autoActivatedFieldRef = useRef<{ fieldId: string; area: PivotFieldArea } | null>(null);
+  const pendingAutoActivatedMoveRef = useRef<PendingAutoActivatedMove | null>(null);
+  const pointerDragCancelRef = useRef<(() => void) | null>(null);
+  const nativeDropTargetRef = useRef<{
+    state: DragState;
+    area: PivotFieldArea;
+    position: number;
+  } | null>(null);
 
   const fieldById = useMemo(() => new Map(fields.map((field) => [field.id, field])), [fields]);
+  const placedFieldIds = useMemo(
+    () => new Set(placements.map((placement) => placement.fieldId)),
+    [placements],
+  );
   const placementsByArea = useMemo<Record<PivotFieldArea, PlacedField[]>>(() => {
     const byArea: Record<PivotFieldArea, PlacedField[]> = {
       filter: [],
@@ -314,14 +208,77 @@ export function PivotFieldList({
 
   useEffect(() => {
     return () => {
+      pointerDragCancelRef.current?.();
+      pointerDragCancelRef.current = null;
       autoScrollRef.current?.cleanup();
       autoScrollRef.current = null;
     };
   }, []);
 
+  useEffect(() => {
+    const pending = pendingAutoActivatedMoveRef.current;
+    if (!pending) return;
+
+    const activatedPlacement = [...placementsByArea[pending.fromArea]]
+      .reverse()
+      .find((item) => item.field.id === pending.fieldId);
+    if (!activatedPlacement) return;
+
+    pendingAutoActivatedMoveRef.current = null;
+    const position = Math.max(0, Math.min(pending.position, placementsByArea[pending.toArea].length));
+    onMovePlacement(placementId(activatedPlacement.placement), pending.toArea, position);
+  }, [onMovePlacement, placementsByArea]);
+
+  const applyDragStateToPosition = useCallback(
+    (state: DragState, toArea: PivotFieldArea, toPosition: number) => {
+      if (!canDragState(state)) return;
+      if (state.kind === 'field') {
+        const field = fieldById.get(state.fieldId);
+        onAddField(state.fieldId, toArea, {
+          position: Math.max(0, Math.min(toPosition, placementsByArea[toArea].length)),
+          aggregateFunction: defaultAggregate(toArea, field),
+        });
+        return;
+      }
+      const maxPosition =
+        state.fromArea === toArea
+          ? Math.max(0, placementsByArea[toArea].length - 1)
+          : placementsByArea[toArea].length;
+      const finalPosition = Math.max(0, Math.min(toPosition, maxPosition));
+      if (state.fromArea !== toArea || finalPosition !== state.fromIndex) {
+        onMovePlacement(state.placementId, toArea, finalPosition);
+      }
+    },
+    [canDragState, fieldById, onAddField, onMovePlacement, placementsByArea],
+  );
+
+  const finishNativeDrag = useCallback(() => {
+    const pendingDropTarget = nativeDropTargetRef.current;
+    nativeDropTargetRef.current = null;
+    if (pendingDropTarget) {
+      pointerDragCancelRef.current?.();
+      pointerDragCancelRef.current = null;
+      applyDragStateToPosition(
+        pendingDropTarget.state,
+        pendingDropTarget.area,
+        pendingDropTarget.position,
+      );
+    }
+    stopAutoScroll();
+    setDragState(null);
+    setDragOverArea(null);
+    setDropIndicator(null);
+    setSelectedItem(null);
+  }, [applyDragStateToPosition, stopAutoScroll]);
+
   const handleDragStart = useCallback(
     (event: DragEvent, state: DragState) => {
       if (!canDragState(state)) return;
+      if (pointerDragCancelRef.current) {
+        event.preventDefault();
+        return;
+      }
+      nativeDropTargetRef.current = null;
       setDragState(state);
       event.dataTransfer.effectAllowed = 'move';
       event.dataTransfer.setData(DROP_PAYLOAD_TYPE, serializeDragState(state));
@@ -329,19 +286,47 @@ export function PivotFieldList({
         'text/plain',
         state.kind === 'field' ? state.fieldId : state.placementId,
       );
+      document.addEventListener('dragend', finishNativeDrag, { capture: true, once: true });
     },
-    [canDragState],
+    [canDragState, finishNativeDrag],
   );
 
-  const handleDragEnd = useCallback(() => {
-    stopAutoScroll();
-    setDragState(null);
-    setDragOverArea(null);
-  }, [stopAutoScroll]);
+  const handleDragEnd = finishNativeDrag;
+
+  const resolvePositionDropTarget = useCallback(
+    (event: DragEvent, state: DragState, area?: PivotFieldArea) => {
+      if (state.kind !== 'placement') return null;
+      const target = resolvePointerDropTarget({
+        clientX: event.clientX,
+        clientY: event.clientY,
+        state,
+        canRemoveFields,
+        placementsByArea,
+      });
+      if (target?.kind !== 'position') return null;
+      if (area !== undefined && target.area !== area) return null;
+      return target;
+    },
+    [canRemoveFields, placementsByArea],
+  );
+
+  const setNativePositionDropTarget = useCallback((state: DragState, target: NonNullable<ReturnType<typeof resolvePositionDropTarget>>) => {
+    nativeDropTargetRef.current = {
+      state,
+      area: target.area,
+      position: target.position,
+    };
+    setDragOverArea(target.area);
+    setDropIndicator({ area: target.area, position: target.indicatorPosition });
+  }, []);
 
   const handleListDragOver = useCallback(
     (event: DragEvent<HTMLDivElement>) => {
       const state = dragStateFromEvent(event);
+      if (state?.kind === 'placement' && canDragState(state)) {
+        const target = resolvePositionDropTarget(event, state);
+        if (target) setNativePositionDropTarget(state, target);
+      }
       if (!canDragState(state) || !getScrollElement()) {
         stopAutoScroll();
         return;
@@ -352,14 +337,24 @@ export function PivotFieldList({
       dragPointRef.current = { x: event.clientX, y: event.clientY };
       ensureAutoScroll().start();
     },
-    [canDragState, dragStateFromEvent, ensureAutoScroll, getScrollElement, stopAutoScroll],
+    [
+      canDragState,
+      dragStateFromEvent,
+      ensureAutoScroll,
+      getScrollElement,
+      resolvePositionDropTarget,
+      setNativePositionDropTarget,
+      stopAutoScroll,
+    ],
   );
 
   const handleListDragLeave = useCallback(
     (event: DragEvent<HTMLDivElement>) => {
       const relatedTarget = event.relatedTarget;
       if (relatedTarget instanceof Node && event.currentTarget.contains(relatedTarget)) return;
+      nativeDropTargetRef.current = null;
       stopAutoScroll();
+      setDropIndicator(null);
     },
     [stopAutoScroll],
   );
@@ -367,12 +362,68 @@ export function PivotFieldList({
   const handleDragOver = useCallback(
     (event: DragEvent, area: PivotFieldArea) => {
       const state = dragStateFromEvent(event);
-      if (!canDragState(state)) return;
+      if (!state || !canDragState(state)) return;
       event.preventDefault();
       event.dataTransfer.dropEffect = 'move';
+
+      const target = resolvePositionDropTarget(event, state, area);
+      if (target) {
+        setNativePositionDropTarget(state, target);
+        return;
+      }
+
+      nativeDropTargetRef.current = {
+        state,
+        area,
+        position:
+          state.kind === 'placement' && state.fromArea === area
+            ? Math.max(0, placementsByArea[area].length - 1)
+            : placementsByArea[area].length,
+      };
       setDragOverArea(area);
+      setDropIndicator(null);
     },
-    [canDragState, dragStateFromEvent],
+    [canDragState, dragStateFromEvent, placementsByArea, resolvePositionDropTarget, setNativePositionDropTarget],
+  );
+
+  const handlePlacementDragOver = useCallback(
+    (event: DragEvent, item: PlacedField, targetIndex: number) => {
+      const state = dragStateFromEvent(event);
+      if (!state || !canDragState(state)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      event.dataTransfer.dropEffect = 'move';
+
+      const target =
+        state.kind === 'placement' && state.placementId === placementId(item.placement)
+          ? resolvePositionDropTarget(event, state)
+          : null;
+      if (target) {
+        setNativePositionDropTarget(state, target);
+        return;
+      }
+
+      const rect = event.currentTarget.getBoundingClientRect();
+      const dropAfter = rect.height > 0 ? event.clientY > rect.top + rect.height / 2 : false;
+      const insertionBeforeRemoval = targetIndex + (dropAfter ? 1 : 0);
+      const adjustedPosition =
+        state.kind === 'placement' &&
+        state.fromArea === item.placement.area &&
+        state.fromIndex < insertionBeforeRemoval
+          ? insertionBeforeRemoval - 1
+          : insertionBeforeRemoval;
+      nativeDropTargetRef.current = {
+        state,
+        area: item.placement.area,
+        position: adjustedPosition,
+      };
+      setDragOverArea(item.placement.area);
+      setDropIndicator({
+        area: item.placement.area,
+        position: insertionBeforeRemoval,
+      });
+    },
+    [canDragState, dragStateFromEvent, resolvePositionDropTarget, setNativePositionDropTarget],
   );
 
   const handleDropAtPosition = useCallback(
@@ -385,55 +436,194 @@ export function PivotFieldList({
         return;
       }
 
-      if (state.kind === 'field') {
-        const field = fieldById.get(state.fieldId);
-        onAddField(state.fieldId, toArea, {
-          position: Math.max(0, Math.min(toPosition, placementsByArea[toArea].length)),
-          aggregateFunction: defaultAggregate(toArea, field),
-        });
-      } else {
-        const maxPosition =
-          state.fromArea === toArea
-            ? Math.max(0, placementsByArea[toArea].length - 1)
-            : placementsByArea[toArea].length;
-        const finalPosition = Math.max(0, Math.min(toPosition, maxPosition));
-        if (state.fromArea !== toArea || finalPosition !== state.fromIndex) {
-          onMovePlacement(state.placementId, toArea, finalPosition);
-        }
-      }
+      nativeDropTargetRef.current = null;
+      pointerDragCancelRef.current?.();
+      pointerDragCancelRef.current = null;
+      applyDragStateToPosition(state, toArea, toPosition);
 
       setDragState(null);
       setDragOverArea(null);
+      setDropIndicator(null);
       setSelectedItem(null);
       stopAutoScroll();
     },
+    [canDragState, dragStateFromEvent, applyDragStateToPosition, stopAutoScroll],
+  );
+
+  const dropTargetFromPoint = useCallback(
+    (clientX: number, clientY: number, state: DragState) =>
+      resolvePointerDropTarget({ clientX, clientY, state, canRemoveFields, placementsByArea }),
+    [canRemoveFields, placementsByArea],
+  );
+
+  const clearDragFeedback = useCallback(() => {
+    setDragState(null);
+    setDragOverArea(null);
+    setDropIndicator(null);
+    setSelectedItem(null);
+    stopAutoScroll();
+  }, [stopAutoScroll]);
+
+  const handleMouseDragStart = useCallback(
+    (event: MouseEvent<HTMLElement>, state: DragState) => {
+      if (event.button !== 0 || !canDragState(state)) return;
+      const start = { x: event.clientX, y: event.clientY };
+      let active = false;
+      let lastDropTarget: PointerDropTarget | null = null;
+
+      const updateFeedback = (clientX: number, clientY: number) => {
+        const target = dropTargetFromPoint(clientX, clientY, state);
+        lastDropTarget = target;
+        if (target?.kind === 'position') {
+          setDragOverArea(target.area);
+          setDropIndicator({ area: target.area, position: target.indicatorPosition });
+        } else {
+          setDragOverArea(null);
+          setDropIndicator(null);
+        }
+      };
+
+      const handleMouseMove = (moveEvent: globalThis.MouseEvent) => {
+        const dx = moveEvent.clientX - start.x;
+        const dy = moveEvent.clientY - start.y;
+        if (!active && Math.hypot(dx, dy) < POINTER_DRAG_THRESHOLD_PX) return;
+        if (!active) {
+          active = true;
+          setDragState(state);
+          setSelectedItem(null);
+        }
+        dragPointRef.current = { x: moveEvent.clientX, y: moveEvent.clientY };
+        ensureAutoScroll().start();
+        updateFeedback(moveEvent.clientX, moveEvent.clientY);
+      };
+
+      const handleMouseUp = (upEvent: globalThis.MouseEvent) => {
+        cleanup();
+        if (!active) return;
+        const currentTarget = dropTargetFromPoint(upEvent.clientX, upEvent.clientY, state);
+        const target = currentTarget?.kind === 'available' ? currentTarget : lastDropTarget ?? currentTarget;
+        if (target?.kind === 'available' && state.kind === 'placement' && canRemoveFields) {
+          onRemovePlacement(state.placementId);
+        } else if (target?.kind === 'position') {
+          applyDragStateToPosition(state, target.area, target.position);
+        }
+        clearDragFeedback();
+      };
+
+      const cleanup = () => {
+        document.removeEventListener('mousemove', handleMouseMove, true);
+        document.removeEventListener('mouseup', handleMouseUp, true);
+        if (pointerDragCancelRef.current === cleanup) {
+          pointerDragCancelRef.current = null;
+        }
+      };
+
+      document.addEventListener('mousemove', handleMouseMove, true);
+      document.addEventListener('mouseup', handleMouseUp, true);
+      pointerDragCancelRef.current = cleanup;
+    },
     [
+      applyDragStateToPosition,
       canDragState,
-      dragStateFromEvent,
-      fieldById,
-      onAddField,
-      onMovePlacement,
-      placementsByArea,
-      stopAutoScroll,
+      canRemoveFields,
+      clearDragFeedback,
+      dropTargetFromPoint,
+      ensureAutoScroll,
+      onRemovePlacement,
     ],
+  );
+
+  const handleListMouseDownCapture = useCallback(
+    (event: MouseEvent<HTMLDivElement>) => {
+      if (
+        event.target instanceof HTMLElement &&
+        event.target.closest(POINTER_DRAG_IGNORED_SELECTOR)
+      ) {
+        return;
+      }
+      const state = dragStateFromPoint({
+        clientX: event.clientX,
+        clientY: event.clientY,
+        placementsByArea,
+      });
+      if (state) handleMouseDragStart(event, state);
+    },
+    [handleMouseDragStart, placementsByArea],
   );
 
   const handleDropOnZone = useCallback(
     (event: DragEvent, toArea: PivotFieldArea) => {
       const state = dragStateFromEvent(event);
+      const target = state ? resolvePositionDropTarget(event, state, toArea) : null;
+      if (target) {
+        handleDropAtPosition(event, target.area, target.position);
+        return;
+      }
       const appendPosition =
         state?.kind === 'placement' && state.fromArea === toArea
           ? Math.max(0, placementsByArea[toArea].length - 1)
           : placementsByArea[toArea].length;
       handleDropAtPosition(event, toArea, appendPosition);
     },
-    [dragStateFromEvent, handleDropAtPosition, placementsByArea],
+    [dragStateFromEvent, handleDropAtPosition, placementsByArea, resolvePositionDropTarget],
+  );
+
+  const handleAvailableDragOver = useCallback(
+    (event: DragEvent<HTMLDivElement>) => {
+      const state = dragStateFromEvent(event);
+      if (!state || state.kind !== 'placement' || !canDragState(state) || !canRemoveFields) {
+        return;
+      }
+
+      event.preventDefault();
+      event.dataTransfer.dropEffect = 'move';
+      nativeDropTargetRef.current = null;
+      setDragOverArea(null);
+      setDropIndicator(null);
+    },
+    [canDragState, canRemoveFields, dragStateFromEvent],
+  );
+
+  const handleDropOnAvailable = useCallback(
+    (event: DragEvent<HTMLDivElement>) => {
+      const state = dragStateFromEvent(event);
+      if (!state || state.kind !== 'placement' || !canDragState(state) || !canRemoveFields) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      nativeDropTargetRef.current = null;
+      pointerDragCancelRef.current?.();
+      pointerDragCancelRef.current = null;
+      onRemovePlacement(state.placementId);
+      setDragState(null);
+      setDragOverArea(null);
+      setDropIndicator(null);
+      setSelectedItem(null);
+      stopAutoScroll();
+    },
+    [canDragState, canRemoveFields, dragStateFromEvent, onRemovePlacement, stopAutoScroll],
   );
 
   const handleDropOnPlacement = useCallback(
     (event: DragEvent, item: PlacedField, targetIndex: number) => {
       const state = dragStateFromEvent(event);
       if (!state) return;
+
+      if (state.kind === 'placement' && state.placementId === placementId(item.placement)) {
+        const target = resolvePointerDropTarget({
+          clientX: event.clientX,
+          clientY: event.clientY,
+          state,
+          canRemoveFields,
+          placementsByArea,
+        });
+        if (target?.kind === 'position') {
+          handleDropAtPosition(event, target.area, target.position);
+          return;
+        }
+      }
 
       const rect = event.currentTarget.getBoundingClientRect();
       const dropAfter = rect.height > 0 ? event.clientY > rect.top + rect.height / 2 : false;
@@ -447,7 +637,39 @@ export function PivotFieldList({
 
       handleDropAtPosition(event, item.placement.area, adjustedPosition);
     },
-    [dragStateFromEvent, handleDropAtPosition],
+    [canRemoveFields, dragStateFromEvent, handleDropAtPosition, placementsByArea],
+  );
+
+  const consumeAutoActivatedField = useCallback(
+    (fieldId: string, toArea: PivotFieldArea, position: number): boolean => {
+      const autoActivated = autoActivatedFieldRef.current;
+      if (!autoActivated || autoActivated.fieldId !== fieldId) return false;
+
+      autoActivatedFieldRef.current = null;
+      setSelectedItem(null);
+
+      if (autoActivated.area === toArea) {
+        return true;
+      }
+
+      const activatedPlacement = [...placementsByArea[autoActivated.area]]
+        .reverse()
+        .find((item) => item.field.id === fieldId);
+      if (activatedPlacement) {
+        const finalPosition = Math.max(0, Math.min(position, placementsByArea[toArea].length));
+        onMovePlacement(placementId(activatedPlacement.placement), toArea, finalPosition);
+        return true;
+      }
+
+      pendingAutoActivatedMoveRef.current = {
+        fieldId,
+        fromArea: autoActivated.area,
+        toArea,
+        position,
+      };
+      return true;
+    },
+    [onMovePlacement, placementsByArea],
   );
 
   const handleZoneClick = useCallback(
@@ -459,6 +681,7 @@ export function PivotFieldList({
           : placementsByArea[toArea].length;
 
       if (selectedItem.kind === 'field') {
+        if (consumeAutoActivatedField(selectedItem.fieldId, toArea, appendPosition)) return;
         const field = fieldById.get(selectedItem.fieldId);
         onAddField(selectedItem.fieldId, toArea, {
           position: appendPosition,
@@ -468,9 +691,33 @@ export function PivotFieldList({
         onMovePlacement(selectedItem.placementId, toArea, appendPosition);
       }
 
+      autoActivatedFieldRef.current = null;
       setSelectedItem(null);
     },
-    [canDragState, fieldById, onAddField, onMovePlacement, placementsByArea, selectedItem],
+    [
+      canDragState,
+      consumeAutoActivatedField,
+      fieldById,
+      onAddField,
+      onMovePlacement,
+      placementsByArea,
+      selectedItem,
+    ],
+  );
+
+  const activateSourceField = useCallback(
+    (field: PivotField) => {
+      const state: DragState = { kind: 'field', fieldId: field.id };
+      if (!canDragState(state)) return;
+      const area = defaultAreaForField(field);
+      onAddField(field.id, area, {
+        position: placementsByArea[area].length,
+        aggregateFunction: defaultAggregate(area, field),
+      });
+      autoActivatedFieldRef.current = { fieldId: field.id, area };
+      setSelectedItem(state);
+    },
+    [canDragState, onAddField, placementsByArea],
   );
 
   const applySelectedItemAtPosition = useCallback(
@@ -478,6 +725,7 @@ export function PivotFieldList({
       if (!selectedItem || !canDragState(selectedItem)) return false;
 
       if (selectedItem.kind === 'field') {
+        if (consumeAutoActivatedField(selectedItem.fieldId, toArea, position)) return true;
         const field = fieldById.get(selectedItem.fieldId);
         onAddField(selectedItem.fieldId, toArea, {
           position: Math.max(0, Math.min(position, placementsByArea[toArea].length)),
@@ -498,29 +746,50 @@ export function PivotFieldList({
       setSelectedItem(null);
       return true;
     },
-    [canDragState, fieldById, onAddField, onMovePlacement, placementsByArea, selectedItem],
+    [
+      canDragState,
+      consumeAutoActivatedField,
+      fieldById,
+      onAddField,
+      onMovePlacement,
+      placementsByArea,
+      selectedItem,
+    ],
   );
 
-  const renderSourceFieldChip = (field: PivotField) => {
+  const renderSourceFieldRow = (field: PivotField) => {
     const state: DragState = { kind: 'field', fieldId: field.id };
     const isDragging = dragState?.kind === 'field' && dragState.fieldId === field.id;
     const isSelected = selectedItem?.kind === 'field' && selectedItem.fieldId === field.id;
+    const isChecked = isSelected || placedFieldIds.has(field.id);
     const canDrag = canDragState(state);
 
     return (
       <div
         key={`available-${field.id}`}
-        className={`flex max-w-full min-w-0 items-center gap-1.5 px-2 py-1.5 rounded text-body-sm select-none transition-colors ${
+        className={`flex w-full max-w-full min-w-0 items-center gap-2 px-2 py-1.5 rounded text-body-sm select-none transition-colors ${
           canDrag ? 'cursor-grab' : 'cursor-default'
-        } ${isDragging ? 'opacity-50' : ''} ${isSelected ? 'ring-2 ring-ss-primary' : ''} bg-ss-surface-hover`}
+        } ${isDragging ? 'opacity-50' : ''} ${
+          isSelected ? 'ring-2 ring-ss-primary' : ''
+        } hover:bg-ss-surface-hover`}
         draggable={canDrag}
+        role="checkbox"
+        aria-checked={isChecked}
+        aria-disabled={!canDrag}
+        tabIndex={canDrag ? 0 : -1}
         title={field.name}
         aria-label={field.name}
         onDragStart={(event) => handleDragStart(event, state)}
         onDragEnd={handleDragEnd}
         onClick={(event) => {
           event.stopPropagation();
-          if (canDrag) setSelectedItem(state);
+          activateSourceField(field);
+        }}
+        onKeyDown={(event) => {
+          if (event.key !== 'Enter' && event.key !== ' ') return;
+          event.preventDefault();
+          event.stopPropagation();
+          activateSourceField(field);
         }}
         data-pivot-target="field-chip"
         data-pivot-field-id={field.id}
@@ -529,9 +798,20 @@ export function PivotFieldList({
         data-pivot-placement-id={field.id}
         data-pivot-area="available"
         data-pivot-selected={isSelected ? 'true' : 'false'}
+        data-pivot-checked={isChecked ? 'true' : 'false'}
       >
+        <span
+          aria-hidden="true"
+          className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-sm border text-[10px] leading-none ${
+            isChecked
+              ? 'border-ss-primary bg-ss-primary text-white'
+              : 'border-ss-border bg-ss-surface text-transparent'
+          }`}
+        >
+          ✓
+        </span>
         <DataTypeIcon dataType={field.dataType} />
-        <span className="min-w-0 flex-1 truncate" title={field.name} aria-label={field.name}>
+        <span className="min-w-0 flex-1 truncate" title={field.name}>
           {field.name}
         </span>
       </div>
@@ -563,7 +843,7 @@ export function PivotFieldList({
     return (
       <div
         key={id}
-        className={`flex w-full max-w-full min-w-0 flex-col gap-1.5 px-2 py-1.5 rounded text-body-sm select-none transition-colors ${
+        className={`relative flex w-full max-w-full min-w-0 flex-col gap-1.5 px-2 py-1.5 rounded text-body-sm select-none transition-colors ${
           canDrag ? 'cursor-grab' : 'cursor-default'
         } ${isDragging ? 'opacity-50' : ''} ${isSelected ? 'ring-2 ring-ss-primary' : ''} ${
           isValueField ? 'bg-ss-primary-light' : 'bg-ss-surface-hover'
@@ -573,7 +853,7 @@ export function PivotFieldList({
         aria-label={label}
         onDragStart={(event) => handleDragStart(event, state)}
         onDragEnd={handleDragEnd}
-        onDragOver={(event) => handleDragOver(event, placement.area)}
+        onDragOver={(event) => handlePlacementDragOver(event, item, index)}
         onDrop={(event) => handleDropOnPlacement(event, item, index)}
         onClick={(event) => {
           event.stopPropagation();
@@ -602,7 +882,14 @@ export function PivotFieldList({
       >
         <div className="flex w-full min-w-0 items-center gap-1.5">
           <DataTypeIcon dataType={field.dataType} />
-          <span className="min-w-0 flex-1 truncate" title={label} aria-label={label}>
+          <span
+            className="min-w-0 flex-1 truncate"
+            title={label}
+            aria-label={label}
+            draggable={false}
+            onDragStart={(event) => handleDragStart(event, state)}
+            onDragEnd={handleDragEnd}
+          >
             {label}
           </span>
           {canRemoveFields && (
@@ -656,45 +943,27 @@ export function PivotFieldList({
     );
   };
 
-  const renderDropZone = (area: PivotFieldArea, label: string) => {
-    const placedFields = placementsByArea[area];
-    const dropAreaClass = `flex flex-col gap-1.5 min-h-9 p-1.5 bg-ss-surface border border-dashed rounded transition-colors ${
-      dragOverArea === area ? 'bg-ss-primary-light border-ss-primary' : 'border-ss-border'
-    }`;
-
-    return (
-      <div
-        className="flex min-w-0 flex-col gap-1.5"
-        data-pivot-target="field-zone-wrapper"
-        data-pivot-zone={area}
-      >
-        <div className="text-caption font-medium text-ss-text-secondary">{label}</div>
-        <div
-          className={dropAreaClass}
-          onDragOver={(event) => handleDragOver(event, area)}
-          onDragLeave={() => setDragOverArea(null)}
-          onDrop={(event) => handleDropOnZone(event, area)}
-          onClick={() => handleZoneClick(area)}
-          data-pivot-target="field-zone"
-          data-pivot-zone={area}
-          data-pivot-accepts-selected={selectedItem ? 'true' : 'false'}
-        >
-          {placedFields.length === 0 ? (
-            <span className="pointer-events-none text-caption text-ss-text-disabled italic p-1">
-              Drop fields here
-            </span>
-          ) : (
-            placedFields.map((item, index) => renderPlacementChip(item, index))
-          )}
-        </div>
-      </div>
-    );
-  };
+  const renderDropZone = (area: PivotFieldArea, label: string) => (
+    <PivotFieldDropZone
+      area={area}
+      label={label}
+      placedFields={placementsByArea[area]}
+      dragOverArea={dragOverArea}
+      dropIndicator={dropIndicator}
+      acceptsSelected={selectedItem != null}
+      renderPlacementChip={renderPlacementChip}
+      onDragOver={handleDragOver}
+      onDragLeave={() => setDragOverArea(null)}
+      onDrop={handleDropOnZone}
+      onClick={handleZoneClick}
+    />
+  );
 
   return (
     <div
       className="flex flex-col gap-4 p-4 bg-ss-surface-secondary rounded-ss-lg text-body-sm"
       data-pivot-target="field-list"
+      onMouseDownCapture={handleListMouseDownCapture}
       onDragOver={handleListDragOver}
       onDragLeave={handleListDragLeave}
     >
@@ -703,14 +972,18 @@ export function PivotFieldList({
           Available Fields
         </div>
         <div
-          className="flex flex-wrap gap-1.5 min-h-9 p-1.5 bg-ss-surface border border-dashed border-ss-border rounded"
+          className="flex max-h-60 min-h-9 flex-col gap-0.5 overflow-y-auto p-1 bg-ss-surface border border-ss-border rounded"
+          role="group"
+          aria-label="Available fields"
+          onDragOver={handleAvailableDragOver}
+          onDrop={handleDropOnAvailable}
           data-pivot-target="available-fields"
           data-pivot-zone="available"
         >
           {fields.length === 0 ? (
             <span className="text-caption text-ss-text-disabled italic p-1">No fields</span>
           ) : (
-            fields.map(renderSourceFieldChip)
+            fields.map(renderSourceFieldRow)
           )}
         </div>
       </div>

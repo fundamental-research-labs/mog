@@ -224,6 +224,11 @@ impl CellMirror {
         None
     }
 
+    /// Get a column's dense data as a slice, if available.
+    pub(crate) fn get_column_slice(&self, sheet: &SheetId, col: u32) -> Option<&[CellValue]> {
+        self.sheets.get(sheet)?.get_column_slice(col)
+    }
+
     /// Get the identity formula for a cell (across all sheets).
     pub fn get_formula(&self, cell_id: &CellId) -> Option<&IdentityFormula> {
         let sheet_id = self.cell_to_sheet.get(cell_id)?;

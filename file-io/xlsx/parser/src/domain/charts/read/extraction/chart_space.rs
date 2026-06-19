@@ -8,10 +8,13 @@ use super::data_refs::reconstruct_data_range_from_chart_space;
 use super::formatting::{
     extract_chart_format, extract_chart_line, extract_chart_rich_text, extract_title_chart_format,
 };
-use super::labels::extract_data_label_data;
+use super::labels::{extract_data_label_data, extract_data_label_data_from_chart_type_config};
 use super::legend::extract_legend_from_chart_space;
 use super::series::extract_series_from_chart_space;
-use super::text::extract_title_text_from_title;
+use super::text::{
+    extract_title_h_align, extract_title_show_shadow, extract_title_text_from_title,
+    extract_title_v_align,
+};
 
 pub fn extract_chart_spec_from_chart_space(
     cs: &ooxml_types::charts::ChartSpace,
@@ -52,15 +55,17 @@ pub fn extract_chart_spec_from_chart_space(
     // -------------------------------------------------------------------------
     // (f) axes — from cs.chart.plot_area.axes
     // -------------------------------------------------------------------------
-    let mut axes = extract_axes_from_chart_space(cs);
-    apply_imported_axis_label_positions(&chart_type, axes.as_mut());
+    let axes = extract_axes_from_chart_space(cs);
 
     // -------------------------------------------------------------------------
     // (g) chart-level data_labels — from first chart group's d_lbls
     // -------------------------------------------------------------------------
-    let data_labels = first_group
-        .and_then(|g| g.d_lbls.as_ref())
-        .map(|dl| extract_data_label_data(dl));
+    let data_labels = first_group.and_then(|g| {
+        g.d_lbls
+            .as_ref()
+            .map(extract_data_label_data)
+            .or_else(|| extract_data_label_data_from_chart_type_config(&g.config))
+    });
 
     // -------------------------------------------------------------------------
     // (h) formatting — chart-level, plot-area, title
@@ -74,6 +79,9 @@ pub fn extract_chart_spec_from_chart_space(
         .title
         .as_ref()
         .and_then(|title| title.layout.as_ref().map(Into::into));
+    let title_h_align = chart.title.as_ref().and_then(extract_title_h_align);
+    let title_v_align = chart.title.as_ref().and_then(extract_title_v_align);
+    let title_show_shadow = chart.title.as_ref().and_then(extract_title_show_shadow);
 
     // -------------------------------------------------------------------------
     // (i) scalar fields from chart group configs
@@ -126,8 +134,8 @@ pub fn extract_chart_spec_from_chart_space(
             show_outline: dt.show_outline,
             show_keys: dt.show_keys,
             format: extract_chart_format(dt.sp_pr.as_ref(), dt.tx_pr.as_ref()),
-            show_legend_key: None,
-            visible: None,
+            show_legend_key: dt.show_keys,
+            visible: Some(true),
         });
 
     // -------------------------------------------------------------------------
@@ -189,8 +197,8 @@ pub fn extract_chart_spec_from_chart_space(
     // -------------------------------------------------------------------------
     // (l) Anchor metadata
     // -------------------------------------------------------------------------
-    let width_px = (anchor.cx / 9525).max(100) as f64;
-    let height_px = (anchor.cy / 9525).max(100) as f64;
+    let width_px = super::super::emu_to_pixels(anchor.cx);
+    let height_px = super::super::emu_to_pixels(anchor.cy);
 
     domain_types::ChartSpec {
         chart_type,
@@ -230,6 +238,8 @@ pub fn extract_chart_spec_from_chart_space(
         axes,
         data_labels,
         data_range,
+        series_range: None,
+        category_range: None,
         style: cs.style,
         rounded_corners: cs.rounded_corners,
         auto_title_deleted: chart.auto_title_deleted,
@@ -238,7 +248,10 @@ pub fn extract_chart_spec_from_chart_space(
         plot_format,
         title_format,
         title_rich_text,
-        title_formula: None,
+        title_formula: chart
+            .title
+            .as_ref()
+            .and_then(super::text::extract_title_formula_from_title),
         plot_layout,
         title_layout,
         data_table,
@@ -251,6 +264,7 @@ pub fn extract_chart_spec_from_chart_space(
         boxplot: None,
         hierarchy: None,
         region_map: None,
+        colors: None,
         display_blanks_as,
         plot_visible_only,
         gap_width: scalar_fields.gap_width,
@@ -266,11 +280,13 @@ pub fn extract_chart_spec_from_chart_space(
         category_label_level: None,
         series_name_level: None,
         show_all_field_buttons: chart.show_all_field_buttons,
-        second_plot_size: None,
+        show_lines: scalar_fields.show_lines,
+        smooth_lines: scalar_fields.smooth_lines,
+        second_plot_size: scalar_fields.second_plot_size,
         vary_by_categories,
-        title_h_align: None,
-        title_v_align: None,
-        title_show_shadow: None,
+        title_h_align,
+        title_v_align,
+        title_show_shadow,
         pivot_options,
         pivot_projection: None,
         bar_shape: scalar_fields.bar_shape,
@@ -338,129 +354,6 @@ fn effective_vary_by_categories(
         ooxml_types::charts::ChartTypeConfig::Bubble(_) if single_series => Some(true),
         _ => None,
     }
-}
-
-#[derive(Clone, Copy, PartialEq)]
-enum AxisOrientation {
-    Horizontal,
-    Vertical,
-}
-
-#[derive(Clone, Copy, PartialEq)]
-enum AxisPosition {
-    Bottom,
-    Top,
-    Left,
-    Right,
-}
-
-fn apply_imported_axis_label_positions(
-    chart_type: &domain_types::ChartType,
-    axes: Option<&mut domain_types::chart::AxisData>,
-) {
-    let Some(axes) = axes else {
-        return;
-    };
-    let Some((category_orientation, value_orientation)) = cartesian_axis_orientations(chart_type)
-    else {
-        return;
-    };
-
-    apply_axis_pair_label_position(
-        axes.category_axis.as_mut(),
-        axes.value_axis.as_mut(),
-        category_orientation,
-        value_orientation,
-    );
-    apply_axis_pair_label_position(
-        axes.secondary_category_axis.as_mut(),
-        axes.secondary_value_axis.as_mut(),
-        category_orientation,
-        value_orientation,
-    );
-}
-
-fn cartesian_axis_orientations(
-    chart_type: &domain_types::ChartType,
-) -> Option<(AxisOrientation, AxisOrientation)> {
-    use domain_types::ChartType;
-
-    match chart_type {
-        ChartType::Bar | ChartType::Bar3D => {
-            Some((AxisOrientation::Vertical, AxisOrientation::Horizontal))
-        }
-        ChartType::Column
-        | ChartType::Column3D
-        | ChartType::Line
-        | ChartType::Line3D
-        | ChartType::Area
-        | ChartType::Area3D
-        | ChartType::Stock => Some((AxisOrientation::Horizontal, AxisOrientation::Vertical)),
-        _ => None,
-    }
-}
-
-fn apply_axis_pair_label_position(
-    category_axis: Option<&mut domain_types::chart::SingleAxisData>,
-    value_axis: Option<&mut domain_types::chart::SingleAxisData>,
-    category_orientation: AxisOrientation,
-    value_orientation: AxisOrientation,
-) {
-    let category_position = category_axis
-        .as_ref()
-        .and_then(|axis| normalize_axis_position(axis.position.as_deref()));
-    let value_position = value_axis
-        .as_ref()
-        .and_then(|axis| normalize_axis_position(axis.position.as_deref()));
-    let category_compatible = is_axis_position_compatible(category_position, category_orientation);
-    let value_compatible = is_axis_position_compatible(value_position, value_orientation);
-    let shared_incompatible_position = category_position.is_some()
-        && value_position.is_some()
-        && category_position == value_position
-        && (!category_compatible || !value_compatible);
-
-    if !category_compatible || shared_incompatible_position {
-        if let Some(axis) = category_axis {
-            hide_axis_tick_labels(axis);
-        }
-    }
-    if !value_compatible || shared_incompatible_position {
-        if let Some(axis) = value_axis {
-            hide_axis_tick_labels(axis);
-        }
-    }
-}
-
-fn normalize_axis_position(position: Option<&str>) -> Option<AxisPosition> {
-    match position?.to_ascii_lowercase().as_str() {
-        "b" | "bottom" => Some(AxisPosition::Bottom),
-        "t" | "top" => Some(AxisPosition::Top),
-        "l" | "left" => Some(AxisPosition::Left),
-        "r" | "right" => Some(AxisPosition::Right),
-        _ => None,
-    }
-}
-
-fn is_axis_position_compatible(
-    position: Option<AxisPosition>,
-    orientation: AxisOrientation,
-) -> bool {
-    matches!(
-        (position, orientation),
-        (None, _)
-            | (
-                Some(AxisPosition::Bottom | AxisPosition::Top),
-                AxisOrientation::Horizontal
-            )
-            | (
-                Some(AxisPosition::Left | AxisPosition::Right),
-                AxisOrientation::Vertical
-            )
-    )
-}
-
-fn hide_axis_tick_labels(axis: &mut domain_types::chart::SingleAxisData) {
-    axis.tick_label_position = Some("none".to_string());
 }
 
 fn extract_analysis_fields_from_config(
@@ -881,13 +774,24 @@ fn push_style_owner(
 fn extract_sub_type_from_config(
     config: &ooxml_types::charts::ChartTypeConfig,
 ) -> Option<domain_types::chart::ChartSubType> {
+    use domain_types::chart::ChartSubType;
     use ooxml_types::charts::{ChartTypeConfig as CTC, Grouping, RadarStyle};
 
     if let CTC::Radar(c) = config {
         return match c.radar_style {
-            RadarStyle::Filled => Some(domain_types::chart::ChartSubType::Filled),
-            RadarStyle::Marker => Some(domain_types::chart::ChartSubType::Markers),
+            RadarStyle::Filled => Some(ChartSubType::Filled),
+            RadarStyle::Marker => Some(ChartSubType::Markers),
             RadarStyle::Standard => None,
+        };
+    }
+
+    if let CTC::Line(c) = config
+        && c.marker == Some(true)
+    {
+        return match c.grouping {
+            Grouping::Stacked => Some(ChartSubType::MarkersStacked),
+            Grouping::PercentStacked => Some(ChartSubType::MarkersPercentStacked),
+            _ => Some(ChartSubType::Markers),
         };
     }
 
@@ -902,9 +806,9 @@ fn extract_sub_type_from_config(
     }?;
 
     match grouping {
-        Grouping::Clustered => Some(domain_types::chart::ChartSubType::Clustered),
-        Grouping::Stacked => Some(domain_types::chart::ChartSubType::Stacked),
-        Grouping::PercentStacked => Some(domain_types::chart::ChartSubType::PercentStacked),
+        Grouping::Clustered => Some(ChartSubType::Clustered),
+        Grouping::Stacked => Some(ChartSubType::Stacked),
+        Grouping::PercentStacked => Some(ChartSubType::PercentStacked),
         Grouping::Standard => None, // Default, don't emit
     }
 }
@@ -971,6 +875,9 @@ struct ScalarChartFields {
     bubble_3d_effect: Option<bool>,
     split_type: Option<String>,
     split_value: Option<f64>,
+    second_plot_size: Option<u32>,
+    show_lines: Option<bool>,
+    smooth_lines: Option<bool>,
     bar_shape: Option<String>,
     wireframe: Option<bool>,
     surface_top_view: Option<bool>,
@@ -1041,10 +948,15 @@ fn extract_scalar_fields_from_config(
             vary_by_categories: c.vary_colors,
             ..Default::default()
         },
-        CTC::Scatter(c) => ScalarChartFields {
-            vary_by_categories: c.vary_colors,
-            ..Default::default()
-        },
+        CTC::Scatter(c) => {
+            let (show_lines, smooth_lines) = scatter_style_scalar_fields(c.scatter_style);
+            ScalarChartFields {
+                show_lines,
+                smooth_lines,
+                vary_by_categories: c.vary_colors,
+                ..Default::default()
+            }
+        }
         CTC::Bubble(c) => ScalarChartFields {
             bubble_scale: c.bubble_scale,
             show_neg_bubbles: c.show_neg_bubbles,
@@ -1058,12 +970,15 @@ fn extract_scalar_fields_from_config(
             ..Default::default()
         },
         CTC::OfPie(c) => {
-            let split_type = c.split_type.map(|st| st.to_ooxml().to_string());
+            let split_type = c
+                .split_type
+                .map(|st| public_split_type_name(st).to_string());
             let split_value = c.split_pos;
             ScalarChartFields {
                 gap_width: c.gap_width,
                 split_type,
                 split_value,
+                second_plot_size: c.second_pie_size,
                 vary_by_categories: c.vary_colors,
                 ..Default::default()
             }
@@ -1095,10 +1010,36 @@ impl ScalarChartFields {
         self.bubble_3d_effect = self.bubble_3d_effect.or(other.bubble_3d_effect);
         self.split_type = self.split_type.take().or(other.split_type);
         self.split_value = self.split_value.or(other.split_value);
+        self.second_plot_size = self.second_plot_size.or(other.second_plot_size);
+        self.show_lines = self.show_lines.or(other.show_lines);
+        self.smooth_lines = self.smooth_lines.or(other.smooth_lines);
         self.bar_shape = self.bar_shape.take().or(other.bar_shape);
         self.wireframe = self.wireframe.or(other.wireframe);
         self.surface_top_view = self.surface_top_view.or(other.surface_top_view);
         self.vary_by_categories = self.vary_by_categories.or(other.vary_by_categories);
+    }
+}
+
+fn public_split_type_name(split_type: ooxml_types::charts::SplitType) -> &'static str {
+    match split_type {
+        ooxml_types::charts::SplitType::Auto => "auto",
+        ooxml_types::charts::SplitType::Custom => "custom",
+        ooxml_types::charts::SplitType::Percent => "percent",
+        ooxml_types::charts::SplitType::Position => "position",
+        ooxml_types::charts::SplitType::Value => "value",
+    }
+}
+
+fn scatter_style_scalar_fields(
+    style: ooxml_types::charts::ScatterStyle,
+) -> (Option<bool>, Option<bool>) {
+    match style {
+        ooxml_types::charts::ScatterStyle::Line | ooxml_types::charts::ScatterStyle::LineMarker => {
+            (Some(true), None)
+        }
+        ooxml_types::charts::ScatterStyle::Smooth
+        | ooxml_types::charts::ScatterStyle::SmoothMarker => (Some(true), Some(true)),
+        _ => (None, None),
     }
 }
 
@@ -1299,7 +1240,7 @@ mod tests {
     }
 
     #[test]
-    fn single_series_column_with_shared_left_axes_hides_axis_labels() {
+    fn single_series_column_with_shared_left_axes_preserves_tick_label_omission() {
         let cs = ChartSpace {
             chart: OoxmlChart {
                 plot_area: PlotArea {
@@ -1349,13 +1290,13 @@ mod tests {
             axes.category_axis
                 .as_ref()
                 .and_then(|axis| axis.tick_label_position.as_deref()),
-            Some("none")
+            None
         );
         assert_eq!(
             axes.value_axis
                 .as_ref()
                 .and_then(|axis| axis.tick_label_position.as_deref()),
-            Some("none")
+            None
         );
     }
 

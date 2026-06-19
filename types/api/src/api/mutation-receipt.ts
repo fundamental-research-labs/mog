@@ -8,6 +8,7 @@
 
 import type { ObjectBounds } from '../kernel/floating-object-manager';
 import type { CellRange, CellValue, SheetId } from '@mog/types-core/core';
+import type { WorksheetRange } from './ranges';
 import type { CFRule, ConditionalFormat } from '@mog/types-formatting/conditional-format/rules';
 import type { Chart, SeriesConfig, TrendlineConfig } from '@mog/types-data/data/charts';
 import type { FloatingObject } from '@mog/types-objects/objects/floating-objects';
@@ -843,7 +844,7 @@ export interface PivotAddReceipt extends OperationReceiptBase {
   readonly config: PivotTableConfig;
   readonly lifecycle: PivotCreationLifecycle;
   readonly materialized: boolean;
-  readonly renderedRange?: CellRange | null;
+  readonly renderedRange?: WorksheetRange | null;
   readonly result?: PivotTableResult | null;
 }
 
@@ -856,7 +857,7 @@ export interface PivotAddWithSheetReceipt extends OperationReceiptBase {
   readonly config: PivotTableConfig;
   readonly lifecycle: PivotCreationLifecycle;
   readonly materialized: boolean;
-  readonly renderedRange?: CellRange | null;
+  readonly renderedRange?: WorksheetRange | null;
   readonly result?: PivotTableResult | null;
 }
 
@@ -867,7 +868,7 @@ export interface PivotRefreshReceipt extends OperationReceiptBase {
   readonly pivotId: string;
   readonly config?: PivotTableConfig | null;
   readonly materialized: boolean;
-  readonly renderedRange?: CellRange | null;
+  readonly renderedRange?: WorksheetRange | null;
   readonly result?: PivotTableResult | null;
 }
 
@@ -899,7 +900,7 @@ export interface PivotRefreshAllReceipt extends OperationReceiptBase {
   readonly materialized: boolean;
   readonly materializedCount: number;
   readonly failedCount: number;
-  readonly renderedRanges: readonly (CellRange | null)[];
+  readonly renderedRanges: readonly (WorksheetRange | null)[];
 }
 
 export type PivotHandleMutationKind =

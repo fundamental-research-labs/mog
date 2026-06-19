@@ -17,6 +17,7 @@
 //! - Pivot tables are stored as JSON strings (same pattern as charts/comments/sparklines).
 //! - EventBus emission, observer/cache patterns, and legacy migration are not ported.
 
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use yrs::{Any, Doc, Map, MapPrelim, MapRef, Origin, Out, Transact};
@@ -26,7 +27,9 @@ use cell_types::SheetId;
 use compute_document::hex::id_to_hex;
 use compute_document::schema::KEY_PIVOT_TABLES;
 use compute_document::undo::ORIGIN_USER_EDIT;
-use domain_types::domain::pivot::{PIVOT_CONFIG_SCHEMA_VERSION, PivotTableConfig};
+use domain_types::domain::pivot::{
+    PIVOT_CONFIG_SCHEMA_VERSION, PivotFieldArea, PivotTableConfig, PlacementId,
+};
 use value_types::ComputeError;
 
 // =============================================================================
@@ -390,6 +393,107 @@ pub fn get_all_pivots(doc: &Doc, sheets: &MapRef, sheet_id: &SheetId) -> Vec<Piv
         Some(m) => read_all_pivots(&txn, &m),
         None => vec![],
     }
+}
+
+pub(crate) fn get_all_pivots_in_txn<T: yrs::ReadTxn>(
+    txn: &T,
+    sheets: &MapRef,
+    sheet_id: &SheetId,
+) -> Vec<PivotTableConfig> {
+    let sheet_hex = id_to_hex(sheet_id.as_u128());
+    match get_pivots_map(txn, sheets, &sheet_hex) {
+        Some(m) => read_all_pivots(txn, &m),
+        None => vec![],
+    }
+}
+
+pub(crate) fn write_pivots_in_txn(
+    txn: &mut yrs::TransactionMut<'_>,
+    sheets: &MapRef,
+    sheet_id: &SheetId,
+    pivots: &[PivotTableConfig],
+) -> Result<(), ComputeError> {
+    let sheet_hex = id_to_hex(sheet_id.as_u128());
+    let sheet_map = match sheets.get(txn, &sheet_hex) {
+        Some(Out::YMap(m)) => m,
+        _ => {
+            return Err(ComputeError::SheetNotFound {
+                sheet_id: sheet_hex.to_string(),
+            });
+        }
+    };
+    let pivots_map = match sheet_map.get(txn, KEY_PIVOT_TABLES) {
+        Some(Out::YMap(m)) => m,
+        _ => sheet_map.insert(txn, KEY_PIVOT_TABLES, MapPrelim::default()),
+    };
+    let existing_keys: Vec<String> = pivots_map
+        .iter(txn)
+        .map(|(key, _)| key.to_string())
+        .collect();
+    for key in existing_keys {
+        pivots_map.remove(txn, key.as_str());
+    }
+    for pivot in pivots {
+        write_pivot(&pivots_map, txn, pivot.id.as_str(), pivot);
+    }
+    Ok(())
+}
+
+fn pivot_area_key(area: PivotFieldArea) -> &'static str {
+    match area {
+        PivotFieldArea::Row => "row",
+        PivotFieldArea::Column => "column",
+        PivotFieldArea::Value => "value",
+        PivotFieldArea::Filter => "filter",
+        _ => "unknown",
+    }
+}
+
+fn remap_copied_pivot_placement_ids(pivot: &mut PivotTableConfig) {
+    let mut used = HashSet::new();
+    for (index, placement) in pivot.placements.iter_mut().enumerate() {
+        let base = format!(
+            "{}:{}:{}:{}",
+            pivot.id,
+            pivot_area_key(placement.area),
+            placement.field_id.as_str(),
+            placement.position
+        );
+        let mut candidate = base.clone();
+        let mut suffix = index + 1;
+        while !used.insert(candidate.clone()) {
+            candidate = format!("{}:{}", base, suffix);
+            suffix += 1;
+        }
+        placement.placement_id = PlacementId::from(candidate);
+    }
+}
+
+pub(crate) fn remap_pivots_for_sheet_copy(
+    source_pivots: Vec<PivotTableConfig>,
+    source_sheet_id: &SheetId,
+    new_sheet_id: &SheetId,
+    new_sheet_name: &str,
+    id_alloc: &cell_types::IdAllocator,
+) -> Vec<PivotTableConfig> {
+    let source_sheet_uuid = source_sheet_id.to_uuid_string();
+    let new_sheet_uuid = new_sheet_id.to_uuid_string();
+
+    source_pivots
+        .into_iter()
+        .map(|mut pivot| {
+            pivot.id = format!("pivot-copy-{:032x}", id_alloc.next_u128());
+            pivot.name = format!("{} (Copy)", pivot.name);
+            pivot.output_sheet_id = Some(new_sheet_uuid.clone());
+            pivot.output_sheet_name = new_sheet_name.to_string();
+            if pivot.source_sheet_id.as_deref() == Some(source_sheet_uuid.as_str()) {
+                pivot.source_sheet_id = Some(new_sheet_uuid.clone());
+                pivot.source_sheet_name = new_sheet_name.to_string();
+            }
+            remap_copied_pivot_placement_ids(&mut pivot);
+            pivot
+        })
+        .collect()
 }
 
 pub fn update_pivot(

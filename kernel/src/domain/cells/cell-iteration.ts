@@ -377,22 +377,20 @@ export async function getCurrentRegion(
     return { sheetId, startRow, startCol, endRow: startRow, endCol: startCol };
   }
 
-  // Constrain search to data bounds
-  const effectiveMaxRow = Math.min(maxRow, bounds.maxRow + 1);
-  const effectiveMaxCol = Math.min(maxCol, bounds.maxCol + 1);
-
-  // Query a reasonable region around the start cell
-  const queryStartRow = Math.max(0, Math.min(startRow - 100, bounds.minRow));
-  const queryStartCol = Math.max(0, Math.min(startCol - 100, bounds.minCol));
-  const queryEndRow = Math.min(effectiveMaxRow, startRow + 1000);
-  const queryEndCol = Math.min(effectiveMaxCol, startCol + 200);
+  // Constrain search to the provider-reported data bounds. Current-region
+  // detection must see deferred/imported data beyond the viewport and beyond
+  // the old 1000-row sampling window.
+  const searchMinRow = Math.max(0, Math.min(startRow, bounds.minRow));
+  const searchMinCol = Math.max(0, Math.min(startCol, bounds.minCol));
+  const searchMaxRow = Math.min(maxRow, Math.max(startRow, bounds.maxRow));
+  const searchMaxCol = Math.min(maxCol, Math.max(startCol, bounds.maxCol));
 
   const rangeData = await ctx.computeBridge.queryRange(
     sheetId,
-    queryStartRow,
-    queryStartCol,
-    queryEndRow,
-    queryEndCol,
+    searchMinRow,
+    searchMinCol,
+    searchMaxRow,
+    searchMaxCol,
   );
 
   // Build set of non-empty positions
@@ -400,7 +398,7 @@ export async function getCurrentRegion(
   if (rangeData?.cells) {
     for (const cell of rangeData.cells) {
       const value = cell.value;
-      if (value !== null && value !== undefined) {
+      if ((value !== null && value !== undefined) || cell.formula) {
         nonEmpty.add(`${cell.row},${cell.col}`);
       }
     }
@@ -420,9 +418,9 @@ export async function getCurrentRegion(
   // If start cell is empty, check adjacent cells
   if (!startHasData) {
     const hasDataAbove = startRow > 0 && hasData(startRow - 1, startCol);
-    const hasDataBelow = startRow < effectiveMaxRow && hasData(startRow + 1, startCol);
+    const hasDataBelow = startRow < searchMaxRow && hasData(startRow + 1, startCol);
     const hasDataLeft = startCol > 0 && hasData(startRow, startCol - 1);
-    const hasDataRight = startCol < effectiveMaxCol && hasData(startRow, startCol + 1);
+    const hasDataRight = startCol < searchMaxCol && hasData(startRow, startCol + 1);
 
     if (!hasDataAbove && !hasDataBelow && !hasDataLeft && !hasDataRight) {
       return { sheetId, startRow, startCol, endRow: startRow, endCol: startCol };
@@ -450,7 +448,7 @@ export async function getCurrentRegion(
     }
 
     // Try expanding down
-    if (bottom < effectiveMaxRow) {
+    if (bottom < searchMaxRow) {
       let rowHasData = false;
       for (let col = left; col <= right; col++) {
         if (hasData(bottom + 1, col)) {
@@ -480,7 +478,7 @@ export async function getCurrentRegion(
     }
 
     // Try expanding right
-    if (right < effectiveMaxCol) {
+    if (right < searchMaxCol) {
       let colHasData = false;
       for (let row = top; row <= bottom; row++) {
         if (hasData(row, right + 1)) {

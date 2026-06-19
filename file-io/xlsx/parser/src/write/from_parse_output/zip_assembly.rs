@@ -579,6 +579,19 @@ pub(super) fn write_zip_package(
                     chart_auxiliary::chart_user_shapes_data(chart_spec, &chart_path);
                 let mut written_auxiliary_paths = std::collections::BTreeSet::new();
 
+                if !chart_replay::chart_allows_current_auxiliary_replay(chart_spec, &chart_path)
+                    && let Some(color_style) =
+                        chart_auxiliary::generated_chart_color_style_data(chart_spec, &chart_path)
+                {
+                    written_auxiliary_paths.insert(color_style.path.clone());
+                    add_registered_part(
+                        package_graph,
+                        &mut zip,
+                        &color_style.path,
+                        color_style.data,
+                    )?;
+                }
+
                 // Write chart auxiliary files (style XML, colors XML) only
                 // when the current chart still carries imported chart identity.
                 if chart_replay::chart_allows_current_auxiliary_replay(chart_spec, &chart_path)
@@ -626,6 +639,17 @@ pub(super) fn write_zip_package(
                 // Write ChartEx auxiliary files only when the current chart
                 // still carries imported chart identity.
                 let chart_spec = &output.sheets[sheet_idx].charts[entry.source_idx];
+                if !chart_replay::chart_allows_current_auxiliary_replay(chart_spec, &chart_path)
+                    && let Some(color_style) =
+                        chart_auxiliary::generated_chart_color_style_data(chart_spec, &chart_path)
+                {
+                    add_registered_part(
+                        package_graph,
+                        &mut zip,
+                        &color_style.path,
+                        color_style.data,
+                    )?;
+                }
                 if chart_replay::chart_allows_current_auxiliary_replay(chart_spec, &chart_path)
                     && let Some(aux) = chart_auxiliary::chart_auxiliary_data(chart_spec)
                 {

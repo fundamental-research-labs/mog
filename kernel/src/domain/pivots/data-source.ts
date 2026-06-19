@@ -22,6 +22,10 @@ import { parseCellRange } from '@mog/spreadsheet-utils/a1';
 import { pivotValueFieldDisplayName } from './value-labels';
 
 type PivotFieldPlacement = PivotFieldPlacementFlat;
+type SimplePivotOutputAliases = {
+  outputSheetName?: unknown;
+  outputLocation?: unknown;
+};
 
 export type PivotCreateDataConfig = Omit<
   DataPivotTableConfig,
@@ -61,6 +65,15 @@ function parseDataSource(dataSource: string): {
       endCol: parsed.endCol,
     },
   };
+}
+
+function parseOutputLocationAlias(value: unknown): { row: number; col: number } | null {
+  if (value == null || typeof value !== 'object') return null;
+  const { row, col } = value as { row?: unknown; col?: unknown };
+  if (typeof row !== 'number' || typeof col !== 'number') return null;
+  if (!Number.isInteger(row) || !Number.isInteger(col)) return null;
+  if (row < 0 || col < 0) return null;
+  return { row, col };
 }
 
 async function resolveSourceSheetId(
@@ -286,13 +299,19 @@ export async function convertSimpleToDataConfig(
     if (addr) {
       outputLocation = { row: addr.startRow, col: addr.startCol };
     }
+  } else {
+    outputLocation =
+      parseOutputLocationAlias((simpleConfig as SimplePivotOutputAliases).outputLocation) ??
+      outputLocation;
   }
+  const outputAlias = (simpleConfig as SimplePivotOutputAliases).outputSheetName;
 
   return {
     name: simpleConfig.name,
     sourceSheetName,
     sourceRange,
-    outputSheetName: simpleConfig.targetSheet ?? outputSheetName,
+    outputSheetName:
+      simpleConfig.targetSheet ?? (typeof outputAlias === 'string' ? outputAlias : outputSheetName),
     outputLocation,
     fields,
     placements,

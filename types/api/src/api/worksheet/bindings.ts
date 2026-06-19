@@ -5,6 +5,7 @@
  * projection (dynamic array spill) metadata.
  */
 import type { CellRange, CreateBindingConfig, SheetDataBindingInfo } from '../types';
+import type { WorksheetRange } from '../ranges';
 
 /** Sub-API for worksheet data binding operations. */
 export interface WorksheetBindings {
@@ -57,7 +58,7 @@ export interface WorksheetBindings {
    * @param col - Column index (0-based)
    * @returns The spill range, or null if the cell is not a projection source
    */
-  getProjectionRange(row: number, col: number): Promise<CellRange | null>;
+  getProjectionRange(row: number, col: number): Promise<WorksheetRange | null>;
 
   /**
    * Get the source cell of a projected value.

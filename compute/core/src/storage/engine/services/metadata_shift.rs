@@ -891,6 +891,7 @@ fn shift_sparkline_ranges(stores: &mut EngineStores, sheet_id: &SheetId, change:
                 && data_changed
             {
                 update.data_range = Some(domain_types::domain::sparkline::SparklineDataRange {
+                    source_sheet_name: sp.data_range.source_sheet_name.clone(),
                     start_row: s.start_row(),
                     start_col: s.start_col(),
                     end_row: s.end_row(),

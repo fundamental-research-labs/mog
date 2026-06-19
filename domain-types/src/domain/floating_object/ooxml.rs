@@ -176,7 +176,7 @@ pub struct ChartDrawingFrameOoxmlProps {
     pub relationship_id: Option<String>,
     /// Original drawing relationship target for the chart part.
     pub relationship_target: Option<String>,
-    #[serde(skip)]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub raw_alternate_content: Option<String>,
 }
 
@@ -207,7 +207,8 @@ pub struct ChartOoxmlProps {
     /// Durable standard `c:chartSpace` export authority.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub standard_chart_export_authority: Option<StandardChartExportAuthority>,
-    #[serde(skip)]
+    /// Opaque ChartEx package replay data for imported charts that remain current.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub chart_ex_replay: Option<ChartExReplayData>,
     /// Whether this chart uses ChartEx format.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]

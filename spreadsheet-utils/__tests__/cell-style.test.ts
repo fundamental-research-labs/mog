@@ -7,6 +7,8 @@
 
 import {
   DEFAULT_CELL_STYLE,
+  fontSizeCssPxToPoints,
+  fontSizePointsToCssPx,
   resolveCellTextColor,
   resolveCellTextStyle,
 } from '@mog/spreadsheet-utils/cells/cell-style';
@@ -76,22 +78,27 @@ describe('Cell Text Style', () => {
     });
 
     describe('font size', () => {
-      it('should use format fontSize when provided', () => {
+      it('should convert format fontSize points to CSS pixels', () => {
         const format: CellFormat = { fontSize: 18 };
         const style = resolveCellTextStyle(format);
-        expect(style.fontSize).toBe(18);
+        expect(style.fontSize).toBe(24);
       });
 
       it('should handle small font sizes', () => {
         const format: CellFormat = { fontSize: 8 };
         const style = resolveCellTextStyle(format);
-        expect(style.fontSize).toBe(8);
+        expect(style.fontSize).toBeCloseTo(10.6667, 4);
       });
 
       it('should handle large font sizes', () => {
         const format: CellFormat = { fontSize: 72 };
         const style = resolveCellTextStyle(format);
-        expect(style.fontSize).toBe(72);
+        expect(style.fontSize).toBe(96);
+      });
+
+      it('should expose reversible point and CSS pixel conversion helpers', () => {
+        expect(fontSizePointsToCssPx(11)).toBeCloseTo(14.6667, 4);
+        expect(fontSizeCssPxToPoints(14.6667)).toBeCloseTo(11, 4);
       });
     });
 
@@ -248,7 +255,7 @@ describe('Cell Text Style', () => {
 
         const style = resolveCellTextStyle(format);
 
-        expect(style.fontSize).toBe(14);
+        expect(style.fontSize).toBeCloseTo(18.6667, 4);
         expect(style.fontFamily).toBe('Arial');
         expect(style.color).toBe('#333333');
         expect(style.fontWeight).toBe('bold');

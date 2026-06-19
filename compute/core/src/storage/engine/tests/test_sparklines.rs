@@ -21,6 +21,7 @@ fn sparkline(id: &str, row: u32, col: u32) -> Sparkline {
             col,
         },
         data_range: SparklineDataRange {
+            source_sheet_name: None,
             start_row: 0,
             start_col: 0,
             end_row: 0,

@@ -17,7 +17,7 @@ import { toA1 } from '../internal/utils';
 
 interface ResolvedSheet {
   readonly sheetId: SheetId;
-  readonly sheetName: string;
+  readonly sheetName?: string;
 }
 
 export async function diagnoseTrackedExternalFormulaReferences(
@@ -33,7 +33,9 @@ export async function diagnoseTrackedExternalFormulaReferences(
   const sheets = await listSheets(ctx);
   const sheetNamesById = new Map(sheets.map((sheet) => [sheet.sheetId, sheet.sheetName]));
   const localSheetNames = new Map(
-    sheets.map((sheet) => [sheet.sheetName.toLowerCase(), sheet.sheetName]),
+    sheets
+      .filter((sheet): sheet is ResolvedSheet & { sheetName: string } => Boolean(sheet.sheetName))
+      .map((sheet) => [sheet.sheetName.toLowerCase(), sheet.sheetName]),
   );
   const linkRecords = ctx.workbookLinks.listRecords();
   const findings: WorkbookValidationFinding[] = [];
@@ -43,7 +45,7 @@ export async function diagnoseTrackedExternalFormulaReferences(
     const sourceSheetName =
       sheetNamesById.get(cell.sheetId) ??
       (await ctx.computeBridge.getSheetName(cell.sheetId)) ??
-      cell.sheetId;
+      undefined;
     const address = toA1(cell.row, cell.col);
 
     for (const ref of getExternalFormulaReferences(cell.formula)) {
@@ -70,7 +72,7 @@ export async function diagnoseTrackedExternalFormulaReferences(
 function localSheetCandidateFinding(
   check: WorkbookValidationCheckKind,
   cell: ExternalFormulaCell,
-  sourceSheetName: string,
+  sourceSheetName: string | undefined,
   address: string,
   ref: ParsedExternalRef,
   localSheetName: string,
@@ -88,7 +90,9 @@ function localSheetCandidateFinding(
     row: cell.row,
     col: cell.col,
     formula: cell.formula,
-    suggestedNextApiCall: `await wb.getSheet(${JSON.stringify(sourceSheetName)}).then(ws => ws.setFormula(${JSON.stringify(address)}, ${JSON.stringify(feedback.suggestedFormula)}))`,
+    suggestedNextApiCall: sourceSheetName
+      ? `await wb.getSheet(${JSON.stringify(sourceSheetName)}).then(ws => ws.setFormula(${JSON.stringify(address)}, ${JSON.stringify(feedback.suggestedFormula)}))`
+      : undefined,
     details: feedback.details,
   };
 }
@@ -96,7 +100,7 @@ function localSheetCandidateFinding(
 function unboundExternalFormulaFinding(
   check: WorkbookValidationCheckKind,
   cell: ExternalFormulaCell,
-  sourceSheetName: string,
+  sourceSheetName: string | undefined,
   address: string,
   ref: ParsedExternalRef,
 ): WorkbookValidationFinding {
@@ -124,7 +128,7 @@ async function listSheets(ctx: DocumentContext): Promise<ResolvedSheet[]> {
   return Promise.all(
     ids.map(async (id) => ({
       sheetId: id,
-      sheetName: (await ctx.computeBridge.getSheetName(id)) ?? id,
+      sheetName: (await ctx.computeBridge.getSheetName(id)) ?? undefined,
     })),
   );
 }

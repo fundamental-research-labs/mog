@@ -81,7 +81,7 @@ export async function getSheetStatistics(
   let endOfSheet: { row: number; col: number } | null = null;
 
   try {
-    // ws.getUsedRange() returns a structured `CellRange | null` with 0-based
+    // ws.getUsedRange() returns a structured `WorksheetRange | null` with 0-based
     // row/col fields. The previous code treated it as an A1 string and
     // matched a regex against it, which always returned null — so the
     // statistics dialog never reported endOfSheet for any non-empty sheet.

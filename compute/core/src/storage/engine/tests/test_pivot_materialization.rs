@@ -2,7 +2,7 @@ use super::super::*;
 use super::helpers::*;
 use crate::snapshot::{CellData, SheetSnapshot};
 use serde_json::json;
-use value_types::{CellValue, FiniteF64};
+use value_types::{CellValue, ComputeError, FiniteF64};
 
 fn stored_number_format_at(
     engine: &YrsComputeEngine,
@@ -93,6 +93,127 @@ fn pivot_history_snapshot(sid: SheetId) -> WorkbookSnapshot {
         max_change: FiniteF64::must(0.001),
         calculation_settings: None,
     }
+}
+
+fn create_region_sales_pivot(engine: &mut YrsComputeEngine, sid: SheetId, name: &str) -> String {
+    engine
+        .pivot_create(json!({
+            "id": name,
+            "name": name,
+            "sourceSheetId": sid.to_uuid_string(),
+            "sourceSheetName": "Sheet1",
+            "sourceRange": { "startRow": 0, "startCol": 0, "endRow": 2, "endCol": 1 },
+            "outputSheetName": "Sheet1",
+            "outputLocation": { "row": 0, "col": 4 },
+            "fields": [
+                { "id": "Region", "name": "Region", "sourceColumn": 0, "dataType": "string" },
+                { "id": "Sales", "name": "Sales", "sourceColumn": 1, "dataType": "number" }
+            ],
+            "placements": [
+                { "fieldId": "Region", "area": "row", "position": 0 },
+                {
+                    "fieldId": "Sales",
+                    "area": "value",
+                    "position": 0,
+                    "aggregateFunction": "sum"
+                }
+            ],
+            "filters": []
+        }))
+        .expect("create pivot");
+    engine
+        .pivot_get_all(&sid)
+        .into_iter()
+        .find(|config| config.name == name)
+        .expect("created pivot")
+        .id
+}
+
+#[test]
+fn pivot_output_cells_reject_user_writes() {
+    let sid = sheet_id();
+    let snap = pivot_history_snapshot(sid);
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+
+    create_region_sales_pivot(&mut engine, sid, "GuardedPivot");
+    engine.recalculate().expect("materialize pivot");
+
+    let err = engine
+        .batch_set_cells_by_position(
+            vec![(
+                sid,
+                1,
+                4,
+                crate::storage::engine::mutation::CellInput::Parse {
+                    text: "asdf".into(),
+                },
+            )],
+            true,
+        )
+        .expect_err("pivot output user write should reject");
+
+    assert!(matches!(
+        err,
+        ComputeError::PartialArrayWrite {
+            row: 1,
+            col: 4,
+            anchor_row: 0,
+            anchor_col: 4,
+            ..
+        }
+    ));
+    assert!(!engine.can_edit_cell(&sid, 1, 4));
+    assert_eq!(cell_value_at(&engine, &sid, 1, 4), CellValue::from("North"));
+}
+
+#[test]
+fn copied_sheet_pivots_retarget_output_and_same_sheet_source() {
+    let sid = sheet_id();
+    let snap = pivot_history_snapshot(sid);
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+
+    let original_id = create_region_sales_pivot(&mut engine, sid, "CopyablePivot");
+    engine.recalculate().expect("materialize source pivot");
+
+    let (copy_hex, _) = engine.copy_sheet(&sid, "Copy").expect("copy sheet");
+    let copy_id_raw = compute_document::hex::hex_to_id(&copy_hex).expect("copy sheet id hex");
+    let copy_sid = SheetId::from_raw(copy_id_raw);
+    let copied_pivots = engine.pivot_get_all(&copy_sid);
+    assert_eq!(copied_pivots.len(), 1);
+    let copied = &copied_pivots[0];
+    assert_ne!(copied.id, original_id);
+    assert_eq!(
+        copied.output_sheet_id.as_deref(),
+        Some(copy_sid.to_uuid_string().as_str())
+    );
+    assert_eq!(copied.output_sheet_name, "Copy");
+    assert_eq!(
+        copied.source_sheet_id.as_deref(),
+        Some(copy_sid.to_uuid_string().as_str())
+    );
+    assert_eq!(copied.source_sheet_name, "Copy");
+
+    let original = engine
+        .pivot_get_all(&sid)
+        .into_iter()
+        .find(|config| config.id == original_id)
+        .expect("source pivot still exists");
+    let original_placement_ids: std::collections::HashSet<_> = original
+        .placements
+        .iter()
+        .map(|placement| placement.placement_id.as_str().to_string())
+        .collect();
+    let copied_placement_ids: std::collections::HashSet<_> = copied
+        .placements
+        .iter()
+        .map(|placement| placement.placement_id.as_str().to_string())
+        .collect();
+    assert_eq!(copied_placement_ids.len(), copied.placements.len());
+    assert!(copied_placement_ids.is_disjoint(&original_placement_ids));
+
+    engine
+        .pivot_update_and_materialize(&copy_sid, &copied.id, copied.clone(), None)
+        .expect("copied pivot update should use copied output identity");
 }
 
 #[test]

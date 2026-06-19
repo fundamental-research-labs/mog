@@ -37,7 +37,8 @@ import type {
   PivotSetPivotItemVisibilityReceipt,
   PivotSetPreserveFormattingReceipt,
 } from '../mutation-receipt';
-import type { CellRange, CellValue } from '@mog/types-core';
+import type { WorksheetRange } from '../ranges';
+import type { CellValue, SheetId } from '@mog/types-core';
 import type {
   AggregateFunction,
   CalculatedField,
@@ -94,6 +95,20 @@ export interface PivotCreateOptions {
    * `materialize` stores metadata and refreshes the rendered worksheet output.
    */
   lifecycle?: PivotCreationLifecycle;
+}
+
+export interface PivotCreateWithSheetOptions extends PivotCreateOptions {
+  /**
+   * Insert the newly-created pivot worksheet immediately before this sheet.
+   * Takes precedence over `insertIndex` when both are provided.
+   */
+  insertBeforeSheetId?: SheetId;
+
+  /**
+   * Optional 0-based worksheet index for the newly-created pivot worksheet.
+   * Values past the current sheet count append at the end.
+   */
+  insertIndex?: number;
 }
 
 export interface PivotPlacementSpec {
@@ -189,8 +204,8 @@ export interface PivotSurfaceCellReadback {
 
 export interface PivotSurfaceReadback {
   revision: PivotReadbackRevision;
-  anchor: CellRange;
-  bounds: CellRange;
+  anchor: WorksheetRange;
+  bounds: WorksheetRange;
   cells: PivotSurfaceCellReadback[];
 }
 
@@ -277,7 +292,7 @@ export interface WorksheetPivots {
   addWithSheet(
     sheetName: string,
     config: PivotCreateConfig,
-    options?: PivotCreateOptions,
+    options?: PivotCreateWithSheetOptions,
   ): Promise<PivotAddWithSheetReceipt>;
 
   /**
@@ -580,41 +595,41 @@ export interface WorksheetPivots {
    * Get the full range occupied by the rendered pivot table, resolved by pivot name.
    *
    * @param name - Pivot table name
-   * @returns CellRange covering the entire pivot table, or null if not computed
+   * @returns Public worksheet range covering the entire pivot table, or null if not computed
    */
-  getRange(name: string): Promise<CellRange | null>;
+  getRange(name: string): Promise<WorksheetRange | null>;
 
   /**
    * Get the range of the data body, resolved by pivot name.
    *
    * @param name - Pivot table name
-   * @returns CellRange covering the data body, or null if not computed
+   * @returns Public worksheet range covering the data body, or null if not computed
    */
-  getDataBodyRange(name: string): Promise<CellRange | null>;
+  getDataBodyRange(name: string): Promise<WorksheetRange | null>;
 
   /**
    * Get the range of column label headers, resolved by pivot name.
    *
    * @param name - Pivot table name
-   * @returns CellRange covering the column headers, or null if not computed
+   * @returns Public worksheet range covering the column headers, or null if not computed
    */
-  getColumnLabelRange(name: string): Promise<CellRange | null>;
+  getColumnLabelRange(name: string): Promise<WorksheetRange | null>;
 
   /**
    * Get the range of row label headers, resolved by pivot name.
    *
    * @param name - Pivot table name
-   * @returns CellRange covering the row headers, or null if not computed
+   * @returns Public worksheet range covering the row headers, or null if not computed
    */
-  getRowLabelRange(name: string): Promise<CellRange | null>;
+  getRowLabelRange(name: string): Promise<WorksheetRange | null>;
 
   /**
    * Get the range of the filter area, resolved by pivot name.
    *
    * @param name - Pivot table name
-   * @returns CellRange covering filter dropdowns, or null if no filter fields
+   * @returns Public worksheet range covering filter dropdowns, or null if no filter fields
    */
-  getFilterAxisRange(name: string): Promise<CellRange | null>;
+  getFilterAxisRange(name: string): Promise<WorksheetRange | null>;
 
   // ===========================================================================
   // Pivot Items

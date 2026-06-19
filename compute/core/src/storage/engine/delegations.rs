@@ -368,11 +368,35 @@ impl YrsComputeEngine {
 
     #[bridge::skip(ts_bridge)]
     #[bridge::structural(scope = "workbook")]
+    pub fn create_sheet_with_default_col_width(
+        &mut self,
+        name: &str,
+        default_col_width_px: f64,
+    ) -> Result<(String, MutationResult), ComputeError> {
+        sheet_lifecycle::create_sheet_with_default_col_width(self, name, Some(default_col_width_px))
+    }
+
+    #[bridge::skip(ts_bridge)]
+    #[bridge::structural(scope = "workbook")]
     pub fn create_default_sheet(
         &mut self,
         name: &str,
     ) -> Result<(String, MutationResult), ComputeError> {
         sheet_lifecycle::create_default_sheet(self, name)
+    }
+
+    #[bridge::skip(ts_bridge)]
+    #[bridge::structural(scope = "workbook")]
+    pub fn create_default_sheet_with_default_col_width(
+        &mut self,
+        name: &str,
+        default_col_width_px: f64,
+    ) -> Result<(String, MutationResult), ComputeError> {
+        sheet_lifecycle::create_default_sheet_with_default_col_width(
+            self,
+            name,
+            Some(default_col_width_px),
+        )
     }
 
     #[bridge::skip(ts_bridge)]

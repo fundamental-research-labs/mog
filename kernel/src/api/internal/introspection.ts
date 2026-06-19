@@ -15,9 +15,14 @@
  *
  */
 
-import type { FunctionInfo, SheetSnapshot, WorkbookSnapshot } from '@mog-sdk/contracts/api';
+import type {
+  FunctionInfo,
+  SheetSnapshot,
+  WorkbookSnapshot,
+  WorksheetRange,
+} from '@mog-sdk/contracts/api';
 import type { FunctionArgument } from '@mog-sdk/contracts/utils';
-import type { CellRange, SheetId } from '@mog-sdk/contracts/core';
+import type { SheetId } from '@mog-sdk/contracts/core';
 import { globalRegistry } from '@mog/spreadsheet-utils/function-registry';
 import { ensureFunctionCatalog } from '@mog/spreadsheet-utils/function-catalog';
 import { getAll as getAllCharts } from '../../domain/charts/chart-store';
@@ -25,6 +30,7 @@ import { getFirstId, getMeta, getOrder } from '../../domain/sheets/sheet-meta';
 
 import type { DocumentContext } from '../../context';
 import type { IKernelContext } from '@mog-sdk/contracts/kernel';
+import { toWorksheetRange } from '../worksheet/public-ranges';
 
 // ============================================================================
 // Workbook Snapshot
@@ -102,7 +108,7 @@ async function calculateSheetStats(
 ): Promise<{
   cellCount: number;
   formulaCount: number;
-  usedRange: CellRange | null;
+  usedRange: WorksheetRange | null;
 }> {
   // Use getDataBounds (O(1) Rust query) instead of brute-force iteration
   const bounds = await ctx.computeBridge.getDataBounds(sheetId);
@@ -130,13 +136,12 @@ async function calculateSheetStats(
   return {
     cellCount: rangeResult.cells.length,
     formulaCount,
-    usedRange: {
-      sheetId,
+    usedRange: toWorksheetRange({
       startRow: bounds.minRow,
       startCol: bounds.minCol,
       endRow: bounds.maxRow,
       endCol: bounds.maxCol,
-    },
+    }),
   };
 }
 

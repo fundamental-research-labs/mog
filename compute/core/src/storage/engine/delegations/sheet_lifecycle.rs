@@ -32,8 +32,17 @@ pub(in crate::storage::engine) fn create_sheet(
     engine: &mut YrsComputeEngine,
     name: &str,
 ) -> Result<(String, MutationResult), ComputeError> {
+    create_sheet_with_default_col_width(engine, name, None)
+}
+
+pub(in crate::storage::engine) fn create_sheet_with_default_col_width(
+    engine: &mut YrsComputeEngine,
+    name: &str,
+    default_col_width_px: Option<f64>,
+) -> Result<(String, MutationResult), ComputeError> {
     match engine.apply_mutation(mutation::EngineMutation::CreateSheet {
         name: name.to_string(),
+        default_col_width_px,
     })? {
         mutation::MutationOutput::SheetId(hex, result) => Ok((hex, result)),
         _ => Err(ComputeError::Eval {
@@ -46,8 +55,17 @@ pub(in crate::storage::engine) fn create_default_sheet(
     engine: &mut YrsComputeEngine,
     name: &str,
 ) -> Result<(String, MutationResult), ComputeError> {
+    create_default_sheet_with_default_col_width(engine, name, None)
+}
+
+pub(in crate::storage::engine) fn create_default_sheet_with_default_col_width(
+    engine: &mut YrsComputeEngine,
+    name: &str,
+    default_col_width_px: Option<f64>,
+) -> Result<(String, MutationResult), ComputeError> {
     match engine.apply_mutation(mutation::EngineMutation::CreateDefaultSheet {
         name: name.to_string(),
+        default_col_width_px,
     })? {
         mutation::MutationOutput::SheetId(hex, result) => Ok((hex, result)),
         _ => Err(ComputeError::Eval {

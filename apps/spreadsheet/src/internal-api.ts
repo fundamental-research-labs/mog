@@ -344,8 +344,12 @@ export interface FormulaBarProps {
   onContextMenu?: (event: React.MouseEvent) => void;
   /** Whether the formula bar is expanded (multiline mode) */
   isExpanded?: boolean;
+  /** Current formula bar height in pixels, including chrome padding and resize handle */
+  heightPx?: number;
   /** Callback when expand/collapse is toggled */
   onToggleExpand?: () => void;
+  /** Callback when the user drag-resizes the formula bar */
+  onResizeHeight?: (heightPx: number) => void;
   /** IME composition start handler - called when composition begins */
   onCompositionStart?: () => void;
   /** IME composition update handler - receives composition text */

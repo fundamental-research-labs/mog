@@ -144,11 +144,11 @@ pub(super) fn resolve_group_y_axis_index(
     groups: &[ooxml_types::charts::ChartGroup],
     group: &ooxml_types::charts::ChartGroup,
 ) -> Option<u8> {
+    let group_value_id = resolve_group_axis_role_ids(axes, group).value?;
     if groups.len() <= 1 {
-        return None;
+        return single_group_uses_secondary_axis_set(axes, group, group_value_id).then_some(1);
     }
 
-    let group_value_id = resolve_group_axis_role_ids(axes, group).value?;
     let role_ids = resolve_combo_axis_role_ids(axes, groups);
 
     if Some(group_value_id) == role_ids.secondary_value {
@@ -158,6 +158,57 @@ pub(super) fn resolve_group_y_axis_index(
     } else {
         None
     }
+}
+
+fn single_group_uses_secondary_axis_set(
+    axes: &[ooxml_types::charts::ChartAxis],
+    group: &ooxml_types::charts::ChartGroup,
+    group_value_id: u32,
+) -> bool {
+    let Some(value_axis) = find_axis_by_id(axes, group_value_id) else {
+        return false;
+    };
+    if axis_has_primary_counterpart_outside_group(axes, group, value_axis) {
+        return true;
+    }
+
+    value_axis.axis_type == ooxml_types::charts::AxisType::Value
+        && group.ax_id.iter().any(|id| {
+            *id != group_value_id
+                && find_axis_by_id(axes, *id)
+                    .filter(|axis| axis.axis_type == ooxml_types::charts::AxisType::Value)
+                    .is_some_and(|axis| {
+                        axis_has_primary_counterpart_outside_group(axes, group, axis)
+                    })
+        })
+}
+
+fn axis_has_primary_counterpart_outside_group(
+    axes: &[ooxml_types::charts::ChartAxis],
+    group: &ooxml_types::charts::ChartGroup,
+    axis: &ooxml_types::charts::ChartAxis,
+) -> bool {
+    is_secondary_axis_position(axis.ax_pos)
+        && axes.iter().any(|candidate| {
+            candidate.ax_id != axis.ax_id
+                && !group.ax_id.contains(&candidate.ax_id)
+                && axis_types_share_public_role(candidate.axis_type, axis.axis_type)
+                && is_primary_axis_position(candidate.ax_pos)
+        })
+}
+
+fn axis_types_share_public_role(
+    a: ooxml_types::charts::AxisType,
+    b: ooxml_types::charts::AxisType,
+) -> bool {
+    use ooxml_types::charts::AxisType;
+    matches!(
+        (a, b),
+        (
+            AxisType::Category | AxisType::Date,
+            AxisType::Category | AxisType::Date
+        )
+    ) || a == b
 }
 
 fn resolve_group_axis_role_ids(
@@ -611,7 +662,7 @@ mod tests {
             format.text_vertical_type,
             Some(domain_types::chart::ChartTextVerticalType::Horizontal)
         );
-        assert_eq!(category.text_orientation, None);
+        assert_eq!(category.text_orientation, Some(-45.0));
     }
 
     #[test]
@@ -731,6 +782,7 @@ fn extract_single_axis(ax: &ooxml_types::charts::ChartAxis) -> domain_types::cha
 
     // Formatting
     let format = extract_chart_format(ax.sp_pr.as_ref(), ax.tx_pr.as_ref());
+    let text_orientation = format.as_ref().and_then(|format| format.text_rotation);
     let title_format = ax.title.as_ref().and_then(extract_title_chart_format);
     let title_rich_text = ax
         .title
@@ -837,6 +889,7 @@ fn extract_single_axis(ax: &ooxml_types::charts::ChartAxis) -> domain_types::cha
         crosses_at,
         crosses_at_value,
         is_between_categories,
+        text_orientation,
         ..Default::default()
     }
 }

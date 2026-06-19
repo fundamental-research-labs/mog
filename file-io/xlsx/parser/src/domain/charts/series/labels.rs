@@ -2,6 +2,7 @@ use crate::infra::scanner::{
     extract_quoted_value, find_attr_simd, find_closing_tag, find_gt_simd, find_tag_simd,
 };
 use crate::infra::xml::decode_xml_entities;
+use crate::infra::xml::extract_direct_child_element_xml;
 
 use super::xml_values::{parse_bool_val, parse_val_attr_u32};
 use super::{DataLabelOptions, DataLabelPosition, parse_chart_ext_lst, parse_str_ref};
@@ -59,21 +60,27 @@ pub fn parse_data_labels(xml: &[u8]) -> DataLabelOptions {
     // Parse show flags — only before extLst
     if let Some(start) = find_tag_simd(tail_children, b"showLegendKey", 0) {
         labels.show_legend_key = parse_bool_val(&tail[start..]);
+        labels.show_legend_key_present = true;
     }
     if let Some(start) = find_tag_simd(tail_children, b"showVal", 0) {
         labels.show_value = parse_bool_val(&tail[start..]);
+        labels.show_value_present = true;
     }
     if let Some(start) = find_tag_simd(tail_children, b"showCatName", 0) {
         labels.show_category = parse_bool_val(&tail[start..]);
+        labels.show_category_present = true;
     }
     if let Some(start) = find_tag_simd(tail_children, b"showSerName", 0) {
         labels.show_series_name = parse_bool_val(&tail[start..]);
+        labels.show_series_name_present = true;
     }
     if let Some(start) = find_tag_simd(tail_children, b"showPercent", 0) {
         labels.show_percent = parse_bool_val(&tail[start..]);
+        labels.show_percent_present = true;
     }
     if let Some(start) = find_tag_simd(tail_children, b"showBubbleSize", 0) {
         labels.show_bubble_size = parse_bool_val(&tail[start..]);
+        labels.show_bubble_size_present = true;
     }
     if let Some(start) = find_tag_simd(tail_children, b"showLeaderLines", 0) {
         labels.show_leader_lines = Some(parse_bool_val(&tail[start..]));
@@ -152,16 +159,15 @@ pub fn parse_data_labels(xml: &[u8]) -> DataLabelOptions {
         }
     }
 
-    // Parse spPr — only before extLst
-    if let Some(sp_start) = find_tag_simd(tail_children, b"spPr", 0) {
-        let sp_end = find_closing_tag(tail, b"spPr", sp_start).unwrap_or(tail_child_end);
-        labels.sp_pr = Some(parse_shape_properties(&tail[sp_start..sp_end]));
+    // Parse direct dLbls-level spPr. Nested leaderLines/dLbl spPr belongs to
+    // those child elements and must not be promoted to label visual formatting.
+    if let Some(sp_xml) = extract_direct_child_element_xml(xml, b"dLbls", b"spPr") {
+        labels.sp_pr = Some(parse_shape_properties(sp_xml.as_bytes()));
     }
 
-    // Parse txPr — only before extLst
-    if let Some(txpr_start) = find_tag_simd(tail_children, b"txPr", 0) {
-        let txpr_end = find_closing_tag(tail, b"txPr", txpr_start).unwrap_or(tail_child_end);
-        labels.tx_pr = Some(parse_text_body(&tail[txpr_start..txpr_end]));
+    // Parse direct dLbls-level txPr for the same reason as spPr.
+    if let Some(txpr_xml) = extract_direct_child_element_xml(xml, b"dLbls", b"txPr") {
+        labels.tx_pr = Some(parse_text_body(txpr_xml.as_bytes()));
     }
 
     // Parse delete flag (CT_DLbls choice: delete OR group content)
@@ -300,3 +306,91 @@ pub(crate) fn parse_individual_data_label(xml: &[u8]) -> ooxml_types::charts::Da
 
 // =============================================================================
 // Error Bars (parsing into ooxml_types::charts::ErrorBars)
+
+#[cfg(test)]
+mod tests {
+    use super::parse_data_labels;
+
+    #[test]
+    fn data_labels_parse_direct_text_body_properties() {
+        let labels = parse_data_labels(
+            br#"<c:dLbls xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+                         xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+                <c:txPr>
+                    <a:bodyPr/>
+                    <a:lstStyle/>
+                    <a:p>
+                        <a:pPr><a:defRPr sz="900" baseline="0"/></a:pPr>
+                        <a:endParaRPr lang="en-US"/>
+                    </a:p>
+                </c:txPr>
+                <c:showCatName val="1"/>
+                <c:showPercent val="1"/>
+            </c:dLbls>"#,
+        );
+
+        let tx_pr = labels.tx_pr.as_ref().expect("parsed dLbls txPr");
+        let paragraph = tx_pr.paragraphs.first().expect("paragraph");
+        let def_rpr = paragraph
+            .props
+            .def_run_props
+            .as_ref()
+            .expect("default run properties");
+        assert_eq!(def_rpr.size.map(|size| size.value()), Some(900));
+        assert_eq!(def_rpr.baseline.map(|baseline| baseline.value()), Some(0));
+        assert_eq!(
+            paragraph
+                .end_para_rpr
+                .as_ref()
+                .and_then(|props| props.lang.as_deref()),
+            Some("en-US")
+        );
+    }
+
+    #[test]
+    fn data_labels_do_not_promote_leader_line_shape_properties() {
+        let labels = parse_data_labels(
+            br#"<c:dLbls xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+                         xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+                <c:showLeaderLines val="1"/>
+                <c:leaderLines>
+                    <c:spPr>
+                        <a:ln w="25400">
+                            <a:solidFill><a:srgbClr val="00FF00"/></a:solidFill>
+                        </a:ln>
+                    </c:spPr>
+                </c:leaderLines>
+            </c:dLbls>"#,
+        );
+
+        assert!(labels.sp_pr.is_none());
+        assert!(
+            labels
+                .leader_lines
+                .as_ref()
+                .and_then(|lines| lines.sp_pr.as_ref())
+                .is_some()
+        );
+    }
+
+    #[test]
+    fn data_labels_parse_direct_shape_properties() {
+        let labels = parse_data_labels(
+            br#"<c:dLbls xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+                         xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+                <c:spPr>
+                    <a:ln><a:noFill/></a:ln>
+                </c:spPr>
+            </c:dLbls>"#,
+        );
+
+        assert!(matches!(
+            labels
+                .sp_pr
+                .as_ref()
+                .and_then(|sp_pr| sp_pr.ln.as_ref())
+                .and_then(|line| line.fill.as_ref()),
+            Some(ooxml_types::drawings::LineFill::NoFill)
+        ));
+    }
+}

@@ -22,15 +22,6 @@ pub(super) fn extract_cat_ref_formula(
 pub(super) fn reconstruct_data_range_from_chart_space(
     cs: &ooxml_types::charts::ChartSpace,
 ) -> Option<String> {
-    if cs.chart.plot_area.chart_groups.iter().any(|g| {
-        matches!(
-            g.chart_type,
-            ooxml_types::charts::ChartType::Scatter | ooxml_types::charts::ChartType::Bubble
-        )
-    }) {
-        return None;
-    }
-
     let mut formulas: Vec<&str> = Vec::new();
 
     for g in &cs.chart.plot_area.chart_groups {
@@ -72,15 +63,6 @@ pub(super) fn reconstruct_data_range_from_chart_space(
 pub(super) fn reconstruct_data_range_from_chart_groups(
     groups: &[ooxml_types::charts::ChartGroup],
 ) -> Option<String> {
-    if groups.iter().any(|g| {
-        matches!(
-            g.chart_type,
-            ooxml_types::charts::ChartType::Scatter | ooxml_types::charts::ChartType::Bubble
-        )
-    }) {
-        return None;
-    }
-
     let mut formulas: Vec<&str> = Vec::new();
     for g in groups {
         for s in &g.series {
@@ -204,9 +186,10 @@ pub(crate) fn synthesize_rectangular_data_range(formulas: &[&str]) -> Option<Str
         }
     }
     let rect_area = (end_row - start_row + 1) as usize * (end_col - start_col + 1) as usize;
-    let missing_only_top_left =
-        cells.len() + 1 == rect_area && !cells.contains(&(start_row, start_col));
-    if cells.len() != rect_area && !missing_only_top_left {
+    let missing_only_header_cells = start_row < end_row
+        && (start_row + 1..=end_row)
+            .all(|row| (start_col..=end_col).all(|col| cells.contains(&(row, col))));
+    if cells.len() != rect_area && !missing_only_header_cells {
         return None;
     }
 
@@ -363,7 +346,49 @@ fn extract_legacy_series_text_ref_formula_str(
 
 #[cfg(test)]
 mod tests {
-    use super::synthesize_rectangular_data_range;
+    use super::{reconstruct_data_range_from_chart_groups, synthesize_rectangular_data_range};
+    use ooxml_types::charts::{
+        BubbleChartConfig, CatDataSource, ChartGroup, ChartSeries, ChartType, ChartTypeConfig,
+        NumDataSource, NumRef, ScatterChartConfig, SeriesTextSource, StrRef,
+    };
+
+    fn num_ref(formula: &str) -> NumDataSource {
+        NumDataSource::Ref(NumRef {
+            f: formula.to_string(),
+            ..Default::default()
+        })
+    }
+
+    fn cat_num_ref(formula: &str) -> CatDataSource {
+        CatDataSource::NumRef(NumRef {
+            f: formula.to_string(),
+            ..Default::default()
+        })
+    }
+
+    fn series_text_ref(formula: &str) -> SeriesTextSource {
+        SeriesTextSource::StrRef(StrRef {
+            f: formula.to_string(),
+            ..Default::default()
+        })
+    }
+
+    fn chart_group(
+        chart_type: ChartType,
+        config: ChartTypeConfig,
+        series: Vec<ChartSeries>,
+    ) -> ChartGroup {
+        ChartGroup {
+            chart_type,
+            config,
+            series,
+            d_lbls: None,
+            ax_id: Vec::new(),
+            raw_chart_type_attr: None,
+            raw_chart_element_name: None,
+            raw_chart_group_xml: None,
+        }
+    }
 
     #[test]
     fn chart_table_range_allows_omitted_top_left_category_header() {
@@ -381,10 +406,73 @@ mod tests {
     }
 
     #[test]
+    fn chart_table_range_allows_omitted_header_cells_when_body_is_dense() {
+        assert_eq!(
+            synthesize_rectangular_data_range(&[
+                "Sheet1!B1",
+                "Sheet1!A2:A4",
+                "Sheet1!B2:B4",
+                "Sheet1!C2:C4",
+            ])
+            .as_deref(),
+            Some("Sheet1!A1:C4"),
+        );
+    }
+
+    #[test]
     fn sparse_chart_refs_with_other_holes_do_not_synthesize_a_range() {
         assert_eq!(
             synthesize_rectangular_data_range(&["Sheet1!B1", "Sheet1!A2:A4", "Sheet1!C2:C4"]),
             None,
+        );
+    }
+
+    #[test]
+    fn scatter_group_reconstructs_dense_xy_data_range() {
+        let series = ["B", "C", "D"]
+            .into_iter()
+            .enumerate()
+            .map(|(idx, col)| ChartSeries {
+                idx: idx as u32,
+                order: idx as u32,
+                tx: Some(series_text_ref(&format!("Sheet1!{col}1"))),
+                x_val: Some(cat_num_ref("Sheet1!A2:A5")),
+                y_val: Some(num_ref(&format!("Sheet1!{col}2:{col}5"))),
+                ..Default::default()
+            })
+            .collect();
+        let group = chart_group(
+            ChartType::Scatter,
+            ChartTypeConfig::Scatter(ScatterChartConfig::default()),
+            series,
+        );
+
+        assert_eq!(
+            reconstruct_data_range_from_chart_groups(&[group]).as_deref(),
+            Some("Sheet1!A1:D5"),
+        );
+    }
+
+    #[test]
+    fn bubble_group_reconstructs_dense_xyz_data_range() {
+        let series = vec![ChartSeries {
+            idx: 0,
+            order: 0,
+            tx: Some(series_text_ref("Sheet1!B1")),
+            x_val: Some(cat_num_ref("Sheet1!A2:A5")),
+            y_val: Some(num_ref("Sheet1!B2:B5")),
+            bubble_size: Some(num_ref("Sheet1!C2:C5")),
+            ..Default::default()
+        }];
+        let group = chart_group(
+            ChartType::Bubble,
+            ChartTypeConfig::Bubble(BubbleChartConfig::default()),
+            series,
+        );
+
+        assert_eq!(
+            reconstruct_data_range_from_chart_groups(&[group]).as_deref(),
+            Some("Sheet1!A1:C5"),
         );
     }
 }

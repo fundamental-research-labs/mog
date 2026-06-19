@@ -365,12 +365,6 @@ pub(in crate::storage::engine) fn rebuild_engine_from_snapshot(
     engine.mirror.finalize_range_hydration();
     sync_table_catalog_from_yrs_if_present(&mut engine.stores, &mut engine.mirror);
 
-    crate::storage::engine::services::imported_filters::normalize_imported_auto_filter_visibility(
-        &mut engine.stores,
-        &mut engine.mirror,
-        None,
-        domain_types::ImportPhase::FullHydration,
-    );
     engine.update_buffer.clear();
 
     // Recreate observer + undo, derive settings, clear viewport

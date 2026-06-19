@@ -9,10 +9,10 @@ use domain_types::{ChartStyleContextData, ChartStyleOwnerData, ChartType, Import
 use ooxml_types::chart_ex::{
     ChartExAxis, ChartExBinning, ChartExBoundValue, ChartExChartData, ChartExData,
     ChartExDataLabels, ChartExDimension, ChartExFormatOverride, ChartExLayoutId,
-    ChartExLayoutProperties, ChartExPlotAreaRegion, ChartExSeries, ChartExSpace, ChartExText,
-    ChartExTitle,
+    ChartExLayoutProperties, ChartExPlotAreaRegion, ChartExSeries, ChartExSpace, ChartExTitle,
 };
 
+use crate::domain::charts::chart_ex::{chart_ex_text_text, chart_ex_title_text};
 use crate::domain::charts::read::{
     extract_chart_format, extract_chart_line, extract_chart_rich_text, parse_chart_a1_ref,
     synthesize_rectangular_data_range,
@@ -582,6 +582,9 @@ fn project_chart_ex_series(
             let category_source_kind = categories
                 .as_ref()
                 .map(|_| domain_types::chart::ChartSeriesDimensionSourceKindData::Ref);
+            let category_source_type = categories
+                .as_ref()
+                .map(|_| domain_types::chart::ChartSeriesCategorySourceTypeData::String);
 
             Some(ChartSeriesData {
                 name: chart_ex_text_text(series.tx.as_ref())
@@ -597,11 +600,13 @@ fn project_chart_ex_series(
                 x_role: None,
                 category_cache: None,
                 category_source_kind,
+                category_source_type,
                 category_levels: None,
                 category_label_format: None,
                 bubble_size: None,
                 bubble_size_cache: None,
                 bubble_size_source_kind: None,
+                bubble_3d: None,
                 smooth: None,
                 show_lines: None,
                 explosion: None,
@@ -632,6 +637,7 @@ fn project_chart_ex_series(
                 invert_color: None,
                 marker_background_color: None,
                 marker_foreground_color: None,
+                marker_line_format: None,
                 filtered: series.hidden,
                 source_series_index: None,
                 source_series_key: None,
@@ -826,7 +832,8 @@ fn project_chart_formula<'a>(
         );
         return None;
     }
-    if trimmed.starts_with("_xlchart.") {
+    let reference = trimmed.strip_prefix('=').unwrap_or(trimmed);
+    if reference.starts_with("_xlchart.") {
         push_projection_diagnostic(
             diagnostics,
             domain_types::ImportDiagnosticCode::UnsupportedFeature,
@@ -836,7 +843,7 @@ fn project_chart_formula<'a>(
         );
         return None;
     }
-    if synthesize_rectangular_data_range(&[trimmed]).is_none() {
+    if synthesize_rectangular_data_range(&[reference]).is_none() {
         push_projection_diagnostic(
             diagnostics,
             domain_types::ImportDiagnosticCode::InvalidRangeReference,
@@ -858,37 +865,6 @@ fn push_formula(formulas: &mut Vec<String>, formula: Option<&str>) {
 fn synthesize_data_range(formulas: &[String]) -> Option<String> {
     let formula_refs = formulas.iter().map(String::as_str).collect::<Vec<_>>();
     synthesize_rectangular_data_range(&formula_refs)
-}
-
-fn chart_ex_text_text(text: Option<&ChartExText>) -> Option<String> {
-    let text = text?;
-    text.tx_data
-        .as_ref()
-        .and_then(|data| data.value.clone())
-        .filter(|value| !value.is_empty())
-        .or_else(|| {
-            text.rich.as_ref().and_then(|rich| {
-                let parts = rich
-                    .paragraphs
-                    .iter()
-                    .flat_map(|paragraph| &paragraph.runs)
-                    .filter_map(|run| match run {
-                        ooxml_types::drawings::TextRunContent::Run(run) if !run.text.is_empty() => {
-                            Some(run.text.clone())
-                        }
-                        ooxml_types::drawings::TextRunContent::Field {
-                            text: Some(text), ..
-                        } if !text.is_empty() => Some(text.clone()),
-                        _ => None,
-                    })
-                    .collect::<Vec<_>>();
-                (!parts.is_empty()).then(|| parts.join(""))
-            })
-        })
-}
-
-fn chart_ex_title_text(title: &ChartExTitle) -> Option<String> {
-    chart_ex_text_text(title.tx.as_ref())
 }
 
 fn chart_ex_title_rich_text(
@@ -1245,6 +1221,7 @@ fn project_chart_ex_points(series: &ChartExSeries) -> Option<Vec<PointFormatData
                 visual_format: extract_chart_format(Some(sp_pr), None),
                 marker_background_color: None,
                 marker_foreground_color: None,
+                marker_line_format: None,
                 marker_size: None,
                 marker_style: None,
             })
@@ -1715,11 +1692,14 @@ mod tests {
             category_cache: None,
             category_source_kind: categories
                 .map(|_| domain_types::chart::ChartSeriesDimensionSourceKindData::Ref),
+            category_source_type: categories
+                .map(|_| domain_types::chart::ChartSeriesCategorySourceTypeData::String),
             category_levels: None,
             category_label_format: None,
             bubble_size: None,
             bubble_size_cache: None,
             bubble_size_source_kind: None,
+            bubble_3d: None,
             smooth: None,
             show_lines: None,
             explosion: None,
@@ -1742,6 +1722,7 @@ mod tests {
             invert_color: None,
             marker_background_color: None,
             marker_foreground_color: None,
+            marker_line_format: None,
             filtered: None,
             source_series_index: None,
             source_series_key: None,
@@ -1847,7 +1828,7 @@ mod tests {
         };
         chart_space.chart = ChartExChart {
             title: Some(ChartExTitle {
-                tx: Some(ChartExText {
+                tx: Some(ooxml_types::chart_ex::ChartExText {
                     tx_data: Some(ChartExTxData {
                         formula: None,
                         value: Some("Cash Flow".to_string()),
@@ -1906,7 +1887,7 @@ mod tests {
             chart_space_with_series(ChartExLayoutId::Waterfall, cat_val_dimensions(), None);
         chart_space.sp_pr = Some(solid_shape("111111"));
         chart_space.chart.title = Some(ChartExTitle {
-            tx: Some(ChartExText {
+            tx: Some(ooxml_types::chart_ex::ChartExText {
                 rich: Some(crate::domain::charts::parse_text_body(
                     br#"<cx:rich xmlns:cx="http://schemas.microsoft.com/office/drawing/2014/chartex"
                                xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
@@ -1933,7 +1914,7 @@ mod tests {
             ChartExAxis {
                 scaling: Some(ChartExScaling::Category { gap_width: None }),
                 title: Some(ChartExTitle {
-                    tx: Some(ChartExText {
+                    tx: Some(ooxml_types::chart_ex::ChartExText {
                         rich: Some(crate::domain::charts::parse_text_body(
                             br#"<cx:rich xmlns:cx="http://schemas.microsoft.com/office/drawing/2014/chartex"
                                        xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">

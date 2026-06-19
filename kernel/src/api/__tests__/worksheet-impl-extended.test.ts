@@ -522,7 +522,7 @@ describe('WorksheetImpl Extended Methods', () => {
       const subtotalResult = {
         groupsCreated: 2,
         subtotalRowsInserted: 2,
-        affectedRange: { startRow: 0, startCol: 0, endRow: 6, endCol: 1 },
+        affectedRange: { startRow: 0, startCol: 0, endRow: 6, endCol: 1, address: 'A1:B7' },
       };
       (GroupingOps.subtotal as jest.Mock).mockResolvedValue({
         success: true,
@@ -1384,13 +1384,14 @@ describe('WorksheetImpl Extended Methods', () => {
   // =========================================================================
   describe('Group 10: Projection Detection', () => {
     it('getProjectionRange delegates to CellOps.getProjectionRange', async () => {
-      const mockRange = { startRow: 0, startCol: 0, endRow: 5, endCol: 3 };
+      const mockRange = { sheetId: SHEET_ID, startRow: 0, startCol: 0, endRow: 5, endCol: 3 };
       (CellOps.getProjectionRange as jest.Mock).mockResolvedValue(mockRange);
 
       const result = await ws.bindings.getProjectionRange(0, 0);
 
       expect(CellOps.getProjectionRange).toHaveBeenCalledWith(ctx, SHEET_ID, 0, 0);
-      expect(result).toEqual(mockRange);
+      expect(result).toEqual({ startRow: 0, startCol: 0, endRow: 5, endCol: 3, address: 'A1:D6' });
+      expect(result).not.toHaveProperty('sheetId');
     });
 
     it('getProjectionRange returns null when no projection', async () => {

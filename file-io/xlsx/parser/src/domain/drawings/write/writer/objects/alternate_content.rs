@@ -206,30 +206,38 @@ impl DrawingWriter {
         }
         w.end_element("xdr:nvGraphicFramePr");
 
-        // Transform — preserve the typed graphic frame transform. For two-cell
-        // anchors Excel also stores the position on the anchor itself.
-        w.start_element("xdr:xfrm");
-        if let Some(rot) = cx_ref.xfrm_rot {
-            w.attr_num("rot", rot);
+        if cx_ref.has_xfrm {
+            // Transform — preserve the typed graphic frame transform. For two-cell
+            // anchors Excel also stores the position on the anchor itself.
+            w.start_element("xdr:xfrm");
+            if let Some(rot) = cx_ref.xfrm_rot {
+                w.attr_num("rot", rot);
+            }
+            if let Some(flip_h) = cx_ref.xfrm_flip_h {
+                w.attr("flipH", if flip_h { "1" } else { "0" });
+            }
+            if let Some(flip_v) = cx_ref.xfrm_flip_v {
+                w.attr("flipV", if flip_v { "1" } else { "0" });
+            }
+            if !cx_ref.xfrm_has_off && !cx_ref.xfrm_has_ext {
+                w.self_close();
+            } else {
+                w.end_attrs();
+                if cx_ref.xfrm_has_off {
+                    w.start_element("a:off")
+                        .attr_num("x", cx_ref.xfrm_off_x)
+                        .attr_num("y", cx_ref.xfrm_off_y)
+                        .self_close();
+                }
+                if cx_ref.xfrm_has_ext {
+                    w.start_element("a:ext")
+                        .attr_num("cx", cx_ref.xfrm_ext_cx)
+                        .attr_num("cy", cx_ref.xfrm_ext_cy)
+                        .self_close();
+                }
+                w.end_element("xdr:xfrm");
+            }
         }
-        if let Some(flip_h) = cx_ref.xfrm_flip_h {
-            w.attr("flipH", if flip_h { "1" } else { "0" });
-        }
-        if let Some(flip_v) = cx_ref.xfrm_flip_v {
-            w.attr("flipV", if flip_v { "1" } else { "0" });
-        }
-        w.end_attrs();
-        {
-            w.start_element("a:off")
-                .attr_num("x", cx_ref.xfrm_off_x)
-                .attr_num("y", cx_ref.xfrm_off_y)
-                .self_close();
-            w.start_element("a:ext")
-                .attr_num("cx", cx_ref.xfrm_ext_cx)
-                .attr_num("cy", cx_ref.xfrm_ext_cy)
-                .self_close();
-        }
-        w.end_element("xdr:xfrm");
 
         // Graphic with ChartEx reference
         w.start_element("a:graphic").end_attrs();

@@ -12,7 +12,9 @@ import type {
   ChartType,
   HierarchyChartConfig,
   RegionMapConfig,
+  SeriesConfig,
 } from '@mog-sdk/contracts/data/charts';
+import { parseCellRange, quoteSheetName, toA1 } from '@mog/spreadsheet-utils/a1';
 
 import { normalizeImportedComboChart } from '../../bridges/compute/chart-import-normalization';
 import type { ChartFloatingObject } from '../../bridges/compute/compute-bridge';
@@ -24,6 +26,7 @@ import {
   chartStyleContextToWire,
   dataLabelConfigToWire,
   dataTableConfigToWire,
+  directHexPaletteToWire,
   histogramConfigToWire,
   legendConfigToWire,
   seriesConfigArrayToWire,
@@ -35,6 +38,7 @@ import {
   wireToChartStyleContext,
   wireToDataLabelConfig,
   wireToDataTableConfig,
+  wireToDirectHexPalette,
   wireToHierarchyChartConfig,
   wireToHistogramConfig,
   wireToLegendConfig,
@@ -56,9 +60,102 @@ import {
   syncLegendEntriesToInternal,
   syncSeriesFormatToInternal,
 } from './chart-api-compatibility';
+import {
+  chartHeightCellsToPixels,
+  chartWidthCellsToPixels,
+  resolveChartHeightCells,
+  resolveChartWidthCells,
+} from './chart-size-units';
 
 /** English Metric Units per point (1 pt = 12700 EMU). */
 const EMU_PER_PT = 12700;
+
+function formatPublicRange(
+  range: {
+    startRow: number;
+    startCol: number;
+    endRow: number;
+    endCol: number;
+    sheetName?: string | null;
+  },
+): string {
+  const body = `${toA1(range.startRow, range.startCol)}:${toA1(range.endRow, range.endCol)}`;
+  return range.sheetName ? `${quoteSheetName(range.sheetName)}!${body}` : body;
+}
+
+function deriveCommonCategoryRange(
+  series: readonly SeriesConfig[] | undefined,
+): string | undefined {
+  if (!series?.length) return undefined;
+  let common: string | undefined;
+
+  for (const item of series) {
+    const ref = normalizeChartA1RefForRead(item.categories)?.trim();
+    if (!ref || !parseCellRange(ref)) return undefined;
+    if (common != null && common !== ref) return undefined;
+    common = ref;
+  }
+
+  return common;
+}
+
+type SeriesNameCell = {
+  row: number;
+  col: number;
+  sheetName?: string;
+};
+
+function parseSeriesNameCell(ref: string | undefined): SeriesNameCell | null {
+  const normalizedRef = normalizeChartA1RefForRead(ref)?.trim();
+  if (!normalizedRef) return null;
+  const parsed = parseCellRange(normalizedRef);
+  if (!parsed) return null;
+  if (parsed.startRow !== parsed.endRow || parsed.startCol !== parsed.endCol) return null;
+  return {
+    row: parsed.startRow,
+    col: parsed.startCol,
+    sheetName: parsed.sheetName,
+  };
+}
+
+function deriveContiguousSeriesRange(
+  series: readonly SeriesConfig[] | undefined,
+): string | undefined {
+  if (!series?.length) return undefined;
+  const cells = series.map((item) => parseSeriesNameCell(item.nameRef));
+  if (cells.some((cell) => cell == null)) return undefined;
+  const parsedCells = cells as SeriesNameCell[];
+  const first = parsedCells[0]!;
+  if (parsedCells.some((cell) => cell.sheetName !== first.sheetName)) return undefined;
+
+  const sameRow = parsedCells.every(
+    (cell, index) => cell.row === first.row && cell.col === first.col + index,
+  );
+  if (sameRow) {
+    return formatPublicRange({
+      startRow: first.row,
+      startCol: first.col,
+      endRow: first.row,
+      endCol: first.col + parsedCells.length - 1,
+      sheetName: first.sheetName,
+    });
+  }
+
+  const sameCol = parsedCells.every(
+    (cell, index) => cell.col === first.col && cell.row === first.row + index,
+  );
+  if (sameCol) {
+    return formatPublicRange({
+      startRow: first.row,
+      startCol: first.col,
+      endRow: first.row + parsedCells.length - 1,
+      endCol: first.col,
+      sheetName: first.sheetName,
+    });
+  }
+
+  return undefined;
+}
 
 const UNSUPPORTED_NATIVE_XLSX_CHART_TYPES = new Set<ChartType>(['heatmap', 'violin']);
 
@@ -66,6 +163,56 @@ export type ChartUpdatePayload = Omit<Partial<ChartFloatingObject>, 'anchor' | '
   anchor?: Partial<ChartFloatingObject['anchor']>;
   title?: string | null;
 };
+
+type InternalChartTypeFields = {
+  chartType: string;
+  subType?: ChartConfig['subType'];
+  barShape?: ChartConfig['barShape'];
+  bubble3dEffect?: ChartFloatingObject['bubble3dEffect'];
+  wireframe?: ChartFloatingObject['wireframe'];
+  surfaceTopView?: ChartFloatingObject['surfaceTopView'];
+};
+
+function internalFieldsForPublicChartType(type: ChartType | string): InternalChartTypeFields {
+  switch (type) {
+    case 'lineMarkers':
+      return { chartType: 'line', subType: 'markers' };
+    case 'lineMarkersStacked':
+      return { chartType: 'line', subType: 'markersStacked' };
+    case 'lineMarkersStacked100':
+      return { chartType: 'line', subType: 'markersPercentStacked' };
+    case 'bubble3DEffect':
+      return { chartType: 'bubble', bubble3dEffect: true };
+    case 'surfaceWireframe':
+      return { chartType: 'surface3d', wireframe: true, surfaceTopView: false };
+    case 'surfaceTopView':
+      return { chartType: 'surface', wireframe: false, surfaceTopView: true };
+    case 'surfaceTopViewWireframe':
+      return { chartType: 'surface', wireframe: true, surfaceTopView: true };
+    default:
+      return internalBarShapeFieldsForPublicChartType(type) ?? { chartType: type };
+  }
+}
+
+function internalBarShapeFieldsForPublicChartType(
+  type: ChartType | string,
+): InternalChartTypeFields | undefined {
+  const match = /^(cylinder|cone|pyramid)(Bar|Col)(Clustered|Stacked|Stacked100)?$/.exec(type);
+  if (!match) return undefined;
+  const [, shape, direction, grouping] = match;
+  return {
+    chartType: direction === 'Bar' ? 'bar3d' : 'column3d',
+    subType:
+      grouping === 'Stacked100'
+        ? 'percentStacked'
+        : grouping === 'Stacked'
+          ? 'stacked'
+          : grouping === 'Clustered'
+            ? 'clustered'
+            : undefined,
+    barShape: shape as ChartConfig['barShape'],
+  };
+}
 
 function numericField(fields: Record<string, unknown>, key: string): number | undefined {
   const value = fields[key];
@@ -169,6 +316,8 @@ export function chartConfigToInternal(config: ChartConfig): ChartFloatingObject 
       explosion: pieSlice?.explosion ?? 25,
     };
   }
+  const typeFields = internalFieldsForPublicChartType(chartType);
+  chartType = typeFields.chartType;
 
   const anchor: ChartFloatingObject['anchor'] = {
     anchorRow: config.anchorRow,
@@ -195,7 +344,9 @@ export function chartConfigToInternal(config: ChartConfig): ChartFloatingObject 
     : undefined;
 
   const series = config.series
-    ? seriesConfigArrayToWire(config.series.map(syncSeriesFormatToInternal))
+    ? seriesConfigArrayToWire(
+        config.series.map((entry) => syncSeriesFormatToInternal(entry, chartType)),
+      )
     : undefined;
 
   const legend = config.legend
@@ -207,8 +358,8 @@ export function chartConfigToInternal(config: ChartConfig): ChartFloatingObject 
     id: (config as { id?: string }).id || `chart-${now}`,
     sheetId: '',
     anchor,
-    width: config.width * 80,
-    height: config.height * 20,
+    width: chartWidthCellsToPixels(config.width) ?? 640,
+    height: chartHeightCellsToPixels(config.height) ?? 300,
     zIndex: 0,
     rotation: 0,
     flipH: false,
@@ -224,7 +375,7 @@ export function chartConfigToInternal(config: ChartConfig): ChartFloatingObject 
     type: 'chart',
     // ChartData fields
     chartType,
-    subType: config.subType,
+    subType: config.subType ?? typeFields.subType,
     dataRange: config.dataRange,
     seriesRange: config.seriesRange,
     categoryRange: config.categoryRange,
@@ -233,7 +384,7 @@ export function chartConfigToInternal(config: ChartConfig): ChartFloatingObject 
     subtitle: config.subtitle,
     legend,
     axis,
-    colors: config.colors,
+    colors: directHexPaletteToWire(config.colors),
     series,
     dataLabels: config.dataLabels
       ? dataLabelConfigToWire(
@@ -265,12 +416,12 @@ export function chartConfigToInternal(config: ChartConfig): ChartFloatingObject 
     bubbleScale: config.bubbleScale,
     showNegBubbles: config.showNegBubbles,
     sizeRepresents: config.sizeRepresents,
-    bubble3dEffect: config.bubble3DEffect,
+    bubble3dEffect: config.bubble3DEffect ?? typeFields.bubble3dEffect,
     splitType: config.splitType,
     splitValue: config.splitValue,
-    barShape: config.barShape,
-    wireframe: config.wireframe,
-    surfaceTopView: config.surfaceTopView,
+    barShape: config.barShape ?? typeFields.barShape,
+    wireframe: config.wireframe ?? typeFields.wireframe,
+    surfaceTopView: config.surfaceTopView ?? typeFields.surfaceTopView,
     colorScheme: config.colorScheme,
     widthCells: config.width,
     heightCells: config.height,
@@ -322,7 +473,17 @@ export function chartUpdatesToInternal(updates: Partial<ChartConfig>): ChartUpda
         result.pieSlice = { explosion: 25 } as ChartFloatingObject['pieSlice'];
       }
     } else {
-      result.chartType = updates.type;
+      const typeFields = internalFieldsForPublicChartType(updates.type);
+      result.chartType = typeFields.chartType;
+      if (typeFields.subType !== undefined) result.subType = typeFields.subType;
+      if (typeFields.barShape !== undefined) result.barShape = typeFields.barShape;
+      if (typeFields.bubble3dEffect !== undefined) {
+        result.bubble3dEffect = typeFields.bubble3dEffect;
+      }
+      if (typeFields.wireframe !== undefined) result.wireframe = typeFields.wireframe;
+      if (typeFields.surfaceTopView !== undefined) {
+        result.surfaceTopView = typeFields.surfaceTopView;
+      }
     }
   }
   if (updates.subType !== undefined) result.subType = updates.subType;
@@ -369,9 +530,11 @@ export function chartUpdatesToInternal(updates: Partial<ChartConfig>): ChartUpda
     );
   if (updates.axis !== undefined)
     result.axis = axisConfigToWire(syncAxisFieldsToInternal(updates.axis) as typeof updates.axis);
-  if (updates.colors !== undefined) result.colors = updates.colors;
+  if (updates.colors !== undefined) result.colors = directHexPaletteToWire(updates.colors);
   if (updates.series !== undefined)
-    result.series = seriesConfigArrayToWire(updates.series.map(syncSeriesFormatToInternal));
+    result.series = seriesConfigArrayToWire(
+      updates.series.map((entry) => syncSeriesFormatToInternal(entry, updates.type)),
+    );
   if (updates.dataLabels !== undefined)
     result.dataLabels = dataLabelConfigToWire(
       syncDataLabelsToInternal(updates.dataLabels) as typeof updates.dataLabels,
@@ -497,12 +660,19 @@ export function serializedChartToChart(rawChart: ChartFloatingObject): Chart {
   const axis = axisConfig ? (deriveAxisFieldsForRead(axisConfig) as typeof axisConfig) : undefined;
 
   const series = seriesConfigs?.map((s) =>
-    normalizeSeriesRefsForRead(deriveSeriesFormatForRead(s)),
+    normalizeSeriesRefsForRead(deriveSeriesFormatForRead(s, reportedType)),
   );
+  const chartTrendlines = wireToTrendlineConfigArray(chart.trendline);
+  const publicTrendlines =
+    chartTrendlines && chartTrendlines.length > 0 ? chartTrendlines : series?.[0]?.trendlines;
 
   const legend = legendConfig
     ? (deriveLegendEntriesForRead(legendConfig) as typeof legendConfig)
     : undefined;
+  const seriesRange =
+    normalizeChartA1RefForRead(chart.seriesRange) ?? deriveContiguousSeriesRange(series);
+  const categoryRange =
+    normalizeChartA1RefForRead(chart.categoryRange) ?? deriveCommonCategoryRange(series);
 
   const result: Chart = {
     id: chart.id,
@@ -510,25 +680,25 @@ export function serializedChartToChart(rawChart: ChartFloatingObject): Chart {
     type: reportedType as Chart['type'],
     subType: chart.subType as Chart['subType'],
     dataRange: normalizeChartA1RefForRead(chart.dataRange) ?? '',
-    seriesRange: normalizeChartA1RefForRead(chart.seriesRange),
-    categoryRange: normalizeChartA1RefForRead(chart.categoryRange),
+    seriesRange,
+    categoryRange,
     seriesOrientation: chart.seriesOrientation as Chart['seriesOrientation'],
     anchorRow: anchor.anchorRow,
     anchorCol: anchor.anchorCol,
-    width: chart.widthCells ?? chart.width ?? 8,
-    height: chart.heightCells ?? chart.height ?? 15,
+    width: resolveChartWidthCells(chart.widthCells, chart.width) ?? 8,
+    height: resolveChartHeightCells(chart.heightCells, chart.height) ?? 15,
     title: chart.title && chart.title !== 'undefined' ? chart.title : undefined,
     subtitle: chart.subtitle && chart.subtitle !== 'undefined' ? chart.subtitle : undefined,
     legend,
     axis,
-    colors: chart.colors,
+    colors: wireToDirectHexPalette(chart.colors),
     series,
     dataLabels: dataLabelsConfig
       ? (deriveDataLabelsForRead(dataLabelsConfig) as Chart['dataLabels'])
       : undefined,
     pieSlice: chart.pieSlice,
-    trendline: wireToTrendlineConfigArray(chart.trendline)?.[0],
-    trendlines: wireToTrendlineConfigArray(chart.trendline),
+    trendline: publicTrendlines?.[0],
+    trendlines: publicTrendlines,
     showLines: chart.showLines,
     smoothLines: chart.smoothLines,
     radarFilled: chart.radarFilled,

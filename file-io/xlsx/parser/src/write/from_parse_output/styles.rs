@@ -14,53 +14,33 @@ use crate::domain::styles::write::StylesWriter;
 
 /// Build a `StylesWriter` from the modeled `DocumentFormat` export palette.
 ///
-/// Each `DocumentFormat` in the palette becomes a cellXf entry. The returned
-/// writer's cellXfs[0] is always the default style (empty `DocumentFormat`);
-/// cellXfs[N] for N >= 1 corresponds to `palette[N-1]`.
+/// Each `DocumentFormat` in the palette becomes a cellXf entry. Palette entry
+/// 0 is the workbook Normal style and is emitted as cellXfs[0], so cells with
+/// no explicit `s` attribute still inherit imported workbook defaults.
 ///
 /// The caller uses `style_id` values from `CellData` as indices into this
-/// generated palette. Sheet writing offsets those ids by +1 because
-/// `cellXfs[0]` is the default.
+/// generated palette. Sheet writing uses the same indices in the emitted
+/// `cellXfs` table.
 pub(super) fn build_styles(palette: &[DocumentFormat]) -> StylesWriter {
     let mut writer = StylesWriter::with_defaults();
 
-    // The default style is already at cellXfs[0] from with_defaults().
-    // Now add one cellXf per palette entry.
-    for doc_fmt in palette {
+    let Some((normal_fmt, remaining_palette)) = palette.split_first() else {
+        return writer;
+    };
+
+    let normal_components = add_style_components(&mut writer, normal_fmt);
+    writer.cell_style_xfs[0] = cell_xf_from_components(normal_fmt, &normal_components, None, false);
+    writer.cell_xfs[0] = cell_xf_from_components(normal_fmt, &normal_components, Some(0), true);
+
+    for doc_fmt in remaining_palette {
         let components = add_style_components(&mut writer, doc_fmt);
-
-        let has_font = components.font_id != 0;
-        let has_fill = components.fill_id != 0;
-        let has_border = components.border_id != 0;
-        let has_num_fmt = components.num_fmt_id != 0;
-        let has_alignment = components.alignment.is_some();
-        let has_protection = components.protection.is_some();
-
-        let xf = CellXfDef {
-            num_fmt_id: Some(components.num_fmt_id),
-            font_id: Some(components.font_id),
-            fill_id: Some(components.fill_id),
-            border_id: Some(components.border_id),
-            xf_id: Some(0),
-            alignment: components.alignment,
-            protection: components.protection,
-            apply_number_format: if has_num_fmt { Some(true) } else { None },
-            apply_font: if has_font { Some(true) } else { None },
-            apply_fill: if has_fill { Some(true) } else { None },
-            apply_border: if has_border { Some(true) } else { None },
-            apply_alignment: if has_alignment { Some(true) } else { None },
-            apply_protection: if has_protection { Some(true) } else { None },
-            pivot_button: doc_fmt.pivot_button.unwrap_or(false),
-            quote_prefix: doc_fmt.quote_prefix.unwrap_or(false),
-            ext_lst: None,
-        };
-
-        writer.add_cell_xf(xf);
+        writer.add_cell_xf(cell_xf_from_components(doc_fmt, &components, Some(0), true));
     }
 
     writer
 }
 
+#[derive(Clone)]
 struct StyleComponentIds {
     font_id: u32,
     fill_id: u32,
@@ -68,6 +48,63 @@ struct StyleComponentIds {
     num_fmt_id: u32,
     alignment: Option<AlignmentDef>,
     protection: Option<ProtectionDef>,
+}
+
+fn cell_xf_from_components(
+    doc_fmt: &DocumentFormat,
+    components: &StyleComponentIds,
+    xf_id: Option<u32>,
+    include_apply_flags: bool,
+) -> CellXfDef {
+    let has_font = components.font_id != 0;
+    let has_fill = components.fill_id != 0;
+    let has_border = components.border_id != 0;
+    let has_num_fmt = components.num_fmt_id != 0;
+    let has_alignment = components.alignment.is_some();
+    let has_protection = components.protection.is_some();
+
+    CellXfDef {
+        num_fmt_id: Some(components.num_fmt_id),
+        font_id: Some(components.font_id),
+        fill_id: Some(components.fill_id),
+        border_id: Some(components.border_id),
+        xf_id,
+        alignment: components.alignment.clone(),
+        protection: components.protection.clone(),
+        apply_number_format: if include_apply_flags && has_num_fmt {
+            Some(true)
+        } else {
+            None
+        },
+        apply_font: if include_apply_flags && has_font {
+            Some(true)
+        } else {
+            None
+        },
+        apply_fill: if include_apply_flags && has_fill {
+            Some(true)
+        } else {
+            None
+        },
+        apply_border: if include_apply_flags && has_border {
+            Some(true)
+        } else {
+            None
+        },
+        apply_alignment: if include_apply_flags && has_alignment {
+            Some(true)
+        } else {
+            None
+        },
+        apply_protection: if include_apply_flags && has_protection {
+            Some(true)
+        } else {
+            None
+        },
+        pivot_button: doc_fmt.pivot_button.unwrap_or(false),
+        quote_prefix: doc_fmt.quote_prefix.unwrap_or(false),
+        ext_lst: None,
+    }
 }
 
 fn add_style_components(writer: &mut StylesWriter, doc_fmt: &DocumentFormat) -> StyleComponentIds {

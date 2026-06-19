@@ -1,4 +1,5 @@
 import type {
+  ChartBorderData,
   DataLabelData,
   ErrorBarData,
   PointFormatData,
@@ -6,6 +7,7 @@ import type {
 } from '../../bridges/compute/compute-types.gen';
 
 import type {
+  ChartBorder,
   DataLabelConfig,
   ErrorBarConfig,
   MarkerStyle,
@@ -18,11 +20,13 @@ import {
   chartFormatStringToWire,
   chartFormatToWire,
   chartLineFormatToWire,
+  directHexColorToWire,
   leaderLinesFormatToWire,
   wireToChartColor,
   wireToChartFormat,
   wireToChartFormatString,
   wireToChartLineFormat,
+  wireToDirectHexColor,
   wireToLeaderLinesFormat,
 } from './chart-format-converters';
 
@@ -51,7 +55,7 @@ const DATA_LABEL_POSITIONS = [
 ] as const;
 type DataLabelPosition = (typeof DATA_LABEL_POSITIONS)[number];
 
-const MARKER_STYLES = [
+export const MARKER_STYLES = [
   'circle',
   'dash',
   'diamond',
@@ -66,7 +70,28 @@ const MARKER_STYLES = [
   'auto',
 ] as const;
 
-function narrowEnum<T extends string>(
+const CHART_BORDER_STYLES = [
+  'solid',
+  'dot',
+  'dash',
+  'dashDot',
+  'longDash',
+  'longDashDot',
+  'longDashDotDot',
+] as const;
+type ChartBorderStyle = NonNullable<ChartBorder['style']>;
+
+const TRENDLINE_TYPES = [
+  'linear',
+  'exponential',
+  'logarithmic',
+  'polynomial',
+  'power',
+  'moving-average',
+] as const;
+type TrendlineTypeName = NonNullable<TrendlineConfig['type']>;
+
+export function narrowEnum<T extends string>(
   value: string | null | undefined,
   allowed: readonly T[],
   fieldName: string,
@@ -79,6 +104,39 @@ function narrowEnum<T extends string>(
     );
   }
   return undefined;
+}
+
+function wireToChartBorder(w: ChartBorderData | undefined): ChartBorder | undefined {
+  if (!w) return undefined;
+  return {
+    color: wireToDirectHexColor(w.color),
+    width: w.width,
+    style: narrowEnum<ChartBorderStyle>(w.style, CHART_BORDER_STYLES, 'ChartBorder.style'),
+  };
+}
+
+function chartBorderToWire(c: ChartBorder | undefined): ChartBorderData | undefined {
+  if (!c) return undefined;
+  return {
+    color: directHexColorToWire(c.color),
+    width: c.width,
+    style: c.style,
+  };
+}
+
+function wireToTrendlineType(value: string | null | undefined): TrendlineTypeName | undefined {
+  switch (value) {
+    case 'exp':
+      return 'exponential';
+    case 'log':
+      return 'logarithmic';
+    case 'poly':
+      return 'polynomial';
+    case 'movingAvg':
+      return 'moving-average';
+    default:
+      return narrowEnum<TrendlineTypeName>(value, TRENDLINE_TYPES, 'Trendline.type');
+  }
 }
 
 /** Convert a wire DataLabelData to the contract DataLabelConfig. */
@@ -163,8 +221,8 @@ export function dataLabelConfigToWire(c: DataLabelConfig): DataLabelData {
 export function wireToTrendlineConfig(w: TrendlineData): TrendlineConfig {
   return {
     show: w.show,
-    type: w.type,
-    color: w.color,
+    type: wireToTrendlineType(w.type),
+    color: wireToDirectHexColor(w.color),
     lineWidth: w.lineWidth,
     order: w.order,
     period: w.period,
@@ -196,7 +254,7 @@ export function trendlineConfigToWire(c: TrendlineConfig): TrendlineData {
   return {
     show: c.show,
     type: c.type,
-    color: c.color,
+    color: directHexColorToWire(c.color),
     lineWidth: c.lineWidth,
     order: c.order,
     period: c.period,
@@ -232,13 +290,14 @@ export function wireToPointFormat(w: PointFormatData): PointFormat {
     explosion: w.explosion,
     bubble3d: w.bubble3d,
     bubble3D: w.bubble3d,
-    fill: w.fill,
-    border: w.border,
+    fill: wireToDirectHexColor(w.fill),
+    border: wireToChartBorder(w.border),
     lineFormat: w.lineFormat ? wireToChartLineFormat(w.lineFormat) : undefined,
     dataLabel: w.dataLabel ? wireToDataLabelConfig(w.dataLabel) : undefined,
     visualFormat: wireToChartFormat(w.visualFormat),
     markerBackgroundColor: wireToChartColor(w.markerBackgroundColor),
     markerForegroundColor: wireToChartColor(w.markerForegroundColor),
+    markerLineFormat: w.markerLineFormat ? wireToChartLineFormat(w.markerLineFormat) : undefined,
     markerSize: w.markerSize,
     markerStyle: narrowEnum<MarkerStyle>(w.markerStyle, MARKER_STYLES, 'Point.markerStyle'),
   };
@@ -251,13 +310,14 @@ export function pointFormatToWire(c: PointFormat): PointFormatData {
     invertIfNegative: c.invertIfNegative,
     explosion: c.explosion,
     bubble3d: c.bubble3d ?? c.bubble3D,
-    fill: c.fill,
-    border: c.border,
+    fill: directHexColorToWire(c.fill),
+    border: chartBorderToWire(c.border),
     lineFormat: c.lineFormat ? chartLineFormatToWire(c.lineFormat) : undefined,
     dataLabel: c.dataLabel ? dataLabelConfigToWire(c.dataLabel) : undefined,
     visualFormat: chartFormatToWire(c.visualFormat),
     markerBackgroundColor: chartColorToWire(c.markerBackgroundColor),
     markerForegroundColor: chartColorToWire(c.markerForegroundColor),
+    markerLineFormat: c.markerLineFormat ? chartLineFormatToWire(c.markerLineFormat) : undefined,
     markerSize: c.markerSize,
     markerStyle: c.markerStyle,
   };

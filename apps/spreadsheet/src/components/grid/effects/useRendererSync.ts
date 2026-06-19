@@ -17,6 +17,7 @@ import type { RefObject } from 'react';
 import { useEffect } from 'react';
 
 import type { SheetCoordinator } from '../../../coordinator/sheet-coordinator';
+import { clampZoom } from '../../../infra/utils/zoom-utils';
 import { lifecycleDebug } from '../../../systems/renderer/debug/debug-lifecycle';
 import type { GridScrollbarSettings } from '../layout/viewport-size';
 
@@ -48,6 +49,8 @@ export interface UseRendererSyncOptions {
   switchSheet: (sheetId: string) => void;
   /** Set zoom callback from renderer hook */
   setZoom: (zoom: number) => void;
+  /** Persist zoom for a sheet in the UI store */
+  setZoomLevel: (sheetId: string, level: number) => void;
   /** Unmount callback from renderer hook */
   unmount: () => void;
 }
@@ -67,12 +70,34 @@ export interface RendererZoomSyncOptions {
  */
 export function syncRendererZoom(options: RendererZoomSyncOptions): void {
   const { currentZoom, coordinator, setZoom } = options;
+  const rendererZoom = coordinator.renderer.getZoom();
+  if (Number.isFinite(rendererZoom) && Math.abs(rendererZoom - currentZoom) < 0.0001) {
+    return;
+  }
+
   setZoom(currentZoom);
 
   const activeCell = coordinator.grid.access.accessors.selection.getActiveCell();
   if (activeCell) {
     coordinator.renderer.scrollToActiveCell(activeCell);
   }
+}
+
+export interface PersistInputZoomOptions {
+  activeSheetId: string;
+  zoom: number;
+  currentZoom: number;
+  setZoomLevel: (sheetId: string, level: number) => void;
+}
+
+export function persistInputZoomForSheet(options: PersistInputZoomOptions): void {
+  const { activeSheetId, zoom, currentZoom, setZoomLevel } = options;
+  if (!Number.isFinite(zoom)) return;
+
+  const clampedZoom = clampZoom(zoom);
+  if (Math.abs(clampedZoom - currentZoom) < 0.0001) return;
+
+  setZoomLevel(activeSheetId, clampedZoom);
 }
 
 /**
@@ -103,6 +128,7 @@ export function useRendererSync(options: UseRendererSyncOptions): void {
     resume,
     switchSheet,
     setZoom,
+    setZoomLevel,
     unmount,
   } = options;
 
@@ -209,6 +235,14 @@ export function useRendererSync(options: UseRendererSyncOptions): void {
 
     syncRendererZoom({ currentZoom, coordinator, setZoom });
   }, [isReady, currentZoom, coordinator, setZoom]);
+
+  useEffect(() => {
+    if (!isReady) return;
+
+    return coordinator.input.onZoomChange((zoom) => {
+      persistInputZoomForSheet({ activeSheetId, zoom, currentZoom, setZoomLevel });
+    });
+  }, [isReady, coordinator, activeSheetId, currentZoom, setZoomLevel]);
 
   // Input dependencies effect
   // Sets up InputCoordinator dependencies when renderer is ready.

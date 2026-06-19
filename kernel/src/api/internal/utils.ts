@@ -104,8 +104,8 @@ export function isAddressInRange(address: CellAddress, range: CellRange): boolea
  * Convert a CellAddress to A1 notation.
  *
  * @param sheetName - When `includeSheet` is true, use this resolved name instead of
- *   the raw `address.sheetId` (which is typically a UUID). Falls back to `address.sheetId`
- *   when omitted.
+ *   the raw `address.sheetId` (which is typically a stable ID, not a display name).
+ *   When omitted, no sheet prefix is emitted.
  */
 export function addressToA1(
   address: CellAddress,
@@ -113,9 +113,8 @@ export function addressToA1(
   sheetName?: string,
 ): string {
   const a1 = _toA1(address.row, address.col);
-  const resolvedName = sheetName ?? address.sheetId;
-  if (includeSheet && resolvedName) {
-    return `${_quoteSheetName(resolvedName)}!${a1}`;
+  if (includeSheet && sheetName) {
+    return `${_quoteSheetName(sheetName)}!${a1}`;
   }
   return a1;
 }
@@ -124,17 +123,16 @@ export function addressToA1(
  * Convert a CellRange to A1 notation.
  *
  * @param sheetName - When `includeSheet` is true, use this resolved name instead of
- *   the raw `range.sheetId` (which is typically a UUID). Falls back to `range.sheetId`
- *   when omitted.
+ *   the raw `range.sheetId` (which is typically a stable ID, not a display name).
+ *   When omitted, no sheet prefix is emitted.
  */
 export function rangeToA1(range: CellRange, includeSheet = false, sheetName?: string): string {
   const start = _toA1(range.startRow, range.startCol);
   const end = _toA1(range.endRow, range.endCol);
   const rangeRef = `${start}:${end}`;
 
-  const resolvedName = sheetName ?? range.sheetId;
-  if (includeSheet && resolvedName) {
-    return `${_quoteSheetName(resolvedName)}!${rangeRef}`;
+  if (includeSheet && sheetName) {
+    return `${_quoteSheetName(sheetName)}!${rangeRef}`;
   }
   return rangeRef;
 }

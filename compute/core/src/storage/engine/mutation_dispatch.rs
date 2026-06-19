@@ -318,12 +318,16 @@ impl YrsComputeEngine {
                 MutationOutput::Recalc(MutationResult::from_recalc(recalc).with_data(&plan.result)?)
             }
 
-            EngineMutation::CreateSheet { name } => {
+            EngineMutation::CreateSheet {
+                name,
+                default_col_width_px,
+            } => {
                 let (hex, result) = services::mutation_handlers::mutation_create_sheet(
                     &mut self.stores,
                     &mut self.mirror,
                     &mut self.mutation,
                     &name,
+                    default_col_width_px,
                 )?;
                 // R2.3 — new sheet added; any cached matrix that keyed
                 // on a prior layout stays in the cache but is now
@@ -349,7 +353,10 @@ impl YrsComputeEngine {
                 MutationOutput::SheetId(hex, result)
             }
 
-            EngineMutation::CreateDefaultSheet { name } => {
+            EngineMutation::CreateDefaultSheet {
+                name,
+                default_col_width_px,
+            } => {
                 // Same store-sync invariants as CreateSheet, but the underlying
                 // Yrs transaction is tagged ORIGIN_BOOTSTRAP so it stays out of
                 // the undo stack (a fresh workbook must report canUndo == false).
@@ -358,6 +365,7 @@ impl YrsComputeEngine {
                     &mut self.mirror,
                     &mut self.mutation,
                     &name,
+                    default_col_width_px,
                 )?;
                 self.security.bump_structure_version();
                 self.stores.compute.mark_dirty();
@@ -448,6 +456,7 @@ impl YrsComputeEngine {
                     &mut self.stores,
                     &mut self.mirror,
                     &mut self.mutation,
+                    &self.settings,
                     &sheet_id,
                     start_row,
                     start_col,
@@ -865,6 +874,7 @@ impl YrsComputeEngine {
             &mut self.mirror,
             &mut self.mutation,
             name,
+            None,
         )
     }
 

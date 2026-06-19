@@ -95,7 +95,7 @@ export function ColorFiltersMenu({
    * Handle color selection.
    * Uses Draft + Apply pattern: store config, then dispatch.
    */
-  const handleColorSelect = (color: string, type: 'fill' | 'font') => {
+  const handleColorSelect = async (color: string, type: 'fill' | 'font') => {
     // Store pending config in UIStore (Draft step)
     setPendingColorFilter({
       filterId,
@@ -106,8 +106,14 @@ export function ColorFiltersMenu({
     });
 
     // Dispatch to apply filter (Apply step)
-    dispatch('APPLY_COLOR_FILTER', deps);
-    onClose();
+    try {
+      const result = await dispatch('APPLY_COLOR_FILTER', deps);
+      if (result.handled) {
+        onClose();
+      }
+    } catch (error) {
+      console.error('[ColorFiltersMenu] Failed to apply color filter:', error);
+    }
   };
 
   const hasColors = backgroundColors.length > 0 || fontColors.length > 0;
@@ -128,7 +134,7 @@ export function ColorFiltersMenu({
             Filter by Cell Color
           </div>
           {backgroundColors.map((color) => (
-            <MenuItem key={`bg-${color}`} onSelect={() => handleColorSelect(color, 'fill')}>
+            <MenuItem key={`bg-${color}`} onSelect={() => void handleColorSelect(color, 'fill')}>
               <div
                 className="w-4 h-4 border border-ss-border rounded mr-2"
                 style={{ backgroundColor: color }}
@@ -148,7 +154,7 @@ export function ColorFiltersMenu({
             Filter by Font Color
           </div>
           {fontColors.map((color) => (
-            <MenuItem key={`font-${color}`} onSelect={() => handleColorSelect(color, 'font')}>
+            <MenuItem key={`font-${color}`} onSelect={() => void handleColorSelect(color, 'font')}>
               <div
                 className="w-4 h-4 border border-ss-border rounded flex items-center justify-center mr-2"
                 data-color={color}

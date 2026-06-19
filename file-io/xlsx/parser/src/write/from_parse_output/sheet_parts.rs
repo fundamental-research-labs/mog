@@ -533,9 +533,301 @@ fn serialize_current_chart_ex_space(
     chart_ex_space: &ooxml_types::chart_ex::ChartExSpace,
 ) -> Vec<u8> {
     let mut current = chart_ex_space.clone();
+    apply_chart_ex_modeled_state(chart_spec, &mut current);
     apply_chart_ex_title_state(chart_spec, &mut current);
     apply_chart_ex_legend_state(chart_spec, &mut current);
     serialize_chart_ex_space(&current)
+}
+
+fn apply_chart_ex_modeled_state(
+    chart_spec: &domain_types::ChartSpec,
+    chart_ex_space: &mut ooxml_types::chart_ex::ChartExSpace,
+) {
+    let Some(layout_id) = chart_ex_layout_id_for_chart_type(&chart_spec.chart_type) else {
+        return;
+    };
+
+    let series_count = chart_spec.series.len().max(1);
+    ensure_chart_ex_series(chart_ex_space, series_count, layout_id);
+    apply_chart_ex_layout_state(chart_spec, chart_ex_space);
+    apply_chart_ex_data_state(chart_spec, chart_ex_space);
+}
+
+fn chart_ex_layout_id_for_chart_type(
+    chart_type: &domain_types::ChartType,
+) -> Option<ooxml_types::chart_ex::ChartExLayoutId> {
+    use domain_types::ChartType;
+    use ooxml_types::chart_ex::ChartExLayoutId;
+
+    match chart_type {
+        ChartType::Waterfall => Some(ChartExLayoutId::Waterfall),
+        ChartType::Treemap => Some(ChartExLayoutId::Treemap),
+        ChartType::Sunburst => Some(ChartExLayoutId::Sunburst),
+        ChartType::Funnel => Some(ChartExLayoutId::Funnel),
+        ChartType::RegionMap => Some(ChartExLayoutId::RegionMap),
+        ChartType::Histogram => Some(ChartExLayoutId::Histogram),
+        ChartType::Pareto => Some(ChartExLayoutId::Pareto),
+        ChartType::Boxplot => Some(ChartExLayoutId::BoxWhisker),
+        _ => None,
+    }
+}
+
+fn ensure_chart_ex_series(
+    chart_ex_space: &mut ooxml_types::chart_ex::ChartExSpace,
+    series_count: usize,
+    layout_id: ooxml_types::chart_ex::ChartExLayoutId,
+) {
+    let series = &mut chart_ex_space.chart.plot_area.plot_area_region.series;
+    if series.is_empty() {
+        series.push(ooxml_types::chart_ex::ChartExSeries {
+            layout_id: layout_id.clone(),
+            data_id: Some(0),
+            ..Default::default()
+        });
+    }
+    while series.len() < series_count {
+        let data_id = u32::try_from(series.len()).unwrap_or(u32::MAX);
+        series.push(ooxml_types::chart_ex::ChartExSeries {
+            layout_id: layout_id.clone(),
+            data_id: Some(data_id),
+            ..Default::default()
+        });
+    }
+    for (idx, series) in series.iter_mut().enumerate().take(series_count) {
+        series.layout_id = layout_id.clone();
+        if series.data_id.is_none() {
+            series.data_id = Some(u32::try_from(idx).unwrap_or(u32::MAX));
+        }
+    }
+}
+
+fn apply_chart_ex_layout_state(
+    chart_spec: &domain_types::ChartSpec,
+    chart_ex_space: &mut ooxml_types::chart_ex::ChartExSpace,
+) {
+    let series = &mut chart_ex_space.chart.plot_area.plot_area_region.series;
+    for (idx, chart_ex_series) in series.iter_mut().enumerate() {
+        let runtime_series = chart_spec.series.get(idx);
+        let mut layout = chart_ex_series.layout_pr.take().unwrap_or_default();
+        apply_chart_ex_waterfall_layout(chart_spec, runtime_series, &mut layout);
+        apply_chart_ex_histogram_layout(chart_spec, runtime_series, &mut layout);
+        apply_chart_ex_boxplot_layout(chart_spec, runtime_series, &mut layout);
+        apply_chart_ex_hierarchy_layout(chart_spec, &mut layout);
+        chart_ex_series.layout_pr = chart_ex_layout_has_state(&layout).then_some(layout);
+    }
+}
+
+fn apply_chart_ex_waterfall_layout(
+    chart_spec: &domain_types::ChartSpec,
+    runtime_series: Option<&domain_types::chart::ChartSeriesData>,
+    layout: &mut ooxml_types::chart_ex::ChartExLayoutProperties,
+) {
+    let chart_connector_lines = chart_spec
+        .waterfall
+        .as_ref()
+        .and_then(|waterfall| waterfall.show_connector_lines);
+    let series_connector_lines = runtime_series.and_then(|series| series.show_connector_lines);
+    let connector_lines = series_connector_lines.or(chart_connector_lines);
+    let subtotal_indices = chart_spec
+        .waterfall
+        .as_ref()
+        .map(|waterfall| waterfall.subtotal_indices.clone())
+        .unwrap_or_default();
+
+    if connector_lines.is_some() {
+        let visibility = layout.visibility.get_or_insert_with(Default::default);
+        visibility.connector_lines = connector_lines;
+    }
+    if !subtotal_indices.is_empty() {
+        layout.subtotals = Some(ooxml_types::chart_ex::ChartExSubtotals {
+            idx: subtotal_indices,
+        });
+    }
+}
+
+fn apply_chart_ex_histogram_layout(
+    chart_spec: &domain_types::ChartSpec,
+    runtime_series: Option<&domain_types::chart::ChartSeriesData>,
+    layout: &mut ooxml_types::chart_ex::ChartExLayoutProperties,
+) {
+    let histogram = runtime_series
+        .and_then(|series| series.bin_options.as_ref())
+        .or(chart_spec.histogram.as_ref());
+    if let Some(histogram) = histogram {
+        layout.binning = Some(ooxml_types::chart_ex::ChartExBinning {
+            interval_closed: layout
+                .binning
+                .as_ref()
+                .and_then(|binning| binning.interval_closed.clone()),
+            underflow: chart_ex_bound_value(histogram.underflow_bin, histogram.underflow_bin_value),
+            overflow: chart_ex_bound_value(histogram.overflow_bin, histogram.overflow_bin_value),
+            bin_size: histogram.bin_width,
+            bin_count: histogram.bin_count,
+        });
+    }
+}
+
+fn chart_ex_bound_value(
+    enabled: Option<bool>,
+    value: Option<f64>,
+) -> Option<ooxml_types::chart_ex::ChartExBoundValue> {
+    match (enabled, value) {
+        (Some(true), Some(value)) => Some(ooxml_types::chart_ex::ChartExBoundValue::Value(value)),
+        (Some(true), None) | (Some(false), _) => {
+            Some(ooxml_types::chart_ex::ChartExBoundValue::Auto)
+        }
+        (None, Some(value)) => Some(ooxml_types::chart_ex::ChartExBoundValue::Value(value)),
+        (None, None) => None,
+    }
+}
+
+fn apply_chart_ex_boxplot_layout(
+    chart_spec: &domain_types::ChartSpec,
+    runtime_series: Option<&domain_types::chart::ChartSeriesData>,
+    layout: &mut ooxml_types::chart_ex::ChartExLayoutProperties,
+) {
+    let boxplot = runtime_series
+        .and_then(|series| series.boxwhisker_options.as_ref())
+        .or(chart_spec.boxplot.as_ref());
+    if let Some(boxplot) = boxplot {
+        if boxplot.show_outlier_points.is_some()
+            || boxplot.show_outliers.is_some()
+            || boxplot.show_mean_markers.is_some()
+            || boxplot.show_mean.is_some()
+            || boxplot.show_mean_line.is_some()
+        {
+            let visibility = layout.visibility.get_or_insert_with(Default::default);
+            visibility.outlier_points = boxplot.show_outlier_points.or(boxplot.show_outliers);
+            visibility.mean_marker = boxplot.show_mean_markers.or(boxplot.show_mean);
+            visibility.mean_line = boxplot.show_mean_line;
+        }
+        if boxplot.quartile_method.is_some() {
+            layout.statistics = Some(ooxml_types::chart_ex::ChartExStatistics {
+                quartile_method: boxplot.quartile_method.clone(),
+            });
+        }
+    }
+}
+
+fn apply_chart_ex_hierarchy_layout(
+    chart_spec: &domain_types::ChartSpec,
+    layout: &mut ooxml_types::chart_ex::ChartExLayoutProperties,
+) {
+    if let Some(parent_label_layout) = chart_spec
+        .hierarchy
+        .as_ref()
+        .and_then(|hierarchy| hierarchy.parent_label_layout.clone())
+    {
+        layout.parent_label_layout = Some(parent_label_layout);
+    }
+}
+
+fn chart_ex_layout_has_state(layout: &ooxml_types::chart_ex::ChartExLayoutProperties) -> bool {
+    layout.visibility.is_some()
+        || layout.subtotals.is_some()
+        || layout.parent_label_layout.is_some()
+        || layout.binning.is_some()
+        || layout.statistics.is_some()
+}
+
+fn apply_chart_ex_data_state(
+    chart_spec: &domain_types::ChartSpec,
+    chart_ex_space: &mut ooxml_types::chart_ex::ChartExSpace,
+) {
+    let mut data_entries = Vec::new();
+    if let Some(region_map) = chart_spec.region_map.as_ref() {
+        let mut dimensions = Vec::new();
+        push_chart_ex_string_dimension(
+            &mut dimensions,
+            "cat",
+            region_map.region_formula.as_deref(),
+        );
+        push_chart_ex_numeric_dimension(
+            &mut dimensions,
+            "val",
+            region_map.value_formula.as_deref(),
+        );
+        if !dimensions.is_empty() {
+            data_entries.push(ooxml_types::chart_ex::ChartExData { id: 0, dimensions });
+        }
+    } else if let Some(hierarchy) = chart_spec.hierarchy.as_ref() {
+        let mut dimensions = Vec::new();
+        for formula in &hierarchy.category_formulas {
+            push_chart_ex_string_dimension(&mut dimensions, "cat", Some(formula.as_str()));
+        }
+        push_chart_ex_numeric_dimension(
+            &mut dimensions,
+            "size",
+            hierarchy.value_formula.as_deref(),
+        );
+        if !dimensions.is_empty() {
+            data_entries.push(ooxml_types::chart_ex::ChartExData { id: 0, dimensions });
+        }
+    } else {
+        for (idx, series) in chart_spec.series.iter().enumerate() {
+            let mut dimensions = Vec::new();
+            push_chart_ex_string_dimension(&mut dimensions, "cat", series.categories.as_deref());
+            push_chart_ex_numeric_dimension(&mut dimensions, "val", series.values.as_deref());
+            if !dimensions.is_empty() {
+                data_entries.push(ooxml_types::chart_ex::ChartExData {
+                    id: u32::try_from(idx).unwrap_or(u32::MAX),
+                    dimensions,
+                });
+            }
+        }
+    }
+
+    if data_entries.is_empty() {
+        return;
+    }
+
+    chart_ex_space.chart_data.data = data_entries;
+    for (idx, series) in chart_ex_space
+        .chart
+        .plot_area
+        .plot_area_region
+        .series
+        .iter_mut()
+        .enumerate()
+    {
+        if series.data_id.is_none() {
+            series.data_id = Some(u32::try_from(idx).unwrap_or(u32::MAX));
+        }
+    }
+}
+
+fn push_chart_ex_string_dimension(
+    dimensions: &mut Vec<ooxml_types::chart_ex::ChartExDimension>,
+    dim_type: &str,
+    formula: Option<&str>,
+) {
+    if let Some(formula) = chart_ex_formula(formula) {
+        dimensions.push(ooxml_types::chart_ex::ChartExDimension::String {
+            dim_type: dim_type.to_string(),
+            formula,
+        });
+    }
+}
+
+fn push_chart_ex_numeric_dimension(
+    dimensions: &mut Vec<ooxml_types::chart_ex::ChartExDimension>,
+    dim_type: &str,
+    formula: Option<&str>,
+) {
+    if let Some(formula) = chart_ex_formula(formula) {
+        dimensions.push(ooxml_types::chart_ex::ChartExDimension::Numeric {
+            dim_type: dim_type.to_string(),
+            formula,
+        });
+    }
+}
+
+fn chart_ex_formula(formula: Option<&str>) -> Option<ooxml_types::chart_ex::ChartExFormula> {
+    let content = formula?.trim();
+    (!content.is_empty()).then(|| ooxml_types::chart_ex::ChartExFormula {
+        dir: None,
+        content: content.to_string(),
+    })
 }
 
 fn apply_chart_ex_title_state(

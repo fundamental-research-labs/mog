@@ -182,19 +182,19 @@ pub(crate) fn extract_chart_line(
             use ooxml_types::drawings::DashStyle;
             match ds {
                 DashStyle::Solid => Some(domain_types::chart::ChartDashStyle::Solid),
-                DashStyle::Dot | DashStyle::SystemDot => {
-                    Some(domain_types::chart::ChartDashStyle::Dot)
-                }
-                DashStyle::Dash | DashStyle::SystemDash => {
-                    Some(domain_types::chart::ChartDashStyle::Dash)
-                }
-                DashStyle::DashDot | DashStyle::SystemDashDot => {
-                    Some(domain_types::chart::ChartDashStyle::DashDot)
-                }
+                DashStyle::Dot => Some(domain_types::chart::ChartDashStyle::Dot),
+                DashStyle::SystemDot => Some(domain_types::chart::ChartDashStyle::SysDot),
+                DashStyle::Dash => Some(domain_types::chart::ChartDashStyle::Dash),
+                DashStyle::SystemDash => Some(domain_types::chart::ChartDashStyle::SysDash),
+                DashStyle::DashDot => Some(domain_types::chart::ChartDashStyle::DashDot),
+                DashStyle::SystemDashDot => Some(domain_types::chart::ChartDashStyle::SysDashDot),
                 DashStyle::LongDash => Some(domain_types::chart::ChartDashStyle::LongDash),
                 DashStyle::LongDashDot => Some(domain_types::chart::ChartDashStyle::LongDashDot),
-                DashStyle::LongDashDotDot | DashStyle::SystemDashDotDot => {
+                DashStyle::LongDashDotDot => {
                     Some(domain_types::chart::ChartDashStyle::LongDashDotDot)
+                }
+                DashStyle::SystemDashDotDot => {
+                    Some(domain_types::chart::ChartDashStyle::SysDashDotDot)
                 }
             }
         }
@@ -535,8 +535,10 @@ fn extract_alpha_transparency(color: &ooxml_types::drawings::DrawingColor) -> Op
 #[cfg(test)]
 mod tests {
     use super::*;
-    use domain_types::chart::ChartColorData;
-    use ooxml_types::drawings::{ColorTransform, DrawingColor, SchemeColor};
+    use domain_types::chart::{ChartColorData, ChartDashStyle};
+    use ooxml_types::drawings::{
+        ColorTransform, DashStyle, DrawingColor, LineDash, Outline, SchemeColor,
+    };
 
     fn tint_shade_for(transforms: Vec<ColorTransform>) -> Option<f64> {
         match extract_chart_color(&DrawingColor::SchemeClr {
@@ -554,6 +556,25 @@ mod tests {
             (actual - expected).abs() < 0.00001,
             "expected {expected}, got {actual}"
         );
+    }
+
+    #[test]
+    fn preserves_system_line_dash_styles() {
+        let cases = [
+            (DashStyle::SystemDash, ChartDashStyle::SysDash),
+            (DashStyle::SystemDot, ChartDashStyle::SysDot),
+            (DashStyle::SystemDashDot, ChartDashStyle::SysDashDot),
+            (DashStyle::SystemDashDotDot, ChartDashStyle::SysDashDotDot),
+        ];
+
+        for (source, expected) in cases {
+            let outline = Outline {
+                dash: Some(LineDash::Preset(source)),
+                ..Default::default()
+            };
+
+            assert_eq!(extract_chart_line(&outline).dash_style, Some(expected));
+        }
     }
 
     #[test]

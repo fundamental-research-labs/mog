@@ -21,8 +21,12 @@ fn make_parse_output(sheets: Vec<SheetData>) -> ParseOutput {
     }
 }
 
+mod chart_color_style;
 mod chart_ex_frame_defaults;
+mod chart_ex_modeled_state;
+mod chart_ex_replay;
 mod chart_export_defaults;
+mod chart_user_shapes;
 mod charts;
 mod context_removal_gates;
 mod data_tables;
@@ -758,6 +762,9 @@ fn make_chart(chart_type: ChartType, data_range: &str) -> ChartSpec {
         axes: None,
         data_labels: None,
         data_range: Some(data_range.to_string()),
+        series_range: None,
+        category_range: None,
+        colors: None,
         style: None,
         rounded_corners: None,
         auto_title_deleted: None,
@@ -791,6 +798,8 @@ fn make_chart(chart_type: ChartType, data_range: &str) -> ChartSpec {
         size_represents: None,
         split_type: None,
         split_value: None,
+        show_lines: None,
+        smooth_lines: None,
         bar_shape: None,
         bubble_3d_effect: None,
         wireframe: None,

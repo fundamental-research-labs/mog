@@ -261,15 +261,20 @@ function dashStyleToStrokeDash(
   const unit = Math.max(1, width ?? 1);
   switch (dashStyle) {
     case 'dot':
+    case 'sysDot':
       return [unit, unit * 2];
     case 'dash':
+    case 'sysDash':
       return [unit * 4, unit * 2];
     case 'dashDot':
+    case 'sysDashDot':
       return [unit * 4, unit * 2, unit, unit * 2];
     case 'longDash':
       return [unit * 8, unit * 2];
     case 'longDashDot':
       return [unit * 8, unit * 2, unit, unit * 2];
+    case 'sysDashDotDot':
+      return [unit * 4, unit * 2, unit, unit * 2, unit, unit * 2];
     case 'longDashDotDot':
       return [unit * 8, unit * 2, unit, unit * 2, unit, unit * 2];
     default:

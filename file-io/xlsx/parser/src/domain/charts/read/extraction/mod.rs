@@ -10,7 +10,11 @@ mod legacy;
 mod legend;
 mod markers;
 mod series;
+mod series_sources;
+#[cfg(test)]
+mod tests;
 mod text;
+mod trendlines;
 
 pub use chart_space::extract_chart_spec_from_chart_space;
 

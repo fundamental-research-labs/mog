@@ -259,11 +259,11 @@ describe('WorksheetPivotsImpl contracts', () => {
         lifecycle: 'materialize',
         materialized: true,
         renderedRange: {
-          sheetId: SHEET_ID,
           startRow: 2,
           startCol: 3,
           endRow: 3,
           endCol: 4,
+          address: 'D3:E4',
         },
         result: makePivotResult(),
         diagnostics: [],
@@ -307,6 +307,19 @@ describe('WorksheetPivotsImpl contracts', () => {
     );
   });
 
+  it('addWithSheet forwards worksheet insertion options to the pivot bridge', async () => {
+    await pivots.addWithSheet('Pivot Output', makePivotConfig(), {
+      insertBeforeSheetId: sheetId('source-sheet'),
+      insertIndex: 0,
+    });
+
+    expect(ctx.pivot.createPivotWithSheet).toHaveBeenCalledWith(
+      'Pivot Output',
+      expect.objectContaining({ name: 'SalesPivot' }),
+      { insertBeforeSheetId: 'source-sheet', insertIndex: 0 },
+    );
+  });
+
   it('refresh returns a materialization receipt with result details', async () => {
     const receipt = await pivots.refresh('SalesPivot');
 
@@ -319,11 +332,11 @@ describe('WorksheetPivotsImpl contracts', () => {
         config: expect.objectContaining({ id: 'pivot-1', name: 'SalesPivot' }),
         materialized: true,
         renderedRange: {
-          sheetId: SHEET_ID,
           startRow: 2,
           startCol: 3,
           endRow: 3,
           endCol: 4,
+          address: 'D3:E4',
         },
         result: makePivotResult(),
         diagnostics: [],
@@ -551,8 +564,8 @@ describe('WorksheetPivotsImpl contracts', () => {
         materializedCount: 2,
         failedCount: 0,
         renderedRanges: [
-          { sheetId: SHEET_ID, startRow: 2, startCol: 3, endRow: 3, endCol: 4 },
-          { sheetId: SHEET_ID, startRow: 5, startCol: 1, endRow: 6, endCol: 2 },
+          { startRow: 2, startCol: 3, endRow: 3, endCol: 4, address: 'D3:E4' },
+          { startRow: 5, startCol: 1, endRow: 6, endCol: 2, address: 'B6:C7' },
         ],
         diagnostics: [],
       }),
@@ -699,11 +712,11 @@ describe('WorksheetPivotsImpl contracts', () => {
         pivotId: 'pivot-1',
         materialized: true,
         renderedRange: {
-          sheetId: SHEET_ID,
           startRow: 2,
           startCol: 3,
           endRow: 3,
           endCol: 4,
+          address: 'D3:E4',
         },
         result: makePivotResult(),
       }),
@@ -780,7 +793,7 @@ describe('WorksheetPivotsImpl contracts', () => {
     expectHandleConfigReceipt(dataSourceReceipt, 'pivot.handle.setDataSource');
   });
 
-  it('handle placement and calculated-field mutators wrap kernel receipts with base fields', async () => {
+  it('handle placement and calculated-field mutators expose base fields', async () => {
     const handle = await pivots.get('SalesPivot');
 
     const addPlacementReceipt = await handle!.addPlacement({
@@ -792,9 +805,11 @@ describe('WorksheetPivotsImpl contracts', () => {
     expect(addPlacementReceipt).toEqual(
       expect.objectContaining({
         placementId: 'row:Category:1',
-        kernelReceipt: expect.objectContaining({ kernelReceiptId: expect.any(String) }),
+        placement: expect.objectContaining({ fieldId: 'Category', area: 'row', position: 1 }),
       }),
     );
+    expect(addPlacementReceipt).not.toHaveProperty('kernelReceipt');
+    expect(ctx.pivot.addPlacement).not.toHaveBeenCalled();
 
     const moveFieldReceipt = await handle!.moveField('Category', 'row', 'column', 0);
     expectHandleConfigReceipt(moveFieldReceipt, 'pivot.handle.moveField');
@@ -979,7 +994,7 @@ describe('WorksheetPivotsImpl contracts', () => {
           startCol: 3,
           endRow: 3,
           endCol: 4,
-          sheetId: SHEET_ID,
+          address: 'D3:E4',
         },
         availableMethods: expect.arrayContaining(['getInfo', 'setItemVisibility']),
         items: makePivotItems(),
@@ -1001,7 +1016,7 @@ describe('WorksheetPivotsImpl contracts', () => {
           startCol: 3,
           endRow: 3,
           endCol: 4,
-          sheetId: SHEET_ID,
+          address: 'D3:E4',
         },
       }),
     );

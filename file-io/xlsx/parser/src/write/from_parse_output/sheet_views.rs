@@ -54,9 +54,6 @@ pub(super) fn apply_sheet_views(writer: &mut SheetWriter, sheet_data: &SheetData
 
     let mut sheet_view = SheetView::default();
 
-    if view.scroll_row != 0 || view.scroll_col != 0 || view.has_explicit_top_left_cell {
-        sheet_view.top_left_cell = Some(to_a1(view.scroll_row, view.scroll_col));
-    }
     if let Some(zoom) = view.zoom_scale {
         sheet_view.zoom_scale = zoom;
     }
@@ -125,17 +122,18 @@ pub(super) fn apply_sheet_views(writer: &mut SheetWriter, sheet_data: &SheetData
         }
     }
 
-    if sheet_view.pane.is_some() {
-        let preserved_selections =
-            compatible_selections_for_pane(&view.selections, sheet_view.pane.as_ref());
+    apply_sheet_view_top_left_cell(&mut sheet_view, view);
+
+    if let Some(pane) = sheet_view.pane.as_ref() {
+        let preserved_selections = compatible_selections_for_pane(&view.selections, Some(pane));
         if !preserved_selections.is_empty() {
             sheet_view.selections = preserved_selections;
         } else if view.active_cell.is_some() || view.sqref.is_some() {
-            let active_pane = sheet_view.pane.as_ref().unwrap().effective_active_pane();
+            let active_pane = pane.effective_active_pane();
             let sel_active = view
                 .active_cell
                 .clone()
-                .or_else(|| sheet_view.pane.as_ref().unwrap().top_left_cell.clone());
+                .or_else(|| pane.top_left_cell.clone());
             let sel_sqref = view.sqref.clone().or_else(|| sel_active.clone());
             sheet_view.selections = vec![Selection {
                 pane: Some(active_pane),
@@ -237,9 +235,6 @@ fn domain_view_to_ooxml(view: &DomainSheetView) -> SheetView {
     if let Some(ref view_type) = view.view {
         sheet_view.view = ooxml_types::worksheet::SheetViewType::from_ooxml(view_type);
     }
-    if view.scroll_row != 0 || view.scroll_col != 0 || view.has_explicit_top_left_cell {
-        sheet_view.top_left_cell = Some(to_a1(view.scroll_row, view.scroll_col));
-    }
     if let Some(color_id) = view.color_id {
         sheet_view.color_id = color_id;
     }
@@ -253,10 +248,25 @@ fn domain_view_to_ooxml(view: &DomainSheetView) -> SheetView {
     sheet_view.zoom_scale_sheet_layout_view = view.zoom_scale_sheet_layout_view;
     sheet_view.workbook_view_id = view.workbook_view_id;
     sheet_view.pane = view.pane.as_ref().map(domain_pane_to_ooxml);
+    apply_sheet_view_top_left_cell(&mut sheet_view, view);
     sheet_view.selections = view.selections.clone();
     sheet_view.pivot_selection = view.pivot_selection.clone();
     sheet_view.ext_lst_xml = safe_view_ext_lst(view.ext_lst_xml.as_deref()).map(str::to_owned);
     sheet_view
+}
+
+fn apply_sheet_view_top_left_cell(sheet_view: &mut SheetView, view: &DomainSheetView) {
+    let has_scroll = view.scroll_row != 0 || view.scroll_col != 0;
+    if view.has_explicit_top_left_cell
+        || (has_scroll
+            && sheet_view
+                .pane
+                .as_ref()
+                .and_then(|pane| pane.top_left_cell.as_ref())
+                .is_none())
+    {
+        sheet_view.top_left_cell = Some(to_a1(view.scroll_row, view.scroll_col));
+    }
 }
 
 fn safe_view_ext_lst(ext_lst_xml: Option<&str>) -> Option<&str> {

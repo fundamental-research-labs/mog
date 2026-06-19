@@ -489,6 +489,7 @@ impl From<&DocumentFormat> for CellFormat {
             locked: prot.and_then(|p| p.locked),
             hidden: prot.and_then(|p| p.hidden),
             quote_prefix: doc.quote_prefix,
+            pivot_button: doc.pivot_button,
 
             ..Default::default()
         }
@@ -628,7 +629,7 @@ impl From<&CellFormat> for DocumentFormat {
             alignment,
             protection,
             quote_prefix: cf.quote_prefix,
-            pivot_button: None,
+            pivot_button: cf.pivot_button,
         }
     }
 }
@@ -775,6 +776,23 @@ mod tests {
             !obj.contains_key("diagonalDown"),
             "None diagonal_down should be skipped, got {json}"
         );
+    }
+
+    #[test]
+    fn document_cell_format_preserves_xf_flags() {
+        let doc = DocumentFormat {
+            quote_prefix: Some(true),
+            pivot_button: Some(true),
+            ..Default::default()
+        };
+
+        let cell = CellFormat::from(&doc);
+        assert_eq!(cell.quote_prefix, Some(true));
+        assert_eq!(cell.pivot_button, Some(true));
+
+        let roundtripped = DocumentFormat::from(&cell);
+        assert_eq!(roundtripped.quote_prefix, Some(true));
+        assert_eq!(roundtripped.pivot_button, Some(true));
     }
 
     #[test]

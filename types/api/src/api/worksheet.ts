@@ -29,6 +29,7 @@
  */
 import type { CallableDisposable } from '@mog/types-core/disposable';
 import type { CellControl, CellValue, CellValuePrimitive } from '@mog/types-core/core';
+import type { WorksheetRange } from './ranges';
 import type {
   EventByType,
   SpreadsheetEventType as InternalEventType,
@@ -140,7 +141,7 @@ export type {
   FillSeriesApplyReceipt,
   WorksheetFill,
 } from './worksheet/fill';
-export type { PivotCreateOptions } from './worksheet/index';
+export type { PivotCreateOptions, PivotCreateWithSheetOptions } from './worksheet/index';
 
 export type {
   WorksheetCellVisitor,
@@ -814,10 +815,10 @@ export interface Worksheet extends WorksheetFill {
   // ===========================================================================
 
   /** Get the used range, or null if the sheet is empty. */
-  getUsedRange(): Promise<CellRange | null>;
+  getUsedRange(): Promise<WorksheetRange | null>;
 
   /** Get the contiguous data region around a cell (Excel's Ctrl+Shift+* / CurrentRegion). */
-  getCurrentRegion(row: number, col: number): Promise<CellRange>;
+  getCurrentRegion(row: number, col: number): Promise<WorksheetRange>;
 
   /** Find the data edge in a direction (Excel's Ctrl+Arrow). Single bridge call to Rust. */
   findDataEdge(
@@ -898,13 +899,13 @@ export interface Worksheet extends WorksheetFill {
    * @param range - A1 range string (current selection)
    * @param direction - Direction to extend
    * @param activeCell - Optional active cell override (default: top-left of range)
-   * @returns Extended range as CellRange
+   * @returns Extended range as a worksheet-scoped public range
    */
   getExtendedRange(
     range: string,
     direction: 'up' | 'down' | 'left' | 'right',
     activeCell?: { row: number; col: number },
-  ): Promise<CellRange>;
+  ): Promise<WorksheetRange>;
 
   /**
    * Check if a range represents entire column(s) (e.g., "A:C").

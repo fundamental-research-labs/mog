@@ -5,7 +5,7 @@
  * All functions take DocumentContext and sheetId as the first two parameters.
  */
 
-import type { CellRange, SubtotalConfig, SubtotalResult } from '@mog-sdk/contracts/api';
+import type { SubtotalConfig, SubtotalResult } from '@mog-sdk/contracts/api';
 import type { SheetId } from '@mog-sdk/contracts/core';
 import type {
   GroupDefinition,
@@ -16,6 +16,7 @@ import type {
 import { KernelError } from '../../../errors';
 import type { DocumentContext, OperationResult } from './shared';
 import { invalidCellAddress, operationFailed } from './shared';
+import { toWorksheetRange } from '../public-ranges';
 
 // =============================================================================
 // Row/Column Grouping Read Operations
@@ -419,15 +420,6 @@ function isBridgeSubtotalResult(value: unknown): value is {
   );
 }
 
-function toCellRange(range: SheetRange): CellRange {
-  return {
-    startRow: range.startRow,
-    startCol: range.startCol,
-    endRow: range.endRow,
-    endCol: range.endCol,
-  };
-}
-
 export async function subtotal(
   ctx: DocumentContext,
   sheetId: SheetId,
@@ -461,7 +453,7 @@ export async function subtotal(
       data: {
         groupsCreated: mutationResult.data.groupsCreated,
         subtotalRowsInserted: mutationResult.data.subtotalRowsInserted,
-        affectedRange: toCellRange(mutationResult.data.affectedRange),
+        affectedRange: toWorksheetRange(mutationResult.data.affectedRange),
       },
     };
   } catch (e) {

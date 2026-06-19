@@ -23,6 +23,13 @@ pub(super) struct ChartUserShapesDataRef<'a> {
     pub(super) relationship_id_hint: &'a str,
 }
 
+pub(super) struct GeneratedChartColorStyle {
+    pub(super) path: String,
+    pub(super) data: Vec<u8>,
+    pub(super) relationship_type: &'static str,
+    pub(super) relationship_id_hint: &'static str,
+}
+
 pub(super) fn chart_auxiliary_data(chart_spec: &ChartSpec) -> Option<ChartAuxiliaryDataRef<'_>> {
     if chart_spec.chart_auxiliary_files.is_empty() || chart_spec.chart_relationships.is_empty() {
         return None;
@@ -58,6 +65,23 @@ pub(super) fn chart_user_shapes_data<'a>(
         data: data.as_slice(),
         relationship_type,
         relationship_id_hint: r_id,
+    })
+}
+
+pub(super) fn generated_chart_color_style_data(
+    chart_spec: &ChartSpec,
+    chart_path: &str,
+) -> Option<GeneratedChartColorStyle> {
+    let data = crate::domain::charts::color_style::build_chart_color_style_xml(
+        chart_spec.colors.as_deref(),
+        chart_spec.color_scheme,
+    )?;
+    let number = chart_number(chart_path)?;
+    Some(GeneratedChartColorStyle {
+        path: format!("xl/charts/colors{number}.xml"),
+        data,
+        relationship_type: REL_CHART_COLOR_STYLE,
+        relationship_id_hint: "rIdChartColorStyle",
     })
 }
 
@@ -159,6 +183,10 @@ fn original_chart_number(path: &str, prefix: &str) -> Option<usize> {
     let fname = path.rsplit('/').next()?;
     let num_str = fname.strip_prefix(prefix)?.strip_suffix(".xml")?;
     num_str.parse::<usize>().ok()
+}
+
+fn chart_number(path: &str) -> Option<usize> {
+    original_chart_number(path, "chart").or_else(|| original_chart_number(path, "chartEx"))
 }
 
 fn normalize_path(path: &str) -> String {

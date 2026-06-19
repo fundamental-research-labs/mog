@@ -79,6 +79,8 @@ pub struct SparklineCellAddress {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SparklineDataRange {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_sheet_name: Option<String>,
     pub start_row: u32,
     pub start_col: u32,
     pub end_row: u32,
@@ -94,15 +96,25 @@ pub struct SparklineVisualSettings {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub negative_color: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub show_negative_points: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub show_markers: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub marker_color: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub show_high_point: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub high_point_color: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub show_low_point: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub low_point_color: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub show_first_point: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub first_point_color: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub show_last_point: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_point_color: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -247,6 +259,7 @@ mod tests {
                 col: 1,
             },
             data_range: SparklineDataRange {
+                source_sheet_name: Some("Data".to_string()),
                 start_row: 0,
                 start_col: 0,
                 end_row: 9,
@@ -258,11 +271,16 @@ mod tests {
             visual: SparklineVisualSettings {
                 color: "#376092".to_string(),
                 negative_color: Some("#D00000".to_string()),
+                show_negative_points: Some(true),
                 show_markers: Some(true),
                 marker_color: None,
+                show_high_point: Some(true),
                 high_point_color: Some("#00B050".to_string()),
+                show_low_point: Some(true),
                 low_point_color: Some("#FF0000".to_string()),
+                show_first_point: None,
                 first_point_color: None,
+                show_last_point: None,
                 last_point_color: None,
                 line_weight: Some(0.75),
                 column_gap: None,
@@ -390,6 +408,7 @@ mod tests {
                 col: 0,
             },
             data_range: SparklineDataRange {
+                source_sheet_name: None,
                 start_row: 0,
                 start_col: 0,
                 end_row: 0,

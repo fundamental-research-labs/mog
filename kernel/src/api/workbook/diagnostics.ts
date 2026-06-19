@@ -108,10 +108,14 @@ export class WorkbookDiagnosticsImpl implements WorkbookDiagnostics {
         if (!cell.formula) continue;
         const value = normalizeCellValue(cell.value);
         if (classifyRangeValueType(value) !== RangeValueType.Error) continue;
+        const address = toA1(cell.row, cell.col);
         findings.push(
           this.cellFinding(check, 'error', 'FORMULA_ERROR_VALUE', range, cell, {
-            message: `Formula at ${range.sheetName}!${toA1(cell.row, cell.col)} evaluates to ${String(value)}.`,
-            suggestedNextApiCall: `await wb.getSheet(${JSON.stringify(range.sheetName)}).then(ws => ws.getCell(${JSON.stringify(toA1(cell.row, cell.col))}))`,
+            message: `Formula at ${displayAddress(range, address)} evaluates to ${String(value)}.`,
+            suggestedNextApiCall: worksheetApiCall(
+              range.sheetName,
+              `getCell(${JSON.stringify(address)})`,
+            ),
           }),
         );
         if (findings.length >= limit) {
@@ -258,7 +262,7 @@ export class WorkbookDiagnosticsImpl implements WorkbookDiagnostics {
             check,
             severity: 'error',
             code: 'REQUIRED_REGION_BLANK',
-            message: `Required region ${range.displayRange} has a blank cell at ${range.sheetName}!${address}.`,
+            message: `Required region ${range.displayRange} has a blank cell at ${displayAddress(range, address)}.`,
             sheetId: range.sheetId,
             sheetName: range.sheetName,
             address,
@@ -267,7 +271,10 @@ export class WorkbookDiagnosticsImpl implements WorkbookDiagnostics {
             col,
             currentValue: value,
             formula,
-            suggestedNextApiCall: `await wb.getSheet(${JSON.stringify(range.sheetName)}).then(ws => ws.setCell(${JSON.stringify(address)}, value))`,
+            suggestedNextApiCall: worksheetApiCall(
+              range.sheetName,
+              `setCell(${JSON.stringify(address)}, value)`,
+            ),
             details: range.label ? { label: range.label } : undefined,
           });
           if (findings.length >= limit) {
@@ -330,9 +337,12 @@ export class WorkbookDiagnosticsImpl implements WorkbookDiagnostics {
           if (formula) {
             if (expectedFormula && formula !== expectedFormula) {
               finding = this.cellFinding(check, 'warning', 'FORMULA_SHAPE_MISMATCH', range, cell!, {
-                message: `Formula at ${range.sheetName}!${address} does not match the expected formula shape.`,
+                message: `Formula at ${displayAddress(range, address)} does not match the expected formula shape.`,
                 expectedFormula,
-                suggestedNextApiCall: `await wb.getSheet(${JSON.stringify(range.sheetName)}).then(ws => ws.setFormula(${JSON.stringify(address)}, ${JSON.stringify(expectedFormula)}))`,
+                suggestedNextApiCall: worksheetApiCall(
+                  range.sheetName,
+                  `setFormula(${JSON.stringify(address)}, ${JSON.stringify(expectedFormula)})`,
+                ),
               });
             }
           } else if (isBlankValue(value, true)) {
@@ -342,7 +352,7 @@ export class WorkbookDiagnosticsImpl implements WorkbookDiagnostics {
                 check,
                 severity: 'error',
                 code: 'FORMULA_RANGE_BLANK',
-                message: `Formula-intended range ${range.displayRange} has a blank cell at ${range.sheetName}!${address}.`,
+                message: `Formula-intended range ${range.displayRange} has a blank cell at ${displayAddress(range, address)}.`,
                 sheetId: range.sheetId,
                 sheetName: range.sheetName,
                 address,
@@ -353,8 +363,14 @@ export class WorkbookDiagnosticsImpl implements WorkbookDiagnostics {
                 formula,
                 expectedFormula,
                 suggestedNextApiCall: expectedFormula
-                  ? `await wb.getSheet(${JSON.stringify(range.sheetName)}).then(ws => ws.setFormula(${JSON.stringify(address)}, ${JSON.stringify(expectedFormula)}))`
-                  : `await wb.getSheet(${JSON.stringify(range.sheetName)}).then(ws => ws.setFormula(${JSON.stringify(address)}, '=...'))`,
+                  ? worksheetApiCall(
+                      range.sheetName,
+                      `setFormula(${JSON.stringify(address)}, ${JSON.stringify(expectedFormula)})`,
+                    )
+                  : worksheetApiCall(
+                      range.sheetName,
+                      `setFormula(${JSON.stringify(address)}, '=...')`,
+                    ),
                 details: range.label ? { label: range.label } : undefined,
               };
             }
@@ -364,7 +380,7 @@ export class WorkbookDiagnosticsImpl implements WorkbookDiagnostics {
               check,
               severity: 'error',
               code: 'FORMULA_LIKE_TEXT_VALUE',
-              message: `Cell ${range.sheetName}!${address} contains formula-like text stored as a value.`,
+              message: `Cell ${displayAddress(range, address)} contains formula-like text stored as a value.`,
               sheetId: range.sheetId,
               sheetName: range.sheetName,
               address,
@@ -374,7 +390,10 @@ export class WorkbookDiagnosticsImpl implements WorkbookDiagnostics {
               currentValue: value,
               formula,
               expectedFormula,
-              suggestedNextApiCall: `await wb.getSheet(${JSON.stringify(range.sheetName)}).then(ws => ws.setFormula(${JSON.stringify(address)}, ${JSON.stringify(value)}))`,
+              suggestedNextApiCall: worksheetApiCall(
+                range.sheetName,
+                `setFormula(${JSON.stringify(address)}, ${JSON.stringify(value)})`,
+              ),
               details: range.label ? { label: range.label } : undefined,
             };
           } else if (!allowConstants) {
@@ -383,7 +402,7 @@ export class WorkbookDiagnosticsImpl implements WorkbookDiagnostics {
               check,
               severity: 'error',
               code: 'HARDCODE_IN_FORMULA_RANGE',
-              message: `Formula-intended range ${range.displayRange} has a hardcoded value at ${range.sheetName}!${address}.`,
+              message: `Formula-intended range ${range.displayRange} has a hardcoded value at ${displayAddress(range, address)}.`,
               sheetId: range.sheetId,
               sheetName: range.sheetName,
               address,
@@ -394,8 +413,14 @@ export class WorkbookDiagnosticsImpl implements WorkbookDiagnostics {
               formula,
               expectedFormula,
               suggestedNextApiCall: expectedFormula
-                ? `await wb.getSheet(${JSON.stringify(range.sheetName)}).then(ws => ws.setFormula(${JSON.stringify(address)}, ${JSON.stringify(expectedFormula)}))`
-                : `await wb.getSheet(${JSON.stringify(range.sheetName)}).then(ws => ws.setFormula(${JSON.stringify(address)}, '=...'))`,
+                ? worksheetApiCall(
+                    range.sheetName,
+                    `setFormula(${JSON.stringify(address)}, ${JSON.stringify(expectedFormula)})`,
+                  )
+                : worksheetApiCall(
+                    range.sheetName,
+                    `setFormula(${JSON.stringify(address)}, '=...')`,
+                  ),
               details: range.label ? { label: range.label } : undefined,
             };
           }
@@ -686,13 +711,13 @@ export class WorkbookDiagnosticsImpl implements WorkbookDiagnostics {
   private async resolveSheet(sheetId?: SheetId, sheetName?: string): Promise<ResolvedSheet | null> {
     if (sheetId) {
       const name = await this.ctx.computeBridge.getSheetName(sheetId);
-      return name == null ? null : { sheetId, sheetName: name };
+      return { sheetId, sheetName: name ?? undefined };
     }
 
     const sheets = await this.listSheets();
     if (sheetName) {
       const lower = sheetName.toLowerCase();
-      return sheets.find((sheet) => sheet.sheetName.toLowerCase() === lower) ?? null;
+      return sheets.find((sheet) => sheet.sheetName?.toLowerCase() === lower) ?? null;
     }
     return sheets.length === 1 ? sheets[0] : null;
   }
@@ -702,7 +727,7 @@ export class WorkbookDiagnosticsImpl implements WorkbookDiagnostics {
     return Promise.all(
       ids.map(async (id) => ({
         sheetId: id,
-        sheetName: (await this.ctx.computeBridge.getSheetName(id)) ?? id,
+        sheetName: (await this.ctx.computeBridge.getSheetName(id)) ?? undefined,
       })),
     );
   }
@@ -744,7 +769,7 @@ export class WorkbookDiagnosticsImpl implements WorkbookDiagnostics {
 
 interface ResolvedSheet {
   readonly sheetId: SheetId;
-  readonly sheetName: string;
+  readonly sheetName?: string;
 }
 
 interface ResolvedValidationRange extends ResolvedSheet {
@@ -755,6 +780,21 @@ interface ResolvedValidationRange extends ResolvedSheet {
   readonly displayRange: string;
   readonly label?: string;
   readonly request: WorkbookValidationRangeRequest;
+}
+
+function displayAddress(
+  range: Pick<ResolvedValidationRange, 'sheetName'>,
+  address: string,
+): string {
+  return range.sheetName ? `${range.sheetName}!${address}` : address;
+}
+
+function worksheetApiCall(
+  sheetName: string | undefined,
+  worksheetExpression: string,
+): string | undefined {
+  if (!sheetName) return undefined;
+  return `await wb.getSheet(${JSON.stringify(sheetName)}).then(ws => ws.${worksheetExpression})`;
 }
 
 function normalizeLimit(limit: number | undefined): number {

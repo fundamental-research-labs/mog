@@ -18,6 +18,7 @@
 
 import { useCallback, useMemo, useState } from 'react';
 
+import type { PlacementId } from '@mog-sdk/contracts/pivot';
 import {
   CloseSvg,
   CollapseSvg,
@@ -68,6 +69,8 @@ export interface PivotContextMenuProps {
   headerKey?: string;
   /** Field ID if clicking on a specific field */
   fieldId?: string;
+  /** Placement ID if clicking on a concrete field placement */
+  placementId?: PlacementId;
   /** Called when menu should close */
   onClose: () => void;
 }
@@ -184,6 +187,7 @@ export function PivotContextMenu({
   pivotId,
   headerKey,
   fieldId,
+  placementId,
   onClose,
 }: PivotContextMenuProps) {
   // Get pivot actions
@@ -191,6 +195,7 @@ export function PivotContextMenu({
     pivotId,
     headerKey,
     fieldId,
+    placementId,
   });
   const [isChangeSourceOpen, setIsChangeSourceOpen] = useState(false);
   const [sourceDraft, setSourceDraft] = useState('');
@@ -205,6 +210,7 @@ export function PivotContextMenu({
   const canChangeAggregate = actions.pivotCapabilities?.canChangeAggregate ?? false;
   const canRefresh = actions.pivotCapabilities?.canRefresh ?? false;
   const canDelete = actions.pivotCapabilities?.canDelete ?? false;
+  const canSortLabels = actions.pivotCapabilities?.canSortLabels ?? false;
 
   const initialDataSource = useMemo(() => {
     const config = actions.pivotConfig;
@@ -379,14 +385,14 @@ export function PivotContextMenu({
         </ContextMenuItemComponent>
 
         {/* Sort - Only show on header targets */}
-        {(isHeaderTarget || actions.hasFieldContext) && (
+        {(isHeaderTarget || actions.hasSortContext) && (
           <>
             <ContextMenuSeparator />
 
             <ContextMenuItemComponent
               icon={<SortAscIcon />}
               onSelect={actions.sortAscending}
-              disabled={!canEditFields}
+              disabled={!canSortLabels}
             >
               Sort A to Z
             </ContextMenuItemComponent>
@@ -394,7 +400,7 @@ export function PivotContextMenu({
             <ContextMenuItemComponent
               icon={<SortDescIcon />}
               onSelect={actions.sortDescending}
-              disabled={!canEditFields}
+              disabled={!canSortLabels}
             >
               Sort Z to A
             </ContextMenuItemComponent>

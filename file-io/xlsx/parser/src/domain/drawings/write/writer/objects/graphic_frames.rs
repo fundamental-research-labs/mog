@@ -69,29 +69,37 @@ impl DrawingWriter {
         }
         w.end_element("xdr:nvGraphicFramePr");
 
-        // Transform — preserve original values for round-trip fidelity
-        w.start_element("xdr:xfrm");
-        if let Some(rot) = chart.xfrm_rot {
-            w.attr_num("rot", rot);
+        if chart.has_xfrm {
+            // Transform — preserve original values for round-trip fidelity
+            w.start_element("xdr:xfrm");
+            if let Some(rot) = chart.xfrm_rot {
+                w.attr_num("rot", rot);
+            }
+            if let Some(flip_h) = chart.xfrm_flip_h {
+                w.attr("flipH", if flip_h { "1" } else { "0" });
+            }
+            if let Some(flip_v) = chart.xfrm_flip_v {
+                w.attr("flipV", if flip_v { "1" } else { "0" });
+            }
+            if !chart.xfrm_has_off && !chart.xfrm_has_ext {
+                w.self_close();
+            } else {
+                w.end_attrs();
+                if chart.xfrm_has_off {
+                    w.start_element("a:off")
+                        .attr_num("x", chart.xfrm_off_x)
+                        .attr_num("y", chart.xfrm_off_y)
+                        .self_close();
+                }
+                if chart.xfrm_has_ext {
+                    w.start_element("a:ext")
+                        .attr_num("cx", chart.xfrm_ext_cx)
+                        .attr_num("cy", chart.xfrm_ext_cy)
+                        .self_close();
+                }
+                w.end_element("xdr:xfrm");
+            }
         }
-        if let Some(flip_h) = chart.xfrm_flip_h {
-            w.attr("flipH", if flip_h { "1" } else { "0" });
-        }
-        if let Some(flip_v) = chart.xfrm_flip_v {
-            w.attr("flipV", if flip_v { "1" } else { "0" });
-        }
-        w.end_attrs();
-        {
-            w.start_element("a:off")
-                .attr_num("x", chart.xfrm_off_x)
-                .attr_num("y", chart.xfrm_off_y)
-                .self_close();
-            w.start_element("a:ext")
-                .attr_num("cx", chart.xfrm_ext_cx)
-                .attr_num("cy", chart.xfrm_ext_cy)
-                .self_close();
-        }
-        w.end_element("xdr:xfrm");
 
         // Graphic with chart reference
         w.start_element("a:graphic").end_attrs();

@@ -4,62 +4,222 @@ use domain_types::chart::{
 };
 use ooxml_types::charts::{
     self, ChartLines, ChartSurface, ChartText, DataLabel, DataLabelOptions, DataLabelPosition,
-    DataTableConfig, LegendPosition, NumFmt, StrRef, View3D,
+    DataTableConfig, ExtensionEntry, LegendPosition, NumFmt, StrData, StrPoint, StrRef, View3D,
 };
-use ooxml_types::drawings::{Paragraph, ParagraphProperties, TextBody, TextRun, TextRunContent};
+use ooxml_types::drawings::{
+    ColorTransform, DrawingColor, EffectList, EffectProperties, OuterShadow, Paragraph,
+    ParagraphProperties, ShapeProperties, StAngle, StPositiveCoordinate, TextAlign, TextAnchor,
+    TextBody, TextRun, TextRunContent,
+};
 
 use super::formatting::{
     build_outline, build_run_properties, build_shape_properties, build_text_body,
 };
+use crate::domain::charts::data_label_contract_ext::build_data_label_contract_extension;
+
+pub(super) struct TitleTextSource<'a> {
+    pub text: Option<&'a str>,
+    pub formula: Option<&'a str>,
+}
 
 pub(super) fn build_title(
-    text: Option<&str>,
+    source: TitleTextSource<'_>,
     format: Option<&ChartFormatData>,
     rich_text: Option<&[ChartFormatStringData]>,
     layout: Option<&domain_types::domain::drawings::ManualLayout>,
+    horizontal_alignment: Option<&str>,
+    vertical_alignment: Option<&str>,
+    show_shadow: Option<bool>,
 ) -> Option<charts::Title> {
-    let default_font = format.and_then(|f| f.font.as_ref());
-    if let Some(runs) = rich_text.filter(|runs| runs.iter().any(|run| !run.text.is_empty())) {
+    if let Some(formula) = source.formula.filter(|formula| !formula.trim().is_empty()) {
         return Some(build_title_with_text(
-            build_chart_text_rich_runs(runs, default_font),
+            build_title_str_ref(formula, source.text),
             format,
             layout,
+            horizontal_alignment,
+            vertical_alignment,
+            show_shadow,
         ));
     }
 
-    let text = text?;
+    if let Some(runs) = rich_text.filter(|runs| runs.iter().any(|run| !run.text.is_empty())) {
+        let redundant_font = format.and_then(|f| f.font.as_ref()).is_some_and(|font| {
+            runs.iter()
+                .filter(|run| !run.text.is_empty())
+                .all(|run| run.font.as_ref() == Some(font))
+        });
+        let stripped_format = redundant_font.then(|| {
+            let mut format = format.cloned().expect("redundant font requires format");
+            format.font = None;
+            format
+        });
+        let rich_format = stripped_format.as_ref().or(format);
+        return Some(build_title_with_text(
+            build_chart_text_rich_runs(runs, rich_format.and_then(|f| f.font.as_ref())),
+            rich_format,
+            layout,
+            horizontal_alignment,
+            vertical_alignment,
+            show_shadow,
+        ));
+    }
+
+    let text = source.text?;
     // Guard against the literal string "undefined" leaking from JS bridge serialization.
-    if text == "undefined" || text.is_empty() {
+    if !is_valid_title_text(text) {
         return None;
     }
-    Some(build_title_element(text, format, layout))
+    Some(build_title_element(
+        text,
+        format,
+        layout,
+        horizontal_alignment,
+        vertical_alignment,
+        show_shadow,
+    ))
 }
 
 pub(super) fn build_title_element(
     text: &str,
     format: Option<&ChartFormatData>,
     layout: Option<&domain_types::domain::drawings::ManualLayout>,
+    horizontal_alignment: Option<&str>,
+    vertical_alignment: Option<&str>,
+    show_shadow: Option<bool>,
 ) -> charts::Title {
     build_title_with_text(
         build_chart_text_rich(text, format.and_then(|f| f.font.as_ref())),
         format,
         layout,
+        horizontal_alignment,
+        vertical_alignment,
+        show_shadow,
     )
 }
 
+fn is_valid_title_text(text: &str) -> bool {
+    text != "undefined" && !text.is_empty()
+}
+
+fn build_title_str_ref(formula: &str, text: Option<&str>) -> ChartText {
+    ChartText::StrRef(StrRef {
+        f: formula.to_string(),
+        str_cache: text
+            .filter(|text| is_valid_title_text(text))
+            .map(|text| StrData {
+                pt_count: Some(1),
+                pts: vec![StrPoint {
+                    idx: 0,
+                    v: text.to_string(),
+                }],
+                extensions: Vec::new(),
+            }),
+        extensions: Vec::new(),
+    })
+}
+
 fn build_title_with_text(
-    tx: ChartText,
+    mut tx: ChartText,
     format: Option<&ChartFormatData>,
     layout: Option<&domain_types::domain::drawings::ManualLayout>,
+    horizontal_alignment: Option<&str>,
+    vertical_alignment: Option<&str>,
+    show_shadow: Option<bool>,
 ) -> charts::Title {
-    let sp_pr = format.and_then(build_shape_properties);
+    apply_title_text_alignment(&mut tx, horizontal_alignment, vertical_alignment);
+    let sp_pr = build_title_shape_properties(format, show_shadow);
 
     charts::Title {
         tx: Some(tx),
         layout: layout.cloned().map(Into::into),
         sp_pr,
+        tx_pr: format.and_then(build_text_body),
         ..Default::default()
     }
+}
+
+fn apply_title_text_alignment(
+    tx: &mut ChartText,
+    horizontal_alignment: Option<&str>,
+    vertical_alignment: Option<&str>,
+) {
+    let ChartText::Rich(body) = tx else {
+        return;
+    };
+    if let Some(anchor) = vertical_alignment.and_then(title_vertical_alignment_to_ooxml) {
+        body.body_props.anchor = Some(anchor);
+    }
+    if let Some(align) = horizontal_alignment.and_then(title_horizontal_alignment_to_ooxml) {
+        for paragraph in &mut body.paragraphs {
+            paragraph.props.align = Some(align);
+        }
+    }
+}
+
+fn build_title_shape_properties(
+    format: Option<&ChartFormatData>,
+    show_shadow: Option<bool>,
+) -> Option<ShapeProperties> {
+    build_shape_properties_with_default_shadow(format, show_shadow)
+}
+
+fn build_shape_properties_with_default_shadow(
+    format: Option<&ChartFormatData>,
+    show_shadow: Option<bool>,
+) -> Option<ShapeProperties> {
+    apply_default_shadow_to_shape_properties(format.and_then(build_shape_properties), show_shadow)
+}
+
+pub(super) fn apply_default_shadow_to_shape_properties(
+    mut sp_pr: Option<ShapeProperties>,
+    show_shadow: Option<bool>,
+) -> Option<ShapeProperties> {
+    if show_shadow != Some(true) {
+        return sp_pr;
+    }
+
+    let shape = sp_pr.get_or_insert_with(ShapeProperties::default);
+    shape.effects = Some(EffectProperties::EffectList(EffectList {
+        outer_shadow: Some(default_outer_shadow()),
+        ..Default::default()
+    }));
+    sp_pr
+}
+
+fn default_outer_shadow() -> OuterShadow {
+    OuterShadow {
+        blur_rad: StPositiveCoordinate::new_clamped(38_100),
+        dist: StPositiveCoordinate::new_clamped(38_100),
+        dir: StAngle::new(2_700_000),
+        color: Some(DrawingColor::SrgbClr {
+            val: "000000".to_string(),
+            transforms: vec![ColorTransform::Alpha { val: 43_137 }],
+        }),
+        rot_with_shape: false,
+        ..Default::default()
+    }
+}
+
+fn title_horizontal_alignment_to_ooxml(value: &str) -> Option<TextAlign> {
+    match value {
+        "left" => Some(TextAlign::Left),
+        "center" => Some(TextAlign::Center),
+        "right" => Some(TextAlign::Right),
+        _ => None,
+    }
+}
+
+fn title_vertical_alignment_to_ooxml(value: &str) -> Option<TextAnchor> {
+    match value {
+        "top" => Some(TextAnchor::Top),
+        "middle" => Some(TextAnchor::Center),
+        "bottom" => Some(TextAnchor::Bottom),
+        _ => None,
+    }
+}
+
+fn angle_degrees_to_ooxml(value: f64) -> StAngle {
+    StAngle::new((value * 60_000.0).round() as i32)
 }
 
 /// Build a ChartText::Rich from a plain string and optional font.
@@ -153,7 +313,7 @@ pub(super) fn build_legend(ld: &LegendData) -> Option<charts::Legend> {
         .map(|entries| entries.iter().map(build_legend_entry).collect())
         .unwrap_or_default();
 
-    let sp_pr = ld.format.as_ref().and_then(build_shape_properties);
+    let sp_pr = build_shape_properties_with_default_shadow(ld.format.as_ref(), ld.show_shadow);
     let tx_pr = ld.format.as_ref().and_then(build_text_body);
 
     Some(charts::Legend {
@@ -193,11 +353,12 @@ pub(super) fn build_data_labels(dl: &DataLabelData) -> DataLabelOptions {
     let num_fmt = dl.number_format.clone();
     let num_fmt_obj = dl.number_format.as_ref().map(|code| NumFmt {
         format_code: code.clone(),
-        source_linked: Some(false),
+        source_linked: dl.link_number_format.or(Some(false)),
     });
 
     let sp_pr = dl.visual_format.as_ref().and_then(build_shape_properties);
-    let tx_pr = dl.visual_format.as_ref().and_then(build_text_body);
+    let tx_pr = build_data_label_text_body(dl);
+    let extensions = build_data_label_extensions(dl);
 
     DataLabelOptions {
         delete: dl.delete,
@@ -207,6 +368,12 @@ pub(super) fn build_data_labels(dl: &DataLabelData) -> DataLabelOptions {
         show_percent: dl.show_percentage.unwrap_or(false),
         show_bubble_size: dl.show_bubble_size.unwrap_or(false),
         show_legend_key: dl.show_legend_key.unwrap_or(false),
+        show_value_present: dl.show_value.is_some(),
+        show_category_present: dl.show_category_name.is_some(),
+        show_series_name_present: dl.show_series_name.is_some(),
+        show_percent_present: dl.show_percentage.is_some(),
+        show_bubble_size_present: dl.show_bubble_size.is_some(),
+        show_legend_key_present: dl.show_legend_key.is_some(),
         position,
         separator: dl.separator.clone(),
         num_fmt,
@@ -221,6 +388,7 @@ pub(super) fn build_data_labels(dl: &DataLabelData) -> DataLabelOptions {
                 ..Default::default()
             }),
         }),
+        extensions,
         ..Default::default()
     }
 }
@@ -246,7 +414,7 @@ pub(super) fn build_data_label_override(idx: u32, dl: &DataLabelData) -> DataLab
             })
         });
     let sp_pr = dl.visual_format.as_ref().and_then(build_shape_properties);
-    let tx_pr = dl.visual_format.as_ref().and_then(build_text_body);
+    let tx_pr = build_data_label_text_body(dl);
     let num_fmt = dl.number_format.as_ref().map(|code| NumFmt {
         format_code: code.clone(),
         source_linked: dl.link_number_format,
@@ -268,7 +436,114 @@ pub(super) fn build_data_label_override(idx: u32, dl: &DataLabelData) -> DataLab
         show_bubble_size: dl.show_bubble_size,
         position: dl.position.as_deref().map(data_label_position_from_domain),
         separator: dl.separator.clone(),
-        extensions: Vec::new(),
+        extensions: build_data_label_extensions(dl),
+    }
+}
+
+fn build_data_label_extensions(dl: &DataLabelData) -> Vec<ExtensionEntry> {
+    build_data_label_contract_extension(dl)
+        .into_iter()
+        .collect()
+}
+
+fn build_data_label_text_body(dl: &DataLabelData) -> Option<TextBody> {
+    let default_font = dl
+        .visual_format
+        .as_ref()
+        .and_then(|format| format.font.as_ref());
+    let format_body = dl.visual_format.as_ref().and_then(build_text_body);
+    let rich_body = dl
+        .rich_text
+        .as_deref()
+        .filter(|runs| runs.iter().any(|run| !run.text.is_empty()))
+        .and_then(
+            |runs| match build_chart_text_rich_runs(runs, default_font) {
+                ChartText::Rich(body) => Some(body),
+                ChartText::StrRef(_) => None,
+            },
+        );
+
+    let needs_text_properties = dl.horizontal_alignment.is_some()
+        || dl.vertical_alignment.is_some()
+        || dl.text_orientation.is_some();
+    let mut body = match (rich_body, format_body) {
+        (Some(mut rich_body), Some(format_body)) => {
+            merge_data_label_text_body_format(&mut rich_body, &format_body);
+            Some(rich_body)
+        }
+        (Some(rich_body), None) => Some(rich_body),
+        (None, Some(format_body)) => Some(format_body),
+        (None, None) if needs_text_properties => Some(empty_text_body(default_font)),
+        (None, None) => None,
+    }?;
+
+    apply_data_label_text_properties(&mut body, dl);
+    Some(body)
+}
+
+fn merge_data_label_text_body_format(target: &mut TextBody, format: &TextBody) {
+    target.body_props = format.body_props.clone();
+    if target.list_style.is_none() {
+        target.list_style = format.list_style.clone();
+    }
+
+    let default_props = format
+        .paragraphs
+        .first()
+        .and_then(|paragraph| paragraph.props.def_run_props.clone());
+    let end_para_props = format
+        .paragraphs
+        .first()
+        .and_then(|paragraph| paragraph.end_para_rpr.clone());
+    for paragraph in &mut target.paragraphs {
+        if paragraph.props.def_run_props.is_none() {
+            paragraph.props.def_run_props = default_props.clone();
+        }
+        if paragraph.end_para_rpr.is_none() {
+            paragraph.end_para_rpr = end_para_props.clone();
+        }
+    }
+}
+
+fn empty_text_body(default_font: Option<&ChartFontData>) -> TextBody {
+    TextBody {
+        body_props: Default::default(),
+        list_style: None,
+        paragraphs: vec![Paragraph {
+            props: ParagraphProperties {
+                def_run_props: default_font.map(|font| Box::new(build_run_properties(font))),
+                ..Default::default()
+            },
+            runs: Vec::new(),
+            end_para_rpr: None,
+        }],
+    }
+}
+
+fn apply_data_label_text_properties(body: &mut TextBody, dl: &DataLabelData) {
+    if let Some(rotation) = dl.text_orientation {
+        body.body_props.rot = Some(angle_degrees_to_ooxml(rotation));
+    }
+    if let Some(anchor) = dl
+        .vertical_alignment
+        .as_deref()
+        .and_then(title_vertical_alignment_to_ooxml)
+    {
+        body.body_props.anchor = Some(anchor);
+    }
+    let Some(align) = dl
+        .horizontal_alignment
+        .as_deref()
+        .and_then(title_horizontal_alignment_to_ooxml)
+    else {
+        return;
+    };
+
+    if body.paragraphs.is_empty() {
+        body.paragraphs.push(Paragraph::default());
+    }
+    for paragraph in &mut body.paragraphs {
+        paragraph.props.align = Some(align);
     }
 }
 
@@ -295,7 +570,7 @@ pub(super) fn build_data_table(dt: &ChartDataTableData) -> DataTableConfig {
         show_horz_border: dt.show_horz_border,
         show_vert_border: dt.show_vert_border,
         show_outline: dt.show_outline,
-        show_keys: dt.show_keys,
+        show_keys: dt.show_keys.or(dt.show_legend_key),
         sp_pr,
         tx_pr,
         ..Default::default()
@@ -355,6 +630,72 @@ mod tests {
         }
     }
 
+    fn title_source<'a>(text: Option<&'a str>, formula: Option<&'a str>) -> TitleTextSource<'a> {
+        TitleTextSource { text, formula }
+    }
+
+    #[test]
+    fn build_data_table_uses_show_legend_key_alias() {
+        let data_table = ChartDataTableData {
+            show_horz_border: None,
+            show_vert_border: None,
+            show_outline: None,
+            show_keys: None,
+            format: None,
+            show_legend_key: Some(true),
+            visible: Some(true),
+        };
+
+        let config = build_data_table(&data_table);
+
+        assert_eq!(config.show_keys, Some(true));
+    }
+
+    fn data_label_with_flags(
+        show_value: Option<bool>,
+        show_category_name: Option<bool>,
+    ) -> DataLabelData {
+        DataLabelData {
+            show: true,
+            delete: None,
+            position: None,
+            format: None,
+            show_value,
+            show_category_name,
+            show_series_name: None,
+            show_percentage: None,
+            show_bubble_size: None,
+            show_legend_key: None,
+            separator: None,
+            show_leader_lines: None,
+            text: None,
+            visual_format: None,
+            number_format: None,
+            text_orientation: None,
+            rich_text: None,
+            auto_text: None,
+            horizontal_alignment: None,
+            vertical_alignment: None,
+            link_number_format: None,
+            geometric_shape_type: None,
+            formula: None,
+            height: None,
+            width: None,
+            leader_lines_format: None,
+            layout: None,
+        }
+    }
+
+    #[test]
+    fn build_data_labels_preserves_absent_and_explicit_false_show_flags() {
+        let labels = build_data_labels(&data_label_with_flags(Some(false), None));
+
+        assert!(!labels.show_value);
+        assert!(labels.show_value_present);
+        assert!(!labels.show_category);
+        assert!(!labels.show_category_present);
+    }
+
     #[test]
     fn build_title_preserves_rich_text_runs() {
         let default_format = format_with_font(font(Some("Aptos"), Some(11.0), None, None));
@@ -370,9 +711,12 @@ mod tests {
         ];
 
         let title = build_title(
-            Some("Revenue FY26"),
+            title_source(Some("Revenue FY26"), None),
             Some(&default_format),
             Some(&rich_text),
+            None,
+            None,
+            None,
             None,
         )
         .expect("rich-text title should be reconstructed");
@@ -405,6 +749,70 @@ mod tests {
         assert_eq!(second.text, "FY26");
         assert_eq!(second.props.italic, Some(true));
         assert_eq!(second.props.size.map(|size| size.value()), Some(1400));
+    }
+
+    #[test]
+    fn title_preserves_imported_unmodeled_rich_text_properties() {
+        let imported_body = crate::domain::charts::parse_text_body(
+            br#"<c:rich xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"
+                      xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+                <a:bodyPr/>
+                <a:p>
+                    <a:pPr>
+                        <a:defRPr lang="en-US" baseline="0" sz="1800"/>
+                    </a:pPr>
+                    <a:r>
+                        <a:rPr lang="en-US" baseline="0" sz="2200"/>
+                        <a:t>Revenue</a:t>
+                    </a:r>
+                </a:p>
+            </c:rich>"#,
+        );
+        let imported_title = charts::Title {
+            tx: Some(ChartText::Rich(imported_body)),
+            ..Default::default()
+        };
+        let default_format = format_with_font(font(Some("Aptos"), Some(11.0), None, None));
+        let rich_text = vec![ChartFormatStringData {
+            text: "Revenue".to_string(),
+            font: Some(font(None, Some(14.0), Some(true), None)),
+        }];
+
+        let mut title = build_title(
+            title_source(Some("Revenue"), None),
+            Some(&default_format),
+            Some(&rich_text),
+            None,
+            None,
+            None,
+            None,
+        )
+        .expect("rich-text title should be reconstructed");
+        super::super::text_body_fidelity::preserve_imported_title_text_properties(
+            &mut title,
+            Some(&imported_title),
+        );
+
+        let Some(ChartText::Rich(body)) = title.tx else {
+            panic!("expected rich chart text");
+        };
+        let paragraph = &body.paragraphs[0];
+        let def_rpr = paragraph
+            .props
+            .def_run_props
+            .as_ref()
+            .expect("default run properties");
+        assert_eq!(def_rpr.lang.as_deref(), Some("en-US"));
+        assert_eq!(def_rpr.baseline.map(|baseline| baseline.value()), Some(0));
+        assert_eq!(def_rpr.size.map(|size| size.value()), Some(1100));
+
+        let TextRunContent::Run(run) = &paragraph.runs[0] else {
+            panic!("expected rich-text run");
+        };
+        assert_eq!(run.props.lang.as_deref(), Some("en-US"));
+        assert_eq!(run.props.baseline.map(|baseline| baseline.value()), Some(0));
+        assert_eq!(run.props.bold, Some(true));
+        assert_eq!(run.props.size.map(|size| size.value()), Some(1400));
     }
 
     #[test]
@@ -482,8 +890,16 @@ mod tests {
 
     #[test]
     fn build_title_falls_back_to_plain_text_without_rich_runs() {
-        let title = build_title(Some("Plain"), None, Some(&[]), None)
-            .expect("plain title should be reconstructed");
+        let title = build_title(
+            title_source(Some("Plain"), None),
+            None,
+            Some(&[]),
+            None,
+            None,
+            None,
+            None,
+        )
+        .expect("plain title should be reconstructed");
 
         let Some(ChartText::Rich(body)) = title.tx else {
             panic!("expected rich chart text");
@@ -492,5 +908,110 @@ mod tests {
             panic!("expected plain title run");
         };
         assert_eq!(run.text, "Plain");
+    }
+
+    #[test]
+    fn build_title_preserves_alignment_and_shadow() {
+        let title = build_title(
+            title_source(Some("Aligned"), None),
+            None,
+            None,
+            None,
+            Some("center"),
+            Some("top"),
+            Some(true),
+        )
+        .expect("title should be reconstructed");
+
+        let Some(ChartText::Rich(body)) = title.tx else {
+            panic!("expected rich chart text");
+        };
+        assert_eq!(body.body_props.anchor, Some(TextAnchor::Top));
+        assert_eq!(body.paragraphs[0].props.align, Some(TextAlign::Center));
+
+        let effects = title
+            .sp_pr
+            .and_then(|sp_pr| sp_pr.effects)
+            .expect("title shadow should emit shape effects");
+        let EffectProperties::EffectList(list) = effects else {
+            panic!("expected title shadow effect list");
+        };
+        assert!(list.outer_shadow.is_some());
+    }
+
+    #[test]
+    fn build_title_emits_formula_reference_with_cached_text() {
+        let title = build_title(
+            title_source(Some("Linked title"), Some("Sheet1!$A$1")),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .expect("linked title should be reconstructed");
+
+        let Some(ChartText::StrRef(str_ref)) = title.tx else {
+            panic!("expected title string reference");
+        };
+        assert_eq!(str_ref.f, "Sheet1!$A$1");
+        let cache = str_ref.str_cache.expect("title string cache");
+        assert_eq!(cache.pt_count, Some(1));
+        assert_eq!(cache.pts[0].idx, 0);
+        assert_eq!(cache.pts[0].v, "Linked title");
+    }
+
+    #[test]
+    fn build_title_emits_text_body_format() {
+        let format = ChartFormatData {
+            fill: None,
+            line: None,
+            font: None,
+            text_rotation: Some(42.0),
+            text_vertical_type: None,
+            shadow: None,
+        };
+
+        let title = build_title(
+            title_source(Some("Rotated"), None),
+            Some(&format),
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .expect("title should be reconstructed");
+
+        let tx_pr = title.tx_pr.expect("title text properties");
+        assert_eq!(tx_pr.body_props.rot.map(|rot| rot.value()), Some(2520000));
+    }
+
+    #[test]
+    fn build_legend_preserves_show_shadow() {
+        let legend = build_legend(&LegendData {
+            show: true,
+            position: "right".to_string(),
+            visible: true,
+            overlay: None,
+            format: None,
+            entries: None,
+            custom_x: None,
+            custom_y: None,
+            layout: None,
+            shadow: None,
+            show_shadow: Some(true),
+        })
+        .expect("visible legend should be reconstructed");
+
+        let effects = legend
+            .sp_pr
+            .and_then(|sp_pr| sp_pr.effects)
+            .expect("legend shadow should emit shape effects");
+        let EffectProperties::EffectList(list) = effects else {
+            panic!("expected legend shadow effect list");
+        };
+        assert!(list.outer_shadow.is_some());
     }
 }

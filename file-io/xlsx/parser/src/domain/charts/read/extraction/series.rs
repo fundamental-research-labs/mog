@@ -4,8 +4,23 @@ use super::data_refs::{extract_cat_ref_formula, extract_num_ref_formula};
 use super::formatting::{extract_chart_format, extract_chart_line, extract_fill_color};
 use super::labels::{extract_data_label_data, extract_individual_data_label_data};
 use super::markers::extract_marker_config;
-use super::text::extract_chart_text_string;
+use super::series_sources::{
+    extract_cat_level_cache, extract_cat_point_cache, extract_cat_source_kind,
+    extract_cat_source_type, extract_category_label_format, extract_num_point_cache,
+    extract_num_source_kind,
+};
+use super::text::{extract_chart_text_string, shape_properties_has_shadow};
+use super::trendlines::{
+    trendline_legacy_color, trendline_legacy_line_width, trendline_type_to_public,
+};
+use color::extract_legacy_series_color;
+use error_bars::extract_error_bars;
+use points::point_border_from_line;
 use std::collections::BTreeMap;
+
+mod color;
+mod error_bars;
+mod points;
 
 pub(super) fn extract_series_from_chart_space(
     cs: &ooxml_types::charts::ChartSpace,
@@ -33,8 +48,10 @@ struct SeriesGroupSemantics {
     x_role: Option<domain_types::chart::ChartSeriesXRoleData>,
     show_lines: Option<bool>,
     show_markers: Option<bool>,
-    smooth: Option<bool>,
     stock_role: Option<domain_types::chart::ChartSeriesStockRoleData>,
+    legacy_color_from_line: bool,
+    uses_directional_error_bars: bool,
+    pie_like_connector_lines: bool,
 }
 
 fn series_group_semantics(
@@ -58,14 +75,34 @@ fn series_group_semantics(
         }
         _ => Some(domain_types::chart::ChartSeriesXRoleData::Category),
     };
-    let (show_lines, show_markers, smooth) = match &group.config {
+    let (show_lines, show_markers) = match &group.config {
         ooxml_types::charts::ChartTypeConfig::Scatter(cfg) => {
-            scatter_style_semantics(cfg.scatter_style)
+            let (show_lines, _) = scatter_style_semantics(cfg.scatter_style);
+            (show_lines, None)
         }
-        ooxml_types::charts::ChartTypeConfig::Line(cfg) => (Some(true), cfg.marker, cfg.smooth),
-        ooxml_types::charts::ChartTypeConfig::Line3D(_) => (Some(true), None, None),
-        _ => (None, None, None),
+        ooxml_types::charts::ChartTypeConfig::Line(_) => (Some(true), None),
+        ooxml_types::charts::ChartTypeConfig::Line3D(_) => (Some(true), None),
+        _ => (None, None),
     };
+    let legacy_color_from_line = matches!(
+        &group.config,
+        ooxml_types::charts::ChartTypeConfig::Line(_)
+            | ooxml_types::charts::ChartTypeConfig::Line3D(_)
+            | ooxml_types::charts::ChartTypeConfig::Radar(_)
+            | ooxml_types::charts::ChartTypeConfig::Stock(_)
+    );
+    let uses_directional_error_bars = matches!(
+        &group.config,
+        ooxml_types::charts::ChartTypeConfig::Scatter(_)
+            | ooxml_types::charts::ChartTypeConfig::Bubble(_)
+    );
+    let pie_like_connector_lines = matches!(
+        &group.config,
+        ooxml_types::charts::ChartTypeConfig::Pie(_)
+            | ooxml_types::charts::ChartTypeConfig::Pie3D(_)
+            | ooxml_types::charts::ChartTypeConfig::Doughnut(_)
+            | ooxml_types::charts::ChartTypeConfig::OfPie(_)
+    );
 
     SeriesGroupSemantics {
         series_type,
@@ -73,8 +110,10 @@ fn series_group_semantics(
         x_role,
         show_lines,
         show_markers,
-        smooth,
         stock_role: None,
+        legacy_color_from_line,
+        uses_directional_error_bars,
+        pie_like_connector_lines,
     }
 }
 
@@ -164,16 +203,16 @@ fn is_stock_volume_group(group: &ooxml_types::charts::ChartGroup) -> bool {
 
 fn scatter_style_semantics(
     style: ooxml_types::charts::ScatterStyle,
-) -> (Option<bool>, Option<bool>, Option<bool>) {
+) -> (Option<bool>, Option<bool>) {
     use ooxml_types::charts::ScatterStyle;
 
     match style {
-        ScatterStyle::None => (Some(false), Some(false), Some(false)),
-        ScatterStyle::Line => (Some(true), Some(false), Some(false)),
-        ScatterStyle::LineMarker => (Some(true), Some(true), Some(false)),
-        ScatterStyle::Marker => (Some(false), Some(true), Some(false)),
-        ScatterStyle::Smooth => (Some(true), Some(false), Some(true)),
-        ScatterStyle::SmoothMarker => (Some(true), Some(true), Some(true)),
+        ScatterStyle::None => (Some(false), Some(false)),
+        ScatterStyle::Line => (Some(true), Some(false)),
+        ScatterStyle::LineMarker => (Some(true), Some(true)),
+        ScatterStyle::Marker => (Some(false), Some(true)),
+        ScatterStyle::Smooth => (Some(true), Some(false)),
+        ScatterStyle::SmoothMarker => (Some(true), Some(true)),
     }
 }
 
@@ -200,8 +239,7 @@ fn extract_single_series_with_semantics(
     // Name
     let (name, name_ref) = extract_series_name(s.tx.as_ref(), s.idx, s.order);
 
-    // Legacy fill color
-    let color = s.sp_pr.as_ref().and_then(|sp| extract_fill_color(sp));
+    let color = extract_legacy_series_color(s, semantics.legacy_color_from_line);
 
     // Values range: val (standard) or y_val (scatter/bubble)
     let values = extract_num_ref_formula(&s.val).or_else(|| extract_num_ref_formula(&s.y_val));
@@ -215,6 +253,8 @@ fn extract_single_series_with_semantics(
         extract_cat_point_cache(&s.cat).or_else(|| extract_cat_point_cache(&s.x_val));
     let category_source_kind =
         extract_cat_source_kind(&s.cat).or_else(|| extract_cat_source_kind(&s.x_val));
+    let category_source_type =
+        extract_cat_source_type(&s.cat).or_else(|| extract_cat_source_type(&s.x_val));
     let category_levels =
         extract_cat_level_cache(&s.cat).or_else(|| extract_cat_level_cache(&s.x_val));
     let category_label_format =
@@ -232,10 +272,9 @@ fn extract_single_series_with_semantics(
     let bubble_size_source_kind = extract_num_source_kind(&s.bubble_size);
 
     // Markers
-    let (show_markers, marker_size, marker_style, marker_background_color, marker_foreground_color) =
-        extract_marker_config(&s.marker);
-    let show_markers = show_markers.or(semantics.show_markers);
-    let smooth = s.smooth.or(semantics.smooth);
+    let marker_config = extract_marker_config(&s.marker);
+    let show_markers = marker_config.show.or(semantics.show_markers);
+    let smooth = s.smooth;
 
     // Per-point formatting
     let mut point_formats: BTreeMap<u32, domain_types::chart::PointFormatData> = BTreeMap::new();
@@ -247,13 +286,8 @@ fn extract_single_series_with_semantics(
             .as_ref()
             .and_then(|sp| sp.ln.as_ref())
             .map(|ln| extract_chart_line(ln));
-        let (
-            _point_show_markers,
-            point_marker_size,
-            point_marker_style,
-            point_marker_background_color,
-            point_marker_foreground_color,
-        ) = extract_marker_config(&pt.marker);
+        let border = line_format.as_ref().and_then(point_border_from_line);
+        let point_marker_config = extract_marker_config(&pt.marker);
         let entry = point_formats
             .entry(pt.idx)
             .or_insert_with(|| point_format(pt.idx));
@@ -261,12 +295,14 @@ fn extract_single_series_with_semantics(
         entry.explosion = pt.explosion;
         entry.bubble_3d = pt.bubble_3d;
         entry.fill = fill;
+        entry.border = border;
         entry.line_format = line_format;
         entry.visual_format = visual_format;
-        entry.marker_size = point_marker_size;
-        entry.marker_style = point_marker_style;
-        entry.marker_background_color = point_marker_background_color;
-        entry.marker_foreground_color = point_marker_foreground_color;
+        entry.marker_size = point_marker_config.size;
+        entry.marker_style = point_marker_config.style;
+        entry.marker_background_color = point_marker_config.background_color;
+        entry.marker_foreground_color = point_marker_config.foreground_color;
+        entry.marker_line_format = point_marker_config.line_format;
     }
     let labels_from_options = s.d_lbls.iter().flat_map(|labels| labels.d_lbl.iter());
     for label in labels_from_options.chain(s.d_lbl.iter()) {
@@ -303,10 +339,10 @@ fn extract_single_series_with_semantics(
                         }
                     });
                     domain_types::chart::TrendlineData {
-                        show: None,
-                        r#type: Some(t.trendline_type.to_ooxml().to_string()),
-                        color: None,
-                        line_width: None,
+                        show: Some(true),
+                        r#type: Some(trendline_type_to_public(t.trendline_type)),
+                        color: trendline_legacy_color(line_format.as_ref()),
+                        line_width: trendline_legacy_line_width(line_format.as_ref()),
                         order: t.order,
                         period: t.period,
                         forward: t.forward,
@@ -324,13 +360,27 @@ fn extract_single_series_with_semantics(
     };
 
     // Error bars
-    let (error_bars, x_error_bars, y_error_bars) = extract_error_bars_new(&s.err_bars);
+    let uses_directional_error_bars =
+        semantics.uses_directional_error_bars || s.x_val.is_some() || s.bubble_size.is_some();
+    let (error_bars, x_error_bars, y_error_bars) =
+        extract_error_bars(&s.err_bars, uses_directional_error_bars);
 
     // Series-level data labels
     let data_labels = s.d_lbls.as_ref().map(|dl| extract_data_label_data(dl));
+    let leader_line_format = series_leader_line_format(data_labels.as_ref());
+    let show_leader_lines = data_labels.as_ref().and_then(|dl| dl.show_leader_lines);
+    let show_connector_lines = semantics
+        .pie_like_connector_lines
+        .then_some(show_leader_lines)
+        .flatten();
 
     // Rich format from sp_pr + tx_pr
     let format = extract_chart_format(s.sp_pr.as_ref(), None);
+    let show_shadow = s
+        .sp_pr
+        .as_ref()
+        .is_some_and(shape_properties_has_shadow)
+        .then_some(true);
 
     // Bar shape
     let bar_shape = s.shape.map(|bs| bs.to_ooxml().to_string());
@@ -348,19 +398,21 @@ fn extract_single_series_with_semantics(
         x_role,
         category_cache,
         category_source_kind,
+        category_source_type,
         category_levels,
         category_label_format,
         bubble_size,
         bubble_size_cache,
         bubble_size_source_kind,
+        bubble_3d: s.bubble_3d,
         smooth,
         show_lines: semantics.show_lines,
         explosion: s.explosion,
         invert_if_negative: s.invert_if_negative,
         y_axis_index: semantics.y_axis_index,
         show_markers,
-        marker_size,
-        marker_style,
+        marker_size: marker_config.size,
+        marker_style: marker_config.style,
         line_width: None,
         points,
         data_labels,
@@ -373,8 +425,9 @@ fn extract_single_series_with_semantics(
         format,
         bar_shape,
         invert_color: None,
-        marker_background_color,
-        marker_foreground_color,
+        marker_background_color: marker_config.background_color,
+        marker_foreground_color: marker_config.foreground_color,
+        marker_line_format: marker_config.line_format,
         filtered: None,
         source_series_index: None,
         source_series_key: None,
@@ -383,13 +436,28 @@ fn extract_single_series_with_semantics(
         pivot_data_field_index: None,
         projection_authority: None,
         projection_diagnostics: Vec::new(),
-        show_shadow: None,
-        show_connector_lines: None,
-        leader_line_format: None,
-        show_leader_lines: None,
+        show_shadow,
+        show_connector_lines,
+        leader_line_format,
+        show_leader_lines,
         bin_options: None,
         boxwhisker_options: None,
     }
+}
+
+fn series_leader_line_format(
+    data_labels: Option<&domain_types::chart::DataLabelData>,
+) -> Option<domain_types::chart::ChartFormatData> {
+    data_labels
+        .and_then(|labels| labels.leader_lines_format.clone())
+        .map(|line| domain_types::chart::ChartFormatData {
+            fill: None,
+            line: Some(line),
+            font: None,
+            text_rotation: None,
+            text_vertical_type: None,
+            shadow: None,
+        })
 }
 
 fn point_format(idx: u32) -> domain_types::chart::PointFormatData {
@@ -405,6 +473,7 @@ fn point_format(idx: u32) -> domain_types::chart::PointFormatData {
         visual_format: None,
         marker_background_color: None,
         marker_foreground_color: None,
+        marker_line_format: None,
         marker_size: None,
         marker_style: None,
     }
@@ -436,237 +505,10 @@ fn extract_series_name(
     }
 }
 
-pub(super) fn extract_num_point_cache(
-    src: &Option<ooxml_types::charts::NumDataSource>,
-) -> Option<domain_types::chart::ChartSeriesPointCacheData> {
-    use ooxml_types::charts::NumDataSource;
-
-    let data = match src.as_ref()? {
-        NumDataSource::Ref(num_ref) => num_ref.num_cache.as_ref()?,
-        NumDataSource::Lit(num_data) => num_data,
-    };
-    Some(num_data_to_point_cache(data))
-}
-
-pub(super) fn extract_num_source_kind(
-    src: &Option<ooxml_types::charts::NumDataSource>,
-) -> Option<domain_types::chart::ChartSeriesDimensionSourceKindData> {
-    use ooxml_types::charts::NumDataSource;
-
-    match src.as_ref()? {
-        NumDataSource::Ref(_) => Some(domain_types::chart::ChartSeriesDimensionSourceKindData::Ref),
-        NumDataSource::Lit(_) => {
-            Some(domain_types::chart::ChartSeriesDimensionSourceKindData::Literal)
-        }
-    }
-}
-
-pub(super) fn extract_cat_point_cache(
-    src: &Option<ooxml_types::charts::CatDataSource>,
-) -> Option<domain_types::chart::ChartSeriesPointCacheData> {
-    use ooxml_types::charts::CatDataSource;
-
-    match src.as_ref()? {
-        CatDataSource::NumRef(num_ref) => num_ref.num_cache.as_ref().map(num_data_to_point_cache),
-        CatDataSource::NumLit(num_data) => Some(num_data_to_point_cache(num_data)),
-        CatDataSource::StrRef(str_ref) => str_ref.str_cache.as_ref().map(str_data_to_point_cache),
-        CatDataSource::StrLit(str_data) => Some(str_data_to_point_cache(str_data)),
-        CatDataSource::MultiLvlStrRef(_) => None,
-    }
-}
-
-pub(super) fn extract_cat_source_kind(
-    src: &Option<ooxml_types::charts::CatDataSource>,
-) -> Option<domain_types::chart::ChartSeriesDimensionSourceKindData> {
-    use ooxml_types::charts::CatDataSource;
-
-    match src.as_ref()? {
-        CatDataSource::NumRef(_) | CatDataSource::StrRef(_) | CatDataSource::MultiLvlStrRef(_) => {
-            Some(domain_types::chart::ChartSeriesDimensionSourceKindData::Ref)
-        }
-        CatDataSource::NumLit(_) | CatDataSource::StrLit(_) => {
-            Some(domain_types::chart::ChartSeriesDimensionSourceKindData::Literal)
-        }
-    }
-}
-
-fn extract_cat_level_cache(
-    src: &Option<ooxml_types::charts::CatDataSource>,
-) -> Option<domain_types::chart::ChartSeriesCategoryLevelsCacheData> {
-    use ooxml_types::charts::CatDataSource;
-
-    match src.as_ref()? {
-        CatDataSource::MultiLvlStrRef(multi_lvl_ref) => multi_lvl_ref
-            .multi_lvl_str_cache
-            .as_ref()
-            .map(multi_lvl_str_data_to_category_levels_cache),
-        _ => None,
-    }
-}
-
-fn multi_lvl_str_data_to_category_levels_cache(
-    data: &ooxml_types::charts::MultiLvlStrData,
-) -> domain_types::chart::ChartSeriesCategoryLevelsCacheData {
-    domain_types::chart::ChartSeriesCategoryLevelsCacheData {
-        point_count: data.pt_count,
-        levels: data
-            .levels
-            .iter()
-            .enumerate()
-            .map(
-                |(level, level_data)| domain_types::chart::ChartSeriesCategoryLevelCacheData {
-                    level: level as u32,
-                    point_count: level_data.pt_count,
-                    points: level_data
-                        .pts
-                        .iter()
-                        .map(
-                            |point| domain_types::chart::ChartSeriesPointCachePointData {
-                                idx: point.idx,
-                                value: point.v.clone(),
-                                format_code: None,
-                            },
-                        )
-                        .collect(),
-                },
-            )
-            .collect(),
-    }
-}
-
-fn num_data_to_point_cache(
-    data: &ooxml_types::charts::NumData,
-) -> domain_types::chart::ChartSeriesPointCacheData {
-    domain_types::chart::ChartSeriesPointCacheData {
-        point_count: data.pt_count,
-        format_code: data.format_code.clone(),
-        points: data
-            .pts
-            .iter()
-            .map(
-                |point| domain_types::chart::ChartSeriesPointCachePointData {
-                    idx: point.idx,
-                    value: point.v.clone(),
-                    format_code: point.format_code.clone(),
-                },
-            )
-            .collect(),
-    }
-}
-
-fn str_data_to_point_cache(
-    data: &ooxml_types::charts::StrData,
-) -> domain_types::chart::ChartSeriesPointCacheData {
-    domain_types::chart::ChartSeriesPointCacheData {
-        point_count: data.pt_count,
-        format_code: None,
-        points: data
-            .pts
-            .iter()
-            .map(
-                |point| domain_types::chart::ChartSeriesPointCachePointData {
-                    idx: point.idx,
-                    value: point.v.clone(),
-                    format_code: None,
-                },
-            )
-            .collect(),
-    }
-}
-
-fn extract_category_label_format(
-    cat: &Option<ooxml_types::charts::CatDataSource>,
-) -> Option<domain_types::chart::CategoryLabelFormatData> {
-    use ooxml_types::charts::CatDataSource;
-
-    let num_data = match cat {
-        Some(CatDataSource::NumRef(num_ref)) => num_ref.num_cache.as_ref(),
-        Some(CatDataSource::NumLit(num_data)) => Some(num_data),
-        _ => None,
-    }?;
-
-    let points: Vec<domain_types::chart::CategoryPointLabelFormatData> = num_data
-        .pts
-        .iter()
-        .filter_map(|point| {
-            point.format_code.as_ref().map(|format_code| {
-                domain_types::chart::CategoryPointLabelFormatData {
-                    idx: point.idx,
-                    format_code: Some(format_code.clone()),
-                }
-            })
-        })
-        .collect();
-
-    if num_data.format_code.is_none() && points.is_empty() {
-        return None;
-    }
-
-    Some(domain_types::chart::CategoryLabelFormatData {
-        format_code: num_data.format_code.clone(),
-        points: if points.is_empty() {
-            None
-        } else {
-            Some(points)
-        },
-    })
-}
-
-/// Extract error bars with line_format support.
-fn extract_error_bars_new(
-    err_bars: &[ooxml_types::charts::ErrorBars],
-) -> (
-    Option<domain_types::chart::ErrorBarData>,
-    Option<domain_types::chart::ErrorBarData>,
-    Option<domain_types::chart::ErrorBarData>,
-) {
-    let mut general = None;
-    let mut x_bars = None;
-    let mut y_bars = None;
-
-    for eb in err_bars {
-        let line_format = eb
-            .sp_pr
-            .as_ref()
-            .and_then(|sp| sp.ln.as_ref())
-            .map(|ln| extract_chart_line(ln));
-        let data = domain_types::chart::ErrorBarData {
-            visible: None,
-            direction: eb.err_dir.as_ref().map(|d| d.to_ooxml().to_string()),
-            bar_type: Some(eb.err_bar_type.to_ooxml().to_string()),
-            value_type: Some(eb.err_val_type.to_ooxml().to_string()),
-            value: eb.val,
-            no_end_cap: eb.no_end_cap,
-            line_format,
-            plus_source: eb.plus.as_ref().map(num_data_source_to_error_bar_source),
-            minus_source: eb.minus.as_ref().map(num_data_source_to_error_bar_source),
-        };
-        match eb.err_dir {
-            Some(ooxml_types::charts::ErrorBarDirection::X) => x_bars = Some(data),
-            Some(ooxml_types::charts::ErrorBarDirection::Y) => y_bars = Some(data),
-            None => general = Some(data),
-        }
-    }
-
-    (general, x_bars, y_bars)
-}
-
-fn num_data_source_to_error_bar_source(
-    src: &ooxml_types::charts::NumDataSource,
-) -> domain_types::chart::ErrorBarSourceData {
-    use ooxml_types::charts::NumDataSource;
-
-    match src {
-        NumDataSource::Ref(num_ref) => domain_types::chart::ErrorBarSourceData {
-            formula: Some(num_ref.f.clone()),
-            cache: num_ref.num_cache.as_ref().map(num_data_to_point_cache),
-        },
-        NumDataSource::Lit(num_data) => domain_types::chart::ErrorBarSourceData {
-            formula: None,
-            cache: Some(num_data_to_point_cache(num_data)),
-        },
-    }
-}
+#[cfg(test)]
+mod bubble;
+#[cfg(test)]
+mod series_regression_tests;
 
 #[cfg(test)]
 mod tests {

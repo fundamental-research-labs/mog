@@ -53,6 +53,7 @@ import {
   snapshotSeries,
   snapshotSeriesProjection,
 } from './resolved-spec-series-snapshot';
+import { resolveChartHeightCells, resolveChartWidthCells } from '../chart-size-units';
 import {
   groupingFor,
   snapshotAxis,
@@ -213,8 +214,8 @@ export function buildResolvedChartSpecSnapshot(input: {
       name: input.chart.name,
       anchorRow: input.chart.anchor?.anchorRow,
       anchorCol: input.chart.anchor?.anchorCol,
-      width: input.chart.widthCells ?? input.chart.width,
-      height: input.chart.heightCells ?? input.chart.height,
+      width: resolveChartWidthCells(input.chart.widthCells, input.chart.width),
+      height: resolveChartHeightCells(input.chart.heightCells, input.chart.height),
       widthPt: input.chart.widthPt,
       heightPt: input.chart.heightPt,
     },

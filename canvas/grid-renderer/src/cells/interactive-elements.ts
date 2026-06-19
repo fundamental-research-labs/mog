@@ -9,7 +9,9 @@
  * @module grid-renderer/cells/interactive-elements
  */
 
+import { canvasToDocXY, docToCanvasXY, type RenderRegion } from '@mog/canvas-engine';
 import type { InteractiveElement, InteractiveElementCollector } from '@mog-sdk/contracts/rendering';
+import { getFilterButtonHitBounds } from './indicators';
 import type { CellRenderInfo } from './types';
 
 // =============================================================================
@@ -38,6 +40,54 @@ export interface InteractiveCellInfo {
   };
   /** Sheet ID */
   sheetId: string;
+}
+
+export function toInteractiveViewportCellInfo(
+  cell: CellRenderInfo,
+  region: RenderRegion,
+): CellRenderInfo {
+  const zoom = region.zoom || 1;
+  const viewportSpaceRegion = {
+    bounds: { x: 0, y: 0 },
+    viewportOrigin: { x: 0, y: 0 },
+    scrollOffset: region.scrollOffset,
+    zoom,
+  };
+  const toViewportXY = (x: number, y: number): { x: number; y: number } => {
+    const doc = canvasToDocXY(region.bounds.x + x * zoom, region.bounds.y + y * zoom, region);
+    return docToCanvasXY(doc.x, doc.y, viewportSpaceRegion);
+  };
+  const scaleRect = (rect: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  }): { x: number; y: number; width: number; height: number } => {
+    const { x, y } = toViewportXY(rect.x, rect.y);
+    return {
+      x,
+      y,
+      width: rect.width * zoom,
+      height: rect.height * zoom,
+    };
+  };
+
+  return {
+    ...cell,
+    ...scaleRect(cell),
+    merge: cell.merge
+      ? (() => {
+          const merge = toViewportXY(cell.merge.mergeX, cell.merge.mergeY);
+          return {
+            ...cell.merge,
+            mergeX: merge.x,
+            mergeY: merge.y,
+            mergeWidth: cell.merge.mergeWidth * zoom,
+            mergeHeight: cell.merge.mergeHeight * zoom,
+          };
+        })()
+      : undefined,
+  };
 }
 
 // =============================================================================
@@ -129,10 +179,11 @@ export function collectInteractiveElements(
   // Filter button
   if (info.filterInfo) {
     const { filterId, headerCellId, hasActiveFilter } = info.filterInfo;
+    const bounds = getFilterButtonHitBounds(x, y, width, height);
     const element: InteractiveElement = {
       id: elementId('filter-button', sheetId, row, col),
       type: 'filter-button',
-      bounds: { x, y, width, height },
+      bounds,
       metadata: {
         type: 'filter-button',
         filterId,

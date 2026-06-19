@@ -8,6 +8,8 @@ use domain_types::{PivotCacheSourceDef, SheetData};
 use std::collections::HashMap;
 use value_types::CellValue;
 
+const EXCEL_MAX_ROW_INDEX: u32 = 1_048_575;
+
 /// Build pivot cache definition + records XML by reading source range cells.
 pub(super) fn build_cache(
     cache_src: &PivotCacheSourceDef,
@@ -56,6 +58,11 @@ pub(super) fn build_cache(
             }),
         };
 
+        if let Some(rows) = snapshot_records {
+            let (fields, records) = cache_from_snapshot(cache_src, rows);
+            return Some(finish_cache(&mut cache_writer, fields, records));
+        }
+
         if let Some((sheet_idx, range_ref)) = resolve_named_source(sheets, source_name) {
             let sheet = &sheets[sheet_idx];
             if let Some((start_row, start_col, end_row, mut end_col)) =
@@ -80,13 +87,7 @@ pub(super) fn build_cache(
                     &cache_src.field_names,
                     &cache_src.shared_items,
                 );
-                for field in fields {
-                    cache_writer.add_field(field);
-                }
-                cache_writer.set_record_count(records.len() as u32);
-                let definition_xml = cache_writer.to_definition_xml();
-                let records_xml = cache_writer.to_records_xml(&records);
-                return Some((definition_xml, records_xml));
+                return Some(finish_cache(&mut cache_writer, fields, records));
             }
         }
     } else if let (Some(sheet_name), Some(range_ref)) =
@@ -101,6 +102,11 @@ pub(super) fn build_cache(
                 r_id: None,
             }),
         };
+
+        if let Some(rows) = snapshot_records {
+            let (fields, records) = cache_from_snapshot(cache_src, rows);
+            return Some(finish_cache(&mut cache_writer, fields, records));
+        }
 
         if let Some(&sheet_idx) = sheet_name_to_idx.get(sheet_name.as_str()) {
             let sheet = &sheets[sheet_idx];
@@ -119,42 +125,56 @@ pub(super) fn build_cache(
                     &cache_src.field_names,
                     &cache_src.shared_items,
                 );
-                for field in fields {
-                    cache_writer.add_field(field);
-                }
-                cache_writer.set_record_count(records.len() as u32);
-                let definition_xml = cache_writer.to_definition_xml();
-                let records_xml = cache_writer.to_records_xml(&records);
-                return Some((definition_xml, records_xml));
+                return Some(finish_cache(&mut cache_writer, fields, records));
             }
         }
     }
 
     let snapshot_records = snapshot_records?;
     let (fields, records) = cache_from_snapshot(cache_src, snapshot_records);
+    Some(finish_cache(&mut cache_writer, fields, records))
+}
+
+fn finish_cache(
+    cache_writer: &mut PivotCacheWriter,
+    fields: Vec<CacheFieldDef>,
+    records: Vec<Vec<SharedItem>>,
+) -> (Vec<u8>, Vec<u8>) {
     for field in fields {
         cache_writer.add_field(field);
     }
     cache_writer.set_record_count(records.len() as u32);
     let definition_xml = cache_writer.to_definition_xml();
     let records_xml = cache_writer.to_records_xml(&records);
-    Some((definition_xml, records_xml))
+    (definition_xml, records_xml)
 }
 
 fn resolve_extraction_range(sheet: &SheetData, range_ref: &str) -> Option<(u32, u32, u32, u32)> {
-    parse_range(range_ref).or_else(|| {
-        let (start_col, end_col) = parse_whole_column_range(range_ref)?;
-        Some((0, start_col, sheet_data_last_row(sheet), end_col))
-    })
+    if let Some((start_row, start_col, end_row, end_col)) = parse_range(range_ref) {
+        let end_row = if start_row == 0 && end_row >= EXCEL_MAX_ROW_INDEX {
+            sheet_data_last_row_in_columns(sheet, start_col, end_col)
+        } else {
+            end_row
+        };
+        return Some((start_row, start_col, end_row, end_col));
+    }
+
+    let (start_col, end_col) = parse_whole_column_range(range_ref)?;
+    Some((
+        0,
+        start_col,
+        sheet_data_last_row_in_columns(sheet, start_col, end_col),
+        end_col,
+    ))
 }
 
-fn sheet_data_last_row(sheet: &SheetData) -> u32 {
+fn sheet_data_last_row_in_columns(sheet: &SheetData, start_col: u32, end_col: u32) -> u32 {
     sheet
         .cells
         .iter()
+        .filter(|cell| cell.col >= start_col && cell.col <= end_col)
         .map(|cell| cell.row)
         .max()
-        .or_else(|| (sheet.rows > 0).then_some(sheet.rows - 1))
         .unwrap_or(0)
 }
 
@@ -188,7 +208,7 @@ fn fields_from_source(
         .len()
         .max(cache_src.shared_items.len())
         .max(snapshot_width.unwrap_or_default());
-    let (mut field_shared_items, _) = seeded_shared_items(num_cols, &cache_src.shared_items);
+    let mut seeded = seeded_shared_items(num_cols, &cache_src.shared_items);
     (0..num_cols)
         .map(|i| CacheFieldDef {
             name: cache_src
@@ -196,7 +216,7 @@ fn fields_from_source(
                 .get(i)
                 .cloned()
                 .unwrap_or_else(|| format!("Column{}", i + 1)),
-            shared_items: std::mem::take(&mut field_shared_items[i]),
+            shared_items: std::mem::take(&mut seeded.shared_items[i]),
             number_format: None,
             num_fmt_id: None,
             sql_type: None,
@@ -216,17 +236,18 @@ fn cache_from_snapshot(
         .unwrap_or_default()
         .max(cache_src.field_names.len())
         .max(cache_src.shared_items.len());
-    let (mut field_shared_items, mut field_value_indices) =
-        seeded_shared_items(num_cols, &cache_src.shared_items);
+    let mut seeded = seeded_shared_items(num_cols, &cache_src.shared_items);
     let records = rows
         .iter()
         .map(|row| {
-            (0..num_cols)
-                .map(|col_idx| {
+            row.iter()
+                .enumerate()
+                .map(|(col_idx, value)| {
                     cell_value_to_cache_record_item(
-                        row.get(col_idx).unwrap_or(&CellValue::Null),
-                        &mut field_shared_items[col_idx],
-                        &mut field_value_indices[col_idx],
+                        value,
+                        &mut seeded.shared_items[col_idx],
+                        &mut seeded.value_indices[col_idx],
+                        seeded.missing_indices[col_idx],
                     )
                 })
                 .collect()
@@ -239,7 +260,7 @@ fn cache_from_snapshot(
                 .get(i)
                 .cloned()
                 .unwrap_or_else(|| format!("Column{}", i + 1)),
-            shared_items: std::mem::take(&mut field_shared_items[i]),
+            shared_items: std::mem::take(&mut seeded.shared_items[i]),
             number_format: None,
             num_fmt_id: None,
             sql_type: None,
@@ -277,6 +298,7 @@ fn cell_value_to_cache_record_item(
     value: &CellValue,
     shared_items: &mut Vec<SharedItem>,
     value_indices: &mut HashMap<String, u32>,
+    missing_index: Option<u32>,
 ) -> SharedItem {
     match value {
         CellValue::Text(s) => {
@@ -291,6 +313,9 @@ fn cell_value_to_cache_record_item(
             };
             SharedItem::Index(idx)
         }
+        CellValue::Null => missing_index
+            .map(SharedItem::Index)
+            .unwrap_or(SharedItem::Missing),
         CellValue::Number(n) => SharedItem::Number(n.get()),
         CellValue::Boolean(b) => SharedItem::Boolean(*b),
         CellValue::Error(err, _) => SharedItem::Error(err.as_str().to_string()),
@@ -298,28 +323,37 @@ fn cell_value_to_cache_record_item(
     }
 }
 
-fn seeded_shared_items(
-    num_cols: usize,
-    seed_shared_items: &[Vec<CellValue>],
-) -> (Vec<Vec<SharedItem>>, Vec<HashMap<String, u32>>) {
-    let mut field_shared_items: Vec<Vec<SharedItem>> = vec![Vec::new(); num_cols];
-    let mut field_value_indices: Vec<HashMap<String, u32>> = vec![HashMap::new(); num_cols];
+struct SeededSharedItems {
+    shared_items: Vec<Vec<SharedItem>>,
+    value_indices: Vec<HashMap<String, u32>>,
+    missing_indices: Vec<Option<u32>>,
+}
+
+fn seeded_shared_items(num_cols: usize, seed_shared_items: &[Vec<CellValue>]) -> SeededSharedItems {
+    let mut seeded = SeededSharedItems {
+        shared_items: vec![Vec::new(); num_cols],
+        value_indices: vec![HashMap::new(); num_cols],
+        missing_indices: vec![None; num_cols],
+    };
 
     for col_idx in 0..num_cols {
         if let Some(seeds) = seed_shared_items.get(col_idx) {
             for value in seeds {
                 let shared_item = cell_value_to_shared_item(value);
+                let item_idx = seeded.shared_items[col_idx].len() as u32;
                 if let SharedItem::String(s) = &shared_item {
-                    field_value_indices[col_idx]
+                    seeded.value_indices[col_idx]
                         .entry(s.clone())
-                        .or_insert(field_shared_items[col_idx].len() as u32);
+                        .or_insert(item_idx);
+                } else if matches!(shared_item, SharedItem::Missing) {
+                    seeded.missing_indices[col_idx].get_or_insert(item_idx);
                 }
-                field_shared_items[col_idx].push(shared_item);
+                seeded.shared_items[col_idx].push(shared_item);
             }
         }
     }
 
-    (field_shared_items, field_value_indices)
+    seeded
 }
 
 fn cell_value_to_shared_item(value: &CellValue) -> SharedItem {
@@ -368,8 +402,7 @@ fn extract_cache_data(
 
     let data_start = range.start_row + 1;
     let data_end = range.end_row;
-    let (mut field_shared_items, mut field_value_indices) =
-        seeded_shared_items(num_cols, seed_shared_items);
+    let mut seeded = seeded_shared_items(num_cols, seed_shared_items);
     let mut records: Vec<Vec<SharedItem>> = Vec::new();
 
     for row in data_start..=data_end {
@@ -381,8 +414,9 @@ fn extract_cache_data(
                 .flatten();
             let item = cell_value_to_cache_record_item(
                 value.unwrap_or(&CellValue::Null),
-                &mut field_shared_items[col_offset],
-                &mut field_value_indices[col_offset],
+                &mut seeded.shared_items[col_offset],
+                &mut seeded.value_indices[col_offset],
+                seeded.missing_indices[col_offset],
             );
             record.push(item);
         }
@@ -396,7 +430,7 @@ fn extract_cache_data(
                 .get(i)
                 .cloned()
                 .unwrap_or_else(|| format!("Column{}", i + 1)),
-            shared_items: std::mem::take(&mut field_shared_items[i]),
+            shared_items: std::mem::take(&mut seeded.shared_items[i]),
             number_format: None,
             num_fmt_id: None,
             sql_type: None,
@@ -469,6 +503,98 @@ mod tests {
     }
 
     #[test]
+    fn whole_column_source_ignores_live_cells_outside_source_columns() {
+        let sheet = SheetData {
+            name: "Data".to_string(),
+            rows: 10_000,
+            cols: 8,
+            cells: vec![
+                text_cell(0, 0, "Region"),
+                text_cell(0, 1, "Amount"),
+                text_cell(1, 0, "West"),
+                domain_types::CellData {
+                    row: 1,
+                    col: 1,
+                    value: CellValue::Number(FiniteF64::new(42.0).unwrap()),
+                    ..Default::default()
+                },
+                text_cell(9_999, 7, "unrelated"),
+            ],
+            ..Default::default()
+        };
+        let cache_src = PivotCacheSourceDef {
+            cache_id: 1,
+            source_kind: PivotCacheSourceKind::LocalWorksheet,
+            source_sheet: Some("Data".to_string()),
+            source_range: Some("A:B".to_string()),
+            field_names: vec!["Region".to_string(), "Amount".to_string()],
+            ..Default::default()
+        };
+        let sheet_name_to_idx = HashMap::from([("Data", 0usize)]);
+
+        let (definition_xml, records_xml) = build_cache(
+            &cache_src,
+            &[sheet],
+            &sheet_name_to_idx,
+            None,
+            Some("rId1"),
+            None,
+        )
+        .expect("whole-column cache should use the source columns' live extent");
+        let definition = String::from_utf8(definition_xml).unwrap();
+        let records = String::from_utf8(records_xml).unwrap();
+
+        assert!(definition.contains("recordCount=\"1\""));
+        assert_eq!(records.matches("<r>").count(), 1);
+    }
+
+    #[test]
+    fn full_height_range_source_ignores_live_cells_outside_source_columns() {
+        let sheet = SheetData {
+            name: "Data".to_string(),
+            rows: 1_048_576,
+            cols: 8,
+            cells: vec![
+                text_cell(0, 0, "Region"),
+                text_cell(0, 1, "Amount"),
+                text_cell(1, 0, "West"),
+                domain_types::CellData {
+                    row: 1,
+                    col: 1,
+                    value: CellValue::Number(FiniteF64::new(42.0).unwrap()),
+                    ..Default::default()
+                },
+                text_cell(1_048_575, 7, "unrelated"),
+            ],
+            ..Default::default()
+        };
+        let cache_src = PivotCacheSourceDef {
+            cache_id: 1,
+            source_kind: PivotCacheSourceKind::LocalWorksheet,
+            source_sheet: Some("Data".to_string()),
+            source_range: Some("A1:B1048576".to_string()),
+            field_names: vec!["Region".to_string(), "Amount".to_string()],
+            ..Default::default()
+        };
+        let sheet_name_to_idx = HashMap::from([("Data", 0usize)]);
+
+        let (definition_xml, records_xml) = build_cache(
+            &cache_src,
+            &[sheet],
+            &sheet_name_to_idx,
+            None,
+            Some("rId1"),
+            None,
+        )
+        .expect("full-height cache should use the source columns' live extent");
+        let definition = String::from_utf8(definition_xml).unwrap();
+        let records = String::from_utf8(records_xml).unwrap();
+
+        assert!(definition.contains("recordCount=\"1\""));
+        assert_eq!(records.matches("<r>").count(), 1);
+    }
+
+    #[test]
     fn unresolved_local_source_does_not_emit_fake_empty_cache() {
         let cache_src = PivotCacheSourceDef {
             cache_id: 1,
@@ -515,5 +641,80 @@ mod tests {
         assert!(definition.contains(r#"<worksheetSource ref="A:B" sheet="Missing"/>"#));
         assert!(records.contains(r#"<x v="0"/>"#));
         assert!(records.contains(r#"<n v="42"/>"#));
+    }
+
+    #[test]
+    fn imported_snapshot_records_preserve_row_widths() {
+        let cache_src = PivotCacheSourceDef {
+            cache_id: 1,
+            source_kind: PivotCacheSourceKind::LocalWorksheet,
+            source_sheet: Some("Missing".to_string()),
+            source_range: Some("A:C".to_string()),
+            field_names: vec![
+                "Region".to_string(),
+                "Amount".to_string(),
+                "Trailing".to_string(),
+            ],
+            ..Default::default()
+        };
+        let snapshot_records = vec![
+            vec![
+                CellValue::Text(Arc::from("West")),
+                CellValue::Number(FiniteF64::new(42.0).unwrap()),
+            ],
+            vec![
+                CellValue::Text(Arc::from("East")),
+                CellValue::Number(FiniteF64::new(7.0).unwrap()),
+                CellValue::Null,
+            ],
+        ];
+
+        let (definition_xml, records_xml) = build_cache(
+            &cache_src,
+            &[],
+            &HashMap::new(),
+            Some(&snapshot_records),
+            Some("rId1"),
+            None,
+        )
+        .expect("imported typed cache records should preserve sparse row shapes");
+        let definition = String::from_utf8(definition_xml).unwrap();
+        let records = String::from_utf8(records_xml).unwrap();
+
+        assert!(definition.contains(r#"count="3""#));
+        assert!(records.contains(r#"<r><x v="0"/><n v="42"/></r>"#));
+        assert!(records.contains(r#"<r><x v="1"/><n v="7"/><m/></r>"#));
+    }
+
+    #[test]
+    fn imported_snapshot_records_reuse_seeded_missing_shared_item() {
+        let cache_src = PivotCacheSourceDef {
+            cache_id: 1,
+            source_kind: PivotCacheSourceKind::LocalWorksheet,
+            source_sheet: Some("Missing".to_string()),
+            source_range: Some("A:A".to_string()),
+            field_names: vec!["Category".to_string()],
+            shared_items: vec![vec![CellValue::Null]],
+            ..Default::default()
+        };
+        let snapshot_records = vec![vec![CellValue::Null]];
+
+        let (definition_xml, records_xml) = build_cache(
+            &cache_src,
+            &[],
+            &HashMap::new(),
+            Some(&snapshot_records),
+            Some("rId1"),
+            None,
+        )
+        .expect("imported typed cache records should preserve missing shared-item identity");
+        let definition = String::from_utf8(definition_xml).unwrap();
+        let records = String::from_utf8(records_xml).unwrap();
+
+        assert!(
+            definition.contains(r#"<sharedItems count="1" containsBlank="1"><m/></sharedItems>"#)
+        );
+        assert!(records.contains(r#"<x v="0"/>"#));
+        assert!(!records.contains(r#"<m/>"#));
     }
 }

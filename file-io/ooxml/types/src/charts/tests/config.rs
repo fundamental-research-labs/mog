@@ -75,7 +75,7 @@ fn chart_type_config_chart_type() {
 #[test]
 fn bubble_chart_config_default() {
     let cfg = BubbleChartConfig::default();
-    assert_eq!(cfg.bubble_scale, Some(100));
+    assert!(cfg.bubble_scale.is_none());
     assert!(cfg.vary_colors.is_none());
 }
 

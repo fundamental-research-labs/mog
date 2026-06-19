@@ -184,7 +184,18 @@ export type ChartFill =
 export interface ChartLineFormat {
   color?: ChartColor;
   width?: number;
-  dashStyle?: 'solid' | 'dot' | 'dash' | 'dashDot' | 'longDash' | 'longDashDot' | 'longDashDotDot';
+  dashStyle?:
+    | 'solid'
+    | 'dot'
+    | 'dash'
+    | 'dashDot'
+    | 'longDash'
+    | 'longDashDot'
+    | 'longDashDotDot'
+    | 'sysDash'
+    | 'sysDot'
+    | 'sysDashDot'
+    | 'sysDashDotDot';
   transparency?: number;
   /** Explicit OOXML a:ln/a:noFill. Absent line formatting is not an explicit no-line. */
   noFill?: boolean;
@@ -194,7 +205,7 @@ export interface ChartLineFormat {
 export interface ChartBorder {
   color?: string;
   width?: number;
-  style?: string;
+  style?: 'solid' | 'dot' | 'dash' | 'dashDot' | 'longDash' | 'longDashDot' | 'longDashDotDot';
 }
 
 /** Font. Maps to OOXML tx_pr → defRPr. */
@@ -779,7 +790,7 @@ export interface DataLabelConfig {
  */
 export interface TrendlineConfig {
   show?: boolean;
-  type?: string;
+  type?: TrendlineType;
   color?: string;
   lineWidth?: number;
   order?: number;
@@ -868,6 +879,9 @@ export type ChartSeriesDimensionSourceKind = 'ref' | 'literal' | 'cacheFallback'
 
 /** Imported x/category dimension role for a series. */
 export type ChartSeriesXRole = 'category' | 'quantitative';
+
+/** Imported OOXML category/x source value type. */
+export type ChartSeriesCategorySourceType = 'number' | 'string' | 'multiLevelString';
 
 /** Imported stock chart source role for HLC/OHLC and volume stock charts. */
 export type ChartSeriesStockRole = 'volume' | 'open' | 'high' | 'low' | 'close';
@@ -1108,18 +1122,23 @@ export interface SeriesConfig {
   categoryCache?: ChartSeriesPointCache;
   categoryLevels?: ChartSeriesCategoryLevelsCache;
   categorySourceKind?: ChartSeriesDimensionSourceKind;
+  categorySourceType?: ChartSeriesCategorySourceType;
   categoryLabelFormat?: CategoryLabelFormat;
   bubbleSize?: string;
   bubbleSizeCache?: ChartSeriesPointCache;
   bubbleSizeSourceKind?: ChartSeriesDimensionSourceKind;
+  /** 3-D bubble effect for this series. */
+  bubble3d?: boolean;
+  /** 3-D bubble effect for this series. */
+  bubble3D?: boolean;
   smooth?: boolean;
   showLines?: boolean;
   explosion?: number;
   invertIfNegative?: boolean;
-  yAxisIndex?: number;
+  yAxisIndex?: 0 | 1;
   showMarkers?: boolean;
   markerSize?: number;
-  markerStyle?: string;
+  markerStyle?: MarkerStyle;
   lineWidth?: number;
   points?: PointFormat[];
   dataLabels?: DataLabelConfig;
@@ -1138,6 +1157,8 @@ export interface SeriesConfig {
   markerBackgroundColor?: ChartColor;
   /** Marker border color. */
   markerForegroundColor?: ChartColor;
+  /** Full marker border/outline format. */
+  markerLineFormat?: ChartLineFormat;
   /** Whether this series is hidden/filtered from the chart. */
   filtered?: boolean;
   /** Original chart series index before filtering/projection. */
@@ -1234,6 +1255,8 @@ export interface PointFormat {
   markerBackgroundColor?: ChartColor;
   /** Per-point marker border color. */
   markerForegroundColor?: ChartColor;
+  /** Per-point marker border/outline format. */
+  markerLineFormat?: ChartLineFormat;
   /** Per-point marker size (2-72 points). */
   markerSize?: number;
   /** Per-point marker style. */
@@ -1307,8 +1330,8 @@ export interface ChartRangeReferenceSnapshot {
   kind: string;
   source: 'identity' | 'a1';
   ref?: string;
+  sheetName?: string;
   range: {
-    sheetId?: string;
     startRow: number;
     startCol: number;
     endRow: number;
@@ -1537,7 +1560,7 @@ export interface ResolvedChartSeriesSnapshot {
   showLines?: boolean;
   smooth?: boolean;
   showMarkers?: boolean;
-  markerStyle?: string;
+  markerStyle?: MarkerStyle;
   renderLayerCount?: number;
   geometry?: ResolvedChartSeriesGeometrySnapshot;
   color?: string;

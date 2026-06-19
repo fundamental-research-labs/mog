@@ -68,30 +68,32 @@ pub(super) fn emit_data_labels(w: &mut XmlWriter, dl: &DataLabelOptions) {
             .self_close();
     }
 
-    // showLegendKey
-    w.start_element("c:showLegendKey")
-        .attr("val", if dl.show_legend_key { "1" } else { "0" })
-        .self_close();
-    // showVal
-    w.start_element("c:showVal")
-        .attr("val", if dl.show_value { "1" } else { "0" })
-        .self_close();
-    // showCatName
-    w.start_element("c:showCatName")
-        .attr("val", if dl.show_category { "1" } else { "0" })
-        .self_close();
-    // showSerName
-    w.start_element("c:showSerName")
-        .attr("val", if dl.show_series_name { "1" } else { "0" })
-        .self_close();
-    // showPercent
-    w.start_element("c:showPercent")
-        .attr("val", if dl.show_percent { "1" } else { "0" })
-        .self_close();
-    // showBubbleSize
-    w.start_element("c:showBubbleSize")
-        .attr("val", if dl.show_bubble_size { "1" } else { "0" })
-        .self_close();
+    emit_present_or_true_bool(
+        w,
+        "c:showLegendKey",
+        dl.show_legend_key,
+        dl.show_legend_key_present,
+    );
+    emit_present_or_true_bool(w, "c:showVal", dl.show_value, dl.show_value_present);
+    emit_present_or_true_bool(
+        w,
+        "c:showCatName",
+        dl.show_category,
+        dl.show_category_present,
+    );
+    emit_present_or_true_bool(
+        w,
+        "c:showSerName",
+        dl.show_series_name,
+        dl.show_series_name_present,
+    );
+    emit_present_or_true_bool(w, "c:showPercent", dl.show_percent, dl.show_percent_present);
+    emit_present_or_true_bool(
+        w,
+        "c:showBubbleSize",
+        dl.show_bubble_size,
+        dl.show_bubble_size_present,
+    );
 
     // separator
     if let Some(ref sep) = dl.separator {
@@ -255,6 +257,15 @@ pub(super) fn emit_data_point(w: &mut XmlWriter, dp: &DataPointOverride) {
     w.end_element("c:dPt");
 }
 
+fn emit_present_or_true_bool(w: &mut XmlWriter, name: &str, value: bool, present: bool) {
+    if !present && !value {
+        return;
+    }
+    w.start_element(name)
+        .attr("val", if value { "1" } else { "0" })
+        .self_close();
+}
+
 pub(super) fn emit_trendline(w: &mut XmlWriter, t: &Trendline) {
     w.start_element("c:trendline").end_attrs();
 
@@ -378,4 +389,55 @@ pub(super) fn emit_error_bars(w: &mut XmlWriter, eb: &ErrorBars) {
     }
 
     w.end_element("c:errBars");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn render_data_labels(labels: &DataLabelOptions) -> String {
+        let mut writer = XmlWriter::new();
+        emit_data_labels(&mut writer, labels);
+        String::from_utf8(writer.finish()).expect("data labels XML should be UTF-8")
+    }
+
+    #[test]
+    fn emit_data_labels_omits_absent_false_show_flags() {
+        let xml = render_data_labels(&DataLabelOptions::default());
+
+        assert!(!xml.contains("<c:showLegendKey"));
+        assert!(!xml.contains("<c:showVal"));
+        assert!(!xml.contains("<c:showCatName"));
+        assert!(!xml.contains("<c:showSerName"));
+        assert!(!xml.contains("<c:showPercent"));
+        assert!(!xml.contains("<c:showBubbleSize"));
+    }
+
+    #[test]
+    fn emit_data_labels_preserves_explicit_false_show_flags() {
+        let labels = DataLabelOptions {
+            show_value_present: true,
+            show_category_present: true,
+            ..Default::default()
+        };
+
+        let xml = render_data_labels(&labels);
+
+        assert!(xml.contains("<c:showVal val=\"0\"/>"));
+        assert!(xml.contains("<c:showCatName val=\"0\"/>"));
+        assert!(!xml.contains("<c:showSerName"));
+        assert!(!xml.contains("<c:showPercent"));
+    }
+
+    #[test]
+    fn emit_data_labels_preserves_true_show_flags_without_presence_metadata() {
+        let labels = DataLabelOptions {
+            show_value: true,
+            ..Default::default()
+        };
+
+        let xml = render_data_labels(&labels);
+
+        assert!(xml.contains("<c:showVal val=\"1\"/>"));
+    }
 }

@@ -81,6 +81,7 @@ export type {
   ImportedPivotViewRecord,
   PivotCreateConfig,
   PivotCreateOptions,
+  PivotCreateWithSheetOptions,
   WorksheetPivots,
 } from './pivots';
 export type { WorksheetPrint } from './print';

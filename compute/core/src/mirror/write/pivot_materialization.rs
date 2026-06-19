@@ -6,6 +6,12 @@ use crate::mirror::cell_mirror::CellMirror;
 impl CellMirror {
     /// Clear a rectangular region in col_data, setting all cells to Null.
     /// Used to wipe previously materialized pivot output before re-rendering.
+    ///
+    /// Historical builds allowed user edits inside pivot output ranges. Those
+    /// authored cells are read before `col_data`, so clearing only `col_data`
+    /// leaves stale values masking fresh pivot output after a sort or field
+    /// change. Keep identity registrations in place, but clear their authored
+    /// values and formulas so regenerated `col_data` is visible again.
     pub fn clear_pivot_region(
         &mut self,
         sheet: &SheetId,
@@ -19,6 +25,7 @@ impl CellMirror {
         if let Some(sheet_mirror) = self.sheets.get_mut(sheet) {
             for c in 0..total_cols {
                 let col = anchor_col + c;
+                let mut touched = false;
                 if let Some(col_vec) = sheet_mirror.col_data.get_mut(&col) {
                     for r in 0..total_rows {
                         let row = (anchor_row + r) as usize;
@@ -26,6 +33,21 @@ impl CellMirror {
                             col_vec[row] = CellValue::Null;
                         }
                     }
+                    touched = true;
+                }
+
+                for r in 0..total_rows {
+                    let pos = SheetPos::new(anchor_row + r, col);
+                    if let Some(cell_id) = sheet_mirror.pos_to_id.get(&pos).copied()
+                        && let Some(entry) = sheet_mirror.cells.get_mut(&cell_id)
+                    {
+                        entry.value = CellValue::Null;
+                        entry.formula = None;
+                        touched = true;
+                    }
+                }
+
+                if touched {
                     cols_touched.push(col);
                 }
             }
@@ -46,6 +68,25 @@ impl CellMirror {
         anchor_col: u32,
         result: &compute_pivot::types::PivotTableResult,
         row_field_names: &[String],
+    ) {
+        self.materialize_pivot_with_row_label_options(
+            sheet,
+            anchor_row,
+            anchor_col,
+            result,
+            row_field_names,
+            true,
+        );
+    }
+
+    pub fn materialize_pivot_with_row_label_options(
+        &mut self,
+        sheet: &SheetId,
+        anchor_row: u32,
+        anchor_col: u32,
+        result: &compute_pivot::types::PivotTableResult,
+        row_field_names: &[String],
+        repeat_row_labels: bool,
     ) {
         let bounds = &result.rendered_bounds;
         let first_data_row = bounds.first_data_row;
@@ -181,7 +222,11 @@ impl CellMirror {
                     );
                 }
 
-                // Write row headers and data values
+                // Write row headers and data values. In multi-column row layouts
+                // Excel leaves repeated outer item labels blank unless repeat labels are enabled.
+                let suppress_repeated_row_labels = !repeat_row_labels && first_data_col > 1;
+                let mut previous_visible_row_header_keys: Vec<Option<String>> =
+                    vec![None; first_data_col as usize];
                 for (row_idx, pivot_row) in result.rows.iter().enumerate() {
                     let row_idx = row_idx as u32;
                     // Row headers. In compact layout the engine still carries the
@@ -192,12 +237,29 @@ impl CellMirror {
                         (first_data_col as usize).min(pivot_row.headers.len());
                     let hidden_prefix =
                         pivot_row.headers.len().saturating_sub(visible_header_count);
+                    let mut ancestor_changed = false;
                     for (h_idx, header) in pivot_row.headers[hidden_prefix..].iter().enumerate() {
-                        write_cell(
-                            anchor_col + h_idx as u32,
-                            anchor_row + first_data_row + row_idx,
-                            header.value.clone(),
-                        );
+                        let is_repeated = previous_visible_row_header_keys
+                            .get(h_idx)
+                            .and_then(Option::as_deref)
+                            == Some(header.key.as_str());
+                        let should_write =
+                            !suppress_repeated_row_labels || ancestor_changed || !is_repeated;
+                        if should_write {
+                            write_cell(
+                                anchor_col + h_idx as u32,
+                                anchor_row + first_data_row + row_idx,
+                                header.value.clone(),
+                            );
+                        }
+                        ancestor_changed = ancestor_changed || !is_repeated;
+                        previous_visible_row_header_keys[h_idx] = Some(header.key.clone());
+                    }
+                    for key in previous_visible_row_header_keys
+                        .iter_mut()
+                        .skip(visible_header_count)
+                    {
+                        *key = None;
                     }
                     // Data values
                     for (v_idx, value) in pivot_row.values.iter().enumerate() {
@@ -281,9 +343,17 @@ impl CellMirror {
         anchor_col: u32,
         result: &compute_pivot::types::PivotTableResult,
         row_field_names: &[String],
+        repeat_row_labels: bool,
         id_alloc: &IdAllocator,
     ) {
-        self.materialize_pivot(sheet, anchor_row, anchor_col, result, row_field_names);
+        self.materialize_pivot_with_row_label_options(
+            sheet,
+            anchor_row,
+            anchor_col,
+            result,
+            row_field_names,
+            repeat_row_labels,
+        );
 
         let bounds = &result.rendered_bounds;
         if bounds.total_rows == 0 || bounds.total_cols == 0 {

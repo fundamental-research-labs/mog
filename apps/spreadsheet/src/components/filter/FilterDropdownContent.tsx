@@ -425,12 +425,18 @@ export function FilterDropdownContent({
                 width="16"
                 height="16"
                 viewBox="0 0 24 24"
-                fill="currentColor"
+                fill="none"
                 className="text-ss-text-secondary mr-2"
               >
                 <rect x="4" y="4" width="6" height="6" rx="1" fill="#4CAF50" />
                 <rect x="4" y="14" width="6" height="6" rx="1" fill="#2196F3" />
-                <path d="M14 7h6M14 17h6M16 4l-2 3h4l-2 3M16 14l2 3h-4l2 3" />
+                <path
+                  d="M14 7h6M14 17h6M16 4l-2 3h4l-2 3M16 14l2 3h-4l2 3"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
               </svg>
               <span className="flex-1">Sort by Color</span>
               <span className="text-ss-text-secondary">›</span>

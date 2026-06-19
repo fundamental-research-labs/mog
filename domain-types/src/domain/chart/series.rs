@@ -21,6 +21,15 @@ pub enum ChartSeriesXRoleData {
     Quantitative,
 }
 
+/// Imported category/x source value type.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ChartSeriesCategorySourceTypeData {
+    Number,
+    String,
+    MultiLevelString,
+}
+
 /// Imported stock chart series role.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -104,7 +113,7 @@ pub struct PivotChartProjectionData {
 
 /// Runtime series data — carries both range references and visual config.
 /// bridge-ts generates the TS equivalent, replacing hand-written SeriesConfig.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ChartSeriesData {
     /// Series name (from c:tx)
@@ -149,6 +158,9 @@ pub struct ChartSeriesData {
     /// Source authority for the category/x dimension.
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub category_source_kind: Option<ChartSeriesDimensionSourceKindData>,
+    /// Original OOXML category/x source value type (`numRef`, `strRef`, etc.).
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub category_source_type: Option<ChartSeriesCategorySourceTypeData>,
     /// Imported cached multi-level category labels, keyed by point index.
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub category_levels: Option<ChartSeriesCategoryLevelsCacheData>,
@@ -164,6 +176,9 @@ pub struct ChartSeriesData {
     /// Source authority for the bubble-size dimension.
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub bubble_size_source_kind: Option<ChartSeriesDimensionSourceKindData>,
+    /// 3-D bubble effect for this series.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub bubble_3d: Option<bool>,
 
     // -- Visual properties --
     /// Smooth line (line, scatter)
@@ -234,6 +249,8 @@ pub struct ChartSeriesData {
     pub marker_background_color: Option<ChartColorData>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub marker_foreground_color: Option<ChartColorData>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub marker_line_format: Option<ChartLineData>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub filtered: Option<bool>,
     /// Original chart series index before filtering/projection.
@@ -339,7 +356,7 @@ pub struct CategoryPointLabelFormatData {
 }
 
 /// Per-point formatting override.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PointFormatData {
     #[serde(default)]
@@ -365,6 +382,8 @@ pub struct PointFormatData {
     pub marker_background_color: Option<ChartColorData>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub marker_foreground_color: Option<ChartColorData>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub marker_line_format: Option<ChartLineData>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub marker_size: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none", default)]

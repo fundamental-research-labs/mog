@@ -104,6 +104,33 @@ function chip(container: HTMLElement, placementId: string): HTMLElement {
 }
 
 describe('PivotFieldList placement editor', () => {
+  it('renders available source fields as full-width checkbox rows with stable selectors', () => {
+    const { container } = renderList();
+    const availableFields = container.querySelector<HTMLElement>(
+      '[data-pivot-target="available-fields"][data-pivot-zone="available"]',
+    );
+    if (!availableFields) throw new Error('Missing available fields list');
+
+    const sourceRows = availableFields.querySelectorAll<HTMLElement>(
+      '[data-pivot-target="field-chip"][data-pivot-area="available"]',
+    );
+    const category = screen.getByRole('checkbox', { name: 'Category' });
+    const amount = screen.getByRole('checkbox', { name: 'Amount' });
+
+    expect(availableFields).toHaveClass('flex-col');
+    expect(availableFields).not.toHaveClass('flex-wrap');
+    expect(sourceRows).toHaveLength(fields.length);
+    sourceRows.forEach((row) => expect(row).toHaveClass('w-full'));
+    expect(category).toHaveAttribute('data-pivot-field-id', 'Category');
+    expect(category).toHaveAttribute('data-pivot-selected', 'false');
+    expect(category).toHaveAttribute('data-pivot-checked', 'false');
+    expect(category).toHaveAttribute('aria-checked', 'false');
+    expect(category).toHaveAttribute('draggable', 'true');
+    expect(amount).toHaveAttribute('data-pivot-field-id', 'Amount');
+    expect(amount).toHaveAttribute('data-pivot-checked', 'true');
+    expect(amount).toHaveAttribute('aria-checked', 'true');
+  });
+
   it('renders ordered placement wells keyed by placementId with row/value sort controls', () => {
     const { container } = renderList({
       placements: [
@@ -124,6 +151,7 @@ describe('PivotFieldList placement editor', () => {
     ).map((node) => node.dataset.pivotPlacementId);
 
     expect(rowPlacementIds).toEqual(['row:Month:0', 'row:Vendor:1']);
+    expect(chip(container, 'row:Month:0')).toHaveAttribute('draggable', 'true');
     expect(screen.getByRole('combobox', { name: /Sort Month/i })).toHaveValue('none');
     expect(screen.getByRole('combobox', { name: /Sort values by Amount/i })).toHaveValue('none');
   });
@@ -212,6 +240,66 @@ describe('PivotFieldList placement editor', () => {
     expect(props.onMovePlacement).toHaveBeenCalledWith('row:Vendor:1', 'column', 0);
   });
 
+  it('reorders against the underlying chip when pointer hit testing only hits the dragged chip', () => {
+    const { container, props } = renderList();
+    const vendor = chip(container, 'row:Vendor:1');
+    const month = chip(container, 'row:Month:0');
+    const rowZone = zone(container, 'row');
+    setRect(month, { top: 0, height: 20 });
+    const originalElementsFromPoint = document.elementsFromPoint;
+    Object.defineProperty(document, 'elementsFromPoint', {
+      configurable: true,
+      value: jest.fn(() => [vendor, rowZone]),
+    });
+
+    try {
+      fireEvent.mouseDown(vendor, { button: 0, clientX: 10, clientY: 10 });
+      fireEvent.mouseMove(document, { clientX: 20, clientY: 1 });
+      fireEvent.mouseUp(document, { clientX: 20, clientY: 1 });
+
+      expect(props.onMovePlacement).toHaveBeenCalledWith('row:Vendor:1', 'row', 0);
+    } finally {
+      Object.defineProperty(document, 'elementsFromPoint', {
+        configurable: true,
+        value: originalElementsFromPoint,
+      });
+    }
+  });
+
+  it('removes a placement when it is dropped back onto available fields', () => {
+    const { container, props } = renderList();
+    const transfer = dataTransfer();
+    const availableFields = container.querySelector<HTMLElement>(
+      '[data-pivot-target="available-fields"]',
+    );
+    if (!availableFields) throw new Error('Missing available fields');
+
+    fireEvent.dragStart(chip(container, 'row:Vendor:1'), { dataTransfer: transfer });
+    fireEvent.dragOver(availableFields, { dataTransfer: transfer });
+    fireEvent.drop(availableFields, { dataTransfer: transfer });
+
+    expect(props.onRemovePlacement).toHaveBeenCalledWith('row:Vendor:1');
+  });
+
+  it('shows an insertion indicator while hovering over a placement', () => {
+    const { container } = renderList();
+    const transfer = dataTransfer();
+    const vendor = chip(container, 'row:Vendor:1');
+    const month = chip(container, 'row:Month:0');
+    setRect(month, { top: 0, height: 20 });
+
+    fireEvent.dragStart(vendor, { dataTransfer: transfer });
+    const currentMonth = chip(container, 'row:Month:0');
+    setRect(currentMonth, { top: 0, height: 20 });
+    fireEvent.dragOver(currentMonth, { dataTransfer: transfer, clientY: 1 });
+
+    const indicator = zone(container, 'row').querySelector<HTMLElement>(
+      '[data-pivot-target="field-drop-indicator"]',
+    );
+    expect(indicator).toBeInTheDocument();
+    expect(indicator).toHaveAttribute('data-pivot-drop-position', '0');
+  });
+
   it('inserts source fields at the target placement position', () => {
     const { container, props } = renderList();
     const transfer = dataTransfer();
@@ -229,6 +317,71 @@ describe('PivotFieldList placement editor', () => {
       position: 0,
       aggregateFunction: 'count',
     });
+  });
+
+  it('does not double-commit when native drag starts after pointer fallback mousedown', () => {
+    const { container, props } = renderList();
+    const transfer = dataTransfer();
+    const category = container.querySelector<HTMLElement>(
+      '[data-pivot-target="field-chip"][data-pivot-area="available"][data-pivot-field-id="Category"]',
+    );
+    if (!category) throw new Error('Missing Category source chip');
+    const rowZone = zone(container, 'row');
+    const originalElementsFromPoint = document.elementsFromPoint;
+    const elementsFromPoint = jest.fn(() => [category]);
+    Object.defineProperty(document, 'elementsFromPoint', {
+      configurable: true,
+      value: elementsFromPoint,
+    });
+
+    try {
+      fireEvent.mouseDown(category, { button: 0, clientX: 5, clientY: 5 });
+      expect(fireEvent.dragStart(category, { dataTransfer: transfer })).toBe(false);
+      fireEvent.drop(rowZone, { dataTransfer: transfer });
+      elementsFromPoint.mockImplementation(() => [rowZone]);
+      fireEvent.mouseMove(document, { clientX: 20, clientY: 20 });
+      fireEvent.mouseUp(document, { clientX: 20, clientY: 20 });
+
+      expect(props.onAddField).toHaveBeenCalledTimes(1);
+      expect(props.onAddField).toHaveBeenCalledWith('Category', 'row', {
+        position: 2,
+        aggregateFunction: 'count',
+      });
+    } finally {
+      Object.defineProperty(document, 'elementsFromPoint', {
+        configurable: true,
+        value: originalElementsFromPoint,
+      });
+    }
+  });
+
+  it('keeps pointer fallback active when native drag starts without a native drop', () => {
+    const { container, props } = renderList();
+    const transfer = dataTransfer();
+    const vendor = chip(container, 'row:Vendor:1');
+    const month = chip(container, 'row:Month:0');
+    setRect(month, { top: 0, height: 20 });
+    const originalElementsFromPoint = document.elementsFromPoint;
+    const elementsFromPoint = jest.fn(() => [vendor]);
+    Object.defineProperty(document, 'elementsFromPoint', {
+      configurable: true,
+      value: elementsFromPoint,
+    });
+
+    try {
+      fireEvent.mouseDown(vendor, { button: 0, clientX: 10, clientY: 10 });
+      elementsFromPoint.mockImplementation(() => [vendor, month]);
+      expect(fireEvent.dragStart(vendor, { dataTransfer: transfer })).toBe(false);
+      fireEvent.mouseMove(document, { clientX: 20, clientY: 1 });
+      fireEvent.mouseUp(document, { clientX: 20, clientY: 1 });
+
+      expect(props.onMovePlacement).toHaveBeenCalledWith('row:Vendor:1', 'row', 0);
+    } finally {
+      Object.defineProperty(document, 'elementsFromPoint', {
+        configurable: true,
+        value: originalElementsFromPoint,
+      });
+    }
   });
 
   it('starts auto-scroll against the provided pane during field drag', () => {
@@ -291,7 +444,68 @@ describe('PivotFieldList placement editor', () => {
     }
   });
 
-  it('places a selected source field after a clicked placement chip', () => {
+  it('starts auto-scroll during pointer fallback field drags', () => {
+    const frameCallbacks: FrameRequestCallback[] = [];
+    const requestAnimationFrameMock = jest.fn((callback: FrameRequestCallback) => {
+      frameCallbacks.push(callback);
+      return frameCallbacks.length;
+    });
+    const cancelAnimationFrameMock = jest.fn();
+    const originalRequestAnimationFrame = window.requestAnimationFrame;
+    const originalCancelAnimationFrame = window.cancelAnimationFrame;
+    const originalElementsFromPoint = document.elementsFromPoint;
+    Object.defineProperty(window, 'requestAnimationFrame', {
+      configurable: true,
+      value: requestAnimationFrameMock,
+    });
+    Object.defineProperty(window, 'cancelAnimationFrame', {
+      configurable: true,
+      value: cancelAnimationFrameMock,
+    });
+
+    try {
+      const scrollContainer = document.createElement('div');
+      setRect(scrollContainer, { top: 0, bottom: 100, left: 0, right: 240, height: 100 });
+      const getDragScrollContainer = jest.fn(() => scrollContainer);
+      const { container } = renderList({ getDragScrollContainer });
+      const category = container.querySelector<HTMLElement>(
+        '[data-pivot-target="field-chip"][data-pivot-area="available"][data-pivot-field-id="Category"]',
+      );
+      const rowZone = zone(container, 'row');
+      if (!category) throw new Error('Missing Category source chip');
+      const elementsFromPoint = jest.fn(() => [category]);
+      Object.defineProperty(document, 'elementsFromPoint', {
+        configurable: true,
+        value: elementsFromPoint,
+      });
+
+      fireEvent.mouseDown(category, { button: 0, clientX: 12, clientY: 40 });
+      elementsFromPoint.mockImplementation(() => [rowZone]);
+      fireEvent.mouseMove(document, { clientX: 12, clientY: 98 });
+
+      expect(requestAnimationFrameMock).toHaveBeenCalled();
+      frameCallbacks[0](1);
+      expect(getDragScrollContainer).toHaveBeenCalled();
+
+      fireEvent.mouseUp(document, { clientX: 12, clientY: 98 });
+      expect(cancelAnimationFrameMock).toHaveBeenCalled();
+    } finally {
+      Object.defineProperty(document, 'elementsFromPoint', {
+        configurable: true,
+        value: originalElementsFromPoint,
+      });
+      Object.defineProperty(window, 'requestAnimationFrame', {
+        configurable: true,
+        value: originalRequestAnimationFrame,
+      });
+      Object.defineProperty(window, 'cancelAnimationFrame', {
+        configurable: true,
+        value: originalCancelAnimationFrame,
+      });
+    }
+  });
+
+  it('activates a text source field into the row area on click', () => {
     const { container, props } = renderList();
     const category = container.querySelector<HTMLElement>(
       '[data-pivot-target="field-chip"][data-pivot-area="available"][data-pivot-field-id="Category"]',
@@ -299,13 +513,107 @@ describe('PivotFieldList placement editor', () => {
     if (!category) throw new Error('Missing Category source chip');
 
     fireEvent.click(category);
+
     expect(category).toHaveAttribute('data-pivot-selected', 'true');
-
-    fireEvent.click(chip(container, 'row:Month:0'));
-
     expect(props.onAddField).toHaveBeenCalledWith('Category', 'row', {
-      position: 1,
+      position: 2,
       aggregateFunction: 'count',
+    });
+  });
+
+  it('does not double-add when a harness-style zone click follows default activation', () => {
+    const { container, props } = renderList();
+    const category = container.querySelector<HTMLElement>(
+      '[data-pivot-target="field-chip"][data-pivot-area="available"][data-pivot-field-id="Category"]',
+    );
+    if (!category) throw new Error('Missing Category source chip');
+
+    fireEvent.click(category);
+    fireEvent.click(zone(container, 'row'));
+
+    expect(props.onAddField).toHaveBeenCalledTimes(1);
+    expect(props.onAddField).toHaveBeenCalledWith('Category', 'row', {
+      position: 2,
+      aggregateFunction: 'count',
+    });
+  });
+
+  it('moves an auto-activated source field when a follow-up click targets another well', () => {
+    const { container, props, rerender } = renderList();
+    const category = container.querySelector<HTMLElement>(
+      '[data-pivot-target="field-chip"][data-pivot-area="available"][data-pivot-field-id="Category"]',
+    );
+    if (!category) throw new Error('Missing Category source chip');
+
+    fireEvent.click(category);
+    rerender(
+      <PivotFieldList
+        {...props}
+        placements={[
+          ...props.placements,
+          placement({
+            placementId: 'row:Category:2',
+            fieldId: 'Category',
+            area: 'row',
+            position: 2,
+          }),
+        ]}
+      />,
+    );
+    fireEvent.click(zone(container, 'column'));
+
+    expect(props.onAddField).toHaveBeenCalledTimes(1);
+    expect(props.onMovePlacement).toHaveBeenCalledWith('row:Category:2', 'column', 0);
+  });
+
+  it('does not double-add when a same-well chip click follows default activation', () => {
+    const { container, props, rerender } = renderList({
+      placements: [
+        placement({ placementId: 'row:Month:0', fieldId: 'Month', area: 'row', position: 0 }),
+      ],
+    });
+    const amount = container.querySelector<HTMLElement>(
+      '[data-pivot-target="field-chip"][data-pivot-area="available"][data-pivot-field-id="Amount"]',
+    );
+    if (!amount) throw new Error('Missing Amount source chip');
+
+    fireEvent.click(amount);
+    rerender(
+      <PivotFieldList
+        {...props}
+        placements={[
+          ...props.placements,
+          placement({
+            placementId: 'value:Amount:0',
+            fieldId: 'Amount',
+            area: 'value',
+            position: 0,
+            aggregateFunction: 'sum',
+          }),
+        ]}
+      />,
+    );
+    fireEvent.click(chip(container, 'value:Amount:0'));
+
+    expect(props.onAddField).toHaveBeenCalledTimes(1);
+  });
+
+  it('activates a numeric source field into the value area from the keyboard', () => {
+    const { container, props } = renderList({
+      placements: [
+        placement({ placementId: 'row:Month:0', fieldId: 'Month', area: 'row', position: 0 }),
+      ],
+    });
+    const amount = container.querySelector<HTMLElement>(
+      '[data-pivot-target="field-chip"][data-pivot-area="available"][data-pivot-field-id="Amount"]',
+    );
+    if (!amount) throw new Error('Missing Amount source chip');
+
+    fireEvent.keyDown(amount, { key: 'Enter' });
+
+    expect(props.onAddField).toHaveBeenCalledWith('Amount', 'value', {
+      position: 0,
+      aggregateFunction: 'sum',
     });
   });
 
@@ -340,6 +648,35 @@ describe('PivotFieldList placement editor', () => {
       within(chip(container, 'value:Amount:1')).getByRole('button', { name: /Remove Amount Max/i }),
     );
     expect(props.onRemovePlacement).toHaveBeenCalledWith('value:Amount:1');
+  });
+
+  it('keeps remove button pointer input out of drag fallback handling', () => {
+    const { container, props } = renderList();
+    const removeButton = within(chip(container, 'row:Vendor:1')).getByRole('button', {
+      name: /Remove Vendor/i,
+    });
+    const originalElementsFromPoint = document.elementsFromPoint;
+    const elementsFromPoint = jest.fn(() => [chip(container, 'row:Vendor:1')]);
+    Object.defineProperty(document, 'elementsFromPoint', {
+      configurable: true,
+      value: elementsFromPoint,
+    });
+
+    try {
+      fireEvent.mouseDown(removeButton, { button: 0, clientX: 10, clientY: 10 });
+      fireEvent.mouseMove(document, { clientX: 30, clientY: 30 });
+      fireEvent.mouseUp(document, { clientX: 30, clientY: 30 });
+      fireEvent.click(removeButton);
+
+      expect(elementsFromPoint).not.toHaveBeenCalled();
+      expect(props.onMovePlacement).not.toHaveBeenCalled();
+      expect(props.onRemovePlacement).toHaveBeenCalledWith('row:Vendor:1');
+    } finally {
+      Object.defineProperty(document, 'elementsFromPoint', {
+        configurable: true,
+        value: originalElementsFromPoint,
+      });
+    }
   });
 
   it('renders per-capability read-only controls as disabled', () => {
@@ -389,7 +726,7 @@ describe('PivotFieldList placement editor', () => {
     expect(label).toHaveClass('min-w-0', 'flex-1', 'truncate');
     expect(label).toHaveAttribute('title', longName);
     expect(label).toHaveAttribute('aria-label', longName);
-    expect(controls).toHaveClass('w-full', 'min-w-0');
+    expect(controls).toHaveClass('flex', 'w-full', 'min-w-0');
     expect(screen.getByRole('combobox', { name: /Sort values by/i })).toHaveClass('min-w-0');
   });
 });

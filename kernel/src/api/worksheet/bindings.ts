@@ -11,6 +11,7 @@ import type {
   SheetDataBindingInfo,
   SheetId,
   WorksheetBindings,
+  WorksheetRange,
 } from '@mog-sdk/contracts/api';
 import { KernelError } from '../../errors';
 
@@ -18,6 +19,7 @@ import type { DocumentContext } from '../../context';
 import { resolveRange } from '../internal/address-resolver';
 import { normalizeBindingResponse } from './operations/binding-helpers';
 import * as CellOps from './operations/cell-operations';
+import { toWorksheetRangeOrNull } from './public-ranges';
 
 export class WorksheetBindingsImpl implements WorksheetBindings {
   constructor(
@@ -108,8 +110,10 @@ export class WorksheetBindingsImpl implements WorksheetBindings {
     }
   }
 
-  async getProjectionRange(row: number, col: number): Promise<CellRange | null> {
-    return CellOps.getProjectionRange(this.ctx, this.sheetId, row, col);
+  async getProjectionRange(row: number, col: number): Promise<WorksheetRange | null> {
+    return toWorksheetRangeOrNull(
+      await CellOps.getProjectionRange(this.ctx, this.sheetId, row, col),
+    );
   }
 
   async getProjectionSource(

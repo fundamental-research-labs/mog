@@ -46,6 +46,7 @@ import { getUniqueSheetName } from '../../infra/utils/naming';
 import type { WorkbookWithImportedPivots } from '../../pivot/imported-pivot-runtime';
 import type { PivotViewModel } from '../../pivot/pivot-capabilities';
 import { loadPivotConfigEntries, type PivotConfigEntry } from '../../pivot/pivot-view-records';
+import { usePivotMutationQueue } from './pivot-mutation-queue';
 import {
   assertPivotMaterialized,
   awaitPivotMaterialization,
@@ -57,10 +58,6 @@ import {
 function pivotEntryMatchesId(entry: PivotConfigEntry, pivotId: string): boolean {
   return entry.config.id === pivotId || entry.alternateIds?.includes(pivotId) === true;
 }
-
-// =============================================================================
-// Types for Location Selection
-// =============================================================================
 
 /**
  * Output location specification for pivot table creation.
@@ -86,10 +83,6 @@ export interface PivotOutputLocation {
    */
   cell?: { row: number; col: number };
 }
-
-// =============================================================================
-// Types
-// =============================================================================
 
 export interface UsePivotTablesOptions {
   /**
@@ -299,6 +292,7 @@ export function usePivotTables({ sheetId }: UsePivotTablesOptions): UsePivotTabl
   const [pivotEntries, setPivotEntries] = useState<PivotConfigEntry[]>([]);
   const editingMissReloadKeyRef = useRef<string | null>(null);
   const loadPivotEntries = useCallback(() => loadPivotConfigEntries(wb, sheetId), [wb, sheetId]);
+  const enqueuePivotMutation = usePivotMutationQueue();
 
   const pivotConfigFromId = useCallback(
     (pivotId: string): PivotTableConfig | null =>
@@ -536,7 +530,7 @@ export function usePivotTables({ sheetId }: UsePivotTablesOptions): UsePivotTabl
         layout: {
           showRowGrandTotals: true,
           showColumnGrandTotals: true,
-          layoutForm: 'compact' as const,
+          layoutForm: 'outline' as const,
         },
       };
 
@@ -555,7 +549,7 @@ export function usePivotTables({ sheetId }: UsePivotTablesOptions): UsePivotTabl
             outputSheetName: sheetName,
             outputLocation: { row: 0, col: 0 },
           },
-          { lifecycle: 'materialize' },
+          { lifecycle: 'materialize', insertBeforeSheetId: sourceSheetId },
         );
         assertPivotMaterialized(receipt);
         const outputSheetId = toSheetId(receipt.sheetId);
@@ -614,9 +608,9 @@ export function usePivotTables({ sheetId }: UsePivotTablesOptions): UsePivotTabl
   // Update pivot table via ws.pivots (fire-and-forget async)
   const updatePivotTable = useCallback(
     (pivotId: string, updates: Partial<Omit<PivotTableConfig, 'id' | 'createdAt'>>) => {
-      void pivotHandleFromId(pivotId)?.update(updates);
+      void enqueuePivotMutation(pivotId, 'update', () => pivotHandleFromId(pivotId)?.update(updates));
     },
-    [pivotHandleFromId],
+    [enqueuePivotMutation, pivotHandleFromId],
   );
 
   // Delete pivot table via ws.pivots (fire-and-forget async)
@@ -662,48 +656,55 @@ export function usePivotTables({ sheetId }: UsePivotTablesOptions): UsePivotTabl
         displayName?: string;
       },
     ) => {
-      const handle = pivotHandleFromId(pivotId);
-      if (!handle) return;
-      if (area === 'value') {
-        void handle.addValueField(
-          fieldId,
-          (options?.aggregateFunction ?? 'sum') as 'sum' | 'count' | 'average' | 'max' | 'min',
-          options?.displayName,
-        );
-      } else {
-        void handle.addField(fieldId, area, options?.position);
-      }
+      void enqueuePivotMutation(pivotId, 'add field', () => {
+        const handle = pivotHandleFromId(pivotId);
+        if (!handle) return null;
+        if (area === 'value') {
+          return handle.addValueField(
+            fieldId,
+            (options?.aggregateFunction ?? 'sum') as 'sum' | 'count' | 'average' | 'max' | 'min',
+            options?.displayName,
+          );
+        }
+        return handle.addField(fieldId, area, options?.position);
+      });
     },
-    [pivotHandleFromId],
+    [enqueuePivotMutation, pivotHandleFromId],
   );
 
   // Add a field as a placement at a specific position.
   const addPlacement = useCallback(
     (pivotId: string, spec: PivotHandlePlacementSpec) => {
-      inspectPivotMutationReceipt('add placement', pivotHandleFromId(pivotId)?.addPlacement(spec));
+      void enqueuePivotMutation(pivotId, 'add placement', () =>
+        inspectPivotMutationReceipt('add placement', pivotHandleFromId(pivotId)?.addPlacement(spec)),
+      );
     },
-    [pivotHandleFromId],
+    [enqueuePivotMutation, pivotHandleFromId],
   );
 
   // Remove field from area via the pivot handle.
   const removeFieldFromArea = useCallback(
     (pivotId: string, fieldId: string, area: PivotFieldArea) => {
-      const placement = placementForField(pivotId, fieldId, area);
-      if (!placement) return;
-      void pivotHandleFromId(pivotId)?.removeField(fieldId, area);
+      void enqueuePivotMutation(pivotId, 'remove field', () => {
+        const placement = placementForField(pivotId, fieldId, area);
+        if (!placement) return null;
+        return pivotHandleFromId(pivotId)?.removeField(fieldId, area);
+      });
     },
-    [pivotHandleFromId, placementForField],
+    [enqueuePivotMutation, pivotHandleFromId, placementForField],
   );
 
   // Remove a specific placement by placementId.
   const removePlacement = useCallback(
     (pivotId: string, placementId: PlacementId) => {
-      inspectPivotMutationReceipt(
-        'remove placement',
-        pivotHandleFromId(pivotId)?.removePlacement(placementId),
+      void enqueuePivotMutation(pivotId, 'remove placement', () =>
+        inspectPivotMutationReceipt(
+          'remove placement',
+          pivotHandleFromId(pivotId)?.removePlacement(placementId),
+        ),
       );
     },
-    [pivotHandleFromId],
+    [enqueuePivotMutation, pivotHandleFromId],
   );
 
   // Move field via the pivot handle.
@@ -715,71 +716,85 @@ export function usePivotTables({ sheetId }: UsePivotTablesOptions): UsePivotTabl
       toArea: PivotFieldArea,
       toPosition: number,
     ) => {
-      const placement = placementForField(pivotId, fieldId, fromArea);
-      if (!placement) return;
-      void pivotHandleFromId(pivotId)?.moveField(fieldId, fromArea, toArea, toPosition);
+      void enqueuePivotMutation(pivotId, 'move field', () => {
+        const placement = placementForField(pivotId, fieldId, fromArea);
+        if (!placement) return null;
+        return pivotHandleFromId(pivotId)?.moveField(fieldId, fromArea, toArea, toPosition);
+      });
     },
-    [pivotHandleFromId, placementForField],
+    [enqueuePivotMutation, pivotHandleFromId, placementForField],
   );
 
   // Move a specific placement by placementId.
   const movePlacement = useCallback(
     (pivotId: string, placementId: PlacementId, toArea: PivotFieldArea, toPosition: number) => {
-      inspectPivotMutationReceipt(
-        'move placement',
-        pivotHandleFromId(pivotId)?.movePlacement(placementId, toArea, toPosition),
+      void enqueuePivotMutation(pivotId, 'move placement', () =>
+        inspectPivotMutationReceipt(
+          'move placement',
+          pivotHandleFromId(pivotId)?.movePlacement(placementId, toArea, toPosition),
+        ),
       );
     },
-    [pivotHandleFromId],
+    [enqueuePivotMutation, pivotHandleFromId],
   );
 
   // Set aggregate function via the pivot handle.
   const setAggregateFunction = useCallback(
     (pivotId: string, fieldOrPlacementId: string, aggregateFunction: AggregateFunction) => {
-      void pivotHandleFromId(pivotId)?.changeAggregation(
-        fieldOrPlacementId,
-        aggregateFunction as 'sum' | 'count' | 'average' | 'max' | 'min',
+      void enqueuePivotMutation(pivotId, 'set aggregate function', () =>
+        pivotHandleFromId(pivotId)?.changeAggregation(
+          fieldOrPlacementId,
+          aggregateFunction as 'sum' | 'count' | 'average' | 'max' | 'min',
+        ),
       );
     },
-    [pivotHandleFromId],
+    [enqueuePivotMutation, pivotHandleFromId],
   );
 
   // Set aggregate function for a specific value placement.
   const setPlacementAggregateFunction = useCallback(
     (pivotId: string, placementId: PlacementId, aggregateFunction: AggregateFunction) => {
-      inspectPivotMutationReceipt(
-        'set placement aggregate function',
-        pivotHandleFromId(pivotId)?.setPlacementAggregateFunction(placementId, aggregateFunction),
+      void enqueuePivotMutation(pivotId, 'set placement aggregate function', () =>
+        inspectPivotMutationReceipt(
+          'set placement aggregate function',
+          pivotHandleFromId(pivotId)?.setPlacementAggregateFunction(placementId, aggregateFunction),
+        ),
       );
     },
-    [pivotHandleFromId],
+    [enqueuePivotMutation, pivotHandleFromId],
   );
 
   // Set show-values-as via the pivot handle.
   const setShowValuesAs = useCallback(
     (pivotId: string, fieldOrPlacementId: string, showValuesAs: ShowValuesAsConfig | null) => {
-      void pivotHandleFromId(pivotId)?.setShowValuesAs(fieldOrPlacementId, showValuesAs);
+      void enqueuePivotMutation(pivotId, 'set show values as', () =>
+        pivotHandleFromId(pivotId)?.setShowValuesAs(fieldOrPlacementId, showValuesAs),
+      );
     },
-    [pivotHandleFromId],
+    [enqueuePivotMutation, pivotHandleFromId],
   );
 
   // Set sort order via the pivot handle.
   const setSortOrder = useCallback(
     (pivotId: string, fieldId: string, sortOrder: SortOrder) => {
-      void pivotHandleFromId(pivotId)?.setSortOrder(fieldId, sortOrder);
+      void enqueuePivotMutation(pivotId, 'set sort order', () =>
+        pivotHandleFromId(pivotId)?.setSortOrder(fieldId, sortOrder),
+      );
     },
-    [pivotHandleFromId],
+    [enqueuePivotMutation, pivotHandleFromId],
   );
 
   // Set row/column label sort for a specific placement.
   const setPlacementSortOrder = useCallback(
     (pivotId: string, placementId: PlacementId, sortOrder: SortOrder | null) => {
-      inspectPivotMutationReceipt(
-        'set placement sort order',
-        pivotHandleFromId(pivotId)?.setPlacementSortOrder(placementId, sortOrder),
+      void enqueuePivotMutation(pivotId, 'set placement sort order', () =>
+        inspectPivotMutationReceipt(
+          'set placement sort order',
+          pivotHandleFromId(pivotId)?.setPlacementSortOrder(placementId, sortOrder),
+        ),
       );
     },
-    [pivotHandleFromId],
+    [enqueuePivotMutation, pivotHandleFromId],
   );
 
   // Set value sorting on a specific axis placement.
@@ -790,56 +805,66 @@ export function usePivotTables({ sheetId }: UsePivotTablesOptions): UsePivotTabl
       valuePlacementId: PlacementId,
       valueSortConfig: PivotValueSortConfig | null,
     ) => {
-      inspectPivotMutationReceipt(
-        'set value sort',
-        pivotHandleFromId(pivotId)?.setSortByValue(
-          axisPlacementId,
-          valuePlacementId,
-          valueSortConfig,
+      void enqueuePivotMutation(pivotId, 'set value sort', () =>
+        inspectPivotMutationReceipt(
+          'set value sort',
+          pivotHandleFromId(pivotId)?.setSortByValue(
+            axisPlacementId,
+            valuePlacementId,
+            valueSortConfig,
+          ),
         ),
       );
     },
-    [pivotHandleFromId],
+    [enqueuePivotMutation, pivotHandleFromId],
   );
 
   // Set filter via the pivot handle.
   const setFilter = useCallback(
     (pivotId: string, fieldId: string, filter: Omit<PivotFilter, 'fieldId'>) => {
-      const config = pivotConfigFromId(pivotId);
-      if (!config) return;
-      void pivotHandleFromId(pivotId)?.setFilter(fieldId, filter);
+      void enqueuePivotMutation(pivotId, 'set filter', () => {
+        const config = pivotConfigFromId(pivotId);
+        if (!config) return null;
+        return pivotHandleFromId(pivotId)?.setFilter(fieldId, filter);
+      });
     },
-    [pivotHandleFromId, pivotConfigFromId],
+    [enqueuePivotMutation, pivotHandleFromId, pivotConfigFromId],
   );
 
   // Remove filter via the pivot handle.
   const removeFilter = useCallback(
     (pivotId: string, fieldId: string) => {
-      const config = pivotConfigFromId(pivotId);
-      if (!config) return;
-      void pivotHandleFromId(pivotId)?.removeFilter(fieldId);
+      void enqueuePivotMutation(pivotId, 'remove filter', () => {
+        const config = pivotConfigFromId(pivotId);
+        if (!config) return null;
+        return pivotHandleFromId(pivotId)?.removeFilter(fieldId);
+      });
     },
-    [pivotHandleFromId, pivotConfigFromId],
+    [enqueuePivotMutation, pivotHandleFromId, pivotConfigFromId],
   );
 
   // Set layout via the pivot handle.
   const setLayout = useCallback(
     (pivotId: string, layout: Partial<PivotTableLayout>) => {
-      const config = pivotConfigFromId(pivotId);
-      if (!config) return;
-      void pivotHandleFromId(pivotId)?.setLayout(layout);
+      void enqueuePivotMutation(pivotId, 'set layout', () => {
+        const config = pivotConfigFromId(pivotId);
+        if (!config) return null;
+        return pivotHandleFromId(pivotId)?.setLayout(layout);
+      });
     },
-    [pivotHandleFromId, pivotConfigFromId],
+    [enqueuePivotMutation, pivotHandleFromId, pivotConfigFromId],
   );
 
   // Set style via the pivot handle.
   const setStyle = useCallback(
     (pivotId: string, style: Partial<PivotTableStyle>) => {
-      const config = pivotConfigFromId(pivotId);
-      if (!config) return;
-      void pivotHandleFromId(pivotId)?.setStyle(style);
+      void enqueuePivotMutation(pivotId, 'set style', () => {
+        const config = pivotConfigFromId(pivotId);
+        if (!config) return null;
+        return pivotHandleFromId(pivotId)?.setStyle(style);
+      });
     },
-    [pivotHandleFromId, pivotConfigFromId],
+    [enqueuePivotMutation, pivotHandleFromId, pivotConfigFromId],
   );
 
   // Toggle row expanded via ws.pivots (fire-and-forget async, return true as default)

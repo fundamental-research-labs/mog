@@ -25,6 +25,7 @@ export type {
   ImportedPivotSourceKind,
   ImportedPivotViewRecord,
   PivotCacheStats,
+  PivotCreateSheetOptions,
   PivotResultCallback,
 } from './pivot-bridge';
 

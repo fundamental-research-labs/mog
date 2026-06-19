@@ -7,6 +7,7 @@ import type { SheetId } from '@mog-sdk/contracts/core';
 
 import type { ChartFloatingObject, ComputeBridge } from '../../bridges/compute/compute-bridge';
 import { cellsToPixels } from './chart-manager-dimensions';
+import { resolveChartHeightCells, resolveChartWidthCells } from './chart-size-units';
 
 export function chartNeedsPositionUpdate(chart: ChartFloatingObject): boolean {
   return Boolean(chart.anchorCellId);
@@ -23,8 +24,8 @@ export async function calculateChartPixelBounds(
   return cellsToPixels(
     chart.anchor.anchorRow,
     chart.anchor.anchorCol,
-    chart.widthCells ?? chart.width,
-    chart.heightCells ?? chart.height,
+    resolveChartWidthCells(chart.widthCells, chart.width) ?? 4,
+    resolveChartHeightCells(chart.heightCells, chart.height) ?? 10,
     containerId,
     computeBridge,
   );

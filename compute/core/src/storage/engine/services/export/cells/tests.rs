@@ -104,14 +104,17 @@ fn engine_from_parse_output(output: &domain_types::ParseOutput) -> (YrsComputeEn
 
 fn authored_style_run_output() -> domain_types::ParseOutput {
     domain_types::ParseOutput {
-        style_palette: vec![DocumentFormat {
-            fill: Some(domain_types::FillFormat {
-                background_color: Some("#FFEE00".to_string()),
-                pattern_type: Some("solid".to_string()),
+        style_palette: vec![
+            DocumentFormat::default(),
+            DocumentFormat {
+                fill: Some(domain_types::FillFormat {
+                    background_color: Some("#FFEE00".to_string()),
+                    pattern_type: Some("solid".to_string()),
+                    ..Default::default()
+                }),
                 ..Default::default()
-            }),
-            ..Default::default()
-        }],
+            },
+        ],
         sheets: vec![domain_types::SheetData {
             name: "Sheet1".to_string(),
             rows: 2,
@@ -127,7 +130,7 @@ fn authored_style_run_output() -> domain_types::ParseOutput {
                 start_col: 0,
                 end_row: 1,
                 end_col: 1,
-                style_id: 0,
+                style_id: 1,
             }],
             ..Default::default()
         }],
@@ -175,7 +178,7 @@ fn authored_style_runs_hydrate_as_format_ranges_without_blank_cells() {
         .iter()
         .find(|cell| cell.row == 0 && cell.col == 1)
         .expect("overlapping value cell should export");
-    assert_eq!(value_cell.style_id, Some(0));
+    assert_eq!(value_cell.style_id, Some(1));
 
     let exported_runs =
         export_authored_style_runs_for_sheet(&engine.stores, &engine.mirror, &sheet_id, &palette);
@@ -224,9 +227,9 @@ fn mutated_row_and_col_formats_use_authored_palette_ids() {
         .expect("set col format");
 
     let exported = engine.build_parse_output_from_yrs();
-    assert_eq!(exported.style_palette.len(), 2);
-    assert_eq!(exported.sheets[0].row_styles[0].style_id, 0);
-    assert_eq!(exported.sheets[0].col_styles[0].style_id, 1);
+    assert_eq!(exported.style_palette.len(), 3);
+    assert_eq!(exported.sheets[0].row_styles[0].style_id, 1);
+    assert_eq!(exported.sheets[0].col_styles[0].style_id, 2);
 }
 
 #[test]

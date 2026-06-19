@@ -86,6 +86,14 @@ pub enum ChartDashStyle {
     LongDash,
     LongDashDot,
     LongDashDotDot,
+    #[serde(rename = "sysDash")]
+    SysDash,
+    #[serde(rename = "sysDot")]
+    SysDot,
+    #[serde(rename = "sysDashDot")]
+    SysDashDot,
+    #[serde(rename = "sysDashDotDot")]
+    SysDashDotDot,
 }
 
 /// Font. Maps to OOXML tx_pr -> defRPr.

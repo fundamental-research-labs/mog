@@ -24,6 +24,10 @@ pub fn parse_all_data_points(xml: &[u8]) -> Vec<DataPointOverride> {
 /// Parse a single data point element into a `DataPointOverride`.
 pub fn parse_data_point(xml: &[u8]) -> DataPointOverride {
     let mut point = DataPointOverride::default();
+    let marker_range = find_tag_simd(xml, b"marker", 0).map(|marker_start| {
+        let marker_end = find_closing_tag(xml, b"marker", marker_start).unwrap_or(xml.len());
+        (marker_start, marker_end)
+    });
 
     // Parse index
     if let Some(idx_start) = find_tag_simd(xml, b"idx", 0) {
@@ -44,8 +48,7 @@ pub fn parse_data_point(xml: &[u8]) -> DataPointOverride {
     }
 
     // Parse marker → Option<Marker>
-    if let Some(marker_start) = find_tag_simd(xml, b"marker", 0) {
-        let marker_end = find_closing_tag(xml, b"marker", marker_start).unwrap_or(xml.len());
+    if let Some((marker_start, marker_end)) = marker_range {
         point.marker = Some(parse_marker(&xml[marker_start..marker_end]));
     }
 
@@ -55,7 +58,7 @@ pub fn parse_data_point(xml: &[u8]) -> DataPointOverride {
     }
 
     // Parse spPr
-    if let Some(sp_start) = find_tag_simd(xml, b"spPr", 0) {
+    if let Some(sp_start) = find_direct_point_shape_properties(xml, marker_range) {
         let sp_end = find_closing_tag(xml, b"spPr", sp_start).unwrap_or(xml.len());
         point.sp_pr = Some(parse_shape_properties(&xml[sp_start..sp_end]));
     }
@@ -64,6 +67,24 @@ pub fn parse_data_point(xml: &[u8]) -> DataPointOverride {
     point.extensions = parse_chart_ext_lst(xml);
 
     point
+}
+
+fn find_direct_point_shape_properties(
+    xml: &[u8],
+    marker_range: Option<(usize, usize)>,
+) -> Option<usize> {
+    let mut pos = 0;
+    while let Some(sp_start) = find_tag_simd(xml, b"spPr", pos) {
+        if let Some((marker_start, marker_end)) = marker_range
+            && sp_start >= marker_start
+            && sp_start < marker_end
+        {
+            pos = marker_end;
+            continue;
+        }
+        return Some(sp_start);
+    }
+    None
 }
 
 /// Parse marker element into an `Marker`.

@@ -4,12 +4,14 @@ use super::data_refs::{
     reconstruct_data_range_from_chart_groups,
 };
 use super::formatting::extract_fill_color;
-use super::labels::extract_data_label_data;
+use super::labels::{extract_data_label_data, extract_data_label_data_from_chart_type_config};
 use super::markers::extract_marker_config;
-use super::series::{
-    extract_cat_point_cache, extract_cat_source_kind, extract_num_point_cache,
-    extract_num_source_kind, extract_single_series,
+use super::series::extract_single_series;
+use super::series_sources::{
+    extract_cat_point_cache, extract_cat_source_kind, extract_cat_source_type,
+    extract_num_point_cache, extract_num_source_kind,
 };
+use super::trendlines::trendline_type_to_public;
 
 pub(in crate::domain::charts::read) fn extract_chart_series(
     chart: &crate::domain::charts::Chart,
@@ -68,19 +70,15 @@ pub(in crate::domain::charts::read) fn extract_chart_series(
                 extract_cat_point_cache(&s.cat).or_else(|| extract_cat_point_cache(&s.x_val));
             let category_source_kind =
                 extract_cat_source_kind(&s.cat).or_else(|| extract_cat_source_kind(&s.x_val));
+            let category_source_type =
+                extract_cat_source_type(&s.cat).or_else(|| extract_cat_source_type(&s.x_val));
 
             let bubble_size = extract_num_ref_formula(&s.bubble_size);
             let bubble_size_cache = extract_num_point_cache(&s.bubble_size);
             let bubble_size_source_kind = extract_num_source_kind(&s.bubble_size);
 
             // Markers
-            let (
-                show_markers,
-                marker_size,
-                marker_style,
-                marker_background_color,
-                marker_foreground_color,
-            ) = extract_marker_config(&s.marker);
+            let marker_config = extract_marker_config(&s.marker);
 
             // Per-point formatting
             let points = if s.d_pt.is_empty() {
@@ -103,6 +101,7 @@ pub(in crate::domain::charts::read) fn extract_chart_series(
                                 visual_format: None,
                                 marker_background_color: None,
                                 marker_foreground_color: None,
+                                marker_line_format: None,
                                 marker_size: None,
                                 marker_style: None,
                             }
@@ -119,8 +118,8 @@ pub(in crate::domain::charts::read) fn extract_chart_series(
                     s.trendline
                         .iter()
                         .map(|t| domain_types::chart::TrendlineData {
-                            show: None,
-                            r#type: Some(t.trendline_type.to_ooxml().to_string()),
+                            show: Some(true),
+                            r#type: Some(trendline_type_to_public(t.trendline_type)),
                             color: None,
                             line_width: None,
                             order: t.order,
@@ -160,19 +159,21 @@ pub(in crate::domain::charts::read) fn extract_chart_series(
                 },
                 category_cache,
                 category_source_kind,
+                category_source_type,
                 category_levels: None,
                 category_label_format: None,
                 bubble_size,
                 bubble_size_cache,
                 bubble_size_source_kind,
+                bubble_3d: None,
                 smooth: s.smooth,
                 show_lines: None,
                 explosion: s.explosion,
                 invert_if_negative: s.invert_if_negative,
                 y_axis_index: None, // follow-up: derive from c:axId cross-reference
-                show_markers,
-                marker_size,
-                marker_style,
+                show_markers: marker_config.show,
+                marker_size: marker_config.size,
+                marker_style: marker_config.style,
                 line_width: None,
                 points,
                 data_labels,
@@ -185,8 +186,9 @@ pub(in crate::domain::charts::read) fn extract_chart_series(
                 format: None,
                 bar_shape: None,
                 invert_color: None,
-                marker_background_color,
-                marker_foreground_color,
+                marker_background_color: marker_config.background_color,
+                marker_foreground_color: marker_config.foreground_color,
+                marker_line_format: marker_config.line_format,
                 filtered: None,
                 source_series_index: None,
                 source_series_key: None,
@@ -322,6 +324,12 @@ pub(in crate::domain::charts::read) fn extract_chart_data_labels(
         .data_labels
         .as_ref()
         .map(|dl| extract_data_label_data(dl))
+        .or_else(|| {
+            chart
+                .chart_type_config
+                .as_ref()
+                .and_then(extract_data_label_data_from_chart_type_config)
+        })
 }
 
 /// Extract a reconstructed data range from all series references.

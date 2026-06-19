@@ -83,10 +83,8 @@ pub(super) fn build_drawing_fill(fill: &ChartFillData) -> DrawingFill {
             transparency,
         } => {
             let mut dc = build_drawing_color(color);
-            // Apply transparency as alpha transform
             if let Some(t) = transparency {
-                let alpha_val = ((1.0 - t / 100.0) * 100000.0) as i32;
-                add_alpha_transform(&mut dc, alpha_val);
+                add_alpha_transform(&mut dc, transparency_fraction_to_alpha(*t));
             }
             DrawingFill::Solid(SolidFill { color: dc })
         }
@@ -100,8 +98,7 @@ pub(super) fn build_drawing_fill(fill: &ChartFillData) -> DrawingFill {
                 .map(|s| {
                     let mut color = build_drawing_color(&s.color);
                     if let Some(t) = s.transparency {
-                        let alpha_val = ((1.0 - t / 100.0) * 100000.0) as i32;
-                        add_alpha_transform(&mut color, alpha_val);
+                        add_alpha_transform(&mut color, transparency_fraction_to_alpha(t));
                     }
                     GradientStop {
                         position: StPositiveFixedPercentageDecimal::new_clamped(
@@ -151,7 +148,10 @@ pub(super) fn build_outline(line: &ChartLineData) -> Outline {
         Some(LineFill::NoFill)
     } else {
         line.color.as_ref().map(|c| {
-            let dc = build_drawing_color(c);
+            let mut dc = build_drawing_color(c);
+            if let Some(t) = line.transparency {
+                add_alpha_transform(&mut dc, transparency_fraction_to_alpha(t));
+            }
             LineFill::Solid(SolidFill { color: dc })
         })
     };
@@ -165,6 +165,10 @@ pub(super) fn build_outline(line: &ChartLineData) -> Outline {
             ChartDashStyle::LongDash => DashStyle::LongDash,
             ChartDashStyle::LongDashDot => DashStyle::LongDashDot,
             ChartDashStyle::LongDashDotDot => DashStyle::LongDashDotDot,
+            ChartDashStyle::SysDash => DashStyle::SystemDash,
+            ChartDashStyle::SysDot => DashStyle::SystemDot,
+            ChartDashStyle::SysDashDot => DashStyle::SystemDashDot,
+            ChartDashStyle::SysDashDotDot => DashStyle::SystemDashDotDot,
         };
         LineDash::Preset(style)
     });
@@ -217,6 +221,15 @@ pub(super) fn add_alpha_transform(color: &mut DrawingColor, alpha_val: i32) {
     }
 }
 
+fn transparency_fraction_to_alpha(transparency: f64) -> i32 {
+    let transparency = if transparency.is_finite() {
+        transparency.clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+    ((1.0 - transparency) * 100000.0).round() as i32
+}
+
 pub(super) fn build_run_properties(font: &ChartFontData) -> RunProperties {
     let size = font
         .size
@@ -262,5 +275,96 @@ pub(super) fn build_run_properties(font: &ChartFontData) -> RunProperties {
         latin,
         color,
         ..Default::default()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use domain_types::chart::{ChartDashStyle, ChartGradientType, ChartLineData};
+
+    fn alpha_transform(color: &DrawingColor) -> Option<i32> {
+        let transforms = match color {
+            DrawingColor::SrgbClr { transforms, .. }
+            | DrawingColor::SchemeClr { transforms, .. }
+            | DrawingColor::HslClr { transforms, .. }
+            | DrawingColor::SysClr { transforms, .. }
+            | DrawingColor::PrstClr { transforms, .. }
+            | DrawingColor::ScrgbClr { transforms, .. } => transforms,
+        };
+
+        transforms.iter().find_map(|transform| match transform {
+            ColorTransform::Alpha { val } => Some(*val),
+            _ => None,
+        })
+    }
+
+    #[test]
+    fn builds_system_line_dash_styles() {
+        let cases = [
+            (ChartDashStyle::SysDash, DashStyle::SystemDash),
+            (ChartDashStyle::SysDot, DashStyle::SystemDot),
+            (ChartDashStyle::SysDashDot, DashStyle::SystemDashDot),
+            (ChartDashStyle::SysDashDotDot, DashStyle::SystemDashDotDot),
+        ];
+
+        for (source, expected) in cases {
+            let outline = build_outline(&ChartLineData {
+                color: None,
+                width: None,
+                dash_style: Some(source),
+                transparency: None,
+                no_fill: None,
+            });
+
+            assert_eq!(outline.dash, Some(LineDash::Preset(expected)));
+        }
+    }
+
+    #[test]
+    fn solid_fill_transparency_uses_fraction_units() {
+        let fill = build_drawing_fill(&ChartFillData::Solid {
+            color: ChartColorData::Hex("4472C4".to_string()),
+            transparency: Some(0.25),
+        });
+
+        let DrawingFill::Solid(fill) = fill else {
+            panic!("expected solid fill");
+        };
+        assert_eq!(alpha_transform(&fill.color), Some(75000));
+    }
+
+    #[test]
+    fn gradient_stop_transparency_uses_fraction_units() {
+        let fill = build_drawing_fill(&ChartFillData::Gradient {
+            gradient_type: ChartGradientType::Linear,
+            angle: None,
+            stops: vec![domain_types::chart::ChartGradientStop {
+                position: 0.0,
+                color: ChartColorData::Hex("4472C4".to_string()),
+                transparency: Some(0.4),
+            }],
+        });
+
+        let DrawingFill::Gradient(fill) = fill else {
+            panic!("expected gradient fill");
+        };
+        assert_eq!(alpha_transform(&fill.stops[0].color), Some(60000));
+    }
+
+    #[test]
+    fn line_transparency_uses_fraction_units() {
+        let outline = build_outline(&ChartLineData {
+            color: Some(ChartColorData::Hex("4472C4".to_string())),
+            width: None,
+            dash_style: None,
+            transparency: Some(0.1),
+            no_fill: None,
+        });
+
+        let Some(LineFill::Solid(fill)) = outline.fill else {
+            panic!("expected solid line fill");
+        };
+        assert_eq!(alpha_transform(&fill.color), Some(90000));
     }
 }

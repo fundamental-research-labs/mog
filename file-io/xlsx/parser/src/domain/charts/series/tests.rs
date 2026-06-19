@@ -22,6 +22,24 @@ fn test_parse_series_basic() {
 }
 
 #[test]
+fn test_parse_series_bubble_3d() {
+    let xml = br#"<c:ser>
+            <c:idx val="0"/>
+            <c:order val="0"/>
+            <c:bubble3D val="1"/>
+            <c:dPt>
+                <c:idx val="0"/>
+                <c:bubble3D val="0"/>
+            </c:dPt>
+        </c:ser>"#;
+
+    let series = parse_series(xml);
+
+    assert_eq!(series.bubble_3d, Some(true));
+    assert_eq!(series.d_pt[0].bubble_3d, Some(false));
+}
+
+#[test]
 fn test_parse_series_with_text() {
     let xml = br#"<c:ser>
             <c:idx val="0"/>
@@ -152,8 +170,14 @@ fn test_parse_data_labels() {
 
     let labels = parse_data_labels(xml);
     assert!(labels.show_value);
+    assert!(labels.show_value_present);
     assert!(!labels.show_category);
+    assert!(labels.show_category_present);
     assert!(labels.show_series_name);
+    assert!(labels.show_series_name_present);
+    assert!(!labels.show_percent_present);
+    assert!(!labels.show_legend_key_present);
+    assert!(!labels.show_bubble_size_present);
     assert_eq!(labels.position, DataLabelPosition::OutsideEnd);
 }
 
@@ -304,6 +328,42 @@ fn test_parse_series_with_values() {
     match series.cat.unwrap() {
         CatDataSource::StrRef(sr) => assert_eq!(sr.f, "Sheet1!$A$2:$A$5"),
         other => panic!("Expected CatDataSource::StrRef, got {:?}", other),
+    }
+}
+
+#[test]
+fn test_parse_series_values_ignore_nested_error_bar_values() {
+    let xml = br#"<c:ser>
+            <c:idx val="0"/>
+            <c:order val="0"/>
+            <c:xVal>
+                <c:strRef>
+                    <c:f>Sheet1!$A$2:$A$5</c:f>
+                </c:strRef>
+            </c:xVal>
+            <c:yVal>
+                <c:numRef>
+                    <c:f>Sheet1!$B$2:$B$5</c:f>
+                </c:numRef>
+            </c:yVal>
+            <c:errBars>
+                <c:errDir val="y"/>
+                <c:errBarType val="both"/>
+                <c:errValType val="cust"/>
+                <c:val val="5"/>
+                <c:plus>
+                    <c:numRef>
+                        <c:f>=Sheet1!$A$1</c:f>
+                    </c:numRef>
+                </c:plus>
+            </c:errBars>
+        </c:ser>"#;
+
+    let series = parse_series(xml);
+    assert!(series.val.is_none());
+    match series.y_val.unwrap() {
+        NumDataSource::Ref(nr) => assert_eq!(nr.f, "Sheet1!$B$2:$B$5"),
+        other => panic!("Expected NumDataSource::Ref, got {:?}", other),
     }
 }
 
@@ -491,6 +551,45 @@ fn test_parse_data_point_with_sp_pr() {
 }
 
 #[test]
+fn test_parse_data_point_marker_sp_pr_does_not_shadow_direct_sp_pr() {
+    let xml = br#"<c:dPt>
+            <c:idx val="2"/>
+            <c:marker>
+                <c:spPr>
+                    <a:ln><a:noFill/></a:ln>
+                </c:spPr>
+            </c:marker>
+            <c:spPr>
+                <a:solidFill>
+                    <a:srgbClr val="00FF00"/>
+                </a:solidFill>
+            </c:spPr>
+        </c:dPt>"#;
+
+    let point = parse_data_point(xml);
+    let marker_line_fill = point
+        .marker
+        .as_ref()
+        .and_then(|marker| marker.sp_pr.as_ref())
+        .and_then(|sp_pr| sp_pr.ln.as_ref())
+        .and_then(|line| line.fill.as_ref());
+    assert!(matches!(
+        marker_line_fill,
+        Some(ooxml_types::drawings::LineFill::NoFill)
+    ));
+
+    let point_fill = point.sp_pr.as_ref().and_then(|sp_pr| sp_pr.fill.as_ref());
+    assert!(matches!(
+        point_fill,
+        Some(ooxml_types::drawings::DrawingFill::Solid(solid))
+            if matches!(
+                &solid.color,
+                ooxml_types::drawings::DrawingColor::SrgbClr { val, .. } if val == "00FF00"
+            )
+    ));
+}
+
+#[test]
 fn test_parse_data_labels_with_sp_pr_and_tx_pr() {
     let xml = br#"<c:dLbls>
             <c:showVal val="1"/>
@@ -513,6 +612,72 @@ fn test_parse_data_labels_with_sp_pr_and_tx_pr() {
     assert!(labels.show_value);
     assert!(labels.sp_pr.is_some());
     assert!(labels.tx_pr.is_some());
+}
+
+#[test]
+fn parse_series_preserves_data_label_direct_shape_properties() {
+    let xml = br#"<c:ser>
+            <c:idx val="0"/>
+            <c:order val="0"/>
+            <c:dLbls>
+                <c:spPr>
+                    <a:ln><a:noFill/></a:ln>
+                </c:spPr>
+            </c:dLbls>
+        </c:ser>"#;
+
+    let series = parse_series(xml);
+    assert!(matches!(
+        series
+            .d_lbls
+            .as_ref()
+            .and_then(|labels| labels.sp_pr.as_ref())
+            .and_then(|sp_pr| sp_pr.ln.as_ref())
+            .and_then(|line| line.fill.as_ref()),
+        Some(ooxml_types::drawings::LineFill::NoFill)
+    ));
+}
+
+#[test]
+fn parse_series_preserves_data_label_direct_text_body_properties() {
+    let xml = br#"<c:ser>
+            <c:idx val="0"/>
+            <c:order val="0"/>
+            <c:dLbls>
+                <c:txPr>
+                    <a:bodyPr/>
+                    <a:lstStyle/>
+                    <a:p>
+                        <a:pPr><a:defRPr sz="900" baseline="0"/></a:pPr>
+                        <a:endParaRPr lang="en-US"/>
+                    </a:p>
+                </c:txPr>
+                <c:showCatName val="1"/>
+                <c:showPercent val="1"/>
+            </c:dLbls>
+        </c:ser>"#;
+
+    let series = parse_series(xml);
+    let tx_pr = series
+        .d_lbls
+        .as_ref()
+        .and_then(|labels| labels.tx_pr.as_ref())
+        .expect("series data label txPr");
+    let paragraph = tx_pr.paragraphs.first().expect("paragraph");
+    let def_rpr = paragraph
+        .props
+        .def_run_props
+        .as_ref()
+        .expect("default run properties");
+    assert_eq!(def_rpr.size.map(|size| size.value()), Some(900));
+    assert_eq!(def_rpr.baseline.map(|baseline| baseline.value()), Some(0));
+    assert_eq!(
+        paragraph
+            .end_para_rpr
+            .as_ref()
+            .and_then(|props| props.lang.as_deref()),
+        Some("en-US")
+    );
 }
 
 #[test]

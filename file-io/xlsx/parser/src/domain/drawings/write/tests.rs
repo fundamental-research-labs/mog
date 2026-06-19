@@ -1,6 +1,7 @@
 //! Tests for drawing writing functionality.
 
 mod basic_writer;
+mod chart_frame_transform;
 mod common;
 mod connectors;
 mod fills_and_styles;

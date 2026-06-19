@@ -161,6 +161,34 @@ function failedKernelReceipt(message: string): PivotKernelMutationReceipt {
   };
 }
 
+function appliedKernelReceipt(): PivotKernelMutationReceipt {
+  return {
+    kernelReceiptId: 'receipt-1',
+    pivotId: 'pivot-1',
+    effects: [],
+    mutationResult: null,
+    updateReason: 'fieldPlacementChanged',
+    refreshPolicy: 'refreshAndMaterialize',
+    materialized: true,
+    configRevision: 1,
+    status: 'applied',
+  };
+}
+
+function deferred<T>(): {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+  reject: (reason?: unknown) => void;
+} {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+
 beforeEach(() => {
   jest.clearAllMocks();
   mockLoadPivotConfigEntries.mockReset();
@@ -216,8 +244,10 @@ describe('usePivotTables pivot receipts', () => {
 
     expect(mockWorksheet.pivots.addWithSheet).toHaveBeenCalledWith(
       'Sales Pivot',
-      expect.any(Object),
-      { lifecycle: 'materialize' },
+      expect.objectContaining({
+        layout: expect.objectContaining({ layoutForm: 'outline' }),
+      }),
+      { lifecycle: 'materialize', insertBeforeSheetId: 'sheet-1' },
     );
   });
 
@@ -265,6 +295,41 @@ describe('usePivotTables pivot receipts', () => {
       expect(warn).toHaveBeenCalledWith('Placement materialization failed.', failedReceipt),
     );
     warn.mockRestore();
+  });
+
+  it('serializes placement mutations for the same pivot', async () => {
+    const addDeferred = deferred<PivotKernelMutationReceipt>();
+    const moveDeferred = deferred<PivotKernelMutationReceipt>();
+    const removeDeferred = deferred<PivotKernelMutationReceipt>();
+    const addPlacement = jest.fn(() => addDeferred.promise);
+    const movePlacement = jest.fn(() => moveDeferred.promise);
+    const removePlacement = jest.fn(() => removeDeferred.promise);
+    mockLoadPivotConfigEntries.mockResolvedValue([
+      nativeEntry('pivot-1', { addPlacement, movePlacement, removePlacement }),
+    ]);
+
+    const { result } = renderHook(() => usePivotTables({ sheetId: 'sheet-1' as SheetId }));
+
+    await waitFor(() => expect(result.current.pivotTables).toHaveLength(1));
+    act(() => {
+      result.current.addPlacement('pivot-1', { fieldId: 'Amount', area: 'value' });
+      result.current.movePlacement('pivot-1', placementId('value:Amount:0'), 'column', 0);
+      result.current.removePlacement('pivot-1', placementId('value:Amount:0'));
+    });
+
+    await waitFor(() => expect(addPlacement).toHaveBeenCalledTimes(1));
+    expect(movePlacement).not.toHaveBeenCalled();
+    expect(removePlacement).not.toHaveBeenCalled();
+
+    addDeferred.resolve(appliedKernelReceipt());
+    await waitFor(() => expect(movePlacement).toHaveBeenCalledTimes(1));
+    expect(removePlacement).not.toHaveBeenCalled();
+
+    moveDeferred.resolve(appliedKernelReceipt());
+    await waitFor(() => expect(removePlacement).toHaveBeenCalledTimes(1));
+
+    removeDeferred.resolve(appliedKernelReceipt());
+    await waitFor(() => expect(removePlacement).toHaveBeenCalledTimes(1));
   });
 
   it('clears selection and editing state only after an applied delete receipt', async () => {

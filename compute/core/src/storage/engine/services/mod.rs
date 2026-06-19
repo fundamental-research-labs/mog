@@ -23,6 +23,7 @@ pub(super) mod mutation;
 pub(super) mod mutation_handlers;
 pub(super) mod objects;
 pub(super) mod queries;
+pub(super) mod resolved_formats;
 pub(super) mod structural;
 pub(super) mod styles;
 pub(super) mod tables;

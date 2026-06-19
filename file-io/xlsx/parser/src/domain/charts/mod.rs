@@ -25,6 +25,8 @@
 
 pub mod axes;
 pub mod chart_ex;
+pub(crate) mod color_style;
+pub(crate) mod data_label_contract_ext;
 mod import_diagnostics;
 pub mod model;
 pub mod parse;

@@ -3,7 +3,8 @@
 //! Uses the same SIMD-based scanning approach as the standard chart parser.
 
 use crate::infra::scanner::{
-    extract_quoted_value, find_attr_simd, find_closing_tag, find_gt_simd, find_tag_simd,
+    extract_quoted_value, find_attr_simd, find_closing_tag, find_element_end, find_gt_simd,
+    find_lt_simd, find_tag_simd,
 };
 use crate::infra::xml::decode_xml_entities;
 
@@ -700,40 +701,19 @@ fn parse_chart_ex_axis(xml: &[u8]) -> ChartExAxis {
     }
 
     // Parse title
-    if let Some(t_start) = find_tag_simd(xml, b"title", 0) {
-        let t_end = find_closing_tag(xml, b"title", t_start)
-            .and_then(|p| find_gt_simd(xml, p).map(|g| g + 1))
-            .unwrap_or(xml.len());
-        axis.title = Some(parse_chart_ex_title(&xml[t_start..t_end]));
+    if let Some(title_bytes) = direct_child_slice(xml, b"title") {
+        axis.title = Some(parse_chart_ex_title(title_bytes));
     }
 
     // Parse majorGridlines
-    if let Some(mg_start) = find_tag_simd(xml, b"majorGridlines", 0) {
-        let mg_end = find_closing_tag(xml, b"majorGridlines", mg_start)
-            .and_then(|p| find_gt_simd(xml, p).map(|g| g + 1))
-            .unwrap_or(xml.len());
-        let mg_bytes = &xml[mg_start..mg_end];
-        let sp = if let Some(sp_start) = find_tag_simd(mg_bytes, b"spPr", 0) {
-            let sp_end = find_closing_tag(mg_bytes, b"spPr", sp_start).unwrap_or(mg_bytes.len());
-            Some(parse_shape_properties(&mg_bytes[sp_start..sp_end]))
-        } else {
-            None
-        };
+    if let Some(mg_bytes) = direct_child_slice(xml, b"majorGridlines") {
+        let sp = direct_child_slice(mg_bytes, b"spPr").map(parse_shape_properties);
         axis.major_gridlines = Some(ChartExGridlines { sp_pr: sp });
     }
 
     // Parse minorGridlines
-    if let Some(mg_start) = find_tag_simd(xml, b"minorGridlines", 0) {
-        let mg_end = find_closing_tag(xml, b"minorGridlines", mg_start)
-            .and_then(|p| find_gt_simd(xml, p).map(|g| g + 1))
-            .unwrap_or(xml.len());
-        let mg_bytes = &xml[mg_start..mg_end];
-        let sp = if let Some(sp_start) = find_tag_simd(mg_bytes, b"spPr", 0) {
-            let sp_end = find_closing_tag(mg_bytes, b"spPr", sp_start).unwrap_or(mg_bytes.len());
-            Some(parse_shape_properties(&mg_bytes[sp_start..sp_end]))
-        } else {
-            None
-        };
+    if let Some(mg_bytes) = direct_child_slice(xml, b"minorGridlines") {
+        let sp = direct_child_slice(mg_bytes, b"spPr").map(parse_shape_properties);
         axis.minor_gridlines = Some(ChartExGridlines { sp_pr: sp });
     }
 
@@ -770,37 +750,14 @@ fn parse_chart_ex_axis(xml: &[u8]) -> ChartExAxis {
         });
     }
 
-    // Parse spPr (axis line formatting) — find spPr not inside gridlines or title
-    // Search after scaling/title/gridlines/tickLabels
-    let sp_search_start = {
-        let mut s = tag_end + 1;
-        // Skip past major/minor gridlines and tickLabels
-        if let Some(tl) = find_tag_simd(xml, b"tickLabels", 0) {
-            let tl_end = find_gt_simd(xml, tl).map(|p| p + 1).unwrap_or(xml.len());
-            if tl_end > s {
-                s = tl_end;
-            }
-        }
-        // Skip past numFmt
-        if let Some(nf) = find_tag_simd(xml, b"numFmt", s) {
-            let nf_end = find_gt_simd(xml, nf).map(|p| p + 1).unwrap_or(xml.len());
-            if nf_end > s {
-                s = nf_end;
-            }
-        }
-        s
-    };
-    if let Some(sp_start) = find_tag_simd(xml, b"spPr", sp_search_start) {
-        let sp_end = find_closing_tag(xml, b"spPr", sp_start).unwrap_or(xml.len());
-        axis.sp_pr = Some(parse_shape_properties(&xml[sp_start..sp_end]));
+    // Parse spPr (axis line formatting)
+    if let Some(sp_bytes) = direct_child_slice(xml, b"spPr") {
+        axis.sp_pr = Some(parse_shape_properties(sp_bytes));
     }
 
     // Parse txPr
-    if let Some(txpr_start) = find_tag_simd(xml, b"txPr", sp_search_start) {
-        let txpr_end = find_closing_tag(xml, b"txPr", txpr_start)
-            .and_then(|p| find_gt_simd(xml, p).map(|g| g + 1))
-            .unwrap_or(xml.len());
-        axis.tx_pr = Some(parse_text_body(&xml[txpr_start..txpr_end]));
+    if let Some(txpr_bytes) = direct_child_slice(xml, b"txPr") {
+        axis.tx_pr = Some(parse_text_body(txpr_bytes));
     }
 
     axis
@@ -888,6 +845,72 @@ fn parse_attr_str(xml: &[u8], attr_prefix: &[u8]) -> Option<String> {
     let (start, end) = extract_quoted_value(xml, val_start)?;
     Some(crate::infra::xml::decode_xml_entities(&xml[start..end]))
 }
+
+fn direct_child_slice<'a>(xml: &'a [u8], local_name: &[u8]) -> Option<&'a [u8]> {
+    let mut pos = find_element_end(xml, 0).map_or(0, |gt| gt + 1);
+    while let Some(start) = find_lt_simd(xml, pos) {
+        match xml.get(start + 1) {
+            Some(b'/') => return None,
+            Some(b'!') | Some(b'?') => {
+                pos = find_element_end(xml, start).map_or(start + 1, |gt| gt + 1);
+                continue;
+            }
+            None => return None,
+            _ => {}
+        }
+
+        let Some(child_name) = start_tag_local_name(xml, start) else {
+            pos = start + 1;
+            continue;
+        };
+        let open_end = find_element_end(xml, start)?;
+        let end = if is_self_closing_open_tag(xml, open_end) {
+            open_end + 1
+        } else {
+            find_closing_tag(xml, child_name, start)
+                .and_then(|close| find_gt_simd(xml, close).map(|gt| gt + 1))
+                .unwrap_or(xml.len())
+        };
+
+        if child_name == local_name {
+            return Some(&xml[start..end]);
+        }
+        pos = end;
+    }
+    None
+}
+
+fn start_tag_local_name(xml: &[u8], start: usize) -> Option<&[u8]> {
+    if xml.get(start) != Some(&b'<') {
+        return None;
+    }
+    let name_start = start + 1;
+    if matches!(xml.get(name_start), Some(b'/') | Some(b'!') | Some(b'?')) {
+        return None;
+    }
+    let mut name_end = name_start;
+    while name_end < xml.len() {
+        if matches!(xml[name_end], b' ' | b'\t' | b'\n' | b'\r' | b'>' | b'/') {
+            break;
+        }
+        name_end += 1;
+    }
+    if name_end == name_start {
+        return None;
+    }
+    let local_start = xml[name_start..name_end]
+        .iter()
+        .rposition(|b| *b == b':')
+        .map_or(name_start, |idx| name_start + idx + 1);
+    Some(&xml[local_start..name_end])
+}
+
+fn is_self_closing_open_tag(xml: &[u8], open_end: usize) -> bool {
+    open_end > 0 && xml[open_end - 1] == b'/'
+}
+
+#[cfg(test)]
+mod axis_regression_tests;
 
 fn parse_attr_u32(xml: &[u8], attr_prefix: &[u8]) -> Option<u32> {
     parse_attr_str(xml, attr_prefix)?.parse().ok()

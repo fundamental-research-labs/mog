@@ -349,6 +349,8 @@ export function renderNormalText(
   const basePadding = style.paddingX;
   const indentPixels = (format?.indent ?? 0) * 8;
   const paddingX = basePadding + indentPixels;
+  const textPaddingX =
+    horizontalAlign === 'right' ? Math.max(1, basePadding - 3) + indentPixels : paddingX;
   const paddingY = basePadding;
 
   const fontSize =
@@ -371,7 +373,7 @@ export function renderNormalText(
   }
 
   // Calculate text position
-  const textX = computeTextX(effectiveX, effectiveWidth, paddingX, horizontalAlign);
+  const textX = computeTextX(effectiveX, effectiveWidth, textPaddingX, horizontalAlign);
   let textY = computeTextY(y, height, paddingY, fontSize, verticalAlign);
 
   // Set canvas properties

@@ -19,6 +19,7 @@ pub fn sparkline_data_range_to_position_range(r: &SparklineDataRange) -> Positio
 
 pub fn position_range_to_sparkline_data_range(r: &PositionRange) -> SparklineDataRange {
     SparklineDataRange {
+        source_sheet_name: None,
         start_row: r.start_row(),
         start_col: r.start_col(),
         end_row: r.end_row(),

@@ -25,6 +25,7 @@ use compute_document::schema::{
     write_schema_version,
 };
 use compute_document::undo::ORIGIN_USER_EDIT;
+use domain_types::units::Pixels;
 use domain_types::yrs_schema::comment as comment_schema;
 // Note: ORIGIN_BOOTSTRAP is supplied by callers via `*_with_origin` and never
 // referenced directly here — this file only needs to know it can accept any
@@ -37,6 +38,11 @@ use crate::storage::YrsStorage;
 use super::yrs_helpers::{
     KEY_COLS, KEY_DEFAULT_COL_WIDTH, KEY_DEFAULT_ROW_HEIGHT, KEY_HIDDEN, KEY_ROWS, meta_number,
 };
+
+struct SheetCreationOptions {
+    origin: Origin,
+    default_col_width_px: Pixels,
+}
 
 // =============================================================================
 // Generic Y-value clone helpers
@@ -335,7 +341,13 @@ impl YrsStorage {
         name: &str,
         id_alloc: &cell_types::IdAllocator,
     ) -> Result<SheetId, ComputeError> {
-        self.create_sheet_with_origin(mirror, name, id_alloc, Origin::from(ORIGIN_USER_EDIT))
+        self.create_sheet_with_origin(
+            mirror,
+            name,
+            id_alloc,
+            Origin::from(ORIGIN_USER_EDIT),
+            compute_layout_index::platform_default_col_width(),
+        )
     }
 
     /// Create a new sheet, recording the Yrs transaction under `origin`.
@@ -350,10 +362,21 @@ impl YrsStorage {
         name: &str,
         id_alloc: &cell_types::IdAllocator,
         origin: Origin,
+        default_col_width_px: Pixels,
     ) -> Result<SheetId, ComputeError> {
         let sheet_id = self.next_unused_sheet_id(id_alloc);
         // Default: 100 rows x 26 cols
-        self.add_sheet_with_origin(mirror, sheet_id, name, 100, 26, origin)?;
+        self.add_sheet_with_origin(
+            mirror,
+            sheet_id,
+            name,
+            100,
+            26,
+            SheetCreationOptions {
+                origin,
+                default_col_width_px,
+            },
+        )?;
         Ok(sheet_id)
     }
 
@@ -403,6 +426,7 @@ impl YrsStorage {
         let cols;
         let mut top_entries: Vec<(String, YValue)> = Vec::new();
         let mut cell_id_remap: HashMap<String, String> = HashMap::new();
+        let source_pivots;
 
         {
             let txn = self.doc.transact();
@@ -465,12 +489,22 @@ impl YrsStorage {
                 }
             }
 
+            source_pivots = super::pivots::get_all_pivots_in_txn(&txn, &self.sheets, source_id);
+
             for (key, value) in source_map.iter(&txn) {
                 if let Some(y) = read_y_out(value, &txn) {
                     top_entries.push((key.to_string(), y));
                 }
             }
         }
+
+        let copied_pivots = super::pivots::remap_pivots_for_sheet_copy(
+            source_pivots,
+            source_id,
+            &new_id,
+            new_name,
+            id_alloc,
+        );
 
         // Pass 2: Write the tree into the new sheet. `cells` and `gridIndex`
         // get bespoke handling for CellId-hex remapping; everything else uses
@@ -496,9 +530,14 @@ impl YrsStorage {
                     KEY_COMMENTS => {
                         write_comments_remapped(&new_sheet, &mut txn, value, &cell_id_remap)
                     }
+                    KEY_PIVOT_TABLES => {
+                        let _: MapRef =
+                            new_sheet.insert(&mut txn, KEY_PIVOT_TABLES, MapPrelim::default());
+                    }
                     _ => write_y_value_into_map(&new_sheet, &mut txn, key, value),
                 }
             }
+            super::pivots::write_pivots_in_txn(&mut txn, &self.sheets, &new_id, &copied_pivots)?;
 
             // Override meta fields for new sheet
             if let Some(Out::YMap(new_meta)) = new_sheet.get(&txn, KEY_PROPERTIES) {
@@ -587,7 +626,10 @@ impl YrsStorage {
             name,
             rows,
             cols,
-            Origin::from(ORIGIN_USER_EDIT),
+            SheetCreationOptions {
+                origin: Origin::from(ORIGIN_USER_EDIT),
+                default_col_width_px: compute_layout_index::platform_default_col_width(),
+            },
         )
     }
 
@@ -595,14 +637,14 @@ impl YrsStorage {
     ///
     /// Used by engine-bootstrap callers that need to bypass the undo stack
     /// (see `ORIGIN_BOOTSTRAP` in `compute_document::undo`).
-    pub(crate) fn add_sheet_with_origin(
+    fn add_sheet_with_origin(
         &mut self,
         mirror: &mut CellMirror,
         sheet_id: SheetId,
         name: &str,
         rows: u32,
         cols: u32,
-        origin: Origin,
+        options: SheetCreationOptions,
     ) -> Result<(), ComputeError> {
         let sheet_hex = id_to_hex(sheet_id.as_u128());
         if self.sheet_exists(&sheet_id) {
@@ -612,7 +654,7 @@ impl YrsStorage {
         }
 
         {
-            let mut txn = self.doc.transact_mut_with(origin);
+            let mut txn = self.doc.transact_mut_with(options.origin);
             write_schema_version(&mut txn, &self.workbook);
 
             // Append to sheet order — Provider Protocol lifecycle: lazy-create rather
@@ -638,7 +680,7 @@ impl YrsStorage {
                     KEY_DEFAULT_COL_WIDTH,
                     Any::Number(
                         domain_types::units::pixels_to_char_width(
-                            compute_layout_index::platform_default_col_width(),
+                            options.default_col_width_px,
                             domain_types::units::platform_mdw(),
                         )
                         .0,

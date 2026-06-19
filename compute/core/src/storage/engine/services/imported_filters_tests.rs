@@ -251,6 +251,29 @@ fn filter_shell_metadata_classifies_unsupported_lossless_criteria() {
 }
 
 #[test]
+fn filter_shell_metadata_keeps_runtime_color_filter_supported() {
+    let imported = AutoFilter {
+        range_ref: "A1:D10".to_string(),
+        columns: vec![FilterColumn {
+            col_index: 1,
+            filter_type: Some(OoxmlFilterType::Color {
+                dxf_id: None,
+                cell_color: true,
+            }),
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    let shell = build_filter_shell_metadata(Some(&imported), BTreeMap::new());
+
+    assert_eq!(shell.capability, filters::FilterCapability::Supported);
+    assert!(shell.unsupported_reasons.is_empty());
+    assert!(shell.has_active_lossless_criteria);
+    assert_eq!(shell.lossless_criteria[0].kind, "color");
+}
+
+#[test]
 fn unsupported_import_diagnostic_merges_phases_and_preserves_filter_location() {
     let mut col_id_to_header_cell_id = BTreeMap::new();
     col_id_to_header_cell_id.insert(2, "header-c".to_string());

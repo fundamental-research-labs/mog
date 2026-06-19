@@ -14,6 +14,7 @@
  */
 
 import type { TextMeasurer } from '@mog/canvas-engine';
+import { fontSizeCssPxToPoints } from '@mog/spreadsheet-utils/cells/cell-style';
 import type { CellFormat } from '@mog-sdk/contracts/core';
 import type { ThemeDefinition } from '@mog-sdk/contracts/theme';
 import {
@@ -102,7 +103,7 @@ export function calculateShrunkFontSize(
     const mid = Math.ceil((low + high) / 2);
 
     // Build a format with the test font size
-    const testFormat: CellFormat = { ...format, fontSize: mid };
+    const testFormat: CellFormat = { ...format, fontSize: fontSizeCssPxToPoints(mid) };
     const testFont = buildCellFont(testFormat, theme, text);
     const testWidth = textMeasurer.measureText(text, testFont).width;
 
@@ -157,7 +158,7 @@ export function renderShrinkToFit(
   );
 
   // Build font with shrunk size
-  const shrunkFormat: CellFormat = { ...format, fontSize: shrunkSize };
+  const shrunkFormat: CellFormat = { ...format, fontSize: fontSizeCssPxToPoints(shrunkSize) };
   const font = buildCellFont(shrunkFormat, options.theme, displayText);
   ctx.font = font;
 

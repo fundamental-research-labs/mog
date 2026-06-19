@@ -1063,7 +1063,7 @@ describe('WorksheetPivotsImpl', () => {
         startCol: 3,
         endRow: 3,
         endCol: 4,
-        sheetId: SHEET_ID,
+        address: 'D3:E4',
       });
 
       expect(ctx.pivot.compute).toHaveBeenCalledWith(SHEET_ID, 'pivot-1');

@@ -153,6 +153,7 @@ pub fn cell_format_json_fields() -> Vec<String> {
         locked: Some(false),
         hidden: Some(false),
         quote_prefix: Some(false),
+        pivot_button: Some(false),
     };
     let val = serde_json::to_value(full).expect("CellFormat must serialize");
     let obj = val

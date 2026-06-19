@@ -19,6 +19,24 @@ use xml_parsing::{
 
 use conversion::convert_chart_to_chart_spec;
 
+const EMUS_PER_PIXEL: f64 = 9525.0;
+
+pub(super) fn emu_to_pixels(emu: i64) -> f64 {
+    emu.max(0) as f64 / EMUS_PER_PIXEL
+}
+
+#[cfg(test)]
+mod tests {
+    use super::emu_to_pixels;
+
+    #[test]
+    fn emu_to_pixels_preserves_small_extents_without_minimum_clamp() {
+        assert_eq!(emu_to_pixels(42 * 9525), 42.0);
+        assert_eq!(emu_to_pixels(0), 0.0);
+        assert_eq!(emu_to_pixels(-9525), 0.0);
+    }
+}
+
 // Re-export the 5 public functions
 pub use chart_ex::parse_chart_ex_for_sheet;
 pub use connectors::parse_connectors_for_sheet;

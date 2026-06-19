@@ -50,6 +50,41 @@ describe('WorkbookDiagnosticsImpl', () => {
     expect(ctx.computeBridge.queryRange).toHaveBeenCalledWith('sheet-1', 0, 0, 1, 1);
   });
 
+  it('does not fall back to raw sheet ids when diagnostic sheet names are unavailable', async () => {
+    const ctx = {
+      computeBridge: {
+        getAllSheetIds: jest.fn(async () => ['550e8400-e29b-41d4-a716-446655440000']),
+        getSheetName: jest.fn(async () => undefined),
+        getDataBounds: jest.fn(async () => ({ minRow: 0, minCol: 0, maxRow: 0, maxCol: 0 })),
+        queryRange: jest.fn(async () => ({
+          cells: [
+            {
+              row: 0,
+              col: 0,
+              cellId: 'cell-1',
+              formula: '=Missing!A1',
+              value: { type: 'error', value: 'Ref' },
+            },
+          ],
+          merges: [],
+        })),
+      },
+    };
+    const diagnostics = new WorkbookDiagnosticsImpl(ctx as any);
+
+    const result = await diagnostics.checkFormulaErrorValues();
+
+    expect(result.findings).toEqual([
+      expect.objectContaining({
+        sheetId: '550e8400-e29b-41d4-a716-446655440000',
+        sheetName: undefined,
+        address: 'A1',
+        message: 'Formula at A1 evaluates to #REF!.',
+        suggestedNextApiCall: undefined,
+      }),
+    ]);
+  });
+
   it('checks explicit blank regions and reports address-bearing findings', async () => {
     const ctx = {
       computeBridge: {

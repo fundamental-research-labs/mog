@@ -71,10 +71,44 @@ export function resolvePointerDropTarget(options: {
   placementsByArea: Record<PivotFieldArea, Array<{ placement: PivotFieldPlacement }>>;
 }): PointerDropTarget | null {
   const { clientX, clientY, state, canRemoveFields, placementsByArea } = options;
-  const elements = document
-    .elementsFromPoint(clientX, clientY)
-    .filter((element): element is HTMLElement => element instanceof HTMLElement);
-  if (elements.length === 0) return null;
+  const isDraggedPlacementChip = (candidate: HTMLElement): boolean =>
+    state.kind === 'placement' && candidate.dataset.pivotPlacementId === state.placementId;
+  const isPlacementChip = (candidate: HTMLElement | null | undefined): candidate is HTMLElement =>
+    candidate?.dataset.pivotArea !== undefined &&
+    candidate.dataset.pivotArea !== 'available' &&
+    !isDraggedPlacementChip(candidate);
+  const targetFromChip = (chip: HTMLElement): PointerDropTarget | null => {
+    const chipArea = chip.dataset.pivotArea as PivotFieldArea | undefined;
+    if (!chipArea || !PIVOT_FIELD_LIST_AREAS.includes(chipArea)) return null;
+
+    const targetIndex = placementsByArea[chipArea].findIndex(
+      (item) => placementId(item.placement) === chip.dataset.pivotPlacementId,
+    );
+    if (targetIndex < 0) return null;
+
+    const rect = chip.getBoundingClientRect();
+    const dropAfter = rect.height > 0 ? clientY > rect.top + rect.height / 2 : false;
+    const insertionBeforeRemoval = targetIndex + (dropAfter ? 1 : 0);
+    const adjustedPosition =
+      state.kind === 'placement' &&
+      state.fromArea === chipArea &&
+      state.fromIndex < insertionBeforeRemoval
+        ? insertionBeforeRemoval - 1
+        : insertionBeforeRemoval;
+    return {
+      kind: 'position',
+      area: chipArea,
+      position: adjustedPosition,
+      indicatorPosition: insertionBeforeRemoval,
+    };
+  };
+
+  const elements =
+    typeof document.elementsFromPoint === 'function'
+      ? document
+          .elementsFromPoint(clientX, clientY)
+          .filter((element): element is HTMLElement => element instanceof HTMLElement)
+      : [];
 
   if (
     state.kind === 'placement' &&
@@ -89,29 +123,10 @@ export function resolvePointerDropTarget(options: {
       .map((element) =>
         element.closest<HTMLElement>('[data-pivot-target="field-chip"][data-pivot-area]'),
       )
-      .find((candidate) => candidate?.dataset.pivotArea !== 'available') ?? null;
-  const chipArea = chip?.dataset.pivotArea as PivotFieldArea | undefined;
-  if (chip && chipArea && PIVOT_FIELD_LIST_AREAS.includes(chipArea)) {
-    const targetIndex = placementsByArea[chipArea].findIndex(
-      (item) => placementId(item.placement) === chip.dataset.pivotPlacementId,
-    );
-    if (targetIndex >= 0) {
-      const rect = chip.getBoundingClientRect();
-      const dropAfter = rect.height > 0 ? clientY > rect.top + rect.height / 2 : false;
-      const insertionBeforeRemoval = targetIndex + (dropAfter ? 1 : 0);
-      const adjustedPosition =
-        state.kind === 'placement' &&
-        state.fromArea === chipArea &&
-        state.fromIndex < insertionBeforeRemoval
-          ? insertionBeforeRemoval - 1
-          : insertionBeforeRemoval;
-      return {
-        kind: 'position',
-        area: chipArea,
-        position: adjustedPosition,
-        indicatorPosition: insertionBeforeRemoval,
-      };
-    }
+      .find(isPlacementChip) ?? null;
+  if (chip) {
+    const target = targetFromChip(chip);
+    if (target) return target;
   }
 
   const zone =
@@ -121,6 +136,46 @@ export function resolvePointerDropTarget(options: {
       )
       .find(Boolean) ?? null;
   const zoneArea = zone?.dataset.pivotZone as PivotFieldArea | undefined;
+  const placementChips = Array.from(
+    document.querySelectorAll<HTMLElement>('[data-pivot-target="field-chip"][data-pivot-area]'),
+  );
+  const geometryChip = placementChips.find((candidate) => {
+    if (!isPlacementChip(candidate)) return false;
+    const rect = candidate.getBoundingClientRect();
+    return (
+      clientX >= rect.left &&
+      clientX <= rect.right &&
+      clientY >= rect.top &&
+      clientY <= rect.bottom
+    );
+  });
+  if (geometryChip) {
+    const target = targetFromChip(geometryChip);
+    if (target) return target;
+  }
+
+  const verticalArea =
+    zoneArea && PIVOT_FIELD_LIST_AREAS.includes(zoneArea)
+      ? zoneArea
+      : state.kind === 'placement'
+        ? state.fromArea
+        : undefined;
+  const verticalChip = placementChips.find((candidate) => {
+    if (
+      !verticalArea ||
+      !isPlacementChip(candidate) ||
+      candidate.dataset.pivotArea !== verticalArea
+    ) {
+      return false;
+    }
+    const rect = candidate.getBoundingClientRect();
+    return clientY >= rect.top && clientY <= rect.bottom;
+  });
+  if (verticalChip) {
+    const target = targetFromChip(verticalChip);
+    if (target) return target;
+  }
+
   if (zoneArea && PIVOT_FIELD_LIST_AREAS.includes(zoneArea)) {
     const appendPosition =
       state.kind === 'placement' && state.fromArea === zoneArea

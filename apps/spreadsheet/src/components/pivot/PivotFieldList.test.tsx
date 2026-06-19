@@ -238,6 +238,32 @@ describe('PivotFieldList placement editor', () => {
     expect(props.onMovePlacement).toHaveBeenCalledWith('row:Vendor:1', 'column', 0);
   });
 
+  it('reorders against the underlying chip when pointer hit testing only hits the dragged chip', () => {
+    const { container, props } = renderList();
+    const vendor = chip(container, 'row:Vendor:1');
+    const month = chip(container, 'row:Month:0');
+    const rowZone = zone(container, 'row');
+    setRect(month, { top: 0, height: 20 });
+    const originalElementsFromPoint = document.elementsFromPoint;
+    Object.defineProperty(document, 'elementsFromPoint', {
+      configurable: true,
+      value: jest.fn(() => [vendor, rowZone]),
+    });
+
+    try {
+      fireEvent.mouseDown(vendor, { button: 0, clientX: 10, clientY: 10 });
+      fireEvent.mouseMove(document, { clientX: 20, clientY: 1 });
+      fireEvent.mouseUp(document, { clientX: 20, clientY: 1 });
+
+      expect(props.onMovePlacement).toHaveBeenCalledWith('row:Vendor:1', 'row', 0);
+    } finally {
+      Object.defineProperty(document, 'elementsFromPoint', {
+        configurable: true,
+        value: originalElementsFromPoint,
+      });
+    }
+  });
+
   it('removes a placement when it is dropped back onto available fields', () => {
     const { container, props } = renderList();
     const transfer = dataTransfer();
@@ -317,6 +343,35 @@ describe('PivotFieldList placement editor', () => {
         position: 2,
         aggregateFunction: 'count',
       });
+    } finally {
+      Object.defineProperty(document, 'elementsFromPoint', {
+        configurable: true,
+        value: originalElementsFromPoint,
+      });
+    }
+  });
+
+  it('keeps pointer fallback active when native drag starts without a native drop', () => {
+    const { container, props } = renderList();
+    const transfer = dataTransfer();
+    const vendor = chip(container, 'row:Vendor:1');
+    const month = chip(container, 'row:Month:0');
+    setRect(month, { top: 0, height: 20 });
+    const originalElementsFromPoint = document.elementsFromPoint;
+    const elementsFromPoint = jest.fn(() => [vendor]);
+    Object.defineProperty(document, 'elementsFromPoint', {
+      configurable: true,
+      value: elementsFromPoint,
+    });
+
+    try {
+      fireEvent.mouseDown(vendor, { button: 0, clientX: 10, clientY: 10 });
+      elementsFromPoint.mockImplementation(() => [vendor, month]);
+      fireEvent.dragStart(vendor, { dataTransfer: transfer });
+      fireEvent.mouseMove(document, { clientX: 20, clientY: 1 });
+      fireEvent.mouseUp(document, { clientX: 20, clientY: 1 });
+
+      expect(props.onMovePlacement).toHaveBeenCalledWith('row:Vendor:1', 'row', 0);
     } finally {
       Object.defineProperty(document, 'elementsFromPoint', {
         configurable: true,

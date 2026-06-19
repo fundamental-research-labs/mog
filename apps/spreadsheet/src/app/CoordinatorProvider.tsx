@@ -102,6 +102,18 @@ function isNativeEditableShortcut(e: KeyboardEvent, target: HTMLElement | null):
   return key === 'c' || key === 'x' || key === 'v' || key === 'z' || key === 'y';
 }
 
+const SPREADSHEET_CHROME_NAVIGATION_KEYS = new Set(['Home', 'End', 'PageDown', 'PageUp']);
+
+export function shouldRouteSpreadsheetChromeNavigationShortcut(
+  e: Pick<KeyboardEvent, 'key' | 'ctrlKey' | 'metaKey' | 'altKey'>,
+  target: HTMLElement | null,
+): boolean {
+  if (!(e.ctrlKey || e.metaKey) || e.altKey) return false;
+  if (!SPREADSHEET_CHROME_NAVIGATION_KEYS.has(e.key)) return false;
+  if (isDialogKeyboardTarget(target) || isEditableKeyboardTarget(target)) return false;
+  return true;
+}
+
 export function shouldCommitFormulaBarEnterInPlace(
   e: Pick<KeyboardEvent, 'key' | 'shiftKey' | 'ctrlKey' | 'metaKey' | 'altKey'>,
   currentLayerType: string,
@@ -385,12 +397,12 @@ function KeyboardCaptureSetup({
           return;
         }
 
-        // Sheet navigation shortcuts (Ctrl+PageDown/Up) must also fire when focus
-        // is on spreadsheet chrome elements (e.g. sheet tabs) that sit outside the
-        // grid div and therefore never bubble to the grid's onKeyDown handler.
-        const isSheetNavigation =
-          (e.key === 'PageDown' || e.key === 'PageUp') && (e.ctrlKey || e.metaKey);
-        if (isSheetNavigation) {
+        // Sheet/workbook navigation shortcuts must also fire when focus is on
+        // spreadsheet chrome elements (e.g. sheet tabs or pivot field items)
+        // that sit outside the grid div and therefore never bubble to the
+        // grid's onKeyDown handler. Text inputs and dialogs retain their native
+        // keyboard ownership.
+        if (shouldRouteSpreadsheetChromeNavigationShortcut(e, target)) {
           const result = keyboardCoordinator.handleKeyboardEvent(e);
           if (result.handled) {
             e.preventDefault();

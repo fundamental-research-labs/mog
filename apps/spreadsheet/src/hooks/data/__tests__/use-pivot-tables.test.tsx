@@ -216,7 +216,9 @@ describe('usePivotTables pivot receipts', () => {
 
     expect(mockWorksheet.pivots.addWithSheet).toHaveBeenCalledWith(
       'Sales Pivot',
-      expect.any(Object),
+      expect.objectContaining({
+        layout: expect.objectContaining({ layoutForm: 'outline' }),
+      }),
       { lifecycle: 'materialize', insertBeforeSheetId: 'sheet-1' },
     );
   });

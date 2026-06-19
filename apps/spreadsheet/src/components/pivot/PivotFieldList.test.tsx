@@ -238,6 +238,40 @@ describe('PivotFieldList placement editor', () => {
     expect(props.onMovePlacement).toHaveBeenCalledWith('row:Vendor:1', 'column', 0);
   });
 
+  it('removes a placement when it is dropped back onto available fields', () => {
+    const { container, props } = renderList();
+    const transfer = dataTransfer();
+    const availableFields = container.querySelector<HTMLElement>(
+      '[data-pivot-target="available-fields"]',
+    );
+    if (!availableFields) throw new Error('Missing available fields');
+
+    fireEvent.dragStart(chip(container, 'row:Vendor:1'), { dataTransfer: transfer });
+    fireEvent.dragOver(availableFields, { dataTransfer: transfer });
+    fireEvent.drop(availableFields, { dataTransfer: transfer });
+
+    expect(props.onRemovePlacement).toHaveBeenCalledWith('row:Vendor:1');
+  });
+
+  it('shows an insertion indicator while hovering over a placement', () => {
+    const { container } = renderList();
+    const transfer = dataTransfer();
+    const vendor = chip(container, 'row:Vendor:1');
+    const month = chip(container, 'row:Month:0');
+    setRect(month, { top: 0, height: 20 });
+
+    fireEvent.dragStart(vendor, { dataTransfer: transfer });
+    const currentMonth = chip(container, 'row:Month:0');
+    setRect(currentMonth, { top: 0, height: 20 });
+    fireEvent.dragOver(currentMonth, { dataTransfer: transfer, clientY: 1 });
+
+    const indicator = zone(container, 'row').querySelector<HTMLElement>(
+      '[data-pivot-target="field-drop-indicator"]',
+    );
+    expect(indicator).toBeInTheDocument();
+    expect(indicator).toHaveAttribute('data-pivot-drop-position', '0');
+  });
+
   it('inserts source fields at the target placement position', () => {
     const { container, props } = renderList();
     const transfer = dataTransfer();
@@ -462,6 +496,35 @@ describe('PivotFieldList placement editor', () => {
     expect(props.onRemovePlacement).toHaveBeenCalledWith('value:Amount:1');
   });
 
+  it('keeps remove button pointer input out of drag fallback handling', () => {
+    const { container, props } = renderList();
+    const removeButton = within(chip(container, 'row:Vendor:1')).getByRole('button', {
+      name: /Remove Vendor/i,
+    });
+    const originalElementsFromPoint = document.elementsFromPoint;
+    const elementsFromPoint = jest.fn(() => [chip(container, 'row:Vendor:1')]);
+    Object.defineProperty(document, 'elementsFromPoint', {
+      configurable: true,
+      value: elementsFromPoint,
+    });
+
+    try {
+      fireEvent.mouseDown(removeButton, { button: 0, clientX: 10, clientY: 10 });
+      fireEvent.mouseMove(document, { clientX: 30, clientY: 30 });
+      fireEvent.mouseUp(document, { clientX: 30, clientY: 30 });
+      fireEvent.click(removeButton);
+
+      expect(elementsFromPoint).not.toHaveBeenCalled();
+      expect(props.onMovePlacement).not.toHaveBeenCalled();
+      expect(props.onRemovePlacement).toHaveBeenCalledWith('row:Vendor:1');
+    } finally {
+      Object.defineProperty(document, 'elementsFromPoint', {
+        configurable: true,
+        value: originalElementsFromPoint,
+      });
+    }
+  });
+
   it('renders per-capability read-only controls as disabled', () => {
     renderList({
       canAddFields: false,
@@ -509,7 +572,7 @@ describe('PivotFieldList placement editor', () => {
     expect(label).toHaveClass('min-w-0', 'flex-1', 'truncate');
     expect(label).toHaveAttribute('title', longName);
     expect(label).toHaveAttribute('aria-label', longName);
-    expect(controls).toHaveClass('w-full', 'min-w-0');
+    expect(controls).toHaveClass('flex', 'w-full', 'min-w-0');
     expect(screen.getByRole('combobox', { name: /Sort values by/i })).toHaveClass('min-w-0');
   });
 });

@@ -536,7 +536,7 @@ export function usePivotTables({ sheetId }: UsePivotTablesOptions): UsePivotTabl
         layout: {
           showRowGrandTotals: true,
           showColumnGrandTotals: true,
-          layoutForm: 'compact' as const,
+          layoutForm: 'outline' as const,
         },
       };
 

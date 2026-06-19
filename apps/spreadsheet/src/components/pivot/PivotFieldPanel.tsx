@@ -118,7 +118,7 @@ export function PivotFieldPanel({
 
   return (
     <div
-      className="flex flex-col w-full h-full bg-ss-surface border-l border-ss-border shadow-ss-md overflow-hidden"
+      className="flex min-h-0 flex-col w-full h-full bg-ss-surface border-l border-ss-border shadow-ss-md overflow-hidden"
       style={style}
       data-pivot-target="field-panel"
       data-pivot-id={config.id}
@@ -141,7 +141,7 @@ export function PivotFieldPanel({
       </div>
 
       {/* Content */}
-      <div ref={contentRef} className="flex-1 overflow-y-auto p-4">
+      <div ref={contentRef} className="min-h-0 flex-1 overflow-y-auto p-4">
         {/* Error banner */}
         {error && (
           <div className="px-3 py-2 bg-ss-error-bg rounded mb-4 text-body text-ss-error">
@@ -183,7 +183,7 @@ export function PivotFieldPanel({
               <span>{result.sourceRowCount.toLocaleString()}</span>
             </div>
             <div className="flex justify-between py-1">
-              <span>Pivot rows:</span>
+              <span>Pivot output rows including totals:</span>
               <span>{result.rows.length.toLocaleString()}</span>
             </div>
           </div>

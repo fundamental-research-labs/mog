@@ -1,5 +1,7 @@
 import { ChevronDownSvg } from '@mog/icons';
-import type { PlacementId, SortOrder } from '@mog-sdk/contracts/pivot';
+import { useEffect, useState } from 'react';
+import type { CellError, CellValue } from '@mog-sdk/contracts/core';
+import type { PivotFieldItems, PivotItemInfo, PlacementId, SortOrder } from '@mog-sdk/contracts/pivot';
 
 import { pivotReadbackAttributes } from '../../systems/pivot';
 import {
@@ -79,9 +81,7 @@ export function PivotLayerOverlay({
           onStartEditingPivot={onStartEditingPivot}
         />
       )}
-      {showFilterControls && (
-        <ReportFilterControls marker={marker} onStartEditingPivot={onStartEditingPivot} />
-      )}
+      {showFilterControls && <ReportFilterControls marker={marker} />}
       {showEmptyState && (
         <PivotEmptyState marker={marker} onStartEditingPivot={onStartEditingPivot} />
       )}
@@ -262,10 +262,8 @@ function HeaderMenuButton({
 
 function ReportFilterControls({
   marker,
-  onStartEditingPivot,
 }: {
   marker: PivotMarker;
-  onStartEditingPivot: (pivotId: string) => void;
 }) {
   return (
     <div className="absolute inset-0 pointer-events-none">
@@ -273,8 +271,7 @@ function ReportFilterControls({
         <ReportFilterControl
           key={control.placementId}
           control={control}
-          pivotId={marker.id}
-          onStartEditingPivot={onStartEditingPivot}
+          marker={marker}
         />
       ))}
     </div>
@@ -283,16 +280,61 @@ function ReportFilterControls({
 
 function ReportFilterControl({
   control,
-  pivotId,
-  onStartEditingPivot,
+  marker,
 }: {
   control: PivotReportFilterControlLayout;
-  pivotId: string;
-  onStartEditingPivot: (pivotId: string) => void;
+  marker: PivotMarker;
 }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [items, setItems] = useState<PivotItemInfo[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const activeFilter = marker.pivot.config.filters.find(
+    (filter) => filter.fieldId === control.fieldId,
+  );
+  const filterSummary = summarizeReportFilter(activeFilter, items);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    let cancelled = false;
+    const handle = marker.pivot.handle;
+    if (!handle) {
+      setItems([]);
+      return;
+    }
+
+    setIsLoading(true);
+    void handle
+      .getAllItems()
+      .then((groups) => {
+        if (cancelled) return;
+        setItems(filterItemsForControl(groups, control));
+      })
+      .catch(() => {
+        if (!cancelled) setItems([]);
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [control, isOpen, marker.pivot.handle]);
+
+  const clearFilter = () => {
+    setIsOpen(false);
+    void marker.pivot.handle?.removeFilter(control.fieldId);
+  };
+
+  const includeSingleValue = (value: CellValue) => {
+    setIsOpen(false);
+    void marker.pivot.handle?.setFilter(control.fieldId, { includeValues: [value] });
+  };
+
   return (
     <div
-      className="absolute flex items-center pointer-events-none"
+      className="absolute flex items-start pointer-events-none"
       style={{
         left: control.rect.x,
         top: control.rect.y,
@@ -306,18 +348,134 @@ function ReportFilterControl({
         data-pivot-field-id={control.fieldId}
         data-pivot-placement-id={control.placementId}
         data-pivot-row={control.row}
-        title={`Filter ${control.label}: All`}
-        aria-label={`Filter ${control.label}: All`}
-        onClick={() => onStartEditingPivot(pivotId)}
+        title={`Filter ${control.label}: ${filterSummary}`}
+        aria-label={`Filter ${control.label}: ${filterSummary}`}
+        aria-haspopup="listbox"
+        aria-expanded={isOpen ? 'true' : 'false'}
+        onClick={(event) => {
+          event.stopPropagation();
+          setIsOpen((open) => !open);
+        }}
       >
         <span className="min-w-0 truncate">{control.label}</span>
-        <span className="shrink-0 text-ss-text-secondary">All</span>
+        <span className="shrink-0 text-ss-text-secondary">{filterSummary}</span>
         <span className="shrink-0 text-ss-text-secondary" aria-hidden="true">
           v
         </span>
       </button>
+      {isOpen && (
+        <div
+          role="listbox"
+          className="pointer-events-auto absolute left-0 top-full z-20 mt-1 flex max-h-72 min-w-44 flex-col overflow-auto rounded border border-ss-border bg-ss-surface p-1 text-caption text-ss-text-primary shadow-lg"
+          data-pivot-target="report-filter-picker"
+          data-pivot-field-id={control.fieldId}
+          data-pivot-placement-id={control.placementId}
+          aria-label={`${control.label} filter values`}
+          onClick={(event) => event.stopPropagation()}
+        >
+          <button
+            type="button"
+            role="option"
+            aria-selected={!activeFilter}
+            className="rounded px-2 py-1 text-left hover:bg-ss-surface-hover"
+            data-pivot-target="report-filter-option"
+            data-pivot-filter-option="all"
+            onClick={clearFilter}
+          >
+            All
+          </button>
+          {isLoading && (
+            <div className="px-2 py-1 text-ss-text-secondary" data-pivot-target="filter-loading">
+              Loading
+            </div>
+          )}
+          {!isLoading &&
+            items.map((item) => {
+              const label = formatFilterValue(item.value);
+              const selected = isValueIncluded(activeFilter, item.value);
+              return (
+                <button
+                  key={String(item.key)}
+                  type="button"
+                  role="option"
+                  aria-selected={selected}
+                  className="rounded px-2 py-1 text-left hover:bg-ss-surface-hover"
+                  data-pivot-target="report-filter-option"
+                  data-pivot-filter-option={label}
+                  onClick={() => includeSingleValue(item.value)}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          {!isLoading && items.length === 0 && (
+            <div className="px-2 py-1 text-ss-text-secondary" data-pivot-target="filter-empty">
+              No values
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
+}
+
+function filterItemsForControl(
+  groups: PivotFieldItems[],
+  control: PivotReportFilterControlLayout,
+): PivotItemInfo[] {
+  const group = groups.find(
+    (candidate) => candidate.fieldId === control.fieldId || candidate.fieldName === control.label,
+  );
+  return (
+    group?.items.filter((item) => !item.isSubtotal && !item.isGrandTotal && item.isVisible) ?? []
+  );
+}
+
+function isCellError(value: CellValue): value is CellError {
+  return typeof value === 'object' && value !== null && 'type' in value && value.type === 'error';
+}
+
+function formatFilterValue(value: CellValue): string {
+  if (value == null) return '(blank)';
+  if (isCellError(value)) return value.message ?? value.value;
+  return String(value);
+}
+
+function cellValueKey(value: CellValue): string {
+  return isCellError(value)
+    ? `error:${value.value}:${value.message ?? ''}`
+    : `${typeof value}:${String(value)}`;
+}
+
+function isValueIncluded(
+  filter: PivotMarker['pivot']['config']['filters'][number] | undefined,
+  value: CellValue,
+): boolean {
+  if (!filter) return true;
+  const valueKey = cellValueKey(value);
+  if (filter.includeValues) {
+    return filter.includeValues.some((entry) => cellValueKey(entry) === valueKey);
+  }
+  if (filter.excludeValues) {
+    return !filter.excludeValues.some((entry) => cellValueKey(entry) === valueKey);
+  }
+  return true;
+}
+
+function summarizeReportFilter(
+  filter: PivotMarker['pivot']['config']['filters'][number] | undefined,
+  items: PivotItemInfo[],
+): string {
+  if (!filter) return 'All';
+  if (filter.includeValues?.length === 1) return formatFilterValue(filter.includeValues[0]);
+  if (filter.includeValues && filter.includeValues.length > 1) {
+    return `${filter.includeValues.length} selected`;
+  }
+  if (filter.excludeValues && filter.excludeValues.length > 0) {
+    const visibleCount = items.length > 0 ? Math.max(0, items.length - filter.excludeValues.length) : 0;
+    return items.length > 0 ? `${visibleCount} selected` : 'Filtered';
+  }
+  return 'All';
 }
 
 function PivotEmptyState({

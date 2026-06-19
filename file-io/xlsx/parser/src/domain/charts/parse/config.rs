@@ -1,6 +1,6 @@
 //! Chart-type-specific configuration parsing.
 
-use crate::infra::scanner::{find_attr_simd, find_closing_tag, find_tag_simd};
+use crate::infra::scanner::{find_closing_tag, find_tag_simd};
 
 use super::super::xml_helpers::find_direct_child_tag;
 use super::super::*;
@@ -108,49 +108,11 @@ fn parse_line_config(xml: &[u8]) -> LineChartConfig {
     if find_tag_simd(xml, b"upDownBars", 0).is_some() {
         cfg.up_down_bars = Some(parse_up_down_bars(xml));
     }
-    // chart-level marker and smooth can appear before OR after <c:axId> elements
-    // (OOXML spec says before, but real files vary). Search the non-series region.
-    {
-        // Helper: search a region for chart-level marker/smooth (not series-level)
-        let mut search_marker_smooth = |region: &[u8]| {
-            if cfg.marker.is_none() {
-                if let Some(start) = find_tag_simd(region, b"marker", 0) {
-                    if let Some(val_pos) = find_attr_simd(&region[start..], b"val=\"", 0) {
-                        if val_pos < 50 {
-                            cfg.marker = Some(attrs::parse_bool_attr(&region[start..], b"val=\""));
-                        }
-                    }
-                }
-            }
-            if cfg.smooth.is_none() {
-                if let Some(start) = find_tag_simd(region, b"smooth", 0) {
-                    if let Some(val_pos) = find_attr_simd(&region[start..], b"val=\"", 0) {
-                        if val_pos < 50 {
-                            cfg.smooth = Some(attrs::parse_bool_attr(&region[start..], b"val=\""));
-                        }
-                    }
-                }
-            }
-        };
-
-        if let Some(first_axid) = find_tag_simd(xml, b"axId", 0) {
-            // Search before the first axId
-            let search_start = first_axid.saturating_sub(200);
-            search_marker_smooth(&xml[search_start..first_axid]);
-
-            // Search after the last axId (find second axId, then search after it)
-            let after_first = first_axid + 5;
-            if let Some(second_axid) = find_tag_simd(xml, b"axId", after_first) {
-                let after_second = (second_axid + 30).min(xml.len());
-                let end = (after_second + 200).min(xml.len());
-                search_marker_smooth(&xml[after_second..end]);
-            } else {
-                // Only one axId - search after it
-                let after = (first_axid + 30).min(xml.len());
-                let end = (after + 200).min(xml.len());
-                search_marker_smooth(&xml[after..end]);
-            }
-        }
+    if let Some(start) = find_direct_child_tag(xml, b"lineChart", b"marker") {
+        cfg.marker = Some(attrs::parse_bool_attr(&xml[start..], b"val=\""));
+    }
+    if let Some(start) = find_direct_child_tag(xml, b"lineChart", b"smooth") {
+        cfg.smooth = Some(attrs::parse_bool_attr(&xml[start..], b"val=\""));
     }
     cfg.extensions = parse_chart_type_ext_lst(xml);
     cfg
@@ -439,4 +401,46 @@ fn parse_shape_properties_child(xml: &[u8]) -> Option<ooxml_types::charts::Shape
     let sp_start = find_tag_simd(xml, b"spPr", 0)?;
     let sp_end = find_closing_tag(xml, b"spPr", sp_start).unwrap_or(xml.len());
     Some(parse_shape_properties(&xml[sp_start..sp_end]))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn line_config_ignores_series_level_smooth() {
+        let xml = br#"<c:lineChart>
+            <c:grouping val="standard"/>
+            <c:ser>
+                <c:idx val="0"/>
+                <c:smooth val="1"/>
+            </c:ser>
+            <c:axId val="1"/>
+            <c:axId val="2"/>
+        </c:lineChart>"#;
+
+        let cfg = parse_line_config(xml);
+
+        assert_eq!(cfg.smooth, None);
+    }
+
+    #[test]
+    fn line_config_reads_direct_chart_level_marker_and_smooth() {
+        let xml = br#"<c:lineChart>
+            <c:grouping val="standard"/>
+            <c:ser>
+                <c:idx val="0"/>
+                <c:smooth val="1"/>
+            </c:ser>
+            <c:marker val="1"/>
+            <c:smooth val="0"/>
+            <c:axId val="1"/>
+            <c:axId val="2"/>
+        </c:lineChart>"#;
+
+        let cfg = parse_line_config(xml);
+
+        assert_eq!(cfg.marker, Some(true));
+        assert_eq!(cfg.smooth, Some(false));
+    }
 }

@@ -274,6 +274,10 @@ export function PivotFieldList({
   const handleDragStart = useCallback(
     (event: DragEvent, state: DragState) => {
       if (!canDragState(state)) return;
+      if (pointerDragCancelRef.current) {
+        event.preventDefault();
+        return;
+      }
       nativeDropTargetRef.current = null;
       setDragState(state);
       event.dataTransfer.effectAllowed = 'move';
@@ -443,12 +447,7 @@ export function PivotFieldList({
       setSelectedItem(null);
       stopAutoScroll();
     },
-    [
-      canDragState,
-      dragStateFromEvent,
-      applyDragStateToPosition,
-      stopAutoScroll,
-    ],
+    [canDragState, dragStateFromEvent, applyDragStateToPosition, stopAutoScroll],
   );
 
   const dropTargetFromPoint = useCallback(
@@ -493,6 +492,8 @@ export function PivotFieldList({
           setDragState(state);
           setSelectedItem(null);
         }
+        dragPointRef.current = { x: moveEvent.clientX, y: moveEvent.clientY };
+        ensureAutoScroll().start();
         updateFeedback(moveEvent.clientX, moveEvent.clientY);
       };
 
@@ -527,6 +528,7 @@ export function PivotFieldList({
       canRemoveFields,
       clearDragFeedback,
       dropTargetFromPoint,
+      ensureAutoScroll,
       onRemovePlacement,
     ],
   );
@@ -770,7 +772,7 @@ export function PivotFieldList({
         } ${isDragging ? 'opacity-50' : ''} ${
           isSelected ? 'ring-2 ring-ss-primary' : ''
         } hover:bg-ss-surface-hover`}
-        draggable={false}
+        draggable={canDrag}
         role="checkbox"
         aria-checked={isChecked}
         aria-disabled={!canDrag}
@@ -846,7 +848,7 @@ export function PivotFieldList({
         } ${isDragging ? 'opacity-50' : ''} ${isSelected ? 'ring-2 ring-ss-primary' : ''} ${
           isValueField ? 'bg-ss-primary-light' : 'bg-ss-surface-hover'
         }`}
-        draggable={false}
+        draggable={canDrag}
         title={label}
         aria-label={label}
         onDragStart={(event) => handleDragStart(event, state)}

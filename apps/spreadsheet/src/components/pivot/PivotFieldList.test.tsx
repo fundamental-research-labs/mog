@@ -125,6 +125,7 @@ describe('PivotFieldList placement editor', () => {
     expect(category).toHaveAttribute('data-pivot-selected', 'false');
     expect(category).toHaveAttribute('data-pivot-checked', 'false');
     expect(category).toHaveAttribute('aria-checked', 'false');
+    expect(category).toHaveAttribute('draggable', 'true');
     expect(amount).toHaveAttribute('data-pivot-field-id', 'Amount');
     expect(amount).toHaveAttribute('data-pivot-checked', 'true');
     expect(amount).toHaveAttribute('aria-checked', 'true');
@@ -150,6 +151,7 @@ describe('PivotFieldList placement editor', () => {
     ).map((node) => node.dataset.pivotPlacementId);
 
     expect(rowPlacementIds).toEqual(['row:Month:0', 'row:Vendor:1']);
+    expect(chip(container, 'row:Month:0')).toHaveAttribute('draggable', 'true');
     expect(screen.getByRole('combobox', { name: /Sort Month/i })).toHaveValue('none');
     expect(screen.getByRole('combobox', { name: /Sort values by Amount/i })).toHaveValue('none');
   });
@@ -326,15 +328,17 @@ describe('PivotFieldList placement editor', () => {
     if (!category) throw new Error('Missing Category source chip');
     const rowZone = zone(container, 'row');
     const originalElementsFromPoint = document.elementsFromPoint;
+    const elementsFromPoint = jest.fn(() => [category]);
     Object.defineProperty(document, 'elementsFromPoint', {
       configurable: true,
-      value: jest.fn(() => [rowZone]),
+      value: elementsFromPoint,
     });
 
     try {
       fireEvent.mouseDown(category, { button: 0, clientX: 5, clientY: 5 });
-      fireEvent.dragStart(category, { dataTransfer: transfer });
+      expect(fireEvent.dragStart(category, { dataTransfer: transfer })).toBe(false);
       fireEvent.drop(rowZone, { dataTransfer: transfer });
+      elementsFromPoint.mockImplementation(() => [rowZone]);
       fireEvent.mouseMove(document, { clientX: 20, clientY: 20 });
       fireEvent.mouseUp(document, { clientX: 20, clientY: 20 });
 
@@ -367,7 +371,7 @@ describe('PivotFieldList placement editor', () => {
     try {
       fireEvent.mouseDown(vendor, { button: 0, clientX: 10, clientY: 10 });
       elementsFromPoint.mockImplementation(() => [vendor, month]);
-      fireEvent.dragStart(vendor, { dataTransfer: transfer });
+      expect(fireEvent.dragStart(vendor, { dataTransfer: transfer })).toBe(false);
       fireEvent.mouseMove(document, { clientX: 20, clientY: 1 });
       fireEvent.mouseUp(document, { clientX: 20, clientY: 1 });
 
@@ -429,6 +433,67 @@ describe('PivotFieldList placement editor', () => {
       fireEvent.dragEnd(category);
       expect(cancelAnimationFrameMock).toHaveBeenCalled();
     } finally {
+      Object.defineProperty(window, 'requestAnimationFrame', {
+        configurable: true,
+        value: originalRequestAnimationFrame,
+      });
+      Object.defineProperty(window, 'cancelAnimationFrame', {
+        configurable: true,
+        value: originalCancelAnimationFrame,
+      });
+    }
+  });
+
+  it('starts auto-scroll during pointer fallback field drags', () => {
+    const frameCallbacks: FrameRequestCallback[] = [];
+    const requestAnimationFrameMock = jest.fn((callback: FrameRequestCallback) => {
+      frameCallbacks.push(callback);
+      return frameCallbacks.length;
+    });
+    const cancelAnimationFrameMock = jest.fn();
+    const originalRequestAnimationFrame = window.requestAnimationFrame;
+    const originalCancelAnimationFrame = window.cancelAnimationFrame;
+    const originalElementsFromPoint = document.elementsFromPoint;
+    Object.defineProperty(window, 'requestAnimationFrame', {
+      configurable: true,
+      value: requestAnimationFrameMock,
+    });
+    Object.defineProperty(window, 'cancelAnimationFrame', {
+      configurable: true,
+      value: cancelAnimationFrameMock,
+    });
+
+    try {
+      const scrollContainer = document.createElement('div');
+      setRect(scrollContainer, { top: 0, bottom: 100, left: 0, right: 240, height: 100 });
+      const getDragScrollContainer = jest.fn(() => scrollContainer);
+      const { container } = renderList({ getDragScrollContainer });
+      const category = container.querySelector<HTMLElement>(
+        '[data-pivot-target="field-chip"][data-pivot-area="available"][data-pivot-field-id="Category"]',
+      );
+      const rowZone = zone(container, 'row');
+      if (!category) throw new Error('Missing Category source chip');
+      const elementsFromPoint = jest.fn(() => [category]);
+      Object.defineProperty(document, 'elementsFromPoint', {
+        configurable: true,
+        value: elementsFromPoint,
+      });
+
+      fireEvent.mouseDown(category, { button: 0, clientX: 12, clientY: 40 });
+      elementsFromPoint.mockImplementation(() => [rowZone]);
+      fireEvent.mouseMove(document, { clientX: 12, clientY: 98 });
+
+      expect(requestAnimationFrameMock).toHaveBeenCalled();
+      frameCallbacks[0](1);
+      expect(getDragScrollContainer).toHaveBeenCalled();
+
+      fireEvent.mouseUp(document, { clientX: 12, clientY: 98 });
+      expect(cancelAnimationFrameMock).toHaveBeenCalled();
+    } finally {
+      Object.defineProperty(document, 'elementsFromPoint', {
+        configurable: true,
+        value: originalElementsFromPoint,
+      });
       Object.defineProperty(window, 'requestAnimationFrame', {
         configurable: true,
         value: originalRequestAnimationFrame,

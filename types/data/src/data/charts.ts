@@ -184,7 +184,18 @@ export type ChartFill =
 export interface ChartLineFormat {
   color?: ChartColor;
   width?: number;
-  dashStyle?: 'solid' | 'dot' | 'dash' | 'dashDot' | 'longDash' | 'longDashDot' | 'longDashDotDot' | 'sysDash' | 'sysDot' | 'sysDashDot' | 'sysDashDotDot';
+  dashStyle?:
+    | 'solid'
+    | 'dot'
+    | 'dash'
+    | 'dashDot'
+    | 'longDash'
+    | 'longDashDot'
+    | 'longDashDotDot'
+    | 'sysDash'
+    | 'sysDot'
+    | 'sysDashDot'
+    | 'sysDashDotDot';
   transparency?: number;
   /** Explicit OOXML a:ln/a:noFill. Absent line formatting is not an explicit no-line. */
   noFill?: boolean;
@@ -1127,7 +1138,7 @@ export interface SeriesConfig {
   yAxisIndex?: 0 | 1;
   showMarkers?: boolean;
   markerSize?: number;
-  markerStyle?: string;
+  markerStyle?: MarkerStyle;
   lineWidth?: number;
   points?: PointFormat[];
   dataLabels?: DataLabelConfig;
@@ -1549,7 +1560,7 @@ export interface ResolvedChartSeriesSnapshot {
   showLines?: boolean;
   smooth?: boolean;
   showMarkers?: boolean;
-  markerStyle?: string;
+  markerStyle?: MarkerStyle;
   renderLayerCount?: number;
   geometry?: ResolvedChartSeriesGeometrySnapshot;
   color?: string;

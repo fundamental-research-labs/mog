@@ -30,7 +30,7 @@
 
 import type { ChartSeriesData } from '../../bridges/compute/compute-types.gen';
 
-import type { SeriesConfig } from '@mog-sdk/contracts/data/charts';
+import type { MarkerStyle, SeriesConfig } from '@mog-sdk/contracts/data/charts';
 
 import {
   chartColorToWire,
@@ -46,6 +46,8 @@ import {
 import {
   dataLabelConfigToWire,
   errorBarConfigToWire,
+  MARKER_STYLES,
+  narrowEnum,
   pointFormatToWire,
   trendlineConfigArrayToWire,
   wireToDataLabelConfig,
@@ -167,9 +169,7 @@ export function wireToSeriesConfig(w: ChartSeriesData): SeriesConfig {
     yAxisIndex: w.yAxisIndex,
     showMarkers: w.showMarkers,
     markerSize: w.markerSize,
-    // SeriesConfig.markerStyle is an unrestricted string on the contract;
-    // per-point `PointFormat.markerStyle` is the narrowed one.
-    markerStyle: w.markerStyle,
+    markerStyle: narrowEnum<MarkerStyle>(w.markerStyle, MARKER_STYLES, 'Series.markerStyle'),
     lineWidth: w.lineWidth,
     points: w.points?.map(wireToPointFormat),
     dataLabels: w.dataLabels ? wireToDataLabelConfig(w.dataLabels) : undefined,

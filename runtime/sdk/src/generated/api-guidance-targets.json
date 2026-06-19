@@ -12529,7 +12529,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "addWithSheet(\n    sheetName: string,\n    config: PivotCreateConfig,\n    options?: PivotCreateOptions,\n  ): Promise<PivotAddWithSheetReceipt>;",
+      "signature": "addWithSheet(\n    sheetName: string,\n    config: PivotCreateConfig,\n    options?: PivotCreateWithSheetOptions,\n  ): Promise<PivotAddWithSheetReceipt>;",
       "typeText": "Promise<PivotAddWithSheetReceipt>",
       "compatibility": [],
       "source": {
@@ -30946,7 +30946,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "addWithSheet(\n    sheetName: string,\n    config: PivotCreateConfig,\n    options?: PivotCreateOptions,\n  ): Promise<PivotAddWithSheetReceipt>;",
+      "signature": "addWithSheet(\n    sheetName: string,\n    config: PivotCreateConfig,\n    options?: PivotCreateWithSheetOptions,\n  ): Promise<PivotAddWithSheetReceipt>;",
       "typeText": "Promise<PivotAddWithSheetReceipt>",
       "compatibility": [],
       "source": {

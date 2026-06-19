@@ -151,6 +151,7 @@ fn series_marker_line_format_reconstructs_width_and_dash_without_line_color() {
     let series_xml = chart_group_xml(line_xml, "<c:ser>", "</c:ser>");
     let marker_xml = chart_group_xml(series_xml, "<c:marker>", "</c:marker>");
 
+    assert!(line_xml.contains(r#"<c:marker val="1"/>"#), "{line_xml}");
     assert!(marker_xml.contains(r#"<a:ln w="25400">"#), "{marker_xml}");
     assert!(
         marker_xml.contains(r#"<a:prstDash val="solid"/>"#),

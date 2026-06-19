@@ -53,7 +53,7 @@ const DATA_LABEL_POSITIONS = [
 ] as const;
 type DataLabelPosition = (typeof DATA_LABEL_POSITIONS)[number];
 
-const MARKER_STYLES = [
+export const MARKER_STYLES = [
   'circle',
   'dash',
   'diamond',
@@ -78,7 +78,7 @@ const TRENDLINE_TYPES = [
 ] as const;
 type TrendlineTypeName = NonNullable<TrendlineConfig['type']>;
 
-function narrowEnum<T extends string>(
+export function narrowEnum<T extends string>(
   value: string | null | undefined,
   allowed: readonly T[],
   fieldName: string,

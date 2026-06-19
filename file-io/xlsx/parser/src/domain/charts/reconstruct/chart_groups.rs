@@ -393,6 +393,22 @@ fn line_marker_for_sub_type(sub: Option<&ChartSubType>) -> Option<bool> {
     .then_some(true)
 }
 
+fn line_marker_for_series(series: &[charts::ChartSeries]) -> Option<bool> {
+    let mut has_explicit_none = false;
+    for series in series {
+        let Some(marker) = series.marker.as_ref() else {
+            continue;
+        };
+        match marker.symbol {
+            Some(charts::MarkerStyle::None) => has_explicit_none = true,
+            Some(_) => return Some(true),
+            None if marker.size.is_some() || marker.sp_pr.is_some() => return Some(true),
+            None => {}
+        }
+    }
+    has_explicit_none.then_some(false)
+}
+
 fn radar_style_for_sub_type(sub: Option<&ChartSubType>) -> Option<charts::RadarStyle> {
     match sub {
         Some(ChartSubType::Filled) => Some(charts::RadarStyle::Filled),
@@ -448,7 +464,7 @@ pub(super) fn build_default_config(
     ct: OoxmlChartType,
     chart_type: &DomainChartType,
     spec: &ChartSpec,
-    _series: &[charts::ChartSeries],
+    series: &[charts::ChartSeries],
 ) -> ChartTypeConfig {
     let grouping = sub_type_to_grouping(spec.sub_type.as_ref());
     let path_grouping = sub_type_to_path_grouping(spec.sub_type.as_ref());
@@ -487,7 +503,8 @@ pub(super) fn build_default_config(
             drop_lines: spec.drop_lines.as_ref().map(build_chart_lines),
             hi_low_lines: spec.high_low_lines.as_ref().map(build_chart_lines),
             up_down_bars: spec.up_down_bars.as_ref().map(build_up_down_bars),
-            marker: line_marker_for_sub_type(spec.sub_type.as_ref()),
+            marker: line_marker_for_sub_type(spec.sub_type.as_ref())
+                .or_else(|| line_marker_for_series(series)),
             ..Default::default()
         }),
         OoxmlChartType::Line3D => ChartTypeConfig::Line3D(charts::Line3DChartConfig {
@@ -584,7 +601,7 @@ pub(super) fn build_default_config(
 /// The config_template stores non-series fields; we overlay series + spec-level values.
 pub(super) fn inject_series_into_config(
     template: &ChartTypeConfig,
-    _series: &[charts::ChartSeries],
+    series: &[charts::ChartSeries],
     spec: &ChartSpec,
 ) -> ChartTypeConfig {
     match template {
@@ -609,6 +626,9 @@ pub(super) fn inject_series_into_config(
             ..c.clone()
         }),
         ChartTypeConfig::Line(c) => ChartTypeConfig::Line(charts::LineChartConfig {
+            marker: line_marker_for_sub_type(spec.sub_type.as_ref())
+                .or_else(|| line_marker_for_series(series))
+                .or(c.marker),
             drop_lines: spec
                 .drop_lines
                 .as_ref()

@@ -241,6 +241,15 @@ describe('chart-type-converters', () => {
     );
   });
 
+  it('narrows imported series marker style strings at the public boundary', () => {
+    expect(wireToSeriesConfig({ name: 'Markers', markerStyle: 'diamond' })).toEqual(
+      expect.objectContaining({ markerStyle: 'diamond' }),
+    );
+    expect(
+      wireToSeriesConfig({ name: 'Markers', markerStyle: 'Mog chart contract' }).markerStyle,
+    ).toBeUndefined();
+  });
+
   it('round-trips projected series identity metadata on series configs', () => {
     const seriesConfig = wireToSeriesConfig({
       name: 'Projected',

@@ -79,6 +79,9 @@ impl LocalPalette {
     }
 
     pub(crate) fn from_vec(existing: &mut Vec<DocumentFormat>) -> Self {
+        if existing.is_empty() {
+            existing.push(DocumentFormat::default());
+        }
         let index = existing
             .iter()
             .enumerate()
@@ -120,6 +123,10 @@ struct SharedPalette {
 #[cfg(feature = "native")]
 impl SharedPalette {
     fn from_vec(existing: Vec<DocumentFormat>) -> Self {
+        let mut existing = existing;
+        if existing.is_empty() {
+            existing.push(DocumentFormat::default());
+        }
         let index = existing
             .iter()
             .enumerate()

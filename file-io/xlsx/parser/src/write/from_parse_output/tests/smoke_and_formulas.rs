@@ -473,6 +473,38 @@ fn sheet_view_selection_exports_from_modeled_state() {
 }
 
 #[test]
+fn pane_derived_top_left_cell_does_not_become_sheet_view_attribute() {
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        view: domain_types::SheetView {
+            scroll_row: 7,
+            scroll_col: 13,
+            pane: Some(domain_types::SheetPaneConfig {
+                state: domain_types::SheetPaneState::Frozen,
+                x_split: 5.0,
+                y_split: 7.0,
+                top_left_cell: Some("N8".to_string()),
+                active_pane: Some(domain_types::SheetPaneId::BottomRight),
+            }),
+            ..Default::default()
+        },
+        ..Default::default()
+    }]);
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let sheet_xml =
+        String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
+    let sheet_view_open = sheet_xml
+        .split_once("<sheetView")
+        .and_then(|(_, rest)| rest.split_once('>').map(|(tag, _)| tag))
+        .expect("sheetView opening tag");
+
+    assert!(!sheet_view_open.contains("topLeftCell="), "{sheet_xml}");
+    assert_eq!(sheet_xml.matches(r#"topLeftCell="N8""#).count(), 1);
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
 fn stale_extra_sheet_view_pane_selection_is_dropped_without_current_pane() {
     let output = make_parse_output(vec![SheetData {
         name: "Sheet1".to_string(),

@@ -58,6 +58,11 @@ pub(super) fn build_cache(
             }),
         };
 
+        if let Some(rows) = snapshot_records {
+            let (fields, records) = cache_from_snapshot(cache_src, rows);
+            return Some(finish_cache(&mut cache_writer, fields, records));
+        }
+
         if let Some((sheet_idx, range_ref)) = resolve_named_source(sheets, source_name) {
             let sheet = &sheets[sheet_idx];
             if let Some((start_row, start_col, end_row, mut end_col)) =
@@ -82,13 +87,7 @@ pub(super) fn build_cache(
                     &cache_src.field_names,
                     &cache_src.shared_items,
                 );
-                for field in fields {
-                    cache_writer.add_field(field);
-                }
-                cache_writer.set_record_count(records.len() as u32);
-                let definition_xml = cache_writer.to_definition_xml();
-                let records_xml = cache_writer.to_records_xml(&records);
-                return Some((definition_xml, records_xml));
+                return Some(finish_cache(&mut cache_writer, fields, records));
             }
         }
     } else if let (Some(sheet_name), Some(range_ref)) =
@@ -103,6 +102,11 @@ pub(super) fn build_cache(
                 r_id: None,
             }),
         };
+
+        if let Some(rows) = snapshot_records {
+            let (fields, records) = cache_from_snapshot(cache_src, rows);
+            return Some(finish_cache(&mut cache_writer, fields, records));
+        }
 
         if let Some(&sheet_idx) = sheet_name_to_idx.get(sheet_name.as_str()) {
             let sheet = &sheets[sheet_idx];
@@ -121,26 +125,28 @@ pub(super) fn build_cache(
                     &cache_src.field_names,
                     &cache_src.shared_items,
                 );
-                for field in fields {
-                    cache_writer.add_field(field);
-                }
-                cache_writer.set_record_count(records.len() as u32);
-                let definition_xml = cache_writer.to_definition_xml();
-                let records_xml = cache_writer.to_records_xml(&records);
-                return Some((definition_xml, records_xml));
+                return Some(finish_cache(&mut cache_writer, fields, records));
             }
         }
     }
 
     let snapshot_records = snapshot_records?;
     let (fields, records) = cache_from_snapshot(cache_src, snapshot_records);
+    Some(finish_cache(&mut cache_writer, fields, records))
+}
+
+fn finish_cache(
+    cache_writer: &mut PivotCacheWriter,
+    fields: Vec<CacheFieldDef>,
+    records: Vec<Vec<SharedItem>>,
+) -> (Vec<u8>, Vec<u8>) {
     for field in fields {
         cache_writer.add_field(field);
     }
     cache_writer.set_record_count(records.len() as u32);
     let definition_xml = cache_writer.to_definition_xml();
     let records_xml = cache_writer.to_records_xml(&records);
-    Some((definition_xml, records_xml))
+    (definition_xml, records_xml)
 }
 
 fn resolve_extraction_range(sheet: &SheetData, range_ref: &str) -> Option<(u32, u32, u32, u32)> {
@@ -234,10 +240,11 @@ fn cache_from_snapshot(
     let records = rows
         .iter()
         .map(|row| {
-            (0..num_cols)
-                .map(|col_idx| {
+            row.iter()
+                .enumerate()
+                .map(|(col_idx, value)| {
                     cell_value_to_cache_record_item(
-                        row.get(col_idx).unwrap_or(&CellValue::Null),
+                        value,
                         &mut seeded.shared_items[col_idx],
                         &mut seeded.value_indices[col_idx],
                         seeded.missing_indices[col_idx],
@@ -634,6 +641,49 @@ mod tests {
         assert!(definition.contains(r#"<worksheetSource ref="A:B" sheet="Missing"/>"#));
         assert!(records.contains(r#"<x v="0"/>"#));
         assert!(records.contains(r#"<n v="42"/>"#));
+    }
+
+    #[test]
+    fn imported_snapshot_records_preserve_row_widths() {
+        let cache_src = PivotCacheSourceDef {
+            cache_id: 1,
+            source_kind: PivotCacheSourceKind::LocalWorksheet,
+            source_sheet: Some("Missing".to_string()),
+            source_range: Some("A:C".to_string()),
+            field_names: vec![
+                "Region".to_string(),
+                "Amount".to_string(),
+                "Trailing".to_string(),
+            ],
+            ..Default::default()
+        };
+        let snapshot_records = vec![
+            vec![
+                CellValue::Text(Arc::from("West")),
+                CellValue::Number(FiniteF64::new(42.0).unwrap()),
+            ],
+            vec![
+                CellValue::Text(Arc::from("East")),
+                CellValue::Number(FiniteF64::new(7.0).unwrap()),
+                CellValue::Null,
+            ],
+        ];
+
+        let (definition_xml, records_xml) = build_cache(
+            &cache_src,
+            &[],
+            &HashMap::new(),
+            Some(&snapshot_records),
+            Some("rId1"),
+            None,
+        )
+        .expect("imported typed cache records should preserve sparse row shapes");
+        let definition = String::from_utf8(definition_xml).unwrap();
+        let records = String::from_utf8(records_xml).unwrap();
+
+        assert!(definition.contains(r#"count="3""#));
+        assert!(records.contains(r#"<r><x v="0"/><n v="42"/></r>"#));
+        assert!(records.contains(r#"<r><x v="1"/><n v="7"/><m/></r>"#));
     }
 
     #[test]

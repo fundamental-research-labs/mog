@@ -88,6 +88,7 @@ fn test_merge_formats_preserves_extended_sparse_fields() {
         auto_indent: Some(true),
         background_color_tint: Some(-0.4),
         pattern_foreground_color_tint: Some(0.5),
+        pivot_button: Some(true),
         ..Default::default()
     };
     let higher = CellFormat {
@@ -100,6 +101,7 @@ fn test_merge_formats_preserves_extended_sparse_fields() {
     assert_eq!(merged.auto_indent, Some(false));
     assert_eq!(merged.background_color_tint, Some(-0.4));
     assert_eq!(merged.pattern_foreground_color_tint, Some(0.5));
+    assert_eq!(merged.pivot_button, Some(true));
 }
 
 #[test]

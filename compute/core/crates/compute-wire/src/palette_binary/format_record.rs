@@ -401,6 +401,8 @@ pub(super) fn read_format_record(
         hidden,
         // quote_prefix is not part of the binary wire format.
         quote_prefix: None,
+        // pivot_button is not part of the binary wire format.
+        pivot_button: None,
         // tint / auto-indent fields are not part of the binary wire format.
         font_color_tint: None,
         auto_indent: None,

@@ -403,7 +403,7 @@ fn test_style_mapping_font() {
 }
 
 #[test]
-fn test_style_mapping_keeps_palette_zero_out_of_default_style() {
+fn test_style_mapping_uses_palette_zero_as_default_style() {
     let palette = vec![DocumentFormat {
         number_format: Some("#,##0.00".to_string()),
         font: Some(FontFormat {
@@ -440,47 +440,51 @@ fn test_style_mapping_keeps_palette_zero_out_of_default_style() {
 
     let writer = build_styles(&palette);
 
-    assert_eq!(writer.cell_style_xfs[0].num_fmt_id, Some(0));
-    assert_eq!(writer.cell_style_xfs[0].font_id, Some(0));
+    assert_eq!(writer.cell_xfs.len(), 1);
+    assert_ne!(writer.cell_style_xfs[0].num_fmt_id, Some(0));
+    assert_ne!(writer.cell_style_xfs[0].font_id, Some(0));
     assert_eq!(writer.cell_style_xfs[0].fill_id, Some(0));
-    assert_eq!(writer.cell_style_xfs[0].border_id, Some(0));
-    assert_eq!(writer.cell_xfs[0].num_fmt_id, Some(0));
-    assert_eq!(writer.cell_xfs[0].font_id, Some(0));
+    assert_ne!(writer.cell_style_xfs[0].border_id, Some(0));
+    assert_ne!(writer.cell_xfs[0].num_fmt_id, Some(0));
+    assert_ne!(writer.cell_xfs[0].font_id, Some(0));
     assert_eq!(writer.cell_xfs[0].fill_id, Some(0));
-    assert_eq!(writer.cell_xfs[0].border_id, Some(0));
+    assert_ne!(writer.cell_xfs[0].border_id, Some(0));
 
-    let applied_font_id = writer.cell_xfs[1].font_id.unwrap() as usize;
+    let applied_font_id = writer.cell_xfs[0].font_id.unwrap() as usize;
     assert_eq!(
         writer.fonts[applied_font_id].name.as_deref(),
         Some("Aptos Narrow")
     );
     assert_eq!(writer.fonts[applied_font_id].size, Some(12.0));
-    assert_ne!(writer.cell_xfs[1].num_fmt_id, Some(0));
-    assert_ne!(writer.cell_xfs[1].border_id, Some(0));
+    assert_ne!(writer.cell_xfs[0].num_fmt_id, Some(0));
+    assert_ne!(writer.cell_xfs[0].border_id, Some(0));
 }
 
 #[test]
-fn test_modeled_palette_zero_writes_as_cell_xfs_one() {
+fn test_modeled_palette_indices_write_direct_cell_xf_ids() {
     let output = ParseOutput {
-        style_palette: vec![DocumentFormat {
-            number_format: Some("#,##0.00".to_string()),
-            border: Some(BorderFormat {
-                top: Some(DomainBorderSide {
-                    style: "thin".to_string(),
-                    color: Some("#000000".to_string()),
-                    color_tint: None,
+        style_palette: vec![
+            DocumentFormat::default(),
+            DocumentFormat {
+                number_format: Some("#,##0.00".to_string()),
+                border: Some(BorderFormat {
+                    top: Some(DomainBorderSide {
+                        style: "thin".to_string(),
+                        color: Some("#000000".to_string()),
+                        color_tint: None,
+                    }),
+                    ..Default::default()
                 }),
                 ..Default::default()
-            }),
-            ..Default::default()
-        }],
+            },
+        ],
         sheets: vec![SheetData {
             name: "Sheet1".to_string(),
             cells: vec![DomainCellData {
                 row: 0,
                 col: 0,
                 value: DomainValue::Number(FiniteF64::new(1.0).unwrap()),
-                style_id: Some(0),
+                style_id: Some(1),
                 ..Default::default()
             }],
             ..Default::default()
@@ -512,7 +516,7 @@ fn test_modeled_palette_zero_writes_as_cell_xfs_one() {
     );
     assert!(
         sheet_xml.contains(r#"<c r="A1" s="1"><v>1</v></c>"#),
-        "style_id 0 must write as s=\"1\", got: {sheet_xml}"
+        "style_id 1 must write as s=\"1\", got: {sheet_xml}"
     );
 }
 
@@ -578,7 +582,7 @@ fn live_palette_style_ids_are_export_authority_even_with_imported_stylesheet() {
         String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
 
     assert!(
-        styles_xml.contains(r#"<cellXfs count="3">"#),
+        styles_xml.contains(r#"<cellXfs count="2">"#),
         "{styles_xml}"
     );
     assert!(
@@ -590,8 +594,8 @@ fn live_palette_style_ids_are_export_authority_even_with_imported_stylesheet() {
         "imported cellXfs must not override live palette, got: {styles_xml}"
     );
     assert!(
-        sheet_xml.contains(r#"<c r="A1" s="2"><v>1</v></c>"#),
-        "live palette style ID 1 must emit as s=\"2\" after the default xf, got: {sheet_xml}"
+        sheet_xml.contains(r#"<c r="A1" s="1"><v>1</v></c>"#),
+        "live palette style ID 1 must emit as s=\"1\", got: {sheet_xml}"
     );
 }
 
@@ -616,10 +620,13 @@ fn invalid_live_palette_style_ids_are_not_coerced_from_imported_stylesheet() {
             Vec::new(),
             None,
         )),
-        style_palette: vec![DocumentFormat {
-            number_format: Some("#,##0".to_string()),
-            ..Default::default()
-        }],
+        style_palette: vec![
+            DocumentFormat::default(),
+            DocumentFormat {
+                number_format: Some("#,##0".to_string()),
+                ..Default::default()
+            },
+        ],
         sheets: vec![SheetData {
             name: "Sheet1".to_string(),
             cells: vec![
@@ -627,7 +634,7 @@ fn invalid_live_palette_style_ids_are_not_coerced_from_imported_stylesheet() {
                     row: 0,
                     col: 0,
                     value: DomainValue::Number(FiniteF64::new(1.0).unwrap()),
-                    style_id: Some(0),
+                    style_id: Some(1),
                     ..Default::default()
                 },
                 DomainCellData {
@@ -817,8 +824,8 @@ fn test_col_styles_roundtrip() {
     );
     let xml = String::from_utf8(writer.to_xml()).unwrap();
     assert!(
-        xml.contains("style=\"16\""),
-        "Expected style=\"16\" on <col> element, but got: {}",
+        xml.contains("style=\"15\""),
+        "Expected style=\"15\" on <col> element, but got: {}",
         &xml[..xml.len().min(2000)]
     );
 }
@@ -853,7 +860,7 @@ fn test_sparse_col_style_ranges_export_as_col_metadata() {
     );
     let xml = String::from_utf8(writer.to_xml()).unwrap();
     assert!(xml.contains(r#"<col min="1" max="16384""#), "{xml}");
-    assert!(xml.contains(r#"style="16""#), "{xml}");
+    assert!(xml.contains(r#"style="15""#), "{xml}");
     assert!(
         !xml.contains("<c "),
         "sparse column defaults must not export as blank cells: {xml}"

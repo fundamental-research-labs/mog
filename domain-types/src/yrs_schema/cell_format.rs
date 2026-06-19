@@ -40,6 +40,7 @@ pub const KEY_PATTERN_FG_COLOR: &str = "pf";
 pub const KEY_FONT_OUTLINE: &str = "fo";
 pub const KEY_FONT_SHADOW: &str = "fw";
 pub const KEY_QUOTE_PREFIX: &str = "qp";
+pub const KEY_PIVOT_BUTTON: &str = "pb";
 pub const KEY_FONT_CHARSET: &str = "cs";
 pub const KEY_FONT_FAMILY_TYPE: &str = "fy";
 pub const KEY_AUTO_INDENT: &str = "ai";
@@ -54,7 +55,7 @@ pub const KEY_GRADIENT_FILL: &str = "gf";
 /// Only present (Some) fields are emitted — omitted fields produce no key,
 /// keeping the Y.Map sparse and bandwidth-friendly.
 pub fn to_yrs_prelim(fmt: &CellFormat) -> Vec<(&str, Any)> {
-    let mut entries: Vec<(&str, Any)> = Vec::with_capacity(34);
+    let mut entries: Vec<(&str, Any)> = Vec::with_capacity(35);
 
     if let Some(ref v) = fmt.font_family {
         entries.push((KEY_FONT_FAMILY, Any::String(Arc::from(v.as_str()))));
@@ -155,6 +156,9 @@ pub fn to_yrs_prelim(fmt: &CellFormat) -> Vec<(&str, Any)> {
     if let Some(v) = fmt.quote_prefix {
         entries.push((KEY_QUOTE_PREFIX, Any::Bool(v)));
     }
+    if let Some(v) = fmt.pivot_button {
+        entries.push((KEY_PIVOT_BUTTON, Any::Bool(v)));
+    }
     if let Some(ref v) = fmt.borders
         && let Ok(json) = serde_json::to_string(v)
     {
@@ -214,10 +218,10 @@ pub fn from_yrs_map<T: ReadTxn>(map: &MapRef, txn: &T) -> Option<CellFormat> {
         pattern_foreground_color: read_string(map, txn, KEY_PATTERN_FG_COLOR),
         pattern_foreground_color_tint: read_number(map, txn, KEY_PATTERN_FG_COLOR_TINT),
         quote_prefix: read_bool(map, txn, KEY_QUOTE_PREFIX),
+        pivot_button: read_bool(map, txn, KEY_PIVOT_BUTTON),
         borders: read_string(map, txn, KEY_BORDERS).and_then(|s| serde_json::from_str(&s).ok()),
         gradient_fill: read_string(map, txn, KEY_GRADIENT_FILL)
             .and_then(|s| serde_json::from_str(&s).ok()),
-        ..Default::default()
     };
 
     // Return None if every field is None (empty map).
@@ -315,6 +319,19 @@ mod tests {
         };
         let rt = yrs_roundtrip(&fmt);
         assert_eq!(rt.borders, fmt.borders);
+    }
+
+    #[test]
+    fn xf_flags_yrs_roundtrip() {
+        let fmt = CellFormat {
+            quote_prefix: Some(true),
+            pivot_button: Some(true),
+            ..Default::default()
+        };
+
+        let rt = yrs_roundtrip(&fmt);
+        assert_eq!(rt.quote_prefix, Some(true));
+        assert_eq!(rt.pivot_button, Some(true));
     }
 
     #[test]

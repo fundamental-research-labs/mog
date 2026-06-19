@@ -25,6 +25,7 @@ pub(super) fn series_for_export(spec: &ChartSpec) -> Vec<ChartSeriesData> {
     series
 }
 
+#[cfg(test)]
 pub(super) fn chart_series_data(
     name: Option<String>,
     categories: Option<String>,

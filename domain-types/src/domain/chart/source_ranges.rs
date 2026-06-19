@@ -152,7 +152,14 @@ fn apply_pie_slice_to_chart_series(series: &mut [ChartSeriesData], pie_slice: &P
     let Some(first) = series.first_mut() else {
         return;
     };
-    let series_explosion = pie_slice.explosion.or(pie_slice.explode_offset);
+    let series_explosion = if pie_slice.exploded_indices.is_none()
+        || pie_slice.explode_all == Some(true)
+        || pie_slice.explosion.is_some()
+    {
+        pie_slice.explode_offset.or(pie_slice.explosion)
+    } else {
+        None
+    };
     if pie_slice.explode_all == Some(true) || series_explosion.is_some() {
         first.explosion = Some(series_explosion.unwrap_or(DEFAULT_PIE_SLICE_EXPLOSION));
     }
@@ -701,6 +708,52 @@ mod tests {
                 .and_then(|points| points.first())
                 .map(|point| (point.idx, point.explosion)),
             Some((2, Some(42)))
+        );
+    }
+
+    #[test]
+    fn runtime_pie_slice_explode_offset_overrides_exploded_type_default() {
+        let series = chart_series_from_runtime_inputs(
+            &ChartType::Pie,
+            None,
+            Some("Data!A1:B5"),
+            None,
+            None,
+            Some(&PieSliceData {
+                explosion: Some(25),
+                exploded_indices: None,
+                explode_offset: Some(42),
+                explode_all: None,
+            }),
+        );
+
+        assert_eq!(series[0].explosion, Some(42));
+    }
+
+    #[test]
+    fn runtime_pie_slice_exploded_indices_do_not_create_series_explosion() {
+        let series = chart_series_from_runtime_inputs(
+            &ChartType::Pie,
+            None,
+            Some("Data!A1:B5"),
+            None,
+            None,
+            Some(&PieSliceData {
+                explosion: None,
+                exploded_indices: Some(vec![2]),
+                explode_offset: Some(25),
+                explode_all: None,
+            }),
+        );
+
+        assert_eq!(series[0].explosion, None);
+        assert_eq!(
+            series[0]
+                .points
+                .as_deref()
+                .and_then(|points| points.first())
+                .map(|point| (point.idx, point.explosion)),
+            Some((2, Some(25)))
         );
     }
 

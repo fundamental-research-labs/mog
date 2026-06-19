@@ -2,13 +2,13 @@ use crate::infra::scanner::{
     extract_quoted_value, find_attr_simd, find_closing_tag, find_gt_simd, find_tag_simd,
 };
 
-use super::data_sources::{parse_series_text, AxisData};
+use super::data_sources::{AxisData, parse_series_text};
 use super::error_bars::parse_error_bars;
 use super::labels::parse_data_labels;
 use super::points::{parse_all_data_points, parse_marker};
 use super::trendlines::parse_trendline;
 use super::xml_values::{parse_bool_val, parse_val_attr_u32};
-use super::{find_top_level_ext_lst, parse_chart_ext_lst_at, ChartSeries};
+use super::{ChartSeries, find_top_level_ext_lst, parse_chart_ext_lst_at};
 use crate::domain::charts::parse_shape_properties;
 
 // =============================================================================

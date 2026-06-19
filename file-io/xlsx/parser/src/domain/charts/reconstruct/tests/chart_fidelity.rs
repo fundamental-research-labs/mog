@@ -1,7 +1,7 @@
 use super::*;
+use domain_types::ChartDefinition;
 use domain_types::chart::{DataLabelData, LegendData};
 use domain_types::domain::drawings::{LayoutMode, LayoutTarget, ManualLayout};
-use domain_types::ChartDefinition;
 use ooxml_types::charts::{Chart, ChartSpace};
 
 #[test]

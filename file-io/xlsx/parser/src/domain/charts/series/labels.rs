@@ -5,7 +5,7 @@ use crate::infra::xml::decode_xml_entities;
 use crate::infra::xml::extract_direct_child_element_xml;
 
 use super::xml_values::{parse_bool_val, parse_val_attr_u32};
-use super::{parse_chart_ext_lst, parse_str_ref, DataLabelOptions, DataLabelPosition};
+use super::{DataLabelOptions, DataLabelPosition, parse_chart_ext_lst, parse_str_ref};
 use crate::domain::charts::{parse_shape_properties, parse_text_body};
 
 pub fn parse_data_labels(xml: &[u8]) -> DataLabelOptions {
@@ -364,11 +364,13 @@ mod tests {
         );
 
         assert!(labels.sp_pr.is_none());
-        assert!(labels
-            .leader_lines
-            .as_ref()
-            .and_then(|lines| lines.sp_pr.as_ref())
-            .is_some());
+        assert!(
+            labels
+                .leader_lines
+                .as_ref()
+                .and_then(|lines| lines.sp_pr.as_ref())
+                .is_some()
+        );
     }
 
     #[test]

@@ -113,7 +113,7 @@ pub struct PivotChartProjectionData {
 
 /// Runtime series data — carries both range references and visual config.
 /// bridge-ts generates the TS equivalent, replacing hand-written SeriesConfig.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ChartSeriesData {
     /// Series name (from c:tx)
@@ -356,7 +356,7 @@ pub struct CategoryPointLabelFormatData {
 }
 
 /// Per-point formatting override.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PointFormatData {
     #[serde(default)]

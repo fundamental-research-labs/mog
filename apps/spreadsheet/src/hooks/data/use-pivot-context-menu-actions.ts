@@ -420,7 +420,7 @@ export function usePivotContextMenuActions(
       closeContextMenu();
       return;
     }
-    if (pivotId && effectiveFieldId && canSortLabels) {
+    if (pivotId && effectiveFieldId && !placementId && !targetPlacement && canSortLabels) {
       setSortOrder(pivotId, effectiveFieldId, 'asc');
       closeContextMenu();
     }
@@ -431,6 +431,8 @@ export function usePivotContextMenuActions(
     setPlacementSortOrder,
     closeContextMenu,
     effectiveFieldId,
+    placementId,
+    targetPlacement,
     setSortOrder,
   ]);
 
@@ -440,7 +442,7 @@ export function usePivotContextMenuActions(
       closeContextMenu();
       return;
     }
-    if (pivotId && effectiveFieldId && canSortLabels) {
+    if (pivotId && effectiveFieldId && !placementId && !targetPlacement && canSortLabels) {
       setSortOrder(pivotId, effectiveFieldId, 'desc');
       closeContextMenu();
     }
@@ -451,6 +453,8 @@ export function usePivotContextMenuActions(
     setPlacementSortOrder,
     closeContextMenu,
     effectiveFieldId,
+    placementId,
+    targetPlacement,
     setSortOrder,
   ]);
 
@@ -460,7 +464,7 @@ export function usePivotContextMenuActions(
       closeContextMenu();
       return;
     }
-    if (pivotId && effectiveFieldId && canSortLabels) {
+    if (pivotId && effectiveFieldId && !placementId && !targetPlacement && canSortLabels) {
       setSortOrder(pivotId, effectiveFieldId, 'none');
       closeContextMenu();
     }
@@ -471,6 +475,8 @@ export function usePivotContextMenuActions(
     setPlacementSortOrder,
     closeContextMenu,
     effectiveFieldId,
+    placementId,
+    targetPlacement,
     setSortOrder,
   ]);
 

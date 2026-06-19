@@ -7,6 +7,7 @@
 
 import { create } from 'zustand';
 
+import type { PlacementId } from '@mog-sdk/contracts/pivot';
 import { createContextMenuSlice, type ContextMenuSlice } from '../view/context-menu';
 
 function createTestStore() {
@@ -73,6 +74,42 @@ describe('ContextMenuSlice', () => {
       const id2 = store.getState().contextMenu.instanceId;
 
       expect(id2).not.toBe(id1);
+    });
+
+    it('enriches an open menu with resolved pivot placement context without remounting', () => {
+      const store = createTestStore();
+
+      store.getState().openContextMenu({
+        x: 100,
+        y: 100,
+        target: 'cell',
+        targetRow: 12,
+        targetCol: 6,
+      });
+      const instanceId = store.getState().contextMenu.instanceId;
+
+      store.getState().setContextMenuPivotContext({
+        target: 'pivot-row-header',
+        pivotId: 'pivot-1',
+        pivotHeaderKey: 'West|Acme',
+        pivotFieldId: 'Vendor',
+        pivotPlacementId: 'row:Vendor:1' as PlacementId,
+        pivotFieldArea: 'row',
+      });
+
+      expect(store.getState().contextMenu).toEqual(
+        expect.objectContaining({
+          instanceId,
+          target: 'pivot-row-header',
+          targetRow: 12,
+          targetCol: 6,
+          pivotId: 'pivot-1',
+          pivotHeaderKey: 'West|Acme',
+          pivotFieldId: 'Vendor',
+          pivotPlacementId: 'row:Vendor:1',
+          pivotFieldArea: 'row',
+        }),
+      );
     });
   });
 });

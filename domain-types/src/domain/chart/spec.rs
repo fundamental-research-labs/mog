@@ -8,12 +8,17 @@ use super::floating_object::{
     AnchorMode, ChartData, ChartDrawingFrameOoxmlProps, ChartOoxmlProps, FloatingObject,
     FloatingObjectAnchor, FloatingObjectCommon, FloatingObjectData,
 };
-use super::source_ranges::{infer_common_category_range, infer_series_name_range};
+use super::options::radar_flags_from_sub_type;
+use super::source_ranges::{
+    chart_series_from_runtime_inputs, infer_common_category_range, infer_series_name_range,
+    pie_slice_from_chart_series,
+};
 use super::{
     AnchorPosition, AxisData, ChartAuxiliaryPart, ChartDataTableData, ChartDefinition,
     ChartFormatData, ChartFormatStringData, ChartLineData, ChartRelationshipData,
     ChartStyleContextData, ChartSubType, ChartType, ChartView3DData, DataLabelData, LegendData,
-    ObjectSize, StandardChartExportAuthority, StandardChartProvenance, WaterfallOptions,
+    ObjectSize, PivotChartOptionsData, StandardChartExportAuthority, StandardChartProvenance,
+    WaterfallOptions,
 };
 use super::{
     BoxplotConfigData, ChartSeriesData, HierarchyChartConfigData, HistogramConfigData,
@@ -322,20 +327,6 @@ pub struct ChartSpec {
     pub import_status: Option<ImportObjectStatus>,
 }
 
-/// Pivot chart display options (field button visibility).
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PivotChartOptionsData {
-    #[serde(skip_serializing_if = "Option::is_none", default)]
-    pub show_axis_field_buttons: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none", default)]
-    pub show_legend_field_buttons: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none", default)]
-    pub show_report_filter_field_buttons: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none", default)]
-    pub show_value_field_buttons: Option<bool>,
-}
-
 impl ChartSpec {
     fn rotation_units_from_degrees(rotation: f64) -> Option<i32> {
         if !rotation.is_finite() {
@@ -597,6 +588,14 @@ impl ChartSpec {
                 ChartDefinition::Chart(ooxml_types::charts::ChartSpace::default())
             })
         });
+        let series = chart_series_from_runtime_inputs(
+            &chart_data.chart_type,
+            chart_data.series.clone(),
+            chart_data.data_range.as_deref(),
+            chart_data.category_range.as_deref(),
+            chart_data.series_range.as_deref(),
+            chart_data.pie_slice.as_ref(),
+        );
 
         Some(ChartSpec {
             chart_type: chart_data.chart_type.clone(),
@@ -610,7 +609,7 @@ impl ChartSpec {
             size,
             z_index: common.z_index,
             definition,
-            series: chart_data.series.clone().unwrap_or_default(),
+            series,
             sub_type: chart_data.sub_type.clone(),
             legend: chart_data.legend.clone(),
             axes: chart_data.axis.clone(),
@@ -906,7 +905,7 @@ impl ChartSpec {
                 Some(self.series.clone())
             },
             data_labels: self.data_labels.clone(),
-            pie_slice: None,
+            pie_slice: pie_slice_from_chart_series(&self.chart_type, &self.series),
             trendline: None,
             show_lines: None,
             smooth_lines: None,
@@ -995,20 +994,5 @@ impl ChartSpec {
             common,
             data: FloatingObjectData::Chart(chart_data),
         }
-    }
-}
-
-fn radar_flags_from_sub_type(
-    chart_type: &ChartType,
-    sub_type: Option<&ChartSubType>,
-) -> (Option<bool>, Option<bool>) {
-    if !matches!(chart_type, ChartType::Radar) {
-        return (None, None);
-    }
-
-    match sub_type {
-        Some(ChartSubType::Filled) => (Some(true), None),
-        Some(ChartSubType::Markers) => (None, Some(true)),
-        _ => (None, None),
     }
 }

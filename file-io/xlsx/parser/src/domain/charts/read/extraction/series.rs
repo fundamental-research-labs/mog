@@ -51,6 +51,7 @@ struct SeriesGroupSemantics {
     stock_role: Option<domain_types::chart::ChartSeriesStockRoleData>,
     legacy_color_from_line: bool,
     uses_directional_error_bars: bool,
+    pie_like_connector_lines: bool,
 }
 
 fn series_group_semantics(
@@ -95,6 +96,13 @@ fn series_group_semantics(
         ooxml_types::charts::ChartTypeConfig::Scatter(_)
             | ooxml_types::charts::ChartTypeConfig::Bubble(_)
     );
+    let pie_like_connector_lines = matches!(
+        &group.config,
+        ooxml_types::charts::ChartTypeConfig::Pie(_)
+            | ooxml_types::charts::ChartTypeConfig::Pie3D(_)
+            | ooxml_types::charts::ChartTypeConfig::Doughnut(_)
+            | ooxml_types::charts::ChartTypeConfig::OfPie(_)
+    );
 
     SeriesGroupSemantics {
         series_type,
@@ -105,6 +113,7 @@ fn series_group_semantics(
         stock_role: None,
         legacy_color_from_line,
         uses_directional_error_bars,
+        pie_like_connector_lines,
     }
 }
 
@@ -360,6 +369,10 @@ fn extract_single_series_with_semantics(
     let data_labels = s.d_lbls.as_ref().map(|dl| extract_data_label_data(dl));
     let leader_line_format = series_leader_line_format(data_labels.as_ref());
     let show_leader_lines = data_labels.as_ref().and_then(|dl| dl.show_leader_lines);
+    let show_connector_lines = semantics
+        .pie_like_connector_lines
+        .then_some(show_leader_lines)
+        .flatten();
 
     // Rich format from sp_pr + tx_pr
     let format = extract_chart_format(s.sp_pr.as_ref(), None);
@@ -424,7 +437,7 @@ fn extract_single_series_with_semantics(
         projection_authority: None,
         projection_diagnostics: Vec::new(),
         show_shadow,
-        show_connector_lines: None,
+        show_connector_lines,
         leader_line_format,
         show_leader_lines,
         bin_options: None,

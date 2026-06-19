@@ -633,6 +633,7 @@ fn series_data_label_leader_lines_extract_to_series_alias() {
     });
 
     assert_eq!(extracted[0].show_leader_lines, Some(true));
+    assert_eq!(extracted[0].show_connector_lines, Some(true));
     assert_eq!(
         extracted[0]
             .leader_line_format

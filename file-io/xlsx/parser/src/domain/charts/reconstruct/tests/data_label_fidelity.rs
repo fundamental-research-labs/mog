@@ -272,6 +272,19 @@ fn series_leader_line_alias_reconstructs_data_label_leader_lines() {
     assert!(xml.contains("<a:prstDash val=\"dash\"/>"), "{xml}");
 }
 
+#[test]
+fn series_connector_line_alias_reconstructs_data_label_leader_lines() {
+    let mut spec = minimal_chart_spec(DomainChartType::Pie, None);
+    let mut series = modeled_series(0, None, "Composition", "Data!$B$2:$B$4");
+    series.show_connector_lines = Some(true);
+    spec.series = vec![series];
+
+    let xml = chart_xml(&spec);
+
+    assert!(xml.contains("<c:dLbls>"), "{xml}");
+    assert!(xml.contains("<c:showLeaderLines val=\"1\"/>"), "{xml}");
+}
+
 fn imported_data_label_options() -> DataLabelOptions {
     DataLabelOptions {
         show_value: true,

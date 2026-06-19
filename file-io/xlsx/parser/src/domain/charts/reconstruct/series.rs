@@ -145,14 +145,11 @@ pub(super) fn build_series(
 
     // Shape properties from explicit format, legacy color, or modeled chart defaults.
     let sp_pr = apply_default_shadow_to_shape_properties(
-        build_series_shape_properties(sd, effective_chart_type)
-            .or_else(|| {
-                synthesize_modeled_defaults
-                    .then(|| {
-                        default_series_shape_properties(sd, effective_chart_type, fallback_idx)
-                    })
-                    .flatten()
-            }),
+        build_series_shape_properties(sd, effective_chart_type).or_else(|| {
+            synthesize_modeled_defaults
+                .then(|| default_series_shape_properties(sd, effective_chart_type, fallback_idx))
+                .flatten()
+        }),
         sd.show_shadow,
     );
 
@@ -188,12 +185,13 @@ fn apply_series_leader_lines(d_lbls: &mut Option<charts::DataLabelOptions>, sd: 
         .leader_line_format
         .as_ref()
         .and_then(|format| format.line.as_ref());
-    if line.is_none() && sd.show_leader_lines.is_none() {
+    let show_leader_lines = sd.show_leader_lines.or(sd.show_connector_lines);
+    if line.is_none() && show_leader_lines.is_none() {
         return;
     }
 
     let labels = d_lbls.get_or_insert_with(Default::default);
-    if let Some(show) = sd.show_leader_lines {
+    if let Some(show) = show_leader_lines {
         labels.show_leader_lines = Some(show);
     }
     if let Some(line) = line {

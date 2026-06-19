@@ -12,6 +12,7 @@ use crate::storage::engine::mutation_coordinator::MutationCoordinator;
 use crate::storage::engine::stores::EngineStores;
 use compute_document::hex::id_to_hex;
 use compute_document::undo::{ORIGIN_BOOTSTRAP, ORIGIN_USER_EDIT};
+use domain_types::units::Pixels;
 
 // ---------------------------------------------------------------------------
 // mutation_create_sheet
@@ -23,6 +24,7 @@ pub(in crate::storage::engine) fn mutation_create_sheet(
     mirror: &mut CellMirror,
     mutation: &mut MutationCoordinator,
     name: &str,
+    default_col_width_px: Option<f64>,
 ) -> Result<(String, MutationResult), ComputeError> {
     create_sheet_with_origin(
         stores,
@@ -30,6 +32,7 @@ pub(in crate::storage::engine) fn mutation_create_sheet(
         mutation,
         name,
         Origin::from(ORIGIN_USER_EDIT),
+        default_col_width_px,
     )
 }
 
@@ -64,6 +67,7 @@ pub(in crate::storage::engine) fn mutation_create_default_sheet(
     mirror: &mut CellMirror,
     mutation: &mut MutationCoordinator,
     name: &str,
+    default_col_width_px: Option<f64>,
 ) -> Result<(String, MutationResult), ComputeError> {
     // Run the standard store-sync work; discard the slim per-mutation
     // `MutationResult` it builds — we re-emit a hydration-shape result
@@ -74,6 +78,7 @@ pub(in crate::storage::engine) fn mutation_create_default_sheet(
         mutation,
         name,
         Origin::from(ORIGIN_BOOTSTRAP),
+        default_col_width_px,
     )?;
     let result = super::build_mutation_result_for_hydration(stores, mirror, RecalcResult::empty());
     Ok((hex, result))
@@ -85,6 +90,7 @@ fn create_sheet_with_origin(
     mutation: &mut MutationCoordinator,
     name: &str,
     origin: Origin,
+    default_col_width_px: Option<f64>,
 ) -> Result<(String, MutationResult), ComputeError> {
     use crate::storage::sheet::properties;
 
@@ -96,12 +102,18 @@ fn create_sheet_with_origin(
         name.to_string()
     };
 
+    let default_col_width = resolve_default_col_width(default_col_width_px)?;
+
     // 1 + 2. Create sheet in yrs Doc and mirror
     let sheet_id = {
         let _guard = mutation.suppress_guard();
-        stores
-            .storage
-            .create_sheet_with_origin(mirror, &name, &stores.grid_id_alloc, origin)?
+        stores.storage.create_sheet_with_origin(
+            mirror,
+            &name,
+            &stores.grid_id_alloc,
+            origin,
+            default_col_width,
+        )?
     };
     let hex: String = id_to_hex(sheet_id.as_u128()).into();
 
@@ -128,9 +140,15 @@ fn create_sheet_with_origin(
         .insert(sheet_id, RangeSpatialIndex::with_items(vec![]));
 
     // 3c. Create LayoutIndex (all defaults)
-    stores
-        .layout_indexes
-        .insert(sheet_id, compute_layout_index::LayoutIndex::new(100, 26));
+    stores.layout_indexes.insert(
+        sheet_id,
+        compute_layout_index::LayoutIndex::with_defaults(
+            100,
+            26,
+            compute_layout_index::DEFAULT_ROW_HEIGHT,
+            default_col_width,
+        ),
+    );
 
     // 4. Add to ComputeCore via add_sheet with empty snapshot
     let snap = crate::snapshot::SheetSnapshot {
@@ -159,6 +177,16 @@ fn create_sheet_with_origin(
     );
     result.sheet_lifecycle_runtime_hint = Some(SheetLifecycleRuntimeHint::focus(sheet_id));
     Ok((hex, result))
+}
+
+fn resolve_default_col_width(default_col_width_px: Option<f64>) -> Result<Pixels, ComputeError> {
+    match default_col_width_px {
+        Some(width) if width.is_finite() && width > 0.0 => Ok(Pixels(width)),
+        Some(width) => Err(ComputeError::InvalidInput {
+            message: format!("Invalid default column width: {width}"),
+        }),
+        None => Ok(compute_layout_index::platform_default_col_width()),
+    }
 }
 
 // ---------------------------------------------------------------------------

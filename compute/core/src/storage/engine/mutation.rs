@@ -268,14 +268,20 @@ pub(crate) enum EngineMutation {
 
     /// Create a new empty sheet.
     /// When `name` is empty, the engine generates a unique "SheetN" name.
-    CreateSheet { name: String },
+    CreateSheet {
+        name: String,
+        default_col_width_px: Option<f64>,
+    },
 
     /// Create the implicit default sheet on a freshly-started blank workbook.
     ///
     /// Identical in effect to `CreateSheet`, except the underlying Yrs
     /// transaction is tagged with `ORIGIN_BOOTSTRAP` so it never enters the
     /// undo stack. A fresh workbook must report `canUndo == false`.
-    CreateDefaultSheet { name: String },
+    CreateDefaultSheet {
+        name: String,
+        default_col_width_px: Option<f64>,
+    },
 
     /// Delete a sheet by SheetId.
     DeleteSheet { sheet_id: SheetId },

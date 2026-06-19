@@ -175,6 +175,27 @@ describe('cell text clipping contract', () => {
     expect(hasExplicitFontColor(format)).toBe(true);
   });
 
+  it('right-aligned normal text uses a tight numeric inset', () => {
+    const { ctx, paints } = createRecordingContext();
+
+    renderNormalText(
+      ctx,
+      cell({ value: 1234.5, displayText: '$1,234.50', width: 80 }),
+      { horizontalAlign: 'general' } as CellFormat,
+      textMeasurer,
+      {
+        ...baseOptions,
+        overflowResult: null,
+      },
+    );
+
+    expect(ctx.textAlign).toBe('right');
+    expect(paints.find((op) => op.kind === 'fillText')).toMatchObject({
+      text: '$1,234.50',
+      x: 119,
+    });
+  });
+
   it('normal text decorations are inside the same row-vertical clip as glyph paint', () => {
     const { ctx, clips, paints } = createRecordingContext();
     const format: CellFormat = {

@@ -36,6 +36,7 @@ import type { ReadonlyBinaryViewportBuffer } from '../wire/viewport-coordinator'
 import type { CellMetadataCache } from '../wire/cell-metadata-cache';
 import type { RangeMetadataCache } from '../wire/range-metadata-cache';
 import type { ViewportPrefetchState, ViewportScrollBehavior } from '../wire/viewport-prefetch';
+import { SHEET_META_DEFAULT_COL_WIDTH } from '../../domain/sheets/sheet-meta-defaults';
 import {
   normalizeFloatingObjectForStorage,
   normalizeFloatingObjectUpdateForStorage,
@@ -1101,12 +1102,16 @@ export class ComputeBridge extends GeneratedBridgeBase {
     // See `copySheet` above: route through public admission and the normal
     // mutation pipeline so the undo service refreshes its cached state.
     const { raw } = await this.core.mutatePublicResult<[string, MutationResult]>(
-      'compute_create_sheet',
+      'compute_create_sheet_with_default_col_width',
       () =>
-        this.core.transport.call<[string, MutationResult]>('compute_create_sheet', {
-          docId: this.core.docId,
-          name,
-        }),
+        this.core.transport.call<[string, MutationResult]>(
+          'compute_create_sheet_with_default_col_width',
+          {
+            docId: this.core.docId,
+            name,
+            defaultColWidthPx: SHEET_META_DEFAULT_COL_WIDTH,
+          },
+        ),
       ([, mutationResult]) => [new Uint8Array(0), mutationResult],
     );
     const [rawId] = raw;
@@ -1127,12 +1132,16 @@ export class ComputeBridge extends GeneratedBridgeBase {
    */
   async createDefaultSheet(name: string): Promise<{ sheetId: SheetId }> {
     const { raw } = await this.core.mutateSystemResult<[string, MutationResult]>(
-      'compute_create_default_sheet',
+      'compute_create_default_sheet_with_default_col_width',
       () =>
-        this.core.transport.call<[string, MutationResult]>('compute_create_default_sheet', {
-          docId: this.core.docId,
-          name,
-        }),
+        this.core.transport.call<[string, MutationResult]>(
+          'compute_create_default_sheet_with_default_col_width',
+          {
+            docId: this.core.docId,
+            name,
+            defaultColWidthPx: SHEET_META_DEFAULT_COL_WIDTH,
+          },
+        ),
       ([, mutationResult]) => [new Uint8Array(0), mutationResult],
     );
     const [rawId] = raw;

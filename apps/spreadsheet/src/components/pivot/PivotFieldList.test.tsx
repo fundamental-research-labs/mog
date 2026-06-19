@@ -291,6 +291,40 @@ describe('PivotFieldList placement editor', () => {
     });
   });
 
+  it('does not double-commit when native drag starts after pointer fallback mousedown', () => {
+    const { container, props } = renderList();
+    const transfer = dataTransfer();
+    const category = container.querySelector<HTMLElement>(
+      '[data-pivot-target="field-chip"][data-pivot-area="available"][data-pivot-field-id="Category"]',
+    );
+    if (!category) throw new Error('Missing Category source chip');
+    const rowZone = zone(container, 'row');
+    const originalElementsFromPoint = document.elementsFromPoint;
+    Object.defineProperty(document, 'elementsFromPoint', {
+      configurable: true,
+      value: jest.fn(() => [rowZone]),
+    });
+
+    try {
+      fireEvent.mouseDown(category, { button: 0, clientX: 5, clientY: 5 });
+      fireEvent.dragStart(category, { dataTransfer: transfer });
+      fireEvent.drop(rowZone, { dataTransfer: transfer });
+      fireEvent.mouseMove(document, { clientX: 20, clientY: 20 });
+      fireEvent.mouseUp(document, { clientX: 20, clientY: 20 });
+
+      expect(props.onAddField).toHaveBeenCalledTimes(1);
+      expect(props.onAddField).toHaveBeenCalledWith('Category', 'row', {
+        position: 2,
+        aggregateFunction: 'count',
+      });
+    } finally {
+      Object.defineProperty(document, 'elementsFromPoint', {
+        configurable: true,
+        value: originalElementsFromPoint,
+      });
+    }
+  });
+
   it('starts auto-scroll against the provided pane during field drag', () => {
     const frameCallbacks: FrameRequestCallback[] = [];
     const requestAnimationFrameMock = jest.fn((callback: FrameRequestCallback) => {

@@ -117,6 +117,7 @@ export function PivotFieldList({
   const autoScrollRef = useRef<AutoScrollController | null>(null);
   const autoActivatedFieldRef = useRef<{ fieldId: string; area: PivotFieldArea } | null>(null);
   const pendingAutoActivatedMoveRef = useRef<PendingAutoActivatedMove | null>(null);
+  const pointerDragCancelRef = useRef<(() => void) | null>(null);
   const nativeDropTargetRef = useRef<{
     state: DragState;
     area: PivotFieldArea;
@@ -213,6 +214,8 @@ export function PivotFieldList({
 
   useEffect(() => {
     return () => {
+      pointerDragCancelRef.current?.();
+      pointerDragCancelRef.current = null;
       autoScrollRef.current?.cleanup();
       autoScrollRef.current = null;
     };
@@ -258,6 +261,8 @@ export function PivotFieldList({
   const handleDragStart = useCallback(
     (event: DragEvent, state: DragState) => {
       if (!canDragState(state)) return;
+      pointerDragCancelRef.current?.();
+      pointerDragCancelRef.current = null;
       nativeDropTargetRef.current = null;
       setDragState(state);
       event.dataTransfer.effectAllowed = 'move';
@@ -438,8 +443,7 @@ export function PivotFieldList({
       };
 
       const handleMouseUp = (upEvent: globalThis.MouseEvent) => {
-        document.removeEventListener('mousemove', handleMouseMove, true);
-        document.removeEventListener('mouseup', handleMouseUp, true);
+        cleanup();
         if (!active) return;
         const currentTarget = dropTargetFromPoint(upEvent.clientX, upEvent.clientY, state);
         const target = currentTarget?.kind === 'available' ? currentTarget : lastDropTarget ?? currentTarget;
@@ -451,8 +455,17 @@ export function PivotFieldList({
         clearDragFeedback();
       };
 
+      const cleanup = () => {
+        document.removeEventListener('mousemove', handleMouseMove, true);
+        document.removeEventListener('mouseup', handleMouseUp, true);
+        if (pointerDragCancelRef.current === cleanup) {
+          pointerDragCancelRef.current = null;
+        }
+      };
+
       document.addEventListener('mousemove', handleMouseMove, true);
       document.addEventListener('mouseup', handleMouseUp, true);
+      pointerDragCancelRef.current = cleanup;
     },
     [
       applyDragStateToPosition,

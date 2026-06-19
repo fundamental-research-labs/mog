@@ -44,9 +44,9 @@ export function warnPivotRefresh(receipt: PivotRefreshReceipt | null | undefined
 export function inspectPivotMutationReceipt(
   operation: string,
   mutation: Promise<PivotHandleMutationReceipt> | null | undefined,
-): void {
-  if (!mutation) return;
-  void mutation
+): Promise<void> {
+  if (!mutation) return Promise.resolve();
+  return mutation
     .then((receipt) => {
       if (receipt.status === 'applied') return;
       const errorMessage = (receipt as { error?: { message?: string } }).error?.message;

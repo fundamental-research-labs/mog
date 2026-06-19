@@ -12,7 +12,9 @@ import type {
   ChartType,
   HierarchyChartConfig,
   RegionMapConfig,
+  SeriesConfig,
 } from '@mog-sdk/contracts/data/charts';
+import { parseCellRange, quoteSheetName, toA1 } from '@mog/spreadsheet-utils/a1';
 
 import { normalizeImportedComboChart } from '../../bridges/compute/chart-import-normalization';
 import type { ChartFloatingObject } from '../../bridges/compute/compute-bridge';
@@ -67,6 +69,93 @@ import {
 
 /** English Metric Units per point (1 pt = 12700 EMU). */
 const EMU_PER_PT = 12700;
+
+function formatPublicRange(
+  range: {
+    startRow: number;
+    startCol: number;
+    endRow: number;
+    endCol: number;
+    sheetName?: string | null;
+  },
+): string {
+  const body = `${toA1(range.startRow, range.startCol)}:${toA1(range.endRow, range.endCol)}`;
+  return range.sheetName ? `${quoteSheetName(range.sheetName)}!${body}` : body;
+}
+
+function deriveCommonCategoryRange(
+  series: readonly SeriesConfig[] | undefined,
+): string | undefined {
+  if (!series?.length) return undefined;
+  let common: string | undefined;
+
+  for (const item of series) {
+    const ref = normalizeChartA1RefForRead(item.categories)?.trim();
+    if (!ref || !parseCellRange(ref)) return undefined;
+    if (common != null && common !== ref) return undefined;
+    common = ref;
+  }
+
+  return common;
+}
+
+type SeriesNameCell = {
+  row: number;
+  col: number;
+  sheetName?: string;
+};
+
+function parseSeriesNameCell(ref: string | undefined): SeriesNameCell | null {
+  const normalizedRef = normalizeChartA1RefForRead(ref)?.trim();
+  if (!normalizedRef) return null;
+  const parsed = parseCellRange(normalizedRef);
+  if (!parsed) return null;
+  if (parsed.startRow !== parsed.endRow || parsed.startCol !== parsed.endCol) return null;
+  return {
+    row: parsed.startRow,
+    col: parsed.startCol,
+    sheetName: parsed.sheetName,
+  };
+}
+
+function deriveContiguousSeriesRange(
+  series: readonly SeriesConfig[] | undefined,
+): string | undefined {
+  if (!series?.length) return undefined;
+  const cells = series.map((item) => parseSeriesNameCell(item.nameRef));
+  if (cells.some((cell) => cell == null)) return undefined;
+  const parsedCells = cells as SeriesNameCell[];
+  const first = parsedCells[0]!;
+  if (parsedCells.some((cell) => cell.sheetName !== first.sheetName)) return undefined;
+
+  const sameRow = parsedCells.every(
+    (cell, index) => cell.row === first.row && cell.col === first.col + index,
+  );
+  if (sameRow) {
+    return formatPublicRange({
+      startRow: first.row,
+      startCol: first.col,
+      endRow: first.row,
+      endCol: first.col + parsedCells.length - 1,
+      sheetName: first.sheetName,
+    });
+  }
+
+  const sameCol = parsedCells.every(
+    (cell, index) => cell.col === first.col && cell.row === first.row + index,
+  );
+  if (sameCol) {
+    return formatPublicRange({
+      startRow: first.row,
+      startCol: first.col,
+      endRow: first.row + parsedCells.length - 1,
+      endCol: first.col,
+      sheetName: first.sheetName,
+    });
+  }
+
+  return undefined;
+}
 
 const UNSUPPORTED_NATIVE_XLSX_CHART_TYPES = new Set<ChartType>(['heatmap', 'violin']);
 
@@ -580,6 +669,10 @@ export function serializedChartToChart(rawChart: ChartFloatingObject): Chart {
   const legend = legendConfig
     ? (deriveLegendEntriesForRead(legendConfig) as typeof legendConfig)
     : undefined;
+  const seriesRange =
+    normalizeChartA1RefForRead(chart.seriesRange) ?? deriveContiguousSeriesRange(series);
+  const categoryRange =
+    normalizeChartA1RefForRead(chart.categoryRange) ?? deriveCommonCategoryRange(series);
 
   const result: Chart = {
     id: chart.id,
@@ -587,8 +680,8 @@ export function serializedChartToChart(rawChart: ChartFloatingObject): Chart {
     type: reportedType as Chart['type'],
     subType: chart.subType as Chart['subType'],
     dataRange: normalizeChartA1RefForRead(chart.dataRange) ?? '',
-    seriesRange: normalizeChartA1RefForRead(chart.seriesRange),
-    categoryRange: normalizeChartA1RefForRead(chart.categoryRange),
+    seriesRange,
+    categoryRange,
     seriesOrientation: chart.seriesOrientation as Chart['seriesOrientation'],
     anchorRow: anchor.anchorRow,
     anchorCol: anchor.anchorCol,

@@ -59,6 +59,64 @@ describe('chart public API converters', () => {
     expect(publicChart.height).toBe(42);
   });
 
+  it('derives public top-level source ranges from lossless imported series refs', () => {
+    const publicChart = serializedChartToChart(
+      chart({
+        chartType: 'area',
+        dataRange: 'A1:D5',
+        series: [
+          { nameRef: 'B1', values: 'B2:B5', categories: 'A2:A5' },
+          { nameRef: 'C1', values: 'C2:C5', categories: 'A2:A5' },
+          { nameRef: 'D1', values: 'D2:D5', categories: 'A2:A5' },
+        ],
+      }),
+    );
+
+    expect(publicChart.categoryRange).toBe('A2:A5');
+    expect(publicChart.seriesRange).toBe('B1:D1');
+    expect(publicChart.series?.map((series) => series.nameRef)).toEqual(['B1', 'C1', 'D1']);
+  });
+
+  it('normalizes derived public source ranges with sheet-qualified refs', () => {
+    const publicChart = serializedChartToChart(
+      chart({
+        chartType: 'column',
+        dataRange: "'Q1 Data'!$A$1:$C$5",
+        series: [
+          {
+            nameRef: "'Q1 Data'!$B$1",
+            values: "'Q1 Data'!$B$2:$B$5",
+            categories: "'Q1 Data'!$A$2:$A$5",
+          },
+          {
+            nameRef: "'Q1 Data'!$C$1",
+            values: "'Q1 Data'!$C$2:$C$5",
+            categories: "'Q1 Data'!$A$2:$A$5",
+          },
+        ],
+      }),
+    );
+
+    expect(publicChart.categoryRange).toBe("'Q1 Data'!A2:A5");
+    expect(publicChart.seriesRange).toBe("'Q1 Data'!B1:C1");
+  });
+
+  it('does not derive public source ranges when series refs are not lossless', () => {
+    const publicChart = serializedChartToChart(
+      chart({
+        chartType: 'bar',
+        dataRange: 'A1:D5',
+        series: [
+          { nameRef: 'B1', values: 'B2:B5', categories: 'A2:A5' },
+          { nameRef: 'D1', values: 'D2:D5', categories: 'A3:A6' },
+        ],
+      }),
+    );
+
+    expect(publicChart.categoryRange).toBeUndefined();
+    expect(publicChart.seriesRange).toBeUndefined();
+  });
+
   it('derives line-family series color from line format on read and write', () => {
     const publicChart = serializedChartToChart(
       chart({

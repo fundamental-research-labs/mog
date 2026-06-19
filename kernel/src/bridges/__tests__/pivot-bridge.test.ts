@@ -61,6 +61,11 @@ function makePivotConfig(overrides?: Record<string, unknown>): any {
 function createMockCtx(): any {
   const handlers = new Map<string, Array<(event: any) => void>>();
   return {
+    clock: {
+      now: jest.fn(() => 1_000),
+      dateNow: jest.fn(() => 1_000),
+      performanceNow: jest.fn(() => 1_000),
+    },
     computeBridge: {
       getMutationHandler: jest.fn(() => null),
       pivotCreate: jest.fn(async (config: unknown) => ({ data: config })),

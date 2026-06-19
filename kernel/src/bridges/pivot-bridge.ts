@@ -774,10 +774,11 @@ function toPublicPivotFieldItems(fieldItems: ComputePivotFieldItems): PivotField
 function buildPivotBridgeReceipt(
   pivotId: string,
   action: string,
+  nowMs: number,
   placementId?: PlacementId,
 ): PivotKernelMutationReceipt {
   return {
-    kernelReceiptId: `${pivotId}:${action}:${Date.now()}`,
+    kernelReceiptId: `${pivotId}:${action}:${nowMs}`,
     pivotId,
     effects: placementId
       ? [{ type: action === 'addPlacement' ? 'placementAdded' : 'placementUpdated', placementId }]
@@ -786,7 +787,7 @@ function buildPivotBridgeReceipt(
     updateReason: action,
     refreshPolicy: 'refreshAndMaterialize',
     materialized: true,
-    configRevision: Date.now(),
+    configRevision: nowMs,
     status: 'applied',
   };
 }
@@ -956,7 +957,7 @@ export class PivotBridge implements IPivotBridge {
           result: publicResult,
           configVersion: this.getConfigVersion(pivotId),
           dataVersion: this.getDataVersion(sheetId),
-          computedAt: Date.now(),
+          computedAt: this.ctx.clock.now(),
         });
         this.notifySubscribers(pivotId, publicResult);
       }
@@ -1054,7 +1055,7 @@ export class PivotBridge implements IPivotBridge {
     );
     const placementId = getBridgePlacementId(placement);
     return {
-      ...buildPivotBridgeReceipt(pivotId, 'addPlacement', placementId),
+      ...buildPivotBridgeReceipt(pivotId, 'addPlacement', this.ctx.clock.now(), placementId),
       status: 'applied',
       placementId,
     };
@@ -1087,7 +1088,7 @@ export class PivotBridge implements IPivotBridge {
       { placements },
       { reason: 'fieldPlacementChanged', refreshPolicy: 'refreshAndMaterialize' },
     );
-    return buildPivotBridgeReceipt(pivotId, 'updatePlacement', placementId);
+    return buildPivotBridgeReceipt(pivotId, 'updatePlacement', this.ctx.clock.now(), placementId);
   }
 
   async removePlacement(
@@ -1110,7 +1111,7 @@ export class PivotBridge implements IPivotBridge {
       { reason: 'fieldPlacementChanged', refreshPolicy: 'refreshAndMaterialize' },
     );
     return {
-      ...buildPivotBridgeReceipt(pivotId, 'removePlacement'),
+      ...buildPivotBridgeReceipt(pivotId, 'removePlacement', this.ctx.clock.now()),
       effects: [{ type: 'placementRemoved', placementId }],
     };
   }
@@ -1148,7 +1149,7 @@ export class PivotBridge implements IPivotBridge {
       { placements },
       { reason: 'fieldPlacementChanged', refreshPolicy: 'refreshAndMaterialize' },
     );
-    return buildPivotBridgeReceipt(pivotId, 'movePlacement', placementId);
+    return buildPivotBridgeReceipt(pivotId, 'movePlacement', this.ctx.clock.now(), placementId);
   }
 
   async setAggregateFunction(
@@ -1245,7 +1246,7 @@ export class PivotBridge implements IPivotBridge {
       { placements },
       { reason: 'fieldReset', refreshPolicy: 'refreshAndMaterialize' },
     );
-    return buildPivotBridgeReceipt(pivotId, 'resetPlacement', placementId);
+    return buildPivotBridgeReceipt(pivotId, 'resetPlacement', this.ctx.clock.now(), placementId);
   }
 
   async setExpansion(
@@ -1255,7 +1256,7 @@ export class PivotBridge implements IPivotBridge {
     expanded: boolean,
   ): Promise<PivotKernelMutationReceipt> {
     return {
-      ...buildPivotBridgeReceipt(pivotId, 'setExpansion', axisPlacementId),
+      ...buildPivotBridgeReceipt(pivotId, 'setExpansion', this.ctx.clock.now(), axisPlacementId),
       mutationResult: { action: 'setExpansion', expanded },
     };
   }
@@ -1369,7 +1370,7 @@ export class PivotBridge implements IPivotBridge {
         result,
         configVersion,
         dataVersion,
-        computedAt: Date.now(),
+        computedAt: this.ctx.clock.now(),
       });
 
       return result;
@@ -1418,7 +1419,7 @@ export class PivotBridge implements IPivotBridge {
         result,
         configVersion,
         dataVersion,
-        computedAt: Date.now(),
+        computedAt: this.ctx.clock.now(),
       });
       this.notifySubscribers(pivotId, result);
       return result;
@@ -1623,7 +1624,7 @@ export class PivotBridge implements IPivotBridge {
    * Get cache statistics.
    */
   getCacheStats(): PivotCacheStats {
-    const now = Date.now();
+    const now = this.ctx.clock.now();
     const entries: Array<{ pivotId: string; computedAt: number; ageMs: number }> = [];
 
     this.cache.forEach((cached, pivotId) => {

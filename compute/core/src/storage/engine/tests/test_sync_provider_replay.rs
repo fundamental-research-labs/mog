@@ -137,6 +137,65 @@ fn provider_refresh_replay_materializes_range_backed_values() {
 }
 
 #[test]
+fn provider_refresh_replay_preserves_range_backed_values_after_structural_update() {
+    use formula_types::StructureChange;
+
+    let (mut engine_a, _) =
+        YrsComputeEngine::from_snapshot(provider_replay_range_backed_snapshot()).unwrap();
+    let sheet_a = cell_types::SheetId::from_uuid_str(RANGE_REPLAY_SHEET_UUID).unwrap();
+
+    let full_state = compute_collab::encode_full_state(engine_a.storage().doc());
+    let (mut engine_b, _) =
+        YrsComputeEngine::from_yrs_state(&full_state).expect("session B from original state");
+    let sheet_b = cell_types::SheetId::from_uuid_str(RANGE_REPLAY_SHEET_UUID).unwrap();
+
+    engine_a
+        .structure_change(
+            &sheet_a,
+            &StructureChange::InsertRows {
+                at: 2,
+                count: 1,
+                new_row_ids: vec![cell_types::RowId::from_raw(0xE300)],
+            },
+        )
+        .expect("session A structural insert");
+
+    let b_sv = compute_collab::encode_state_vector(engine_b.storage().doc());
+    let diff = compute_collab::encode_diff(engine_a.storage().doc(), &b_sv)
+        .expect("encode structural diff");
+    engine_b
+        .apply_sync_update(&diff)
+        .expect("session B apply structural sync update");
+
+    let a1 = engine_b.get_cell_value(&sheet_b, 0, 0);
+    assert!(
+        matches!(a1, value_types::CellValue::Number(n) if n.get() == 1.0),
+        "Provider replay after structural update must preserve range-backed A1; got {a1:?}",
+    );
+    let inserted = engine_b.get_cell_value(&sheet_b, 2, 0);
+    assert!(
+        inserted.is_null(),
+        "Provider replay after structural update must preserve inserted blank row; got {inserted:?}",
+    );
+    let shifted = engine_b.get_cell_value(&sheet_b, 3, 0);
+    assert!(
+        matches!(shifted, value_types::CellValue::Number(n) if n.get() == 3.0),
+        "Provider replay after structural update must expose shifted range-backed A3 at row 4; got {shifted:?}",
+    );
+
+    match engine_b.mirror().cell_render_at(&sheet_b, 3, 0) {
+        crate::projection::CellRender::Plain(view) => assert!(
+            matches!(view.value, value_types::CellValue::Number(n) if n.get() == 3.0),
+            "Provider replay after structural update must render shifted range-backed values; got {:?}",
+            view.value,
+        ),
+        other => panic!(
+            "Provider replay after structural update must render shifted range-backed values; got {other:?}",
+        ),
+    }
+}
+
+#[test]
 fn provider_refresh_replay_incremental_updates_through_engine() {
     use std::sync::{Arc, Mutex};
 

@@ -166,7 +166,7 @@ pub(in crate::storage::engine) fn import_sheets_from_xlsx(
             hs.sheet_id,
             &snap_for_grid,
             engine.stores.grid_id_alloc.clone(),
-        );
+        )?;
 
         // Register all cell positions in the grid.
         // cell_ids from hydrate_sheet are in the same order as SheetData.cells.

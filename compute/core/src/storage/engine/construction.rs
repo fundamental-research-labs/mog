@@ -39,11 +39,13 @@ use compute_document::observe::DocumentObserver;
 use compute_document::undo::UndoRedoManager;
 
 mod assembly;
+mod axis_resolver;
 mod csv;
 mod deferred;
 mod indexes;
 mod named_ranges;
 mod range_styles;
+mod rebuild;
 mod runtime;
 mod sheet_import;
 mod snapshots;
@@ -54,6 +56,9 @@ mod xlsx;
 pub(super) use assembly::{
     assemble_engine, from_snapshot, from_yrs_state, rebuild_engine_from_snapshot,
     snapshot_id_high_water_mark,
+};
+pub(in crate::storage::engine) use axis_resolver::{
+    register_pos_to_id_entries, resolve_sheet_axes_from_yrs,
 };
 pub(super) use csv::{from_csv_bytes, import_from_csv_bytes};
 pub(super) use deferred::{
@@ -69,6 +74,10 @@ pub(super) use named_ranges::{
     YrsIdentityFormulaLookup, defined_names_to_named_range_defs, normalize_named_range_refs,
 };
 pub(super) use range_styles::{build_imported_range_style_plan, range_style_formats_enabled};
+pub(in crate::storage::engine) use rebuild::{
+    build_finalized_mirror_from_snapshot, finalize_rebuilt_sheet_runtimes,
+    rebuild_sheet_runtime_from_yrs,
+};
 pub(super) use runtime::{
     create_observer_and_undo, derive_settings, hydrate_mirror_format_ranges,
     load_custom_cell_styles, load_custom_table_styles, load_theme_palette,

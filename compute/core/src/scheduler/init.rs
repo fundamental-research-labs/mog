@@ -103,6 +103,77 @@ impl ComputeCore {
         Ok(result)
     }
 
+    /// Initialize from a workbook snapshot using an already-populated mirror.
+    ///
+    /// Rebuild paths that need range-backed values during initial recalc must
+    /// install mirror row/column identity maps and finalize range hydration
+    /// before formulas evaluate. This variant keeps the caller-provided mirror
+    /// intact and rebuilds only ComputeCore state from the supplied snapshot.
+    pub(crate) fn init_from_snapshot_with_prebuilt_mirror(
+        &mut self,
+        mirror: &mut CellMirror,
+        snapshot: WorkbookSnapshot,
+    ) -> Result<RecalcResult, ComputeError> {
+        self.iterative_calc = snapshot.iterative_calc;
+        self.max_iterations = snapshot.max_iterations;
+        self.max_change = snapshot.max_change.get();
+        self.calc_mode = snapshot
+            .calculation_settings
+            .as_ref()
+            .map_or(CalcMode::Auto, |settings| settings.calc_mode);
+
+        self.sheet_order = snapshot
+            .sheets
+            .iter()
+            .enumerate()
+            .filter_map(|(idx, sheet)| SheetId::from_uuid_str(&sheet.id).ok().map(|sid| (sid, idx)))
+            .collect();
+        self.rebuild_ordered_sheets_cache();
+
+        let formula_cells = {
+            let _span = tracing::info_span!("collect_formula_cells").entered();
+            Self::extract_formula_cells_from_snapshot(&snapshot)
+        };
+
+        {
+            let mut max_id: u128 = 0;
+            for sheet in &snapshot.sheets {
+                if let Ok(sid) = SheetId::from_uuid_str(&sheet.id) {
+                    max_id = max_id.max(sid.as_u128());
+                }
+                for cell in &sheet.cells {
+                    if let Ok(cid) = CellId::from_uuid_str(&cell.cell_id) {
+                        max_id = max_id.max(cid.as_u128());
+                    }
+                }
+            }
+            let seed = if max_id <= u64::MAX as u128 {
+                (max_id as u64).saturating_add(1)
+            } else {
+                1
+            };
+            self.id_alloc = std::sync::Arc::new(IdAllocator::with_seed(seed));
+        }
+
+        let total_cell_count: usize = snapshot.sheets.iter().map(|s| s.cells.len()).sum();
+        let formula_count = formula_cells.len();
+        self.graph = DependencyGraph::with_capacity_full(formula_count, total_cell_count);
+        self.ast_cache = FxHashMap::with_capacity_and_hasher(formula_count, Default::default());
+        self.formula_strings =
+            FxHashMap::with_capacity_and_hasher(formula_count, Default::default());
+        self.cell_formula_text =
+            FxHashMap::with_capacity_and_hasher(formula_count, Default::default());
+        self.seed_cell_formula_text(&formula_cells);
+
+        self.bulk_parse_and_register(mirror, formula_cells);
+        self.register_all_variables(mirror);
+
+        let result = self.full_recalc(mirror)?;
+        self.clear_dirty();
+
+        Ok(result)
+    }
+
     /// Initialize from a WorkbookSnapshot WITHOUT running formula recalc.
     ///
     /// Use this when cached cell values from the snapshot are sufficient

@@ -131,7 +131,7 @@ fn create_sheet_with_origin(
         sheet_id,
         &snap_for_grid,
         stores.grid_id_alloc.clone(),
-    );
+    )?;
     stores.grid_indexes.insert(sheet_id, grid);
 
     // 3b. Create empty merge spatial index
@@ -372,7 +372,7 @@ pub(in crate::storage::engine) fn mutation_copy_sheet(
 
     // 2b. Re-populate mirror from Yrs — copy_sheet creates an empty mirror entry,
     // but the cells were written to Yrs. Read them back to populate the mirror.
-    if let Some(snap) = construction::build_sheet_snapshot_from_yrs(&stores.storage, &new_id) {
+    if let Some(snap) = construction::build_sheet_snapshot_from_yrs(&stores.storage, &new_id)? {
         mirror.remove_sheet(&new_id);
         mirror.add_sheet(snap)?;
     }
@@ -411,12 +411,11 @@ pub(in crate::storage::engine) fn mutation_copy_sheet(
     stores.layout_indexes.insert(new_id, li);
 
     // 4. Build a SheetSnapshot from yrs (not mirror/compute, which hasn't been initialized yet)
-    let snap =
-        construction::build_sheet_snapshot_from_yrs(&stores.storage, &new_id).ok_or_else(|| {
-            ComputeError::SheetNotFound {
-                sheet_id: hex.clone(),
-            }
-        })?;
+    let snap = construction::build_sheet_snapshot_from_yrs(&stores.storage, &new_id)?.ok_or_else(
+        || ComputeError::SheetNotFound {
+            sheet_id: hex.clone(),
+        },
+    )?;
     stores.compute.add_sheet(mirror, snap)?;
 
     // Build MutationResult via the canonical hydration helper, threading

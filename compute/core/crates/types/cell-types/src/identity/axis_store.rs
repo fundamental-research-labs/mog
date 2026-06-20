@@ -1,8 +1,9 @@
-use super::axis_run::{AxisIdentityRun, AxisIdentitySegment};
+use super::axis_run::{AxisIdentityRun, AxisIdentityRunRef, AxisIdentitySegment};
 use super::base_ids::SheetId;
 use super::compact_encoding::{
     AxisIdentityId, AxisRunId, decode_compact_axis_identity, encode_compact_axis_identity,
 };
+use crate::range_id::AxisIdentityRef;
 use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
 
@@ -179,6 +180,76 @@ where
             next: start.min(end),
             end,
             _marker: PhantomData,
+        }
+    }
+
+    /// Materialize a compact-or-explicit range axis reference into ordered identities.
+    ///
+    /// Returns `None` when the reference points outside this store, such as a
+    /// compact run/offset span that no longer exists on the sheet.
+    #[must_use]
+    pub fn identities_for_ref(
+        &self,
+        sheet_id: SheetId,
+        axis_ref: &AxisIdentityRef<Id>,
+    ) -> Option<Vec<Id>> {
+        match axis_ref {
+            AxisIdentityRef::Explicit(ids) => Some(ids.clone()),
+            AxisIdentityRef::StoreRun {
+                run_id,
+                start_offset,
+                len,
+            } => self.identities_for_run_ref(
+                sheet_id,
+                AxisIdentityRunRef::new(*run_id, *start_offset, *len),
+            ),
+            AxisIdentityRef::Runs(runs) => {
+                let mut ids = Vec::new();
+                for run_ref in runs {
+                    ids.extend(self.identities_for_run_ref(sheet_id, *run_ref)?);
+                }
+                Some(ids)
+            }
+        }
+    }
+
+    fn identities_for_run_ref(
+        &self,
+        sheet_id: SheetId,
+        run_ref: AxisIdentityRunRef,
+    ) -> Option<Vec<Id>> {
+        let mut ids = Vec::with_capacity(run_ref.len as usize);
+        let end_offset = run_ref.start_offset.checked_add(run_ref.len)?;
+        for offset in run_ref.start_offset..end_offset {
+            ids.push(self.identity_for_run_offset(sheet_id, run_ref.run_id, offset)?);
+        }
+        Some(ids)
+    }
+
+    fn identity_for_run_offset(
+        &self,
+        sheet_id: SheetId,
+        run_id: AxisRunId,
+        offset: u32,
+    ) -> Option<Id> {
+        match self {
+            Self::Explicit(ids) => ids.iter().copied().find(|id| {
+                decode_compact_axis_identity(id.as_raw()).is_some_and(|decoded| {
+                    decoded.axis_kind == Id::AXIS_KIND
+                        && decoded.run_id == run_id
+                        && decoded.offset == offset
+                })
+            }),
+            Self::Runs(compact) => {
+                let segment = segment_for_offset(&compact.reverse_index, run_id, offset)?;
+                Some(Id::from_compact_raw(encode_compact_axis_identity(
+                    Id::AXIS_KIND,
+                    sheet_id,
+                    segment.run.run_id,
+                    segment.run.seed,
+                    offset,
+                )))
+            }
         }
     }
 

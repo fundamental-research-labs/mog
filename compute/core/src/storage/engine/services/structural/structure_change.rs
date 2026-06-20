@@ -333,7 +333,7 @@ fn preflight_structure_change(
     // deleted, otherwise references into the deleted band are reparsed against
     // the post-delete sheet and can silently bind to the shifted survivor.
     stores.compute.ensure_graph_built(mirror)?;
-    hydrate_stored_formula_identities_for_structure_change(stores, mirror);
+    hydrate_stored_formula_identities_for_structure_change(stores, mirror)?;
 
     Ok(StructureChangePreflight {
         inherited_insert_row_height,
@@ -343,7 +343,7 @@ fn preflight_structure_change(
 fn hydrate_stored_formula_identities_for_structure_change(
     stores: &mut EngineStores,
     mirror: &mut CellMirror,
-) {
+) -> Result<(), ComputeError> {
     enum FormulaSeed {
         Identity(formula_types::IdentityFormula),
         A1(String),
@@ -354,7 +354,7 @@ fn hydrate_stored_formula_identities_for_structure_change(
 
     for sheet_id in &sheet_ids {
         let Some(sheet_snap) =
-            construction::build_sheet_snapshot_from_yrs(&stores.storage, sheet_id)
+            construction::build_sheet_snapshot_from_yrs(&stores.storage, sheet_id)?
         else {
             continue;
         };
@@ -397,6 +397,7 @@ fn hydrate_stored_formula_identities_for_structure_change(
             mirror.set_formula(&cell_id, Some(identity_formula));
         }
     }
+    Ok(())
 }
 
 fn grid_index<'a>(

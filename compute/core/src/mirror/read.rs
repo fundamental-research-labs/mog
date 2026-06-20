@@ -305,6 +305,10 @@ impl CellMirror {
         self.cell_to_sheet.get(cell_id).copied()
     }
 
+    pub(crate) fn cell_to_sheet_entries(&self) -> impl Iterator<Item = (&CellId, &SheetId)> {
+        self.cell_to_sheet.iter()
+    }
+
     /// Check whether calculation is enabled for a given sheet.
     /// Returns `true` (calculation enabled) if the sheet does not exist.
     pub fn is_calculation_enabled(&self, sheet_id: &SheetId) -> bool {

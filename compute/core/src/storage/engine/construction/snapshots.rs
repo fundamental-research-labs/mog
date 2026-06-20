@@ -193,30 +193,27 @@ pub(in crate::storage::engine) fn build_workbook_snapshot(
 pub(in crate::storage::engine) fn build_sheet_snapshot_from_yrs(
     storage: &YrsStorage,
     sheet_id: &SheetId,
-) -> Option<SheetSnapshot> {
-    use crate::storage::infra::grid_helpers;
+) -> Result<Option<SheetSnapshot>, ComputeError> {
     use crate::storage::sheet::properties;
     use compute_document::hex::hex_to_id;
     use compute_document::schema::KEY_GRID_INDEX;
 
-    let name = properties::get_sheet_name(storage.doc(), storage.sheets(), sheet_id)?;
-
-    // Derive dimensions from rowOrder/colOrder YArray lengths
-    let (rows, cols) = {
-        let txn = storage.doc().transact();
-        let sheet_hex = compute_document::hex::id_to_hex(sheet_id.as_u128());
-        let sheet_map = match storage.sheets().get(&txn, &sheet_hex) {
-            Some(yrs::Out::YMap(m)) => m,
-            _ => return None,
-        };
-        let r = grid_helpers::get_row_order_array(&sheet_map, &txn)
-            .map(|a| a.len(&txn))
-            .unwrap_or(100);
-        let c = grid_helpers::get_col_order_array(&sheet_map, &txn)
-            .map(|a| a.len(&txn))
-            .unwrap_or(26);
-        (r, c)
+    let Some(name) = properties::get_sheet_name(storage.doc(), storage.sheets(), sheet_id) else {
+        return Ok(None);
     };
+    let resolved_axes = super::resolve_sheet_axes_from_yrs(storage, *sheet_id)?;
+
+    let (rows, cols) = resolved_axes
+        .as_ref()
+        .map_or((100, 26), |axes| (axes.row_count(), axes.col_count()));
+    let axis_grid = resolved_axes.as_ref().map(|axes| {
+        compute_document::identity::GridIndex::from_axis_stores(
+            *sheet_id,
+            axes.row_axis.clone(),
+            axes.col_axis.clone(),
+            Arc::new(IdAllocator::new()),
+        )
+    });
 
     // Walk `gridIndex/posToId` — the CRDT winner map for position ownership.
     // `idToPos` is only an inverse mirror and can contain losing CellIds after
@@ -228,29 +225,6 @@ pub(in crate::storage::engine) fn build_sheet_snapshot_from_yrs(
         let txn = storage.doc().transact();
         let sheet_hex = compute_document::hex::id_to_hex(sheet_id.as_u128());
         if let Some(yrs::Out::YMap(sheet_map)) = storage.sheets().get(&txn, &sheet_hex) {
-            // Build rowHex -> row_index and colHex -> col_index maps from
-            // rowOrder / colOrder arrays.
-            let row_index: std::collections::HashMap<String, u32> =
-                match grid_helpers::get_row_order_array(&sheet_map, &txn) {
-                    Some(arr) => (0..arr.len(&txn))
-                        .filter_map(|i| match arr.get(&txn, i) {
-                            Some(yrs::Out::Any(yrs::Any::String(s))) => Some((s.to_string(), i)),
-                            _ => None,
-                        })
-                        .collect(),
-                    None => std::collections::HashMap::new(),
-                };
-            let col_index: std::collections::HashMap<String, u32> =
-                match grid_helpers::get_col_order_array(&sheet_map, &txn) {
-                    Some(arr) => (0..arr.len(&txn))
-                        .filter_map(|i| match arr.get(&txn, i) {
-                            Some(yrs::Out::Any(yrs::Any::String(s))) => Some((s.to_string(), i)),
-                            _ => None,
-                        })
-                        .collect(),
-                    None => std::collections::HashMap::new(),
-                };
-
             if let Some(yrs::Out::YMap(gi_map)) = sheet_map.get(&txn, KEY_GRID_INDEX)
                 && let Some(yrs::Out::YMap(pos_to_id)) = gi_map.get(&txn, "posToId")
             {
@@ -266,12 +240,6 @@ pub(in crate::storage::engine) fn build_sheet_snapshot_from_yrs(
                     let row_hex = &pos_key[..colon];
                     #[allow(clippy::string_slice)] // colon + 1 is a char boundary (ASCII ':').
                     let col_hex = &pos_key[colon + 1..];
-                    let Some(&row) = row_index.get(row_hex) else {
-                        continue;
-                    };
-                    let Some(&col) = col_index.get(col_hex) else {
-                        continue;
-                    };
                     let cell_hex = match value {
                         yrs::Out::Any(yrs::Any::String(s)) => s.to_string(),
                         _ => continue,
@@ -280,6 +248,27 @@ pub(in crate::storage::engine) fn build_sheet_snapshot_from_yrs(
                         continue;
                     };
                     let cid = cell_types::CellId::from_raw(raw);
+                    let (row, col) = match axis_grid.as_ref() {
+                        Some(grid) => {
+                            let (Some(row), Some(col)) = (
+                                grid.row_index_from_hex(row_hex),
+                                grid.col_index_from_hex(col_hex),
+                            ) else {
+                                if storage.read_cell_from_yrs_full(sheet_id, &cid).is_some() {
+                                    return Err(ComputeError::Deserialize {
+                                        message: format!(
+                                            "sheet {} posToId entry {pos_key} for cell {} does not resolve through sheet axes",
+                                            sheet_id.to_uuid_string(),
+                                            cid.to_uuid_string(),
+                                        ),
+                                    });
+                                }
+                                continue;
+                            };
+                            (row, col)
+                        }
+                        None => continue,
+                    };
                     let Some((value, formula, identity_formula, array_ref)) =
                         storage.read_cell_from_yrs_full(sheet_id, &cid)
                     else {
@@ -318,6 +307,45 @@ pub(in crate::storage::engine) fn build_sheet_snapshot_from_yrs(
             for entry in
                 compute_document::range::read_ranges_from_yrs(&txn, &ranges_map, &payloads_map)
             {
+                let mut row_ids = entry.metadata.row_ids;
+                let mut col_ids = entry.metadata.col_ids;
+
+                if entry.metadata.row_axis.is_some() || entry.metadata.col_axis.is_some() {
+                    let (Some(row_axis_ref), Some(col_axis_ref), Some(axes)) = (
+                        entry.metadata.row_axis.as_ref(),
+                        entry.metadata.col_axis.as_ref(),
+                        resolved_axes.as_ref(),
+                    ) else {
+                        return Err(ComputeError::Deserialize {
+                            message: format!(
+                                "sheet {} range {} has asymmetric or unresolved compact range axes",
+                                sheet_id.to_uuid_string(),
+                                entry.metadata.range_id.to_uuid_string(),
+                            ),
+                        });
+                    };
+                    row_ids = axes
+                        .row_axis
+                        .identities_for_ref(*sheet_id, row_axis_ref)
+                        .ok_or_else(|| ComputeError::Deserialize {
+                            message: format!(
+                                "sheet {} range {} row axis ref does not resolve",
+                                sheet_id.to_uuid_string(),
+                                entry.metadata.range_id.to_uuid_string(),
+                            ),
+                        })?;
+                    col_ids = axes
+                        .col_axis
+                        .identities_for_ref(*sheet_id, col_axis_ref)
+                        .ok_or_else(|| ComputeError::Deserialize {
+                            message: format!(
+                                "sheet {} range {} column axis ref does not resolve",
+                                sheet_id.to_uuid_string(),
+                                entry.metadata.range_id.to_uuid_string(),
+                            ),
+                        })?;
+                }
+
                 range_data_vec.push(crate::snapshot::RangeData {
                     range_id: entry.metadata.range_id,
                     kind: entry.metadata.kind,
@@ -326,22 +354,22 @@ pub(in crate::storage::engine) fn build_sheet_snapshot_from_yrs(
                     payload: entry.payload,
                     row_axis: entry.metadata.row_axis,
                     col_axis: entry.metadata.col_axis,
-                    row_ids: entry.metadata.row_ids,
-                    col_ids: entry.metadata.col_ids,
+                    row_ids,
+                    col_ids,
                 });
             }
         }
         range_data_vec
     };
 
-    Some(SheetSnapshot {
+    Ok(Some(SheetSnapshot {
         id: sheet_id.to_uuid_string(),
         name,
         rows,
         cols,
         cells,
         ranges,
-    })
+    }))
 }
 
 // ---------------------------------------------------------------------------
@@ -358,10 +386,19 @@ pub fn build_workbook_snapshot_from_yrs(
 ) -> Result<WorkbookSnapshot, ComputeError> {
     // 1. Build sheet snapshots from Yrs
     let sheet_order = storage.sheet_order();
-    let sheet_snapshots: Vec<SheetSnapshot> = sheet_order
-        .iter()
-        .filter_map(|sheet_id| build_sheet_snapshot_from_yrs(storage, sheet_id))
-        .collect();
+    let mut sheet_snapshots = Vec::with_capacity(sheet_order.len());
+    for sheet_id in &sheet_order {
+        let sheet_snapshot =
+            build_sheet_snapshot_from_yrs(storage, sheet_id)?.ok_or_else(|| {
+                ComputeError::Deserialize {
+                    message: format!(
+                        "sheet {} listed in sheet order but missing from Yrs sheet state",
+                        sheet_id.to_uuid_string()
+                    ),
+                }
+            })?;
+        sheet_snapshots.push(sheet_snapshot);
+    }
 
     // 2. Named ranges from Yrs
     let defined_names =

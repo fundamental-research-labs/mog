@@ -76,14 +76,20 @@ impl YrsComputeEngine {
     /// Rebuild the `ComputeCore` from the engine's own internal state.
     pub fn rebuild_compute_core(&mut self) -> Result<crate::snapshot::RecalcResult, ComputeError> {
         let snapshot = construction::build_workbook_snapshot(&self.stores, &self.mirror);
+        let mut rebuilt_mirror = construction::build_finalized_mirror_from_snapshot(
+            &self.stores.storage,
+            &snapshot,
+            &self.stores.grid_indexes,
+        )?;
         self.stores.compute = ComputeCore::new();
         let recalc = self
             .stores
             .compute
-            .init_from_snapshot(&mut self.mirror, snapshot)?;
+            .init_from_snapshot_with_prebuilt_mirror(&mut rebuilt_mirror, snapshot)?;
         self.stores
             .compute
             .set_id_alloc(self.stores.grid_id_alloc.clone());
+        self.mirror = rebuilt_mirror;
         self.init_cf_caches();
         // `init_from_snapshot` already cleared the dirty bit after its
         // internal full recalc. Belt-and-braces — rebuild leaves the

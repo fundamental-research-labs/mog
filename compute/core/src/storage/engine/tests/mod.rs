@@ -26,6 +26,7 @@ mod test_properties;
 mod test_queries;
 mod test_range_sort;
 mod test_range_structural;
+mod test_range_structural_replay;
 mod test_rebuild;
 mod test_shapes;
 mod test_sheet_introduce_unification;

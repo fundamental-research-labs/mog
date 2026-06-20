@@ -7,7 +7,7 @@ use value_types::ComputeError;
 use crate::scheduler::ComputeCore;
 use crate::snapshot::{ChangeKind, MutationResult, RecalcResult};
 
-use super::grid_indexing::{apply_grid_index_changes, build_grid_from_yrs_for_sheet};
+use super::grid_indexing::apply_grid_index_changes;
 use super::{YrsComputeEngine, construction, services, viewport};
 
 mod runtime_settings;
@@ -48,7 +48,7 @@ impl YrsComputeEngine {
                 self.stores
                     .grid_indexes
                     .get(sid)
-                    .map(|g| (*sid, g.row_ids_dense().len()))
+                    .map(|g| (*sid, g.row_count() as usize))
             })
             .collect();
         let pre_col_counts: HashMap<SheetId, usize> = pre_sheet_order
@@ -57,32 +57,32 @@ impl YrsComputeEngine {
                 self.stores
                     .grid_indexes
                     .get(sid)
-                    .map(|g| (*sid, g.col_ids_dense().len()))
+                    .map(|g| (*sid, g.col_count() as usize))
             })
             .collect();
 
         let workbook_snap = construction::build_workbook_snapshot_from_yrs(&self.stores.storage)?;
 
-        for sheet_snap in &workbook_snap.sheets {
-            if let Ok(sheet_id) = SheetId::from_uuid_str(&sheet_snap.id) {
-                let grid = build_grid_from_yrs_for_sheet(
-                    &self.stores.storage,
-                    sheet_id,
-                    sheet_snap,
-                    self.stores.grid_id_alloc.clone(),
-                );
-                self.stores.grid_indexes.insert(sheet_id, grid);
-            }
-        }
+        self.stores.grid_indexes = construction::build_grid_indexes_from_yrs(
+            &self.stores.storage,
+            &workbook_snap,
+            self.stores.grid_id_alloc.clone(),
+        )?;
+        let mut rebuilt_mirror = construction::build_finalized_mirror_from_snapshot(
+            &self.stores.storage,
+            &workbook_snap,
+            &self.stores.grid_indexes,
+        )?;
 
         self.stores.compute = ComputeCore::new();
         let recalc = self
             .stores
             .compute
-            .init_from_snapshot(&mut self.mirror, workbook_snap.clone())?;
+            .init_from_snapshot_with_prebuilt_mirror(&mut rebuilt_mirror, workbook_snap.clone())?;
         self.stores
             .compute
             .set_id_alloc(self.stores.grid_id_alloc.clone());
+        self.mirror = rebuilt_mirror;
 
         self.stores.merge_indexes = construction::build_merge_indexes(
             &self.stores.storage,
@@ -94,17 +94,6 @@ impl YrsComputeEngine {
             &workbook_snap,
             &self.stores.grid_indexes,
         )?;
-
-        self.mirror
-            .install_row_col_indexes(self.stores.grid_indexes.iter().map(|(sid, grid)| {
-                (
-                    *sid,
-                    grid.row_ids_dense().to_vec(),
-                    grid.col_ids_dense().to_vec(),
-                )
-            }));
-        construction::hydrate_mirror_format_ranges(&self.stores.storage, &mut self.mirror);
-        self.mirror.finalize_range_hydration();
 
         self.settings = construction::derive_settings(&self.stores.storage);
         self.init_cf_caches();
@@ -228,8 +217,8 @@ impl YrsComputeEngine {
         for sid in &post_sheet_order {
             let sheet_id_str = sid.to_uuid_string();
             if let Some(grid) = self.stores.grid_indexes.get(sid) {
-                let post_rows = grid.row_ids_dense().len();
-                let post_cols = grid.col_ids_dense().len();
+                let post_rows = grid.row_count() as usize;
+                let post_cols = grid.col_count() as usize;
                 let pre_rows = pre_row_counts.get(sid).copied().unwrap_or(0);
                 let pre_cols = pre_col_counts.get(sid).copied().unwrap_or(0);
 
@@ -270,23 +259,23 @@ impl YrsComputeEngine {
         Ok((vec![], result))
     }
 
-    fn bootstrap_sheet_from_yrs(&mut self, sheet_id: SheetId) -> bool {
+    fn bootstrap_sheet_from_yrs(&mut self, sheet_id: SheetId) -> Result<bool, ComputeError> {
         if self.stores.grid_indexes.contains_key(&sheet_id) {
-            return false;
+            return Ok(false);
         }
 
         let Some(sheet_snap) =
-            construction::build_sheet_snapshot_from_yrs(&self.stores.storage, &sheet_id)
+            construction::build_sheet_snapshot_from_yrs(&self.stores.storage, &sheet_id)?
         else {
-            return false;
+            return Ok(false);
         };
 
-        let grid = build_grid_from_yrs_for_sheet(
+        let grid = crate::storage::engine::build_grid_from_yrs_for_sheet(
             &self.stores.storage,
             sheet_id,
             &sheet_snap,
             self.stores.grid_id_alloc.clone(),
-        );
+        )?;
         self.stores.grid_indexes.insert(sheet_id, grid);
 
         let _ = self.mirror.add_sheet(sheet_snap.clone());
@@ -310,7 +299,7 @@ impl YrsComputeEngine {
         );
         self.stores.layout_indexes.insert(sheet_id, li);
 
-        true
+        Ok(true)
     }
 
     fn collect_observer_touched_sheet_ids(
@@ -413,7 +402,7 @@ impl YrsComputeEngine {
         let mut sheet_lifecycle_changed = false;
 
         for &sheet_id in &doc_changes.sheet_additions {
-            self.bootstrap_sheet_from_yrs(sheet_id);
+            self.bootstrap_sheet_from_yrs(sheet_id)?;
             sheet_lifecycle_changed = true;
         }
 
@@ -431,7 +420,7 @@ impl YrsComputeEngine {
             if deleted_sheets.contains(&sheet_id) {
                 continue;
             }
-            if self.bootstrap_sheet_from_yrs(sheet_id) {
+            if self.bootstrap_sheet_from_yrs(sheet_id)? {
                 sheet_lifecycle_changed = true;
             }
         }
@@ -440,26 +429,29 @@ impl YrsComputeEngine {
             let workbook_snap =
                 construction::build_workbook_snapshot_from_yrs(&self.stores.storage)?;
 
-            for sheet_snap in &workbook_snap.sheets {
-                if let Ok(sheet_id) = SheetId::from_uuid_str(&sheet_snap.id) {
-                    let grid = build_grid_from_yrs_for_sheet(
-                        &self.stores.storage,
-                        sheet_id,
-                        sheet_snap,
-                        self.stores.grid_id_alloc.clone(),
-                    );
-                    self.stores.grid_indexes.insert(sheet_id, grid);
-                }
-            }
+            self.stores.grid_indexes = construction::build_grid_indexes_from_yrs(
+                &self.stores.storage,
+                &workbook_snap,
+                self.stores.grid_id_alloc.clone(),
+            )?;
+            let mut rebuilt_mirror = construction::build_finalized_mirror_from_snapshot(
+                &self.stores.storage,
+                &workbook_snap,
+                &self.stores.grid_indexes,
+            )?;
 
             self.stores.compute = ComputeCore::new();
             let recalc = self
                 .stores
                 .compute
-                .init_from_snapshot(&mut self.mirror, workbook_snap.clone())?;
+                .init_from_snapshot_with_prebuilt_mirror(
+                    &mut rebuilt_mirror,
+                    workbook_snap.clone(),
+                )?;
             self.stores
                 .compute
                 .set_id_alloc(self.stores.grid_id_alloc.clone());
+            self.mirror = rebuilt_mirror;
 
             self.stores.merge_indexes = construction::build_merge_indexes(
                 &self.stores.storage,
@@ -471,15 +463,6 @@ impl YrsComputeEngine {
                 &workbook_snap,
                 &self.stores.grid_indexes,
             )?;
-
-            self.mirror.install_row_col_indexes(
-                self.stores
-                    .grid_indexes
-                    .iter()
-                    .map(|(sid, grid)| (*sid, grid.row_ids_ordered(), grid.col_ids_ordered())),
-            );
-            construction::hydrate_mirror_format_ranges(&self.stores.storage, &mut self.mirror);
-            self.mirror.finalize_range_hydration();
 
             self.settings = construction::derive_settings(&self.stores.storage);
             self.init_cf_caches();
@@ -504,7 +487,7 @@ impl YrsComputeEngine {
         let mut occupied_positions: Vec<(SheetId, CellId, SheetPos)> = Vec::new();
 
         if !doc_changes.grid_index.is_empty() {
-            apply_grid_index_changes(&mut self.stores, &doc_changes.grid_index);
+            apply_grid_index_changes(&mut self.stores, &doc_changes.grid_index)?;
 
             // For cells that changed position in the yrs gridIndex (undo/redo of
             // same-sheet relocate_cells writes updated posToId/idToPos entries),
@@ -726,37 +709,16 @@ impl YrsComputeEngine {
         //    regenerate_formula_strings (inside structure_change) can produce the
         //    correct A1 display strings.
         let mut formulas_needing_identity: Vec<(SheetId, CellId, String)> = Vec::new();
+        let mut rebuilt_runtimes = Vec::new();
 
         for sheet_id in structural_sheets {
-            if let Some(sheet_snap) =
-                construction::build_sheet_snapshot_from_yrs(&self.stores.storage, sheet_id)
-            {
-                // Rebuild GridIndex for this sheet from Yrs rowOrder/colOrder
-                let grid = build_grid_from_yrs_for_sheet(
-                    &self.stores.storage,
-                    *sheet_id,
-                    &sheet_snap,
-                    self.stores.grid_id_alloc.clone(),
-                );
-                self.stores.grid_indexes.insert(*sheet_id, grid);
-
-                // Rebuild CellMirror for this sheet
-                self.mirror.remove_sheet(sheet_id);
-                let _ = self.mirror.add_sheet(sheet_snap.clone());
-
-                // Sync enable_calculation flag from Yrs
-                {
-                    use crate::storage::sheet::visibility;
-                    let enabled = visibility::is_sheet_calculation_enabled(
-                        self.stores.storage.doc(),
-                        self.stores.storage.sheets(),
-                        sheet_id,
-                    );
-                    self.mirror.set_enable_calculation(sheet_id, enabled);
-                }
-
+            if let Some(runtime) = construction::rebuild_sheet_runtime_from_yrs(
+                &self.stores.storage,
+                *sheet_id,
+                self.stores.grid_id_alloc.clone(),
+            )? {
                 // Collect cells with legacy formula but no IdentityFormula.
-                for cell_data in &sheet_snap.cells {
+                for cell_data in &runtime.sheet_snapshot.cells {
                     if cell_data.identity_formula.is_none()
                         && let Some(ref formula) = cell_data.formula
                         && let Ok(cell_id) = CellId::from_uuid_str(&cell_data.cell_id)
@@ -764,18 +726,14 @@ impl YrsComputeEngine {
                         formulas_needing_identity.push((*sheet_id, cell_id, formula.clone()));
                     }
                 }
-
-                // Rebuild LayoutIndex for this sheet
-                let li = construction::build_layout_index_for_sheet(
-                    &self.stores.storage,
-                    sheet_id,
-                    sheet_snap.rows,
-                    sheet_snap.cols,
-                    self.stores.grid_indexes.get(sheet_id),
-                );
-                self.stores.layout_indexes.insert(*sheet_id, li);
+                rebuilt_runtimes.push(runtime);
             }
         }
+        construction::finalize_rebuilt_sheet_runtimes(
+            &mut self.stores,
+            &mut self.mirror,
+            rebuilt_runtimes,
+        )?;
 
         // 1b. Re-parse legacy formulas into IdentityFormulas so that
         //     regenerate_formula_strings (inside structure_change) works.

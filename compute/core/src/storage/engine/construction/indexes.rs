@@ -5,97 +5,15 @@ pub(in crate::storage::engine) fn build_grid_indexes_from_yrs(
     snapshot: &WorkbookSnapshot,
     grid_id_alloc: Arc<IdAllocator>,
 ) -> Result<FxHashMap<SheetId, GridIndex>, ComputeError> {
-    use crate::storage::infra::grid_helpers;
-
     let mut grid_indexes = FxHashMap::default();
     for sheet_snap in &snapshot.sheets {
         let sheet_id = SheetId::from_uuid_str(&sheet_snap.id)?;
-        let sheet_hex = compute_document::hex::id_to_hex(sheet_id.as_u128());
-
-        // Try reading compact axis stores, legacy rowOrder/colOrder, and the
-        // authoritative position index from Yrs.
-        let (row_axis, col_axis, row_hexes, col_hexes, pos_to_id_entries) = {
-            let txn = storage.doc().transact();
-            let sheet_map = match storage.sheets().get(&txn, &sheet_hex) {
-                Some(yrs::Out::YMap(m)) => Some(m),
-                _ => None,
-            };
-            if let Some(sm) = sheet_map {
-                let grid_index_map = sm
-                    .get(&txn, compute_document::schema::KEY_GRID_INDEX)
-                    .and_then(|out| match out {
-                        yrs::Out::YMap(grid_index_map) => Some(grid_index_map),
-                        _ => None,
-                    });
-                let row_axis = grid_index_map.as_ref().and_then(|grid_index_map| {
-                    compute_document::schema::read_grid_row_axis(&txn, grid_index_map)
-                });
-                let col_axis = grid_index_map.as_ref().and_then(|grid_index_map| {
-                    compute_document::schema::read_grid_col_axis(&txn, grid_index_map)
-                });
-                let rh = grid_helpers::get_row_order_array(&sm, &txn)
-                    .map(|a| grid_helpers::read_row_order(&a, &txn))
-                    .unwrap_or_default();
-                let ch = grid_helpers::get_col_order_array(&sm, &txn)
-                    .map(|a| grid_helpers::read_col_order(&a, &txn))
-                    .unwrap_or_default();
-                let pos_to_id_entries = grid_index_map
-                    .and_then(|grid_index_map| {
-                        grid_index_map.get(&txn, compute_document::schema::KEY_GRID_POS_TO_ID)
-                    })
-                    .and_then(|out| match out {
-                        yrs::Out::YMap(pos_to_id) => Some(
-                            pos_to_id
-                                .iter(&txn)
-                                .filter_map(|(pos_key, value)| match value {
-                                    yrs::Out::Any(Any::String(cell_hex)) => {
-                                        Some((pos_key.to_string(), cell_hex.to_string()))
-                                    }
-                                    _ => None,
-                                })
-                                .collect::<Vec<_>>(),
-                        ),
-                        _ => None,
-                    })
-                    .unwrap_or_default();
-                (row_axis, col_axis, rh, ch, pos_to_id_entries)
-            } else {
-                (None, None, vec![], vec![], vec![])
-            }
-        };
-
-        let mut grid = if let (Some(row_axis), Some(col_axis)) = (row_axis, col_axis) {
-            GridIndex::from_axis_stores(sheet_id, row_axis, col_axis, grid_id_alloc.clone())
-        } else if !row_hexes.is_empty() || !col_hexes.is_empty() {
-            GridIndex::from_yrs_arrays(sheet_id, &row_hexes, &col_hexes, grid_id_alloc.clone())
-        } else {
-            GridIndex::new(
-                sheet_id,
-                sheet_snap.rows,
-                sheet_snap.cols,
-                grid_id_alloc.clone(),
-            )
-        };
-
-        for (pos_key, cell_hex) in pos_to_id_entries {
-            let Some((row_hex, col_hex)) = pos_key.split_once(':') else {
-                continue;
-            };
-            let (Some(row), Some(col)) = (
-                grid.row_index_from_hex(row_hex),
-                grid.col_index_from_hex(col_hex),
-            ) else {
-                continue;
-            };
-            if let Some(cell_raw) = hex_to_id(&cell_hex) {
-                grid.register_cell(CellId::from_raw(cell_raw), row, col);
-            }
-        }
-
-        for cell_data in &sheet_snap.cells {
-            let cell_id = CellId::from_uuid_str(&cell_data.cell_id)?;
-            grid.register_cell(cell_id, cell_data.row, cell_data.col);
-        }
+        let grid = crate::storage::engine::build_grid_from_yrs_for_sheet(
+            storage,
+            sheet_id,
+            sheet_snap,
+            grid_id_alloc.clone(),
+        )?;
         grid_indexes.insert(sheet_id, grid);
     }
     Ok(grid_indexes)

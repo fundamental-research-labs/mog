@@ -10,10 +10,7 @@ impl CellMirror {
     pub fn remove_sheet(&mut self, sheet: &SheetId) {
         if let Some(s) = self.sheets.remove(sheet) {
             self.sheet_names.remove(&normalize_sheet_key(&s.name));
-            // Remove all cell_to_sheet entries for cells in this sheet
-            for cell_id in s.cells.keys() {
-                self.cell_to_sheet.remove(cell_id);
-            }
+            self.cell_to_sheet.retain(|_, owner| owner != sheet);
         }
     }
 

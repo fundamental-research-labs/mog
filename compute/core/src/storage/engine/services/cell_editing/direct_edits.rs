@@ -160,7 +160,7 @@ pub(in crate::storage::engine) fn set_cell_value_parsed(
                     *sheet_id,
                     &snap,
                     stores.grid_id_alloc.clone(),
-                );
+                )?;
                 // Carry over existing cell registrations
                 if let Some(old_grid) = stores.grid_indexes.get(sheet_id) {
                     for (cid, r, c) in old_grid.cells() {

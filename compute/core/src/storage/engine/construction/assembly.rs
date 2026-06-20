@@ -66,11 +66,15 @@ pub(in crate::storage::engine) fn from_yrs_state(
     ));
 
     let snapshot = build_workbook_snapshot_from_yrs(&storage)?;
+    let initial_grid_indexes =
+        build_grid_indexes_from_yrs(&storage, &snapshot, collab_alloc.clone())?;
 
     let (compute, _initial_recalc_result, mirror) = {
         let mut compute = ComputeCore::new();
-        let mut mirror = CellMirror::new();
-        let recalc_result = compute.init_from_snapshot(&mut mirror, snapshot.clone())?;
+        let mut mirror =
+            build_finalized_mirror_from_snapshot(&storage, &snapshot, &initial_grid_indexes)?;
+        let recalc_result =
+            compute.init_from_snapshot_with_prebuilt_mirror(&mut mirror, snapshot.clone())?;
         // Override ComputeCore's allocator AFTER init_from_snapshot (which
         // unconditionally reseeds). Share the SAME Arc as grid_id_alloc to
         // prevent CellId collisions between ghost cells (allocated by

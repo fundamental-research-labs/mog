@@ -58,6 +58,7 @@ export async function queryPivotByName(params: {
   const records = buildQueryRecords({
     result,
     fieldNameById,
+    rowFieldCount: rowPlacements.length,
     valuePlacementsLength: valuePlacements.length,
     valueFieldLabels,
     colDimensionTuples,
@@ -106,20 +107,29 @@ function buildColumnDimensionTuples(
 function buildQueryRecords(params: {
   result: PivotTableResult;
   fieldNameById: Map<string, string>;
+  rowFieldCount: number;
   valuePlacementsLength: number;
   valueFieldLabels: string[];
   colDimensionTuples: Record<string, CellValue>[];
 }): PivotQueryRecord[] {
-  const { result, fieldNameById, valuePlacementsLength, valueFieldLabels, colDimensionTuples } =
-    params;
+  const {
+    result,
+    fieldNameById,
+    rowFieldCount,
+    valuePlacementsLength,
+    valueFieldLabels,
+    colDimensionTuples,
+  } = params;
   const records: PivotQueryRecord[] = [];
 
   for (const row of result.rows) {
     if (row.isSubtotal || row.isGrandTotal) continue;
 
+    const rowHeaders = row.headers.filter((header) => !header.isSubtotal && !header.isGrandTotal);
+    if (rowFieldCount > 0 && rowHeaders.length !== rowFieldCount) continue;
+
     const rowDimensions: Record<string, CellValue> = {};
-    for (const header of row.headers) {
-      if (header.isSubtotal || header.isGrandTotal) continue;
+    for (const header of rowHeaders) {
       const fieldName = fieldNameById.get(header.fieldId) ?? header.fieldId;
       rowDimensions[fieldName] = header.value;
     }

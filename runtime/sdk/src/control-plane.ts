@@ -17,9 +17,13 @@ import {
 
 export {
   CONTROL_PLANE_ENTRYPOINT_IDS,
+  type ControlPlaneArtifactRuntimeRange,
   type ControlPlaneCapabilityGateScope,
+  type ControlPlaneCapabilityGateScopeDelta,
   type ControlPlaneCapabilityGateSnapshot,
   type ControlPlaneCapabilityGateStage,
+  type ControlPlaneCapabilityGateRolloutStage,
+  type ControlPlaneCasToken,
   type ControlPlaneClient,
   type ControlPlaneCompareAndSwapRequest,
   type ControlPlaneCompareAndSwapResult,
@@ -36,6 +40,8 @@ export {
   type ControlPlaneEntrypointId,
   type ControlPlaneEntrypointInventory,
   type ControlPlaneEntrypointStatus,
+  type ControlPlaneRuntimeKind,
+  type GateEvidencePreflightDigest,
   type ControlPlanePreflightDigest,
   type ControlPlanePreflightDigestAlgorithm,
   type ControlPlaneReadRequest,
@@ -116,27 +122,44 @@ export function createInertControlPlane(): ControlPlaneClient {
     async dryRunCapabilityGate(
       request: ControlPlaneDryRunRequest,
     ): Promise<ControlPlaneDryRunResult> {
-      void request.gateId;
       return Object.freeze({
         status: 'not-applied',
         reason: 'noop',
         applied: false,
-        scope: request.scope,
+        casKey: request.casKey,
+        expectedPriorStage: request.expectedPriorStage,
+        targetStage: request.targetStage,
+        priorScope: request.priorScope,
+        targetScope: request.targetScope,
+        scopeDelta: request.scopeDelta,
         diagnostics: NOOP_DIAGNOSTICS,
-        preflightDigest: request.expectedDigest,
+        preflightDigest: request.preflightDigest,
+        artifactRuntimeRange: request.artifactRuntimeRange,
       });
     },
     async compareAndSwapCapabilityGate(
       request: ControlPlaneCompareAndSwapRequest,
     ): Promise<ControlPlaneCompareAndSwapResult> {
-      void request.gateId;
       return Object.freeze({
         status: 'not-applied',
         reason: 'unavailable',
         applied: false,
-        scope: request.scope,
+        casKey: request.casKey,
+        expectedPriorStage: request.expectedPriorStage,
+        targetStage: request.targetStage,
+        priorScope: request.priorScope,
+        targetScope: request.targetScope,
+        scopeDelta: request.scopeDelta,
         diagnostics: UNAVAILABLE_DIAGNOSTICS,
-        currentDigest: request.expectedDigest,
+        preflightDigest: request.preflightDigest,
+        expectedPriorCasToken: request.expectedPriorCasToken,
+        artifactRuntimeRange: request.artifactRuntimeRange,
+        casReceipt: Object.freeze({
+          applied: false,
+          reason: 'unavailable',
+          casKey: request.casKey,
+          expectedPriorCasToken: request.expectedPriorCasToken,
+        }),
       });
     },
     observeShadow: observeControlPlaneShadow,

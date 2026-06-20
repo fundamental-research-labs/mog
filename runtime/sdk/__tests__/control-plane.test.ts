@@ -23,44 +23,87 @@ describe('inert control plane', () => {
 
   it('keeps read, dry-run, and compare-and-swap inert', async () => {
     const controlPlane = createInertControlPlane();
-    const scope = { workbookId: 'workbook-public-id', labels: ['vc-a0'] };
+    const priorScope = { workbookId: 'workbook-public-id', labels: ['vc-a0'] };
+    const targetScope = {
+      workbookId: 'workbook-public-id',
+      domainIds: ['first-slice'],
+      surfaceIds: ['headless'],
+      labels: ['vc-a0'],
+    };
+    const scopeDelta = { added: { domainIds: ['first-slice'] }, changedFields: ['domainIds'] };
     const digest = { algorithm: 'opaque' as const, value: 'public-digest' };
+    const casToken = { token: 'prior-token', version: '1' };
+    const artifactRuntimeRange = {
+      runtimeKind: 'headless-sdk' as const,
+      packageName: '@mog-sdk/sdk',
+      minClientVersion: '0.9.6',
+    };
 
-    const before = await controlPlane.readCapabilityGates({ scope });
+    const before = await controlPlane.readCapabilityGates({ scope: priorScope });
     const dryRun = await controlPlane.dryRunCapabilityGate({
-      gateId: 'capability-gate',
-      scope,
-      expectedDigest: digest,
+      casKey: 'capability-gate',
+      expectedPriorStage: 'disabled',
+      targetStage: 'shadow-only',
+      priorScope,
+      targetScope,
+      scopeDelta,
+      preflightDigest: digest,
+      artifactRuntimeRange,
     });
     const compareAndSwap = await controlPlane.compareAndSwapCapabilityGate({
-      gateId: 'capability-gate',
-      scope,
-      expectedDigest: digest,
+      casKey: 'capability-gate',
+      expectedPriorStage: 'disabled',
+      targetStage: 'shadow-only',
+      priorScope,
+      targetScope,
+      scopeDelta,
+      preflightDigest: digest,
+      expectedPriorCasToken: casToken,
+      artifactRuntimeRange,
     });
-    const after = await controlPlane.readCapabilityGates({ scope });
+    const after = await controlPlane.readCapabilityGates({ scope: priorScope });
 
     expect(before).toMatchObject({
       status: 'disabled',
-      scope,
+      scope: priorScope,
       gates: [],
     });
     expect(dryRun).toMatchObject({
       status: 'not-applied',
       reason: 'noop',
       applied: false,
-      scope,
+      casKey: 'capability-gate',
+      expectedPriorStage: 'disabled',
+      targetStage: 'shadow-only',
+      priorScope,
+      targetScope,
+      scopeDelta,
       preflightDigest: digest,
+      artifactRuntimeRange,
     });
     expect(compareAndSwap).toMatchObject({
       status: 'not-applied',
       reason: 'unavailable',
       applied: false,
-      scope,
-      currentDigest: digest,
+      casKey: 'capability-gate',
+      expectedPriorStage: 'disabled',
+      targetStage: 'shadow-only',
+      priorScope,
+      targetScope,
+      scopeDelta,
+      preflightDigest: digest,
+      expectedPriorCasToken: casToken,
+      artifactRuntimeRange,
+      casReceipt: {
+        applied: false,
+        reason: 'unavailable',
+        casKey: 'capability-gate',
+        expectedPriorCasToken: casToken,
+      },
     });
     expect(after).toMatchObject({
       status: 'disabled',
-      scope,
+      scope: priorScope,
       gates: [],
     });
   });

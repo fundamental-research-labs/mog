@@ -3497,11 +3497,11 @@ export interface ChartConfig {
   anchorRow: number;
   /** Anchor column (0-based) */
   anchorCol: number;
-  /** Chart width in cells */
+  /** Chart width in points. */
   width: number;
-  /** Chart height in cells */
+  /** Chart height in points. */
   height: number;
-  /** Layout authority for render diagnostics; embedded charts keep width/height as cell counts. */
+  /** Layout authority for render diagnostics. */
   layoutAuthority?: ChartLayoutAuthority;
 
   // Data binding (A1 strings)
@@ -3672,10 +3672,10 @@ export interface ChartConfig {
    */
   extra?: unknown;
 
-  // Position in points (Group A)
-  /** Chart height in points */
+  // Position aliases preserved for imported chart metadata.
+  /** @deprecated Use height. */
   heightPt?: number;
-  /** Chart width in points */
+  /** @deprecated Use width. */
   widthPt?: number;
   /** Left offset in points */
   leftPt?: number;

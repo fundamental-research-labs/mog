@@ -61,14 +61,14 @@ import {
   syncSeriesFormatToInternal,
 } from './chart-api-compatibility';
 import {
-  chartHeightCellsToPixels,
-  chartWidthCellsToPixels,
-  resolveChartHeightCells,
-  resolveChartWidthCells,
+  chartEmuToPoints,
+  chartPixelsToPoints,
+  chartPointsToEmu,
+  chartPointsToPixels,
 } from './chart-size-units';
 
-/** English Metric Units per point (1 pt = 12700 EMU). */
-const EMU_PER_PT = 12700;
+const DEFAULT_CHART_WIDTH_PT = 480;
+const DEFAULT_CHART_HEIGHT_PT = 225;
 
 function formatPublicRange(
   range: {
@@ -326,18 +326,20 @@ export function chartConfigToInternal(config: ChartConfig): ChartFloatingObject 
     anchorColOffsetEmu: 0,
     anchorMode: 'oneCell',
   };
-  if (config.widthPt != null) {
-    anchor.extentCxEmu = config.widthPt * EMU_PER_PT;
-  }
-  if (config.heightPt != null) {
-    anchor.extentCyEmu = config.heightPt * EMU_PER_PT;
-  }
+  const widthPt = config.width ?? config.widthPt ?? DEFAULT_CHART_WIDTH_PT;
+  const heightPt = config.height ?? config.heightPt ?? DEFAULT_CHART_HEIGHT_PT;
+  anchor.extentCxEmu = chartPointsToEmu(widthPt) ?? 0;
+  anchor.extentCyEmu = chartPointsToEmu(heightPt) ?? 0;
   if (config.leftPt != null) {
-    anchor.anchorColOffsetEmu = config.leftPt * EMU_PER_PT;
+    anchor.anchorColOffsetEmu = chartPointsToEmu(config.leftPt) ?? 0;
   }
   if (config.topPt != null) {
-    anchor.anchorRowOffsetEmu = config.topPt * EMU_PER_PT;
+    anchor.anchorRowOffsetEmu = chartPointsToEmu(config.topPt) ?? 0;
   }
+  const widthPx =
+    chartPointsToPixels(widthPt) ?? chartPointsToPixels(DEFAULT_CHART_WIDTH_PT) ?? 640;
+  const heightPx =
+    chartPointsToPixels(heightPt) ?? chartPointsToPixels(DEFAULT_CHART_HEIGHT_PT) ?? 300;
 
   const axis = config.axis
     ? axisConfigToWire(syncAxisFieldsToInternal(config.axis) as typeof config.axis)
@@ -358,8 +360,8 @@ export function chartConfigToInternal(config: ChartConfig): ChartFloatingObject 
     id: (config as { id?: string }).id || `chart-${now}`,
     sheetId: '',
     anchor,
-    width: chartWidthCellsToPixels(config.width) ?? 640,
-    height: chartHeightCellsToPixels(config.height) ?? 300,
+    width: widthPx,
+    height: heightPx,
     zIndex: 0,
     rotation: 0,
     flipH: false,
@@ -423,8 +425,10 @@ export function chartConfigToInternal(config: ChartConfig): ChartFloatingObject 
     wireframe: config.wireframe ?? typeFields.wireframe,
     surfaceTopView: config.surfaceTopView ?? typeFields.surfaceTopView,
     colorScheme: config.colorScheme,
-    widthCells: config.width,
-    heightCells: config.height,
+    heightPt,
+    widthPt,
+    leftPt: config.leftPt,
+    topPt: config.topPt,
     // rich formatting fields
     style: config.style,
     roundedCorners: config.roundedCorners,
@@ -498,6 +502,8 @@ export function chartUpdatesToInternal(updates: Partial<ChartConfig>): ChartUpda
   const hasAnchorUpdate =
     updates.anchorRow !== undefined ||
     updates.anchorCol !== undefined ||
+    updates.width !== undefined ||
+    updates.height !== undefined ||
     updates.widthPt !== undefined ||
     updates.heightPt !== undefined ||
     updates.leftPt !== undefined ||
@@ -512,15 +518,42 @@ export function chartUpdatesToInternal(updates: Partial<ChartConfig>): ChartUpda
       anchorUpdates.anchorColOffsetEmu = legacyAnchorColOffset;
     if (legacyAnchorRowOffset !== undefined)
       anchorUpdates.anchorRowOffsetEmu = legacyAnchorRowOffset;
+    if (updates.width !== undefined) {
+      anchorUpdates.extentCxEmu = chartPointsToEmu(updates.width);
+    }
+    if (updates.height !== undefined) {
+      anchorUpdates.extentCyEmu = chartPointsToEmu(updates.height);
+    }
     if (updates.leftPt !== undefined)
-      anchorUpdates.anchorColOffsetEmu = updates.leftPt * EMU_PER_PT;
-    if (updates.topPt !== undefined) anchorUpdates.anchorRowOffsetEmu = updates.topPt * EMU_PER_PT;
-    if (updates.widthPt !== undefined) anchorUpdates.extentCxEmu = updates.widthPt * EMU_PER_PT;
-    if (updates.heightPt !== undefined) anchorUpdates.extentCyEmu = updates.heightPt * EMU_PER_PT;
+      anchorUpdates.anchorColOffsetEmu = chartPointsToEmu(updates.leftPt);
+    if (updates.topPt !== undefined)
+      anchorUpdates.anchorRowOffsetEmu = chartPointsToEmu(updates.topPt);
+    if (updates.width === undefined && updates.widthPt !== undefined) {
+      anchorUpdates.extentCxEmu = chartPointsToEmu(updates.widthPt);
+    }
+    if (updates.height === undefined && updates.heightPt !== undefined) {
+      anchorUpdates.extentCyEmu = chartPointsToEmu(updates.heightPt);
+    }
     result.anchor = anchorUpdates;
   }
-  if (updates.width !== undefined) result.widthCells = updates.width;
-  if (updates.height !== undefined) result.heightCells = updates.height;
+  if (updates.width !== undefined) {
+    result.widthPt = updates.width;
+    result.width = chartPointsToPixels(updates.width);
+  }
+  if (updates.height !== undefined) {
+    result.heightPt = updates.height;
+    result.height = chartPointsToPixels(updates.height);
+  }
+  if (updates.width === undefined && updates.widthPt !== undefined) {
+    result.widthPt = updates.widthPt;
+    result.width = chartPointsToPixels(updates.widthPt);
+  }
+  if (updates.height === undefined && updates.heightPt !== undefined) {
+    result.heightPt = updates.heightPt;
+    result.height = chartPointsToPixels(updates.heightPt);
+  }
+  if (updates.leftPt !== undefined) result.leftPt = updates.leftPt;
+  if (updates.topPt !== undefined) result.topPt = updates.topPt;
 
   if (updates.title !== undefined) result.title = updates.title;
   if (updates.subtitle !== undefined) result.subtitle = updates.subtitle;
@@ -645,12 +678,18 @@ export function serializedChartToChart(rawChart: ChartFloatingObject): Chart {
   }
 
   const anchor = chart.anchor;
-  const heightPt = anchor.extentCyEmu != null ? anchor.extentCyEmu / EMU_PER_PT : undefined;
-  const widthPt = anchor.extentCxEmu != null ? anchor.extentCxEmu / EMU_PER_PT : undefined;
-  const leftPt =
-    anchor.anchorColOffsetEmu != null ? anchor.anchorColOffsetEmu / EMU_PER_PT : undefined;
-  const topPt =
-    anchor.anchorRowOffsetEmu != null ? anchor.anchorRowOffsetEmu / EMU_PER_PT : undefined;
+  const heightPt =
+    chartEmuToPoints(anchor.extentCyEmu) ??
+    chart.heightPt ??
+    chartPixelsToPoints(chart.height) ??
+    DEFAULT_CHART_HEIGHT_PT;
+  const widthPt =
+    chartEmuToPoints(anchor.extentCxEmu) ??
+    chart.widthPt ??
+    chartPixelsToPoints(chart.width) ??
+    DEFAULT_CHART_WIDTH_PT;
+  const leftPt = chartEmuToPoints(anchor.anchorColOffsetEmu);
+  const topPt = chartEmuToPoints(anchor.anchorRowOffsetEmu);
 
   const axisConfig = chart.axis ? wireToAxisConfig(chart.axis) : undefined;
   const seriesConfigs = chart.series ? wireToSeriesConfigArray(chart.series) : undefined;
@@ -685,8 +724,8 @@ export function serializedChartToChart(rawChart: ChartFloatingObject): Chart {
     seriesOrientation: chart.seriesOrientation as Chart['seriesOrientation'],
     anchorRow: anchor.anchorRow,
     anchorCol: anchor.anchorCol,
-    width: resolveChartWidthCells(chart.widthCells, chart.width) ?? 8,
-    height: resolveChartHeightCells(chart.heightCells, chart.height) ?? 15,
+    width: widthPt,
+    height: heightPt,
     title: chart.title && chart.title !== 'undefined' ? chart.title : undefined,
     subtitle: chart.subtitle && chart.subtitle !== 'undefined' ? chart.subtitle : undefined,
     legend,

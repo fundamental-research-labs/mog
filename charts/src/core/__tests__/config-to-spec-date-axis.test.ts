@@ -26,8 +26,8 @@ function makeDateAxisConfig(type: ChartType, seriesCount = 1): ChartConfig {
     type,
     anchorRow: 0,
     anchorCol: 0,
-    width: 8,
-    height: 5,
+    width: 480,
+    height: 75,
     axis: {
       categoryAxis: {
         visible: true,
@@ -187,7 +187,7 @@ describe('configToSpec imported Excel date category axes', () => {
 
   it('maps imported chart text rotation when vertical text mode is horizontal', () => {
     const config = makeDateAxisConfig('line');
-    config.height = 16;
+    config.height = 240;
     config.axis = {
       ...config.axis,
       categoryAxis: {
@@ -210,7 +210,7 @@ describe('configToSpec imported Excel date category axes', () => {
 
   it('ignores out-of-range imported chart text rotations', () => {
     const config = makeDateAxisConfig('line');
-    config.height = 16;
+    config.height = 240;
     config.axis = {
       ...config.axis,
       categoryAxis: {
@@ -295,7 +295,7 @@ describe('configToSpec imported Excel date category axes', () => {
       ],
     };
     const config = makeDateAxisConfig('combo', 2);
-    config.height = 20;
+    config.height = 300;
     config.axis = {
       ...config.axis,
       valueAxis: {
@@ -374,7 +374,7 @@ describe('configToSpec imported Excel date category axes', () => {
       ],
     };
     const config = makeDateAxisConfig('line', 2);
-    config.height = 12;
+    config.height = 180;
     config.axis = {
       ...config.axis,
       valueAxis: {
@@ -566,8 +566,8 @@ describe('configToSpec imported Excel date category axes', () => {
       subType: 'stacked',
       anchorRow: 0,
       anchorCol: 0,
-      width: 8,
-      height: 5,
+      width: 480,
+      height: 75,
       legend: { show: true, visible: true, position: 'bottom' },
       series: [
         {
@@ -670,7 +670,7 @@ describe('configToSpec imported Excel date category axes', () => {
       ],
     };
     const config = makeDateAxisConfig('combo', 3);
-    config.height = 18;
+    config.height = 270;
     config.axis = {
       ...config.axis,
       categoryAxis: {
@@ -799,8 +799,8 @@ describe('configToSpec imported Excel date category axes', () => {
       type: 'line',
       anchorRow: 0,
       anchorCol: 0,
-      width: 8,
-      height: 5,
+      width: 480,
+      height: 75,
       axis: {
         categoryAxis: {
           visible: true,
@@ -833,13 +833,13 @@ describe('configToSpec imported Excel date category axes', () => {
 
     const gapSpec = asUnitSpec(
       configToSpec(
-        { type: 'line', anchorRow: 0, anchorCol: 0, width: 8, height: 5, displayBlanksAs: 'gap' },
+        { type: 'line', anchorRow: 0, anchorCol: 0, width: 480, height: 75, displayBlanksAs: 'gap' },
         data,
       ),
     );
     const zeroSpec = asUnitSpec(
       configToSpec(
-        { type: 'line', anchorRow: 0, anchorCol: 0, width: 8, height: 5, displayBlanksAs: 'zero' },
+        { type: 'line', anchorRow: 0, anchorCol: 0, width: 480, height: 75, displayBlanksAs: 'zero' },
         data,
       ),
     );

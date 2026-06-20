@@ -15,8 +15,6 @@ import {
   DEFAULT_CHART_HEIGHT,
   DEFAULT_CHART_WIDTH,
   MARK_TYPE_MAP,
-  PIXELS_PER_COLUMN,
-  PIXELS_PER_ROW,
 } from './constants';
 import {
   isQuantitativeXSeries,
@@ -67,8 +65,8 @@ export function resolvePathAxisLayoutForMembers(input: {
     shouldUseDateSerialCategoryAxis(input.config, input.data, false);
   const stackMode =
     input.stackMode ?? pathStackModeForMemberIndices(input.config, input.data, input.memberIndices);
-  const widthFromPoints = pointsToCanvasPx(input.config.widthPt);
-  const heightFromPoints = pointsToCanvasPx(input.config.heightPt);
+  const widthFromPoints = pointsToCanvasPx(input.config.width);
+  const heightFromPoints = pointsToCanvasPx(input.config.height);
 
   return resolvePathChartAxisLayout({
     sourceDialect: chartImportSourceDialect(input.config),
@@ -278,11 +276,11 @@ function supportedSeriesType(
 }
 
 function chartWidthPx(config: ChartConfig): number {
-  return config.width ? config.width * PIXELS_PER_COLUMN : DEFAULT_CHART_WIDTH;
+  return pointsToCanvasPx(config.width) ?? DEFAULT_CHART_WIDTH;
 }
 
 function chartHeightPx(config: ChartConfig): number {
-  return config.height ? config.height * PIXELS_PER_ROW : DEFAULT_CHART_HEIGHT;
+  return pointsToCanvasPx(config.height) ?? DEFAULT_CHART_HEIGHT;
 }
 
 function categoryAxisConfig(config: ChartConfig): SingleAxisConfig | undefined {

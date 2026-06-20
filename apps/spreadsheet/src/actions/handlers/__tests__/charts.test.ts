@@ -968,8 +968,8 @@ describe('Chart Handlers - Dialog Actions', () => {
         gridLines: true,
         visible: true,
       });
-      expect(addedConfig.axis.xAxis).toEqual(addedConfig.axis.categoryAxis);
-      expect(addedConfig.axis.yAxis).toEqual(addedConfig.axis.valueAxis);
+      expect(addedConfig.axis).not.toHaveProperty('xAxis');
+      expect(addedConfig.axis).not.toHaveProperty('yAxis');
       expect(addedConfig.dataLabels).toEqual({ show: true });
       expect(addedConfig).not.toHaveProperty('showDataLabels');
       expect(addedConfig).not.toHaveProperty('xAxis');

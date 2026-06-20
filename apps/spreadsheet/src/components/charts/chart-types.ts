@@ -8,22 +8,19 @@
  */
 
 import type { ChartData, ChartType, StoredChartConfig } from '@mog/charts';
-import type { ChartPosition } from '@mog/grid-renderer';
 import type { ChartAppModel } from '@mog-sdk/contracts/data/chart-app-model';
 
 /**
  * Chart definition stored in state
  *
  * This type represents a chart as it exists in the spreadsheet's state.
- * It combines positioning information with the chart configuration and data.
+ * It combines chart configuration, extracted data, and semantic model state.
  */
 export interface ChartDefinition {
   /** Unique chart ID */
   id: string;
   /** Chart type (bar, line, pie, etc.) */
   type: ChartType;
-  /** Position in the spreadsheet (cell-based) */
-  position: ChartPosition;
   /** Chart configuration (title, colors, options) */
   config: StoredChartConfig;
   /** Chart data (categories and series) */
@@ -31,6 +28,3 @@ export interface ChartDefinition {
   /** Semantic chart model for first-party controls. */
   appModel?: ChartAppModel;
 }
-
-// Re-export ChartPosition for convenience
-export type { ChartPosition };

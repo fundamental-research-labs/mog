@@ -385,8 +385,8 @@ export function InsertChartWizardDialog() {
       // Required position fields (not used for preview but needed by type)
       anchorRow: 0,
       anchorCol: 0,
-      width: 8,
-      height: 15,
+      width: 480,
+      height: 225,
       dataRange: dataRange || 'A1:D10',
       // Display options
       title: title || undefined,

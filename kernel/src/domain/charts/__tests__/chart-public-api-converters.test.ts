@@ -5,6 +5,8 @@ import {
   serializedChartToChart,
 } from '../chart-public-api-converters';
 
+const EMU_PER_PT = 12700;
+
 function chart(overrides: Partial<ChartFloatingObject> = {}): ChartFloatingObject {
   return {
     id: 'chart-1',
@@ -30,33 +32,59 @@ function chart(overrides: Partial<ChartFloatingObject> = {}): ChartFloatingObjec
 }
 
 describe('chart public API converters', () => {
-  it('stores SDK chart dimensions as pixel geometry and explicit cell spans', () => {
+  it('stores SDK chart dimensions as point geometry', () => {
     const internal = chartConfigToInternal({
       type: 'bar',
       anchorRow: 0,
       anchorCol: 0,
-      width: 42,
-      height: 43,
+      width: 480,
+      height: 225,
       dataRange: 'A1:B2',
     });
 
-    expect(internal.width).toBe(3360);
-    expect(internal.height).toBe(860);
-    expect(internal.widthCells).toBe(42);
-    expect(internal.heightCells).toBe(43);
+    expect(internal.width).toBe(640);
+    expect(internal.height).toBe(300);
+    expect(internal.widthCells).toBeUndefined();
+    expect(internal.heightCells).toBeUndefined();
+    expect(internal.widthPt).toBe(480);
+    expect(internal.heightPt).toBe(225);
+    expect(internal.anchor.extentCxEmu).toBe(480 * EMU_PER_PT);
+    expect(internal.anchor.extentCyEmu).toBe(225 * EMU_PER_PT);
   });
 
-  it('reports imported pixel geometry as SDK chart cell spans', () => {
+  it('reports imported pixel geometry as SDK chart point dimensions', () => {
+    const publicChart = serializedChartToChart(
+      chart({
+        width: 640,
+        height: 300,
+        dataRange: 'Sheet1!A1:B2',
+      }),
+    );
+
+    expect(publicChart.width).toBe(480);
+    expect(publicChart.height).toBe(225);
+  });
+
+  it('reports imported anchor extents as SDK chart point dimensions', () => {
     const publicChart = serializedChartToChart(
       chart({
         width: 3360,
         height: 840,
         dataRange: 'Sheet1!A1:B2',
+        anchor: {
+          anchorRow: 0,
+          anchorCol: 0,
+          anchorMode: 'oneCell',
+          extentCxEmu: 480 * EMU_PER_PT,
+          extentCyEmu: 225 * EMU_PER_PT,
+        },
       }),
     );
 
-    expect(publicChart.width).toBe(42);
-    expect(publicChart.height).toBe(42);
+    expect(publicChart.width).toBe(480);
+    expect(publicChart.height).toBe(225);
+    expect(publicChart.widthPt).toBe(480);
+    expect(publicChart.heightPt).toBe(225);
   });
 
   it('derives public top-level source ranges from lossless imported series refs', () => {
@@ -308,6 +336,28 @@ describe('chart public API converters', () => {
       wireframe: true,
       surfaceTopView: false,
     });
+  });
+
+  it('syncs point size updates to pixel geometry and physical extents', () => {
+    const internal = chartUpdatesToInternal({
+      width: 480,
+      height: 225,
+      leftPt: 18,
+      topPt: 9,
+    });
+
+    expect(internal.widthCells).toBeUndefined();
+    expect(internal.heightCells).toBeUndefined();
+    expect(internal.widthPt).toBe(480);
+    expect(internal.heightPt).toBe(225);
+    expect(internal.leftPt).toBe(18);
+    expect(internal.topPt).toBe(9);
+    expect(internal.width).toBe(640);
+    expect(internal.height).toBe(300);
+    expect(internal.anchor?.extentCxEmu).toBe(480 * EMU_PER_PT);
+    expect(internal.anchor?.extentCyEmu).toBe(225 * EMU_PER_PT);
+    expect(internal.anchor?.anchorColOffsetEmu).toBe(18 * EMU_PER_PT);
+    expect(internal.anchor?.anchorRowOffsetEmu).toBe(9 * EMU_PER_PT);
   });
 
   it('syncs series axis text orientation through the native axis text format', () => {

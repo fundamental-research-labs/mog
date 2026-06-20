@@ -27,7 +27,6 @@ import type {
 } from '@mog/charts';
 import { extractChartData, extractChartDataFromRange, parseRange } from '@mog/charts';
 
-import type { ChartPosition } from '@mog/grid-renderer';
 import type { ChartMutationReceipt, WorksheetWithInternals } from '@mog-sdk/contracts/api';
 import type { CellRange, SheetId } from '@mog-sdk/contracts/core';
 import type { ChartAppModel, ChartAxisRole } from '@mog-sdk/contracts/data/chart-app-model';
@@ -42,6 +41,9 @@ import {
 
 import { useWorkbook } from '../../infra/context';
 import { useChartUI } from './use-chart';
+
+const DEFAULT_EMBEDDED_CHART_WIDTH_PT = 480;
+const DEFAULT_EMBEDDED_CHART_HEIGHT_PT = 180;
 
 // =============================================================================
 // Types
@@ -90,9 +92,6 @@ export interface UseChartsReturn {
 
   /** Switch row/column grouping when the chart source binding supports it. */
   switchSeriesOrientation: (chartId: string) => Promise<ChartMutationReceipt>;
-
-  /** Update chart position */
-  updateChartPosition: (chartId: string, position: ChartPosition) => void;
 
   /** Remove a chart */
   removeChart: (chartId: string) => void;
@@ -148,17 +147,13 @@ interface ChartDefCacheEntry {
  * Used to determine if we can reuse cached config/data objects.
  */
 function isOnlyPositionChange(prev: SerializedChart, next: SerializedChart): boolean {
-  // Position fields that can change during drag
-  if (
-    prev.anchorRow !== next.anchorRow ||
-    prev.anchorCol !== next.anchorCol ||
-    prev.width !== next.width ||
-    prev.height !== next.height
-  ) {
+  if (prev.anchorRow !== next.anchorRow || prev.anchorCol !== next.anchorCol) {
     // Check if non-position fields are the same (data config that affects chart content)
     return (
       prev.type === next.type &&
       prev.subType === next.subType &&
+      prev.width === next.width &&
+      prev.height === next.height &&
       prev.title === next.title &&
       prev.dataRange === next.dataRange &&
       prev.seriesRange === next.seriesRange &&
@@ -250,21 +245,17 @@ async function resolveAnchorCellId(
 }
 
 /**
- * Get chart position, resolving CellId anchor if present.
- *
- * Handles twoCell mode, oneCell mode, and legacy position-based charts.
+ * Resolve the chart anchor position from stable CellId metadata when present.
  */
-async function getChartPosition(
+async function resolveChartAnchorPosition(
   ws: WorksheetWithInternals,
   chart: StoredChartConfig,
-): Promise<{ anchorRow: number; anchorCol: number; width: number; height: number } | null> {
+): Promise<{ anchorRow: number; anchorCol: number } | null> {
   const sheetId = chart.sheetId;
   if (!sheetId) {
     return {
       anchorRow: chart.anchorRow,
       anchorCol: chart.anchorCol,
-      width: chart.width,
-      height: chart.height,
     };
   }
 
@@ -272,34 +263,15 @@ async function getChartPosition(
     const resolved = await resolveAnchorCellId(ws, chart.anchorCellId);
     if (!resolved) return null;
 
-    if (chart.anchorMode === 'twoCell' && chart.endAnchorCellId) {
-      const endResolved = await resolveAnchorCellId(ws, chart.endAnchorCellId);
-      if (!endResolved) {
-        return {
-          anchorRow: resolved.row,
-          anchorCol: resolved.col,
-          width: chart.width,
-          height: chart.height,
-        };
-      }
-      const width = Math.max(1, endResolved.col - resolved.col + 1);
-      const height = Math.max(1, endResolved.row - resolved.row + 1);
-      return { anchorRow: resolved.row, anchorCol: resolved.col, width, height };
-    }
-
     return {
       anchorRow: resolved.row,
       anchorCol: resolved.col,
-      width: chart.width,
-      height: chart.height,
     };
   }
 
   return {
     anchorRow: chart.anchorRow,
     anchorCol: chart.anchorCol,
-    width: chart.width,
-    height: chart.height,
   };
 }
 
@@ -341,8 +313,8 @@ async function getChartDataRange(
 /**
  * Convert a SerializedChart to a ChartDefinition with extracted data.
  *
- * Uses getChartPosition to resolve CellId-based anchors to positions.
- * This ensures charts move correctly when rows/cols are inserted/deleted.
+ * Uses CellId-based anchors when available so chart data extraction observes
+ * row/column insertions and deletions.
  */
 async function serializedToChartDefinition(
   wb: ReturnType<typeof useWorkbook>,
@@ -350,14 +322,13 @@ async function serializedToChartDefinition(
   serialized: SerializedChart,
   appModelOverride?: ChartAppModel,
 ): Promise<ChartDefinition> {
-  // Resolve chart position using CellId if available
-  const resolvedPosition = await getChartPosition(ws, serialized);
+  const resolvedAnchor = await resolveChartAnchorPosition(ws, serialized);
 
   // If position couldn't be resolved (anchor cell deleted), use stored position
-  const anchorRow = resolvedPosition?.anchorRow ?? serialized.anchorRow;
-  const anchorCol = resolvedPosition?.anchorCol ?? serialized.anchorCol;
-  const width = resolvedPosition?.width ?? serialized.width;
-  const height = resolvedPosition?.height ?? serialized.height;
+  const anchorRow = resolvedAnchor?.anchorRow ?? serialized.anchorRow;
+  const anchorCol = resolvedAnchor?.anchorCol ?? serialized.anchorCol;
+  const width = serialized.width;
+  const height = serialized.height;
 
   // Build chart config for data extraction
   const config: StoredChartConfig = {
@@ -402,18 +373,9 @@ async function serializedToChartDefinition(
     data = extractChartData(cellAccessor, config);
   }
 
-  // Build chart position for overlay manager
-  const position: ChartPosition = {
-    anchorRow,
-    anchorCol,
-    widthCells: width,
-    heightCells: height,
-  };
-
   return {
     id: serialized.id,
     type: serialized.type,
-    position,
     config,
     data,
     appModel: appModel ?? undefined,
@@ -572,31 +534,12 @@ export function useCharts({ sheetId }: UseChartsOptions): UseChartsReturn {
               return cached.definition;
             }
 
-            // Case 2: Position-only change - reuse config/data, update position only
-            // This is the KEY fix for chart flickering during drag operations
-            // chart renderer won't re-initialize because config/data objects are stable
+            // Case 2: Anchor-only change - reuse config/data.
             if (
               cached.dataVersion === dataVersion &&
               isOnlyPositionChange(cached.serialized, serialized)
             ) {
-              // Create new definition with same config/data but updated position
-              const newPosition: ChartPosition = {
-                anchorRow: serialized.anchorRow,
-                anchorCol: serialized.anchorCol,
-                widthCells: serialized.width,
-                heightCells: serialized.height,
-              };
-
-              const definition: ChartDefinition = {
-                id: serialized.id,
-                type: serialized.type,
-                position: newPosition,
-                config: cached.definition.config, // REUSE - prevents chart renderer flicker!
-                data: cached.definition.data, // REUSE - prevents chart renderer flicker!
-                appModel: cached.definition.appModel,
-              };
-
-              // Update cache with new serialized reference but same config/data
+              const definition = cached.definition;
               cache.set(serialized.id, { serialized, dataVersion, definition });
               return definition;
             }
@@ -678,20 +621,6 @@ export function useCharts({ sheetId }: UseChartsOptions): UseChartsReturn {
     [sheetId, wb],
   );
 
-  // Update chart position via Worksheet API (fire-and-forget)
-  const updateChartPosition = useCallback(
-    (chartId: string, position: ChartPosition) => {
-      const ws = wb.getSheetById(sheetId);
-      void ws.charts.update(chartId, {
-        anchorRow: position.anchorRow,
-        anchorCol: position.anchorCol,
-        width: position.widthCells,
-        height: position.heightCells,
-      });
-    },
-    [sheetId, wb],
-  );
-
   // Remove chart via Worksheet API (fire-and-forget)
   const removeChart = useCallback(
     (chartId: string) => {
@@ -754,8 +683,8 @@ export function useCharts({ sheetId }: UseChartsOptions): UseChartsReturn {
         type,
         anchorRow: range.endRow + 2,
         anchorCol: range.startCol,
-        width: 8, // cells
-        height: 12, // cells
+        width: DEFAULT_EMBEDDED_CHART_WIDTH_PT,
+        height: DEFAULT_EMBEDDED_CHART_HEIGHT_PT,
         dataRange,
         title: `${type.charAt(0).toUpperCase() + type.slice(1)} Chart`,
         legend: {
@@ -789,7 +718,6 @@ export function useCharts({ sheetId }: UseChartsOptions): UseChartsReturn {
     setAxisTitle,
     setAxisVisible,
     switchSeriesOrientation,
-    updateChartPosition,
     removeChart,
     selectChart,
     startEditingChart,
@@ -800,4 +728,4 @@ export function useCharts({ sheetId }: UseChartsOptions): UseChartsReturn {
 }
 
 // Re-export types for convenience
-export type { ChartDefinition, ChartPosition, SerializedChart };
+export type { ChartDefinition, SerializedChart };

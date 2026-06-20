@@ -485,8 +485,8 @@ export const DEFAULT_CHART_COLORS = DEFAULT_CATEGORY_COLORS;
  * Default chart configuration
  */
 export const DEFAULT_CHART_CONFIG: Partial<StoredChartConfig> = {
-  width: 8, // cells
-  height: 15, // cells
+  width: 480,
+  height: 225,
   legend: {
     show: true,
     position: 'bottom',

@@ -36,7 +36,6 @@ import type {
 import type { ISheetViewGeometry, ISheetViewViewport } from '@mog-sdk/sheet-view';
 import { type SheetId, sheetId } from '@mog-sdk/contracts/core';
 
-import { normalizeChartConfig } from '../../adapters/charts/chart-config-adapter';
 import { pasteChartFromClipboard } from './chart-clipboard';
 import { deselectChartObjects, selectChartObject } from './chart-selection';
 import { resolveChartCreationSourceRange, resolveChartSourceRange } from './chart-source-range';
@@ -1007,10 +1006,8 @@ export const CREATE_EMBEDDED_CHART: AsyncActionHandler = async (
   const chartType = payload?.type || 'column';
   const chartSubType = payload?.subType;
 
-  // Default chart size in cells (not pixels!)
-  // 8 cells wide × 15 cells tall ≈ 640×300px with default cell sizes
-  const DEFAULT_WIDTH_CELLS = 8;
-  const DEFAULT_HEIGHT_CELLS = 15;
+  const DEFAULT_WIDTH_PT = 480;
+  const DEFAULT_HEIGHT_PT = 225;
 
   // Default position when no selection
   const DEFAULT_POSITION = { anchorRow: 2, anchorCol: 2 };
@@ -1025,8 +1022,8 @@ export const CREATE_EMBEDDED_CHART: AsyncActionHandler = async (
         dataRange: '',
         anchorRow: position.anchorRow,
         anchorCol: position.anchorCol,
-        width: DEFAULT_WIDTH_CELLS,
-        height: DEFAULT_HEIGHT_CELLS,
+        width: DEFAULT_WIDTH_PT,
+        height: DEFAULT_HEIGHT_PT,
       });
       if (newChart.chart.id) {
         selectChartObject(deps, newChart.chart.id);
@@ -1058,8 +1055,8 @@ export const CREATE_EMBEDDED_CHART: AsyncActionHandler = async (
         : {}),
       anchorRow: position.anchorRow,
       anchorCol: position.anchorCol,
-      width: DEFAULT_WIDTH_CELLS,
-      height: DEFAULT_HEIGHT_CELLS,
+      width: DEFAULT_WIDTH_PT,
+      height: DEFAULT_HEIGHT_PT,
     });
     if (newChart.chart.id) {
       selectChartObject(deps, newChart.chart.id);
@@ -1188,47 +1185,51 @@ export const INSERT_CHART_FROM_WIZARD: AsyncActionHandler = async (deps): Promis
   const sourceRange = ranges && ranges.length > 0 ? ranges[0] : null;
   const position = await getSmartChartPosition(deps, sourceRange, DEFAULT_POSITION, sheetId);
 
-  // Default chart size in cells (not pixels!)
-  const DEFAULT_WIDTH_CELLS = 8;
-  const DEFAULT_HEIGHT_CELLS = 15;
+  const DEFAULT_WIDTH_PT = 480;
+  const DEFAULT_HEIGHT_PT = 225;
 
   // Create chart via unified Worksheet API
   // Note: ChartConfig uses 'axis' property with xAxis/yAxis sub-properties
   try {
-    const newChart = await ws.charts.add(
-      normalizeChartConfig({
-        type: dialogState.chartType,
-        subType: dialogState.variantId as ChartConfig['subType'],
-        dataRange: dialogState.dataRange,
-        seriesOrientation: dialogState.seriesInRows ? 'rows' : 'columns',
-        title: dialogState.title,
-        axis:
-          dialogState.xAxis || dialogState.yAxis
-            ? {
-                xAxis: {
-                  type: 'category' as const,
-                  title: dialogState.xAxis?.title || undefined,
-                  min: dialogState.xAxis?.min,
-                  max: dialogState.xAxis?.max,
-                  gridLines: dialogState.xAxis?.showGridlines,
-                },
-                yAxis: {
-                  type: 'value' as const,
-                  title: dialogState.yAxis?.title || undefined,
-                  min: dialogState.yAxis?.min,
-                  max: dialogState.yAxis?.max,
-                  gridLines: dialogState.yAxis?.showGridlines,
-                },
-              }
-            : undefined,
-        legend: dialogState.legend,
-        dataLabels: { show: dialogState.showDataLabels },
-        anchorRow: position.anchorRow,
-        anchorCol: position.anchorCol,
-        width: DEFAULT_WIDTH_CELLS,
-        height: DEFAULT_HEIGHT_CELLS,
-      }),
-    );
+    const newChart = await ws.charts.add({
+      type: dialogState.chartType,
+      subType: dialogState.variantId as ChartConfig['subType'],
+      dataRange: dialogState.dataRange,
+      seriesOrientation: dialogState.seriesInRows ? 'rows' : 'columns',
+      title: dialogState.title,
+      axis: {
+        categoryAxis: {
+          axisType: 'category',
+          type: 'category',
+          visible: true,
+          show: true,
+          title: dialogState.xAxis.title || undefined,
+          min: dialogState.xAxis.min,
+          max: dialogState.xAxis.max,
+          gridLines: dialogState.xAxis.showGridlines,
+        },
+        valueAxis: {
+          axisType: 'value',
+          type: 'value',
+          visible: true,
+          show: true,
+          title: dialogState.yAxis.title || undefined,
+          min: dialogState.yAxis.min,
+          max: dialogState.yAxis.max,
+          gridLines: dialogState.yAxis.showGridlines,
+        },
+      },
+      legend: {
+        show: dialogState.legend.show,
+        visible: dialogState.legend.show,
+        position: dialogState.legend.position,
+      },
+      dataLabels: { show: dialogState.showDataLabels },
+      anchorRow: position.anchorRow,
+      anchorCol: position.anchorCol,
+      width: DEFAULT_WIDTH_PT,
+      height: DEFAULT_HEIGHT_PT,
+    });
     if (newChart.chart.id) {
       selectChartObject(deps, newChart.chart.id);
     }

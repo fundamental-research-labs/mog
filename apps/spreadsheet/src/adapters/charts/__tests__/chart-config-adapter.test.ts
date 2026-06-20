@@ -80,8 +80,8 @@ describe('chart config adapter', () => {
       type: 'column',
       anchorRow: 2,
       anchorCol: 3,
-      width: 8,
-      height: 15,
+      width: 480,
+      height: 225,
       dataRange: 'A1:B5',
       legend: { show: true, position: 'right' },
       axis: {

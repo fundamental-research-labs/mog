@@ -11,7 +11,7 @@ import {
   normalizeImportedComboChart,
   normalizeImportedDisplayBlanksAsValue,
 } from '../../../bridges/compute/chart-import-normalization';
-import { resolveChartHeightCells, resolveChartWidthCells } from '../chart-size-units';
+import { chartEmuToPoints, chartPixelsToPoints } from '../chart-size-units';
 import { isXYValueAxisChartType } from './axis-role';
 import {
   wireToAxisConfig,
@@ -258,6 +258,14 @@ type ChartRenderExtra = {
   };
 };
 
+function anchorExtentPt(
+  anchor: ChartFloatingObject['anchor'] | undefined,
+  axis: 'x' | 'y',
+): number | undefined {
+  const emu = axis === 'x' ? anchor?.extentCxEmu : anchor?.extentCyEmu;
+  return chartEmuToPoints(emu);
+}
+
 function renderExtraFromChart(chart: ChartFloatingObject): ChartConfig['extra'] {
   const ooxml = recordValue(chart.ooxml);
   if (!ooxml && !chart.importStatus) return undefined;
@@ -352,21 +360,23 @@ export function toChartConfig(chart: ChartFloatingObject): ChartConfig {
   const displayBlanksAs = normalizeImportedDisplayBlanksAsValue(normalizedChart.displayBlanksAs) as
     | ChartConfig['displayBlanksAs']
     | undefined;
-  const widthCells =
-    layoutAuthority === 'chartSheet'
-      ? undefined
-      : resolveChartWidthCells(normalizedChart.widthCells, normalizedChart.width);
-  const heightCells =
-    layoutAuthority === 'chartSheet'
-      ? undefined
-      : resolveChartHeightCells(normalizedChart.heightCells, normalizedChart.height);
+  const widthPt =
+    anchorExtentPt(normalizedChart.anchor, 'x') ??
+    normalizedChart.widthPt ??
+    chartPixelsToPoints(normalizedChart.width) ??
+    480;
+  const heightPt =
+    anchorExtentPt(normalizedChart.anchor, 'y') ??
+    normalizedChart.heightPt ??
+    chartPixelsToPoints(normalizedChart.height) ??
+    225;
 
   return {
     type: narrowedType.type ?? 'bar',
     anchorRow: normalizedChart.anchor.anchorRow,
     anchorCol: normalizedChart.anchor.anchorCol,
-    width: widthCells ?? 4,
-    height: heightCells ?? 10,
+    width: widthPt,
+    height: heightPt,
     layoutAuthority,
     dataRange: normalizedChart.dataRange ?? '',
     seriesRange: normalizedChart.seriesRange,
@@ -439,8 +449,8 @@ export function toChartConfig(chart: ChartFloatingObject): ChartConfig {
       }
     ).stockSourceComposition,
     barShape: normalizedChart.barShape as ChartConfig['barShape'],
-    heightPt: normalizedChart.heightPt,
-    widthPt: normalizedChart.widthPt,
+    heightPt,
+    widthPt,
     leftPt: normalizedChart.leftPt,
     topPt: normalizedChart.topPt,
     wireframe: normalizedChart.wireframe,

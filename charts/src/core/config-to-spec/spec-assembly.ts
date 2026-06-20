@@ -11,10 +11,9 @@ import type { ChartConfig, LegendConfig } from '../../types';
 import {
   DEFAULT_CHART_HEIGHT,
   DEFAULT_CHART_WIDTH,
-  PIXELS_PER_COLUMN,
-  PIXELS_PER_ROW,
 } from './constants';
 import { isLegendShown } from './legend';
+import { pointsToCanvasPx } from './units';
 
 export interface ChartDimensions {
   width: number;
@@ -23,8 +22,8 @@ export interface ChartDimensions {
 
 export function buildChartDimensions(config: ChartConfig): ChartDimensions {
   return {
-    width: config.width ? config.width * PIXELS_PER_COLUMN : DEFAULT_CHART_WIDTH,
-    height: config.height ? config.height * PIXELS_PER_ROW : DEFAULT_CHART_HEIGHT,
+    width: pointsToCanvasPx(config.width) ?? DEFAULT_CHART_WIDTH,
+    height: pointsToCanvasPx(config.height) ?? DEFAULT_CHART_HEIGHT,
   };
 }
 

@@ -30,8 +30,8 @@ describe('DEFAULT_CHART_COLORS', () => {
 
 describe('DEFAULT_CHART_CONFIG', () => {
   it('has reasonable default dimensions', () => {
-    expect(DEFAULT_CHART_CONFIG.width).toBe(8);
-    expect(DEFAULT_CHART_CONFIG.height).toBe(15);
+    expect(DEFAULT_CHART_CONFIG.width).toBe(480);
+    expect(DEFAULT_CHART_CONFIG.height).toBe(225);
   });
 
   it('has legend shown by default', () => {
@@ -82,8 +82,8 @@ describe('ChartConfig', () => {
       type: 'column',
       anchorRow: 0,
       anchorCol: 0,
-      width: 8,
-      height: 15,
+      width: 480,
+      height: 225,
       dataRange: 'A1:D10',
     };
 
@@ -177,8 +177,8 @@ describe('TypedChartConfig', () => {
     id: 'test',
     anchorRow: 0,
     anchorCol: 0,
-    width: 8,
-    height: 15,
+    width: 480,
+    height: 225,
     dataRange: 'A1:D10',
   } as const;
 

@@ -8,7 +8,7 @@
  */
 
 // Chart types (shared between canvas renderer and hooks)
-export { type ChartDefinition, type ChartPosition } from './chart-types';
+export { type ChartDefinition } from './chart-types';
 
 // Chart editing components
 export { ChartEditor, type ChartEditorProps } from './ChartEditor';

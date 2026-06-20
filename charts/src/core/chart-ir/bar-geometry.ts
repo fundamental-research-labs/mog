@@ -13,6 +13,7 @@ import type {
   SeriesConfig,
   SingleAxisConfig,
 } from '../../types';
+import { pointsToCanvasPx } from '../config-to-spec/units';
 import { manualLayoutFromValue } from '../config-to-spec/layout-hints-manual';
 import { seriesConfigForDataSeries } from '../series-identity';
 import { resolveBarColumnAxisLayout } from './bar-axis-layout';
@@ -522,8 +523,8 @@ function withBarColumnImportedGeometryContract(
     seriesIndices: options.seriesIndices,
     categoryAxis,
     valueAxis,
-    chartWidth: config.width,
-    chartHeight: config.height,
+    chartWidth: pointsToCanvasPx(config.width),
+    chartHeight: pointsToCanvasPx(config.height),
   });
   const valueAxisDomain = axisLayout.valueAxisDomain;
   const baselineValue = barBaselineValueForDomain(

@@ -5,12 +5,6 @@ import type { ChartType } from '../../types';
 // Layout Constants
 // =============================================================================
 
-/** Default column width in pixels, used to convert cell-unit width to pixels. */
-export const PIXELS_PER_COLUMN = 80;
-
-/** Default row height in pixels, used to convert cell-unit height to pixels. */
-export const PIXELS_PER_ROW = 20;
-
 /** Default chart width in pixels when no width is specified. */
 export const DEFAULT_CHART_WIDTH = 600;
 

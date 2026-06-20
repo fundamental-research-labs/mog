@@ -109,8 +109,16 @@ export async function convertFloatingObjectToChartPosition(
     return {
       anchorRow: obj.chartConfig.anchorRow,
       anchorCol: obj.chartConfig.anchorCol,
-      widthCells: obj.chartConfig.width,
-      heightCells: obj.chartConfig.height,
+      widthCells:
+        resolveChartWidthCells(
+          (obj.chartConfig as StoredChartConfig & { widthCells?: number }).widthCells,
+          position.width,
+        ) ?? 4,
+      heightCells:
+        resolveChartHeightCells(
+          (obj.chartConfig as StoredChartConfig & { heightCells?: number }).heightCells,
+          position.height,
+        ) ?? 10,
     };
   }
 

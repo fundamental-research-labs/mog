@@ -53,7 +53,7 @@ import {
   snapshotSeries,
   snapshotSeriesProjection,
 } from './resolved-spec-series-snapshot';
-import { resolveChartHeightCells, resolveChartWidthCells } from '../chart-size-units';
+import { chartEmuToPoints, chartPixelsToPoints } from '../chart-size-units';
 import {
   groupingFor,
   snapshotAxis,
@@ -66,6 +66,14 @@ import {
 type CompilerPathId = ResolvedChartSpecSnapshot['implementation']['compilerPathId'];
 
 export { defaultExportOptionsForSize, hashJson } from './resolved-spec-primitives';
+
+function anchorExtentPt(
+  anchor: ChartFloatingObject['anchor'] | undefined,
+  axis: 'x' | 'y',
+): number | undefined {
+  const emu = axis === 'x' ? anchor?.extentCxEmu : anchor?.extentCyEmu;
+  return chartEmuToPoints(emu);
+}
 
 export function buildResolvedChartSpecSnapshot(input: {
   chart: ChartFloatingObject;
@@ -214,10 +222,16 @@ export function buildResolvedChartSpecSnapshot(input: {
       name: input.chart.name,
       anchorRow: input.chart.anchor?.anchorRow,
       anchorCol: input.chart.anchor?.anchorCol,
-      width: resolveChartWidthCells(input.chart.widthCells, input.chart.width),
-      height: resolveChartHeightCells(input.chart.heightCells, input.chart.height),
-      widthPt: input.chart.widthPt,
-      heightPt: input.chart.heightPt,
+      width:
+        anchorExtentPt(input.chart.anchor, 'x') ??
+        input.chart.widthPt ??
+        chartPixelsToPoints(input.chart.width),
+      height:
+        anchorExtentPt(input.chart.anchor, 'y') ??
+        input.chart.heightPt ??
+        chartPixelsToPoints(input.chart.height),
+      widthPt: anchorExtentPt(input.chart.anchor, 'x') ?? input.chart.widthPt,
+      heightPt: anchorExtentPt(input.chart.anchor, 'y') ?? input.chart.heightPt,
     },
     export: input.exportOptions,
     implementation: {

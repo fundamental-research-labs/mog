@@ -5,6 +5,7 @@ import { toChartConfig, unsupportedChartTypeError } from '../bridge/chart-config
 
 const SHEET_A: SheetId = toSheetId('sheet-a');
 const CHART_ID = 'chart-1';
+const EMU_PER_PT = 12700;
 
 function chart(overrides: Partial<ChartFloatingObject> = {}): ChartFloatingObject {
   return {
@@ -26,8 +27,9 @@ describe('chart config normalizer', () => {
       chart({
         chartType: 'line',
         widthCells: undefined,
-        width: 560,
+        width: 640,
         heightCells: 3,
+        height: 300,
         axis: {
           categoryAxis: { axisType: 'dateAxis', visible: false },
           valueAxis: { axisType: 'value', visible: true },
@@ -37,8 +39,8 @@ describe('chart config normalizer', () => {
     );
 
     expect(config.type).toBe('line');
-    expect(config.width).toBe(7);
-    expect(config.height).toBe(3);
+    expect(config.width).toBe(480);
+    expect(config.height).toBe(225);
     expect(config.axis?.xAxis).toMatchObject({ type: 'dateAxis', show: false });
     expect(config.axis?.yAxis).toMatchObject({ type: 'value', show: true });
     expect(config.axis?.secondaryCategoryAxis).toMatchObject({
@@ -48,18 +50,39 @@ describe('chart config normalizer', () => {
     });
   });
 
-  it('derives missing render cell spans from imported pixel geometry', () => {
+  it('derives render point dimensions from imported pixel geometry', () => {
     const config = toChartConfig(
       chart({
         widthCells: undefined,
         heightCells: undefined,
-        width: 3360,
-        height: 840,
+        width: 640,
+        height: 300,
       } as unknown as Partial<ChartFloatingObject>),
     );
 
-    expect(config.width).toBe(42);
-    expect(config.height).toBe(42);
+    expect(config.width).toBe(480);
+    expect(config.height).toBe(225);
+  });
+
+  it('derives render point dimensions from imported anchor extents', () => {
+    const config = toChartConfig(
+      chart({
+        widthPt: 1,
+        heightPt: 1,
+        anchor: {
+          anchorRow: 0,
+          anchorCol: 0,
+          anchorCellId: 'cell-0' as never,
+          extentCxEmu: 480 * EMU_PER_PT,
+          extentCyEmu: 225 * EMU_PER_PT,
+        },
+      } as unknown as Partial<ChartFloatingObject>),
+    );
+
+    expect(config.widthPt).toBe(480);
+    expect(config.heightPt).toBe(225);
+    expect(config.width).toBe(480);
+    expect(config.height).toBe(225);
   });
 
   it('maps imported bubble value-axis pairs to XY axes and suppresses invalid shared-side labels', () => {

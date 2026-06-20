@@ -59,8 +59,8 @@ function makeConfig(overrides: Partial<StoredChartConfig> = {}): StoredChartConf
     type: 'bar',
     anchorRow: 0,
     anchorCol: 0,
-    width: 8,
-    height: 15,
+    width: 320,
+    height: 150,
     dataRange: 'A1:D10',
     ...overrides,
   };
@@ -1693,8 +1693,8 @@ describe('configToSpec - integration', () => {
     const config = makeConfig({ type: 'bar', title: 'Sales' });
     const spec = configToSpec(config, SINGLE_SERIES_DATA);
 
-    expect(spec.width).toBe(640); // 8 * 80
-    expect(spec.height).toBe(300); // 15 * 20
+    expect(spec.width).toBe(640); // 320pt * 2 canvas px/pt
+    expect(spec.height).toBe(300); // 150pt * 2 canvas px/pt
     expect(spec.mark).toEqual({
       type: 'bar',
       fillField: SERIES_FILL_FIELD,

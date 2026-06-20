@@ -186,6 +186,11 @@
       "types": "./dist/control-plane/index.d.ts",
       "import": "./dist/control-plane/index.js"
     },
+    "./versioning": {
+      "development": "./src/versioning/index.ts",
+      "types": "./dist/versioning/index.d.ts",
+      "import": "./dist/versioning/index.js"
+    },
     "./connections": {
       "development": "./src/connections/index.ts",
       "types": "./dist/connections/index.d.ts",
@@ -878,6 +883,10 @@
       "./control-plane": {
         "types": "./dist/control-plane/index.d.ts",
         "import": "./dist/control-plane/index.js"
+      },
+      "./versioning": {
+        "types": "./dist/versioning/index.d.ts",
+        "import": "./dist/versioning/index.js"
       },
       "./connections": {
         "types": "./dist/connections/index.d.ts",

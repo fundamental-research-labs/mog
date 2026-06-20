@@ -47,7 +47,11 @@ export async function queryPivotByName(params: {
     (placement) => fieldNameById.get(placement.fieldId) ?? placement.fieldId,
   );
   const valueFieldLabels = valuePlacements.map((placement) =>
-    automaticPivotValuePlacementDisplayName({ config: pivot, placement }),
+    automaticPivotValuePlacementDisplayName({
+      config: pivot,
+      placement,
+      displayName: placement.displayName,
+    }),
   );
 
   const colDimensionTuples = buildColumnDimensionTuples(

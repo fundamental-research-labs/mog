@@ -137,4 +137,33 @@ describe('queryPivotByName', () => {
       }),
     );
   });
+
+  it('uses explicit value placement display names as query value labels', async () => {
+    const config = makeConfig();
+    config.placements = config.placements.map((placement) =>
+      placement.area === 'value'
+        ? { ...placement, displayName: 'Sales % Row', showValuesAs: { type: 'percentOfRowTotal' } }
+        : placement,
+    );
+    const ctx = {
+      pivot: {
+        getAllPivots: jest.fn().mockResolvedValue([config]),
+        compute: jest.fn().mockResolvedValue(makeResult()),
+      },
+    } as any;
+
+    await expect(
+      queryPivotByName({ ctx, sheetId: SHEET_ID, pivotName: 'SalesPivot' }),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        valueFields: ['Sales % Row'],
+        records: expect.arrayContaining([
+          {
+            dimensions: { Region: 'East', Product: 'Widget' },
+            values: { 'Sales % Row': 100 },
+          },
+        ]),
+      }),
+    );
+  });
 });

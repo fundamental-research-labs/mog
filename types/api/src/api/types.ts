@@ -734,6 +734,8 @@ export interface PivotValueField {
   aggregation: 'sum' | 'count' | 'average' | 'max' | 'min';
   /** Custom label for the value field */
   label?: string;
+  /** Optional "Show Values As" calculation for this value field. */
+  showValuesAs?: ShowValuesAsConfig;
 }
 
 /** Placement-first field insertion spec for a pivot table handle. */
@@ -828,7 +830,7 @@ export interface PivotTableHandle {
   /** Side-effect-free handle-local introspection bound to this pivot ID. */
   getInfo(options?: PivotHandleInfoOptions): Promise<PivotHandleInfo>;
   /** Get the current configuration including all fields */
-  getConfig(): PivotTableConfig;
+  getConfig(): DataPivotTableConfig;
   /** Update the pivot table data configuration. */
   update(
     updates: Partial<Omit<DataPivotTableConfig, 'id' | 'createdAt'>>,

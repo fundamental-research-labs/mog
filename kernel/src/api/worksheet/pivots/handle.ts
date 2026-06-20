@@ -373,9 +373,8 @@ export function buildPivotTableHandle(options: PivotHandleBuilderOptions): Pivot
       };
     },
 
-    getConfig(): ApiPivotTableConfig {
-      const current = currentConfig('getConfig');
-      return toApiConfig(current, current.sourceSheetName ?? sourceSheetName);
+    getConfig(): DataPivotTableConfig {
+      return JSON.parse(JSON.stringify(currentConfig('getConfig'))) as DataPivotTableConfig;
     },
 
     async update(

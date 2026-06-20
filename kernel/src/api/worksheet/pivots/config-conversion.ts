@@ -24,6 +24,8 @@ export function dataConfigToApiConfig(
   dataConfig: DataPivotTableConfig,
   sourceSheetName: string | null,
 ): ApiPivotTableConfig {
+  const fieldNameById = new Map(dataConfig.fields.map((field) => [field.id, field.name]));
+  const fieldName = (fieldId: string): string => fieldNameById.get(fieldId) ?? fieldId;
   const rowFields: string[] = [];
   const columnFields: string[] = [];
   const valueFields: {
@@ -31,23 +33,24 @@ export function dataConfigToApiConfig(
     field: string;
     aggregation: 'sum' | 'count' | 'average' | 'max' | 'min';
     label?: string;
+    showValuesAs?: DataPivotTableConfig['placements'][number]['showValuesAs'];
   }[] = [];
-  const filterFields: string[] = [];
+  const filterFields = new Set<string>();
 
   for (const placement of dataConfig.placements) {
     switch (placement.area as PivotFieldArea) {
       case 'row':
-        rowFields.push(placement.fieldId);
+        rowFields.push(fieldName(placement.fieldId));
         break;
       case 'column':
-        columnFields.push(placement.fieldId);
+        columnFields.push(fieldName(placement.fieldId));
         break;
-      case 'value':
-        valueFields.push({
+      case 'value': {
+        const valueField: (typeof valueFields)[number] = {
           placementId:
             placement.placementId ??
             makePlacementId('value', placement.fieldId, placement.position),
-          field: placement.fieldId,
+          field: fieldName(placement.fieldId),
           aggregation: (placement.aggregateFunction ?? 'sum') as
             | 'sum'
             | 'count'
@@ -55,12 +58,21 @@ export function dataConfigToApiConfig(
             | 'max'
             | 'min',
           label: placement.displayName ?? undefined,
-        });
+        };
+        if (placement.showValuesAs) {
+          valueField.showValuesAs = placement.showValuesAs;
+        }
+        valueFields.push(valueField);
         break;
+      }
       case 'filter':
-        filterFields.push(placement.fieldId);
+        filterFields.add(fieldName(placement.fieldId));
         break;
     }
+  }
+
+  for (const filter of dataConfig.filters) {
+    filterFields.add(fieldName(filter.fieldId));
   }
 
   return {
@@ -69,7 +81,7 @@ export function dataConfigToApiConfig(
     rowFields,
     columnFields,
     valueFields,
-    filterFields,
+    filterFields: [...filterFields],
     allowMultipleFiltersPerField: dataConfig.allowMultipleFiltersPerField ?? undefined,
     autoFormat: dataConfig.autoFormat ?? undefined,
     preserveFormatting: dataConfig.preserveFormatting ?? undefined,

@@ -297,6 +297,141 @@ fn pivot_create_treats_null_optional_sheet_ids_as_absent() {
 }
 
 #[test]
+fn pivot_update_persists_detected_fields_for_sparse_placement_config() {
+    let snap = simple_snapshot();
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let sid = sheet_id();
+
+    engine
+        .set_cell(
+            &sid,
+            cell_id_a1(),
+            0,
+            0,
+            crate::bridge_types::CellInput::Parse {
+                text: "Region".into(),
+            },
+        )
+        .expect("write Region header");
+    engine
+        .set_cell(
+            &sid,
+            cell_id_b1(),
+            0,
+            1,
+            crate::bridge_types::CellInput::Parse {
+                text: "Sales".into(),
+            },
+        )
+        .expect("write Sales header");
+    engine
+        .set_cell(
+            &sid,
+            cell_id_a2(),
+            1,
+            0,
+            crate::bridge_types::CellInput::Parse {
+                text: "East".into(),
+            },
+        )
+        .expect("write Region value");
+    engine
+        .set_cell(
+            &sid,
+            cell_types::CellId::from_uuid_str("550e8400-e29b-41d4-a716-446655440004")
+                .expect("B2 cell id"),
+            1,
+            1,
+            crate::bridge_types::CellInput::Parse { text: "100".into() },
+        )
+        .expect("write Sales value");
+
+    let config = json!({
+        "id": "caller-id",
+        "name": "SparsePivot",
+        "sourceSheetId": sid.to_uuid_string(),
+        "sourceSheetName": "Sheet1",
+        "sourceRange": { "startRow": 0, "startCol": 0, "endRow": 1, "endCol": 1 },
+        "outputSheetName": "Sheet1",
+        "outputLocation": { "row": 5, "col": 0 },
+        "fields": [],
+        "placements": [],
+        "filters": []
+    });
+
+    let (_patches, created_result) = engine.pivot_create(config).expect("pivot create");
+    let created: domain_types::domain::pivot::PivotTableConfig = created_result
+        .extract_data()
+        .expect("created pivot config in data");
+    assert!(created.fields.is_empty());
+
+    let mut updated = created.clone();
+    updated.placements = vec![
+        domain_types::domain::pivot::PivotFieldPlacementFlat {
+            placement_id: Default::default(),
+            field_id: domain_types::domain::pivot::FieldId::from("Region"),
+            calculated_field_id: None,
+            area: domain_types::domain::pivot::PivotFieldArea::Row,
+            position: 0,
+            aggregate_function: None,
+            sort_order: None,
+            custom_sort_list: None,
+            sort_by_value: None,
+            date_grouping: None,
+            number_grouping: None,
+            show_subtotals: None,
+            display_name: None,
+            number_format: None,
+            show_values_as: None,
+        },
+        domain_types::domain::pivot::PivotFieldPlacementFlat {
+            placement_id: Default::default(),
+            field_id: domain_types::domain::pivot::FieldId::from("Sales"),
+            calculated_field_id: None,
+            area: domain_types::domain::pivot::PivotFieldArea::Value,
+            position: 0,
+            aggregate_function: Some(domain_types::domain::analytics::AggregateFunction::Sum),
+            sort_order: None,
+            custom_sort_list: None,
+            sort_by_value: None,
+            date_grouping: None,
+            number_grouping: None,
+            show_subtotals: None,
+            display_name: None,
+            number_format: None,
+            show_values_as: None,
+        },
+    ];
+
+    let (_patches, update_result) = engine
+        .pivot_update(&sid, &created.id, updated)
+        .expect("pivot update");
+    let updated_config: Option<domain_types::domain::pivot::PivotTableConfig> = update_result
+        .extract_data()
+        .expect("updated pivot config in data");
+    let updated_config = updated_config.expect("pivot should be updated");
+
+    assert_eq!(
+        updated_config
+            .fields
+            .iter()
+            .map(|field| (field.id.as_str(), field.name.as_str()))
+            .collect::<Vec<_>>(),
+        vec![("Region", "Region"), ("Sales", "Sales")]
+    );
+
+    let loaded = engine
+        .pivot_get(&sid, &created.id)
+        .expect("pivot should load after update");
+    assert_eq!(loaded.fields, updated_config.fields);
+
+    let result = engine
+        .pivot_compute_from_source(&sid, &created.id, None)
+        .expect("stored pivot config should compute");
+    assert_eq!(result.source_row_count, 1);
+}
+
+#[test]
 fn pivot_create_with_sheet_can_insert_before_source_sheet() {
     let snap = simple_snapshot();
     let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();

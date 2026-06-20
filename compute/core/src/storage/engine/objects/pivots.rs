@@ -45,7 +45,8 @@ impl YrsComputeEngine {
         if let Some(sheet) = self.mirror.get_sheet(sheet_id) {
             config.output_sheet_name = sheet.name.clone();
         }
-        self.resolve_pivot_source_identity(config)
+        let config = self.resolve_pivot_source_identity(config)?;
+        self.populate_missing_pivot_fields_from_source(config)
     }
 
     fn materialize_pivot_table(
@@ -428,6 +429,32 @@ impl YrsComputeEngine {
         Ok(data)
     }
 
+    fn populate_missing_pivot_fields_from_data(
+        config: &mut PivotTableConfig,
+        data: &[Vec<CellValue>],
+    ) {
+        if !config.fields.is_empty() || config.placements.is_empty() {
+            return;
+        }
+
+        let mut detected = compute_pivot::detect_fields(data);
+        for field in &mut detected {
+            field.id = compute_pivot::FieldId::new(field.name.clone());
+        }
+        config.fields = detected;
+    }
+
+    fn populate_missing_pivot_fields_from_source(
+        &self,
+        mut config: PivotTableConfig,
+    ) -> Result<PivotTableConfig, ComputeError> {
+        if config.fields.is_empty() && !config.placements.is_empty() {
+            let data = self.load_pivot_source_data(&config)?;
+            Self::populate_missing_pivot_fields_from_data(&mut config, &data);
+        }
+        Ok(config)
+    }
+
     fn prepare_pivot_engine_config(
         &self,
         mut config: PivotTableConfig,
@@ -439,13 +466,7 @@ impl YrsComputeEngine {
         ),
         ComputeError,
     > {
-        if config.fields.is_empty() && !config.placements.is_empty() {
-            let mut detected = compute_pivot::detect_fields(data);
-            for field in &mut detected {
-                field.id = compute_pivot::FieldId::new(field.name.clone());
-            }
-            config.fields = detected;
-        }
+        Self::populate_missing_pivot_fields_from_data(&mut config, data);
 
         let engine_config =
             compute_pivot::PivotEngineConfig::try_from(config).map_err(|e| ComputeError::Eval {
@@ -482,6 +503,7 @@ impl YrsComputeEngine {
             })?;
         let config = self.resolve_pivot_source_identity(config)?;
         let (sheet_id, config) = self.resolve_pivot_output_identity(config)?;
+        let config = self.populate_missing_pivot_fields_from_source(config)?;
         let result = services::objects::pivot_create(&mut self.stores, &sheet_id, config)?;
         // Pivot CRUD doesn't touch cells but `recalculate_with_options` uses
         // `materialize_all_pivots` to render output — must not short-circuit.
@@ -523,6 +545,7 @@ impl YrsComputeEngine {
             config.output_sheet_name = sheet_name.to_string();
         }
         config.output_sheet_id = Some(sheet_id.to_uuid_string());
+        config = self.populate_missing_pivot_fields_from_source(config)?;
         let pivot =
             services::objects::pivot_create_with_sheet_inner(&mut self.stores, &sheet_id, config)?;
         sheet_result.pivot_changes.push(PivotTableChange {

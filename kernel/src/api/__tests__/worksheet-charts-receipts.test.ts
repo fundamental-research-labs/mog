@@ -215,10 +215,20 @@ describe('WorksheetChartsImpl mutation receipts', () => {
         kind: 'chart.axis.setTitle',
         status: 'applied',
         axisType: 'value',
+        title: '=A1',
       }),
     );
-    expect(axisReceipt.effects).toEqual(
-      expect.arrayContaining([expect.objectContaining({ type: 'changedRange', range: 'A1' })]),
+    expect(axisReceipt.effects).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ type: 'changedRange' })]),
+    );
+    expect(updateChart).toHaveBeenCalledWith(
+      SHEET_ID,
+      'chart-1',
+      expect.objectContaining({
+        axis: expect.objectContaining({
+          valueAxis: expect.objectContaining({ title: '=A1' }),
+        }),
+      }),
     );
 
     const labelReceipt = await charts.setDataLabelHeight('chart-1', 0, 0, 18);
@@ -249,8 +259,33 @@ describe('WorksheetChartsImpl mutation receipts', () => {
       makeChart({
         chartType: 'line',
         dataRange: 'A1:B4',
+        title: 'Revenue',
         legend: { show: true, visible: true, position: 'bottom' },
-        axis: { categoryAxis: { visible: true, title: 'Quarter' } },
+        axis: {
+          categoryAxis: { visible: true, title: 'Quarter' },
+          secondaryValueAxis: { visible: true, title: 'Margin' },
+        },
+      }),
+    );
+
+    const appModel = await charts.getAppModel('chart-1');
+    expect(appModel).toEqual(
+      expect.objectContaining({
+        title: expect.objectContaining({ text: 'Revenue', visible: true }),
+        legend: expect.objectContaining({ visible: true, position: 'bottom' }),
+        axes: expect.objectContaining({
+          category: expect.objectContaining({
+            applicable: true,
+            visible: true,
+            title: 'Quarter',
+          }),
+          secondaryValue: expect.objectContaining({
+            applicable: true,
+            visible: true,
+            title: 'Margin',
+          }),
+        }),
+        source: expect.objectContaining({ kind: 'range', supportsOrientationSwitch: true }),
       }),
     );
 
@@ -268,10 +303,10 @@ describe('WorksheetChartsImpl mutation receipts', () => {
         }),
       }),
     );
+    expect(legendReceipt.effects[0]?.details).not.toHaveProperty('appModelBefore');
+    expect(legendReceipt.effects[0]?.details).not.toHaveProperty('appModelAfter');
 
-    const axisReceipt = await charts.setAxisTitle('chart-1', 'category', 'Month', {
-      titleKind: 'literal',
-    });
+    const axisReceipt = await charts.setAxisTitle('chart-1', 'category', 'Month');
     expect(axisReceipt).toEqual(
       expect.objectContaining({
         kind: 'chart.axis.setTitle',
@@ -291,6 +326,60 @@ describe('WorksheetChartsImpl mutation receipts', () => {
         axis: expect.objectContaining({
           categoryAxis: expect.objectContaining({ title: 'Month', titleVisible: true }),
         }),
+      }),
+    );
+
+    const axisVisibleReceipt = await charts.setAxisVisible('chart-1', 'secondaryValue', false);
+    expect(axisVisibleReceipt).toEqual(
+      expect.objectContaining({
+        kind: 'chart.axis.setVisible',
+        status: 'applied',
+        axisRole: 'secondaryValue',
+        axisType: 'value',
+        visible: false,
+      }),
+    );
+    expect(updateChart).toHaveBeenLastCalledWith(
+      SHEET_ID,
+      'chart-1',
+      expect.objectContaining({
+        axis: expect.objectContaining({
+          secondaryValueAxis: expect.objectContaining({ visible: false }),
+        }),
+      }),
+    );
+
+    const hiddenTitleReceipt = await charts.setChartTitleVisible('chart-1', false);
+    expect(hiddenTitleReceipt).toEqual(
+      expect.objectContaining({
+        kind: 'chart.title.setVisible',
+        status: 'applied',
+        visible: false,
+        appModelAfter: expect.objectContaining({
+          title: expect.objectContaining({ visible: false }),
+        }),
+      }),
+    );
+
+    const pieCase = createMutableChartsApi(
+      makeChart({
+        chartType: 'pie',
+        dataRange: 'A1:B4',
+      }),
+    );
+    const pieAppModel = await pieCase.charts.getAppModel('chart-1');
+    expect(pieAppModel?.axes.category).toEqual(
+      expect.objectContaining({
+        applicable: false,
+        visible: false,
+        source: 'absent',
+      }),
+    );
+    expect(pieAppModel?.axes.value).toEqual(
+      expect.objectContaining({
+        applicable: false,
+        visible: false,
+        source: 'absent',
       }),
     );
   });
@@ -342,6 +431,49 @@ describe('WorksheetChartsImpl mutation receipts', () => {
       }),
     );
     expect(explicitCase.updateChart).not.toHaveBeenCalled();
+
+    const invalidRangeCase = createMutableChartsApi(
+      makeChart({
+        chartType: 'column',
+        dataRange: 'not a range',
+      }),
+    );
+    const invalidRange = await invalidRangeCase.charts.switchSeriesOrientation('chart-1');
+    expect(invalidRange).toEqual(
+      expect.objectContaining({
+        kind: 'chart.source.switchSeriesOrientation',
+        status: 'unsupported',
+        sourceBindingBefore: expect.objectContaining({
+          kind: 'unsupported',
+          diagnostics: ['chart-data-range-is-not-parseable'],
+        }),
+      }),
+    );
+    expect(invalidRangeCase.updateChart).not.toHaveBeenCalled();
+
+    const metadataCase = createMutableChartsApi(
+      makeChart({
+        chartType: 'column',
+        dataRange: 'A1:B4',
+        seriesOrientation: 'columns',
+        series: [{ name: 'Metadata only' }],
+      }),
+    );
+    const metadataSwitch = await metadataCase.charts.switchSeriesOrientation('chart-1');
+    expect(metadataSwitch).toEqual(
+      expect.objectContaining({
+        status: 'applied',
+        sourceBindingChange: expect.objectContaining({
+          renderedGroupingChanged: true,
+          explicitSeriesAction: 'preserved',
+        }),
+      }),
+    );
+    expect(metadataCase.updateChart).toHaveBeenCalledWith(
+      SHEET_ID,
+      'chart-1',
+      expect.objectContaining({ seriesOrientation: 'rows' }),
+    );
   });
 
   it('returns failed receipts for inferred dataRange series hidden by explicit series', async () => {

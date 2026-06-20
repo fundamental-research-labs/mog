@@ -58,6 +58,7 @@ type ChartMutationReceiptFields = Pick<
 
 export type ChartMutationTarget = Partial<ChartMutationReceiptFields> & {
   readonly changedRanges?: readonly (string | null | undefined)[];
+  readonly chart?: Chart | null;
 };
 
 function compactDetails(details: Record<string, unknown>): Record<string, unknown> {
@@ -90,6 +91,24 @@ function receiptTargetFields(
     sourceBindingAfter: target.sourceBindingAfter,
     sourceBindingChange: target.sourceBindingChange,
   }) as Partial<ChartMutationReceiptFields>;
+}
+
+function receiptDetailFields(target: ChartMutationTarget = {}): Record<string, unknown> {
+  return compactDetails({
+    seriesIndex: target.seriesIndex,
+    fromSeriesIndex: target.fromSeriesIndex,
+    toSeriesIndex: target.toSeriesIndex,
+    trendlineIndex: target.trendlineIndex,
+    pointIndex: target.pointIndex,
+    axisType: target.axisType,
+    axisRole: target.axisRole,
+    range: target.range,
+    visible: target.visible,
+    title: target.title,
+    series: target.series,
+    trendline: target.trendline,
+    sourceBindingChange: target.sourceBindingChange,
+  });
 }
 
 function addChangedRange(ranges: Set<string>, range: string | null | undefined): void {
@@ -150,7 +169,7 @@ export function buildAppliedChartMutationReceipt(
   const targetDetails = compactDetails({
     mutationKind: kind,
     targetType: chartMutationTargetKind(target),
-    ...targetFields,
+    ...receiptDetailFields(target),
     objectType: 'chart',
   });
   const changedRanges = collectChangedRanges(target);
@@ -210,7 +229,7 @@ export function buildFailedChartMutationReceipt(
   const targetFields = receiptTargetFields(target);
   const diagnosticDetails = compactDetails({
     mutationKind: kind,
-    ...targetFields,
+    ...receiptDetailFields(target),
     ...details,
   });
   const diagnostic: OperationDiagnostic = {
@@ -252,7 +271,7 @@ export function buildUnsupportedChartMutationReceipt(
   const targetFields = receiptTargetFields(target);
   const diagnosticDetails = compactDetails({
     mutationKind: kind,
-    ...targetFields,
+    ...receiptDetailFields(target),
     ...details,
   });
   const diagnostic: OperationDiagnostic = {
@@ -269,7 +288,7 @@ export function buildUnsupportedChartMutationReceipt(
     status: 'unsupported',
     sheetId,
     chartId,
-    chart: target.appModelBefore?.raw ?? null,
+    chart: target.chart ?? null,
     effects: [
       {
         type: 'worksheetUnchanged',

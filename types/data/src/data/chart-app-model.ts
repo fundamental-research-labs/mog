@@ -1,6 +1,5 @@
 import type {
   AxisType,
-  Chart,
   ChartType,
   LegendPosition,
   SeriesOrientation,
@@ -29,6 +28,7 @@ export interface ChartLegendAppModel {
 
 export interface ChartAxisAppModel {
   readonly role: ChartAxisRole;
+  readonly applicable: boolean;
   readonly visible: boolean;
   readonly title: string | null;
   readonly titleVisible: boolean;
@@ -69,7 +69,6 @@ export interface ChartAppModel {
     readonly series?: ChartAxisAppModel;
   };
   readonly source: ChartSourceBindingAppModel;
-  readonly raw: Chart;
 }
 
 export interface ChartSourceBindingChange {

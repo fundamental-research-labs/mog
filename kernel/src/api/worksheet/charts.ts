@@ -754,9 +754,8 @@ export class WorksheetChartsImpl implements WorksheetCharts {
     chartId: string,
     axisType: ChartAxisRole,
     title: string,
-    options?: { titleKind?: 'literal' | 'formula' },
   ): Promise<ChartMutationReceipt> {
-    return setChartAxisTitleAppModelMutation(this.ctx, this.sheetId, chartId, axisType, title, options);
+    return setChartAxisTitleAppModelMutation(this.ctx, this.sheetId, chartId, axisType, title);
   }
 
   async setAxisVisible(chartId: string, axisRole: ChartAxisRole, visible: boolean): Promise<ChartMutationReceipt> {

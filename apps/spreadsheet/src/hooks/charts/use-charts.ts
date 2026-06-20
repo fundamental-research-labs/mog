@@ -30,7 +30,7 @@ import { extractChartData, extractChartDataFromRange, parseRange } from '@mog/ch
 import type { ChartPosition } from '@mog/grid-renderer';
 import type { ChartMutationReceipt, WorksheetWithInternals } from '@mog-sdk/contracts/api';
 import type { CellRange, SheetId } from '@mog-sdk/contracts/core';
-import type { ChartAxisRole } from '@mog-sdk/contracts/data/chart-app-model';
+import type { ChartAppModel, ChartAxisRole } from '@mog-sdk/contracts/data/chart-app-model';
 import { parseCellRange } from '@mog/spreadsheet-utils/a1';
 import type { ChartDefinition } from '../../components/charts/chart-types';
 import {
@@ -79,7 +79,6 @@ export interface UseChartsReturn {
     chartId: string,
     axisRole: ChartAxisRole,
     title: string,
-    options?: { titleKind?: 'literal' | 'formula' },
   ) => Promise<ChartMutationReceipt>;
 
   /** Set axis visibility through the semantic chart contract. */
@@ -349,6 +348,7 @@ async function serializedToChartDefinition(
   wb: ReturnType<typeof useWorkbook>,
   ws: WorksheetWithInternals,
   serialized: SerializedChart,
+  appModelOverride?: ChartAppModel,
 ): Promise<ChartDefinition> {
   // Resolve chart position using CellId if available
   const resolvedPosition = await getChartPosition(ws, serialized);
@@ -383,7 +383,9 @@ async function serializedToChartDefinition(
 
   // Extract chart data using resolved data range
   const dataRange = await getChartDataRange(ws, serialized);
-  const appModel = await ws.charts.getAppModel(serialized.id, { materialization: 'available' });
+  const appModel =
+    appModelOverride ??
+    (await ws.charts.getAppModel(serialized.id, { materialization: 'available' }));
   const sourceSheets = await resolveChartSourceSheets(wb, serialized);
   const cellAccessor = createCellAccessor(ws, serialized.sheetId ?? '', sourceSheets);
   let data: ChartData;
@@ -603,7 +605,12 @@ export function useCharts({ sheetId }: UseChartsOptions): UseChartsReturn {
           // Case 3: Cache miss - compute new definition
           // This happens when: new chart, config changed, or data changed
           // Pass ws for CellId resolution
-          const definition = await serializedToChartDefinition(wb, ws, serialized);
+          const definition = await serializedToChartDefinition(
+            wb,
+            ws,
+            serialized,
+            cached?.serialized === serialized ? cached.definition.appModel : undefined,
+          );
           cache.set(serialized.id, { serialized, dataVersion, definition });
           return definition;
         }),
@@ -655,12 +662,8 @@ export function useCharts({ sheetId }: UseChartsOptions): UseChartsReturn {
   );
 
   const setAxisTitle = useCallback(
-    (
-      chartId: string,
-      axisRole: ChartAxisRole,
-      title: string,
-      options?: { titleKind?: 'literal' | 'formula' },
-    ) => wb.getSheetById(sheetId).charts.setAxisTitle(chartId, axisRole, title, options),
+    (chartId: string, axisRole: ChartAxisRole, title: string) =>
+      wb.getSheetById(sheetId).charts.setAxisTitle(chartId, axisRole, title),
     [sheetId, wb],
   );
 

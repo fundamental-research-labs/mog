@@ -21,12 +21,6 @@ function seriesBindingKind(series: readonly SeriesConfig[]): ChartSourceBindingA
   return 'explicitSeries';
 }
 
-function orientationForDataRange(chart: Chart): ChartSourceBindingAppModel['orientation'] {
-  if (chart.seriesOrientation) return chart.seriesOrientation;
-  const parsed = parseCellRange(chart.dataRange ?? '');
-  return parsed ? detectSeriesOrientation(parsed) : undefined;
-}
-
 export function chartSourceBindingFromChart(chart: Chart): ChartSourceBindingAppModel {
   const explicitSeries = chart.series ?? [];
   const renderableSeriesCount = explicitSeries.filter(hasRenderableExplicitSeriesData).length;
@@ -48,15 +42,29 @@ export function chartSourceBindingFromChart(chart: Chart): ChartSourceBindingApp
   }
 
   if (chart.dataRange) {
+    const parsedDataRange = parseCellRange(chart.dataRange);
+    if (!parsedDataRange) {
+      return {
+        kind: 'unsupported',
+        dataRange: chart.dataRange,
+        categoryRange: chart.categoryRange,
+        seriesRange: chart.seriesRange,
+        explicitSeriesCount: explicitSeries.length || undefined,
+        renderableSeriesCount,
+        supportsOrientationSwitch: false,
+        diagnostics: ['chart-data-range-is-not-parseable'],
+      };
+    }
+    const orientation = chart.seriesOrientation ?? detectSeriesOrientation(parsedDataRange);
     return {
       kind: explicitSeries.length > 0 ? 'partial' : 'range',
-      orientation: orientationForDataRange(chart),
+      orientation,
       dataRange: chart.dataRange,
       categoryRange: chart.categoryRange,
       seriesRange: chart.seriesRange,
       explicitSeriesCount: explicitSeries.length || undefined,
       renderableSeriesCount,
-      supportsOrientationSwitch: explicitSeries.length === 0,
+      supportsOrientationSwitch: true,
       diagnostics:
         explicitSeries.length > 0
           ? ['series-metadata-present-without-renderable-explicit-values']

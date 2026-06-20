@@ -24,7 +24,6 @@ import { applyUpdate } from './chart-api-helpers';
 import {
   buildAppliedChartMutationReceipt,
   buildUnsupportedChartMutationReceipt,
-  formulaRangeCandidate,
   readChartForMutation,
   readResolvedChart,
   type ChartMutationTarget,
@@ -34,18 +33,6 @@ function axisTypeForRole(role: ChartAxisRole): 'category' | 'value' | undefined 
   if (role === 'category' || role === 'secondaryCategory') return 'category';
   if (role === 'value' || role === 'secondaryValue') return 'value';
   return undefined;
-}
-
-function changedRangesForAxisTitle(
-  title: string,
-  options: { titleKind?: 'literal' | 'formula' } | undefined,
-): string[] {
-  if (options?.titleKind === 'literal') return [];
-  if (options?.titleKind === 'formula' || title.trim().startsWith('=')) {
-    const range = formulaRangeCandidate(title);
-    return range ? [range] : [];
-  }
-  return [];
 }
 
 function sourceBindingChange(
@@ -133,7 +120,6 @@ export async function setChartAxisTitleAppModelMutation(
   chartId: string,
   axisRole: ChartAxisRole,
   title: string,
-  options?: { titleKind?: 'literal' | 'formula' },
 ): Promise<ChartMutationReceipt> {
   return applyChartAppModelUpdateAndReceipt(
     ctx,
@@ -145,7 +131,6 @@ export async function setChartAxisTitleAppModelMutation(
       axisRole,
       axisType: axisTypeForRole(axisRole),
       title,
-      changedRanges: changedRangesForAxisTitle(title, options),
     },
   );
 }
@@ -183,6 +168,7 @@ export async function switchChartSeriesOrientationMutation(
       read.resolvedChartId,
       'Chart source binding does not support switching series orientation',
       {
+        chart: read.chart,
         appModelBefore,
         appModelAfter: appModelBefore,
         sourceBindingBefore: appModelBefore.source,
@@ -215,7 +201,7 @@ export async function switchChartSeriesOrientationMutation(
     sourceBindingChange: sourceBindingChange(
       appModelBefore.source,
       sourceAfter,
-      'notApplicable',
+      explicitSeriesSwitchAction(appModelBefore.source),
     ),
   });
 }

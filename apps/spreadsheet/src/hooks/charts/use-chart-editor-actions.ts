@@ -170,7 +170,7 @@ export function useChartEditorActions(
   const handleChartAxisTitleChange = useCallback(
     (axisRole: ChartAxisRole, title: string) => {
       if (editingChartId) {
-        void setAxisTitle(editingChartId, axisRole, title, { titleKind: 'literal' });
+        void setAxisTitle(editingChartId, axisRole, title);
       }
     },
     [editingChartId, setAxisTitle],

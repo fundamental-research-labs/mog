@@ -398,12 +398,11 @@ export interface WorksheetCharts {
     group: 'primary' | 'secondary',
   ): Promise<SingleAxisConfig | null>;
 
-  /** Set axis title from a formula string. */
+  /** Set axis title by semantic axis role. Title text is stored literally. */
   setAxisTitle(
     chartId: string,
     axisType: ChartAxisRole,
     title: string,
-    options?: { titleKind?: 'literal' | 'formula' },
   ): Promise<ChartMutationReceipt>;
 
   /** Set axis visibility by semantic axis role. */

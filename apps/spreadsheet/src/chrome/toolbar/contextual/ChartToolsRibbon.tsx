@@ -68,6 +68,11 @@ interface OptimisticTitleToggle {
   checked: boolean;
 }
 
+interface OptimisticLegendToggle {
+  chartId: string;
+  checked: boolean;
+}
+
 // =============================================================================
 // Component
 // =============================================================================
@@ -84,6 +89,8 @@ export function ChartToolsRibbon(_props: ContextualTabProps) {
   const [optimisticTitleToggle, setOptimisticTitleToggle] = useState<OptimisticTitleToggle | null>(
     null,
   );
+  const [optimisticLegendToggle, setOptimisticLegendToggle] =
+    useState<OptimisticLegendToggle | null>(null);
 
   // Get the selected chart
   const selectedChart = charts.find((c) => c.id === selectedChartId);
@@ -97,9 +104,13 @@ export function ChartToolsRibbon(_props: ContextualTabProps) {
     optimisticTitleToggle && optimisticTitleToggle.chartId === selectedChartId
       ? optimisticTitleToggle.checked
       : observedHasTitle;
-  const hasLegend = selectedChart
+  const observedHasLegend = selectedChart
     ? (selectedChart.appModel?.legend.visible ?? (selectedChart.config.legend?.show !== false))
     : false;
+  const hasLegend =
+    optimisticLegendToggle && optimisticLegendToggle.chartId === selectedChartId
+      ? optimisticLegendToggle.checked
+      : observedHasLegend;
 
   useEffect(() => {
     if (!optimisticTitleToggle) {
@@ -115,6 +126,33 @@ export function ChartToolsRibbon(_props: ContextualTabProps) {
       setOptimisticTitleToggle(null);
     }
   }, [optimisticTitleToggle, observedHasTitle, selectedChart, selectedChartId]);
+
+  useEffect(() => {
+    if (!optimisticLegendToggle) {
+      return;
+    }
+
+    if (!selectedChart || !selectedChartId || optimisticLegendToggle.chartId !== selectedChartId) {
+      setOptimisticLegendToggle(null);
+      return;
+    }
+
+    if (optimisticLegendToggle.checked === observedHasLegend) {
+      setOptimisticLegendToggle(null);
+    }
+  }, [optimisticLegendToggle, observedHasLegend, selectedChart, selectedChartId]);
+
+  const clearOptimisticTitleToggle = useCallback((chartId: string, checked: boolean) => {
+    setOptimisticTitleToggle((current) =>
+      current?.chartId === chartId && current.checked === checked ? null : current,
+    );
+  }, []);
+
+  const clearOptimisticLegendToggle = useCallback((chartId: string, checked: boolean) => {
+    setOptimisticLegendToggle((current) =>
+      current?.chartId === chartId && current.checked === checked ? null : current,
+    );
+  }, []);
 
   // ==========================================================================
   // Handlers
@@ -133,20 +171,35 @@ export function ChartToolsRibbon(_props: ContextualTabProps) {
   const handleToggleTitle = useCallback(
     (checked: boolean) => {
       if (selectedChartId && selectedChart) {
-        setOptimisticTitleToggle({ chartId: selectedChartId, checked });
-        void setChartTitleVisible(selectedChartId, checked);
+        const chartId = selectedChartId;
+        setOptimisticTitleToggle({ chartId, checked });
+        void setChartTitleVisible(chartId, checked)
+          .then((receipt) => {
+            if (receipt.status !== 'applied') {
+              clearOptimisticTitleToggle(chartId, checked);
+            }
+          })
+          .catch(() => clearOptimisticTitleToggle(chartId, checked));
       }
     },
-    [selectedChartId, selectedChart, setChartTitleVisible],
+    [clearOptimisticTitleToggle, selectedChartId, selectedChart, setChartTitleVisible],
   );
 
   const handleToggleLegend = useCallback(
     (checked: boolean) => {
       if (selectedChartId) {
-        void setLegendVisible(selectedChartId, checked);
+        const chartId = selectedChartId;
+        setOptimisticLegendToggle({ chartId, checked });
+        void setLegendVisible(chartId, checked)
+          .then((receipt) => {
+            if (receipt.status !== 'applied') {
+              clearOptimisticLegendToggle(chartId, checked);
+            }
+          })
+          .catch(() => clearOptimisticLegendToggle(chartId, checked));
       }
     },
-    [selectedChartId, setLegendVisible],
+    [clearOptimisticLegendToggle, selectedChartId, setLegendVisible],
   );
 
   const handleSwitchRowColumn = useCallback(() => {

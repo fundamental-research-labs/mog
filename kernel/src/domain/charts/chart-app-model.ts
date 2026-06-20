@@ -43,19 +43,44 @@ function defaultAxisType(role: ChartAxisRole): AxisType | undefined {
   }
 }
 
+function chartTypeDefaultsAxes(type: Chart['type']): boolean {
+  switch (type) {
+    case 'pie':
+    case 'doughnut':
+    case 'pieExploded':
+    case 'pie3d':
+    case 'pie3dExploded':
+    case 'doughnutExploded':
+    case 'ofPie':
+    case 'treemap':
+    case 'sunburst':
+    case 'regionMap':
+    case 'funnel':
+      return false;
+    default:
+      return true;
+  }
+}
+
 function toAxisType(value: string | undefined): AxisType | undefined {
   return value === 'category' || value === 'value' || value === 'time' || value === 'log'
     ? value
     : undefined;
 }
 
-function axisModel(axis: AxisConfig | undefined, role: ChartAxisRole): ChartAxisAppModel {
+function axisModel(
+  chart: Chart,
+  axis: AxisConfig | undefined,
+  role: ChartAxisRole,
+): ChartAxisAppModel {
   const single = axisForRole(axis, role);
-  const visible = single ? (single.visible ?? single.show ?? true) : true;
+  const applicable = Boolean(single) || chartTypeDefaultsAxes(chart.type);
+  const visible = applicable && (single ? (single.visible ?? single.show ?? true) : true);
   const title = single?.title?.trim() ? single.title : null;
-  const source: ChartAppModelValueSource = single ? 'explicit' : 'default';
+  const source: ChartAppModelValueSource = single ? 'explicit' : applicable ? 'default' : 'absent';
   return {
     role,
+    applicable,
     visible,
     title,
     titleVisible: Boolean(title) && single?.titleVisible !== false,
@@ -94,12 +119,14 @@ export function chartToAppModel(chart: Chart): ChartAppModel {
     legend && legendPosition !== 'none' && legend.show !== false && legend.visible !== false,
   );
   const secondaryCategory = axisForRole(chart.axis, 'secondaryCategory')
-    ? axisModel(chart.axis, 'secondaryCategory')
+    ? axisModel(chart, chart.axis, 'secondaryCategory')
     : undefined;
   const secondaryValue = axisForRole(chart.axis, 'secondaryValue')
-    ? axisModel(chart.axis, 'secondaryValue')
+    ? axisModel(chart, chart.axis, 'secondaryValue')
     : undefined;
-  const series = axisForRole(chart.axis, 'series') ? axisModel(chart.axis, 'series') : undefined;
+  const series = axisForRole(chart.axis, 'series')
+    ? axisModel(chart, chart.axis, 'series')
+    : undefined;
 
   return {
     id: chart.id,
@@ -115,13 +142,12 @@ export function chartToAppModel(chart: Chart): ChartAppModel {
       source: legend ? 'explicit' : 'absent',
     },
     axes: {
-      category: axisModel(chart.axis, 'category'),
-      value: axisModel(chart.axis, 'value'),
+      category: axisModel(chart, chart.axis, 'category'),
+      value: axisModel(chart, chart.axis, 'value'),
       ...(secondaryCategory ? { secondaryCategory } : {}),
       ...(secondaryValue ? { secondaryValue } : {}),
       ...(series ? { series } : {}),
     },
     source: chartSourceBindingFromChart(chart),
-    raw: chart,
   };
 }

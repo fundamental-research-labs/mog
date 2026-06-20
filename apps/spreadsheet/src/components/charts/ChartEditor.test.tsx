@@ -116,7 +116,76 @@ describe('ChartEditor', () => {
 
     fireEvent.change(input, { target: { value: 'Month' } });
 
+    expect(input).toHaveValue('Month');
+    expect(onSetAxisTitle).not.toHaveBeenCalled();
+
+    fireEvent.blur(input);
+
     expect(onSetAxisTitle).toHaveBeenCalledWith('category', 'Month');
+    expect(onSetAxisTitle).toHaveBeenCalledTimes(1);
     expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('treats null app-model axis titles as authoritative over legacy config', async () => {
+    const appModel = {
+      axes: {
+        category: { title: null },
+        value: { title: null },
+      },
+      legend: { visible: true },
+      title: { visible: true },
+      source: { supportsOrientationSwitch: true },
+    } as ChartAppModel;
+
+    render(
+      <ChartEditor
+        config={{
+          ...BASE_CONFIG,
+          axis: {
+            xAxis: { title: 'Stale X' },
+            yAxis: { title: 'Stale Y' },
+          },
+        }}
+        appModel={appModel}
+        onChange={jest.fn()}
+        onClose={jest.fn()}
+        onDelete={jest.fn()}
+      />,
+    );
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Axis' }));
+
+    expect(screen.getByPlaceholderText('X-axis title')).toHaveValue('');
+    expect(screen.getByPlaceholderText('Y-axis title')).toHaveValue('');
+  });
+
+  it('commits fallback axis title edits on blur', async () => {
+    const onChange = jest.fn();
+
+    render(
+      <ChartEditor
+        config={BASE_CONFIG}
+        onChange={onChange}
+        onClose={jest.fn()}
+        onDelete={jest.fn()}
+      />,
+    );
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Axis' }));
+    const input = screen.getByPlaceholderText('X-axis title');
+
+    fireEvent.change(input, { target: { value: 'Month' } });
+
+    expect(onChange).not.toHaveBeenCalled();
+
+    fireEvent.blur(input);
+
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange).toHaveBeenCalledWith({
+      axis: expect.objectContaining({
+        categoryAxis: expect.objectContaining({ title: 'Month' }),
+        xAxis: expect.objectContaining({ title: 'Month' }),
+      }),
+    });
   });
 });

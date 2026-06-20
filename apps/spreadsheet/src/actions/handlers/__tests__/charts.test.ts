@@ -827,6 +827,76 @@ describe('Chart Handlers - Dialog Actions', () => {
     });
   });
 
+  describe('APPLY_SELECT_DATA', () => {
+    function setupOpenSelectDataDialog(orientation: 'rows' | 'columns' = 'columns') {
+      const deps = createMockDeps();
+      const closeSelectDataDialog = jest.fn();
+      (deps.uiStore as any).getState = () => ({
+        selectDataDialog: {
+          isOpen: true,
+          chartId: 'chart-1',
+          sheetId: deps.getActiveSheetId(),
+          dataRange: 'A1:C5',
+          orientation,
+        },
+        closeSelectDataDialog,
+      });
+      const ws = (deps.workbook as any).getSheetById(deps.getActiveSheetId());
+      return { deps, ws, closeSelectDataDialog };
+    }
+
+    it('updates source data without switching when orientation already matches', async () => {
+      const { deps, ws, closeSelectDataDialog } = setupOpenSelectDataDialog('columns');
+      ws.charts.getAppModel.mockResolvedValue({
+        source: { orientation: 'columns', supportsOrientationSwitch: true },
+      });
+
+      const result = await ChartHandlers.APPLY_SELECT_DATA(deps);
+
+      expect(result.handled).toBe(true);
+      expect(ws.charts.setSourceData).toHaveBeenCalledWith('chart-1', { dataRange: 'A1:C5' });
+      expect(ws.charts.switchSeriesOrientation).not.toHaveBeenCalled();
+      expect(ws.charts.update).not.toHaveBeenCalled();
+      expect(closeSelectDataDialog).toHaveBeenCalledTimes(1);
+    });
+
+    it('switches row/column when requested orientation differs', async () => {
+      const { deps, ws, closeSelectDataDialog } = setupOpenSelectDataDialog('rows');
+      ws.charts.getAppModel.mockResolvedValue({
+        source: { orientation: 'columns', supportsOrientationSwitch: true },
+      });
+
+      const result = await ChartHandlers.APPLY_SELECT_DATA(deps);
+
+      expect(result.handled).toBe(true);
+      expect(ws.charts.setSourceData).toHaveBeenCalledWith('chart-1', { dataRange: 'A1:C5' });
+      expect(ws.charts.switchSeriesOrientation).toHaveBeenCalledWith('chart-1');
+      expect(ws.charts.update).not.toHaveBeenCalled();
+      expect(closeSelectDataDialog).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps dialog open when requested orientation switch is unsupported', async () => {
+      const { deps, ws, closeSelectDataDialog } = setupOpenSelectDataDialog('rows');
+      ws.charts.getAppModel.mockResolvedValue({
+        source: { orientation: 'columns', supportsOrientationSwitch: false },
+      });
+      ws.charts.switchSeriesOrientation.mockResolvedValue({
+        status: 'unsupported',
+        diagnostics: [{ message: 'Cannot switch explicit series' }],
+      });
+
+      const result = await ChartHandlers.APPLY_SELECT_DATA(deps);
+
+      expect(result).toEqual({
+        handled: false,
+        error: 'Cannot switch explicit series',
+      });
+      expect(ws.charts.setSourceData).toHaveBeenCalledWith('chart-1', { dataRange: 'A1:C5' });
+      expect(ws.charts.switchSeriesOrientation).toHaveBeenCalledWith('chart-1');
+      expect(closeSelectDataDialog).not.toHaveBeenCalled();
+    });
+  });
+
   describe('OPEN_INSERT_CHART_WIZARD_DIALOG', () => {
     it('should return handled', async () => {
       const deps = createMockDeps();

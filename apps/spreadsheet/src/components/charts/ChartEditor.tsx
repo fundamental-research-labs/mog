@@ -7,7 +7,7 @@
  * @module components/ChartEditor
  */
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 import type {
   AreaSubType,
@@ -193,14 +193,28 @@ export function ChartEditor({
   onDelete,
 }: ChartEditorProps) {
   const [activeTab, setActiveTab] = useState<TabId>('data');
-  const legendVisible = appModel?.legend.visible ?? (config.legend?.show !== false);
-  const categoryAxisTitle =
-    appModel?.axes.category.title ??
-    config.axis?.categoryAxis?.title ??
-    config.axis?.xAxis?.title ??
-    '';
-  const valueAxisTitle =
-    appModel?.axes.value.title ?? config.axis?.valueAxis?.title ?? config.axis?.yAxis?.title ?? '';
+  const resolvedLegendVisible = appModel?.legend.visible ?? (config.legend?.show !== false);
+  const resolvedCategoryAxisTitle = appModel
+    ? (appModel.axes.category.title ?? '')
+    : (config.axis?.categoryAxis?.title ?? config.axis?.xAxis?.title ?? '');
+  const resolvedValueAxisTitle = appModel
+    ? (appModel.axes.value.title ?? '')
+    : (config.axis?.valueAxis?.title ?? config.axis?.yAxis?.title ?? '');
+  const [legendVisibleDraft, setLegendVisibleDraft] = useState(resolvedLegendVisible);
+  const [categoryAxisTitleDraft, setCategoryAxisTitleDraft] = useState(resolvedCategoryAxisTitle);
+  const [valueAxisTitleDraft, setValueAxisTitleDraft] = useState(resolvedValueAxisTitle);
+
+  useEffect(() => {
+    setLegendVisibleDraft(resolvedLegendVisible);
+  }, [resolvedLegendVisible]);
+
+  useEffect(() => {
+    setCategoryAxisTitleDraft(resolvedCategoryAxisTitle);
+  }, [resolvedCategoryAxisTitle]);
+
+  useEffect(() => {
+    setValueAxisTitleDraft(resolvedValueAxisTitle);
+  }, [resolvedValueAxisTitle]);
 
   // Handlers
   const handleTitleChange = useCallback(
@@ -234,6 +248,7 @@ export function ChartEditor({
 
   const handleLegendShowChange = useCallback(
     (checked: boolean) => {
+      setLegendVisibleDraft(checked);
       if (onSetLegendVisible) {
         onSetLegendVisible(checked);
         return;
@@ -286,6 +301,17 @@ export function ChartEditor({
 
   const handleAxisTitleChange = useCallback(
     (axisRole: 'category' | 'value', title: string) => {
+      if (axisRole === 'category') {
+        setCategoryAxisTitleDraft(title);
+      } else {
+        setValueAxisTitleDraft(title);
+      }
+    },
+    [],
+  );
+
+  const commitAxisTitle = useCallback(
+    (axisRole: 'category' | 'value', title: string) => {
       if (onSetAxisTitle) {
         onSetAxisTitle(axisRole, title);
         return;
@@ -305,6 +331,15 @@ export function ChartEditor({
       });
     },
     [config.axis, onChange, onSetAxisTitle],
+  );
+
+  const handleAxisTitleKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLInputElement>) => {
+      if (event.key === 'Enter') {
+        event.currentTarget.blur();
+      }
+    },
+    [],
   );
 
   const handleGridLinesChange = useCallback(
@@ -581,7 +616,7 @@ export function ChartEditor({
           <>
             <div className="mb-4">
               <Checkbox
-                checked={legendVisible}
+                checked={legendVisibleDraft}
                 onChange={handleLegendShowChange}
                 label="Show legend"
               />
@@ -595,7 +630,7 @@ export function ChartEditor({
                 value={config.legend?.position || 'bottom'}
                 onChange={handleLegendPositionChange}
                 options={LEGEND_POSITIONS.map((pos) => ({ value: pos.value, label: pos.label }))}
-                disabled={!legendVisible}
+                disabled={!legendVisibleDraft}
               />
             </div>
           </>
@@ -608,8 +643,10 @@ export function ChartEditor({
                 X-Axis Title
               </SectionLabel>
               <Input
-                value={categoryAxisTitle}
+                value={categoryAxisTitleDraft}
                 onChange={(e) => handleAxisTitleChange('category', e.target.value)}
+                onBlur={(e) => commitAxisTitle('category', e.target.value)}
+                onKeyDown={handleAxisTitleKeyDown}
                 placeholder="X-axis title"
               />
             </div>
@@ -619,8 +656,10 @@ export function ChartEditor({
                 Y-Axis Title
               </SectionLabel>
               <Input
-                value={valueAxisTitle}
+                value={valueAxisTitleDraft}
                 onChange={(e) => handleAxisTitleChange('value', e.target.value)}
+                onBlur={(e) => commitAxisTitle('value', e.target.value)}
+                onKeyDown={handleAxisTitleKeyDown}
                 placeholder="Y-axis title"
               />
             </div>

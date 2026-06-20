@@ -564,7 +564,15 @@ export const APPLY_SELECT_DATA: AsyncActionHandler = async (deps): Promise<Actio
       (currentOrientation && currentOrientation !== dialogState.orientation) ||
       (!currentOrientation && dialogState.orientation === 'rows')
     ) {
-      await ws.charts.switchSeriesOrientation(dialogState.chartId);
+      const switchReceipt = await ws.charts.switchSeriesOrientation(dialogState.chartId);
+      if (switchReceipt.status !== 'applied') {
+        return {
+          handled: false,
+          error:
+            switchReceipt.diagnostics[0]?.message ??
+            'Chart source binding does not support switching series orientation',
+        };
+      }
     }
   } catch (e: any) {
     return { handled: false, error: e.message ?? String(e) };

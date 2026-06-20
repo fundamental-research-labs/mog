@@ -19,7 +19,6 @@ import { useEffect } from 'react';
 import type { SheetCoordinator } from '../../../coordinator/sheet-coordinator';
 import { clampZoom } from '../../../infra/utils/zoom-utils';
 import { lifecycleDebug } from '../../../systems/renderer/debug/debug-lifecycle';
-import type { GridScrollbarVisibilitySettings } from '../layout/viewport-size';
 
 /**
  * Options for the useRendererSync hook.
@@ -35,8 +34,10 @@ export interface UseRendererSyncOptions {
   activeSheetId: string;
   /** Current zoom level for the active sheet (already resolved from UIStore) */
   currentZoom: number;
-  /** Workbook settings for scrollbar visibility */
-  workbookSettings: GridScrollbarVisibilitySettings;
+  /** Whether the host renders the horizontal custom scrollbar. */
+  showHorizontalScrollbar: boolean;
+  /** Whether the host renders the vertical custom scrollbar. */
+  showVerticalScrollbar: boolean;
   /** The sheet coordinator instance */
   coordinator: SheetCoordinator;
   /** Resize callback from renderer hook */
@@ -121,7 +122,8 @@ export function useRendererSync(options: UseRendererSyncOptions): void {
     currentSheetId,
     activeSheetId,
     currentZoom,
-    workbookSettings,
+    showHorizontalScrollbar,
+    showVerticalScrollbar,
     coordinator,
     resize,
     suspend,
@@ -187,8 +189,8 @@ export function useRendererSync(options: UseRendererSyncOptions): void {
       resize(rect.width, rect.height);
     }
   }, [
-    workbookSettings.showHorizontalScrollbar,
-    workbookSettings.showVerticalScrollbar,
+    showHorizontalScrollbar,
+    showVerticalScrollbar,
     isReady,
     resize,
     containerRef,

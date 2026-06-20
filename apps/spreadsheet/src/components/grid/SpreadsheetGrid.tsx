@@ -278,15 +278,17 @@ export const SpreadsheetGrid = memo(function SpreadsheetGrid({
     [groupingState.columnGroups, groupingState.groupingConfig],
   );
 
-  // Context menu state — openContextMenu stores hit-test target info,
-  // Radix ContextMenu owns open/close state and positioning.
   const openContextMenu = useUIStore((s) => s.openContextMenu);
   const closeContextMenu = useUIStore((s) => s.closeContextMenu);
   const closeObjectContextMenu = useUIStore((s) => s.closeObjectContextMenu);
 
   const { settings: workbookSettings } = useWorkbookSettings();
+  const showHorizontalScrollbar = workbookSettings.showHorizontalScrollbar;
+  const showVerticalScrollbar = workbookSettings.showVerticalScrollbar;
+  const autoHideScrollBars = workbookSettings.autoHideScrollBars;
   const gridViewportLayout = usePivotAwareGridViewportLayout({
-    scrollbarVisibility: workbookSettings,
+    showHorizontalScrollbar,
+    showVerticalScrollbar,
     coordinator,
     isReady,
   });
@@ -302,7 +304,6 @@ export const SpreadsheetGrid = memo(function SpreadsheetGrid({
     return { x: rowHeaderWidth, y: colHeaderHeight };
   }, [viewOptions.showRowHeaders, viewOptions.showColumnHeaders]);
 
-  // Protection alert dialog state
   // @see STREAM-H-EDITOR-PROTECTION.md
   const protectionAlertOpen = useUIStore((s) => s.protectionAlertOpen);
   const protectionAlertMessage = useUIStore((s) => s.protectionAlertMessage);
@@ -794,15 +795,14 @@ export const SpreadsheetGrid = memo(function SpreadsheetGrid({
     layoutReady: rendererActions.layoutReady,
   });
 
-  // Use extracted hook for renderer sync (combines multiple effects)
-  // PERFORMANCE: Uses granular hooks instead of full useRenderer()
   useRendererSync({
     containerRef,
     isReady,
     currentSheetId: rendererSheetId,
     activeSheetId,
     currentZoom,
-    workbookSettings,
+    showHorizontalScrollbar,
+    showVerticalScrollbar,
     coordinator,
     resize: rendererActions.resize,
     suspend: rendererActions.suspend,
@@ -906,10 +906,9 @@ export const SpreadsheetGrid = memo(function SpreadsheetGrid({
             </div>
           )}
 
-          {/* ScrollContainer - scrollbars and split boxes */}
           <ScrollContainer
             viewportLayout={gridViewportLayout}
-            autoHideScrollBars={workbookSettings.autoHideScrollBars}
+            autoHideScrollBars={autoHideScrollBars}
             scrollWidth={scrollWidth}
             scrollHeight={scrollHeight}
           />

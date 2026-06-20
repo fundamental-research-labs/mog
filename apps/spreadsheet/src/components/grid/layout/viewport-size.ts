@@ -1,11 +1,8 @@
 import { SCROLL_BAR_WIDTH } from '@mog-sdk/contracts/rendering';
 
-export interface GridScrollbarVisibilitySettings {
+export interface GridViewportLayoutSettings {
   showHorizontalScrollbar: boolean;
   showVerticalScrollbar: boolean;
-}
-
-export interface GridViewportLayoutSettings extends GridScrollbarVisibilitySettings {
   reservedRightInset: number;
 }
 

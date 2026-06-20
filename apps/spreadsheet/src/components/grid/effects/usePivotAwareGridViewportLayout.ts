@@ -2,17 +2,16 @@ import { useEffect, useMemo } from 'react';
 
 import { useUIStore } from '../../../infra/context';
 import type { SheetCoordinator } from '../../../coordinator/sheet-coordinator';
-import type {
-  GridScrollbarVisibilitySettings,
-  GridViewportLayoutSettings,
-} from '../layout/viewport-size';
+import type { GridViewportLayoutSettings } from '../layout/viewport-size';
 
 export function usePivotAwareGridViewportLayout({
-  scrollbarVisibility,
+  showHorizontalScrollbar,
+  showVerticalScrollbar,
   coordinator,
   isReady,
 }: {
-  scrollbarVisibility: GridScrollbarVisibilitySettings;
+  showHorizontalScrollbar: boolean;
+  showVerticalScrollbar: boolean;
   coordinator: SheetCoordinator;
   isReady: boolean;
 }): GridViewportLayoutSettings {
@@ -28,14 +27,10 @@ export function usePivotAwareGridViewportLayout({
 
   return useMemo(
     () => ({
-      showHorizontalScrollbar: scrollbarVisibility.showHorizontalScrollbar,
-      showVerticalScrollbar: scrollbarVisibility.showVerticalScrollbar,
+      showHorizontalScrollbar,
+      showVerticalScrollbar,
       reservedRightInset,
     }),
-    [
-      scrollbarVisibility.showHorizontalScrollbar,
-      scrollbarVisibility.showVerticalScrollbar,
-      reservedRightInset,
-    ],
+    [showHorizontalScrollbar, showVerticalScrollbar, reservedRightInset],
   );
 }

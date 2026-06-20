@@ -221,14 +221,25 @@ describe('ChangeAccumulator — workbook-level trackers', () => {
     expect(acc.activeCount).toBe(0);
   });
 
-  it('threads oldValue and newValue from CellChangeInfo to ChangeRecord', () => {
+  it('threads before and after snapshots from CellChangeInfo to ChangeRecord', () => {
     const acc = new ChangeAccumulator();
     const wbTracker = createMockWorkbookTracker();
     acc.registerWorkbook(wbTracker);
 
     acc.ingest(
       [
-        { sheetId: 'sheet-1', row: 0, col: 0, value: 42, oldValue: 10 },
+        {
+          sheetId: 'sheet-1',
+          row: 0,
+          col: 0,
+          value: 42,
+          displayText: '42',
+          oldValue: 10,
+          oldDisplayText: '10',
+          oldFormula: '=A1',
+          newFormula: '=A1*2',
+          numberFormat: '0.00',
+        },
         { sheetId: 'sheet-1', row: 1, col: 0, value: 'hello' },
       ],
       null,
@@ -236,9 +247,17 @@ describe('ChangeAccumulator — workbook-level trackers', () => {
     );
 
     expect(wbTracker.allRecords[0].oldValue).toBe(10);
+    expect(wbTracker.allRecords[0].oldDisplayValue).toBe('10');
+    expect(wbTracker.allRecords[0].oldFormula).toBe('=A1');
     expect(wbTracker.allRecords[0].newValue).toBe(42);
+    expect(wbTracker.allRecords[0].newDisplayValue).toBe('42');
+    expect(wbTracker.allRecords[0].newFormula).toBe('=A1*2');
+    expect(wbTracker.allRecords[0].numberFormat).toBe('0.00');
     expect(wbTracker.allRecords[1].oldValue).toBeUndefined();
+    expect(wbTracker.allRecords[1].oldDisplayValue).toBeUndefined();
+    expect(wbTracker.allRecords[1].oldFormula).toBeNull();
     expect(wbTracker.allRecords[1].newValue).toBe('hello');
+    expect(wbTracker.allRecords[1].newFormula).toBeNull();
   });
 
   it('generates correct A1 addresses', () => {

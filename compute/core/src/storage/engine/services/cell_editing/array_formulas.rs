@@ -42,10 +42,13 @@ pub(in crate::storage::engine) fn set_array_formula(
     };
 
     // Snapshot old anchor value for the change-set patch.
-    let old_val = mirror
-        .get_cell_value(&anchor_id)
+    let old_val = stores
+        .compute
+        .get_cell_value(mirror, &anchor_id)
         .cloned()
+        .or_else(|| mirror.get_cell_value(&anchor_id).cloned())
         .unwrap_or(CellValue::Null);
+    let old_formula = stores.compute.get_formula(&anchor_id).map(str::to_owned);
 
     // Write the formula text to Yrs (suppressed observer, so we own
     // the change-set construction). The body is normalized in the
@@ -107,11 +110,14 @@ pub(in crate::storage::engine) fn set_array_formula(
         }
     }
 
-    // Patch old_value onto the seed change.
+    // Patch before-side fields onto the seed change.
     let cell_id_str = anchor_id.to_uuid_string();
     for change in &mut result.changed_cells {
-        if change.old_value.is_none() && change.cell_id == cell_id_str {
+        if change.cell_id == cell_id_str {
             change.old_value = Some(old_val.clone());
+            if change.old_formula.is_none() {
+                change.old_formula = old_formula.clone();
+            }
         }
     }
 

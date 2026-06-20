@@ -32,8 +32,18 @@ export interface WorkbookChangeRecord {
   type: 'modified';
   /** Value before the change (undefined if cell was previously empty). */
   oldValue?: unknown;
+  /** Formatted display value before the change. */
+  oldDisplayValue?: string;
+  /** Formula before the change, or null if the cell had no formula. */
+  oldFormula?: string | null;
   /** Value after the change (undefined if cell was cleared). */
   newValue?: unknown;
+  /** Formatted display value after the change. */
+  newDisplayValue?: string;
+  /** Formula after the change, or null if the cell has no formula. */
+  newFormula?: string | null;
+  /** Effective number format after the change. */
+  numberFormat?: string;
 }
 
 // =============================================================================

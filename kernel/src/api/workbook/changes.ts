@@ -127,7 +127,12 @@ class WorkbookChangeTrackerImpl implements WorkbookChangeTracker, WorkbookTracke
       origin: record.origin,
       type: 'modified' as const,
       oldValue: record.oldValue,
+      oldDisplayValue: record.oldDisplayValue,
+      oldFormula: record.oldFormula,
       newValue: record.newValue,
+      newDisplayValue: record.newDisplayValue,
+      newFormula: record.newFormula,
+      numberFormat: record.numberFormat,
     }));
 
     const result: WorkbookCollectResult = {
@@ -175,7 +180,12 @@ class WorkbookChangeTrackerImpl implements WorkbookChangeTracker, WorkbookTracke
       origin: record.origin,
       type: 'modified' as const,
       oldValue: record.oldValue,
+      oldDisplayValue: record.oldDisplayValue,
+      oldFormula: record.oldFormula,
       newValue: record.newValue,
+      newDisplayValue: record.newDisplayValue,
+      newFormula: record.newFormula,
+      numberFormat: record.numberFormat,
     }));
 
     return { records, truncated, totalObserved };

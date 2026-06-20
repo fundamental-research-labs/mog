@@ -23,6 +23,7 @@ impl YrsComputeEngine {
     ) -> Result<RecalcResult, ComputeError> {
         let mut edits = Vec::new();
         let mut old_values = std::collections::HashMap::new();
+        let mut old_formulas = std::collections::HashMap::new();
         let mut seen = std::collections::HashSet::new();
 
         {
@@ -44,16 +45,23 @@ impl YrsComputeEngine {
                         }
 
                         let old_value = self
-                            .mirror
-                            .get_cell_value(&cell_id)
+                            .stores
+                            .compute
+                            .get_cell_value(&self.mirror, &cell_id)
                             .cloned()
+                            .or_else(|| self.mirror.get_cell_value(&cell_id).cloned())
                             .unwrap_or(CellValue::Null);
-                        let has_formula = self.mirror.get_formula(&cell_id).is_some();
+                        let old_formula =
+                            self.stores.compute.get_formula(&cell_id).map(str::to_owned);
+                        let has_formula = old_formula.is_some();
                         if matches!(old_value, CellValue::Null) && !has_formula {
                             continue;
                         }
 
                         old_values.insert(cell_id, old_value);
+                        if let Some(old_formula) = old_formula {
+                            old_formulas.insert(cell_id, old_formula);
+                        }
                         edits.push((*sheet_id, cell_id, row, col, CellInput::Clear));
                     }
                 }
@@ -69,11 +77,15 @@ impl YrsComputeEngine {
             .compute
             .set_cells(&mut self.mirror, &edits, true)?;
         for change in &mut result.changed_cells {
-            if change.old_value.is_none()
-                && let Ok(cell_id) = CellId::from_uuid_str(&change.cell_id)
-                && let Some(old_value) = old_values.remove(&cell_id)
-            {
-                change.old_value = Some(old_value);
+            if let Ok(cell_id) = CellId::from_uuid_str(&change.cell_id) {
+                if let Some(old_value) = old_values.remove(&cell_id) {
+                    change.old_value = Some(old_value);
+                }
+                if change.old_formula.is_none()
+                    && let Some(old_formula) = old_formulas.remove(&cell_id)
+                {
+                    change.old_formula = Some(old_formula);
+                }
             }
         }
         Ok(result)

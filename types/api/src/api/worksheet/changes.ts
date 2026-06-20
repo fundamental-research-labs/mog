@@ -3,8 +3,9 @@
  *
  * Creates lightweight trackers that accumulate cell-level change records
  * across mutations. Trackers are opt-in to avoid bloating return values;
- * they return addresses + metadata only (no cell values) so callers can
- * hydrate via getRange() when needed.
+ * they return cell before/after snapshots captured from native mutation
+ * results, so callers do not need a post-exec getRange() pass for changed
+ * cells.
  *
  * Inspired by query-scoped subscriptions and transaction origin tagging.
  */
@@ -27,8 +28,18 @@ export interface ChangeRecord {
   type: 'modified';
   /** Value before the change (undefined if cell was previously empty). */
   oldValue?: unknown;
+  /** Formatted display value before the change. */
+  oldDisplayValue?: string;
+  /** Formula before the change, or null if the cell had no formula. */
+  oldFormula?: string | null;
   /** Value after the change (undefined if cell was cleared). */
   newValue?: unknown;
+  /** Formatted display value after the change. */
+  newDisplayValue?: string;
+  /** Formula after the change, or null if the cell has no formula. */
+  newFormula?: string | null;
+  /** Effective number format after the change. */
+  numberFormat?: string;
 }
 
 /** Origin of a change: direct write, formula recalculation, or remote collaborator. */
@@ -50,8 +61,7 @@ export interface ChangeTrackOptions {
 export interface ChangeTracker {
   /**
    * Drain all accumulated changes since creation or last collect() call.
-   * Returns addresses + metadata only (no cell values) — call ws.getRange()
-   * to hydrate if needed.
+   * Returns native before/after cell snapshots for accumulated changes.
    */
   collect(): ChangeRecord[];
 

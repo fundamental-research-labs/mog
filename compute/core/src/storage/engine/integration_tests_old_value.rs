@@ -284,6 +284,40 @@ fn test_integration_set_cell_with_formula_deps() {
     assert_new_value(changes, 0, 2, num(201.0));
 }
 
+#[test]
+fn test_integration_change_records_include_display_formula_and_number_format() {
+    let snap = formula_deps_snapshot();
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    assert_eq!(
+        *engine.mirror().get_cell_value(&cell_id_b1()).unwrap(),
+        num(20.0)
+    );
+
+    let (_patches, mutation_result) = engine
+        .set_cell(
+            &sheet_id(),
+            cell_id_b1(),
+            0,
+            1,
+            crate::bridge_types::CellInput::Parse {
+                text: "=A1*3".into(),
+            },
+        )
+        .unwrap();
+
+    let changes = &mutation_result.recalc.changed_cells;
+    let b1_change = find_change(changes, 0, 1)
+        .expect("B1 should appear in changed_cells after formula overwrite");
+
+    assert_eq!(b1_change.old_value, Some(num(20.0)));
+    assert_eq!(b1_change.value, num(30.0));
+    assert_eq!(b1_change.old_display_text.as_deref(), Some("20"));
+    assert_eq!(b1_change.display_text.as_deref(), Some("30"));
+    assert_eq!(b1_change.old_formula.as_deref(), Some("=A1*2"));
+    assert_eq!(b1_change.new_formula.as_deref(), Some("=A1*3"));
+    assert_eq!(b1_change.number_format.as_deref(), Some("General"));
+}
+
 // ===================================================================
 // Test 2: batch set cells — verify old_values for both cells
 // ===================================================================

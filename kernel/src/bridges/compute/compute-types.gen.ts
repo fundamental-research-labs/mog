@@ -692,6 +692,10 @@ export interface CellChange {
   position?: CellPosition;
   value: CellValue;
   displayText?: string;
+  oldDisplayText?: string;
+  oldFormula?: string;
+  newFormula?: string;
+  numberFormat?: string;
   formatIdx?: number;
   extraFlags: number;
   oldValue?: CellValue;
@@ -1031,6 +1035,7 @@ export interface ChartDrawingFrameOoxmlProps {
   clientDataPrintsWithSheet: boolean | null;
   relationshipId: string | null;
   relationshipTarget: string | null;
+  rawAlternateContent?: string;
 }
 
 export interface ChartExReplayData {
@@ -1127,6 +1132,7 @@ export interface ChartOoxmlProps {
   chartAuxiliaryParts?: ChartAuxiliaryPart[];
   standardChartProvenance?: StandardChartProvenance;
   standardChartExportAuthority?: StandardChartExportAuthority;
+  chartExReplay?: ChartExReplayData;
   isChartEx?: boolean;
 }
 
@@ -1313,6 +1319,8 @@ export interface ChartSpec {
   categoryLabelLevel?: number;
   seriesNameLevel?: number;
   showAllFieldButtons?: boolean;
+  showLines?: boolean;
+  smoothLines?: boolean;
   secondPlotSize?: number;
   varyByCategories?: boolean;
   titleHAlign?: string;
@@ -1328,6 +1336,7 @@ export interface ChartSpec {
   chartRelationships?: ChartRelationshipData[];
   chartAuxiliaryFiles?: [string, Uint8Array][];
   chartAuxiliaryParts?: ChartAuxiliaryPart[];
+  chartExReplay?: ChartExReplayData;
   standardChartProvenance?: StandardChartProvenance;
   standardChartExportAuthority?: StandardChartExportAuthority;
   isChartEx: boolean;

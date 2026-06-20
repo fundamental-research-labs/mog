@@ -45,8 +45,18 @@ export interface CellChangeInfo {
   col: number;
   /** New value after the change (from Rust CellChange.value). */
   value?: unknown;
+  /** New display text after the change (from Rust CellChange.displayText). */
+  displayText?: string;
   /** Previous value before the change (from Rust CellChange.oldValue). */
   oldValue?: unknown;
+  /** Previous display text before the change (from Rust CellChange.oldDisplayText). */
+  oldDisplayText?: string;
+  /** Formula before the change (from Rust CellChange.oldFormula). */
+  oldFormula?: string;
+  /** Formula after the change (from Rust CellChange.newFormula). */
+  newFormula?: string;
+  /** Effective number format after the change (from Rust CellChange.numberFormat). */
+  numberFormat?: string;
 }
 
 // =============================================================================
@@ -141,7 +151,12 @@ export class ChangeAccumulator {
         origin,
         type: 'modified',
         oldValue: cell.oldValue,
+        oldDisplayValue: cell.oldDisplayText,
+        oldFormula: cell.oldFormula ?? null,
         newValue: cell.value,
+        newDisplayValue: cell.displayText,
+        newFormula: cell.newFormula ?? null,
+        numberFormat: cell.numberFormat,
       };
 
       let list = recordsBySheet.get(cell.sheetId);

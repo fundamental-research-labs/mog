@@ -20,14 +20,21 @@ pub(in crate::storage::engine) fn set_cell_values_parsed(
     // Snapshot old values from mirror BEFORE the batch write updates them.
     let mut direct_edit_old_values: std::collections::HashMap<CellId, CellValue> =
         std::collections::HashMap::with_capacity(updates.len());
+    let mut direct_edit_old_formulas: std::collections::HashMap<CellId, String> =
+        std::collections::HashMap::with_capacity(updates.len());
     if let Some(grid) = stores.grid_indexes.get(sheet_id) {
         for (row, col, _) in updates {
             if let Some(cell_id) = grid.cell_id_at(*row, *col) {
-                let old_val = mirror
-                    .get_cell_value(&cell_id)
+                let old_val = stores
+                    .compute
+                    .get_cell_value(mirror, &cell_id)
                     .cloned()
+                    .or_else(|| mirror.get_cell_value(&cell_id).cloned())
                     .unwrap_or(CellValue::Null);
                 direct_edit_old_values.insert(cell_id, old_val);
+                if let Some(old_formula) = stores.compute.get_formula(&cell_id) {
+                    direct_edit_old_formulas.insert(cell_id, old_formula.to_string());
+                }
             }
         }
     }
@@ -159,13 +166,17 @@ pub(in crate::storage::engine) fn set_cell_values_parsed(
         .compute
         .set_cells_with_targets(mirror, &edits, &format_hints, false)?;
 
-    // Patch old_value onto seed changes (direct edits) that don't already have one.
+    // Patch before-side fields onto seed changes (direct edits) that don't already have one.
     for change in &mut result.changed_cells {
-        if change.old_value.is_none()
-            && let Ok(cid) = CellId::from_uuid_str(&change.cell_id)
-            && let Some(old) = direct_edit_old_values.remove(&cid)
-        {
-            change.old_value = Some(old);
+        if let Ok(cid) = CellId::from_uuid_str(&change.cell_id) {
+            if let Some(old) = direct_edit_old_values.remove(&cid) {
+                change.old_value = Some(old);
+            }
+            if change.old_formula.is_none()
+                && let Some(old_formula) = direct_edit_old_formulas.remove(&cid)
+            {
+                change.old_formula = Some(old_formula);
+            }
         }
     }
 
@@ -200,14 +211,21 @@ pub(in crate::storage::engine) fn import_values(
     // Snapshot old values from mirror BEFORE the bulk import updates them.
     let mut direct_edit_old_values: std::collections::HashMap<CellId, CellValue> =
         std::collections::HashMap::with_capacity(updates.len());
+    let mut direct_edit_old_formulas: std::collections::HashMap<CellId, String> =
+        std::collections::HashMap::with_capacity(updates.len());
     if let Some(grid) = stores.grid_indexes.get(sheet_id) {
         for (row, col, _, _) in updates {
             if let Some(cell_id) = grid.cell_id_at(*row, *col) {
-                let old_val = mirror
-                    .get_cell_value(&cell_id)
+                let old_val = stores
+                    .compute
+                    .get_cell_value(mirror, &cell_id)
                     .cloned()
+                    .or_else(|| mirror.get_cell_value(&cell_id).cloned())
                     .unwrap_or(CellValue::Null);
                 direct_edit_old_values.insert(cell_id, old_val);
+                if let Some(old_formula) = stores.compute.get_formula(&cell_id) {
+                    direct_edit_old_formulas.insert(cell_id, old_formula.to_string());
+                }
             }
         }
     }
@@ -268,13 +286,17 @@ pub(in crate::storage::engine) fn import_values(
         crate::scheduler::WriteTrust::UserEdit,
     )?;
 
-    // Patch old_value onto seed changes (direct edits) that don't already have one.
+    // Patch before-side fields onto seed changes (direct edits) that don't already have one.
     for change in &mut result.changed_cells {
-        if change.old_value.is_none()
-            && let Ok(cid) = CellId::from_uuid_str(&change.cell_id)
-            && let Some(old) = direct_edit_old_values.remove(&cid)
-        {
-            change.old_value = Some(old);
+        if let Ok(cid) = CellId::from_uuid_str(&change.cell_id) {
+            if let Some(old) = direct_edit_old_values.remove(&cid) {
+                change.old_value = Some(old);
+            }
+            if change.old_formula.is_none()
+                && let Some(old_formula) = direct_edit_old_formulas.remove(&cid)
+            {
+                change.old_formula = Some(old_formula);
+            }
         }
     }
 

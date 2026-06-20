@@ -754,6 +754,7 @@ fn generate_combined() {
         format!("{manifest_dir}/../../../domain-types/src/domain/chart/formatting.rs"),
         format!("{manifest_dir}/../../../domain-types/src/domain/chart/labels.rs"),
         format!("{manifest_dir}/../../../domain-types/src/domain/chart/legend.rs"),
+        format!("{manifest_dir}/../../../domain-types/src/domain/chart/options.rs"),
         format!("{manifest_dir}/../../../domain-types/src/domain/chart/position.rs"),
         format!("{manifest_dir}/../../../domain-types/src/domain/chart/series.rs"),
         format!("{manifest_dir}/../../../domain-types/src/domain/chart/style_context.rs"),

@@ -46,8 +46,18 @@ pub(in crate::storage::engine) fn set_cell_value_parsed(
         .get(sheet_id)
         .and_then(|g| g.cell_id_at(row, col));
     let old_val = pre_cell_id
-        .and_then(|cid| mirror.get_cell_value(&cid).cloned())
+        .as_ref()
+        .and_then(|cid| {
+            stores
+                .compute
+                .get_cell_value(mirror, cid)
+                .cloned()
+                .or_else(|| mirror.get_cell_value(cid).cloned())
+        })
         .unwrap_or(CellValue::Null);
+    let old_formula = pre_cell_id
+        .as_ref()
+        .and_then(|cid| stores.compute.get_formula(cid).map(str::to_owned));
 
     mutation.observer.set_suppressed(true);
     {
@@ -170,11 +180,14 @@ pub(in crate::storage::engine) fn set_cell_value_parsed(
             .compute
             .set_cell_with_target(mirror, sheet_id, cell_id, row, col, input, target)?;
 
-        // Patch old_value onto the seed change for this direct edit.
+        // Patch before-side fields onto the seed change for this direct edit.
         let cell_id_str = cell_id.to_uuid_string();
         for change in &mut result.changed_cells {
-            if change.old_value.is_none() && change.cell_id == cell_id_str {
+            if change.cell_id == cell_id_str {
                 change.old_value = Some(old_val.clone());
+                if change.old_formula.is_none() {
+                    change.old_formula = old_formula.clone();
+                }
             }
         }
         return Ok(result);
@@ -216,8 +229,18 @@ pub(in crate::storage::engine) fn set_cell_value_as_text(
         .get(sheet_id)
         .and_then(|g| g.cell_id_at(row, col));
     let old_val = pre_cell_id
-        .and_then(|cid| mirror.get_cell_value(&cid).cloned())
+        .as_ref()
+        .and_then(|cid| {
+            stores
+                .compute
+                .get_cell_value(mirror, cid)
+                .cloned()
+                .or_else(|| mirror.get_cell_value(cid).cloned())
+        })
         .unwrap_or(CellValue::Null);
+    let old_formula = pre_cell_id
+        .as_ref()
+        .and_then(|cid| stores.compute.get_formula(cid).map(str::to_owned));
 
     mutation.observer.set_suppressed(true);
     {
@@ -252,11 +275,14 @@ pub(in crate::storage::engine) fn set_cell_value_as_text(
             .compute
             .set_cell(mirror, sheet_id, cell_id, row, col, input)?;
 
-        // Patch old_value onto the seed change for this direct edit.
+        // Patch before-side fields onto the seed change for this direct edit.
         let cell_id_str = cell_id.to_uuid_string();
         for change in &mut result.changed_cells {
-            if change.old_value.is_none() && change.cell_id == cell_id_str {
+            if change.cell_id == cell_id_str {
                 change.old_value = Some(old_val.clone());
+                if change.old_formula.is_none() {
+                    change.old_formula = old_formula.clone();
+                }
             }
         }
         return Ok(result);
@@ -306,6 +332,16 @@ pub(in crate::storage::engine) fn set_cell(
         }
     };
 
+    // Snapshot before-side fields before the Yrs write and mirror update replace
+    // formula/value state for this cell.
+    let old_val = stores
+        .compute
+        .get_cell_value(mirror, &cell_id)
+        .cloned()
+        .or_else(|| mirror.get_cell_value(&cell_id).cloned())
+        .unwrap_or(CellValue::Null);
+    let old_formula = stores.compute.get_formula(&cell_id).map(str::to_owned);
+
     mutation.observer.set_suppressed(true);
     write_cell_to_yrs(
         stores,
@@ -325,12 +361,6 @@ pub(in crate::storage::engine) fn set_cell(
     );
     mutation.observer.set_suppressed(false);
 
-    // Snapshot old value from mirror BEFORE apply_edit overwrites it.
-    let old_val = mirror
-        .get_cell_value(&cell_id)
-        .cloned()
-        .unwrap_or(CellValue::Null);
-
     mirror.apply_edit(
         sheet_id,
         cell_id,
@@ -347,11 +377,14 @@ pub(in crate::storage::engine) fn set_cell(
         .compute
         .set_cell(mirror, sheet_id, cell_id, row, col, input)?;
 
-    // Patch old_value onto the seed change for this direct edit.
+    // Patch before-side fields onto the seed change for this direct edit.
     let cell_id_str = cell_id.to_uuid_string();
     for change in &mut result.changed_cells {
-        if change.old_value.is_none() && change.cell_id == cell_id_str {
+        if change.cell_id == cell_id_str {
             change.old_value = Some(old_val.clone());
+            if change.old_formula.is_none() {
+                change.old_formula = old_formula.clone();
+            }
         }
     }
 

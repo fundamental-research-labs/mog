@@ -225,6 +225,18 @@ pub struct CellChange {
     /// When present, TS should use this instead of computing its own display text.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub display_text: Option<String>,
+    /// Pre-mutation formatted display text for the old value.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub old_display_text: Option<String>,
+    /// Formula text before the mutation, if the cell had a formula.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub old_formula: Option<String>,
+    /// Formula text after the mutation, if the cell has a formula.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub new_formula: Option<String>,
+    /// Effective number format after the mutation.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub number_format: Option<String>,
     /// Format palette index (matches viewport binary format_idx).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub format_idx: Option<u16>,
@@ -366,6 +378,10 @@ mod tests {
                 position: Some(CellPosition { row: 0, col: 0 }),
                 value: CellValue::number(10.0),
                 display_text: None,
+                old_display_text: None,
+                old_formula: None,
+                new_formula: None,
+                number_format: None,
                 format_idx: None,
                 extra_flags: 0,
                 old_value: None,
@@ -475,6 +491,10 @@ mod tests {
             position: None,
             value: CellValue::number(1.0),
             display_text: None,
+            old_display_text: None,
+            old_formula: None,
+            new_formula: None,
+            number_format: None,
             format_idx: None,
             extra_flags: 0,
             old_value: None,
@@ -502,6 +522,10 @@ mod tests {
             position: Some(CellPosition { row: 3, col: 7 }),
             value: CellValue::number(42.0),
             display_text: None,
+            old_display_text: None,
+            old_formula: None,
+            new_formula: None,
+            number_format: None,
             format_idx: None,
             extra_flags: 0,
             old_value: None,

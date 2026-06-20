@@ -645,7 +645,12 @@ export class MutationResultHandler {
             row: c.position.row,
             col: c.position.col,
             value: c.value,
+            displayText: c.displayText,
             oldValue: c.oldValue,
+            oldDisplayText: c.oldDisplayText,
+            oldFormula: c.oldFormula,
+            newFormula: c.newFormula,
+            numberFormat: c.numberFormat,
           };
         })
         .filter((c): c is NonNullable<typeof c> => c !== null);

@@ -369,6 +369,10 @@ impl YrsComputeEngine {
                 position: Some(snapshot_types::CellPosition { row, col }),
                 value,
                 display_text: None,
+                old_display_text: None,
+                old_formula: None,
+                new_formula: None,
+                number_format: None,
                 format_idx: Some(format_idx),
                 extra_flags: 0,
                 old_value: None,
@@ -428,8 +432,12 @@ impl YrsComputeEngine {
                     sheet_id: sheet_id_str.clone(),
                     position: Some(snapshot_types::CellPosition { row, col }),
                     value,
-                    display_text: None, // filled by enrich_display_text below
-                    format_idx: None,   // filled by format enrichment in patch loop
+                    display_text: None,
+                    old_display_text: None,
+                    old_formula: None,
+                    new_formula: None,
+                    number_format: None, // filled by enrich_display_text below
+                    format_idx: None,    // filled by format enrichment in patch loop
                     extra_flags: 0,
                     old_value: None,
                 });
@@ -652,6 +660,10 @@ impl YrsComputeEngine {
                 position: Some(snapshot_types::CellPosition { row, col }),
                 value,
                 display_text: None,
+                old_display_text: None,
+                old_formula: None,
+                new_formula: None,
+                number_format: None,
                 format_idx: Some(format_idx),
                 extra_flags: 0,
                 old_value: None,
@@ -717,7 +729,11 @@ impl YrsComputeEngine {
                         sheet_id: sheet_id_str.clone(),
                         position: Some(crate::snapshot::CellPosition { row, col }),
                         value,
-                        display_text: None, // enriched by prepare_recalc_for_flush
+                        display_text: None,
+                        old_display_text: None,
+                        old_formula: None,
+                        new_formula: None,
+                        number_format: None, // enriched by prepare_recalc_for_flush
                         format_idx: None,
                         extra_flags: 0,
                         old_value: None,
@@ -884,6 +900,10 @@ impl YrsComputeEngine {
                     position: Some(snapshot_types::CellPosition { row, col }),
                     value,
                     display_text: None,
+                    old_display_text: None,
+                    old_formula: None,
+                    new_formula: None,
+                    number_format: None,
                     format_idx: Some(format_idx),
                     extra_flags: 0,
                     old_value: None,

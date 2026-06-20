@@ -181,6 +181,11 @@
       "types": "./dist/conditional-format/index.d.ts",
       "import": "./dist/conditional-format/index.js"
     },
+    "./control-plane": {
+      "development": "./src/control-plane/index.ts",
+      "types": "./dist/control-plane/index.d.ts",
+      "import": "./dist/control-plane/index.js"
+    },
     "./connections": {
       "development": "./src/connections/index.ts",
       "types": "./dist/connections/index.d.ts",
@@ -869,6 +874,10 @@
       "./conditional-format": {
         "types": "./dist/conditional-format/index.d.ts",
         "import": "./dist/conditional-format/index.js"
+      },
+      "./control-plane": {
+        "types": "./dist/control-plane/index.d.ts",
+        "import": "./dist/control-plane/index.js"
       },
       "./connections": {
         "types": "./dist/connections/index.d.ts",

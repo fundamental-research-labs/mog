@@ -8,6 +8,13 @@ import {
   type ChartRasterWasmGlueLoader,
   createWasmChartImageExporterFactory,
 } from './chart-export/node-chart-image-exporter';
+export {
+  CONTROL_PLANE_ENTRYPOINT_IDS,
+  controlPlaneEntrypoints,
+  createInertControlPlane,
+  observeControlPlaneShadow,
+} from './control-plane';
+export type * from './control-plane';
 import { createNodeHeadlessHost } from './host-adapters/node-headless-host';
 import { createPortableRandomUUID } from './host-adapters/portable-host-crypto';
 import type {

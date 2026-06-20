@@ -55,6 +55,13 @@ export {
   type CollaborativeEngineOptions,
   type SyncMode,
 } from './collaborative-engine';
+export {
+  CONTROL_PLANE_ENTRYPOINT_IDS,
+  controlPlaneEntrypoints,
+  createInertControlPlane,
+  observeControlPlaneShadow,
+} from './control-plane';
+export type * from './control-plane';
 
 // ---------------------------------------------------------------------------
 // Kernel-backed public APIs — SDK-owned declarations, bundled runtime

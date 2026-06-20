@@ -159,6 +159,7 @@
       "./commands": { "disposition": "public-experimental" },
       "./comments": { "disposition": "public-experimental" },
       "./conditional-format": { "disposition": "public-experimental" },
+      "./control-plane": { "disposition": "public-experimental" },
       "./connections": { "disposition": "public-experimental" },
       "./core": { "disposition": "public-experimental" },
       "./culture": { "disposition": "public-experimental" },

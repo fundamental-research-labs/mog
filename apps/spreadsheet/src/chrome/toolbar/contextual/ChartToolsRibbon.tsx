@@ -63,8 +63,6 @@ const CHART_TYPES: ChartTypeOption[] = [
   { type: 'combo', label: 'Combo' },
 ];
 
-const DEFAULT_CHART_TITLE = 'Chart Title';
-
 interface OptimisticTitleToggle {
   chartId: string;
   checked: boolean;
@@ -79,7 +77,9 @@ export function ChartToolsRibbon(_props: ContextualTabProps) {
   const { uiStore } = useDocumentContext();
   const activeSheetId = useStore(uiStore, (s) => s.activeSheetId);
   const { selectedChartId, deleteSelectedChart } = useChartUI();
-  const { charts, updateChart } = useCharts({ sheetId: activeSheetId });
+  const { charts, setChartTitleVisible, setLegendVisible, switchSeriesOrientation } = useCharts({
+    sheetId: activeSheetId,
+  });
   const [typeDropdownOpen, setTypeDropdownOpen] = useState(false);
   const [optimisticTitleToggle, setOptimisticTitleToggle] = useState<OptimisticTitleToggle | null>(
     null,
@@ -91,12 +91,15 @@ export function ChartToolsRibbon(_props: ContextualTabProps) {
 
   // Check if chart has title/legend
   const observedHasTitle =
-    selectedChart?.config.autoTitleDeleted === true ? false : Boolean(selectedChart?.config.title);
+    selectedChart?.appModel?.title.visible ??
+    (selectedChart?.config.autoTitleDeleted === true ? false : Boolean(selectedChart?.config.title));
   const hasTitle =
     optimisticTitleToggle && optimisticTitleToggle.chartId === selectedChartId
       ? optimisticTitleToggle.checked
       : observedHasTitle;
-  const hasLegend = selectedChart?.config.legend?.show !== false;
+  const hasLegend = selectedChart
+    ? (selectedChart.appModel?.legend.visible ?? (selectedChart.config.legend?.show !== false))
+    : false;
 
   useEffect(() => {
     if (!optimisticTitleToggle) {
@@ -131,37 +134,26 @@ export function ChartToolsRibbon(_props: ContextualTabProps) {
     (checked: boolean) => {
       if (selectedChartId && selectedChart) {
         setOptimisticTitleToggle({ chartId: selectedChartId, checked });
-
-        if (checked) {
-          updateChart(selectedChartId, {
-            title: selectedChart.config.title || DEFAULT_CHART_TITLE,
-            autoTitleDeleted: false,
-          });
-        } else {
-          // `null` explicitly clears title; `undefined` means no title update.
-          updateChart(selectedChartId, { title: null, autoTitleDeleted: true });
-        }
+        void setChartTitleVisible(selectedChartId, checked);
       }
     },
-    [selectedChartId, selectedChart, updateChart],
+    [selectedChartId, selectedChart, setChartTitleVisible],
   );
 
-  const handleToggleLegend = useCallback(() => {
-    if (selectedChartId && selectedChart) {
-      const currentLegend = selectedChart.config.legend ?? { show: true, position: 'bottom' };
-      updateChart(selectedChartId, {
-        legend: { ...currentLegend, show: !hasLegend },
-      });
-    }
-  }, [selectedChartId, selectedChart, hasLegend, updateChart]);
+  const handleToggleLegend = useCallback(
+    (checked: boolean) => {
+      if (selectedChartId) {
+        void setLegendVisible(selectedChartId, checked);
+      }
+    },
+    [selectedChartId, setLegendVisible],
+  );
 
   const handleSwitchRowColumn = useCallback(() => {
-    if (selectedChartId && selectedChart) {
-      const currentOrientation = selectedChart.config.seriesOrientation ?? 'columns';
-      const newOrientation = currentOrientation === 'columns' ? 'rows' : 'columns';
-      updateChart(selectedChartId, { seriesOrientation: newOrientation });
+    if (selectedChartId) {
+      void switchSeriesOrientation(selectedChartId);
     }
-  }, [selectedChartId, selectedChart, updateChart]);
+  }, [selectedChartId, switchSeriesOrientation]);
 
   const handleSelectData = useCallback(() => {
     if (selectedChartId) {

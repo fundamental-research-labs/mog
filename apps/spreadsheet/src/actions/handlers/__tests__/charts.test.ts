@@ -68,6 +68,11 @@ function createMockDeps(overrides?: Partial<ActionDependencies>): ActionDependen
       list: jest.fn().mockResolvedValue([]),
       add: jest.fn().mockResolvedValue(createChartAddReceipt()),
       update: jest.fn().mockResolvedValue(undefined),
+      setSourceData: jest.fn().mockResolvedValue(undefined),
+      getAppModel: jest.fn().mockResolvedValue({
+        source: { orientation: 'columns', supportsOrientationSwitch: true },
+      }),
+      switchSeriesOrientation: jest.fn().mockResolvedValue({ status: 'applied' }),
       remove: jest.fn().mockResolvedValue(undefined),
       bringToFront: jest.fn().mockResolvedValue(undefined),
       sendToBack: jest.fn().mockResolvedValue(undefined),

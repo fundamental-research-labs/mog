@@ -16,6 +16,7 @@ import { useCallback, useMemo } from 'react';
 import type { ChartType } from '@mog/charts';
 
 import type { CellRange, SheetId } from '@mog-sdk/contracts/core';
+import type { ChartAxisRole } from '@mog-sdk/contracts/data/chart-app-model';
 import { cellRangeToA1 } from '@mog/spreadsheet-utils/a1';
 import type { StoredChartConfigUpdateDraft } from '../../adapters/charts/chart-config-adapter';
 import { useActiveSheetId } from '../../infra/context';
@@ -48,6 +49,8 @@ export interface UseChartEditorActionsReturn {
     config?: StoredChartConfigUpdateDraft,
   ) => void;
   handleChartEditorChange: (updates: StoredChartConfigUpdateDraft) => void;
+  handleChartLegendVisibleChange: (visible: boolean) => void;
+  handleChartAxisTitleChange: (axisRole: ChartAxisRole, title: string) => void;
   handleChartEditorClose: () => void;
   handleChartEditorDelete: () => void;
 
@@ -87,6 +90,8 @@ export function useChartEditorActions(
     editingChartId,
     createChartFromSelection,
     updateChart,
+    setLegendVisible,
+    setAxisTitle,
     removeChart,
     stopEditingChart,
   } = useCharts({ sheetId: activeSheetId });
@@ -153,6 +158,24 @@ export function useChartEditorActions(
     [editingChartId, updateChart],
   );
 
+  const handleChartLegendVisibleChange = useCallback(
+    (visible: boolean) => {
+      if (editingChartId) {
+        void setLegendVisible(editingChartId, visible);
+      }
+    },
+    [editingChartId, setLegendVisible],
+  );
+
+  const handleChartAxisTitleChange = useCallback(
+    (axisRole: ChartAxisRole, title: string) => {
+      if (editingChartId) {
+        void setAxisTitle(editingChartId, axisRole, title, { titleKind: 'literal' });
+      }
+    },
+    [editingChartId, setAxisTitle],
+  );
+
   /**
    * Close the chart editor panel.
    */
@@ -183,6 +206,8 @@ export function useChartEditorActions(
     // Actions
     handleInsertChart,
     handleChartEditorChange,
+    handleChartLegendVisibleChange,
+    handleChartAxisTitleChange,
     handleChartEditorClose,
     handleChartEditorDelete,
 

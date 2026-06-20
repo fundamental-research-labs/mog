@@ -9,6 +9,7 @@
 
 import type { ChartData, ChartType, StoredChartConfig } from '@mog/charts';
 import type { ChartPosition } from '@mog/grid-renderer';
+import type { ChartAppModel } from '@mog-sdk/contracts/data/chart-app-model';
 
 /**
  * Chart definition stored in state
@@ -27,6 +28,8 @@ export interface ChartDefinition {
   config: StoredChartConfig;
   /** Chart data (categories and series) */
   data: ChartData;
+  /** Semantic chart model for first-party controls. */
+  appModel?: ChartAppModel;
 }
 
 // Re-export ChartPosition for convenience

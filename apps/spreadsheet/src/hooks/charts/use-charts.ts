@@ -28,8 +28,9 @@ import type {
 import { extractChartData, extractChartDataFromRange, parseRange } from '@mog/charts';
 
 import type { ChartPosition } from '@mog/grid-renderer';
-import type { WorksheetWithInternals } from '@mog-sdk/contracts/api';
+import type { ChartMutationReceipt, WorksheetWithInternals } from '@mog-sdk/contracts/api';
 import type { CellRange, SheetId } from '@mog-sdk/contracts/core';
+import type { ChartAxisRole } from '@mog-sdk/contracts/data/chart-app-model';
 import { parseCellRange } from '@mog/spreadsheet-utils/a1';
 import type { ChartDefinition } from '../../components/charts/chart-types';
 import {
@@ -66,6 +67,30 @@ export interface UseChartsReturn {
 
   /** Update a chart */
   updateChart: (chartId: string, updates: StoredChartConfigUpdateDraft) => void;
+
+  /** Set legend visibility through the semantic chart contract. */
+  setLegendVisible: (chartId: string, visible: boolean) => Promise<ChartMutationReceipt>;
+
+  /** Set chart title visibility through the semantic chart contract. */
+  setChartTitleVisible: (chartId: string, visible: boolean) => Promise<ChartMutationReceipt>;
+
+  /** Set axis title through the semantic chart contract. */
+  setAxisTitle: (
+    chartId: string,
+    axisRole: ChartAxisRole,
+    title: string,
+    options?: { titleKind?: 'literal' | 'formula' },
+  ) => Promise<ChartMutationReceipt>;
+
+  /** Set axis visibility through the semantic chart contract. */
+  setAxisVisible: (
+    chartId: string,
+    axisRole: ChartAxisRole,
+    visible: boolean,
+  ) => Promise<ChartMutationReceipt>;
+
+  /** Switch row/column grouping when the chart source binding supports it. */
+  switchSeriesOrientation: (chartId: string) => Promise<ChartMutationReceipt>;
 
   /** Update chart position */
   updateChartPosition: (chartId: string, position: ChartPosition) => void;
@@ -358,6 +383,7 @@ async function serializedToChartDefinition(
 
   // Extract chart data using resolved data range
   const dataRange = await getChartDataRange(ws, serialized);
+  const appModel = await ws.charts.getAppModel(serialized.id, { materialization: 'available' });
   const sourceSheets = await resolveChartSourceSheets(wb, serialized);
   const cellAccessor = createCellAccessor(ws, serialized.sheetId ?? '', sourceSheets);
   let data: ChartData;
@@ -388,6 +414,7 @@ async function serializedToChartDefinition(
     position,
     config,
     data,
+    appModel: appModel ?? undefined,
   };
 }
 
@@ -564,6 +591,7 @@ export function useCharts({ sheetId }: UseChartsOptions): UseChartsReturn {
                 position: newPosition,
                 config: cached.definition.config, // REUSE - prevents chart renderer flicker!
                 data: cached.definition.data, // REUSE - prevents chart renderer flicker!
+                appModel: cached.definition.appModel,
               };
 
               // Update cache with new serialized reference but same config/data
@@ -611,6 +639,39 @@ export function useCharts({ sheetId }: UseChartsOptions): UseChartsReturn {
       const ws = wb.getSheetById(sheetId);
       void ws.charts.update(chartId, normalizeStoredChartConfigUpdate(updates));
     },
+    [sheetId, wb],
+  );
+
+  const setLegendVisible = useCallback(
+    (chartId: string, visible: boolean) =>
+      wb.getSheetById(sheetId).charts.setLegendVisible(chartId, visible),
+    [sheetId, wb],
+  );
+
+  const setChartTitleVisible = useCallback(
+    (chartId: string, visible: boolean) =>
+      wb.getSheetById(sheetId).charts.setChartTitleVisible(chartId, visible),
+    [sheetId, wb],
+  );
+
+  const setAxisTitle = useCallback(
+    (
+      chartId: string,
+      axisRole: ChartAxisRole,
+      title: string,
+      options?: { titleKind?: 'literal' | 'formula' },
+    ) => wb.getSheetById(sheetId).charts.setAxisTitle(chartId, axisRole, title, options),
+    [sheetId, wb],
+  );
+
+  const setAxisVisible = useCallback(
+    (chartId: string, axisRole: ChartAxisRole, visible: boolean) =>
+      wb.getSheetById(sheetId).charts.setAxisVisible(chartId, axisRole, visible),
+    [sheetId, wb],
+  );
+
+  const switchSeriesOrientation = useCallback(
+    (chartId: string) => wb.getSheetById(sheetId).charts.switchSeriesOrientation(chartId),
     [sheetId, wb],
   );
 
@@ -720,6 +781,11 @@ export function useCharts({ sheetId }: UseChartsOptions): UseChartsReturn {
     editingChartId,
     addChart,
     updateChart,
+    setLegendVisible,
+    setChartTitleVisible,
+    setAxisTitle,
+    setAxisVisible,
+    switchSeriesOrientation,
     updateChartPosition,
     removeChart,
     selectChart,

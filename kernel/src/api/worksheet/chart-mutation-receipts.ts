@@ -9,6 +9,11 @@ import type {
   SheetId,
 } from '@mog-sdk/contracts/api';
 import type {
+  ChartAxisRole,
+  ChartSourceBindingChange,
+  ChartSourceBindingAppModel,
+} from '@mog-sdk/contracts/data/chart-app-model';
+import type {
   BoxplotConfig,
   ChartBorder,
   DataLabelConfig,
@@ -38,9 +43,17 @@ type ChartMutationReceiptFields = Pick<
   | 'trendlineIndex'
   | 'pointIndex'
   | 'axisType'
+  | 'axisRole'
   | 'range'
+  | 'visible'
+  | 'title'
   | 'series'
   | 'trendline'
+  | 'appModelBefore'
+  | 'appModelAfter'
+  | 'sourceBindingBefore'
+  | 'sourceBindingAfter'
+  | 'sourceBindingChange'
 >;
 
 export type ChartMutationTarget = Partial<ChartMutationReceiptFields> & {
@@ -65,9 +78,17 @@ function receiptTargetFields(
     trendlineIndex: target.trendlineIndex,
     pointIndex: target.pointIndex,
     axisType: target.axisType,
+    axisRole: target.axisRole,
     range: target.range,
+    visible: target.visible,
+    title: target.title,
     series: target.series,
     trendline: target.trendline,
+    appModelBefore: target.appModelBefore,
+    appModelAfter: target.appModelAfter,
+    sourceBindingBefore: target.sourceBindingBefore,
+    sourceBindingAfter: target.sourceBindingAfter,
+    sourceBindingChange: target.sourceBindingChange,
   }) as Partial<ChartMutationReceiptFields>;
 }
 
@@ -109,10 +130,12 @@ function collectChangedRanges(target: ChartMutationTarget = {}): string[] {
 
 function chartMutationTargetKind(target: ChartMutationTarget): string {
   if (target.trendlineIndex !== undefined) return 'chartTrendline';
+  if (target.sourceBindingBefore !== undefined || target.sourceBindingAfter !== undefined)
+    return 'chartSourceBinding';
   if (target.pointIndex !== undefined) return 'chartPoint';
   if (target.seriesIndex !== undefined || target.fromSeriesIndex !== undefined)
     return 'chartSeries';
-  if (target.axisType !== undefined) return 'chartAxis';
+  if (target.axisType !== undefined || target.axisRole !== undefined) return 'chartAxis';
   return 'chart';
 }
 
@@ -205,6 +228,48 @@ export function buildFailedChartMutationReceipt(
     sheetId,
     chartId,
     chart: null,
+    effects: [
+      {
+        type: 'worksheetUnchanged',
+        sheetId,
+        objectId: chartId,
+        details: diagnosticDetails,
+      },
+    ],
+    diagnostics: [diagnostic],
+    ...targetFields,
+  };
+}
+
+export function buildUnsupportedChartMutationReceipt(
+  kind: ChartMutationReceiptKind,
+  sheetId: SheetId,
+  chartId: string,
+  message: string,
+  target: ChartMutationTarget = {},
+  details: Record<string, unknown> = {},
+): ChartMutationReceipt {
+  const targetFields = receiptTargetFields(target);
+  const diagnosticDetails = compactDetails({
+    mutationKind: kind,
+    ...targetFields,
+    ...details,
+  });
+  const diagnostic: OperationDiagnostic = {
+    severity: 'warning',
+    code: 'chart.mutation.unsupported',
+    message,
+    target: { sheetId, objectId: chartId },
+    recoverable: true,
+    details: diagnosticDetails,
+  };
+
+  return {
+    kind,
+    status: 'unsupported',
+    sheetId,
+    chartId,
+    chart: target.appModelBefore?.raw ?? null,
     effects: [
       {
         type: 'worksheetUnchanged',

@@ -7,6 +7,7 @@
 import type { CallableDisposable } from '@mog/types-core/disposable';
 import type { CellRange } from '@mog/types-core/core';
 import type { ChartMutationReceipt } from '../mutation-receipt';
+import type { ChartAppModel, ChartAxisRole } from '@mog/types-data/data/chart-app-model';
 import type {
   BoxplotConfig,
   Chart,
@@ -147,6 +148,9 @@ export interface WorksheetCharts {
 
   /** Get a chart by ID, or null if not found. */
   get(chartId: string): Promise<Chart | null>;
+
+  /** Get the normalized app-facing chart model used by first-party UI controls. */
+  getAppModel(chartId: string, options?: ChartReadOptions): Promise<ChartAppModel | null>;
 
   /** Update a chart's configuration. */
   update(chartId: string, updates: Partial<ChartConfig>): Promise<ChartUpdateReceipt>;
@@ -397,9 +401,26 @@ export interface WorksheetCharts {
   /** Set axis title from a formula string. */
   setAxisTitle(
     chartId: string,
-    axisType: 'category' | 'value',
-    formula: string,
+    axisType: ChartAxisRole,
+    title: string,
+    options?: { titleKind?: 'literal' | 'formula' },
   ): Promise<ChartMutationReceipt>;
+
+  /** Set axis visibility by semantic axis role. */
+  setAxisVisible(
+    chartId: string,
+    axisRole: ChartAxisRole,
+    visible: boolean,
+  ): Promise<ChartMutationReceipt>;
+
+  /** Set legend visibility with chart-app-model semantics. */
+  setLegendVisible(chartId: string, visible: boolean): Promise<ChartMutationReceipt>;
+
+  /** Set chart title visibility without requiring callers to patch raw title fields. */
+  setChartTitleVisible(chartId: string, visible: boolean): Promise<ChartMutationReceipt>;
+
+  /** Switch source orientation when supported, otherwise return an explicit no-op/unsupported receipt. */
+  switchSeriesOrientation(chartId: string): Promise<ChartMutationReceipt>;
 
   /** Set category axis labels from a cell range (A1 notation). */
   setCategoryNames(chartId: string, range: string): Promise<ChartMutationReceipt>;

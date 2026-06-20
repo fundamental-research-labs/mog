@@ -15,6 +15,12 @@ import type { FloatingObject } from '@mog/types-objects/objects/floating-objects
 import type { OperationReceiptBase } from './operation-receipt';
 import type { AutoFillApplyReceipt } from './worksheet/fill';
 import type {
+  ChartAppModel,
+  ChartAxisRole,
+  ChartSourceBindingChange,
+  ChartSourceBindingAppModel,
+} from '@mog/types-data/data/chart-app-model';
+import type {
   ApplyScenarioResult,
   Comment,
   LinkId,
@@ -173,7 +179,11 @@ export type ChartMutationReceiptKind =
   | 'chart.trendline.add'
   | 'chart.trendline.update'
   | 'chart.trendline.remove'
+  | 'chart.legend.setVisible'
+  | 'chart.axis.setVisible'
   | 'chart.axis.setTitle'
+  | 'chart.title.setVisible'
+  | 'chart.source.switchSeriesOrientation'
   | 'chart.categoryNames.set'
   | 'chart.dataLabel.setHeight'
   | 'chart.dataLabel.setWidth';
@@ -181,17 +191,25 @@ export type ChartMutationReceiptKind =
 /** Receipt for chart series, trendline, axis, and data-label mutations. */
 export interface ChartSeriesMutationReceipt extends OperationReceiptBase {
   readonly kind: ChartMutationReceiptKind;
-  readonly status: 'applied' | 'failed' | 'noOp';
+  readonly status: 'applied' | 'failed' | 'noOp' | 'unsupported';
   readonly sheetId: string;
   readonly chartId: string;
   readonly chart?: Chart | null;
+  readonly appModelBefore?: ChartAppModel;
+  readonly appModelAfter?: ChartAppModel;
+  readonly sourceBindingBefore?: ChartSourceBindingAppModel;
+  readonly sourceBindingAfter?: ChartSourceBindingAppModel;
+  readonly sourceBindingChange?: ChartSourceBindingChange;
   readonly seriesIndex?: number;
   readonly fromSeriesIndex?: number;
   readonly toSeriesIndex?: number;
   readonly trendlineIndex?: number;
   readonly pointIndex?: number;
   readonly axisType?: 'category' | 'value';
+  readonly axisRole?: ChartAxisRole;
   readonly range?: string;
+  readonly visible?: boolean;
+  readonly title?: string | null;
   readonly series?: SeriesConfig | null;
   readonly trendline?: TrendlineConfig | null;
 }

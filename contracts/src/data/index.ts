@@ -1,4 +1,5 @@
 export * from './charts';
+export * from './chart-app-model';
 export * from './conditional-format';
 export * from './diagnostics';
 export * from './filter';

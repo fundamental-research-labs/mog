@@ -23,6 +23,11 @@
       "types": "./dist/data/charts.d.ts",
       "import": "./dist/data/charts.js"
     },
+    "./data/chart-app-model": {
+      "development": "./src/data/chart-app-model.ts",
+      "types": "./dist/data/chart-app-model.d.ts",
+      "import": "./dist/data/chart-app-model.js"
+    },
     "./data/diagnostics": {
       "development": "./src/data/diagnostics.ts",
       "types": "./dist/data/diagnostics.d.ts",

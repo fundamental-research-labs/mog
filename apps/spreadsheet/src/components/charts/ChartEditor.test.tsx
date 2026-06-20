@@ -1,8 +1,9 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeAll, describe, expect, it, jest } from '@jest/globals';
 
 import type { ChartConfig } from '@mog/charts';
+import type { ChartAppModel } from '@mog-sdk/contracts/data/chart-app-model';
 
 import { ChartEditor } from './ChartEditor';
 
@@ -61,5 +62,61 @@ describe('ChartEditor', () => {
     expect(screen.getByRole('option', { name: 'Default' })).toBeInTheDocument();
     expect(screen.getByRole('option', { name: 'Clustered' })).toBeInTheDocument();
     expect(screen.getByRole('option', { name: 'Stacked' })).toBeInTheDocument();
+  });
+
+  it('routes legend visibility through the semantic callback', async () => {
+    const user = userEvent.setup();
+    const onChange = jest.fn();
+    const onSetLegendVisible = jest.fn();
+
+    render(
+      <ChartEditor
+        config={{ ...BASE_CONFIG, legend: { show: true, visible: true, position: 'bottom' } }}
+        onChange={onChange}
+        onSetLegendVisible={onSetLegendVisible}
+        onClose={jest.fn()}
+        onDelete={jest.fn()}
+      />,
+    );
+
+    await user.click(screen.getByRole('tab', { name: 'Legend' }));
+    await user.click(screen.getByRole('checkbox', { name: 'Show legend' }));
+
+    expect(onSetLegendVisible).toHaveBeenCalledWith(false);
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('uses app-model axis titles and routes edits through the semantic callback', async () => {
+    const onChange = jest.fn();
+    const onSetAxisTitle = jest.fn();
+    const appModel = {
+      axes: {
+        category: { title: 'Imported Category' },
+        value: { title: 'Imported Value' },
+      },
+      legend: { visible: false },
+      title: { visible: true },
+      source: { supportsOrientationSwitch: true },
+    } as ChartAppModel;
+
+    render(
+      <ChartEditor
+        config={BASE_CONFIG}
+        appModel={appModel}
+        onChange={onChange}
+        onSetAxisTitle={onSetAxisTitle}
+        onClose={jest.fn()}
+        onDelete={jest.fn()}
+      />,
+    );
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Axis' }));
+    const input = screen.getByPlaceholderText('X-axis title');
+    expect(input).toHaveValue('Imported Category');
+
+    fireEvent.change(input, { target: { value: 'Month' } });
+
+    expect(onSetAxisTitle).toHaveBeenCalledWith('category', 'Month');
+    expect(onChange).not.toHaveBeenCalled();
   });
 });

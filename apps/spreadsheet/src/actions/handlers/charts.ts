@@ -552,11 +552,20 @@ export const APPLY_SELECT_DATA: AsyncActionHandler = async (deps): Promise<Actio
 
   // Update chart with new data via unified Worksheet API
   try {
-    await ws.charts.update(dialogState.chartId, {
+    await ws.charts.setSourceData(dialogState.chartId, {
       dataRange: dialogState.dataRange,
-      seriesOrientation: dialogState.orientation,
       // Note: Full implementation would update series configurations
     });
+    const appModel = await ws.charts.getAppModel(dialogState.chartId, {
+      materialization: 'available',
+    });
+    const currentOrientation = appModel?.source.orientation;
+    if (
+      (currentOrientation && currentOrientation !== dialogState.orientation) ||
+      (!currentOrientation && dialogState.orientation === 'rows')
+    ) {
+      await ws.charts.switchSeriesOrientation(dialogState.chartId);
+    }
   } catch (e: any) {
     return { handled: false, error: e.message ?? String(e) };
   }

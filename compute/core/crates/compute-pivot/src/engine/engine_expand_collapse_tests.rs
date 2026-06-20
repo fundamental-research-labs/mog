@@ -35,6 +35,82 @@ fn drill_down_returns_source_row_indices() {
 }
 
 #[test]
+fn drill_down_matches_all_row_tuple_levels() {
+    let config = make_base_config(
+        sample_fields(),
+        vec![
+            make_placement("region", PivotFieldArea::Row, 0, None),
+            make_placement("product", PivotFieldArea::Row, 1, None),
+            make_placement(
+                "sales",
+                PivotFieldArea::Value,
+                0,
+                Some(AggregateFunction::Sum),
+            ),
+        ],
+        vec![],
+    );
+
+    let indices = drill_down(
+        &config,
+        &sample_sales_data(),
+        "T:east\x00T:gadget",
+        GRAND_TOTAL_KEY,
+    );
+
+    assert_eq!(indices, vec![2, 3]);
+}
+
+#[test]
+fn drill_down_accepts_blank_tuple_member_keys() {
+    let data = vec![
+        vec![cv_text("Segment"), cv_text("Category"), cv_text("Amount")],
+        vec![cv_text(""), cv_text("Discount"), cv_num(7.75)],
+        vec![CellValue::Null, cv_text("Standard"), cv_num(3.5)],
+        vec![cv_text("Alpha"), cv_text("Standard"), cv_num(10.5)],
+    ];
+    let config = make_base_config(
+        vec![
+            PivotField {
+                id: FieldId::from("segment"),
+                name: "Segment".to_string(),
+                source_column: 0,
+                data_type: DetectedDataType::String,
+                ..Default::default()
+            },
+            PivotField {
+                id: FieldId::from("category"),
+                name: "Category".to_string(),
+                source_column: 1,
+                data_type: DetectedDataType::String,
+                ..Default::default()
+            },
+            PivotField {
+                id: FieldId::from("amount"),
+                name: "Amount".to_string(),
+                source_column: 2,
+                data_type: DetectedDataType::Number,
+                ..Default::default()
+            },
+        ],
+        vec![
+            make_placement("segment", PivotFieldArea::Row, 0, None),
+            make_placement(
+                "amount",
+                PivotFieldArea::Value,
+                0,
+                Some(AggregateFunction::Sum),
+            ),
+        ],
+        vec![],
+    );
+
+    let indices = drill_down(&config, &data, "\x00BLANK\x00", GRAND_TOTAL_KEY);
+
+    assert_eq!(indices, vec![0, 1]);
+}
+
+#[test]
 fn drill_down_handles_grand_total() {
     let config = make_base_config(
         sample_fields(),

@@ -6,6 +6,7 @@ use crate::filter::apply_filters_resolved;
 use crate::grouper::{apply_date_grouping, apply_number_grouping, normalize_to_key};
 use crate::resolved::ResolvedPivotConfig;
 use crate::types::{AggregateFunction, PivotTableConfig};
+use crate::values::{ARRAY_KEY, BLANK_KEY, LAMBDA_KEY};
 
 use super::GRAND_TOTAL_KEY;
 use super::validation::validate_and_resolve;
@@ -41,16 +42,8 @@ pub fn drill_down_resolved(
     column_key: &str,
 ) -> Vec<usize> {
     // Parse the row and column keys to extract field values
-    let row_values: Vec<&str> = if row_key == GRAND_TOTAL_KEY {
-        vec![]
-    } else {
-        row_key.split('\x00').collect()
-    };
-    let column_values: Vec<&str> = if column_key == GRAND_TOTAL_KEY {
-        vec![]
-    } else {
-        column_key.split('\x00').collect()
-    };
+    let row_values = parse_tuple_key(row_key);
+    let column_values = parse_tuple_key(column_key);
 
     // Filter data rows (apply the same filters as compute)
     let data_rows = if data.len() > 1 { &data[1..] } else { &[] };
@@ -132,4 +125,35 @@ pub fn drill_down_resolved(
     }
 
     matching_indices
+}
+
+fn parse_tuple_key(key: &str) -> Vec<&str> {
+    if key == GRAND_TOTAL_KEY {
+        return Vec::new();
+    }
+
+    let mut values = Vec::new();
+    let mut rest = key;
+    while !rest.is_empty() {
+        if let Some(sentinel) = [BLANK_KEY, ARRAY_KEY, LAMBDA_KEY]
+            .iter()
+            .find(|sentinel| rest.starts_with(**sentinel))
+        {
+            values.push(*sentinel);
+            rest = &rest[sentinel.len()..];
+            if rest.starts_with('\x00') {
+                rest = &rest[1..];
+            }
+            continue;
+        }
+
+        if let Some(separator) = rest.find('\x00') {
+            values.push(&rest[..separator]);
+            rest = &rest[separator + 1..];
+        } else {
+            values.push(rest);
+            break;
+        }
+    }
+    values
 }

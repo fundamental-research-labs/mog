@@ -43,6 +43,18 @@ export {
 // import from the `.gen.ts` path directly. Source: `MethodAccess` on each
 // `#[bridge::*]` method in compute-core.
 export { BRIDGE_METHOD_KIND, type BridgeMethodKind } from './manifest.gen';
+export {
+  classifyWriteOperation,
+  type OperationAdmissionClassification,
+  type OperationInvocationKind,
+} from './operation-classification';
+export {
+  observeMutationAdmission,
+  recordMutationAdmissionDiagnostic,
+  type MutationAdmissionDiagnostic,
+  type MutationAdmissionDiagnosticCode,
+  type MutationAdmissionOptions,
+} from './mutation-admission';
 
 // ComputeCore — the real per-doc compute state holder, re-exported so the
 // shell-side trap-recovery integration tests

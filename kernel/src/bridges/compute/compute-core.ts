@@ -45,7 +45,9 @@ import { refreshViewportForCfSiblings } from './cf-sibling-refresh';
 import { refreshViewportsAfterHistoryReplay } from './history-replay-refresh';
 import {
   admitPublicMutation as admitPublicMutationForCore,
+  observeMutationAdmission,
   type DirectEditPosition,
+  type MutationAdmissionOptions,
   type MutationTuple,
   runSystemMutation,
 } from './mutation-admission';
@@ -419,12 +421,13 @@ export class ComputeCore {
    * wait for deferred XLSX hydration. The post-barrier writable check matters:
    * closing/checkpointing/read-only state can arrive while hydration is running.
    */
-  async admitPublicMutation(operation: string): Promise<void> {
+  async admitPublicMutation(operation: string, options?: MutationAdmissionOptions): Promise<void> {
     await admitPublicMutationForCore(
       this.ctx,
       this._writeGate,
       () => this.ensureInitialized(),
       operation,
+      options,
     );
   }
 
@@ -998,8 +1001,9 @@ export class ComputeCore {
     operation: string,
     call: () => Promise<MutationTuple>,
     directEdits?: DirectEditPosition[],
+    options?: MutationAdmissionOptions,
   ): Promise<MutationResult> {
-    await this.admitPublicMutation(operation);
+    await this.admitPublicMutation(operation, options);
     return this.mutate(call(), directEdits, operation);
   }
 
@@ -1015,7 +1019,12 @@ export class ComputeCore {
     operation: string,
     call: () => Promise<MutationTuple>,
     directEdits?: DirectEditPosition[],
+    options?: MutationAdmissionOptions,
   ): Promise<MutationResult> {
+    observeMutationAdmission(this.ctx, operation, {
+      invocation: 'public-ui-state',
+      ...options,
+    });
     this.ensureInitialized();
     this._writeGate?.assertWritable(operation);
     return this.mutate(call(), directEdits, operation);
@@ -1030,8 +1039,9 @@ export class ComputeCore {
     call: () => Promise<T>,
     toMutationTuple: (result: T) => MutationTuple,
     directEdits?: DirectEditPosition[],
+    options?: MutationAdmissionOptions,
   ): Promise<{ raw: T; mutation: MutationResult }> {
-    await this.admitPublicMutation(operation);
+    await this.admitPublicMutation(operation, options);
     const raw = await call();
     const mutation = await this.mutate(
       Promise.resolve(toMutationTuple(raw)),
@@ -1050,9 +1060,10 @@ export class ComputeCore {
     operation: string,
     call: () => Promise<MutationTuple>,
     directEdits?: DirectEditPosition[],
+    options?: MutationAdmissionOptions,
   ): Promise<MutationResult> {
     const run = () => this.mutate(call(), directEdits, operation);
-    return runSystemMutation(this._writeGate, run);
+    return runSystemMutation(this.ctx, this._writeGate, operation, run, options);
   }
 
   /**
@@ -1063,6 +1074,7 @@ export class ComputeCore {
     call: () => Promise<T>,
     toMutationTuple: (result: T) => MutationTuple,
     directEdits?: DirectEditPosition[],
+    options?: MutationAdmissionOptions,
   ): Promise<{ raw: T; mutation: MutationResult }> {
     const run = async () => {
       const raw = await call();
@@ -1073,7 +1085,7 @@ export class ComputeCore {
       );
       return { raw, mutation };
     };
-    return runSystemMutation(this._writeGate, run);
+    return runSystemMutation(this.ctx, this._writeGate, operation, run, options);
   }
 
   /**

@@ -1,0 +1,66 @@
+{
+  "schemaVersion": "vc02.operation-classification-registry.v1",
+  "baseCommit": "5f272c766228d54ffe6ca504b746e580a20ad3fc",
+  "contractSource": "contracts/src/versioning/index.ts",
+  "runtimeRegistry": "kernel/src/bridges/compute/operation-classification.ts",
+  "coveredInventory": "dev/version-control/inventory/compute-bridge-write-inventory.json",
+  "capturePolicies": [
+    "commitEligible",
+    "excluded",
+    "derivedOnly",
+    "rootCreation",
+    "historyGap",
+    "shadowOnly"
+  ],
+  "writeAdmissionModes": [
+    "capture",
+    "shadowOnly",
+    "captureDisabledNoHistory",
+    "captureSuspendedWithGap",
+    "block"
+  ],
+  "requiredRepresentativeClasses": [
+    {
+      "class": "authored mutation",
+      "command": "compute_set_cell",
+      "capturePolicy": "commitEligible",
+      "writeAdmissionMode": "capture"
+    },
+    {
+      "class": "excluded sync write",
+      "command": "compute_apply_sync_update",
+      "capturePolicy": "excluded",
+      "writeAdmissionMode": "captureDisabledNoHistory"
+    },
+    {
+      "class": "lifecycle create",
+      "command": "compute_init",
+      "capturePolicy": "rootCreation",
+      "writeAdmissionMode": "capture"
+    },
+    {
+      "class": "lifecycle destroy",
+      "command": "compute_destroy",
+      "capturePolicy": "excluded",
+      "writeAdmissionMode": "captureDisabledNoHistory"
+    },
+    {
+      "class": "undo/redo control",
+      "command": "compute_undo",
+      "capturePolicy": "historyGap",
+      "writeAdmissionMode": "captureSuspendedWithGap"
+    },
+    {
+      "class": "viewport/control-plane/runtime write",
+      "command": "compute_update_viewport_bounds",
+      "capturePolicy": "shadowOnly",
+      "writeAdmissionMode": "shadowOnly"
+    },
+    {
+      "class": "native compute-api write",
+      "command": "compute_wb_security_add_policy",
+      "capturePolicy": "excluded",
+      "writeAdmissionMode": "block"
+    }
+  ]
+}

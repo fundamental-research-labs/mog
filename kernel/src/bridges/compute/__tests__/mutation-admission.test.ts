@@ -1,4 +1,6 @@
 import { jest } from '@jest/globals';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 (globalThis as any).window = {};
 
@@ -10,6 +12,8 @@ import { WriteGate } from '../../../document/write-gate';
 import { ComputeBridge } from '../compute-bridge';
 import { ComputeCore } from '../compute-core';
 import type { MutationResult } from '../compute-types.gen';
+import { classifyWriteOperation, type OperationInvocationKind } from '../operation-classification';
+import type { MutationAdmissionDiagnostic } from '../mutation-admission';
 
 function deferred<T = void>(): {
   promise: Promise<T>;
@@ -68,7 +72,69 @@ function createStartedBridge(ctx: IKernelContext, transport: BridgeTransport): C
   return bridge;
 }
 
+function repoRoot(): string {
+  return process.cwd().endsWith('/kernel') ? resolve(process.cwd(), '..') : process.cwd();
+}
+
+function invocationFromWrapper(wrapper: string): OperationInvocationKind | undefined {
+  if (wrapper === 'mutateSystem' || wrapper === 'mutateSystemResult') return 'system-mutation';
+  if (wrapper === 'mutatePublicUiState') return 'public-ui-state';
+  if (wrapper === 'direct-compute-api') return 'direct-compute-api';
+  if (wrapper === 'transport.call') return 'lifecycle';
+  return undefined;
+}
+
 describe('Compute mutation admission', () => {
+  it('classifies every mutating command in the VC-02 bridge write inventory', () => {
+    const inventoryPath = resolve(
+      repoRoot(),
+      'dev/version-control/inventory/compute-bridge-write-inventory.json',
+    );
+    const inventory = JSON.parse(readFileSync(inventoryPath, 'utf8')) as {
+      entries: Array<{ command: string; wrapper: string; source: string }>;
+    };
+    const unclassified = inventory.entries
+      .map((entry) => ({
+        entry,
+        classification: classifyWriteOperation(entry.command, invocationFromWrapper(entry.wrapper)),
+      }))
+      .filter(({ classification }) => !classification)
+      .map(({ entry }) => entry);
+
+    expect(unclassified).toEqual([]);
+    expect(classifyWriteOperation('compute_set_cell')).toMatchObject({
+      capturePolicy: 'commitEligible',
+      writeAdmissionMode: 'capture',
+      domainClass: 'authored',
+    });
+    expect(classifyWriteOperation('compute_apply_sync_update', 'system-mutation')).toMatchObject({
+      capturePolicy: 'excluded',
+      writeAdmissionMode: 'captureDisabledNoHistory',
+      operationKind: 'sync-import',
+    });
+    expect(classifyWriteOperation('compute_init', 'lifecycle')).toMatchObject({
+      capturePolicy: 'rootCreation',
+      writeAdmissionMode: 'capture',
+    });
+    expect(classifyWriteOperation('compute_destroy', 'lifecycle')).toMatchObject({
+      capturePolicy: 'excluded',
+      writeAdmissionMode: 'captureDisabledNoHistory',
+    });
+    expect(classifyWriteOperation('compute_undo')).toMatchObject({
+      capturePolicy: 'historyGap',
+      writeAdmissionMode: 'captureSuspendedWithGap',
+    });
+    expect(classifyWriteOperation('compute_update_viewport_bounds')).toMatchObject({
+      capturePolicy: 'shadowOnly',
+      writeAdmissionMode: 'shadowOnly',
+    });
+    expect(classifyWriteOperation('compute_wb_security_add_policy')).toMatchObject({
+      capturePolicy: 'excluded',
+      writeAdmissionMode: 'block',
+      domainClass: 'secret',
+    });
+  });
+
   it('waits for all-sheet materialization before starting a public transport call', async () => {
     const materialized = deferred<void>();
     const awaitMaterialized = jest.fn(() => materialized.promise);
@@ -95,6 +161,69 @@ describe('Compute mutation admission', () => {
     await promise;
 
     expect(transport.call).toHaveBeenCalledWith('compute_set_cell', { docId: 'test-doc' });
+  });
+
+  it('records missing context diagnostics for production public wrappers', async () => {
+    const diagnostics: MutationAdmissionDiagnostic[] = [];
+    const ctx = makeMockContext({
+      versioningAdmissionDiagnostics: {
+        record: (diagnostic: MutationAdmissionDiagnostic) => diagnostics.push(diagnostic),
+      },
+    } as unknown as Partial<IKernelContext>);
+    const transport: BridgeTransport & { call: jest.Mock } = {
+      call: jest.fn(async () => [new Uint8Array(), mutationResult()]),
+    };
+    const core = createStartedCore(ctx, transport);
+
+    await core.mutatePublic(
+      'compute_set_cell',
+      () =>
+        transport.call('compute_set_cell', { docId: 'test-doc' }) as Promise<
+          [Uint8Array, MutationResult]
+        >,
+    );
+
+    expect(diagnostics).toEqual([
+      expect.objectContaining({
+        code: 'versioning.admission.missing-context',
+        severity: 'warning',
+        command: 'compute_set_cell',
+        classification: expect.objectContaining({
+          capturePolicy: 'commitEligible',
+          writeAdmissionMode: 'capture',
+        }),
+      }),
+    ]);
+  });
+
+  it('records unclassified write diagnostics before transport execution', async () => {
+    const diagnostics: MutationAdmissionDiagnostic[] = [];
+    const ctx = makeMockContext({
+      versioningAdmissionDiagnostics: {
+        record: (diagnostic: MutationAdmissionDiagnostic) => diagnostics.push(diagnostic),
+      },
+    } as unknown as Partial<IKernelContext>);
+    const transport: BridgeTransport & { call: jest.Mock } = {
+      call: jest.fn(async () => [new Uint8Array(), mutationResult()]),
+    };
+    const core = createStartedCore(ctx, transport);
+
+    await core.mutatePublic(
+      'custom_unregistered_write',
+      () =>
+        transport.call('custom_unregistered_write', { docId: 'test-doc' }) as Promise<
+          [Uint8Array, MutationResult]
+        >,
+    );
+
+    expect(diagnostics).toEqual([
+      expect.objectContaining({
+        code: 'versioning.admission.unclassified-write',
+        severity: 'error',
+        command: 'custom_unregistered_write',
+      }),
+    ]);
+    expect(transport.call).toHaveBeenCalledWith('custom_unregistered_write', { docId: 'test-doc' });
   });
 
   it('rechecks the write gate after materialization before starting public transport', async () => {

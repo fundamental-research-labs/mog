@@ -1,0 +1,2105 @@
+{
+  "schemaVersion": "vc02.compute-write-inventory.v1",
+  "baseCommit": "5f272c766228d54ffe6ca504b746e580a20ad3fc",
+  "sourceDigest": "sha256:034c99758e04f8be713ff4ced7bc9c744633180a5548752d3068bb132496cc2c",
+  "entries": [
+    {
+      "source": "compute-core-direct",
+      "wrapper": "admitPublicMutation",
+      "command": "compute_redo"
+    },
+    {
+      "source": "compute-core-direct",
+      "wrapper": "admitPublicMutation",
+      "command": "compute_undo"
+    },
+    {
+      "source": "compute-core-direct",
+      "wrapper": "mutatePublic",
+      "command": "compute_structure_change"
+    },
+    {
+      "source": "compute-core-direct",
+      "wrapper": "mutateSystem",
+      "command": "compute_apply_sync_update"
+    },
+    {
+      "source": "compute-core-lifecycle",
+      "wrapper": "transport.call",
+      "command": "compute_destroy"
+    },
+    {
+      "source": "compute-core-lifecycle",
+      "wrapper": "transport.call",
+      "command": "compute_init"
+    },
+    {
+      "source": "compute-core-lifecycle",
+      "wrapper": "transport.call",
+      "command": "compute_init_from_yrs_state"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "addCalculatedColumn",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_add_calculated_column"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "addCfRule",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_add_cf_rule"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "addCommentByPosition",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_add_comment_by_position"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "addComputeSheet",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_add_compute_sheet"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "addHorizontalPageBreak",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_add_horizontal_page_break"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "addRuleToCf",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_add_rule_to_cf"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "addSlicerStyle",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_add_slicer_style"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "addSparklineGroup",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_add_sparkline_group"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "addSparkline",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_add_sparkline"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "addTableColumn",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_add_table_column"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "addTableDataRow",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_add_table_data_row"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "addVerticalPageBreak",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_add_vertical_page_break"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "applyAdvancedFilter",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_apply_advanced_filter"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "applyAutoExpansion",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_apply_auto_expansion"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "applyCalculatedFormulasToRow",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_apply_calculated_formulas_to_row"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "applyChanges",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_apply_changes"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "applyFilter",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_apply_filter"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "applyScenario",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_apply_scenario"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "applySyncUpdate",
+      "access": "write",
+      "wrapper": "mutateSystem",
+      "command": "compute_apply_sync_update"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "autoFill",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_auto_fill"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "autoFitColumnAndSet",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_auto_fit_column_and_set"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "autoFitColumnsAndSet",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_auto_fit_columns_and_set"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "autoFitRowsAndSet",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_auto_fit_rows_and_set"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "autoOutline",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_auto_outline"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "batchClearCells",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_batch_clear_cells"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "batchSetCellsByPosition",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_batch_set_cells_by_position"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "batchSetCells",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_batch_set_cells"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "beginUndoGroup",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_begin_undo_group"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "bringChartForward",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_bring_chart_forward"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "bringChartToFront",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_bring_chart_to_front"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "bringFloatingObjectForward",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_bring_floating_object_forward"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "bringFloatingObjectToFront",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_bring_floating_object_to_front"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "clearAllColumnFilters",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_clear_all_column_filters"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "clearAllComments",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_clear_all_comments"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "clearAllFilters",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_clear_all_filters"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "clearAllGrouping",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_clear_all_grouping"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "clearAllMerges",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_clear_all_merges"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "clearAllPageBreaks",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_clear_all_page_breaks"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "clearCellFormat",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_clear_cell_format"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "clearCfFormatsForSheet",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_clear_cf_formats_for_sheet"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "clearColFormat",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_clear_col_format"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "clearColumnFilter",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_clear_column_filter"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "clearColumnGrouping",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_clear_column_grouping"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "clearColumnSchema",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_clear_column_schema"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "clearFormatForRanges",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_clear_format_for_ranges"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "clearHyperlinksInRange",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_clear_hyperlinks_in_range"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "clearRangeAndReturnIds",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_clear_range_and_return_ids"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "clearRangeByPosition",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_clear_range_by_position"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "clearRange",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_clear_range"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "clearRangeWithMode",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_clear_range_with_mode"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "clearRowGrouping",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_clear_row_grouping"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "clearSchemas",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_clear_schemas"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "clearSlicerSelection",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_clear_slicer_selection"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "clearSparklinesForSheet",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_clear_sparklines_for_sheet"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "clearSparklinesInRange",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_clear_sparklines_in_range"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "collapseAllGroups",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_collapse_all_groups"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "completeDeferredHydration",
+      "access": "write",
+      "wrapper": "mutateSystem",
+      "command": "compute_complete_deferred_hydration"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "convertNoteToThread",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_convert_note_to_thread"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "convertTableToRange",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_convert_table_to_range"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "copyRange",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_copy_range"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "createBinding",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_create_binding"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "createChart",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_create_chart"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "createCustomCellStyle",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_create_custom_cell_style"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "createCustomTableStyle",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_create_custom_table_style"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "createDataTable",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_create_data_table"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "createFilter",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_create_filter"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "createFloatingObjectGroup",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_create_floating_object_group"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "createFloatingObject",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_create_floating_object"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "createNamedRange",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_create_named_range"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "createScenario",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_create_scenario"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "createShape",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_create_shape"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "createSlicer",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_create_slicer"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "createSubtotals",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_create_subtotals"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "createTableLifecycle",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_create_table_lifecycle"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "createTable",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_create_table"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "deleteCellsWithShift",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_delete_cells_with_shift"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "deleteCfRule",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_delete_cf_rule"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "deleteChart",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_delete_chart"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "deleteComment",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_delete_comment"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "deleteCommentsForCellByPosition",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_delete_comments_for_cell_by_position"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "deleteCommentsForCell",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_delete_comments_for_cell"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "deleteCustomCellStyle",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_delete_custom_cell_style"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "deleteCustomTableStyle",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_delete_custom_table_style"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "deleteFilter",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_delete_filter"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "deleteFloatingObjectGroup",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_delete_floating_object_group"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "deleteFloatingObject",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_delete_floating_object"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "deleteRangeSchema",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_delete_range_schema"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "deleteRuleFromCf",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_delete_rule_from_cf"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "deleteSlicer",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_delete_slicer"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "deleteSlicerStyle",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_delete_slicer_style"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "deleteSparklineGroup",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_delete_sparkline_group"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "deleteSparkline",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_delete_sparkline"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "deleteTable",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_delete_table"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "duplicateFloatingObjectTyped",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_duplicate_floating_object_typed"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "duplicateSlicerStyle",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_duplicate_slicer_style"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "endUndoGroup",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_end_undo_group"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "expandAllGroups",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_expand_all_groups"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "flashFill",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_flash_fill"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "flipFloatingObjectTyped",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_flip_floating_object_typed"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "flushUndoCapture",
+      "access": "write",
+      "wrapper": "mutateSystem",
+      "command": "compute_flush_undo_capture"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "freezeColumns",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_freeze_columns"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "freezeRows",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_freeze_rows"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "getOrCreateCellId",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_get_or_create_cell_id"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "groupColumns",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_group_columns"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "groupRows",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_group_rows"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "hideColumns",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_hide_columns"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "hideRows",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_hide_rows"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "importFromCsvBytes",
+      "access": "write",
+      "wrapper": "mutateSystem",
+      "command": "compute_import_from_csv_bytes"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "importFromXlsxBytesDeferred",
+      "access": "write",
+      "wrapper": "mutateSystem",
+      "command": "compute_import_from_xlsx_bytes_deferred"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "importFromXlsxBytes",
+      "access": "write",
+      "wrapper": "mutateSystem",
+      "command": "compute_import_from_xlsx_bytes"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "importNamedRanges",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_import_named_ranges"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "importSheetsFromXlsx",
+      "access": "write",
+      "wrapper": "query",
+      "command": "compute_import_sheets_from_xlsx"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "importValues",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_import_values"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "insertCellsWithShift",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_insert_cells_with_shift"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "linkChartToTable",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_link_chart_to_table"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "mergeAcross",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_merge_across"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "mergeAndCenter",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_merge_and_center"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "mergeRange",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_merge_range"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "moveFloatingObjectTyped",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_move_floating_object_typed"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "moveSheet",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_move_sheet"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "patchWorkbookSettings",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_patch_workbook_settings"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "pivotCreate",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_pivot_create"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "pivotDelete",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_pivot_delete"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "pivotMaterialize",
+      "access": "write",
+      "wrapper": "query",
+      "command": "compute_pivot_materialize"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "pivotRegisterDef",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_pivot_register_def"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "pivotUnregisterDef",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_pivot_unregister_def"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "pivotUpdate",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_pivot_update"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "protectSheet",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_protect_sheet"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "protectSheetWithOptions",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_protect_sheet_with_options"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "protectWorkbook",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_protect_workbook"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "reapplyFilter",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_reapply_filter"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "redo",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_redo"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "registerViewport",
+      "access": "lifecycle",
+      "wrapper": "mutateSystem",
+      "command": "compute_register_viewport"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "relocateCells",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_relocate_cells"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "relocateCellsYrs",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_relocate_cells_yrs"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "removeBinding",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_remove_binding"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "removeBindingsForConnection",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_remove_bindings_for_connection"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "removeCalculatedColumn",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_remove_calculated_column"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "removeComputeSheet",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_remove_compute_sheet"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "removeDuplicates",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_remove_duplicates"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "removeHfImage",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_remove_hf_image"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "removeHorizontalPageBreak",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_remove_horizontal_page_break"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "removeHyperlink",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_remove_hyperlink"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "removeNamedRangeById",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_remove_named_range_by_id"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "removeNamedRange",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_remove_named_range"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "removeNamedRangesByScope",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_remove_named_ranges_by_scope"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "removeScenario",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_remove_scenario"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "removeSchema",
+      "access": "write",
+      "wrapper": "query",
+      "command": "compute_remove_schema"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "removeSubtotals",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_remove_subtotals"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "removeTableColumn",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_remove_table_column"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "removeTableDataRow",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_remove_table_data_row"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "removeVerticalPageBreak",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_remove_vertical_page_break"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "renameTableColumn",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_rename_table_column"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "renameTable",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_rename_table"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "reorderCfRules",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_reorder_cf_rules"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "reorderSheets",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_reorder_sheets"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "replaceAllInRange",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_replace_all_in_range"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "resetSheetViewports",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_reset_sheet_viewports"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "resetViewportState",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_reset_viewport_state"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "resetWorkbookSettings",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_reset_workbook_settings"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "resizeFloatingObjectTyped",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_resize_floating_object_typed"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "resizeTable",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_resize_table"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "restoreScenario",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_restore_scenario"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "rotateFloatingObjectTyped",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_rotate_floating_object_typed"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "sendChartBackward",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_send_chart_backward"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "sendChartToBack",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_send_chart_to_back"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "sendFloatingObjectBackward",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_send_floating_object_backward"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "sendFloatingObjectToBack",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_send_floating_object_to_back"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "setActiveScenario",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_set_active_scenario"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "setArrayFormula",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_set_array_formula"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "setCalculatedColumnFormula",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_set_calculated_column_formula"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "setCalculationMode",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_set_calculation_mode"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "setCalculationSettings",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_set_calculation_settings"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "setCellBinary",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_set_cell_binary"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "setCellFormat",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_set_cell_format"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "setCell",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_set_cell"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "setCellPropertiesBatch",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_set_cell_properties_batch"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "setCellsBatch",
+      "access": "write",
+      "wrapper": "query",
+      "command": "compute_set_cells_batch"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "setCellValueAsText",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_set_cell_value_as_text"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "setCellValueParsed",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_set_cell_value_parsed"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "setCellValuesParsed",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_set_cell_values_parsed"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "setColFormat",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_set_col_format"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "setColFormatRange",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_set_col_format_range"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "setColFormats",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_set_col_formats"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "setColumnFilter",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_set_column_filter"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "setColumnSchema",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_set_column_schema"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "setColWidthChars",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_set_col_width_chars"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "setColWidth",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_set_col_width"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "setColWidthsChars",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_set_col_widths_chars"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "setColWidths",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_set_col_widths"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "setConvergenceThreshold",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_set_convergence_threshold"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "setCulture",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_set_culture"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "setCustomSetting",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_set_custom_setting"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "setDateValue",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_set_date_value"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "setDefaultPivotTableStyle",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_set_default_pivot_table_style"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "setDefaultSlicerStyle",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_set_default_slicer_style"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "setDefaultTableStyleId",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_set_default_table_style_id"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "setDocumentProperties",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_set_document_properties"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "setFilterSortState",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_set_filter_sort_state"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "setFloatingObjectGroup",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_set_floating_object_group"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "setFloatingObject",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_set_floating_object"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "setFormatForRanges",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_set_format_for_ranges"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "setFormatForRangesUiState",
+      "access": "write",
+      "wrapper": "mutateSystem",
+      "command": "compute_set_format_for_ranges_ui_state"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "setFrozenPanes",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_set_frozen_panes"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "setGroupCollapsed",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_set_group_collapsed"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "setHfImage",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_set_hf_image"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "setHyperlink",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_set_hyperlink"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "setIterativeCalculationEnabled",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_set_iterative_calculation_enabled"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "setIterativeCalculation",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_set_iterative_calculation"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "setLevelCollapsed",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_set_level_collapsed"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "setMaxIterations",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_set_max_iterations"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "setNamedRange",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_set_named_range"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "setNoteDimensions",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_set_note_dimensions"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "setNoteVisible",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_set_note_visible"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "setOutlineSettings",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_set_outline_settings"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "setPrintArea",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_set_print_area"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "setPrintSettings",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_set_print_settings"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "setPrintTitles",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_set_print_titles"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "setRangeSchema",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_set_range_schema"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "setRowFormat",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_set_row_format"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "setRowFormats",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_set_row_formats"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "setRowHeight",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_set_row_height"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "setSchemaMap",
+      "access": "write",
+      "wrapper": "query",
+      "command": "compute_set_schema_map"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "setScrollPosition",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_set_scroll_position"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "setSheetEnableCalculation",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_set_sheet_enable_calculation"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "setSheetHidden",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_set_sheet_hidden"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "setSheetProtectionOptions",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_set_sheet_protection_options"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "setSheetSetting",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_set_sheet_setting"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "setSheetVisibility",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_set_sheet_visibility"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "setSplitConfig",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_set_split_config"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "setTabColor",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_set_tab_color"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "setTableAutoCalculatedColumns",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_set_table_auto_calculated_columns"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "setTableAutoExpand",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_set_table_auto_expand"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "setTableBoolOption",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_set_table_bool_option"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "setTableStyle",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_set_table_style"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "setTableTotalsFunction",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_set_table_totals_function"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "setThreadResolved",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_set_thread_resolved"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "setTimeValue",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_set_time_value"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "settleForMirror",
+      "access": "write",
+      "wrapper": "mutateSystem",
+      "command": "compute_settle_for_mirror"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "setUsePrecisionAsDisplayed",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_set_use_precision_as_displayed"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "setViewOption",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_set_view_option"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "setWorkbookSetting",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_set_workbook_setting"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "setWorkbookSettings",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_set_workbook_settings"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "setWorkbookTheme",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_set_workbook_theme"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "sortRange",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_sort_range"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "textToColumns",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_text_to_columns"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "textToColumnsSimple",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_text_to_columns_simple"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "toggleBandedCols",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_toggle_banded_cols"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "toggleBandedRows",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_toggle_banded_rows"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "toggleFormatProperty",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_toggle_format_property"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "toggleGroupCollapsed",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_toggle_group_collapsed"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "toggleHeaderRow",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_toggle_header_row"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "toggleSlicerItem",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_toggle_slicer_item"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "toggleTotalsRow",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_toggle_totals_row"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "toIdentityFormula",
+      "access": "write",
+      "wrapper": "query",
+      "command": "compute_to_identity_formula"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "undo",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_undo"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "ungroupColumns",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_ungroup_columns"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "ungroupRows",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_ungroup_rows"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "unhideColumns",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_unhide_columns"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "unhideRows",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_unhide_rows"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "unlinkChartFromTable",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_unlink_chart_from_table"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "unmergeRange",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_unmerge_range"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "unprotectSheet",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_unprotect_sheet"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "unprotectWorkbook",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_unprotect_workbook"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "unregisterViewport",
+      "access": "lifecycle",
+      "wrapper": "mutateSystem",
+      "command": "compute_unregister_viewport"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "updateBinding",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_update_binding"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "updateCalculatedColumn",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_update_calculated_column"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "updateCellPosition",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_update_cell_position"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "updateCfRanges",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_update_cf_ranges"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "updateCfRule",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_update_cf_rule"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "updateChart",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_update_chart"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "updateCommentMentions",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_update_comment_mentions"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "updateComment",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_update_comment"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "updateCustomCellStyle",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_update_custom_cell_style"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "updateCustomTableStyle",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_update_custom_table_style"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "updateFloatingObjectGroup",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_update_floating_object_group"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "updateFloatingObject",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_update_floating_object"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "updateNamedRange",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_update_named_range"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "updateRangeSchema",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_update_range_schema"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "updateRefreshMetadata",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_update_refresh_metadata"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "updateRuleInCf",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_update_rule_in_cf"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "updateScenario",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_update_scenario"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "updateSchema",
+      "access": "write",
+      "wrapper": "query",
+      "command": "compute_update_schema"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "updateShapeStyle",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_update_shape_style"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "updateSlicerConfig",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_update_slicer_config"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "updateSparkline",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_update_sparkline"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "updateViewportBounds",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_update_viewport_bounds"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "validateAndCleanComments",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_validate_and_clean_comments"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "validateAndCleanMerges",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_validate_and_clean_merges"
+    },
+    {
+      "source": "handwritten-bridge",
+      "wrapper": "admitPublicMutation",
+      "command": "compute_begin_undo_group"
+    },
+    {
+      "source": "handwritten-bridge",
+      "wrapper": "admitPublicMutation",
+      "command": "compute_delete_sheet"
+    },
+    {
+      "source": "handwritten-bridge",
+      "wrapper": "admitPublicMutation",
+      "command": "compute_end_undo_group"
+    },
+    {
+      "source": "handwritten-bridge",
+      "wrapper": "admitPublicMutation",
+      "command": "compute_pivot_materialize_mutation"
+    },
+    {
+      "source": "handwritten-bridge",
+      "wrapper": "mutatePublic",
+      "command": "compute_add_comment_by_position"
+    },
+    {
+      "source": "handwritten-bridge",
+      "wrapper": "mutatePublicUiState",
+      "command": "compute_patch_workbook_settings"
+    },
+    {
+      "source": "handwritten-bridge",
+      "wrapper": "mutateSystem",
+      "command": "compute_complete_deferred_hydration"
+    },
+    {
+      "source": "native-compute-api",
+      "wrapper": "direct-compute-api",
+      "command": "compute_wb_security_add_policy"
+    }
+  ]
+}

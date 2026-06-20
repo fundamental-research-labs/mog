@@ -6,6 +6,7 @@ import type {
   CapturePolicy,
   DomainCapabilityPolicyManifest,
   ObjectDigest,
+  VersionWriteAdmissionMode,
   VersionCapabilityGate,
   VersionDomainCapabilityState,
   VersionDomainClass,
@@ -13,15 +14,63 @@ import type {
 
 type Assert<T extends true> = T;
 type IsNever<T> = [T] extends [never] ? true : false;
+type IsEqual<A, B> =
+  (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
+
+type ExpectedDomainClass =
+  | 'authored'
+  | 'derived'
+  | 'transient'
+  | 'packageFidelity'
+  | 'secret'
+  | 'external';
+type ExpectedDomainCapabilityState =
+  | 'not-started'
+  | 'contracted'
+  | 'supported'
+  | 'derived'
+  | 'excluded'
+  | 'opaque-preserved'
+  | 'opaque-blocking';
+type ExpectedCapturePolicy =
+  | 'commitEligible'
+  | 'excluded'
+  | 'derivedOnly'
+  | 'rootCreation'
+  | 'historyGap'
+  | 'shadowOnly';
+type ExpectedWriteAdmissionMode =
+  | 'capture'
+  | 'shadowOnly'
+  | 'captureDisabledNoHistory'
+  | 'captureSuspendedWithGap'
+  | 'block';
 
 type _NoExpectedFailingDomainCapabilityState = Assert<
   IsNever<Extract<VersionDomainCapabilityState, 'expected-failing'>>
 >;
-type _CapabilityStateIsSeparateFromDomainClass = Assert<
-  IsNever<Extract<VersionDomainCapabilityState, VersionDomainClass>>
+type _ExactDomainClassSet = Assert<IsEqual<VersionDomainClass, ExpectedDomainClass>>;
+type _ExactDomainCapabilityStateSet = Assert<
+  IsEqual<VersionDomainCapabilityState, ExpectedDomainCapabilityState>
 >;
-type _CapabilityStateIsSeparateFromCapturePolicy = Assert<
-  IsNever<Extract<VersionDomainCapabilityState, CapturePolicy>>
+type _ExactCapturePolicySet = Assert<IsEqual<CapturePolicy, ExpectedCapturePolicy>>;
+type _ExactWriteAdmissionModeSet = Assert<
+  IsEqual<VersionWriteAdmissionMode, ExpectedWriteAdmissionMode>
+>;
+type _CapabilityStateFieldUsesCapabilityUnion = Assert<
+  IsEqual<DomainCapabilityPolicyManifest['capabilityState'], VersionDomainCapabilityState>
+>;
+type _DomainClassFieldUsesDomainClassUnion = Assert<
+  IsEqual<DomainCapabilityPolicyManifest['domainClass'], VersionDomainClass>
+>;
+type _CapturePolicyFieldUsesCapturePolicyUnion = Assert<
+  IsEqual<DomainCapabilityPolicyManifest['capturePolicy'], CapturePolicy>
+>;
+type _CapabilityStateUnionIsNotDomainClassUnion = Assert<
+  IsEqual<VersionDomainCapabilityState, VersionDomainClass> extends true ? false : true
+>;
+type _CapabilityStateUnionIsNotCapturePolicyUnion = Assert<
+  IsEqual<VersionDomainCapabilityState, CapturePolicy> extends true ? false : true
 >;
 
 const digest: ObjectDigest = Object.freeze({
@@ -34,7 +83,7 @@ const versionCapabilityGate: VersionCapabilityGate = Object.freeze({
   capabilityId: 'versioning.public-contract-spine',
   rolloutStage: 'shadow-only',
   scope: Object.freeze({
-    domainIds: Object.freeze(['grid-data']),
+    domainIds: Object.freeze(['authored-grid']),
     featureId: 'versioning',
   }),
   preflightDigest: Object.freeze({
@@ -48,11 +97,11 @@ const versionCapabilityGate: VersionCapabilityGate = Object.freeze({
 });
 
 const domainPolicy: DomainCapabilityPolicyManifest = Object.freeze({
-  domainId: 'grid-data',
-  domainClass: 'grid-data',
-  capabilityState: 'shadow-only',
-  capturePolicy: 'capture-shadow-only',
-  writeAdmissionMode: 'shadow-only',
+  domainId: 'authored-grid',
+  domainClass: 'authored',
+  capabilityState: 'contracted',
+  capturePolicy: 'shadowOnly',
+  writeAdmissionMode: 'shadowOnly',
   rolloutStage: versionCapabilityGate.rolloutStage,
   historyAccess: Object.freeze({
     readMode: 'metadata-only',

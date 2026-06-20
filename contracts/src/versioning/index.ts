@@ -19,41 +19,43 @@ export const VERSION_OPERATION_KINDS = Object.freeze([
 export type VersionOperationKind = (typeof VERSION_OPERATION_KINDS)[number];
 
 export const CAPTURE_POLICIES = Object.freeze([
-  'capture-required',
-  'capture-optional',
-  'metadata-only',
-  'capture-shadow-only',
+  'commitEligible',
   'excluded',
+  'derivedOnly',
+  'rootCreation',
+  'historyGap',
+  'shadowOnly',
 ] as const);
 export type CapturePolicy = (typeof CAPTURE_POLICIES)[number];
 
 export const VERSION_WRITE_ADMISSION_MODES = Object.freeze([
-  'disabled',
-  'shadow-only',
-  'verify-only',
-  'admit-with-gate',
-  'admit',
+  'capture',
+  'shadowOnly',
+  'captureDisabledNoHistory',
+  'captureSuspendedWithGap',
+  'block',
 ] as const);
 export type VersionWriteAdmissionMode = (typeof VERSION_WRITE_ADMISSION_MODES)[number];
 
 export const VERSION_DOMAIN_CLASSES = Object.freeze([
-  'workbook-structure',
-  'grid-data',
-  'formula-graph',
-  'formatting',
-  'drawing-object',
-  'derived-output',
-  'external-sync',
-  'opaque-extension',
+  'authored',
+  'derived',
+  'transient',
+  'packageFidelity',
+  'secret',
+  'external',
 ] as const);
 export type VersionDomainClass = (typeof VERSION_DOMAIN_CLASSES)[number];
+export type SemanticDomainClass = VersionDomainClass;
 
 export const VERSION_DOMAIN_CAPABILITY_STATES = Object.freeze([
-  'unsupported',
-  'shadow-only',
-  'read-only',
-  'write-gated',
-  'writable',
+  'not-started',
+  'contracted',
+  'supported',
+  'derived',
+  'excluded',
+  'opaque-preserved',
+  'opaque-blocking',
 ] as const);
 export type VersionDomainCapabilityState = (typeof VERSION_DOMAIN_CAPABILITY_STATES)[number];
 
@@ -360,8 +362,9 @@ export interface ShadowOnlyObjectAuthority {
   readonly authorityId: string;
   readonly domainId: string;
   readonly objectKinds: readonly string[];
-  readonly capabilityState: Extract<VersionDomainCapabilityState, 'shadow-only'>;
-  readonly capturePolicy: Extract<CapturePolicy, 'capture-shadow-only'>;
+  readonly capabilityState: VersionDomainCapabilityState;
+  readonly capturePolicy: Extract<CapturePolicy, 'shadowOnly'>;
+  readonly writeAdmissionMode: Extract<VersionWriteAdmissionMode, 'shadowOnly'>;
 }
 
 export interface VersionExportMetadataSummary {

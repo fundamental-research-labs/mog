@@ -25,11 +25,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { SCROLL_BUFFER_COLS, SCROLL_BUFFER_ROWS } from '../hooks/useScrollDimensions';
 import { useCoordinator } from '../../../hooks/shared/use-coordinator';
+import type { GridScrollbarSettings } from './viewport-size';
 
 export interface ScrollContainerProps {
-  workbookSettings: {
-    showVerticalScrollbar: boolean;
-    showHorizontalScrollbar: boolean;
+  workbookSettings: GridScrollbarSettings & {
     autoHideScrollBars?: boolean;
   };
   /** Total scrollable content width (px) — base used-range content size */
@@ -122,6 +121,7 @@ export function ScrollContainer({
 }: ScrollContainerProps) {
   const coordinator = useCoordinator();
   const inputCoordinator = coordinator.input.inputCoordinator;
+  const reservedRightInset = Math.max(0, workbookSettings.reservedRightInset ?? 0);
 
   // Current scroll position from InputCoordinator
   const [scrollX, setScrollX] = useState(0);
@@ -199,6 +199,7 @@ export function ScrollContainer({
           viewportSize={viewportHeight}
           contentSize={scrollHeight}
           isVisible={isVisible}
+          reservedRightInset={reservedRightInset}
           onScroll={(position) => inputCoordinator.scrollTo(scrollX, position)}
           onHoverChange={setIsHovered}
         />
@@ -208,9 +209,10 @@ export function ScrollContainer({
       {workbookSettings.showVerticalScrollbar && (
         <div
           className="split-box-vertical absolute pointer-events-auto"
+          data-no-grid-pointer="true"
           style={{
             top: 0,
-            right: 0,
+            right: reservedRightInset,
             width: SCROLL_BAR_WIDTH,
             height: 8,
             cursor: 'row-resize',
@@ -235,6 +237,7 @@ export function ScrollContainer({
           viewportSize={viewportWidth}
           contentSize={scrollWidth}
           isVisible={isVisible}
+          reservedRightInset={reservedRightInset}
           onScroll={(position) => inputCoordinator.scrollTo(position, scrollY)}
           onHoverChange={setIsHovered}
         />
@@ -244,6 +247,7 @@ export function ScrollContainer({
       {workbookSettings.showHorizontalScrollbar && (
         <div
           className="split-box-horizontal absolute pointer-events-auto"
+          data-no-grid-pointer="true"
           style={{
             bottom: 0,
             left: 0,
@@ -276,6 +280,7 @@ interface ScrollbarTrackProps {
   viewportSize: number;
   contentSize: number;
   isVisible: boolean;
+  reservedRightInset: number;
   onScroll: (position: number) => void;
   onHoverChange: (hovered: boolean) => void;
 }
@@ -287,6 +292,7 @@ function ScrollbarTrack({
   viewportSize,
   contentSize,
   isVisible,
+  reservedRightInset,
   onScroll,
   onHoverChange,
 }: ScrollbarTrackProps) {
@@ -376,7 +382,7 @@ function ScrollbarTrack({
     ? {
         position: 'absolute',
         top: 0,
-        right: 0,
+        right: reservedRightInset,
         bottom: SCROLL_BAR_WIDTH,
         width: SCROLL_BAR_WIDTH,
         boxSizing: 'border-box',
@@ -389,7 +395,7 @@ function ScrollbarTrack({
         position: 'absolute',
         left: 0,
         bottom: 0,
-        right: SCROLL_BAR_WIDTH,
+        right: SCROLL_BAR_WIDTH + reservedRightInset,
         height: SCROLL_BAR_WIDTH,
         boxSizing: 'border-box',
         backgroundColor: SCROLLBAR_TRACK_COLOR,
@@ -426,6 +432,7 @@ function ScrollbarTrack({
       ref={trackRef}
       className="pointer-events-auto"
       style={trackStyle}
+      data-no-grid-pointer="true"
       onClick={handleTrackClick}
       onMouseEnter={() => onHoverChange(true)}
       onMouseLeave={() => onHoverChange(false)}

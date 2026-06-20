@@ -5,6 +5,7 @@
  */
 
 import type { StateCreator } from 'zustand';
+import type { PlacementId } from '@mog-sdk/contracts/pivot';
 import type { PivotDialogDraft, PivotDialogSession } from '../../../systems/pivot';
 
 /**
@@ -13,6 +14,27 @@ import type { PivotDialogDraft, PivotDialogSession } from '../../../systems/pivo
  * - 'existingWorksheet': Place on an existing sheet at a user-specified cell
  */
 export type PivotLocationMode = 'newWorksheet' | 'existingWorksheet';
+
+export type PivotTransientOverlay =
+  | null
+  | { kind: 'field-header-menu'; pivotId: string; placementId: PlacementId }
+  | { kind: 'report-filter-menu'; pivotId: string; placementId: PlacementId }
+  | { kind: 'context-menu'; pivotId: string; target: unknown };
+
+export type PivotOverlayDismissReason =
+  | 'outside-pointer'
+  | 'escape'
+  | 'selection-change'
+  | 'sheet-change'
+  | 'scroll'
+  | 'panel-open'
+  | 'command-applied'
+  | 'pivot-deleted'
+  | 'placement-changed';
+
+export const DEFAULT_PIVOT_FIELD_PANEL_WIDTH = 320;
+export const MIN_PIVOT_FIELD_PANEL_WIDTH = 280;
+export const MAX_PIVOT_FIELD_PANEL_WIDTH = 640;
 
 /**
  * Pivot table UI state
@@ -24,6 +46,12 @@ export interface PivotUIState {
   selectedPivotId: string | null;
   /** Pivot being edited (field panel open) */
   editingPivotId: string | null;
+  /** Transient pivot overlay/menu owned by pivot interaction state */
+  openTransientOverlay: PivotTransientOverlay;
+  /** Last dismissal reason, useful for dev/test readback */
+  lastOverlayDismissReason: PivotOverlayDismissReason | null;
+  /** Reserved width for the pivot field panel when editing is active */
+  fieldPanelWidth: number;
   /** Initial source range from selection (e.g., "A1:D10") */
   initialSourceRange: string;
 
@@ -47,6 +75,9 @@ export interface PivotDialogSlice {
   selectPivot: (pivotId: string | null) => void;
   startEditingPivot: (pivotId: string) => void;
   stopEditingPivot: () => void;
+  openPivotOverlay: (overlay: Exclude<PivotTransientOverlay, null>) => void;
+  closePivotOverlays: (reason: PivotOverlayDismissReason) => void;
+  setPivotFieldPanelWidth: (width: number) => void;
   // Location selection actions
   setLocationMode: (mode: PivotLocationMode) => void;
   setDestinationSheet: (sheetId: string | null) => void;
@@ -57,6 +88,9 @@ const initialState: PivotUIState = {
   isDialogOpen: false,
   selectedPivotId: null,
   editingPivotId: null,
+  openTransientOverlay: null,
+  lastOverlayDismissReason: null,
+  fieldPanelWidth: DEFAULT_PIVOT_FIELD_PANEL_WIDTH,
   initialSourceRange: '',
   // Location selection defaults
   locationMode: 'newWorksheet',
@@ -67,6 +101,13 @@ const initialState: PivotUIState = {
 
 function createSessionId(): string {
   return `pivot-dialog-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function clampPanelWidth(width: number): number {
+  return Math.min(
+    MAX_PIVOT_FIELD_PANEL_WIDTH,
+    Math.max(MIN_PIVOT_FIELD_PANEL_WIDTH, Math.round(width)),
+  );
 }
 
 export const createPivotDialogSlice: StateCreator<PivotDialogSlice, [], [], PivotDialogSlice> = (
@@ -141,6 +182,15 @@ export const createPivotDialogSlice: StateCreator<PivotDialogSlice, [], [], Pivo
       pivot: {
         ...s.pivot,
         selectedPivotId: pivotId,
+        editingPivotId:
+          pivotId == null || (s.pivot.editingPivotId != null && s.pivot.editingPivotId !== pivotId)
+            ? null
+            : s.pivot.editingPivotId,
+        openTransientOverlay: null,
+        lastOverlayDismissReason:
+          s.pivot.openTransientOverlay != null
+            ? 'selection-change'
+            : s.pivot.lastOverlayDismissReason,
       },
     }));
   },
@@ -151,6 +201,9 @@ export const createPivotDialogSlice: StateCreator<PivotDialogSlice, [], [], Pivo
         ...s.pivot,
         selectedPivotId: pivotId,
         editingPivotId: pivotId,
+        openTransientOverlay: null,
+        lastOverlayDismissReason:
+          s.pivot.openTransientOverlay != null ? 'panel-open' : s.pivot.lastOverlayDismissReason,
       },
     }));
   },
@@ -160,6 +213,36 @@ export const createPivotDialogSlice: StateCreator<PivotDialogSlice, [], [], Pivo
       pivot: {
         ...s.pivot,
         editingPivotId: null,
+      },
+    }));
+  },
+
+  openPivotOverlay: (overlay: Exclude<PivotTransientOverlay, null>) => {
+    set((s) => ({
+      pivot: {
+        ...s.pivot,
+        openTransientOverlay: overlay,
+        lastOverlayDismissReason: null,
+      },
+    }));
+  },
+
+  closePivotOverlays: (reason: PivotOverlayDismissReason) => {
+    set((s) => ({
+      pivot: {
+        ...s.pivot,
+        openTransientOverlay: null,
+        lastOverlayDismissReason:
+          s.pivot.openTransientOverlay != null ? reason : s.pivot.lastOverlayDismissReason,
+      },
+    }));
+  },
+
+  setPivotFieldPanelWidth: (width: number) => {
+    set((s) => ({
+      pivot: {
+        ...s.pivot,
+        fieldPanelWidth: clampPanelWidth(width),
       },
     }));
   },

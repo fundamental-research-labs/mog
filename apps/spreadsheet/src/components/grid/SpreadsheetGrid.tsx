@@ -70,6 +70,7 @@ import { ProtectionDialogs } from './dialogs/ProtectionDialogs';
 import { useEditorIntegration } from './effects/useEditorIntegration';
 import { useGroupingIntegration } from './effects/useGroupingIntegration';
 import { useInputListeners } from './effects/useInputListeners';
+import { usePivotFieldPanelViewportSettings } from './effects/usePivotFieldPanelViewportSettings';
 import { useRenderContextConfig } from './effects/useRenderContextConfig';
 import { useRendererDependencies } from './effects/useRendererDependencies';
 import { useRendererLifecycle } from './effects/useRendererLifecycle';
@@ -283,16 +284,16 @@ export const SpreadsheetGrid = memo(function SpreadsheetGrid({
   const closeContextMenu = useUIStore((s) => s.closeContextMenu);
   const closeObjectContextMenu = useUIStore((s) => s.closeObjectContextMenu);
 
-  // Get workbook settings for scrollbar visibility (Issue 7: View Options)
   const { settings: workbookSettings } = useWorkbookSettings();
+  const gridViewportSettings = usePivotFieldPanelViewportSettings({
+    workbookSettings,
+    coordinator,
+    isReady,
+  });
 
-  // Get sheet view options for header visibility (Canvas Interactive Element Layer)
-  // Used to compute header offset for CanvasInteractiveOverlay positioning
   const { viewOptions } = useSheetViewOptions(activeSheetId);
   const { rendererSkin } = useSpreadsheetDisplayMode();
 
-  // Compute header offset for CanvasInteractiveOverlay
-  // The overlay needs to be positioned after row/column headers
   const headerOffset = useMemo(() => {
     const { rowHeaderWidth, colHeaderHeight } = getEffectiveHeaderDimensions({
       showRowHeaders: viewOptions.showRowHeaders,
@@ -406,13 +407,6 @@ export const SpreadsheetGrid = memo(function SpreadsheetGrid({
     sparklineManager,
   });
 
-  // ==========================================================================
-  // SET RENDERER DEPENDENCIES EFFECT
-  // Provides viewport + data callbacks to the state machine so SheetView
-  // (created in the 'initializing' state) can resolve the current sheet's
-  // ViewportReader and pull cell data on demand.
-  // Must run before MOUNT so dependencies are available when machine needs them.
-  // ==========================================================================
   // Sync SheetStateProvider backed by the kernel state mirror.
   // The mirror is populated by `MutationResultHandler.applyAndNotify` BEFORE
   // any event emission, so reads are correct on first paint and on every
@@ -446,14 +440,13 @@ export const SpreadsheetGrid = memo(function SpreadsheetGrid({
     rendererSkin,
   });
 
-  // Use extracted hook for renderer dependencies
   useRendererDependencies({
     coordinator,
     viewport: activeViewport,
     getCellValue,
     getCellFormat,
     activeSheetId,
-    workbookSettings,
+    workbookSettings: gridViewportSettings,
     sheetStateProvider,
     rendererSkin,
     uiStoreApi,
@@ -915,7 +908,7 @@ export const SpreadsheetGrid = memo(function SpreadsheetGrid({
 
           {/* ScrollContainer - scrollbars and split boxes */}
           <ScrollContainer
-            workbookSettings={workbookSettings}
+            workbookSettings={gridViewportSettings}
             scrollWidth={scrollWidth}
             scrollHeight={scrollHeight}
           />

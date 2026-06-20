@@ -12,7 +12,7 @@
  * @module hooks/use-pivot-tables
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import type { PivotHandlePlacementSpec, PivotValueSortConfig } from '@mog-sdk/contracts/api';
 import { type CellRange, type SheetId, sheetId as toSheetId } from '@mog-sdk/contracts/core';
@@ -49,11 +49,11 @@ import { loadPivotConfigEntries, type PivotConfigEntry } from '../../pivot/pivot
 import { usePivotMutationQueue } from './pivot-mutation-queue';
 import {
   assertPivotMaterialized,
-  awaitPivotMaterialization,
   inspectPivotMutationReceipt,
   pivotReceiptMessage,
   warnPivotRefresh,
 } from './pivot-receipt-utils';
+import { usePivotInteractionLifecycle } from './use-pivot-interaction-lifecycle';
 
 function pivotEntryMatchesId(entry: PivotConfigEntry, pivotId: string): boolean {
   return entry.config.id === pivotId || entry.alternateIds?.includes(pivotId) === true;
@@ -290,7 +290,7 @@ export function usePivotTables({ sheetId }: UsePivotTablesOptions): UsePivotTabl
 
   // Local state for pivot configs and results
   const [pivotEntries, setPivotEntries] = useState<PivotConfigEntry[]>([]);
-  const editingMissReloadKeyRef = useRef<string | null>(null);
+  const [hasLoadedPivotEntries, setHasLoadedPivotEntries] = useState(false);
   const loadPivotEntries = useCallback(() => loadPivotConfigEntries(wb, sheetId), [wb, sheetId]);
   const enqueuePivotMutation = usePivotMutationQueue();
 
@@ -337,8 +337,12 @@ export function usePivotTables({ sheetId }: UsePivotTablesOptions): UsePivotTabl
         const entries = await loadPivotEntries();
         if (cancelled) return;
         setPivotEntries(entries);
+        setHasLoadedPivotEntries(true);
       } catch {
-        if (!cancelled) setPivotEntries([]);
+        if (!cancelled) {
+          setPivotEntries([]);
+          setHasLoadedPivotEntries(true);
+        }
       }
     };
 
@@ -373,58 +377,18 @@ export function usePivotTables({ sheetId }: UsePivotTablesOptions): UsePivotTabl
     };
   }, [sheetId, ws, eventBus, loadPivotEntries]);
 
-  // Imported PivotTables can be materialized by the active selection path without
-  // emitting a native pivot lifecycle event, so refresh once when the editor is
-  // targeting an id that the current local config list does not yet contain.
-  useEffect(() => {
-    if (!editingPivotId) {
-      editingMissReloadKeyRef.current = null;
-      return;
-    }
-
-    if (pivotEntries.some((entry) => pivotEntryMatchesId(entry, editingPivotId))) {
-      editingMissReloadKeyRef.current = null;
-      return;
-    }
-
-    const reloadKey = `${sheetId}:${editingPivotId}`;
-    if (editingMissReloadKeyRef.current === reloadKey) return;
-    editingMissReloadKeyRef.current = reloadKey;
-
-    let cancelled = false;
-    const refreshMaterializedConfigs = async () => {
-      try {
-        const entries = await loadPivotEntries();
-        if (cancelled) return;
-        setPivotEntries(entries);
-        if (entries.some((entry) => pivotEntryMatchesId(entry, editingPivotId))) {
-          return;
-        }
-      } catch {
-        // Fall through to the materialization-backed retry below.
-      }
-
-      try {
-        await awaitPivotMaterialization(wb);
-      } catch {
-        // Materialization failures should not hide any already-available sidecar
-        // or persisted imported pivot records.
-      }
-
-      try {
-        const entries = await loadPivotEntries();
-        if (!cancelled) setPivotEntries(entries);
-      } catch {
-        if (!cancelled) setPivotEntries([]);
-      }
-    };
-
-    void refreshMaterializedConfigs();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [editingPivotId, loadPivotEntries, pivotEntries, sheetId, wb]);
+  usePivotInteractionLifecycle({
+    sheetId,
+    wb,
+    selectedPivotId,
+    editingPivotId,
+    pivotEntries,
+    hasLoadedPivotEntries,
+    loadPivotEntries,
+    setPivotEntries,
+    selectPivot: selectPivotAction,
+    stopEditingPivot: stopEditingPivotAction,
+  });
 
   // Compute results when configs change
   useEffect(() => {
@@ -608,7 +572,9 @@ export function usePivotTables({ sheetId }: UsePivotTablesOptions): UsePivotTabl
   // Update pivot table via ws.pivots (fire-and-forget async)
   const updatePivotTable = useCallback(
     (pivotId: string, updates: Partial<Omit<PivotTableConfig, 'id' | 'createdAt'>>) => {
-      void enqueuePivotMutation(pivotId, 'update', () => pivotHandleFromId(pivotId)?.update(updates));
+      void enqueuePivotMutation(pivotId, 'update', () =>
+        pivotHandleFromId(pivotId)?.update(updates),
+      );
     },
     [enqueuePivotMutation, pivotHandleFromId],
   );
@@ -676,7 +642,10 @@ export function usePivotTables({ sheetId }: UsePivotTablesOptions): UsePivotTabl
   const addPlacement = useCallback(
     (pivotId: string, spec: PivotHandlePlacementSpec) => {
       void enqueuePivotMutation(pivotId, 'add placement', () =>
-        inspectPivotMutationReceipt('add placement', pivotHandleFromId(pivotId)?.addPlacement(spec)),
+        inspectPivotMutationReceipt(
+          'add placement',
+          pivotHandleFromId(pivotId)?.addPlacement(spec),
+        ),
       );
     },
     [enqueuePivotMutation, pivotHandleFromId],

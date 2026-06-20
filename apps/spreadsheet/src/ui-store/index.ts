@@ -397,6 +397,8 @@ export function createUIStoreHooks(store: StoreApi<UIState>) {
     useIsPivotDialogOpen: () => useStore(store, (s) => s.pivot.isDialogOpen),
     useSelectedPivotId: () => useStore(store, (s) => s.pivot.selectedPivotId),
     useEditingPivotId: () => useStore(store, (s) => s.pivot.editingPivotId),
+    usePivotTransientOverlay: () => useStore(store, (s) => s.pivot.openTransientOverlay),
+    usePivotFieldPanelWidth: () => useStore(store, (s) => s.pivot.fieldPanelWidth),
     useFormatPainter: () => useStore(store, (s) => s.formatPainter),
     useIsFormatPainterActive: () => useStore(store, (s) => s.formatPainter.isActive),
     useIsInsertFunctionDialogOpen: () => useStore(store, (s) => s.insertFunctionDialogOpen),

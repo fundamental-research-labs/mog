@@ -1,8 +1,26 @@
 import { ChevronDownSvg } from '@mog/icons';
 import { useEffect, useState } from 'react';
 import type { CellError, CellValue } from '@mog-sdk/contracts/core';
-import type { PivotFieldItems, PivotItemInfo, PlacementId, SortOrder } from '@mog-sdk/contracts/pivot';
+import type {
+  PivotFieldItems,
+  PivotItemInfo,
+  PlacementId,
+  SortOrder,
+} from '@mog-sdk/contracts/pivot';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@mog/shell/components/ui';
 
+import type {
+  PivotOverlayDismissReason,
+  PivotTransientOverlay,
+} from '../../ui-store/slices/dialogs/pivot-dialog';
 import { pivotReadbackAttributes } from '../../systems/pivot';
 import {
   hasPivotFilterPlacements,
@@ -12,15 +30,11 @@ import {
   type PivotReportFilterControlLayout,
 } from './pivot-layer-layout';
 
-export interface OpenPivotHeaderMenu {
-  pivotId: string;
-  placementId: PlacementId;
-}
-
 interface PivotLayerOverlayProps {
   marker: PivotMarker;
-  openHeaderMenu: OpenPivotHeaderMenu | null;
-  onToggleHeaderMenu: (menu: OpenPivotHeaderMenu | null) => void;
+  openTransientOverlay: PivotTransientOverlay;
+  onOpenPivotOverlay: (overlay: Exclude<PivotTransientOverlay, null>) => void;
+  onClosePivotOverlays: (reason: PivotOverlayDismissReason) => void;
   onApplyHeaderSort: (
     marker: PivotMarker,
     control: PivotFieldHeaderControlLayout,
@@ -31,8 +45,9 @@ interface PivotLayerOverlayProps {
 
 export function PivotLayerOverlay({
   marker,
-  openHeaderMenu,
-  onToggleHeaderMenu,
+  openTransientOverlay,
+  onOpenPivotOverlay,
+  onClosePivotOverlays,
   onApplyHeaderSort,
   onStartEditingPivot,
 }: PivotLayerOverlayProps) {
@@ -75,13 +90,21 @@ export function PivotLayerOverlay({
       {showHeaderControls && (
         <PivotHeaderControls
           marker={marker}
-          openHeaderMenu={openHeaderMenu}
-          onToggleHeaderMenu={onToggleHeaderMenu}
+          openTransientOverlay={openTransientOverlay}
+          onOpenPivotOverlay={onOpenPivotOverlay}
+          onClosePivotOverlays={onClosePivotOverlays}
           onApplyHeaderSort={onApplyHeaderSort}
           onStartEditingPivot={onStartEditingPivot}
         />
       )}
-      {showFilterControls && <ReportFilterControls marker={marker} />}
+      {showFilterControls && (
+        <ReportFilterControls
+          marker={marker}
+          openTransientOverlay={openTransientOverlay}
+          onOpenPivotOverlay={onOpenPivotOverlay}
+          onClosePivotOverlays={onClosePivotOverlays}
+        />
+      )}
       {showEmptyState && (
         <PivotEmptyState marker={marker} onStartEditingPivot={onStartEditingPivot} />
       )}
@@ -91,8 +114,9 @@ export function PivotLayerOverlay({
 
 function PivotHeaderControls({
   marker,
-  openHeaderMenu,
-  onToggleHeaderMenu,
+  openTransientOverlay,
+  onOpenPivotOverlay,
+  onClosePivotOverlays,
   onApplyHeaderSort,
   onStartEditingPivot,
 }: PivotLayerOverlayProps) {
@@ -104,10 +128,12 @@ function PivotHeaderControls({
           marker={marker}
           control={control}
           isOpen={
-            openHeaderMenu?.pivotId === marker.id &&
-            openHeaderMenu?.placementId === control.placementId
+            openTransientOverlay?.kind === 'field-header-menu' &&
+            openTransientOverlay.pivotId === marker.id &&
+            openTransientOverlay.placementId === control.placementId
           }
-          onToggleHeaderMenu={onToggleHeaderMenu}
+          onOpenPivotOverlay={onOpenPivotOverlay}
+          onClosePivotOverlays={onClosePivotOverlays}
           onApplyHeaderSort={onApplyHeaderSort}
           onStartEditingPivot={onStartEditingPivot}
         />
@@ -120,7 +146,8 @@ interface PivotHeaderControlProps {
   marker: PivotMarker;
   control: PivotFieldHeaderControlLayout;
   isOpen: boolean;
-  onToggleHeaderMenu: (menu: OpenPivotHeaderMenu | null) => void;
+  onOpenPivotOverlay: (overlay: Exclude<PivotTransientOverlay, null>) => void;
+  onClosePivotOverlays: (reason: PivotOverlayDismissReason) => void;
   onApplyHeaderSort: (
     marker: PivotMarker,
     control: PivotFieldHeaderControlLayout,
@@ -133,7 +160,8 @@ function PivotHeaderControl({
   marker,
   control,
   isOpen,
-  onToggleHeaderMenu,
+  onOpenPivotOverlay,
+  onClosePivotOverlays,
   onApplyHeaderSort,
   onStartEditingPivot,
 }: PivotHeaderControlProps) {
@@ -149,38 +177,47 @@ function PivotHeaderControl({
         height: control.rect.height,
       }}
     >
-      <button
-        type="button"
-        className="pointer-events-auto absolute right-0.5 top-0.5 inline-flex h-5 w-5 items-center justify-center rounded border border-ss-border bg-ss-surface/95 text-ss-text-secondary shadow-sm hover:bg-ss-surface-hover disabled:opacity-50"
-        data-pivot-target="pivot-field-header-control"
-        data-pivot-area={control.area}
-        data-pivot-field-id={control.fieldId}
-        data-pivot-placement-id={control.placementId}
-        data-pivot-row={control.row}
-        data-pivot-col={control.col}
-        aria-haspopup="menu"
-        aria-expanded={isOpen ? 'true' : 'false'}
-        title={`${control.label} field menu`}
-        aria-label={`${control.label} field menu`}
-        disabled={!marker.pivot.capabilities.canEditFields}
-        onClick={(event) => {
-          event.stopPropagation();
-          onToggleHeaderMenu(
-            isOpen ? null : { pivotId: marker.id, placementId: control.placementId },
-          );
+      <DropdownMenu
+        open={isOpen}
+        onOpenChange={(open) => {
+          if (open) {
+            onOpenPivotOverlay({
+              kind: 'field-header-menu',
+              pivotId: marker.id,
+              placementId: control.placementId,
+            });
+          } else if (isOpen) {
+            onClosePivotOverlays('outside-pointer');
+          }
         }}
       >
-        <ChevronDownSvg className="h-3 w-3" aria-hidden="true" />
-      </button>
-      {isOpen && (
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            className="pointer-events-auto absolute right-0.5 top-0.5 inline-flex h-5 w-5 items-center justify-center rounded border border-ss-border bg-ss-surface/95 text-ss-text-secondary shadow-sm hover:bg-ss-surface-hover disabled:opacity-50"
+            data-no-grid-pointer="true"
+            data-pivot-target="pivot-field-header-control"
+            data-pivot-area={control.area}
+            data-pivot-field-id={control.fieldId}
+            data-pivot-placement-id={control.placementId}
+            data-pivot-row={control.row}
+            data-pivot-col={control.col}
+            title={`${control.label} field menu`}
+            aria-label={`${control.label} field menu`}
+            disabled={!marker.pivot.capabilities.canEditFields}
+          >
+            <ChevronDownSvg className="h-3 w-3" aria-hidden="true" />
+          </button>
+        </DropdownMenuTrigger>
         <PivotHeaderMenu
           marker={marker}
           control={control}
           canSort={canSort}
+          onClosePivotOverlays={onClosePivotOverlays}
           onApplyHeaderSort={onApplyHeaderSort}
           onStartEditingPivot={onStartEditingPivot}
         />
-      )}
+      </DropdownMenu>
     </div>
   );
 }
@@ -189,6 +226,7 @@ interface PivotHeaderMenuProps {
   marker: PivotMarker;
   control: PivotFieldHeaderControlLayout;
   canSort: boolean;
+  onClosePivotOverlays: (reason: PivotOverlayDismissReason) => void;
   onApplyHeaderSort: (
     marker: PivotMarker,
     control: PivotFieldHeaderControlLayout,
@@ -201,69 +239,59 @@ function PivotHeaderMenu({
   marker,
   control,
   canSort,
+  onClosePivotOverlays,
   onApplyHeaderSort,
   onStartEditingPivot,
 }: PivotHeaderMenuProps) {
   return (
-    <div
-      role="menu"
-      className="pointer-events-auto absolute right-0 top-6 z-10 flex min-w-36 flex-col rounded border border-ss-border bg-ss-surface p-1 text-caption text-ss-text-primary shadow-lg"
+    <DropdownMenuContent
+      align="end"
+      side="bottom"
+      sideOffset={4}
+      className="min-w-36 p-1 text-caption"
+      data-no-grid-pointer="true"
       data-pivot-target="pivot-field-header-menu"
       data-pivot-area={control.area}
       data-pivot-field-id={control.fieldId}
       data-pivot-placement-id={control.placementId}
+      onEscapeKeyDown={() => onClosePivotOverlays('escape')}
+      onCloseAutoFocus={(event) => event.preventDefault()}
     >
-      <HeaderMenuButton
+      <DropdownMenuItem
         disabled={!canSort}
-        onClick={() => onApplyHeaderSort(marker, control, 'asc')}
+        onSelect={() => onApplyHeaderSort(marker, control, 'asc')}
       >
         Sort Ascending
-      </HeaderMenuButton>
-      <HeaderMenuButton
+      </DropdownMenuItem>
+      <DropdownMenuItem
         disabled={!canSort}
-        onClick={() => onApplyHeaderSort(marker, control, 'desc')}
+        onSelect={() => onApplyHeaderSort(marker, control, 'desc')}
       >
         Sort Descending
-      </HeaderMenuButton>
-      <HeaderMenuButton
+      </DropdownMenuItem>
+      <DropdownMenuItem
         disabled={!canSort}
-        onClick={() => onApplyHeaderSort(marker, control, null)}
+        onSelect={() => onApplyHeaderSort(marker, control, null)}
       >
         Clear Sort
-      </HeaderMenuButton>
-      <HeaderMenuButton onClick={() => onStartEditingPivot(marker.id)}>
+      </DropdownMenuItem>
+      <DropdownMenuItem onSelect={() => onStartEditingPivot(marker.id)}>
         Field Settings
-      </HeaderMenuButton>
-    </div>
-  );
-}
-
-function HeaderMenuButton({
-  children,
-  disabled,
-  onClick,
-}: {
-  children: string;
-  disabled?: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      role="menuitem"
-      className="rounded px-2 py-1 text-left hover:bg-ss-surface-hover disabled:opacity-50"
-      disabled={disabled}
-      onClick={onClick}
-    >
-      {children}
-    </button>
+      </DropdownMenuItem>
+    </DropdownMenuContent>
   );
 }
 
 function ReportFilterControls({
   marker,
+  openTransientOverlay,
+  onOpenPivotOverlay,
+  onClosePivotOverlays,
 }: {
   marker: PivotMarker;
+  openTransientOverlay: PivotTransientOverlay;
+  onOpenPivotOverlay: (overlay: Exclude<PivotTransientOverlay, null>) => void;
+  onClosePivotOverlays: (reason: PivotOverlayDismissReason) => void;
 }) {
   return (
     <div className="absolute inset-0 pointer-events-none">
@@ -272,6 +300,13 @@ function ReportFilterControls({
           key={control.placementId}
           control={control}
           marker={marker}
+          isOpen={
+            openTransientOverlay?.kind === 'report-filter-menu' &&
+            openTransientOverlay.pivotId === marker.id &&
+            openTransientOverlay.placementId === control.placementId
+          }
+          onOpenPivotOverlay={onOpenPivotOverlay}
+          onClosePivotOverlays={onClosePivotOverlays}
         />
       ))}
     </div>
@@ -281,11 +316,16 @@ function ReportFilterControls({
 function ReportFilterControl({
   control,
   marker,
+  isOpen,
+  onOpenPivotOverlay,
+  onClosePivotOverlays,
 }: {
   control: PivotReportFilterControlLayout;
   marker: PivotMarker;
+  isOpen: boolean;
+  onOpenPivotOverlay: (overlay: Exclude<PivotTransientOverlay, null>) => void;
+  onClosePivotOverlays: (reason: PivotOverlayDismissReason) => void;
 }) {
-  const [isOpen, setIsOpen] = useState(false);
   const [items, setItems] = useState<PivotItemInfo[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const activeFilter = marker.pivot.config.filters.find(
@@ -323,12 +363,12 @@ function ReportFilterControl({
   }, [control, isOpen, marker.pivot.handle]);
 
   const clearFilter = () => {
-    setIsOpen(false);
+    onClosePivotOverlays('command-applied');
     void marker.pivot.handle?.removeFilter(control.fieldId);
   };
 
   const includeSingleValue = (value: CellValue) => {
-    setIsOpen(false);
+    onClosePivotOverlays('command-applied');
     void marker.pivot.handle?.setFilter(control.fieldId, { includeValues: [value] });
   };
 
@@ -341,37 +381,55 @@ function ReportFilterControl({
         height: control.rect.height,
       }}
     >
-      <button
-        type="button"
-        className="pointer-events-auto inline-flex max-w-full min-w-0 items-center gap-1 rounded border border-ss-border bg-ss-surface/95 px-2 py-1 text-caption text-ss-text-primary shadow-sm hover:bg-ss-surface-hover"
-        data-pivot-target="report-filter-control"
-        data-pivot-field-id={control.fieldId}
-        data-pivot-placement-id={control.placementId}
-        data-pivot-row={control.row}
-        title={`Filter ${control.label}: ${filterSummary}`}
-        aria-label={`Filter ${control.label}: ${filterSummary}`}
-        aria-haspopup="listbox"
-        aria-expanded={isOpen ? 'true' : 'false'}
-        onClick={(event) => {
-          event.stopPropagation();
-          setIsOpen((open) => !open);
+      <Popover
+        open={isOpen}
+        onOpenChange={(open) => {
+          if (open) {
+            onOpenPivotOverlay({
+              kind: 'report-filter-menu',
+              pivotId: marker.id,
+              placementId: control.placementId,
+            });
+          } else if (isOpen) {
+            onClosePivotOverlays('outside-pointer');
+          }
         }}
       >
-        <span className="min-w-0 truncate">{control.label}</span>
-        <span className="shrink-0 text-ss-text-secondary">{filterSummary}</span>
-        <span className="shrink-0 text-ss-text-secondary" aria-hidden="true">
-          v
-        </span>
-      </button>
-      {isOpen && (
-        <div
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            className="pointer-events-auto inline-flex max-w-full min-w-0 items-center gap-1 rounded border border-ss-border bg-ss-surface/95 px-2 py-1 text-caption text-ss-text-primary shadow-sm hover:bg-ss-surface-hover"
+            data-no-grid-pointer="true"
+            data-pivot-target="report-filter-control"
+            data-pivot-field-id={control.fieldId}
+            data-pivot-placement-id={control.placementId}
+            data-pivot-row={control.row}
+            title={`Filter ${control.label}: ${filterSummary}`}
+            aria-label={`Filter ${control.label}: ${filterSummary}`}
+            aria-haspopup="listbox"
+            aria-expanded={isOpen ? 'true' : 'false'}
+          >
+            <span className="min-w-0 truncate">{control.label}</span>
+            <span className="shrink-0 text-ss-text-secondary">{filterSummary}</span>
+            <span className="shrink-0 text-ss-text-secondary" aria-hidden="true">
+              v
+            </span>
+          </button>
+        </PopoverTrigger>
+        <PopoverContent
           role="listbox"
-          className="pointer-events-auto absolute left-0 top-full z-20 mt-1 flex max-h-72 min-w-44 flex-col overflow-auto rounded border border-ss-border bg-ss-surface p-1 text-caption text-ss-text-primary shadow-lg"
+          align="start"
+          side="bottom"
+          sideOffset={4}
+          className="flex max-h-72 min-w-44 flex-col overflow-auto p-1 text-caption"
+          data-no-grid-pointer="true"
           data-pivot-target="report-filter-picker"
           data-pivot-field-id={control.fieldId}
           data-pivot-placement-id={control.placementId}
           aria-label={`${control.label} filter values`}
-          onClick={(event) => event.stopPropagation()}
+          onEscapeKeyDown={() => onClosePivotOverlays('escape')}
+          onPointerDown={(event) => event.stopPropagation()}
+          onCloseAutoFocus={(event) => event.preventDefault()}
         >
           <button
             type="button"
@@ -413,8 +471,8 @@ function ReportFilterControl({
               No values
             </div>
           )}
-        </div>
-      )}
+        </PopoverContent>
+      </Popover>
     </div>
   );
 }
@@ -472,7 +530,8 @@ function summarizeReportFilter(
     return `${filter.includeValues.length} selected`;
   }
   if (filter.excludeValues && filter.excludeValues.length > 0) {
-    const visibleCount = items.length > 0 ? Math.max(0, items.length - filter.excludeValues.length) : 0;
+    const visibleCount =
+      items.length > 0 ? Math.max(0, items.length - filter.excludeValues.length) : 0;
     return items.length > 0 ? `${visibleCount} selected` : 'Filtered';
   }
   return 'All';
@@ -489,6 +548,7 @@ function PivotEmptyState({
     <button
       type="button"
       className="mt-2 flex h-full min-h-[120px] w-full flex-col items-start justify-center rounded border border-dashed border-ss-border bg-ss-surface/95 px-4 py-3 text-left shadow-sm hover:bg-ss-surface-hover"
+      data-no-grid-pointer="true"
       data-pivot-target="empty-state"
       data-pivot-id={marker.id}
       title={`Configure ${marker.name}`}

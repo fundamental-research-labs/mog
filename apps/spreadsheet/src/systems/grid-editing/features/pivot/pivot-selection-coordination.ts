@@ -40,17 +40,20 @@ export function setupPivotSelectionCoordination(
   const setSelectedPivot = (pivotId: string | null): void => {
     const state = uiStoreApi.getState();
     if (pivotId != null) {
-      if (state.pivot.selectedPivotId !== pivotId || state.pivot.editingPivotId !== pivotId) {
-        state.startEditingPivot(pivotId);
+      const editingBelongsToDifferentPivot =
+        state.pivot.editingPivotId != null && state.pivot.editingPivotId !== pivotId;
+      if (
+        state.pivot.selectedPivotId !== pivotId ||
+        editingBelongsToDifferentPivot ||
+        state.pivot.openTransientOverlay != null
+      ) {
+        state.selectPivot(pivotId);
       }
       return;
     }
 
-    if (state.pivot.selectedPivotId !== null) {
+    if (state.pivot.selectedPivotId !== null || state.pivot.editingPivotId !== null) {
       state.selectPivot(null);
-    }
-    if (state.pivot.editingPivotId != null) {
-      state.stopEditingPivot();
     }
   };
 

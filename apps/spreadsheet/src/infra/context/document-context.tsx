@@ -220,6 +220,8 @@ export const useIsDVDialogOpen = () => useUIStore((s) => s.dvDialog.isOpen);
 export const useIsPivotDialogOpen = () => useUIStore((s) => s.pivot.isDialogOpen);
 export const useSelectedPivotId = () => useUIStore((s) => s.pivot.selectedPivotId);
 export const useEditingPivotId = () => useUIStore((s) => s.pivot.editingPivotId);
+export const usePivotTransientOverlay = () => useUIStore((s) => s.pivot.openTransientOverlay);
+export const usePivotFieldPanelWidth = () => useUIStore((s) => s.pivot.fieldPanelWidth);
 export const useIsFormatPainterActive = () => useUIStore((s) => s.formatPainter.isActive);
 export const useIsInsertFunctionDialogOpen = () => useUIStore((s) => s.insertFunctionDialogOpen);
 export const useZoomLevels = () => useUIStore((s) => s.zoomLevels);

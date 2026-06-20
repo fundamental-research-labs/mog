@@ -120,6 +120,7 @@ export function PivotFieldPanel({
     <div
       className="flex min-h-0 flex-col w-full h-full bg-ss-surface border-l border-ss-border shadow-ss-md overflow-hidden"
       style={style}
+      data-no-grid-pointer="true"
       data-pivot-target="field-panel"
       data-pivot-id={config.id}
       data-pivot-name={config.name}
@@ -135,6 +136,7 @@ export function PivotFieldPanel({
           className="flex items-center justify-center w-7 h-7 p-0 border-none rounded-full bg-transparent cursor-pointer text-section text-ss-text-secondary hover:bg-ss-surface-hover transition-colors"
           onClick={onClose}
           title="Close (Esc)"
+          data-no-grid-pointer="true"
         >
           ×
         </button>

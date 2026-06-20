@@ -7,13 +7,13 @@
  * overlays anchored to those materialized cells, not by a floating DOM table.
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import type { SortOrder } from '@mog-sdk/contracts/pivot';
 import { useCoordinator, useRendererActions, useRendererStatus } from '../../hooks';
-import { useActiveSheetId } from '../../internal-api';
+import { useActiveSheetId, useUIStore } from '../../infra/context';
 import { usePivotTables } from '../../hooks/data/use-pivot-tables';
-import { PivotLayerOverlay, type OpenPivotHeaderMenu } from './PivotLayerOverlay';
+import { PivotLayerOverlay } from './PivotLayerOverlay';
 import {
   getPivotMarker,
   type PivotFieldHeaderControlLayout,
@@ -26,6 +26,7 @@ function usePivotLayerInvalidation(
   coordinator: Coordinator,
   isReady: boolean,
   pivotCount: number,
+  closeTransientOverlays: (reason: 'scroll') => void,
 ): number {
   const [scrollTick, setScrollTick] = useState(0);
 
@@ -33,8 +34,9 @@ function usePivotLayerInvalidation(
     const inputCoordinator = coordinator.input.inputCoordinator;
     return inputCoordinator.onScrollChange(() => {
       setScrollTick((value) => value + 1);
+      closeTransientOverlays('scroll');
     });
-  }, [coordinator]);
+  }, [coordinator, closeTransientOverlays]);
 
   useEffect(() => {
     if (!isReady) return;
@@ -47,13 +49,14 @@ function usePivotLayerInvalidation(
         event.type === 'zoom-change'
       ) {
         setScrollTick((value) => value + 1);
+        closeTransientOverlays('scroll');
       }
     });
 
     return () => {
       sheetViewEvents?.dispose();
     };
-  }, [coordinator, isReady]);
+  }, [coordinator, closeTransientOverlays, isReady]);
 
   useEffect(() => {
     if (!isReady || pivotCount === 0) return;
@@ -108,8 +111,18 @@ export function PivotLayerContainer() {
   const { isReady } = useRendererStatus();
   const { getGeometry, getViewport } = useRendererActions();
   const coordinator = useCoordinator();
-  const scrollTick = usePivotLayerInvalidation(coordinator, isReady, pivotTables.length);
-  const [openHeaderMenu, setOpenHeaderMenu] = useState<OpenPivotHeaderMenu | null>(null);
+  const openTransientOverlay = useUIStore((s) => s.pivot.openTransientOverlay);
+  const openPivotOverlay = useUIStore((s) => s.openPivotOverlay);
+  const closePivotOverlays = useUIStore((s) => s.closePivotOverlays);
+  const closeTransientForViewportChange = useCallback(() => {
+    closePivotOverlays('scroll');
+  }, [closePivotOverlays]);
+  const scrollTick = usePivotLayerInvalidation(
+    coordinator,
+    isReady,
+    pivotTables.length,
+    closeTransientForViewportChange,
+  );
 
   const geometry = getGeometry();
   const markers = useMemo<PivotMarker[]>(() => {
@@ -128,13 +141,64 @@ export function PivotLayerContainer() {
     sortOrder: SortOrder | null,
   ) => {
     setPlacementSortOrder(marker.id, control.placementId, sortOrder);
-    setOpenHeaderMenu(null);
+    closePivotOverlays('command-applied');
   };
 
   const openPivotEditor = (pivotId: string) => {
     startEditingPivot(pivotId);
-    setOpenHeaderMenu(null);
   };
+
+  useEffect(() => {
+    closePivotOverlays('sheet-change');
+  }, [activeSheetId, closePivotOverlays]);
+
+  useEffect(() => {
+    if (!openTransientOverlay) return;
+    const marker = markers.find((candidate) => candidate.id === openTransientOverlay.pivotId);
+    if (!marker) {
+      closePivotOverlays('pivot-deleted');
+      return;
+    }
+    if (
+      openTransientOverlay.kind === 'field-header-menu' &&
+      !marker.fieldHeaderControls.some(
+        (control) => control.placementId === openTransientOverlay.placementId,
+      )
+    ) {
+      closePivotOverlays('placement-changed');
+      return;
+    }
+    if (
+      openTransientOverlay.kind === 'report-filter-menu' &&
+      !marker.reportFilterControls.some(
+        (control) => control.placementId === openTransientOverlay.placementId,
+      )
+    ) {
+      closePivotOverlays('placement-changed');
+    }
+  }, [closePivotOverlays, markers, openTransientOverlay]);
+
+  useEffect(() => {
+    if (!openTransientOverlay) return;
+    const handleWheel = (event: WheelEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest?.('[data-pivot-target="report-filter-picker"]')) return;
+      closePivotOverlays('scroll');
+    };
+    document.addEventListener('wheel', handleWheel, { capture: true, passive: true });
+    return () => document.removeEventListener('wheel', handleWheel, true);
+  }, [closePivotOverlays, openTransientOverlay]);
+
+  useEffect(() => {
+    if (!openTransientOverlay) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        closePivotOverlays('escape');
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown, true);
+    return () => document.removeEventListener('keydown', handleKeyDown, true);
+  }, [closePivotOverlays, openTransientOverlay]);
 
   if (markers.length === 0) {
     return null;
@@ -160,8 +224,9 @@ export function PivotLayerContainer() {
         <PivotLayerOverlay
           key={`${marker.id}-visible-overlay`}
           marker={marker}
-          openHeaderMenu={openHeaderMenu}
-          onToggleHeaderMenu={setOpenHeaderMenu}
+          openTransientOverlay={openTransientOverlay}
+          onOpenPivotOverlay={openPivotOverlay}
+          onClosePivotOverlays={closePivotOverlays}
           onApplyHeaderSort={applyHeaderSort}
           onStartEditingPivot={openPivotEditor}
         />

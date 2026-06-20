@@ -115,7 +115,11 @@ export interface GridEditingUIStore {
 
   // --- Pivot selection coordination ---
   /** Pivot field-panel state */
-  pivot: { selectedPivotId: string | null; editingPivotId: string | null };
+  pivot: {
+    selectedPivotId: string | null;
+    editingPivotId: string | null;
+    openTransientOverlay?: unknown;
+  };
   /** Set the currently selected pivot */
   selectPivot: (pivotId: string | null) => void;
   /** Open pivot field editing */

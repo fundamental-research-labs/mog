@@ -110,12 +110,25 @@ function createMockSheetSwitchDeps() {
     setToolbarRanges: () => {},
     tableDesign: { selectedTableId: null },
     setSelectedTable: () => {},
-    pivot: { selectedPivotId: null, editingPivotId: null },
+    pivot: { selectedPivotId: null, editingPivotId: null, openTransientOverlay: null },
     selectPivot: (pivotId: string | null) => {
-      state.pivot = { ...state.pivot, selectedPivotId: pivotId };
+      state.pivot = {
+        ...state.pivot,
+        selectedPivotId: pivotId,
+        editingPivotId:
+          pivotId == null ||
+          (state.pivot.editingPivotId != null && state.pivot.editingPivotId !== pivotId)
+            ? null
+            : state.pivot.editingPivotId,
+        openTransientOverlay: null,
+      };
     },
     startEditingPivot: (pivotId: string) => {
-      state.pivot = { selectedPivotId: pivotId, editingPivotId: pivotId };
+      state.pivot = {
+        selectedPivotId: pivotId,
+        editingPivotId: pivotId,
+        openTransientOverlay: null,
+      };
     },
     stopEditingPivot: () => {
       state.pivot = { ...state.pivot, editingPivotId: null };

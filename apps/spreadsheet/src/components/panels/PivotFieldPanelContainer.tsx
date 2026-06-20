@@ -14,22 +14,19 @@
 
 import {
   useCallback,
-  useState,
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
+  useState,
 } from 'react';
 
 import type { AggregateFunction, PivotFieldArea } from '@mog-sdk/contracts/pivot';
+import { useUIStore } from '../../infra/context';
 import { usePivotEditorActions } from '../../hooks/data/use-pivot-editor-actions';
 import { PivotFieldPanel } from '../pivot';
-
-const DEFAULT_PANEL_WIDTH = 320;
-const MIN_PANEL_WIDTH = 280;
-const MAX_PANEL_WIDTH = 640;
-
-function clampPanelWidth(width: number): number {
-  return Math.min(MAX_PANEL_WIDTH, Math.max(MIN_PANEL_WIDTH, Math.round(width)));
-}
+import {
+  MAX_PIVOT_FIELD_PANEL_WIDTH,
+  MIN_PIVOT_FIELD_PANEL_WIDTH,
+} from '../../ui-store/slices/dialogs/pivot-dialog';
 
 // =============================================================================
 // Types
@@ -53,8 +50,9 @@ export interface PivotFieldPanelContainerProps {
 export function PivotFieldPanelContainer({
   className,
 }: PivotFieldPanelContainerProps): React.JSX.Element | null {
-  const [panelWidth, setPanelWidth] = useState(DEFAULT_PANEL_WIDTH);
   const [isResizing, setIsResizing] = useState(false);
+  const panelWidth = useUIStore((s) => s.pivot.fieldPanelWidth);
+  const setPanelWidth = useUIStore((s) => s.setPivotFieldPanelWidth);
 
   // Pivot editor actions hook provides all pivot manipulation functionality
   const {
@@ -81,9 +79,9 @@ export function PivotFieldPanelContainer({
   const handleResizePointerMove = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
       if (!isResizing || !event.currentTarget.hasPointerCapture(event.pointerId)) return;
-      setPanelWidth(clampPanelWidth(window.innerWidth - event.clientX));
+      setPanelWidth(window.innerWidth - event.clientX);
     },
-    [isResizing],
+    [isResizing, setPanelWidth],
   );
 
   const finishResize = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
@@ -93,22 +91,25 @@ export function PivotFieldPanelContainer({
     setIsResizing(false);
   }, []);
 
-  const handleResizeKeyDown = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
-    const step = event.shiftKey ? 40 : 16;
-    if (event.key === 'ArrowLeft') {
-      event.preventDefault();
-      setPanelWidth((width) => clampPanelWidth(width + step));
-    } else if (event.key === 'ArrowRight') {
-      event.preventDefault();
-      setPanelWidth((width) => clampPanelWidth(width - step));
-    } else if (event.key === 'Home') {
-      event.preventDefault();
-      setPanelWidth(MIN_PANEL_WIDTH);
-    } else if (event.key === 'End') {
-      event.preventDefault();
-      setPanelWidth(MAX_PANEL_WIDTH);
-    }
-  }, []);
+  const handleResizeKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLDivElement>) => {
+      const step = event.shiftKey ? 40 : 16;
+      if (event.key === 'ArrowLeft') {
+        event.preventDefault();
+        setPanelWidth(panelWidth + step);
+      } else if (event.key === 'ArrowRight') {
+        event.preventDefault();
+        setPanelWidth(panelWidth - step);
+      } else if (event.key === 'Home') {
+        event.preventDefault();
+        setPanelWidth(MIN_PIVOT_FIELD_PANEL_WIDTH);
+      } else if (event.key === 'End') {
+        event.preventDefault();
+        setPanelWidth(MAX_PIVOT_FIELD_PANEL_WIDTH);
+      }
+    },
+    [panelWidth, setPanelWidth],
+  );
 
   // Only render when a pivot table is being edited
   if (!editingPivot) {
@@ -132,6 +133,7 @@ export function PivotFieldPanelContainer({
     <div
       className={className ?? 'absolute top-0 right-0 bottom-0 z-ss-sticky'}
       style={{ width: panelWidth }}
+      data-no-grid-pointer="true"
       data-pivot-target="field-panel-container"
       data-pivot-id={editingPivot.config.id}
     >
@@ -140,12 +142,13 @@ export function PivotFieldPanelContainer({
         aria-orientation="vertical"
         aria-label="Resize pivot field panel"
         tabIndex={0}
-        aria-valuemin={MIN_PANEL_WIDTH}
-        aria-valuemax={MAX_PANEL_WIDTH}
+        aria-valuemin={MIN_PIVOT_FIELD_PANEL_WIDTH}
+        aria-valuemax={MAX_PIVOT_FIELD_PANEL_WIDTH}
         aria-valuenow={panelWidth}
         className={`absolute left-0 top-0 z-10 h-full w-2 -translate-x-1 cursor-col-resize bg-transparent hover:bg-ss-accent/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-ss-accent ${
           isResizing ? 'bg-ss-accent/20' : ''
         }`}
+        data-no-grid-pointer="true"
         data-pivot-target="field-panel-resize-handle"
         onPointerDown={handleResizePointerDown}
         onPointerMove={handleResizePointerMove}

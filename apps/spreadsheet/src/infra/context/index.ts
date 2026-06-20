@@ -53,6 +53,8 @@ export {
   useIsFormatPainterActive,
   useIsInsertFunctionDialogOpen,
   useIsPivotDialogOpen,
+  usePivotFieldPanelWidth,
+  usePivotTransientOverlay,
   useSelectedPivotId,
   useUIStore,
   useUIStoreApi,

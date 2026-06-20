@@ -1094,6 +1094,8 @@ export interface PivotTableInfo {
   valueFields?: PivotValueField[];
   /** Filter field names */
   filterFields?: string[];
+  /** Layout settings when present */
+  layout?: PivotTableLayout;
 }
 
 /** A single flat record from a pivot query result. */

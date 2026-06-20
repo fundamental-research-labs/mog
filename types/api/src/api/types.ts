@@ -965,6 +965,8 @@ export interface PivotTableInfo {
   valueFields?: PivotValueField[];
   /** Filter field names */
   filterFields?: string[];
+  /** Layout settings when present */
+  layout?: PivotTableLayout;
 }
 
 // =============================================================================

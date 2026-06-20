@@ -905,6 +905,10 @@ describe('WorksheetPivotsImpl contracts', () => {
   });
 
   it('getInfo exposes contentArea from rendered bounds', async () => {
+    ctx.pivot.getAllPivots.mockResolvedValueOnce([
+      makePivotConfig({ layout: { layoutForm: 'tabular' } }),
+    ]);
+
     const info = await pivots.getInfo('SalesPivot');
 
     expect(info).toEqual(
@@ -912,12 +916,17 @@ describe('WorksheetPivotsImpl contracts', () => {
         name: 'SalesPivot',
         location: 'D3',
         contentArea: 'D3:E4',
+        layout: { layoutForm: 'tabular' },
       }),
     );
     expect(ctx.pivot.compute).toHaveBeenCalledWith(SHEET_ID, 'pivot-1');
   });
 
   it('list exposes contentArea from rendered bounds', async () => {
+    ctx.pivot.getAllPivots.mockResolvedValueOnce([
+      makePivotConfig({ layout: { layoutForm: 'tabular' } }),
+    ]);
+
     const list = await pivots.list();
 
     expect(list).toEqual([
@@ -925,6 +934,7 @@ describe('WorksheetPivotsImpl contracts', () => {
         name: 'SalesPivot',
         location: 'D3',
         contentArea: 'D3:E4',
+        layout: { layoutForm: 'tabular' },
       }),
     ]);
     expect(ctx.pivot.compute).toHaveBeenCalledWith(SHEET_ID, 'pivot-1');

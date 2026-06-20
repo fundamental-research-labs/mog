@@ -1120,6 +1120,7 @@ export class WorksheetPivotsImpl implements WorksheetPivots {
       columnFields: apiConfig.columnFields,
       valueFields: apiConfig.valueFields,
       filterFields: apiConfig.filterFields,
+      ...(p.layout ? { layout: p.layout } : {}),
     };
   }
 

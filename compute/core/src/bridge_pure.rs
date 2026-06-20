@@ -84,21 +84,132 @@ impl PivotBridge {
     }
 
     /// Drill down into a specific pivot cell to get source row indices.
-    /// Skipped for napi: usize is not supported by napi-rs FFI.
     #[bridge::pure]
-    #[bridge::skip(napi)]
     pub fn pivot_drill_down(
         config: PivotTableConfig,
         data: Vec<Vec<CellValue>>,
         row_key: &str,
         column_key: &str,
-    ) -> Result<Vec<usize>, compute_pivot::types::PivotError> {
+    ) -> Result<Vec<u32>, compute_pivot::types::PivotError> {
         let config = PivotEngineConfig::try_from(config)
             .map_err(|message| PivotError::ValidationError { message })?;
         let resolved = compute_pivot::validate_and_resolve(&config)?;
-        Ok(compute_pivot::drill_down_resolved(
-            &resolved, &data, row_key, column_key,
-        ))
+        compute_pivot::drill_down_resolved(&resolved, &data, row_key, column_key)
+            .into_iter()
+            .map(|index| {
+                u32::try_from(index).map_err(|_| PivotError::ValidationError {
+                    message: format!("pivot drill-down source row index exceeds u32: {index}"),
+                })
+            })
+            .collect()
+    }
+}
+
+#[cfg(test)]
+mod pivot_bridge_tests {
+    use super::*;
+    use domain_types::domain::analytics::{AggregateFunction, DetectedDataType};
+    use domain_types::domain::pivot::{
+        FieldId, OutputLocation, PIVOT_CONFIG_SCHEMA_VERSION, PivotFieldArea,
+        PivotFieldPlacementFlat,
+    };
+
+    fn text(value: &str) -> CellValue {
+        CellValue::Text(value.into())
+    }
+
+    fn placement(field_id: &str, area: PivotFieldArea, position: usize) -> PivotFieldPlacementFlat {
+        PivotFieldPlacementFlat {
+            placement_id: Default::default(),
+            field_id: FieldId::from(field_id),
+            calculated_field_id: None,
+            area,
+            position,
+            aggregate_function: (area == PivotFieldArea::Value).then_some(AggregateFunction::Sum),
+            sort_order: None,
+            custom_sort_list: None,
+            sort_by_value: None,
+            date_grouping: None,
+            number_grouping: None,
+            show_subtotals: None,
+            display_name: None,
+            number_format: None,
+            show_values_as: None,
+        }
+    }
+
+    #[test]
+    fn pivot_drill_down_exposes_napi_safe_source_indices() {
+        let data = vec![
+            vec![text("Region"), text("Product"), text("Sales")],
+            vec![text("East"), text("Widget"), CellValue::number(100.0)],
+            vec![text("East"), text("Widget"), CellValue::number(125.0)],
+            vec![text("West"), text("Widget"), CellValue::number(80.0)],
+        ];
+
+        let config = PivotTableConfig {
+            schema_version: PIVOT_CONFIG_SCHEMA_VERSION,
+            id: "pivot1".to_string(),
+            name: "Test Pivot".to_string(),
+            source_sheet_id: None,
+            source_sheet_name: "Sheet1".to_string(),
+            source_range: domain_types::domain::pivot::CellRange::new(0, 0, 3, 2),
+            output_sheet_id: None,
+            output_sheet_name: "Sheet1".to_string(),
+            output_location: OutputLocation { row: 0, col: 0 },
+            fields: vec![
+                domain_types::domain::pivot::PivotField {
+                    id: FieldId::from("Region"),
+                    name: "Region".to_string(),
+                    source_column: 0,
+                    data_type: DetectedDataType::String,
+                    ..Default::default()
+                },
+                domain_types::domain::pivot::PivotField {
+                    id: FieldId::from("Product"),
+                    name: "Product".to_string(),
+                    source_column: 1,
+                    data_type: DetectedDataType::String,
+                    ..Default::default()
+                },
+                domain_types::domain::pivot::PivotField {
+                    id: FieldId::from("Sales"),
+                    name: "Sales".to_string(),
+                    source_column: 2,
+                    data_type: DetectedDataType::Number,
+                    ..Default::default()
+                },
+            ],
+            placements: vec![
+                placement("Region", PivotFieldArea::Row, 0),
+                placement("Product", PivotFieldArea::Column, 0),
+                placement("Sales", PivotFieldArea::Value, 0),
+            ],
+            filters: vec![],
+            layout: None,
+            style: None,
+            data_options: None,
+            created_at: None,
+            updated_at: None,
+            calculated_fields: None,
+            allow_multiple_filters_per_field: None,
+            auto_format: None,
+            preserve_formatting: None,
+            cache_id: None,
+            data_on_rows: None,
+            ref_range: None,
+            first_data_row: None,
+            first_header_row: None,
+            first_data_col: None,
+            rows_per_page: None,
+            cols_per_page: None,
+            row_items: Vec::new(),
+            col_items: Vec::new(),
+        };
+
+        let indices = PivotBridge::pivot_drill_down(config, data, "T:east", "T:widget").unwrap();
+
+        assert_eq!(indices, vec![0_u32, 1_u32]);
     }
 }
 

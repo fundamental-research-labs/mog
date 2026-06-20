@@ -45,6 +45,6 @@ pub fn drill_down(
     data: Vec<Vec<CellValue>>,
     row_key: &str,
     column_key: &str,
-) -> Result<Vec<usize>, PivotError> {
+) -> Result<Vec<u32>, PivotError> {
     compute_core::bridge_pure::PivotBridge::pivot_drill_down(config, data, row_key, column_key)
 }

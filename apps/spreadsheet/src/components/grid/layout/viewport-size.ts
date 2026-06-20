@@ -1,15 +1,18 @@
 import { SCROLL_BAR_WIDTH } from '@mog-sdk/contracts/rendering';
 
-export interface GridScrollbarSettings {
+export interface GridScrollbarVisibilitySettings {
   showHorizontalScrollbar: boolean;
   showVerticalScrollbar: boolean;
-  reservedRightInset?: number;
+}
+
+export interface GridViewportLayoutSettings extends GridScrollbarVisibilitySettings {
+  reservedRightInset: number;
 }
 
 export function getGridViewportSize(
   width: number,
   height: number,
-  settings: GridScrollbarSettings,
+  settings: GridViewportLayoutSettings,
 ): { width: number; height: number } {
   const inset = getGridViewportInset(settings);
 
@@ -19,7 +22,7 @@ export function getGridViewportSize(
   };
 }
 
-export function getGridViewportInset(settings: GridScrollbarSettings): {
+export function getGridViewportInset(settings: GridViewportLayoutSettings): {
   right: number;
   bottom: number;
 } {

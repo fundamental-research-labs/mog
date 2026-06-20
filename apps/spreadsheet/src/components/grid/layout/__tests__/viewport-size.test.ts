@@ -8,6 +8,7 @@ describe('getGridViewportSize', () => {
       getGridViewportSize(1000, 700, {
         showHorizontalScrollbar: true,
         showVerticalScrollbar: true,
+        reservedRightInset: 0,
       }),
     ).toEqual({
       width: 1000 - SCROLL_BAR_WIDTH,
@@ -20,6 +21,7 @@ describe('getGridViewportSize', () => {
       getGridViewportSize(1000, 700, {
         showHorizontalScrollbar: false,
         showVerticalScrollbar: false,
+        reservedRightInset: 0,
       }),
     ).toEqual({ width: 1000, height: 700 });
   });
@@ -29,6 +31,7 @@ describe('getGridViewportSize', () => {
       getGridViewportSize(4, 3, {
         showHorizontalScrollbar: true,
         showVerticalScrollbar: true,
+        reservedRightInset: 0,
       }),
     ).toEqual({ width: 0, height: 0 });
   });

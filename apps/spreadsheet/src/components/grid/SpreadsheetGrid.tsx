@@ -70,7 +70,7 @@ import { ProtectionDialogs } from './dialogs/ProtectionDialogs';
 import { useEditorIntegration } from './effects/useEditorIntegration';
 import { useGroupingIntegration } from './effects/useGroupingIntegration';
 import { useInputListeners } from './effects/useInputListeners';
-import { usePivotFieldPanelViewportSettings } from './effects/usePivotFieldPanelViewportSettings';
+import { usePivotAwareGridViewportLayout } from './effects/usePivotAwareGridViewportLayout';
 import { useRenderContextConfig } from './effects/useRenderContextConfig';
 import { useRendererDependencies } from './effects/useRendererDependencies';
 import { useRendererLifecycle } from './effects/useRendererLifecycle';
@@ -285,8 +285,8 @@ export const SpreadsheetGrid = memo(function SpreadsheetGrid({
   const closeObjectContextMenu = useUIStore((s) => s.closeObjectContextMenu);
 
   const { settings: workbookSettings } = useWorkbookSettings();
-  const gridViewportSettings = usePivotFieldPanelViewportSettings({
-    workbookSettings,
+  const gridViewportLayout = usePivotAwareGridViewportLayout({
+    scrollbarVisibility: workbookSettings,
     coordinator,
     isReady,
   });
@@ -446,7 +446,7 @@ export const SpreadsheetGrid = memo(function SpreadsheetGrid({
     getCellValue,
     getCellFormat,
     activeSheetId,
-    workbookSettings: gridViewportSettings,
+    viewportLayout: gridViewportLayout,
     sheetStateProvider,
     rendererSkin,
     uiStoreApi,
@@ -908,7 +908,8 @@ export const SpreadsheetGrid = memo(function SpreadsheetGrid({
 
           {/* ScrollContainer - scrollbars and split boxes */}
           <ScrollContainer
-            workbookSettings={gridViewportSettings}
+            viewportLayout={gridViewportLayout}
+            autoHideScrollBars={workbookSettings.autoHideScrollBars}
             scrollWidth={scrollWidth}
             scrollHeight={scrollHeight}
           />

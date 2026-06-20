@@ -25,12 +25,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { SCROLL_BUFFER_COLS, SCROLL_BUFFER_ROWS } from '../hooks/useScrollDimensions';
 import { useCoordinator } from '../../../hooks/shared/use-coordinator';
-import type { GridScrollbarSettings } from './viewport-size';
+import type { GridViewportLayoutSettings } from './viewport-size';
 
 export interface ScrollContainerProps {
-  workbookSettings: GridScrollbarSettings & {
-    autoHideScrollBars?: boolean;
-  };
+  viewportLayout: GridViewportLayoutSettings;
+  autoHideScrollBars?: boolean;
   /** Total scrollable content width (px) — base used-range content size */
   scrollWidth: number;
   /** Total scrollable content height (px) — base used-range content size */
@@ -115,13 +114,14 @@ export function computeScrollbarDragPosition(params: {
  * Scrollbar position is a pure function of InputCoordinator scroll state.
  */
 export function ScrollContainer({
-  workbookSettings,
+  viewportLayout,
+  autoHideScrollBars,
   scrollWidth: baseScrollWidth,
   scrollHeight: baseScrollHeight,
 }: ScrollContainerProps) {
   const coordinator = useCoordinator();
   const inputCoordinator = coordinator.input.inputCoordinator;
-  const reservedRightInset = Math.max(0, workbookSettings.reservedRightInset ?? 0);
+  const reservedRightInset = Math.max(0, viewportLayout.reservedRightInset);
 
   // Current scroll position from InputCoordinator
   const [scrollX, setScrollX] = useState(0);
@@ -131,7 +131,7 @@ export function ScrollContainer({
   const [isActive, setIsActive] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
   const autoHideTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const autoHideEnabled = workbookSettings.autoHideScrollBars ?? false;
+  const autoHideEnabled = autoHideScrollBars ?? false;
 
   // Subscribe to scroll changes from InputCoordinator
   useEffect(() => {
@@ -191,7 +191,7 @@ export function ScrollContainer({
   return (
     <>
       {/* Vertical scrollbar */}
-      {workbookSettings.showVerticalScrollbar && maxScrollY > 0 && (
+      {viewportLayout.showVerticalScrollbar && maxScrollY > 0 && (
         <ScrollbarTrack
           orientation="vertical"
           scrollPosition={scrollY}
@@ -206,7 +206,7 @@ export function ScrollContainer({
       )}
 
       {/* Split Box - Vertical (placeholder for future split view) */}
-      {workbookSettings.showVerticalScrollbar && (
+      {viewportLayout.showVerticalScrollbar && (
         <div
           className="split-box-vertical absolute pointer-events-auto"
           data-no-grid-pointer="true"
@@ -229,7 +229,7 @@ export function ScrollContainer({
       )}
 
       {/* Horizontal scrollbar */}
-      {workbookSettings.showHorizontalScrollbar && maxScrollX > 0 && (
+      {viewportLayout.showHorizontalScrollbar && maxScrollX > 0 && (
         <ScrollbarTrack
           orientation="horizontal"
           scrollPosition={scrollX}
@@ -244,7 +244,7 @@ export function ScrollContainer({
       )}
 
       {/* Split Box - Horizontal (placeholder for future split view) */}
-      {workbookSettings.showHorizontalScrollbar && (
+      {viewportLayout.showHorizontalScrollbar && (
         <div
           className="split-box-horizontal absolute pointer-events-auto"
           data-no-grid-pointer="true"

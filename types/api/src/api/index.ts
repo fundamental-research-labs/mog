@@ -147,6 +147,7 @@ export type {
   WorksheetHyperlink,
   WorksheetHyperlinks,
   WorksheetInternal,
+  WorksheetInternalChart,
   WorksheetLayout,
   RangePixelPosition,
   WorksheetNames,

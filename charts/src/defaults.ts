@@ -1,1 +1,1 @@
-export const CANVAS_PIXELS_PER_POINT = 2;
+export const CANVAS_PIXELS_PER_POINT = 96 / 72;

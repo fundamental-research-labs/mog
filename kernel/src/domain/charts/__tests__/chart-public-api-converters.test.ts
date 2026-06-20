@@ -65,6 +65,34 @@ describe('chart public API converters', () => {
     expect(publicChart.height).toBe(225);
   });
 
+  it('uses pixel geometry ahead of stale cell spans on read', () => {
+    const publicChart = serializedChartToChart(
+      chart({
+        width: 800,
+        height: 400,
+        widthCells: 4,
+        heightCells: 5,
+      }),
+    );
+
+    expect(publicChart.width).toBe(600);
+    expect(publicChart.height).toBe(300);
+  });
+
+  it('privately converts cell-only stored dimensions to SDK chart point dimensions', () => {
+    const publicChart = serializedChartToChart(
+      chart({
+        width: 0,
+        height: 0,
+        widthCells: 8,
+        heightCells: 15,
+      }),
+    );
+
+    expect(publicChart.width).toBe(480);
+    expect(publicChart.height).toBe(225);
+  });
+
   it('reports imported anchor extents as SDK chart point dimensions', () => {
     const publicChart = serializedChartToChart(
       chart({

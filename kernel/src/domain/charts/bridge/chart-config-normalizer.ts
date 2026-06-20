@@ -11,7 +11,10 @@ import {
   normalizeImportedComboChart,
   normalizeImportedDisplayBlanksAsValue,
 } from '../../../bridges/compute/chart-import-normalization';
-import { chartEmuToPoints, chartPixelsToPoints } from '../chart-size-units';
+import {
+  resolveStoredChartHeightPoints,
+  resolveStoredChartWidthPoints,
+} from '../chart-size-units';
 import { isXYValueAxisChartType } from './axis-role';
 import {
   wireToAxisConfig,
@@ -258,14 +261,6 @@ type ChartRenderExtra = {
   };
 };
 
-function anchorExtentPt(
-  anchor: ChartFloatingObject['anchor'] | undefined,
-  axis: 'x' | 'y',
-): number | undefined {
-  const emu = axis === 'x' ? anchor?.extentCxEmu : anchor?.extentCyEmu;
-  return chartEmuToPoints(emu);
-}
-
 function renderExtraFromChart(chart: ChartFloatingObject): ChartConfig['extra'] {
   const ooxml = recordValue(chart.ooxml);
   if (!ooxml && !chart.importStatus) return undefined;
@@ -360,16 +355,8 @@ export function toChartConfig(chart: ChartFloatingObject): ChartConfig {
   const displayBlanksAs = normalizeImportedDisplayBlanksAsValue(normalizedChart.displayBlanksAs) as
     | ChartConfig['displayBlanksAs']
     | undefined;
-  const widthPt =
-    anchorExtentPt(normalizedChart.anchor, 'x') ??
-    normalizedChart.widthPt ??
-    chartPixelsToPoints(normalizedChart.width) ??
-    480;
-  const heightPt =
-    anchorExtentPt(normalizedChart.anchor, 'y') ??
-    normalizedChart.heightPt ??
-    chartPixelsToPoints(normalizedChart.height) ??
-    225;
+  const widthPt = resolveStoredChartWidthPoints(normalizedChart) ?? 480;
+  const heightPt = resolveStoredChartHeightPoints(normalizedChart) ?? 225;
 
   return {
     type: narrowedType.type ?? 'bar',

@@ -39,8 +39,8 @@ import {
   normalizeImportedDisplayBlanksAsValue,
 } from './chart-import-normalization';
 import {
-  resolveChartHeightCells,
-  resolveChartWidthCells,
+  resolveStoredChartHeightCellSpan,
+  resolveStoredChartWidthCellSpan,
 } from '../../domain/charts/chart-size-units';
 
 import type {
@@ -918,8 +918,8 @@ function toChartObject(d: WireChart): ChartObject {
     anchorMode: (chart.anchor.anchorMode === 'twoCell'
       ? 'twoCell'
       : 'oneCell') as ChartObject['anchorMode'],
-    widthCells: resolveChartWidthCells(chart.widthCells, chart.width) ?? 8,
-    heightCells: resolveChartHeightCells(chart.heightCells, chart.height) ?? 15,
+    widthCells: resolveStoredChartWidthCellSpan(chart) ?? 8,
+    heightCells: resolveStoredChartHeightCellSpan(chart) ?? 15,
     chartConfig,
     dataRangeIdentity: chart.dataRangeIdentity,
     seriesRangeIdentity: chart.seriesRangeIdentity,

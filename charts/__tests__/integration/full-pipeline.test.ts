@@ -19,8 +19,8 @@ function makeConfig(overrides: Partial<StoredChartConfig> = {}): StoredChartConf
     type: 'bar',
     anchorRow: 0,
     anchorCol: 0,
-    width: 320,
-    height: 150,
+    width: 480,
+    height: 225,
     dataRange: 'A1:D10',
     ...overrides,
   };
@@ -578,11 +578,11 @@ describe('Full pipeline: config options produce corresponding output', () => {
   it('layout bounds reflect configured dimensions', () => {
     const config = makeConfig({
       type: 'bar',
-      width: 400,
-      height: 200,
+      width: 600,
+      height: 300,
     });
     const spec = configToSpec(config, SINGLE_DATA);
-    // Width: 400pt * 2 = 800, Height: 200pt * 2 = 400
+    // Width: 600pt at 96 CSS px/in = 800, Height: 300pt = 400
     expect(spec.width).toBe(800);
     expect(spec.height).toBe(400);
 

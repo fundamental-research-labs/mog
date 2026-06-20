@@ -5,11 +5,31 @@
  * formula bar, action handlers) but NOT part of the public Worksheet surface.
  * Only exposed on WorksheetImpl directly, never on the Worksheet interface.
  */
-import type { IdentityFormula } from '@mog/types-core/cell-identity';
+import type { CellId, CellIdRange, IdentityFormula } from '@mog/types-core/cell-identity';
 import type { SheetId } from '@mog/types-core/core';
 import type { RangeSchema } from '@mog/types-commands/schema';
+import type { Chart, ChartAnchorMode } from '@mog/types-data/data/charts';
 import type { TableConfig } from '@mog/types-data/data/tables';
 import type { CellRange, ConditionalFormatCache } from '../types';
+
+/**
+ * Internal chart read model for first-party worksheet consumers.
+ *
+ * Public `Chart` intentionally omits CRDT/storage metadata. Spreadsheet
+ * rendering still needs those fields to keep anchors and source ranges stable
+ * across structural edits, so the internal worksheet surface exposes this
+ * storage-backed projection instead of requiring UI code to inspect raw bridge
+ * objects.
+ */
+export interface WorksheetInternalChart extends Chart {
+  anchorCellId?: CellId;
+  endAnchorCellId?: CellId;
+  anchorMode?: ChartAnchorMode;
+  dataRangeIdentity?: CellIdRange;
+  seriesRangeIdentity?: CellIdRange;
+  categoryRangeIdentity?: CellIdRange;
+  zIndex?: number;
+}
 
 /** Internal worksheet operations — not part of the public Worksheet API. */
 export interface WorksheetInternal {
@@ -46,6 +66,11 @@ export interface WorksheetInternal {
    * @returns Map from cell ID to position (missing IDs are omitted)
    */
   batchGetCellPositions(cellIds: string[]): Promise<Map<string, { row: number; col: number }>>;
+
+  /**
+   * List stored chart configs for first-party UI infrastructure.
+   */
+  listStoredCharts(): Promise<WorksheetInternalChart[]>;
 
   /**
    * Reactive conditional format cache.

@@ -270,7 +270,7 @@ describe('configToSpec imported Excel date category axes', () => {
     const spec = asUnitSpec(configToSpec(config, makeData()));
     const result = compile(spec);
 
-    expect(result.layout.margin.left).toBeGreaterThanOrEqual(300);
+    expect(result.layout.margin.left).toBeGreaterThanOrEqual(220);
   });
 
   it('uses independent y scales for combo series bound to a secondary axis', () => {
@@ -773,7 +773,7 @@ describe('configToSpec imported Excel date category axes', () => {
     expect(area?.style.opacity).toBeUndefined();
     expect(area?.style.fillPaint?.opacity).toBeCloseTo(0.43);
     expect(line?.style.stroke).toBe('#000000');
-    expect(line?.style.strokeWidth).toBe(3);
+    expect(line?.style.strokeWidth).toBe(2);
 
     const areaCoordinates = (area?.path.match(/-?\d+(?:\.\d+)?/g) ?? []).map(Number);
     const areaYCoordinates = areaCoordinates.filter((_, index) => index % 2 === 1);

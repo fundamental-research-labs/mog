@@ -146,7 +146,7 @@ describe('configToSpec style resolver integration', () => {
     expect(spec.title).toMatchObject({
       text: 'Owner styled',
       color: '#123456',
-      fontSize: 32,
+      fontSize: 64 / 3,
       fontWeight: 'bold',
       richText: [expect.objectContaining({ text: 'Owner styled', fontStyle: 'italic' })],
     });
@@ -178,7 +178,7 @@ describe('configToSpec style resolver integration', () => {
       fill: { type: 'solid', color: '#EEEEEE' },
       line: {
         paint: { type: 'solid', color: '#111111' },
-        width: 8,
+        width: 16 / 3,
       },
     });
   });

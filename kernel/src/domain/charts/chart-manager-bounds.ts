@@ -6,8 +6,13 @@ import { pointInRect } from '@mog/geometry';
 import type { SheetId } from '@mog-sdk/contracts/core';
 
 import type { ChartFloatingObject, ComputeBridge } from '../../bridges/compute/compute-bridge';
-import { cellsToPixels } from './chart-manager-dimensions';
-import { resolveChartHeightCells, resolveChartWidthCells } from './chart-size-units';
+import { chartAnchorToPixels } from './chart-manager-dimensions';
+import {
+  DEFAULT_CHART_HEIGHT_PX,
+  DEFAULT_CHART_WIDTH_PX,
+  resolveStoredChartHeightPixels,
+  resolveStoredChartWidthPixels,
+} from './chart-size-units';
 
 export function chartNeedsPositionUpdate(chart: ChartFloatingObject): boolean {
   return Boolean(chart.anchorCellId);
@@ -21,14 +26,18 @@ export async function calculateChartPixelBounds(
   containerId: SheetId,
   computeBridge: ComputeBridge,
 ): Promise<{ x: number; y: number; width: number; height: number }> {
-  return cellsToPixels(
+  const anchor = await chartAnchorToPixels(
     chart.anchor.anchorRow,
     chart.anchor.anchorCol,
-    resolveChartWidthCells(chart.widthCells, chart.width) ?? 4,
-    resolveChartHeightCells(chart.heightCells, chart.height) ?? 10,
     containerId,
     computeBridge,
   );
+
+  return {
+    ...anchor,
+    width: resolveStoredChartWidthPixels(chart) ?? DEFAULT_CHART_WIDTH_PX,
+    height: resolveStoredChartHeightPixels(chart) ?? DEFAULT_CHART_HEIGHT_PX,
+  };
 }
 
 /**

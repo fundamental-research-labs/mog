@@ -9,11 +9,15 @@ import type {
   CellRange,
   ConditionalFormatCache,
   SheetId,
+  WorksheetInternalChart,
   WorksheetInternal,
 } from '@mog-sdk/contracts/api';
-import type { IdentityFormula } from '@mog-sdk/contracts/cell-identity';
+import { toCellId, type IdentityFormula } from '@mog-sdk/contracts/cell-identity';
 import type { RangeSchema } from '@mog-sdk/contracts/schema';
-import type { RangeSchema as BridgeRangeSchema } from '../../bridges/compute/compute-bridge';
+import type {
+  ChartFloatingObject,
+  RangeSchema as BridgeRangeSchema,
+} from '../../bridges/compute/compute-bridge';
 import type { Table as CanonicalTable } from '../../bridges/compute/compute-types.gen';
 import type { PivotTableConfig as DataPivotTableConfig } from '@mog-sdk/contracts/pivot';
 import type { TableConfig } from '@mog-sdk/contracts/tables';
@@ -25,6 +29,8 @@ import {
 import type { DocumentContext } from '../../context';
 import { getOrCreateCellId as getOrCreateCellIdDomain } from '../../domain/cells/cell-identity';
 import { getData as getCellStoreDataDomain } from '../../domain/cells/cell-values';
+import { orderChartsForList } from '../../domain/charts/chart-list-ordering';
+import { serializedChartToChart } from '../../domain/charts/chart-public-api-converters';
 import { getPivotRangeForId } from '../../domain/pivots/ranges';
 import * as CellOps from './operations/cell-operations';
 import {
@@ -343,6 +349,33 @@ export class WorksheetInternalImpl implements WorksheetInternal {
     cellIds: string[],
   ): Promise<Map<string, { row: number; col: number }>> {
     return CellOps.batchGetCellPositions(this.ctx, this.sheetId, cellIds);
+  }
+
+  async listStoredCharts(): Promise<WorksheetInternalChart[]> {
+    const charts = (await this.ctx.computeBridge.getAllCharts(
+      this.sheetId,
+    )) as ChartFloatingObject[];
+
+    return orderChartsForList(charts)
+      .sort((a, b) => {
+        const zA = a.zIndex ?? 0;
+        const zB = b.zIndex ?? 0;
+        if (zA !== zB) return zA - zB;
+        return (a.createdAt ?? 0) - (b.createdAt ?? 0);
+      })
+      .map((rawChart) => {
+        const endAnchorCellId = rawChart.toAnchorCellId;
+        return {
+          ...serializedChartToChart(rawChart),
+          anchorCellId: rawChart.anchorCellId ? toCellId(rawChart.anchorCellId) : undefined,
+          endAnchorCellId: endAnchorCellId ? toCellId(endAnchorCellId) : undefined,
+          anchorMode: rawChart.anchor?.anchorMode,
+          dataRangeIdentity: rawChart.dataRangeIdentity,
+          seriesRangeIdentity: rawChart.seriesRangeIdentity,
+          categoryRangeIdentity: rawChart.categoryRangeIdentity,
+          zIndex: rawChart.zIndex,
+        };
+      });
   }
 
   get cfCache(): ConditionalFormatCache {

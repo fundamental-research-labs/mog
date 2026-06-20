@@ -5,8 +5,8 @@
  * Bridges the gap between the Charts domain module and the FloatingObjectManager.
  *
  * This is spreadsheet-specific because:
- * - Charts use cell-based positioning (anchorRow/Col, widthCells/heightCells)
- * - Position conversion requires dimension lookups (cell widths/heights)
+ * - Charts use cell-based anchors with fixed pixel/point sizes
+ * - Position conversion requires anchor coordinate lookups
  * - Charts domain module uses cell coordinates for storage
  *
  * Uses ComputeBridge for dimension queries. Functions that perform

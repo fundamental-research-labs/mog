@@ -38,6 +38,24 @@ export async function cellsToPixels(
 }
 
 /**
+ * Resolve a chart anchor to pixel coordinates without deriving chart size from
+ * live column or row dimensions.
+ */
+export async function chartAnchorToPixels(
+  anchorRow: number,
+  anchorCol: number,
+  containerId: SheetId,
+  computeBridge: ComputeBridge,
+): Promise<{ x: number; y: number }> {
+  const [x, y] = await Promise.all([
+    computeBridge.getColPosition(containerId, anchorCol),
+    computeBridge.getRowPosition(containerId, anchorRow),
+  ]);
+
+  return { x, y };
+}
+
+/**
  * Convert pixel-based position to cell-based position.
  *
  * Async - uses ComputeBridge for dimension queries.

@@ -43,10 +43,9 @@ export interface ResolveBarColumnAxisLayoutInput {
 
 const DEFAULT_AXIS_LABEL_FONT_SIZE = 11;
 const CATEGORY_TEXT_WIDTH_RATIO = 0.52;
-const APPROXIMATE_CELL_WIDTH_PX = 64;
-const APPROXIMATE_CELL_HEIGHT_PX = 20;
 const DEFAULT_CATEGORY_AXIS_WIDTH_PX = 480;
 const DEFAULT_CATEGORY_AXIS_HEIGHT_PX = 320;
+const APPROXIMATE_PLOT_AREA_RATIO = 0.72;
 
 export function resolveBarColumnAxisLayout(
   input: ResolveBarColumnAxisLayoutInput,
@@ -176,8 +175,18 @@ function importedAutoCategoryTickSkip(input: ResolveBarColumnAxisLayoutInput): n
     ...categories.map((category) => String(category ?? '').length),
   );
   if (input.orientation === 'horizontal') {
-    if (categoryCount >= 24) return 2;
-    return maxLabelLength >= 24 && categoryCount >= 16 ? 2 : 1;
+    const axisLength = approximateCategoryAxisLength(input);
+    const slot = axisLength / categoryCount;
+    const sizeDrivenSkip =
+      slot > 0 ? Math.ceil(DEFAULT_AXIS_LABEL_FONT_SIZE / slot) : categoryCount;
+    const densityDrivenSkip = categoryCount >= 24 || (maxLabelLength >= 24 && categoryCount >= 16)
+      ? 2
+      : 1;
+    return clamp(
+      Math.max(sizeDrivenSkip, densityDrivenSkip),
+      1,
+      Math.max(1, Math.ceil(categoryCount / 2)),
+    );
   }
 
   const angle = normalizedAxisLabelAngle(input.categoryAxis);
@@ -378,12 +387,12 @@ function approximateCategoryAxisLength(input: ResolveBarColumnAxisLayoutInput): 
   if (input.orientation === 'vertical') {
     const chartWidth = positiveNumber(input.chartWidth);
     return chartWidth !== undefined
-      ? Math.max(120, chartWidth * APPROXIMATE_CELL_WIDTH_PX * 0.72)
+      ? Math.max(120, chartWidth * APPROXIMATE_PLOT_AREA_RATIO)
       : DEFAULT_CATEGORY_AXIS_WIDTH_PX;
   }
   const chartHeight = positiveNumber(input.chartHeight);
   return chartHeight !== undefined
-    ? Math.max(120, chartHeight * APPROXIMATE_CELL_HEIGHT_PX * 0.72)
+    ? Math.max(120, chartHeight * APPROXIMATE_PLOT_AREA_RATIO)
     : DEFAULT_CATEGORY_AXIS_HEIGHT_PX;
 }
 

@@ -64,6 +64,34 @@ describe('chart config normalizer', () => {
     expect(config.height).toBe(225);
   });
 
+  it('uses pixel geometry ahead of stale cell spans for render configs', () => {
+    const config = toChartConfig(
+      chart({
+        width: 800,
+        height: 400,
+        widthCells: 4,
+        heightCells: 5,
+      } as unknown as Partial<ChartFloatingObject>),
+    );
+
+    expect(config.width).toBe(600);
+    expect(config.height).toBe(300);
+  });
+
+  it('privately converts cell-only stored dimensions for render configs', () => {
+    const config = toChartConfig(
+      chart({
+        width: 0,
+        height: 0,
+        widthCells: 8,
+        heightCells: 15,
+      } as unknown as Partial<ChartFloatingObject>),
+    );
+
+    expect(config.width).toBe(480);
+    expect(config.height).toBe(225);
+  });
+
   it('derives render point dimensions from imported anchor extents', () => {
     const config = toChartConfig(
       chart({

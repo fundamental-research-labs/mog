@@ -9,8 +9,15 @@ import type { ObjectPosition } from '@mog-sdk/contracts/floating-objects';
 
 import { normalizeImportedComboChart } from '../../bridges/compute/chart-import-normalization';
 import type { ChartFloatingObject, ComputeBridge } from '../../bridges/compute/compute-bridge';
-import { cellsToPixels, pixelsToCells } from './chart-manager-dimensions';
-import { resolveChartHeightCells, resolveChartWidthCells } from './chart-size-units';
+import { chartAnchorToPixels, pixelsToCells } from './chart-manager-dimensions';
+import {
+  DEFAULT_CHART_HEIGHT_PX,
+  DEFAULT_CHART_WIDTH_PX,
+  resolveStoredChartHeightCellSpan,
+  resolveStoredChartHeightPixels,
+  resolveStoredChartWidthCellSpan,
+  resolveStoredChartWidthPixels,
+} from './chart-size-units';
 import type { ChartObject, ChartPosition } from './chart-manager-types';
 
 /**
@@ -37,15 +44,10 @@ export async function convertChartToFloatingObject(
 
   const anchorRow = normalizedChart.anchor.anchorRow;
   const anchorCol = normalizedChart.anchor.anchorCol;
-  const widthCells = resolveChartWidthCells(normalizedChart.widthCells, normalizedChart.width) ?? 4;
-  const heightCells =
-    resolveChartHeightCells(normalizedChart.heightCells, normalizedChart.height) ?? 10;
 
-  const pixelBounds = await cellsToPixels(
+  const anchorPixels = await chartAnchorToPixels(
     anchorRow,
     anchorCol,
-    widthCells,
-    heightCells,
     containerId,
     ctx.computeBridge,
   );
@@ -61,10 +63,10 @@ export async function convertChartToFloatingObject(
   const position: ObjectPosition = {
     anchorType: 'oneCell',
     from: fromAnchor,
-    x: pixelBounds.x,
-    y: pixelBounds.y,
-    width: pixelBounds.width,
-    height: pixelBounds.height,
+    x: anchorPixels.x,
+    y: anchorPixels.y,
+    width: resolveStoredChartWidthPixels(normalizedChart) ?? DEFAULT_CHART_WIDTH_PX,
+    height: resolveStoredChartHeightPixels(normalizedChart) ?? DEFAULT_CHART_HEIGHT_PX,
     rotation: normalizedChart.rotation ?? 0,
     flipH: normalizedChart.flipH ?? false,
     flipV: normalizedChart.flipV ?? false,
@@ -110,15 +112,16 @@ export async function convertFloatingObjectToChartPosition(
       anchorRow: obj.chartConfig.anchorRow,
       anchorCol: obj.chartConfig.anchorCol,
       widthCells:
-        resolveChartWidthCells(
-          (obj.chartConfig as StoredChartConfig & { widthCells?: number }).widthCells,
-          position.width,
-        ) ?? 4,
+        resolveStoredChartWidthCellSpan({
+          width: position.width,
+          widthCells: (obj.chartConfig as StoredChartConfig & { widthCells?: number }).widthCells,
+        }) ?? 4,
       heightCells:
-        resolveChartHeightCells(
-          (obj.chartConfig as StoredChartConfig & { heightCells?: number }).heightCells,
-          position.height,
-        ) ?? 10,
+        resolveStoredChartHeightCellSpan({
+          height: position.height,
+          heightCells: (obj.chartConfig as StoredChartConfig & { heightCells?: number })
+            .heightCells,
+        }) ?? 10,
     };
   }
 

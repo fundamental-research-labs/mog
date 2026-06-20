@@ -1,8 +1,13 @@
 import { jest } from '@jest/globals';
 import { sheetId as toSheetId, type SheetId } from '@mog-sdk/contracts/core';
 
-import type { ChartFloatingObject, MutationResult } from '../../../bridges/compute/compute-bridge';
+import type {
+  ChartFloatingObject,
+  ComputeBridge,
+  MutationResult,
+} from '../../../bridges/compute/compute-bridge';
 import type { DocumentContext } from '../../../context/types';
+import { calculateChartPixelBounds, convertChartToFloatingObject } from '../chart-manager';
 import { getChartPosition, updatePosition } from '../chart-position';
 import { create, get, getAll, remove, update } from '../chart-store';
 import {
@@ -43,8 +48,10 @@ function chart(overrides: ChartOverrides = {}): ChartFloatingObject {
       anchorColOffsetEmu: 0,
       anchorMode: 'oneCell',
     },
-    width: 4,
-    height: 10,
+    width: 0,
+    height: 0,
+    widthCells: 4,
+    heightCells: 10,
     zIndex: 0,
     rotation: 0,
     flipH: false,
@@ -98,6 +105,10 @@ function createBridgeMock() {
     ),
     getAllCharts: jest.fn(async () => [existingChart]),
     getCellPosition: jest.fn(async () => null),
+    getColPosition: jest.fn(async (_sheetId: SheetId, col: number) => col * 80),
+    getRowPosition: jest.fn(async (_sheetId: SheetId, row: number) => row * 20),
+    getColWidthFromIndex: jest.fn(async () => 80),
+    getRowHeightFromIndex: jest.fn(async () => 20),
     linkChartToTable: jest.fn(async () => mutationResult()),
     unlinkChartFromTable: jest.fn(async () => mutationResult()),
     isChartLinkedToTable: jest.fn(async () => true),
@@ -147,6 +158,64 @@ describe('chart-store', () => {
     expect(bridge.getAllCharts).toHaveBeenCalledWith(SHEET_ID);
     expect(eventBus.emit).not.toHaveBeenCalled();
     expect(eventBus.emitBatch).not.toHaveBeenCalled();
+  });
+});
+
+describe('chart-manager geometry consumers', () => {
+  it('calculates pixel bounds from point-backed size ahead of stale cell spans', async () => {
+    const { bridge } = createMockContext({
+      getColWidthFromIndex: jest.fn(async () => 100),
+      getRowHeightFromIndex: jest.fn(async () => 30),
+    });
+    const importedChart = chart({
+      anchor: { anchorRow: 2, anchorCol: 3 },
+      width: 640,
+      height: 300,
+      widthPt: 480,
+      heightPt: 225,
+      widthCells: 4,
+      heightCells: 5,
+    });
+
+    await expect(
+      calculateChartPixelBounds(importedChart, SHEET_ID, bridge as unknown as ComputeBridge),
+    ).resolves.toEqual({
+      x: 240,
+      y: 40,
+      width: 640,
+      height: 300,
+    });
+    expect(bridge.getColWidthFromIndex).not.toHaveBeenCalled();
+    expect(bridge.getRowHeightFromIndex).not.toHaveBeenCalled();
+  });
+
+  it('converts chart floating objects from point-backed size ahead of stale cell spans', async () => {
+    const { bridge } = createMockContext({
+      getColWidthFromIndex: jest.fn(async () => 100),
+      getRowHeightFromIndex: jest.fn(async () => 30),
+    });
+    const importedChart = chart({
+      anchor: { anchorRow: 2, anchorCol: 3 },
+      width: 640,
+      height: 300,
+      widthPt: 480,
+      heightPt: 225,
+      widthCells: 4,
+      heightCells: 5,
+    });
+
+    const object = await convertChartToFloatingObject(importedChart, {
+      computeBridge: bridge as unknown as ComputeBridge,
+    });
+
+    expect(object?.position).toMatchObject({
+      x: 240,
+      y: 40,
+      width: 640,
+      height: 300,
+    });
+    expect(bridge.getColWidthFromIndex).not.toHaveBeenCalled();
+    expect(bridge.getRowHeightFromIndex).not.toHaveBeenCalled();
   });
 });
 
@@ -253,6 +322,27 @@ describe('chart-position', () => {
         }),
       ),
     ).resolves.toEqual({ anchorRow: 9, anchorCol: 10, width: 13, height: 14 });
+
+    expect(bridge.getCellPosition).not.toHaveBeenCalled();
+  });
+
+  it('uses point-backed geometry ahead of stale cell spans for fixed size', async () => {
+    const { ctx, bridge } = createMockContext();
+
+    await expect(
+      getChartPosition(
+        ctx,
+        chart({
+          anchor: { anchorRow: 9, anchorCol: 10 },
+          width: 640,
+          height: 300,
+          widthPt: 480,
+          heightPt: 225,
+          widthCells: 4,
+          heightCells: 5,
+        }),
+      ),
+    ).resolves.toEqual({ anchorRow: 9, anchorCol: 10, width: 8, height: 15 });
 
     expect(bridge.getCellPosition).not.toHaveBeenCalled();
   });

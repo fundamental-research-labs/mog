@@ -53,7 +53,10 @@ import {
   snapshotSeries,
   snapshotSeriesProjection,
 } from './resolved-spec-series-snapshot';
-import { chartEmuToPoints, chartPixelsToPoints } from '../chart-size-units';
+import {
+  resolveStoredChartHeightPoints,
+  resolveStoredChartWidthPoints,
+} from '../chart-size-units';
 import {
   groupingFor,
   snapshotAxis,
@@ -66,14 +69,6 @@ import {
 type CompilerPathId = ResolvedChartSpecSnapshot['implementation']['compilerPathId'];
 
 export { defaultExportOptionsForSize, hashJson } from './resolved-spec-primitives';
-
-function anchorExtentPt(
-  anchor: ChartFloatingObject['anchor'] | undefined,
-  axis: 'x' | 'y',
-): number | undefined {
-  const emu = axis === 'x' ? anchor?.extentCxEmu : anchor?.extentCyEmu;
-  return chartEmuToPoints(emu);
-}
 
 export function buildResolvedChartSpecSnapshot(input: {
   chart: ChartFloatingObject;
@@ -206,6 +201,8 @@ export function buildResolvedChartSpecSnapshot(input: {
       ),
     }),
   ]);
+  const chartObjectWidthPt = resolveStoredChartWidthPoints(input.chart);
+  const chartObjectHeightPt = resolveStoredChartHeightPoints(input.chart);
   return {
     schemaVersion: 1,
     chartId: input.chart.id,
@@ -222,16 +219,10 @@ export function buildResolvedChartSpecSnapshot(input: {
       name: input.chart.name,
       anchorRow: input.chart.anchor?.anchorRow,
       anchorCol: input.chart.anchor?.anchorCol,
-      width:
-        anchorExtentPt(input.chart.anchor, 'x') ??
-        input.chart.widthPt ??
-        chartPixelsToPoints(input.chart.width),
-      height:
-        anchorExtentPt(input.chart.anchor, 'y') ??
-        input.chart.heightPt ??
-        chartPixelsToPoints(input.chart.height),
-      widthPt: anchorExtentPt(input.chart.anchor, 'x') ?? input.chart.widthPt,
-      heightPt: anchorExtentPt(input.chart.anchor, 'y') ?? input.chart.heightPt,
+      width: chartObjectWidthPt,
+      height: chartObjectHeightPt,
+      widthPt: chartObjectWidthPt,
+      heightPt: chartObjectHeightPt,
     },
     export: input.exportOptions,
     implementation: {

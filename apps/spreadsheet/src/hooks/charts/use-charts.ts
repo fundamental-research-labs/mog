@@ -27,7 +27,11 @@ import type {
 } from '@mog/charts';
 import { extractChartData, extractChartDataFromRange, parseRange } from '@mog/charts';
 
-import type { ChartMutationReceipt, WorksheetWithInternals } from '@mog-sdk/contracts/api';
+import type {
+  ChartMutationReceipt,
+  WorksheetInternalChart,
+  WorksheetWithInternals,
+} from '@mog-sdk/contracts/api';
 import type { CellRange, SheetId } from '@mog-sdk/contracts/core';
 import type { ChartAppModel, ChartAxisRole } from '@mog-sdk/contracts/data/chart-app-model';
 import { parseCellRange } from '@mog/spreadsheet-utils/a1';
@@ -135,33 +139,59 @@ export interface UseChartsReturn {
  */
 interface ChartDefCacheEntry {
   /** Serialized chart reference (for identity comparison) */
-  serialized: SerializedChart;
+  serialized: WorksheetInternalChart;
   /** Data version when computed (for detecting cell value changes) */
   dataVersion: number;
   /** Cached chart definition (with config and data) */
   definition: ChartDefinition;
 }
 
+async function listStoredChartConfigs(
+  ws: WorksheetWithInternals,
+): Promise<WorksheetInternalChart[]> {
+  return ws._internal.listStoredCharts();
+}
+
+function stableSerialize(value: unknown): string {
+  if (value === undefined) return 'undefined';
+  if (value === null || typeof value !== 'object') return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(stableSerialize).join(',')}]`;
+
+  const record = value as Record<string, unknown>;
+  return `{${Object.keys(record)
+    .sort()
+    .map((key) => `${JSON.stringify(key)}:${stableSerialize(record[key])}`)
+    .join(',')}}`;
+}
+
+function chartContentForCache(chart: WorksheetInternalChart): Record<string, unknown> {
+  const content: Record<string, unknown> = { ...chart };
+  delete content.anchorRow;
+  delete content.anchorCol;
+  delete content.anchorCellId;
+  delete content.endAnchorCellId;
+  delete content.anchorMode;
+  delete content.zIndex;
+  delete content.updatedAt;
+  return content;
+}
+
 /**
  * Check if a chart update is position-only (no config/data changes).
  * Used to determine if we can reuse cached config/data objects.
  */
-function isOnlyPositionChange(prev: SerializedChart, next: SerializedChart): boolean {
+function isOnlyPositionChange(prev: WorksheetInternalChart, next: WorksheetInternalChart): boolean {
   if (prev.anchorRow !== next.anchorRow || prev.anchorCol !== next.anchorCol) {
-    // Check if non-position fields are the same (data config that affects chart content)
     return (
-      prev.type === next.type &&
-      prev.subType === next.subType &&
-      prev.width === next.width &&
-      prev.height === next.height &&
-      prev.title === next.title &&
-      prev.dataRange === next.dataRange &&
-      prev.seriesRange === next.seriesRange &&
-      prev.categoryRange === next.categoryRange
+      stableSerialize(chartContentForCache(prev)) === stableSerialize(chartContentForCache(next))
     );
   }
   return false;
 }
+
+export const __testing__ = {
+  isOnlyPositionChange,
+};
 
 // =============================================================================
 // Helpers
@@ -311,7 +341,7 @@ async function getChartDataRange(
 }
 
 /**
- * Convert a SerializedChart to a ChartDefinition with extracted data.
+ * Convert a stored chart config to a ChartDefinition with extracted data.
  *
  * Uses CellId-based anchors when available so chart data extraction observes
  * row/column insertions and deletions.
@@ -319,7 +349,7 @@ async function getChartDataRange(
 async function serializedToChartDefinition(
   wb: ReturnType<typeof useWorkbook>,
   ws: WorksheetWithInternals,
-  serialized: SerializedChart,
+  serialized: WorksheetInternalChart,
   appModelOverride?: ChartAppModel,
 ): Promise<ChartDefinition> {
   const resolvedAnchor = await resolveChartAnchorPosition(ws, serialized);
@@ -405,7 +435,7 @@ export function useCharts({ sheetId }: UseChartsOptions): UseChartsReturn {
 
   // Local state for charts from Yjs (updated via subscription)
   // Charts are sorted by z-order for correct rendering
-  const [serializedCharts, setSerializedCharts] = useState<SerializedChart[]>([]);
+  const [serializedCharts, setSerializedCharts] = useState<WorksheetInternalChart[]>([]);
 
   // Version counter to trigger re-render when cell data changes
   const [dataVersion, setDataVersion] = useState(0);
@@ -427,19 +457,12 @@ export function useCharts({ sheetId }: UseChartsOptions): UseChartsReturn {
 
     // Fetch all charts via Worksheet API and sort by z-order
     const fetchCharts = async () => {
-      const allCharts = await ws.charts.list({ materialization: 'available' });
+      const sortedCharts = await listStoredChartConfigs(ws);
       if (cancelled) return;
-      // Sort by z-order (matching getChartsInZOrder behavior)
-      const sortedCharts = [...(allCharts as SerializedChart[])].sort((a, b) => {
-        const zA = a.zIndex ?? 0;
-        const zB = b.zIndex ?? 0;
-        if (zA !== zB) return zA - zB;
-        return (a.createdAt ?? 0) - (b.createdAt ?? 0);
-      });
       console.log(
         `[useCharts:${hookId}] initial fetch for sheet:`,
         sortedCharts.length,
-        sortedCharts.map((c: SerializedChart) => c.id),
+        sortedCharts.map((c) => c.id),
       );
       setSerializedCharts(sortedCharts);
     };
@@ -449,18 +472,12 @@ export function useCharts({ sheetId }: UseChartsOptions): UseChartsReturn {
     // Listen to all chart CRUD events to refresh chart list
     const chartHandler = () => {
       void (async () => {
-        const allCharts = await ws.charts.list({ materialization: 'available' });
+        const sortedCharts = await listStoredChartConfigs(ws);
         if (cancelled) return;
-        const sortedCharts = [...(allCharts as SerializedChart[])].sort((a, b) => {
-          const zA = a.zIndex ?? 0;
-          const zB = b.zIndex ?? 0;
-          if (zA !== zB) return zA - zB;
-          return (a.createdAt ?? 0) - (b.createdAt ?? 0);
-        });
         console.log(
           `[useCharts:${hookId}] charts updated:`,
           sortedCharts.length,
-          sortedCharts.map((c: SerializedChart) => c.id),
+          sortedCharts.map((c) => c.id),
         );
         setSerializedCharts(sortedCharts);
       })();
@@ -539,7 +556,15 @@ export function useCharts({ sheetId }: UseChartsOptions): UseChartsReturn {
               cached.dataVersion === dataVersion &&
               isOnlyPositionChange(cached.serialized, serialized)
             ) {
-              const definition = cached.definition;
+              const resolvedAnchor = await resolveChartAnchorPosition(ws, serialized);
+              const definition: ChartDefinition = {
+                ...cached.definition,
+                config: {
+                  ...serialized,
+                  anchorRow: resolvedAnchor?.anchorRow ?? serialized.anchorRow,
+                  anchorCol: resolvedAnchor?.anchorCol ?? serialized.anchorCol,
+                },
+              };
               cache.set(serialized.id, { serialized, dataVersion, definition });
               return definition;
             }

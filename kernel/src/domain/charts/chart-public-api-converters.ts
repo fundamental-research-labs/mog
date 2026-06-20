@@ -62,13 +62,13 @@ import {
 } from './chart-api-compatibility';
 import {
   chartEmuToPoints,
-  chartPixelsToPoints,
   chartPointsToEmu,
   chartPointsToPixels,
+  DEFAULT_CHART_HEIGHT_PT,
+  DEFAULT_CHART_WIDTH_PT,
+  resolveStoredChartHeightPoints,
+  resolveStoredChartWidthPoints,
 } from './chart-size-units';
-
-const DEFAULT_CHART_WIDTH_PT = 480;
-const DEFAULT_CHART_HEIGHT_PT = 225;
 
 function formatPublicRange(
   range: {
@@ -678,16 +678,8 @@ export function serializedChartToChart(rawChart: ChartFloatingObject): Chart {
   }
 
   const anchor = chart.anchor;
-  const heightPt =
-    chartEmuToPoints(anchor.extentCyEmu) ??
-    chart.heightPt ??
-    chartPixelsToPoints(chart.height) ??
-    DEFAULT_CHART_HEIGHT_PT;
-  const widthPt =
-    chartEmuToPoints(anchor.extentCxEmu) ??
-    chart.widthPt ??
-    chartPixelsToPoints(chart.width) ??
-    DEFAULT_CHART_WIDTH_PT;
+  const heightPt = resolveStoredChartHeightPoints(chart) ?? DEFAULT_CHART_HEIGHT_PT;
+  const widthPt = resolveStoredChartWidthPoints(chart) ?? DEFAULT_CHART_WIDTH_PT;
   const leftPt = chartEmuToPoints(anchor.anchorColOffsetEmu);
   const topPt = chartEmuToPoints(anchor.anchorRowOffsetEmu);
 

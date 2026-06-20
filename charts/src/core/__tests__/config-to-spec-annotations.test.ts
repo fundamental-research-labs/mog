@@ -676,7 +676,7 @@ describe('configToSpec annotation layers', () => {
     expect(rows[0]).toEqual(
       expect.objectContaining({
         [DATA_LABEL_TEXT_FIELD]: 'North, 50%',
-        [DATA_LABEL_FONT_SIZE_FIELD]: 18,
+        [DATA_LABEL_FONT_SIZE_FIELD]: 12,
       }),
     );
     expect(rows[0][DATA_LABEL_X_FIELD]).toBeCloseTo(0.5, 6);
@@ -698,7 +698,7 @@ describe('configToSpec annotation layers', () => {
 
     expect(arcs.map((arc) => arc.style.fill)).toEqual(['#2F75B5', '#70AD47']);
     expect(firstArc?.innerRadius).toBeCloseTo(firstArc!.outerRadius * 0.65, 6);
-    expect(firstLabel?.fontSize).toBe(18);
+    expect(firstLabel?.fontSize).toBe(12);
     expect(
       compiled.legends.filter((mark) => mark.type === 'rect').map((mark) => mark.style.fill),
     ).toEqual(['#2F75B5', '#70AD47']);

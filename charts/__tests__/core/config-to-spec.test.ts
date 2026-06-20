@@ -59,8 +59,8 @@ function makeConfig(overrides: Partial<StoredChartConfig> = {}): StoredChartConf
     type: 'bar',
     anchorRow: 0,
     anchorCol: 0,
-    width: 320,
-    height: 150,
+    width: 480,
+    height: 225,
     dataRange: 'A1:D10',
     ...overrides,
   };
@@ -1056,7 +1056,7 @@ describe('buildEncoding - axis config', () => {
       expect.objectContaining({
         title: null,
         format: '"FY3/"0',
-        labelFontSize: 18,
+        labelFontSize: 12,
         labelColor: '#595959',
         crossesAt: 'automatic',
       }),
@@ -1069,7 +1069,7 @@ describe('buildEncoding - axis config', () => {
         ticks: false,
         grid: true,
         gridColor: '#000000',
-        gridWidth: 1.5,
+        gridWidth: 1,
         gridOpacity: 1,
       }),
     );
@@ -1090,8 +1090,8 @@ describe('buildEncoding - axis config', () => {
     expect(encoding.y!.axis).toEqual(
       expect.objectContaining({
         grid: true,
-        gridWidth: 1.5,
-        gridDash: [6, 3, 1.5, 3],
+        gridWidth: 1,
+        gridDash: [4, 2, 1, 2],
         gridOpacity: 0.75,
       }),
     );
@@ -1171,7 +1171,7 @@ describe('buildEncoding - legend config', () => {
         },
       ],
       symbolType: 'area',
-      labelFontSize: 18,
+      labelFontSize: 12,
       labelColor: '#595959',
     });
   });
@@ -1318,7 +1318,7 @@ describe('buildConfigSpec - colors', () => {
       }),
     );
     expect(encoding.x?.axis?.labelAngle).toBeUndefined();
-    expect(configSpec?.layoutHints?.bottomMargin).toBe(35);
+    expect(configSpec?.layoutHints?.bottomMargin).toBe(29);
   });
 
   it('should derive category colors from imported series theme fills', () => {
@@ -1390,7 +1390,7 @@ describe('buildTitle', () => {
     );
     expect(result).toEqual({
       text: 'Revenue (mn)',
-      fontSize: 21.6,
+      fontSize: 14.4,
       color: '#595959',
     });
   });
@@ -1646,7 +1646,7 @@ describe('buildComboLayers', () => {
     const layers = buildComboLayers(config, data, []);
     const mark = layers[0].mark as MarkSpec;
     const markerLayer = layers.find((layer) => (layer.mark as MarkSpec).type === 'point');
-    expect(mark.strokeWidth).toBe(6);
+    expect(mark.strokeWidth).toBe(4);
     expect(markerLayer).toBeDefined();
   });
 });
@@ -1693,8 +1693,8 @@ describe('configToSpec - integration', () => {
     const config = makeConfig({ type: 'bar', title: 'Sales' });
     const spec = configToSpec(config, SINGLE_SERIES_DATA);
 
-    expect(spec.width).toBe(640); // 320pt * 2 canvas px/pt
-    expect(spec.height).toBe(300); // 150pt * 2 canvas px/pt
+    expect(spec.width).toBe(640); // 480pt at 96 CSS px/in
+    expect(spec.height).toBe(300); // 225pt at 96 CSS px/in
     expect(spec.mark).toEqual({
       type: 'bar',
       fillField: SERIES_FILL_FIELD,
@@ -1844,7 +1844,7 @@ describe('configToSpec - integration', () => {
         },
       ],
       symbolType: 'line',
-      labelFontSize: 18,
+      labelFontSize: 12,
     });
   });
 
@@ -2159,7 +2159,7 @@ describe('buildComboLayers - per-series overrides', () => {
     });
     const layers = buildComboLayers(config, SINGLE_SERIES_DATA, []);
     const mark = layers[0].mark as MarkSpec;
-    expect(mark.strokeWidth).toBe(8);
+    expect(mark.strokeWidth).toBeCloseTo(16 / 3);
   });
 
   it('should add data label layer for series with dataLabels.show', () => {

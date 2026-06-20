@@ -480,6 +480,8 @@ describe('toFloatingObject — ChartObject', () => {
         chartType: 'bar',
         width: 640,
         height: 300,
+        widthCells: 4,
+        heightCells: 5,
       } as Partial<WireFloatingObject>),
     );
     expect(obj.type).toBe('chart');

@@ -111,6 +111,8 @@ pub mod data_table;
 
 pub mod diagnostics;
 
+pub mod versioning;
+
 // Table Engine (extracted to compute-table crate)
 pub use compute_table as table;
 

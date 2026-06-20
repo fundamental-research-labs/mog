@@ -14,6 +14,7 @@ mod mutation;
 mod recalc;
 mod scenario;
 mod settings;
+pub mod versioning;
 mod viewport;
 
 pub mod bindings;
@@ -62,6 +63,7 @@ pub use settings::{
     EnterKeyDirection, NonNullPatch, NullablePatch, ProtectedWorkbookOperation,
     RustWorkbookSettingsPatch, WorkbookProtectionOptions, WorkbookSettings,
 };
+pub use versioning::*;
 // Floating object types are now in domain-types::domain::floating_object.
 // SerializedFloatingObject and FloatingObjectType have been removed.
 pub use viewport::{

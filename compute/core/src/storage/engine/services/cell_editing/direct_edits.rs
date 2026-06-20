@@ -9,7 +9,42 @@ use crate::storage::engine::mutation_coordinator::MutationCoordinator;
 use crate::storage::engine::stores::EngineStores;
 use compute_document::hex::id_to_hex;
 
-use super::{cell_id_for_region_guard, find_cell_id_at, write_cell_to_yrs};
+use super::{
+    NO_OLD_FORMULA_SENTINEL, cell_id_for_region_guard, find_cell_id_at, write_cell_to_yrs,
+};
+
+fn patch_direct_edit_before_snapshot(
+    result: &mut RecalcResult,
+    cell_id: CellId,
+    sheet_id: &SheetId,
+    row: u32,
+    col: u32,
+    old_value: &CellValue,
+    old_formula: Option<&String>,
+) {
+    let cell_id_str = cell_id.to_uuid_string();
+    let sheet_id_str = sheet_id.to_uuid_string();
+
+    for change in &mut result.changed_cells {
+        let same_cell_id = change.cell_id == cell_id_str;
+        let same_position = change.sheet_id == sheet_id_str
+            && change
+                .position
+                .as_ref()
+                .is_some_and(|pos| pos.row == row && pos.col == col);
+
+        if same_cell_id || same_position {
+            change.old_value = Some(old_value.clone());
+            if change.old_formula.is_none() {
+                change.old_formula = Some(
+                    old_formula
+                        .cloned()
+                        .unwrap_or_else(|| NO_OLD_FORMULA_SENTINEL.to_string()),
+                );
+            }
+        }
+    }
+}
 
 fn validate_cell_input_before_write(
     stores: &EngineStores,
@@ -180,16 +215,15 @@ pub(in crate::storage::engine) fn set_cell_value_parsed(
             .compute
             .set_cell_with_target(mirror, sheet_id, cell_id, row, col, input, target)?;
 
-        // Patch before-side fields onto the seed change for this direct edit.
-        let cell_id_str = cell_id.to_uuid_string();
-        for change in &mut result.changed_cells {
-            if change.cell_id == cell_id_str {
-                change.old_value = Some(old_val.clone());
-                if change.old_formula.is_none() {
-                    change.old_formula = old_formula.clone();
-                }
-            }
-        }
+        patch_direct_edit_before_snapshot(
+            &mut result,
+            cell_id,
+            sheet_id,
+            row,
+            col,
+            &old_val,
+            old_formula.as_ref(),
+        );
         return Ok(result);
     }
 
@@ -275,16 +309,15 @@ pub(in crate::storage::engine) fn set_cell_value_as_text(
             .compute
             .set_cell(mirror, sheet_id, cell_id, row, col, input)?;
 
-        // Patch before-side fields onto the seed change for this direct edit.
-        let cell_id_str = cell_id.to_uuid_string();
-        for change in &mut result.changed_cells {
-            if change.cell_id == cell_id_str {
-                change.old_value = Some(old_val.clone());
-                if change.old_formula.is_none() {
-                    change.old_formula = old_formula.clone();
-                }
-            }
-        }
+        patch_direct_edit_before_snapshot(
+            &mut result,
+            cell_id,
+            sheet_id,
+            row,
+            col,
+            &old_val,
+            old_formula.as_ref(),
+        );
         return Ok(result);
     }
 
@@ -377,16 +410,15 @@ pub(in crate::storage::engine) fn set_cell(
         .compute
         .set_cell(mirror, sheet_id, cell_id, row, col, input)?;
 
-    // Patch before-side fields onto the seed change for this direct edit.
-    let cell_id_str = cell_id.to_uuid_string();
-    for change in &mut result.changed_cells {
-        if change.cell_id == cell_id_str {
-            change.old_value = Some(old_val.clone());
-            if change.old_formula.is_none() {
-                change.old_formula = old_formula.clone();
-            }
-        }
-    }
+    patch_direct_edit_before_snapshot(
+        &mut result,
+        cell_id,
+        sheet_id,
+        row,
+        col,
+        &old_val,
+        old_formula.as_ref(),
+    );
 
     Ok(result)
 }

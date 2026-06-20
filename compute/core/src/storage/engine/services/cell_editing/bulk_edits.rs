@@ -1,4 +1,5 @@
 use cell_types::{CellId, SheetId};
+use std::collections::HashMap;
 use value_types::{CellValue, ComputeError};
 
 use crate::mirror::CellMirror;
@@ -8,7 +9,46 @@ use crate::storage::engine::mutation::CellInput;
 use crate::storage::engine::mutation_coordinator::MutationCoordinator;
 use crate::storage::engine::stores::EngineStores;
 
-use super::{cell_id_for_region_guard, find_cell_id_at};
+use super::{NO_OLD_FORMULA_SENTINEL, cell_id_for_region_guard, find_cell_id_at};
+
+type PositionKey = (u32, u32);
+
+fn patch_change_before_snapshot(
+    change: &mut snapshot_types::CellChange,
+    old_values_by_id: &mut HashMap<CellId, CellValue>,
+    old_formulas_by_id: &mut HashMap<CellId, String>,
+    old_values_by_position: &mut HashMap<PositionKey, CellValue>,
+    old_formulas_by_position: &mut HashMap<PositionKey, String>,
+) {
+    let position = change.position.as_ref().map(|pos| (pos.row, pos.col));
+    let mut matched_direct_edit = false;
+    let mut old_formula: Option<String> = None;
+
+    if let Ok(cid) = CellId::from_uuid_str(&change.cell_id) {
+        if let Some(old) = old_values_by_id.remove(&cid) {
+            change.old_value = Some(old);
+            matched_direct_edit = true;
+        }
+        old_formula = old_formulas_by_id.remove(&cid);
+    }
+
+    if let Some(position) = position {
+        if !matched_direct_edit && let Some(old) = old_values_by_position.remove(&position) {
+            change.old_value = Some(old);
+            matched_direct_edit = true;
+        }
+        if old_formula.is_none() {
+            old_formula = old_formulas_by_position.remove(&position);
+        } else {
+            old_formulas_by_position.remove(&position);
+        }
+    }
+
+    if matched_direct_edit && change.old_formula.is_none() {
+        change.old_formula =
+            Some(old_formula.unwrap_or_else(|| NO_OLD_FORMULA_SENTINEL.to_string()));
+    }
+}
 
 pub(in crate::storage::engine) fn set_cell_values_parsed(
     stores: &mut EngineStores,
@@ -18,24 +58,41 @@ pub(in crate::storage::engine) fn set_cell_values_parsed(
     updates: &[(u32, u32, String)],
 ) -> Result<RecalcResult, ComputeError> {
     // Snapshot old values from mirror BEFORE the batch write updates them.
-    let mut direct_edit_old_values: std::collections::HashMap<CellId, CellValue> =
-        std::collections::HashMap::with_capacity(updates.len());
-    let mut direct_edit_old_formulas: std::collections::HashMap<CellId, String> =
-        std::collections::HashMap::with_capacity(updates.len());
+    let mut direct_edit_old_values: HashMap<CellId, CellValue> =
+        HashMap::with_capacity(updates.len());
+    let mut direct_edit_old_formulas: HashMap<CellId, String> =
+        HashMap::with_capacity(updates.len());
+    let mut direct_edit_old_values_by_position: HashMap<PositionKey, CellValue> =
+        HashMap::with_capacity(updates.len());
+    let mut direct_edit_old_formulas_by_position: HashMap<PositionKey, String> =
+        HashMap::with_capacity(updates.len());
     if let Some(grid) = stores.grid_indexes.get(sheet_id) {
         for (row, col, _) in updates {
-            if let Some(cell_id) = grid.cell_id_at(*row, *col) {
-                let old_val = stores
-                    .compute
-                    .get_cell_value(mirror, &cell_id)
-                    .cloned()
-                    .or_else(|| mirror.get_cell_value(&cell_id).cloned())
-                    .unwrap_or(CellValue::Null);
+            let cell_id = grid.cell_id_at(*row, *col);
+            let old_val = cell_id
+                .as_ref()
+                .and_then(|cell_id| {
+                    stores
+                        .compute
+                        .get_cell_value(mirror, cell_id)
+                        .cloned()
+                        .or_else(|| mirror.get_cell_value(cell_id).cloned())
+                })
+                .unwrap_or(CellValue::Null);
+            direct_edit_old_values_by_position.insert((*row, *col), old_val.clone());
+
+            if let Some(cell_id) = cell_id {
                 direct_edit_old_values.insert(cell_id, old_val);
                 if let Some(old_formula) = stores.compute.get_formula(&cell_id) {
-                    direct_edit_old_formulas.insert(cell_id, old_formula.to_string());
+                    let old_formula = old_formula.to_string();
+                    direct_edit_old_formulas.insert(cell_id, old_formula.clone());
+                    direct_edit_old_formulas_by_position.insert((*row, *col), old_formula);
                 }
             }
+        }
+    } else {
+        for (row, col, _) in updates {
+            direct_edit_old_values_by_position.insert((*row, *col), CellValue::Null);
         }
     }
 
@@ -94,7 +151,6 @@ pub(in crate::storage::engine) fn set_cell_values_parsed(
     }
     mutation.observer.set_suppressed(false);
 
-    use crate::storage::engine::mutation::CellInput;
     let mut edits: Vec<(SheetId, CellId, u32, u32, CellInput)> = Vec::with_capacity(updates.len());
     let mut format_hints: Vec<Option<compute_formats::FormatType>> =
         Vec::with_capacity(updates.len());
@@ -166,18 +222,17 @@ pub(in crate::storage::engine) fn set_cell_values_parsed(
         .compute
         .set_cells_with_targets(mirror, &edits, &format_hints, false)?;
 
-    // Patch before-side fields onto seed changes (direct edits) that don't already have one.
+    // Patch before-side fields onto seed changes (direct edits). Matching by
+    // position preserves snapshots even when rich-value storage reallocates a
+    // cell identity during formula/text transitions.
     for change in &mut result.changed_cells {
-        if let Ok(cid) = CellId::from_uuid_str(&change.cell_id) {
-            if let Some(old) = direct_edit_old_values.remove(&cid) {
-                change.old_value = Some(old);
-            }
-            if change.old_formula.is_none()
-                && let Some(old_formula) = direct_edit_old_formulas.remove(&cid)
-            {
-                change.old_formula = Some(old_formula);
-            }
-        }
+        patch_change_before_snapshot(
+            change,
+            &mut direct_edit_old_values,
+            &mut direct_edit_old_formulas,
+            &mut direct_edit_old_values_by_position,
+            &mut direct_edit_old_formulas_by_position,
+        );
     }
 
     Ok(result)
@@ -209,24 +264,41 @@ pub(in crate::storage::engine) fn import_values(
         .validate_raw_user_edit_region_writes(mirror, &guard_edits)?;
 
     // Snapshot old values from mirror BEFORE the bulk import updates them.
-    let mut direct_edit_old_values: std::collections::HashMap<CellId, CellValue> =
-        std::collections::HashMap::with_capacity(updates.len());
-    let mut direct_edit_old_formulas: std::collections::HashMap<CellId, String> =
-        std::collections::HashMap::with_capacity(updates.len());
+    let mut direct_edit_old_values: HashMap<CellId, CellValue> =
+        HashMap::with_capacity(updates.len());
+    let mut direct_edit_old_formulas: HashMap<CellId, String> =
+        HashMap::with_capacity(updates.len());
+    let mut direct_edit_old_values_by_position: HashMap<PositionKey, CellValue> =
+        HashMap::with_capacity(updates.len());
+    let mut direct_edit_old_formulas_by_position: HashMap<PositionKey, String> =
+        HashMap::with_capacity(updates.len());
     if let Some(grid) = stores.grid_indexes.get(sheet_id) {
         for (row, col, _, _) in updates {
-            if let Some(cell_id) = grid.cell_id_at(*row, *col) {
-                let old_val = stores
-                    .compute
-                    .get_cell_value(mirror, &cell_id)
-                    .cloned()
-                    .or_else(|| mirror.get_cell_value(&cell_id).cloned())
-                    .unwrap_or(CellValue::Null);
+            let cell_id = grid.cell_id_at(*row, *col);
+            let old_val = cell_id
+                .as_ref()
+                .and_then(|cell_id| {
+                    stores
+                        .compute
+                        .get_cell_value(mirror, cell_id)
+                        .cloned()
+                        .or_else(|| mirror.get_cell_value(cell_id).cloned())
+                })
+                .unwrap_or(CellValue::Null);
+            direct_edit_old_values_by_position.insert((*row, *col), old_val.clone());
+
+            if let Some(cell_id) = cell_id {
                 direct_edit_old_values.insert(cell_id, old_val);
                 if let Some(old_formula) = stores.compute.get_formula(&cell_id) {
-                    direct_edit_old_formulas.insert(cell_id, old_formula.to_string());
+                    let old_formula = old_formula.to_string();
+                    direct_edit_old_formulas.insert(cell_id, old_formula.clone());
+                    direct_edit_old_formulas_by_position.insert((*row, *col), old_formula);
                 }
             }
+        }
+    } else {
+        for (row, col, _, _) in updates {
+            direct_edit_old_values_by_position.insert((*row, *col), CellValue::Null);
         }
     }
 
@@ -286,18 +358,17 @@ pub(in crate::storage::engine) fn import_values(
         crate::scheduler::WriteTrust::UserEdit,
     )?;
 
-    // Patch before-side fields onto seed changes (direct edits) that don't already have one.
+    // Patch before-side fields onto seed changes (direct edits). Matching by
+    // position preserves snapshots even when rich-value storage reallocates a
+    // cell identity during formula/text transitions.
     for change in &mut result.changed_cells {
-        if let Ok(cid) = CellId::from_uuid_str(&change.cell_id) {
-            if let Some(old) = direct_edit_old_values.remove(&cid) {
-                change.old_value = Some(old);
-            }
-            if change.old_formula.is_none()
-                && let Some(old_formula) = direct_edit_old_formulas.remove(&cid)
-            {
-                change.old_formula = Some(old_formula);
-            }
-        }
+        patch_change_before_snapshot(
+            change,
+            &mut direct_edit_old_values,
+            &mut direct_edit_old_formulas,
+            &mut direct_edit_old_values_by_position,
+            &mut direct_edit_old_formulas_by_position,
+        );
     }
 
     Ok(result)

@@ -318,6 +318,78 @@ fn test_integration_change_records_include_display_formula_and_number_format() {
     assert_eq!(b1_change.number_format.as_deref(), Some("General"));
 }
 
+#[test]
+fn test_integration_parsed_formula_overwrite_includes_before_snapshots() {
+    let snap = formula_deps_snapshot();
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+
+    let (_patches, mutation_result) = engine
+        .set_cell_value_parsed(&sheet_id(), 0, 1, "=A1*3")
+        .unwrap();
+
+    let b1_change = find_change(&mutation_result.recalc.changed_cells, 0, 1)
+        .expect("B1 should appear in changed_cells after parsed formula overwrite");
+
+    assert_eq!(b1_change.old_value, Some(num(20.0)));
+    assert_eq!(b1_change.value, num(30.0));
+    assert_eq!(b1_change.old_display_text.as_deref(), Some("20"));
+    assert_eq!(b1_change.display_text.as_deref(), Some("30"));
+    assert_eq!(b1_change.old_formula.as_deref(), Some("=A1*2"));
+    assert_eq!(b1_change.new_formula.as_deref(), Some("=A1*3"));
+}
+
+#[test]
+fn test_integration_parsed_value_to_formula_has_no_old_formula() {
+    let snap = simple_snapshot();
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+
+    let (_patches, mutation_result) = engine
+        .set_cell_value_parsed(&sheet_id(), 0, 1, "=A1*3")
+        .unwrap();
+
+    let b1_change = find_change(&mutation_result.recalc.changed_cells, 0, 1)
+        .expect("B1 should appear in changed_cells after parsed value-to-formula edit");
+
+    assert_eq!(b1_change.old_value, Some(num(20.0)));
+    assert_eq!(b1_change.value, num(30.0));
+    assert_eq!(b1_change.old_formula, None);
+    assert_eq!(b1_change.new_formula.as_deref(), Some("=A1*3"));
+}
+
+#[test]
+fn test_integration_set_cells_by_position_formula_overwrite_includes_before_snapshots() {
+    let snap = formula_deps_snapshot();
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+
+    let output = engine
+        .apply_mutation(EngineMutation::SetCellsByPosition {
+            edits: vec![(
+                sheet_id(),
+                0,
+                1,
+                crate::bridge_types::CellInput::Parse {
+                    text: "=A1*3".into(),
+                },
+            )],
+            skip_cycle_check: false,
+        })
+        .unwrap();
+
+    let mutation_result = match output {
+        MutationOutput::Recalc(result) => result,
+        _ => panic!("expected recalc mutation output"),
+    };
+    let b1_change = find_change(&mutation_result.recalc.changed_cells, 0, 1)
+        .expect("B1 should appear in changed_cells after SetCellsByPosition formula overwrite");
+
+    assert_eq!(b1_change.old_value, Some(num(20.0)));
+    assert_eq!(b1_change.value, num(30.0));
+    assert_eq!(b1_change.old_display_text.as_deref(), Some("20"));
+    assert_eq!(b1_change.display_text.as_deref(), Some("30"));
+    assert_eq!(b1_change.old_formula.as_deref(), Some("=A1*2"));
+    assert_eq!(b1_change.new_formula.as_deref(), Some("=A1*3"));
+}
+
 // ===================================================================
 // Test 2: batch set cells — verify old_values for both cells
 // ===================================================================

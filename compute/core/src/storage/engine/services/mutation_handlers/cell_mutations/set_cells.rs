@@ -8,6 +8,7 @@ use crate::snapshot::{PolicyPreservedParseOutcome, RecalcResult};
 use crate::storage::cells::values::InputParseContext;
 use crate::storage::engine::mutation::CellInput;
 use crate::storage::engine::mutation_coordinator::MutationCoordinator;
+use crate::storage::engine::services::cell_editing::NO_OLD_FORMULA_SENTINEL;
 use crate::storage::engine::stores::EngineStores;
 
 use super::edits::{canonicalize_resolved_cell_inputs, validate_edit_bounds};
@@ -100,6 +101,7 @@ pub(in crate::storage::engine) fn mutation_set_cells(
     // These are used to populate CellChange.old_value on direct-edit seed cells.
     let mut direct_edit_old_values: HashMap<CellId, CellValue> =
         HashMap::with_capacity(edits.len());
+    let mut direct_edit_old_formulas: HashMap<CellId, String> = HashMap::with_capacity(edits.len());
 
     let mut prepared_values = Vec::with_capacity(edits.len());
     for (idx, &(ref sheet_id, cell_id, row, col, ref input)) in edits.iter().enumerate() {
@@ -180,6 +182,9 @@ pub(in crate::storage::engine) fn mutation_set_cells(
             .cloned()
             .unwrap_or(CellValue::Null);
         direct_edit_old_values.insert(*cell_id, old_val);
+        if let Some(old_formula) = stores.compute.get_formula(cell_id) {
+            direct_edit_old_formulas.insert(*cell_id, old_formula.to_string());
+        }
 
         // Update mirror — ONLY for plain-value edits. For formula edits,
         //    `process_input` needs to see the prior cell value to detect
@@ -210,14 +215,23 @@ pub(in crate::storage::engine) fn mutation_set_cells(
         skip_cycle_check,
     )?;
 
-    // Patch old_value onto seed changes (direct edits) that don't already have one.
-    // Cascade changes already have old_value set by level_eval.rs.
+    // Patch before-side fields onto seed changes. Direct formula edits can
+    // arrive from the scheduler with old_value=Null because the formula body
+    // changed; the user-facing change record still needs the pre-edit value.
     for change in &mut result.changed_cells {
-        if change.old_value.is_none()
-            && let Ok(cid) = CellId::from_uuid_str(&change.cell_id)
-            && let Some(old) = direct_edit_old_values.remove(&cid)
-        {
-            change.old_value = Some(old);
+        if let Ok(cid) = CellId::from_uuid_str(&change.cell_id) {
+            let mut matched_direct_edit = false;
+            if let Some(old) = direct_edit_old_values.remove(&cid) {
+                change.old_value = Some(old);
+                matched_direct_edit = true;
+            }
+            if matched_direct_edit && change.old_formula.is_none() {
+                change.old_formula = Some(
+                    direct_edit_old_formulas
+                        .remove(&cid)
+                        .unwrap_or_else(|| NO_OLD_FORMULA_SENTINEL.to_string()),
+                );
+            }
         }
     }
 

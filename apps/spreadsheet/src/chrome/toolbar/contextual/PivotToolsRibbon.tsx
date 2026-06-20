@@ -1,24 +1,38 @@
 import { useCallback, useMemo } from 'react';
 import { Button } from '@mog/shell/components/ui';
 
-import { useActiveSheetId, useUIStore } from '../../../infra/context';
+import { useActiveSheetId } from '../../../infra/context';
 import { usePivotTables } from '../../../hooks/data/use-pivot-tables';
+
+type PivotView = ReturnType<typeof usePivotTables>['pivotTables'][number];
+
+function findSelectedPivot(
+  pivotTables: PivotView[],
+  selectedPivotId: string | null,
+): PivotView | null {
+  return (
+    pivotTables.find(
+      (pivot) =>
+        pivot.config.id === selectedPivotId ||
+        pivot.alternateIds?.includes(selectedPivotId ?? '') === true,
+    ) ?? null
+  );
+}
 
 export function PivotAnalyzeRibbon() {
   const activeSheetId = useActiveSheetId();
-  const { pivotTables, selectedPivotId, refreshPivotTable } = usePivotTables({
+  const { pivotTables, selectedPivotId, refreshPivotTable, startEditingPivot } = usePivotTables({
     sheetId: activeSheetId,
   });
-  const startEditingPivot = useUIStore((s) => s.startEditingPivot);
   const selectedPivot = useMemo(
-    () => pivotTables.find((pivot) => pivot.config.id === selectedPivotId) ?? null,
+    () => findSelectedPivot(pivotTables, selectedPivotId),
     [pivotTables, selectedPivotId],
   );
   const canRefreshSelectedPivot = selectedPivot?.capabilities.canRefresh ?? false;
 
   const openFields = useCallback(() => {
-    if (selectedPivotId) startEditingPivot(selectedPivotId);
-  }, [selectedPivotId, startEditingPivot]);
+    if (selectedPivot) startEditingPivot(selectedPivot.config.id);
+  }, [selectedPivot, startEditingPivot]);
 
   const refresh = useCallback(() => {
     if (!selectedPivot || !canRefreshSelectedPivot) return;
@@ -27,13 +41,13 @@ export function PivotAnalyzeRibbon() {
 
   return (
     <div className="flex items-center gap-2">
-      <Button variant="secondary" onClick={openFields} disabled={!selectedPivotId}>
+      <Button variant="secondary" onClick={openFields} disabled={!selectedPivot}>
         Field List
       </Button>
       <Button
         variant="secondary"
         onClick={refresh}
-        disabled={!selectedPivotId || !canRefreshSelectedPivot}
+        disabled={!selectedPivot || !canRefreshSelectedPivot}
       >
         Refresh
       </Button>
@@ -42,16 +56,22 @@ export function PivotAnalyzeRibbon() {
 }
 
 export function PivotDesignRibbon() {
-  const selectedPivotId = useUIStore((s) => s.pivot.selectedPivotId);
-  const startEditingPivot = useUIStore((s) => s.startEditingPivot);
+  const activeSheetId = useActiveSheetId();
+  const { pivotTables, selectedPivotId, startEditingPivot } = usePivotTables({
+    sheetId: activeSheetId,
+  });
+  const selectedPivot = useMemo(
+    () => findSelectedPivot(pivotTables, selectedPivotId),
+    [pivotTables, selectedPivotId],
+  );
 
   const openFields = useCallback(() => {
-    if (selectedPivotId) startEditingPivot(selectedPivotId);
-  }, [selectedPivotId, startEditingPivot]);
+    if (selectedPivot) startEditingPivot(selectedPivot.config.id);
+  }, [selectedPivot, startEditingPivot]);
 
   return (
     <div className="flex items-center gap-2">
-      <Button variant="secondary" onClick={openFields} disabled={!selectedPivotId}>
+      <Button variant="secondary" onClick={openFields} disabled={!selectedPivot}>
         Field List
       </Button>
     </div>

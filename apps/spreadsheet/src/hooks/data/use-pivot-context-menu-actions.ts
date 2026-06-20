@@ -221,7 +221,11 @@ export function usePivotContextMenuActions(
   // Get the current pivot table config
   const pivot = useMemo(() => {
     if (!pivotId) return null;
-    return pivotTables.find((p) => p.config.id === pivotId) ?? null;
+    return (
+      pivotTables.find(
+        (p) => p.config.id === pivotId || p.alternateIds?.includes(pivotId) === true,
+      ) ?? null
+    );
   }, [pivotId, pivotTables]);
   const pivotConfig = pivot?.config ?? null;
   const pivotCapabilities = pivot?.capabilities ?? null;
@@ -327,11 +331,11 @@ export function usePivotContextMenuActions(
   // ==========================================================================
 
   const editPivot = useCallback(() => {
-    if (pivotId) {
-      startEditingPivot(pivotId);
+    if (pivotConfig) {
+      startEditingPivot(pivotConfig.id);
       closeContextMenu();
     }
-  }, [pivotId, startEditingPivot, closeContextMenu]);
+  }, [pivotConfig, startEditingPivot, closeContextMenu]);
 
   const refreshPivot = useCallback(() => {
     if (pivotId && canRefresh) {

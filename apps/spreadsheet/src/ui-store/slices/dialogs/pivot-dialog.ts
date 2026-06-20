@@ -221,6 +221,11 @@ export const createPivotDialogSlice: StateCreator<PivotDialogSlice, [], [], Pivo
     set((s) => ({
       pivot: {
         ...s.pivot,
+        selectedPivotId: overlay.pivotId,
+        editingPivotId:
+          s.pivot.editingPivotId != null && s.pivot.editingPivotId !== overlay.pivotId
+            ? null
+            : s.pivot.editingPivotId,
         openTransientOverlay: overlay,
         lastOverlayDismissReason: null,
       },

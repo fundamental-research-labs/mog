@@ -12,6 +12,7 @@
 import {
   computeContinuousExpansion,
   computeScrollbarDragPosition,
+  getScrollbarTrackLength,
   getScrollbarThumbColor,
   SCROLLBAR_TRACK_BORDER_COLOR,
   SCROLLBAR_TRACK_COLOR,
@@ -419,6 +420,16 @@ describe('computeScrollbarDragPosition', () => {
       maxScroll: 8_000,
     });
     expect(returnedLeftAfterContraction).toBe(0);
+  });
+});
+
+describe('getScrollbarTrackLength', () => {
+  it('keeps full track length when the perpendicular scrollbar is hidden', () => {
+    expect(getScrollbarTrackLength(700, 0)).toBe(700);
+  });
+
+  it('subtracts the perpendicular scrollbar only when it is present', () => {
+    expect(getScrollbarTrackLength(700, 14)).toBe(686);
   });
 });
 

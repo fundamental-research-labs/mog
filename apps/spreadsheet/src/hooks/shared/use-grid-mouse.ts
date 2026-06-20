@@ -24,7 +24,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { isOnFillHandle, isOnSelectionBorder, isOnTableResizeHandle } from '@mog/grid-renderer';
 import { editorSelectors } from '../../selectors';
 import { MAX_COLS, MAX_ROWS, type CellRange } from '@mog-sdk/contracts/core';
-import { SCROLL_BAR_WIDTH } from '@mog-sdk/contracts/rendering';
 import { parseA1Range } from '@mog/spreadsheet-utils/a1';
 
 import { useUIStore, useUIStoreApi, useWorkbook } from '../../infra/context';
@@ -48,6 +47,7 @@ import {
   type CachedTableHitInfo,
   type PendingTableClickSelection,
 } from '../grid-mouse/helpers/table-click-selection';
+import { isNoGridPointerEvent } from '../grid-mouse/helpers/no-grid-pointer';
 import {
   resolveSelectionBorderDoubleClickTarget,
   type SelectionBorderEdge,
@@ -1659,6 +1659,7 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
 
   const handleDoubleClick = useCallback(
     async (e: React.MouseEvent<HTMLDivElement>) => {
+      if (isNoGridPointerEvent(e.nativeEvent)) return;
       const container = containerRef.current;
       if (!container) return;
 
@@ -1874,12 +1875,13 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
+    const pointerCaptureManager = coordinator.input.pointerCaptureManager;
 
     const handlePointerDown = (e: PointerEvent) => {
       // DOM overlays that own their own pointer behavior opt out of the grid
       // native pointer path. React synthetic stopPropagation() cannot prevent
       // this native listener from firing.
-      if ((e.target as HTMLElement | null)?.closest?.('[data-no-grid-pointer]')) return;
+      if (isNoGridPointerEvent(e)) return;
 
       // Ensure keyboard focus is on the grid container for keyboard shortcuts.
       // Native pointer events (addEventListener) don't auto-focus like React synthetic events.
@@ -1897,13 +1899,9 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
         container.focus();
       }
 
-      // Skip events in scrollbar regions — ScrollContainer handles these.
-      // Native pointerdown fires before React synthetic stopPropagation() can
-      // intervene (React 18 delegation timing), so we guard by coordinates.
       const rect = container.getBoundingClientRect();
       const relX = e.clientX - rect.left;
       const relY = e.clientY - rect.top;
-      if (relX >= rect.width - SCROLL_BAR_WIDTH || relY >= rect.height - SCROLL_BAR_WIDTH) return;
 
       // Right-click on fill handle
       if (e.button === 2) {
@@ -2008,14 +2006,13 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
     };
 
     const handlePointerMove = (e: PointerEvent) => {
-      if ((e.target as HTMLElement | null)?.closest?.('[data-no-grid-pointer]')) return;
-
-      // Skip events in scrollbar regions to prevent selection extension
-      // during scrollbar drag (same guard as handlePointerDown).
-      const rect = container.getBoundingClientRect();
-      const relX = e.clientX - rect.left;
-      const relY = e.clientY - rect.top;
-      if (relX >= rect.width - SCROLL_BAR_WIDTH || relY >= rect.height - SCROLL_BAR_WIDTH) return;
+      if (
+        isNoGridPointerEvent(e, {
+          includePointHitTest: !pointerCaptureManager.isCapturing(),
+        })
+      ) {
+        return;
+      }
 
       handleMouseMove(e);
     };

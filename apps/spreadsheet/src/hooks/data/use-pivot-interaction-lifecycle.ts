@@ -7,6 +7,10 @@ function pivotEntryMatchesId(entry: PivotConfigEntry, pivotId: string): boolean 
   return entry.config.id === pivotId || entry.alternateIds?.includes(pivotId) === true;
 }
 
+function findPivotEntryById(entries: PivotConfigEntry[], pivotId: string): PivotConfigEntry | null {
+  return entries.find((entry) => pivotEntryMatchesId(entry, pivotId)) ?? null;
+}
+
 export interface UsePivotInteractionLifecycleOptions {
   sheetId: string;
   wb: Parameters<typeof awaitPivotMaterialization>[0];
@@ -17,6 +21,7 @@ export interface UsePivotInteractionLifecycleOptions {
   loadPivotEntries: () => Promise<PivotConfigEntry[]>;
   setPivotEntries: Dispatch<SetStateAction<PivotConfigEntry[]>>;
   selectPivot: (pivotId: string | null) => void;
+  startEditingPivot: (pivotId: string) => void;
   stopEditingPivot: () => void;
 }
 
@@ -30,6 +35,7 @@ export function usePivotInteractionLifecycle({
   loadPivotEntries,
   setPivotEntries,
   selectPivot,
+  startEditingPivot,
   stopEditingPivot,
 }: UsePivotInteractionLifecycleOptions): void {
   const selectedOrEditingMissReloadKeyRef = useRef<string | null>(null);
@@ -41,7 +47,7 @@ export function usePivotInteractionLifecycle({
       return;
     }
 
-    if (pivotEntries.some((entry) => pivotEntryMatchesId(entry, targetPivotId))) {
+    if (findPivotEntryById(pivotEntries, targetPivotId)) {
       selectedOrEditingMissReloadKeyRef.current = null;
       return;
     }
@@ -56,7 +62,7 @@ export function usePivotInteractionLifecycle({
         const entries = await loadPivotEntries();
         if (cancelled) return;
         setPivotEntries(entries);
-        if (entries.some((entry) => pivotEntryMatchesId(entry, targetPivotId))) return;
+        if (findPivotEntryById(entries, targetPivotId)) return;
       } catch {
         // Fall through to the materialization-backed retry below.
       }
@@ -94,14 +100,28 @@ export function usePivotInteractionLifecycle({
   useEffect(() => {
     if (!hasLoadedPivotEntries) return;
 
+    const selectedEntry =
+      selectedPivotId != null ? findPivotEntryById(pivotEntries, selectedPivotId) : null;
+    const editingEntry =
+      editingPivotId != null ? findPivotEntryById(pivotEntries, editingPivotId) : null;
+
+    if (editingEntry && editingPivotId !== editingEntry.config.id) {
+      startEditingPivot(editingEntry.config.id);
+      return;
+    }
+    if (selectedEntry && selectedPivotId !== selectedEntry.config.id) {
+      selectPivot(selectedEntry.config.id);
+      return;
+    }
+
     const selectedMissing =
       selectedPivotId != null &&
       !selectedPivotId.startsWith('imported:') &&
-      !pivotEntries.some((entry) => pivotEntryMatchesId(entry, selectedPivotId));
+      !selectedEntry;
     const editingMissing =
       editingPivotId != null &&
       !editingPivotId.startsWith('imported:') &&
-      !pivotEntries.some((entry) => pivotEntryMatchesId(entry, editingPivotId));
+      !editingEntry;
 
     if (selectedMissing) {
       selectPivot(null);
@@ -116,6 +136,7 @@ export function usePivotInteractionLifecycle({
     pivotEntries,
     selectPivot,
     selectedPivotId,
+    startEditingPivot,
     stopEditingPivot,
   ]);
 }

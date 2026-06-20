@@ -177,6 +177,8 @@ export function ScrollContainer({
   // Compute scroll bounds for thumb positioning
   const maxScrollX = Math.max(0, scrollWidth - viewportWidth);
   const maxScrollY = Math.max(0, scrollHeight - viewportHeight);
+  const hasVerticalScrollbar = viewportLayout.showVerticalScrollbar && maxScrollY > 0;
+  const hasHorizontalScrollbar = viewportLayout.showHorizontalScrollbar && maxScrollX > 0;
 
   // Sync physics bounds with scrollbar UI
   // This ensures InputCoordinator's scroll physics uses the same bounds
@@ -191,7 +193,7 @@ export function ScrollContainer({
   return (
     <>
       {/* Vertical scrollbar */}
-      {viewportLayout.showVerticalScrollbar && maxScrollY > 0 && (
+      {hasVerticalScrollbar && (
         <ScrollbarTrack
           orientation="vertical"
           scrollPosition={scrollY}
@@ -200,6 +202,7 @@ export function ScrollContainer({
           contentSize={scrollHeight}
           isVisible={isVisible}
           reservedRightInset={reservedRightInset}
+          crossAxisScrollbarSize={hasHorizontalScrollbar ? SCROLL_BAR_WIDTH : 0}
           onScroll={(position) => inputCoordinator.scrollTo(scrollX, position)}
           onHoverChange={setIsHovered}
         />
@@ -229,7 +232,7 @@ export function ScrollContainer({
       )}
 
       {/* Horizontal scrollbar */}
-      {viewportLayout.showHorizontalScrollbar && maxScrollX > 0 && (
+      {hasHorizontalScrollbar && (
         <ScrollbarTrack
           orientation="horizontal"
           scrollPosition={scrollX}
@@ -238,6 +241,7 @@ export function ScrollContainer({
           contentSize={scrollWidth}
           isVisible={isVisible}
           reservedRightInset={reservedRightInset}
+          crossAxisScrollbarSize={hasVerticalScrollbar ? SCROLL_BAR_WIDTH : 0}
           onScroll={(position) => inputCoordinator.scrollTo(position, scrollY)}
           onHoverChange={setIsHovered}
         />
@@ -281,6 +285,7 @@ interface ScrollbarTrackProps {
   contentSize: number;
   isVisible: boolean;
   reservedRightInset: number;
+  crossAxisScrollbarSize: number;
   onScroll: (position: number) => void;
   onHoverChange: (hovered: boolean) => void;
 }
@@ -293,6 +298,7 @@ function ScrollbarTrack({
   contentSize,
   isVisible,
   reservedRightInset,
+  crossAxisScrollbarSize,
   onScroll,
   onHoverChange,
 }: ScrollbarTrackProps) {
@@ -304,7 +310,7 @@ function ScrollbarTrack({
   const isVertical = orientation === 'vertical';
 
   // Compute thumb geometry
-  const trackLength = isVertical ? viewportHeightFn(viewportSize) : viewportWidthFn(viewportSize);
+  const trackLength = getScrollbarTrackLength(viewportSize, crossAxisScrollbarSize);
   const thumbRatio = contentSize > 0 ? viewportSize / contentSize : 1;
   const thumbSize = Math.max(MIN_THUMB_SIZE, Math.round(trackLength * thumbRatio));
   const scrollableTrack = trackLength - thumbSize;
@@ -383,7 +389,7 @@ function ScrollbarTrack({
         position: 'absolute',
         top: 0,
         right: reservedRightInset,
-        bottom: SCROLL_BAR_WIDTH,
+        bottom: crossAxisScrollbarSize,
         width: SCROLL_BAR_WIDTH,
         boxSizing: 'border-box',
         backgroundColor: SCROLLBAR_TRACK_COLOR,
@@ -395,7 +401,7 @@ function ScrollbarTrack({
         position: 'absolute',
         left: 0,
         bottom: 0,
-        right: SCROLL_BAR_WIDTH + reservedRightInset,
+        right: crossAxisScrollbarSize + reservedRightInset,
         height: SCROLL_BAR_WIDTH,
         boxSizing: 'border-box',
         backgroundColor: SCROLLBAR_TRACK_COLOR,
@@ -453,12 +459,9 @@ function ScrollbarTrack({
 // Helpers — track length accounting for scrollbar intersection area
 // =============================================================================
 
-/** Effective vertical track length (full height minus horizontal scrollbar) */
-function viewportHeightFn(viewportSize: number): number {
-  return Math.max(0, viewportSize - SCROLL_BAR_WIDTH);
-}
-
-/** Effective horizontal track length (full width minus vertical scrollbar) */
-function viewportWidthFn(viewportSize: number): number {
-  return Math.max(0, viewportSize - SCROLL_BAR_WIDTH);
+export function getScrollbarTrackLength(
+  viewportSize: number,
+  crossAxisScrollbarSize: number,
+): number {
+  return Math.max(0, viewportSize - crossAxisScrollbarSize);
 }

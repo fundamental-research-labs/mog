@@ -89,6 +89,25 @@ describe('PivotDialogSlice interaction state', () => {
     );
   });
 
+  it('opening an overlay activates that pivot without opening editing', () => {
+    const store = createTestStore();
+
+    store.getState().startEditingPivot('pivot-a');
+    store.getState().openPivotOverlay({
+      kind: 'field-header-menu',
+      pivotId: 'pivot-b',
+      placementId: testPlacementId('row:Vendor:1'),
+    });
+
+    expect(store.getState().pivot).toEqual(
+      expect.objectContaining({
+        selectedPivotId: 'pivot-b',
+        editingPivotId: null,
+        openTransientOverlay: expect.objectContaining({ pivotId: 'pivot-b' }),
+      }),
+    );
+  });
+
   it('stopEditingPivot preserves durable selection', () => {
     const store = createTestStore();
 

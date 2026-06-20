@@ -289,6 +289,8 @@ export const SpreadsheetGrid = memo(function SpreadsheetGrid({
   const gridViewportLayout = usePivotAwareGridViewportLayout({
     showHorizontalScrollbar,
     showVerticalScrollbar,
+    containerRef,
+    resize: rendererActions.resize,
     coordinator,
     isReady,
   });
@@ -383,11 +385,8 @@ export const SpreadsheetGrid = memo(function SpreadsheetGrid({
     containerRef,
   });
 
-  // Remote cursors from collab sidecar presence
   const remoteCursors = useRemoteCursors();
 
-  // ViewportPositionIndex + ViewportMergeIndex created by renderer execution.
-  // We pass the viewport directly to useRendererDependencies.
   const activeViewport = useMemo(() => {
     return wb.getSheetById(activeSheetId).viewport;
   }, [wb, activeSheetId]);

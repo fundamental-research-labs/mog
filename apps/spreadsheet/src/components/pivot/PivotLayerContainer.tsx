@@ -114,6 +114,9 @@ export function PivotLayerContainer() {
   const openTransientOverlay = useUIStore((s) => s.pivot.openTransientOverlay);
   const openPivotOverlay = useUIStore((s) => s.openPivotOverlay);
   const closePivotOverlays = useUIStore((s) => s.closePivotOverlays);
+  const restoreGridFocus = useCallback(() => {
+    coordinator.input.focusGrid();
+  }, [coordinator]);
   const closeTransientForViewportChange = useCallback(() => {
     closePivotOverlays('scroll');
   }, [closePivotOverlays]);
@@ -182,7 +185,7 @@ export function PivotLayerContainer() {
     if (!openTransientOverlay) return;
     const handleWheel = (event: WheelEvent) => {
       const target = event.target as HTMLElement | null;
-      if (target?.closest?.('[data-pivot-target="report-filter-picker"]')) return;
+      if (target?.closest?.('.pivot-report-filter-picker')) return;
       closePivotOverlays('scroll');
     };
     document.addEventListener('wheel', handleWheel, { capture: true, passive: true });
@@ -229,6 +232,7 @@ export function PivotLayerContainer() {
           onClosePivotOverlays={closePivotOverlays}
           onApplyHeaderSort={applyHeaderSort}
           onStartEditingPivot={openPivotEditor}
+          onRestoreGridFocus={restoreGridFocus}
         />
       ))}
     </div>

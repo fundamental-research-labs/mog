@@ -14,6 +14,7 @@
 
 import {
   useCallback,
+  useRef,
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
   useState,
@@ -51,6 +52,7 @@ export function PivotFieldPanelContainer({
   className,
 }: PivotFieldPanelContainerProps): React.JSX.Element | null {
   const [isResizing, setIsResizing] = useState(false);
+  const panelRef = useRef<HTMLDivElement>(null);
   const panelWidth = useUIStore((s) => s.pivot.fieldPanelWidth);
   const setPanelWidth = useUIStore((s) => s.setPivotFieldPanelWidth);
 
@@ -79,7 +81,9 @@ export function PivotFieldPanelContainer({
   const handleResizePointerMove = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
       if (!isResizing || !event.currentTarget.hasPointerCapture(event.pointerId)) return;
-      setPanelWidth(window.innerWidth - event.clientX);
+      const containerRect = panelRef.current?.parentElement?.getBoundingClientRect();
+      const rightEdge = containerRect?.right ?? window.innerWidth;
+      setPanelWidth(rightEdge - event.clientX);
     },
     [isResizing, setPanelWidth],
   );
@@ -131,6 +135,7 @@ export function PivotFieldPanelContainer({
 
   return (
     <div
+      ref={panelRef}
       className={className ?? 'absolute top-0 right-0 bottom-0 z-ss-sticky'}
       style={{ width: panelWidth }}
       data-no-grid-pointer="true"

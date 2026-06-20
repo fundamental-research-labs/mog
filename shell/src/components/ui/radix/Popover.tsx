@@ -242,6 +242,7 @@ export function PopoverAnchor({ virtualRef, asChild, children }: PopoverAnchorPr
 // =============================================================================
 
 export interface PopoverContentProps {
+  [key: `data-${string}`]: string | number | boolean | undefined;
   /** The content to display inside the popover */
   children: ReactNode;
   /** Which side of the trigger to position on. Default: 'bottom' */
@@ -422,6 +423,7 @@ export function PopoverContent({
   onPointerDown,
   onKeyDown,
   disableScrollConstraints,
+  ...dataAttributes
 }: PopoverContentProps) {
   const portalContainer = usePortalContainer();
   const resolvedContainer = container ?? portalContainer;
@@ -481,6 +483,7 @@ export function PopoverContent({
         style={computedStyle}
         role={role}
         aria-label={ariaLabel}
+        {...dataAttributes}
         data-testid={dataTestId}
         onMouseEnter={onMouseEnter}
         onMouseLeave={onMouseLeave}

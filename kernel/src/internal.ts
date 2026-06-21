@@ -234,3 +234,9 @@ export {
   type SnapshotRootReloadServiceOptions,
   type SnapshotRootReloadSourceKind,
 } from './document/version-store/snapshot-root-reload-service';
+
+export {
+  createDocumentLifecycleSnapshotRootHydrator,
+  type DocumentLifecycleSnapshotRootHydratorOptions,
+  type SnapshotRootFreshLifecycleMaterialization,
+} from './api/document/snapshot-root-lifecycle-hydrator';

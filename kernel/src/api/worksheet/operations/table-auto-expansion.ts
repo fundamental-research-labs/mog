@@ -14,7 +14,7 @@ import type {
 import { colToLetter, letterToCol } from '../../internal/utils';
 import type { DocumentContext, OperationResult } from './shared';
 import { wrapOp } from './shared';
-import { bridgeTableToTableInfo } from './table-operations';
+import { bridgeTableToTableInfo, createTableMutationOptions } from './table-operations';
 
 interface TableAutoExpansionReceiptInput {
   sheetId: SheetId;
@@ -400,7 +400,11 @@ export async function applyAutoExpansion(
     }
 
     try {
-      const bridgeResult = await ctx.computeBridge.applyAutoExpansion(sheetId, tableName);
+      const bridgeResult = await ctx.computeBridge.applyAutoExpansion(
+        sheetId,
+        tableName,
+        createTableMutationOptions(ctx, 'tables.applyAutoExpansion', sheetId),
+      );
       const after = await getTableByName(ctx, tableName).catch(() => before);
       return tableAutoExpansionReceipt({
         sheetId,

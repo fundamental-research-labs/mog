@@ -64,11 +64,14 @@ import {
   buildTableResizeReceipt,
   buildTableUpdateReceipt,
   bridgeTableToTableInfo,
+  createGroupedTableMutationOptions,
+  createTableMutationOptions,
   effectiveTableUpdateOptions,
   getDataBodyRangeFromInfo,
   getHeaderRowRangeFromInfo,
   getTableColumnDataCellsFromInfo,
   getTotalRowRangeFromInfo,
+  type TableMutationOptions,
 } from './operations/table-operations';
 import { applyAutoExpansion as applyAutoExpansionOperation } from './operations/table-auto-expansion';
 import {
@@ -136,6 +139,27 @@ export class WorksheetTablesImpl implements WorksheetTables {
 
   private _ensureWritable(op: string): void {
     this.ctx.writeGate.assertWritable(op);
+  }
+
+  private _tableMutationOptions(
+    operationIdPrefix: string,
+    groupId?: string,
+  ): TableMutationOptions {
+    return createTableMutationOptions(this.ctx, operationIdPrefix, this.sheetId, groupId);
+  }
+
+  private _groupedTableMutationOptions(operationIdPrefix: string): () => TableMutationOptions {
+    return createGroupedTableMutationOptions(this.ctx, operationIdPrefix, this.sheetId);
+  }
+
+  private _undoGroupBridge(): {
+    beginUndoGroup(admissionOptions?: TableMutationOptions): Promise<unknown>;
+    endUndoGroup(admissionOptions?: TableMutationOptions): Promise<unknown>;
+  } {
+    return this.ctx.computeBridge as unknown as {
+      beginUndoGroup(admissionOptions?: TableMutationOptions): Promise<unknown>;
+      endUndoGroup(admissionOptions?: TableMutationOptions): Promise<unknown>;
+    };
   }
 
   private emitTableCreated(table: TableInfo): void {
@@ -338,6 +362,7 @@ export class WorksheetTablesImpl implements WorksheetTables {
       [],
       options?.hasHeaders !== false,
       tableStyleIdForCompute(options?.style),
+      this._tableMutationOptions('tables.add'),
     );
 
     // Re-fetch the table to get the complete info (with generated name, columns, etc.)
@@ -438,7 +463,10 @@ export class WorksheetTablesImpl implements WorksheetTables {
     return table.columns.find((c) => c.name === columnName) ?? null;
   }
 
-  async remove(name: string): Promise<TableRemoveReceipt> {
+  async remove(
+    name: string,
+    nextMutationOptions?: () => TableMutationOptions,
+  ): Promise<TableRemoveReceipt> {
     const table = await this.get(name);
     if (!table) throw new KernelError('COMPUTE_ERROR', `Table not found: ${name}`);
     await assertUnprotectedTableDefinition(
@@ -448,7 +476,10 @@ export class WorksheetTablesImpl implements WorksheetTables {
       name,
       table.range,
     );
-    await this.ctx.computeBridge.deleteTable(name);
+    await this.ctx.computeBridge.deleteTable(
+      name,
+      nextMutationOptions?.() ?? this._tableMutationOptions('tables.remove'),
+    );
     this.sortSpecCache.delete(name);
     this.emitTableDeleted(table.id);
     return buildTableRemoveReceipt(this.sheetId, table);
@@ -464,7 +495,10 @@ export class WorksheetTablesImpl implements WorksheetTables {
       name,
       table.range,
     );
-    const result = await this.ctx.computeBridge.convertTableToRange(name);
+    const result = await this.ctx.computeBridge.convertTableToRange(
+      name,
+      this._tableMutationOptions('tables.convertToRange'),
+    );
     this.sortSpecCache.delete(name);
     const convertedCount =
       typeof result.data === 'number'
@@ -504,8 +538,9 @@ export class WorksheetTablesImpl implements WorksheetTables {
         table.range,
       );
     }
+    const nextOptions = this._groupedTableMutationOptions('tables.clear');
     for (const table of tables) {
-      await this.remove(table.name);
+      await this.remove(table.name, nextOptions);
     }
     return buildTableClearReceipt(this.sheetId, tables);
   }
@@ -530,7 +565,11 @@ export class WorksheetTablesImpl implements WorksheetTables {
       table.range,
     );
     await this.assertValidTableNameForRename(oldName, newName);
-    await this.ctx.computeBridge.renameTable(oldName, newName);
+    await this.ctx.computeBridge.renameTable(
+      oldName,
+      newName,
+      this._tableMutationOptions('tables.rename'),
+    );
     const cached = this.sortSpecCache.get(oldName);
     if (cached) {
       this.sortSpecCache.delete(oldName);
@@ -596,14 +635,16 @@ export class WorksheetTablesImpl implements WorksheetTables {
     if (effectiveUpdates.name !== undefined) {
       await this.assertValidTableNameForRename(tableName, effectiveUpdates.name);
     }
+    const nextOptions = this._groupedTableMutationOptions('tables.update');
     if (effectiveUpdates.style !== undefined) {
       await this.ctx.computeBridge.setTableStyle(
         tableName,
         tableStyleIdForCompute(effectiveUpdates.style) ?? effectiveUpdates.style,
+        nextOptions(),
       );
     }
     if (effectiveUpdates.name !== undefined) {
-      await this.ctx.computeBridge.renameTable(tableName, effectiveUpdates.name);
+      await this.ctx.computeBridge.renameTable(tableName, effectiveUpdates.name, nextOptions());
     }
     // Boolean option updates via setTableBoolOption
     // Keys match Rust TableBoolOption names directly
@@ -616,24 +657,34 @@ export class WorksheetTablesImpl implements WorksheetTables {
     ] as const;
     for (const key of boolOptions) {
       if (effectiveUpdates[key] !== undefined) {
-        await this.ctx.computeBridge.setTableBoolOption(tableName, key, effectiveUpdates[key]);
+        await this.ctx.computeBridge.setTableBoolOption(
+          tableName,
+          key,
+          effectiveUpdates[key],
+          nextOptions(),
+        );
       }
     }
     if (effectiveUpdates.autoExpand !== undefined) {
-      await this.ctx.computeBridge.setTableAutoExpand(tableName, effectiveUpdates.autoExpand);
+      await this.ctx.computeBridge.setTableAutoExpand(
+        tableName,
+        effectiveUpdates.autoExpand,
+        nextOptions(),
+      );
     }
     if (effectiveUpdates.autoCalculatedColumns !== undefined) {
       await this.ctx.computeBridge.setTableAutoCalculatedColumns(
         tableName,
         effectiveUpdates.autoCalculatedColumns,
+        nextOptions(),
       );
     }
     // Headers/totals with set semantics (not toggle)
     if (effectiveUpdates.hasHeaderRow !== undefined) {
-      await this.setShowHeaders(tableName, effectiveUpdates.hasHeaderRow);
+      await this.setShowHeaders(tableName, effectiveUpdates.hasHeaderRow, nextOptions);
     }
     if (effectiveUpdates.hasTotalsRow !== undefined) {
-      await this.setShowTotals(tableName, effectiveUpdates.hasTotalsRow);
+      await this.setShowTotals(tableName, effectiveUpdates.hasTotalsRow, nextOptions);
     }
     this.emitTableUpdated(table.id, this.tableUpdateOptionsToEventChanges(effectiveUpdates));
     return buildTableUpdateReceipt({
@@ -681,7 +732,11 @@ export class WorksheetTablesImpl implements WorksheetTables {
 
     await assertTableFilterCriteriaAllowed(this.ctx, this.sheetId, 'tables.filter.clear', table);
     await this.ctx.awaitMaterialized?.('allSheets');
-    await this.ctx.computeBridge.clearAllColumnFilters(this.sheetId, filter.id);
+    await this.ctx.computeBridge.clearAllColumnFilters(
+      this.sheetId,
+      filter.id,
+      this._tableMutationOptions('tables.clearFilters'),
+    );
   }
 
   async applyIconFilter(
@@ -738,17 +793,19 @@ export class WorksheetTablesImpl implements WorksheetTables {
     };
 
     await this.ctx.awaitMaterialized?.('allSheets');
+    const nextOptions = this._groupedTableMutationOptions('tables.applyIconFilter');
     await this.ctx.computeBridge.setColumnFilter(
       this.sheetId,
       filter.id,
       headerCol,
       columnFilterCriteriaToCompute(criteria),
+      nextOptions(),
     );
 
     // Apply the filter so hidden-row state is updated.
     // Note: Icon filtering at the Rust level returns all-visible;
     // real icon evaluation happens in the bridge layer when available.
-    await this.ctx.computeBridge.applyFilter(this.sheetId, filter.id);
+    await this.ctx.computeBridge.applyFilter(this.sheetId, filter.id, nextOptions());
   }
 
   async setStylePreset(tableName: string, preset: string): Promise<TableUpdateReceipt> {
@@ -765,7 +822,11 @@ export class WorksheetTablesImpl implements WorksheetTables {
     }
     await assertTableStyleAllowed(this.ctx, this.sheetId, 'tables.update.style', table);
     const style = tableStyleIdForCompute(preset) ?? preset;
-    await this.ctx.computeBridge.setTableStyle(tableName, style);
+    await this.ctx.computeBridge.setTableStyle(
+      tableName,
+      style,
+      this._tableMutationOptions('tables.setStylePreset'),
+    );
     this.emitTableUpdated(table.id, { style: this.tableStyleFromPreset(style) });
     return buildTableUpdateReceipt({
       sheetId: this.sheetId,
@@ -797,6 +858,7 @@ export class WorksheetTablesImpl implements WorksheetTables {
       bounds.startCol,
       bounds.endRow,
       bounds.endCol,
+      this._tableMutationOptions('tables.resize'),
     );
     this.emitTableUpdated(table.id, { range: bounds });
     return buildTableResizeReceipt({
@@ -831,19 +893,21 @@ export class WorksheetTablesImpl implements WorksheetTables {
       'insertColumns',
     );
 
-    await this.ctx.computeBridge.beginUndoGroup();
+    const nextOptions = this._groupedTableMutationOptions('tables.addColumn');
+    await this._undoGroupBridge().beginUndoGroup(nextOptions());
     try {
       await Structures.insertColumns(this.ctx, this.sheetId, null, targetCol, 1, 'api');
-      await this.ctx.computeBridge.addTableColumn(name, columnName, actualPosition);
+      await this.ctx.computeBridge.addTableColumn(name, columnName, actualPosition, nextOptions());
       await this.ctx.computeBridge.resizeTable(
         name,
         bounds.startRow,
         bounds.startCol,
         bounds.endRow,
         bounds.endCol + 1,
+        nextOptions(),
       );
     } finally {
-      await this.ctx.computeBridge.endUndoGroup();
+      await this._undoGroupBridge().endUndoGroup(nextOptions());
     }
     this.emitTableUpdated(table.id);
     const columnLetter = colToLetter(targetCol);
@@ -894,7 +958,12 @@ export class WorksheetTablesImpl implements WorksheetTables {
       name,
       table.range,
     );
-    await this.ctx.computeBridge.renameTableColumn(name, columnIndex, newColumnName);
+    await this.ctx.computeBridge.renameTableColumn(
+      name,
+      columnIndex,
+      newColumnName,
+      this._tableMutationOptions('tables.renameColumn'),
+    );
     this.emitTableUpdated(table.id);
     return buildTableRenameColumnReceipt({
       sheetId: this.sheetId,
@@ -928,7 +997,8 @@ export class WorksheetTablesImpl implements WorksheetTables {
       columnIndex,
       'deleteColumns',
     );
-    await this.ctx.computeBridge.beginUndoGroup();
+    const nextOptions = this._groupedTableMutationOptions('tables.removeColumn');
+    await this._undoGroupBridge().beginUndoGroup(nextOptions());
     try {
       await Structures.deleteColumns(
         this.ctx,
@@ -938,16 +1008,17 @@ export class WorksheetTablesImpl implements WorksheetTables {
         1,
         'api',
       );
-      await this.ctx.computeBridge.removeTableColumn(name, columnIndex);
+      await this.ctx.computeBridge.removeTableColumn(name, columnIndex, nextOptions());
       await this.ctx.computeBridge.resizeTable(
         name,
         bounds.startRow,
         bounds.startCol,
         bounds.endRow,
         bounds.endCol - 1,
+        nextOptions(),
       );
     } finally {
-      await this.ctx.computeBridge.endUndoGroup();
+      await this._undoGroupBridge().endUndoGroup(nextOptions());
     }
     this.emitTableUpdated(table.id);
     const columnName = table.columns[columnIndex]?.name ?? '';
@@ -979,7 +1050,10 @@ export class WorksheetTablesImpl implements WorksheetTables {
       name,
       table.range,
     );
-    await this.ctx.computeBridge.toggleTotalsRow(name);
+    await this.ctx.computeBridge.toggleTotalsRow(
+      name,
+      this._tableMutationOptions('tables.setShowTotals'),
+    );
     const updates = { hasTotalsRow: !table.hasTotalsRow };
     this.emitTableUpdated(table.id, { hasTotalRow: updates.hasTotalsRow });
     return buildTableUpdateReceipt({
@@ -1001,7 +1075,10 @@ export class WorksheetTablesImpl implements WorksheetTables {
       name,
       table.range,
     );
-    await this.ctx.computeBridge.toggleHeaderRow(name);
+    await this.ctx.computeBridge.toggleHeaderRow(
+      name,
+      this._tableMutationOptions('tables.setShowHeaders'),
+    );
     const updates = { hasHeaderRow: !table.hasHeaderRow };
     this.emitTableUpdated(table.id, { hasHeaderRow: updates.hasHeaderRow });
     return buildTableUpdateReceipt({
@@ -1134,7 +1211,12 @@ export class WorksheetTablesImpl implements WorksheetTables {
       return buildTableUpdateReceipt({ sheetId: this.sheetId, table, updates, status: 'noOp' });
     }
     await assertTableStyleAllowed(this.ctx, this.sheetId, 'tables.update.style', table);
-    await this.ctx.computeBridge.setTableBoolOption(tableName, 'emphasizeFirstColumn', value);
+    await this.ctx.computeBridge.setTableBoolOption(
+      tableName,
+      'emphasizeFirstColumn',
+      value,
+      this._tableMutationOptions('tables.setHighlightFirstColumn'),
+    );
     this.emitTableUpdated(table.id, { style: { showFirstColumnHighlight: value } });
     return buildTableUpdateReceipt({ sheetId: this.sheetId, table, updates, status: 'applied' });
   }
@@ -1147,7 +1229,12 @@ export class WorksheetTablesImpl implements WorksheetTables {
       return buildTableUpdateReceipt({ sheetId: this.sheetId, table, updates, status: 'noOp' });
     }
     await assertTableStyleAllowed(this.ctx, this.sheetId, 'tables.update.style', table);
-    await this.ctx.computeBridge.setTableBoolOption(tableName, 'emphasizeLastColumn', value);
+    await this.ctx.computeBridge.setTableBoolOption(
+      tableName,
+      'emphasizeLastColumn',
+      value,
+      this._tableMutationOptions('tables.setHighlightLastColumn'),
+    );
     this.emitTableUpdated(table.id, { style: { showLastColumnHighlight: value } });
     return buildTableUpdateReceipt({ sheetId: this.sheetId, table, updates, status: 'applied' });
   }
@@ -1160,7 +1247,12 @@ export class WorksheetTablesImpl implements WorksheetTables {
       return buildTableUpdateReceipt({ sheetId: this.sheetId, table, updates, status: 'noOp' });
     }
     await assertTableStyleAllowed(this.ctx, this.sheetId, 'tables.update.style', table);
-    await this.ctx.computeBridge.setTableBoolOption(tableName, 'bandedColumns', value);
+    await this.ctx.computeBridge.setTableBoolOption(
+      tableName,
+      'bandedColumns',
+      value,
+      this._tableMutationOptions('tables.setShowBandedColumns'),
+    );
     this.emitTableUpdated(table.id, { style: { showBandedColumns: value } });
     return buildTableUpdateReceipt({ sheetId: this.sheetId, table, updates, status: 'applied' });
   }
@@ -1173,7 +1265,12 @@ export class WorksheetTablesImpl implements WorksheetTables {
       return buildTableUpdateReceipt({ sheetId: this.sheetId, table, updates, status: 'noOp' });
     }
     await assertTableStyleAllowed(this.ctx, this.sheetId, 'tables.update.style', table);
-    await this.ctx.computeBridge.setTableBoolOption(tableName, 'bandedRows', value);
+    await this.ctx.computeBridge.setTableBoolOption(
+      tableName,
+      'bandedRows',
+      value,
+      this._tableMutationOptions('tables.setShowBandedRows'),
+    );
     this.emitTableUpdated(table.id, { style: { showBandedRows: value } });
     return buildTableUpdateReceipt({ sheetId: this.sheetId, table, updates, status: 'applied' });
   }
@@ -1192,7 +1289,12 @@ export class WorksheetTablesImpl implements WorksheetTables {
       tableName,
       table.range,
     );
-    await this.ctx.computeBridge.setTableBoolOption(tableName, 'showFilterButtons', value);
+    await this.ctx.computeBridge.setTableBoolOption(
+      tableName,
+      'showFilterButtons',
+      value,
+      this._tableMutationOptions('tables.setShowFilterButton'),
+    );
     this.emitTableUpdated(table.id, { showFilterButtons: value });
     return buildTableUpdateReceipt({ sheetId: this.sheetId, table, updates, status: 'applied' });
   }
@@ -1201,7 +1303,11 @@ export class WorksheetTablesImpl implements WorksheetTables {
   // Set semantics for headers/totals
   // ---------------------------------------------------------------------------
 
-  async setShowHeaders(tableName: string, visible: boolean): Promise<TableUpdateReceipt> {
+  async setShowHeaders(
+    tableName: string,
+    visible: boolean,
+    nextMutationOptions?: () => TableMutationOptions,
+  ): Promise<TableUpdateReceipt> {
     const table = await this.get(tableName);
     if (!table) throw new KernelError('COMPUTE_ERROR', `Table not found: ${tableName}`);
     const updates = effectiveTableUpdateOptions(table, { hasHeaderRow: visible });
@@ -1215,12 +1321,19 @@ export class WorksheetTablesImpl implements WorksheetTables {
       tableName,
       table.range,
     );
-    await this.ctx.computeBridge.toggleHeaderRow(tableName);
+    await this.ctx.computeBridge.toggleHeaderRow(
+      tableName,
+      nextMutationOptions?.() ?? this._tableMutationOptions('tables.setShowHeaders'),
+    );
     this.emitTableUpdated(table.id, { hasHeaderRow: visible });
     return buildTableUpdateReceipt({ sheetId: this.sheetId, table, updates, status: 'applied' });
   }
 
-  async setShowTotals(tableName: string, visible: boolean): Promise<TableUpdateReceipt> {
+  async setShowTotals(
+    tableName: string,
+    visible: boolean,
+    nextMutationOptions?: () => TableMutationOptions,
+  ): Promise<TableUpdateReceipt> {
     const table = await this.get(tableName);
     if (!table) throw new KernelError('COMPUTE_ERROR', `Table not found: ${tableName}`);
     const updates = effectiveTableUpdateOptions(table, { hasTotalsRow: visible });
@@ -1234,7 +1347,10 @@ export class WorksheetTablesImpl implements WorksheetTables {
       tableName,
       table.range,
     );
-    await this.ctx.computeBridge.toggleTotalsRow(tableName);
+    await this.ctx.computeBridge.toggleTotalsRow(
+      tableName,
+      nextMutationOptions?.() ?? this._tableMutationOptions('tables.setShowTotals'),
+    );
     this.emitTableUpdated(table.id, { hasTotalRow: visible });
     return buildTableUpdateReceipt({ sheetId: this.sheetId, table, updates, status: 'applied' });
   }
@@ -1254,6 +1370,7 @@ export class WorksheetTablesImpl implements WorksheetTables {
   ): Promise<void> {
     const initialTable = await this.get(tableName);
     if (!initialTable) return;
+    let nextMutationOptions: (() => TableMutationOptions) | undefined;
     if (!initialTable.hasTotalsRow) {
       await assertUnprotectedTableDefinition(
         this.ctx,
@@ -1262,7 +1379,8 @@ export class WorksheetTablesImpl implements WorksheetTables {
         tableName,
         initialTable.range,
       );
-      await this.setShowTotals(tableName, true);
+      nextMutationOptions = this._groupedTableMutationOptions('tables.setTotalsFunction');
+      await this.setShowTotals(tableName, true, nextMutationOptions);
     }
 
     const table = initialTable.hasTotalsRow ? initialTable : await this.get(tableName);
@@ -1309,8 +1427,14 @@ export class WorksheetTablesImpl implements WorksheetTables {
 
     const computeTable = await this.ctx.computeBridge.getTableByName(tableName);
     const computeColumn = computeTable?.columns[colIdx];
+    nextMutationOptions ??= this._groupedTableMutationOptions('tables.setTotalsFunction');
     if (computeColumn) {
-      await this.ctx.computeBridge.setTableTotalsFunction(tableName, computeColumn.id, func);
+      await this.ctx.computeBridge.setTableTotalsFunction(
+        tableName,
+        computeColumn.id,
+        func,
+        nextMutationOptions(),
+      );
     }
 
     // WASM normalises ANY formula written to a freshly-created totals cell to the
@@ -1318,8 +1442,16 @@ export class WorksheetTablesImpl implements WorksheetTables {
     // and producing #NAME?. Writing a plain 0 first "de-registers" the fresh-cell
     // normalisation flag; the subsequent formula write then stores the table-qualified
     // form (Table1[Amount]) intact, which evaluates correctly.
-    await this.ctx.computeBridge.setCellValueParsed(this.sheetId, totalsRow, totalsCol, '0');
-    await this.ctx.computeBridge.setCellValueParsed(this.sheetId, totalsRow, totalsCol, formula);
+    await this.ctx.computeBridge.setCellsByPosition(
+      this.sheetId,
+      [{ row: totalsRow, col: totalsCol, input: { kind: 'parse', text: '0' } }],
+      nextMutationOptions(),
+    );
+    await this.ctx.computeBridge.setCellsByPosition(
+      this.sheetId,
+      [{ row: totalsRow, col: totalsCol, input: { kind: 'parse', text: formula } }],
+      nextMutationOptions(),
+    );
   }
 
   // ---------------------------------------------------------------------------
@@ -1350,7 +1482,12 @@ export class WorksheetTablesImpl implements WorksheetTables {
       preflightInsertRow,
       values?.length,
     );
-    const result = await this.ctx.computeBridge.addTableDataRow(tableName, index ?? null);
+    const nextOptions = this._groupedTableMutationOptions('tables.addRow');
+    const result = await this.ctx.computeBridge.addTableDataRow(
+      tableName,
+      index ?? null,
+      nextOptions(),
+    );
 
     // result.data is { insertRow, needsRangeExpand } (new format) or a plain number (legacy).
     // The NAPI transport returns parsed objects, but guard against edge cases
@@ -1403,6 +1540,7 @@ export class WorksheetTablesImpl implements WorksheetTables {
             parsed.startCol,
             parsed.endRow + 1,
             parsed.endCol,
+            nextOptions(),
           );
         }
       }
@@ -1417,7 +1555,7 @@ export class WorksheetTablesImpl implements WorksheetTables {
         col: beforeRange.startCol + i,
         input: toCellInput(val),
       }));
-      await this.ctx.computeBridge.setCellsByPosition(this.sheetId, edits);
+      await this.ctx.computeBridge.setCellsByPosition(this.sheetId, edits, nextOptions());
     }
     const rowRange = `${colToLetter(beforeRange.startCol)}${insertRow + 1}:${colToLetter(
       beforeRange.endCol,
@@ -1436,7 +1574,11 @@ export class WorksheetTablesImpl implements WorksheetTables {
     });
   }
 
-  async deleteRow(tableName: string, index: number): Promise<TableDeleteRowReceipt> {
+  async deleteRow(
+    tableName: string,
+    index: number,
+    nextMutationOptions?: () => TableMutationOptions,
+  ): Promise<TableDeleteRowReceipt> {
     const table = await this.get(tableName);
     if (!table) throw new KernelError('COMPUTE_ERROR', `Table not found: ${tableName}`);
     const rowCount = await this.getRowCount(tableName);
@@ -1455,7 +1597,11 @@ export class WorksheetTablesImpl implements WorksheetTables {
     await assertTableRowsDeleteAllowed(this.ctx, this.sheetId, 'tables.deleteRow', table, [
       dataRowToSheetRow(table, index),
     ]);
-    const result = await this.ctx.computeBridge.removeTableDataRow(tableName, index);
+    const result = await this.ctx.computeBridge.removeTableDataRow(
+      tableName,
+      index,
+      nextMutationOptions?.() ?? this._tableMutationOptions('tables.deleteRow'),
+    );
     // result.data contains the absolute row index that was removed
     const removedRow =
       typeof result.data === 'number' ? result.data : parseInt(result.data as string, 10);
@@ -1515,8 +1661,9 @@ export class WorksheetTablesImpl implements WorksheetTables {
       sorted.map((index) => dataRowToSheetRow(table, index)),
     );
 
+    const nextOptions = this._groupedTableMutationOptions('tables.deleteRows');
     for (const index of sorted) {
-      await this.deleteRow(tableName, index);
+      await this.deleteRow(tableName, index, nextOptions);
     }
   }
 
@@ -1577,7 +1724,11 @@ export class WorksheetTablesImpl implements WorksheetTables {
       edits.map(({ row, col }) => ({ row, col })),
       'editing this table row',
     );
-    await this.ctx.computeBridge.setCellsByPosition(this.sheetId, edits);
+    await this.ctx.computeBridge.setCellsByPosition(
+      this.sheetId,
+      edits,
+      this._tableMutationOptions('tables.setRowValues'),
+    );
   }
 
   // ---------------------------------------------------------------------------
@@ -1671,7 +1822,11 @@ export class WorksheetTablesImpl implements WorksheetTables {
       edits.map(({ row, col }) => ({ row, col })),
       'editing this table column',
     );
-    await this.ctx.computeBridge.setCellsByPosition(this.sheetId, edits);
+    await this.ctx.computeBridge.setCellsByPosition(
+      this.sheetId,
+      edits,
+      this._tableMutationOptions('tables.setColumnValues'),
+    );
   }
 
   // ---------------------------------------------------------------------------
@@ -1756,7 +1911,11 @@ export class WorksheetTablesImpl implements WorksheetTables {
         });
       }
     }
-    await this.ctx.computeBridge.setCellsByPosition(this.sheetId, edits);
+    await this.ctx.computeBridge.setCellsByPosition(
+      this.sheetId,
+      edits,
+      this._tableMutationOptions('tables.sort.apply'),
+    );
   }
 
   async sortClear(tableName: string): Promise<void> {

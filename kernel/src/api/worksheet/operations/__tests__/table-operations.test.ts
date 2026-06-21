@@ -84,6 +84,21 @@ function createReceiptCtx(table: Table | null, overrides: Record<string, jest.Mo
   };
 }
 
+function expectTableMutationOptions(operationIdPrefix: string) {
+  return expect.objectContaining({
+    operationContext: expect.objectContaining({
+      operationId: expect.stringMatching(
+        new RegExp(`^${operationIdPrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}:`),
+      ),
+      kind: 'mutation',
+      sheetIds: ['sheet-1'],
+      domainIds: ['tables'],
+      capturePolicy: 'commitEligible',
+      writeAdmissionMode: 'capture',
+    }),
+  });
+}
+
 describe('bridgeTableToTableInfo', () => {
   it('returns canonical built-in table style names for full compute IDs', () => {
     expect(bridgeTableToTableInfo(makeTable('TableStyleMedium4')).style).toBe('TableStyleMedium4');
@@ -115,10 +130,24 @@ describe('calculated column receipts', () => {
       'Sales',
       2,
       '=[@Qty]*[@Price]',
+      expectTableMutationOptions('tables.setCalculatedColumn'),
     );
-    expect(ctx.computeBridge.setCellsByPosition).toHaveBeenCalledWith('sheet-1', [
-      { row: 1, col: 2, input: { kind: 'parse', text: '=[@Qty]*[@Price]' } },
-    ]);
+    expect(ctx.computeBridge.setCellsByPosition).toHaveBeenCalledWith(
+      'sheet-1',
+      [{ row: 1, col: 2, input: { kind: 'parse', text: '=[@Qty]*[@Price]' } }],
+      expectTableMutationOptions('tables.setCalculatedColumn'),
+    );
+    const beginOptions = ctx.computeBridge.beginUndoGroup.mock.calls[0][0];
+    const updateOptions = ctx.computeBridge.updateCalculatedColumn.mock.calls[0][3];
+    const seedOptions = ctx.computeBridge.setCellsByPosition.mock.calls[0][2];
+    const endOptions = ctx.computeBridge.endUndoGroup.mock.calls[0][0];
+    expect(beginOptions.operationContext.groupId).toBe(beginOptions.operationContext.operationId);
+    expect(updateOptions.operationContext.groupId).toBe(beginOptions.operationContext.groupId);
+    expect(seedOptions.operationContext.groupId).toBe(beginOptions.operationContext.groupId);
+    expect(endOptions.operationContext.groupId).toBe(beginOptions.operationContext.groupId);
+    expect(updateOptions.operationContext.operationId).not.toBe(
+      beginOptions.operationContext.operationId,
+    );
     expect(ctx.computeBridge.autoFill).toHaveBeenCalledWith(
       'sheet-1',
       expect.objectContaining({
@@ -211,7 +240,12 @@ describe('calculated column receipts', () => {
 
     expect(result.success).toBe(true);
     if (!result.success) return;
-    expect(ctx.computeBridge.updateCalculatedColumn).toHaveBeenCalledWith('Sales', 2, '=1');
+    expect(ctx.computeBridge.updateCalculatedColumn).toHaveBeenCalledWith(
+      'Sales',
+      2,
+      '=1',
+      expectTableMutationOptions('tables.setCalculatedColumn'),
+    );
     expect(ctx.computeBridge.autoFill).not.toHaveBeenCalled();
     expect(ctx.computeBridge.endUndoGroup).toHaveBeenCalledTimes(1);
     expect(result.data).toMatchObject({
@@ -243,12 +277,20 @@ describe('calculated column receipts', () => {
 
     expect(result.success).toBe(true);
     if (!result.success) return;
-    expect(ctx.computeBridge.removeCalculatedColumn).toHaveBeenCalledWith('Sales', 2);
-    expect(ctx.computeBridge.setCellsByPosition).toHaveBeenCalledWith('sheet-1', [
-      { row: 1, col: 2, input: { kind: 'clear' } },
-      { row: 2, col: 2, input: { kind: 'clear' } },
-      { row: 3, col: 2, input: { kind: 'clear' } },
-    ]);
+    expect(ctx.computeBridge.removeCalculatedColumn).toHaveBeenCalledWith(
+      'Sales',
+      2,
+      expectTableMutationOptions('tables.clearCalculatedColumn'),
+    );
+    expect(ctx.computeBridge.setCellsByPosition).toHaveBeenCalledWith(
+      'sheet-1',
+      [
+        { row: 1, col: 2, input: { kind: 'clear' } },
+        { row: 2, col: 2, input: { kind: 'clear' } },
+        { row: 3, col: 2, input: { kind: 'clear' } },
+      ],
+      expectTableMutationOptions('tables.clearCalculatedColumn'),
+    );
     expect(result.data).toMatchObject({
       kind: 'table.calculatedColumn.clear',
       status: 'applied',

@@ -936,7 +936,11 @@ describe('WorksheetImpl Extended Methods', () => {
       await ws.tables.rename('OldName', 'NewName');
 
       expect(ctx.computeBridge.tableValidateTableName).toHaveBeenCalledWith('NewName', []);
-      expect(ctx.computeBridge.renameTable).toHaveBeenCalledWith('OldName', 'NewName');
+      expect(ctx.computeBridge.renameTable).toHaveBeenCalledWith(
+        'OldName',
+        'NewName',
+        expectVersionOperationOptions('tables.rename', ['tables']),
+      );
     });
 
     it('renameTable rejects invalid names before compute rename', async () => {
@@ -966,7 +970,11 @@ describe('WorksheetImpl Extended Methods', () => {
       expect(ctx.computeBridge.tableValidateTableName).toHaveBeenCalledWith('table1', [
         'OtherTable',
       ]);
-      expect(ctx.computeBridge.renameTable).toHaveBeenCalledWith('Table1', 'table1');
+      expect(ctx.computeBridge.renameTable).toHaveBeenCalledWith(
+        'Table1',
+        'table1',
+        expectVersionOperationOptions('tables.rename', ['tables']),
+      );
     });
 
     it('addTable with style delegates to one Rust lifecycle command', async () => {
@@ -1006,6 +1014,7 @@ describe('WorksheetImpl Extended Methods', () => {
         [],
         true,
         'TableStyleMedium4',
+        expectVersionOperationOptions('tables.add', ['tables']),
       );
       expect(ctx.computeBridge.createTable).not.toHaveBeenCalled();
       expect(ctx.computeBridge.setTableStyle).not.toHaveBeenCalled();
@@ -1052,6 +1061,7 @@ describe('WorksheetImpl Extended Methods', () => {
         [],
         false,
         null,
+        expectVersionOperationOptions('tables.add', ['tables']),
       );
       expect(ctx.computeBridge.createTable).not.toHaveBeenCalled();
       expect(ctx.computeBridge.setTableStyle).not.toHaveBeenCalled();
@@ -1061,7 +1071,11 @@ describe('WorksheetImpl Extended Methods', () => {
     it('updateTable with style updates calls computeBridge.setTableStyle', async () => {
       await ws.tables.update('Table1', { style: 'TableStyleLight1' });
 
-      expect(ctx.computeBridge.setTableStyle).toHaveBeenCalledWith('Table1', 'TableStyleLight1');
+      expect(ctx.computeBridge.setTableStyle).toHaveBeenCalledWith(
+        'Table1',
+        'TableStyleLight1',
+        expectVersionOperationOptions('tables.update', ['tables']),
+      );
     });
 
     it('updateTable rejects invalid renamed names before compute rename', async () => {
@@ -1088,19 +1102,29 @@ describe('WorksheetImpl Extended Methods', () => {
     it('setTableStylePreset delegates to computeBridge.setTableStyle', async () => {
       await ws.tables.setStylePreset('Table1', 'TableStyleMedium2');
 
-      expect(ctx.computeBridge.setTableStyle).toHaveBeenCalledWith('Table1', 'TableStyleMedium2');
+      expect(ctx.computeBridge.setTableStyle).toHaveBeenCalledWith(
+        'Table1',
+        'TableStyleMedium2',
+        expectVersionOperationOptions('tables.setStylePreset', ['tables']),
+      );
     });
 
     it('setShowTotals delegates to computeBridge.toggleTotalsRow when state differs', async () => {
       await ws.tables.setShowTotals('Table1', true);
 
-      expect(ctx.computeBridge.toggleTotalsRow).toHaveBeenCalledWith('Table1');
+      expect(ctx.computeBridge.toggleTotalsRow).toHaveBeenCalledWith(
+        'Table1',
+        expectVersionOperationOptions('tables.setShowTotals', ['tables']),
+      );
     });
 
     it('setShowHeaders delegates to computeBridge.toggleHeaderRow when state differs', async () => {
       await ws.tables.setShowHeaders('Table1', false);
 
-      expect(ctx.computeBridge.toggleHeaderRow).toHaveBeenCalledWith('Table1');
+      expect(ctx.computeBridge.toggleHeaderRow).toHaveBeenCalledWith(
+        'Table1',
+        expectVersionOperationOptions('tables.setShowHeaders', ['tables']),
+      );
     });
 
     it('applyAutoExpansion delegates to computeBridge.applyAutoExpansion', async () => {
@@ -1112,13 +1136,24 @@ describe('WorksheetImpl Extended Methods', () => {
 
       await ws.tables.applyAutoExpansion('Table1');
 
-      expect(ctx.computeBridge.applyAutoExpansion).toHaveBeenCalledWith(SHEET_ID, 'Table1');
+      expect(ctx.computeBridge.applyAutoExpansion).toHaveBeenCalledWith(
+        SHEET_ID,
+        'Table1',
+        expectVersionOperationOptions('tables.applyAutoExpansion', ['tables']),
+      );
     });
 
     it('resizeTable delegates to computeBridge.resizeTable', async () => {
       await ws.tables.resize('Table1', 'A1:E20');
 
-      expect(ctx.computeBridge.resizeTable).toHaveBeenCalledWith('Table1', 0, 0, 19, 4);
+      expect(ctx.computeBridge.resizeTable).toHaveBeenCalledWith(
+        'Table1',
+        0,
+        0,
+        19,
+        4,
+        expectVersionOperationOptions('tables.resize', ['tables']),
+      );
     });
 
     it('addTableColumn inserts a worksheet column and normalizes the table range', async () => {
@@ -1128,8 +1163,20 @@ describe('WorksheetImpl Extended Methods', () => {
       expect(ctx.computeBridge.structureChange).toHaveBeenCalledWith(SHEET_ID, {
         InsertCols: { at: 2, count: 1, new_col_ids: [] },
       });
-      expect(ctx.computeBridge.addTableColumn).toHaveBeenCalledWith('Table1', 'NewCol', 2);
-      expect(ctx.computeBridge.resizeTable).toHaveBeenCalledWith('Table1', 0, 0, 9, 4);
+      expect(ctx.computeBridge.addTableColumn).toHaveBeenCalledWith(
+        'Table1',
+        'NewCol',
+        2,
+        expectVersionOperationOptions('tables.addColumn', ['tables']),
+      );
+      expect(ctx.computeBridge.resizeTable).toHaveBeenCalledWith(
+        'Table1',
+        0,
+        0,
+        9,
+        4,
+        expectVersionOperationOptions('tables.addColumn', ['tables']),
+      );
       expect(ctx.computeBridge.endUndoGroup).toHaveBeenCalledTimes(1);
     });
 
@@ -1139,8 +1186,20 @@ describe('WorksheetImpl Extended Methods', () => {
       expect(ctx.computeBridge.structureChange).toHaveBeenCalledWith(SHEET_ID, {
         InsertCols: { at: 3, count: 1, new_col_ids: [] },
       });
-      expect(ctx.computeBridge.addTableColumn).toHaveBeenCalledWith('Table1', 'NewCol', 3);
-      expect(ctx.computeBridge.resizeTable).toHaveBeenCalledWith('Table1', 0, 0, 9, 4);
+      expect(ctx.computeBridge.addTableColumn).toHaveBeenCalledWith(
+        'Table1',
+        'NewCol',
+        3,
+        expectVersionOperationOptions('tables.addColumn', ['tables']),
+      );
+      expect(ctx.computeBridge.resizeTable).toHaveBeenCalledWith(
+        'Table1',
+        0,
+        0,
+        9,
+        4,
+        expectVersionOperationOptions('tables.addColumn', ['tables']),
+      );
     });
 
     it('removeTableColumn deletes the worksheet column and normalizes the table range', async () => {
@@ -1150,8 +1209,19 @@ describe('WorksheetImpl Extended Methods', () => {
       expect(ctx.computeBridge.structureChange).toHaveBeenCalledWith(SHEET_ID, {
         DeleteCols: { at: 2, count: 1, deleted_cell_ids: [] },
       });
-      expect(ctx.computeBridge.removeTableColumn).toHaveBeenCalledWith('Table1', 2);
-      expect(ctx.computeBridge.resizeTable).toHaveBeenCalledWith('Table1', 0, 0, 9, 2);
+      expect(ctx.computeBridge.removeTableColumn).toHaveBeenCalledWith(
+        'Table1',
+        2,
+        expectVersionOperationOptions('tables.removeColumn', ['tables']),
+      );
+      expect(ctx.computeBridge.resizeTable).toHaveBeenCalledWith(
+        'Table1',
+        0,
+        0,
+        9,
+        2,
+        expectVersionOperationOptions('tables.removeColumn', ['tables']),
+      );
       expect(ctx.computeBridge.endUndoGroup).toHaveBeenCalledTimes(1);
     });
   });

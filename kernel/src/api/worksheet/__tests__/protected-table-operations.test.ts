@@ -155,6 +155,21 @@ function expectProtected(error: unknown, operation: string) {
   expect(typeof err.context.reason).toBe('string');
 }
 
+function expectTableMutationOptions(operationIdPrefix: string) {
+  return expect.objectContaining({
+    operationContext: expect.objectContaining({
+      operationId: expect.stringMatching(
+        new RegExp(`^${operationIdPrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}:`),
+      ),
+      kind: 'mutation',
+      sheetIds: [SHEET_ID],
+      domainIds: ['tables'],
+      capturePolicy: 'commitEligible',
+      writeAdmissionMode: 'capture',
+    }),
+  });
+}
+
 describe('protected sheet table operation policy', () => {
   it('blocks structural table definition mutations before bridge writes', async () => {
     const ctx = createCtx();
@@ -180,7 +195,12 @@ describe('protected sheet table operation policy', () => {
 
     await tables.renameColumn('Sales', 1, 'Rep Name');
 
-    expect(ctx.computeBridge.renameTableColumn).toHaveBeenCalledWith('Sales', 1, 'Rep Name');
+    expect(ctx.computeBridge.renameTableColumn).toHaveBeenCalledWith(
+      'Sales',
+      1,
+      'Rep Name',
+      expectTableMutationOptions('tables.renameColumn'),
+    );
     expect(ctx.eventBus.emit).toHaveBeenCalledWith(
       expect.objectContaining({
         type: 'table:updated',
@@ -202,6 +222,7 @@ describe('protected sheet table operation policy', () => {
     expect(allowedCtx.computeBridge.setTableStyle).toHaveBeenCalledWith(
       'Sales',
       'TableStyleLight1',
+      expectTableMutationOptions('tables.setStylePreset'),
     );
   });
 

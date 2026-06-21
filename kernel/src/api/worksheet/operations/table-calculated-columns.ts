@@ -13,9 +13,11 @@ import { operationFailed } from './shared';
 import { toCellInput } from './cell-input';
 import * as FillOps from './fill-operations';
 import {
+  createGroupedTableMutationOptions,
   getDataBodyRangeFromInfo,
   getTableByName,
   getTableColumnDataCellsFromInfo,
+  type TableMutationOptions,
 } from './table-operations';
 
 type TableCalculatedColumnAction = 'set' | 'clear';
@@ -306,6 +308,16 @@ function tableCalculatedColumnDiagnostic(params: {
   };
 }
 
+function undoGroupBridge(ctx: DocumentContext): {
+  beginUndoGroup(admissionOptions?: TableMutationOptions): Promise<unknown>;
+  endUndoGroup(admissionOptions?: TableMutationOptions): Promise<unknown>;
+} {
+  return ctx.computeBridge as unknown as {
+    beginUndoGroup(admissionOptions?: TableMutationOptions): Promise<unknown>;
+    endUndoGroup(admissionOptions?: TableMutationOptions): Promise<unknown>;
+  };
+}
+
 export async function applySetCalculatedColumnWithReceipt(
   ctx: DocumentContext,
   sheetId: SheetId,
@@ -338,22 +350,29 @@ export async function applySetCalculatedColumnWithReceipt(
   let autofillReceipt: AutoFillApplyReceipt | undefined;
   let undoGroupStarted = false;
   let stage = 'beginUndoGroup';
+  const nextOptions = createGroupedTableMutationOptions(
+    ctx,
+    'tables.setCalculatedColumn',
+    sheetId,
+  );
 
   try {
-    await ctx.computeBridge.beginUndoGroup();
+    await undoGroupBridge(ctx).beginUndoGroup(nextOptions());
     undoGroupStarted = true;
 
     stage = 'updateMetadata';
-    await ctx.computeBridge.updateCalculatedColumn(tableName, columnIndex, formula);
+    await ctx.computeBridge.updateCalculatedColumn(tableName, columnIndex, formula, nextOptions());
     metadataChanged = true;
 
     if (sortedCells.length > 0) {
       const sourceCell = sortedCells[0]!;
       directCellWriteRange = a1RangeForCells([sourceCell]);
       stage = 'writeSeedCell';
-      await ctx.computeBridge.setCellsByPosition(sheetId, [
-        { row: sourceCell.row, col: sourceCell.col, input: toCellInput(formula) },
-      ]);
+      await ctx.computeBridge.setCellsByPosition(
+        sheetId,
+        [{ row: sourceCell.row, col: sourceCell.col, input: toCellInput(formula) }],
+        nextOptions(),
+      );
       directCellWriteCount = 1;
 
       if (sortedCells.length > 1) {
@@ -382,11 +401,11 @@ export async function applySetCalculatedColumnWithReceipt(
     }
 
     stage = 'endUndoGroup';
-    await ctx.computeBridge.endUndoGroup();
+    await undoGroupBridge(ctx).endUndoGroup(nextOptions());
   } catch (error) {
     if (undoGroupStarted && stage !== 'endUndoGroup') {
       try {
-        await ctx.computeBridge.endUndoGroup();
+        await undoGroupBridge(ctx).endUndoGroup(nextOptions());
       } catch {
         // Preserve the original mutation failure in the receipt diagnostic.
       }
@@ -461,15 +480,20 @@ export async function applyClearCalculatedColumnWithReceipt(
   let directCellWriteCount = 0;
   const directCellWriteRange = a1RangeForCells(sortedCells);
   let stage = 'removeMetadata';
+  const nextOptions = createGroupedTableMutationOptions(
+    ctx,
+    'tables.clearCalculatedColumn',
+    sheetId,
+  );
 
   try {
-    await ctx.computeBridge.removeCalculatedColumn(tableName, columnIndex);
+    await ctx.computeBridge.removeCalculatedColumn(tableName, columnIndex, nextOptions());
     metadataChanged = true;
 
     if (sortedCells.length > 0) {
       stage = 'clearCells';
       const edits = sortedCells.map(({ row, col }) => ({ row, col, input: toCellInput(null) }));
-      await ctx.computeBridge.setCellsByPosition(sheetId, edits);
+      await ctx.computeBridge.setCellsByPosition(sheetId, edits, nextOptions());
       directCellWriteCount = edits.length;
     }
   } catch (error) {

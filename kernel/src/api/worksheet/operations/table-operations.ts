@@ -26,8 +26,11 @@ import type {
   TableUpdateReceipt,
 } from '@mog-sdk/contracts/api';
 import type { CellRange, SheetId } from '@mog-sdk/contracts/core';
+import type { VersionOperationContext } from '@mog-sdk/contracts/versioning';
+import type { MutationAdmissionOptions } from '../../../bridges/compute';
 import type { Table, TableHitRegion } from '../../../bridges/compute/compute-types.gen';
 import type { TableDef } from '../../../bridges/compute/compute-wire-types';
+import { createVersionOperationContext } from '../../internal/version-operation-context';
 import { colToLetter, letterToCol } from '../../internal/utils';
 import type { DocumentContext, OperationResult } from './shared';
 import { invalidRange, wrapOp } from './shared';
@@ -42,6 +45,54 @@ export type { TableInfo } from '@mog-sdk/contracts/api';
 // =============================================================================
 // Helpers
 // =============================================================================
+
+export type TableMutationOptions = MutationAdmissionOptions & {
+  readonly operationContext: VersionOperationContext;
+};
+
+const TABLE_MUTATION_DOMAIN_IDS = ['tables'] as const;
+
+export function createTableMutationOptions(
+  ctx: DocumentContext,
+  operationIdPrefix: string,
+  sheetId?: SheetId,
+  groupId?: string,
+): TableMutationOptions {
+  return {
+    operationContext: createVersionOperationContext(ctx, {
+      operationIdPrefix,
+      ...(sheetId !== undefined ? { sheetIds: [sheetId] } : {}),
+      domainIds: TABLE_MUTATION_DOMAIN_IDS,
+      ...(groupId ? { groupId } : {}),
+    }),
+  };
+}
+
+export function createGroupedTableMutationOptions(
+  ctx: DocumentContext,
+  operationIdPrefix: string,
+  sheetId?: SheetId,
+): () => TableMutationOptions {
+  let nextOptions = ensureTableMutationGroup(
+    createTableMutationOptions(ctx, operationIdPrefix, sheetId),
+  );
+  const groupId = nextOptions.operationContext.groupId;
+  return () => {
+    const options = nextOptions;
+    nextOptions = createTableMutationOptions(ctx, operationIdPrefix, sheetId, groupId);
+    return options;
+  };
+}
+
+function ensureTableMutationGroup(options: TableMutationOptions): TableMutationOptions {
+  const groupId = options.operationContext.groupId ?? options.operationContext.operationId;
+  return {
+    operationContext: {
+      ...options.operationContext,
+      groupId,
+    },
+  };
+}
 
 /**
  * Parse an A1 range string (e.g., "A1:D10") into numeric bounds (0-based).
@@ -633,9 +684,13 @@ export async function getTableHitRegion(
 export async function removeTable(
   ctx: DocumentContext,
   tableName: string,
+  admissionOptions?: MutationAdmissionOptions,
 ): Promise<OperationResult<void>> {
   return wrapOp('removeTable', async () => {
-    await ctx.computeBridge.deleteTable(tableName);
+    await ctx.computeBridge.deleteTable(
+      tableName,
+      admissionOptions ?? createTableMutationOptions(ctx, 'tables.remove'),
+    );
   });
 }
 
@@ -651,6 +706,7 @@ export async function resizeTable(
   ctx: DocumentContext,
   tableName: string,
   bounds: Pick<CellRange, 'startRow' | 'startCol' | 'endRow' | 'endCol'>,
+  admissionOptions?: MutationAdmissionOptions,
 ): Promise<OperationResult<void>> {
   const { startRow, startCol, endRow, endCol } = bounds;
   if (startRow < 0 || startCol < 0 || endRow < startRow || endCol < startCol) {
@@ -661,7 +717,14 @@ export async function resizeTable(
   }
 
   return wrapOp('resizeTable', async () => {
-    await ctx.computeBridge.resizeTable(tableName, startRow, startCol, endRow, endCol);
+    await ctx.computeBridge.resizeTable(
+      tableName,
+      startRow,
+      startCol,
+      endRow,
+      endCol,
+      admissionOptions ?? createTableMutationOptions(ctx, 'tables.resize'),
+    );
   });
 }
 
@@ -677,11 +740,13 @@ export async function setTableStyle(
   ctx: DocumentContext,
   tableName: string,
   styleName: string,
+  admissionOptions?: MutationAdmissionOptions,
 ): Promise<OperationResult<void>> {
   return wrapOp('setTableStyle', async () => {
     await ctx.computeBridge.setTableStyle(
       tableName,
       tableStyleIdForCompute(styleName) ?? styleName,
+      admissionOptions ?? createTableMutationOptions(ctx, 'tables.setStylePreset'),
     );
   });
 }
@@ -698,9 +763,14 @@ export async function renameTable(
   ctx: DocumentContext,
   oldName: string,
   newName: string,
+  admissionOptions?: MutationAdmissionOptions,
 ): Promise<OperationResult<void>> {
   return wrapOp('renameTable', async () => {
-    await ctx.computeBridge.renameTable(oldName, newName);
+    await ctx.computeBridge.renameTable(
+      oldName,
+      newName,
+      admissionOptions ?? createTableMutationOptions(ctx, 'tables.rename'),
+    );
   });
 }
 
@@ -718,9 +788,15 @@ export async function addTableColumn(
   tableName: string,
   columnName: string,
   position: number,
+  admissionOptions?: MutationAdmissionOptions,
 ): Promise<OperationResult<void>> {
   return wrapOp('addTableColumn', async () => {
-    await ctx.computeBridge.addTableColumn(tableName, columnName, position);
+    await ctx.computeBridge.addTableColumn(
+      tableName,
+      columnName,
+      position,
+      admissionOptions ?? createTableMutationOptions(ctx, 'tables.addColumn'),
+    );
   });
 }
 
@@ -736,9 +812,14 @@ export async function removeTableColumn(
   ctx: DocumentContext,
   tableName: string,
   columnIndex: number,
+  admissionOptions?: MutationAdmissionOptions,
 ): Promise<OperationResult<void>> {
   return wrapOp('removeTableColumn', async () => {
-    await ctx.computeBridge.removeTableColumn(tableName, columnIndex);
+    await ctx.computeBridge.removeTableColumn(
+      tableName,
+      columnIndex,
+      admissionOptions ?? createTableMutationOptions(ctx, 'tables.removeColumn'),
+    );
   });
 }
 
@@ -754,6 +835,7 @@ export async function createTable(
   ctx: DocumentContext,
   sheetId: SheetId,
   table: TableDef,
+  admissionOptions?: MutationAdmissionOptions,
 ): Promise<OperationResult<void>> {
   return wrapOp('createTable', async () => {
     await ctx.computeBridge.createTable(
@@ -765,6 +847,7 @@ export async function createTable(
       table.end_col,
       table.columns,
       table.has_headers,
+      admissionOptions ?? createTableMutationOptions(ctx, 'tables.add', sheetId),
     );
   });
 }
@@ -776,9 +859,13 @@ export async function createTable(
 export async function toggleTotalsRow(
   ctx: DocumentContext,
   tableName: string,
+  admissionOptions?: MutationAdmissionOptions,
 ): Promise<OperationResult<void>> {
   return wrapOp('toggleTotalsRow', async () => {
-    await ctx.computeBridge.toggleTotalsRow(tableName);
+    await ctx.computeBridge.toggleTotalsRow(
+      tableName,
+      admissionOptions ?? createTableMutationOptions(ctx, 'tables.setShowTotals'),
+    );
   });
 }
 
@@ -789,9 +876,13 @@ export async function toggleTotalsRow(
 export async function toggleHeaderRow(
   ctx: DocumentContext,
   tableName: string,
+  admissionOptions?: MutationAdmissionOptions,
 ): Promise<OperationResult<void>> {
   return wrapOp('toggleHeaderRow', async () => {
-    await ctx.computeBridge.toggleHeaderRow(tableName);
+    await ctx.computeBridge.toggleHeaderRow(
+      tableName,
+      admissionOptions ?? createTableMutationOptions(ctx, 'tables.setShowHeaders'),
+    );
   });
 }
 

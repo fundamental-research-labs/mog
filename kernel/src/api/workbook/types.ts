@@ -13,6 +13,7 @@ import type { IEventBus } from '@mog-sdk/contracts/events';
 import type { IKernelContext } from '@mog-sdk/contracts/kernel';
 import type { WorkbookStateProvider } from '@mog-sdk/contracts/api';
 import type { CodeExecutionOptions, CodeExecutionResult, SheetId } from '@mog-sdk/contracts/core';
+import type { DomainSupportManifest } from '@mog-sdk/contracts/versioning';
 import type {
   DocumentImportOptions,
   DocumentImportWarning,
@@ -31,6 +32,9 @@ import type { CheckoutSnapshotMaterializer } from '../../document/version-store/
 import type { SnapshotRootByteSyncPort } from '../../document/version-store/snapshot-root-capture';
 import type { VersionStoreProvider } from '../../document/version-store/provider';
 import type { DocumentWorkbookVersioningLifecycleConfig } from '../../document/version-store/lifecycle';
+import type {
+  DomainSupportManifestValidationOptions,
+} from '../../document/version-store/domain-support-manifest-validator';
 import type { HandleLiveness } from '../lifecycle/handle-liveness';
 
 // =============================================================================
@@ -49,6 +53,8 @@ export type CodeExecutorFactory = (config: {
   getActiveSheetId: () => SheetId;
 }) => CodeExecutorType;
 
+type MaybePromise<T> = T | Promise<T>;
+
 export interface WorkbookVersioningConfig {
   readonly provider?: VersionStoreProvider;
   readonly writeService?: Pick<
@@ -60,6 +66,12 @@ export interface WorkbookVersioningConfig {
   readonly captureMergeCommit?: VersionMergeCommitCapture;
   readonly snapshotRootByteSyncPort?: SnapshotRootByteSyncPort;
   readonly checkoutSnapshotMaterializer?: CheckoutSnapshotMaterializer;
+  readonly domainSupportManifest?: DomainSupportManifest | null;
+  readonly readDomainSupportManifest?: () => MaybePromise<
+    DomainSupportManifest | null | undefined
+  >;
+  readonly domainSupportManifestOptions?: DomainSupportManifestValidationOptions;
+  readonly requireDomainSupportManifest?: boolean;
 }
 
 // =============================================================================

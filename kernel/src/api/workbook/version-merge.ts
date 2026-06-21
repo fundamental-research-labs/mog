@@ -30,6 +30,7 @@ import {
   getVersionMergeCapabilityDecision,
   versionMergeCapabilityDisabledDiagnostic,
 } from './version-merge-capability';
+import { validateVersionDomainSupportManifestGate } from './version-domain-support-gate';
 
 const WORKBOOK_COMMIT_ID_RE = /^commit:sha256:[0-9a-f]{64}$/;
 const VERSION_MERGE_INPUT_KEYS = new Set(['base', 'ours', 'theirs']);
@@ -108,6 +109,16 @@ export async function mergeWorkbookVersion(
   const validated = validateMergeRequest(input, options);
   if (!validated.ok) {
     return blockedMergeResult(validated.base, validated.ours, validated.theirs, validated.diagnostics);
+  }
+
+  const gateDiagnostics = await validateVersionDomainSupportManifestGate(ctx, 'merge');
+  if (gateDiagnostics.length > 0) {
+    return blockedMergeResult(
+      validated.input.base,
+      validated.input.ours,
+      validated.input.theirs,
+      gateDiagnostics,
+    );
   }
 
   const services = getAttachedVersionServices(ctx);

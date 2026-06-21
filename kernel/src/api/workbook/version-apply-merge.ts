@@ -32,6 +32,7 @@ import {
   getVersionMergeCapabilityDecision,
   versionMergeCapabilityDisabledDiagnostic,
 } from './version-merge-capability';
+import { validateVersionDomainSupportManifestGate } from './version-domain-support-gate';
 
 const WORKBOOK_COMMIT_ID_RE = /^commit:sha256:[0-9a-f]{64}$/;
 const VERSION_APPLY_MERGE_INPUT_KEYS = new Set(['base', 'ours', 'theirs', 'resolutions']);
@@ -130,6 +131,10 @@ export async function applyMergeWorkbookVersion(
   }
 
   if (isRecord(input) && 'resultId' in input) {
+    const gateDiagnostics = await validateVersionDomainSupportManifestGate(ctx, 'applyMerge');
+    if (gateDiagnostics.length > 0) {
+      return blockedApplyMergeResult(null, null, null, gateDiagnostics);
+    }
     return applyPersistedMergeResult(ctx, input, options);
   }
 
@@ -140,6 +145,16 @@ export async function applyMergeWorkbookVersion(
       validated.ours,
       validated.theirs,
       validated.diagnostics,
+    );
+  }
+
+  const gateDiagnostics = await validateVersionDomainSupportManifestGate(ctx, 'applyMerge');
+  if (gateDiagnostics.length > 0) {
+    return blockedApplyMergeResult(
+      validated.mergeInput.base,
+      validated.mergeInput.ours,
+      validated.mergeInput.theirs,
+      gateDiagnostics,
     );
   }
 

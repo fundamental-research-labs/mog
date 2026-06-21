@@ -23,6 +23,7 @@ import {
   REF_NAME_STORAGE_PREFIX,
   validateRefName,
 } from '../../document/version-store/ref-name';
+import { validateVersionDomainSupportManifestGate } from './version-domain-support-gate';
 
 const VERSION_HEAD_REF = 'HEAD';
 const VERSION_MAIN_REF = 'refs/heads/main' satisfies VersionMainRefName;
@@ -97,6 +98,11 @@ export async function checkoutWorkbookVersion(
   const parsed = validateCheckoutTarget(target);
   if (!parsed.ok) {
     return degradedCheckout(parsed.diagnostics);
+  }
+
+  const gateDiagnostics = await validateVersionDomainSupportManifestGate(ctx, 'checkout');
+  if (gateDiagnostics.length > 0) {
+    return degradedCheckout(gateDiagnostics);
   }
 
   const service = getAttachedCheckoutMaterializationService(ctx);

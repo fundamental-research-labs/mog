@@ -16,6 +16,7 @@ import type {
 
 import type { DocumentContext } from '../../context';
 import { validateRefName } from '../../document/version-store/ref-name';
+import { validateVersionDomainSupportManifestGate } from './version-domain-support-gate';
 import { versionFailureFromStoreDiagnostics } from './version-result';
 
 const VERSION_HEAD_REF = 'HEAD';
@@ -110,6 +111,11 @@ export async function commitWorkbookVersion(
   const validated = validateCommitOptions(options);
   if (!validated.ok) {
     return versionFailureFromStoreDiagnostics('commit', validated.diagnostics);
+  }
+
+  const gateDiagnostics = await validateVersionDomainSupportManifestGate(ctx, 'commit');
+  if (gateDiagnostics.length > 0) {
+    return versionFailureFromStoreDiagnostics('commit', gateDiagnostics);
   }
 
   const writeService = getAttachedVersionWriteService(ctx);

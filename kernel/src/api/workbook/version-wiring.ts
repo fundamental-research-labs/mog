@@ -22,6 +22,7 @@ export function attachWorkbookVersioning(
 ): void {
   const runtime = ctx as MutableVersioningContext;
   const existing = isRecord(runtime.versioning) ? runtime.versioning : {};
+  const domainSupportManifestFields = domainSupportManifestAttachmentFields(config);
   const semanticCapture =
     !config.captureNormalCommit && config.provider && config.snapshotRootByteSyncPort
       ? createSemanticMutationCapture()
@@ -42,7 +43,7 @@ export function attachWorkbookVersioning(
           snapshotRootByteSyncPort: config.snapshotRootByteSyncPort,
         })
       : undefined);
-  if (!writeService) return;
+  if (!writeService && Object.keys(domainSupportManifestFields).length === 0) return;
 
   const diffService =
     existing.diffService ??
@@ -74,8 +75,12 @@ export function attachWorkbookVersioning(
   runtime.versioning = {
     ...existing,
     ...(config.provider ? { provider: config.provider } : {}),
-    writeService,
-    readService: existing.readService ?? writeService,
+    ...(writeService
+      ? {
+          writeService,
+          readService: existing.readService ?? writeService,
+        }
+      : {}),
     ...(semanticCapture ? { mutationCapture: semanticCapture.mutationCapture } : {}),
     ...(captureMergeCommit
       ? {
@@ -89,6 +94,7 @@ export function attachWorkbookVersioning(
     ...(checkoutService ? { checkoutService } : {}),
     ...(mergeService ? { mergeService } : {}),
     ...(branchService ? { branchService } : {}),
+    ...domainSupportManifestFields,
   };
 }
 
@@ -107,4 +113,23 @@ export function attachWorkbookVersionSurfaceStatusService(
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
   return typeof value === 'object' && value !== null;
+}
+
+function domainSupportManifestAttachmentFields(
+  config: WorkbookVersioningConfig,
+): Readonly<Record<string, unknown>> {
+  return {
+    ...(config.domainSupportManifest !== undefined
+      ? { domainSupportManifest: config.domainSupportManifest }
+      : {}),
+    ...(config.readDomainSupportManifest
+      ? { readDomainSupportManifest: config.readDomainSupportManifest }
+      : {}),
+    ...(config.domainSupportManifestOptions
+      ? { domainSupportManifestOptions: config.domainSupportManifestOptions }
+      : {}),
+    ...(config.requireDomainSupportManifest !== undefined
+      ? { requireDomainSupportManifest: config.requireDomainSupportManifest }
+      : {}),
+  };
 }

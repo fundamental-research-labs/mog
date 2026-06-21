@@ -497,6 +497,42 @@ describe('WorkbookVersion applyMerge production materializer', () => {
         mutationGuarantee: 'ref-not-mutated',
       });
 
+      const fastForwardedHead = await expectHead(sourceWb);
+      await sourceWb.activeSheet.setCell('D1', 'after-terminal');
+      const afterTerminalCommit = await expectCommit(
+        sourceWb.version.commit({
+          expectedHead: {
+            commitId: theirsCommit.id,
+            revision: requireRefRevision(fastForwardedHead),
+          },
+        }),
+      );
+      const staleTerminal = await sourceWb.version.applyMerge(
+        {
+          resultId: preview.value.resultId,
+          resultDigest: preview.value.resultDigest,
+        },
+        {
+          targetRef: 'refs/heads/main' as any,
+          expectedTargetHead,
+        },
+      );
+      if (!staleTerminal.ok) {
+        throw new Error(`expected stale terminal applyMerge result: ${staleTerminal.error.code}`);
+      }
+      expect(staleTerminal.value).toMatchObject({
+        status: 'staleTargetHead',
+        ours: oursCommit.id,
+        theirs: theirsCommit.id,
+        resultId: preview.value.resultId,
+        resultDigest: preview.value.resultDigest,
+        targetRef: 'refs/heads/main',
+        headBefore: oursCommit.id,
+        headAfter: afterTerminalCommit.id,
+        changes: [],
+        mutationGuarantee: 'ref-not-mutated',
+      });
+
       const commits = await sourceWb.version.listCommits();
       if (!commits.ok) throw new Error(`expected listCommits success: ${commits.error.code}`);
       expect(commits.value.items).toEqual(
@@ -638,6 +674,41 @@ describe('WorkbookVersion applyMerge production materializer', () => {
       expect(head).toMatchObject({
         id: oursCommit.id,
         refRevision: requireRefRevision(oursHead),
+      });
+
+      await sourceWb.activeSheet.setCell('C1', 'after-already-merged');
+      const afterAlreadyMergedCommit = await expectCommit(
+        sourceWb.version.commit({
+          expectedHead: {
+            commitId: oursCommit.id,
+            revision: requireRefRevision(head),
+          },
+        }),
+      );
+      const staleTerminal = await sourceWb.version.applyMerge(
+        {
+          resultId: preview.value.resultId,
+          resultDigest: preview.value.resultDigest,
+        },
+        {
+          targetRef: 'refs/heads/main' as any,
+          expectedTargetHead,
+        },
+      );
+      if (!staleTerminal.ok) {
+        throw new Error(`expected stale already-merged terminal result: ${staleTerminal.error.code}`);
+      }
+      expect(staleTerminal.value).toMatchObject({
+        status: 'staleTargetHead',
+        ours: oursCommit.id,
+        theirs: baseCommit.id,
+        resultId: preview.value.resultId,
+        resultDigest: preview.value.resultDigest,
+        targetRef: 'refs/heads/main',
+        headBefore: oursCommit.id,
+        headAfter: afterAlreadyMergedCommit.id,
+        changes: [],
+        mutationGuarantee: 'ref-not-mutated',
       });
     } finally {
       if (sourceWb) await sourceWb.close('skipSave');

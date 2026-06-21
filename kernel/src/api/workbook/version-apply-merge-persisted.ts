@@ -133,9 +133,14 @@ export async function applyPersistedMergeResult(
   if (validationDiagnostics.length > 0) {
     return blockedApplyMergeResult(record.base, record.ours, record.theirs, validationDiagnostics);
   }
-  if (record.terminal) return resultFromTerminalIntent(record);
+  if (record.terminal) return resultFromTerminalIntent(opened.provider, record);
   if (record.applyKind === 'alreadyMerged') {
-    return completeAlreadyMergedIntent(opened.store, record, normalizedInput.resultId);
+    return completeAlreadyMergedIntent(
+      opened.provider,
+      opened.store,
+      record,
+      normalizedInput.resultId,
+    );
   }
   if (record.applyKind !== 'fastForward') {
     return blockedApplyMergeResult(record.base, record.ours, record.theirs, [
@@ -270,7 +275,11 @@ function normalizePersistedResolutions(
 async function openPersistedMergeIntentStore(
   ctx: DocumentContext,
 ): Promise<
-  | { readonly ok: true; readonly store: MergeApplyIntentStore }
+  | {
+      readonly ok: true;
+      readonly provider: VersionStoreProvider & MergeApplyIntentStoreProvider;
+      readonly store: MergeApplyIntentStore;
+    }
   | { readonly ok: false; readonly diagnostics: readonly VersionStoreDiagnostic[] }
 > {
   const provider = getAttachedMergeApplyIntentStoreProvider(ctx);
@@ -294,6 +303,7 @@ async function openPersistedMergeIntentStore(
     }
     return {
       ok: true,
+      provider,
       store: await provider.openMergeApplyIntentStore(namespaceForRegistry(registry.registry)),
     };
   } catch {
@@ -341,10 +351,14 @@ function validatePersistedIntentRecord(
 }
 
 async function completeAlreadyMergedIntent(
+  provider: VersionStoreProvider,
   store: MergeApplyIntentStore,
   record: MergeApplyIntentRecord,
   resultId: VersionMergeResultId,
 ): Promise<VersionApplyMergeResult> {
+  const stale = await resultIfTargetMoved(provider, record, resultId, record.ours);
+  if (stale) return stale;
+
   const completed = await store.completeIntent({
     intentId: record.intentId,
     resolvedAttemptDigest: record.resolvedAttemptDigest,
@@ -425,14 +439,23 @@ async function applyPersistedFastForwardIntent(
   }
 }
 
-function resultFromTerminalIntent(record: MergeApplyIntentRecord): VersionApplyMergeResult {
+async function resultFromTerminalIntent(
+  provider: VersionStoreProvider,
+  record: MergeApplyIntentRecord,
+): Promise<VersionApplyMergeResult> {
+  const resultId = publicResultId(record);
   if (record.terminal?.status === 'alreadyMerged') {
-    return alreadyMergedPersistedResult(record, publicResultId(record));
+    const expectedCommitId = record.terminal.commitId ?? record.terminal.headAfter ?? record.ours;
+    const stale = await resultIfTargetMoved(provider, record, resultId, expectedCommitId);
+    if (stale) return stale;
+    return alreadyMergedPersistedResult(record, resultId);
   }
   if (record.terminal?.status === 'fastForwarded' || record.terminal?.status === 'alreadyApplied') {
     const commitId = record.terminal.commitId ?? record.terminal.headAfter ?? record.theirs;
+    const stale = await resultIfTargetMoved(provider, record, resultId, commitId);
+    if (stale) return stale;
     return {
-      ...persistedMetadata(record, publicResultId(record)),
+      ...persistedMetadata(record, resultId),
       status: 'alreadyApplied',
       base: record.base,
       ours: record.ours,
@@ -446,7 +469,7 @@ function resultFromTerminalIntent(record: MergeApplyIntentRecord): VersionApplyM
     };
   }
   return {
-    ...persistedMetadata(record, publicResultId(record)),
+    ...persistedMetadata(record, resultId),
     status: 'staleTargetHead',
     base: record.base,
     ours: record.ours,
@@ -456,6 +479,52 @@ function resultFromTerminalIntent(record: MergeApplyIntentRecord): VersionApplyM
     diagnostics: [],
     mutationGuarantee: 'ref-not-mutated',
   };
+}
+
+async function resultIfTargetMoved(
+  provider: VersionStoreProvider,
+  record: MergeApplyIntentRecord,
+  resultId: VersionMergeResultId,
+  expectedCommitId: WorkbookCommitId,
+): Promise<VersionApplyMergeResult | null> {
+  const current = await readCurrentTargetHead(provider, record);
+  if (!current.ok) {
+    return blockedApplyMergeResult(
+      record.base,
+      record.ours,
+      record.theirs,
+      current.diagnostics,
+      'no-write-attempted',
+    );
+  }
+  if (current.commitId === expectedCommitId) return null;
+  return staleTargetHeadPersistedResult(record, resultId, current.commitId);
+}
+
+async function readCurrentTargetHead(
+  provider: VersionStoreProvider,
+  record: MergeApplyIntentRecord,
+): Promise<
+  | { readonly ok: true; readonly commitId: WorkbookCommitId }
+  | { readonly ok: false; readonly diagnostics: readonly VersionStoreDiagnostic[] }
+> {
+  try {
+    const registry = await provider.readGraphRegistry();
+    if (registry.status !== 'ok') {
+      return { ok: false, diagnostics: mapProviderDiagnostics(registry.diagnostics) };
+    }
+    const graph = await provider.openGraph(namespaceForRegistry(registry.registry), provider.accessContext);
+    const read = await graph.readRef(record.targetRef);
+    if (read.status !== 'success' || !('commitId' in read.ref)) {
+      return {
+        ok: false,
+        diagnostics: mapProviderDiagnostics(read.diagnostics),
+      };
+    }
+    return { ok: true, commitId: read.ref.commitId };
+  } catch {
+    return { ok: false, diagnostics: [providerErrorDiagnostic()] };
+  }
 }
 
 function fastForwardedPersistedResult(
@@ -493,6 +562,25 @@ function alreadyMergedPersistedResult(
     conflicts: [],
     diagnostics: [],
     resolutionCount: 0,
+    mutationGuarantee: 'ref-not-mutated',
+  };
+}
+
+function staleTargetHeadPersistedResult(
+  record: MergeApplyIntentRecord,
+  resultId: VersionMergeResultId,
+  currentHead: WorkbookCommitId,
+): VersionApplyMergeResult {
+  return {
+    ...persistedMetadata(record, resultId),
+    headAfter: currentHead,
+    status: 'staleTargetHead',
+    base: record.base,
+    ours: record.ours,
+    theirs: record.theirs,
+    changes: [],
+    conflicts: [],
+    diagnostics: [],
     mutationGuarantee: 'ref-not-mutated',
   };
 }

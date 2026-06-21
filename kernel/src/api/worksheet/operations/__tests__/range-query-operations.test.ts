@@ -27,6 +27,7 @@ function createMockCtx(): any {
       clearRange: jest.fn().mockResolvedValue(undefined),
       clearFormatForRanges: jest.fn().mockResolvedValue(undefined),
       clearHyperlinksInRange: jest.fn().mockResolvedValue(undefined),
+      replaceAllInRange: jest.fn().mockResolvedValue({ data: 2 }),
     },
   };
 }
@@ -142,5 +143,91 @@ describe('clearWithMode', () => {
     expect(ctx.computeBridge.clearRange).not.toHaveBeenCalled();
     expect(ctx.computeBridge.clearFormatForRanges).not.toHaveBeenCalled();
     expect(ctx.computeBridge.clearHyperlinksInRange).not.toHaveBeenCalled();
+  });
+
+  it('passes mutation admission options to every clear bridge call', async () => {
+    const ctx = createMockCtx();
+    const options = {
+      operationContext: {
+        operationId: 'worksheet.clear:1',
+        kind: 'mutation',
+        author: { authorId: 'user-1', actorKind: 'user' },
+        createdAt: '2026-06-20T00:00:00.000Z',
+        sheetIds: [SHEET_ID],
+        domainIds: ['cells'],
+        capturePolicy: 'commitEligible',
+        writeAdmissionMode: 'capture',
+      },
+    };
+
+    await RangeQueryOps.clearWithMode(ctx, SHEET_ID, RANGE, 'all', options as any);
+
+    expect(ctx.computeBridge.clearRangeByPosition).toHaveBeenCalledWith(
+      SHEET_ID,
+      0,
+      0,
+      1,
+      1,
+      options,
+    );
+    expect(ctx.computeBridge.clearFormatForRanges).toHaveBeenCalledWith(
+      SHEET_ID,
+      [[0, 0, 1, 1]],
+      options,
+    );
+    expect(ctx.computeBridge.clearHyperlinksInRange).toHaveBeenCalledWith(
+      SHEET_ID,
+      0,
+      0,
+      1,
+      1,
+      options,
+    );
+  });
+});
+
+describe('replaceAll', () => {
+  it('passes mutation admission options to replaceAllInRange', async () => {
+    const ctx = createMockCtx();
+    const options = {
+      operationContext: {
+        operationId: 'worksheet.replaceAll:1',
+        kind: 'mutation',
+        author: { authorId: 'user-1', actorKind: 'user' },
+        createdAt: '2026-06-20T00:00:00.000Z',
+        sheetIds: [SHEET_ID],
+        domainIds: ['cells'],
+        capturePolicy: 'commitEligible',
+        writeAdmissionMode: 'capture',
+      },
+    };
+
+    const result = await RangeQueryOps.replaceAll(
+      ctx,
+      SHEET_ID,
+      RANGE,
+      'old',
+      'new',
+      { caseSensitive: true },
+      options as any,
+    );
+
+    expect(result).toBe(2);
+    expect(ctx.computeBridge.replaceAllInRange).toHaveBeenCalledWith(
+      SHEET_ID,
+      0,
+      0,
+      1,
+      1,
+      'old',
+      'new',
+      {
+        text: 'old',
+        caseSensitive: true,
+        wholeCell: null,
+        includeFormulas: null,
+      },
+      options,
+    );
   });
 });

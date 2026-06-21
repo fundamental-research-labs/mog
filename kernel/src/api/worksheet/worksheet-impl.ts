@@ -1452,13 +1452,24 @@ export class WorksheetImpl implements Worksheet {
     const bounds = resolveRange(a, b, c, d);
     await this.ensureRangeEditable(bounds.startRow, bounds.startCol, bounds.endRow, bounds.endCol);
     this._invalidateActiveCellEditSourceForRange(bounds);
-    return RangeOps.clearRange(this.ctx, this.sheetId, {
-      sheetId: this.sheetId,
-      startRow: bounds.startRow,
-      startCol: bounds.startCol,
-      endRow: bounds.endRow,
-      endCol: bounds.endCol,
-    });
+    return RangeOps.clearRange(
+      this.ctx,
+      this.sheetId,
+      {
+        sheetId: this.sheetId,
+        startRow: bounds.startRow,
+        startCol: bounds.startCol,
+        endRow: bounds.endRow,
+        endCol: bounds.endCol,
+      },
+      {
+        operationContext: createVersionOperationContext(this.ctx, {
+          operationIdPrefix: 'worksheet.clearData',
+          sheetIds: [this.sheetId],
+          domainIds: ['cells'],
+        }),
+      },
+    );
   }
 
   async clear(range: string | CellRange, applyTo?: ClearApplyTo): Promise<ClearResult> {
@@ -1480,6 +1491,13 @@ export class WorksheetImpl implements Worksheet {
       this.sheetId,
       { sheetId: this.sheetId, ...bounds },
       clearMode,
+      {
+        operationContext: createVersionOperationContext(this.ctx, {
+          operationIdPrefix: 'worksheet.clear',
+          sheetIds: [this.sheetId],
+          domainIds: ['cells'],
+        }),
+      },
     );
   }
 
@@ -2088,6 +2106,13 @@ export class WorksheetImpl implements Worksheet {
         caseSensitive: options?.matchCase,
         wholeCell: options?.entireCell,
         includeFormulas: options?.searchFormulas,
+      },
+      {
+        operationContext: createVersionOperationContext(this.ctx, {
+          operationIdPrefix: 'worksheet.replaceAll',
+          sheetIds: [this.sheetId],
+          domainIds: ['cells'],
+        }),
       },
     );
   }

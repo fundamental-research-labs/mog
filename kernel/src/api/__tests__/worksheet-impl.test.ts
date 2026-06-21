@@ -103,6 +103,7 @@ jest.unstable_mockModule('../worksheet/operations/range-query-operations', () =>
     }
     return { cellCount: (endRow - startRow + 1) * (endCol - startCol + 1) };
   }),
+  replaceAll: jest.fn(),
 }));
 jest.unstable_mockModule('../worksheet/operations/format-operations', () => ({
   setFormat: jest.fn(),
@@ -797,13 +798,18 @@ describe('WorksheetImpl', () => {
 
       await ws.clearData('A1:B2');
 
-      expect(RangeOps.clearRange).toHaveBeenCalledWith(ctx, SHEET_ID, {
-        sheetId: SHEET_ID,
-        startRow: 0,
-        startCol: 0,
-        endRow: 1,
-        endCol: 1,
-      });
+      expect(RangeOps.clearRange).toHaveBeenCalledWith(
+        ctx,
+        SHEET_ID,
+        {
+          sheetId: SHEET_ID,
+          startRow: 0,
+          startCol: 0,
+          endRow: 1,
+          endCol: 1,
+        },
+        expectVersionOperationOptions('worksheet.clearData', ['cells']),
+      );
     });
 
     it('clearData(0, 0, 2, 3) uses numeric bounds directly', async () => {
@@ -811,13 +817,18 @@ describe('WorksheetImpl', () => {
 
       await ws.clearData(0, 0, 2, 3);
 
-      expect(RangeOps.clearRange).toHaveBeenCalledWith(ctx, SHEET_ID, {
-        sheetId: SHEET_ID,
-        startRow: 0,
-        startCol: 0,
-        endRow: 2,
-        endCol: 3,
-      });
+      expect(RangeOps.clearRange).toHaveBeenCalledWith(
+        ctx,
+        SHEET_ID,
+        {
+          sheetId: SHEET_ID,
+          startRow: 0,
+          startCol: 0,
+          endRow: 2,
+          endCol: 3,
+        },
+        expectVersionOperationOptions('worksheet.clearData', ['cells']),
+      );
     });
 
     it('clearData throws when clearRange throws', async () => {
@@ -835,6 +846,13 @@ describe('WorksheetImpl', () => {
     it('clear("A1:B2", "contents") resolves A1 range and clears contents', async () => {
       await expect(ws.clear('A1:B2', 'contents')).resolves.toEqual({ cellCount: 4 });
 
+      expect(RangeQueryOps.clearWithMode).toHaveBeenCalledWith(
+        ctx,
+        SHEET_ID,
+        { sheetId: SHEET_ID, startRow: 0, startCol: 0, endRow: 1, endCol: 1 },
+        'contents',
+        expectVersionOperationOptions('worksheet.clear', ['cells']),
+      );
       expect(ctx.computeBridge.clearRange).toHaveBeenCalledWith(SHEET_ID, 0, 0, 1, 1);
       expect(ctx.computeBridge.clearRangeByPosition).not.toHaveBeenCalled();
       expect(ctx.computeBridge.clearFormatForRanges).not.toHaveBeenCalled();
@@ -865,6 +883,26 @@ describe('WorksheetImpl', () => {
       expect(ctx.computeBridge.clearRange).not.toHaveBeenCalled();
       expect(ctx.computeBridge.clearFormatForRanges).not.toHaveBeenCalled();
       expect(ctx.computeBridge.clearHyperlinksInRange).not.toHaveBeenCalled();
+    });
+
+    it('replaceAll delegates with version operation context', async () => {
+      (RangeQueryOps.replaceAll as jest.Mock).mockResolvedValue(2);
+
+      await expect(ws.replaceAll('A1:B2', 'old', 'new', { matchCase: true })).resolves.toBe(2);
+
+      expect(RangeQueryOps.replaceAll).toHaveBeenCalledWith(
+        ctx,
+        SHEET_ID,
+        { sheetId: SHEET_ID, startRow: 0, startCol: 0, endRow: 1, endCol: 1 },
+        'old',
+        'new',
+        {
+          caseSensitive: true,
+          wholeCell: undefined,
+          includeFormulas: undefined,
+        },
+        expectVersionOperationOptions('worksheet.replaceAll', ['cells']),
+      );
     });
 
     it('getRawCellData("A1") delegates to CellOps and returns raw data', async () => {

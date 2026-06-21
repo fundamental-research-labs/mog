@@ -343,6 +343,7 @@ export async function clearRange(
   ctx: DocumentContext,
   sheetId: SheetId,
   range: CellRange,
+  options?: MutationAdmissionOptions,
 ): Promise<ClearResult> {
   if (!isValidRange(range)) {
     throw invalidRange(range.startRow, range.startCol, range.endRow, range.endCol);
@@ -351,13 +352,24 @@ export async function clearRange(
   const normalized = normalizeRange(range);
 
   await ctx.awaitMaterialized?.('allSheets');
-  await ctx.computeBridge.clearRangeByPosition(
-    sheetId,
-    normalized.startRow,
-    normalized.startCol,
-    normalized.endRow,
-    normalized.endCol,
-  );
+  if (options) {
+    await ctx.computeBridge.clearRangeByPosition(
+      sheetId,
+      normalized.startRow,
+      normalized.startCol,
+      normalized.endRow,
+      normalized.endCol,
+      options,
+    );
+  } else {
+    await ctx.computeBridge.clearRangeByPosition(
+      sheetId,
+      normalized.startRow,
+      normalized.startCol,
+      normalized.endRow,
+      normalized.endCol,
+    );
+  }
 
   const cellCount =
     (normalized.endRow - normalized.startRow + 1) * (normalized.endCol - normalized.startCol + 1);

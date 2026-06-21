@@ -152,6 +152,14 @@ describe('WorksheetImpl.clearOrResetContents', () => {
         endCol: 2,
       }),
       'contents',
+      expect.objectContaining({
+        operationContext: expect.objectContaining({
+          operationId: expect.stringMatching(/^worksheet\.clear:/),
+          domainIds: ['cells'],
+          capturePolicy: 'commitEligible',
+          writeAdmissionMode: 'capture',
+        }),
+      }),
     );
 
     // Should NOT call setCell for resets since there are no controls
@@ -184,6 +192,14 @@ describe('WorksheetImpl.clearOrResetContents', () => {
       SHEET_ID,
       expect.objectContaining({ startRow: 0, startCol: 0, endRow: 2, endCol: 2 }),
       'contents',
+      expect.objectContaining({
+        operationContext: expect.objectContaining({
+          operationId: expect.stringMatching(/^worksheet\.clear:/),
+          domainIds: ['cells'],
+          capturePolicy: 'commitEligible',
+          writeAdmissionMode: 'capture',
+        }),
+      }),
     );
 
     // Should reset checkbox cell to false

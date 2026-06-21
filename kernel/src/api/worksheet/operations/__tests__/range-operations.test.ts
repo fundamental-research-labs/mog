@@ -56,6 +56,38 @@ describe('clearRange', () => {
     expect(ctx.order).toEqual(['await:allSheets', 'clearRangeByPosition']);
   });
 
+  it('passes mutation admission options to clearRangeByPosition', async () => {
+    const ctx = createMockCtx();
+    const options = {
+      operationContext: {
+        operationId: 'worksheet.clearData:1',
+        kind: 'mutation',
+        author: { authorId: 'user-1', actorKind: 'user' },
+        createdAt: '2026-06-20T00:00:00.000Z',
+        sheetIds: [SHEET_ID],
+        domainIds: ['cells'],
+        capturePolicy: 'commitEligible',
+        writeAdmissionMode: 'capture',
+      },
+    };
+
+    await RangeOps.clearRange(
+      ctx,
+      SHEET_ID,
+      { sheetId: SHEET_ID, startRow: 0, startCol: 0, endRow: 1, endCol: 1 },
+      options as any,
+    );
+
+    expect(ctx.computeBridge.clearRangeByPosition).toHaveBeenCalledWith(
+      SHEET_ID,
+      0,
+      0,
+      1,
+      1,
+      options,
+    );
+  });
+
   it('throws on swapped range bounds (startRow > endRow)', async () => {
     const ctx = createMockCtx();
     await expect(

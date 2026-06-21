@@ -216,3 +216,21 @@ export {
   type WorkbookSnapshotRootRecord,
   type YrsFullStateSnapshotRootPayload,
 } from './document/version-store/snapshot-root-capture';
+
+export {
+  SnapshotRootReloadService,
+  createSnapshotRootReloadService,
+  type SnapshotRootCurrentWorkbookMutationGuarantee,
+  type SnapshotRootFreshLifecycleHydrationInput,
+  type SnapshotRootFreshLifecycleHydrationResult,
+  type SnapshotRootFreshLifecycleHydrator,
+  type SnapshotRootFreshLifecycleMutationGuarantee,
+  type SnapshotRootReloadDiagnostic,
+  type SnapshotRootReloadDiagnosticCode,
+  type SnapshotRootReloadError,
+  type SnapshotRootReloadErrorCode,
+  type SnapshotRootReloadInput,
+  type SnapshotRootReloadResult,
+  type SnapshotRootReloadServiceOptions,
+  type SnapshotRootReloadSourceKind,
+} from './document/version-store/snapshot-root-reload-service';

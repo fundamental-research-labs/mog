@@ -30,7 +30,7 @@ const VERSION_AUTHOR: VersionAuthor = {
 };
 
 describe('WorkbookVersion checkout lifecycle materialization', () => {
-  it('publishes a real snapshot-root checkout into the active workbook facade', async () => {
+  it('publishes a real snapshot-root checkout into a clean active workbook facade', async () => {
     const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
     const initialized = await provider.initializeGraph(await initializeInput('graph-1', 'root'));
     expectInitializeSuccess(initialized);
@@ -58,9 +58,7 @@ describe('WorkbookVersion checkout lifecycle materialization', () => {
           symbolicHeadRevision: initialized.symbolicHead.revision,
         },
       });
-
-      await wb.activeSheet.setCell('A1', 99);
-      await wb.activeSheet.setCell('A2', '=A1+1');
+      wb.markClean();
 
       const result = await wb.version.checkout({ kind: 'commit', id: committed.id });
 
@@ -76,6 +74,61 @@ describe('WorkbookVersion checkout lifecycle materialization', () => {
       });
       await expect(wb.activeSheet.getCell('A1')).resolves.toMatchObject({ value: 7 });
       await expect(wb.activeSheet.getCell('A2')).resolves.toMatchObject({ value: 42 });
+    } finally {
+      if (wb) await wb.close('skipSave');
+      await handle.dispose();
+    }
+  });
+
+  it('rejects dirty post-commit checkout without discarding workbook edits', async () => {
+    const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
+    const initialized = await provider.initializeGraph(await initializeInput('graph-1', 'root'));
+    expectInitializeSuccess(initialized);
+    const handle = await DocumentFactory.create({
+      documentId: DOCUMENT_SCOPE.documentId,
+      environment: 'headless',
+      userTimezone: 'UTC',
+    });
+    let wb: Workbook | undefined;
+
+    try {
+      wb = await handle.workbook({
+        versioning: {
+          provider,
+          captureNormalCommit: createNormalCommitCapture('checkpoint'),
+        },
+      });
+
+      await wb.activeSheet.setCell('A1', 7);
+      await wb.activeSheet.setCell('A2', '=A1*6');
+      const committed = await wb.version.commit({
+        expectedHead: {
+          commitId: initialized.rootCommit.id,
+          revision: initialized.initialHead.revision,
+          symbolicHeadRevision: initialized.symbolicHead.revision,
+        },
+      });
+      wb.markClean();
+
+      await wb.activeSheet.setCell('A1', 99);
+      await wb.activeSheet.setCell('A2', '=A1+1');
+
+      const result = await wb.version.checkout({ kind: 'commit', id: committed.id });
+
+      expect(result).toMatchObject({
+        status: 'degraded',
+        materialization: 'not-applied',
+        mutationGuarantee: 'no-workbook-mutation',
+        diagnostics: [
+          expect.objectContaining({
+            issueCode: 'VERSION_CHECKOUT_DIRTY_WORKING_STATE',
+            recoverability: 'none',
+            redacted: true,
+          }),
+        ],
+      });
+      await expect(wb.activeSheet.getCell('A1')).resolves.toMatchObject({ value: 99 });
+      await expect(wb.activeSheet.getCell('A2')).resolves.toMatchObject({ value: 100 });
     } finally {
       if (wb) await wb.close('skipSave');
       await handle.dispose();

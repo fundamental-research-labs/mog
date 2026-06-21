@@ -90,6 +90,7 @@ import type { SpreadsheetObjectManager } from '../../floating-objects';
 import { createCheckpointManager } from '../../services/checkpoint';
 import type { ICheckpointManager } from '../../services/checkpoint';
 import type { CheckoutSnapshotApplyInput } from '../../document/version-store/checkout-apply';
+import type { CheckoutMaterializationDiagnostic } from '../../document/version-store/checkout-service';
 import type { SnapshotRootFreshLifecycleMaterialization } from '../document/snapshot-root-lifecycle-hydrator';
 import {
   getFunctionCatalog as getCatalog,
@@ -155,6 +156,13 @@ import type {
 } from '@mog-sdk/contracts/api';
 import { WorkbookHistoryImpl } from './history';
 import { WorkbookVersionImpl } from './version';
+import {
+  checkoutDirtyWorkingStateDiagnostic,
+  checkoutWriteFenceUnavailableDiagnostic,
+  type VersionCheckoutTransactionBeginResult,
+  type VersionCheckoutTransactionGuard,
+  type VersionCheckoutTransactionToken,
+} from './version-checkout';
 import { WorkbookNamesImpl } from './names';
 import { WorkbookNotificationsImpl } from './notifications';
 import { WorkbookPropertiesImpl } from './properties';
@@ -208,6 +216,24 @@ function resolveWorkbookLivenessMetadata(ctx: DocumentContext): {
   };
 }
 
+type WorkbookCheckoutTransactionToken = VersionCheckoutTransactionToken & {
+  readonly id: number;
+  readonly mutationWatermark: number | null;
+};
+
+function checkoutPublishDiagnosticMessage(code: CheckoutMaterializationDiagnostic['code']): string {
+  switch (code) {
+    case 'VERSION_CHECKOUT_DIRTY_WORKING_STATE':
+      return 'Checkout requires a clean workbook before publishing materialized state.';
+    case 'VERSION_CHECKOUT_WRITE_FENCE_STALE':
+      return 'Workbook state changed while checkout materialization was in progress.';
+    case 'VERSION_CHECKOUT_WRITE_FENCE_UNAVAILABLE':
+      return 'Checkout could not acquire a local write fence before publishing materialized state.';
+    default:
+      return 'Checkout materialized state could not be published.';
+  }
+}
+
 export class WorkbookImpl implements WorkbookInternal {
   /**
    * Internal DocumentContext — cast from the public IKernelContext.
@@ -226,6 +252,12 @@ export class WorkbookImpl implements WorkbookInternal {
   private _links?: WorkbookLinks;
   private _diagnostics?: WorkbookDiagnosticsImpl;
   private readonly _checkoutMaterializations = new Set<SnapshotRootFreshLifecycleMaterialization>();
+  private _checkoutTransactionSequence = 0;
+  private _activeCheckoutTransaction: WorkbookCheckoutTransactionToken | null = null;
+  private readonly checkoutTransactionGuard: VersionCheckoutTransactionGuard = {
+    beginCheckoutTransaction: () => this.beginCheckoutTransaction(),
+    endCheckoutTransaction: (token) => this.endCheckoutTransaction(token),
+  };
 
   private get _floatingObjectManager(): SpreadsheetObjectManager {
     return this.ctx.floatingObjectManager as SpreadsheetObjectManager;
@@ -368,9 +400,96 @@ export class WorkbookImpl implements WorkbookInternal {
       ...versioning,
       checkoutSnapshotMaterializer: createWorkbookCheckoutSnapshotMaterializer({
         currentContext: () => this.ctx,
+        revalidateCheckoutPublish: (input) => this.revalidateCheckoutPublish(input),
         publishCheckoutMaterialization: (materialization, input) =>
           this.publishCheckoutMaterialization(materialization, input),
       }),
+    };
+  }
+
+  private beginCheckoutTransaction(): VersionCheckoutTransactionBeginResult {
+    if (this._activeCheckoutTransaction) {
+      return {
+        ok: false,
+        diagnostics: [
+          checkoutWriteFenceUnavailableDiagnostic({ reason: 'checkoutAlreadyInProgress' }),
+        ],
+      };
+    }
+    if (this._dirty) {
+      return { ok: false, diagnostics: [checkoutDirtyWorkingStateDiagnostic()] };
+    }
+
+    const mutationWatermark = this.captureCheckoutMutationWatermark();
+    if (mutationWatermark === false) {
+      return {
+        ok: false,
+        diagnostics: [checkoutWriteFenceUnavailableDiagnostic({ reason: 'writeGateRejected' })],
+      };
+    }
+
+    const token = {
+      id: ++this._checkoutTransactionSequence,
+      mutationWatermark,
+    } satisfies WorkbookCheckoutTransactionToken;
+    this._activeCheckoutTransaction = token;
+    return { ok: true, token };
+  }
+
+  private endCheckoutTransaction(token: VersionCheckoutTransactionToken): void {
+    if (this._activeCheckoutTransaction === token) {
+      this._activeCheckoutTransaction = null;
+    }
+  }
+
+  private revalidateCheckoutPublish(
+    input: CheckoutSnapshotApplyInput,
+  ): readonly CheckoutMaterializationDiagnostic[] {
+    const token = this._activeCheckoutTransaction;
+    if (!token) {
+      return [this.checkoutPublishDiagnostic(input, 'VERSION_CHECKOUT_WRITE_FENCE_UNAVAILABLE')];
+    }
+    if (this._dirty) {
+      return [this.checkoutPublishDiagnostic(input, 'VERSION_CHECKOUT_DIRTY_WORKING_STATE')];
+    }
+
+    const mutationWatermark = this.captureCheckoutMutationWatermark();
+    if (mutationWatermark === false) {
+      return [this.checkoutPublishDiagnostic(input, 'VERSION_CHECKOUT_WRITE_FENCE_UNAVAILABLE')];
+    }
+    if (
+      token.mutationWatermark !== null &&
+      mutationWatermark !== null &&
+      mutationWatermark !== token.mutationWatermark
+    ) {
+      return [this.checkoutPublishDiagnostic(input, 'VERSION_CHECKOUT_WRITE_FENCE_STALE')];
+    }
+    return [];
+  }
+
+  private captureCheckoutMutationWatermark(): number | null | false {
+    try {
+      this.ctx.writeGate.assertWritable('workbook.version.checkout');
+    } catch {
+      return false;
+    }
+    const snapshot = this.ctx.writeGate.captureHighWaterMark?.();
+    return typeof snapshot?.mutationWatermark === 'number' ? snapshot.mutationWatermark : null;
+  }
+
+  private checkoutPublishDiagnostic(
+    input: CheckoutSnapshotApplyInput,
+    code:
+      | 'VERSION_CHECKOUT_DIRTY_WORKING_STATE'
+      | 'VERSION_CHECKOUT_WRITE_FENCE_STALE'
+      | 'VERSION_CHECKOUT_WRITE_FENCE_UNAVAILABLE',
+  ): CheckoutMaterializationDiagnostic {
+    return {
+      code,
+      severity: 'error',
+      message: checkoutPublishDiagnosticMessage(code),
+      commitId: input.commitId,
+      details: { cause: code },
     };
   }
 
@@ -1948,7 +2067,9 @@ export class WorkbookImpl implements WorkbookInternal {
 
   private _version?: WorkbookVersionImpl;
   get version(): WorkbookVersion {
-    return (this._version ??= new WorkbookVersionImpl(this.ctx));
+    return (this._version ??= new WorkbookVersionImpl(this.ctx, {
+      checkoutTransactionGuard: this.checkoutTransactionGuard,
+    }));
   }
 
   private _tableStyles?: WorkbookTableStylesImpl;

@@ -114,6 +114,7 @@ export type VersionDiagnosticCode =
   | 'VERSION_CHECKOUT_DEPENDENCY_READ_FAILED'
   | 'VERSION_CHECKOUT_DETACHED_HEAD_UNSUPPORTED'
   | 'VERSION_CHECKOUT_DETACHED_TARGET_UNSUPPORTED'
+  | 'VERSION_CHECKOUT_DIRTY_WORKING_STATE'
   | 'VERSION_CHECKOUT_INVALID_TARGET'
   | 'VERSION_CHECKOUT_MISSING_COMMIT'
   | 'VERSION_CHECKOUT_MISSING_DEPENDENCY'
@@ -125,9 +126,12 @@ export type VersionDiagnosticCode =
   | 'VERSION_CHECKOUT_SNAPSHOT_READ_FAILED'
   | 'VERSION_CHECKOUT_PROVIDER_ERROR'
   | 'VERSION_CHECKOUT_REF_READ_FAILED'
+  | 'VERSION_CHECKOUT_REQUIRE_CLEAN_UNSUPPORTED'
   | 'VERSION_CHECKOUT_SERVICE_UNAVAILABLE'
   | 'VERSION_CHECKOUT_UNMATERIALIZABLE_COMMIT'
   | 'VERSION_CHECKOUT_UNSUPPORTED_TARGET'
+  | 'VERSION_CHECKOUT_WRITE_FENCE_STALE'
+  | 'VERSION_CHECKOUT_WRITE_FENCE_UNAVAILABLE'
   | 'VERSION_INVALID_COMMIT_ID'
   | 'VERSION_INVALID_COMMIT_PAYLOAD'
   | 'VERSION_INVALID_OPTIONS'
@@ -308,6 +312,11 @@ export type VersionCheckoutTarget =
 
 export interface VersionCheckoutOptions {
   readonly includeDiagnostics?: boolean;
+  /**
+   * Defaults to true. Dirty working state cannot be discarded by this checkout
+   * slice; passing false returns a degraded unsupported result.
+   */
+  readonly requireClean?: boolean;
 }
 
 export type VersionCheckoutDependencyRole =

@@ -90,11 +90,19 @@ type Stores = {
 };
 
 function createMockEventBus() {
+  const allHandlers: Array<(event: unknown) => void> = [];
   return {
     on: jest.fn().mockReturnValue(() => undefined),
-    onAll: jest.fn().mockReturnValue(() => undefined),
+    onAll: jest.fn((handler?: unknown) => {
+      if (typeof handler === 'function') {
+        allHandlers.push(handler as (event: unknown) => void);
+      }
+      return () => undefined;
+    }),
     onMany: jest.fn(),
-    emit: jest.fn(),
+    emit: jest.fn((event: unknown) => {
+      allHandlers.forEach((handler) => handler(event));
+    }),
     emitBatch: jest.fn(),
     clear: jest.fn(),
   };
@@ -318,6 +326,74 @@ describe('WorkbookVersion checkout facade', () => {
       diagnostics: [],
     });
     expect(JSON.stringify(result)).not.toContain('digest');
+  });
+
+  it('rejects dirty checkout before calling the attached checkout service', async () => {
+    const eventBus = createMockEventBus();
+    const checkout = jest.fn();
+    const planCheckout = jest.fn();
+    const wb = createWorkbook({
+      eventBus,
+      ctx: createMockCtx({
+        versioning: {
+          checkoutService: { checkout, planCheckout },
+        },
+      }),
+    });
+
+    eventBus.emit({ type: 'test:dirty' });
+    const result = await wb.version.checkout({
+      kind: 'commit',
+      id: `commit:sha256:${'3'.repeat(64)}`,
+    });
+
+    expect(result).toMatchObject({
+      status: 'degraded',
+      materialization: 'not-applied',
+      plan: null,
+      mutationGuarantee: 'no-workbook-mutation',
+      diagnostics: [
+        expect.objectContaining({
+          issueCode: 'VERSION_CHECKOUT_DIRTY_WORKING_STATE',
+          recoverability: 'none',
+          redacted: true,
+        }),
+      ],
+    });
+    expect(checkout).not.toHaveBeenCalled();
+    expect(planCheckout).not.toHaveBeenCalled();
+  });
+
+  it('rejects requireClean:false without invoking checkout services', async () => {
+    const checkout = jest.fn();
+    const planCheckout = jest.fn();
+    const wb = createWorkbook({
+      ctx: createMockCtx({
+        versioning: {
+          checkoutService: { checkout, planCheckout },
+        },
+      }),
+    });
+
+    const result = await wb.version.checkout(
+      { kind: 'commit', id: `commit:sha256:${'4'.repeat(64)}` },
+      { requireClean: false },
+    );
+
+    expect(result).toMatchObject({
+      status: 'degraded',
+      materialization: 'not-applied',
+      mutationGuarantee: 'no-workbook-mutation',
+      diagnostics: [
+        expect.objectContaining({
+          issueCode: 'VERSION_CHECKOUT_REQUIRE_CLEAN_UNSUPPORTED',
+          recoverability: 'unsupported',
+          payload: expect.objectContaining({ option: 'requireClean' }),
+        }),
+      ],
+    });
+    expect(checkout).not.toHaveBeenCalled();
+    expect(planCheckout).not.toHaveBeenCalled();
   });
 
   it('falls back to a public plan when the attached service has no snapshot materializer', async () => {

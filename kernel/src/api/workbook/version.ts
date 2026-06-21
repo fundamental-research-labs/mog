@@ -17,7 +17,7 @@ import { observeMutationAdmission } from '../../bridges/compute/mutation-admissi
 import type { DocumentContext } from '../../context';
 import { VERSION_OBJECT_SCHEMA_VERSION } from '../../document/version-store/object-store';
 import { REF_NAME_STORAGE_PREFIX } from '../../document/version-store/ref-name';
-import { checkoutWorkbookVersion, hasAttachedVersionCheckoutService } from './version-checkout';
+import { checkoutWorkbookVersion, hasAttachedVersionCheckoutService, type VersionCheckoutTransactionGuard } from './version-checkout';
 import { commitWorkbookVersion, hasAttachedVersionWriteService } from './version-commit';
 import { diffWorkbookVersion } from './version-diff';
 import { hasAttachedVersionMergeService, mergeWorkbookVersion } from './version-merge';
@@ -152,7 +152,7 @@ function getRolloutStage(provenanceAdmissionPresent: boolean): WorkbookVersionRo
 }
 
 export class WorkbookVersionImpl implements WorkbookVersion {
-  constructor(private readonly ctx: DocumentContext) {}
+  constructor(private readonly ctx: DocumentContext, private readonly options: { readonly checkoutTransactionGuard?: VersionCheckoutTransactionGuard } = {}) {}
 
   async getStatus(): Promise<WorkbookVersionStatus> {
     const services = getAttachedVersionServices(this.ctx);
@@ -327,7 +327,7 @@ export class WorkbookVersionImpl implements WorkbookVersion {
   }
 
   async checkout(target: VersionCheckoutTarget, options: VersionCheckoutOptions = {}): Promise<VersionCheckoutResult> {
-    return checkoutWorkbookVersion(this.ctx, target, options);
+    return checkoutWorkbookVersion(this.ctx, target, options, this.options.checkoutTransactionGuard);
   }
 
   async merge(input: VersionMergeInput, options: VersionMergeOptions = {}): Promise<VersionMergeResult> {

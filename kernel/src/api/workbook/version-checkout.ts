@@ -27,7 +27,7 @@ import {
 const VERSION_HEAD_REF = 'HEAD';
 const VERSION_MAIN_REF = 'refs/heads/main' satisfies VersionMainRefName;
 const WORKBOOK_COMMIT_ID_RE = /^commit:sha256:[0-9a-f]{64}$/;
-const VERSION_CHECKOUT_OPTION_KEYS = new Set(['includeDiagnostics']);
+const VERSION_CHECKOUT_OPTION_KEYS = new Set(['includeDiagnostics', 'requireClean']);
 const VERSION_CHECKOUT_TARGET_KIND_KEYS = new Set(['kind']);
 const VERSION_CHECKOUT_TARGET_COMMIT_KEYS = new Set(['id', 'kind']);
 const VERSION_CHECKOUT_TARGET_REF_KEYS = new Set(['kind', 'name']);
@@ -43,6 +43,23 @@ type MaybePromise<T> = T | Promise<T>;
 type BoundMethod = (...args: readonly unknown[]) => MaybePromise<unknown>;
 
 type VersionCheckoutOperation = 'checkout';
+
+export type VersionCheckoutTransactionToken = object;
+
+export type VersionCheckoutTransactionBeginResult =
+  | {
+      readonly ok: true;
+      readonly token: VersionCheckoutTransactionToken;
+    }
+  | {
+      readonly ok: false;
+      readonly diagnostics: readonly VersionStoreDiagnostic[];
+    };
+
+export interface VersionCheckoutTransactionGuard {
+  beginCheckoutTransaction(): VersionCheckoutTransactionBeginResult;
+  endCheckoutTransaction(token: VersionCheckoutTransactionToken): void;
+}
 
 type AttachedCheckoutMaterializationService = {
   planCheckout?: (request: CheckoutMaterializationRequest) => MaybePromise<unknown>;
@@ -70,6 +87,7 @@ export async function checkoutWorkbookVersion(
   ctx: DocumentContext,
   target: VersionCheckoutTarget,
   options: VersionCheckoutOptions = {},
+  transactionGuard?: VersionCheckoutTransactionGuard,
 ): Promise<VersionCheckoutResult> {
   const optionDiagnostics = validateCheckoutOptions(options);
   if (optionDiagnostics.length > 0) {
@@ -86,6 +104,12 @@ export async function checkoutWorkbookVersion(
     return degradedCheckout([serviceUnavailableDiagnostic(parsed.payload)]);
   }
 
+  const transaction = transactionGuard?.beginCheckoutTransaction();
+  if (transaction && !transaction.ok) {
+    return degradedCheckout(transaction.diagnostics);
+  }
+  const token = transaction?.token ?? null;
+
   try {
     const planCheckout = service.planCheckout;
     if (service.checkout) {
@@ -100,6 +124,8 @@ export async function checkoutWorkbookVersion(
     return mapCheckoutResult(await planCheckout(parsed.request), parsed.payload);
   } catch {
     return degradedCheckout([providerErrorDiagnostic(parsed.payload)]);
+  } finally {
+    if (token) transactionGuard?.endCheckoutTransaction(token);
   }
 }
 
@@ -181,6 +207,19 @@ function validateCheckoutOptions(
         option: 'includeDiagnostics',
       }),
     );
+  }
+  if (
+    'requireClean' in input &&
+    input.requireClean !== undefined &&
+    typeof input.requireClean !== 'boolean'
+  ) {
+    diagnostics.push(
+      invalidOptionsDiagnostic('requireClean must be a boolean when supplied.', {
+        option: 'requireClean',
+      }),
+    );
+  } else if (input.requireClean === false) {
+    diagnostics.push(requireCleanUnsupportedDiagnostic());
   }
 
   return diagnostics;
@@ -584,6 +623,60 @@ function invalidOptionsDiagnostic(
   });
 }
 
+function requireCleanUnsupportedDiagnostic(): VersionStoreDiagnostic {
+  return publicDiagnostic(
+    'VERSION_CHECKOUT_REQUIRE_CLEAN_UNSUPPORTED',
+    'Checkout cannot discard dirty working state; requireClean:false is not supported.',
+    {
+      severity: 'error',
+      recoverability: 'unsupported',
+      payload: { option: 'requireClean', requireClean: false },
+    },
+  );
+}
+
+export function checkoutDirtyWorkingStateDiagnostic(
+  payload: VersionDiagnosticPublicPayload = {},
+): VersionStoreDiagnostic {
+  return publicDiagnostic(
+    'VERSION_CHECKOUT_DIRTY_WORKING_STATE',
+    'Checkout requires a clean workbook and did not apply the target snapshot.',
+    {
+      severity: 'error',
+      recoverability: 'none',
+      payload,
+    },
+  );
+}
+
+export function checkoutWriteFenceUnavailableDiagnostic(
+  payload: VersionDiagnosticPublicPayload = {},
+): VersionStoreDiagnostic {
+  return publicDiagnostic(
+    'VERSION_CHECKOUT_WRITE_FENCE_UNAVAILABLE',
+    'Checkout could not acquire a local write fence before materialization.',
+    {
+      severity: 'error',
+      recoverability: 'retry',
+      payload,
+    },
+  );
+}
+
+export function checkoutWriteFenceStaleDiagnostic(
+  payload: VersionDiagnosticPublicPayload = {},
+): VersionStoreDiagnostic {
+  return publicDiagnostic(
+    'VERSION_CHECKOUT_WRITE_FENCE_STALE',
+    'Workbook state changed while checkout materialization was in progress.',
+    {
+      severity: 'error',
+      recoverability: 'retry',
+      payload,
+    },
+  );
+}
+
 function invalidPayloadDiagnostic(
   payload: VersionDiagnosticPublicPayload,
 ): VersionStoreDiagnostic {
@@ -666,6 +759,14 @@ function safeMessageForIssue(issueCode: string): string {
       return 'The checkout service could not read the target snapshot root.';
     case 'VERSION_CHECKOUT_SNAPSHOT_APPLY_FAILED':
       return 'The checkout snapshot materializer could not apply the target snapshot.';
+    case 'VERSION_CHECKOUT_DIRTY_WORKING_STATE':
+      return 'Checkout requires a clean workbook and did not apply the target snapshot.';
+    case 'VERSION_CHECKOUT_REQUIRE_CLEAN_UNSUPPORTED':
+      return 'Checkout cannot discard dirty working state; requireClean:false is not supported.';
+    case 'VERSION_CHECKOUT_WRITE_FENCE_UNAVAILABLE':
+      return 'Checkout could not acquire a local write fence before materialization.';
+    case 'VERSION_CHECKOUT_WRITE_FENCE_STALE':
+      return 'Workbook state changed while checkout materialization was in progress.';
     default:
       return 'The checkout materialization service could not complete checkout planning.';
   }
@@ -691,9 +792,13 @@ function recoverabilityForIssue(issueCode: string): VersionStoreDiagnostic['reco
     case 'VERSION_CHECKOUT_MISSING_REF':
     case 'VERSION_CHECKOUT_SERVICE_UNAVAILABLE':
     case 'VERSION_CHECKOUT_MATERIALIZER_UNAVAILABLE':
+    case 'VERSION_CHECKOUT_REQUIRE_CLEAN_UNSUPPORTED':
       return 'unsupported';
     case 'VERSION_CHECKOUT_SNAPSHOT_APPLY_FAILED':
       return 'repair';
+    case 'VERSION_CHECKOUT_WRITE_FENCE_UNAVAILABLE':
+    case 'VERSION_CHECKOUT_WRITE_FENCE_STALE':
+      return 'retry';
     default:
       return 'none';
   }

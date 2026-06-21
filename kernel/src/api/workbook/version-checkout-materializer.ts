@@ -15,6 +15,9 @@ import {
 
 export interface WorkbookCheckoutPublisher {
   currentContext(): DocumentContext;
+  revalidateCheckoutPublish?(
+    input: CheckoutSnapshotApplyInput,
+  ): Promise<readonly CheckoutMaterializationDiagnostic[]> | readonly CheckoutMaterializationDiagnostic[];
   publishCheckoutMaterialization(
     materialization: SnapshotRootFreshLifecycleMaterialization,
     input: CheckoutSnapshotApplyInput,
@@ -43,6 +46,16 @@ export function createWorkbookCheckoutSnapshotMaterializer(
             reloaded.freshLifecycleMutationGuarantee === 'unknown-after-hydrator-failure'
               ? 'unknown-after-partial-mutation'
               : 'no-workbook-mutation',
+        };
+      }
+
+      const publishDiagnostics = await publisher.revalidateCheckoutPublish?.(input);
+      if (publishDiagnostics && publishDiagnostics.length > 0) {
+        await reloaded.materialized.dispose();
+        return {
+          status: 'failed',
+          diagnostics: publishDiagnostics,
+          mutationGuarantee: 'no-workbook-mutation',
         };
       }
 

@@ -17,6 +17,10 @@ import {
   type VersionObjectRecord,
   type VersionObjectStoreDiagnostic,
 } from './object-store';
+import {
+  parseVc04ParentCommitIds,
+  validateVc04ParentCommitClosureForCreate,
+} from './commit-store-parents';
 
 export type WorkbookCommitCompletenessDiagnostic = {
   readonly code: string;
@@ -49,6 +53,7 @@ export type WorkbookCommit = {
 export type WorkbookCommitStoreDiagnosticCode =
   | 'VERSION_WRONG_DOCUMENT'
   | 'VERSION_MISSING_DEPENDENCY'
+  | 'VERSION_MISSING_PARENT'
   | 'VERSION_OBJECT_STORE_FAILURE'
   | 'VERSION_INVALID_COMMIT_PAYLOAD'
   | 'VERSION_INVALID_COMMIT_ID'
@@ -128,18 +133,14 @@ export class InMemoryWorkbookCommitStore {
       ]);
     }
 
-    const parentCommitIds = input.parentCommitIds ?? [];
-    if (parentCommitIds.length > 0) {
-      return failedCreate([
-        diagnostic(
-          'VERSION_UNSUPPORTED_PARENT_COMMIT',
-          'This commit-store slice only supports root commits.',
-          {
-            details: { parentCommitCount: parentCommitIds.length },
-          },
-        ),
-      ]);
+    const parentResult = await validateVc04ParentCommitClosureForCreate(
+      this.objectStore,
+      input.parentCommitIds ?? [],
+    );
+    if (!parentResult.ok) {
+      return failedCreate(parentResult.diagnostics);
     }
+    const parentCommitIds = parentResult.parentCommitIds;
 
     const records = collectDependencyRecords(input);
     if (records.diagnostics.length > 0) {
@@ -166,7 +167,7 @@ export class InMemoryWorkbookCommitStore {
     const payload: WorkbookCommitPayload = {
       schemaVersion: 1,
       documentId,
-      parentCommitIds: [],
+      parentCommitIds,
       snapshotRootDigest: cloneDigest(records.snapshotRootRecord.digest),
       semanticChangeSetDigest: cloneDigest(records.semanticChangeSetRecord.digest),
       ...(records.mutationSegmentRecords.length === 0
@@ -466,10 +467,16 @@ async function validateCommitDependenciesPresent(
   for (const dependency of dependencies) {
     try {
       if (!(await objectStore.hasObject(dependency))) {
+        const code =
+          dependency.kind === 'commit' ? 'VERSION_MISSING_PARENT' : 'VERSION_MISSING_DEPENDENCY';
         diagnostics.push(
-          diagnostic('VERSION_MISSING_DEPENDENCY', 'Commit dependency object is missing.', {
-            dependency,
-          }),
+          diagnostic(
+            code,
+            dependency.kind === 'commit'
+              ? 'Commit parent object is missing.'
+              : 'Commit dependency object is missing.',
+            { dependency },
+          ),
         );
       }
     } catch (error) {
@@ -529,28 +536,11 @@ function parseCommitPayload(
       diagnostics: [diagnostic('VERSION_WRONG_DOCUMENT', 'Commit payload documentId is invalid.')],
     };
   }
-  if (!Array.isArray(payload.parentCommitIds)) {
-    return {
-      ok: false,
-      diagnostics: [
-        diagnostic('VERSION_INVALID_COMMIT_ID', 'Commit parentCommitIds must be an array.'),
-      ],
-    };
-  }
-  if (payload.parentCommitIds.length > 0) {
-    return {
-      ok: false,
-      diagnostics: [
-        diagnostic(
-          'VERSION_UNSUPPORTED_PARENT_COMMIT',
-          'This commit-store slice only supports root commits.',
-          { details: { parentCommitCount: payload.parentCommitIds.length } },
-        ),
-      ],
-    };
-  }
+  const parentResult = parseVc04ParentCommitIds(payload.parentCommitIds);
+  if (!parentResult.ok) return { ok: false, diagnostics: parentResult.diagnostics };
 
   const diagnostics: WorkbookCommitStoreDiagnostic[] = [];
+  const parentCommitIds = parentResult.parentCommitIds;
   const snapshotRootDigest = parsePayloadDigest(
     payload.snapshotRootDigest,
     'snapshotRootDigest',
@@ -600,7 +590,7 @@ function parseCommitPayload(
     payload: {
       schemaVersion: 1,
       documentId: payload.documentId,
-      parentCommitIds: [],
+      parentCommitIds,
       snapshotRootDigest,
       semanticChangeSetDigest,
       ...(mutationSegmentDigests.length === 0 ? {} : { mutationSegmentDigests }),
@@ -615,6 +605,13 @@ function parseCommitPayload(
 
 function dependenciesForPayload(payload: WorkbookCommitPayload): readonly VersionDependencyRef[] {
   return [
+    ...payload.parentCommitIds.map(
+      (commitId): VersionDependencyRef => ({
+        kind: 'commit',
+        commitId,
+        digest: objectDigestFromWorkbookCommitId(commitId),
+      }),
+    ),
     {
       kind: 'object',
       objectType: 'workbook.semanticChangeSet.v1',

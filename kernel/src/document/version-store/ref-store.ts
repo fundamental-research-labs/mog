@@ -391,6 +391,14 @@ export class InMemoryRefStore {
   }
 
   updateRef(input: UpdateRefInput): RefMutationResult {
+    return this.updateRefInternal(input, false);
+  }
+
+  advanceRefForGraphWrite(input: UpdateRefInput): RefMutationResult {
+    return this.updateRefInternal(input, true);
+  }
+
+  private updateRefInternal(input: UpdateRefInput, allowProtected: boolean): RefMutationResult {
     const parsedName = parseRefNameForResult(input.name);
     if (!parsedName.ok) return parsedName.result;
 
@@ -413,7 +421,7 @@ export class InMemoryRefStore {
     if (record.state === 'tombstone') {
       return refTombstoned(record);
     }
-    if (record.protected) {
+    if (record.protected && !allowProtected) {
       return protectedRef(record.name, 'update');
     }
     if (expectedHead !== undefined && record.targetCommitId !== expectedHead.commitId) {

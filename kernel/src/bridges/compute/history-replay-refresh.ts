@@ -5,9 +5,6 @@ import type { ViewportFetchManager } from './viewport-fetch-manager';
 
 function historyReplayNeedsFullViewportRefresh(result: MutationResult): boolean {
   return Boolean(
-    result.dimensionChanges?.length ||
-    result.mergeChanges?.length ||
-    result.visibilityChanges?.length ||
     result.commentChanges?.length ||
     result.filterChanges?.length ||
     result.tableChanges?.length ||
@@ -41,6 +38,15 @@ function historyReplayCellValueSheetIds(result: MutationResult): SheetId[] {
     sheetIds.add(toSheetId(change.sheetId));
   }
   for (const change of result.recalc?.projectionChanges ?? []) {
+    sheetIds.add(toSheetId(change.sheetId));
+  }
+  for (const change of result.dimensionChanges ?? []) {
+    sheetIds.add(toSheetId(change.sheetId));
+  }
+  for (const change of result.mergeChanges ?? []) {
+    sheetIds.add(toSheetId(change.sheetId));
+  }
+  for (const change of result.visibilityChanges ?? []) {
     sheetIds.add(toSheetId(change.sheetId));
   }
   return [...sheetIds];

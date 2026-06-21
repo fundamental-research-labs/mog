@@ -936,9 +936,11 @@ export class ComputeCore {
     // Architecturally this keeps Rust as the single source of truth for
     // positions: the renderer never recomputes them from per-row dimension
     // queries (the old quadratic pre-roll loop in viewport-wiring.ts).
+    const isHistoryReplay = operation === 'compute_undo' || operation === 'compute_redo';
     if (
       (result.dimensionChanges?.length || result.visibilityChanges?.length) &&
-      this.fetchManager
+      this.fetchManager &&
+      !isHistoryReplay
     ) {
       await this.fetchManager.forceRefreshAllViewports();
     }
@@ -1644,7 +1646,7 @@ export class ComputeCore {
   // ===========================================================================
 
   async undo(): Promise<MutationResult> {
-    await this.admitPublicMutation('compute_undo');
+    await this.admitPublicMutation('compute_undo', { awaitMaterialization: false });
     const result = await this.mutateCore(
       this.transport.call<MutationTuple>('compute_undo', { docId: this.docId }),
       undefined,
@@ -1655,7 +1657,7 @@ export class ComputeCore {
   }
 
   async redo(): Promise<MutationResult> {
-    await this.admitPublicMutation('compute_redo');
+    await this.admitPublicMutation('compute_redo', { awaitMaterialization: false });
     const result = await this.mutateCore(
       this.transport.call<MutationTuple>('compute_redo', { docId: this.docId }),
       undefined,

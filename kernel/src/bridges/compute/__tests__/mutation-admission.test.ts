@@ -163,6 +163,23 @@ describe('Compute mutation admission', () => {
     expect(transport.call).toHaveBeenCalledWith('compute_set_cell', { docId: 'test-doc' });
   });
 
+  it('does not hold undo and redo behind pending materialization', async () => {
+    const materialized = deferred<void>();
+    const awaitMaterialized = jest.fn(() => materialized.promise);
+    const ctx = makeMockContext({ awaitMaterialized } as Partial<IKernelContext>);
+    const transport: BridgeTransport & { call: jest.Mock } = {
+      call: jest.fn(async () => [new Uint8Array(), mutationResult()]),
+    };
+    const core = createStartedCore(ctx, transport);
+
+    await expect(core.undo()).resolves.toEqual(expect.any(Object));
+    await expect(core.redo()).resolves.toEqual(expect.any(Object));
+
+    expect(awaitMaterialized).not.toHaveBeenCalled();
+    expect(transport.call).toHaveBeenCalledWith('compute_undo', { docId: 'test-doc' });
+    expect(transport.call).toHaveBeenCalledWith('compute_redo', { docId: 'test-doc' });
+  });
+
   it('records missing context diagnostics for production public wrappers', async () => {
     const diagnostics: MutationAdmissionDiagnostic[] = [];
     const ctx = makeMockContext({

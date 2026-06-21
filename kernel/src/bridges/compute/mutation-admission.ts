@@ -28,6 +28,7 @@ export interface MutationAdmissionDiagnostic {
 export interface MutationAdmissionOptions {
   readonly operationContext?: VersionOperationContext;
   readonly invocation?: OperationInvocationKind;
+  readonly awaitMaterialization?: boolean;
 }
 
 interface PublicWriteMaterializationContext {
@@ -105,9 +106,11 @@ export async function admitPublicMutation(
   });
   ensureInitialized();
   writeGate?.assertWritable(operation);
-  await (ctx as IKernelContext & PublicWriteMaterializationContext).awaitMaterialized?.(
-    'allSheets',
-  );
+  if (options.awaitMaterialization !== false) {
+    await (ctx as IKernelContext & PublicWriteMaterializationContext).awaitMaterialized?.(
+      'allSheets',
+    );
+  }
   writeGate?.assertWritable(operation);
 }
 

@@ -39,7 +39,7 @@ export interface IUndoReplayService extends IUndoService {
 class UndoService extends Subscribable<UndoStateChangeEvent> implements IUndoService {
   private static readonly HISTORY_REPLAY_PIVOT_UPDATE: PivotUpdateOptions = {
     reason: 'historyReplay',
-    refreshPolicy: 'refreshAndMaterialize',
+    refreshPolicy: 'dirtyOnly',
   };
 
   private computeBridge: ComputeBridge;

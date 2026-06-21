@@ -27,7 +27,7 @@ async function flushInitialState(): Promise<void> {
 }
 
 describe('UndoService pivot history replay metadata', () => {
-  it('wraps undo in historyReplay pivot update options', async () => {
+  it('wraps undo in dirty-only historyReplay pivot update options', async () => {
     const { bridge, withPivotUpdateOptions } = createComputeBridgeMock();
     const service = createUndoService(bridge as any);
     await flushInitialState();
@@ -37,13 +37,13 @@ describe('UndoService pivot history replay metadata', () => {
     expect(result.ok).toBe(true);
     expect(bridge.undo).toHaveBeenCalledTimes(1);
     expect(withPivotUpdateOptions).toHaveBeenCalledWith(
-      { reason: 'historyReplay', refreshPolicy: 'refreshAndMaterialize' },
+      { reason: 'historyReplay', refreshPolicy: 'dirtyOnly' },
       expect.any(Function),
     );
     expect(bridge.forceRefreshAllViewports).not.toHaveBeenCalled();
   });
 
-  it('wraps redo in historyReplay pivot update options', async () => {
+  it('wraps redo in dirty-only historyReplay pivot update options', async () => {
     const { bridge, withPivotUpdateOptions } = createComputeBridgeMock();
     const service = createUndoService(bridge as any);
     await flushInitialState();
@@ -53,7 +53,7 @@ describe('UndoService pivot history replay metadata', () => {
     expect(result.ok).toBe(true);
     expect(bridge.redo).toHaveBeenCalledTimes(1);
     expect(withPivotUpdateOptions).toHaveBeenCalledWith(
-      { reason: 'historyReplay', refreshPolicy: 'refreshAndMaterialize' },
+      { reason: 'historyReplay', refreshPolicy: 'dirtyOnly' },
       expect.any(Function),
     );
     expect(bridge.forceRefreshAllViewports).not.toHaveBeenCalled();

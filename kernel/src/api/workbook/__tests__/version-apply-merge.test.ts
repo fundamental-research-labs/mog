@@ -623,6 +623,27 @@ describe('WorkbookVersion applyMerge preview planner', () => {
       },
     });
     expect(merge).not.toHaveBeenCalled();
+
+    await expect(
+      version.applyMerge(
+        {
+          resultId: `merge-result:${DIGEST_B.digest}`,
+          previewArtifactDigest: DIGEST_B,
+          resultDigest: DIGEST_A,
+        } as any,
+        { mode: 'preview' },
+      ),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: {
+        code: 'target_unavailable',
+        target: 'workbook.version.applyMerge',
+        diagnostics: expect.arrayContaining([
+          expect.objectContaining({ code: 'VERSION_MERGE_RESOLUTION_MISMATCH' }),
+        ]),
+      },
+    });
+    expect(merge).not.toHaveBeenCalled();
   });
 });
 

@@ -24,6 +24,10 @@ import {
 import type { VersionStoreProvider } from '../../document/version-store/provider';
 import { namespaceForRegistry } from '../../document/version-store/registry';
 import {
+  applyPersistedMergePreviewArtifact,
+  isPersistedMergePreviewArtifactInput,
+} from './version-apply-merge-persisted-artifact';
+import {
   isApplyMergeWriteSuccessResult,
   isNonFastForwardWriteResult,
   mapApplyMergeWriteResult,
@@ -79,7 +83,7 @@ type MaybeVersionRuntimeContext = DocumentContext & {
   readonly version?: unknown;
 };
 
-type NormalizedPersistedApplyMergeInput = {
+export type NormalizedPersistedApplyMergeInput = {
   readonly resultId: VersionMergeResultId;
   readonly previewArtifactDigest?: ObjectDigest;
   readonly resultDigest: ObjectDigest;
@@ -88,7 +92,10 @@ type NormalizedPersistedApplyMergeInput = {
   readonly resolutions: readonly VersionApplyMergeResolution[];
 };
 
-type NormalizedPersistedApplyMergeOptions = {
+export type NormalizedPersistedApplyMergeOptions = {
+  readonly mode: 'preview';
+} | {
+  readonly mode: 'apply';
   readonly targetRef: VersionMainRefName | VersionRefName;
   readonly expectedTargetHead: VersionCommitExpectedHead;
 };
@@ -108,6 +115,17 @@ export async function applyPersistedMergeResult(
     return blockedApplyMergeResult(null, null, null, [
       resolutionMismatchDiagnostic(
         'persisted applyMerge result inputs currently support only empty resolution sets.',
+      ),
+    ]);
+  }
+  if (isPersistedMergePreviewArtifactInput(normalizedInput)) {
+    return applyPersistedMergePreviewArtifact(ctx, normalizedInput, normalizedOptions);
+  }
+  if (normalizedOptions.mode === 'preview') {
+    return blockedApplyMergeResult(null, null, null, [
+      invalidApplyMergeOptionDiagnostic(
+        'mode',
+        'persisted applyMerge result inputs are valid only in apply mode.',
       ),
     ]);
   }
@@ -248,14 +266,10 @@ function normalizePersistedApplyMergeOptions(
       invalidApplyMergeOptionDiagnostic(`options.${key}`, `Unknown applyMerge option "${key}".`),
     );
   }
-  if (input.mode === 'preview') {
-    diagnostics.push(
-      invalidApplyMergeOptionDiagnostic(
-        'mode',
-        'persisted applyMerge result inputs are valid only in apply mode.',
-      ),
-    );
-  } else if (input.mode !== undefined && input.mode !== 'apply') {
+  let mode: 'preview' | 'apply' = 'apply';
+  if (input.mode === 'preview' || input.mode === 'apply') {
+    mode = input.mode;
+  } else if (input.mode !== undefined) {
     diagnostics.push(
       invalidApplyMergeOptionDiagnostic('mode', 'applyMerge mode must be "preview" or "apply".'),
     );
@@ -264,6 +278,23 @@ function normalizePersistedApplyMergeOptions(
     diagnostics.push(
       invalidApplyMergeOptionDiagnostic('includeDiagnostics', 'includeDiagnostics must be a boolean.'),
     );
+  }
+
+  if (mode === 'preview') {
+    if (input.targetRef !== undefined) {
+      diagnostics.push(
+        invalidApplyMergeOptionDiagnostic('targetRef', 'targetRef is valid only in apply mode.'),
+      );
+    }
+    if (input.expectedTargetHead !== undefined) {
+      diagnostics.push(
+        invalidApplyMergeOptionDiagnostic(
+          'expectedTargetHead',
+          'expectedTargetHead is valid only in apply mode.',
+        ),
+      );
+    }
+    return diagnostics.length === 0 ? { mode: 'preview' } : null;
   }
 
   const targetRef = mapPublicTargetRef(input.targetRef);
@@ -280,7 +311,7 @@ function normalizePersistedApplyMergeOptions(
     );
   }
 
-  return targetRef && expectedTargetHead ? { targetRef, expectedTargetHead } : null;
+  return targetRef && expectedTargetHead ? { mode: 'apply', targetRef, expectedTargetHead } : null;
 }
 
 function normalizePersistedResolutions(
@@ -339,7 +370,7 @@ async function openPersistedMergeIntentStore(
 function validatePersistedIntentRecord(
   record: MergeApplyIntentRecord,
   input: NormalizedPersistedApplyMergeInput,
-  options: NormalizedPersistedApplyMergeOptions,
+  options: Extract<NormalizedPersistedApplyMergeOptions, { readonly mode: 'apply' }>,
 ): readonly VersionStoreDiagnostic[] {
   const diagnostics: VersionStoreDiagnostic[] = [];
   if (!digestsEqual(record.resultDigest, input.resultDigest)) {

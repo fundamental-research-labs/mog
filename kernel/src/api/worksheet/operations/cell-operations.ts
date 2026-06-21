@@ -701,9 +701,18 @@ export async function setDateValue(
   row: number,
   col: number,
   date: { year: number; month: number; day: number },
+  options?: MutationAdmissionOptions,
 ): Promise<void> {
   await awaitAllSheetsBeforeCellWrite(ctx);
-  await ctx.computeBridge.setDateValue(sheetId, row, col, date.year, date.month, date.day);
+  await ctx.computeBridge.setDateValue(
+    sheetId,
+    row,
+    col,
+    date.year,
+    date.month,
+    date.day,
+    options,
+  );
   await reapplyActiveFiltersAfterWrite(ctx, sheetId);
 }
 
@@ -724,9 +733,18 @@ export async function setTimeValue(
   row: number,
   col: number,
   time: { hours: number; minutes: number; seconds: number },
+  options?: MutationAdmissionOptions,
 ): Promise<void> {
   await awaitAllSheetsBeforeCellWrite(ctx);
-  await ctx.computeBridge.setTimeValue(sheetId, row, col, time.hours, time.minutes, time.seconds);
+  await ctx.computeBridge.setTimeValue(
+    sheetId,
+    row,
+    col,
+    time.hours,
+    time.minutes,
+    time.seconds,
+    options,
+  );
   await reapplyActiveFiltersAfterWrite(ctx, sheetId);
 }
 

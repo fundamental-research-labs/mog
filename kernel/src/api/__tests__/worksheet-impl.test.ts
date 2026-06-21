@@ -666,11 +666,18 @@ describe('WorksheetImpl', () => {
       const date = new Date(2024, 0, 15); // Jan 15, 2024
       await ws.setDateValue(0, 0, date);
 
-      expect(CellOps.setDateValue).toHaveBeenCalledWith(ctx, SHEET_ID, 0, 0, {
-        year: 2024,
-        month: 1,
-        day: 15,
-      });
+      expect(CellOps.setDateValue).toHaveBeenCalledWith(
+        ctx,
+        SHEET_ID,
+        0,
+        0,
+        {
+          year: 2024,
+          month: 1,
+          day: 15,
+        },
+        expectVersionOperationOptions('worksheet.setDateValue', ['cells']),
+      );
     });
 
     it('setTimeValue delegates to CellOps.setTimeValue with hours/minutes/seconds', async () => {
@@ -679,11 +686,18 @@ describe('WorksheetImpl', () => {
       const date = new Date(2024, 0, 1, 14, 30, 45);
       await ws.setTimeValue(0, 0, date);
 
-      expect(CellOps.setTimeValue).toHaveBeenCalledWith(ctx, SHEET_ID, 0, 0, {
-        hours: 14,
-        minutes: 30,
-        seconds: 45,
-      });
+      expect(CellOps.setTimeValue).toHaveBeenCalledWith(
+        ctx,
+        SHEET_ID,
+        0,
+        0,
+        {
+          hours: 14,
+          minutes: 30,
+          seconds: 45,
+        },
+        expectVersionOperationOptions('worksheet.setTimeValue', ['cells']),
+      );
     });
   });
 

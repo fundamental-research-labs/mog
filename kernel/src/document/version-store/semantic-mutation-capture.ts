@@ -158,13 +158,21 @@ function mapMutationResultToSemanticChanges(
   input: VersionMutationCaptureRecordInput,
   sequence: number,
 ): readonly VersionSemanticChangeRecord[] {
-  if (input.operation === 'compute_batch_set_cells_by_position') {
+  if (isDirectCellValueOperation(input.operation)) {
     return mapCellWriteChanges(input.result.recalc?.changedCells ?? [], input.directEdits ?? [], sequence);
   }
   if (input.operation === 'compute_rename_compute_sheet') {
     return mapSheetRenameChanges(input.result.sheetChanges ?? [], sequence);
   }
   return [];
+}
+
+function isDirectCellValueOperation(operation: string): boolean {
+  return (
+    operation === 'compute_batch_set_cells_by_position' ||
+    operation === 'compute_set_date_value' ||
+    operation === 'compute_set_time_value'
+  );
 }
 
 function mapCellWriteChanges(

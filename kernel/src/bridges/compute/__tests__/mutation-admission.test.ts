@@ -270,6 +270,105 @@ describe('Compute mutation admission', () => {
     });
   });
 
+  it('records direct edits for date and time bridge value writes', async () => {
+    const recordMutationResult = jest.fn();
+    const ctx = makeMockContext({
+      versioning: {
+        mutationCapture: { recordMutationResult },
+      },
+    } as unknown as Partial<IKernelContext>);
+    const dateResult = mutationResult({
+      recalc: {
+        changedCells: [
+          {
+            cellId: 'cell-c2',
+            sheetId: 'sheet-1',
+            position: { row: 1, col: 2 },
+            oldValue: null,
+            value: 45291,
+            extraFlags: 0,
+          },
+        ],
+        projectionChanges: [],
+        errors: [],
+        validationAnnotations: [],
+        metrics: {},
+      },
+    });
+    const timeResult = mutationResult({
+      recalc: {
+        changedCells: [
+          {
+            cellId: 'cell-e4',
+            sheetId: 'sheet-1',
+            position: { row: 3, col: 4 },
+            oldValue: null,
+            value: 0.5,
+            extraFlags: 0,
+          },
+        ],
+        projectionChanges: [],
+        errors: [],
+        validationAnnotations: [],
+        metrics: {},
+      },
+    });
+    const transport: BridgeTransport & { call: jest.Mock } = {
+      call: jest.fn(async (command: string) => [
+        new Uint8Array(),
+        command === 'compute_set_time_value' ? timeResult : dateResult,
+      ]),
+    };
+    const bridge = createStartedBridge(ctx, transport);
+    const operationContext = {
+      operationId: 'operation-1',
+      kind: 'mutation',
+      author: { authorId: 'user-1', actorKind: 'user' },
+      createdAt: '2026-06-20T00:00:00.000Z',
+      domainIds: ['cell'],
+      capturePolicy: 'commitEligible',
+      writeAdmissionMode: 'capture',
+    };
+
+    await bridge.setDateValue(sheetId('sheet-1'), 1, 2, 2024, 1, 15, {
+      operationContext: operationContext as any,
+    });
+    await bridge.setTimeValue(sheetId('sheet-1'), 3, 4, 12, 0, 0, {
+      operationContext: operationContext as any,
+    });
+
+    expect(transport.call).toHaveBeenCalledWith('compute_set_date_value', {
+      docId: 'test-doc',
+      sheetId: 'sheet-1',
+      row: 1,
+      col: 2,
+      year: 2024,
+      month: 1,
+      day: 15,
+    });
+    expect(transport.call).toHaveBeenCalledWith('compute_set_time_value', {
+      docId: 'test-doc',
+      sheetId: 'sheet-1',
+      row: 3,
+      col: 4,
+      hours: 12,
+      minutes: 0,
+      seconds: 0,
+    });
+    expect(recordMutationResult).toHaveBeenNthCalledWith(1, {
+      operation: 'compute_set_date_value',
+      result: dateResult,
+      directEdits: [{ sheetId: 'sheet-1', row: 1, col: 2 }],
+      operationContext,
+    });
+    expect(recordMutationResult).toHaveBeenNthCalledWith(2, {
+      operation: 'compute_set_time_value',
+      result: timeResult,
+      directEdits: [{ sheetId: 'sheet-1', row: 3, col: 4 }],
+      operationContext,
+    });
+  });
+
   it('records unclassified write diagnostics before transport execution', async () => {
     const diagnostics: MutationAdmissionDiagnostic[] = [];
     const ctx = makeMockContext({

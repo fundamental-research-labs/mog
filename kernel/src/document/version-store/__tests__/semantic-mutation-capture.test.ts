@@ -150,6 +150,98 @@ describe('semantic mutation capture', () => {
       ],
     });
   });
+
+  it('captures direct date and time value writes', async () => {
+    const capture = createSemanticMutationCapture({ author: AUTHOR, now: () => NOW });
+
+    capture.mutationCapture.recordMutationResult({
+      operation: 'compute_set_date_value',
+      directEdits: [{ sheetId: 'sheet-1', row: 1, col: 2 }],
+      result: mutationResult({
+        recalc: {
+          changedCells: [
+            {
+              cellId: 'cell-c2',
+              sheetId: 'sheet-1',
+              position: { row: 1, col: 2 },
+              oldValue: null,
+              value: 45291,
+              extraFlags: 0,
+            },
+          ],
+          projectionChanges: [],
+          errors: [],
+          validationAnnotations: [],
+          metrics: {},
+        },
+      }),
+    });
+    capture.mutationCapture.recordMutationResult({
+      operation: 'compute_set_time_value',
+      directEdits: [{ sheetId: 'sheet-1', row: 2, col: 3 }],
+      result: mutationResult({
+        recalc: {
+          changedCells: [
+            {
+              cellId: 'cell-d3',
+              sheetId: 'sheet-1',
+              position: { row: 2, col: 3 },
+              oldValue: null,
+              value: 0.5,
+              extraFlags: 0,
+            },
+          ],
+          projectionChanges: [],
+          errors: [],
+          validationAnnotations: [],
+          metrics: {},
+        },
+      }),
+    });
+
+    const captured = expectCaptureSuccess(await capture.captureNormalCommit(captureInput()));
+    expect(captured.input.semanticChangeSetRecord.preimage.payload).toEqual({
+      schemaVersion: 1,
+      changes: [
+        {
+          structural: {
+            kind: 'metadata',
+            changeId: 'mutation-1:cell:0',
+            domain: 'cell',
+            entityId: 'sheet-1!C2',
+            propertyPath: ['value'],
+          },
+          before: { kind: 'value', value: null },
+          after: { kind: 'value', value: 45291 },
+          display: { address: { kind: 'value', value: 'C2' } },
+        },
+        {
+          structural: {
+            kind: 'metadata',
+            changeId: 'mutation-2:cell:0',
+            domain: 'cell',
+            entityId: 'sheet-1!D3',
+            propertyPath: ['value'],
+          },
+          before: { kind: 'value', value: null },
+          after: { kind: 'value', value: 0.5 },
+          display: { address: { kind: 'value', value: 'D3' } },
+        },
+      ],
+    });
+    expect(captured.input.mutationSegmentRecords?.map((record) => record.preimage.payload)).toEqual([
+      expect.objectContaining({
+        segmentId: 'mutation-1',
+        operation: 'compute_set_date_value',
+        directEdits: [{ sheetId: 'sheet-1', row: 1, col: 2, address: 'C2' }],
+      }),
+      expect.objectContaining({
+        segmentId: 'mutation-2',
+        operation: 'compute_set_time_value',
+        directEdits: [{ sheetId: 'sheet-1', row: 2, col: 3, address: 'D3' }],
+      }),
+    ]);
+  });
 });
 
 function mutationResult(overrides: Partial<MutationResult> = {}): MutationResult {

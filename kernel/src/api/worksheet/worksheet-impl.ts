@@ -945,7 +945,13 @@ export class WorksheetImpl implements Worksheet {
     const { row, col, year, month, day } = this.resolveDateArgs(a, b, c, d, e);
     await this.ensureCellEditable(row, col);
     this._invalidateActiveCellEditSourceForCell(row, col);
-    await CellOps.setDateValue(this.ctx, this.sheetId, row, col, { year, month, day });
+    await CellOps.setDateValue(this.ctx, this.sheetId, row, col, { year, month, day }, {
+      operationContext: createVersionOperationContext(this.ctx, {
+        operationIdPrefix: 'worksheet.setDateValue',
+        sheetIds: [this.sheetId],
+        domainIds: ['cells'],
+      }),
+    });
   }
 
   /**
@@ -980,7 +986,13 @@ export class WorksheetImpl implements Worksheet {
     const { row, col, hours, minutes, seconds } = this.resolveTimeArgs(a, b, c, d, e);
     await this.ensureCellEditable(row, col);
     this._invalidateActiveCellEditSourceForCell(row, col);
-    await CellOps.setTimeValue(this.ctx, this.sheetId, row, col, { hours, minutes, seconds });
+    await CellOps.setTimeValue(this.ctx, this.sheetId, row, col, { hours, minutes, seconds }, {
+      operationContext: createVersionOperationContext(this.ctx, {
+        operationIdPrefix: 'worksheet.setTimeValue',
+        sheetIds: [this.sheetId],
+        domainIds: ['cells'],
+      }),
+    });
   }
 
   /**

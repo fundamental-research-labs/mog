@@ -1745,6 +1745,58 @@ export class ComputeBridge extends GeneratedBridgeBase {
     return this.applyDateFormulaFormatCompatibility(sheetId, normalEdits, result);
   }
 
+  setDateValue(
+    sheetId: SheetId,
+    row: number,
+    col: number,
+    year: number,
+    month: number,
+    day: number,
+    options?: MutationAdmissionOptions,
+  ): Promise<MutationResult> {
+    return this.core.mutatePublic(
+      'compute_set_date_value',
+      () =>
+        this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_date_value', {
+          docId: this.core.docId,
+          sheetId,
+          row,
+          col,
+          year,
+          month,
+          day,
+        }),
+      [{ sheetId, row, col }],
+      options,
+    );
+  }
+
+  setTimeValue(
+    sheetId: SheetId,
+    row: number,
+    col: number,
+    hours: number,
+    minutes: number,
+    seconds: number,
+    options?: MutationAdmissionOptions,
+  ): Promise<MutationResult> {
+    return this.core.mutatePublic(
+      'compute_set_time_value',
+      () =>
+        this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_time_value', {
+          docId: this.core.docId,
+          sheetId,
+          row,
+          col,
+          hours,
+          minutes,
+          seconds,
+        }),
+      [{ sheetId, row, col }],
+      options,
+    );
+  }
+
   private async applyTableHeaderRenames(
     headerRenames: TableHeaderRename[],
   ): Promise<MutationResult | null> {

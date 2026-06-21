@@ -174,6 +174,22 @@ const TableOps = await import('../worksheet/operations/table-operations');
 
 const SHEET_ID = sheetId('sheet-1');
 
+function expectVersionOperationOptions(operationIdPrefix: string, domainIds: readonly string[]) {
+  return expect.objectContaining({
+    operationContext: expect.objectContaining({
+      operationId: expect.stringMatching(
+        new RegExp(`^${operationIdPrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}:`),
+      ),
+      kind: 'mutation',
+      author: expect.objectContaining({ actorKind: 'user' }),
+      sheetIds: [SHEET_ID],
+      domainIds,
+      capturePolicy: 'commitEligible',
+      writeAdmissionMode: 'capture',
+    }),
+  });
+}
+
 function createMockCtx(): any {
   const eventHandlers = new Map<string, Set<(event: any) => void>>();
   const eventBus = {
@@ -1332,11 +1348,18 @@ describe('WorksheetImpl Extended Methods', () => {
       const date = new Date(2024, 0, 15); // Jan 15, 2024
       await ws.setDateValue(0, 0, date);
 
-      expect(CellOps.setDateValue).toHaveBeenCalledWith(ctx, SHEET_ID, 0, 0, {
-        year: 2024,
-        month: 1,
-        day: 15,
-      });
+      expect(CellOps.setDateValue).toHaveBeenCalledWith(
+        ctx,
+        SHEET_ID,
+        0,
+        0,
+        {
+          year: 2024,
+          month: 1,
+          day: 15,
+        },
+        expectVersionOperationOptions('worksheet.setDateValue', ['cells']),
+      );
     });
 
     it('setDateValue extracts month as 1-based', async () => {
@@ -1345,11 +1368,18 @@ describe('WorksheetImpl Extended Methods', () => {
       const date = new Date(2023, 11, 25); // Dec 25, 2023
       await ws.setDateValue(3, 2, date);
 
-      expect(CellOps.setDateValue).toHaveBeenCalledWith(ctx, SHEET_ID, 3, 2, {
-        year: 2023,
-        month: 12,
-        day: 25,
-      });
+      expect(CellOps.setDateValue).toHaveBeenCalledWith(
+        ctx,
+        SHEET_ID,
+        3,
+        2,
+        {
+          year: 2023,
+          month: 12,
+          day: 25,
+        },
+        expectVersionOperationOptions('worksheet.setDateValue', ['cells']),
+      );
     });
 
     it('setTimeValue delegates to CellOps.setTimeValue with decomposed time', async () => {
@@ -1358,11 +1388,18 @@ describe('WorksheetImpl Extended Methods', () => {
       const date = new Date(2024, 0, 1, 14, 30, 45);
       await ws.setTimeValue(0, 0, date);
 
-      expect(CellOps.setTimeValue).toHaveBeenCalledWith(ctx, SHEET_ID, 0, 0, {
-        hours: 14,
-        minutes: 30,
-        seconds: 45,
-      });
+      expect(CellOps.setTimeValue).toHaveBeenCalledWith(
+        ctx,
+        SHEET_ID,
+        0,
+        0,
+        {
+          hours: 14,
+          minutes: 30,
+          seconds: 45,
+        },
+        expectVersionOperationOptions('worksheet.setTimeValue', ['cells']),
+      );
     });
 
     it('setTimeValue handles midnight', async () => {
@@ -1371,11 +1408,18 @@ describe('WorksheetImpl Extended Methods', () => {
       const date = new Date(2024, 0, 1, 0, 0, 0);
       await ws.setTimeValue(1, 1, date);
 
-      expect(CellOps.setTimeValue).toHaveBeenCalledWith(ctx, SHEET_ID, 1, 1, {
-        hours: 0,
-        minutes: 0,
-        seconds: 0,
-      });
+      expect(CellOps.setTimeValue).toHaveBeenCalledWith(
+        ctx,
+        SHEET_ID,
+        1,
+        1,
+        {
+          hours: 0,
+          minutes: 0,
+          seconds: 0,
+        },
+        expectVersionOperationOptions('worksheet.setTimeValue', ['cells']),
+      );
     });
   });
 

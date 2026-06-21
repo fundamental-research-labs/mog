@@ -4,8 +4,10 @@ import { toA1 } from '@mog/spreadsheet-utils/a1';
 
 import type {
   CellChange,
+  FilterChange,
   MutationResult,
   SheetChange,
+  SortingChange,
 } from '../../bridges/compute/compute-types.gen';
 import type { DirectEditPosition } from '../../bridges/compute/mutation-admission';
 import type {
@@ -158,28 +160,33 @@ function mapMutationResultToSemanticChanges(
   input: VersionMutationCaptureRecordInput,
   sequence: number,
 ): readonly VersionSemanticChangeRecord[] {
+  const changes: VersionSemanticChangeRecord[] = [];
   if (isDirectCellValueOperation(input.operation)) {
-    return mapCellWriteChanges(input.result.recalc?.changedCells ?? [], input.directEdits ?? [], sequence);
+    changes.push(
+      ...mapCellWriteChanges(input.result.recalc?.changedCells ?? [], input.directEdits ?? [], sequence),
+    );
   }
   if (input.operation === 'compute_rename_compute_sheet') {
-    return mapSheetRenameChanges(input.result.sheetChanges ?? [], sequence);
+    changes.push(...mapSheetRenameChanges(input.result.sheetChanges ?? [], sequence));
   }
   if (input.operation === 'compute_set_tab_color') {
-    return mapSheetTabColorChanges(input.result.sheetChanges ?? [], sequence);
+    changes.push(...mapSheetTabColorChanges(input.result.sheetChanges ?? [], sequence));
   }
   if (input.operation === 'compute_create_sheet_with_default_col_width') {
-    return mapSheetCreateChanges(input.result.sheetChanges ?? [], sequence);
+    changes.push(...mapSheetCreateChanges(input.result.sheetChanges ?? [], sequence));
   }
   if (input.operation === 'compute_delete_sheet') {
-    return mapSheetRemoveChanges(input.result.sheetChanges ?? [], sequence);
+    changes.push(...mapSheetRemoveChanges(input.result.sheetChanges ?? [], sequence));
   }
   if (input.operation === 'compute_copy_sheet') {
-    return mapSheetCopyChanges(input.result.sheetChanges ?? [], sequence);
+    changes.push(...mapSheetCopyChanges(input.result.sheetChanges ?? [], sequence));
   }
   if (input.operation === 'compute_move_sheet') {
-    return mapSheetMoveChanges(input.result.sheetChanges ?? [], sequence);
+    changes.push(...mapSheetMoveChanges(input.result.sheetChanges ?? [], sequence));
   }
-  return [];
+  changes.push(...mapFilterChanges(input.result.filterChanges ?? [], sequence));
+  changes.push(...mapSortingChanges(input.result.sortingChanges ?? [], sequence));
+  return changes;
 }
 
 function isDirectCellValueOperation(operation: string): boolean {
@@ -430,20 +437,134 @@ function mapSheetMoveChanges(
   return changes;
 }
 
+function mapFilterChanges(
+  filterChanges: readonly FilterChange[],
+  sequence: number,
+): readonly VersionSemanticChangeRecord[] {
+  const changes: VersionSemanticChangeRecord[] = [];
+  for (const change of filterChanges) {
+    if (!isStableSheetId(change.sheetId)) continue;
+
+    const entityId = filterEntityId(change);
+    const value = semanticFilterValue(change);
+    changes.push({
+      structural: {
+        kind: 'metadata',
+        changeId: `mutation-${sequence}:filter:${changes.length}`,
+        domain: 'filters',
+        entityId,
+        propertyPath: ['state'],
+      },
+      before: { kind: 'value', value: change.kind === 'Removed' ? value : null },
+      after: { kind: 'value', value: change.kind === 'Removed' ? null : value },
+      display: {
+        entityLabel: { kind: 'value', value: entityId },
+      },
+    });
+  }
+  return changes;
+}
+
+function mapSortingChanges(
+  sortingChanges: readonly SortingChange[],
+  sequence: number,
+): readonly VersionSemanticChangeRecord[] {
+  const changes: VersionSemanticChangeRecord[] = [];
+  for (const change of sortingChanges) {
+    if (
+      !isStableSheetId(change.sheetId) ||
+      !isSheetIndex(change.startRow) ||
+      !isSheetIndex(change.startCol) ||
+      !isSheetIndex(change.endRow) ||
+      !isSheetIndex(change.endCol) ||
+      change.endRow < change.startRow ||
+      change.endCol < change.startCol
+    ) {
+      continue;
+    }
+
+    const rangeLabel = `${toA1(change.startRow, change.startCol)}:${toA1(change.endRow, change.endCol)}`;
+    const entityId = `${change.sheetId}!${rangeLabel}`;
+    const value = semanticObjectValue([
+      { key: 'kind', value: change.kind },
+      { key: 'range', value: rangeLabel },
+      { key: 'rowsMoved', value: change.rowsMoved },
+    ]);
+    changes.push({
+      structural: {
+        kind: 'metadata',
+        changeId: `mutation-${sequence}:sort:${changes.length}`,
+        domain: 'sorts',
+        entityId,
+        propertyPath: ['order'],
+      },
+      before: { kind: 'value', value: change.kind === 'Removed' ? value : null },
+      after: { kind: 'value', value: change.kind === 'Removed' ? null : value },
+      display: {
+        address: { kind: 'value', value: rangeLabel },
+      },
+    });
+  }
+  return changes;
+}
+
 function semanticSheetValue(input: {
   readonly name: string;
   readonly index?: number;
   readonly sourceSheetId?: string;
 }): VersionSemanticValue {
-  const fields: { key: string; value: VersionSemanticValue }[] = [
-    { key: 'name', value: input.name },
-  ];
+  const fields: { key: string; value: VersionSemanticValue }[] = [{ key: 'name', value: input.name }];
   if (input.index !== undefined) {
     fields.push({ key: 'index', value: input.index });
   }
   if (input.sourceSheetId !== undefined) {
     fields.push({ key: 'sourceSheetId', value: input.sourceSheetId });
   }
+  return semanticObjectValue(fields);
+}
+
+function semanticFilterValue(change: FilterChange): VersionSemanticValue {
+  const fields: { key: string; value: VersionSemanticValue }[] = [
+    { key: 'kind', value: change.kind },
+  ];
+  pushOptionalSemanticField(fields, 'filterId', change.filterId);
+  pushOptionalSemanticField(fields, 'filterKind', change.filterKind);
+  pushOptionalSemanticField(fields, 'tableId', change.tableId);
+  pushOptionalSemanticField(fields, 'capability', change.capability);
+  pushOptionalSemanticField(fields, 'hasActiveFilter', change.hasActiveFilter);
+  pushOptionalSemanticField(fields, 'clearable', change.clearable);
+  pushOptionalSemanticField(fields, 'action', change.action);
+  pushOptionalSemanticField(fields, 'hiddenRowCount', change.hiddenRowCount);
+  pushOptionalSemanticField(fields, 'visibleRowCount', change.visibleRowCount);
+  if (change.unsupportedReasons?.length) {
+    fields.push({ key: 'unsupportedReasons', value: { kind: 'array', values: change.unsupportedReasons } });
+  }
+  return semanticObjectValue(fields);
+}
+
+function filterEntityId(change: FilterChange): string {
+  if (typeof change.filterId === 'string' && change.filterId.length > 0) {
+    return `${change.sheetId}!filter:${change.filterId}`;
+  }
+  if (typeof change.tableId === 'string' && change.tableId.length > 0) {
+    return `${change.sheetId}!table:${change.tableId}:filter`;
+  }
+  return `${change.sheetId}!autoFilter`;
+}
+
+function pushOptionalSemanticField(
+  fields: { key: string; value: VersionSemanticValue }[],
+  key: string,
+  value: string | number | boolean | undefined,
+): void {
+  if (value !== undefined) {
+    fields.push({ key, value });
+  }
+}
+
+function semanticObjectValue(
+  fields: readonly { key: string; value: VersionSemanticValue }[],
+): VersionSemanticValue {
   return { kind: 'object', fields };
 }
 

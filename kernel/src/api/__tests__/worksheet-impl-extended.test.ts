@@ -1346,7 +1346,12 @@ describe('WorksheetImpl Extended Methods', () => {
       ];
       const result = await ws.setCells(updates);
 
-      expect(CellOps.setCells).toHaveBeenCalledWith(ctx, SHEET_ID, updates);
+      expect(CellOps.setCells).toHaveBeenCalledWith(
+        ctx,
+        SHEET_ID,
+        updates,
+        expectVersionOperationOptions('worksheet.setCells', ['cells']),
+      );
       expect(result).toEqual({ cellsWritten: 2 });
     });
 

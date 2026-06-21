@@ -541,6 +541,7 @@ export async function setCells(
     col?: number;
     value: CellValuePrimitive | Date;
   }>,
+  options?: MutationAdmissionOptions,
 ): Promise<SetCellsResult> {
   if (cells.length === 0) return { cellsWritten: 0, errors: null };
 
@@ -641,7 +642,11 @@ export async function setCells(
 
     // --- Use the mutation pipeline path for primitives ---
     if (edits.length > 0) {
-      await ctx.computeBridge.setCellsByPosition(sheetId, edits);
+      if (options) {
+        await ctx.computeBridge.setCellsByPosition(sheetId, edits, options);
+      } else {
+        await ctx.computeBridge.setCellsByPosition(sheetId, edits);
+      }
     }
     // --- Date writes go through setDateValue so Rust produces a
     // date serial + applies a default date format when the cell is unformatted.
@@ -651,14 +656,26 @@ export async function setCells(
     // headless test.
     for (const d of dates) {
       const parts = calendarPartsInTz(d.date, ctx.userTimezone);
-      await ctx.computeBridge.setDateValue(
-        sheetId,
-        d.row,
-        d.col,
-        parts.year,
-        parts.month,
-        parts.day,
-      );
+      if (options) {
+        await ctx.computeBridge.setDateValue(
+          sheetId,
+          d.row,
+          d.col,
+          parts.year,
+          parts.month,
+          parts.day,
+          options,
+        );
+      } else {
+        await ctx.computeBridge.setDateValue(
+          sheetId,
+          d.row,
+          d.col,
+          parts.year,
+          parts.month,
+          parts.day,
+        );
+      }
     }
     if (edits.length > 0 || dates.length > 0 || wroteHeader) {
       await reapplyActiveFiltersAfterWrite(ctx, sheetId);

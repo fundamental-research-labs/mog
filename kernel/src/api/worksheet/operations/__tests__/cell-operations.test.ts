@@ -45,6 +45,9 @@ function createMockCtx() {
       setCellsByPosition: jest.fn().mockImplementation(async () => {
         order.push('setCellsByPosition');
       }),
+      setDateValue: jest.fn().mockImplementation(async () => {
+        order.push('setDateValue');
+      }),
       getActiveFilters: jest.fn().mockImplementation(async () => {
         order.push('getActiveFilters');
         return [{ id: 'filter-1' }];
@@ -123,6 +126,56 @@ describe('CellOps filter reapply materialization', () => {
       'await:allSheets',
       'renameTableColumn',
       'setCellsByPosition',
+      'getActiveFilters',
+      'applyFilter',
+    ]);
+  });
+
+  it('passes mutation admission options to bulk primitive and date writes', async () => {
+    const ctx = createMockCtx();
+    const date = new Date(Date.UTC(2024, 0, 15));
+    const options = {
+      operationContext: {
+        operationId: 'worksheet.setCells:1',
+        kind: 'mutation',
+        author: { authorId: 'user-1', actorKind: 'user' },
+        createdAt: '2026-06-20T00:00:00.000Z',
+        sheetIds: [SHEET_ID],
+        domainIds: ['cells'],
+        capturePolicy: 'commitEligible',
+        writeAdmissionMode: 'capture',
+      },
+    };
+
+    const result = await CellOps.setCells(
+      ctx,
+      SHEET_ID,
+      [
+        { row: 1, col: 0, value: 'West' },
+        { row: 2, col: 0, value: date },
+      ],
+      options as any,
+    );
+
+    expect(result).toEqual({ cellsWritten: 2, errors: null });
+    expect(ctx.computeBridge.setCellsByPosition).toHaveBeenCalledWith(
+      SHEET_ID,
+      [{ row: 1, col: 0, input: { kind: 'parse', text: 'West' } }],
+      options,
+    );
+    expect(ctx.computeBridge.setDateValue).toHaveBeenCalledWith(
+      SHEET_ID,
+      2,
+      0,
+      2024,
+      1,
+      15,
+      options,
+    );
+    expect(ctx.order).toEqual([
+      'await:allSheets',
+      'setCellsByPosition',
+      'setDateValue',
       'getActiveFilters',
       'applyFilter',
     ]);

@@ -2516,7 +2516,13 @@ export class WorksheetImpl implements Worksheet {
         addrStr !== undefined ? resolveCell(addrStr) : (cell as { row: number; col: number });
       this._invalidateActiveCellEditSourceForCell(row, col);
     }
-    return CellOps.setCells(this.ctx, this.sheetId, normalizedCells);
+    return CellOps.setCells(this.ctx, this.sheetId, normalizedCells, {
+      operationContext: createVersionOperationContext(this.ctx, {
+        operationIdPrefix: 'worksheet.setCells',
+        sheetIds: [this.sheetId],
+        domainIds: ['cells'],
+      }),
+    });
   }
 
   private normalizeSetCellsEntries(cells: SetCellsEntry[]): NormalizedSetCellsEntry[] {

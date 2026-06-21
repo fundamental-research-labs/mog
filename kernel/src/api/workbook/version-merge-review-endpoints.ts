@@ -95,9 +95,23 @@ export async function saveMergeResolutionsWorkbookVersion(
     return mergeEndpointFailure('saveMergeResolutions', targetDiagnostics);
   }
 
+  if (artifact.payload.status !== 'clean' && artifact.payload.status !== 'conflicted') {
+    return mergeEndpointFailure('saveMergeResolutions', [
+      mergeReviewDiagnostic(
+        'saveMergeResolutions',
+        'VERSION_MERGE_RESOLUTION_MISMATCH',
+        'ancestry merge preview artifacts do not accept saved resolutions.',
+      ),
+    ]);
+  }
+  const resolutionPreview = {
+    status: artifact.payload.status,
+    conflicts: artifact.payload.conflicts,
+  };
+
   const resolutionValidation = validateResolutionsForPreview(
     'saveMergeResolutions',
-    artifact.payload,
+    resolutionPreview,
     normalized.input.resolutions,
   );
   if (!resolutionValidation.ok) {
@@ -338,7 +352,7 @@ export async function putMergeResolutionPayloadWorkbookVersion(
       optionId: normalized.input.optionId,
       kind: normalized.input.kind,
       targetRef: normalized.input.targetRef,
-      expectedTargetHead: cloneJson(normalized.input.expectedTargetHead) as JsonValue,
+      expectedTargetHead: cloneJson(normalized.input.expectedTargetHead) as unknown as JsonValue,
       purpose: normalized.input.purpose,
       ...(normalized.input.domainPayloadSchema === undefined
         ? {}

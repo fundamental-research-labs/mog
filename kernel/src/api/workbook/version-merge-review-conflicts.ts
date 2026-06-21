@@ -2,7 +2,6 @@ import type {
   VersionDiffStructuralMetadata,
   VersionDiffValue,
   VersionMergeConflict,
-  VersionMergeConflictDetailResolutionOption,
   VersionMergeConflictResolutionOption,
   VersionMergeConflictResolutionOptionKind,
   VersionRedactedValue,
@@ -27,6 +26,14 @@ const REDACTED_VALUE_REASONS = new Set([
   'redaction-policy',
   'historical-acl-unavailable',
 ]);
+
+type VersionMergeConflictDetailResolutionOption = {
+  readonly optionId: string;
+  readonly conflictId: string;
+  readonly kind: VersionMergeConflictResolutionOptionKind;
+  readonly value: VersionDiffValue;
+  readonly recalcRequired: boolean;
+};
 
 export function findExpectedConflict(
   operation: VersionMergePublicOperation,

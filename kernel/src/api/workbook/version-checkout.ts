@@ -103,6 +103,10 @@ export async function checkoutWorkbookVersion(
   }
 }
 
+export function hasAttachedVersionCheckoutService(ctx: DocumentContext): boolean {
+  return getAttachedCheckoutMaterializationService(ctx) !== null;
+}
+
 function getAttachedCheckoutMaterializationService(
   ctx: DocumentContext,
 ): AttachedCheckoutMaterializationService | null {

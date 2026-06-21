@@ -17,7 +17,7 @@ import { observeMutationAdmission } from '../../bridges/compute/mutation-admissi
 import type { DocumentContext } from '../../context';
 import { VERSION_OBJECT_SCHEMA_VERSION } from '../../document/version-store/object-store';
 import { REF_NAME_STORAGE_PREFIX } from '../../document/version-store/ref-name';
-import { checkoutWorkbookVersion } from './version-checkout';
+import { checkoutWorkbookVersion, hasAttachedVersionCheckoutService } from './version-checkout';
 import { commitWorkbookVersion, hasAttachedVersionWriteService } from './version-commit';
 import { diffWorkbookVersion } from './version-diff';
 import { hasAttachedVersionMergeService, mergeWorkbookVersion } from './version-merge';
@@ -158,6 +158,7 @@ export class WorkbookVersionImpl implements WorkbookVersion {
     const services = getAttachedVersionServices(this.ctx);
     const writeServiceAttached = hasAttachedVersionWriteService(this.ctx);
     const refLifecycleServiceAttached = hasAttachedVersionRefLifecycleService(this.ctx);
+    const checkoutServiceAttached = hasAttachedVersionCheckoutService(this.ctx);
     const mergeServiceAttached = hasAttachedVersionMergeService(this.ctx);
     const provenanceAdmissionPresent = typeof observeMutationAdmission === 'function';
     const rolloutStage = getRolloutStage(provenanceAdmissionPresent);
@@ -206,6 +207,12 @@ export class WorkbookVersionImpl implements WorkbookVersion {
       'Public checkout facade is exposed, but no production materializer lifecycle attachment is reported yet.',
       'VC-05',
     );
+    const checkoutServiceAttachedDiagnostic = diagnostic(
+      'version.checkout.serviceAttached',
+      'info',
+      'Document-scoped public checkout materialization service is attached.',
+      'version-service',
+    );
     const mergePending = diagnostic(
       'version.merge.pending',
       'warning',
@@ -238,12 +245,15 @@ export class WorkbookVersionImpl implements WorkbookVersion {
     const commitApiDiagnostics = writeServiceAttached
       ? [commitApiServiceAttached]
       : [commitApiPending];
+    const checkoutDiagnostics = checkoutServiceAttached
+      ? [checkoutServiceAttachedDiagnostic, checkoutPending]
+      : [checkoutPending];
 
     const diagnostics = [
       ...objectStoreDiagnostics,
       ...refLifecycleDiagnostics,
       ...commitApiDiagnostics,
-      checkoutPending,
+      ...checkoutDiagnostics,
       mergeServiceAttached ? mergeServiceAttachedDiagnostic : mergePending,
       provenanceAdmission,
     ];
@@ -253,13 +263,8 @@ export class WorkbookVersionImpl implements WorkbookVersion {
       rolloutStage,
       objectStoreFoundation: capability('present', true, 'VC-04', objectStoreDiagnostics),
       refLifecycleFoundation: capability('present', true, 'VC-05', refLifecycleDiagnostics),
-      commitApi: capability(
-        writeServiceAttached ? 'present' : 'pending',
-        writeServiceAttached,
-        'VC-04',
-        commitApiDiagnostics,
-      ),
-      checkout: capability('pending', false, 'VC-05', [checkoutPending]),
+      commitApi: capability(writeServiceAttached ? 'present' : 'pending', writeServiceAttached, 'VC-04', commitApiDiagnostics),
+      checkout: capability('pending', false, 'VC-05', checkoutDiagnostics),
       merge: capability(
         mergeServiceAttached ? 'present' : 'pending',
         mergeServiceAttached,

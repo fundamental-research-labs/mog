@@ -612,6 +612,16 @@ describe('WorkbookVersion status slice', () => {
       ],
       order: 'topological-newest',
     });
+    await expect(wb.version.getStatus()).resolves.toMatchObject({
+      checkout: {
+        stage: 'pending',
+        available: false,
+      },
+      diagnostics: expect.arrayContaining([
+        expect.objectContaining({ code: 'version.checkout.serviceAttached' }),
+        expect.objectContaining({ code: 'version.checkout.pending' }),
+      ]),
+    });
 
     const graph = await provider.openGraph(namespaceForDocumentScope(DOCUMENT_SCOPE, 'graph-1'));
     await expect(graph.readHead()).resolves.toMatchObject({

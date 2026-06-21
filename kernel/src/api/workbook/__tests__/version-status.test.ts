@@ -359,7 +359,7 @@ describe('WorkbookVersion status slice', () => {
     expect(graphStore.listCommits).not.toHaveBeenCalled();
   });
 
-  it('does not expose arbitrary branch refs in the first public read slice', async () => {
+  it('redacts invalid private refs before any graph or branch service call', async () => {
     const graphStore = createFakeGraphStore();
     const wb = createWorkbook({
       ctx: createMockCtx({
@@ -369,12 +369,39 @@ describe('WorkbookVersion status slice', () => {
       }),
     });
 
-    await expect(wb.version.readRef('refs/heads/private-review')).resolves.toMatchObject({
+    const result = await wb.version.readRef('refs/heads/private-review');
+    expect(result).toMatchObject({
+      status: 'degraded',
+      ref: null,
+    });
+    expect(result.diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          issueCode: 'VERSION_INVALID_OPTIONS',
+          payload: expect.objectContaining({ refName: 'redacted' }),
+          redacted: true,
+        }),
+      ]),
+    );
+    expect(graphStore.readRef).not.toHaveBeenCalled();
+  });
+
+  it('requires an attached public ref lifecycle service for arbitrary valid branch refs', async () => {
+    const graphStore = createFakeGraphStore();
+    const wb = createWorkbook({
+      ctx: createMockCtx({
+        versioning: {
+          graphStore,
+        },
+      }),
+    });
+
+    await expect(wb.version.readRef('refs/heads/review/private-review')).resolves.toMatchObject({
       status: 'degraded',
       ref: null,
       diagnostics: [
         expect.objectContaining({
-          issueCode: 'VERSION_PERMISSION_DENIED',
+          issueCode: 'VERSION_GRAPH_UNINITIALIZED',
           recoverability: 'unsupported',
           redacted: true,
         }),
@@ -740,14 +767,17 @@ describe('WorkbookVersion status slice', () => {
     expect(graphStore.commit).not.toHaveBeenCalled();
   });
 
-  it('does not expose deferred checkout, merge, or branch lifecycle methods', () => {
+  it('exposes ref lifecycle methods but not deferred checkout or merge methods', () => {
     const wb = createWorkbook();
 
     expect('checkout' in wb.version).toBe(false);
     expect('merge' in wb.version).toBe(false);
     expect('diff' in wb.version).toBe(true);
-    expect('createBranch' in wb.version).toBe(false);
-    expect('listRefs' in wb.version).toBe(false);
+    expect('createBranch' in wb.version).toBe(true);
+    expect('listRefs' in wb.version).toBe(true);
+    expect('fastForwardBranch' in wb.version).toBe(true);
+    expect('updateBranch' in wb.version).toBe(true);
+    expect('deleteBranch' in wb.version).toBe(true);
   });
 });
 

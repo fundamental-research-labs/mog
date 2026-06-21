@@ -1,23 +1,31 @@
 import type {
   RedactedVersionAuthor,
-  VersionCommitish,
+  VersionBranchName,
   VersionBranchRefReadResult,
+  VersionCommitish,
+  VersionCreateBranchOptions,
   VersionCommitOptions,
   VersionCommitPage,
   VersionDegradedHeadResult,
+  VersionDeleteRefOptions,
   VersionDiffOptions,
   VersionDiagnosticPublicPayload,
+  VersionFastForwardBranchOptions,
   VersionGetHeadOptions,
   VersionListCommitsOptions,
+  VersionListRefsOptions,
   VersionMainRefName,
   VersionRecordRevision,
   VersionRef,
+  VersionRefListResult,
+  VersionRefMutationResult,
   VersionRefName,
   VersionRefReadResult,
   VersionRefSelector,
   VersionStoreDiagnostic,
   VersionSymbolicRef,
   VersionSymbolicRefReadResult,
+  VersionUpdateBranchOptions,
   WorkbookCommitId,
   WorkbookCommitRef,
   WorkbookCommitSummary,
@@ -25,7 +33,6 @@ import type {
   WorkbookVersion,
   WorkbookVersionCapabilityStatus,
   WorkbookVersionDiagnostic,
-  WorkbookVersionHead,
   WorkbookVersionRolloutStage,
   WorkbookVersionStatus,
 } from '@mog-sdk/contracts/api';
@@ -36,6 +43,17 @@ import { VERSION_OBJECT_SCHEMA_VERSION } from '../../document/version-store/obje
 import { REF_NAME_STORAGE_PREFIX } from '../../document/version-store/ref-name';
 import { commitWorkbookVersion, hasAttachedVersionWriteService } from './version-commit';
 import { diffWorkbookVersion } from './version-diff';
+import {
+  createWorkbookVersionBranch,
+  deleteWorkbookVersionBranch,
+  deleteWorkbookVersionRef,
+  fastForwardWorkbookVersionBranch,
+  getWorkbookVersionRef,
+  hasAttachedVersionRefLifecycleService,
+  listWorkbookVersionRefs,
+  readWorkbookVersionRef,
+  updateWorkbookVersionBranch,
+} from './version-refs';
 
 const VERSION_HEAD_REF = 'HEAD';
 const VERSION_MAIN_REF = 'refs/heads/main' satisfies VersionMainRefName;
@@ -161,6 +179,7 @@ export class WorkbookVersionImpl implements WorkbookVersion {
   async getStatus(): Promise<WorkbookVersionStatus> {
     const services = getAttachedVersionServices(this.ctx);
     const writeServiceAttached = hasAttachedVersionWriteService(this.ctx);
+    const refLifecycleServiceAttached = hasAttachedVersionRefLifecycleService(this.ctx);
     const provenanceAdmissionPresent = typeof observeMutationAdmission === 'function';
     const rolloutStage = getRolloutStage(provenanceAdmissionPresent);
 
@@ -228,7 +247,7 @@ export class WorkbookVersionImpl implements WorkbookVersion {
     const objectStoreDiagnostics = services?.objectStore
       ? [objectStoreFoundation]
       : [objectStoreFoundation, objectStoreServiceUnavailable];
-    const refLifecycleDiagnostics = services?.refStore
+    const refLifecycleDiagnostics = refLifecycleServiceAttached || services?.refStore
       ? [refLifecycleFoundation]
       : [refLifecycleFoundation, refLifecycleServiceUnavailable];
     const commitApiDiagnostics = writeServiceAttached
@@ -268,12 +287,8 @@ export class WorkbookVersionImpl implements WorkbookVersion {
   }
 
   async getHead(): Promise<WorkbookCommitRef | VersionDegradedHeadResult>;
-  async getHead(
-    options: VersionGetHeadOptions,
-  ): Promise<WorkbookCommitRef | VersionDegradedHeadResult>;
-  async getHead(
-    _options: VersionGetHeadOptions = {},
-  ): Promise<WorkbookCommitRef | VersionDegradedHeadResult> {
+  async getHead(options: VersionGetHeadOptions): Promise<WorkbookCommitRef | VersionDegradedHeadResult>;
+  async getHead(_options: VersionGetHeadOptions = {}): Promise<WorkbookCommitRef | VersionDegradedHeadResult> {
     const readService = getAttachedVersionReadService(this.ctx);
     if (!readService) {
       return degradedHead([serviceUnavailableDiagnostic('getHead')]);
@@ -325,24 +340,55 @@ export class WorkbookVersionImpl implements WorkbookVersion {
   }
 
   async readRef(name: 'HEAD'): Promise<VersionSymbolicRefReadResult>;
-  async readRef(name: VersionMainRefName | VersionRefName): Promise<VersionBranchRefReadResult>;
-  async readRef(name: VersionRefSelector): Promise<VersionRefReadResult>;
-  async readRef(name: VersionRefSelector): Promise<VersionRefReadResult> {
-    const optionDiagnostics = validateReadRefName(name);
-    if (optionDiagnostics.length > 0) {
-      return degradedRef(null, optionDiagnostics);
+  async readRef(name: VersionMainRefName | VersionRefName | VersionBranchName): Promise<VersionBranchRefReadResult>;
+  async readRef(name: VersionRefSelector | VersionBranchName): Promise<VersionRefReadResult>;
+  async readRef(name: VersionRefSelector | VersionBranchName): Promise<VersionRefReadResult> {
+    if (name !== VERSION_HEAD_REF && name !== VERSION_MAIN_REF) {
+      return readWorkbookVersionRef(this.ctx, name);
     }
 
+    const publicReadName = name as VersionRefSelector;
     const readService = getAttachedVersionReadService(this.ctx);
     if (!readService?.readRef) {
-      return degradedRef(null, [serviceUnavailableDiagnostic('readRef', { refName: name })]);
+      return degradedRef(null, [serviceUnavailableDiagnostic('readRef', { refName: publicReadName })]);
     }
 
     try {
-      return mapRefResult(await readService.readRef(name), name);
+      return mapRefResult(await readService.readRef(publicReadName), publicReadName);
     } catch {
-      return degradedRef(null, [providerErrorDiagnostic('readRef', { refName: name })]);
+      return degradedRef(null, [providerErrorDiagnostic('readRef', { refName: publicReadName })]);
     }
+  }
+
+  async getRef(name: 'HEAD'): Promise<VersionSymbolicRefReadResult>;
+  async getRef(name: VersionMainRefName | VersionRefName | VersionBranchName): Promise<VersionBranchRefReadResult>;
+  async getRef(name: VersionRefSelector | VersionBranchName): Promise<VersionRefReadResult>;
+  async getRef(name: VersionRefSelector | VersionBranchName): Promise<VersionRefReadResult> {
+    return getWorkbookVersionRef(this.ctx, name);
+  }
+
+  async listRefs(options: VersionListRefsOptions = {}): Promise<VersionRefListResult> {
+    return listWorkbookVersionRefs(this.ctx, options);
+  }
+
+  async createBranch(options: VersionCreateBranchOptions): Promise<VersionRefMutationResult> {
+    return createWorkbookVersionBranch(this.ctx, options);
+  }
+
+  async fastForwardBranch(options: VersionFastForwardBranchOptions): Promise<VersionRefMutationResult> {
+    return fastForwardWorkbookVersionBranch(this.ctx, options);
+  }
+
+  async updateBranch(options: VersionUpdateBranchOptions): Promise<VersionRefMutationResult> {
+    return updateWorkbookVersionBranch(this.ctx, options);
+  }
+
+  async deleteBranch(options: VersionDeleteRefOptions): Promise<VersionRefMutationResult> {
+    return deleteWorkbookVersionBranch(this.ctx, options);
+  }
+
+  async deleteRef(options: VersionDeleteRefOptions): Promise<VersionRefMutationResult> {
+    return deleteWorkbookVersionRef(this.ctx, options);
   }
 }
 
@@ -441,23 +487,6 @@ function validateListCommitsOptions(
   }
 
   return diagnostics;
-}
-
-function validateReadRefName(name: VersionRefSelector): readonly VersionStoreDiagnostic[] {
-  if (name === VERSION_HEAD_REF || name === VERSION_MAIN_REF) return [];
-
-  return [
-    publicDiagnostic(
-      'VERSION_PERMISSION_DENIED',
-      'readRef',
-      'This version read slice can read only HEAD or refs/heads/main.',
-      {
-        severity: 'error',
-        recoverability: 'unsupported',
-        payload: { refName: 'redacted' },
-      },
-    ),
-  ];
 }
 
 function mapHeadResult(value: unknown): WorkbookCommitRef | VersionDegradedHeadResult {

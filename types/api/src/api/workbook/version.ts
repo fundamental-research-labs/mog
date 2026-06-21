@@ -95,6 +95,11 @@ export type VersionRefName = string & {
   readonly __brand?: 'VersionRefName';
 };
 export type VersionRefSelector = 'HEAD' | VersionMainRefName | VersionRefName;
+export type VersionRefNamespace = 'scenario' | 'agent' | 'import' | 'review';
+export type VersionBranchName = string & {
+  readonly __brand?: 'VersionBranchName';
+};
+export type VersionBranchSelector = VersionBranchName | VersionMainRefName | VersionRefName;
 
 export type VersionPageOrder = 'topological-newest' | 'semantic-change-order';
 
@@ -237,6 +242,15 @@ export interface VersionListCommitsOptions {
   readonly pageSize?: number;
   readonly pageToken?: VersionPageToken | string;
   readonly includeOrphans?: boolean;
+  readonly includeDiagnostics?: boolean;
+}
+
+export interface VersionListRefsOptions {
+  /**
+   * Optional branch namespace or branch-prefix filter. Examples:
+   * `scenario`, `scenario/budget`, or `refs/heads/scenario/budget`.
+   */
+  readonly prefix?: VersionRefNamespace | VersionBranchName | VersionRefName;
   readonly includeDiagnostics?: boolean;
 }
 
@@ -384,6 +398,28 @@ export interface VersionCommitOptions {
   readonly mode?: VersionCommitMode;
 }
 
+export interface VersionCreateBranchOptions {
+  readonly name: VersionBranchName | VersionRefName;
+  readonly targetCommitId: WorkbookCommitId;
+  readonly baseCommitId?: WorkbookCommitId;
+  readonly expectedAbsent?: true;
+}
+
+export interface VersionFastForwardBranchOptions {
+  readonly name: VersionBranchName | VersionRefName;
+  readonly nextCommitId: WorkbookCommitId;
+  readonly expectedHead: WorkbookCommitId;
+  readonly expectedRefRevision: VersionRecordRevision;
+}
+
+export type VersionUpdateBranchOptions = VersionFastForwardBranchOptions;
+
+export interface VersionDeleteRefOptions {
+  readonly name: VersionBranchName | VersionRefName;
+  readonly expectedHead?: WorkbookCommitId;
+  readonly expectedRefRevision?: VersionRecordRevision;
+}
+
 export type VersionSymbolicRefReadResult =
   | {
       readonly status: 'success';
@@ -417,6 +453,30 @@ export type VersionRefReadResult =
       readonly diagnostics: readonly VersionStoreDiagnostic[];
     };
 
+export type VersionRefListResult =
+  | {
+      readonly status: 'success';
+      readonly items: readonly VersionRef[];
+      readonly diagnostics: readonly [];
+    }
+  | {
+      readonly status: 'degraded';
+      readonly items: readonly VersionRef[];
+      readonly diagnostics: readonly VersionStoreDiagnostic[];
+    };
+
+export type VersionRefMutationResult =
+  | {
+      readonly status: 'success';
+      readonly ref: VersionRef;
+      readonly diagnostics: readonly [];
+    }
+  | {
+      readonly status: 'degraded';
+      readonly ref: VersionRef | null;
+      readonly diagnostics: readonly VersionStoreDiagnostic[];
+    };
+
 export interface WorkbookVersion {
   getStatus(): Promise<WorkbookVersionStatus>;
   getHead(): Promise<WorkbookCommitRef | VersionDegradedHeadResult>;
@@ -431,4 +491,13 @@ export interface WorkbookVersion {
   readRef(name: 'HEAD'): Promise<VersionSymbolicRefReadResult>;
   readRef(name: VersionMainRefName | VersionRefName): Promise<VersionBranchRefReadResult>;
   readRef(name: VersionRefSelector): Promise<VersionRefReadResult>;
+  getRef(name: 'HEAD'): Promise<VersionSymbolicRefReadResult>;
+  getRef(name: VersionMainRefName | VersionRefName | VersionBranchName): Promise<VersionBranchRefReadResult>;
+  getRef(name: VersionRefSelector | VersionBranchName): Promise<VersionRefReadResult>;
+  listRefs(options?: VersionListRefsOptions): Promise<VersionRefListResult>;
+  createBranch(options: VersionCreateBranchOptions): Promise<VersionRefMutationResult>;
+  fastForwardBranch(options: VersionFastForwardBranchOptions): Promise<VersionRefMutationResult>;
+  updateBranch(options: VersionUpdateBranchOptions): Promise<VersionRefMutationResult>;
+  deleteBranch(options: VersionDeleteRefOptions): Promise<VersionRefMutationResult>;
+  deleteRef(options: VersionDeleteRefOptions): Promise<VersionRefMutationResult>;
 }

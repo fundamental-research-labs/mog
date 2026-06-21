@@ -20,6 +20,7 @@ import type {
 } from '@mog-sdk/contracts/api';
 
 import type { DocumentContext } from '../../context';
+import { projectReviewAccessDiffValue } from '../../document/version-store/review-access-projection';
 
 const VERSION_HEAD_REF = 'HEAD';
 const VERSION_MAIN_REF = 'refs/heads/main' satisfies VersionMainRefName;
@@ -461,8 +462,8 @@ function mapDiffEntry(value: unknown): VersionDiffEntry | null {
   if (!isRecord(value)) return null;
 
   const structural = mapStructuralMetadata(value.structural ?? value);
-  const before = mapDiffValue(value.before);
-  const after = mapDiffValue(value.after);
+  const before = structural ? mapReviewAccessDiffValue(structural, value.before) : null;
+  const after = structural ? mapReviewAccessDiffValue(structural, value.after) : null;
   if (!structural || !before || !after) return null;
 
   const display = value.display === undefined ? undefined : mapDiffDisplay(value.display);
@@ -479,6 +480,14 @@ function mapDiffEntry(value: unknown): VersionDiffEntry | null {
     ...(display ? { display } : {}),
     ...(diagnostics && diagnostics.length > 0 ? { diagnostics } : {}),
   };
+}
+
+function mapReviewAccessDiffValue(
+  structural: VersionDiffStructuralMetadata,
+  value: unknown,
+): VersionDiffValue | null {
+  const reviewValue = projectReviewAccessDiffValue(structural, value);
+  return reviewValue === undefined ? mapDiffValue(value) : reviewValue;
 }
 
 function mapStructuralMetadata(value: unknown): VersionDiffStructuralMetadata | null {

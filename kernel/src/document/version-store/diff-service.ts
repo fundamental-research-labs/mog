@@ -24,6 +24,7 @@ import {
   type VersionStoreProvider,
 } from './provider';
 import { namespaceForRegistry } from './registry';
+import { projectReviewAccessDiffValue } from './review-access-projection';
 
 const VERSION_DIFF_DEFAULT_PAGE_SIZE = 50;
 const VERSION_DIFF_MAX_PAGE_SIZE = 500;
@@ -425,8 +426,8 @@ function mapSemanticChange(value: unknown): VersionDiffEntry | null {
   if (!isRecord(value)) return null;
 
   const structural = mapStructuralMetadata(value);
-  const before = mapDiffValue(value.before);
-  const after = mapDiffValue(value.after);
+  const before = structural ? mapReviewAccessDiffValue(structural, value.before) : null;
+  const after = structural ? mapReviewAccessDiffValue(structural, value.after) : null;
   if (!structural || !before || !after) return null;
 
   const display = value.display === undefined ? undefined : mapDiffDisplay(value.display);
@@ -438,6 +439,14 @@ function mapSemanticChange(value: unknown): VersionDiffEntry | null {
     after,
     ...(display ? { display } : {}),
   };
+}
+
+function mapReviewAccessDiffValue(
+  structural: VersionDiffStructuralMetadata,
+  value: unknown,
+): VersionDiffValue | null {
+  const reviewValue = projectReviewAccessDiffValue(structural, value);
+  return reviewValue === undefined ? mapDiffValue(value) : reviewValue;
 }
 
 function mapStructuralMetadata(

@@ -158,6 +158,43 @@ describe('WorkbookVersionDiffService', () => {
       'charts.source-range',
       'floating-objects.anchors',
     ]);
+    expect(result.items[0]?.display).toEqual(redactedEntityLabelDisplay());
+    expect(JSON.stringify(result)).not.toContain('secretFormula');
+  });
+
+  it('fails closed without leaking unsupported VC-06 raw payload fields', async () => {
+    const rawSecret = 'Sheet1!$B$2:$B$20';
+    const { provider, rootCommitId, childCommitId } = await graphWithRootAndChild({
+      semanticPayload: validSemanticPayload('child', [
+        semanticRecord({
+          changeId: 'vc06-unsupported-named-range-raw-field',
+          domain: 'named-ranges',
+          entityId: 'name:RevenueTotal',
+          propertyPath: ['definition'],
+          before: null,
+          after: semanticObject([
+            { key: 'kind', value: 'Set' },
+            { key: 'name', value: 'RevenueTotal' },
+            { key: 'secretFormula', value: rawSecret },
+          ]),
+          display: entityLabelDisplay('RevenueTotal'),
+        }),
+      ]),
+    });
+    const service = createWorkbookVersionDiffService({ provider });
+
+    const result = await service.diff(
+      { kind: 'commit', id: rootCommitId },
+      { kind: 'commit', id: childCommitId },
+    );
+
+    expect(result).toMatchObject({
+      status: 'degraded',
+      items: [],
+      diagnostics: [expect.objectContaining({ issueCode: 'VERSION_UNSUPPORTED_SCHEMA' })],
+    });
+    expect(JSON.stringify(result)).not.toContain(rawSecret);
+    expect(JSON.stringify(result)).not.toContain('secretFormula');
   });
 
   it('resolves HEAD and refs/heads/main selectors through the visible graph', async () => {
@@ -460,9 +497,8 @@ function vc06SemanticChanges() {
       after: semanticObject([
         { key: 'kind', value: 'Set' },
         { key: 'name', value: 'RevenueTotal' },
-        { key: 'formula', value: 'Sheet1!$B$2:$B$20' },
       ]),
-      display: entityLabelDisplay('RevenueTotal'),
+      display: redactedEntityLabelDisplay(),
     }),
     semanticRecord({
       changeId: 'vc06-table-definition',
@@ -474,14 +510,12 @@ function vc06SemanticChanges() {
         { key: 'tableId', value: 'table-sales' },
         { key: 'name', value: 'SalesTable' },
         { key: 'sheetId', value: 'sheet-1' },
-        { key: 'range', value: 'A1:C20' },
       ]),
       after: semanticObject([
         { key: 'kind', value: 'Set' },
         { key: 'tableId', value: 'table-sales' },
         { key: 'name', value: 'SalesTable' },
         { key: 'sheetId', value: 'sheet-1' },
-        { key: 'range', value: 'A1:D20' },
       ]),
       display: entityLabelDisplay('SalesTable'),
     }),
@@ -494,7 +528,7 @@ function vc06SemanticChanges() {
       after: semanticObject([
         { key: 'kind', value: 'Set' },
         { key: 'cellId', value: 'cell-b2' },
-        { key: 'text', value: 'Needs review' },
+        { key: 'address', value: 'B2' },
       ]),
       display: sheetAddressDisplay('Sheet1', 'B2'),
     }),
@@ -507,8 +541,6 @@ function vc06SemanticChanges() {
       after: semanticObject([
         { key: 'kind', value: 'Set' },
         { key: 'ruleId', value: 'cf-top-10' },
-        { key: 'appliesTo', value: 'B2:B20' },
-        { key: 'type', value: 'top10' },
       ]),
       display: entityLabelDisplay('cf-top-10'),
     }),
@@ -569,18 +601,6 @@ function vc06SemanticChanges() {
         { key: 'kind', value: 'Set' },
         { key: 'range', value: 'A1:D20' },
         { key: 'rowsMoved', value: 6 },
-        {
-          key: 'sortKeys',
-          value: {
-            kind: 'array',
-            values: [
-              semanticObject([
-                { key: 'column', value: 'D' },
-                { key: 'direction', value: 'descending' },
-              ]),
-            ],
-          },
-        },
       ]),
       display: addressDisplay('A1:D20'),
     }),
@@ -680,6 +700,12 @@ function semanticObject(fields: readonly { readonly key: string; readonly value:
 function entityLabelDisplay(value: string) {
   return {
     entityLabel: { kind: 'value', value },
+  };
+}
+
+function redactedEntityLabelDisplay() {
+  return {
+    entityLabel: { kind: 'redacted', reason: 'redaction-policy' },
   };
 }
 

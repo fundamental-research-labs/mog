@@ -25,13 +25,16 @@ import {
   type VersionGraphNamespace,
 } from './object-store';
 import {
+  InMemoryVersionDocumentProviderBackend,
+  type InMemoryVersionProviderDurability,
+} from './provider-memory-backend';
+import {
   cloneVersionGraphRegistry,
   createVersionGraphRegistry,
   namespaceForDocumentScope,
   namespaceForRegistry,
   normalizeVersionDocumentScope,
   normalizeVersionStoreString,
-  versionDocumentScopeKey,
   type VersionDocumentScope,
   type VersionGraphRegistry,
   type VersionRecordRevision,
@@ -46,6 +49,10 @@ export {
   versionDocumentScopeKey,
 } from './registry';
 export type { VersionDocumentScope, VersionGraphRegistry, VersionRecordRevision } from './registry';
+export {
+  InMemoryVersionDocumentProviderBackend,
+  type InMemoryVersionDocumentProviderBackendSnapshot,
+} from './provider-memory-backend';
 
 export type VersionAccessContext = {
   readonly principalScope?: string;
@@ -84,6 +91,14 @@ export type VersionStoreCapabilities = {
 };
 
 export type VersionStoreCloseReason = 'workbook-close' | 'dispose' | 'error' | 'test-teardown';
+export type VersionStoreLifecycleState =
+  | 'open'
+  | 'closing'
+  | 'close-failed'
+  | 'closed'
+  | 'disposing'
+  | 'dispose-failed'
+  | 'disposed';
 
 export type VersionStoreOperation =
   | 'readGraphRegistry'
@@ -105,6 +120,7 @@ export type VersionStoreDiagnosticCode =
   | 'VERSION_STORE_UNAVAILABLE'
   | 'VERSION_UNSUPPORTED_DURABLE_PERSISTENCE'
   | 'VERSION_UNSUPPORTED_REGISTRY'
+  | 'VERSION_CORRUPT_REGISTRY'
   | 'VERSION_MISSING_CHANGE_SET'
   | 'VERSION_PROVIDER_FAILED';
 
@@ -115,6 +131,7 @@ export type VersionDiagnosticMessageId =
   | 'version.graph.uninitialized'
   | 'version.graph.conflict'
   | 'version.registry.unsupported'
+  | 'version.registry.corrupt'
   | 'version.integrity.wrong-namespace'
   | 'version.integrity.missing-object'
   | 'version.integrity.missing-parent'
@@ -140,6 +157,7 @@ export type VersionStoreDiagnostic = {
   readonly refName?: typeof VERSION_GRAPH_MAIN_REF | typeof VERSION_GRAPH_HEAD_REF;
   readonly commitId?: WorkbookCommitId;
   readonly mutationGuarantee?: VersionStoreMutationGuarantee;
+  readonly lifecycleState?: VersionStoreLifecycleState;
   readonly details?: Readonly<Record<string, string | number | boolean | null>>;
   readonly sourceDiagnostics?: readonly VersionGraphStoreDiagnostic[];
 };
@@ -167,6 +185,12 @@ export type VersionGraphRegistryReadResult =
     }
   | {
       readonly status: 'unsupported';
+      readonly registry: null;
+      readonly diagnostics: readonly VersionStoreDiagnostic[];
+      readonly mutationGuarantee: 'no-write-attempted';
+    }
+  | {
+      readonly status: 'corrupt';
       readonly registry: null;
       readonly diagnostics: readonly VersionStoreDiagnostic[];
       readonly mutationGuarantee: 'no-write-attempted';
@@ -271,42 +295,18 @@ export const IN_MEMORY_VERSION_STORE_CAPABILITIES: VersionStoreCapabilities = fr
   },
 });
 
-export class InMemoryVersionDocumentProviderBackend {
-  private readonly registries = new Map<string, VersionGraphRegistry>();
-  private readonly graphStores = new Map<string, InMemoryVersionGraphStore>();
-
-  getRegistry(documentScope: VersionDocumentScope): VersionGraphRegistry | undefined {
-    const registry = this.registries.get(versionDocumentScopeKey(documentScope));
-    return registry === undefined ? undefined : cloneVersionGraphRegistry(registry);
-  }
-
-  setRegistry(documentScope: VersionDocumentScope, registry: VersionGraphRegistry): void {
-    this.registries.set(
-      versionDocumentScopeKey(documentScope),
-      cloneVersionGraphRegistry(registry),
-    );
-  }
-
-  getGraph(namespace: VersionGraphNamespace): InMemoryVersionGraphStore | undefined {
-    return this.graphStores.get(versionGraphNamespaceKey(namespace));
-  }
-
-  getOrCreateGraph(namespace: VersionGraphNamespace): InMemoryVersionGraphStore {
-    const normalized = normalizeVersionGraphNamespace(namespace);
-    const key = versionGraphNamespaceKey(normalized);
-    const existing = this.graphStores.get(key);
-    if (existing) return existing;
-
-    const graph = createInMemoryVersionGraphStore({ namespace: normalized });
-    this.graphStores.set(key, graph);
-    return graph;
-  }
-}
+export const IN_MEMORY_DURABLE_SNAPSHOT_VERSION_STORE_CAPABILITIES: VersionStoreCapabilities =
+  freezeCapabilities({
+    ...IN_MEMORY_VERSION_STORE_CAPABILITIES,
+    durableGraphRegistry: true,
+    durableObjects: true,
+  });
 
 export type InMemoryVersionStoreProviderOptions = {
   readonly documentScope: VersionDocumentScope;
   readonly accessContext?: VersionAccessContext;
   readonly backend?: InMemoryVersionDocumentProviderBackend;
+  readonly durability?: InMemoryVersionProviderDurability;
   readonly readOnly?: boolean;
   readonly unavailable?: boolean;
 };
@@ -318,25 +318,31 @@ export class InMemoryVersionStoreProvider implements VersionStoreProvider {
 
   private readonly backend: InMemoryVersionDocumentProviderBackend;
   private readonly mode: 'read-write' | 'read-only' | 'unavailable';
+  private readonly baseCapabilities: VersionStoreCapabilities;
+  private lifecycleState: VersionStoreLifecycleState = 'open';
 
   constructor(options: InMemoryVersionStoreProviderOptions) {
     this.documentScope = normalizeVersionDocumentScope(options.documentScope);
     this.accessContext = normalizeVersionAccessContext(options.accessContext);
     this.backend = options.backend ?? new InMemoryVersionDocumentProviderBackend();
     this.mode = options.unavailable ? 'unavailable' : options.readOnly ? 'read-only' : 'read-write';
+    this.baseCapabilities =
+      options.durability === 'snapshot-test-double'
+        ? IN_MEMORY_DURABLE_SNAPSHOT_VERSION_STORE_CAPABILITIES
+        : IN_MEMORY_VERSION_STORE_CAPABILITIES;
     this.capabilities =
       this.mode === 'unavailable'
-        ? unavailableCapabilities(IN_MEMORY_VERSION_STORE_CAPABILITIES)
+        ? unavailableCapabilities(this.baseCapabilities)
         : this.mode === 'read-only'
-          ? readOnlyCapabilities(IN_MEMORY_VERSION_STORE_CAPABILITIES)
-          : cloneVersionStoreCapabilities(IN_MEMORY_VERSION_STORE_CAPABILITIES);
+          ? readOnlyCapabilities(this.baseCapabilities)
+          : cloneVersionStoreCapabilities(this.baseCapabilities);
   }
 
   async readGraphRegistry(): Promise<VersionGraphRegistryReadResult> {
     this.assertAvailable('readGraphRegistry');
 
-    const registry = this.backend.getRegistry(this.documentScope);
-    if (!registry) {
+    const registryRecord = this.backend.readRegistryRecord(this.documentScope);
+    if (!registryRecord) {
       return {
         status: 'absent',
         registry: null,
@@ -349,10 +355,13 @@ export class InMemoryVersionStoreProvider implements VersionStoreProvider {
         ],
       };
     }
+    if (registryRecord.kind !== 'valid') {
+      return registryRecordResult(registryRecord.kind, 'readGraphRegistry', this.documentScope);
+    }
 
     return {
       status: 'ok',
-      registry,
+      registry: registryRecord.registry,
       diagnostics: [],
     };
   }
@@ -410,8 +419,20 @@ export class InMemoryVersionStoreProvider implements VersionStoreProvider {
       );
     }
 
-    const existingRegistry = this.backend.getRegistry(this.documentScope);
-    if (existingRegistry) {
+    const existingRegistryRecord = this.backend.readRegistryRecord(this.documentScope);
+    if (
+      existingRegistryRecord?.kind === 'corrupt' ||
+      existingRegistryRecord?.kind === 'unsupported'
+    ) {
+      return failedStoreResult(
+        registryRecordResult(existingRegistryRecord.kind, 'initializeGraph', this.documentScope)
+          .diagnostics,
+        'no-write-attempted',
+      );
+    }
+
+    if (existingRegistryRecord?.kind === 'valid') {
+      const existingRegistry = existingRegistryRecord.registry;
       const dryRun = createInMemoryVersionGraphStore({ namespace });
       const dryRunInitialized = await dryRun.initializeGraph(input.rootWrite);
       if (dryRunInitialized.status !== 'success') {
@@ -519,8 +540,8 @@ export class InMemoryVersionStoreProvider implements VersionStoreProvider {
       );
     }
 
-    const registry = this.backend.getRegistry(this.documentScope);
-    if (!registry) {
+    const registryRecord = this.backend.readRegistryRecord(this.documentScope);
+    if (!registryRecord) {
       throw new VersionStoreProviderError(
         versionStoreDiagnostic('VERSION_GRAPH_UNINITIALIZED', {
           operation: 'openGraph',
@@ -530,8 +551,13 @@ export class InMemoryVersionStoreProvider implements VersionStoreProvider {
         }),
       );
     }
+    if (registryRecord.kind !== 'valid') {
+      throw new VersionStoreProviderError(
+        registryRecordResult(registryRecord.kind, 'openGraph', this.documentScope).diagnostics[0],
+      );
+    }
 
-    const expectedNamespace = namespaceForRegistry(registry);
+    const expectedNamespace = namespaceForRegistry(registryRecord.registry);
     if (versionGraphNamespaceKey(namespace) !== versionGraphNamespaceKey(expectedNamespace)) {
       throw new VersionStoreProviderError(
         versionStoreDiagnostic('VERSION_WRONG_NAMESPACE', {
@@ -589,14 +615,25 @@ export class InMemoryVersionStoreProvider implements VersionStoreProvider {
   }
 
   async close(_reason: VersionStoreCloseReason = 'workbook-close'): Promise<void> {
-    return;
+    if (this.lifecycleState === 'closed' || this.lifecycleState === 'disposed') return;
+    if (this.lifecycleState === 'disposing') return;
+    this.lifecycleState = 'closing';
+    this.lifecycleState = 'closed';
   }
 
   async dispose(_reason: VersionStoreCloseReason = 'dispose'): Promise<void> {
-    return;
+    if (this.lifecycleState === 'disposed') return;
+    if (this.lifecycleState === 'open') {
+      await this.close('dispose');
+    }
+    this.lifecycleState = 'disposing';
+    this.lifecycleState = 'disposed';
   }
 
   private assertAvailable(operation: VersionStoreOperation): void {
+    if (this.lifecycleState !== 'open') {
+      throw new VersionStoreProviderError(this.lifecycleUnavailableDiagnostic(operation));
+    }
     if (this.mode !== 'unavailable') return;
 
     throw new VersionStoreProviderError(
@@ -610,6 +647,14 @@ export class InMemoryVersionStoreProvider implements VersionStoreProvider {
   }
 
   private writeUnavailableFailure(operation: VersionStoreOperation): VersionStoreFailure | null {
+    if (this.lifecycleState !== 'open') {
+      return failedStoreResult(
+        [this.lifecycleUnavailableDiagnostic(operation)],
+        'no-write-attempted',
+        true,
+      );
+    }
+
     if (this.mode === 'unavailable') {
       return failedStoreResult(
         [
@@ -639,6 +684,16 @@ export class InMemoryVersionStoreProvider implements VersionStoreProvider {
     }
 
     return null;
+  }
+
+  private lifecycleUnavailableDiagnostic(operation: VersionStoreOperation): VersionStoreDiagnostic {
+    return versionStoreDiagnostic('VERSION_STORE_UNAVAILABLE', {
+      operation,
+      documentScope: this.documentScope,
+      recoverability: 'retry',
+      lifecycleState: this.lifecycleState,
+      safeMessage: 'Version store provider is closed or disposing.',
+    });
   }
 }
 
@@ -769,6 +824,30 @@ function mapGraphDiagnostics(
   );
 }
 
+function registryRecordResult(
+  kind: 'corrupt' | 'unsupported',
+  operation: VersionStoreOperation,
+  documentScope: VersionDocumentScope,
+): Extract<VersionGraphRegistryReadResult, { status: 'corrupt' | 'unsupported' }> {
+  const code = kind === 'corrupt' ? 'VERSION_CORRUPT_REGISTRY' : 'VERSION_UNSUPPORTED_REGISTRY';
+  return {
+    status: kind,
+    registry: null,
+    diagnostics: [
+      versionStoreDiagnostic(code, {
+        operation,
+        documentScope,
+        recoverability: kind === 'corrupt' ? 'repair' : 'unsupported',
+        safeMessage:
+          kind === 'corrupt'
+            ? 'Version graph registry is corrupt and cannot be opened normally.'
+            : 'Version graph registry schema is not supported by this provider.',
+      }),
+    ],
+    mutationGuarantee: 'no-write-attempted',
+  };
+}
+
 function versionStoreDiagnostic(
   code: VersionStoreDiagnosticCode,
   options: {
@@ -780,6 +859,7 @@ function versionStoreDiagnostic(
     readonly safeMessage: string;
     readonly recoverability?: VersionStoreDiagnostic['recoverability'];
     readonly mutationGuarantee?: VersionStoreMutationGuarantee;
+    readonly lifecycleState?: VersionStoreLifecycleState;
     readonly details?: Readonly<Record<string, string | number | boolean | null>>;
     readonly sourceDiagnostics?: readonly VersionGraphStoreDiagnostic[];
   },
@@ -803,6 +883,7 @@ function versionStoreDiagnostic(
     ...(options.refName ? { refName: options.refName } : {}),
     ...(options.commitId ? { commitId: options.commitId } : {}),
     ...(options.mutationGuarantee ? { mutationGuarantee: options.mutationGuarantee } : {}),
+    ...(options.lifecycleState ? { lifecycleState: options.lifecycleState } : {}),
     ...(options.details ? { details: options.details } : {}),
     ...(options.sourceDiagnostics ? { sourceDiagnostics: options.sourceDiagnostics } : {}),
   });
@@ -822,6 +903,8 @@ function messageTemplateIdForCode(code: VersionStoreDiagnosticCode): VersionDiag
       return 'version.graph.conflict';
     case 'VERSION_UNSUPPORTED_REGISTRY':
       return 'version.registry.unsupported';
+    case 'VERSION_CORRUPT_REGISTRY':
+      return 'version.registry.corrupt';
     case 'VERSION_WRONG_NAMESPACE':
       return 'version.integrity.wrong-namespace';
     case 'VERSION_MISSING_OBJECT':
@@ -872,6 +955,8 @@ function recoverabilityForCode(
     case 'VERSION_UNSUPPORTED_PARENT_COMMIT':
     case 'VERSION_UNSUPPORTED_PAGE_TOKEN':
       return 'unsupported';
+    case 'VERSION_CORRUPT_REGISTRY':
+      return 'repair';
     case 'VERSION_DANGLING_REF':
     case 'VERSION_MISSING_OBJECT':
     case 'VERSION_MISSING_PARENT':

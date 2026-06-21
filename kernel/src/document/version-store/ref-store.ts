@@ -1,6 +1,7 @@
 import type { VersionAuthor } from '@mog-sdk/contracts/versioning';
 
 import { parseWorkbookCommitId, type ObjectDigest, type WorkbookCommitId } from './object-digest';
+import type { InMemoryRefStoreSnapshot } from './ref-store-snapshot';
 import {
   REF_NAMESPACES,
   parseRefName,
@@ -198,6 +199,7 @@ export type DeleteRefResult =
 export interface InMemoryRefStoreOptions {
   readonly versionDocumentId: string;
   readonly now?: () => Date | string;
+  readonly snapshot?: InMemoryRefStoreSnapshot;
 }
 
 const REF_VERSION_VALUE_RE = /^(0|[1-9][0-9]*)$/;
@@ -224,6 +226,33 @@ export class InMemoryRefStore {
   constructor(options: InMemoryRefStoreOptions) {
     this.versionDocumentId = options.versionDocumentId;
     this.nowFn = options.now ?? (() => new Date());
+    if (options.snapshot) {
+      for (const record of options.snapshot.records) {
+        if (record.versionDocumentId !== this.versionDocumentId) {
+          throw new RefStoreValidationError('invalidRefName', 'Ref snapshot document mismatch.', [
+            diagnostic('invalidRefName', 'Ref snapshot document mismatch.'),
+          ]);
+        }
+        this.records.set(
+          record.name,
+          record.state === 'live' ? cloneLiveRefRecord(record) : cloneTombstoneRefRecord(record),
+        );
+      }
+      this.nextGeneratedId = options.snapshot.nextGeneratedId;
+    }
+  }
+
+  exportSnapshot(): InMemoryRefStoreSnapshot {
+    return Object.freeze({
+      records: Object.freeze(
+        [...this.records.values()]
+          .sort((left, right) => compareAscii(left.name, right.name))
+          .map((record) =>
+            record.state === 'live' ? cloneLiveRefRecord(record) : cloneTombstoneRefRecord(record),
+          ),
+      ),
+      nextGeneratedId: this.nextGeneratedId,
+    });
   }
 
   initializeMain(input: InitializeMainInput): RefMutationResult {

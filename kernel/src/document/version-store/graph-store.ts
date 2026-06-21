@@ -27,6 +27,7 @@ import {
   type RefVersion,
   type VersionDiagnostic,
 } from './ref-store';
+import type { InMemoryRefStoreSnapshot } from './ref-store-snapshot';
 import { parseVc04ParentCommitIds } from './commit-store-parents';
 import { orderTopologicalNewestFirst, uniqueSortedCommitIds } from './graph-store-traversal';
 
@@ -197,6 +198,12 @@ export type InMemoryVersionGraphStoreOptions = {
   readonly objectStore?: InMemoryVersionObjectStore;
   readonly commitStore?: InMemoryWorkbookCommitStore;
   readonly refStore?: InMemoryRefStore;
+};
+
+export type InMemoryVersionGraphStoreSnapshot = {
+  readonly namespace: VersionGraphNamespace;
+  readonly objectRecords: readonly VersionObjectRecord<unknown>[];
+  readonly refStore: InMemoryRefStoreSnapshot;
 };
 
 export class InMemoryVersionGraphStore {
@@ -446,6 +453,43 @@ export class InMemoryVersionGraphStore {
     return { status: 'success', commits: ordered.commits, diagnostics: [] };
   }
 
+  async exportSnapshot(): Promise<InMemoryVersionGraphStoreSnapshot> {
+    const listedRefs = this.refStore.listRefs({ includeTombstones: true });
+    if (!listedRefs.ok) {
+      throw new Error('Version graph refs could not be snapshotted.');
+    }
+
+    const recordsByDigest = new Map<string, VersionObjectRecord<unknown>>();
+    for (const ref of listedRefs.refs) {
+      if (ref.state !== 'live') continue;
+      const closure = await this.readCommitClosure(ref.targetCommitId);
+      if (closure.status !== 'success') {
+        throw new Error('Version graph commit closure could not be snapshotted.');
+      }
+      for (const commit of closure.commits) {
+        recordsByDigest.set(commit.record.digest.digest, commit.record);
+        const pendingDependencies = [...commit.record.preimage.dependencies];
+        for (let index = 0; index < pendingDependencies.length; index++) {
+          const dependency = pendingDependencies[index];
+          const dependencyRecord = await this.objectStore.getObjectRecord<unknown>(dependency);
+          if (recordsByDigest.has(dependencyRecord.digest.digest)) continue;
+          recordsByDigest.set(dependencyRecord.digest.digest, dependencyRecord);
+          pendingDependencies.push(...dependencyRecord.preimage.dependencies);
+        }
+      }
+    }
+
+    return Object.freeze({
+      namespace: this.namespace,
+      objectRecords: Object.freeze(
+        [...recordsByDigest.values()].sort((left, right) =>
+          left.digest.digest.localeCompare(right.digest.digest),
+        ),
+      ),
+      refStore: this.refStore.exportSnapshot(),
+    });
+  }
+
   private async readCommitFromRef(
     ref: LiveRefRecord,
     operation: VersionGraphStoreOperation,
@@ -539,6 +583,25 @@ export function createInMemoryVersionGraphStore(
   options: InMemoryVersionGraphStoreOptions,
 ): InMemoryVersionGraphStore {
   return new InMemoryVersionGraphStore(options);
+}
+
+export async function createInMemoryVersionGraphStoreFromSnapshot(
+  snapshot: InMemoryVersionGraphStoreSnapshot,
+): Promise<InMemoryVersionGraphStore> {
+  const namespace = normalizeVersionGraphNamespace(snapshot.namespace);
+  const objectStore = createInMemoryVersionObjectStore(namespace);
+  const putResult = await objectStore.putObjects(snapshot.objectRecords);
+  if (putResult.status !== 'success') {
+    throw new Error('Version graph object snapshot failed validation.');
+  }
+  return createInMemoryVersionGraphStore({
+    namespace,
+    objectStore,
+    refStore: createInMemoryRefStore({
+      versionDocumentId: namespace.documentId,
+      snapshot: snapshot.refStore,
+    }),
+  });
 }
 
 function parseGraphRefSelector(

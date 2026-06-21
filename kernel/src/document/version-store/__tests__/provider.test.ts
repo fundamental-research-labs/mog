@@ -186,6 +186,47 @@ describe('InMemoryVersionStoreProvider graph registry', () => {
     expect(head.head.id).toBe(initialized.rootCommit.id);
   });
 
+  it('reloads registry and graph readback from a durable snapshot test backend', async () => {
+    const backend = new InMemoryVersionDocumentProviderBackend();
+    const provider = createInMemoryVersionStoreProvider({
+      documentScope: DOCUMENT_SCOPE,
+      backend,
+      durability: 'snapshot-test-double',
+    });
+    const initialized = await provider.initializeGraph(await initializeInput('graph-1'));
+    expectInitializeSuccess(initialized);
+
+    const snapshot = await backend.exportSnapshot();
+    const reloadedBackend = await InMemoryVersionDocumentProviderBackend.fromSnapshot(snapshot);
+    const reloadedProvider = createInMemoryVersionStoreProvider({
+      documentScope: DOCUMENT_SCOPE,
+      backend: reloadedBackend,
+      durability: 'snapshot-test-double',
+    });
+
+    expect(reloadedProvider.capabilities).toMatchObject({
+      durableGraphRegistry: true,
+      durableObjects: true,
+      readOnlyHistory: false,
+    });
+    const registryRead = await reloadedProvider.readGraphRegistry();
+    expectRegistryOk(registryRead);
+    expect(registryRead.registry).toEqual(initialized.registry);
+
+    const graph = await reloadedProvider.openGraph(
+      namespaceForDocumentScope(DOCUMENT_SCOPE, 'graph-1'),
+    );
+    const head = await graph.readHead();
+    expectReadHeadSuccess(head);
+    expect(head.head.id).toBe(initialized.rootCommit.id);
+
+    const commits = await graph.listCommits();
+    expect(commits.status).toBe('success');
+    if (commits.status === 'success') {
+      expect(commits.commits.map((commit) => commit.id)).toEqual([initialized.rootCommit.id]);
+    }
+  });
+
   it('treats same root initialization as idempotent and different graph as a registry conflict', async () => {
     const backend = new InMemoryVersionDocumentProviderBackend();
     const provider = createInMemoryVersionStoreProvider({
@@ -253,6 +294,69 @@ describe('InMemoryVersionStoreProvider graph registry', () => {
         code: 'VERSION_WRONG_NAMESPACE',
         operation: 'openGraph',
       }),
+    });
+  });
+
+  it('fails closed on corrupt and unsupported registry records without bootstrapping over them', async () => {
+    const corruptBackend = new InMemoryVersionDocumentProviderBackend();
+    corruptBackend.putCorruptRegistryForTesting(DOCUMENT_SCOPE, 'checksum-mismatch');
+    const corruptProvider = createInMemoryVersionStoreProvider({
+      documentScope: DOCUMENT_SCOPE,
+      backend: corruptBackend,
+      durability: 'snapshot-test-double',
+    });
+
+    const corruptRead = await corruptProvider.readGraphRegistry();
+    expect(corruptRead).toMatchObject({
+      status: 'corrupt',
+      registry: null,
+      mutationGuarantee: 'no-write-attempted',
+      diagnostics: [
+        expect.objectContaining({
+          code: 'VERSION_CORRUPT_REGISTRY',
+          messageTemplateId: 'version.registry.corrupt',
+          operation: 'readGraphRegistry',
+          redacted: true,
+        }),
+      ],
+    });
+    const corruptInitialize = await corruptProvider.initializeGraph(
+      await initializeInput('graph-corrupt'),
+    );
+    expectInitializeFailed(corruptInitialize);
+    expect(corruptInitialize).toMatchObject({
+      mutationGuarantee: 'no-write-attempted',
+      diagnostics: [expect.objectContaining({ code: 'VERSION_CORRUPT_REGISTRY' })],
+    });
+    await expect(
+      corruptProvider.openGraph(namespaceForDocumentScope(DOCUMENT_SCOPE, 'graph-corrupt')),
+    ).rejects.toMatchObject({
+      diagnostic: expect.objectContaining({ code: 'VERSION_CORRUPT_REGISTRY' }),
+    });
+    expect(
+      corruptBackend.getGraph(namespaceForDocumentScope(DOCUMENT_SCOPE, 'graph-corrupt')),
+    ).toBeUndefined();
+
+    const unsupportedBackend = new InMemoryVersionDocumentProviderBackend();
+    unsupportedBackend.putUnsupportedRegistryForTesting(DOCUMENT_SCOPE, 'schema-version');
+    const unsupportedProvider = createInMemoryVersionStoreProvider({
+      documentScope: DOCUMENT_SCOPE,
+      backend: unsupportedBackend,
+    });
+    const unsupportedRead = await unsupportedProvider.readGraphRegistry();
+    expect(unsupportedRead).toMatchObject({
+      status: 'unsupported',
+      registry: null,
+      mutationGuarantee: 'no-write-attempted',
+      diagnostics: [expect.objectContaining({ code: 'VERSION_UNSUPPORTED_REGISTRY' })],
+    });
+    const unsupportedInitialize = await unsupportedProvider.initializeGraph(
+      await initializeInput('graph-unsupported'),
+    );
+    expectInitializeFailed(unsupportedInitialize);
+    expect(unsupportedInitialize.diagnostics[0]).toMatchObject({
+      code: 'VERSION_UNSUPPORTED_REGISTRY',
+      recoverability: 'unsupported',
     });
   });
 });
@@ -330,7 +434,7 @@ describe('InMemoryVersionStoreProvider capabilities and provider states', () => 
     });
   });
 
-  it('treats close and dispose as idempotent no-ops for the in-memory provider slice', async () => {
+  it('rejects new operations after close and keeps close/dispose idempotent', async () => {
     const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
 
     await provider.close();
@@ -338,7 +442,25 @@ describe('InMemoryVersionStoreProvider capabilities and provider states', () => 
     await provider.dispose();
     await provider.dispose('test-teardown');
 
-    const registry = await provider.readGraphRegistry();
-    expectRegistryAbsent(registry);
+    await expect(provider.readGraphRegistry()).rejects.toMatchObject({
+      diagnostic: expect.objectContaining({
+        code: 'VERSION_STORE_UNAVAILABLE',
+        lifecycleState: 'disposed',
+        operation: 'readGraphRegistry',
+        redacted: true,
+      }),
+    });
+    const initialize = await provider.initializeGraph(await initializeInput('graph-after-close'));
+    expectInitializeFailed(initialize);
+    expect(initialize).toMatchObject({
+      mutationGuarantee: 'no-write-attempted',
+      diagnostics: [
+        expect.objectContaining({
+          code: 'VERSION_STORE_UNAVAILABLE',
+          lifecycleState: 'disposed',
+          operation: 'initializeGraph',
+        }),
+      ],
+    });
   });
 });

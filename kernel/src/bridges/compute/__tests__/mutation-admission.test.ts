@@ -369,6 +369,55 @@ describe('Compute mutation admission', () => {
     });
   });
 
+  it('records operation context for tab color bridge writes', async () => {
+    const recordMutationResult = jest.fn();
+    const ctx = makeMockContext({
+      versioning: {
+        mutationCapture: { recordMutationResult },
+      },
+    } as unknown as Partial<IKernelContext>);
+    const result = mutationResult({
+      sheetChanges: [
+        {
+          sheetId: 'sheet-1',
+          kind: 'Set',
+          field: 'tabColor',
+          oldColor: '#FF0000',
+          color: '#00FF00',
+        },
+      ],
+    });
+    const transport: BridgeTransport & { call: jest.Mock } = {
+      call: jest.fn(async () => [new Uint8Array(), result]),
+    };
+    const bridge = createStartedBridge(ctx, transport);
+    const operationContext = {
+      operationId: 'operation-1',
+      kind: 'mutation',
+      author: { authorId: 'user-1', actorKind: 'user' },
+      createdAt: '2026-06-20T00:00:00.000Z',
+      domainIds: ['sheets'],
+      capturePolicy: 'commitEligible',
+      writeAdmissionMode: 'capture',
+    };
+
+    await bridge.setTabColor(sheetId('sheet-1'), '#00FF00', {
+      operationContext: operationContext as any,
+    });
+
+    expect(transport.call).toHaveBeenCalledWith('compute_set_tab_color', {
+      docId: 'test-doc',
+      sheetId: 'sheet-1',
+      color: '#00FF00',
+    });
+    expect(recordMutationResult).toHaveBeenCalledWith({
+      operation: 'compute_set_tab_color',
+      result,
+      directEdits: undefined,
+      operationContext,
+    });
+  });
+
   it('records unclassified write diagnostics before transport execution', async () => {
     const diagnostics: MutationAdmissionDiagnostic[] = [];
     const ctx = makeMockContext({

@@ -164,6 +164,9 @@ function mapMutationResultToSemanticChanges(
   if (input.operation === 'compute_rename_compute_sheet') {
     return mapSheetRenameChanges(input.result.sheetChanges ?? [], sequence);
   }
+  if (input.operation === 'compute_set_tab_color') {
+    return mapSheetTabColorChanges(input.result.sheetChanges ?? [], sequence);
+  }
   return [];
 }
 
@@ -244,6 +247,29 @@ function mapSheetRenameChanges(
       display: {
         entityLabel: { kind: 'value', value: change.name },
       },
+    });
+  }
+  return changes;
+}
+
+function mapSheetTabColorChanges(
+  sheetChanges: readonly SheetChange[],
+  sequence: number,
+): readonly VersionSemanticChangeRecord[] {
+  const changes: VersionSemanticChangeRecord[] = [];
+  for (const change of sheetChanges) {
+    if (change.field !== 'tabColor') continue;
+    if (change.oldColor === undefined && change.color === undefined) continue;
+    changes.push({
+      structural: {
+        kind: 'metadata',
+        changeId: `mutation-${sequence}:sheet:${changes.length}`,
+        domain: 'sheet',
+        entityId: change.sheetId,
+        propertyPath: ['tabColor'],
+      },
+      before: { kind: 'value', value: change.oldColor ?? null },
+      after: { kind: 'value', value: change.color ?? null },
     });
   }
   return changes;

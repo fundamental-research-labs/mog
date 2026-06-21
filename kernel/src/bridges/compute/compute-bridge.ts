@@ -1797,6 +1797,24 @@ export class ComputeBridge extends GeneratedBridgeBase {
     );
   }
 
+  setTabColor(
+    sheetId: SheetId,
+    color: string | null,
+    options?: MutationAdmissionOptions,
+  ): Promise<MutationResult> {
+    return this.core.mutatePublic(
+      'compute_set_tab_color',
+      () =>
+        this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_tab_color', {
+          docId: this.core.docId,
+          sheetId,
+          color,
+        }),
+      undefined,
+      options,
+    );
+  }
+
   private async applyTableHeaderRenames(
     headerRenames: TableHeaderRename[],
   ): Promise<MutationResult | null> {

@@ -460,13 +460,21 @@ describe('WorksheetImpl Extended Methods', () => {
     it('setTabColor delegates to computeBridge.setTabColor', async () => {
       await ws.view.setTabColor('#00FF00');
 
-      expect(ctx.computeBridge.setTabColor).toHaveBeenCalledWith(SHEET_ID, '#00FF00');
+      expect(ctx.computeBridge.setTabColor).toHaveBeenCalledWith(
+        SHEET_ID,
+        '#00FF00',
+        expectVersionOperationOptions('worksheet.view.setTabColor', ['sheets']),
+      );
     });
 
     it('setTabColor with null clears the color', async () => {
       await ws.view.setTabColor(null);
 
-      expect(ctx.computeBridge.setTabColor).toHaveBeenCalledWith(SHEET_ID, null);
+      expect(ctx.computeBridge.setTabColor).toHaveBeenCalledWith(
+        SHEET_ID,
+        null,
+        expectVersionOperationOptions('worksheet.view.setTabColor', ['sheets']),
+      );
     });
 
     it('getVisibility returns visible or hidden based on cached value', async () => {

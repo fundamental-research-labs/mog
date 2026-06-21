@@ -10,6 +10,7 @@ import type { SpreadsheetEvent } from '@mog-sdk/contracts/events';
 import type { SplitViewportConfig } from '@mog-sdk/contracts/viewport-config';
 import { createSplitViewportConfig } from '@mog/spreadsheet-utils/viewport/viewport-config';
 import { KernelError } from '../../errors';
+import { createVersionOperationContext } from '../internal/version-operation-context';
 import { parseCellAddress } from '../internal/utils';
 
 import type { DocumentContext } from '../../context';
@@ -166,7 +167,13 @@ export class WorksheetViewImpl implements WorksheetView {
   }
 
   async setTabColor(color: string | null): Promise<void> {
-    await this.ctx.computeBridge.setTabColor(this.sheetId, color);
+    await this.ctx.computeBridge.setTabColor(this.sheetId, color, {
+      operationContext: createVersionOperationContext(this.ctx, {
+        operationIdPrefix: 'worksheet.view.setTabColor',
+        sheetIds: [this.sheetId],
+        domainIds: ['sheets'],
+      }),
+    });
   }
 
   async getScrollPosition(): Promise<ScrollPosition> {

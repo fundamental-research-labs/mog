@@ -240,3 +240,12 @@ export {
   type DocumentLifecycleSnapshotRootHydratorOptions,
   type SnapshotRootFreshLifecycleMaterialization,
 } from './api/document/snapshot-root-lifecycle-hydrator';
+
+export {
+  SnapshotRootMaterializationService,
+  createSnapshotRootMaterializationService,
+  type SnapshotRootMaterializationDiagnostic,
+  type SnapshotRootMaterializationDiagnosticCode,
+  type SnapshotRootMaterializationResult,
+  type SnapshotRootMaterializationServiceOptions,
+} from './document/version-store/snapshot-root-materialization-service';

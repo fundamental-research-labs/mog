@@ -818,6 +818,20 @@ export interface PivotHandleInfo {
   availableMethods: string[];
 }
 
+/** Current pivot handle configuration: full stored config plus ergonomic public field summaries. */
+export interface PivotHandleConfig extends DataPivotTableConfig {
+  /** Source data range in A1 notation, qualified with the source sheet. */
+  dataSource: string;
+  /** Field names in the row area. */
+  rowFields: string[];
+  /** Field names in the column area. */
+  columnFields: string[];
+  /** Value field configurations. */
+  valueFields: PivotValueField[];
+  /** Field names in the filter area. */
+  filterFields: string[];
+}
+
 /**
  * Handle for interacting with an existing pivot table.
  *
@@ -829,8 +843,8 @@ export interface PivotTableHandle {
   getName(): string;
   /** Side-effect-free handle-local introspection bound to this pivot ID. */
   getInfo(options?: PivotHandleInfoOptions): Promise<PivotHandleInfo>;
-  /** Get the current configuration including all fields */
-  getConfig(): DataPivotTableConfig;
+  /** Get the current stored configuration plus public field summaries. */
+  getConfig(): PivotHandleConfig;
   /** Update the pivot table data configuration. */
   update(
     updates: Partial<Omit<DataPivotTableConfig, 'id' | 'createdAt'>>,

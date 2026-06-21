@@ -252,6 +252,72 @@ describe('WorksheetConditionalFormattingImpl — input shape diagnostics', () =>
     });
   });
 
+  it('add accepts historical snake_case aliases that normalize at the bridge boundary', async () => {
+    await cf.add(
+      ['A1:A10'],
+      [
+        {
+          type: 'colorScale',
+          color_scale: {
+            minPoint: { type: 'min', color: '#f8696b' },
+            maxPoint: { type: 'max', color: '#63be7b' },
+          },
+        },
+        {
+          type: 'dataBar',
+          data_bar: {
+            minPoint: { type: 'min', color: '#638ec6' },
+            maxPoint: { type: 'max', color: '#638ec6' },
+            positiveColor: '#638ec6',
+          },
+        },
+        {
+          type: 'iconSet',
+          icon_set: { icon_set_name: '3Arrows' },
+        },
+        {
+          type: 'timePeriod',
+          time_period: 'today',
+          style: { backgroundColor: '#fff2cc' },
+        },
+      ] as any,
+    );
+
+    const rules = bridge.addCfRule.mock.calls[0][1].rules;
+    expect(rules).toEqual([
+      expect.objectContaining({
+        type: 'colorScale',
+        colorScale: expect.objectContaining({
+          minPoint: { value: { kind: 'min' }, color: '#f8696b' },
+          maxPoint: { value: { kind: 'max' }, color: '#63be7b' },
+        }),
+      }),
+      expect.objectContaining({
+        type: 'dataBar',
+        dataBar: expect.objectContaining({
+          minPoint: { value: { kind: 'min' }, color: '#638ec6' },
+          maxPoint: { value: { kind: 'max' }, color: '#638ec6' },
+          positiveColor: '#638ec6',
+        }),
+      }),
+      expect.objectContaining({
+        type: 'iconSet',
+        iconSet: expect.objectContaining({ iconSetName: '3Arrows' }),
+      }),
+      expect.objectContaining({
+        type: 'timePeriod',
+        timePeriod: 'today',
+        style: { backgroundColor: '#fff2cc' },
+      }),
+    ]);
+    for (const rule of rules) {
+      expect(rule).not.toHaveProperty('color_scale');
+      expect(rule).not.toHaveProperty('data_bar');
+      expect(rule).not.toHaveProperty('icon_set');
+      expect(rule).not.toHaveProperty('time_period');
+    }
+  });
+
   it('addFormula creates a formula rule without requiring callers to know the rule schema', async () => {
     const result = await cf.addFormula('B2:B10', 'B2>100', { backgroundColor: '#fff2cc' });
 

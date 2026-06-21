@@ -137,8 +137,9 @@ function assertStringField(
   path: string[],
   methodName: string,
   suggestion: string,
+  aliases: string[] = [],
 ): void {
-  const value = rule[field];
+  const value = fieldValue(rule, field, aliases);
   if (typeof value !== 'string' || value.trim() === '') {
     throw invalidCfRuleError(
       value,
@@ -197,14 +198,27 @@ function assertObjectField(
   path: string[],
   methodName: string,
   suggestion: string,
+  aliases: string[] = [],
 ): void {
   assertPlainObject(
-    rule[field],
+    fieldValue(rule, field, aliases),
     [...path, field],
     methodName,
     `CF_RULE_${field.toUpperCase()}_REQUIRED`,
     suggestion,
   );
+}
+
+function fieldValue(
+  rule: Record<string, unknown>,
+  field: string,
+  aliases: string[],
+): unknown {
+  if (rule[field] !== undefined) return rule[field];
+  for (const alias of aliases) {
+    if (rule[alias] !== undefined) return rule[alias];
+  }
+  return undefined;
 }
 
 function assertStyleField(
@@ -289,6 +303,7 @@ function assertCfRuleInput(
         path,
         methodName,
         'Use { type: "colorScale", colorScale: { minPoint: { type: "min", color: "#f8696b" }, maxPoint: { type: "max", color: "#63be7b" } } }.',
+        ['color_scale'],
       );
       return;
     case 'dataBar':
@@ -298,6 +313,7 @@ function assertCfRuleInput(
         path,
         methodName,
         'Use { type: "dataBar", dataBar: { minPoint: { type: "min", color: "#638ec6" }, maxPoint: { type: "max", color: "#638ec6" }, positiveColor: "#638ec6" } }.',
+        ['data_bar'],
       );
       return;
     case 'iconSet':
@@ -307,6 +323,7 @@ function assertCfRuleInput(
         path,
         methodName,
         'Use { type: "iconSet", iconSet: { iconSetName: "3Arrows" } }.',
+        ['icon_set'],
       );
       return;
     case 'top10':
@@ -406,6 +423,7 @@ function assertCfRuleInput(
         path,
         methodName,
         'Use { type: "timePeriod", timePeriod: "today", style: { backgroundColor: "#fff2cc" } }.',
+        ['time_period'],
       );
       assertStyleField(
         value,

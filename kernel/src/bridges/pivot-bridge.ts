@@ -800,6 +800,9 @@ export class PivotBridge implements IPivotBridge {
     if (!config) {
       return [];
     }
+    if (!config.fields?.length || !config.placements?.length) {
+      return [];
+    }
 
     const data = await getPivotSourceData(this.ctx, toPublicPivotConfig(config));
     if (!data) {
@@ -820,6 +823,9 @@ export class PivotBridge implements IPivotBridge {
   ): Promise<CellValue[][]> {
     const config = await this.ctx.computeBridge.pivotGet(sheetId, pivotId);
     if (!config) {
+      return [];
+    }
+    if (!config.fields?.length || !config.placements?.length) {
       return [];
     }
 

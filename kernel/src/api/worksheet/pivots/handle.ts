@@ -55,6 +55,13 @@ import { buildPivotRefreshReceipt } from './receipts';
 
 type PivotFieldPlacement = PivotFieldPlacementFlat;
 type ValueAggregation = 'sum' | 'count' | 'average' | 'max' | 'min';
+type PivotHandleConfigReadback = DataPivotTableConfig & {
+  dataSource: string;
+  rowFields: NonNullable<ApiPivotTableConfig['rowFields']>;
+  columnFields: NonNullable<ApiPivotTableConfig['columnFields']>;
+  valueFields: NonNullable<ApiPivotTableConfig['valueFields']>;
+  filterFields: NonNullable<ApiPivotTableConfig['filterFields']>;
+};
 
 export interface PivotHandleSnapshotRegistry {
   get(pivotId: string): DataPivotTableConfig | undefined;
@@ -373,8 +380,19 @@ export function buildPivotTableHandle(options: PivotHandleBuilderOptions): Pivot
       };
     },
 
-    getConfig(): DataPivotTableConfig {
-      return JSON.parse(JSON.stringify(currentConfig('getConfig'))) as DataPivotTableConfig;
+    getConfig(): PivotHandleConfigReadback {
+      const current = currentConfig('getConfig');
+      const apiConfig = toApiConfig(current, current.sourceSheetName ?? sourceSheetName);
+      return JSON.parse(
+        JSON.stringify({
+          ...current,
+          rowFields: apiConfig.rowFields,
+          columnFields: apiConfig.columnFields,
+          valueFields: apiConfig.valueFields,
+          filterFields: apiConfig.filterFields,
+          dataSource: apiConfig.dataSource,
+        }),
+      ) as PivotHandleConfigReadback;
     },
 
     async update(

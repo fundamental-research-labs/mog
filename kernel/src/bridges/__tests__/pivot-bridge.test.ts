@@ -89,6 +89,7 @@ function createMockCtx(): any {
       getAllSheetIds: jest.fn().mockResolvedValue([SHEET_ID]),
       pivotComputeFromSource: jest.fn().mockResolvedValue(makePivotResult()),
       pivotMaterialize: jest.fn().mockResolvedValue(makePivotResult()),
+      pivotDrillDown: jest.fn().mockResolvedValue([]),
       forceRefreshAllViewports: jest.fn().mockResolvedValue(undefined),
     },
     eventBus: {
@@ -232,6 +233,16 @@ describe('PivotBridge read vs refresh paths', () => {
     expect(ctx.computeBridge.forceRefreshAllViewports).not.toHaveBeenCalled();
     expect(ctx.computeBridge.pivotComputeFromSource).not.toHaveBeenCalled();
     expect(subscriber).toHaveBeenCalledWith('pivot-1', result, undefined);
+  });
+
+  it('drill-down readback returns empty rows for unconfigured pivots without native validation errors', async () => {
+    const ctx = createMockCtx();
+    ctx.computeBridge.pivotGet.mockResolvedValue(makePivotConfig({ fields: [], placements: [] }));
+    const bridge = new PivotBridge(ctx);
+
+    await expect(bridge.getDrillDownData(SHEET_ID, 'pivot-1', '', '')).resolves.toEqual([]);
+
+    expect(ctx.computeBridge.pivotDrillDown).not.toHaveBeenCalled();
   });
 
   it('refreshAndMaterialize pivot events use the materialization path even without subscribers', async () => {

@@ -121,7 +121,7 @@ describe('pivot config readback', () => {
 
     const readback = handle.getConfig();
 
-    expect(readback).toEqual(config);
+    expect(readback).toEqual(expect.objectContaining(config));
     expect(readback).not.toBe(config);
     expect(readback).toEqual(
       expect.objectContaining({
@@ -131,8 +131,17 @@ describe('pivot config readback', () => {
         layout: config.layout,
         style: config.style,
         calculatedFields: config.calculatedFields,
+        rowFields: ['Region'],
+        valueFields: [
+          expect.objectContaining({
+            field: 'Amount',
+            aggregation: 'sum',
+            showValuesAs: { type: 'percentOfGrandTotal' },
+          }),
+        ],
+        filterFields: ['Product'],
+        dataSource: 'Sheet1!A1:C6',
       }),
     );
-    expect((readback as any).rowFields).toBeUndefined();
   });
 });

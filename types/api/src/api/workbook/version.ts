@@ -5,7 +5,13 @@
  * Commit, checkout, merge, and branch mutation APIs are not part of this slice.
  */
 
-export type WorkbookVersionRolloutStage = 'disabled' | 'shadow-only';
+export type WorkbookVersionRolloutStage =
+  | 'disabled'
+  | 'shadow-only'
+  | 'headless-local'
+  | 'ui-beta'
+  | 'collab-interop-beta'
+  | 'default-on';
 
 export type WorkbookVersionCapabilityStage = 'present' | 'pending' | 'unavailable';
 

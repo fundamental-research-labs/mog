@@ -153,6 +153,11 @@
       "types": "./dist/api/workbook/timeline-styles.d.ts",
       "import": "./dist/api/workbook/timeline-styles.js"
     },
+    "./api/workbook/version": {
+      "development": "./src/api/workbook/version.ts",
+      "types": "./dist/api/workbook/version.d.ts",
+      "import": "./dist/api/workbook/version.js"
+    },
     "./api/workbook/viewport": {
       "development": "./src/api/workbook/viewport.ts",
       "types": "./dist/api/workbook/viewport.d.ts",

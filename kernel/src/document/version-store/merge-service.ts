@@ -30,6 +30,21 @@ const REDACTED_VALUE_REASONS = new Set([
   'historical-acl-unavailable',
 ]);
 
+const SUPPORTED_SEMANTIC_MERGE_DOMAINS = new Set([
+  'cell',
+  'cells.values',
+  'sheet',
+  'filters',
+  'sorts',
+  'named-ranges',
+  'tables',
+  'comments-notes',
+  'conditional-formatting',
+  'data-validation',
+  'charts.source-range',
+  'floating-objects.anchors',
+]);
+
 type MergeDiagnostic = PublicVersionStoreDiagnostic;
 
 type ParsedSemanticChangeSet =
@@ -322,19 +337,26 @@ function parseSemanticChange(
   if (!isRecord(value)) {
     return unsupportedChange(branch, itemIndex);
   }
-  if (hasRedactedValue(value.structural) || hasRedactedValue(value.before) || hasRedactedValue(value.after)) {
+  if (
+    hasRedactedValue(value.structural) ||
+    hasRedactedValue(value.before) ||
+    hasRedactedValue(value.after)
+  ) {
     return redactedChange(branch, itemIndex);
   }
 
   const structural = mapStructuralMetadata(value);
   if (!structural) return unsupportedChange(branch, itemIndex);
-  if (!isSupportedCellValueChange(structural)) {
+  if (structural.domain !== 'cells.values' && structural.propertyPath.length === 0) {
+    return unsupportedChange(branch, itemIndex);
+  }
+  if (!isSupportedSemanticValueChange(structural)) {
     return {
       ok: false,
       diagnostics: [
         diagnostic(
           'VERSION_MERGE_UNSUPPORTED_DOMAIN',
-          'Merge preview supports only cells.values value changes.',
+          'Merge preview supports only allowlisted semantic value changes.',
           {
             payload: {
               branch,
@@ -450,25 +472,38 @@ function classifyValueChanges(
   return { ok: true, changes, conflicts };
 }
 
-function isSupportedCellValueChange(
+function isSupportedSemanticValueChange(
   structural: Exclude<VersionDiffStructuralMetadata, VersionRedactedValue>,
 ): boolean {
+  if (!SUPPORTED_SEMANTIC_MERGE_DOMAINS.has(structural.domain)) return false;
+
   if (structural.domain === 'cell') {
     return structural.propertyPath.length === 1 && structural.propertyPath[0] === 'value';
   }
+
   if (structural.domain === 'cells.values') {
     return (
       structural.propertyPath.length === 0 ||
       (structural.propertyPath.length === 1 && structural.propertyPath[0] === 'value')
     );
   }
-  return false;
+
+  return structural.propertyPath.length > 0;
 }
 
 function mergePropertyKey(
   structural: Exclude<VersionDiffStructuralMetadata, VersionRedactedValue>,
 ): string {
-  return `cells.values:${structural.entityId}:value`;
+  if (
+    structural.domain === 'cell' ||
+    (structural.domain === 'cells.values' &&
+      (structural.propertyPath.length === 0 ||
+        (structural.propertyPath.length === 1 && structural.propertyPath[0] === 'value')))
+  ) {
+    return JSON.stringify(['cells.values', structural.entityId, 'value']);
+  }
+
+  return JSON.stringify([structural.domain, structural.entityId, structural.propertyPath]);
 }
 
 function mapStructuralMetadata(
@@ -480,9 +515,13 @@ function mapStructuralMetadata(
   if (
     typeof source.changeId !== 'string' ||
     typeof source.domain !== 'string' ||
+    source.domain.trim().length === 0 ||
     typeof source.entityId !== 'string' ||
+    source.entityId.trim().length === 0 ||
     !Array.isArray(source.propertyPath) ||
-    !source.propertyPath.every((segment) => typeof segment === 'string')
+    !source.propertyPath.every(
+      (segment) => typeof segment === 'string' && segment.trim().length > 0,
+    )
   ) {
     return null;
   }

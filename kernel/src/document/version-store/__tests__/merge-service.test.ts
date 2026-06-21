@@ -110,10 +110,109 @@ describe('WorkbookVersionMergeService', () => {
     });
   });
 
-  it('blocks unsupported semantic domains without fabricating merge output', async () => {
+  it('previews clean disjoint metadata-domain changes', async () => {
     const graph = await graphWithRootAndDetachedChildren({
       oursSemanticPayload: validSemanticPayload([
         valueChange('ours-sheet-name', 'sheet', 'sheet-1', ['name'], 'Sheet1', 'Forecast'),
+      ]),
+      theirsSemanticPayload: validSemanticPayload([
+        valueChange(
+          'theirs-filter-state',
+          'filters',
+          'sheet-1:auto-filter',
+          ['state'],
+          'none',
+          'active',
+        ),
+      ]),
+    });
+    const service = createWorkbookVersionMergeService({ provider: graph.provider });
+
+    await expect(
+      service.merge({
+        base: graph.rootCommitId,
+        ours: graph.oursCommitId,
+        theirs: graph.theirsCommitId,
+      }),
+    ).resolves.toMatchObject({
+      status: 'clean',
+      changes: [
+        expect.objectContaining({
+          structural: expect.objectContaining({
+            domain: 'sheet',
+            entityId: 'sheet-1',
+            propertyPath: ['name'],
+          }),
+          base: { kind: 'value', value: 'Sheet1' },
+          ours: { kind: 'value', value: 'Forecast' },
+          merged: { kind: 'value', value: 'Forecast' },
+        }),
+        expect.objectContaining({
+          structural: expect.objectContaining({
+            domain: 'filters',
+            entityId: 'sheet-1:auto-filter',
+            propertyPath: ['state'],
+          }),
+          base: { kind: 'value', value: 'none' },
+          theirs: { kind: 'value', value: 'active' },
+          merged: { kind: 'value', value: 'active' },
+        }),
+      ],
+      conflicts: [],
+      diagnostics: [],
+      mutationGuarantee: 'preview-only',
+    });
+  });
+
+  it('classifies same-property metadata-domain changes as conflicts', async () => {
+    const graph = await graphWithRootAndDetachedChildren({
+      oursSemanticPayload: validSemanticPayload([
+        valueChange('ours-sheet-name', 'sheet', 'sheet-1', ['name'], 'Sheet1', 'Forecast'),
+      ]),
+      theirsSemanticPayload: validSemanticPayload([
+        valueChange('theirs-sheet-name', 'sheet', 'sheet-1', ['name'], 'Sheet1', 'Budget'),
+      ]),
+    });
+    const service = createWorkbookVersionMergeService({ provider: graph.provider });
+
+    await expect(
+      service.merge({
+        base: graph.rootCommitId,
+        ours: graph.oursCommitId,
+        theirs: graph.theirsCommitId,
+      }),
+    ).resolves.toMatchObject({
+      status: 'conflicted',
+      changes: [],
+      conflicts: [
+        {
+          conflictKind: 'same-property',
+          structural: expect.objectContaining({
+            domain: 'sheet',
+            entityId: 'sheet-1',
+            propertyPath: ['name'],
+          }),
+          base: { kind: 'value', value: 'Sheet1' },
+          ours: { kind: 'value', value: 'Forecast' },
+          theirs: { kind: 'value', value: 'Budget' },
+        },
+      ],
+      diagnostics: [],
+      mutationGuarantee: 'preview-only',
+    });
+  });
+
+  it('blocks unsupported semantic domains without fabricating merge output', async () => {
+    const graph = await graphWithRootAndDetachedChildren({
+      oursSemanticPayload: validSemanticPayload([
+        valueChange(
+          'ours-pivot-source',
+          'pivot-tables',
+          'pivot-1',
+          ['source'],
+          'A1:B10',
+          'C1:D10',
+        ),
       ]),
       theirsSemanticPayload: validSemanticPayload([]),
     });
@@ -130,6 +229,42 @@ describe('WorkbookVersionMergeService', () => {
       changes: [],
       conflicts: [],
       diagnostics: [expect.objectContaining({ issueCode: 'VERSION_MERGE_UNSUPPORTED_DOMAIN' })],
+      mutationGuarantee: 'preview-only',
+    });
+    expect(JSON.stringify(result)).not.toContain('C1:D10');
+  });
+
+  it.each([
+    [
+      'empty domain',
+      valueChange('ours-empty-domain', '', 'sheet-1', ['name'], 'Sheet1', 'Forecast'),
+    ],
+    [
+      'empty entity',
+      valueChange('ours-empty-entity', 'sheet', '', ['name'], 'Sheet1', 'Forecast'),
+    ],
+    [
+      'empty property path',
+      valueChange('ours-empty-property', 'sheet', 'sheet-1', [], 'Sheet1', 'Forecast'),
+    ],
+  ])('blocks malformed semantic records with %s', async (_label, change) => {
+    const graph = await graphWithRootAndDetachedChildren({
+      oursSemanticPayload: validSemanticPayload([change]),
+      theirsSemanticPayload: validSemanticPayload([]),
+    });
+    const service = createWorkbookVersionMergeService({ provider: graph.provider });
+
+    const result = await service.merge({
+      base: graph.rootCommitId,
+      ours: graph.oursCommitId,
+      theirs: graph.theirsCommitId,
+    });
+
+    expect(result).toMatchObject({
+      status: 'blocked',
+      changes: [],
+      conflicts: [],
+      diagnostics: [expect.objectContaining({ issueCode: 'VERSION_UNSUPPORTED_SCHEMA' })],
       mutationGuarantee: 'preview-only',
     });
     expect(JSON.stringify(result)).not.toContain('Forecast');

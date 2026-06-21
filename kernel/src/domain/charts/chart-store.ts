@@ -9,6 +9,11 @@ import type { SheetId } from '@mog-sdk/contracts/core';
 
 import type { ChartFloatingObject } from '../../bridges/compute/compute-bridge';
 import type { DocumentContext } from '../../context/types';
+import {
+  createChartMutationOptions,
+  nextChartMutationOptions,
+  type ChartMutationOptionsInput,
+} from './chart-mutation-context';
 
 /**
  * Create a new chart on a sheet.
@@ -24,8 +29,13 @@ export async function create(
   ctx: DocumentContext,
   sheetId: SheetId,
   config: ChartFloatingObject,
+  admissionOptions?: ChartMutationOptionsInput,
 ): Promise<string | undefined> {
-  const result = await ctx.computeBridge.createChart(sheetId, config);
+  const result = await ctx.computeBridge.createChart(
+    sheetId,
+    config,
+    chartStoreMutationOptions(ctx, sheetId, 'charts.create', admissionOptions),
+  );
   // Extract the actual chart ID assigned by the Rust engine (it may differ from config.id)
   const change = result?.floatingObjectChanges?.[0];
   return change?.objectId ?? change?.data?.id ?? config.id;
@@ -44,8 +54,14 @@ export async function update(
   sheetId: SheetId,
   chartId: string,
   updates: Partial<ChartFloatingObject>,
+  admissionOptions?: ChartMutationOptionsInput,
 ): Promise<void> {
-  await ctx.computeBridge.updateChart(sheetId, chartId, updates as ChartFloatingObject);
+  await ctx.computeBridge.updateChart(
+    sheetId,
+    chartId,
+    updates as ChartFloatingObject,
+    chartStoreMutationOptions(ctx, sheetId, 'charts.update', admissionOptions),
+  );
 }
 
 /**
@@ -59,8 +75,13 @@ export async function remove(
   ctx: DocumentContext,
   sheetId: SheetId,
   chartId: string,
+  admissionOptions?: ChartMutationOptionsInput,
 ): Promise<void> {
-  await ctx.computeBridge.deleteChart(sheetId, chartId);
+  await ctx.computeBridge.deleteChart(
+    sheetId,
+    chartId,
+    chartStoreMutationOptions(ctx, sheetId, 'charts.delete', admissionOptions),
+  );
 }
 
 /**
@@ -93,4 +114,19 @@ export async function getAll(
 ): Promise<ChartFloatingObject[]> {
   // Bridge returns FloatingObject[]; chart methods always return chart-type objects
   return ctx.computeBridge.getAllCharts(sheetId) as Promise<ChartFloatingObject[]>;
+}
+
+function chartStoreMutationOptions(
+  ctx: DocumentContext,
+  sheetId: SheetId,
+  operationIdPrefix: string,
+  admissionOptions: ChartMutationOptionsInput,
+) {
+  return (
+    nextChartMutationOptions(admissionOptions) ??
+    createChartMutationOptions(ctx, {
+      operationIdPrefix,
+      sheetIds: [sheetId],
+    })
+  );
 }

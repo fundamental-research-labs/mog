@@ -154,6 +154,23 @@ function computeBridgeMock(ctx: DocumentContext): {
   };
 }
 
+function expectChartMutationOptions(operationIdPrefix: string) {
+  return expect.objectContaining({
+    operationContext: expect.objectContaining({
+      operationId: expect.stringMatching(new RegExp(`^${escapeRegExp(operationIdPrefix)}:`)),
+      kind: 'mutation',
+      sheetIds: [SHEET_A],
+      domainIds: ['charts.source-range'],
+      capturePolicy: 'commitEligible',
+      writeAdmissionMode: 'capture',
+    }),
+  });
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 beforeEach(() => {
   jest.clearAllMocks();
 });
@@ -511,12 +528,24 @@ describe('chart bridge subscription range helpers', () => {
     await handleRowsInserted(deps, SHEET_A, 2, 2);
     await handleColumnsDeleted(deps, SHEET_A, 3, 1);
 
-    expect(computeBridge.updateChart).toHaveBeenNthCalledWith(1, SHEET_A, CHART_1, {
-      dataRange: 'B2:C6',
-    });
-    expect(computeBridge.updateChart).toHaveBeenNthCalledWith(2, SHEET_A, CHART_2, {
-      dataRange: 'C2:D4',
-    });
+    expect(computeBridge.updateChart).toHaveBeenNthCalledWith(
+      1,
+      SHEET_A,
+      CHART_1,
+      {
+        dataRange: 'B2:C6',
+      },
+      expectChartMutationOptions('charts.update'),
+    );
+    expect(computeBridge.updateChart).toHaveBeenNthCalledWith(
+      2,
+      SHEET_A,
+      CHART_2,
+      {
+        dataRange: 'C2:D4',
+      },
+      expectChartMutationOptions('charts.update'),
+    );
     expect(deps.invalidateChart).toHaveBeenCalledWith(CHART_1, SHEET_A);
     expect(deps.invalidateChart).toHaveBeenCalledWith(CHART_2, SHEET_A);
   });
@@ -576,6 +605,7 @@ describe('chart bridge subscription range helpers', () => {
           }),
         ],
       }),
+      expectChartMutationOptions('charts.update'),
     );
     expect(computeBridge.updateChart).toHaveBeenNthCalledWith(
       2,
@@ -592,6 +622,7 @@ describe('chart bridge subscription range helpers', () => {
           }),
         ],
       }),
+      expectChartMutationOptions('charts.update'),
     );
     expect(deps.invalidateChart).toHaveBeenCalledWith(CHART_1, SHEET_A);
     expect(deps.invalidateChart).toHaveBeenCalledWith(CHART_2, SHEET_A);
@@ -604,9 +635,14 @@ describe('chart bridge subscription range helpers', () => {
 
     await handleRowsDeleted(deps, SHEET_A, 1, 2);
 
-    expect(computeBridge.updateChart).toHaveBeenCalledWith(SHEET_A, CHART_1, {
-      dataRange: 'B3:C5',
-    });
+    expect(computeBridge.updateChart).toHaveBeenCalledWith(
+      SHEET_A,
+      CHART_1,
+      {
+        dataRange: 'B3:C5',
+      },
+      expectChartMutationOptions('charts.update'),
+    );
     expect(deps.invalidateChart).toHaveBeenCalledWith(CHART_1, SHEET_A);
     expect(deps.invalidateChart).not.toHaveBeenCalledWith(CHART_1, undefined);
   });

@@ -10,6 +10,12 @@ import {
   serializedChartToChart,
   unsupportedNativeXlsxChartType,
 } from '../../domain/charts/chart-public-api-converters';
+import {
+  createChartMutationOptions,
+  nextChartMutationOptions,
+  type ChartMutationOptions,
+  type ChartMutationOptionsInput,
+} from '../../domain/charts/chart-mutation-context';
 import { chartNotFound, invalidChartConfig, operationFailed } from '../../errors/api';
 
 export function assertSupportedNativeXlsxChartConfig(
@@ -46,6 +52,17 @@ export async function awaitChartReadScope(
   if (materialization === 'sheet') {
     await awaitSheetMaterialized(ctx, sheetId);
   }
+}
+
+export function chartMutationOptions(
+  ctx: DocumentContext,
+  sheetId: SheetId,
+  operationIdPrefix: string,
+): ChartMutationOptions {
+  return createChartMutationOptions(ctx, {
+    operationIdPrefix,
+    sheetIds: [sheetId],
+  });
 }
 
 export async function resolveChartIdInput(
@@ -148,6 +165,7 @@ export async function applyUpdate(
   sheetId: SheetId,
   chartId: string,
   updates: Partial<ChartConfig>,
+  admissionOptions?: ChartMutationOptionsInput,
 ): Promise<void> {
   await awaitSheetMaterialized(ctx, sheetId);
   const resolvedChartId = await resolveChartIdInput(ctx, sheetId, chartId);
@@ -160,5 +178,14 @@ export async function applyUpdate(
   if (internalUpdates.anchor && existing.anchor) {
     internalUpdates.anchor = { ...existing.anchor, ...internalUpdates.anchor };
   }
-  await ctx.computeBridge.updateChart(sheetId, resolvedChartId, internalUpdates);
+  await ctx.computeBridge.updateChart(
+    sheetId,
+    resolvedChartId,
+    internalUpdates,
+    nextChartMutationOptions(admissionOptions) ??
+      createChartMutationOptions(ctx, {
+        operationIdPrefix: 'charts.update',
+        sheetIds: [sheetId],
+      }),
+  );
 }

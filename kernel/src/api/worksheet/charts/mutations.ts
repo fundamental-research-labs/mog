@@ -11,10 +11,16 @@ import {
   chartUpdatesToInternal,
   serializedChartToChart,
 } from '../../../domain/charts/chart-public-api-converters';
+import {
+  createGroupedChartMutationOptions,
+  nextChartMutationOptions,
+  type ChartMutationOptionsInput,
+} from '../../../domain/charts/chart-mutation-context';
 import { chartNotFound } from '../../../errors/api';
 import {
   assertSupportedNativeXlsxChartConfig,
   awaitSheetMaterialized,
+  chartMutationOptions,
   resolveChartIdInput,
 } from '../chart-api-helpers';
 import { buildChartRemoveReceipt, buildChartUpdateReceipt } from './receipts';
@@ -39,7 +45,12 @@ export async function updateChartWithReceipt(
     internalUpdates.anchor = { ...existing.anchor, ...internalUpdates.anchor };
   }
 
-  await ctx.computeBridge.updateChart(sheetId, resolvedChartId, internalUpdates);
+  await ctx.computeBridge.updateChart(
+    sheetId,
+    resolvedChartId,
+    internalUpdates,
+    chartMutationOptions(ctx, sheetId, 'charts.update'),
+  );
   const updated = (await ctx.computeBridge.getChart(
     sheetId,
     resolvedChartId,
@@ -54,6 +65,7 @@ export async function removeChartWithReceipt(
   ctx: DocumentContext,
   sheetId: SheetId,
   chartId: string,
+  admissionOptions?: ChartMutationOptionsInput,
 ): Promise<ChartRemoveReceipt> {
   await awaitSheetMaterialized(ctx, sheetId);
   const resolvedChartId = await resolveChartIdInput(ctx, sheetId, chartId);
@@ -63,6 +75,25 @@ export async function removeChartWithReceipt(
   )) as ChartFloatingObject | null;
   if (!existing) throw chartNotFound(chartId);
 
-  await ctx.computeBridge.deleteChart(sheetId, resolvedChartId);
+  await ctx.computeBridge.deleteChart(
+    sheetId,
+    resolvedChartId,
+    nextChartMutationOptions(admissionOptions) ??
+      chartMutationOptions(ctx, sheetId, 'charts.delete'),
+  );
   return buildChartRemoveReceipt(sheetId, resolvedChartId);
+}
+
+export async function clearWorksheetCharts(
+  ctx: DocumentContext,
+  sheetId: SheetId,
+  chartIds: readonly string[],
+): Promise<void> {
+  const nextOptions = createGroupedChartMutationOptions(ctx, {
+    operationIdPrefix: 'charts.delete',
+    sheetIds: [sheetId],
+  });
+  for (const chartId of chartIds) {
+    await removeChartWithReceipt(ctx, sheetId, chartId, nextOptions);
+  }
 }

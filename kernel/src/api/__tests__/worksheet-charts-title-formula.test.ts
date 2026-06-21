@@ -56,10 +56,15 @@ describe('WorksheetChartsImpl chart title formulas', () => {
 
     await charts.setTitleFormula('chart-1', '=A1');
 
-    expect(updateChart).toHaveBeenCalledWith(SHEET_ID, 'chart-1', {
-      title: null,
-      titleFormula: '=A1',
-    });
+    expect(updateChart).toHaveBeenCalledWith(
+      SHEET_ID,
+      'chart-1',
+      {
+        title: null,
+        titleFormula: '=A1',
+      },
+      expect.any(Object),
+    );
     await expect(charts.get('chart-1')).resolves.toEqual(
       expect.objectContaining({ title: undefined, titleFormula: '=A1' }),
     );

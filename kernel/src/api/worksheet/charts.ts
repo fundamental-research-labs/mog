@@ -48,6 +48,7 @@ import {
   assertSupportedNativeXlsxChartConfig,
   awaitChartReadScope,
   awaitSheetMaterialized,
+  chartMutationOptions,
   chartSeriesCount,
   requireChart,
   requireChartSeriesForMutation,
@@ -75,7 +76,20 @@ import {
   buildChartAddReceipt,
   buildChartDuplicateReceipt,
 } from './charts/receipts';
-import { removeChartWithReceipt, updateChartWithReceipt } from './charts/mutations';
+import {
+  bringWorksheetChartForward,
+  bringWorksheetChartToFront,
+  linkWorksheetChartToTable,
+  sendWorksheetChartBackward,
+  sendWorksheetChartToBack,
+  unlinkWorksheetChartFromTable,
+  updateRawWorksheetChart,
+} from './charts/bridge-mutations';
+import {
+  clearWorksheetCharts,
+  removeChartWithReceipt,
+  updateChartWithReceipt,
+} from './charts/mutations';
 import {
   addChartSeriesMutation,
   addChartTrendlineMutation,
@@ -137,7 +151,11 @@ export class WorksheetChartsImpl implements WorksheetCharts {
       id: chartId,
     } as ChartConfig)) as ChartConfig;
     const internalConfig = chartConfigToInternal(configWithId);
-    const result = await this.ctx.computeBridge.createChart(this.sheetId, internalConfig);
+    const result = await this.ctx.computeBridge.createChart(
+      this.sheetId,
+      internalConfig,
+      chartMutationOptions(this.ctx, this.sheetId, 'charts.create'),
+    );
     // Extract the actual chart ID assigned by the Rust engine (may differ from our generated ID)
     const change = result?.floatingObjectChanges?.[0];
     const actualId = change?.objectId ?? change?.data?.id ?? chartId;
@@ -181,9 +199,7 @@ export class WorksheetChartsImpl implements WorksheetCharts {
   }
 
   async updateRaw(chartId: string, fields: Record<string, unknown>): Promise<void> {
-    await awaitSheetMaterialized(this.ctx, this.sheetId);
-    const resolvedChartId = await resolveChartIdInput(this.ctx, this.sheetId, chartId);
-    await this.ctx.computeBridge.updateChart(this.sheetId, resolvedChartId, fields);
+    await updateRawWorksheetChart(this.ctx, this.sheetId, chartId, fields);
   }
 
   async remove(chartId: string): Promise<ChartRemoveReceipt> {
@@ -200,9 +216,7 @@ export class WorksheetChartsImpl implements WorksheetCharts {
 
   async clear(): Promise<void> {
     const charts = await this.list();
-    for (const chart of charts) {
-      await this.remove(chart.id);
-    }
+    await clearWorksheetCharts(this.ctx, this.sheetId, charts.map((chart) => chart.id));
   }
 
   // ===========================================================================
@@ -306,35 +320,19 @@ export class WorksheetChartsImpl implements WorksheetCharts {
   // ===========================================================================
 
   async bringToFront(chartId: string): Promise<void> {
-    await awaitSheetMaterialized(this.ctx, this.sheetId);
-    await this.ctx.computeBridge.bringChartToFront(
-      this.sheetId,
-      await resolveChartIdInput(this.ctx, this.sheetId, chartId),
-    );
+    await bringWorksheetChartToFront(this.ctx, this.sheetId, chartId);
   }
 
   async sendToBack(chartId: string): Promise<void> {
-    await awaitSheetMaterialized(this.ctx, this.sheetId);
-    await this.ctx.computeBridge.sendChartToBack(
-      this.sheetId,
-      await resolveChartIdInput(this.ctx, this.sheetId, chartId),
-    );
+    await sendWorksheetChartToBack(this.ctx, this.sheetId, chartId);
   }
 
   async bringForward(chartId: string): Promise<void> {
-    await awaitSheetMaterialized(this.ctx, this.sheetId);
-    await this.ctx.computeBridge.bringChartForward(
-      this.sheetId,
-      await resolveChartIdInput(this.ctx, this.sheetId, chartId),
-    );
+    await bringWorksheetChartForward(this.ctx, this.sheetId, chartId);
   }
 
   async sendBackward(chartId: string): Promise<void> {
-    await awaitSheetMaterialized(this.ctx, this.sheetId);
-    await this.ctx.computeBridge.sendChartBackward(
-      this.sheetId,
-      await resolveChartIdInput(this.ctx, this.sheetId, chartId),
-    );
+    await sendWorksheetChartBackward(this.ctx, this.sheetId, chartId);
   }
 
   // ===========================================================================
@@ -342,20 +340,11 @@ export class WorksheetChartsImpl implements WorksheetCharts {
   // ===========================================================================
 
   async linkToTable(chartId: string, tableId: string): Promise<void> {
-    await awaitSheetMaterialized(this.ctx, this.sheetId);
-    await this.ctx.computeBridge.linkChartToTable(
-      this.sheetId,
-      await resolveChartIdInput(this.ctx, this.sheetId, chartId),
-      tableId,
-    );
+    await linkWorksheetChartToTable(this.ctx, this.sheetId, chartId, tableId);
   }
 
   async unlinkFromTable(chartId: string): Promise<void> {
-    await awaitSheetMaterialized(this.ctx, this.sheetId);
-    await this.ctx.computeBridge.unlinkChartFromTable(
-      this.sheetId,
-      await resolveChartIdInput(this.ctx, this.sheetId, chartId),
-    );
+    await unlinkWorksheetChartFromTable(this.ctx, this.sheetId, chartId);
   }
 
   async isLinkedToTable(chartId: string): Promise<boolean> {

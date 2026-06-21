@@ -7,6 +7,12 @@ import { toA1 } from '@mog/spreadsheet-utils/a1';
 
 import type { ChartFloatingObject } from '../../bridges/compute/compute-bridge';
 import type { DocumentContext } from '../../context/types';
+import {
+  createChartMutationOptions,
+  createGroupedChartMutationOptions,
+  nextChartMutationOptions,
+  type ChartMutationOptionsInput,
+} from './chart-mutation-context';
 import { get, getAll, update } from './chart-store';
 
 /**
@@ -36,14 +42,27 @@ export async function linkChartToTable(
     /** Use column names as series labels */
     useColumnNamesAsLabels?: boolean;
   },
+  admissionOptions?: ChartMutationOptionsInput,
 ): Promise<void> {
   const chart = await get(ctx, sheetId, chartId);
   if (!chart) return;
 
+  const nextOptions =
+    admissionOptions ??
+    createGroupedChartMutationOptions(ctx, {
+      operationIdPrefix: 'charts.linkToTable',
+      sheetIds: [sheetId],
+    });
+
   // Use the bridge's native linkChartToTable which properly persists the link
   // in the Rust engine. The manual sourceTableId update via updateChart does
   // not round-trip through the floating-object mapper correctly.
-  await ctx.computeBridge.linkChartToTable(sheetId, chartId, tableId);
+  await ctx.computeBridge.linkChartToTable(
+    sheetId,
+    chartId,
+    tableId,
+    nextChartMutationOptions(nextOptions),
+  );
 
   // Also store optional column mapping metadata via update
   if (
@@ -51,11 +70,17 @@ export async function linkChartToTable(
     options?.categoryColumn ||
     options?.useColumnNamesAsLabels !== undefined
   ) {
-    await update(ctx, sheetId, chartId, {
-      tableDataColumns: options?.dataColumns,
-      tableCategoryColumn: options?.categoryColumn,
-      useTableColumnNamesAsLabels: options?.useColumnNamesAsLabels ?? true,
-    });
+    await update(
+      ctx,
+      sheetId,
+      chartId,
+      {
+        tableDataColumns: options?.dataColumns,
+        tableCategoryColumn: options?.categoryColumn,
+        useTableColumnNamesAsLabels: options?.useColumnNamesAsLabels ?? true,
+      },
+      nextOptions,
+    );
   }
 }
 
@@ -73,12 +98,21 @@ export async function unlinkChartFromTable(
   ctx: DocumentContext,
   sheetId: SheetId,
   chartId: string,
+  admissionOptions?: ChartMutationOptionsInput,
 ): Promise<void> {
   const chart = await get(ctx, sheetId, chartId);
   if (!chart) return;
 
   // Use the bridge's native unlinkChartFromTable for proper persistence
-  await ctx.computeBridge.unlinkChartFromTable(sheetId, chartId);
+  await ctx.computeBridge.unlinkChartFromTable(
+    sheetId,
+    chartId,
+    nextChartMutationOptions(admissionOptions) ??
+      createChartMutationOptions(ctx, {
+        operationIdPrefix: 'charts.unlinkFromTable',
+        sheetIds: [sheetId],
+      }),
+  );
 }
 
 /**
@@ -154,15 +188,26 @@ export async function refreshChartTableLink(
   chartId: string,
   tableRange: CellRange,
   tableColumns: string[],
+  admissionOptions?: ChartMutationOptionsInput,
 ): Promise<void> {
   const chart = await get(ctx, sheetId, chartId);
   if (!chart || !chart.sourceTableId) return;
 
   const seriesNames = chart.useTableColumnNamesAsLabels ? tableColumns : undefined;
 
-  await update(ctx, sheetId, chartId, {
-    // Data range will be resolved by the compute core from tableRange
-    dataRange: `${toA1(tableRange.startRow + 1, tableRange.startCol)}:${toA1(tableRange.endRow, tableRange.endCol)}`,
-    tableColumnNames: seriesNames,
-  });
+  await update(
+    ctx,
+    sheetId,
+    chartId,
+    {
+      // Data range will be resolved by the compute core from tableRange
+      dataRange: `${toA1(tableRange.startRow + 1, tableRange.startCol)}:${toA1(tableRange.endRow, tableRange.endCol)}`,
+      tableColumnNames: seriesNames,
+    },
+    admissionOptions ??
+      createChartMutationOptions(ctx, {
+        operationIdPrefix: 'charts.update',
+        sheetIds: [sheetId],
+      }),
+  );
 }

@@ -6,6 +6,7 @@ import type { SheetId } from '@mog-sdk/contracts/core';
 
 import type { ChartFloatingObject } from '../../bridges/compute/compute-bridge';
 import type { DocumentContext } from '../../context/types';
+import { createGroupedChartMutationOptions } from './chart-mutation-context';
 import { get, getAll, update } from './chart-store';
 
 /**
@@ -60,7 +61,16 @@ export async function bringToFront(
   const currentZ = chart.zIndex ?? 0;
 
   if (currentZ < maxZ || maxZ === 0) {
-    await update(ctx, sheetId, chartId, { zIndex: maxZ + 1 });
+    await update(
+      ctx,
+      sheetId,
+      chartId,
+      { zIndex: maxZ + 1 },
+      createGroupedChartMutationOptions(ctx, {
+        operationIdPrefix: 'charts.bringToFront',
+        sheetIds: [sheetId],
+      }),
+    );
   }
 }
 
@@ -84,7 +94,16 @@ export async function sendToBack(
   const currentZ = chart.zIndex ?? 0;
 
   if (currentZ > minZ || minZ === 0) {
-    await update(ctx, sheetId, chartId, { zIndex: minZ - 1 });
+    await update(
+      ctx,
+      sheetId,
+      chartId,
+      { zIndex: minZ - 1 },
+      createGroupedChartMutationOptions(ctx, {
+        operationIdPrefix: 'charts.sendToBack',
+        sheetIds: [sheetId],
+      }),
+    );
   }
 }
 
@@ -119,12 +138,16 @@ export async function bringForward(
     }
   }
 
+  const nextOptions = createGroupedChartMutationOptions(ctx, {
+    operationIdPrefix: 'charts.bringForward',
+    sheetIds: [sheetId],
+  });
   if (nextChart) {
-    await update(ctx, sheetId, chartId, { zIndex: nextZ });
-    await update(ctx, sheetId, nextChart.id, { zIndex: currentZ });
+    await update(ctx, sheetId, chartId, { zIndex: nextZ }, nextOptions);
+    await update(ctx, sheetId, nextChart.id, { zIndex: currentZ }, nextOptions);
   } else {
     const maxZ = await getMaxZIndex(ctx, sheetId);
-    await update(ctx, sheetId, chartId, { zIndex: maxZ + 1 });
+    await update(ctx, sheetId, chartId, { zIndex: maxZ + 1 }, nextOptions);
   }
 }
 
@@ -159,12 +182,16 @@ export async function sendBackward(
     }
   }
 
+  const nextOptions = createGroupedChartMutationOptions(ctx, {
+    operationIdPrefix: 'charts.sendBackward',
+    sheetIds: [sheetId],
+  });
   if (prevChart) {
-    await update(ctx, sheetId, chartId, { zIndex: prevZ });
-    await update(ctx, sheetId, prevChart.id, { zIndex: currentZ });
+    await update(ctx, sheetId, chartId, { zIndex: prevZ }, nextOptions);
+    await update(ctx, sheetId, prevChart.id, { zIndex: currentZ }, nextOptions);
   } else {
     const minZ = await getMinZIndex(ctx, sheetId);
-    await update(ctx, sheetId, chartId, { zIndex: minZ - 1 });
+    await update(ctx, sheetId, chartId, { zIndex: minZ - 1 }, nextOptions);
   }
 }
 

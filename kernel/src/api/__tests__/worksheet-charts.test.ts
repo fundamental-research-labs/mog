@@ -119,6 +119,7 @@ function createPieChartAddApi(cells: Record<string, string | number | boolean | 
             })
           : null,
       ),
+      getSheetName: jest.fn(async () => undefined),
       getCellIdAt: jest.fn(async () => null),
       getProjectionSource: jest.fn(async () => null),
       getCellData: jest.fn(async (_sheetId: string, row: number, col: number) =>
@@ -228,6 +229,7 @@ describe('WorksheetChartsImpl materialization scopes', () => {
       SHEET_ID,
       chart.id,
       expect.objectContaining({ name: 'Updated chart' }),
+      expect.any(Object),
     );
     expect(calls).toEqual([`await:${SHEET_ID}`, 'getChart', 'getChart', 'updateChart', 'getChart']);
   });
@@ -255,6 +257,7 @@ describe('WorksheetChartsImpl materialization scopes', () => {
       SHEET_ID,
       fullId,
       expect.objectContaining({ name: 'Updated import' }),
+      expect.any(Object),
     );
     expect(ctx.computeBridge.getChart).not.toHaveBeenCalledWith(
       expect.anything(),
@@ -387,7 +390,11 @@ describe('WorksheetChartsImpl mutation receipts', () => {
     await expect(worksheet.removeChart('chart-1')).resolves.toEqual(
       expect.objectContaining({ kind: 'chart.remove', chartId: 'chart-1' }),
     );
-    expect(ctx.computeBridge.deleteChart).toHaveBeenCalledWith(SHEET_ID, 'chart-1');
+    expect(ctx.computeBridge.deleteChart).toHaveBeenCalledWith(
+      SHEET_ID,
+      'chart-1',
+      expect.any(Object),
+    );
     expect((await charts.remove('chart-1')).effects).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -805,6 +812,7 @@ describe('WorksheetChartsImpl rich chart format boundary', () => {
           ],
         },
       }),
+      expect.any(Object),
     );
   });
 
@@ -875,6 +883,7 @@ describe('WorksheetChartsImpl rich chart format boundary', () => {
           ],
         },
       }),
+      expect.any(Object),
     );
   });
 });
@@ -996,21 +1005,16 @@ describe('WorksheetChartsImpl ChartEx-family config mapping', () => {
           showConnectorLines: true,
         },
         histogram: {
-          binCount: undefined,
           binWidth: 2.5,
           overflowBin: true,
           overflowBinValue: 10,
-          underflowBin: undefined,
-          underflowBinValue: undefined,
         },
         boxplot: {
           showOutlierPoints: false,
           showMeanMarkers: true,
-          showMeanLine: undefined,
           quartileMethod: 'inclusive',
         },
         hierarchy: {
-          rows: undefined,
           categoryFormulas: ['Sheet1!A1:A3'],
           valueFormula: 'Sheet1!B1:B3',
           parentLabelLayout: 'overlapping',
@@ -1020,6 +1024,7 @@ describe('WorksheetChartsImpl ChartEx-family config mapping', () => {
           valueFormula: 'Sheet1!B1:B3',
         },
       }),
+      expect.any(Object),
     );
   });
 });
@@ -1076,6 +1081,7 @@ describe('WorksheetChartsImpl surface chart config mapping', () => {
         view3d: { rotX: 15, rotY: 20 },
         floorFormat: { fill: { type: 'solid', color: { theme: 'lt1', tint_shade: -0.1 } } },
       }),
+      expect.any(Object),
     );
   });
 });

@@ -24,6 +24,7 @@ import {
   chartUpdatesToInternal,
   serializedChartToChart,
 } from '../../domain/charts/chart-public-api-converters';
+import { createChartMutationOptions } from '../../domain/charts/chart-mutation-context';
 import { resolveA1ChartRange } from '../../domain/charts/chart-range-references';
 import { awaitSheetMaterialized, resolveChartIdInput } from './chart-api-helpers';
 
@@ -156,7 +157,15 @@ export async function updateChartSourceData(
 
   const internalUpdates = { ...chartUpdatesToInternal(updates), ...identityClears };
   if (Object.keys(internalUpdates).length === 0) return;
-  await ctx.computeBridge.updateChart(sheetId, resolvedChartId, internalUpdates);
+  await ctx.computeBridge.updateChart(
+    sheetId,
+    resolvedChartId,
+    internalUpdates,
+    createChartMutationOptions(ctx, {
+      operationIdPrefix: 'charts.update',
+      sheetIds: [sheetId],
+    }),
+  );
 }
 
 export async function resolveWorksheetSourceRangeInput(

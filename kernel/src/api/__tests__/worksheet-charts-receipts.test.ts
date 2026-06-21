@@ -229,6 +229,7 @@ describe('WorksheetChartsImpl mutation receipts', () => {
           valueAxis: expect.objectContaining({ title: '=A1' }),
         }),
       }),
+      expect.any(Object),
     );
 
     const labelReceipt = await charts.setDataLabelHeight('chart-1', 0, 0, 18);
@@ -327,6 +328,7 @@ describe('WorksheetChartsImpl mutation receipts', () => {
           categoryAxis: expect.objectContaining({ title: 'Month', titleVisible: true }),
         }),
       }),
+      expect.any(Object),
     );
 
     const axisVisibleReceipt = await charts.setAxisVisible('chart-1', 'secondaryValue', false);
@@ -347,6 +349,7 @@ describe('WorksheetChartsImpl mutation receipts', () => {
           secondaryValueAxis: expect.objectContaining({ visible: false }),
         }),
       }),
+      expect.any(Object),
     );
 
     const hiddenTitleReceipt = await charts.setChartTitleVisible('chart-1', false);
@@ -408,6 +411,7 @@ describe('WorksheetChartsImpl mutation receipts', () => {
       SHEET_ID,
       'chart-1',
       expect.objectContaining({ seriesOrientation: 'rows' }),
+      expect.any(Object),
     );
 
     const explicitCase = createMutableChartsApi(
@@ -473,6 +477,7 @@ describe('WorksheetChartsImpl mutation receipts', () => {
       SHEET_ID,
       'chart-1',
       expect.objectContaining({ seriesOrientation: 'rows' }),
+      expect.any(Object),
     );
   });
 

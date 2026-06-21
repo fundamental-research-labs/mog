@@ -54,6 +54,10 @@ describe('WorkbookVersion merge capability gate', () => {
   it('blocks persisted applyMerge before attempt lookup or provider mutation when the kill switch is active', async () => {
     const merge = jest.fn();
     const applyMerge = jest.fn();
+    const readGraphRegistry = jest.fn();
+    const openMergeApplyIntentStore = jest.fn();
+    const fastForwardMerge = jest.fn();
+    const mergeCommit = jest.fn();
     const input = {
       resultId: 'merge-result:hidden',
       resultDigest: { algorithm: 'sha256', digest: 'a'.repeat(64) },
@@ -63,8 +67,10 @@ describe('WorkbookVersion merge capability gate', () => {
       {
         versioning: {
           versionControlMergeKillSwitch: true,
+          provider: { readGraphRegistry, openMergeApplyIntentStore },
           mergeService: { merge },
           applyMergeService: { applyMerge },
+          writeService: { fastForwardMerge, mergeCommit },
         },
       } as any,
       input,
@@ -94,6 +100,10 @@ describe('WorkbookVersion merge capability gate', () => {
     });
     expect(merge).not.toHaveBeenCalled();
     expect(applyMerge).not.toHaveBeenCalled();
+    expect(readGraphRegistry).not.toHaveBeenCalled();
+    expect(openMergeApplyIntentStore).not.toHaveBeenCalled();
+    expect(fastForwardMerge).not.toHaveBeenCalled();
+    expect(mergeCommit).not.toHaveBeenCalled();
   });
 
   it('maps disabled applyMerge through the public facade without invoking attached services', async () => {

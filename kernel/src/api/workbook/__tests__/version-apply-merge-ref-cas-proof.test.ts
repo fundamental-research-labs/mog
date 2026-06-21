@@ -10,9 +10,11 @@ import type {
 } from '@mog-sdk/contracts/api';
 
 import { applyPersistedMergeResult } from '../version-apply-merge-persisted';
+import { recoverPersistedMergeApplyPostCas } from '../version-apply-merge-recovery';
 import { recoverStagedMergeCommitIfAlreadyApplied } from '../version-apply-merge-persisted-artifact-recovery';
 import { VERSION_GRAPH_MAIN_REF } from '../../../document/version-store/graph-store';
 import {
+  computeMergeApplyRefCasProof,
   type MergeApplyIntentRecord,
   type MergeApplyIntentStore,
 } from '../../../document/version-store/merge-apply-intent-store';
@@ -190,6 +192,113 @@ describe('recoverStagedMergeCommitIfAlreadyApplied ref CAS proof recovery', () =
   });
 });
 
+describe('recoverPersistedMergeApplyPostCas', () => {
+  it('finalizes an already-moved fast-forward intent under the merge kill switch without write services', async () => {
+    const namespace = namespaceForDocumentScope(DOCUMENT_SCOPE, 'internal-fast-forward-recovery');
+    const record = fastForwardIntentRecord(namespace);
+    const completeIntent = jest.fn(async (input: Parameters<MergeApplyIntentStore['completeIntent']>[0]) => ({
+      status: 'completed' as const,
+      record: { ...record, state: 'finalized' as const, terminal: input.terminal },
+      diagnostics: [],
+    }));
+    const fastForwardMerge = jest.fn();
+    const mergeCommit = jest.fn();
+
+    const result = await recoverPersistedMergeApplyPostCas(
+      recoveryContext({
+        namespace,
+        record,
+        head: THEIRS,
+        proof: await computeMergeApplyRefCasProof({
+          applyKind: 'fastForward',
+          targetRef: TARGET_REF,
+          headBefore: OURS,
+          headAfter: THEIRS,
+        }),
+        completeIntent,
+        fastForwardMerge,
+        mergeCommit,
+      }),
+      { resultId: RESULT_ID, resultDigest: RESULT_DIGEST },
+    );
+
+    expect(result).toMatchObject({
+      status: 'alreadyApplied',
+      commitRef: { id: THEIRS, refName: TARGET_REF },
+      mutationGuarantee: 'ref-not-mutated',
+    });
+    expect(completeIntent).toHaveBeenCalledTimes(1);
+    expect(fastForwardMerge).not.toHaveBeenCalled();
+    expect(mergeCommit).not.toHaveBeenCalled();
+  });
+
+  it('does not mutate when the fast-forward ref CAS is not visible', async () => {
+    const namespace = namespaceForDocumentScope(DOCUMENT_SCOPE, 'internal-fast-forward-not-moved');
+    const record = fastForwardIntentRecord(namespace);
+    const completeIntent = jest.fn();
+    const fastForwardMerge = jest.fn();
+
+    const result = await recoverPersistedMergeApplyPostCas(
+      recoveryContext({
+        namespace,
+        record,
+        head: OURS,
+        completeIntent,
+        fastForwardMerge,
+      }),
+      { resultId: RESULT_ID, resultDigest: RESULT_DIGEST },
+    );
+
+    expect(result).toMatchObject({
+      status: 'blocked',
+      mutationGuarantee: 'no-write-attempted',
+      diagnostics: [expect.objectContaining({ issueCode: 'VERSION_MERGE_RECOVERY_NOT_READY' })],
+    });
+    expect(completeIntent).not.toHaveBeenCalled();
+    expect(fastForwardMerge).not.toHaveBeenCalled();
+  });
+
+  it('finalizes an already-moved mergeCommit intent under the merge kill switch without write services', async () => {
+    const namespace = namespaceForDocumentScope(DOCUMENT_SCOPE, 'internal-merge-commit-recovery');
+    const record = mergeCommitIntentRecord(namespace);
+    const completeIntent = jest.fn(async (input: Parameters<MergeApplyIntentStore['completeIntent']>[0]) => ({
+      status: 'completed' as const,
+      record: { ...record, state: 'finalized' as const, terminal: input.terminal },
+      diagnostics: [],
+    }));
+    const mergeCommit = jest.fn();
+
+    const result = await recoverPersistedMergeApplyPostCas(
+      recoveryContext({
+        namespace,
+        record,
+        head: MERGE,
+        mergeCommitPayload: {
+          parentCommitIds: [OURS, THEIRS],
+          resolvedMergeAttemptDigest: RESOLVED_ATTEMPT_DIGEST,
+        },
+        proof: await computeMergeApplyRefCasProof({
+          applyKind: 'mergeCommit',
+          targetRef: TARGET_REF,
+          headBefore: OURS,
+          headAfter: MERGE,
+        }),
+        completeIntent,
+        mergeCommit,
+      }),
+      { resolvedAttemptDigest: RESOLVED_ATTEMPT_DIGEST, resultDigest: RESULT_DIGEST },
+    );
+
+    expect(result).toMatchObject({
+      status: 'alreadyApplied',
+      commitRef: { id: MERGE, refName: TARGET_REF },
+      mutationGuarantee: 'ref-not-mutated',
+    });
+    expect(completeIntent).toHaveBeenCalledTimes(1);
+    expect(mergeCommit).not.toHaveBeenCalled();
+  });
+});
+
 function fastForwardIntentRecord(
   namespace: ReturnType<typeof namespaceForDocumentScope>,
 ): MergeApplyIntentRecord {
@@ -226,6 +335,88 @@ function mergeApplyIntentRecord(
     createdAt: CREATED_AT,
     updatedAt: CREATED_AT,
   };
+}
+
+function recoveryContext(input: {
+  readonly namespace: ReturnType<typeof namespaceForDocumentScope>;
+  readonly record: MergeApplyIntentRecord;
+  readonly head: WorkbookCommitId;
+  readonly proof?: Awaited<ReturnType<typeof computeMergeApplyRefCasProof>>;
+  readonly mergeCommitPayload?: {
+    readonly parentCommitIds: readonly WorkbookCommitId[];
+    readonly resolvedMergeAttemptDigest?: ReturnType<typeof digest>;
+  };
+  readonly completeIntent: MergeApplyIntentStore['completeIntent'];
+  readonly fastForwardMerge?: jest.Mock;
+  readonly mergeCommit?: jest.Mock;
+}) {
+  const registryPromise = createVersionGraphRegistry({
+    documentScope: DOCUMENT_SCOPE,
+    graphId: input.namespace.graphId,
+    rootCommitId: BASE,
+    createdAt: CREATED_AT,
+  });
+  const store: MergeApplyIntentStore = {
+    namespace: input.namespace,
+    beginIntent: jest.fn(),
+    readByIntentId: jest.fn(async () => ({
+      status: 'found',
+      record: input.record,
+      diagnostics: [],
+    })),
+    readByIdempotencyKey: jest.fn(),
+    readRefCasProof: jest.fn(async () =>
+      input.proof
+        ? { status: 'found', proof: input.proof, diagnostics: [] }
+        : {
+            status: 'missing',
+            proof: null,
+            diagnostics: [
+              {
+                code: 'VERSION_INTENT_NOT_FOUND',
+                message: 'proof missing',
+                recoverability: 'repair',
+              },
+            ],
+          },
+    ),
+    completeIntent: input.completeIntent,
+  };
+  return {
+    versioning: {
+      versionControlMergeKillSwitch: true,
+      provider: {
+        accessContext: {},
+        readGraphRegistry: jest.fn(async () => ({
+          status: 'ok',
+          registry: await registryPromise,
+          diagnostics: [],
+        })),
+        openGraph: jest.fn(async () => ({
+          readRef: jest.fn(async () => ({
+            status: 'success',
+            ref: {
+              name: TARGET_REF,
+              commitId: input.head,
+              revision: { kind: 'counter', value: '2' },
+              updatedAt: CREATED_AT,
+            },
+            diagnostics: [],
+          })),
+          readCommit: jest.fn(async () => ({
+            status: 'success',
+            commit: { payload: input.mergeCommitPayload ?? { parentCommitIds: [] } },
+            diagnostics: [],
+          })),
+        })),
+        openMergeApplyIntentStore: jest.fn(async () => store),
+      },
+      writeService: {
+        fastForwardMerge: input.fastForwardMerge ?? jest.fn(),
+        mergeCommit: input.mergeCommit ?? jest.fn(),
+      },
+    },
+  } as Parameters<typeof recoverPersistedMergeApplyPostCas>[0];
 }
 
 function blockedApplyMergeResult(

@@ -32,7 +32,23 @@ export type SpreadsheetWriteCapability =
   | 'workbook:undo-group'
   | 'workbook:policy-admin'
   | 'decorations:write';
-export type SpreadsheetCapability = SpreadsheetReadCapability | SpreadsheetWriteCapability;
+export type SpreadsheetVersionCapability =
+  | 'version:read'
+  | 'version:diff'
+  | 'version:commit'
+  | 'version:branch'
+  | 'version:checkout'
+  | 'version:reviewRead'
+  | 'version:reviewWrite'
+  | 'version:proposal'
+  | 'version:mergePreview'
+  | 'version:mergeApply'
+  | 'version:revert'
+  | 'version:provenance';
+export type SpreadsheetCapability =
+  | SpreadsheetReadCapability
+  | SpreadsheetWriteCapability
+  | SpreadsheetVersionCapability;
 
 export type SpreadsheetDocumentSource =
   | { readonly kind: 'blank' }

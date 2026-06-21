@@ -2,7 +2,7 @@
  * Capability Types - Core type definitions for capability-based permissioning
  *
  * This file defines:
- * - CapabilityType union type (all ~40 capabilities from tiers 0-5)
+ * - CapabilityType union type (all capabilities from tiers 0-5)
  * - CapabilityInfo interface (name, description, tier, risk level)
  * - CAPABILITY_REGISTRY: Record<CapabilityType, CapabilityInfo>
  *
@@ -77,7 +77,19 @@ export type Tier2Capability =
   | 'notifications:send'
   | 'checkpoints:read'
   | 'checkpoints:create'
-  | 'checkpoints:restore';
+  | 'checkpoints:restore'
+  | 'version:read'
+  | 'version:diff'
+  | 'version:commit'
+  | 'version:branch'
+  | 'version:checkout'
+  | 'version:reviewRead'
+  | 'version:reviewWrite'
+  | 'version:proposal'
+  | 'version:mergePreview'
+  | 'version:mergeApply'
+  | 'version:revert'
+  | 'version:provenance';
 
 /**
  * Tier 3: Platform
@@ -340,6 +352,78 @@ export const CAPABILITY_REGISTRY: Readonly<Record<CapabilityType, CapabilityInfo
     description: 'Restore workbook to a previous checkpoint',
     tier: 2,
     riskLevel: 'high',
+  },
+  'version:read': {
+    name: 'Read Version History',
+    description: 'Read workbook version heads, refs, commits, and timeline summaries',
+    tier: 2,
+    riskLevel: 'medium',
+  },
+  'version:diff': {
+    name: 'Read Version Diffs',
+    description: 'Read semantic version diffs and review diff pages',
+    tier: 2,
+    riskLevel: 'medium',
+  },
+  'version:commit': {
+    name: 'Create Version Commits',
+    description: 'Create authored commits in workbook version history',
+    tier: 2,
+    riskLevel: 'high',
+  },
+  'version:branch': {
+    name: 'Manage Version Branches',
+    description: 'Create, list, and select workbook version branches',
+    tier: 2,
+    riskLevel: 'high',
+  },
+  'version:checkout': {
+    name: 'Checkout Version State',
+    description: 'Materialize a version branch or commit into the active workbook',
+    tier: 2,
+    riskLevel: 'high',
+  },
+  'version:reviewRead': {
+    name: 'Read Version Reviews',
+    description: 'Read review records and review decisions for workbook version changes',
+    tier: 2,
+    riskLevel: 'medium',
+  },
+  'version:reviewWrite': {
+    name: 'Write Version Reviews',
+    description: 'Create and update review records and review decisions',
+    tier: 2,
+    riskLevel: 'high',
+  },
+  'version:proposal': {
+    name: 'Manage Version Proposals',
+    description: 'Create, verify, accept, and reject agent version proposals',
+    tier: 2,
+    riskLevel: 'high',
+  },
+  'version:mergePreview': {
+    name: 'Preview Version Merges',
+    description: 'Preview semantic version merges and conflicts',
+    tier: 2,
+    riskLevel: 'high',
+  },
+  'version:mergeApply': {
+    name: 'Apply Version Merges',
+    description: 'Apply clean or resolved semantic version merges',
+    tier: 2,
+    riskLevel: 'high',
+  },
+  'version:revert': {
+    name: 'Revert Version Changes',
+    description: 'Create authored reversions of workbook version changes',
+    tier: 2,
+    riskLevel: 'high',
+  },
+  'version:provenance': {
+    name: 'Read Version Provenance',
+    description: 'Display redacted provenance and attribution for version history',
+    tier: 2,
+    riskLevel: 'medium',
   },
 
   // =========================================================================

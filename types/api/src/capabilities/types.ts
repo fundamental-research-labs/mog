@@ -2,7 +2,7 @@
  * Capability Types - Core type definitions for capability-based permissioning
  *
  * This file defines ONLY type definitions:
- * - CapabilityType union type (all ~40 capabilities from tiers 0-5)
+ * - CapabilityType union type (all capabilities from tiers 0-5)
  * - CapabilityInfo interface (name, description, tier, risk level)
  *
  * Runtime code (CAPABILITY_REGISTRY, helper functions) has been moved to
@@ -79,7 +79,19 @@ export type Tier2Capability =
   | 'notifications:send'
   | 'checkpoints:read'
   | 'checkpoints:create'
-  | 'checkpoints:restore';
+  | 'checkpoints:restore'
+  | 'version:read'
+  | 'version:diff'
+  | 'version:commit'
+  | 'version:branch'
+  | 'version:checkout'
+  | 'version:reviewRead'
+  | 'version:reviewWrite'
+  | 'version:proposal'
+  | 'version:mergePreview'
+  | 'version:mergeApply'
+  | 'version:revert'
+  | 'version:provenance';
 
 /**
  * Tier 3: Platform

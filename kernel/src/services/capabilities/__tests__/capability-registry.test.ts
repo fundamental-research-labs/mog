@@ -12,10 +12,13 @@ import { createScope } from '../scope';
 
 import { CapabilityRegistry } from '../registry';
 import {
+  CAPABILITY_REGISTRY,
   CloudGrantsStore,
+  capabilityImplies,
   compareVectorClocks,
   createCloudGrantsStore,
   createMemoryGrantsStore,
+  getCapabilityInfo,
   incrementVectorClock,
   MemoryGrantsStore,
   mergeVectorClocks,
@@ -123,6 +126,49 @@ describe('CapabilityRegistry', () => {
 
       expect(expanded).toContain('cells:write');
       expect(expanded).toContain('cells:read');
+    });
+
+    it('should auto-grant version-control dependencies', () => {
+      registry.grant(testAppId, 'version:mergeApply');
+
+      expect(registry.hasCapability(testAppId, 'version:mergeApply')).toBe(true);
+      expect(registry.hasCapability(testAppId, 'version:mergePreview')).toBe(true);
+      expect(registry.hasCapability(testAppId, 'version:diff')).toBe(true);
+      expect(registry.hasCapability(testAppId, 'version:read')).toBe(true);
+      expect(registry.hasCapability(testAppId, 'version:commit')).toBe(false);
+    });
+
+    it('should expose VC-08 version capabilities with plan-aligned tier and risk', () => {
+      const versionCapabilities = [
+        'version:read',
+        'version:diff',
+        'version:commit',
+        'version:branch',
+        'version:checkout',
+        'version:reviewRead',
+        'version:reviewWrite',
+        'version:proposal',
+        'version:mergePreview',
+        'version:mergeApply',
+        'version:revert',
+        'version:provenance',
+      ] as const;
+
+      for (const capability of versionCapabilities) {
+        expect(CAPABILITY_REGISTRY).toHaveProperty(capability);
+        expect(getCapabilityInfo(capability).tier).toBe(2);
+      }
+      expect(getCapabilityInfo('version:read').riskLevel).toBe('medium');
+      expect(getCapabilityInfo('version:diff').riskLevel).toBe('medium');
+      expect(getCapabilityInfo('version:reviewRead').riskLevel).toBe('medium');
+      expect(getCapabilityInfo('version:provenance').riskLevel).toBe('medium');
+      expect(getCapabilityInfo('version:commit').riskLevel).toBe('high');
+      expect(getCapabilityInfo('version:checkout').riskLevel).toBe('high');
+      expect(getCapabilityInfo('version:mergeApply').riskLevel).toBe('high');
+
+      expect(capabilityImplies('version:proposal', 'version:reviewRead')).toBe(true);
+      expect(capabilityImplies('version:checkout', 'version:read')).toBe(true);
+      expect(capabilityImplies('version:mergeApply', 'version:diff')).toBe(true);
     });
   });
 

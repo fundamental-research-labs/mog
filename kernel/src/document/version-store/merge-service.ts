@@ -83,6 +83,11 @@ type SemanticValueChange = {
   readonly display?: VersionDiffDisplay;
 };
 
+type MergeCommitRead = {
+  readonly commit: WorkbookCommit;
+  readonly closure: readonly WorkbookCommit[];
+};
+
 export type WorkbookVersionMergeServiceOptions = {
   readonly provider: VersionStoreProvider;
 };
@@ -109,14 +114,26 @@ export class WorkbookVersionMergeService {
     const opened = await this.openVisibleGraph();
     if (!opened.ok) return blocked(input, opened.diagnostics);
 
-    const ours = await readDirectChild(opened.graph, input.base, input.ours, 'ours');
+    const ours = await readPreviewCommit(opened.graph, input.base, input.ours, 'ours');
     if (!ours.ok) return blocked(input, ours.diagnostics);
-    const theirs = await readDirectChild(opened.graph, input.base, input.theirs, 'theirs');
+    const theirs = await readPreviewCommit(opened.graph, input.base, input.theirs, 'theirs');
     if (!theirs.ok) return blocked(input, theirs.diagnostics);
 
-    const oursPayload = await readSemanticChangeSet(opened.graph, ours.commit);
+    if (input.ours === input.theirs || commitClosureContains(ours.commit, input.theirs)) {
+      return alreadyMerged(input);
+    }
+    if (commitClosureContains(theirs.commit, input.ours)) {
+      return fastForward(input);
+    }
+
+    const oursAncestry = directChildDiagnostic(input.base, ours.commit.commit, 'ours');
+    if (oursAncestry) return blocked(input, [oursAncestry]);
+    const theirsAncestry = directChildDiagnostic(input.base, theirs.commit.commit, 'theirs');
+    if (theirsAncestry) return blocked(input, [theirsAncestry]);
+
+    const oursPayload = await readSemanticChangeSet(opened.graph, ours.commit.commit);
     if (!oursPayload.ok) return blocked(input, oursPayload.diagnostics);
-    const theirsPayload = await readSemanticChangeSet(opened.graph, theirs.commit);
+    const theirsPayload = await readSemanticChangeSet(opened.graph, theirs.commit.commit);
     if (!theirsPayload.ok) return blocked(input, theirsPayload.diagnostics);
 
     const oursChanges = parseSemanticChangeSet(oursPayload.payload, 'ours');
@@ -214,13 +231,13 @@ export function createWorkbookVersionMergeService(
   return new WorkbookVersionMergeService(options);
 }
 
-async function readDirectChild(
+async function readPreviewCommit(
   graph: VersionGraphStore,
   baseCommitId: WorkbookCommitId,
   commitId: WorkbookCommitId,
   branch: 'ours' | 'theirs',
 ): Promise<
-  | { readonly ok: true; readonly commit: WorkbookCommit }
+  | { readonly ok: true; readonly commit: MergeCommitRead }
   | { readonly ok: false; readonly diagnostics: readonly MergeDiagnostic[] }
 > {
   const closure = await graph.readCommitClosure(commitId);
@@ -242,28 +259,6 @@ async function readDirectChild(
     };
   }
 
-  if (
-    commit.payload.parentCommitIds.length !== 1 ||
-    commit.payload.parentCommitIds[0] !== baseCommitId
-  ) {
-    return {
-      ok: false,
-      diagnostics: [
-        diagnostic(
-          'VERSION_MERGE_UNSUPPORTED_ANCESTRY',
-          'Merge preview requires ours and theirs to be direct children of base.',
-          {
-            payload: {
-              branch,
-              parentCount: commit.payload.parentCommitIds.length,
-              parentMatchesBase: commit.payload.parentCommitIds[0] === baseCommitId,
-            },
-          },
-        ),
-      ],
-    };
-  }
-
   if (!closure.commits.some((candidate) => candidate.id === baseCommitId)) {
     return {
       ok: false,
@@ -277,7 +272,62 @@ async function readDirectChild(
     };
   }
 
-  return { ok: true, commit };
+  return { ok: true, commit: { commit, closure: closure.commits } };
+}
+
+function commitClosureContains(read: MergeCommitRead, commitId: WorkbookCommitId): boolean {
+  return read.closure.some((candidate) => candidate.id === commitId);
+}
+
+function directChildDiagnostic(
+  baseCommitId: WorkbookCommitId,
+  commit: WorkbookCommit,
+  branch: 'ours' | 'theirs',
+): MergeDiagnostic | null {
+  if (
+    commit.payload.parentCommitIds.length === 1 &&
+    commit.payload.parentCommitIds[0] === baseCommitId
+  ) {
+    return null;
+  }
+
+  return diagnostic(
+    'VERSION_MERGE_UNSUPPORTED_ANCESTRY',
+    'Merge preview requires non-ancestral divergent commits to be direct children of base.',
+    {
+      payload: {
+        branch,
+        parentCount: commit.payload.parentCommitIds.length,
+        parentMatchesBase: commit.payload.parentCommitIds[0] === baseCommitId,
+      },
+    },
+  );
+}
+
+function fastForward(input: VersionMergeInput): VersionMergeResult {
+  return {
+    status: 'fastForward',
+    base: input.base,
+    ours: input.ours,
+    theirs: input.theirs,
+    changes: [],
+    conflicts: [],
+    diagnostics: [],
+    mutationGuarantee: 'preview-only',
+  };
+}
+
+function alreadyMerged(input: VersionMergeInput): VersionMergeResult {
+  return {
+    status: 'alreadyMerged',
+    base: input.base,
+    ours: input.ours,
+    theirs: input.theirs,
+    changes: [],
+    conflicts: [],
+    diagnostics: [],
+    mutationGuarantee: 'preview-only',
+  };
 }
 
 async function readSemanticChangeSet(

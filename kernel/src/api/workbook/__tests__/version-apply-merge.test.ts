@@ -198,6 +198,117 @@ describe('WorkbookVersion applyMerge preview planner', () => {
     expect(mergeCommit).not.toHaveBeenCalled();
   });
 
+  it('plans fast-forward previews as zero-change plans', async () => {
+    const merge = jest.fn(async () => ancestryResult('fastForward'));
+    const mergeCommit = jest.fn();
+    const version = new WorkbookVersionImpl({
+      versioning: { mergeService: { merge }, writeService: { mergeCommit } },
+    } as any);
+
+    await expect(
+      version.applyMerge({ base: BASE, ours: OURS, theirs: THEIRS }, { mode: 'preview' }),
+    ).resolves.toEqual({
+      ok: true,
+      value: {
+        status: 'planned',
+        base: BASE,
+        ours: OURS,
+        theirs: THEIRS,
+        changes: [],
+        conflicts: [],
+        diagnostics: [],
+        resolutionCount: 0,
+        mutationGuarantee: 'preview-only',
+      },
+    });
+    expect(mergeCommit).not.toHaveBeenCalled();
+  });
+
+  it('blocks fast-forward apply previews when no fast-forward writer is available', async () => {
+    const merge = jest.fn(async () => ancestryResult('fastForward'));
+    const mergeCommit = jest.fn();
+    const version = new WorkbookVersionImpl({
+      versioning: { mergeService: { merge }, writeService: { mergeCommit } },
+    } as any);
+
+    await expect(
+      version.applyMerge(
+        { base: BASE, ours: OURS, theirs: THEIRS },
+        { targetRef: TARGET_REF as any, expectedTargetHead: EXPECTED_TARGET_HEAD },
+      ),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: {
+        code: 'target_unavailable',
+        target: 'workbook.version.applyMerge',
+        diagnostics: [
+          expect.objectContaining({
+            code: 'VERSION_STORE_UNAVAILABLE',
+            data: expect.objectContaining({ redacted: true }),
+          }),
+        ],
+      },
+    });
+    expect(mergeCommit).not.toHaveBeenCalled();
+  });
+
+  it('plans already-merged previews as zero-change plans', async () => {
+    const merge = jest.fn(async () => ancestryResult('alreadyMerged'));
+    const version = new WorkbookVersionImpl({ versioning: { mergeService: { merge } } } as any);
+
+    await expect(
+      version.applyMerge({ base: BASE, ours: OURS, theirs: THEIRS }, { mode: 'preview' }),
+    ).resolves.toEqual({
+      ok: true,
+      value: {
+        status: 'planned',
+        base: BASE,
+        ours: OURS,
+        theirs: THEIRS,
+        changes: [],
+        conflicts: [],
+        diagnostics: [],
+        resolutionCount: 0,
+        mutationGuarantee: 'preview-only',
+      },
+    });
+  });
+
+  it('returns alreadyMerged in apply mode without writing', async () => {
+    const merge = jest.fn(async () => ancestryResult('alreadyMerged'));
+    const mergeCommit = jest.fn();
+    const version = new WorkbookVersionImpl({
+      versioning: { mergeService: { merge }, writeService: { mergeCommit } },
+    } as any);
+
+    await expect(
+      version.applyMerge(
+        { base: BASE, ours: OURS, theirs: THEIRS },
+        { targetRef: TARGET_REF as any, expectedTargetHead: EXPECTED_TARGET_HEAD },
+      ),
+    ).resolves.toEqual({
+      ok: true,
+      value: {
+        status: 'alreadyMerged',
+        base: BASE,
+        ours: OURS,
+        theirs: THEIRS,
+        commitRef: {
+          id: OURS,
+          refName: TARGET_REF,
+          resolvedFrom: TARGET_REF,
+          refRevision: EXPECTED_TARGET_HEAD.revision,
+        },
+        changes: [],
+        conflicts: [],
+        diagnostics: [],
+        resolutionCount: 0,
+        mutationGuarantee: 'ref-not-mutated',
+      },
+    });
+    expect(mergeCommit).not.toHaveBeenCalled();
+  });
+
   it('returns conflicted previews when resolutions are not supplied', async () => {
     const conflict = sameCellConflict();
     const merge = jest.fn(async () => conflictedResult(conflict));
@@ -406,6 +517,19 @@ function conflictedResult(conflict: VersionMergeConflict): VersionMergeResult {
     theirs: THEIRS,
     changes: [],
     conflicts: [conflict],
+    diagnostics: [],
+    mutationGuarantee: 'preview-only',
+  };
+}
+
+function ancestryResult(status: 'fastForward' | 'alreadyMerged'): VersionMergeResult {
+  return {
+    status,
+    base: BASE,
+    ours: OURS,
+    theirs: THEIRS,
+    changes: [],
+    conflicts: [],
     diagnostics: [],
     mutationGuarantee: 'preview-only',
   };

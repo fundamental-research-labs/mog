@@ -273,7 +273,12 @@ function mapMergeResult(value: unknown, fallback: VersionMergeInput): VersionMer
     );
   }
 
-  if (value.status !== 'clean' && value.status !== 'conflicted') {
+  if (
+    value.status !== 'clean' &&
+    value.status !== 'conflicted' &&
+    value.status !== 'fastForward' &&
+    value.status !== 'alreadyMerged'
+  ) {
     return blockedMergeResult(fallback.base, fallback.ours, fallback.theirs, [
       providerErrorDiagnostic(),
     ]);
@@ -317,6 +322,28 @@ function mapMergeResult(value: unknown, fallback: VersionMergeInput): VersionMer
       ours,
       theirs,
       changes,
+      conflicts: [],
+      diagnostics: [],
+      mutationGuarantee: 'preview-only',
+    };
+  }
+
+  if (value.status === 'fastForward' || value.status === 'alreadyMerged') {
+    if (changes.length > 0 || conflicts.length > 0) {
+      return blockedMergeResult(base, ours, theirs, [
+        publicDiagnostic(
+          'VERSION_INVALID_COMMIT_PAYLOAD',
+          'The version merge service returned ancestry status with merge changes.',
+          { recoverability: 'repair' },
+        ),
+      ]);
+    }
+    return {
+      status: value.status,
+      base,
+      ours,
+      theirs,
+      changes: [],
       conflicts: [],
       diagnostics: [],
       mutationGuarantee: 'preview-only',
@@ -794,6 +821,8 @@ function safeMessageForIssue(issueCode: string): string {
       return 'The requested version merge preview contains redacted semantic data.';
     case 'VERSION_MERGE_SERVICE_UNAVAILABLE':
       return 'No document-scoped version merge preview service is attached.';
+    case 'VERSION_MERGE_UNSUPPORTED_ANCESTRY':
+      return 'The requested version merge ancestry is not previewable by the attached service.';
     case 'VERSION_DANGLING_REF':
     case 'VERSION_MISSING_OBJECT':
     case 'VERSION_MISSING_PARENT':
@@ -820,6 +849,7 @@ function recoverabilityForIssue(issueCode: string): VersionStoreDiagnostic['reco
       return 'repair';
     case 'VERSION_GRAPH_UNINITIALIZED':
     case 'VERSION_MERGE_SERVICE_UNAVAILABLE':
+    case 'VERSION_MERGE_UNSUPPORTED_ANCESTRY':
     case 'VERSION_PERMISSION_DENIED':
     case 'VERSION_REDACTION_VIOLATION':
     case 'VERSION_UNMATERIALIZABLE_COMMIT':

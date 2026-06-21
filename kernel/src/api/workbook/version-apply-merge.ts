@@ -18,6 +18,10 @@ import type {
 
 import type { DocumentContext } from '../../context';
 import { validateRefName } from '../../document/version-store/ref-name';
+import {
+  alreadyMergedApplyMergeResult,
+  plannedAncestryApplyMergeResult,
+} from './version-apply-merge-ancestry';
 import { mergeWorkbookVersion } from './version-merge';
 
 const WORKBOOK_COMMIT_ID_RE = /^commit:sha256:[0-9a-f]{64}$/;
@@ -120,14 +124,8 @@ export async function applyMergeWorkbookVersion(
   }
 
   if (validated.applyOptions.mode === 'apply' && validated.resolutions.length === 0) {
-    const fastForward = await tryApplyFastForwardMerge(
-      ctx,
-      validated.mergeInput,
-      validated.applyOptions,
-    );
-    if (fastForward.kind === 'applied' || fastForward.kind === 'blocked') {
-      return fastForward.result;
-    }
+    const fastForward = await tryApplyFastForwardMerge(ctx, validated.mergeInput, validated.applyOptions);
+    if (fastForward.kind !== 'not-fast-forward') return fastForward.result;
   }
 
   const preview = await mergeWorkbookVersion(ctx, validated.mergeInput, validated.previewOptions);
@@ -148,6 +146,23 @@ export async function applyMergeWorkbookVersion(
       changes: preview.changes,
       resolutionCount: 0,
     });
+  }
+
+  if (preview.status === 'fastForward' || preview.status === 'alreadyMerged') {
+    if (validated.resolutions.length > 0) {
+      return blockedApplyMergeResult(preview.base, preview.ours, preview.theirs, [
+        resolutionMismatchDiagnostic('ancestry merge previews do not accept conflict resolutions.'),
+      ]);
+    }
+    if (validated.applyOptions.mode === 'preview') {
+      return plannedAncestryApplyMergeResult(preview);
+    }
+    if (preview.status === 'alreadyMerged') {
+      return alreadyMergedApplyMergeResult({ ...preview, ...validated.applyOptions });
+    }
+    return blockedApplyMergeResult(preview.base, preview.ours, preview.theirs, [
+      applyMergeServiceUnavailableDiagnostic(),
+    ]);
   }
 
   if (validated.resolutions.length === 0) {

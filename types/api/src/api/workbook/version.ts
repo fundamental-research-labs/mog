@@ -676,6 +676,26 @@ export type VersionMergeResult =
       readonly mutationGuarantee: VersionMergeMutationGuarantee;
     }
   | {
+      readonly status: 'fastForward';
+      readonly base: WorkbookCommitId;
+      readonly ours: WorkbookCommitId;
+      readonly theirs: WorkbookCommitId;
+      readonly changes: readonly [];
+      readonly conflicts: readonly [];
+      readonly diagnostics: readonly [];
+      readonly mutationGuarantee: VersionMergeMutationGuarantee;
+    }
+  | {
+      readonly status: 'alreadyMerged';
+      readonly base: WorkbookCommitId;
+      readonly ours: WorkbookCommitId;
+      readonly theirs: WorkbookCommitId;
+      readonly changes: readonly [];
+      readonly conflicts: readonly [];
+      readonly diagnostics: readonly [];
+      readonly mutationGuarantee: VersionMergeMutationGuarantee;
+    }
+  | {
       readonly status: 'blocked';
       readonly base: WorkbookCommitId | null;
       readonly ours: WorkbookCommitId | null;
@@ -735,6 +755,18 @@ export type VersionApplyMergeResult =
       readonly diagnostics: readonly [];
       readonly resolutionCount: number;
       readonly mutationGuarantee: VersionApplyMergeMutationGuarantee;
+    }
+  | {
+      readonly status: 'alreadyMerged';
+      readonly base: WorkbookCommitId;
+      readonly ours: WorkbookCommitId;
+      readonly theirs: WorkbookCommitId;
+      readonly commitRef: WorkbookCommitRef;
+      readonly changes: readonly [];
+      readonly conflicts: readonly [];
+      readonly diagnostics: readonly [];
+      readonly resolutionCount: 0;
+      readonly mutationGuarantee: 'ref-not-mutated';
     }
   | {
       readonly status: 'conflicted';

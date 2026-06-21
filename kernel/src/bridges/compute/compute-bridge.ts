@@ -1403,6 +1403,7 @@ export class ComputeBridge extends GeneratedBridgeBase {
     authorId: string | null,
     parentId: string | null,
     commentType: 'note' | 'threadedComment',
+    admissionOptions?: MutationAdmissionOptions,
   ): Promise<MutationResult> {
     return this.core.mutatePublic('compute_add_comment_by_position', () =>
       this.core.transport.call<[Uint8Array, MutationResult]>('compute_add_comment_by_position', {
@@ -1416,6 +1417,8 @@ export class ComputeBridge extends GeneratedBridgeBase {
         parentId,
         commentType,
       }),
+      undefined,
+      admissionOptions,
     );
   }
 

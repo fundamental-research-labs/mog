@@ -2142,6 +2142,7 @@ describe('WorksheetImpl', () => {
         null,
         null,
         'note',
+        expectVersionOperationOptions('comment.addNote', ['comments-notes']),
       );
     });
 
@@ -2157,6 +2158,7 @@ describe('WorksheetImpl', () => {
         null,
         null,
         'note',
+        expectVersionOperationOptions('comment.addNote', ['comments-notes']),
       );
     });
 
@@ -2188,8 +2190,16 @@ describe('WorksheetImpl', () => {
       await ws.comments.removeNote('A1');
 
       expect(ctx.computeBridge.deleteComment).toHaveBeenCalledTimes(2);
-      expect(ctx.computeBridge.deleteComment).toHaveBeenCalledWith(SHEET_ID, 'c1');
-      expect(ctx.computeBridge.deleteComment).toHaveBeenCalledWith(SHEET_ID, 'c2');
+      expect(ctx.computeBridge.deleteComment).toHaveBeenCalledWith(
+        SHEET_ID,
+        'c1',
+        expectVersionOperationOptions('comment.removeNote', ['comments-notes']),
+      );
+      expect(ctx.computeBridge.deleteComment).toHaveBeenCalledWith(
+        SHEET_ID,
+        'c2',
+        expectVersionOperationOptions('comment.removeNote', ['comments-notes']),
+      );
     });
   });
 

@@ -23,6 +23,27 @@ import { WorksheetCommentsImpl } from '../worksheet/comments';
 
 const SHEET_ID = sheetId('sheet-1');
 
+function expectCommentMutationOptions(operationIdPrefix: string) {
+  return expect.objectContaining({
+    operationContext: expect.objectContaining({
+      operationId: expect.stringMatching(
+        new RegExp(`^${operationIdPrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}:`),
+      ),
+      kind: 'mutation',
+      author: expect.objectContaining({ actorKind: 'user' }),
+      sheetIds: [SHEET_ID],
+      domainIds: ['comments-notes'],
+      capturePolicy: 'commitEligible',
+      writeAdmissionMode: 'capture',
+    }),
+  });
+}
+
+function mutationOptionsFrom(mockFn: jest.Mock, callIndex = 0): any {
+  const call = mockFn.mock.calls[callIndex] as unknown[];
+  return call[call.length - 1];
+}
+
 /** Helper to create a RichTextRun with sensible defaults. */
 function makeRun(text: string, overrides?: Partial<RichTextRun>): RichTextRun {
   return {
@@ -76,7 +97,12 @@ function createMockCtx() {
       getCellPosition: jest.fn(),
       convertNoteToThread: jest.fn(),
       deleteCommentsForCellByPosition: jest.fn(),
+      clearAllComments: jest.fn(),
       validateAndCleanComments: jest.fn(),
+      getNoteCount: jest.fn(),
+      getAllNotes: jest.fn(),
+      setNoteVisible: jest.fn(),
+      setNoteDimensions: jest.fn(),
     },
   } as any;
 }
@@ -173,10 +199,6 @@ describe('WorksheetCommentsImpl — Comment Threading', () => {
     });
   });
 
-  // =========================================================================
-  // add() returns Comment
-  // =========================================================================
-
   describe('addNote()', () => {
     it('returns created note id alias', async () => {
       const created = makeComment({ id: 'note-new-1', commentType: 'note', threadId: null });
@@ -188,6 +210,99 @@ describe('WorksheetCommentsImpl — Comment Threading', () => {
       expect(result.id).toBe('note-new-1');
       expect(result.commentId).toBe('note-new-1');
       expect(result.comment.id).toBe('note-new-1');
+      expect(mockCtx.computeBridge.addCommentByPosition).toHaveBeenCalledWith(
+        SHEET_ID,
+        0,
+        0,
+        'Note',
+        'Alice',
+        null,
+        null,
+        'note',
+        expectCommentMutationOptions('comment.addNote'),
+      );
+    });
+
+    it('groups overwrite deletes with the created note', async () => {
+      const oldNote = makeComment({ id: 'note-old-1', commentType: 'note', threadId: null });
+      const oldThread = makeComment({ id: 'comment-old-1', threadId: 'comment-old-1' });
+      const created = makeComment({ id: 'note-new-1', commentType: 'note', threadId: null });
+      mockCtx.computeBridge.getCommentsForCellByPosition.mockResolvedValue([oldNote, oldThread]);
+      mockCtx.computeBridge.deleteComment.mockResolvedValue({});
+      mockCtx.computeBridge.addCommentByPosition.mockResolvedValue({ data: created });
+
+      await ws.addNote('A1', { text: 'Replacement', author: 'Alice' });
+
+      expect(mockCtx.computeBridge.deleteComment).toHaveBeenCalledTimes(2);
+      expect(mockCtx.computeBridge.deleteComment).toHaveBeenNthCalledWith(
+        1,
+        SHEET_ID,
+        'note-old-1',
+        expectCommentMutationOptions('comment.addNote'),
+      );
+      expect(mockCtx.computeBridge.deleteComment).toHaveBeenNthCalledWith(
+        2,
+        SHEET_ID,
+        'comment-old-1',
+        expectCommentMutationOptions('comment.addNote'),
+      );
+      const firstDeleteContext = mutationOptionsFrom(
+        mockCtx.computeBridge.deleteComment,
+        0,
+      ).operationContext;
+      const secondDeleteContext = mutationOptionsFrom(
+        mockCtx.computeBridge.deleteComment,
+        1,
+      ).operationContext;
+      const addContext = mutationOptionsFrom(
+        mockCtx.computeBridge.addCommentByPosition,
+      ).operationContext;
+      expect(firstDeleteContext.groupId).toBe(firstDeleteContext.operationId);
+      expect(secondDeleteContext.groupId).toBe(firstDeleteContext.groupId);
+      expect(addContext.groupId).toBe(firstDeleteContext.groupId);
+      expect(secondDeleteContext).not.toBe(firstDeleteContext);
+      expect(addContext).not.toBe(firstDeleteContext);
+      expect(secondDeleteContext.operationId).not.toBe(firstDeleteContext.operationId);
+      expect(addContext.operationId).not.toBe(firstDeleteContext.operationId);
+    });
+  });
+
+  describe('removeNote()', () => {
+    it('groups multiple note deletes under one command group', async () => {
+      mockCtx.computeBridge.getCommentsForCellByPosition.mockResolvedValue([
+        makeComment({ id: 'note-1', commentType: 'note', threadId: null }),
+        makeComment({ id: 'note-2', commentType: 'note', threadId: null }),
+      ]);
+      mockCtx.computeBridge.deleteComment.mockResolvedValue({});
+
+      const result = await ws.removeNote('A1');
+
+      expect(result.kind).toBe('comment.removeNote');
+      expect(mockCtx.computeBridge.deleteComment).toHaveBeenCalledTimes(2);
+      expect(mockCtx.computeBridge.deleteComment).toHaveBeenNthCalledWith(
+        1,
+        SHEET_ID,
+        'note-1',
+        expectCommentMutationOptions('comment.removeNote'),
+      );
+      expect(mockCtx.computeBridge.deleteComment).toHaveBeenNthCalledWith(
+        2,
+        SHEET_ID,
+        'note-2',
+        expectCommentMutationOptions('comment.removeNote'),
+      );
+      const firstContext = mutationOptionsFrom(
+        mockCtx.computeBridge.deleteComment,
+        0,
+      ).operationContext;
+      const secondContext = mutationOptionsFrom(
+        mockCtx.computeBridge.deleteComment,
+        1,
+      ).operationContext;
+      expect(firstContext.groupId).toBe(firstContext.operationId);
+      expect(secondContext.groupId).toBe(firstContext.groupId);
+      expect(secondContext).not.toBe(firstContext);
+      expect(secondContext.operationId).not.toBe(firstContext.operationId);
     });
   });
 
@@ -207,6 +322,7 @@ describe('WorksheetCommentsImpl — Comment Threading', () => {
         null,
         null,
         'threadedComment',
+        expectCommentMutationOptions('comment.add'),
       );
       expect(result.kind).toBe('comment.add');
       expect(result.status).toBe('applied');
@@ -245,6 +361,7 @@ describe('WorksheetCommentsImpl — Comment Threading', () => {
         null,
         null,
         'threadedComment',
+        expectCommentMutationOptions('comment.add'),
       );
       expect(result.comment.id).toBe('new-2');
       expect(result.id).toBe('new-2');
@@ -267,16 +384,20 @@ describe('WorksheetCommentsImpl — Comment Threading', () => {
       });
 
       mockCtx.computeBridge.getComment.mockResolvedValue(parent);
-      mockCtx.computeBridge.addComment.mockResolvedValue(reply);
+      mockCtx.computeBridge.addCommentByPosition.mockResolvedValue({ data: reply });
 
       const result = await ws.addReply('root-1', 'My reply', 'Bob');
 
-      expect(mockCtx.computeBridge.addComment).toHaveBeenCalledWith(
+      expect(mockCtx.computeBridge.addCommentByPosition).toHaveBeenCalledWith(
         SHEET_ID,
-        '5:10',
+        5,
+        10,
         'My reply',
         'Bob',
-        { parentId: 'root-1', commentType: 'threadedComment' },
+        null,
+        'root-1',
+        'threadedComment',
+        expectCommentMutationOptions('comment.addReply'),
       );
       expect(result.kind).toBe('comment.addReply');
       expect(result.id).toBe('reply-1');
@@ -315,18 +436,35 @@ describe('WorksheetCommentsImpl — Comment Threading', () => {
 
       mockCtx.computeBridge.getComment.mockResolvedValue(noteParent);
       mockCtx.computeBridge.convertNoteToThread.mockResolvedValue({ data: convertedParent });
-      mockCtx.computeBridge.addComment.mockResolvedValue(reply);
+      mockCtx.computeBridge.addCommentByPosition.mockResolvedValue({ data: reply });
 
       const result = await ws.addReply('note-1', 'My reply', 'Bob');
 
-      expect(mockCtx.computeBridge.convertNoteToThread).toHaveBeenCalledWith(SHEET_ID, 'note-1');
-      expect(mockCtx.computeBridge.addComment).toHaveBeenCalledWith(
+      expect(mockCtx.computeBridge.convertNoteToThread).toHaveBeenCalledWith(
         SHEET_ID,
-        '5:10',
+        'note-1',
+        expectCommentMutationOptions('comment.convertNoteToThread'),
+      );
+      expect(mockCtx.computeBridge.addCommentByPosition).toHaveBeenCalledWith(
+        SHEET_ID,
+        5,
+        10,
         'My reply',
         'Bob',
-        { parentId: 'note-1', commentType: 'threadedComment' },
+        null,
+        'note-1',
+        'threadedComment',
+        expectCommentMutationOptions('comment.addReply'),
       );
+      const conversionContext = mutationOptionsFrom(
+        mockCtx.computeBridge.convertNoteToThread,
+      ).operationContext;
+      const replyContext = mutationOptionsFrom(
+        mockCtx.computeBridge.addCommentByPosition,
+      ).operationContext;
+      expect(conversionContext.groupId).toBe(conversionContext.operationId);
+      expect(replyContext.groupId).toBe(conversionContext.groupId);
+      expect(replyContext).not.toBe(conversionContext);
       expect(result.comment.parentId).toBe('note-1');
       expect(result.comment.threadId).toBe('note-1');
       expect(result.conversion).toEqual(
@@ -386,6 +524,7 @@ describe('WorksheetCommentsImpl — Comment Threading', () => {
         SHEET_ID,
         'root-1',
         true,
+        expectCommentMutationOptions('comment.resolveThread'),
       );
       expect(result.kind).toBe('comment.resolveThread');
       expect(result.status).toBe('applied');
@@ -403,6 +542,92 @@ describe('WorksheetCommentsImpl — Comment Threading', () => {
   });
 
   // =========================================================================
+  // update()
+  // =========================================================================
+
+  describe('update()', () => {
+    it('passes mutation options to plain text updates', async () => {
+      const existing = makeComment({ id: 'update-1', cellRef: '2:3' });
+      const updated = makeComment({ ...existing, content: 'Updated', runs: [makeRun('Updated')] });
+      mockCtx.computeBridge.getComment
+        .mockResolvedValueOnce(existing)
+        .mockResolvedValueOnce(updated);
+      mockCtx.computeBridge.updateComment.mockResolvedValue({});
+
+      const result = await ws.update('update-1', { text: 'Updated' });
+
+      expect(mockCtx.computeBridge.updateComment).toHaveBeenCalledWith(
+        SHEET_ID,
+        'update-1',
+        'Updated',
+        expectCommentMutationOptions('comment.update'),
+      );
+      expect(result.kind).toBe('comment.update');
+      expect(result.status).toBe('applied');
+    });
+
+    it('passes mutation options to mention updates', async () => {
+      const existing = makeComment({ id: 'update-mentions-1', cellRef: '2:3' });
+      const mentions = [{ id: 'user-1', displayName: 'Alice', type: 'user' }] as any;
+      mockCtx.computeBridge.getComment
+        .mockResolvedValueOnce(existing)
+        .mockResolvedValueOnce(existing);
+      mockCtx.computeBridge.updateCommentMentions = jest.fn().mockResolvedValue({});
+
+      await ws.update('update-mentions-1', { text: '@Alice', mentions });
+
+      expect(mockCtx.computeBridge.updateCommentMentions).toHaveBeenCalledWith(
+        SHEET_ID,
+        'update-mentions-1',
+        '@Alice',
+        mentions,
+        expectCommentMutationOptions('comment.update'),
+      );
+    });
+  });
+
+  // =========================================================================
+  // Note property updates
+  // =========================================================================
+
+  describe('note property updates', () => {
+    it('passes mutation options when setting note visibility', async () => {
+      const note = makeComment({ id: 'note-visible-1', commentType: 'note', threadId: null });
+      mockCtx.computeBridge.getCommentsForCellByPosition.mockResolvedValue([note]);
+      mockCtx.computeBridge.setNoteVisible.mockResolvedValue({});
+      mockCtx.computeBridge.getComment.mockResolvedValue({ ...note, visible: true });
+
+      const result = await ws.setNoteVisible('A1', true);
+
+      expect(mockCtx.computeBridge.setNoteVisible).toHaveBeenCalledWith(
+        SHEET_ID,
+        'note-visible-1',
+        true,
+        expectCommentMutationOptions('comment.updateNote'),
+      );
+      expect(result.kind).toBe('comment.updateNote');
+      expect(result.status).toBe('applied');
+    });
+
+    it('passes mutation options when setting note dimensions', async () => {
+      const note = makeComment({ id: 'note-height-1', commentType: 'note', threadId: null });
+      mockCtx.computeBridge.getCommentsForCellByPosition.mockResolvedValue([note]);
+      mockCtx.computeBridge.setNoteDimensions.mockResolvedValue({});
+      mockCtx.computeBridge.getComment.mockResolvedValue({ ...note, noteHeight: 120 });
+
+      await ws.setNoteHeight('A1', 120);
+
+      expect(mockCtx.computeBridge.setNoteDimensions).toHaveBeenCalledWith(
+        SHEET_ID,
+        'note-height-1',
+        120,
+        null,
+        expectCommentMutationOptions('comment.updateNote'),
+      );
+    });
+  });
+
+  // =========================================================================
   // remove()
   // =========================================================================
 
@@ -414,7 +639,11 @@ describe('WorksheetCommentsImpl — Comment Threading', () => {
 
       const result = await ws.remove('remove-1');
 
-      expect(mockCtx.computeBridge.deleteComment).toHaveBeenCalledWith(SHEET_ID, 'remove-1');
+      expect(mockCtx.computeBridge.deleteComment).toHaveBeenCalledWith(
+        SHEET_ID,
+        'remove-1',
+        expectCommentMutationOptions('comment.remove'),
+      );
       expect(result.kind).toBe('comment.remove');
       expect(result.status).toBe('applied');
       expect(result.commentId).toBe('remove-1');
@@ -458,6 +687,7 @@ describe('WorksheetCommentsImpl — Comment Threading', () => {
         SHEET_ID,
         2,
         3,
+        expectCommentMutationOptions('comment.removeForCell'),
       );
       expect(result).toBe(1);
     });
@@ -486,7 +716,10 @@ describe('WorksheetCommentsImpl — Comment Threading', () => {
 
       const result = await ws.clean();
 
-      expect(mockCtx.computeBridge.validateAndCleanComments).toHaveBeenCalledWith(SHEET_ID);
+      expect(mockCtx.computeBridge.validateAndCleanComments).toHaveBeenCalledWith(
+        SHEET_ID,
+        expectCommentMutationOptions('comment.clean'),
+      );
       expect(result).toBe(1);
     });
 

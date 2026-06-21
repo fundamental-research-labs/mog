@@ -28,6 +28,10 @@ import {
 } from './provider';
 import { refVersionsEqual, type RefVersion } from './ref-store';
 import { namespaceForRegistry } from './registry';
+import {
+  captureWorkbookSnapshotRootRecord,
+  type SnapshotRootByteSyncPort,
+} from './snapshot-root-capture';
 
 export type VersionNormalCommitCaptureInput = {
   readonly provider: VersionStoreProvider;
@@ -55,6 +59,7 @@ export type VersionNormalCommitCapture = (
 export type WorkbookVersionCommitServiceOptions = {
   readonly provider: VersionStoreProvider;
   readonly captureNormalCommit?: VersionNormalCommitCapture;
+  readonly snapshotRootByteSyncPort?: SnapshotRootByteSyncPort;
 };
 
 export type WorkbookVersionCommitServiceCommitResult =
@@ -90,10 +95,12 @@ export type WorkbookVersionCommitServiceListCommitsResult =
 export class WorkbookVersionCommitService {
   private readonly provider: VersionStoreProvider;
   private readonly captureNormalCommit?: VersionNormalCommitCapture;
+  private readonly snapshotRootByteSyncPort?: SnapshotRootByteSyncPort;
 
   constructor(options: WorkbookVersionCommitServiceOptions) {
     this.provider = options.provider;
     this.captureNormalCommit = options.captureNormalCommit;
+    this.snapshotRootByteSyncPort = options.snapshotRootByteSyncPort;
   }
 
   async readHead(): Promise<WorkbookVersionCommitServiceReadHeadResult> {
@@ -268,8 +275,13 @@ export class WorkbookVersionCommitService {
       );
     }
 
+    const commitContent = await this.materializeSnapshotRootForNormalCommit(opened, captured);
+    if (commitContent.status !== 'success') {
+      return commitContent;
+    }
+
     const result = await opened.graph.commit({
-      ...captured.input,
+      ...commitContent.input,
       expectedHeadCommitId: expectedHead.commitId,
       expectedMainRefVersion: expectedHead.revision,
       parentCommitIds: [expectedHead.commitId],
@@ -291,6 +303,44 @@ export class WorkbookVersionCommitService {
       result.mutationGuarantee,
       isRetryableGraphWriteFailure(result.diagnostics),
     );
+  }
+
+  private async materializeSnapshotRootForNormalCommit(
+    opened: {
+      readonly namespace: VersionGraphNamespace;
+    },
+    captured: Extract<VersionNormalCommitCaptureResult, { status: 'success' }>,
+  ): Promise<VersionNormalCommitCaptureResult> {
+    if (!this.snapshotRootByteSyncPort) return captured;
+
+    try {
+      const snapshotRootRecord = await captureWorkbookSnapshotRootRecord(
+        opened.namespace,
+        this.snapshotRootByteSyncPort,
+      );
+      return {
+        ...captured,
+        input: {
+          ...captured.input,
+          snapshotRootRecord,
+        },
+      };
+    } catch {
+      return failedStoreResult(
+        [
+          versionStoreDiagnostic('VERSION_PROVIDER_FAILED', {
+            operation: 'commitGraphWrite',
+            documentScope: this.provider.documentScope,
+            namespace: opened.namespace,
+            safeMessage: 'Version commit capture failed before graph mutation.',
+            recoverability: 'retry',
+            mutationGuarantee: 'no-write-attempted',
+          }),
+        ],
+        'no-write-attempted',
+        true,
+      );
+    }
   }
 
   private async openVisibleGraph(

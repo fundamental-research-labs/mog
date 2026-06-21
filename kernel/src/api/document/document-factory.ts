@@ -830,7 +830,13 @@ function createDocumentHandle(
         );
         const resolvedVersioning = await resolveDocumentWorkbookVersioningLifecycle({
           documentId,
-          versioning: config.versioning,
+          versioning: config.versioning
+            ? {
+                ...config.versioning,
+                snapshotRootByteSyncPort:
+                  config.versioning.snapshotRootByteSyncPort ?? ownerHandle.createSyncPort(),
+              }
+            : undefined,
         });
         return createWorkbookFromConfig({
           ctx: context,

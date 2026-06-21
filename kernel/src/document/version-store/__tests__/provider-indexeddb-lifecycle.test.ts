@@ -28,8 +28,14 @@ import {
   type VersionDocumentScope,
   type VersionGraphInitializeInput,
 } from '../provider';
+import {
+  decodeWorkbookSnapshotRootRecord,
+  YRS_FULL_STATE_SNAPSHOT_ROOT_KIND,
+  YRS_FULL_STATE_SNAPSHOT_ROOT_SOURCE,
+} from '../snapshot-root-capture';
 
 const SHEET_ID = 'sheet-1';
+const FULL_STATE_BYTES = new Uint8Array([0x0a, 0x0b, 0x0c]);
 
 function createMockEventBus() {
   return {
@@ -51,6 +57,9 @@ function createMockContext() {
       isSheetHidden: jest.fn().mockResolvedValue(false as never),
       getMutationHandler: jest.fn().mockReturnValue(null),
       onTrap: jest.fn().mockReturnValue(() => undefined),
+      syncApply: jest.fn().mockResolvedValue(undefined as never),
+      encodeDiff: jest.fn().mockResolvedValue(FULL_STATE_BYTES as never),
+      currentStateVector: jest.fn().mockResolvedValue(new Uint8Array([0x01]) as never),
     },
     writeGate: {
       assertWritable: jest.fn(),
@@ -182,6 +191,28 @@ describe('IndexedDB version provider document/workbook lifecycle', () => {
       refName: 'refs/heads/main',
     });
     expect(committed.id).not.toBe(initialHead.id);
+
+    const reader = createIndexedDbVersionStoreProvider({ documentScope });
+    const graph = await reader.openGraph(namespaceForDocumentScope(documentScope, graphId));
+    const read = await graph.readCommit(committed.id);
+    expect(read.status).toBe('success');
+    if (read.status !== 'success') throw new Error('expected committed record to be readable');
+    const snapshotRootRecord = await graph.getObjectRecord({
+      kind: 'object',
+      objectType: 'workbook.snapshotRoot.v1',
+      digest: read.commit.payload.snapshotRootDigest,
+    });
+    expect(snapshotRootRecord.preimage.payload).toMatchObject({
+      schemaVersion: 1,
+      kind: YRS_FULL_STATE_SNAPSHOT_ROOT_KIND,
+      encoding: 'base64',
+      byteLength: FULL_STATE_BYTES.byteLength,
+      source: YRS_FULL_STATE_SNAPSHOT_ROOT_SOURCE,
+    });
+    expect(Array.from(decodeWorkbookSnapshotRootRecord(snapshotRootRecord))).toEqual(
+      Array.from(FULL_STATE_BYTES),
+    );
+    await reader.dispose();
     await first.handle.dispose();
 
     const reopened = await openWorkbook(documentId, {

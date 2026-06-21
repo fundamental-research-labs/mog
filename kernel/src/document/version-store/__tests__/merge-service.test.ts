@@ -110,6 +110,100 @@ describe('WorkbookVersionMergeService', () => {
     });
   });
 
+  it('derives role-invariant conflict structural ids for same-property cells.values edits', async () => {
+    const graph = await graphWithRootAndDetachedChildren({
+      oursSemanticPayload: validSemanticPayload([
+        valueChange('ours-a1-random-source-id', 'cell', 'sheet-1!A1', ['value'], 1, 2),
+      ]),
+      theirsSemanticPayload: validSemanticPayload([
+        valueChange('theirs-a1-different-source-id', 'cells.values', 'sheet-1!A1', [], 1, 3),
+      ]),
+    });
+    const service = createWorkbookVersionMergeService({ provider: graph.provider });
+
+    const forward = await service.merge({
+      base: graph.rootCommitId,
+      ours: graph.oursCommitId,
+      theirs: graph.theirsCommitId,
+    });
+    const reversed = await service.merge({
+      base: graph.rootCommitId,
+      ours: graph.theirsCommitId,
+      theirs: graph.oursCommitId,
+    });
+
+    expect(forward).toMatchObject({
+      status: 'conflicted',
+      conflicts: [
+        {
+          structural: {
+            kind: 'metadata',
+            domain: 'cells.values',
+            entityId: 'sheet-1!A1',
+            propertyPath: ['value'],
+          },
+        },
+      ],
+    });
+    expect(reversed).toMatchObject({
+      status: 'conflicted',
+      conflicts: [
+        {
+          structural: {
+            kind: 'metadata',
+            domain: 'cells.values',
+            entityId: 'sheet-1!A1',
+            propertyPath: ['value'],
+          },
+        },
+      ],
+    });
+    if (forward.status !== 'conflicted' || reversed.status !== 'conflicted') {
+      throw new Error('expected both merge previews to conflict');
+    }
+
+    expect(forward.conflicts[0].structural).toEqual(reversed.conflicts[0].structural);
+    expect(forward.conflicts[0].structural.changeId).toMatch(
+      /^merge-conflict:sha256:[0-9a-f]{64}$/,
+    );
+    expect(forward.conflicts[0].conflictId).toMatch(/^conflict:sha256:[0-9a-f]{64}$/);
+    expect(forward.conflicts[0].conflictDigest).toMatch(/^sha256:[0-9a-f]{64}$/);
+    expect(forward.conflicts[0].conflictId).toBe(reversed.conflicts[0].conflictId);
+    expect(forward.conflicts[0].conflictDigest).toBe(reversed.conflicts[0].conflictDigest);
+    expect(JSON.stringify(forward)).not.toContain('ours-a1-random-source-id');
+    expect(JSON.stringify(forward)).not.toContain('theirs-a1-different-source-id');
+  });
+
+  it('orders clean disjoint changes by merge policy rather than branch role', async () => {
+    const graph = await graphWithRootAndDetachedChildren({
+      oursSemanticPayload: validSemanticPayload([
+        valueChange('ours-b1', 'cells.values', 'sheet-1!B1', [], null, 'ready'),
+      ]),
+      theirsSemanticPayload: validSemanticPayload([
+        valueChange('theirs-a1', 'cell', 'sheet-1!A1', ['value'], 1, 2),
+      ]),
+    });
+    const service = createWorkbookVersionMergeService({ provider: graph.provider });
+
+    const result = await service.merge({
+      base: graph.rootCommitId,
+      ours: graph.oursCommitId,
+      theirs: graph.theirsCommitId,
+    });
+
+    expect(result).toMatchObject({
+      status: 'clean',
+      changes: [
+        expect.objectContaining({
+          structural: expect.objectContaining({ entityId: 'sheet-1!A1' }),
+        }),
+        expect.objectContaining({
+          structural: expect.objectContaining({ entityId: 'sheet-1!B1' }),
+        }),
+      ],
+    });
+  });
+
   it('previews clean disjoint metadata-domain changes', async () => {
     const graph = await graphWithRootAndDetachedChildren({
       oursSemanticPayload: validSemanticPayload([

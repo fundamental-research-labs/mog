@@ -384,6 +384,14 @@ describe('WorkbookVersion persisted merge preview artifact apply', () => {
         resultId: preview.value.resultId,
         resultDigest: preview.value.resultDigest,
         previewArtifactDigest: preview.value.previewArtifactDigest,
+        resolutionSetDigest: {
+          algorithm: 'sha256',
+          digest: expect.stringMatching(/^[0-9a-f]{64}$/),
+        },
+        resolvedAttemptDigest: {
+          algorithm: 'sha256',
+          digest: expect.stringMatching(/^[0-9a-f]{64}$/),
+        },
         targetRef: 'refs/heads/main',
         resolutionCount: 1,
         mutationGuarantee: 'merge-commit-created',
@@ -411,6 +419,43 @@ describe('WorkbookVersion persisted merge preview artifact apply', () => {
         throw new Error(`expected merged checkout success: ${checkoutMerged.error.code}`);
       }
       await expect(mergedWb.activeSheet.getCell('A1')).resolves.toMatchObject({ value: 'theirs' });
+
+      const repeated = await sourceWb.version.applyMerge(
+        {
+          resultId: preview.value.resultId,
+          resultDigest: preview.value.resultDigest,
+          previewArtifactDigest: preview.value.previewArtifactDigest,
+          resolutions: [resolutionFor(replayedPreview.value.conflicts[0], 'acceptTheirs')],
+        },
+        {
+          targetRef: 'refs/heads/main' as any,
+          expectedTargetHead,
+        },
+      );
+      if (!repeated.ok) {
+        throw new Error(`expected repeated persisted conflict apply success: ${repeated.error.code}`);
+      }
+      expect(repeated.value).toMatchObject({
+        status: 'alreadyApplied',
+        ours: oursCommit.id,
+        theirs: theirsCommit.id,
+        resultId: preview.value.resultId,
+        resultDigest: preview.value.resultDigest,
+        previewArtifactDigest: preview.value.previewArtifactDigest,
+        resolutionSetDigest: applied.value.resolutionSetDigest,
+        resolvedAttemptDigest: applied.value.resolvedAttemptDigest,
+        targetRef: 'refs/heads/main',
+        headBefore: oursCommit.id,
+        headAfter: mergeCommitId,
+        commitRef: {
+          id: mergeCommitId,
+          refName: 'refs/heads/main',
+          resolvedFrom: 'refs/heads/main',
+        },
+        changes: [],
+        resolutionCount: 0,
+        mutationGuarantee: 'ref-not-mutated',
+      });
     } finally {
       if (mergedWb) await mergedWb.close('skipSave');
       if (branchWb) await branchWb.close('skipSave');

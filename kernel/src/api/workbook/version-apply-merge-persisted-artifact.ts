@@ -10,16 +10,30 @@ import type {
   VersionRefName,
   VersionStoreDiagnostic,
   WorkbookCommitId,
+  WorkbookCommitRef,
 } from '@mog-sdk/contracts/api';
 
 import type { DocumentContext } from '../../context';
 import {
+  hasMergeApplyIntentStoreProvider,
+  idempotencyKeyForResolvedAttempt,
+  intentIdForResolvedAttemptDigest,
+  type MergeApplyIntentRecord,
+  type MergeApplyIntentStore,
+  type MergeApplyIntentStoreDiagnostic,
+} from '../../document/version-store/merge-apply-intent-store';
+import {
   MERGE_PREVIEW_OBJECT_TYPE,
+  createMergeResolutionSetArtifactRecord,
+  createResolvedMergeAttemptArtifactRecord,
   mergePreviewArtifactRef,
   type MergePreviewArtifactPayload,
 } from '../../document/version-store/merge-attempt-artifacts';
 import type { ObjectDigest as InternalObjectDigest } from '../../document/version-store/object-digest';
-import { VersionObjectStoreError } from '../../document/version-store/object-store';
+import {
+  VersionObjectStoreError,
+  type VersionGraphNamespace,
+} from '../../document/version-store/object-store';
 import type { VersionStoreProvider } from '../../document/version-store/provider';
 import { namespaceForRegistry } from '../../document/version-store/registry';
 import type { VersionGraphStore } from '../../document/version-store/provider-graph-store';
@@ -137,6 +151,19 @@ export async function applyPersistedMergePreviewArtifact(
     );
   }
 
+  const prepared = await prepareResolvedAttempt(opened, artifact.payload, input, options);
+  if (!prepared.ok) {
+    return blockedApplyMergeResult(
+      artifact.payload.base,
+      artifact.payload.ours,
+      artifact.payload.theirs,
+      prepared.diagnostics,
+    );
+  }
+  if (prepared.intent.terminal) {
+    return resultFromTerminalArtifactIntent(opened.graph, input, prepared.intent);
+  }
+
   const service = getAttachedVersionApplyMergeService(ctx);
   if (!service?.mergeCommit) {
     return blockedApplyMergeResult(
@@ -163,15 +190,28 @@ export async function applyPersistedMergePreviewArtifact(
     });
     const mapped = mapApplyMergeWriteResult(raw, writePlan, 'merge-commit-created');
     if (!isApplyMergeWriteSuccessResult(mapped)) return mapped;
-    return {
-      ...mapped,
-      resultId: input.resultId,
-      previewArtifactDigest: input.resultDigest,
-      resultDigest: input.resultDigest,
-      targetRef: options.targetRef,
-      headBefore: artifact.payload.ours,
-      ...('commitRef' in mapped ? { headAfter: mapped.commitRef.id } : {}),
-    };
+    if (!('commitRef' in mapped)) return mapped;
+    const completed = await prepared.store.completeIntent({
+      intentId: prepared.intent.intentId,
+      resolvedAttemptDigest: prepared.intent.resolvedAttemptDigest,
+      completedAt: new Date().toISOString(),
+      terminal: {
+        status: 'applied',
+        headBefore: artifact.payload.ours,
+        headAfter: mapped.commitRef.id,
+        commitId: mapped.commitRef.id,
+      },
+    });
+    if (completed.status !== 'completed') {
+      return blockedApplyMergeResult(
+        artifact.payload.base,
+        artifact.payload.ours,
+        artifact.payload.theirs,
+        intentStoreDiagnostics(completed.diagnostics),
+        'unknown-after-crash',
+      );
+    }
+    return applyArtifactMetadata(mapped, input, completed.record, mapped.commitRef.id);
   } catch {
     return blockedApplyMergeResult(
       artifact.payload.base,
@@ -265,7 +305,13 @@ function previewArtifactMetadata(input: NormalizedPersistedApplyMergeInput) {
 async function openPersistedMergeGraph(
   ctx: DocumentContext,
 ): Promise<
-  | { readonly ok: true; readonly graph: VersionGraphStore }
+  | {
+      readonly ok: true;
+      readonly provider: VersionStoreProvider;
+      readonly namespace: VersionGraphNamespace;
+      readonly graph: VersionGraphStore;
+      readonly intentStore: MergeApplyIntentStore | null;
+    }
   | { readonly ok: false; readonly diagnostics: readonly VersionStoreDiagnostic[] }
 > {
   const provider = getAttachedVersionStoreProvider(ctx);
@@ -287,12 +333,15 @@ async function openPersistedMergeGraph(
     if (registry.status !== 'ok') {
       return { ok: false, diagnostics: mapProviderDiagnostics(registry.diagnostics) };
     }
+    const namespace = namespaceForRegistry(registry.registry);
     return {
       ok: true,
-      graph: await provider.openGraph(
-        namespaceForRegistry(registry.registry),
-        provider.accessContext,
-      ),
+      provider,
+      namespace,
+      graph: await provider.openGraph(namespace, provider.accessContext),
+      intentStore: hasMergeApplyIntentStoreProvider(provider)
+        ? await provider.openMergeApplyIntentStore(namespace)
+        : null,
     };
   } catch {
     return { ok: false, diagnostics: [providerErrorDiagnostic()] };
@@ -389,6 +438,234 @@ function validatePreviewArtifactForApply(
   return [
     resolutionMismatchDiagnostic('applyMerge expectedTargetHead must match the ours commit.'),
   ];
+}
+
+async function prepareResolvedAttempt(
+  opened: {
+    readonly namespace: VersionGraphNamespace;
+    readonly graph: VersionGraphStore;
+    readonly intentStore: MergeApplyIntentStore | null;
+  },
+  payload: MergePreviewArtifactPayload,
+  input: NormalizedPersistedApplyMergeInput,
+  options: Extract<NormalizedPersistedApplyMergeOptions, { readonly mode: 'apply' }>,
+): Promise<
+  | {
+      readonly ok: true;
+      readonly store: MergeApplyIntentStore;
+      readonly intent: MergeApplyIntentRecord;
+    }
+  | { readonly ok: false; readonly diagnostics: readonly VersionStoreDiagnostic[] }
+> {
+  if (!opened.intentStore) {
+    return {
+      ok: false,
+      diagnostics: [
+        publicDiagnostic(
+          'VERSION_STORE_UNAVAILABLE',
+          'No merge apply intent store is attached for persisted applyMerge.',
+          { recoverability: 'unsupported' },
+        ),
+      ],
+    };
+  }
+
+  const resultDigest = toInternalSha256Digest(input.resultDigest);
+  if (!resultDigest) {
+    return {
+      ok: false,
+      diagnostics: [
+        resolutionMismatchDiagnostic('persisted merge resultDigest is not a merge-preview digest.'),
+      ],
+    };
+  }
+
+  const resolutionSet = await createMergeResolutionSetArtifactRecord(
+    opened.namespace,
+    input.resolutions,
+  );
+  const resolvedAttempt = await createResolvedMergeAttemptArtifactRecord(opened.namespace, {
+    resultDigest,
+    resolutionSetDigest: resolutionSet.digest,
+    targetRef: options.targetRef,
+    expectedTargetHead: options.expectedTargetHead,
+  });
+  const digestDiagnostics = validateResolvedAttemptDigests(input, {
+    resolutionSetDigest: resolutionSet.digest,
+    resolvedAttemptDigest: resolvedAttempt.digest,
+  });
+  if (digestDiagnostics.length > 0) {
+    return { ok: false, diagnostics: digestDiagnostics };
+  }
+
+  const persisted = await opened.graph.putObjects([resolutionSet, resolvedAttempt]);
+  if (persisted.status !== 'success') {
+    return { ok: false, diagnostics: mapProviderDiagnostics(persisted.diagnostics) };
+  }
+
+  const begin = await opened.intentStore.beginIntent({
+    intentId: intentIdForResolvedAttemptDigest(resolvedAttempt.digest),
+    idempotencyKey: idempotencyKeyForResolvedAttempt({
+      resolvedAttemptDigest: resolvedAttempt.digest,
+      targetRef: options.targetRef,
+      expectedTargetHead: options.expectedTargetHead,
+    }),
+    applyKind: 'mergeCommit',
+    base: payload.base,
+    ours: payload.ours,
+    theirs: payload.theirs,
+    targetRef: options.targetRef,
+    expectedTargetHead: options.expectedTargetHead,
+    resultDigest,
+    resolutionSetDigest: resolutionSet.digest,
+    resolvedAttemptDigest: resolvedAttempt.digest,
+    createdAt: new Date().toISOString(),
+  });
+  if (begin.status === 'failed' || begin.status === 'conflict') {
+    return { ok: false, diagnostics: intentStoreDiagnostics(begin.diagnostics) };
+  }
+  return { ok: true, store: opened.intentStore, intent: begin.record };
+}
+
+function validateResolvedAttemptDigests(
+  input: NormalizedPersistedApplyMergeInput,
+  expected: {
+    readonly resolutionSetDigest: InternalObjectDigest;
+    readonly resolvedAttemptDigest: InternalObjectDigest;
+  },
+): readonly VersionStoreDiagnostic[] {
+  const diagnostics: VersionStoreDiagnostic[] = [];
+  if (input.resolutionSetDigest && !digestsEqual(input.resolutionSetDigest, expected.resolutionSetDigest)) {
+    diagnostics.push(
+      resolutionMismatchDiagnostic(
+        'persisted merge resolutionSetDigest does not match the resolved artifact.',
+      ),
+    );
+  }
+  if (
+    input.resolvedAttemptDigest &&
+    !digestsEqual(input.resolvedAttemptDigest, expected.resolvedAttemptDigest)
+  ) {
+    diagnostics.push(
+      resolutionMismatchDiagnostic(
+        'persisted merge resolvedAttemptDigest does not match the resolved artifact.',
+      ),
+    );
+  }
+  return diagnostics;
+}
+
+async function resultFromTerminalArtifactIntent(
+  graph: VersionGraphStore,
+  input: NormalizedPersistedApplyMergeInput,
+  record: MergeApplyIntentRecord,
+): Promise<VersionApplyMergeResult> {
+  const commitId = record.terminal?.commitId ?? record.terminal?.headAfter;
+  if (!commitId) return staleTargetHeadArtifactResult(input, record, record.ours);
+
+  const current = await readCurrentTargetHead(graph, record.targetRef);
+  if (!current.ok) {
+    return blockedApplyMergeResult(
+      record.base,
+      record.ours,
+      record.theirs,
+      current.diagnostics,
+    );
+  }
+  if (current.commitId !== commitId) {
+    return staleTargetHeadArtifactResult(input, record, current.commitId);
+  }
+
+  return {
+    ...artifactIntentMetadata(input, record, commitId),
+    status: 'alreadyApplied',
+    base: record.base,
+    ours: record.ours,
+    theirs: record.theirs,
+    commitRef: commitRefForIntent(record, commitId),
+    changes: [],
+    conflicts: [],
+    diagnostics: [],
+    resolutionCount: 0,
+    mutationGuarantee: 'ref-not-mutated',
+  };
+}
+
+async function readCurrentTargetHead(
+  graph: VersionGraphStore,
+  targetRef: VersionMainRefName | VersionRefName,
+): Promise<
+  | { readonly ok: true; readonly commitId: WorkbookCommitId }
+  | { readonly ok: false; readonly diagnostics: readonly VersionStoreDiagnostic[] }
+> {
+  try {
+    const read = await graph.readRef(targetRef);
+    if (read.status !== 'success' || !('commitId' in read.ref)) {
+      return { ok: false, diagnostics: mapProviderDiagnostics(read.diagnostics) };
+    }
+    return { ok: true, commitId: read.ref.commitId };
+  } catch {
+    return { ok: false, diagnostics: [providerErrorDiagnostic()] };
+  }
+}
+
+function staleTargetHeadArtifactResult(
+  input: NormalizedPersistedApplyMergeInput,
+  record: MergeApplyIntentRecord,
+  currentHead: WorkbookCommitId,
+): VersionApplyMergeResult {
+  return {
+    ...artifactIntentMetadata(input, record),
+    headAfter: currentHead,
+    status: 'staleTargetHead',
+    base: record.base,
+    ours: record.ours,
+    theirs: record.theirs,
+    changes: [],
+    conflicts: [],
+    diagnostics: [],
+    mutationGuarantee: 'ref-not-mutated',
+  };
+}
+
+function applyArtifactMetadata(
+  result: VersionApplyMergeResult,
+  input: NormalizedPersistedApplyMergeInput,
+  record: MergeApplyIntentRecord,
+  headAfter: WorkbookCommitId,
+): VersionApplyMergeResult {
+  return {
+    ...result,
+    ...artifactIntentMetadata(input, record, headAfter),
+  };
+}
+
+function artifactIntentMetadata(
+  input: NormalizedPersistedApplyMergeInput,
+  record: MergeApplyIntentRecord,
+  headAfter?: WorkbookCommitId,
+) {
+  return {
+    resultId: input.resultId,
+    previewArtifactDigest: input.resultDigest,
+    resultDigest: input.resultDigest,
+    resolutionSetDigest: record.resolutionSetDigest,
+    resolvedAttemptDigest: record.resolvedAttemptDigest,
+    targetRef: record.targetRef,
+    headBefore: record.terminal?.headBefore ?? record.ours,
+    ...(headAfter ? { headAfter } : {}),
+  };
+}
+
+function commitRefForIntent(
+  record: MergeApplyIntentRecord,
+  commitId: WorkbookCommitId,
+): WorkbookCommitRef {
+  return {
+    id: commitId,
+    refName: record.targetRef,
+    resolvedFrom: record.targetRef,
+  };
 }
 
 function planResolvedConflicts(
@@ -554,11 +831,23 @@ function mapProviderDiagnostics(diagnostics: readonly unknown[]): readonly Versi
   });
 }
 
+function intentStoreDiagnostics(
+  diagnostics: readonly MergeApplyIntentStoreDiagnostic[],
+): readonly VersionStoreDiagnostic[] {
+  return diagnostics.map((item) =>
+    publicDiagnostic(item.code, item.message, {
+      recoverability: item.recoverability,
+      ...(item.details ? { payload: item.details } : {}),
+    }),
+  );
+}
+
 function blockedApplyMergeResult(
   base: WorkbookCommitId | null,
   ours: WorkbookCommitId | null,
   theirs: WorkbookCommitId | null,
   diagnostics: readonly VersionStoreDiagnostic[],
+  mutationGuarantee: VersionApplyMergeResult['mutationGuarantee'] = 'no-write-attempted',
 ): VersionApplyMergeResult {
   return {
     status: 'blocked',
@@ -568,7 +857,7 @@ function blockedApplyMergeResult(
     changes: [],
     conflicts: [],
     diagnostics,
-    mutationGuarantee: 'no-write-attempted',
+    mutationGuarantee,
   };
 }
 

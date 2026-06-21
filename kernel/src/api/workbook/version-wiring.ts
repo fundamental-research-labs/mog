@@ -1,5 +1,6 @@
 import type { DocumentContext } from '../../context';
 import { createWorkbookVersionCommitService } from '../../document/version-store/commit-service';
+import { createWorkbookVersionDiffService } from '../../document/version-store/diff-service';
 import type { WorkbookVersioningConfig } from './types';
 
 type MutableVersioningContext = DocumentContext & {
@@ -22,11 +23,16 @@ export function attachWorkbookVersioning(
 
   const runtime = ctx as MutableVersioningContext;
   const existing = isRecord(runtime.versioning) ? runtime.versioning : {};
+  const diffService =
+    existing.diffService ??
+    existing.versionDiffService ??
+    (config.provider ? createWorkbookVersionDiffService({ provider: config.provider }) : undefined);
   runtime.versioning = {
     ...existing,
     ...(config.provider ? { provider: config.provider } : {}),
     writeService,
     readService: existing.readService ?? writeService,
+    ...(diffService ? { diffService } : {}),
   };
 }
 

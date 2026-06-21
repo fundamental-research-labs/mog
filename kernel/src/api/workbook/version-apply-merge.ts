@@ -22,6 +22,11 @@ import {
   alreadyMergedApplyMergeResult,
   plannedAncestryApplyMergeResult,
 } from './version-apply-merge-ancestry';
+import {
+  isApplyMergeWriteSuccessResult,
+  isNonFastForwardWriteResult,
+  mapApplyMergeWriteResult,
+} from './version-apply-merge-write-result';
 import { mergeWorkbookVersion } from './version-merge';
 
 const WORKBOOK_COMMIT_ID_RE = /^commit:sha256:[0-9a-f]{64}$/;
@@ -290,7 +295,7 @@ async function tryApplyFastForwardMerge(
       },
       'ref-fast-forwarded',
     );
-    return mapped.status === 'applied'
+    return isApplyMergeWriteSuccessResult(mapped)
       ? { kind: 'applied', result: mapped }
       : { kind: 'blocked', result: mapped };
   } catch {
@@ -664,128 +669,6 @@ function bindMethod(value: unknown, name: string): BoundMethod | null {
   return (...args) => Reflect.apply(method, value, args) as MaybePromise<unknown>;
 }
 
-function mapApplyMergeWriteResult(
-  value: unknown,
-  plan: {
-    readonly base: WorkbookCommitId;
-    readonly ours: WorkbookCommitId;
-    readonly theirs: WorkbookCommitId;
-    readonly changes: readonly VersionMergeChange[];
-    readonly resolutionCount: number;
-  },
-  successMutationGuarantee: VersionApplyMergeResult['mutationGuarantee'],
-): VersionApplyMergeResult {
-  if (!isRecord(value)) {
-    return blockedApplyMergeResult(plan.base, plan.ours, plan.theirs, [providerErrorDiagnostic()]);
-  }
-
-  if (value.status !== 'success' && value.status !== 'applied') {
-    return blockedApplyMergeResult(
-      plan.base,
-      plan.ours,
-      plan.theirs,
-      mapWriteDiagnostics(value.diagnostics),
-      toApplyMergeMutationGuarantee(value.mutationGuarantee),
-    );
-  }
-
-  const commit = mapWorkbookCommitRef(value.commitRef ?? value.commit);
-  const diagnostics = Array.isArray(value.diagnostics) ? mapWriteDiagnostics(value.diagnostics) : [];
-  if (!commit || diagnostics.length > 0) {
-    return blockedApplyMergeResult(plan.base, plan.ours, plan.theirs, [
-      ...diagnostics,
-      providerErrorDiagnostic(),
-    ]);
-  }
-
-  return {
-    status: 'applied',
-    base: plan.base,
-    ours: plan.ours,
-    theirs: plan.theirs,
-    commitRef: commit,
-    changes: plan.changes,
-    conflicts: [],
-    diagnostics: [],
-    resolutionCount: plan.resolutionCount,
-    mutationGuarantee: successMutationGuarantee,
-  };
-}
-
-function isNonFastForwardWriteResult(value: unknown): boolean {
-  if (!isRecord(value) || value.status === 'success' || value.status === 'applied') return false;
-  if (!Array.isArray(value.diagnostics)) return false;
-  return value.diagnostics.some((diagnostic) => {
-    if (!isRecord(diagnostic)) return false;
-    return (
-      diagnostic.code === 'VERSION_UNSUPPORTED_PARENT_COMMIT' ||
-      diagnostic.issueCode === 'VERSION_UNSUPPORTED_PARENT_COMMIT'
-    );
-  });
-}
-
-function mapWorkbookCommitRef(value: unknown): WorkbookCommitRef | null {
-  if (!isRecord(value)) return null;
-  const id = toCommitId(value.id);
-  if (!id) return null;
-
-  const refName = value.refName === undefined ? undefined : validatePublicRefNameValue(value.refName);
-  const resolvedFrom =
-    value.resolvedFrom === undefined ? undefined : validatePublicRefSelectorValue(value.resolvedFrom);
-  const refRevision = value.refRevision === undefined ? undefined : toPublicRevision(value.refRevision);
-  if (
-    (value.refName !== undefined && !refName) ||
-    (value.resolvedFrom !== undefined && !resolvedFrom) ||
-    (value.refRevision !== undefined && !refRevision)
-  ) {
-    return null;
-  }
-
-  return {
-    id,
-    ...(refName ? { refName } : {}),
-    ...(resolvedFrom ? { resolvedFrom } : {}),
-    ...(refRevision ? { refRevision } : {}),
-  };
-}
-
-function mapWriteDiagnostics(value: unknown): readonly VersionStoreDiagnostic[] {
-  if (!Array.isArray(value)) return [providerErrorDiagnostic()];
-  return value.map(mapWriteDiagnostic);
-}
-
-function mapWriteDiagnostic(value: unknown): VersionStoreDiagnostic {
-  if (isRecord(value) && typeof value.issueCode === 'string') {
-    return {
-      issueCode: value.issueCode,
-      severity: isSeverity(value.severity) ? value.severity : 'error',
-      recoverability: isRecoverability(value.recoverability) ? value.recoverability : 'none',
-      messageTemplateId:
-        typeof value.messageTemplateId === 'string'
-          ? value.messageTemplateId
-          : `version.applyMerge.${value.issueCode}`,
-      safeMessage:
-        typeof value.safeMessage === 'string'
-          ? value.safeMessage
-          : typeof value.message === 'string'
-            ? value.message
-            : 'Version applyMerge failed.',
-      ...(isRecord(value.payload) ? { payload: mapPayload(value.payload) } : {}),
-      redacted: value.redacted === true,
-      ...(toDiagnosticMutationGuarantee(value.mutationGuarantee)
-        ? { mutationGuarantee: toDiagnosticMutationGuarantee(value.mutationGuarantee) }
-        : {}),
-    };
-  }
-  if (isRecord(value) && typeof value.code === 'string') {
-    return publicDiagnostic(value.code, typeof value.message === 'string' ? value.message : 'Version applyMerge failed.', {
-      recoverability: value.code === 'VERSION_REF_CONFLICT' ? 'retry' : 'none',
-      mutationGuarantee: toDiagnosticMutationGuarantee(value.mutationGuarantee),
-    });
-  }
-  return providerErrorDiagnostic();
-}
-
 function toPublicRevision(value: unknown): VersionRecordRevision | undefined {
   if (isRecord(value) && value.kind === 'counter' && typeof value.value === 'string') {
     return { kind: 'counter', value: value.value };
@@ -795,45 +678,6 @@ function toPublicRevision(value: unknown): VersionRecordRevision | undefined {
   }
   if (typeof value === 'string') return { kind: 'opaque', value };
   return undefined;
-}
-
-function validatePublicRefNameValue(value: unknown): VersionMainRefName | VersionRefName | undefined {
-  if (value === VERSION_MAIN_REF) return VERSION_MAIN_REF;
-  if (typeof value === 'string' && value.startsWith(VERSION_BRANCH_REF_PREFIX)) {
-    return value as VersionRefName;
-  }
-  return undefined;
-}
-
-function validatePublicRefSelectorValue(
-  value: unknown,
-): typeof VERSION_HEAD_REF | VersionMainRefName | VersionRefName | undefined {
-  if (value === VERSION_HEAD_REF) return VERSION_HEAD_REF;
-  return validatePublicRefNameValue(value);
-}
-
-function toApplyMergeMutationGuarantee(
-  value: unknown,
-): VersionApplyMergeResult['mutationGuarantee'] | undefined {
-  return value === 'preview-only' ||
-    value === 'merge-commit-created' ||
-    value === 'ref-fast-forwarded' ||
-    value === 'no-write-attempted' ||
-    value === 'ref-not-mutated' ||
-    value === 'unknown-after-crash'
-    ? value
-    : undefined;
-}
-
-function toDiagnosticMutationGuarantee(
-  value: unknown,
-): VersionStoreDiagnostic['mutationGuarantee'] | undefined {
-  return value === 'no-write-attempted' ||
-    value === 'ref-not-mutated' ||
-    value === 'registry-not-visible' ||
-    value === 'unknown-after-crash'
-    ? value
-    : undefined;
 }
 
 function planResolvedConflicts(
@@ -964,26 +808,6 @@ function publicDiagnostic(
     redacted: true,
     mutationGuarantee: options.mutationGuarantee ?? 'no-write-attempted',
   };
-}
-
-function mapPayload(value: Readonly<Record<string, unknown>>): VersionStoreDiagnostic['payload'] {
-  const payload: Record<string, string | number | boolean | null> = {};
-  for (const [key, item] of Object.entries(value)) {
-    payload[key] = isPayloadPrimitive(item) ? item : String(item);
-  }
-  return payload;
-}
-
-function isSeverity(value: unknown): value is VersionStoreDiagnostic['severity'] {
-  return value === 'info' || value === 'warning' || value === 'error' || value === 'fatal';
-}
-
-function isRecoverability(value: unknown): value is VersionStoreDiagnostic['recoverability'] {
-  return value === 'retry' || value === 'repair' || value === 'unsupported' || value === 'none';
-}
-
-function isPayloadPrimitive(value: unknown): value is string | number | boolean | null {
-  return value === null || ['string', 'number', 'boolean'].includes(typeof value);
 }
 
 function toCommitId(value: unknown): WorkbookCommitId | null {

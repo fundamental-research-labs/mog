@@ -6,6 +6,14 @@ import type { VersionMergeInput, VersionMergeResult } from '@mog-sdk/contracts/a
 const BASE = `commit:sha256:${'1'.repeat(64)}` as VersionMergeInput['base'];
 const OURS = `commit:sha256:${'2'.repeat(64)}` as VersionMergeInput['ours'];
 const THEIRS = `commit:sha256:${'3'.repeat(64)}` as VersionMergeInput['theirs'];
+const DIGEST_A = { algorithm: 'sha256', digest: 'a'.repeat(64) } as const;
+const DIGEST_B = { algorithm: 'sha256', digest: 'b'.repeat(64) } as const;
+const DIGEST_C = { algorithm: 'sha256', digest: 'c'.repeat(64) } as const;
+const TARGET_REF = 'refs/heads/main';
+const EXPECTED_TARGET_HEAD = {
+  commitId: OURS,
+  revision: { kind: 'counter' as const, value: '1' },
+};
 
 describe('WorkbookVersion merge facade', () => {
   it('delegates merge preview through an attached document-scoped service', async () => {
@@ -25,12 +33,88 @@ describe('WorkbookVersion merge facade', () => {
     } as any);
 
     await expect(
-      version.merge({ base: BASE, ours: OURS, theirs: THEIRS }, { mode: 'preview' }),
+      version.merge(
+        { base: BASE, ours: OURS, theirs: THEIRS },
+        {
+          mode: 'preview',
+          includeDiagnostics: true,
+          targetRef: TARGET_REF as any,
+          expectedTargetHead: EXPECTED_TARGET_HEAD,
+          persistReviewRecord: true,
+        },
+      ),
     ).resolves.toStrictEqual({ ok: true, value: result });
     expect(merge).toHaveBeenCalledWith(
       { base: BASE, ours: OURS, theirs: THEIRS },
-      { mode: 'preview' },
+      {
+        mode: 'preview',
+        includeDiagnostics: true,
+        targetRef: TARGET_REF,
+        expectedTargetHead: EXPECTED_TARGET_HEAD,
+        persistReviewRecord: true,
+      },
     );
+  });
+
+  it('passes through validated provider merge attempt metadata', async () => {
+    const result = {
+      status: 'clean',
+      base: BASE,
+      ours: OURS,
+      theirs: THEIRS,
+      changes: [],
+      conflicts: [],
+      diagnostics: [],
+      mutationGuarantee: 'preview-only',
+      resultDigest: DIGEST_A,
+      attemptPersistence: 'persisted',
+      attemptKind: 'applyable',
+      resultId: 'merge-result:review-main',
+      targetRef: TARGET_REF,
+      expectedTargetHead: EXPECTED_TARGET_HEAD,
+      applicationPlanDigest: DIGEST_B,
+      applyEligibilityDigest: DIGEST_C,
+    } as const;
+    const merge = jest.fn(async () => result);
+    const version = new WorkbookVersionImpl({
+      versioning: { mergeService: { merge } },
+    } as any);
+
+    await expect(version.merge({ base: BASE, ours: OURS, theirs: THEIRS })).resolves.toStrictEqual({
+      ok: true,
+      value: result,
+    });
+  });
+
+  it('blocks provider merge attempts with malformed persistence metadata', async () => {
+    const merge = jest.fn(async () => ({
+      status: 'clean',
+      base: BASE,
+      ours: OURS,
+      theirs: THEIRS,
+      changes: [],
+      conflicts: [],
+      diagnostics: [],
+      mutationGuarantee: 'preview-only',
+      resultDigest: { algorithm: 'sha256', digest: 'not-a-digest' },
+    }));
+    const version = new WorkbookVersionImpl({
+      versioning: { mergeService: { merge } },
+    } as any);
+
+    await expect(version.merge({ base: BASE, ours: OURS, theirs: THEIRS })).resolves.toMatchObject({
+      ok: false,
+      error: {
+        code: 'target_unavailable',
+        target: 'workbook.version.merge',
+        diagnostics: [
+          expect.objectContaining({
+            code: 'VERSION_INVALID_COMMIT_PAYLOAD',
+            data: expect.objectContaining({ redacted: true }),
+          }),
+        ],
+      },
+    });
   });
 
   it('passes through provider conflicts with stable identity fields', async () => {

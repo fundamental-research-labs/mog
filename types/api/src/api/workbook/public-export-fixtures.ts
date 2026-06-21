@@ -4,6 +4,7 @@ import type {
   VersionCapabilityError as ApiRootCapabilityError,
   CheckoutVersionResult as ApiRootCheckoutVersionResult,
   VersionApplyMergeInput as ApiRootApplyMergeInput,
+  VersionApplyMergeAttemptMetadata as ApiRootApplyMergeAttemptMetadata,
   VersionApplyMergeMutationGuarantee as ApiRootApplyMergeMutationGuarantee,
   VersionApplyMergeOptions as ApiRootApplyMergeOptions,
   VersionApplyMergeResult as ApiRootApplyMergeResult,
@@ -18,9 +19,13 @@ import type {
   VersionCommitOptions as ApiRootCommitOptions,
   VersionCreateBranchOptions as ApiRootCreateBranchOptions,
   VersionDiffEntry as ApiRootDiffEntry,
+  VersionMergeAttemptKind as ApiRootMergeAttemptKind,
+  VersionMergeAttemptMetadata as ApiRootMergeAttemptMetadata,
+  VersionMergeAttemptPersistence as ApiRootMergeAttemptPersistence,
   VersionMergeConflict as ApiRootMergeConflict,
   VersionMergeConflictResolutionOption as ApiRootMergeConflictResolutionOption,
   VersionMergeResult as ApiRootMergeResult,
+  VersionMergeResultId as ApiRootMergeResultId,
   VersionRefMutationResult as ApiRootRefMutationResult,
   VersionResult as ApiRootVersionResult,
   VersionHead as ApiRootVersionHead,
@@ -37,6 +42,7 @@ import type {
   VersionCapabilityError as PackageApiCapabilityError,
   CheckoutVersionResult as PackageApiCheckoutVersionResult,
   VersionApplyMergeInput as PackageApiApplyMergeInput,
+  VersionApplyMergeAttemptMetadata as PackageApiApplyMergeAttemptMetadata,
   VersionApplyMergeMutationGuarantee as PackageApiApplyMergeMutationGuarantee,
   VersionApplyMergeOptions as PackageApiApplyMergeOptions,
   VersionApplyMergeResult as PackageApiApplyMergeResult,
@@ -51,9 +57,13 @@ import type {
   VersionCommitOptions as PackageApiCommitOptions,
   VersionCreateBranchOptions as PackageApiCreateBranchOptions,
   VersionDiffEntry as PackageApiDiffEntry,
+  VersionMergeAttemptKind as PackageApiMergeAttemptKind,
+  VersionMergeAttemptMetadata as PackageApiMergeAttemptMetadata,
+  VersionMergeAttemptPersistence as PackageApiMergeAttemptPersistence,
   VersionMergeConflict as PackageApiMergeConflict,
   VersionMergeConflictResolutionOption as PackageApiMergeConflictResolutionOption,
   VersionMergeResult as PackageApiMergeResult,
+  VersionMergeResultId as PackageApiMergeResultId,
   VersionRefMutationResult as PackageApiRefMutationResult,
   VersionResult as PackageApiVersionResult,
   VersionHead as PackageApiVersionHead,
@@ -70,6 +80,7 @@ import type {
   VersionCapabilityError as PackageWorkbookCapabilityError,
   CheckoutVersionResult as PackageWorkbookCheckoutVersionResult,
   VersionApplyMergeInput as PackageWorkbookApplyMergeInput,
+  VersionApplyMergeAttemptMetadata as PackageWorkbookApplyMergeAttemptMetadata,
   VersionApplyMergeMutationGuarantee as PackageWorkbookApplyMergeMutationGuarantee,
   VersionApplyMergeOptions as PackageWorkbookApplyMergeOptions,
   VersionApplyMergeResult as PackageWorkbookApplyMergeResult,
@@ -84,9 +95,13 @@ import type {
   VersionCommitOptions as PackageWorkbookCommitOptions,
   VersionCreateBranchOptions as PackageWorkbookCreateBranchOptions,
   VersionDiffEntry as PackageWorkbookDiffEntry,
+  VersionMergeAttemptKind as PackageWorkbookMergeAttemptKind,
+  VersionMergeAttemptMetadata as PackageWorkbookMergeAttemptMetadata,
+  VersionMergeAttemptPersistence as PackageWorkbookMergeAttemptPersistence,
   VersionMergeConflict as PackageWorkbookMergeConflict,
   VersionMergeConflictResolutionOption as PackageWorkbookMergeConflictResolutionOption,
   VersionMergeResult as PackageWorkbookMergeResult,
+  VersionMergeResultId as PackageWorkbookMergeResultId,
   VersionRefMutationResult as PackageWorkbookRefMutationResult,
   VersionResult as PackageWorkbookVersionResult,
   VersionHead as PackageWorkbookVersionHead,
@@ -103,6 +118,7 @@ import type {
   VersionCapabilityError as WorkbookNamespaceCapabilityError,
   CheckoutVersionResult as WorkbookNamespaceCheckoutVersionResult,
   VersionApplyMergeInput as WorkbookNamespaceApplyMergeInput,
+  VersionApplyMergeAttemptMetadata as WorkbookNamespaceApplyMergeAttemptMetadata,
   VersionApplyMergeMutationGuarantee as WorkbookNamespaceApplyMergeMutationGuarantee,
   VersionApplyMergeOptions as WorkbookNamespaceApplyMergeOptions,
   VersionApplyMergeResult as WorkbookNamespaceApplyMergeResult,
@@ -117,9 +133,13 @@ import type {
   VersionCommitOptions as WorkbookNamespaceCommitOptions,
   VersionCreateBranchOptions as WorkbookNamespaceCreateBranchOptions,
   VersionDiffEntry as WorkbookNamespaceDiffEntry,
+  VersionMergeAttemptKind as WorkbookNamespaceMergeAttemptKind,
+  VersionMergeAttemptMetadata as WorkbookNamespaceMergeAttemptMetadata,
+  VersionMergeAttemptPersistence as WorkbookNamespaceMergeAttemptPersistence,
   VersionMergeConflict as WorkbookNamespaceMergeConflict,
   VersionMergeConflictResolutionOption as WorkbookNamespaceMergeConflictResolutionOption,
   VersionMergeResult as WorkbookNamespaceMergeResult,
+  VersionMergeResultId as WorkbookNamespaceMergeResultId,
   VersionRefMutationResult as WorkbookNamespaceRefMutationResult,
   VersionResult as WorkbookNamespaceVersionResult,
   VersionHead as WorkbookNamespaceVersionHead,
@@ -147,6 +167,9 @@ type _WorkbookNamespaceExportsApplyMergeResult = Assert<
 type _WorkbookNamespaceExportsApplyMergeInput = Assert<
   IsEqual<WorkbookNamespaceApplyMergeInput, PackageWorkbookApplyMergeInput>
 >;
+type _WorkbookNamespaceExportsApplyMergeAttemptMetadata = Assert<
+  IsEqual<WorkbookNamespaceApplyMergeAttemptMetadata, PackageWorkbookApplyMergeAttemptMetadata>
+>;
 type _WorkbookNamespaceExportsApplyMergeOptions = Assert<
   IsEqual<WorkbookNamespaceApplyMergeOptions, PackageWorkbookApplyMergeOptions>
 >;
@@ -173,6 +196,18 @@ type _WorkbookNamespaceExportsMergeConflictResolutionOption = Assert<
 >;
 type _WorkbookNamespaceExportsMergeResult = Assert<
   IsEqual<WorkbookNamespaceMergeResult, PackageWorkbookMergeResult>
+>;
+type _WorkbookNamespaceExportsMergeAttemptMetadata = Assert<
+  IsEqual<WorkbookNamespaceMergeAttemptMetadata, PackageWorkbookMergeAttemptMetadata>
+>;
+type _WorkbookNamespaceExportsMergeAttemptKind = Assert<
+  IsEqual<WorkbookNamespaceMergeAttemptKind, PackageWorkbookMergeAttemptKind>
+>;
+type _WorkbookNamespaceExportsMergeAttemptPersistence = Assert<
+  IsEqual<WorkbookNamespaceMergeAttemptPersistence, PackageWorkbookMergeAttemptPersistence>
+>;
+type _WorkbookNamespaceExportsMergeResultId = Assert<
+  IsEqual<WorkbookNamespaceMergeResultId, PackageWorkbookMergeResultId>
 >;
 type _WorkbookNamespaceExportsDiffPage = Assert<
   IsEqual<WorkbookNamespaceDiffPage, PackageWorkbookDiffPage>
@@ -239,6 +274,9 @@ type _ApiRootExportsApplyMergeResult = Assert<
 type _ApiRootExportsApplyMergeInput = Assert<
   IsEqual<ApiRootApplyMergeInput, PackageApiApplyMergeInput>
 >;
+type _ApiRootExportsApplyMergeAttemptMetadata = Assert<
+  IsEqual<ApiRootApplyMergeAttemptMetadata, PackageApiApplyMergeAttemptMetadata>
+>;
 type _ApiRootExportsApplyMergeOptions = Assert<
   IsEqual<ApiRootApplyMergeOptions, PackageApiApplyMergeOptions>
 >;
@@ -260,6 +298,16 @@ type _ApiRootExportsMergeConflictResolutionOption = Assert<
   IsEqual<ApiRootMergeConflictResolutionOption, PackageApiMergeConflictResolutionOption>
 >;
 type _ApiRootExportsMergeResult = Assert<IsEqual<ApiRootMergeResult, PackageApiMergeResult>>;
+type _ApiRootExportsMergeAttemptMetadata = Assert<
+  IsEqual<ApiRootMergeAttemptMetadata, PackageApiMergeAttemptMetadata>
+>;
+type _ApiRootExportsMergeAttemptKind = Assert<
+  IsEqual<ApiRootMergeAttemptKind, PackageApiMergeAttemptKind>
+>;
+type _ApiRootExportsMergeAttemptPersistence = Assert<
+  IsEqual<ApiRootMergeAttemptPersistence, PackageApiMergeAttemptPersistence>
+>;
+type _ApiRootExportsMergeResultId = Assert<IsEqual<ApiRootMergeResultId, PackageApiMergeResultId>>;
 type _ApiRootExportsCapabilityError = Assert<
   IsEqual<ApiRootCapabilityError, PackageApiCapabilityError>
 >;

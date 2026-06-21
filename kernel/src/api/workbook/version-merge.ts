@@ -4,6 +4,8 @@ import type {
   VersionDiffDisplayValue,
   VersionDiffStructuralMetadata,
   VersionDiffValue,
+  VersionCommitExpectedHead,
+  VersionMainRefName,
   VersionMergeChange,
   VersionMergeConflict,
   VersionMergeConflictResolutionOption,
@@ -12,16 +14,28 @@ import type {
   VersionMergeOptions,
   VersionMergeResult,
   VersionRedactedValue,
+  VersionRefName,
   VersionSemanticValue,
   VersionStoreDiagnostic,
   WorkbookCommitId,
 } from '@mog-sdk/contracts/api';
 
 import type { DocumentContext } from '../../context';
+import {
+  mapPublicExpectedTargetHead,
+  mapPublicTargetRef,
+  mapVersionMergeAttemptMetadata,
+} from './version-attempt-metadata';
 
 const WORKBOOK_COMMIT_ID_RE = /^commit:sha256:[0-9a-f]{64}$/;
 const VERSION_MERGE_INPUT_KEYS = new Set(['base', 'ours', 'theirs']);
-const VERSION_MERGE_OPTION_KEYS = new Set(['mode', 'includeDiagnostics']);
+const VERSION_MERGE_OPTION_KEYS = new Set([
+  'mode',
+  'includeDiagnostics',
+  'targetRef',
+  'expectedTargetHead',
+  'persistReviewRecord',
+]);
 const VERSION_MERGE_RESOLUTION_OPTION_KINDS = new Set<VersionMergeConflictResolutionOptionKind>([
   'acceptOurs',
   'acceptTheirs',
@@ -185,7 +199,13 @@ function normalizeMergeOptions(
     diagnostics.push(invalidMergeOptionDiagnostic(key, `Unknown merge option "${key}".`));
   }
 
-  const options: { mode?: 'preview'; includeDiagnostics?: boolean } = {};
+  const options: {
+    mode?: 'preview';
+    includeDiagnostics?: boolean;
+    targetRef?: VersionMainRefName | VersionRefName;
+    expectedTargetHead?: VersionCommitExpectedHead;
+    persistReviewRecord?: boolean;
+  } = {};
   if (input.mode !== undefined) {
     if (input.mode !== 'preview') {
       diagnostics.push(
@@ -206,6 +226,44 @@ function normalizeMergeOptions(
       );
     } else {
       options.includeDiagnostics = input.includeDiagnostics;
+    }
+  }
+
+  if (input.targetRef !== undefined) {
+    const targetRef = mapPublicTargetRef(input.targetRef);
+    if (!targetRef) {
+      diagnostics.push(
+        invalidMergeOptionDiagnostic(
+          'targetRef',
+          'targetRef must name a public-safe version branch.',
+        ),
+      );
+    } else {
+      options.targetRef = targetRef;
+    }
+  }
+
+  if (input.expectedTargetHead !== undefined) {
+    const expectedTargetHead = mapPublicExpectedTargetHead(input.expectedTargetHead);
+    if (!expectedTargetHead) {
+      diagnostics.push(
+        invalidMergeOptionDiagnostic(
+          'expectedTargetHead',
+          'expectedTargetHead must be a valid expected head record.',
+        ),
+      );
+    } else {
+      options.expectedTargetHead = expectedTargetHead;
+    }
+  }
+
+  if (input.persistReviewRecord !== undefined) {
+    if (typeof input.persistReviewRecord !== 'boolean') {
+      diagnostics.push(
+        invalidMergeOptionDiagnostic('persistReviewRecord', 'persistReviewRecord must be a boolean.'),
+      );
+    } else {
+      options.persistReviewRecord = input.persistReviewRecord;
     }
   }
 
@@ -289,13 +347,23 @@ function mapMergeResult(value: unknown, fallback: VersionMergeInput): VersionMer
   const theirs = toCommitId(value.theirs);
   const changes = Array.isArray(value.changes) ? mapMergeChanges(value.changes) : null;
   const conflicts = Array.isArray(value.conflicts) ? mapMergeConflicts(value.conflicts) : null;
+  const metadata = mapVersionMergeAttemptMetadata(value);
   const mutationGuarantee = value.mutationGuarantee === 'preview-only';
   const diagnostics =
     Array.isArray(value.diagnostics) && value.diagnostics.length > 0
       ? mapGraphDiagnostics(value.diagnostics)
       : [];
 
-  if (!base || !ours || !theirs || !changes || !conflicts || !mutationGuarantee || diagnostics.length > 0) {
+  if (
+    !base ||
+    !ours ||
+    !theirs ||
+    !changes ||
+    !conflicts ||
+    !metadata ||
+    !mutationGuarantee ||
+    diagnostics.length > 0
+  ) {
     return blockedMergeResult(base ?? fallback.base, ours ?? fallback.ours, theirs ?? fallback.theirs, [
       ...diagnostics,
       publicDiagnostic(
@@ -317,6 +385,7 @@ function mapMergeResult(value: unknown, fallback: VersionMergeInput): VersionMer
       ]);
     }
     return {
+      ...metadata,
       status: 'clean',
       base,
       ours,
@@ -339,6 +408,7 @@ function mapMergeResult(value: unknown, fallback: VersionMergeInput): VersionMer
       ]);
     }
     return {
+      ...metadata,
       status: value.status,
       base,
       ours,
@@ -351,6 +421,7 @@ function mapMergeResult(value: unknown, fallback: VersionMergeInput): VersionMer
   }
 
   return {
+    ...metadata,
     status: 'conflicted',
     base,
     ours,

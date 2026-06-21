@@ -18,6 +18,9 @@ const EXPECTED_TARGET_HEAD = {
   commitId: OURS,
   revision: { kind: 'counter' as const, value: '1' },
 };
+const DIGEST_A = { algorithm: 'sha256', digest: 'a'.repeat(64) } as const;
+const DIGEST_B = { algorithm: 'sha256', digest: 'b'.repeat(64) } as const;
+const DIGEST_C = { algorithm: 'sha256', digest: 'c'.repeat(64) } as const;
 
 describe('WorkbookVersion applyMerge preview planner', () => {
   it('plans clean merge previews without mutating through a write service', async () => {
@@ -193,6 +196,72 @@ describe('WorkbookVersion applyMerge preview planner', () => {
       theirs: THEIRS,
       targetRef: TARGET_REF,
       expectedTargetHead: EXPECTED_TARGET_HEAD,
+    });
+    expect(merge).not.toHaveBeenCalled();
+    expect(mergeCommit).not.toHaveBeenCalled();
+  });
+
+  it('passes through terminal fast-forward apply metadata from the write service', async () => {
+    const merge = jest.fn();
+    const mergeCommit = jest.fn();
+    const fastForwardMerge = jest.fn(async () => ({
+      status: 'fastForwarded',
+      commitRef: {
+        id: THEIRS,
+        refName: TARGET_REF,
+        resolvedFrom: TARGET_REF,
+        refRevision: { kind: 'counter' as const, value: '2' },
+      },
+      resultId: 'merge-result:fast-forward-main',
+      resultDigest: DIGEST_A,
+      resolutionSetDigest: DIGEST_B,
+      resolvedAttemptDigest: DIGEST_C,
+      targetRef: TARGET_REF,
+      headBefore: OURS,
+      headAfter: THEIRS,
+      applicationPlanDigest: DIGEST_A,
+      diagnostics: [],
+      mutationGuarantee: 'ref-fast-forwarded',
+    }));
+    const version = new WorkbookVersionImpl({
+      versioning: {
+        mergeService: { merge },
+        writeService: { fastForwardMerge, mergeCommit },
+      },
+    } as any);
+
+    await expect(
+      version.applyMerge(
+        { base: BASE, ours: OURS, theirs: THEIRS },
+        { targetRef: TARGET_REF as any, expectedTargetHead: EXPECTED_TARGET_HEAD },
+      ),
+    ).resolves.toEqual({
+      ok: true,
+      value: {
+        status: 'fastForwarded',
+        base: BASE,
+        ours: OURS,
+        theirs: THEIRS,
+        commitRef: {
+          id: THEIRS,
+          refName: TARGET_REF,
+          resolvedFrom: TARGET_REF,
+          refRevision: { kind: 'counter', value: '2' },
+        },
+        resultId: 'merge-result:fast-forward-main',
+        resultDigest: DIGEST_A,
+        resolutionSetDigest: DIGEST_B,
+        resolvedAttemptDigest: DIGEST_C,
+        targetRef: TARGET_REF,
+        headBefore: OURS,
+        headAfter: THEIRS,
+        applicationPlanDigest: DIGEST_A,
+        changes: [],
+        conflicts: [],
+        diagnostics: [],
+        resolutionCount: 0,
+        mutationGuarantee: 'ref-fast-forwarded',
+      },
     });
     expect(merge).not.toHaveBeenCalled();
     expect(mergeCommit).not.toHaveBeenCalled();

@@ -559,6 +559,58 @@ export type VersionMergeResult =
       readonly mutationGuarantee: VersionMergeMutationGuarantee;
     };
 
+export interface VersionApplyMergeResolution {
+  readonly conflictId: string;
+  readonly expectedConflictDigest: string;
+  readonly optionId: string;
+  readonly kind: VersionMergeConflictResolutionOptionKind;
+}
+
+export interface VersionApplyMergeInput extends VersionMergeInput {
+  readonly resolutions?: readonly VersionApplyMergeResolution[];
+}
+
+export interface VersionApplyMergeOptions {
+  readonly mode?: 'preview';
+  readonly includeDiagnostics?: boolean;
+}
+
+export type VersionApplyMergeMutationGuarantee = 'preview-only';
+
+export type VersionApplyMergeResult =
+  | {
+      readonly status: 'planned';
+      readonly base: WorkbookCommitId;
+      readonly ours: WorkbookCommitId;
+      readonly theirs: WorkbookCommitId;
+      readonly changes: readonly VersionMergeChange[];
+      readonly conflicts: readonly [];
+      readonly diagnostics: readonly [];
+      readonly resolutionCount: number;
+      readonly mutationGuarantee: VersionApplyMergeMutationGuarantee;
+    }
+  | {
+      readonly status: 'conflicted';
+      readonly base: WorkbookCommitId;
+      readonly ours: WorkbookCommitId;
+      readonly theirs: WorkbookCommitId;
+      readonly changes: readonly VersionMergeChange[];
+      readonly conflicts: readonly VersionMergeConflict[];
+      readonly diagnostics: readonly [];
+      readonly requiredResolutionCount: number;
+      readonly mutationGuarantee: VersionApplyMergeMutationGuarantee;
+    }
+  | {
+      readonly status: 'blocked';
+      readonly base: WorkbookCommitId | null;
+      readonly ours: WorkbookCommitId | null;
+      readonly theirs: WorkbookCommitId | null;
+      readonly changes: readonly [];
+      readonly conflicts: readonly [];
+      readonly diagnostics: readonly VersionStoreDiagnostic[];
+      readonly mutationGuarantee: VersionApplyMergeMutationGuarantee;
+    };
+
 export type RedactionPolicy = {
   readonly mode: 'default' | 'strict' | 'clean';
   readonly redactSecrets: boolean;
@@ -691,6 +743,10 @@ export interface WorkbookVersion {
     options?: VersionCheckoutOptions,
   ): Promise<VersionCheckoutResult>;
   merge(input: VersionMergeInput, options?: VersionMergeOptions): Promise<VersionMergeResult>;
+  applyMerge(
+    input: VersionApplyMergeInput,
+    options?: VersionApplyMergeOptions,
+  ): Promise<VersionApplyMergeResult>;
   diff(
     base: VersionCommitish,
     target: VersionCommitish,

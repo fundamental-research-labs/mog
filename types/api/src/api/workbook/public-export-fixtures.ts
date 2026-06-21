@@ -1,5 +1,6 @@
 import type {
   RedactionPolicy as ApiRootRedactionPolicy,
+  VersionApplyMergeResult as ApiRootApplyMergeResult,
   VersionBranchRefReadResult as ApiRootBranchRefReadResult,
   VersionCheckoutMutationGuarantee as ApiRootCheckoutMutationGuarantee,
   VersionCheckoutOptions as ApiRootCheckoutOptions,
@@ -23,6 +24,7 @@ import type {
 } from '../index';
 import type {
   RedactionPolicy as PackageApiRedactionPolicy,
+  VersionApplyMergeResult as PackageApiApplyMergeResult,
   VersionBranchRefReadResult as PackageApiBranchRefReadResult,
   VersionCheckoutMutationGuarantee as PackageApiCheckoutMutationGuarantee,
   VersionCheckoutOptions as PackageApiCheckoutOptions,
@@ -46,6 +48,7 @@ import type {
 } from '@mog/types-api/api';
 import type {
   RedactionPolicy as PackageWorkbookRedactionPolicy,
+  VersionApplyMergeResult as PackageWorkbookApplyMergeResult,
   VersionBranchRefReadResult as PackageWorkbookBranchRefReadResult,
   VersionCheckoutMutationGuarantee as PackageWorkbookCheckoutMutationGuarantee,
   VersionCheckoutOptions as PackageWorkbookCheckoutOptions,
@@ -69,6 +72,7 @@ import type {
 } from '@mog/types-api/api/workbook';
 import type {
   RedactionPolicy as WorkbookNamespaceRedactionPolicy,
+  VersionApplyMergeResult as WorkbookNamespaceApplyMergeResult,
   VersionBranchRefReadResult as WorkbookNamespaceBranchRefReadResult,
   VersionCheckoutMutationGuarantee as WorkbookNamespaceCheckoutMutationGuarantee,
   VersionCheckoutOptions as WorkbookNamespaceCheckoutOptions,
@@ -100,6 +104,9 @@ type _WorkbookNamespaceExportsVersionApi = Assert<
 >;
 type _WorkbookNamespaceExportsStatus = Assert<
   IsEqual<WorkbookNamespaceVersionStatus, PackageWorkbookVersionStatus>
+>;
+type _WorkbookNamespaceExportsApplyMergeResult = Assert<
+  IsEqual<WorkbookNamespaceApplyMergeResult, PackageWorkbookApplyMergeResult>
 >;
 type _WorkbookNamespaceExportsCommitOptions = Assert<
   IsEqual<WorkbookNamespaceCommitOptions, PackageWorkbookCommitOptions>
@@ -162,6 +169,9 @@ type _WorkbookNamespaceExportsRedactionPolicy = Assert<
 type _ApiRootExportsVersionApi = Assert<IsEqual<ApiRootWorkbookVersion, PackageApiWorkbookVersion>>;
 type _ApiRootExportsStatus = Assert<
   IsEqual<ApiRootWorkbookVersionStatus, PackageApiWorkbookVersionStatus>
+>;
+type _ApiRootExportsApplyMergeResult = Assert<
+  IsEqual<ApiRootApplyMergeResult, PackageApiApplyMergeResult>
 >;
 type _ApiRootExportsCommitOptions = Assert<
   IsEqual<ApiRootCommitOptions, PackageApiCommitOptions>

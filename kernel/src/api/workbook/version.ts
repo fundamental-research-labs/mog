@@ -1,5 +1,6 @@
 import type {
   RedactedVersionAuthor, VersionBranchName, VersionBranchRefReadResult,
+  VersionApplyMergeInput, VersionApplyMergeOptions, VersionApplyMergeResult,
   VersionCheckoutOptions, VersionCheckoutResult, VersionCheckoutTarget, VersionCommitish,
   VersionCreateBranchOptions, VersionCommitOptions, VersionCommitPage, VersionDegradedHeadResult,
   VersionDeleteRefOptions, VersionDiffOptions, VersionDiagnosticPublicPayload,
@@ -17,6 +18,7 @@ import { observeMutationAdmission } from '../../bridges/compute/mutation-admissi
 import type { DocumentContext } from '../../context';
 import { VERSION_OBJECT_SCHEMA_VERSION } from '../../document/version-store/object-store';
 import { REF_NAME_STORAGE_PREFIX } from '../../document/version-store/ref-name';
+import { applyMergeWorkbookVersion } from './version-apply-merge';
 import { checkoutWorkbookVersion, hasAttachedVersionCheckoutService, type VersionCheckoutTransactionGuard } from './version-checkout';
 import { commitWorkbookVersion, hasAttachedVersionWriteService } from './version-commit';
 import { diffWorkbookVersion } from './version-diff';
@@ -323,23 +325,21 @@ export class WorkbookVersionImpl implements WorkbookVersion {
       return degradedCommitPage([providerErrorDiagnostic('listCommits')]);
     }
   }
-
   async commit(options: VersionCommitOptions = {}): Promise<WorkbookCommitRef> {
     return commitWorkbookVersion(this.ctx, options);
   }
-
   async checkout(target: VersionCheckoutTarget, options: VersionCheckoutOptions = {}): Promise<VersionCheckoutResult> {
     return checkoutWorkbookVersion(this.ctx, target, options, this.options.checkoutTransactionGuard);
   }
-
   async merge(input: VersionMergeInput, options: VersionMergeOptions = {}): Promise<VersionMergeResult> {
     return mergeWorkbookVersion(this.ctx, input, options);
   }
-
+  async applyMerge(input: VersionApplyMergeInput, options: VersionApplyMergeOptions = {}): Promise<VersionApplyMergeResult> {
+    return applyMergeWorkbookVersion(this.ctx, input, options);
+  }
   async diff(base: VersionCommitish, target: VersionCommitish, options: VersionDiffOptions = {}): Promise<WorkbookDiffPage> {
     return diffWorkbookVersion(this.ctx, base, target, options);
   }
-
   async readRef(name: 'HEAD'): Promise<VersionSymbolicRefReadResult>;
   async readRef(name: VersionMainRefName | VersionRefName | VersionBranchName): Promise<VersionBranchRefReadResult>;
   async readRef(name: VersionRefSelector | VersionBranchName): Promise<VersionRefReadResult>;

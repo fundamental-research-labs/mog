@@ -16,6 +16,10 @@ import {
   type VersionDocumentScope,
   type VersionGraphRegistry,
 } from './registry';
+import {
+  MergeApplyIntentMemoryBackend,
+  type MergeApplyIntentMemoryBackendSnapshot,
+} from './merge-apply-intent-store';
 
 export type InMemoryVersionProviderDurability = 'ephemeral' | 'snapshot-test-double';
 
@@ -27,11 +31,18 @@ export type InMemoryVersionRegistryRecord =
 export type InMemoryVersionDocumentProviderBackendSnapshot = {
   readonly registries: readonly (readonly [VersionDocumentScope, InMemoryVersionRegistryRecord])[];
   readonly graphs: readonly InMemoryVersionGraphStoreSnapshot[];
+  readonly mergeApplyIntents: MergeApplyIntentMemoryBackendSnapshot;
 };
 
 export class InMemoryVersionDocumentProviderBackend {
   private readonly registries = new Map<string, InMemoryVersionRegistryRecord>();
   private readonly graphStores = new Map<string, InMemoryVersionGraphStore>();
+  readonly mergeApplyIntentBackend: MergeApplyIntentMemoryBackend;
+
+  constructor(options: { readonly mergeApplyIntentBackend?: MergeApplyIntentMemoryBackend } = {}) {
+    this.mergeApplyIntentBackend =
+      options.mergeApplyIntentBackend ?? new MergeApplyIntentMemoryBackend();
+  }
 
   readRegistryRecord(
     documentScope: VersionDocumentScope,
@@ -91,13 +102,16 @@ export class InMemoryVersionDocumentProviderBackend {
       graphs: Object.freeze(
         await Promise.all([...this.graphStores.values()].map((graph) => graph.exportSnapshot())),
       ),
+      mergeApplyIntents: this.mergeApplyIntentBackend.exportSnapshot(),
     });
   }
 
   static async fromSnapshot(
     snapshot: InMemoryVersionDocumentProviderBackendSnapshot,
   ): Promise<InMemoryVersionDocumentProviderBackend> {
-    const backend = new InMemoryVersionDocumentProviderBackend();
+    const backend = new InMemoryVersionDocumentProviderBackend({
+      mergeApplyIntentBackend: MergeApplyIntentMemoryBackend.fromSnapshot(snapshot.mergeApplyIntents),
+    });
     for (const [scope, record] of snapshot.registries) {
       backend.registries.set(versionDocumentScopeKey(scope), cloneRegistryRecord(record));
     }

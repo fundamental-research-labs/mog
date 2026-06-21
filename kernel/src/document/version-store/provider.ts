@@ -21,6 +21,7 @@ import {
   InMemoryVersionDocumentProviderBackend,
   type InMemoryVersionProviderDurability,
 } from './provider-memory-backend';
+import { InMemoryMergeApplyIntentStore } from './merge-apply-intent-store';
 import {
   cloneVersionGraphRegistry,
   createVersionGraphRegistry,
@@ -568,6 +569,15 @@ export class InMemoryVersionStoreProvider implements VersionStoreProvider {
     }
 
     return graph;
+  }
+
+  async openMergeApplyIntentStore(namespace: VersionGraphNamespace): Promise<InMemoryMergeApplyIntentStore> {
+    await this.openGraph(namespace);
+    return new InMemoryMergeApplyIntentStore({
+      namespace,
+      documentScope: this.documentScope,
+      backend: this.backend.mergeApplyIntentBackend,
+    });
   }
 
   async scanDocumentIntegrity(

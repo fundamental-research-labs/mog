@@ -1,0 +1,262 @@
+import {
+  type BeginMergeApplyIntentInput,
+  type CompleteMergeApplyIntentInput,
+  type MergeApplyIntentBeginResult,
+  type MergeApplyIntentCompleteResult,
+  type MergeApplyIntentId,
+  type MergeApplyIntentIdempotencyKey,
+  type MergeApplyIntentReadResult,
+  type MergeApplyIntentRecord,
+  type MergeApplyIntentStore,
+  cloneIntent,
+  intentsEquivalent,
+  isMergeApplyIntentRecord,
+  mergeApplyIntentStorageKey,
+  objectDigestsEqual,
+} from './merge-apply-intent-store';
+import { normalizeVersionGraphNamespace, versionGraphNamespaceKey, type VersionGraphNamespace } from './object-store';
+import {
+  normalizeVersionDocumentScope,
+  versionDocumentScopeKey,
+  type VersionDocumentScope,
+} from './registry';
+import { INTENTS_STORE } from './provider-indexeddb-schema';
+import { cloneJson, idbRequest, idbTransactionDone } from './provider-indexeddb-internal';
+
+type StoredMergeApplyIntent = {
+  readonly schemaVersion: 1;
+  readonly namespaceKey: string;
+  readonly documentScopeKey: string;
+  readonly operation: 'merge-apply-intent';
+  readonly record: MergeApplyIntentRecord;
+};
+
+export class IndexedDbMergeApplyIntentStore implements MergeApplyIntentStore {
+  readonly namespace: VersionGraphNamespace;
+
+  private readonly documentScopeKey: string;
+  private readonly namespaceKey: string;
+  private readonly getDb: () => Promise<IDBDatabase>;
+
+  constructor(options: {
+    readonly namespace: VersionGraphNamespace;
+    readonly documentScope: VersionDocumentScope;
+    readonly getDb: () => Promise<IDBDatabase>;
+  }) {
+    this.namespace = normalizeVersionGraphNamespace(options.namespace);
+    this.namespaceKey = versionGraphNamespaceKey(this.namespace);
+    this.documentScopeKey = versionDocumentScopeKey(normalizeVersionDocumentScope(options.documentScope));
+    this.getDb = options.getDb;
+  }
+
+  async beginIntent(input: BeginMergeApplyIntentInput): Promise<MergeApplyIntentBeginResult> {
+    const record = this.recordFromInput(input);
+    const key = mergeApplyIntentStorageKey(this.namespace, record.idempotencyKey);
+    try {
+      const db = await this.getDb();
+      const tx = db.transaction(INTENTS_STORE, 'readwrite');
+      const store = tx.objectStore(INTENTS_STORE);
+      const existingRow = await idbRequest<unknown | undefined>(store.get(key));
+      const existing = decodeStoredMergeApplyIntent(existingRow, this.namespaceKey, this.documentScopeKey);
+      if (existing) {
+        await idbTransactionDone(tx);
+        return intentsEquivalent(existing, record)
+          ? { status: 'existing', record: existing, diagnostics: [] }
+          : {
+              status: 'conflict',
+              record: existing,
+              diagnostics: [
+                {
+                  code: 'VERSION_INTENT_CONFLICT',
+                  message: 'Merge apply idempotency key is already bound to a different intent.',
+                  recoverability: 'none',
+                },
+              ],
+            };
+      }
+
+      store.put(storedIntent(record), key);
+      await idbTransactionDone(tx);
+      return { status: 'created', record, diagnostics: [] };
+    } catch {
+      return {
+        status: 'failed',
+        record: null,
+        diagnostics: [
+          {
+            code: 'VERSION_PROVIDER_FAILED',
+            message: 'IndexedDB merge apply intent write failed.',
+            recoverability: 'retry',
+          },
+        ],
+      };
+    }
+  }
+
+  async readByIntentId(intentId: MergeApplyIntentId): Promise<MergeApplyIntentReadResult> {
+    try {
+      const record = await this.findByIntentId(intentId);
+      return record
+        ? { status: 'found', record, diagnostics: [] }
+        : missingRead('Merge apply intent was not found by intent id.');
+    } catch {
+      return failedRead('IndexedDB merge apply intent read failed.');
+    }
+  }
+
+  async readByIdempotencyKey(idempotencyKey: MergeApplyIntentIdempotencyKey): Promise<MergeApplyIntentReadResult> {
+    try {
+      const db = await this.getDb();
+      const row = await idbRequest<unknown | undefined>(
+        db.transaction(INTENTS_STORE, 'readonly')
+          .objectStore(INTENTS_STORE)
+          .get(mergeApplyIntentStorageKey(this.namespace, idempotencyKey)),
+      );
+      const record = decodeStoredMergeApplyIntent(row, this.namespaceKey, this.documentScopeKey);
+      return record
+        ? { status: 'found', record, diagnostics: [] }
+        : missingRead('Merge apply intent was not found by idempotency key.');
+    } catch {
+      return failedRead('IndexedDB merge apply intent read failed.');
+    }
+  }
+
+  async completeIntent(input: CompleteMergeApplyIntentInput): Promise<MergeApplyIntentCompleteResult> {
+    try {
+      const existing = await this.findByIntentId(input.intentId);
+      if (!existing) {
+        return {
+          status: 'missing',
+          record: null,
+          diagnostics: [
+            {
+              code: 'VERSION_INTENT_NOT_FOUND',
+              message: 'Merge apply intent was not found.',
+              recoverability: 'repair',
+            },
+          ],
+        };
+      }
+      if (!objectDigestsEqual(existing.resolvedAttemptDigest, input.resolvedAttemptDigest)) {
+        return {
+          status: 'conflict',
+          record: existing,
+          diagnostics: [
+            {
+              code: 'VERSION_INTENT_CONFLICT',
+              message: 'Merge apply completion did not match the stored resolved attempt digest.',
+              recoverability: 'none',
+            },
+          ],
+        };
+      }
+
+      const completed: MergeApplyIntentRecord = {
+        ...existing,
+        state: 'finalized',
+        updatedAt: input.completedAt,
+        terminal: cloneJson(input.terminal),
+      };
+      const db = await this.getDb();
+      const tx = db.transaction(INTENTS_STORE, 'readwrite');
+      tx.objectStore(INTENTS_STORE).put(storedIntent(completed), mergeApplyIntentStorageKey(this.namespace, completed.idempotencyKey));
+      await idbTransactionDone(tx);
+      return { status: 'completed', record: completed, diagnostics: [] };
+    } catch {
+      return {
+        status: 'failed',
+        record: null,
+        diagnostics: [
+          {
+            code: 'VERSION_PROVIDER_FAILED',
+            message: 'IndexedDB merge apply intent completion failed.',
+            recoverability: 'retry',
+          },
+        ],
+      };
+    }
+  }
+
+  private async findByIntentId(intentId: MergeApplyIntentId): Promise<MergeApplyIntentRecord | null> {
+    const db = await this.getDb();
+    const tx = db.transaction(INTENTS_STORE, 'readonly');
+    const store = tx.objectStore(INTENTS_STORE);
+    const record = await new Promise<MergeApplyIntentRecord | null>((resolve, reject) => {
+      const request = store.index('namespaceKey').openCursor(IDBKeyRange.only(this.namespaceKey));
+      request.onerror = () => reject(request.error ?? new Error('merge apply intent cursor failed'));
+      request.onsuccess = () => {
+        const cursor = request.result;
+        if (!cursor) {
+          resolve(null);
+          return;
+        }
+        const candidate = decodeStoredMergeApplyIntent(
+          cursor.value,
+          this.namespaceKey,
+          this.documentScopeKey,
+        );
+        if (candidate?.intentId === intentId) {
+          resolve(candidate);
+          return;
+        }
+        cursor.continue();
+      };
+    });
+    await idbTransactionDone(tx);
+    return record;
+  }
+
+  private recordFromInput(input: BeginMergeApplyIntentInput): MergeApplyIntentRecord {
+    return cloneIntent({
+      schemaVersion: 1,
+      recordKind: 'mergeApplyIntent',
+      namespaceKey: this.namespaceKey,
+      documentScopeKey: this.documentScopeKey,
+      state: 'staging',
+      updatedAt: input.createdAt,
+      ...input,
+    });
+  }
+}
+
+function storedIntent(record: MergeApplyIntentRecord): StoredMergeApplyIntent {
+  return {
+    schemaVersion: 1,
+    namespaceKey: record.namespaceKey,
+    documentScopeKey: record.documentScopeKey,
+    operation: 'merge-apply-intent',
+    record: cloneJson(record),
+  };
+}
+
+function decodeStoredMergeApplyIntent(
+  value: unknown,
+  namespaceKey: string,
+  documentScopeKey: string,
+): MergeApplyIntentRecord | null {
+  if (!isRecord(value) || value.schemaVersion !== 1 || value.operation !== 'merge-apply-intent') {
+    return null;
+  }
+  if (value.namespaceKey !== namespaceKey || value.documentScopeKey !== documentScopeKey) return null;
+  return isMergeApplyIntentRecord(value.record) ? cloneJson(value.record) : null;
+}
+
+function missingRead(message: string): MergeApplyIntentReadResult {
+  return {
+    status: 'missing',
+    record: null,
+    diagnostics: [{ code: 'VERSION_INTENT_NOT_FOUND', message, recoverability: 'repair' }],
+  };
+}
+
+function failedRead(message: string): MergeApplyIntentReadResult {
+  return {
+    status: 'failed',
+    record: null,
+    diagnostics: [{ code: 'VERSION_PROVIDER_FAILED', message, recoverability: 'retry' }],
+  };
+}
+
+function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
+  return typeof value === 'object' && value !== null;
+}

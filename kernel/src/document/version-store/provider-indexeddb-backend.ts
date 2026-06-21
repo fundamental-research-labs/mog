@@ -82,6 +82,7 @@ import {
   type StoredRegistryEnvelope,
 } from './provider-indexeddb-internal';
 import { graphLoadDiagnostic, loadGraphSnapshot } from './provider-indexeddb-reload';
+import { IndexedDbMergeApplyIntentStore } from './provider-indexeddb-merge-intents';
 
 export const INDEXEDDB_VERSION_STORE_PROVIDER_KIND = 'indexeddb' as const;
 
@@ -334,6 +335,15 @@ export class IndexedDbVersionStoreProvider implements VersionStoreProvider {
       namespace,
       documentScope: this.documentScope,
       accessContext: normalizeVersionAccessContext(accessContext),
+      getDb: () => this.getDb(),
+    });
+  }
+
+  async openMergeApplyIntentStore(namespace: VersionGraphNamespace): Promise<IndexedDbMergeApplyIntentStore> {
+    await this.openGraph(namespace);
+    return new IndexedDbMergeApplyIntentStore({
+      namespace,
+      documentScope: this.documentScope,
       getDb: () => this.getDb(),
     });
   }

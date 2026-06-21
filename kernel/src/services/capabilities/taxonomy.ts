@@ -56,17 +56,6 @@ export const CAPABILITY_IMPLIES: Readonly<
   'undo:write': ['undo:read'],
   'checkpoints:create': ['checkpoints:read'],
   'checkpoints:restore': ['checkpoints:read'],
-  'version:diff': ['version:read'],
-  'version:commit': ['version:read'],
-  'version:branch': ['version:read'],
-  'version:checkout': ['version:branch'],
-  'version:reviewRead': ['version:diff'],
-  'version:reviewWrite': ['version:reviewRead'],
-  'version:proposal': ['version:branch', 'version:reviewWrite'],
-  'version:mergePreview': ['version:diff'],
-  'version:mergeApply': ['version:mergePreview'],
-  'version:revert': ['version:read'],
-  'version:provenance': ['version:read'],
   // Note: clipboard:read and clipboard:write are INDEPENDENT
 
   // =========================================================================

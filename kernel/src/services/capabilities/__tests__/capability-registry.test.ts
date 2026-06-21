@@ -128,14 +128,21 @@ describe('CapabilityRegistry', () => {
       expect(expanded).toContain('cells:read');
     });
 
-    it('should auto-grant version-control dependencies', () => {
+    it('should not auto-grant version-control dependencies', () => {
       registry.grant(testAppId, 'version:mergeApply');
 
       expect(registry.hasCapability(testAppId, 'version:mergeApply')).toBe(true);
-      expect(registry.hasCapability(testAppId, 'version:mergePreview')).toBe(true);
-      expect(registry.hasCapability(testAppId, 'version:diff')).toBe(true);
-      expect(registry.hasCapability(testAppId, 'version:read')).toBe(true);
+      expect(registry.hasCapability(testAppId, 'version:mergePreview')).toBe(false);
+      expect(registry.hasCapability(testAppId, 'version:diff')).toBe(false);
+      expect(registry.hasCapability(testAppId, 'version:read')).toBe(false);
       expect(registry.hasCapability(testAppId, 'version:commit')).toBe(false);
+
+      const expanded = registry.expandCapabilities([
+        'version:mergePreview',
+        'version:mergeApply',
+        'version:branch',
+      ]);
+      expect(expanded).toEqual(['version:mergePreview', 'version:mergeApply', 'version:branch']);
     });
 
     it('should expose VC-08 version capabilities with plan-aligned tier and risk', () => {
@@ -166,9 +173,9 @@ describe('CapabilityRegistry', () => {
       expect(getCapabilityInfo('version:checkout').riskLevel).toBe('high');
       expect(getCapabilityInfo('version:mergeApply').riskLevel).toBe('high');
 
-      expect(capabilityImplies('version:proposal', 'version:reviewRead')).toBe(true);
-      expect(capabilityImplies('version:checkout', 'version:read')).toBe(true);
-      expect(capabilityImplies('version:mergeApply', 'version:diff')).toBe(true);
+      expect(capabilityImplies('version:proposal', 'version:reviewRead')).toBe(false);
+      expect(capabilityImplies('version:checkout', 'version:read')).toBe(false);
+      expect(capabilityImplies('version:mergeApply', 'version:diff')).toBe(false);
     });
   });
 

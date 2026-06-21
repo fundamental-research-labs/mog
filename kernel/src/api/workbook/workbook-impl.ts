@@ -132,6 +132,7 @@ import type {
   WorkbookDiagnostics,
   WorkbookFunctions,
   WorkbookHistory,
+  WorkbookVersion,
   WorkbookNames,
   WorkbookNotifications,
   WorkbookPivotTableStyles,
@@ -149,6 +150,7 @@ import type {
   WorkbookViewport,
 } from '@mog-sdk/contracts/api';
 import { WorkbookHistoryImpl } from './history';
+import { WorkbookVersionImpl } from './version';
 import { WorkbookNamesImpl } from './names';
 import { WorkbookNotificationsImpl } from './notifications';
 import { WorkbookPropertiesImpl } from './properties';
@@ -1822,6 +1824,11 @@ export class WorkbookImpl implements WorkbookInternal {
       ctx: this.ctx,
       refreshSheetMetadata: () => this.refreshSheetMetadata(),
     }));
+  }
+
+  private _version?: WorkbookVersionImpl;
+  get version(): WorkbookVersion {
+    return (this._version ??= new WorkbookVersionImpl(this.ctx));
   }
 
   private _tableStyles?: WorkbookTableStylesImpl;

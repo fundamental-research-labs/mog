@@ -6,6 +6,19 @@
 
 export type { WorkbookHistory } from './history';
 export type {
+  WorkbookVersion,
+  WorkbookVersionCapabilityStage,
+  WorkbookVersionCapabilityStatus,
+  WorkbookVersionDependency,
+  WorkbookVersionDiagnostic,
+  WorkbookVersionDiagnosticCode,
+  WorkbookVersionDiagnosticSeverity,
+  WorkbookVersionHead,
+  WorkbookVersionHeadStatus,
+  WorkbookVersionRolloutStage,
+  WorkbookVersionStatus,
+} from './version';
+export type {
   FormulaReferenceDiagnostic,
   FormulaReferenceDiagnosticsOptions,
   FormulaReferenceDiagnosticsPage,

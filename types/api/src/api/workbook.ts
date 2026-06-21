@@ -55,6 +55,7 @@ import type { LinkStatus, LinkStatusReason, LinkStatusView } from './receipt-pay
 import type { CultureInfo } from '@mog/types-culture/types';
 import type {
   WorkbookHistory,
+  WorkbookVersion,
   WorkbookNames,
   WorkbookNotifications,
   WorkbookProperties,
@@ -765,6 +766,8 @@ export interface Workbook {
   readonly scenarios: WorkbookScenarios;
   /** Undo/redo/history traversal */
   readonly history: WorkbookHistory;
+  /** Version-control status and read-only diagnostics. */
+  readonly version: WorkbookVersion;
   /** Table style management (add, get, update, remove, default, duplicate) */
   readonly tableStyles: WorkbookTableStyles;
   /** Cell style management (add, get, update, remove) */

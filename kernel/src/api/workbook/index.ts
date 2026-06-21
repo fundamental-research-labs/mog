@@ -7,6 +7,7 @@
  */
 
 export { WorkbookHistoryImpl } from './history';
+export { WorkbookVersionImpl } from './version';
 export { WorkbookNamesImpl } from './names';
 export { WorkbookNotificationsImpl } from './notifications';
 export { WorkbookPropertiesImpl } from './properties';

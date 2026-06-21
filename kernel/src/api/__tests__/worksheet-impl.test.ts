@@ -753,7 +753,14 @@ describe('WorksheetImpl', () => {
       ];
       await ws.setRange('A1:B2', values);
 
-      expect(RangeOps.setRange).toHaveBeenCalledWith(ctx, SHEET_ID, 0, 0, values);
+      expect(RangeOps.setRange).toHaveBeenCalledWith(
+        ctx,
+        SHEET_ID,
+        0,
+        0,
+        values,
+        expectVersionOperationOptions('worksheet.setRange', ['cells']),
+      );
     });
 
     it('setRange(0, 0, values) uses numeric path', async () => {
@@ -762,7 +769,14 @@ describe('WorksheetImpl', () => {
       const values = [[1, 2]];
       await ws.setRange(0, 0, values);
 
-      expect(RangeOps.setRange).toHaveBeenCalledWith(ctx, SHEET_ID, 0, 0, values);
+      expect(RangeOps.setRange).toHaveBeenCalledWith(
+        ctx,
+        SHEET_ID,
+        0,
+        0,
+        values,
+        expectVersionOperationOptions('worksheet.setRange', ['cells']),
+      );
     });
 
     it('setRange throws KernelError on failure', async () => {

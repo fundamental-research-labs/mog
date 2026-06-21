@@ -25,6 +25,7 @@ import { prepareExternalFormulaWrite } from '../../../services/external-formulas
 import type { CellData, CellRange, CellValue, CellValuePrimitive, DocumentContext } from './shared';
 import { invalidRange, isValidAddress, isValidRange } from './shared';
 import { toCellInput } from './cell-input';
+import type { MutationAdmissionOptions } from '../../../bridges/compute';
 
 // Re-export validation utilities from types for convenience
 export { isValidAddress, isValidRange } from './shared';
@@ -292,6 +293,7 @@ export async function setRange(
   startRow: number,
   startCol: number,
   values: CellValuePrimitive[][],
+  options?: MutationAdmissionOptions,
 ): Promise<void> {
   if (!isValidAddress(startRow, startCol)) {
     throw KernelError.from(
@@ -321,7 +323,11 @@ export async function setRange(
   }
 
   await ctx.awaitMaterialized?.('allSheets');
-  await ctx.computeBridge.setCellsByPosition(sheetId, edits);
+  if (options) {
+    await ctx.computeBridge.setCellsByPosition(sheetId, edits, options);
+  } else {
+    await ctx.computeBridge.setCellsByPosition(sheetId, edits);
+  }
 }
 
 /**

@@ -161,6 +161,30 @@ describe('setRange', () => {
     ]);
   });
 
+  it('passes mutation admission options to setCellsByPosition', async () => {
+    const ctx = createMockCtx();
+    const options = {
+      operationContext: {
+        operationId: 'worksheet.setRange:1',
+        kind: 'mutation',
+        author: { authorId: 'user-1', actorKind: 'user' },
+        createdAt: '2026-06-20T00:00:00.000Z',
+        sheetIds: [SHEET_ID],
+        domainIds: ['cells'],
+        capturePolicy: 'commitEligible',
+        writeAdmissionMode: 'capture',
+      },
+    };
+
+    await RangeOps.setRange(ctx, SHEET_ID, 0, 0, [['hello']], options as any);
+
+    expect(ctx.computeBridge.setCellsByPosition).toHaveBeenCalledWith(
+      SHEET_ID,
+      [{ row: 0, col: 0, input: { kind: 'parse', text: 'hello' } }],
+      options,
+    );
+  });
+
   it('throws on invalid start address', async () => {
     const ctx = createMockCtx();
     await expect(RangeOps.setRange(ctx, SHEET_ID, -1, 0, [['x']])).rejects.toThrow();

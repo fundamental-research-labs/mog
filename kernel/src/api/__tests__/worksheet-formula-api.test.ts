@@ -349,9 +349,12 @@ describe('Worksheet formula API ergonomics', () => {
     const result = await ws.setCells([{ cell: 'B2', formula: 'SUM(A1:A3)' }]);
 
     expect(result).toEqual({ cellsWritten: 1, errors: null });
-    expect(CellOps.setCells).toHaveBeenCalledWith(ctx, SHEET_ID, [
-      { address: 'B2', value: '=SUM(A1:A3)' },
-    ]);
+    expect(CellOps.setCells).toHaveBeenCalledWith(
+      ctx,
+      SHEET_ID,
+      [{ address: 'B2', value: '=SUM(A1:A3)' }],
+      expectVersionOperationOptions('worksheet.setCells', ['cells']),
+    );
 
     jest.clearAllMocks();
     await expect(
@@ -380,7 +383,14 @@ describe('Worksheet formula API ergonomics', () => {
 
     await ws.setFormulas('A1:B1', [['SUM(C1:C3)', '=D1*2']]);
 
-    expect(RangeOps.setRange).toHaveBeenCalledWith(ctx, SHEET_ID, 0, 0, [['=SUM(C1:C3)', '=D1*2']]);
+    expect(RangeOps.setRange).toHaveBeenCalledWith(
+      ctx,
+      SHEET_ID,
+      0,
+      0,
+      [['=SUM(C1:C3)', '=D1*2']],
+      expectVersionOperationOptions('worksheet.setFormulas', ['cells']),
+    );
   });
 
   it('setFormulas rejects missing or malformed formula grids with exact paths', async () => {

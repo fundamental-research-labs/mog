@@ -904,7 +904,13 @@ export class WorksheetImpl implements Worksheet {
       endRow: startRow + values.length - 1,
       endCol: startCol + (values[0]?.length ?? 1) - 1,
     });
-    await RangeOps.setRange(this.ctx, this.sheetId, startRow, startCol, values);
+    await RangeOps.setRange(this.ctx, this.sheetId, startRow, startCol, values, {
+      operationContext: createVersionOperationContext(this.ctx, {
+        operationIdPrefix: 'worksheet.setFormulas',
+        sheetIds: [this.sheetId],
+        domainIds: ['cells'],
+      }),
+    });
   }
 
   /**
@@ -1333,7 +1339,13 @@ export class WorksheetImpl implements Worksheet {
       endRow: startRow + values.length - 1,
       endCol: startCol + (values[0]?.length ?? 1) - 1,
     });
-    await RangeOps.setRange(this.ctx, this.sheetId, startRow, startCol, values);
+    await RangeOps.setRange(this.ctx, this.sheetId, startRow, startCol, values, {
+      operationContext: createVersionOperationContext(this.ctx, {
+        operationIdPrefix: 'worksheet.setRange',
+        sheetIds: [this.sheetId],
+        domainIds: ['cells'],
+      }),
+    });
   }
 
   /**

@@ -1,4 +1,5 @@
 import type { DocumentContext } from '../../context';
+import { createProviderBackedCheckoutMaterializationService } from '../../document/version-store/checkout-provider-service';
 import { createWorkbookVersionCommitService } from '../../document/version-store/commit-service';
 import { createWorkbookVersionDiffService } from '../../document/version-store/diff-service';
 import type { WorkbookVersioningConfig } from './types';
@@ -27,12 +28,24 @@ export function attachWorkbookVersioning(
     existing.diffService ??
     existing.versionDiffService ??
     (config.provider ? createWorkbookVersionDiffService({ provider: config.provider }) : undefined);
+  const checkoutService =
+    existing.checkoutService ??
+    existing.checkoutMaterializationService ??
+    (config.provider
+      ? createProviderBackedCheckoutMaterializationService({
+          provider: config.provider,
+          ...(config.checkoutSnapshotMaterializer
+            ? { snapshotMaterializer: config.checkoutSnapshotMaterializer }
+            : {}),
+        })
+      : undefined);
   runtime.versioning = {
     ...existing,
     ...(config.provider ? { provider: config.provider } : {}),
     writeService,
     readService: existing.readService ?? writeService,
     ...(diffService ? { diffService } : {}),
+    ...(checkoutService ? { checkoutService } : {}),
   };
 }
 

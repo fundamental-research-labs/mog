@@ -18,11 +18,13 @@ import {
   type VersionGraphSymbolicRef,
   type VersionGraphWriteResult,
 } from './graph-store';
-import type { WorkbookCommitId } from './object-digest';
+import type { ReadWorkbookCommitResult } from './commit-store';
+import type { VersionDependencyRef, WorkbookCommitId } from './object-digest';
 import {
   normalizeVersionGraphNamespace,
   versionGraphNamespaceKey,
   type VersionGraphNamespace,
+  type VersionObjectRecord,
 } from './object-store';
 import {
   InMemoryVersionDocumentProviderBackend,
@@ -231,6 +233,9 @@ export interface VersionGraphStore {
   readonly namespace: VersionGraphNamespace;
   initializeGraph(input: InitializeVersionGraphInput): Promise<VersionGraphWriteResult>;
   commit(input: CommitVersionGraphInput): Promise<VersionGraphWriteResult>;
+  readCommit(commitId: WorkbookCommitId | string): Promise<ReadWorkbookCommitResult>;
+  getObjectRecord<TPayload>(ref: VersionDependencyRef): Promise<VersionObjectRecord<TPayload>>;
+  hasObject(ref: VersionDependencyRef): Promise<boolean>;
   readHead(): Promise<VersionGraphReadHeadResult>;
   readRef(name: VersionGraphRefSelector | string): Promise<VersionGraphReadRefResult>;
   listCommits(options?: VersionGraphListCommitsOptions): Promise<VersionGraphCommitPageResult>;

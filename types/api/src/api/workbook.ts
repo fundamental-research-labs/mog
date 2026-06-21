@@ -89,6 +89,7 @@ export type {
   VersionBranchSelector,
   VersionCheckoutDependencyRole,
   VersionCheckoutDependencySummary,
+  VersionCheckoutMutationGuarantee,
   VersionCheckoutOptions,
   VersionCheckoutPlan,
   VersionCheckoutResolvedTarget,

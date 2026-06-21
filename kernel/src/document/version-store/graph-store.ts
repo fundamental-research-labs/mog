@@ -1,6 +1,7 @@
 import {
   objectDigestFromWorkbookCommitId,
   parseWorkbookCommitId,
+  type VersionDependencyRef,
   type WorkbookCommitId,
 } from './object-digest';
 import {
@@ -16,6 +17,7 @@ import {
   createInMemoryWorkbookCommitStore,
   type CreateWorkbookCommitInput,
   type InMemoryWorkbookCommitStore,
+  type ReadWorkbookCommitResult,
   type WorkbookCommit,
   type WorkbookCommitStoreDiagnostic,
 } from './commit-store';
@@ -317,6 +319,20 @@ export class InMemoryVersionGraphStore {
     }
 
     return successWrite(created.commit, advanced.ref);
+  }
+
+  async readCommit(commitId: WorkbookCommitId | string): Promise<ReadWorkbookCommitResult> {
+    return this.commitStore.readCommit(commitId);
+  }
+
+  async getObjectRecord<TPayload>(
+    ref: VersionDependencyRef,
+  ): Promise<VersionObjectRecord<TPayload>> {
+    return this.objectStore.getObjectRecord(ref);
+  }
+
+  async hasObject(ref: VersionDependencyRef): Promise<boolean> {
+    return this.objectStore.hasObject(ref);
   }
 
   async readHead(): Promise<VersionGraphReadHeadResult> {

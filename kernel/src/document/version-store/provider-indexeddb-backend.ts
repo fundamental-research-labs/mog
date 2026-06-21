@@ -45,8 +45,14 @@ import {
   normalizeVersionGraphNamespace,
   versionGraphNamespaceKey,
   type VersionGraphNamespace,
+  type VersionObjectRecord,
 } from './object-store';
-import { parseWorkbookCommitId, type WorkbookCommitId } from './object-digest';
+import type { ReadWorkbookCommitResult } from './commit-store';
+import {
+  parseWorkbookCommitId,
+  type VersionDependencyRef,
+  type WorkbookCommitId,
+} from './object-digest';
 import { REGISTRIES_STORE, openVersionStoreIndexedDb } from './provider-indexeddb-schema';
 import {
   RefCasConflictError,
@@ -687,6 +693,51 @@ class IndexedDbVersionGraphStore implements VersionGraphStore {
         'ref-not-mutated',
       );
     }
+  }
+
+  async readCommit(commitId: WorkbookCommitId | string): Promise<ReadWorkbookCommitResult> {
+    let parsedCommitId: WorkbookCommitId;
+    try {
+      parsedCommitId = parseWorkbookCommitId(commitId);
+    } catch {
+      return {
+        status: 'failed',
+        diagnostics: [
+          {
+            code: 'VERSION_INVALID_COMMIT_ID',
+            severity: 'error',
+            message: 'Commit id must be commit:sha256:<64 hex>.',
+          },
+        ],
+      };
+    }
+
+    try {
+      return await (await this.loadGraph('readCommit')).readCommit(parsedCommitId);
+    } catch (error) {
+      return {
+        status: 'failed',
+        diagnostics: [
+          {
+            code: 'VERSION_OBJECT_STORE_FAILURE',
+            severity: 'error',
+            message: 'IndexedDB graph could not be loaded while reading commit.',
+            commitId: parsedCommitId,
+            details: { cause: errorMessage(error) },
+          },
+        ],
+      };
+    }
+  }
+
+  async getObjectRecord<TPayload>(
+    ref: VersionDependencyRef,
+  ): Promise<VersionObjectRecord<TPayload>> {
+    return (await this.loadGraph('getObjectRecord')).getObjectRecord<TPayload>(ref);
+  }
+
+  async hasObject(ref: VersionDependencyRef): Promise<boolean> {
+    return (await this.loadGraph('hasObject')).hasObject(ref);
   }
 
   async readHead(): Promise<VersionGraphReadHeadResult> {

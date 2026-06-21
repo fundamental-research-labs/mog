@@ -46,6 +46,7 @@ type VersionCheckoutOperation = 'checkout';
 
 type AttachedCheckoutMaterializationService = {
   planCheckout?: (request: CheckoutMaterializationRequest) => MaybePromise<unknown>;
+  checkout?: (request: CheckoutMaterializationRequest) => MaybePromise<unknown>;
 };
 
 type MaybeVersionRuntimeContext = DocumentContext & {
@@ -81,12 +82,22 @@ export async function checkoutWorkbookVersion(
   }
 
   const service = getAttachedCheckoutMaterializationService(ctx);
-  if (!service?.planCheckout) {
+  if (!service?.planCheckout && !service?.checkout) {
     return degradedCheckout([serviceUnavailableDiagnostic(parsed.payload)]);
   }
 
   try {
-    return mapCheckoutResult(await service.planCheckout(parsed.request), parsed.payload);
+    const planCheckout = service.planCheckout;
+    if (service.checkout) {
+      const checkoutResult = await service.checkout(parsed.request);
+      if (!isMaterializerUnavailableResult(checkoutResult) || !planCheckout) {
+        return mapCheckoutResult(checkoutResult, parsed.payload);
+      }
+    }
+    if (!planCheckout) {
+      return degradedCheckout([serviceUnavailableDiagnostic(parsed.payload)]);
+    }
+    return mapCheckoutResult(await planCheckout(parsed.request), parsed.payload);
   } catch {
     return degradedCheckout([providerErrorDiagnostic(parsed.payload)]);
   }
@@ -118,10 +129,12 @@ function toCheckoutMaterializationService(
   value: unknown,
 ): AttachedCheckoutMaterializationService | null {
   const planCheckout = bindMethod(value, 'planCheckout');
-  if (!planCheckout) return null;
+  const checkout = bindMethod(value, 'checkout');
+  if (!planCheckout && !checkout) return null;
 
   return {
-    planCheckout: (request) => planCheckout(request),
+    ...(planCheckout ? { planCheckout: (request) => planCheckout(request) } : {}),
+    ...(checkout ? { checkout: (request) => checkout(request) } : {}),
   };
 }
 
@@ -321,6 +334,15 @@ function mapCheckoutResult(
     if (!plan) {
       return degradedCheckout([invalidPayloadDiagnostic(fallbackPayload)]);
     }
+    if (value.materialization === 'applied') {
+      return {
+        status: 'success',
+        materialization: 'applied',
+        plan,
+        diagnostics: mapCheckoutDiagnostics(value.diagnostics, fallbackPayload),
+        mutationGuarantee: 'workbook-state-materialized',
+      };
+    }
     return {
       status: 'success',
       materialization: 'planned',
@@ -340,6 +362,9 @@ function mapCheckoutResult(
             : undefined,
         fallbackPayload,
       ),
+      value.mutationGuarantee === 'unknown-after-partial-mutation'
+        ? 'unknown-after-partial-mutation'
+        : 'no-workbook-mutation',
     );
   }
 
@@ -445,6 +470,17 @@ function mapCheckoutDiagnostics(
 ): readonly VersionStoreDiagnostic[] {
   if (!Array.isArray(value) || value.length === 0) return [];
   return value.map((entry) => mapCheckoutDiagnostic(entry, fallbackPayload));
+}
+
+function isMaterializerUnavailableResult(value: unknown): boolean {
+  if (!isRecord(value) || value.ok !== false) return false;
+  if (isRecord(value.error) && value.error.code === 'checkoutMaterializerUnavailable') {
+    return true;
+  }
+  const diagnostics = Array.isArray(value.diagnostics) ? value.diagnostics : [];
+  return diagnostics.some(
+    (entry) => isRecord(entry) && entry.code === 'VERSION_CHECKOUT_MATERIALIZER_UNAVAILABLE',
+  );
 }
 
 function mapCheckoutDiagnostic(
@@ -620,6 +656,12 @@ function safeMessageForIssue(issueCode: string): string {
       return 'The target commit is missing required checkout materialization dependencies.';
     case 'VERSION_CHECKOUT_DEPENDENCY_READ_FAILED':
       return 'The checkout service could not preflight materialization dependencies.';
+    case 'VERSION_CHECKOUT_MATERIALIZER_UNAVAILABLE':
+      return 'No document-scoped checkout snapshot materializer is attached for this target.';
+    case 'VERSION_CHECKOUT_SNAPSHOT_READ_FAILED':
+      return 'The checkout service could not read the target snapshot root.';
+    case 'VERSION_CHECKOUT_SNAPSHOT_APPLY_FAILED':
+      return 'The checkout snapshot materializer could not apply the target snapshot.';
     default:
       return 'The checkout materialization service could not complete checkout planning.';
   }
@@ -631,6 +673,7 @@ function recoverabilityForIssue(issueCode: string): VersionStoreDiagnostic['reco
     case 'VERSION_CHECKOUT_COMMIT_READ_FAILED':
     case 'VERSION_CHECKOUT_DEPENDENCY_READ_FAILED':
     case 'VERSION_CHECKOUT_PROVIDER_ERROR':
+    case 'VERSION_CHECKOUT_SNAPSHOT_READ_FAILED':
       return 'retry';
     case 'VERSION_CHECKOUT_MISSING_COMMIT':
     case 'VERSION_CHECKOUT_MISSING_DEPENDENCY':
@@ -643,7 +686,10 @@ function recoverabilityForIssue(issueCode: string): VersionStoreDiagnostic['reco
     case 'VERSION_CHECKOUT_MISSING_HEAD_READER':
     case 'VERSION_CHECKOUT_MISSING_REF':
     case 'VERSION_CHECKOUT_SERVICE_UNAVAILABLE':
+    case 'VERSION_CHECKOUT_MATERIALIZER_UNAVAILABLE':
       return 'unsupported';
+    case 'VERSION_CHECKOUT_SNAPSHOT_APPLY_FAILED':
+      return 'repair';
     default:
       return 'none';
   }
@@ -651,13 +697,14 @@ function recoverabilityForIssue(issueCode: string): VersionStoreDiagnostic['reco
 
 function degradedCheckout(
   diagnostics: readonly VersionStoreDiagnostic[],
+  mutationGuarantee: 'no-workbook-mutation' | 'unknown-after-partial-mutation' = 'no-workbook-mutation',
 ): VersionCheckoutResult {
   return {
     status: 'degraded',
     materialization: 'not-applied',
     plan: null,
     diagnostics,
-    mutationGuarantee: 'no-workbook-mutation',
+    mutationGuarantee,
   };
 }
 

@@ -11,9 +11,17 @@ import type {
   WorkbookCommitCompletenessDiagnostic,
   WorkbookCommitStoreDiagnostic,
 } from './commit-store';
+import type { VersionGraphStoreDiagnostic } from './graph-store';
 import { validateRefName, type RefName, type RefNameDiagnostic } from './ref-name';
 import type { GetRefResult, RefVersion, VersionDiagnostic } from './ref-store';
 import type { VersionObjectStoreDiagnostic } from './object-store';
+import type { VersionStoreDiagnostic as ProviderVersionStoreDiagnostic } from './provider';
+import {
+  applyCheckoutMaterializationPlan,
+  type CheckoutMaterializationMutationGuarantee,
+  type CheckoutSnapshotMaterializer,
+  type CheckoutSnapshotReader,
+} from './checkout-apply';
 
 type MaybePromise<T> = T | Promise<T>;
 
@@ -36,7 +44,11 @@ export type CheckoutMaterializationErrorCode =
   | 'checkoutDependencyMissing'
   | 'checkoutCommitReadFailed'
   | 'checkoutRefReadFailed'
-  | 'checkoutDependencyReadFailed';
+  | 'checkoutDependencyReadFailed'
+  | 'checkoutProviderUnavailable'
+  | 'checkoutSnapshotReadFailed'
+  | 'checkoutMaterializerUnavailable'
+  | 'checkoutSnapshotApplyFailed';
 
 export type CheckoutMaterializationDiagnosticCode =
   | 'VERSION_CHECKOUT_INVALID_TARGET'
@@ -52,7 +64,11 @@ export type CheckoutMaterializationDiagnosticCode =
   | 'VERSION_CHECKOUT_COMMIT_COMPLETENESS_DIAGNOSTIC'
   | 'VERSION_CHECKOUT_UNMATERIALIZABLE_COMMIT'
   | 'VERSION_CHECKOUT_MISSING_DEPENDENCY'
-  | 'VERSION_CHECKOUT_DEPENDENCY_READ_FAILED';
+  | 'VERSION_CHECKOUT_DEPENDENCY_READ_FAILED'
+  | 'VERSION_CHECKOUT_PROVIDER_ERROR'
+  | 'VERSION_CHECKOUT_SNAPSHOT_READ_FAILED'
+  | 'VERSION_CHECKOUT_MATERIALIZER_UNAVAILABLE'
+  | 'VERSION_CHECKOUT_SNAPSHOT_APPLY_FAILED';
 
 export type CheckoutMaterializationDiagnosticSource =
   | CheckoutMaterializationDiagnostic
@@ -60,7 +76,9 @@ export type CheckoutMaterializationDiagnosticSource =
   | WorkbookCommitStoreDiagnostic
   | RefNameDiagnostic
   | VersionDiagnostic
-  | VersionObjectStoreDiagnostic;
+  | VersionObjectStoreDiagnostic
+  | VersionGraphStoreDiagnostic
+  | ProviderVersionStoreDiagnostic;
 
 export interface CheckoutMaterializationDiagnostic {
   readonly code: CheckoutMaterializationDiagnosticCode;
@@ -128,6 +146,8 @@ export interface CheckoutMaterializationServiceOptions {
   readonly dependencyReader: CheckoutDependencyReader;
   readonly headReader?: CheckoutHeadReader;
   readonly refReader?: CheckoutRefReader;
+  readonly snapshotReader?: CheckoutSnapshotReader;
+  readonly snapshotMaterializer?: CheckoutSnapshotMaterializer;
 }
 
 export type CheckoutMaterializationDependencyRole =
@@ -179,15 +199,26 @@ export interface CheckoutMaterializationPlan {
 export type CheckoutMaterializationResult =
   | {
       readonly ok: true;
+      readonly materialization: 'planned';
       readonly plan: CheckoutMaterializationPlan;
       readonly diagnostics: readonly CheckoutMaterializationDiagnostic[];
       readonly mutationGuarantee: 'no-workbook-mutation';
     }
   | {
+      readonly ok: true;
+      readonly materialization: 'applied';
+      readonly plan: CheckoutMaterializationPlan;
+      readonly diagnostics: readonly CheckoutMaterializationDiagnostic[];
+      readonly mutationGuarantee: 'workbook-state-materialized';
+    }
+  | {
       readonly ok: false;
       readonly error: CheckoutMaterializationError;
       readonly diagnostics: readonly CheckoutMaterializationDiagnostic[];
-      readonly mutationGuarantee: 'no-workbook-mutation';
+      readonly mutationGuarantee: Extract<
+        CheckoutMaterializationMutationGuarantee,
+        'no-workbook-mutation' | 'unknown-after-partial-mutation'
+      >;
     };
 
 type ParsedCheckoutRequest =
@@ -227,12 +258,16 @@ export class CheckoutMaterializationService {
   private readonly dependencyReader: CheckoutDependencyReader;
   private readonly headReader?: CheckoutHeadReader;
   private readonly refReader?: CheckoutRefReader;
+  private readonly snapshotReader?: CheckoutSnapshotReader;
+  private readonly snapshotMaterializer?: CheckoutSnapshotMaterializer;
 
   constructor(options: CheckoutMaterializationServiceOptions) {
     this.commitReader = options.commitReader;
     this.dependencyReader = options.dependencyReader;
     this.headReader = options.headReader;
     this.refReader = options.refReader;
+    this.snapshotReader = options.snapshotReader;
+    this.snapshotMaterializer = options.snapshotMaterializer;
   }
 
   async planCheckout(
@@ -306,10 +341,31 @@ export class CheckoutMaterializationService {
 
     return {
       ok: true,
+      materialization: 'planned',
       plan,
       diagnostics,
       mutationGuarantee: 'no-workbook-mutation',
     };
+  }
+
+  async checkout(
+    request: CheckoutMaterializationRequest,
+  ): Promise<CheckoutMaterializationResult> {
+    const planned = await this.planCheckout(request);
+    if (!planned.ok) return planned;
+    return this.applyPlan(planned.plan, planned.diagnostics);
+  }
+
+  private async applyPlan(
+    plan: CheckoutMaterializationPlan,
+    preflightDiagnostics: readonly CheckoutMaterializationDiagnostic[],
+  ): Promise<CheckoutMaterializationResult> {
+    return applyCheckoutMaterializationPlan({
+      plan,
+      preflightDiagnostics,
+      snapshotReader: this.snapshotReader,
+      snapshotMaterializer: this.snapshotMaterializer,
+    });
   }
 
   private async resolveTarget(

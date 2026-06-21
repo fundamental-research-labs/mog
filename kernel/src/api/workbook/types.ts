@@ -25,6 +25,7 @@ import type {
   VersionNormalCommitCapture,
   WorkbookVersionCommitService,
 } from '../../document/version-store/commit-service';
+import type { CheckoutSnapshotMaterializer } from '../../document/version-store/checkout-apply';
 import type { VersionStoreProvider } from '../../document/version-store/provider';
 import type { DocumentWorkbookVersioningLifecycleConfig } from '../../document/version-store/lifecycle';
 import type { HandleLiveness } from '../lifecycle/handle-liveness';
@@ -52,6 +53,7 @@ export interface WorkbookVersioningConfig {
     'readHead' | 'readRef' | 'listCommits' | 'commit'
   >;
   readonly captureNormalCommit?: VersionNormalCommitCapture;
+  readonly checkoutSnapshotMaterializer?: CheckoutSnapshotMaterializer;
 }
 
 // =============================================================================

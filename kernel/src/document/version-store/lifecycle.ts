@@ -1,4 +1,5 @@
 import type { VersionNormalCommitCapture, WorkbookVersionCommitService } from './commit-service';
+import type { CheckoutSnapshotMaterializer } from './checkout-apply';
 import {
   namespaceForDocumentScope,
   type VersionGraphInitializeInput,
@@ -30,6 +31,7 @@ export type ResolvedWorkbookVersioningConfig = {
     'readHead' | 'readRef' | 'listCommits' | 'commit'
   >;
   readonly captureNormalCommit?: VersionNormalCommitCapture;
+  readonly checkoutSnapshotMaterializer?: CheckoutSnapshotMaterializer;
 };
 
 export type VersionStoreLifecycleProviderSelection = {
@@ -143,6 +145,7 @@ export async function resolveDocumentWorkbookVersioningLifecycle(input: {
       provider,
       captureNormalCommit: config.captureNormalCommit,
       writeService: config.writeService,
+      checkoutSnapshotMaterializer: config.checkoutSnapshotMaterializer,
     },
     diagnostics,
   };

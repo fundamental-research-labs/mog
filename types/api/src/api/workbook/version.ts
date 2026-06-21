@@ -28,6 +28,7 @@ export type WorkbookVersionDiagnosticCode =
   | 'version.commitApi.pending'
   | 'version.commitApi.serviceAttached'
   | 'version.checkout.pending'
+  | 'version.checkout.serviceAttached'
   | 'version.merge.pending'
   | 'version.provenanceAdmission.present'
   | 'version.provenanceAdmission.unavailable'
@@ -118,6 +119,9 @@ export type VersionDiagnosticCode =
   | 'VERSION_CHECKOUT_MISSING_HEAD_READER'
   | 'VERSION_CHECKOUT_MISSING_REF'
   | 'VERSION_CHECKOUT_MISSING_REF_READER'
+  | 'VERSION_CHECKOUT_MATERIALIZER_UNAVAILABLE'
+  | 'VERSION_CHECKOUT_SNAPSHOT_APPLY_FAILED'
+  | 'VERSION_CHECKOUT_SNAPSHOT_READ_FAILED'
   | 'VERSION_CHECKOUT_PROVIDER_ERROR'
   | 'VERSION_CHECKOUT_REF_READ_FAILED'
   | 'VERSION_CHECKOUT_SERVICE_UNAVAILABLE'
@@ -347,6 +351,11 @@ export interface VersionCheckoutPlan {
   readonly requiredDependencyCount: number;
 }
 
+export type VersionCheckoutMutationGuarantee =
+  | 'no-workbook-mutation'
+  | 'workbook-state-materialized'
+  | 'unknown-after-partial-mutation';
+
 export type VersionCheckoutResult =
   | {
       readonly status: 'success';
@@ -356,11 +365,21 @@ export type VersionCheckoutResult =
       readonly mutationGuarantee: 'no-workbook-mutation';
     }
   | {
+      readonly status: 'success';
+      readonly materialization: 'applied';
+      readonly plan: VersionCheckoutPlan;
+      readonly diagnostics: readonly VersionStoreDiagnostic[];
+      readonly mutationGuarantee: 'workbook-state-materialized';
+    }
+  | {
       readonly status: 'degraded';
       readonly materialization: 'not-applied';
       readonly plan: null;
       readonly diagnostics: readonly VersionStoreDiagnostic[];
-      readonly mutationGuarantee: 'no-workbook-mutation';
+      readonly mutationGuarantee: Exclude<
+        VersionCheckoutMutationGuarantee,
+        'workbook-state-materialized'
+      >;
     };
 
 export type VersionSemanticValue =

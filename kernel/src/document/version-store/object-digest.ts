@@ -9,6 +9,9 @@ export const VERSION_OBJECT_TYPES = Object.freeze([
   'workbook.authorizationSnapshot.v1',
   'workbook.opaqueDescriptor.v1',
   'workbook.reviewExtension.v1',
+  'workbook.mergePreview.v1',
+  'workbook.mergeResolutionSet.v1',
+  'workbook.resolvedMergeAttempt.v1',
 ] as const);
 
 export type VersionObjectType = (typeof VERSION_OBJECT_TYPES)[number];

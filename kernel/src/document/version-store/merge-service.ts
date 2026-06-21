@@ -23,18 +23,8 @@ import {
   stableMergeConflictIdentity,
   stableMergeResolutionOptions,
 } from './merge-preview-evidence';
-import {
-  computeEmptyResolutionSetDigest,
-  computeMergeApplyResultDigest,
-  computeResolvedAttemptDigest,
-  hasMergeApplyIntentStoreProvider,
-  idempotencyKeyForResolvedAttempt,
-  intentIdForResolvedAttemptDigest,
-  mergeResultIdForResolvedAttemptDigest,
-  type MergeApplyIntentApplyKind,
-  type MergeApplyIntentStoreDiagnostic,
-} from './merge-apply-intent-store';
 import { VersionObjectStoreError } from './object-store';
+import { persistMergeAttemptIfRequested } from './merge-service-persistence';
 import {
   VersionStoreProviderError,
   type VersionGraphStore,
@@ -132,10 +122,22 @@ export class WorkbookVersionMergeService {
     if (!theirs.ok) return blocked(input, theirs.diagnostics);
 
     if (input.ours === input.theirs || commitClosureContains(ours.commit, input.theirs)) {
-      return this.persistMergeAttemptIfRequested(alreadyMerged(input), options, opened.namespace);
+      return persistMergeAttemptIfRequested({
+        provider: this.provider,
+        graph: opened.graph,
+        namespace: opened.namespace,
+        result: alreadyMerged(input),
+        options,
+      });
     }
     if (commitClosureContains(theirs.commit, input.ours)) {
-      return this.persistMergeAttemptIfRequested(fastForward(input), options, opened.namespace);
+      return persistMergeAttemptIfRequested({
+        provider: this.provider,
+        graph: opened.graph,
+        namespace: opened.namespace,
+        result: fastForward(input),
+        options,
+      });
     }
 
     const oursAncestry = directChildDiagnostic(input.base, ours.commit.commit, 'ours');
@@ -171,112 +173,40 @@ export class WorkbookVersionMergeService {
     if (!classified.ok) return blocked(input, classified.diagnostics);
 
     if (classified.conflicts.length > 0) {
-      return this.persistMergeAttemptIfRequested({
-        status: 'conflicted',
+      return persistMergeAttemptIfRequested({
+        provider: this.provider,
+        graph: opened.graph,
+        namespace: opened.namespace,
+        result: {
+          status: 'conflicted',
+          base: input.base,
+          ours: input.ours,
+          theirs: input.theirs,
+          changes: classified.changes,
+          conflicts: classified.conflicts,
+          diagnostics: [],
+          mutationGuarantee: 'preview-only',
+        },
+        options,
+      });
+    }
+
+    return persistMergeAttemptIfRequested({
+      provider: this.provider,
+      graph: opened.graph,
+      namespace: opened.namespace,
+      result: {
+        status: 'clean',
         base: input.base,
         ours: input.ours,
         theirs: input.theirs,
         changes: classified.changes,
-        conflicts: classified.conflicts,
+        conflicts: [],
         diagnostics: [],
         mutationGuarantee: 'preview-only',
-      }, options, opened.namespace);
-    }
-
-    return this.persistMergeAttemptIfRequested({
-      status: 'clean',
-      base: input.base,
-      ours: input.ours,
-      theirs: input.theirs,
-      changes: classified.changes,
-      conflicts: [],
-      diagnostics: [],
-      mutationGuarantee: 'preview-only',
-    }, options, opened.namespace);
-  }
-
-  private async persistMergeAttemptIfRequested(
-    result: VersionMergeResult,
-    options: VersionMergeOptions,
-    namespace: VersionGraphNamespace,
-  ): Promise<VersionMergeResult> {
-    if (options.persistReviewRecord !== true) return result;
-    const resultInput = mergeInputFromResult(result);
-    if (!resultInput) return result;
-    if (!options.targetRef || !options.expectedTargetHead) {
-      return blocked(resultInput, [
-        diagnostic(
-          'VERSION_INVALID_OPTIONS',
-          'Persisted merge attempts require targetRef and expectedTargetHead.',
-          { payload: { option: 'persistReviewRecord' } },
-        ),
-      ]);
-    }
-    if (result.status !== 'fastForward' && result.status !== 'alreadyMerged') {
-      return blocked(resultInput, [
-        diagnostic(
-          'VERSION_UNSUPPORTED_MERGE_ATTEMPT',
-          'Persisted applyable merge attempts currently support only ancestry merge previews.',
-          { recoverability: 'unsupported' },
-        ),
-      ]);
-    }
-    if (!hasMergeApplyIntentStoreProvider(this.provider)) {
-      return blocked(result, [
-        diagnostic(
-          'VERSION_STORE_UNAVAILABLE',
-          'No merge apply intent store is attached for persisted merge attempts.',
-          { recoverability: 'unsupported' },
-        ),
-      ]);
-    }
-
-    const resultDigest = await computeMergeApplyResultDigest({
-      status: result.status,
-      base: result.base,
-      ours: result.ours,
-      theirs: result.theirs,
-      targetRef: options.targetRef,
-      expectedTargetHead: options.expectedTargetHead,
+      },
+      options,
     });
-    const resolutionSetDigest = await computeEmptyResolutionSetDigest();
-    const resolvedAttemptDigest = await computeResolvedAttemptDigest({
-      resultDigest,
-      resolutionSetDigest,
-      targetRef: options.targetRef,
-      expectedTargetHead: options.expectedTargetHead,
-    });
-    const begin = await (await this.provider.openMergeApplyIntentStore(namespace)).beginIntent({
-      intentId: intentIdForResolvedAttemptDigest(resolvedAttemptDigest),
-      idempotencyKey: idempotencyKeyForResolvedAttempt({
-        resolvedAttemptDigest,
-        targetRef: options.targetRef,
-        expectedTargetHead: options.expectedTargetHead,
-      }),
-      applyKind: applyKindForMergeStatus(result.status),
-      base: result.base,
-      ours: result.ours,
-      theirs: result.theirs,
-      targetRef: options.targetRef,
-      expectedTargetHead: options.expectedTargetHead,
-      resultDigest,
-      resolutionSetDigest,
-      resolvedAttemptDigest,
-      createdAt: new Date().toISOString(),
-    });
-    if (begin.status === 'failed' || begin.status === 'conflict') {
-      return blocked(result, intentStoreDiagnostics(begin.diagnostics));
-    }
-
-    return {
-      ...result,
-      resultDigest,
-      attemptPersistence: 'persisted',
-      attemptKind: 'applyable',
-      resultId: mergeResultIdForResolvedAttemptDigest(resolvedAttemptDigest),
-      targetRef: options.targetRef,
-      expectedTargetHead: options.expectedTargetHead,
-    };
   }
 
   private async openVisibleGraph(): Promise<
@@ -423,12 +353,6 @@ function alreadyMerged(input: VersionMergeInput): VersionMergeResult {
     diagnostics: [],
     mutationGuarantee: 'preview-only',
   };
-}
-
-function applyKindForMergeStatus(
-  status: Extract<VersionMergeResult['status'], 'fastForward' | 'alreadyMerged'>,
-): MergeApplyIntentApplyKind {
-  return status === 'alreadyMerged' ? 'alreadyMerged' : 'fastForward';
 }
 
 async function readSemanticChangeSet(
@@ -924,17 +848,6 @@ function graphDiagnostics(
       },
     );
   });
-}
-
-function intentStoreDiagnostics(
-  diagnostics: readonly MergeApplyIntentStoreDiagnostic[],
-): readonly MergeDiagnostic[] {
-  return diagnostics.map((item) =>
-    diagnostic(item.code, item.message, {
-      recoverability: item.recoverability,
-      ...(item.details ? { payload: item.details } : {}),
-    }),
-  );
 }
 
 function diagnostic(

@@ -36,6 +36,7 @@ import {
 
 const VERSION_APPLY_MERGE_PERSISTED_INPUT_KEYS = new Set([
   'resultId',
+  'previewArtifactDigest',
   'resultDigest',
   'resolutionSetDigest',
   'resolvedAttemptDigest',
@@ -80,6 +81,7 @@ type MaybeVersionRuntimeContext = DocumentContext & {
 
 type NormalizedPersistedApplyMergeInput = {
   readonly resultId: VersionMergeResultId;
+  readonly previewArtifactDigest?: ObjectDigest;
   readonly resultDigest: ObjectDigest;
   readonly resolutionSetDigest?: ObjectDigest;
   readonly resolvedAttemptDigest?: ObjectDigest;
@@ -187,6 +189,16 @@ function normalizePersistedApplyMergeInput(
     );
   }
 
+  const previewArtifactDigest =
+    input.previewArtifactDigest === undefined
+      ? undefined
+      : mapPublicObjectDigest(input.previewArtifactDigest);
+  if (input.previewArtifactDigest !== undefined && !previewArtifactDigest) {
+    diagnostics.push(
+      invalidApplyMergeOptionDiagnostic('previewArtifactDigest', 'previewArtifactDigest is invalid.'),
+    );
+  }
+
   const resolutionSetDigest =
     input.resolutionSetDigest === undefined
       ? undefined
@@ -209,7 +221,14 @@ function normalizePersistedApplyMergeInput(
 
   const resolutions = normalizePersistedResolutions(input.resolutions, diagnostics);
   return resultId && resultDigest && resolutions
-    ? { resultId, resultDigest, resolutionSetDigest, resolvedAttemptDigest, resolutions }
+    ? {
+        resultId,
+        previewArtifactDigest,
+        resultDigest,
+        resolutionSetDigest,
+        resolvedAttemptDigest,
+        resolutions,
+      }
     : null;
 }
 

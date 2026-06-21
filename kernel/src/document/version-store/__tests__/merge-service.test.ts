@@ -2,6 +2,7 @@ import type { VersionAuthor } from '@mog-sdk/contracts/versioning';
 
 import { createInMemoryWorkbookCommitStore } from '../commit-store';
 import { intentIdForMergeResultId } from '../merge-apply-intent-store';
+import { mergePreviewArtifactRef } from '../merge-attempt-artifacts';
 import { createWorkbookVersionMergeService } from '../merge-service';
 import {
   createVersionObjectRecord,
@@ -539,11 +540,33 @@ describe('WorkbookVersionMergeService', () => {
         algorithm: 'sha256',
         digest: expect.stringMatching(/^[0-9a-f]{64}$/),
       },
+      previewArtifactDigest: {
+        algorithm: 'sha256',
+        digest: expect.stringMatching(/^[0-9a-f]{64}$/),
+      },
       resultId: expect.stringMatching(/^merge-result:[0-9a-f]{64}$/),
     });
-    if (result.status !== 'fastForward' || !result.resultId || !result.resultDigest) {
+    if (
+      result.status !== 'fastForward' ||
+      !result.resultId ||
+      !result.resultDigest ||
+      !result.previewArtifactDigest
+    ) {
       throw new Error('expected a persisted fast-forward merge result id and digest');
     }
+    const opened = await graph.provider.openGraph(graph.namespace);
+    await expect(opened.getObjectRecord(mergePreviewArtifactRef(result.previewArtifactDigest)))
+      .resolves.toMatchObject({
+        preimage: {
+          payload: {
+            recordKind: 'mergePreview',
+            status: 'fastForward',
+            base: graph.rootCommitId,
+            ours: graph.oursCommitId,
+            theirs: theirsDescendantCommitId,
+          },
+        },
+      });
 
     const intentId = intentIdForMergeResultId(result.resultId);
     if (!intentId) throw new Error('expected persisted result id to map to an intent id');

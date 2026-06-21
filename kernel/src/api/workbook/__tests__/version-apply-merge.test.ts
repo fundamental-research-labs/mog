@@ -213,6 +213,7 @@ describe('WorkbookVersion applyMerge preview planner', () => {
         refRevision: { kind: 'counter' as const, value: '2' },
       },
       resultId: 'merge-result:fast-forward-main',
+      previewArtifactDigest: DIGEST_C,
       resultDigest: DIGEST_A,
       resolutionSetDigest: DIGEST_B,
       resolvedAttemptDigest: DIGEST_C,
@@ -249,6 +250,7 @@ describe('WorkbookVersion applyMerge preview planner', () => {
           refRevision: { kind: 'counter', value: '2' },
         },
         resultId: 'merge-result:fast-forward-main',
+        previewArtifactDigest: DIGEST_C,
         resultDigest: DIGEST_A,
         resolutionSetDigest: DIGEST_B,
         resolvedAttemptDigest: DIGEST_C,
@@ -585,6 +587,27 @@ describe('WorkbookVersion applyMerge preview planner', () => {
       version.applyMerge(
         {
           resultId: 'merge-result:not-a-digest',
+          resultDigest: DIGEST_A,
+        } as any,
+        { targetRef: TARGET_REF as any, expectedTargetHead: EXPECTED_TARGET_HEAD },
+      ),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: {
+        code: 'target_unavailable',
+        target: 'workbook.version.applyMerge',
+        diagnostics: expect.arrayContaining([
+          expect.objectContaining({ code: 'VERSION_INVALID_OPTIONS' }),
+        ]),
+      },
+    });
+    expect(merge).not.toHaveBeenCalled();
+
+    await expect(
+      version.applyMerge(
+        {
+          resultId: `merge-result:${'a'.repeat(64)}`,
+          previewArtifactDigest: { algorithm: 'sha256', digest: 'not-a-digest' },
           resultDigest: DIGEST_A,
         } as any,
         { targetRef: TARGET_REF as any, expectedTargetHead: EXPECTED_TARGET_HEAD },

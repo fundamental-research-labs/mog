@@ -27,7 +27,10 @@ export function mapVersionMergeAttemptMetadata(
   value: Readonly<Record<string, unknown>>,
 ): VersionMergeAttemptMetadata | null {
   const metadata: Mutable<VersionMergeAttemptMetadata> = {};
+  if (!copyDigest(value, metadata, 'previewArtifactDigest')) return null;
   if (!copyDigest(value, metadata, 'resultDigest')) return null;
+  if (!copyDigest(value, metadata, 'resolutionSetDigest')) return null;
+  if (!copyDigest(value, metadata, 'resolvedAttemptDigest')) return null;
   if (!copyMergeAttemptPersistence(value, metadata)) return null;
   if (!copyMergeAttemptKind(value, metadata)) return null;
   if (!copyMergeResultId(value, metadata)) return null;
@@ -44,6 +47,7 @@ export function mapVersionApplyMergeAttemptMetadata(
 ): VersionApplyMergeAttemptMetadata | null {
   const metadata: Mutable<VersionApplyMergeAttemptMetadata> = {};
   if (!copyMergeResultId(value, metadata)) return null;
+  if (!copyDigest(value, metadata, 'previewArtifactDigest')) return null;
   if (!copyDigest(value, metadata, 'resultDigest')) return null;
   if (!copyDigest(value, metadata, 'resolutionSetDigest')) return null;
   if (!copyDigest(value, metadata, 'resolvedAttemptDigest')) return null;

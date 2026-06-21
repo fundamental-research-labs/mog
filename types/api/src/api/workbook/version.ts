@@ -666,7 +666,10 @@ export type VersionMergeAttemptPersistence = 'ephemeral' | 'persisted';
 export type VersionMergeAttemptKind = 'applyable' | 'reviewOnly';
 
 export interface VersionMergeAttemptMetadata {
+  readonly previewArtifactDigest?: ObjectDigest;
   readonly resultDigest?: ObjectDigest;
+  readonly resolutionSetDigest?: ObjectDigest;
+  readonly resolvedAttemptDigest?: ObjectDigest;
   readonly attemptPersistence?: VersionMergeAttemptPersistence;
   readonly attemptKind?: VersionMergeAttemptKind;
   readonly resultId?: VersionMergeResultId;
@@ -735,6 +738,7 @@ export type VersionApplyMergeInput =
   | {
       readonly resultId: VersionMergeResultId;
       readonly resultDigest: ObjectDigest;
+      readonly previewArtifactDigest?: ObjectDigest;
       readonly resolutionSetDigest?: ObjectDigest;
       readonly resolvedAttemptDigest?: ObjectDigest;
       readonly resolutions?: readonly VersionApplyMergeResolution[];
@@ -757,6 +761,7 @@ export type VersionApplyMergeMutationGuarantee =
 
 export interface VersionApplyMergeAttemptMetadata {
   readonly resultId?: VersionMergeResultId;
+  readonly previewArtifactDigest?: ObjectDigest;
   readonly resultDigest?: ObjectDigest;
   readonly resolutionSetDigest?: ObjectDigest;
   readonly resolvedAttemptDigest?: ObjectDigest;

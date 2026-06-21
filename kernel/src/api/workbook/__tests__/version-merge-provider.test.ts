@@ -66,7 +66,10 @@ describe('WorkbookVersion merge facade', () => {
       conflicts: [],
       diagnostics: [],
       mutationGuarantee: 'preview-only',
+      previewArtifactDigest: DIGEST_B,
       resultDigest: DIGEST_A,
+      resolutionSetDigest: DIGEST_C,
+      resolvedAttemptDigest: DIGEST_A,
       attemptPersistence: 'persisted',
       attemptKind: 'applyable',
       resultId: 'merge-result:review-main',
@@ -97,6 +100,37 @@ describe('WorkbookVersion merge facade', () => {
       diagnostics: [],
       mutationGuarantee: 'preview-only',
       resultDigest: { algorithm: 'sha256', digest: 'not-a-digest' },
+    }));
+    const version = new WorkbookVersionImpl({
+      versioning: { mergeService: { merge } },
+    } as any);
+
+    await expect(version.merge({ base: BASE, ours: OURS, theirs: THEIRS })).resolves.toMatchObject({
+      ok: false,
+      error: {
+        code: 'target_unavailable',
+        target: 'workbook.version.merge',
+        diagnostics: [
+          expect.objectContaining({
+            code: 'VERSION_INVALID_COMMIT_PAYLOAD',
+            data: expect.objectContaining({ redacted: true }),
+          }),
+        ],
+      },
+    });
+  });
+
+  it('blocks provider merge attempts with malformed preview artifact metadata', async () => {
+    const merge = jest.fn(async () => ({
+      status: 'clean',
+      base: BASE,
+      ours: OURS,
+      theirs: THEIRS,
+      changes: [],
+      conflicts: [],
+      diagnostics: [],
+      mutationGuarantee: 'preview-only',
+      previewArtifactDigest: { algorithm: 'sha256', digest: 'not-a-digest' },
     }));
     const version = new WorkbookVersionImpl({
       versioning: { mergeService: { merge } },

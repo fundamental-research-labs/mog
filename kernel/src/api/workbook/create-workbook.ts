@@ -72,6 +72,7 @@ async function createWorkbookWithBootstrap(options: CreateWorkbookOptions): Prom
     previouslySaved: !!source,
     importWarnings,
     writeFile: options.writeFile,
+    versioning: options.versioning,
   });
 
   // Wrap lifecycle close paths to also clean up the owned DocumentHandle.

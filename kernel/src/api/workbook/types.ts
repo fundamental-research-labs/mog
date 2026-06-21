@@ -26,6 +26,7 @@ import type {
   WorkbookVersionCommitService,
 } from '../../document/version-store/commit-service';
 import type { VersionStoreProvider } from '../../document/version-store/provider';
+import type { DocumentWorkbookVersioningLifecycleConfig } from '../../document/version-store/lifecycle';
 import type { HandleLiveness } from '../lifecycle/handle-liveness';
 
 // =============================================================================
@@ -46,7 +47,10 @@ export type CodeExecutorFactory = (config: {
 
 export interface WorkbookVersioningConfig {
   readonly provider?: VersionStoreProvider;
-  readonly writeService?: WorkbookVersionCommitService;
+  readonly writeService?: Pick<
+    WorkbookVersionCommitService,
+    'readHead' | 'readRef' | 'listCommits' | 'commit'
+  >;
   readonly captureNormalCommit?: VersionNormalCommitCapture;
 }
 
@@ -165,4 +169,11 @@ export interface CreateWorkbookOptions {
    * Forwarded to `WorkbookConfig.writeFile`.
    */
   writeFile?: (path: string, data: Uint8Array) => Promise<void>;
+  /**
+   * Explicit version-store lifecycle selection for the document-owned workbook
+   * path. This exists because durable providers such as IndexedDB must be
+   * selected and initialized asynchronously before the WorkbookImpl constructor
+   * receives its concrete versioning services.
+   */
+  versioning?: DocumentWorkbookVersioningLifecycleConfig;
 }

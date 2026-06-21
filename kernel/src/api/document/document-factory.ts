@@ -825,6 +825,13 @@ function createDocumentHandle(
       // Config-accepting path: fresh workbook each call (not cached).
       if (config) {
         const { createWorkbookFromConfig } = await loadWorkbookModule();
+        const { resolveDocumentWorkbookVersioningLifecycle } = await import(
+          '../../document/version-store/lifecycle'
+        );
+        const resolvedVersioning = await resolveDocumentWorkbookVersioningLifecycle({
+          documentId,
+          versioning: config.versioning,
+        });
         return createWorkbookFromConfig({
           ctx: context,
           eventBus: context.eventBus,
@@ -835,7 +842,7 @@ function createDocumentHandle(
           onSave: config.onSave,
           writeFile: config.writeFile,
           importWarnings: config.importWarnings ?? importWarnings,
-          versioning: config.versioning,
+          versioning: resolvedVersioning.versioning,
           liveness: createWorkbookLiveness('document.workbook(config)'),
         });
       }

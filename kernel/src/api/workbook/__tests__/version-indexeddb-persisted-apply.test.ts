@@ -1,6 +1,12 @@
 import 'fake-indexeddb/auto';
 
-import type { VersionHead, Workbook, WorkbookCommitSummary } from '@mog-sdk/contracts/api';
+import type {
+  VersionApplyMergeResolution,
+  VersionHead,
+  VersionMergeConflict,
+  Workbook,
+  WorkbookCommitSummary,
+} from '@mog-sdk/contracts/api';
 import type { VersionAuthor } from '@mog-sdk/contracts/versioning';
 
 import { DocumentFactory } from '../../document/document-factory';
@@ -11,18 +17,14 @@ import {
   type VersionObjectRecord,
 } from '../../../document/version-store/object-store';
 import {
-  idempotencyKeyForResolvedAttempt,
   intentIdForMergeResultId,
   intentIdForResolvedAttemptDigest,
+  type MergeApplyIntentStore,
 } from '../../../document/version-store/merge-apply-intent-store';
-import {
-  createMergeResolutionSetArtifactRecord,
-  createResolvedMergeAttemptArtifactRecord,
-} from '../../../document/version-store/merge-attempt-artifacts';
-import type { ObjectDigest } from '../../../document/version-store/object-digest';
 import {
   createIndexedDbVersionStoreProvider,
   INDEXEDDB_VERSION_STORE_PROVIDER_KIND,
+  type IndexedDbVersionStoreProvider,
 } from '../../../document/version-store/provider-indexeddb-backend';
 import { deleteVersionStoreIndexedDbForTesting } from '../../../document/version-store/provider-indexeddb-schema';
 import {
@@ -311,8 +313,17 @@ describe('WorkbookVersion IndexedDB persisted applyMerge', () => {
     }
   });
 
-  it('recovers a staged mergeCommit intent when the target ref already points at the merge commit', async () => {
+  it('recovers a staged resolved mergeCommit intent when the target ref already points at the merge commit', async () => {
     const namespace = namespaceForDocumentScope(DOCUMENT_SCOPE, GRAPH_ID);
+    const provider = createIndexedDbVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
+    expectInitializeSuccess(
+      await provider.initializeGraph({
+        expectedRegistryRevision: null,
+        graphId: GRAPH_ID,
+        rootWrite: await rootWrite('merge-recovery-root'),
+      }),
+    );
+    const failingProvider = failFirstIntentCompletion(provider);
     const firstHandle = await DocumentFactory.create({
       documentId: DOCUMENT_ID,
       environment: 'headless',
@@ -329,18 +340,7 @@ describe('WorkbookVersion IndexedDB persisted applyMerge', () => {
     let reopenedWb: Workbook | undefined;
 
     try {
-      firstWb = await firstHandle.workbook({
-        versioning: {
-          providerSelection: {
-            kind: INDEXEDDB_VERSION_STORE_PROVIDER_KIND,
-            requireDurablePersistence: true,
-            initialize: {
-              graphId: GRAPH_ID,
-              rootWrite: await rootWrite('merge-recovery-root'),
-            },
-          },
-        },
-      });
+      firstWb = await firstHandle.workbook({ versioning: { provider: failingProvider } });
       const rootHead = await expectHead(firstWb);
 
       await firstWb.activeSheet.setCell('A1', 'base');
@@ -361,7 +361,7 @@ describe('WorkbookVersion IndexedDB persisted applyMerge', () => {
       });
       if (!branch.ok) throw new Error(`expected branch create success: ${branch.error.code}`);
 
-      await firstWb.activeSheet.setCell('B1', 'ours');
+      await firstWb.activeSheet.setCell('A1', 'ours');
       const oursCommit = await expectCommit(
         firstWb.version.commit({
           expectedHead: {
@@ -372,19 +372,12 @@ describe('WorkbookVersion IndexedDB persisted applyMerge', () => {
       );
       const oursHead = await expectHead(firstWb);
 
-      branchWb = await branchHandle.workbook({
-        versioning: {
-          providerSelection: {
-            kind: INDEXEDDB_VERSION_STORE_PROVIDER_KIND,
-            requireDurablePersistence: true,
-          },
-        },
-      });
+      branchWb = await branchHandle.workbook({ versioning: { provider: failingProvider } });
       const checkoutBase = await branchWb.version.checkout({ kind: 'commit', id: baseCommit.id });
       if (!checkoutBase.ok) {
         throw new Error(`expected branch workbook checkout success: ${checkoutBase.error.code}`);
       }
-      await branchWb.activeSheet.setCell('C1', 'theirs');
+      await branchWb.activeSheet.setCell('A1', 'theirs');
       const theirsCommit = await expectCommit(
         branchWb.version.commit({
           targetRef: 'scenario/indexeddb-merge-recovery' as any,
@@ -412,61 +405,61 @@ describe('WorkbookVersion IndexedDB persisted applyMerge', () => {
           persistReviewRecord: true,
         },
       );
-      if (!preview.ok) throw new Error(`expected persisted clean preview success: ${preview.error.code}`);
-      if (preview.value.status !== 'clean' || !preview.value.resultId || !preview.value.resultDigest) {
-        throw new Error('expected persisted clean review artifact metadata');
+      if (!preview.ok) throw new Error(`expected persisted conflicted preview success: ${preview.error.code}`);
+      if (
+        preview.value.status !== 'conflicted' ||
+        !preview.value.resultId ||
+        !preview.value.resultDigest ||
+        !preview.value.previewArtifactDigest
+      ) {
+        throw new Error('expected persisted conflicted review artifact metadata');
       }
 
-      const provider = createIndexedDbVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
-      const graph = await provider.openGraph(namespace, provider.accessContext);
-      const resolutionSet = await createMergeResolutionSetArtifactRecord(namespace);
-      const resolvedAttempt = await createResolvedMergeAttemptArtifactRecord(namespace, {
-        resultDigest: preview.value.resultDigest as ObjectDigest,
-        resolutionSetDigest: resolutionSet.digest,
-        targetRef: 'refs/heads/main' as any,
-        expectedTargetHead,
-      });
-      expect(await graph.putObjects([resolutionSet, resolvedAttempt])).toMatchObject({
-        status: 'success',
-      });
-      const intentStore = await provider.openMergeApplyIntentStore(namespace);
-      await expect(
-        intentStore.beginIntent({
-          intentId: intentIdForResolvedAttemptDigest(resolvedAttempt.digest),
-          idempotencyKey: idempotencyKeyForResolvedAttempt({
-            resolvedAttemptDigest: resolvedAttempt.digest,
-            targetRef: 'refs/heads/main' as any,
-            expectedTargetHead,
-          }),
-          applyKind: 'mergeCommit',
-          base: baseCommit.id,
-          ours: oursCommit.id,
-          theirs: theirsCommit.id,
-          targetRef: 'refs/heads/main' as any,
-          expectedTargetHead,
-          resultDigest: preview.value.resultDigest as ObjectDigest,
-          resolutionSetDigest: resolutionSet.digest,
-          resolvedAttemptDigest: resolvedAttempt.digest,
-          createdAt: CREATED_AT,
-        }),
-      ).resolves.toMatchObject({ status: 'created', record: { state: 'staging' } });
-      await provider.close('test-teardown');
-
-      const appliedOutsideIntent = await firstWb.version.applyMerge(
+      const resolution = resolutionFor(preview.value.conflicts[0], 'acceptTheirs');
+      const interrupted = await firstWb.version.applyMerge(
         {
-          base: baseCommit.id,
-          ours: oursCommit.id,
-          theirs: theirsCommit.id,
+          resultId: preview.value.resultId,
+          resultDigest: preview.value.resultDigest,
+          previewArtifactDigest: preview.value.previewArtifactDigest,
+          resolutions: [resolution],
         },
         {
           targetRef: 'refs/heads/main' as any,
           expectedTargetHead,
         },
       );
-      if (!appliedOutsideIntent.ok) {
-        throw new Error(`expected direct merge apply success: ${appliedOutsideIntent.error.code}`);
+      expect(interrupted).toMatchObject({
+        ok: false,
+        error: {
+          code: 'target_unavailable',
+          target: 'workbook.version.applyMerge',
+        },
+      });
+      const graph = await provider.openGraph(namespace, provider.accessContext);
+      const currentRef = await graph.readRef('refs/heads/main' as any);
+      expect(currentRef).toMatchObject({ status: 'success' });
+      if (currentRef.status !== 'success' || !('commitId' in currentRef.ref)) {
+        throw new Error('expected main ref to point at interrupted merge commit');
       }
-      const mergeCommitId = appliedOutsideIntent.value.commitRef.id;
+      const mergeCommitId = currentRef.ref.commitId;
+      const interruptedCommit = await graph.readCommit(mergeCommitId);
+      expect(interruptedCommit).toMatchObject({
+        status: 'success',
+        commit: {
+          payload: {
+            parentCommitIds: [oursCommit.id, theirsCommit.id],
+            resolvedMergeAttemptDigest: {
+              algorithm: 'sha256',
+              digest: expect.stringMatching(/^[0-9a-f]{64}$/),
+            },
+          },
+        },
+      });
+      if (interruptedCommit.status !== 'success') {
+        throw new Error(`expected interrupted merge commit read: ${interruptedCommit.diagnostics[0]?.code}`);
+      }
+      const resolvedAttemptDigest = interruptedCommit.commit.payload.resolvedMergeAttemptDigest;
+      if (!resolvedAttemptDigest) throw new Error('expected merge commit attempt digest');
 
       await branchWb.close('skipSave');
       branchWb = undefined;
@@ -493,6 +486,8 @@ describe('WorkbookVersion IndexedDB persisted applyMerge', () => {
         {
           resultId: preview.value.resultId,
           resultDigest: preview.value.resultDigest,
+          previewArtifactDigest: preview.value.previewArtifactDigest,
+          resolutions: [resolution],
         },
         {
           targetRef: 'refs/heads/main' as any,
@@ -509,12 +504,27 @@ describe('WorkbookVersion IndexedDB persisted applyMerge', () => {
         },
         resultId: preview.value.resultId,
         resultDigest: preview.value.resultDigest,
-        resolutionSetDigest: resolutionSet.digest,
-        resolvedAttemptDigest: resolvedAttempt.digest,
+        previewArtifactDigest: preview.value.previewArtifactDigest,
+        resolvedAttemptDigest,
         targetRef: 'refs/heads/main',
         headBefore: oursCommit.id,
         headAfter: mergeCommitId,
         mutationGuarantee: 'ref-not-mutated',
+      });
+      const finalizedStore = await provider.openMergeApplyIntentStore(namespace);
+      await expect(
+        finalizedStore.readByIntentId(intentIdForResolvedAttemptDigest(resolvedAttemptDigest)),
+      ).resolves.toMatchObject({
+        status: 'found',
+        record: {
+          state: 'finalized',
+          terminal: {
+            status: 'applied',
+            headBefore: oursCommit.id,
+            headAfter: mergeCommitId,
+            commitId: mergeCommitId,
+          },
+        },
       });
     } finally {
       if (reopenedWb) await reopenedWb.close('skipSave');
@@ -522,6 +532,7 @@ describe('WorkbookVersion IndexedDB persisted applyMerge', () => {
       if (branchWb) await branchWb.close('skipSave');
       await branchHandle.dispose();
       if (firstWb) await firstWb.close('skipSave');
+      await provider.close('test-teardown');
       await firstHandle.dispose();
     }
   });
@@ -895,6 +906,52 @@ async function expectHead(wb: Workbook): Promise<VersionHead> {
 function requireRefRevision(head: VersionHead) {
   if (!head.refRevision) throw new Error('expected head to expose a ref revision');
   return head.refRevision;
+}
+
+function resolutionFor(
+  conflict: VersionMergeConflict,
+  kind: VersionApplyMergeResolution['kind'],
+): VersionApplyMergeResolution {
+  const option = conflict.resolutionOptions.find((candidate) => candidate.kind === kind);
+  if (!option) throw new Error(`expected conflict to expose ${kind} resolution option`);
+  return {
+    conflictId: conflict.conflictId,
+    expectedConflictDigest: conflict.conflictDigest,
+    optionId: option.optionId,
+    kind,
+  };
+}
+
+function failFirstIntentCompletion(
+  provider: IndexedDbVersionStoreProvider,
+): IndexedDbVersionStoreProvider {
+  let shouldFailCompletion = true;
+  const openStore = provider.openMergeApplyIntentStore.bind(provider);
+  provider.openMergeApplyIntentStore = async (namespace) => {
+    const store = await openStore(namespace);
+    return {
+      namespace: store.namespace,
+      beginIntent: store.beginIntent.bind(store),
+      readByIntentId: store.readByIntentId.bind(store),
+      readByIdempotencyKey: store.readByIdempotencyKey.bind(store),
+      completeIntent: async (input) => {
+        if (!shouldFailCompletion) return store.completeIntent(input);
+        shouldFailCompletion = false;
+        return {
+          status: 'failed',
+          record: null,
+          diagnostics: [
+            {
+              code: 'VERSION_PROVIDER_FAILED',
+              message: 'Injected merge intent completion failure.',
+              recoverability: 'retry',
+            },
+          ],
+        };
+      },
+    } satisfies MergeApplyIntentStore;
+  };
+  return provider;
 }
 
 function expectInitializeSuccess(

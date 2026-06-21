@@ -136,6 +136,42 @@ describe('merge apply intent store', () => {
       record: { state: 'finalized', terminal: { status: 'fastForwarded' } },
     });
     await expect(
+      store.completeIntent({
+        intentId: input.intentId,
+        resolvedAttemptDigest: input.resolvedAttemptDigest,
+        completedAt: '2026-06-21T00:00:04.000Z',
+        terminal: {
+          status: 'fastForwarded',
+          headBefore: OURS,
+          headAfter: THEIRS,
+          commitId: THEIRS,
+        },
+      }),
+    ).resolves.toMatchObject({
+      status: 'completed',
+      record: {
+        state: 'finalized',
+        updatedAt: '2026-06-21T00:00:01.000Z',
+        terminal: { status: 'fastForwarded' },
+      },
+    });
+    await expect(
+      store.completeIntent({
+        intentId: input.intentId,
+        resolvedAttemptDigest: input.resolvedAttemptDigest,
+        completedAt: '2026-06-21T00:00:05.000Z',
+        terminal: {
+          status: 'staleTargetHead',
+          headBefore: OURS,
+          headAfter: BASE,
+          commitId: BASE,
+        },
+      }),
+    ).resolves.toMatchObject({
+      status: 'conflict',
+      diagnostics: [{ code: 'VERSION_INTENT_CONFLICT' }],
+    });
+    await expect(
       store.beginIntent({ ...input, createdAt: '2026-06-21T00:00:03.000Z' }),
     ).resolves.toMatchObject({
       status: 'existing',
@@ -188,6 +224,28 @@ describe('merge apply intent store', () => {
         terminal: { status: 'fastForwarded', headBefore: OURS, headAfter: THEIRS },
       }),
     ).resolves.toMatchObject({ status: 'completed' });
+    await expect(
+      reloadedStore.completeIntent({
+        intentId: input.intentId,
+        resolvedAttemptDigest: input.resolvedAttemptDigest,
+        completedAt: '2026-06-21T00:00:04.000Z',
+        terminal: { status: 'fastForwarded', headBefore: OURS, headAfter: THEIRS },
+      }),
+    ).resolves.toMatchObject({
+      status: 'completed',
+      record: { updatedAt: '2026-06-21T00:00:01.000Z' },
+    });
+    await expect(
+      reloadedStore.completeIntent({
+        intentId: input.intentId,
+        resolvedAttemptDigest: input.resolvedAttemptDigest,
+        completedAt: '2026-06-21T00:00:05.000Z',
+        terminal: { status: 'staleTargetHead', headBefore: OURS, headAfter: BASE },
+      }),
+    ).resolves.toMatchObject({
+      status: 'conflict',
+      diagnostics: [{ code: 'VERSION_INTENT_CONFLICT' }],
+    });
     await expect(
       reloadedStore.beginIntent({ ...input, createdAt: '2026-06-21T00:00:03.000Z' }),
     ).resolves.toMatchObject({

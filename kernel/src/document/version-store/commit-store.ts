@@ -10,6 +10,7 @@ import {
   type VersionObjectType,
   type WorkbookCommitId,
 } from './object-digest';
+import { cloneDigest, dependencyKey } from './commit-store-utils';
 import {
   VersionObjectStoreError,
   createVersionObjectRecord,
@@ -42,6 +43,7 @@ export type WorkbookCommitPayload = {
   readonly completenessDiagnostics: readonly WorkbookCommitCompletenessDiagnostic[];
   readonly redactionSummaryDigest?: ObjectDigest;
   readonly verificationSummaryDigest?: ObjectDigest;
+  readonly resolvedMergeAttemptDigest?: ObjectDigest;
 };
 
 export type WorkbookCommit = {
@@ -83,6 +85,7 @@ export type CreateWorkbookCommitInput = {
   readonly completenessDiagnostics?: readonly WorkbookCommitCompletenessDiagnostic[];
   readonly redactionSummaryRecord?: VersionObjectRecord<unknown>;
   readonly verificationSummaryRecord?: VersionObjectRecord<unknown>;
+  readonly resolvedMergeAttemptDigest?: ObjectDigest;
 };
 
 export type CreateWorkbookCommitResult =
@@ -186,6 +189,9 @@ export class InMemoryWorkbookCommitStore {
       ...(records.verificationSummaryRecord === undefined
         ? {}
         : { verificationSummaryDigest: cloneDigest(records.verificationSummaryRecord.digest) }),
+      ...(input.resolvedMergeAttemptDigest === undefined
+        ? {}
+        : { resolvedMergeAttemptDigest: cloneDigest(input.resolvedMergeAttemptDigest) }),
     };
 
     const dependencies = dependenciesForPayload(payload);
@@ -519,6 +525,7 @@ function parseCommitPayload(
         'completenessDiagnostics',
         'redactionSummaryDigest',
         'verificationSummaryDigest',
+        'resolvedMergeAttemptDigest',
       ].includes(key),
   );
   if (unsupportedPayloadKey !== undefined) {
@@ -567,6 +574,11 @@ function parseCommitPayload(
     'verificationSummaryDigest',
     diagnostics,
   );
+  const resolvedMergeAttemptDigest = parseOptionalDigest(
+    payload.resolvedMergeAttemptDigest,
+    'resolvedMergeAttemptDigest',
+    diagnostics,
+  );
   const author = parseVersionAuthor(payload.author, 'author', diagnostics);
   const createdAt = parseString(payload.createdAt, 'createdAt', diagnostics);
   const completenessDiagnostics = parseCompletenessDiagnostics(
@@ -574,6 +586,14 @@ function parseCommitPayload(
     'completenessDiagnostics',
     diagnostics,
   );
+  if (resolvedMergeAttemptDigest !== undefined && parentCommitIds.length !== 2) {
+    diagnostics.push(
+      invalidPayloadDiagnostic(
+        'resolvedMergeAttemptDigest',
+        'Resolved merge-attempt identity is valid only on two-parent merge commits.',
+      ),
+    );
+  }
 
   if (
     diagnostics.length > 0 ||
@@ -600,6 +620,7 @@ function parseCommitPayload(
       completenessDiagnostics,
       ...(redactionSummaryDigest === undefined ? {} : { redactionSummaryDigest }),
       ...(verificationSummaryDigest === undefined ? {} : { verificationSummaryDigest }),
+      ...(resolvedMergeAttemptDigest === undefined ? {} : { resolvedMergeAttemptDigest }),
     },
   };
 }
@@ -646,6 +667,15 @@ function dependenciesForPayload(payload: WorkbookCommitPayload): readonly Versio
             kind: 'object',
             objectType: 'workbook.verificationSummary.v1',
             digest: cloneDigest(payload.verificationSummaryDigest),
+          } satisfies VersionDependencyRef,
+        ]),
+    ...(payload.resolvedMergeAttemptDigest === undefined
+      ? []
+      : [
+          {
+            kind: 'object',
+            objectType: 'workbook.resolvedMergeAttempt.v1',
+            digest: cloneDigest(payload.resolvedMergeAttemptDigest),
           } satisfies VersionDependencyRef,
         ]),
   ];
@@ -941,27 +971,6 @@ function parseOptionalString(
 
 function invalidPayloadDiagnostic(path: string, message: string): WorkbookCommitStoreDiagnostic {
   return diagnostic('VERSION_INVALID_COMMIT_PAYLOAD', message, { details: { path } });
-}
-
-function dependencyKey(dependency: VersionDependencyRef): string {
-  if (dependency.kind === 'object') {
-    return [
-      dependency.kind,
-      dependency.objectType,
-      dependency.digest.algorithm,
-      dependency.digest.digest,
-    ].join('\u0000');
-  }
-  return [
-    dependency.kind,
-    dependency.commitId,
-    dependency.digest.algorithm,
-    dependency.digest.digest,
-  ].join('\u0000');
-}
-
-function cloneDigest(digest: ObjectDigest): ObjectDigest {
-  return { algorithm: digest.algorithm, digest: digest.digest };
 }
 
 function isVersionObjectRecord(value: unknown): value is VersionObjectRecord<unknown> {

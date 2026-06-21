@@ -182,6 +182,57 @@ describe('WorkbookVersionCommitService', () => {
     });
   });
 
+  it('persists resolved merge-attempt identity on merge commits', async () => {
+    const { provider, initialized, ours, theirs } = await setupMergeInputs();
+    const namespace = namespaceForDocumentScope(DOCUMENT_SCOPE, 'graph-1');
+    const graph = await provider.openGraph(namespace);
+    const resolvedAttempt = await createVersionObjectRecord(namespace, {
+      objectType: 'workbook.resolvedMergeAttempt.v1',
+      schemaVersion: 1,
+      payloadEncoding: 'mog-canonical-json-v1',
+      dependencies: [],
+      payload: { recordKind: 'resolvedMergeAttempt' },
+    });
+    expect(await graph.putObjects([resolvedAttempt])).toMatchObject({ status: 'success' });
+    const captureMergeCommit = jest.fn(createMergeCommitCapture('merge-attempt-bound'));
+    const service = createWorkbookVersionCommitService({
+      provider,
+      captureMergeCommit,
+    });
+    const change = mergeChange('merge-bound-change');
+
+    const merged = await service.mergeCommit({
+      base: initialized.rootCommit.id,
+      ours: ours.commit.id,
+      theirs: theirs.commit.id,
+      targetRef: VERSION_GRAPH_MAIN_REF as any,
+      expectedTargetHead: {
+        commitId: ours.commit.id as any,
+        revision: expectRefRevision(ours),
+      },
+      changes: [change],
+      resolutionCount: 0,
+      resolvedMergeAttemptDigest: resolvedAttempt.digest,
+    });
+
+    expectCommitSuccess(merged);
+    expect(captureMergeCommit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        resolvedMergeAttemptDigest: resolvedAttempt.digest,
+      }),
+    );
+    expect(merged.commit.payload.resolvedMergeAttemptDigest).toEqual(resolvedAttempt.digest);
+    expect(merged.commit.record.preimage.dependencies).toEqual(
+      expect.arrayContaining([
+        {
+          kind: 'object',
+          objectType: 'workbook.resolvedMergeAttempt.v1',
+          digest: resolvedAttempt.digest,
+        },
+      ]),
+    );
+  });
+
   it('blocks merge commits when target head fencing is stale before capture runs', async () => {
     const { provider, initialized, ours, theirs } = await setupMergeInputs();
     const captureMergeCommit = jest.fn(createMergeCommitCapture('stale'));

@@ -15,6 +15,15 @@ import {
   type VersionObjectRecord,
 } from '../../../document/version-store/object-store';
 import {
+  idempotencyKeyForResolvedAttempt,
+  intentIdForResolvedAttemptDigest,
+} from '../../../document/version-store/merge-apply-intent-store';
+import {
+  createMergeResolutionSetArtifactRecord,
+  createResolvedMergeAttemptArtifactRecord,
+} from '../../../document/version-store/merge-attempt-artifacts';
+import type { ObjectDigest } from '../../../document/version-store/object-digest';
+import {
   createInMemoryVersionStoreProvider,
   namespaceForDocumentScope,
   type VersionDocumentScope,
@@ -192,6 +201,18 @@ describe('WorkbookVersion persisted merge preview artifact apply', () => {
       });
 
       const mergeCommitId = applied.value.commitRef.id;
+      const graph = await provider.openGraph(
+        namespaceForDocumentScope(DOCUMENT_SCOPE, 'graph-clean-artifact'),
+        provider.accessContext,
+      );
+      await expect(graph.readCommit(mergeCommitId)).resolves.toMatchObject({
+        status: 'success',
+        commit: {
+          payload: {
+            resolvedMergeAttemptDigest: applied.value.resolvedAttemptDigest,
+          },
+        },
+      });
       await expect(sourceWb.version.listCommits()).resolves.toMatchObject({
         ok: true,
         value: {
@@ -461,6 +482,192 @@ describe('WorkbookVersion persisted merge preview artifact apply', () => {
       if (branchWb) await branchWb.close('skipSave');
       if (sourceWb) await sourceWb.close('skipSave');
       await mergedHandle.dispose();
+      await branchHandle.dispose();
+      await sourceHandle.dispose();
+    }
+  });
+
+  it('does not recover a conflicted staged intent from parent shape without commit-bound resolved attempt identity', async () => {
+    const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
+    const initialized = await provider.initializeGraph(await initializeInput('graph-conflict-no-identity', 'root'));
+    expectInitializeSuccess(initialized);
+    const namespace = namespaceForDocumentScope(DOCUMENT_SCOPE, 'graph-conflict-no-identity');
+
+    const sourceHandle = await DocumentFactory.create({
+      documentId: DOCUMENT_ID,
+      environment: 'headless',
+      userTimezone: 'UTC',
+    });
+    const branchHandle = await DocumentFactory.create({
+      documentId: DOCUMENT_ID,
+      environment: 'headless',
+      userTimezone: 'UTC',
+    });
+    let sourceWb: Workbook | undefined;
+    let branchWb: Workbook | undefined;
+
+    try {
+      sourceWb = await sourceHandle.workbook({ versioning: { provider } });
+      await sourceWb.activeSheet.setCell('A1', 'base');
+      const baseCommit = await expectCommit(
+        sourceWb.version.commit({
+          expectedHead: {
+            commitId: initialized.rootCommit.id,
+            revision: initialized.initialHead.revision,
+            symbolicHeadRevision: initialized.symbolicHead.revision,
+          },
+        }),
+      );
+      const baseHead = await expectHead(sourceWb);
+
+      const branch = await sourceWb.version.createBranch({
+        name: 'scenario/persisted-conflict-no-identity' as any,
+        targetCommitId: baseCommit.id,
+        expectedAbsent: true,
+      });
+      if (!branch.ok) throw new Error(`expected branch create success: ${branch.error.code}`);
+
+      await sourceWb.activeSheet.setCell('A1', 'ours');
+      const oursCommit = await expectCommit(
+        sourceWb.version.commit({
+          expectedHead: {
+            commitId: baseCommit.id,
+            revision: requireRefRevision(baseHead),
+          },
+        }),
+      );
+      const oursHead = await expectHead(sourceWb);
+
+      branchWb = await branchHandle.workbook({ versioning: { provider } });
+      const checkoutBase = await branchWb.version.checkout({ kind: 'commit', id: baseCommit.id });
+      if (!checkoutBase.ok) {
+        throw new Error(`expected branch workbook checkout success: ${checkoutBase.error.code}`);
+      }
+      await branchWb.activeSheet.setCell('A1', 'theirs');
+      const theirsCommit = await expectCommit(
+        branchWb.version.commit({
+          targetRef: 'scenario/persisted-conflict-no-identity' as any,
+          expectedHead: {
+            commitId: baseCommit.id,
+            revision: branch.value.revision,
+          },
+        }),
+      );
+
+      const expectedTargetHead = {
+        commitId: oursCommit.id,
+        revision: requireRefRevision(oursHead),
+      };
+      const preview = await sourceWb.version.merge(
+        {
+          base: baseCommit.id,
+          ours: oursCommit.id,
+          theirs: theirsCommit.id,
+        },
+        {
+          mode: 'preview',
+          targetRef: 'refs/heads/main' as any,
+          expectedTargetHead,
+          persistReviewRecord: true,
+        },
+      );
+      if (
+        !preview.ok ||
+        preview.value.status !== 'conflicted' ||
+        !preview.value.resultId ||
+        !preview.value.resultDigest ||
+        !preview.value.previewArtifactDigest
+      ) {
+        throw new Error('expected persisted conflicted preview metadata');
+      }
+
+      const resolution = resolutionFor(preview.value.conflicts[0], 'acceptTheirs');
+      const graph = await provider.openGraph(namespace, provider.accessContext);
+      const resolutionSet = await createMergeResolutionSetArtifactRecord(namespace, [resolution]);
+      const resolvedAttempt = await createResolvedMergeAttemptArtifactRecord(namespace, {
+        resultDigest: preview.value.resultDigest as ObjectDigest,
+        resolutionSetDigest: resolutionSet.digest,
+        targetRef: 'refs/heads/main' as any,
+        expectedTargetHead,
+      });
+      expect(await graph.putObjects([resolutionSet, resolvedAttempt])).toMatchObject({
+        status: 'success',
+      });
+      const intentStore = await provider.openMergeApplyIntentStore(namespace);
+      await expect(
+        intentStore.beginIntent({
+          intentId: intentIdForResolvedAttemptDigest(resolvedAttempt.digest),
+          idempotencyKey: idempotencyKeyForResolvedAttempt({
+            resolvedAttemptDigest: resolvedAttempt.digest,
+            targetRef: 'refs/heads/main' as any,
+            expectedTargetHead,
+          }),
+          applyKind: 'mergeCommit',
+          base: baseCommit.id,
+          ours: oursCommit.id,
+          theirs: theirsCommit.id,
+          targetRef: 'refs/heads/main' as any,
+          expectedTargetHead,
+          resultDigest: preview.value.resultDigest as ObjectDigest,
+          resolutionSetDigest: resolutionSet.digest,
+          resolvedAttemptDigest: resolvedAttempt.digest,
+          createdAt: CREATED_AT,
+        }),
+      ).resolves.toMatchObject({ status: 'created', record: { state: 'staging' } });
+
+      const unboundApply = await sourceWb.version.applyMerge(
+        {
+          base: baseCommit.id,
+          ours: oursCommit.id,
+          theirs: theirsCommit.id,
+          resolutions: [resolution],
+        },
+        {
+          targetRef: 'refs/heads/main' as any,
+          expectedTargetHead,
+        },
+      );
+      if (!unboundApply.ok) {
+        throw new Error(`expected unbound direct apply success: ${unboundApply.error.code}`);
+      }
+      const mergeCommitId = unboundApply.value.commitRef.id;
+      await expect(graph.readCommit(mergeCommitId)).resolves.toMatchObject({
+        status: 'success',
+        commit: {
+          payload: {
+            parentCommitIds: [oursCommit.id, theirsCommit.id],
+          },
+        },
+      });
+
+      const recovered = await sourceWb.version.applyMerge(
+        {
+          resultId: preview.value.resultId,
+          resultDigest: preview.value.resultDigest,
+          previewArtifactDigest: preview.value.previewArtifactDigest,
+          resolutions: [resolution],
+        },
+        {
+          targetRef: 'refs/heads/main' as any,
+          expectedTargetHead,
+        },
+      );
+      if (!recovered.ok) throw new Error(`expected stale replay result: ${recovered.error.code}`);
+      expect(recovered.value).toMatchObject({
+        status: 'staleTargetHead',
+        headAfter: mergeCommitId,
+        resolvedAttemptDigest: resolvedAttempt.digest,
+        mutationGuarantee: 'ref-not-mutated',
+      });
+      await expect(
+        intentStore.readByIntentId(intentIdForResolvedAttemptDigest(resolvedAttempt.digest)),
+      ).resolves.toMatchObject({
+        status: 'found',
+        record: { state: 'staging' },
+      });
+    } finally {
+      if (branchWb) await branchWb.close('skipSave');
+      if (sourceWb) await sourceWb.close('skipSave');
       await branchHandle.dispose();
       await sourceHandle.dispose();
     }

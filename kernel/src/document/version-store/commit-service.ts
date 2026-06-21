@@ -28,7 +28,7 @@ import {
   expectedHeadForMergeCommit,
   finalizeMergeCommitCapture,
 } from './commit-service-merge-helpers';
-import { parseWorkbookCommitId, type WorkbookCommitId } from './object-digest';
+import { parseWorkbookCommitId, type ObjectDigest, type WorkbookCommitId } from './object-digest';
 import { type VersionGraphNamespace } from './object-store';
 import {
   VersionStoreProviderError,
@@ -76,6 +76,7 @@ export type VersionMergeCommitCaptureInput = {
   readonly expectedTargetHead: VersionCommitExpectedHead;
   readonly changes: readonly VersionMergeChange[];
   readonly resolutionCount: number;
+  readonly resolvedMergeAttemptDigest?: ObjectDigest;
 };
 
 export type VersionNormalCommitCaptureFinalizeResult =
@@ -143,6 +144,7 @@ export type WorkbookVersionCommitServiceMergeCommitInput = {
   readonly expectedTargetHead: VersionCommitExpectedHead;
   readonly changes: readonly VersionMergeChange[];
   readonly resolutionCount: number;
+  readonly resolvedMergeAttemptDigest?: ObjectDigest;
 };
 
 export type WorkbookVersionCommitServiceFastForwardMergeInput = Omit<
@@ -543,6 +545,9 @@ export class WorkbookVersionCommitService {
         expectedTargetHead: input.expectedTargetHead,
         changes: input.changes,
         resolutionCount: input.resolutionCount,
+        ...(input.resolvedMergeAttemptDigest === undefined
+          ? {}
+          : { resolvedMergeAttemptDigest: input.resolvedMergeAttemptDigest }),
       });
     } catch {
       return failedStoreResult(
@@ -600,6 +605,9 @@ export class WorkbookVersionCommitService {
 
     const result = await opened.graph.mergeCommit({
       ...captured.input,
+      ...(input.resolvedMergeAttemptDigest === undefined
+        ? {}
+        : { resolvedMergeAttemptDigest: input.resolvedMergeAttemptDigest }),
       targetRef: target.ref.name,
       expectedHeadCommitId: input.ours,
       expectedTargetRefVersion: expectedHead.revision,

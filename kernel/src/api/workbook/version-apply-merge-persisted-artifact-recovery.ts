@@ -11,6 +11,7 @@ import type {
   MergeApplyIntentStore,
   MergeApplyIntentStoreDiagnostic,
 } from '../../document/version-store/merge-apply-intent-store';
+import type { ObjectDigest } from '../../document/version-store/object-digest';
 import type { VersionGraphStore } from '../../document/version-store/provider-graph-store';
 import type { NormalizedPersistedApplyMergeInput } from './version-apply-merge-persisted';
 
@@ -19,7 +20,11 @@ type TargetHeadReadResult =
   | { readonly ok: false; readonly diagnostics: readonly VersionStoreDiagnostic[] };
 
 type CommitParentReadResult =
-  | { readonly ok: true; readonly parents: readonly WorkbookCommitId[] }
+  | {
+      readonly ok: true;
+      readonly parents: readonly WorkbookCommitId[];
+      readonly resolvedMergeAttemptDigest?: ObjectDigest;
+    }
   | { readonly ok: false; readonly diagnostics: readonly VersionStoreDiagnostic[] };
 
 type RecoverStagedMergeCommitIfAlreadyAppliedInput = {
@@ -70,7 +75,7 @@ export async function recoverStagedMergeCommitIfAlreadyApplied({
   providerErrorDiagnostic,
   intentStoreDiagnostics,
 }: RecoverStagedMergeCommitIfAlreadyAppliedInput): Promise<VersionApplyMergeResult | null> {
-  if (input.resolutions.length > 0) return null;
+  if (record.applyKind !== 'mergeCommit' || record.terminal) return null;
 
   const current = await readCurrentTargetHead(graph, record.targetRef);
   if (!current.ok) {
@@ -89,6 +94,12 @@ export async function recoverStagedMergeCommitIfAlreadyApplied({
     committed.parents.length !== 2 ||
     committed.parents[0] !== record.ours ||
     committed.parents[1] !== record.theirs
+  ) {
+    return staleTargetHeadArtifactResult(input, record, current.commitId);
+  }
+  if (
+    !digestsEqual(committed.resolvedMergeAttemptDigest, record.resolvedAttemptDigest) &&
+    (input.resolutions.length > 0 || committed.resolvedMergeAttemptDigest !== undefined)
   ) {
     return staleTargetHeadArtifactResult(input, record, current.commitId);
   }
@@ -116,6 +127,49 @@ export async function recoverStagedMergeCommitIfAlreadyApplied({
   return resultFromTerminalArtifactIntent(graph, input, completed.record);
 }
 
+export async function validateAppliedMergeCommitIdentity(
+  graph: VersionGraphStore,
+  record: MergeApplyIntentRecord,
+  commitId: WorkbookCommitId,
+  diagnostics: {
+    readonly mapProviderDiagnostics: (
+      diagnostics: readonly unknown[],
+    ) => readonly VersionStoreDiagnostic[];
+    readonly providerErrorDiagnostic: () => VersionStoreDiagnostic;
+    readonly resolutionMismatchDiagnostic: (safeMessage: string) => VersionStoreDiagnostic;
+  },
+): Promise<readonly VersionStoreDiagnostic[]> {
+  try {
+    const read = await graph.readCommit(commitId);
+    if (read.status !== 'success') return diagnostics.mapProviderDiagnostics(read.diagnostics);
+    const payload = read.commit.payload;
+    if (
+      payload.parentCommitIds.length !== 2 ||
+      payload.parentCommitIds[0] !== record.ours ||
+      payload.parentCommitIds[1] !== record.theirs
+    ) {
+      return [
+        diagnostics.resolutionMismatchDiagnostic(
+          'applied merge commit parents do not match the merge intent.',
+        ),
+      ];
+    }
+    if (
+      !payload.resolvedMergeAttemptDigest ||
+      !digestsEqual(payload.resolvedMergeAttemptDigest, record.resolvedAttemptDigest)
+    ) {
+      return [
+        diagnostics.resolutionMismatchDiagnostic(
+          'applied merge commit is not bound to the resolved merge attempt.',
+        ),
+      ];
+    }
+    return [];
+  } catch {
+    return [diagnostics.providerErrorDiagnostic()];
+  }
+}
+
 async function readCommitParentIds(
   graph: VersionGraphStore,
   commitId: WorkbookCommitId,
@@ -131,8 +185,18 @@ async function readCommitParentIds(
     if (read.status !== 'success') {
       return { ok: false, diagnostics: diagnostics.mapProviderDiagnostics(read.diagnostics) };
     }
-    return { ok: true, parents: read.commit.payload.parentCommitIds };
+    return {
+      ok: true,
+      parents: read.commit.payload.parentCommitIds,
+      ...(read.commit.payload.resolvedMergeAttemptDigest === undefined
+        ? {}
+        : { resolvedMergeAttemptDigest: read.commit.payload.resolvedMergeAttemptDigest }),
+    };
   } catch {
     return { ok: false, diagnostics: [diagnostics.providerErrorDiagnostic()] };
   }
+}
+
+function digestsEqual(left: ObjectDigest | undefined, right: ObjectDigest): boolean {
+  return left?.algorithm === right.algorithm && left.digest === right.digest;
 }

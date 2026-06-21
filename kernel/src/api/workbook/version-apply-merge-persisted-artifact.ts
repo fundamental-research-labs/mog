@@ -45,7 +45,10 @@ import type {
   NormalizedPersistedApplyMergeInput,
   NormalizedPersistedApplyMergeOptions,
 } from './version-apply-merge-persisted';
-import { recoverStagedMergeCommitIfAlreadyApplied } from './version-apply-merge-persisted-artifact-recovery';
+import {
+  recoverStagedMergeCommitIfAlreadyApplied,
+  validateAppliedMergeCommitIdentity,
+} from './version-apply-merge-persisted-artifact-recovery';
 
 const WORKBOOK_COMMIT_ID_RE = /^commit:sha256:[0-9a-f]{64}$/;
 
@@ -61,6 +64,7 @@ type AttachedVersionApplyMergeService = {
     readonly expectedTargetHead: VersionCommitExpectedHead;
     readonly changes: readonly VersionMergeChange[];
     readonly resolutionCount: number;
+    readonly resolvedMergeAttemptDigest?: InternalObjectDigest;
   }) => MaybePromise<unknown>;
 };
 
@@ -202,10 +206,30 @@ export async function applyPersistedMergePreviewArtifact(
       ...writePlan,
       targetRef: options.targetRef,
       expectedTargetHead: options.expectedTargetHead,
+      resolvedMergeAttemptDigest: prepared.intent.resolvedAttemptDigest,
     });
     const mapped = mapApplyMergeWriteResult(raw, writePlan, 'merge-commit-created');
     if (!isApplyMergeWriteSuccessResult(mapped)) return mapped;
     if (!('commitRef' in mapped)) return mapped;
+    const identityDiagnostics = await validateAppliedMergeCommitIdentity(
+      opened.graph,
+      prepared.intent,
+      mapped.commitRef.id,
+      {
+        mapProviderDiagnostics,
+        providerErrorDiagnostic,
+        resolutionMismatchDiagnostic,
+      },
+    );
+    if (identityDiagnostics.length > 0) {
+      return blockedApplyMergeResult(
+        artifact.payload.base,
+        artifact.payload.ours,
+        artifact.payload.theirs,
+        identityDiagnostics,
+        'unknown-after-crash',
+      );
+    }
     const completed = await prepared.store.completeIntent({
       intentId: prepared.intent.intentId,
       resolvedAttemptDigest: prepared.intent.resolvedAttemptDigest,

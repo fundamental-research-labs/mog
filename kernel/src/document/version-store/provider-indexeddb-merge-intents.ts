@@ -11,6 +11,7 @@ import {
   cloneIntent,
   intentsEquivalent,
   isMergeApplyIntentRecord,
+  mergeApplyIntentTerminalsEqual,
   mergeApplyIntentStorageKey,
   objectDigestsEqual,
 } from './merge-apply-intent-store';
@@ -149,6 +150,21 @@ export class IndexedDbMergeApplyIntentStore implements MergeApplyIntentStore {
             },
           ],
         };
+      }
+      if (existing.terminal) {
+        return mergeApplyIntentTerminalsEqual(existing.terminal, input.terminal)
+          ? { status: 'completed', record: existing, diagnostics: [] }
+          : {
+              status: 'conflict',
+              record: existing,
+              diagnostics: [
+                {
+                  code: 'VERSION_INTENT_CONFLICT',
+                  message: 'Merge apply intent is already finalized with a different terminal result.',
+                  recoverability: 'none',
+                },
+              ],
+            };
       }
 
       const completed: MergeApplyIntentRecord = {

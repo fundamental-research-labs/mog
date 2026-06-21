@@ -206,6 +206,15 @@ export class InMemoryMergeApplyIntentStore implements MergeApplyIntentStore {
         diagnostics: [diagnostic('VERSION_INTENT_CONFLICT', 'Merge apply completion did not match the stored resolved attempt digest.', 'none')],
       };
     }
+    if (existing.terminal) {
+      return mergeApplyIntentTerminalsEqual(existing.terminal, input.terminal)
+        ? { status: 'completed', record: existing, diagnostics: [] }
+        : {
+            status: 'conflict',
+            record: existing,
+            diagnostics: [diagnostic('VERSION_INTENT_CONFLICT', 'Merge apply intent is already finalized with a different terminal result.', 'none')],
+          };
+    }
     const completed: MergeApplyIntentRecord = {
       ...existing,
       state: 'finalized',
@@ -310,6 +319,18 @@ function intentIdentity(record: MergeApplyIntentRecord) {
 
 export function objectDigestsEqual(left: ObjectDigest, right: ObjectDigest): boolean {
   return left.algorithm === right.algorithm && left.digest === right.digest;
+}
+
+export function mergeApplyIntentTerminalsEqual(
+  left: NonNullable<MergeApplyIntentRecord['terminal']>,
+  right: NonNullable<MergeApplyIntentRecord['terminal']>,
+): boolean {
+  return (
+    left.status === right.status &&
+    left.headBefore === right.headBefore &&
+    left.headAfter === right.headAfter &&
+    left.commitId === right.commitId
+  );
 }
 
 export function mergeApplyIntentStorageKey(

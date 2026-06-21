@@ -578,6 +578,7 @@ export interface VersionCommitExpectedHead {
 
 export interface VersionCommitOptions {
   readonly message?: string;
+  readonly targetRef?: VersionMainRefName | VersionRefName | VersionBranchName;
   readonly redactionPolicy?: RedactionPolicy;
   readonly expectedHead?: VersionCommitExpectedHead;
   readonly mode?: VersionCommitMode;

@@ -3,6 +3,7 @@ import type { VersionCommitOptions } from '@mog-sdk/contracts/api';
 import {
   VERSION_GRAPH_HEAD_REF,
   VERSION_GRAPH_MAIN_REF,
+  type VersionGraphBranchRefName,
   type VersionGraphCommitRef,
   type VersionGraphCommitContentInput,
   type VersionGraphCommitPageResult,
@@ -26,6 +27,7 @@ import {
   type VersionGraphStore,
   type VersionStoreProvider,
 } from './provider';
+import { REF_NAME_STORAGE_PREFIX, validateRefName } from './ref-name';
 import { refVersionsEqual, type RefVersion } from './ref-store';
 import { namespaceForRegistry } from './registry';
 import {
@@ -41,6 +43,7 @@ export type VersionNormalCommitCaptureInput = {
   readonly registry: VersionGraphRegistry;
   readonly currentHead: VersionGraphSymbolicRef;
   readonly currentMain: VersionGraphRef;
+  readonly currentRef: VersionGraphRef;
   readonly options: VersionCommitOptions;
 };
 
@@ -89,6 +92,17 @@ export type WorkbookVersionCommitServiceListCommitsResult =
   | VersionGraphCommitPageResult
   | {
       readonly status: 'failed';
+      readonly diagnostics: readonly VersionStoreDiagnostic[];
+    };
+
+type NormalizedCommitTargetRefResult =
+  | {
+      readonly ok: true;
+      readonly refName: VersionGraphBranchRefName;
+      readonly options: VersionCommitOptions;
+    }
+  | {
+      readonly ok: false;
       readonly diagnostics: readonly VersionStoreDiagnostic[];
     };
 
@@ -200,7 +214,25 @@ export class WorkbookVersionCommitService {
       );
     }
 
-    const expectedHead = expectedHeadForCommit(options, main.ref, head.ref);
+    const normalizedTarget = normalizeCommitTargetRef(options, this.provider);
+    if (!normalizedTarget.ok) {
+      return failedStoreResult(normalizedTarget.diagnostics, 'no-write-attempted');
+    }
+
+    const targetRefName = normalizedTarget.refName;
+    const commitOptions = normalizedTarget.options;
+    const target =
+      targetRefName === VERSION_GRAPH_MAIN_REF
+        ? main
+        : await opened.graph.readRef(targetRefName);
+    if (target.status !== 'success' || target.ref.name === VERSION_GRAPH_HEAD_REF) {
+      return failedStoreResult(
+        diagnosticsForGraphRead(target.diagnostics, 'commitGraphWrite'),
+        'no-write-attempted',
+      );
+    }
+
+    const expectedHead = expectedHeadForCommit(commitOptions, target.ref, head.ref);
     if (!expectedHead.ok) {
       return failedStoreResult(expectedHead.diagnostics, 'no-write-attempted', true);
     }
@@ -212,8 +244,8 @@ export class WorkbookVersionCommitService {
             operation: 'commitGraphWrite',
             documentScope: this.provider.documentScope,
             namespace: opened.namespace,
-            refName: VERSION_GRAPH_MAIN_REF,
-            commitId: main.ref.commitId,
+            refName: target.ref.name,
+            commitId: target.ref.commitId,
             safeMessage:
               'No production mutation capture service is attached for normal version commits.',
             mutationGuarantee: 'no-write-attempted',
@@ -233,7 +265,8 @@ export class WorkbookVersionCommitService {
         registry: opened.registry,
         currentHead: head.ref,
         currentMain: main.ref,
-        options,
+        currentRef: target.ref,
+        options: commitOptions,
       });
     } catch {
       return failedStoreResult(
@@ -242,8 +275,8 @@ export class WorkbookVersionCommitService {
             operation: 'commitGraphWrite',
             documentScope: this.provider.documentScope,
             namespace: opened.namespace,
-            refName: VERSION_GRAPH_MAIN_REF,
-            commitId: main.ref.commitId,
+            refName: target.ref.name,
+            commitId: target.ref.commitId,
             safeMessage: 'Version commit capture failed before graph mutation.',
             recoverability: 'retry',
             mutationGuarantee: 'no-write-attempted',
@@ -265,8 +298,8 @@ export class WorkbookVersionCommitService {
             operation: 'commitGraphWrite',
             documentScope: this.provider.documentScope,
             namespace: opened.namespace,
-            refName: VERSION_GRAPH_MAIN_REF,
-            commitId: main.ref.commitId,
+            refName: target.ref.name,
+            commitId: target.ref.commitId,
             safeMessage: 'Normal version commits require a non-empty captured mutation range.',
             mutationGuarantee: 'no-write-attempted',
           }),
@@ -282,8 +315,9 @@ export class WorkbookVersionCommitService {
 
     const result = await opened.graph.commit({
       ...commitContent.input,
+      targetRef: target.ref.name,
       expectedHeadCommitId: expectedHead.commitId,
-      expectedMainRefVersion: expectedHead.revision,
+      expectedTargetRefVersion: expectedHead.revision,
       parentCommitIds: [expectedHead.commitId],
     });
 
@@ -292,9 +326,10 @@ export class WorkbookVersionCommitService {
         ...result,
         commitRef: {
           id: result.commit.id,
-          refName: VERSION_GRAPH_MAIN_REF,
-          resolvedFrom: VERSION_GRAPH_HEAD_REF,
-          refRevision: result.main.revision,
+          refName: result.ref.name,
+          resolvedFrom:
+            commitOptions.targetRef === undefined ? VERSION_GRAPH_HEAD_REF : result.ref.name,
+          refRevision: result.ref.revision,
         },
       };
     }
@@ -381,6 +416,78 @@ export class WorkbookVersionCommitService {
   }
 }
 
+function normalizeCommitTargetRef(
+  options: VersionCommitOptions,
+  provider: VersionStoreProvider,
+): NormalizedCommitTargetRefResult {
+  const value = options.targetRef;
+  if (value === undefined) {
+    return { ok: true, refName: VERSION_GRAPH_MAIN_REF, options };
+  }
+  if (typeof value !== 'string') {
+    return {
+      ok: false,
+      diagnostics: [
+        invalidTargetRefDiagnostic(provider, 'targetRef must be a string.', {
+          option: 'targetRef',
+          issue: 'notString',
+        }),
+      ],
+    };
+  }
+  if (value === VERSION_GRAPH_HEAD_REF) {
+    return {
+      ok: false,
+      diagnostics: [
+        invalidTargetRefDiagnostic(
+          provider,
+          'Version commit targetRef must be a concrete refs/heads/* ref.',
+          { option: 'targetRef', issue: 'reservedSymbolicHead' },
+        ),
+      ],
+    };
+  }
+
+  const branchName = value.startsWith(REF_NAME_STORAGE_PREFIX)
+    ? value.slice(REF_NAME_STORAGE_PREFIX.length)
+    : value;
+  const parsed = validateRefName(branchName, 'targetRef');
+  if (!parsed.ok) {
+    return {
+      ok: false,
+      diagnostics: parsed.diagnostics.map((diagnostic) =>
+        invalidTargetRefDiagnostic(
+          provider,
+          'Version commit targetRef must name a public-safe version branch.',
+          { option: 'targetRef', issue: diagnostic.issue, refName: 'redacted' },
+        ),
+      ),
+    };
+  }
+
+  const refName = `${REF_NAME_STORAGE_PREFIX}${parsed.name}` as VersionGraphBranchRefName;
+  return {
+    ok: true,
+    refName,
+    options: value === refName ? options : { ...options, targetRef: refName },
+  };
+}
+
+function invalidTargetRefDiagnostic(
+  provider: VersionStoreProvider,
+  safeMessage: string,
+  details: Readonly<Record<string, string | number | boolean | null>>,
+): VersionStoreDiagnostic {
+  return versionStoreDiagnostic('VERSION_INVALID_OPTIONS', {
+    operation: 'commitGraphWrite',
+    documentScope: provider.documentScope,
+    safeMessage,
+    recoverability: 'none',
+    mutationGuarantee: 'no-write-attempted',
+    details,
+  });
+}
+
 export function createWorkbookVersionCommitService(
   options: WorkbookVersionCommitServiceOptions,
 ): WorkbookVersionCommitService {
@@ -389,7 +496,7 @@ export function createWorkbookVersionCommitService(
 
 function expectedHeadForCommit(
   options: VersionCommitOptions,
-  main: VersionGraphRef,
+  target: VersionGraphRef,
   head: VersionGraphSymbolicRef,
 ):
   | {
@@ -403,7 +510,24 @@ function expectedHeadForCommit(
     } {
   const expected = options.expectedHead;
   if (!expected) {
-    return { ok: true, commitId: main.commitId, revision: main.revision };
+    return { ok: true, commitId: target.commitId, revision: target.revision };
+  }
+
+  if (options.targetRef !== undefined && expected.symbolicHeadRevision !== undefined) {
+    return {
+      ok: false,
+      diagnostics: [
+        versionStoreDiagnostic('VERSION_INVALID_OPTIONS', {
+          operation: 'commitGraphWrite',
+          refName: target.name,
+          commitId: target.commitId,
+          safeMessage: 'symbolicHeadRevision is valid only for implicit HEAD commits.',
+          recoverability: 'none',
+          mutationGuarantee: 'no-write-attempted',
+          details: { option: 'expectedHead.symbolicHeadRevision' },
+        }),
+      ],
+    };
   }
 
   let expectedCommitId: WorkbookCommitId;
@@ -415,8 +539,8 @@ function expectedHeadForCommit(
       diagnostics: [
         versionStoreDiagnostic('VERSION_INVALID_COMMIT_ID', {
           operation: 'commitGraphWrite',
-          refName: VERSION_GRAPH_MAIN_REF,
-          commitId: main.commitId,
+          refName: target.name,
+          commitId: target.commitId,
           safeMessage: 'Expected version head commit id is invalid.',
           recoverability: 'repair',
           mutationGuarantee: 'no-write-attempted',
@@ -426,16 +550,16 @@ function expectedHeadForCommit(
   }
 
   if (
-    expectedCommitId !== main.commitId ||
+    expectedCommitId !== target.commitId ||
     !isCounterRevision(expected.revision) ||
-    !refVersionsEqual(main.revision, expected.revision)
+    !refVersionsEqual(target.revision, expected.revision)
   ) {
     return {
       ok: false,
       diagnostics: [
-        refConflictDiagnostic(main.commitId, expectedCommitId, 'refs/heads/main', {
+        refConflictDiagnostic(target.commitId, expectedCommitId, target.name, {
           expectedRevisionKind: expected.revision.kind,
-          actualRevision: main.revision.value,
+          actualRevision: target.revision.value,
         }),
       ],
     };
@@ -449,7 +573,7 @@ function expectedHeadForCommit(
     return {
       ok: false,
       diagnostics: [
-        refConflictDiagnostic(main.commitId, expectedCommitId, 'HEAD', {
+        refConflictDiagnostic(target.commitId, expectedCommitId, 'HEAD', {
           expectedRevisionKind: expected.symbolicHeadRevision.kind,
           actualRevision: head.revision.value,
         }),
@@ -463,7 +587,7 @@ function expectedHeadForCommit(
 function refConflictDiagnostic(
   actualCommitId: WorkbookCommitId,
   expectedCommitId: WorkbookCommitId,
-  refName: typeof VERSION_GRAPH_MAIN_REF | typeof VERSION_GRAPH_HEAD_REF,
+  refName: string,
   details: Readonly<Record<string, string | number | boolean | null>>,
 ): VersionStoreDiagnostic {
   return versionStoreDiagnostic('VERSION_REF_CONFLICT', {

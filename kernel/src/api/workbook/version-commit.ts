@@ -13,14 +13,22 @@ import type {
 } from '@mog-sdk/contracts/api';
 
 import type { DocumentContext } from '../../context';
+import { validateRefName } from '../../document/version-store/ref-name';
 import { MogSdkError } from '../../errors';
 
 const VERSION_HEAD_REF = 'HEAD';
 const VERSION_MAIN_REF = 'refs/heads/main' satisfies VersionMainRefName;
+const VERSION_BRANCH_REF_PREFIX = 'refs/heads/';
 const WORKBOOK_COMMIT_ID_RE = /^commit:sha256:[0-9a-f]{64}$/;
 const VERSION_COMMIT_OPERATION = 'workbook.version.commit';
 
-const VERSION_COMMIT_OPTION_KEYS = new Set(['message', 'redactionPolicy', 'expectedHead', 'mode']);
+const VERSION_COMMIT_OPTION_KEYS = new Set([
+  'message',
+  'targetRef',
+  'redactionPolicy',
+  'expectedHead',
+  'mode',
+]);
 const VERSION_COMMIT_EXPECTED_HEAD_KEYS = new Set(['commitId', 'revision', 'symbolicHeadRevision']);
 const VERSION_COMMIT_MODE_KEYS = new Set(['kind']);
 const REDACTION_POLICY_KEYS = new Set([
@@ -30,7 +38,7 @@ const REDACTION_POLICY_KEYS = new Set([
   'redactAgentTrace',
 ]);
 const REDACTION_POLICY_MODES = new Set(['default', 'strict', 'clean']);
-const REF_MUTATION_FIELDS = new Set(['targetRef', 'ref', 'branch']);
+const REF_MUTATION_FIELDS = new Set(['ref', 'branch']);
 const AUTHOR_SPOOFING_FIELDS = new Set([
   'author',
   'committer',
@@ -84,6 +92,7 @@ type CommitValidationResult =
 
 type NormalizedCommitOptions = {
   message?: string;
+  targetRef?: VersionMainRefName | VersionRefName;
   redactionPolicy?: RedactionPolicy;
   expectedHead?: VersionCommitOptions['expectedHead'];
   mode?: { kind: 'normal' };
@@ -198,6 +207,12 @@ function validateCommitOptions(input: VersionCommitOptions): CommitValidationRes
     if (redactionPolicy) options.redactionPolicy = redactionPolicy;
   }
 
+  const hasExplicitTargetRef = 'targetRef' in input;
+  if (hasExplicitTargetRef) {
+    const targetRef = validateTargetRef(input.targetRef, diagnostics);
+    if (targetRef) options.targetRef = targetRef;
+  }
+
   let modeKind: unknown;
   if ('mode' in input) {
     const mode = input.mode;
@@ -224,6 +239,14 @@ function validateCommitOptions(input: VersionCommitOptions): CommitValidationRes
   if ('expectedHead' in input) {
     const expectedHead = validateExpectedHead(input.expectedHead, diagnostics);
     if (expectedHead) options.expectedHead = expectedHead;
+    if (hasExplicitTargetRef && expectedHead?.symbolicHeadRevision !== undefined) {
+      diagnostics.push(
+        invalidCommitOptionDiagnostic(
+          'expectedHead.symbolicHeadRevision',
+          'symbolicHeadRevision is valid only for implicit HEAD commits.',
+        ),
+      );
+    }
     if (modeKind === 'root' || modeKind === 'import-root') {
       diagnostics.push(
         invalidCommitOptionDiagnostic(
@@ -235,6 +258,48 @@ function validateCommitOptions(input: VersionCommitOptions): CommitValidationRes
   }
 
   return diagnostics.length > 0 ? { ok: false, diagnostics } : { ok: true, options };
+}
+
+function validateTargetRef(
+  value: unknown,
+  diagnostics: VersionStoreDiagnostic[],
+): VersionMainRefName | VersionRefName | undefined {
+  if (typeof value !== 'string') {
+    diagnostics.push(invalidCommitOptionDiagnostic('targetRef', 'targetRef must be a string.'));
+    return undefined;
+  }
+  if (value === VERSION_HEAD_REF) {
+    diagnostics.push(
+      invalidCommitOptionDiagnostic('targetRef', 'targetRef must be a concrete refs/heads/* ref.'),
+    );
+    return undefined;
+  }
+
+  const branchName = value.startsWith(VERSION_BRANCH_REF_PREFIX)
+    ? value.slice(VERSION_BRANCH_REF_PREFIX.length)
+    : value;
+  const parsed = validateRefName(branchName, 'targetRef');
+  if (!parsed.ok) {
+    diagnostics.push(
+      ...parsed.diagnostics.map((item) =>
+        publicDiagnostic(
+          'VERSION_INVALID_OPTIONS',
+          'targetRef must name a public-safe version branch.',
+          {
+            severity: 'error',
+            recoverability: 'none',
+            payload: { option: 'targetRef', issue: item.issue, refName: 'redacted' },
+            mutationGuarantee: 'no-write-attempted',
+          },
+        ),
+      ),
+    );
+    return undefined;
+  }
+
+  return parsed.name === 'main'
+    ? VERSION_MAIN_REF
+    : (`${VERSION_BRANCH_REF_PREFIX}${parsed.name}` as VersionRefName);
 }
 
 function validateExpectedHead(

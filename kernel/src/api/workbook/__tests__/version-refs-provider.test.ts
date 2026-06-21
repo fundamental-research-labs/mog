@@ -2,6 +2,7 @@ import { jest } from '@jest/globals';
 import type { VersionAuthor } from '@mog-sdk/contracts/versioning';
 
 import type { WorkbookConfig } from '../types';
+import type { VersionNormalCommitCapture } from '../../../document/version-store/commit-service';
 import {
   InMemoryVersionDocumentProviderBackend,
   createInMemoryVersionStoreProvider,
@@ -255,6 +256,135 @@ describe('WorkbookVersion provider-backed ref lifecycle facade', () => {
       diagnostics: [],
     });
   });
+
+  it.each([
+    ['branch name', 'scenario/provider-commit'],
+    ['full ref', 'refs/heads/scenario/provider-commit'],
+  ])(
+    'commits public targetRef writes by %s to the provider-backed branch without advancing main',
+    async (_label, targetRef) => {
+      const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
+      const initialized = await provider.initializeGraph(await initializeInput('graph-1', 'root'));
+      expectInitializeSuccess(initialized);
+      const captureNormalCommit = jest.fn(createNormalCommitCapture('branch-child'));
+      const wb = createWorkbook({
+        versioning: {
+          provider,
+          captureNormalCommit,
+        },
+      });
+
+      await expect(
+        wb.version.createBranch({
+          name: 'scenario/provider-commit' as any,
+          targetCommitId: initialized.rootCommit.id,
+        }),
+      ).resolves.toMatchObject({
+        status: 'success',
+        ref: {
+          name: 'refs/heads/scenario/provider-commit',
+          commitId: initialized.rootCommit.id,
+          revision: { kind: 'counter', value: '0' },
+        },
+      });
+
+      const committed = await wb.version.commit({
+        targetRef: targetRef as any,
+        expectedHead: {
+          commitId: initialized.rootCommit.id,
+          revision: { kind: 'counter', value: '0' },
+        },
+      });
+
+      expect(captureNormalCommit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          currentRef: expect.objectContaining({
+            name: 'refs/heads/scenario/provider-commit',
+            commitId: initialized.rootCommit.id,
+          }),
+          currentMain: expect.objectContaining({
+            name: 'refs/heads/main',
+            commitId: initialized.rootCommit.id,
+          }),
+          options: expect.objectContaining({
+            targetRef: 'refs/heads/scenario/provider-commit',
+          }),
+        }),
+      );
+      expect(committed).toMatchObject({
+        refName: 'refs/heads/scenario/provider-commit',
+        resolvedFrom: 'refs/heads/scenario/provider-commit',
+        refRevision: { kind: 'counter', value: '1' },
+      });
+      expect(committed.id).not.toBe(initialized.rootCommit.id);
+
+      await expect(wb.version.readRef('refs/heads/scenario/provider-commit' as any)).resolves
+        .toMatchObject({
+          status: 'success',
+          ref: {
+            name: 'refs/heads/scenario/provider-commit',
+            commitId: committed.id,
+            revision: { kind: 'counter', value: '1' },
+          },
+        });
+      await expect(wb.version.readRef('refs/heads/main')).resolves.toMatchObject({
+        status: 'success',
+        ref: {
+          name: 'refs/heads/main',
+          commitId: initialized.rootCommit.id,
+          revision: initialized.initialHead.revision,
+        },
+      });
+      await expect(wb.version.getHead()).resolves.toMatchObject({
+        id: initialized.rootCommit.id,
+        refName: 'refs/heads/main',
+        resolvedFrom: 'HEAD',
+        refRevision: initialized.symbolicHead.revision,
+      });
+    },
+  );
+
+  it('rejects symbolic HEAD revisions for explicit targetRef commits before capture', async () => {
+    const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
+    const initialized = await provider.initializeGraph(await initializeInput('graph-1', 'root'));
+    expectInitializeSuccess(initialized);
+    const captureNormalCommit = jest.fn(createNormalCommitCapture('should-not-run'));
+    const wb = createWorkbook({
+      versioning: {
+        provider,
+        captureNormalCommit,
+      },
+    });
+
+    await expect(
+      wb.version.commit({
+        targetRef: 'scenario/provider-commit' as any,
+        expectedHead: {
+          commitId: initialized.rootCommit.id,
+          revision: initialized.initialHead.revision,
+          symbolicHeadRevision: initialized.symbolicHead.revision,
+        },
+      }),
+    ).rejects.toMatchObject({
+      name: 'MogSdkError',
+      code: 'INVALID_ARGUMENT',
+      operation: 'workbook.version.commit',
+      details: {
+        versionIssueCode: 'VERSION_INVALID_OPTIONS',
+        diagnostics: [
+          expect.objectContaining({
+            issueCode: 'VERSION_INVALID_OPTIONS',
+            mutationGuarantee: 'no-write-attempted',
+            payload: expect.objectContaining({
+              option: 'expectedHead.symbolicHeadRevision',
+            }),
+            redacted: true,
+          }),
+        ],
+      },
+    });
+    expect(captureNormalCommit).not.toHaveBeenCalled();
+  });
 });
 
 async function objectRecord(
@@ -293,6 +423,32 @@ async function initializeInput(
       completenessDiagnostics: [],
     },
   };
+}
+
+function createNormalCommitCapture(label: string): VersionNormalCommitCapture {
+  return async ({ namespace, currentRef }) => ({
+    status: 'success',
+    input: {
+      snapshotRootRecord: await objectRecord(namespace, 'workbook.snapshotRoot.v1', {
+        label,
+        parent: currentRef.commitId,
+        sheets: [],
+      }),
+      semanticChangeSetRecord: await objectRecord(namespace, 'workbook.semanticChangeSet.v1', {
+        label,
+        changes: [{ id: `${label}-change-1`, domain: 'test' }],
+      }),
+      mutationSegmentRecords: [
+        await objectRecord(namespace, 'workbook.mutationSegment.v1', {
+          segmentId: `${label}-segment-1`,
+          baseCommitId: currentRef.commitId,
+        }),
+      ],
+      author: VERSION_AUTHOR,
+      createdAt: CREATED_AT,
+      completenessDiagnostics: [],
+    },
+  });
 }
 
 function expectInitializeSuccess(

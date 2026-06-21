@@ -695,7 +695,6 @@ describe('WorkbookVersion status slice', () => {
   });
 
   it.each([
-    ['targetRef', 'VERSION_REF_WRITE_UNAVAILABLE', 'AUTHORIZATION_DENIED'],
     ['author', 'VERSION_PERMISSION_DENIED', 'AUTHORIZATION_DENIED'],
     ['parents', 'VERSION_PERMISSION_DENIED', 'AUTHORIZATION_DENIED'],
     ['segmentIds', 'VERSION_INVALID_OPTIONS', 'INVALID_ARGUMENT'],

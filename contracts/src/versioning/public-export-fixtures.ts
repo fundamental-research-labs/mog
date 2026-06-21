@@ -1,0 +1,218 @@
+import type {
+  RedactionPolicy as ContractsApiRedactionPolicy,
+  VersionBranchRefReadResult as ContractsApiBranchRefReadResult,
+  VersionCheckoutMutationGuarantee as ContractsApiCheckoutMutationGuarantee,
+  VersionCheckoutResult as ContractsApiCheckoutResult,
+  VersionCheckoutTarget as ContractsApiCheckoutTarget,
+  VersionCommitOptions as ContractsApiCommitOptions,
+  VersionCreateBranchOptions as ContractsApiCreateBranchOptions,
+  VersionDiffEntry as ContractsApiDiffEntry,
+  VersionRefMutationResult as ContractsApiRefMutationResult,
+  VersionSemanticValue as ContractsApiSemanticValue,
+  VersionStoreDiagnostic as ContractsApiStoreDiagnostic,
+  Workbook as ContractsApiWorkbook,
+  WorkbookDiffPage as ContractsApiDiffPage,
+  WorkbookVersion as ContractsApiWorkbookVersion,
+  WorkbookVersionStatus as ContractsApiWorkbookVersionStatus,
+} from '@mog-sdk/contracts/api';
+import type {
+  RedactionPolicy as ContractsWorkbookRedactionPolicy,
+  VersionBranchRefReadResult as ContractsWorkbookBranchRefReadResult,
+  VersionCheckoutMutationGuarantee as ContractsWorkbookCheckoutMutationGuarantee,
+  VersionCheckoutResult as ContractsWorkbookCheckoutResult,
+  VersionCheckoutTarget as ContractsWorkbookCheckoutTarget,
+  VersionCommitOptions as ContractsWorkbookCommitOptions,
+  VersionCreateBranchOptions as ContractsWorkbookCreateBranchOptions,
+  VersionDiffEntry as ContractsWorkbookDiffEntry,
+  VersionRefMutationResult as ContractsWorkbookRefMutationResult,
+  VersionSemanticValue as ContractsWorkbookSemanticValue,
+  VersionStoreDiagnostic as ContractsWorkbookStoreDiagnostic,
+  WorkbookDiffPage as ContractsWorkbookDiffPage,
+  WorkbookVersion as ContractsWorkbookVersion,
+  WorkbookVersionStatus as ContractsWorkbookVersionStatus,
+} from '@mog-sdk/contracts/api/workbook';
+import type {
+  CapturePolicy,
+  DomainMutationReceipt,
+  ObjectDigest,
+  VersionAuthor,
+  VersionDomainCapabilityState,
+  VersionExportMetadataSummary,
+  VersionMutationSegment,
+  VersionObjectHeader,
+  VersionObjectKind,
+  VersionOperationContext,
+  VersionSyncProvenanceEnvelope,
+  VersionWriteAdmissionMode,
+  WorkbookCommitPersistedShape,
+} from '@mog-sdk/contracts/versioning';
+
+type Assert<T extends true> = T;
+type IsEqual<A, B> =
+  (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
+
+type _ContractsApiWorkbookEntryExportsVersionApi = Assert<
+  IsEqual<ContractsApiWorkbookVersion, ContractsWorkbookVersion>
+>;
+type _ContractsApiWorkbookEntryExportsStatus = Assert<
+  IsEqual<ContractsApiWorkbookVersionStatus, ContractsWorkbookVersionStatus>
+>;
+type _ContractsApiWorkbookEntryExportsCommit = Assert<
+  IsEqual<ContractsApiCommitOptions, ContractsWorkbookCommitOptions>
+>;
+type _ContractsApiWorkbookEntryExportsStoreDiagnostic = Assert<
+  IsEqual<ContractsApiStoreDiagnostic, ContractsWorkbookStoreDiagnostic>
+>;
+type _ContractsApiWorkbookEntryExportsDiffEntry = Assert<
+  IsEqual<ContractsApiDiffEntry, ContractsWorkbookDiffEntry>
+>;
+type _ContractsApiWorkbookEntryExportsDiffPage = Assert<
+  IsEqual<ContractsApiDiffPage, ContractsWorkbookDiffPage>
+>;
+type _ContractsApiWorkbookEntryExportsCheckoutTarget = Assert<
+  IsEqual<ContractsApiCheckoutTarget, ContractsWorkbookCheckoutTarget>
+>;
+type _ContractsApiWorkbookEntryExportsCheckoutResult = Assert<
+  IsEqual<ContractsApiCheckoutResult, ContractsWorkbookCheckoutResult>
+>;
+type _ContractsApiWorkbookEntryExportsCheckoutGuarantee = Assert<
+  IsEqual<ContractsApiCheckoutMutationGuarantee, ContractsWorkbookCheckoutMutationGuarantee>
+>;
+type _ContractsApiWorkbookEntryExportsBranchCreate = Assert<
+  IsEqual<ContractsApiCreateBranchOptions, ContractsWorkbookCreateBranchOptions>
+>;
+type _ContractsApiWorkbookEntryExportsBranchRead = Assert<
+  IsEqual<ContractsApiBranchRefReadResult, ContractsWorkbookBranchRefReadResult>
+>;
+type _ContractsApiWorkbookEntryExportsBranchMutation = Assert<
+  IsEqual<ContractsApiRefMutationResult, ContractsWorkbookRefMutationResult>
+>;
+type _ContractsApiWorkbookEntryExportsSemanticValue = Assert<
+  IsEqual<ContractsApiSemanticValue, ContractsWorkbookSemanticValue>
+>;
+type _ContractsApiWorkbookEntryExportsRedactionPolicy = Assert<
+  IsEqual<ContractsApiRedactionPolicy, ContractsWorkbookRedactionPolicy>
+>;
+
+type PublicVersionApiSurface = {
+  readonly workbook: ContractsApiWorkbook;
+  readonly version: ContractsApiWorkbookVersion;
+  readonly status: ContractsApiWorkbookVersionStatus;
+  readonly commit: ContractsApiCommitOptions;
+  readonly storeDiagnostic: ContractsApiStoreDiagnostic;
+  readonly diffEntry: ContractsApiDiffEntry;
+  readonly diffPage: ContractsApiDiffPage;
+  readonly checkoutTarget: ContractsApiCheckoutTarget;
+  readonly checkoutResult: ContractsApiCheckoutResult;
+  readonly checkoutGuarantee: ContractsApiCheckoutMutationGuarantee;
+  readonly createBranch: ContractsApiCreateBranchOptions;
+  readonly branchRead: ContractsApiBranchRefReadResult;
+  readonly branchMutation: ContractsApiRefMutationResult;
+  readonly semanticValue: ContractsApiSemanticValue;
+  readonly redactionPolicy: ContractsApiRedactionPolicy;
+};
+
+const vc03ExportSurfaceDomainIds = Object.freeze([
+  'workbook-metadata',
+  'sheets',
+  'cells.values',
+  'cells.formulas',
+  'rows-columns',
+] as const);
+
+const contractedCapabilityState: VersionDomainCapabilityState = 'contracted';
+const capturePolicy: CapturePolicy = 'commitEligible';
+const writeAdmissionMode: VersionWriteAdmissionMode = 'capture';
+const digest: ObjectDigest = Object.freeze({
+  algorithm: 'sha256',
+  value: 'sha256:vc03-05-public-export-surface',
+});
+const author: VersionAuthor = Object.freeze({
+  authorId: 'vc03-05-export-surface-fixture',
+  actorKind: 'system',
+  displayName: 'VC03-05 public export fixture',
+});
+const operationContext: VersionOperationContext = Object.freeze({
+  operationId: 'vc03-05-public-export-surface',
+  kind: 'sync-export',
+  author,
+  createdAt: '2026-06-21T00:00:00.000Z',
+  domainIds: vc03ExportSurfaceDomainIds,
+  capturePolicy,
+  writeAdmissionMode,
+});
+const mutationSegment: VersionMutationSegment = Object.freeze({
+  segmentId: 'vc03-05-public-export-surface-segment',
+  domainId: 'cells.values',
+  domainClass: 'authored',
+  capabilityState: contractedCapabilityState,
+  operationKind: operationContext.kind,
+  beforeDigest: digest,
+  afterDigest: digest,
+  redactionPolicy: 'metadata-only',
+});
+const domainReceipt: DomainMutationReceipt = Object.freeze({
+  receiptId: 'vc03-05-public-export-surface-receipt',
+  domainId: mutationSegment.domainId,
+  domainClass: mutationSegment.domainClass,
+  operationId: operationContext.operationId,
+  accepted: true,
+  capabilityState: contractedCapabilityState,
+  capturePolicy,
+  writeAdmissionMode,
+  segments: Object.freeze([mutationSegment]),
+});
+const exportMetadata: VersionExportMetadataSummary = Object.freeze({
+  exportId: 'vc03-05-public-export-surface',
+  format: 'public-typescript-barrel',
+  createdAt: operationContext.createdAt,
+  includedDomainIds: vc03ExportSurfaceDomainIds,
+  redactionPolicy: 'metadata-only',
+  digest,
+});
+const syncProvenance: VersionSyncProvenanceEnvelope = Object.freeze({
+  syncId: 'vc03-05-public-export-surface',
+  sourceSystem: '@mog-sdk/contracts/api',
+  importedAt: operationContext.createdAt,
+  sourceVersion: 'vc03-05-export-surface',
+  mappingDigest: digest,
+  domainReceipts: Object.freeze([domainReceipt]),
+});
+const objectKind: VersionObjectKind = 'workbook-commit';
+const objectHeader: VersionObjectHeader = Object.freeze({
+  objectId: 'commit:sha256:vc03-05-public-export-surface',
+  objectKind,
+  schemaVersion: 'workbook-commit.v1',
+  createdAt: operationContext.createdAt,
+  digest,
+  redactionPolicy: 'metadata-only',
+  domainId: 'workbook-metadata',
+});
+const persistedCommit: WorkbookCommitPersistedShape = Object.freeze({
+  header: objectHeader,
+  summary: Object.freeze({
+    commitId: objectHeader.objectId,
+    workbookId: 'vc03-05-export-surface-workbook',
+    parentCommitIds: Object.freeze([]),
+    author,
+    createdAt: operationContext.createdAt,
+    rootDigest: digest,
+    operationGroupId: operationContext.operationId,
+    domainReceipts: Object.freeze([domainReceipt]),
+    historyGapStatus: 'none',
+  }),
+  mutationSegments: Object.freeze([mutationSegment]),
+  exportMetadata,
+  syncProvenance,
+});
+
+export const VERSIONING_PUBLIC_EXPORT_FIXTURES = Object.freeze({
+  vc03ExportSurfaceDomainIds,
+  operationContext,
+  domainReceipt,
+  exportMetadata,
+  syncProvenance,
+  persistedCommit,
+});
+
+export type { PublicVersionApiSurface };

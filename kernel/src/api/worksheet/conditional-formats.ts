@@ -21,6 +21,7 @@ import type {
 import type { DocumentContext } from '../../context';
 import { KernelError } from '../../errors';
 import { resolveRange } from '../internal/address-resolver';
+import { createConditionalFormatMutationOptionsFactory } from './conditional-format-mutation-context';
 import * as CFOps from './operations/cf-operations';
 
 // ---------------------------------------------------------------------------
@@ -558,6 +559,11 @@ function normalizeRules<T extends Record<string, any>>(rules: T[]): T[] {
 }
 
 export class WorksheetConditionalFormattingImpl implements WorksheetConditionalFormatting {
+  private readonly mutationOptions = createConditionalFormatMutationOptionsFactory(
+    this.ctx,
+    this.sheetId,
+  );
+
   constructor(
     private readonly ctx: DocumentContext,
     private readonly sheetId: SheetId,
@@ -587,13 +593,21 @@ export class WorksheetConditionalFormattingImpl implements WorksheetConditionalF
     const trimmed = formula.trim();
     const normalizedFormula = trimmed.startsWith('=') ? trimmed : `=${trimmed}`;
     const rule = { type: 'formula', formula: normalizedFormula, style } as CFRuleInput;
-    const receipt = await this.add(ranges, [rule]);
+    const receipt = await this._addWithOperation(ranges, [rule], 'conditionalFormats.addFormula');
     return { ...receipt, kind: 'conditionalFormat.addFormula' };
   }
 
   async add(
     ranges: (string | CellRange)[],
     rules: CFRuleInput[],
+  ): Promise<ConditionalFormatMutationReceipt & ConditionalFormat> {
+    return this._addWithOperation(ranges, rules, 'conditionalFormats.add');
+  }
+
+  private async _addWithOperation(
+    ranges: (string | CellRange)[],
+    rules: CFRuleInput[],
+    operationIdPrefix: string,
   ): Promise<ConditionalFormatMutationReceipt & ConditionalFormat> {
     this._ensureWritable('conditionalFormats.add');
     assertCfRangeArray(
@@ -605,7 +619,13 @@ export class WorksheetConditionalFormattingImpl implements WorksheetConditionalF
     );
     assertCfRuleArray(rules, ['rules'], 'conditionalFormats.add');
     const resolved = ranges.map((r) => resolveRange(r));
-    const fallback = await CFOps.addConditionalFormat(this.ctx, this.sheetId, resolved, rules);
+    const fallback = await CFOps.addConditionalFormat(
+      this.ctx,
+      this.sheetId,
+      resolved,
+      rules,
+      this.mutationOptions.create(operationIdPrefix),
+    );
 
     // Read back the full entity.
     const format = (await this.get(fallback.id)) ?? fallback;
@@ -664,17 +684,32 @@ export class WorksheetConditionalFormattingImpl implements WorksheetConditionalF
     }
 
     let changed = false;
+    const mutationCount = (ranges !== undefined ? 1 : 0) + (nextRules !== undefined ? 1 : 0);
+    const nextMutationOptions =
+      mutationCount > 1
+        ? this.mutationOptions.grouped('conditionalFormats.update')
+        : () => this.mutationOptions.create('conditionalFormats.update');
 
     // Route ranges through the dedicated updateCfRanges bridge for CRDT safety
     if (ranges !== undefined) {
-      await this.ctx.computeBridge.updateCfRanges(this.sheetId, formatId, ranges);
+      await this.ctx.computeBridge.updateCfRanges(
+        this.sheetId,
+        formatId,
+        ranges,
+        nextMutationOptions(),
+      );
       changed = true;
     }
 
     // Route rule/property updates through updateCfRule (JSON merge)
     if (nextRules !== undefined) {
       const normalizedRules = normalizeRules(nextRules);
-      await this.ctx.computeBridge.updateCfRule(this.sheetId, formatId, { rules: normalizedRules });
+      await this.ctx.computeBridge.updateCfRule(
+        this.sheetId,
+        formatId,
+        { rules: normalizedRules },
+        nextMutationOptions(),
+      );
       nextRules = normalizedRules as CFRule[];
       changed = true;
     }
@@ -739,7 +774,12 @@ export class WorksheetConditionalFormattingImpl implements WorksheetConditionalF
       });
     }
 
-    await this.ctx.computeBridge.updateCfRule(this.sheetId, formatId, { rules: updatedRules });
+    await this.ctx.computeBridge.updateCfRule(
+      this.sheetId,
+      formatId,
+      { rules: updatedRules },
+      this.mutationOptions.create('conditionalFormats.clearRuleStyle'),
+    );
     const fallback = { ...format, rules: updatedRules };
     const after = (await CFOps.getConditionalFormat(this.ctx, this.sheetId, formatId)) ?? fallback;
     return CFOps.buildConditionalFormatMutationReceipt({
@@ -785,7 +825,12 @@ export class WorksheetConditionalFormattingImpl implements WorksheetConditionalF
     }
 
     const normalizedRules = normalizeRules(updatedRules);
-    await this.ctx.computeBridge.updateCfRule(this.sheetId, formatId, { rules: normalizedRules });
+    await this.ctx.computeBridge.updateCfRule(
+      this.sheetId,
+      formatId,
+      { rules: normalizedRules },
+      this.mutationOptions.create('conditionalFormats.changeRuleType'),
+    );
     const fallback = { ...format, rules: normalizedRules as CFRule[] };
     const after = (await CFOps.getConditionalFormat(this.ctx, this.sheetId, formatId)) ?? fallback;
     return CFOps.buildConditionalFormatMutationReceipt({
@@ -814,7 +859,11 @@ export class WorksheetConditionalFormattingImpl implements WorksheetConditionalF
       });
     }
 
-    await this.ctx.computeBridge.deleteCfRule(this.sheetId, formatId);
+    await this.ctx.computeBridge.deleteCfRule(
+      this.sheetId,
+      formatId,
+      this.mutationOptions.create('conditionalFormats.remove'),
+    );
     return CFOps.buildConditionalFormatMutationReceipt({
       kind: 'conditionalFormat.remove',
       sheetId: this.sheetId,
@@ -835,7 +884,12 @@ export class WorksheetConditionalFormattingImpl implements WorksheetConditionalF
       });
     }
 
-    await this.ctx.computeBridge.deleteRuleFromCf(this.sheetId, formatId, ruleId);
+    await this.ctx.computeBridge.deleteRuleFromCf(
+      this.sheetId,
+      formatId,
+      ruleId,
+      this.mutationOptions.create('conditionalFormats.removeRule'),
+    );
     return CFOps.buildConditionalFormatMutationReceipt({
       kind: 'conditionalFormat.removeRule',
       sheetId: this.sheetId,
@@ -853,13 +907,22 @@ export class WorksheetConditionalFormattingImpl implements WorksheetConditionalF
   }
 
   async clear(): Promise<ConditionalFormatMutationReceipt> {
-    return CFOps.clearAllConditionalFormats(this.ctx, this.sheetId);
+    return CFOps.clearAllConditionalFormats(
+      this.ctx,
+      this.sheetId,
+      this.mutationOptions.grouped('conditionalFormats.clear'),
+    );
   }
 
   async clearInRanges(ranges: (string | CellRange)[]): Promise<ConditionalFormatMutationReceipt> {
     assertCfRangeArray(ranges, ['ranges'], 'conditionalFormats.clearInRanges');
     const resolved = ranges.map((r) => resolveRange(r));
-    return CFOps.clearCFRulesInRanges(this.ctx, this.sheetId, resolved);
+    return CFOps.clearCFRulesInRanges(
+      this.ctx,
+      this.sheetId,
+      resolved,
+      this.mutationOptions.grouped('conditionalFormats.clearInRanges'),
+    );
   }
 
   async reorder(formatIds: string[]): Promise<ConditionalFormatMutationReceipt> {
@@ -874,7 +937,11 @@ export class WorksheetConditionalFormattingImpl implements WorksheetConditionalF
         ruleCount: 0,
       });
     }
-    await this.ctx.computeBridge.reorderCfRules(this.sheetId, formatIds);
+    await this.ctx.computeBridge.reorderCfRules(
+      this.sheetId,
+      formatIds,
+      this.mutationOptions.create('conditionalFormats.reorder'),
+    );
     const after = await this.list();
     const affectedAfter = formatIds
       .map((id) => after.find((format) => format.id === id))
@@ -921,6 +988,7 @@ export class WorksheetConditionalFormattingImpl implements WorksheetConditionalF
       relativeCFs,
       origin,
       isCut,
+      this.mutationOptions.grouped('conditionalFormats.cloneForPaste'),
     );
   }
 }

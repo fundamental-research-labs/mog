@@ -18,10 +18,12 @@ import type {
 } from '@mog-sdk/contracts/api';
 import type { CellRange, SheetId } from '@mog-sdk/contracts/core';
 
+import type { MutationAdmissionOptions } from '../../../bridges/compute';
 import { rangeToA1 } from '../../internal/utils';
 import type { DocumentContext } from './shared';
 
 type PublicCFRule = PublicConditionalFormat['rules'][number];
+type MutationAdmissionOptionsFactory = () => MutationAdmissionOptions | undefined;
 
 const publicRuleTypes = new Set([
   'cellValue',
@@ -366,6 +368,7 @@ export async function cloneConditionalFormatsForPaste(
   formats: RelativeConditionalFormat[],
   origin: { row: number; col: number },
   isCut: boolean = false,
+  admissionOptionsFactory?: MutationAdmissionOptionsFactory,
 ): Promise<ConditionalFormatMutationReceipt> {
   const createdFormats: PublicConditionalFormat[] = [];
   for (const cf of formats) {
@@ -387,7 +390,7 @@ export async function cloneConditionalFormatsForPaste(
         priority: i,
       })),
     };
-    await ctx.computeBridge.addCfRule(targetSheetId, cfFormat);
+    await ctx.computeBridge.addCfRule(targetSheetId, cfFormat, admissionOptionsFactory?.());
     createdFormats.push(toPublicFormat(cfFormat));
   }
 
@@ -419,6 +422,7 @@ export async function clearCFRulesInRanges(
   ctx: DocumentContext,
   sheetId: SheetId,
   ranges: Array<{ startRow: number; startCol: number; endRow: number; endCol: number }>,
+  admissionOptionsFactory?: MutationAdmissionOptionsFactory,
 ): Promise<ConditionalFormatMutationReceipt> {
   const allRules = await ctx.computeBridge.getAllCfRules(sheetId);
 
@@ -447,7 +451,11 @@ export async function clearCFRulesInRanges(
     }
   }
 
-  await Promise.all(toDelete.map((rule) => ctx.computeBridge.deleteCfRule(sheetId, rule.id)));
+  await Promise.all(
+    toDelete.map((rule) =>
+      ctx.computeBridge.deleteCfRule(sheetId, rule.id, admissionOptionsFactory?.()),
+    ),
+  );
 
   return buildConditionalFormatMutationReceipt({
     kind: 'conditionalFormat.clearInRanges',
@@ -774,6 +782,7 @@ export async function addConditionalFormat(
   sheetId: SheetId,
   ranges: Array<{ startRow: number; startCol: number; endRow: number; endCol: number }>,
   rules: any[],
+  admissionOptions?: MutationAdmissionOptions,
 ): Promise<PublicConditionalFormat> {
   const formatId = generateFormatId();
   const cfFormat = {
@@ -795,7 +804,7 @@ export async function addConditionalFormat(
       priority: 0,
     })),
   };
-  await ctx.computeBridge.addCfRule(sheetId, cfFormat);
+  await ctx.computeBridge.addCfRule(sheetId, cfFormat, admissionOptions);
   return toPublicFormat(cfFormat);
 }
 
@@ -833,9 +842,14 @@ export async function getConditionalFormats(
 export async function clearAllConditionalFormats(
   ctx: DocumentContext,
   sheetId: SheetId,
+  admissionOptionsFactory?: MutationAdmissionOptionsFactory,
 ): Promise<ConditionalFormatMutationReceipt> {
   const allRules = await ctx.computeBridge.getAllCfRules(sheetId);
-  await Promise.all(allRules.map((rule) => ctx.computeBridge.deleteCfRule(sheetId, rule.id)));
+  await Promise.all(
+    allRules.map((rule) =>
+      ctx.computeBridge.deleteCfRule(sheetId, rule.id, admissionOptionsFactory?.()),
+    ),
+  );
   return buildConditionalFormatMutationReceipt({
     kind: 'conditionalFormat.clear',
     sheetId,

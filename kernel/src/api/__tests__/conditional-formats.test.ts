@@ -421,7 +421,7 @@ describe('WorksheetConditionalFormattingImpl — input shape diagnostics', () =>
     await cf.clearInRanges(['A1:A10']);
 
     expect(bridge.getAllCfRules).toHaveBeenCalledWith(SHEET_ID);
-    expect(bridge.deleteCfRule).toHaveBeenCalledWith(SHEET_ID, 'fmt-1');
+    expect(bridge.deleteCfRule).toHaveBeenCalledWith(SHEET_ID, 'fmt-1', expect.any(Object));
   });
 
   it('update rejects a non-array updates.ranges field', async () => {
@@ -468,10 +468,20 @@ describe('WorksheetConditionalFormattingImpl — input shape diagnostics', () =>
 
     await cf.update('fmt-1', { ranges, rules: [formulaRule], stopIfTrue: true } as any);
 
-    expect(bridge.updateCfRanges).toHaveBeenCalledWith(SHEET_ID, 'fmt-1', ranges);
-    expect(bridge.updateCfRule).toHaveBeenCalledWith(SHEET_ID, 'fmt-1', {
-      rules: [{ ...formulaRule, stopIfTrue: true }],
-    });
+    expect(bridge.updateCfRanges).toHaveBeenCalledWith(
+      SHEET_ID,
+      'fmt-1',
+      ranges,
+      expect.any(Object),
+    );
+    expect(bridge.updateCfRule).toHaveBeenCalledWith(
+      SHEET_ID,
+      'fmt-1',
+      {
+        rules: [{ ...formulaRule, stopIfTrue: true }],
+      },
+      expect.any(Object),
+    );
   });
 
   it('cloneForPaste rejects a non-array relativeCFs argument', async () => {
@@ -887,7 +897,12 @@ describe('WorksheetConditionalFormattingImpl — removeRule', () => {
     await cf.removeRule('fmt-1', 'rule-1');
 
     expect(bridge.deleteRuleFromCf).toHaveBeenCalledTimes(1);
-    expect(bridge.deleteRuleFromCf).toHaveBeenCalledWith(SHEET_ID, 'fmt-1', 'rule-1');
+    expect(bridge.deleteRuleFromCf).toHaveBeenCalledWith(
+      SHEET_ID,
+      'fmt-1',
+      'rule-1',
+      expect.any(Object),
+    );
     expect(bridge.deleteCfRule).not.toHaveBeenCalled();
   });
 });

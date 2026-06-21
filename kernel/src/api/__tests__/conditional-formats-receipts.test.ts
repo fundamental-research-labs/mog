@@ -136,9 +136,14 @@ describe('WorksheetConditionalFormattingImpl — mutation receipts', () => {
 
     const receipt = await cf.update('fmt-1', { stopIfTrue: true });
 
-    expect(bridge.updateCfRule).toHaveBeenCalledWith(SHEET_ID, 'fmt-1', {
-      rules: [updatedRule],
-    });
+    expect(bridge.updateCfRule).toHaveBeenCalledWith(
+      SHEET_ID,
+      'fmt-1',
+      {
+        rules: [updatedRule],
+      },
+      expect.any(Object),
+    );
     expect(receipt).toMatchObject({
       kind: 'conditionalFormat.update',
       status: 'applied',
@@ -161,7 +166,12 @@ describe('WorksheetConditionalFormattingImpl — mutation receipts', () => {
 
     const receipt = await cf.removeRule('fmt-1', 'rule-1');
 
-    expect(bridge.deleteRuleFromCf).toHaveBeenCalledWith(SHEET_ID, 'fmt-1', 'rule-1');
+    expect(bridge.deleteRuleFromCf).toHaveBeenCalledWith(
+      SHEET_ID,
+      'fmt-1',
+      'rule-1',
+      expect.any(Object),
+    );
     expect(bridge.deleteCfRule).not.toHaveBeenCalled();
     expect(receipt).toMatchObject({
       kind: 'conditionalFormat.removeRule',
@@ -206,7 +216,7 @@ describe('WorksheetConditionalFormattingImpl — mutation receipts', () => {
 
     const receipt = await cf.clearInRanges(['A1:A10']);
 
-    expect(bridge.deleteCfRule).toHaveBeenCalledWith(SHEET_ID, 'fmt-1');
+    expect(bridge.deleteCfRule).toHaveBeenCalledWith(SHEET_ID, 'fmt-1', expect.any(Object));
     expect(receipt).toMatchObject({
       kind: 'conditionalFormat.clearInRanges',
       status: 'applied',
@@ -238,7 +248,7 @@ describe('WorksheetConditionalFormattingImpl — mutation receipts', () => {
 
     const receipt = await cf.remove('fmt-1');
 
-    expect(bridge.deleteCfRule).toHaveBeenCalledWith(SHEET_ID, 'fmt-1');
+    expect(bridge.deleteCfRule).toHaveBeenCalledWith(SHEET_ID, 'fmt-1', expect.any(Object));
     expect(receipt.diagnostics).toEqual([
       expect.objectContaining({
         severity: 'warning',

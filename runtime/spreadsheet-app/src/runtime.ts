@@ -24,6 +24,7 @@ import {
 } from './attachment-runtime';
 import { resolveCommandOwner } from './feature-gates';
 import { SpreadsheetAppPublicError, toPublicError } from './public-error';
+import { RUNTIME_POLICY_SNAPSHOT_CAPABILITIES } from './runtime-policy-capabilities';
 import type {
   SpreadsheetActorRef,
   SpreadsheetActorSession,
@@ -919,19 +920,11 @@ class SpreadsheetRuntimeController
           record,
           'getEffectivePolicySnapshot',
         );
-    const capabilities: readonly SpreadsheetCapability[] = [
-      'workbook:read',
-      'workbook:export',
-      'workbook:screenshot',
-      'workbook:write',
-      'workbook:undo-group',
-      'decorations:write',
-    ];
     const decisions: Array<{
       capability: SpreadsheetCapability;
       decision: SpreadsheetPolicyDecision;
     }> = [];
-    for (const capability of capabilities) {
+    for (const capability of RUNTIME_POLICY_SNAPSHOT_CAPABILITIES) {
       try {
         await this.authorize(actorInput, record, capability, `policy.${capability}`);
         decisions.push({ capability, decision: 'allowed' });

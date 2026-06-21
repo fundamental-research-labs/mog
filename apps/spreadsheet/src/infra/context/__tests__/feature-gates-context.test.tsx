@@ -63,9 +63,16 @@ describe('FeatureGatesContext', () => {
       const { result: undo } = renderHook(() => useFeatureGate('capabilities', 'undo'), {
         wrapper: wrapper({}),
       });
+      const { result: versionControl } = renderHook(
+        () => useFeatureGate('capabilities', 'versionControl'),
+        {
+          wrapper: wrapper({}),
+        },
+      );
       expect(homeTab.current).toBe(true);
       expect(clipboard.current).toBe(true);
       expect(undo.current).toBe(true);
+      expect(versionControl.current).toBe(true);
     });
 
     it('useFeatureGates returns the full gates object', () => {
@@ -207,6 +214,7 @@ describe('FeatureGatesContext', () => {
       });
       expect(ribbon.current).toBe(false);
       expect(editing.current).toBe(false);
+      expect(VIEWER_GATES.capabilities?.versionControl).toBe(false);
     });
 
     it('DESKTOP_GATES hides unsupported/internal-only tabs', () => {
@@ -222,6 +230,7 @@ describe('FeatureGatesContext', () => {
       expect(draw.current).toBe(false);
       expect(pageLayout.current).toBe(true);
       expect(home.current).toBe(true);
+      expect(DESKTOP_GATES.capabilities?.versionControl).toBe(false);
     });
 
     it('DESKTOP_GATES does not affect ribbon or editing', () => {
@@ -252,6 +261,7 @@ describe('FeatureGatesContext', () => {
       expect(home.current).toBe(true);
       expect(save.current).toBe(false);
       expect(undo.current).toBe(true);
+      expect(MINIMAL_EDITOR_GATES.capabilities?.versionControl).toBe(false);
     });
   });
 

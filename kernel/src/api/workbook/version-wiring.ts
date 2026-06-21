@@ -1,4 +1,5 @@
 import type { DocumentContext } from '../../context';
+import { createProviderBackedBranchLifecycleService } from '../../document/version-store/branch-provider-service';
 import { createProviderBackedCheckoutMaterializationService } from '../../document/version-store/checkout-provider-service';
 import { createWorkbookVersionCommitService } from '../../document/version-store/commit-service';
 import { createWorkbookVersionDiffService } from '../../document/version-store/diff-service';
@@ -46,6 +47,13 @@ export function attachWorkbookVersioning(
     existing.mergeService ??
     existing.versionMergeService ??
     (config.provider ? createWorkbookVersionMergeService({ provider: config.provider }) : undefined);
+  const branchService =
+    existing.branchService ??
+    existing.branchRefService ??
+    existing.refLifecycleService ??
+    (config.provider
+      ? createProviderBackedBranchLifecycleService({ provider: config.provider })
+      : undefined);
   runtime.versioning = {
     ...existing,
     ...(config.provider ? { provider: config.provider } : {}),
@@ -54,6 +62,7 @@ export function attachWorkbookVersioning(
     ...(diffService ? { diffService } : {}),
     ...(checkoutService ? { checkoutService } : {}),
     ...(mergeService ? { mergeService } : {}),
+    ...(branchService ? { branchService } : {}),
   };
 }
 

@@ -686,6 +686,9 @@ function mapBranchDiagnostic(
     severity: value.severity === 'warning' || value.severity === 'info' ? value.severity : 'error',
     recoverability: recoverabilityForIssue(issueCode),
     payload: sanitizeBranchDiagnosticPayload(value, operation),
+    ...(isRefMutationOperation(operation) && issueCode === 'VERSION_REF_WRITE_UNAVAILABLE'
+      ? { mutationGuarantee: 'no-write-attempted' }
+      : {}),
   });
 }
 
@@ -898,6 +901,16 @@ function issueCodeForBranchDiagnostic(code: string): string {
     default:
       return 'VERSION_INVALID_OPTIONS';
   }
+}
+
+function isRefMutationOperation(operation: VersionRefOperation): boolean {
+  return (
+    operation === 'createBranch' ||
+    operation === 'fastForwardBranch' ||
+    operation === 'updateBranch' ||
+    operation === 'deleteBranch' ||
+    operation === 'deleteRef'
+  );
 }
 
 function safeMessageForIssue(issueCode: string, operation: VersionRefOperation): string {

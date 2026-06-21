@@ -56,6 +56,8 @@ type DiffServiceResult = WorkbookDiffPage & {
   readonly diagnostics: readonly (PublicVersionStoreDiagnostic | VersionStoreDiagnostic)[];
 };
 
+type VersionObjectRecordReader = Pick<VersionObjectStore, 'getObjectRecord'>;
+
 type ParsedDiffOptions = {
   readonly pageSize: number;
   readonly pageToken?: VersionPageToken | string;
@@ -174,7 +176,7 @@ export class WorkbookVersionDiffService {
     | {
         readonly ok: true;
         readonly graph: VersionGraphStore;
-        readonly objectStore: VersionObjectStore;
+        readonly objectStore: VersionObjectRecordReader;
       }
     | {
         readonly ok: false;
@@ -230,11 +232,15 @@ export function createWorkbookVersionDiffService(
   return new WorkbookVersionDiffService(options);
 }
 
-function objectStoreFromGraph(graph: VersionGraphStore): VersionObjectStore | null {
+function objectStoreFromGraph(graph: VersionGraphStore): VersionObjectRecordReader | null {
+  if (typeof graph.getObjectRecord === 'function') return graph;
+
   const candidate = (graph as { readonly objectStore?: unknown }).objectStore;
   if (!candidate || typeof candidate !== 'object') return null;
   const maybe = candidate as Partial<VersionObjectStore>;
-  return typeof maybe.getObjectRecord === 'function' ? (candidate as VersionObjectStore) : null;
+  return typeof maybe.getObjectRecord === 'function'
+    ? (candidate as VersionObjectRecordReader)
+    : null;
 }
 
 async function resolveCommitish(
@@ -350,7 +356,7 @@ function parsePageToken(
 }
 
 async function readSemanticChangeSet(
-  objectStore: VersionObjectStore,
+  objectStore: VersionObjectRecordReader,
   digest: VersionDependencyRef['digest'],
 ): Promise<
   | { readonly ok: true; readonly payload: unknown }

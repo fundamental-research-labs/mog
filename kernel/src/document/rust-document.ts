@@ -513,8 +513,11 @@ export class RustDocument {
     // it eagerly at the top of the file because bridge-provider-doc.ts
     // imports `ComputeBridge` types and we want this file (rust-document)
     // to stay lean; circular import risk is also lower with a lazy import.
-    const { createBridgeBackedProviderDoc } = await import('./providers/bridge-provider-doc');
-    const doc = createBridgeBackedProviderDoc(this.computeBridge, this.docId);
+    const { createBridgeBackedProviderDoc, getBridgeBackedProviderReplayAdmission } =
+      await import('./providers/bridge-provider-doc');
+    const doc = createBridgeBackedProviderDoc(this.computeBridge, this.docId, {
+      providerReplayAdmission: getBridgeBackedProviderReplayAdmission(provider),
+    });
 
     // Provider replay applies persisted bytes into the engine via syncApply.
     // This is a system operation, not a user mutation, so it must bypass the
@@ -1285,7 +1288,7 @@ export class RustDocument {
 
 function providerEnvelopeVersion(
   envelope: ProviderInboundUpdateEnvelopeAny,
-): ProviderDocApplyUpdateMetadata['envelopeVersion'] {
+): 'provider-inbound-update-v1' | 'provider-inbound-update-v2' {
   return isProviderInboundUpdateEnvelopeV2(envelope)
     ? 'provider-inbound-update-v2'
     : 'provider-inbound-update-v1';

@@ -22,12 +22,38 @@
  * @see ./provider.ts — the `ProviderDoc` interface contract
  */
 
+import {
+  DEFAULT_PROVENANCE_REDACTION_POLICY,
+  validateSyncUpdateProvenance,
+  type SyncUpdateProvenance,
+} from '@mog-sdk/types-document/storage';
+import type { StorageScopeBinding } from '@mog-sdk/types-document/storage/provider-identity';
 import type { ComputeBridge } from '../../bridges/compute/compute-bridge';
 import { slog } from '../../lib/slog';
-import type { ProviderDoc, ProviderDocApplyUpdateMetadata } from './provider';
+import type { Provider, ProviderDoc, ProviderDocApplyUpdateMetadata } from './provider';
+
+export interface BridgeBackedProviderReplayAdmissionOptions {
+  readonly providerRefId?: string;
+  readonly providerId?: string;
+  readonly authorityRef?: string;
+  readonly storageScope?: StorageScopeBinding;
+}
 
 export interface BridgeBackedProviderDocOptions {
   readonly onApplyUpdateAdmission?: (metadata: ProviderDocApplyUpdateMetadata) => void;
+  readonly providerReplayAdmission?: BridgeBackedProviderReplayAdmissionOptions;
+}
+
+export function getBridgeBackedProviderReplayAdmission(
+  provider: Pick<Provider, 'name' | 'getIdentity'>,
+): BridgeBackedProviderReplayAdmissionOptions {
+  const identity = provider.getIdentity?.();
+  return {
+    providerRefId: identity?.providerRefId ?? provider.name,
+    ...(identity?.providerId === undefined ? {} : { providerId: identity.providerId }),
+    ...(identity?.authorityRef === undefined ? {} : { authorityRef: identity.authorityRef }),
+    ...(identity?.storageScope === undefined ? {} : { storageScope: identity.storageScope }),
+  };
 }
 
 type ComputeBridgeAdmissionHooks = {
@@ -64,8 +90,17 @@ export function createBridgeBackedProviderDoc(
       update: Uint8Array,
       metadata?: ProviderDocApplyUpdateMetadata,
     ): Promise<void> {
-      if (metadata) {
-        emitApplyUpdateAdmission(bridge, options, metadata);
+      const admissionMetadata =
+        metadata ??
+        (options.providerReplayAdmission
+          ? await classifyProviderReplayApplyUpdate(
+              docId,
+              update,
+              options.providerReplayAdmission,
+            )
+          : undefined);
+      if (admissionMetadata) {
+        emitApplyUpdateAdmission(bridge, options, admissionMetadata);
       }
       // `syncApply` is a mutation route — its return is the recalc result,
       // which Providers don't observe. We `await` so failures surface to the
@@ -77,6 +112,57 @@ export function createBridgeBackedProviderDoc(
     },
     currentStateVector(): Promise<Uint8Array> {
       return bridge.currentStateVector();
+    },
+  };
+}
+
+async function classifyProviderReplayApplyUpdate(
+  docId: string,
+  update: Uint8Array,
+  options: BridgeBackedProviderReplayAdmissionOptions,
+): Promise<ProviderDocApplyUpdateMetadata> {
+  const payloadHash = await sha256Hex(update);
+  const provenance = buildProviderReplayProvenance(payloadHash, options);
+  const validation = validateSyncUpdateProvenance(provenance, { expectedPayloadHash: payloadHash });
+  return {
+    source: 'provider-replay',
+    docId,
+    envelopeVersion: 'provider-replay',
+    ...(options.providerRefId === undefined ? {} : { providerRefId: options.providerRefId }),
+    payloadHash,
+    provenance,
+    validationDiagnostics: validation.diagnostics,
+  };
+}
+
+function buildProviderReplayProvenance(
+  payloadHash: string,
+  options: BridgeBackedProviderReplayAdmissionOptions,
+): SyncUpdateProvenance {
+  const providerId = options.providerId;
+  return {
+    schemaVersion: 'sync-update-provenance-v1',
+    sourceKind: 'providerReplay',
+    updateIdentity: {
+      originKind: 'provider',
+      ...(providerId === undefined ? {} : { stableOriginId: providerId, providerId }),
+      ...(options.providerRefId === undefined ? {} : { providerRefId: options.providerRefId }),
+      ...(options.storageScope === undefined ? {} : { storageScope: options.storageScope }),
+      ...(options.authorityRef === undefined ? {} : { authorityRef: options.authorityRef }),
+      payloadHash,
+    },
+    trust: {
+      status: 'trustedLocalSystem',
+      ...(options.authorityRef === undefined ? {} : { authorityRef: options.authorityRef }),
+    },
+    author: { kind: 'unknown', reason: 'providerReplay' },
+    replay: true,
+    system: true,
+    capturePolicy: 'excluded',
+    redaction: DEFAULT_PROVENANCE_REDACTION_POLICY,
+    exclusionDiagnostic: {
+      reason: 'providerReplay',
+      message: 'Provider attach replay is classified without remote authorship.',
     },
   };
 }
@@ -99,4 +185,14 @@ function emitApplyUpdateAdmission(
   } catch (err) {
     slog('bridgeProviderDoc.bridgeAdmissionHookFailed', { error: err });
   }
+}
+
+async function sha256Hex(bytes: Uint8Array): Promise<string> {
+  if (typeof globalThis.crypto?.subtle?.digest !== 'function') {
+    throw new Error('BridgeBackedProviderDoc.applyUpdate: SHA-256 digest is unavailable');
+  }
+  const digest = await globalThis.crypto.subtle.digest('SHA-256', new Uint8Array(bytes));
+  return Array.from(new Uint8Array(digest))
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('');
 }

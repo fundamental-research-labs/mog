@@ -205,10 +205,14 @@ export type ProviderCheckpointResult =
 export type ProviderAttachReturn = ProviderAttachResult | void;
 export type ProviderCheckpointReturn = ProviderCheckpointResult | void;
 
-export type SyncUpdateAdmissionSource = 'provider-inbound' | 'document-sync-port';
+export type SyncUpdateAdmissionSource =
+  | 'provider-inbound'
+  | 'provider-replay'
+  | 'document-sync-port';
 export type SyncUpdateAdmissionEnvelopeVersion =
   | 'provider-inbound-update-v1'
   | 'provider-inbound-update-v2'
+  | 'provider-replay'
   | 'provenance-only'
   | 'classified-raw';
 
@@ -224,13 +228,22 @@ export interface SyncUpdateAdmissionMetadata {
   readonly validationDiagnostics: readonly SyncUpdateValidationDiagnostic[];
 }
 
-export interface ProviderDocApplyUpdateMetadata extends SyncUpdateAdmissionMetadata {
+export interface ProviderInboundApplyUpdateMetadata extends SyncUpdateAdmissionMetadata {
   readonly source: 'provider-inbound';
   readonly envelopeVersion: 'provider-inbound-update-v1' | 'provider-inbound-update-v2';
   readonly providerRefId: string;
   readonly providerEpoch: string;
   readonly updateId: string;
 }
+
+export interface ProviderReplayApplyUpdateMetadata extends SyncUpdateAdmissionMetadata {
+  readonly source: 'provider-replay';
+  readonly envelopeVersion: 'provider-replay';
+}
+
+export type ProviderDocApplyUpdateMetadata =
+  | ProviderInboundApplyUpdateMetadata
+  | ProviderReplayApplyUpdateMetadata;
 
 export type ClassifiedRawSyncUpdateProvenance = Exclude<
   SyncUpdateProvenance,

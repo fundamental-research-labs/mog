@@ -2,8 +2,8 @@
  * WorkbookVersion -- public version-control API slice.
  *
  * This surface exposes status, graph inspection, public commit/ref mutation,
- * semantic diff, and a checkout materialization planning facade. Merge APIs
- * are not part of this slice.
+ * semantic diff, checkout materialization planning, and a fail-closed merge
+ * preview facade.
  */
 
 export type WorkbookVersionRolloutStage =
@@ -30,6 +30,7 @@ export type WorkbookVersionDiagnosticCode =
   | 'version.checkout.pending'
   | 'version.checkout.serviceAttached'
   | 'version.merge.pending'
+  | 'version.merge.serviceAttached'
   | 'version.provenanceAdmission.present'
   | 'version.provenanceAdmission.unavailable'
   | 'version.head.serviceUnavailable';
@@ -467,6 +468,71 @@ export interface VersionDiffEntry {
 
 export type WorkbookDiffPage = VersionPage<VersionDiffEntry, 'semantic-change-order'>;
 
+export interface VersionMergeInput {
+  readonly base: WorkbookCommitId;
+  readonly ours: WorkbookCommitId;
+  readonly theirs: WorkbookCommitId;
+}
+
+export interface VersionMergeOptions {
+  readonly mode?: 'preview';
+  readonly includeDiagnostics?: boolean;
+}
+
+export interface VersionMergeChange {
+  readonly structural: VersionDiffStructuralMetadata;
+  readonly base: VersionDiffValue;
+  readonly ours?: VersionDiffValue;
+  readonly theirs?: VersionDiffValue;
+  readonly merged: VersionDiffValue;
+  readonly display?: VersionDiffDisplay;
+  readonly diagnostics?: readonly VersionStoreDiagnostic[];
+}
+
+export interface VersionMergeConflict {
+  readonly conflictKind: 'same-property';
+  readonly structural: VersionDiffStructuralMetadata;
+  readonly base: VersionDiffValue;
+  readonly ours: VersionDiffValue;
+  readonly theirs: VersionDiffValue;
+  readonly display?: VersionDiffDisplay;
+  readonly diagnostics?: readonly VersionStoreDiagnostic[];
+}
+
+export type VersionMergeMutationGuarantee = 'preview-only';
+
+export type VersionMergeResult =
+  | {
+      readonly status: 'clean';
+      readonly base: WorkbookCommitId;
+      readonly ours: WorkbookCommitId;
+      readonly theirs: WorkbookCommitId;
+      readonly changes: readonly VersionMergeChange[];
+      readonly conflicts: readonly [];
+      readonly diagnostics: readonly [];
+      readonly mutationGuarantee: VersionMergeMutationGuarantee;
+    }
+  | {
+      readonly status: 'conflicted';
+      readonly base: WorkbookCommitId;
+      readonly ours: WorkbookCommitId;
+      readonly theirs: WorkbookCommitId;
+      readonly changes: readonly VersionMergeChange[];
+      readonly conflicts: readonly VersionMergeConflict[];
+      readonly diagnostics: readonly [];
+      readonly mutationGuarantee: VersionMergeMutationGuarantee;
+    }
+  | {
+      readonly status: 'blocked';
+      readonly base: WorkbookCommitId | null;
+      readonly ours: WorkbookCommitId | null;
+      readonly theirs: WorkbookCommitId | null;
+      readonly changes: readonly [];
+      readonly conflicts: readonly [];
+      readonly diagnostics: readonly VersionStoreDiagnostic[];
+      readonly mutationGuarantee: VersionMergeMutationGuarantee;
+    };
+
 export type RedactionPolicy = {
   readonly mode: 'default' | 'strict' | 'clean';
   readonly redactSecrets: boolean;
@@ -597,6 +663,7 @@ export interface WorkbookVersion {
     target: VersionCheckoutTarget,
     options?: VersionCheckoutOptions,
   ): Promise<VersionCheckoutResult>;
+  merge(input: VersionMergeInput, options?: VersionMergeOptions): Promise<VersionMergeResult>;
   diff(
     base: VersionCommitish,
     target: VersionCommitish,

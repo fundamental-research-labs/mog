@@ -1,0 +1,360 @@
+import type { VersionAuthor } from '@mog-sdk/contracts/versioning';
+
+import { createInMemoryWorkbookCommitStore } from '../commit-store';
+import { createWorkbookVersionMergeService } from '../merge-service';
+import {
+  createVersionObjectRecord,
+  type VersionGraphNamespace,
+  type VersionObjectRecord,
+} from '../object-store';
+import type { VersionObjectType, WorkbookCommitId } from '../object-digest';
+import {
+  createInMemoryVersionStoreProvider,
+  namespaceForDocumentScope,
+  type VersionDocumentScope,
+  type VersionGraphInitializeInput,
+  type VersionGraphInitializeResult,
+} from '../provider';
+
+const DOCUMENT_SCOPE: VersionDocumentScope = {
+  workspaceId: 'workspace-1',
+  documentId: 'document-1',
+  principalScope: 'principal-1',
+};
+
+const AUTHOR: VersionAuthor = {
+  authorId: 'user-1',
+  actorKind: 'user',
+  displayName: 'User One',
+};
+
+const CREATED_AT = '2026-06-20T00:00:00.000Z';
+
+describe('WorkbookVersionMergeService', () => {
+  it('previews clean disjoint cells.values changes without mutating workbook state', async () => {
+    const graph = await graphWithRootAndDetachedChildren({
+      oursSemanticPayload: validSemanticPayload([
+        valueChange('ours-a1', 'cell', 'sheet-1!A1', ['value'], 1, 2),
+      ]),
+      theirsSemanticPayload: validSemanticPayload([
+        valueChange('theirs-b1', 'cells.values', 'sheet-1!B1', [], null, 'ready'),
+      ]),
+    });
+    const service = createWorkbookVersionMergeService({ provider: graph.provider });
+
+    await expect(
+      service.merge(
+        {
+          base: graph.rootCommitId,
+          ours: graph.oursCommitId,
+          theirs: graph.theirsCommitId,
+        },
+        { mode: 'preview' },
+      ),
+    ).resolves.toMatchObject({
+      status: 'clean',
+      base: graph.rootCommitId,
+      ours: graph.oursCommitId,
+      theirs: graph.theirsCommitId,
+      changes: [
+        expect.objectContaining({
+          structural: expect.objectContaining({ entityId: 'sheet-1!A1' }),
+          base: { kind: 'value', value: 1 },
+          ours: { kind: 'value', value: 2 },
+          merged: { kind: 'value', value: 2 },
+        }),
+        expect.objectContaining({
+          structural: expect.objectContaining({ entityId: 'sheet-1!B1' }),
+          base: { kind: 'value', value: null },
+          theirs: { kind: 'value', value: 'ready' },
+          merged: { kind: 'value', value: 'ready' },
+        }),
+      ],
+      conflicts: [],
+      diagnostics: [],
+      mutationGuarantee: 'preview-only',
+    });
+  });
+
+  it('classifies same-property cells.values edits as conflicts', async () => {
+    const graph = await graphWithRootAndDetachedChildren({
+      oursSemanticPayload: validSemanticPayload([
+        valueChange('ours-a1', 'cell', 'sheet-1!A1', ['value'], 1, 2),
+      ]),
+      theirsSemanticPayload: validSemanticPayload([
+        valueChange('theirs-a1', 'cell', 'sheet-1!A1', ['value'], 1, 3),
+      ]),
+    });
+    const service = createWorkbookVersionMergeService({ provider: graph.provider });
+
+    await expect(
+      service.merge({
+        base: graph.rootCommitId,
+        ours: graph.oursCommitId,
+        theirs: graph.theirsCommitId,
+      }),
+    ).resolves.toMatchObject({
+      status: 'conflicted',
+      changes: [],
+      conflicts: [
+        {
+          conflictKind: 'same-property',
+          structural: expect.objectContaining({ entityId: 'sheet-1!A1' }),
+          base: { kind: 'value', value: 1 },
+          ours: { kind: 'value', value: 2 },
+          theirs: { kind: 'value', value: 3 },
+        },
+      ],
+      diagnostics: [],
+      mutationGuarantee: 'preview-only',
+    });
+  });
+
+  it('blocks unsupported semantic domains without fabricating merge output', async () => {
+    const graph = await graphWithRootAndDetachedChildren({
+      oursSemanticPayload: validSemanticPayload([
+        valueChange('ours-sheet-name', 'sheet', 'sheet-1', ['name'], 'Sheet1', 'Forecast'),
+      ]),
+      theirsSemanticPayload: validSemanticPayload([]),
+    });
+    const service = createWorkbookVersionMergeService({ provider: graph.provider });
+
+    const result = await service.merge({
+      base: graph.rootCommitId,
+      ours: graph.oursCommitId,
+      theirs: graph.theirsCommitId,
+    });
+
+    expect(result).toMatchObject({
+      status: 'blocked',
+      changes: [],
+      conflicts: [],
+      diagnostics: [expect.objectContaining({ issueCode: 'VERSION_MERGE_UNSUPPORTED_DOMAIN' })],
+      mutationGuarantee: 'preview-only',
+    });
+    expect(JSON.stringify(result)).not.toContain('Forecast');
+  });
+
+  it('blocks redacted semantic records before classification', async () => {
+    const graph = await graphWithRootAndDetachedChildren({
+      oursSemanticPayload: validSemanticPayload([
+        {
+          ...valueChange('ours-a1', 'cell', 'sheet-1!A1', ['value'], 1, 2),
+          after: { kind: 'redacted', reason: 'redaction-policy' },
+        },
+      ]),
+      theirsSemanticPayload: validSemanticPayload([]),
+    });
+    const service = createWorkbookVersionMergeService({ provider: graph.provider });
+
+    await expect(
+      service.merge({
+        base: graph.rootCommitId,
+        ours: graph.oursCommitId,
+        theirs: graph.theirsCommitId,
+      }),
+    ).resolves.toMatchObject({
+      status: 'blocked',
+      changes: [],
+      conflicts: [],
+      diagnostics: [expect.objectContaining({ issueCode: 'VERSION_REDACTION_VIOLATION' })],
+    });
+  });
+
+  it('blocks unsupported semantic change-set schemas', async () => {
+    const graph = await graphWithRootAndDetachedChildren({
+      oursSemanticPayload: { schemaVersion: 2, changes: [] },
+      theirsSemanticPayload: validSemanticPayload([]),
+    });
+    const service = createWorkbookVersionMergeService({ provider: graph.provider });
+
+    await expect(
+      service.merge({
+        base: graph.rootCommitId,
+        ours: graph.oursCommitId,
+        theirs: graph.theirsCommitId,
+      }),
+    ).resolves.toMatchObject({
+      status: 'blocked',
+      changes: [],
+      conflicts: [],
+      diagnostics: [expect.objectContaining({ issueCode: 'VERSION_UNSUPPORTED_SCHEMA' })],
+    });
+  });
+
+  it('blocks commits that are not direct children of the requested base', async () => {
+    const graph = await graphWithRootAndDetachedChildren({
+      oursSemanticPayload: validSemanticPayload([
+        valueChange('ours-a1', 'cell', 'sheet-1!A1', ['value'], 1, 2),
+      ]),
+      theirsSemanticPayload: validSemanticPayload([]),
+    });
+    const grandchildCommitId = await createDetachedChild(graph, {
+      label: 'grandchild',
+      parentCommitId: graph.oursCommitId,
+      semanticPayload: validSemanticPayload([
+        valueChange('grandchild-a1', 'cell', 'sheet-1!A1', ['value'], 2, 4),
+      ]),
+    });
+    const service = createWorkbookVersionMergeService({ provider: graph.provider });
+
+    await expect(
+      service.merge({
+        base: graph.rootCommitId,
+        ours: grandchildCommitId,
+        theirs: graph.theirsCommitId,
+      }),
+    ).resolves.toMatchObject({
+      status: 'blocked',
+      changes: [],
+      conflicts: [],
+      diagnostics: [expect.objectContaining({ issueCode: 'VERSION_MERGE_UNSUPPORTED_ANCESTRY' })],
+    });
+  });
+});
+
+function expectInitializeSuccess(
+  result: VersionGraphInitializeResult,
+): asserts result is Extract<VersionGraphInitializeResult, { status: 'success' }> {
+  expect(result.status).toBe('success');
+  if (result.status !== 'success') {
+    throw new Error(`expected initialize success: ${result.diagnostics[0]?.code}`);
+  }
+}
+
+async function graphWithRootAndDetachedChildren(options: {
+  readonly oursSemanticPayload: unknown;
+  readonly theirsSemanticPayload: unknown;
+}) {
+  const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
+  const initialized = await provider.initializeGraph(await initializeInput('graph-1', 'root'));
+  expectInitializeSuccess(initialized);
+  const namespace = namespaceForDocumentScope(DOCUMENT_SCOPE, 'graph-1');
+  const rootCommitId = initialized.rootCommit.id;
+  const graph = { provider, namespace, rootCommitId };
+
+  const oursCommitId = await createDetachedChild(graph, {
+    label: 'ours',
+    parentCommitId: rootCommitId,
+    semanticPayload: options.oursSemanticPayload,
+  });
+  const theirsCommitId = await createDetachedChild(graph, {
+    label: 'theirs',
+    parentCommitId: rootCommitId,
+    semanticPayload: options.theirsSemanticPayload,
+  });
+
+  return {
+    provider,
+    namespace,
+    rootCommitId,
+    oursCommitId,
+    theirsCommitId,
+  };
+}
+
+async function createDetachedChild(
+  graph: {
+    readonly provider: ReturnType<typeof createInMemoryVersionStoreProvider>;
+    readonly namespace: VersionGraphNamespace;
+  },
+  options: {
+    readonly label: string;
+    readonly parentCommitId: WorkbookCommitId;
+    readonly semanticPayload: unknown;
+  },
+): Promise<WorkbookCommitId> {
+  const opened = await graph.provider.openGraph(graph.namespace);
+  const commitStore = createInMemoryWorkbookCommitStore(opened.objectStore);
+  const created = await commitStore.createWorkbookCommit({
+    documentId: graph.namespace.documentId,
+    parentCommitIds: [options.parentCommitId],
+    snapshotRootRecord: await objectRecord(graph.namespace, 'workbook.snapshotRoot.v1', {
+      label: options.label,
+      sheets: [],
+    }),
+    semanticChangeSetRecord: await objectRecord(
+      graph.namespace,
+      'workbook.semanticChangeSet.v1',
+      options.semanticPayload,
+    ),
+    mutationSegmentRecords: [
+      await objectRecord(graph.namespace, 'workbook.mutationSegment.v1', {
+        segmentId: `${options.label}-segment-1`,
+      }),
+    ],
+    author: AUTHOR,
+    createdAt: CREATED_AT,
+    completenessDiagnostics: [],
+  });
+  if (created.status !== 'success') {
+    throw new Error(`expected detached child commit success: ${created.diagnostics[0]?.code}`);
+  }
+  return created.commit.id;
+}
+
+async function initializeInput(
+  graphId: string,
+  label: string,
+): Promise<VersionGraphInitializeInput> {
+  const namespace = namespaceForDocumentScope(DOCUMENT_SCOPE, graphId);
+  return {
+    expectedRegistryRevision: null,
+    graphId,
+    rootWrite: {
+      snapshotRootRecord: await objectRecord(namespace, 'workbook.snapshotRoot.v1', {
+        label,
+        sheets: [],
+      }),
+      semanticChangeSetRecord: await objectRecord(namespace, 'workbook.semanticChangeSet.v1', {
+        schemaVersion: 1,
+        changes: [],
+      }),
+      author: AUTHOR,
+      createdAt: CREATED_AT,
+      completenessDiagnostics: [],
+    },
+  };
+}
+
+async function objectRecord(
+  namespace: VersionGraphNamespace,
+  objectType: VersionObjectType,
+  payload: unknown,
+): Promise<VersionObjectRecord<unknown>> {
+  return createVersionObjectRecord(namespace, {
+    objectType,
+    schemaVersion: 1,
+    payloadEncoding: 'mog-canonical-json-v1',
+    dependencies: [],
+    payload,
+  });
+}
+
+function validSemanticPayload(changes: readonly unknown[]) {
+  return {
+    schemaVersion: 1,
+    changes,
+  };
+}
+
+function valueChange(
+  changeId: string,
+  domain: string,
+  entityId: string,
+  propertyPath: readonly string[],
+  before: unknown,
+  after: unknown,
+) {
+  return {
+    changeId,
+    domain,
+    entityId,
+    propertyPath,
+    before: { kind: 'value', value: before },
+    after: { kind: 'value', value: after },
+    display: {
+      address: { kind: 'value', value: entityId.split('!')[1] ?? entityId },
+    },
+  };
+}

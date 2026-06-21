@@ -25,6 +25,7 @@ import type {
   VersionNormalCommitCapture,
   WorkbookVersionCommitService,
 } from '../../document/version-store/commit-service';
+import type { WorkbookVersionMergeService } from '../../document/version-store/merge-service';
 import type { CheckoutSnapshotMaterializer } from '../../document/version-store/checkout-apply';
 import type { SnapshotRootByteSyncPort } from '../../document/version-store/snapshot-root-capture';
 import type { VersionStoreProvider } from '../../document/version-store/provider';
@@ -53,6 +54,7 @@ export interface WorkbookVersioningConfig {
     WorkbookVersionCommitService,
     'readHead' | 'readRef' | 'listCommits' | 'commit'
   >;
+  readonly mergeService?: Pick<WorkbookVersionMergeService, 'merge'>;
   readonly captureNormalCommit?: VersionNormalCommitCapture;
   readonly snapshotRootByteSyncPort?: SnapshotRootByteSyncPort;
   readonly checkoutSnapshotMaterializer?: CheckoutSnapshotMaterializer;

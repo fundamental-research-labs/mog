@@ -1,41 +1,16 @@
 import type {
-  RedactedVersionAuthor,
-  VersionBranchName,
-  VersionBranchRefReadResult,
-  VersionCheckoutOptions, VersionCheckoutResult, VersionCheckoutTarget,
-  VersionCommitish,
-  VersionCreateBranchOptions,
-  VersionCommitOptions,
-  VersionCommitPage,
-  VersionDegradedHeadResult,
-  VersionDeleteRefOptions,
-  VersionDiffOptions,
-  VersionDiagnosticPublicPayload,
-  VersionFastForwardBranchOptions,
-  VersionGetHeadOptions,
-  VersionListCommitsOptions,
-  VersionListRefsOptions,
-  VersionMainRefName,
-  VersionRecordRevision,
-  VersionRef,
-  VersionRefListResult,
-  VersionRefMutationResult,
-  VersionRefName,
-  VersionRefReadResult,
-  VersionRefSelector,
-  VersionStoreDiagnostic,
-  VersionSymbolicRef,
-  VersionSymbolicRefReadResult,
-  VersionUpdateBranchOptions,
-  WorkbookCommitId,
-  WorkbookCommitRef,
-  WorkbookCommitSummary,
-  WorkbookDiffPage,
-  WorkbookVersion,
-  WorkbookVersionCapabilityStatus,
-  WorkbookVersionDiagnostic,
-  WorkbookVersionRolloutStage,
-  WorkbookVersionStatus,
+  RedactedVersionAuthor, VersionBranchName, VersionBranchRefReadResult,
+  VersionCheckoutOptions, VersionCheckoutResult, VersionCheckoutTarget, VersionCommitish,
+  VersionCreateBranchOptions, VersionCommitOptions, VersionCommitPage, VersionDegradedHeadResult,
+  VersionDeleteRefOptions, VersionDiffOptions, VersionDiagnosticPublicPayload,
+  VersionFastForwardBranchOptions, VersionGetHeadOptions, VersionListCommitsOptions,
+  VersionListRefsOptions, VersionMainRefName, VersionMergeInput, VersionMergeOptions,
+  VersionMergeResult, VersionRecordRevision, VersionRef, VersionRefListResult,
+  VersionRefMutationResult, VersionRefName, VersionRefReadResult, VersionRefSelector,
+  VersionStoreDiagnostic, VersionSymbolicRef, VersionSymbolicRefReadResult,
+  VersionUpdateBranchOptions, WorkbookCommitId, WorkbookCommitRef, WorkbookCommitSummary,
+  WorkbookDiffPage, WorkbookVersion, WorkbookVersionCapabilityStatus, WorkbookVersionDiagnostic,
+  WorkbookVersionRolloutStage, WorkbookVersionStatus,
 } from '@mog-sdk/contracts/api';
 
 import { observeMutationAdmission } from '../../bridges/compute/mutation-admission';
@@ -45,6 +20,7 @@ import { REF_NAME_STORAGE_PREFIX } from '../../document/version-store/ref-name';
 import { checkoutWorkbookVersion } from './version-checkout';
 import { commitWorkbookVersion, hasAttachedVersionWriteService } from './version-commit';
 import { diffWorkbookVersion } from './version-diff';
+import { hasAttachedVersionMergeService, mergeWorkbookVersion } from './version-merge';
 import {
   createWorkbookVersionBranch,
   deleteWorkbookVersionBranch,
@@ -182,6 +158,7 @@ export class WorkbookVersionImpl implements WorkbookVersion {
     const services = getAttachedVersionServices(this.ctx);
     const writeServiceAttached = hasAttachedVersionWriteService(this.ctx);
     const refLifecycleServiceAttached = hasAttachedVersionRefLifecycleService(this.ctx);
+    const mergeServiceAttached = hasAttachedVersionMergeService(this.ctx);
     const provenanceAdmissionPresent = typeof observeMutationAdmission === 'function';
     const rolloutStage = getRolloutStage(provenanceAdmissionPresent);
 
@@ -232,8 +209,14 @@ export class WorkbookVersionImpl implements WorkbookVersion {
     const mergePending = diagnostic(
       'version.merge.pending',
       'warning',
-      'Merge APIs are pending and are not exposed by this read-only slice.',
+      'Public merge preview API is exposed, but no document-scoped merge service is attached yet.',
       'VC-07',
+    );
+    const mergeServiceAttachedDiagnostic = diagnostic(
+      'version.merge.serviceAttached',
+      'info',
+      'Document-scoped public merge preview service is attached.',
+      'version-service',
     );
     const provenanceAdmission = diagnostic(
       provenanceAdmissionPresent
@@ -261,7 +244,7 @@ export class WorkbookVersionImpl implements WorkbookVersion {
       ...refLifecycleDiagnostics,
       ...commitApiDiagnostics,
       checkoutPending,
-      mergePending,
+      mergeServiceAttached ? mergeServiceAttachedDiagnostic : mergePending,
       provenanceAdmission,
     ];
 
@@ -277,7 +260,12 @@ export class WorkbookVersionImpl implements WorkbookVersion {
         commitApiDiagnostics,
       ),
       checkout: capability('pending', false, 'VC-05', [checkoutPending]),
-      merge: capability('pending', false, 'VC-07', [mergePending]),
+      merge: capability(
+        mergeServiceAttached ? 'present' : 'pending',
+        mergeServiceAttached,
+        mergeServiceAttached ? 'version-service' : 'VC-07',
+        [mergeServiceAttached ? mergeServiceAttachedDiagnostic : mergePending],
+      ),
       provenanceAdmission: capability(
         provenanceAdmissionPresent ? 'present' : 'unavailable',
         provenanceAdmissionPresent,
@@ -335,6 +323,10 @@ export class WorkbookVersionImpl implements WorkbookVersion {
 
   async checkout(target: VersionCheckoutTarget, options: VersionCheckoutOptions = {}): Promise<VersionCheckoutResult> {
     return checkoutWorkbookVersion(this.ctx, target, options);
+  }
+
+  async merge(input: VersionMergeInput, options: VersionMergeOptions = {}): Promise<VersionMergeResult> {
+    return mergeWorkbookVersion(this.ctx, input, options);
   }
 
   async diff(base: VersionCommitish, target: VersionCommitish, options: VersionDiffOptions = {}): Promise<WorkbookDiffPage> {

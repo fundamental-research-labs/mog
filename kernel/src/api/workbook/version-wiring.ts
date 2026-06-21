@@ -2,6 +2,7 @@ import type { DocumentContext } from '../../context';
 import { createProviderBackedCheckoutMaterializationService } from '../../document/version-store/checkout-provider-service';
 import { createWorkbookVersionCommitService } from '../../document/version-store/commit-service';
 import { createWorkbookVersionDiffService } from '../../document/version-store/diff-service';
+import { createWorkbookVersionMergeService } from '../../document/version-store/merge-service';
 import type { WorkbookVersioningConfig } from './types';
 
 type MutableVersioningContext = DocumentContext & {
@@ -40,6 +41,11 @@ export function attachWorkbookVersioning(
             : {}),
         })
       : undefined);
+  const mergeService =
+    config.mergeService ??
+    existing.mergeService ??
+    existing.versionMergeService ??
+    (config.provider ? createWorkbookVersionMergeService({ provider: config.provider }) : undefined);
   runtime.versioning = {
     ...existing,
     ...(config.provider ? { provider: config.provider } : {}),
@@ -47,6 +53,7 @@ export function attachWorkbookVersioning(
     readService: existing.readService ?? writeService,
     ...(diffService ? { diffService } : {}),
     ...(checkoutService ? { checkoutService } : {}),
+    ...(mergeService ? { mergeService } : {}),
   };
 }
 

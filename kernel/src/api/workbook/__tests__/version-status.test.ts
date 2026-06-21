@@ -149,6 +149,7 @@ describe('WorkbookVersion status slice', () => {
     expect('listCommits' in wb.version).toBe(true);
     expect('readRef' in wb.version).toBe(true);
     expect('commit' in wb.version).toBe(true);
+    expect('merge' in wb.version).toBe(true);
     expect('diff' in wb.version).toBe(true);
   });
 
@@ -332,6 +333,7 @@ describe('WorkbookVersion status slice', () => {
         includeDiagnostics: true,
       },
     );
+
   });
 
   it('returns a stale unsupported diagnostic for page tokens without calling the graph service', async () => {
@@ -767,11 +769,11 @@ describe('WorkbookVersion status slice', () => {
     expect(graphStore.commit).not.toHaveBeenCalled();
   });
 
-  it('exposes checkout and ref lifecycle methods but not merge methods', () => {
+  it('exposes checkout, merge, and ref lifecycle methods', () => {
     const wb = createWorkbook();
 
     expect('checkout' in wb.version).toBe(true);
-    expect('merge' in wb.version).toBe(false);
+    expect('merge' in wb.version).toBe(true);
     expect('diff' in wb.version).toBe(true);
     expect('createBranch' in wb.version).toBe(true);
     expect('listRefs' in wb.version).toBe(true);

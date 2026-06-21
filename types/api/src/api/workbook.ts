@@ -108,6 +108,8 @@ export type {
   VersionFastForwardBranchOptions,
   VersionGetHeadOptions, VersionListCommitsOptions, VersionListRefsOptions,
   VersionMainRefName,
+  VersionMergeChange, VersionMergeConflict, VersionMergeInput,
+  VersionMergeMutationGuarantee, VersionMergeOptions, VersionMergeResult,
   VersionPage, VersionPageOrder, VersionPageToken,
   VersionRecordRevision,
   VersionRedactedValue,

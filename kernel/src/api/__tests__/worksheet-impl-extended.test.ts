@@ -1292,6 +1292,7 @@ describe('WorksheetImpl Extended Methods', () => {
         relativeCFs,
         origin,
         true,
+        expect.any(Function),
       );
     });
 
@@ -1657,10 +1658,17 @@ describe('WorksheetImpl Extended Methods', () => {
       expect(ctx.computeBridge.getTableByName).toHaveBeenCalledWith('Table1');
       expect(TableOps.getTableColumnDataCellsFromInfo).toHaveBeenCalledWith(mockTableInfo, 2);
       expect(ctx.computeBridge.beginUndoGroup).toHaveBeenCalledTimes(1);
-      expect(ctx.computeBridge.updateCalculatedColumn).toHaveBeenCalledWith('Table1', 2, '=A2+B2');
-      expect(ctx.computeBridge.setCellsByPosition).toHaveBeenCalledWith(SHEET_ID, [
-        { row: 1, col: 2, input: { kind: 'parse', text: '=A2+B2' } },
-      ]);
+      expect(ctx.computeBridge.updateCalculatedColumn).toHaveBeenCalledWith(
+        'Table1',
+        2,
+        '=A2+B2',
+        expectVersionOperationOptions('tables.setCalculatedColumn', ['tables']),
+      );
+      expect(ctx.computeBridge.setCellsByPosition).toHaveBeenCalledWith(
+        SHEET_ID,
+        [{ row: 1, col: 2, input: { kind: 'parse', text: '=A2+B2' } }],
+        expectVersionOperationOptions('tables.setCalculatedColumn', ['tables']),
+      );
       expect(ctx.computeBridge.autoFill).toHaveBeenCalledWith(SHEET_ID, {
         sourceRange: { startRow: 1, startCol: 2, endRow: 1, endCol: 2 },
         targetRange: { startRow: 2, startCol: 2, endRow: 3, endCol: 2 },
@@ -1701,11 +1709,19 @@ describe('WorksheetImpl Extended Methods', () => {
       await ws.tables.clearCalculatedColumn('Table1', 2);
 
       expect(ctx.computeBridge.getTableByName).toHaveBeenCalledWith('Table1');
-      expect(ctx.computeBridge.removeCalculatedColumn).toHaveBeenCalledWith('Table1', 2);
-      expect(ctx.computeBridge.setCellsByPosition).toHaveBeenCalledWith(SHEET_ID, [
-        { row: 1, col: 2, input: { kind: 'clear' } },
-        { row: 2, col: 2, input: { kind: 'clear' } },
-      ]);
+      expect(ctx.computeBridge.removeCalculatedColumn).toHaveBeenCalledWith(
+        'Table1',
+        2,
+        expectVersionOperationOptions('tables.clearCalculatedColumn', ['tables']),
+      );
+      expect(ctx.computeBridge.setCellsByPosition).toHaveBeenCalledWith(
+        SHEET_ID,
+        [
+          { row: 1, col: 2, input: { kind: 'clear' } },
+          { row: 2, col: 2, input: { kind: 'clear' } },
+        ],
+        expectVersionOperationOptions('tables.clearCalculatedColumn', ['tables']),
+      );
     });
   });
 

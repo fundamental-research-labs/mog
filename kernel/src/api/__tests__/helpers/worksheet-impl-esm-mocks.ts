@@ -117,6 +117,24 @@ export const worksheetValidationOpsMock = {
 };
 
 export const worksheetTableOpsMock = {
+  createTableMutationOptions: jest.fn((_ctx, operationIdPrefix, sheetId, groupId) => ({
+    operationContext: {
+      operationId: `${operationIdPrefix}:test`,
+      kind: 'mutation',
+      author: { authorId: 'test', actorKind: 'user' },
+      createdAt: '2026-01-01T00:00:00.000Z',
+      ...(sheetId !== undefined ? { sheetIds: [sheetId] } : {}),
+      domainIds: ['tables'],
+      ...(groupId ? { groupId } : {}),
+      capturePolicy: 'commitEligible',
+      writeAdmissionMode: 'capture',
+    },
+  })),
+  createGroupedTableMutationOptions: jest.fn((ctx, operationIdPrefix, sheetId) => {
+    const groupId = `${operationIdPrefix}:test`;
+    return () =>
+      worksheetTableOpsMock.createTableMutationOptions(ctx, operationIdPrefix, sheetId, groupId);
+  }),
   buildTableAddColumnReceipt: mockTableReceipt('tableAddColumn'),
   buildTableAddReceipt: mockTableReceipt('tableAdd'),
   buildTableAddRowReceipt: mockTableReceipt('tableAddRow'),

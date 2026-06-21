@@ -8,7 +8,10 @@
 
 use cell_types::SheetId;
 use domain_types::domain::{
-    chart::{ChartSeriesData, ChartSpec},
+    chart::{
+        ChartSeriesData, ChartSeriesDimensionSourceKindData, ChartSeriesPointCacheData,
+        ChartSeriesPointCachePointData, ChartSpec,
+    },
     floating_object::{FloatingObject, FloatingObjectData},
 };
 use formula_types::{CellRef, RangeType};
@@ -31,6 +34,9 @@ pub(super) fn complete_chart_series_source_refs_for_export(
     sheet_id: &SheetId,
     sheet_name: &str,
 ) {
+    complete_series_live_ref_caches(&mut spec.series, sheet_name, |row, col| {
+        cell_values::get_effective_value(mirror, sheet_id, row, col).map(|value| value.to_string())
+    });
     complete_series_name_refs_from_data_range(
         spec.data_range.as_deref(),
         &mut spec.series,
@@ -40,6 +46,114 @@ pub(super) fn complete_chart_series_source_refs_for_export(
                 .map(|value| value.to_string())
         },
     );
+}
+
+fn complete_series_live_ref_caches(
+    series: &mut [ChartSeriesData],
+    sheet_name: &str,
+    mut cell_text: impl FnMut(u32, u32) -> Option<String>,
+) {
+    for series in series {
+        if should_materialize_live_ref_cache(series.value_source_kind)
+            && let Some(range) = series
+                .values
+                .as_deref()
+                .and_then(|range| parse_local_a1_range(range, sheet_name))
+            && let Some(cache) =
+                point_cache_from_live_range(&range, Some("General"), &mut cell_text)
+        {
+            series.value_cache = Some(cache);
+            series.value_source_kind = Some(ChartSeriesDimensionSourceKindData::Ref);
+        }
+
+        if should_materialize_live_ref_cache(series.category_source_kind)
+            && series.category_levels.is_none()
+            && let Some(range) = series
+                .categories
+                .as_deref()
+                .and_then(|range| parse_local_a1_range(range, sheet_name))
+            && let Some(cache) = point_cache_from_live_range(&range, None, &mut cell_text)
+        {
+            series.category_cache = Some(cache);
+            series.category_source_kind = Some(ChartSeriesDimensionSourceKindData::Ref);
+        }
+
+        if should_materialize_live_ref_cache(series.bubble_size_source_kind)
+            && let Some(range) = series
+                .bubble_size
+                .as_deref()
+                .and_then(|range| parse_local_a1_range(range, sheet_name))
+            && let Some(cache) =
+                point_cache_from_live_range(&range, Some("General"), &mut cell_text)
+        {
+            series.bubble_size_cache = Some(cache);
+            series.bubble_size_source_kind = Some(ChartSeriesDimensionSourceKindData::Ref);
+        }
+    }
+}
+
+fn should_materialize_live_ref_cache(
+    source_kind: Option<ChartSeriesDimensionSourceKindData>,
+) -> bool {
+    matches!(
+        source_kind,
+        None | Some(ChartSeriesDimensionSourceKindData::Ref)
+    )
+}
+
+fn point_cache_from_live_range(
+    range: &ParsedLocalRange,
+    format_code: Option<&str>,
+    mut cell_text: impl FnMut(u32, u32) -> Option<String>,
+) -> Option<ChartSeriesPointCacheData> {
+    let point_count = point_count(range)?;
+    let points = point_positions(range)
+        .into_iter()
+        .enumerate()
+        .filter_map(|(idx, (row, col))| {
+            cell_text(row, col).and_then(|value| {
+                (!value.trim().is_empty()).then_some(ChartSeriesPointCachePointData {
+                    idx: idx as u32,
+                    value,
+                    format_code: None,
+                })
+            })
+        })
+        .collect();
+
+    Some(ChartSeriesPointCacheData {
+        point_count: Some(point_count),
+        format_code: format_code.map(str::to_string),
+        points,
+    })
+}
+
+fn point_count(range: &ParsedLocalRange) -> Option<u32> {
+    let row_count = range.end_row.checked_sub(range.start_row)?.checked_add(1)?;
+    let col_count = range.end_col.checked_sub(range.start_col)?.checked_add(1)?;
+    row_count.checked_mul(col_count)
+}
+
+fn point_positions(range: &ParsedLocalRange) -> Vec<(u32, u32)> {
+    let mut positions = Vec::new();
+    if range.start_col == range.end_col {
+        for row in range.start_row..=range.end_row {
+            positions.push((row, range.start_col));
+        }
+        return positions;
+    }
+    if range.start_row == range.end_row {
+        for col in range.start_col..=range.end_col {
+            positions.push((range.start_row, col));
+        }
+        return positions;
+    }
+    for row in range.start_row..=range.end_row {
+        for col in range.start_col..=range.end_col {
+            positions.push((row, col));
+        }
+    }
+    positions
 }
 
 pub(super) fn split_charts_for_sheet_export(
@@ -199,6 +313,132 @@ mod tests {
             "Sheet1",
             |row, col| headers.get(&(row, col)).map(|value| (*value).to_string()),
         );
+    }
+
+    fn complete_caches(series: &mut [ChartSeriesData], cells: &[((u32, u32), &str)]) {
+        let cells: HashMap<_, _> = cells.iter().copied().collect();
+        complete_series_live_ref_caches(series, "Sheet1", |row, col| {
+            cells.get(&(row, col)).map(|value| (*value).to_string())
+        });
+    }
+
+    fn point_values(cache: &ChartSeriesPointCacheData) -> Vec<(u32, String)> {
+        cache
+            .points
+            .iter()
+            .map(|point| (point.idx, point.value.clone()))
+            .collect()
+    }
+
+    fn cache(points: &[&str]) -> ChartSeriesPointCacheData {
+        ChartSeriesPointCacheData {
+            point_count: Some(points.len() as u32),
+            format_code: None,
+            points: points
+                .iter()
+                .enumerate()
+                .map(|(idx, value)| ChartSeriesPointCachePointData {
+                    idx: idx as u32,
+                    value: (*value).to_string(),
+                    format_code: None,
+                })
+                .collect(),
+        }
+    }
+
+    #[test]
+    fn materializes_live_ref_caches_for_exported_series_ranges() {
+        let mut series = vec![series(json!({
+            "values": "B2:B4",
+            "categories": "A2:A4",
+            "bubbleSize": "C2:C4"
+        }))];
+
+        complete_caches(
+            &mut series,
+            &[
+                ((1, 0), "North"),
+                ((2, 0), "South"),
+                ((3, 0), "West"),
+                ((1, 1), "10"),
+                ((2, 1), "20"),
+                ((3, 1), "30"),
+                ((1, 2), "5"),
+                ((2, 2), "6"),
+                ((3, 2), "7"),
+            ],
+        );
+
+        let value_cache = series[0].value_cache.as_ref().unwrap();
+        assert_eq!(value_cache.point_count, Some(3));
+        assert_eq!(value_cache.format_code.as_deref(), Some("General"));
+        assert_eq!(
+            point_values(value_cache),
+            vec![
+                (0, "10".to_string()),
+                (1, "20".to_string()),
+                (2, "30".to_string())
+            ]
+        );
+        assert_eq!(
+            series[0].value_source_kind,
+            Some(ChartSeriesDimensionSourceKindData::Ref)
+        );
+
+        let category_cache = series[0].category_cache.as_ref().unwrap();
+        assert_eq!(category_cache.point_count, Some(3));
+        assert_eq!(category_cache.format_code, None);
+        assert_eq!(
+            point_values(category_cache),
+            vec![
+                (0, "North".to_string()),
+                (1, "South".to_string()),
+                (2, "West".to_string())
+            ]
+        );
+        assert_eq!(
+            series[0].category_source_kind,
+            Some(ChartSeriesDimensionSourceKindData::Ref)
+        );
+
+        let bubble_cache = series[0].bubble_size_cache.as_ref().unwrap();
+        assert_eq!(bubble_cache.point_count, Some(3));
+        assert_eq!(bubble_cache.format_code.as_deref(), Some("General"));
+        assert_eq!(
+            point_values(bubble_cache),
+            vec![
+                (0, "5".to_string()),
+                (1, "6".to_string()),
+                (2, "7".to_string())
+            ]
+        );
+        assert_eq!(
+            series[0].bubble_size_source_kind,
+            Some(ChartSeriesDimensionSourceKindData::Ref)
+        );
+    }
+
+    #[test]
+    fn preserves_non_live_series_caches() {
+        let imported = cache(&["9", "8"]);
+        let mut series = vec![series(json!({"values": "B2:B3", "categories": "A2:A3"}))];
+        series[0].value_source_kind = Some(ChartSeriesDimensionSourceKindData::Literal);
+        series[0].value_cache = Some(imported.clone());
+        series[0].category_source_kind = Some(ChartSeriesDimensionSourceKindData::CacheFallback);
+        series[0].category_cache = Some(imported.clone());
+
+        complete_caches(
+            &mut series,
+            &[
+                ((1, 0), "North"),
+                ((2, 0), "South"),
+                ((1, 1), "10"),
+                ((2, 1), "20"),
+            ],
+        );
+
+        assert_eq!(series[0].value_cache, Some(imported.clone()));
+        assert_eq!(series[0].category_cache, Some(imported));
     }
 
     #[test]

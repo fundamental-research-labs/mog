@@ -123,6 +123,7 @@ describe('WorkbookVersion public ref lifecycle facade', () => {
           expect.objectContaining({ name: 'refs/heads/main', commitId: COMMIT_A }),
           expect.objectContaining({ name: 'refs/heads/scenario/budget', commitId: COMMIT_A }),
         ],
+        limit: 50,
       },
     });
 
@@ -157,6 +158,7 @@ describe('WorkbookVersion public ref lifecycle facade', () => {
       ok: true,
       value: {
         items: [expect.objectContaining({ name: 'refs/heads/scenario/forecast/q1' })],
+        limit: 50,
       },
     });
     expect(filtered.ok && filtered.value.items).toHaveLength(1);
@@ -173,6 +175,7 @@ describe('WorkbookVersion public ref lifecycle facade', () => {
       ]),
     );
     expect(allRefs.value.items).toHaveLength(4);
+    expect(allRefs.value.limit).toBe(50);
   });
 
   it('rejects invalid names and protected main mutations before service calls', async () => {

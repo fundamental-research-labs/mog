@@ -44,6 +44,7 @@ const VERSION_MAIN_REF = 'refs/heads/main' satisfies VersionMainRefName;
 const WORKBOOK_COMMIT_ID_RE = /^commit:sha256:[0-9a-f]{64}$/;
 const VERSION_LIST_COMMITS_DEFAULT_PAGE_SIZE = 50;
 const VERSION_LIST_COMMITS_MAX_PAGE_SIZE = 500;
+const VERSION_LIST_REFS_DEFAULT_PAGE_SIZE = 50;
 
 type MaybePromise<T> = T | Promise<T>;
 
@@ -369,7 +370,7 @@ export class WorkbookVersionImpl implements WorkbookVersion {
   }
 
   async listRefs(options: VersionListRefsOptions = {}): Promise<VersionResult<Paged<VersionRef>>> {
-    return versionResultFromRefList(await listWorkbookVersionRefs(this.ctx, options));
+    return versionResultFromRefList(await listWorkbookVersionRefs(this.ctx, options), VERSION_LIST_REFS_DEFAULT_PAGE_SIZE);
   }
 
   async createBranch(options: VersionCreateBranchOptions): Promise<VersionRefMutationResult> {

@@ -42,6 +42,7 @@ export function versionResultFromCommitPage(
 
 export function versionResultFromRefList(
   result: VersionRefListResult,
+  limit: number,
 ): VersionResult<Paged<VersionRef>> {
   if (result.status === 'degraded') {
     return versionFailureFromStoreDiagnostics('listRefs', result.diagnostics);
@@ -50,7 +51,7 @@ export function versionResultFromRefList(
     ok: true,
     value: {
       items: result.items,
-      limit: result.items.length,
+      limit,
     },
   };
 }

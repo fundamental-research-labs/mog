@@ -175,6 +175,7 @@ describe('WorkbookVersion provider-backed ref lifecycle facade', () => {
             commitId: initialized.rootCommit.id,
           }),
         ],
+        limit: 50,
       },
     });
 
@@ -233,6 +234,7 @@ describe('WorkbookVersion provider-backed ref lifecycle facade', () => {
             commitId: initialized.rootCommit.id,
           }),
         ],
+        limit: 50,
       },
     });
 
@@ -256,6 +258,7 @@ describe('WorkbookVersion provider-backed ref lifecycle facade', () => {
       ok: true,
       value: {
         items: [],
+        limit: 50,
       },
     });
   });

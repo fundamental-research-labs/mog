@@ -8,7 +8,8 @@ use crate::snapshot::{
     FloatingObjectChange, FloatingObjectChangeKind, GroupingChange, MergeChange, MutationResult,
     NamedRangeChange, PivotTableChange, PropertyChange, RecalcResult, SheetChange,
     SheetChangeField, SheetSettingsChange, SlicerChange, SlicerChangeKind, SlicerSourceType,
-    SortingChange, SparklineChange, TableChange, VisibilityChange, WorkbookSettingsChange,
+    SortingChange, SparklineChange, StructureChangeResult, StructureChangeType, TableChange,
+    VisibilityChange, WorkbookSettingsChange,
 };
 use crate::storage::engine::services::structural::recompute_floating_object_bounds;
 use crate::storage::engine::settings::EngineSettings;
@@ -19,7 +20,9 @@ use crate::storage::sheet::{
 };
 use crate::storage::workbook;
 use compute_document::hex::{hex_to_id, id_to_hex};
-use compute_document::observe::{CellChangeKind, DocumentChanges};
+use compute_document::observe::{
+    AxisOrderAxis, AxisOrderChangeKind, CellChangeKind, DocumentChanges,
+};
 use yrs::{Map, Transact};
 
 use super::super::{
@@ -154,6 +157,36 @@ pub(in crate::storage::engine) fn build_mutation_result_from_changes(
             old_frozen_cols: None,
             color: None,
             old_color: None,
+        });
+    }
+
+    for change in &changes.axis_order {
+        let (change_type, at, count) = match (&change.axis, &change.kind) {
+            (AxisOrderAxis::Row, AxisOrderChangeKind::TailInserted { start, ids }) => {
+                let Ok(count) = u32::try_from(ids.len()) else {
+                    continue;
+                };
+                (StructureChangeType::InsertRows, *start, count)
+            }
+            (AxisOrderAxis::Row, AxisOrderChangeKind::TailRemoved { start, count }) => {
+                (StructureChangeType::DeleteRows, *start, *count)
+            }
+            (AxisOrderAxis::Col, AxisOrderChangeKind::TailInserted { start, ids }) => {
+                let Ok(count) = u32::try_from(ids.len()) else {
+                    continue;
+                };
+                (StructureChangeType::InsertCols, *start, count)
+            }
+            (AxisOrderAxis::Col, AxisOrderChangeKind::TailRemoved { start, count }) => {
+                (StructureChangeType::DeleteCols, *start, *count)
+            }
+            (_, AxisOrderChangeKind::Structural) => continue,
+        };
+        result.structure_changes.push(StructureChangeResult {
+            sheet_id: change.sheet_id.to_uuid_string(),
+            change_type,
+            at,
+            count,
         });
     }
 

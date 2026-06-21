@@ -10,6 +10,7 @@ use crate::snapshot::{ChangeKind, MutationResult, RecalcResult};
 use super::grid_indexing::apply_grid_index_changes;
 use super::{YrsComputeEngine, construction, services, viewport};
 
+mod axis_capacity;
 mod runtime_settings;
 
 impl YrsComputeEngine {
@@ -471,6 +472,10 @@ impl YrsComputeEngine {
 
         self.sync_sheet_names_from_yrs(&doc_changes);
 
+        let capacity_axis_sheets =
+            axis_capacity::capacity_replay_sheets(&self.stores, &doc_changes);
+        axis_capacity::apply_tail_inserts(&mut self.stores, &doc_changes, &capacity_axis_sheets)?;
+
         // --- Identity: mirror gridIndex/posToId entries into in-memory GridIndex ---
         // The yrs `gridIndex/posToId` sub-map is the CRDT-synchronised source of
         // truth for (row, col) ↔ CellId mappings (post-R51). When a peer
@@ -545,12 +550,21 @@ impl YrsComputeEngine {
         // (the CRDT source of truth) rather than patching incrementally.
         let structural_sheets: Vec<SheetId> = {
             let mut seen = std::collections::HashSet::new();
-            doc_changes
-                .structural_changes
-                .iter()
-                .filter(|id| seen.insert(**id))
-                .copied()
-                .collect()
+            let mut sheets = Vec::new();
+            for sheet_id in &doc_changes.structural_changes {
+                if seen.insert(*sheet_id) {
+                    sheets.push(*sheet_id);
+                }
+            }
+            for change in &doc_changes.axis_order {
+                if capacity_axis_sheets.contains(&change.sheet_id) {
+                    continue;
+                }
+                if seen.insert(change.sheet_id) {
+                    sheets.push(change.sheet_id);
+                }
+            }
+            sheets
         };
 
         let mut recalc = if !structural_sheets.is_empty() {
@@ -651,6 +665,16 @@ impl YrsComputeEngine {
                     old_value: None,
                 });
             }
+        }
+
+        axis_capacity::apply_tail_removals(&mut self.stores, &doc_changes, &capacity_axis_sheets);
+        if !capacity_axis_sheets.is_empty() {
+            doc_changes
+                .axis_order
+                .retain(|change| !capacity_axis_sheets.contains(&change.sheet_id));
+            doc_changes
+                .structural_changes
+                .retain(|sheet_id| !capacity_axis_sheets.contains(sheet_id));
         }
 
         // Update layout indexes for dimension changes.

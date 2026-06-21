@@ -157,6 +157,33 @@ pub struct GridIndexCellChange {
     pub kind: CellChangeKind,
 }
 
+/// Which sheet axis changed in the authoritative order array.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AxisOrderAxis {
+    Row,
+    Col,
+}
+
+/// Detailed shape of a `rowOrder` / `colOrder` observer change.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AxisOrderChangeKind {
+    /// Identities were appended at the current axis tail.
+    TailInserted { start: u32, ids: Vec<String> },
+    /// Identities were removed from the current axis tail.
+    TailRemoved { start: u32, count: u32 },
+    /// Any middle insert/delete/reorder or opaque map-level replacement.
+    Structural,
+}
+
+/// A change to the authoritative sheet row/column identity order.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AxisOrderChange {
+    pub sheet_id: SheetId,
+    pub axis: AxisOrderAxis,
+    pub kind: AxisOrderChangeKind,
+    pub origin: Option<Vec<u8>>,
+}
+
 // ---------------------------------------------------------------------------
 // PivotChange types (kept for backward compat during migration)
 // ---------------------------------------------------------------------------
@@ -236,7 +263,9 @@ pub struct DocumentChanges {
     pub sheet_additions: Vec<SheetId>,
     /// Sheet deletions (removed sheets detected via observer).
     pub sheet_deletions: Vec<SheetId>,
-    /// Sheets with structural row/col order changes (YArray mutations).
+    /// Detailed row/col order changes from YArray mutations.
+    pub axis_order: Vec<AxisOrderChange>,
+    /// Sheets with structural row/col order changes.
     pub structural_changes: Vec<SheetId>,
     /// `gridIndex/posToId` entry changes — position ↔ `CellId`
     /// bindings that need to be mirrored into the in-memory
@@ -283,6 +312,7 @@ impl DocumentChanges {
             && self.named_ranges.is_empty()
             && self.sheet_additions.is_empty()
             && self.sheet_deletions.is_empty()
+            && self.axis_order.is_empty()
             && self.structural_changes.is_empty()
             && self.grid_index.is_empty()
             && !self.sheet_order_changed
@@ -316,6 +346,7 @@ impl DocumentChanges {
             || !self.named_ranges.is_empty()
             || !self.sheet_additions.is_empty()
             || !self.sheet_deletions.is_empty()
+            || !self.axis_order.is_empty()
             || !self.grid_index.is_empty()
             || self.sheet_order_changed
             || self.workbook_settings_changed

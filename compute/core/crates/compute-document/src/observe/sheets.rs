@@ -1,7 +1,7 @@
 use std::collections::VecDeque;
 
-use yrs::types::{EntryChange, Event, Events, PathSegment};
-use yrs::{Any, Out, TransactionMut};
+use yrs::types::{Change, EntryChange, Event, Events, PathSegment};
+use yrs::{Any, Array, Out, TransactionMut};
 
 use cell_types::SheetId;
 
@@ -34,6 +34,77 @@ fn comment_cell_ref_from_change(change: &EntryChange, txn: &TransactionMut) -> O
         }
         EntryChange::Removed(old) => comment_cell_ref_from_out(old, txn),
     }
+}
+
+fn axis_order_axis(sub_key: &str) -> Option<AxisOrderAxis> {
+    match sub_key {
+        "rowOrder" => Some(AxisOrderAxis::Row),
+        "colOrder" => Some(AxisOrderAxis::Col),
+        _ => None,
+    }
+}
+
+fn axis_order_change_kind(delta: &[Change], current_len: u32) -> AxisOrderChangeKind {
+    let mut index = 0_u32;
+    let mut observed_change: Option<AxisOrderChangeKind> = None;
+
+    for change in delta {
+        match change {
+            Change::Retain(count) => {
+                index = index.saturating_add(*count);
+            }
+            Change::Added(values) => {
+                if observed_change.is_some() {
+                    return AxisOrderChangeKind::Structural;
+                }
+                let inserted_count = match u32::try_from(values.len()) {
+                    Ok(count) => count,
+                    Err(_) => return AxisOrderChangeKind::Structural,
+                };
+                if index.saturating_add(inserted_count) != current_len {
+                    return AxisOrderChangeKind::Structural;
+                }
+                let mut ids = Vec::with_capacity(values.len());
+                for value in values {
+                    let Out::Any(Any::String(id)) = value else {
+                        return AxisOrderChangeKind::Structural;
+                    };
+                    ids.push(id.to_string());
+                }
+                observed_change = Some(AxisOrderChangeKind::TailInserted { start: index, ids });
+                index = index.saturating_add(inserted_count);
+            }
+            Change::Removed(count) => {
+                if observed_change.is_some() || index != current_len {
+                    return AxisOrderChangeKind::Structural;
+                }
+                observed_change = Some(AxisOrderChangeKind::TailRemoved {
+                    start: index,
+                    count: *count,
+                });
+            }
+        }
+    }
+
+    observed_change.unwrap_or(AxisOrderChangeKind::Structural)
+}
+
+fn push_axis_order_change(
+    buffer: &mut DocumentChanges,
+    sheet_id: SheetId,
+    axis: AxisOrderAxis,
+    kind: AxisOrderChangeKind,
+    origin: Option<Vec<u8>>,
+) {
+    if matches!(kind, AxisOrderChangeKind::Structural) {
+        buffer.structural_changes.push(sheet_id);
+    }
+    buffer.axis_order.push(AxisOrderChange {
+        sheet_id,
+        axis,
+        kind,
+        origin,
+    });
 }
 
 pub(super) fn observe_sheets_events(
@@ -460,7 +531,14 @@ pub(super) fn observe_sheets_events(
                     // rowOrder/colOrder YArray changes indicate structural mutations
                     // (row/col insert/delete/reorder). Detect them for rebuild.
                     "rowOrder" | "colOrder" => {
-                        buffer.structural_changes.push(sheet_id);
+                        let axis = axis_order_axis(sub_map_key.as_ref()).expect("matched axis");
+                        push_axis_order_change(
+                            buffer,
+                            sheet_id,
+                            axis,
+                            AxisOrderChangeKind::Structural,
+                            txn.origin().map(|origin| origin.as_ref().to_vec()),
+                        );
                     }
 
                     // --- Unknown sub-maps: silently skip ---
@@ -475,10 +553,18 @@ pub(super) fn observe_sheets_events(
                 // path = [sheetHex, "rowOrder"|"colOrder"]
                 if path.len() >= 2
                     && let Some(PathSegment::Key(sub_key)) = path.get(1)
-                    && (sub_key.as_ref() == "rowOrder" || sub_key.as_ref() == "colOrder")
+                    && let Some(axis) = axis_order_axis(sub_key.as_ref())
                     && let Some(sheet_id) = extract_sheet_id(&path)
                 {
-                    buffer.structural_changes.push(sheet_id);
+                    let kind =
+                        axis_order_change_kind(arr_event.delta(txn), arr_event.target().len(txn));
+                    push_axis_order_change(
+                        buffer,
+                        sheet_id,
+                        axis,
+                        kind,
+                        txn.origin().map(|origin| origin.as_ref().to_vec()),
+                    );
                 }
             }
             // Other event types — skip.

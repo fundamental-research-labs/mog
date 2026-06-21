@@ -258,6 +258,69 @@ impl GridIndex {
         let new_col_ids = self.ensure_col_capacity_returning(col);
         (new_row_ids, new_col_ids)
     }
+
+    /// Append pre-existing row identities replayed from the authoritative
+    /// `rowOrder` array. This is for undo/redo/sync of implicit capacity
+    /// grows, where the CRDT already owns the exact identities.
+    pub fn append_row_ids(&mut self, ids: impl IntoIterator<Item = RowId>) {
+        let ids: Vec<RowId> = ids.into_iter().collect();
+        if ids.is_empty() {
+            return;
+        }
+        for id in &ids {
+            self.id_alloc.ensure_past(id.as_raw());
+        }
+        let start = self.row_count();
+        axis_insert_explicit(&mut self.row_axis, self.sheet_id, start, ids);
+    }
+
+    /// Append pre-existing column identities replayed from the authoritative
+    /// `colOrder` array. See [`Self::append_row_ids`].
+    pub fn append_col_ids(&mut self, ids: impl IntoIterator<Item = ColId>) {
+        let ids: Vec<ColId> = ids.into_iter().collect();
+        if ids.is_empty() {
+            return;
+        }
+        for id in &ids {
+            self.id_alloc.ensure_past(id.as_raw());
+        }
+        let start = self.col_count();
+        axis_insert_explicit(&mut self.col_axis, self.sheet_id, start, ids);
+    }
+
+    /// Truncate rows from the tail without shifting surviving cell positions.
+    pub fn truncate_rows(&mut self, new_len: u32) {
+        let current = self.row_count();
+        if new_len >= current {
+            return;
+        }
+        self.row_axis.delete_range(new_len, current - new_len);
+        let removed: Vec<CellId> = self
+            .cell_to_pos
+            .iter()
+            .filter_map(|(cell_id, (row, _))| (*row >= new_len).then_some(*cell_id))
+            .collect();
+        for cell_id in removed {
+            self.remove_cell(&cell_id);
+        }
+    }
+
+    /// Truncate columns from the tail without shifting surviving cell positions.
+    pub fn truncate_cols(&mut self, new_len: u32) {
+        let current = self.col_count();
+        if new_len >= current {
+            return;
+        }
+        self.col_axis.delete_range(new_len, current - new_len);
+        let removed: Vec<CellId> = self
+            .cell_to_pos
+            .iter()
+            .filter_map(|(cell_id, (_, col))| (*col >= new_len).then_some(*cell_id))
+            .collect();
+        for cell_id in removed {
+            self.remove_cell(&cell_id);
+        }
+    }
 }
 
 fn axis_insert_explicit<Id>(

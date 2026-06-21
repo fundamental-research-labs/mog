@@ -955,6 +955,7 @@ describe('WorksheetImpl', () => {
         SHEET_ID,
         [[0, 0, 0, 0]],
         format,
+        expectVersionOperationOptions('formats.set', ['formats']),
       );
     });
 
@@ -966,6 +967,7 @@ describe('WorksheetImpl', () => {
         SHEET_ID,
         [[4, 2, 4, 2]],
         format,
+        expectVersionOperationOptions('formats.set', ['formats']),
       );
     });
 
@@ -977,6 +979,7 @@ describe('WorksheetImpl', () => {
         SHEET_ID,
         [[0, 0, 0, 0]],
         format,
+        expectVersionOperationOptions('formats.set', ['formats']),
       );
     });
 
@@ -988,6 +991,7 @@ describe('WorksheetImpl', () => {
         SHEET_ID,
         [[3, 2, 3, 2]],
         format,
+        expectVersionOperationOptions('formats.set', ['formats']),
       );
     });
 
@@ -1005,6 +1009,7 @@ describe('WorksheetImpl', () => {
         SHEET_ID,
         [[0, 0, 1, 1]],
         format,
+        expectVersionOperationOptions('formats.setRange', ['formats']),
       );
     });
 
@@ -1015,13 +1020,21 @@ describe('WorksheetImpl', () => {
     it('clearFormat("A1") resolves and calls computeBridge.clearFormatForRanges', async () => {
       await ws.formats.clearCell('A1');
 
-      expect(ctx.computeBridge.clearFormatForRanges).toHaveBeenCalledWith(SHEET_ID, [[0, 0, 0, 0]]);
+      expect(ctx.computeBridge.clearFormatForRanges).toHaveBeenCalledWith(
+        SHEET_ID,
+        [[0, 0, 0, 0]],
+        expectVersionOperationOptions('formats.clearCell', ['formats']),
+      );
     });
 
     it('clearFormat(2, 3) uses numeric path', async () => {
       await ws.formats.clearCell(2, 3);
 
-      expect(ctx.computeBridge.clearFormatForRanges).toHaveBeenCalledWith(SHEET_ID, [[2, 3, 2, 3]]);
+      expect(ctx.computeBridge.clearFormatForRanges).toHaveBeenCalledWith(
+        SHEET_ID,
+        [[2, 3, 2, 3]],
+        expectVersionOperationOptions('formats.clearCell', ['formats']),
+      );
     });
 
     it('getFormat("B2") resolves and returns format from computeBridge', async () => {
@@ -1055,11 +1068,20 @@ describe('WorksheetImpl', () => {
       // 1) queryRange is called to read the sparse format
       expect(ctx.computeBridge.queryRange).toHaveBeenCalledWith(SHEET_ID, 0, 0, 0, 0);
       // 2) clearFormatForRanges clears all formatting on the cell
-      expect(ctx.computeBridge.clearFormatForRanges).toHaveBeenCalledWith(SHEET_ID, [[0, 0, 0, 0]]);
+      expect(ctx.computeBridge.clearFormatForRanges).toHaveBeenCalledWith(
+        SHEET_ID,
+        [[0, 0, 0, 0]],
+        expectVersionOperationOptions('formats.clearFill', ['formats']),
+      );
       // 3) setFormatForRanges re-applies the non-fill properties
-      expect(ctx.computeBridge.setFormatForRanges).toHaveBeenCalledWith(SHEET_ID, [[0, 0, 0, 0]], {
-        bold: true,
-      });
+      expect(ctx.computeBridge.setFormatForRanges).toHaveBeenCalledWith(
+        SHEET_ID,
+        [[0, 0, 0, 0]],
+        {
+          bold: true,
+        },
+        expectVersionOperationOptions('formats.clearFill', ['formats']),
+      );
     });
 
     it('does not promote row-inherited format to cell-level override', async () => {
@@ -1074,7 +1096,11 @@ describe('WorksheetImpl', () => {
       // queryRange is called to read the sparse format
       expect(ctx.computeBridge.queryRange).toHaveBeenCalledWith(SHEET_ID, 2, 0, 2, 0);
       // clearFormatForRanges is called to clear any cell-level formatting
-      expect(ctx.computeBridge.clearFormatForRanges).toHaveBeenCalledWith(SHEET_ID, [[2, 0, 2, 0]]);
+      expect(ctx.computeBridge.clearFormatForRanges).toHaveBeenCalledWith(
+        SHEET_ID,
+        [[2, 0, 2, 0]],
+        expectVersionOperationOptions('formats.clearFill', ['formats']),
+      );
       // setFormatForRanges should NOT be called — no cell-level format to re-apply
       expect(ctx.computeBridge.setFormatForRanges).not.toHaveBeenCalled();
     });
@@ -1090,7 +1116,11 @@ describe('WorksheetImpl', () => {
 
       // queryRange + clearFormatForRanges are called
       expect(ctx.computeBridge.queryRange).toHaveBeenCalledWith(SHEET_ID, 0, 0, 0, 0);
-      expect(ctx.computeBridge.clearFormatForRanges).toHaveBeenCalledWith(SHEET_ID, [[0, 0, 0, 0]]);
+      expect(ctx.computeBridge.clearFormatForRanges).toHaveBeenCalledWith(
+        SHEET_ID,
+        [[0, 0, 0, 0]],
+        expectVersionOperationOptions('formats.clearFill', ['formats']),
+      );
       // setFormatForRanges should NOT be called — stripping fill leaves nothing to re-apply
       expect(ctx.computeBridge.setFormatForRanges).not.toHaveBeenCalled();
     });

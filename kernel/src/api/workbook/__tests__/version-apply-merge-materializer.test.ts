@@ -467,6 +467,36 @@ describe('WorkbookVersion applyMerge production materializer', () => {
         mutationGuarantee: 'ref-fast-forwarded',
       });
 
+      const repeated = await sourceWb.version.applyMerge(
+        {
+          resultId: preview.value.resultId,
+          resultDigest: preview.value.resultDigest,
+        },
+        {
+          targetRef: 'refs/heads/main' as any,
+          expectedTargetHead,
+        },
+      );
+      if (!repeated.ok) throw new Error(`expected repeated applyMerge success: ${repeated.error.code}`);
+      expect(repeated.value).toMatchObject({
+        status: 'alreadyApplied',
+        ours: oursCommit.id,
+        theirs: theirsCommit.id,
+        commitRef: {
+          id: theirsCommit.id,
+          refName: 'refs/heads/main',
+          resolvedFrom: 'refs/heads/main',
+        },
+        resultId: preview.value.resultId,
+        resultDigest: preview.value.resultDigest,
+        targetRef: 'refs/heads/main',
+        headBefore: oursCommit.id,
+        headAfter: theirsCommit.id,
+        changes: [],
+        resolutionCount: 0,
+        mutationGuarantee: 'ref-not-mutated',
+      });
+
       const commits = await sourceWb.version.listCommits();
       if (!commits.ok) throw new Error(`expected listCommits success: ${commits.error.code}`);
       expect(commits.value.items).toEqual(
@@ -498,6 +528,119 @@ describe('WorkbookVersion applyMerge production materializer', () => {
       if (mergedWb) await mergedWb.close('skipSave');
       if (sourceWb) await sourceWb.close('skipSave');
       await mergedHandle.dispose();
+      await sourceHandle.dispose();
+    }
+  });
+
+  it('applies a persisted already-merged result without moving the target ref', async () => {
+    const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
+    const initialized = await provider.initializeGraph(await initializeInput('graph-already-merged', 'root'));
+    expectInitializeSuccess(initialized);
+
+    const sourceHandle = await DocumentFactory.create({
+      documentId: DOCUMENT_ID,
+      environment: 'headless',
+      userTimezone: 'UTC',
+    });
+    let sourceWb: Workbook | undefined;
+
+    try {
+      sourceWb = await sourceHandle.workbook({ versioning: { provider } });
+      await sourceWb.activeSheet.setCell('A1', 'base');
+      const baseCommit = await expectCommit(
+        sourceWb.version.commit({
+          expectedHead: {
+            commitId: initialized.rootCommit.id,
+            revision: initialized.initialHead.revision,
+            symbolicHeadRevision: initialized.symbolicHead.revision,
+          },
+        }),
+      );
+      const baseHead = await expectHead(sourceWb);
+
+      await sourceWb.activeSheet.setCell('B1', 'ours');
+      const oursCommit = await expectCommit(
+        sourceWb.version.commit({
+          expectedHead: {
+            commitId: baseCommit.id,
+            revision: requireRefRevision(baseHead),
+          },
+        }),
+      );
+      const oursHead = await expectHead(sourceWb);
+      const expectedTargetHead = {
+        commitId: oursCommit.id,
+        revision: requireRefRevision(oursHead),
+      };
+
+      const preview = await sourceWb.version.merge(
+        {
+          base: initialized.rootCommit.id,
+          ours: oursCommit.id,
+          theirs: baseCommit.id,
+        },
+        {
+          mode: 'preview',
+          targetRef: 'refs/heads/main' as any,
+          expectedTargetHead,
+          persistReviewRecord: true,
+        },
+      );
+      if (!preview.ok) throw new Error(`expected already-merged preview success: ${preview.error.code}`);
+      expect(preview.value).toMatchObject({
+        status: 'alreadyMerged',
+        ours: oursCommit.id,
+        theirs: baseCommit.id,
+        resultId: expect.stringMatching(/^merge-result:[0-9a-f]{64}$/),
+        resultDigest: {
+          algorithm: 'sha256',
+          digest: expect.stringMatching(/^[0-9a-f]{64}$/),
+        },
+        attemptPersistence: 'persisted',
+        attemptKind: 'applyable',
+        targetRef: 'refs/heads/main',
+      });
+      if (preview.value.status !== 'alreadyMerged' || !preview.value.resultId || !preview.value.resultDigest) {
+        throw new Error('expected already-merged preview to expose a persisted result id and digest');
+      }
+
+      const applied = await sourceWb.version.applyMerge(
+        {
+          resultId: preview.value.resultId,
+          resultDigest: preview.value.resultDigest,
+        },
+        {
+          targetRef: 'refs/heads/main' as any,
+          expectedTargetHead,
+        },
+      );
+      if (!applied.ok) throw new Error(`expected already-merged apply success: ${applied.error.code}`);
+      expect(applied.value).toMatchObject({
+        status: 'alreadyMerged',
+        ours: oursCommit.id,
+        theirs: baseCommit.id,
+        commitRef: {
+          id: oursCommit.id,
+          refName: 'refs/heads/main',
+          resolvedFrom: 'refs/heads/main',
+        },
+        resultId: preview.value.resultId,
+        resultDigest: preview.value.resultDigest,
+        targetRef: 'refs/heads/main',
+        headBefore: oursCommit.id,
+        headAfter: oursCommit.id,
+        changes: [],
+        resolutionCount: 0,
+        mutationGuarantee: 'ref-not-mutated',
+      });
+
+      const head = await expectHead(sourceWb);
+      expect(head).toMatchObject({
+        id: oursCommit.id,
+        refRevision: requireRefRevision(oursHead),
+      });
+    } finally {
+      if (sourceWb) await sourceWb.close('skipSave');
       await sourceHandle.dispose();
     }
   });

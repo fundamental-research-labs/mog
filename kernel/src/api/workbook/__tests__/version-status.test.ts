@@ -613,10 +613,9 @@ describe('WorkbookVersion status slice', () => {
       order: 'topological-newest',
     });
     const status = await wb.version.getStatus();
-    expect(status.checkout).toMatchObject({ stage: 'pending', available: false });
+    expect(status.checkout).toMatchObject({ stage: 'present', available: true });
     expect(status.checkout.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
       'version.checkout.serviceAttached',
-      'version.checkout.pending',
     ]);
 
     const graph = await provider.openGraph(namespaceForDocumentScope(DOCUMENT_SCOPE, 'graph-1'));

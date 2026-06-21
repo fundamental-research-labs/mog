@@ -246,8 +246,10 @@ export class WorkbookVersionImpl implements WorkbookVersion {
       ? [commitApiServiceAttached]
       : [commitApiPending];
     const checkoutDiagnostics = checkoutServiceAttached
-      ? [checkoutServiceAttachedDiagnostic, checkoutPending]
+      ? [checkoutServiceAttachedDiagnostic]
       : [checkoutPending];
+    const checkoutStage = checkoutServiceAttached ? 'present' : 'pending';
+    const checkoutDependency = checkoutServiceAttached ? 'version-service' : 'VC-05';
 
     const diagnostics = [
       ...objectStoreDiagnostics,
@@ -264,7 +266,7 @@ export class WorkbookVersionImpl implements WorkbookVersion {
       objectStoreFoundation: capability('present', true, 'VC-04', objectStoreDiagnostics),
       refLifecycleFoundation: capability('present', true, 'VC-05', refLifecycleDiagnostics),
       commitApi: capability(writeServiceAttached ? 'present' : 'pending', writeServiceAttached, 'VC-04', commitApiDiagnostics),
-      checkout: capability('pending', false, 'VC-05', checkoutDiagnostics),
+      checkout: capability(checkoutStage, checkoutServiceAttached, checkoutDependency, checkoutDiagnostics),
       merge: capability(
         mergeServiceAttached ? 'present' : 'pending',
         mergeServiceAttached,

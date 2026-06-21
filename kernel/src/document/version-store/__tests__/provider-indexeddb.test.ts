@@ -554,6 +554,22 @@ describe('IndexedDbVersionStoreProvider', () => {
         },
       },
     });
+    const intentStore = await provider.openMergeApplyIntentStore(namespace);
+    await expect(
+      intentStore.readRefCasProof({
+        applyKind: 'mergeCommit',
+        targetRef: VERSION_GRAPH_MAIN_REF,
+        headBefore: ours.commit.id,
+        headAfter: merge.commit.id,
+      }),
+    ).resolves.toMatchObject({
+      status: 'found',
+      proof: {
+        schemaVersion: 1,
+        applyKind: 'mergeCommit',
+        commitMetadataDigest: objectDigestFromWorkbookCommitId(merge.commit.id),
+      },
+    });
     await expect(reloaded.readRef(VERSION_GRAPH_MAIN_REF)).resolves.toMatchObject({
       status: 'success',
       ref: {

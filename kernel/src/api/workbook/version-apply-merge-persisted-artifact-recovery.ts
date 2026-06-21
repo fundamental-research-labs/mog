@@ -8,9 +8,11 @@ import type {
 
 import type {
   MergeApplyIntentRecord,
+  MergeApplyRefCasProof,
   MergeApplyIntentStore,
   MergeApplyIntentStoreDiagnostic,
 } from '../../document/version-store/merge-apply-intent-store';
+import { computeMergeApplyRefCasProof } from '../../document/version-store/merge-apply-intent-store';
 import type { ObjectDigest } from '../../document/version-store/object-digest';
 import type { VersionGraphStore } from '../../document/version-store/provider-graph-store';
 import type { NormalizedPersistedApplyMergeInput } from './version-apply-merge-persisted';
@@ -60,6 +62,7 @@ type RecoverStagedMergeCommitIfAlreadyAppliedInput = {
   readonly intentStoreDiagnostics: (
     diagnostics: readonly MergeApplyIntentStoreDiagnostic[],
   ) => readonly VersionStoreDiagnostic[];
+  readonly resolutionMismatchDiagnostic: (safeMessage: string) => VersionStoreDiagnostic;
 };
 
 export async function recoverStagedMergeCommitIfAlreadyApplied({
@@ -74,6 +77,7 @@ export async function recoverStagedMergeCommitIfAlreadyApplied({
   mapProviderDiagnostics,
   providerErrorDiagnostic,
   intentStoreDiagnostics,
+  resolutionMismatchDiagnostic,
 }: RecoverStagedMergeCommitIfAlreadyAppliedInput): Promise<VersionApplyMergeResult | null> {
   if (record.applyKind !== 'mergeCommit' || record.terminal) return null;
 
@@ -104,6 +108,37 @@ export async function recoverStagedMergeCommitIfAlreadyApplied({
     return staleTargetHeadArtifactResult(input, record, current.commitId);
   }
 
+  const proofRead = await store.readRefCasProof({
+    applyKind: 'mergeCommit',
+    targetRef: record.targetRef,
+    headBefore: record.ours,
+    headAfter: current.commitId,
+  });
+  if (proofRead.status !== 'found') {
+    return blockedApplyMergeResult(
+      record.base,
+      record.ours,
+      record.theirs,
+      intentStoreDiagnostics(proofRead.diagnostics),
+      'ref-not-mutated',
+    );
+  }
+  const proofDiagnostics = await validateMergeCommitRefCasProof(
+    record,
+    current.commitId,
+    proofRead.proof,
+    resolutionMismatchDiagnostic,
+  );
+  if (proofDiagnostics.length > 0) {
+    return blockedApplyMergeResult(
+      record.base,
+      record.ours,
+      record.theirs,
+      proofDiagnostics,
+      'ref-not-mutated',
+    );
+  }
+
   const completed = await store.completeIntent({
     intentId: record.intentId,
     resolvedAttemptDigest: record.resolvedAttemptDigest,
@@ -113,6 +148,7 @@ export async function recoverStagedMergeCommitIfAlreadyApplied({
       headBefore: record.ours,
       headAfter: current.commitId,
       commitId: current.commitId,
+      refCasProof: proofRead.proof,
     },
   });
   if (completed.status !== 'completed') {
@@ -121,10 +157,44 @@ export async function recoverStagedMergeCommitIfAlreadyApplied({
       record.ours,
       record.theirs,
       intentStoreDiagnostics(completed.diagnostics),
-      'unknown-after-crash',
+      'ref-not-mutated',
     );
   }
   return resultFromTerminalArtifactIntent(graph, input, completed.record);
+}
+
+async function validateMergeCommitRefCasProof(
+  record: MergeApplyIntentRecord,
+  commitId: WorkbookCommitId,
+  proof: MergeApplyRefCasProof,
+  resolutionMismatchDiagnostic: (safeMessage: string) => VersionStoreDiagnostic,
+): Promise<readonly VersionStoreDiagnostic[]> {
+  const expected = await computeMergeApplyRefCasProof({
+    applyKind: 'mergeCommit',
+    targetRef: record.targetRef,
+    headBefore: record.ours,
+    headAfter: commitId,
+  });
+  const diagnostics: VersionStoreDiagnostic[] = [];
+  if (proof.applyKind !== 'mergeCommit') {
+    diagnostics.push(resolutionMismatchDiagnostic('merge commit ref CAS proof apply kind does not match.'));
+  }
+  if (!digestsEqual(proof.commitMetadataDigest, expected.commitMetadataDigest)) {
+    diagnostics.push(
+      resolutionMismatchDiagnostic('merge commit ref CAS proof commit metadata does not match.'),
+    );
+  }
+  if (!digestsEqual(proof.refUpdateMetadataDigest, expected.refUpdateMetadataDigest)) {
+    diagnostics.push(
+      resolutionMismatchDiagnostic('merge commit ref CAS proof ref update does not match.'),
+    );
+  }
+  if (!digestsEqual(proof.refLogEventDigest, expected.refLogEventDigest)) {
+    diagnostics.push(
+      resolutionMismatchDiagnostic('merge commit ref CAS proof event log does not match.'),
+    );
+  }
+  return diagnostics;
 }
 
 export async function validateAppliedMergeCommitIdentity(

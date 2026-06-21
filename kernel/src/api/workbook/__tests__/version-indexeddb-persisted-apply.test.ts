@@ -523,6 +523,7 @@ describe('WorkbookVersion IndexedDB persisted applyMerge', () => {
             headBefore: oursCommit.id,
             headAfter: mergeCommitId,
             commitId: mergeCommitId,
+            refCasProof: expect.objectContaining({ schemaVersion: 1, applyKind: 'mergeCommit' }),
           },
         },
       });

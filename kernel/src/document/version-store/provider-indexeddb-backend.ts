@@ -749,6 +749,8 @@ class IndexedDbVersionGraphStore implements VersionGraphStore {
           expectedRefVersion,
           ...(operation === 'fastForwardRef'
             ? { refCasProof: { applyKind: 'fastForward' as const } }
+            : operation === 'mergeCommit'
+              ? { refCasProof: { applyKind: 'mergeCommit' as const } }
             : {}),
         },
       });

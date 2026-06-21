@@ -180,6 +180,7 @@ export async function applyPersistedMergePreviewArtifact(
     mapProviderDiagnostics,
     providerErrorDiagnostic,
     intentStoreDiagnostics,
+    resolutionMismatchDiagnostic,
   });
   if (recovered) return recovered;
 

@@ -50,6 +50,8 @@ describe('SnapshotRootMaterializationService', () => {
       const sourceWorkbook = await sourceHandle.workbook();
       await sourceWorkbook.activeSheet.setCell('A1', 7);
       await sourceWorkbook.activeSheet.setCell('A2', '=A1*6');
+      await sourceWorkbook.names.add('ReplayRevenue', 'Sheet1!A1:A2', 'VC-06 replay range');
+      await sourceWorkbook.activeSheet.comments.setNote('B1', 'Replay note', 'VC Agent');
 
       const namespace = namespaceForDocumentScope(DOCUMENT_SCOPE, 'graph-1');
       const snapshotRootPayload = createYrsFullStateSnapshotRootPayload(
@@ -114,10 +116,26 @@ describe('SnapshotRootMaterializationService', () => {
       await expect(materialized.workbook.activeSheet.getCell('A2')).resolves.toMatchObject({
         value: 42,
       });
+      await expect(materialized.workbook.names.get('ReplayRevenue')).resolves.toMatchObject({
+        name: 'ReplayRevenue',
+        reference: 'Sheet1!A1:A2',
+        comment: 'VC-06 replay range',
+      });
+      await expect(materialized.workbook.activeSheet.comments.getNote('B1')).resolves.toMatchObject({
+        content: 'Replay note',
+        author: 'VC Agent',
+        cellAddress: 'B1',
+      });
 
       await sourceWorkbook.activeSheet.setCell('A1', 99);
+      await sourceWorkbook.names.add('SourceOnly', 'Sheet1!A1', 'not in materialized replay');
+      await sourceWorkbook.activeSheet.comments.setNote('B1', 'Source-only note', 'VC Agent');
       await expect(materialized.workbook.activeSheet.getCell('A1')).resolves.toMatchObject({
         value: 7,
+      });
+      await expect(materialized.workbook.names.get('SourceOnly')).resolves.toBeNull();
+      await expect(materialized.workbook.activeSheet.comments.getNote('B1')).resolves.toMatchObject({
+        content: 'Replay note',
       });
     } finally {
       if (materialized) await materialized.dispose();

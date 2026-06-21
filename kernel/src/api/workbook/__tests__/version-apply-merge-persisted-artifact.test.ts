@@ -1,5 +1,7 @@
 import type {
+  VersionApplyMergeResolution,
   VersionHead,
+  VersionMergeConflict,
   Workbook,
   WorkbookCommitSummary,
 } from '@mog-sdk/contracts/api';
@@ -238,8 +240,14 @@ describe('WorkbookVersion persisted merge preview artifact apply', () => {
       environment: 'headless',
       userTimezone: 'UTC',
     });
+    const mergedHandle = await DocumentFactory.create({
+      documentId: DOCUMENT_ID,
+      environment: 'headless',
+      userTimezone: 'UTC',
+    });
     let sourceWb: Workbook | undefined;
     let branchWb: Workbook | undefined;
+    let mergedWb: Workbook | undefined;
 
     try {
       sourceWb = await sourceHandle.workbook({ versioning: { provider } });
@@ -350,9 +358,64 @@ describe('WorkbookVersion persisted merge preview artifact apply', () => {
         requiredResolutionCount: preview.value.conflicts.length,
         mutationGuarantee: 'preview-only',
       });
+      if (replayedPreview.value.status !== 'conflicted') {
+        throw new Error('expected replayed preview to remain conflicted');
+      }
+
+      const applied = await sourceWb.version.applyMerge(
+        {
+          resultId: preview.value.resultId,
+          resultDigest: preview.value.resultDigest,
+          previewArtifactDigest: preview.value.previewArtifactDigest,
+          resolutions: [resolutionFor(replayedPreview.value.conflicts[0], 'acceptTheirs')],
+        },
+        {
+          targetRef: 'refs/heads/main' as any,
+          expectedTargetHead,
+        },
+      );
+      if (!applied.ok) {
+        throw new Error(`expected persisted conflict apply success: ${applied.error.code}`);
+      }
+      expect(applied.value).toMatchObject({
+        status: 'applied',
+        ours: oursCommit.id,
+        theirs: theirsCommit.id,
+        resultId: preview.value.resultId,
+        resultDigest: preview.value.resultDigest,
+        previewArtifactDigest: preview.value.previewArtifactDigest,
+        targetRef: 'refs/heads/main',
+        resolutionCount: 1,
+        mutationGuarantee: 'merge-commit-created',
+      });
+
+      const mergeCommitId = applied.value.commitRef.id;
+      await expect(sourceWb.version.listCommits()).resolves.toMatchObject({
+        ok: true,
+        value: {
+          items: expect.arrayContaining([
+            expect.objectContaining({
+              id: mergeCommitId,
+              parents: [oursCommit.id, theirsCommit.id],
+            }),
+          ]),
+        },
+      });
+
+      mergedWb = await mergedHandle.workbook({ versioning: { provider } });
+      const checkoutMerged = await mergedWb.version.checkout({
+        kind: 'commit',
+        id: mergeCommitId,
+      });
+      if (!checkoutMerged.ok) {
+        throw new Error(`expected merged checkout success: ${checkoutMerged.error.code}`);
+      }
+      await expect(mergedWb.activeSheet.getCell('A1')).resolves.toMatchObject({ value: 'theirs' });
     } finally {
+      if (mergedWb) await mergedWb.close('skipSave');
       if (branchWb) await branchWb.close('skipSave');
       if (sourceWb) await sourceWb.close('skipSave');
+      await mergedHandle.dispose();
       await branchHandle.dispose();
       await sourceHandle.dispose();
     }
@@ -376,6 +439,20 @@ async function expectHead(wb: Workbook): Promise<VersionHead> {
 function requireRefRevision(head: VersionHead) {
   if (!head.refRevision) throw new Error('expected head to expose a ref revision');
   return head.refRevision;
+}
+
+function resolutionFor(
+  conflict: VersionMergeConflict,
+  kind: VersionApplyMergeResolution['kind'],
+): VersionApplyMergeResolution {
+  const option = conflict.resolutionOptions.find((candidate) => candidate.kind === kind);
+  if (!option) throw new Error(`expected conflict to expose ${kind} resolution option`);
+  return {
+    conflictId: conflict.conflictId,
+    expectedConflictDigest: conflict.conflictDigest,
+    optionId: option.optionId,
+    kind,
+  };
 }
 
 async function initializeInput(

@@ -1,9 +1,11 @@
 import type {
   ObjectDigest,
   VersionApplyMergeResult,
+  VersionApplyMergeResolution,
   VersionCommitExpectedHead,
   VersionMainRefName,
   VersionMergeChange,
+  VersionMergeConflict,
   VersionMergeResultId,
   VersionRefName,
   VersionStoreDiagnostic,
@@ -65,6 +67,16 @@ type MaybeVersionRuntimeContext = DocumentContext & {
   readonly version?: unknown;
 };
 
+type ResolutionPlanResult =
+  | {
+      readonly ok: true;
+      readonly changes: readonly VersionMergeChange[];
+    }
+  | {
+      readonly ok: false;
+      readonly diagnostics: readonly VersionStoreDiagnostic[];
+    };
+
 export function isPersistedMergePreviewArtifactInput(
   input: NormalizedPersistedApplyMergeInput,
 ): boolean {
@@ -94,7 +106,25 @@ export async function applyPersistedMergePreviewArtifact(
   }
 
   if (options.mode === 'preview') {
+    if (input.resolutions.length > 0) {
+      return blockedApplyMergeResult(
+        artifact.payload.base,
+        artifact.payload.ours,
+        artifact.payload.theirs,
+        [resolutionMismatchDiagnostic('preview replay does not accept conflict resolutions.')],
+      );
+    }
     return replayPreviewArtifact(input, artifact.payload);
+  }
+
+  const resolutionPlan = planPreviewArtifactApply(artifact.payload, input.resolutions);
+  if (!resolutionPlan.ok) {
+    return blockedApplyMergeResult(
+      artifact.payload.base,
+      artifact.payload.ours,
+      artifact.payload.theirs,
+      resolutionPlan.diagnostics,
+    );
   }
 
   const validationDiagnostics = validatePreviewArtifactForApply(artifact.payload, options);
@@ -117,21 +147,21 @@ export async function applyPersistedMergePreviewArtifact(
     );
   }
 
-  const plan = {
+  const writePlan = {
     base: artifact.payload.base,
     ours: artifact.payload.ours,
     theirs: artifact.payload.theirs,
-    changes: artifact.payload.changes,
-    resolutionCount: 0,
+    changes: [...artifact.payload.changes, ...resolutionPlan.changes],
+    resolutionCount: input.resolutions.length,
   };
 
   try {
     const raw = await service.mergeCommit({
-      ...plan,
+      ...writePlan,
       targetRef: options.targetRef,
       expectedTargetHead: options.expectedTargetHead,
     });
-    const mapped = mapApplyMergeWriteResult(raw, plan, 'merge-commit-created');
+    const mapped = mapApplyMergeWriteResult(raw, writePlan, 'merge-commit-created');
     if (!isApplyMergeWriteSuccessResult(mapped)) return mapped;
     return {
       ...mapped,
@@ -303,29 +333,122 @@ async function readPreviewArtifact(
   }
 }
 
+function planPreviewArtifactApply(
+  payload: MergePreviewArtifactPayload,
+  resolutions: readonly VersionApplyMergeResolution[],
+): ResolutionPlanResult {
+  if (payload.status === 'clean') {
+    if (resolutions.length > 0) {
+      return {
+        ok: false,
+        diagnostics: [
+          resolutionMismatchDiagnostic('clean merge preview artifacts do not accept resolutions.'),
+        ],
+      };
+    }
+    if (payload.conflicts.length > 0) {
+      return {
+        ok: false,
+        diagnostics: [
+          resolutionMismatchDiagnostic('clean merge preview artifacts must not contain conflicts.'),
+        ],
+      };
+    }
+    return { ok: true, changes: [] };
+  }
+
+  if (payload.status === 'conflicted') {
+    if (resolutions.length === 0) {
+      return {
+        ok: false,
+        diagnostics: [
+          resolutionMismatchDiagnostic(
+            'applyMerge apply mode requires resolutions for conflicted previews.',
+          ),
+        ],
+      };
+    }
+    return planResolvedConflicts(payload.conflicts, resolutions);
+  }
+
+  return {
+    ok: false,
+    diagnostics: [
+      resolutionMismatchDiagnostic(
+        'persisted merge preview artifact is not a review-only applyable result.',
+      ),
+    ],
+  };
+}
+
 function validatePreviewArtifactForApply(
   payload: MergePreviewArtifactPayload,
   options: Extract<NormalizedPersistedApplyMergeOptions, { readonly mode: 'apply' }>,
 ): readonly VersionStoreDiagnostic[] {
-  const diagnostics: VersionStoreDiagnostic[] = [];
-  if (payload.status !== 'clean') {
-    diagnostics.push(
-      resolutionMismatchDiagnostic(
-        'persisted merge preview artifact is not a clean applyable review result.',
-      ),
-    );
+  if (options.expectedTargetHead.commitId === payload.ours) return [];
+  return [
+    resolutionMismatchDiagnostic('applyMerge expectedTargetHead must match the ours commit.'),
+  ];
+}
+
+function planResolvedConflicts(
+  conflicts: readonly VersionMergeConflict[],
+  resolutions: readonly VersionApplyMergeResolution[],
+): ResolutionPlanResult {
+  if (resolutions.length !== conflicts.length) {
+    return {
+      ok: false,
+      diagnostics: [
+        resolutionMismatchDiagnostic('applyMerge preview requires exactly one resolution per conflict.'),
+      ],
+    };
   }
-  if (payload.conflicts.length > 0) {
-    diagnostics.push(
-      resolutionMismatchDiagnostic('clean merge preview artifacts must not contain conflicts.'),
+
+  const conflictsById = new Map(conflicts.map((conflict) => [conflict.conflictId, conflict]));
+  const seenConflictIds = new Set<string>();
+  const changes: VersionMergeChange[] = [];
+
+  for (const resolution of resolutions) {
+    if (seenConflictIds.has(resolution.conflictId)) {
+      return {
+        ok: false,
+        diagnostics: [resolutionMismatchDiagnostic('duplicate conflict resolution supplied.')],
+      };
+    }
+    seenConflictIds.add(resolution.conflictId);
+
+    const conflict = conflictsById.get(resolution.conflictId);
+    if (!conflict || resolution.expectedConflictDigest !== conflict.conflictDigest) {
+      return {
+        ok: false,
+        diagnostics: [resolutionMismatchDiagnostic('resolution does not match the merge conflict.')],
+      };
+    }
+
+    const option = conflict.resolutionOptions.find(
+      (candidate) => candidate.optionId === resolution.optionId && candidate.kind === resolution.kind,
     );
+    if (!option) {
+      return {
+        ok: false,
+        diagnostics: [resolutionMismatchDiagnostic('resolution option does not match the conflict.')],
+      };
+    }
+
+    changes.push({
+      structural: conflict.structural,
+      base: conflict.base,
+      ours: conflict.ours,
+      theirs: conflict.theirs,
+      merged: option.value,
+      ...(conflict.display ? { display: conflict.display } : {}),
+      ...(option.diagnostics && option.diagnostics.length > 0
+        ? { diagnostics: option.diagnostics }
+        : {}),
+    });
   }
-  if (options.expectedTargetHead.commitId !== payload.ours) {
-    diagnostics.push(
-      resolutionMismatchDiagnostic('applyMerge expectedTargetHead must match the ours commit.'),
-    );
-  }
-  return diagnostics;
+
+  return { ok: true, changes };
 }
 
 function toMergePreviewArtifactPayload(value: unknown): MergePreviewArtifactPayload | null {

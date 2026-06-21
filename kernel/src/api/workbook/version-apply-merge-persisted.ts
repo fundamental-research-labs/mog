@@ -111,15 +111,15 @@ export async function applyPersistedMergeResult(
   if (!normalizedInput || !normalizedOptions || diagnostics.length > 0) {
     return blockedApplyMergeResult(null, null, null, diagnostics);
   }
+  if (isPersistedMergePreviewArtifactInput(normalizedInput)) {
+    return applyPersistedMergePreviewArtifact(ctx, normalizedInput, normalizedOptions);
+  }
   if (normalizedInput.resolutions.length > 0) {
     return blockedApplyMergeResult(null, null, null, [
       resolutionMismatchDiagnostic(
         'persisted applyMerge result inputs currently support only empty resolution sets.',
       ),
     ]);
-  }
-  if (isPersistedMergePreviewArtifactInput(normalizedInput)) {
-    return applyPersistedMergePreviewArtifact(ctx, normalizedInput, normalizedOptions);
   }
   if (normalizedOptions.mode === 'preview') {
     return blockedApplyMergeResult(null, null, null, [

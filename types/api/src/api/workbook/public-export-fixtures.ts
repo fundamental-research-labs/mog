@@ -24,13 +24,17 @@ import type {
   VersionMergeAttemptPersistence as ApiRootMergeAttemptPersistence,
   VersionMergeConflict as ApiRootMergeConflict,
   VersionMergeConflictResolutionOption as ApiRootMergeConflictResolutionOption,
+  VersionGetMergeConflictDetailRequest as ApiRootGetMergeConflictDetailRequest,
   VersionMergeResult as ApiRootMergeResult,
   VersionMergeResultId as ApiRootMergeResultId,
+  VersionPutMergeResolutionPayloadResult as ApiRootPutMergeResolutionPayloadResult,
   VersionRefMutationResult as ApiRootRefMutationResult,
   VersionResult as ApiRootVersionResult,
+  VersionSaveMergeResolutionsRequest as ApiRootSaveMergeResolutionsRequest,
   VersionHead as ApiRootVersionHead,
   VersionSemanticDiffPage as ApiRootSemanticDiffPage,
   VersionSemanticValue as ApiRootSemanticValue,
+  VersionSealedResolutionPayloadRef as ApiRootSealedResolutionPayloadRef,
   VersionStoreDiagnostic as ApiRootStoreDiagnostic,
   WorkbookDiffPage as ApiRootDiffPage,
   WorkbookVersion as ApiRootWorkbookVersion,
@@ -62,13 +66,17 @@ import type {
   VersionMergeAttemptPersistence as PackageApiMergeAttemptPersistence,
   VersionMergeConflict as PackageApiMergeConflict,
   VersionMergeConflictResolutionOption as PackageApiMergeConflictResolutionOption,
+  VersionGetMergeConflictDetailRequest as PackageApiGetMergeConflictDetailRequest,
   VersionMergeResult as PackageApiMergeResult,
   VersionMergeResultId as PackageApiMergeResultId,
+  VersionPutMergeResolutionPayloadResult as PackageApiPutMergeResolutionPayloadResult,
   VersionRefMutationResult as PackageApiRefMutationResult,
   VersionResult as PackageApiVersionResult,
+  VersionSaveMergeResolutionsRequest as PackageApiSaveMergeResolutionsRequest,
   VersionHead as PackageApiVersionHead,
   VersionSemanticDiffPage as PackageApiSemanticDiffPage,
   VersionSemanticValue as PackageApiSemanticValue,
+  VersionSealedResolutionPayloadRef as PackageApiSealedResolutionPayloadRef,
   VersionStoreDiagnostic as PackageApiStoreDiagnostic,
   WorkbookDiffPage as PackageApiDiffPage,
   WorkbookVersion as PackageApiWorkbookVersion,
@@ -100,13 +108,17 @@ import type {
   VersionMergeAttemptPersistence as PackageWorkbookMergeAttemptPersistence,
   VersionMergeConflict as PackageWorkbookMergeConflict,
   VersionMergeConflictResolutionOption as PackageWorkbookMergeConflictResolutionOption,
+  VersionGetMergeConflictDetailRequest as PackageWorkbookGetMergeConflictDetailRequest,
   VersionMergeResult as PackageWorkbookMergeResult,
   VersionMergeResultId as PackageWorkbookMergeResultId,
+  VersionPutMergeResolutionPayloadResult as PackageWorkbookPutMergeResolutionPayloadResult,
   VersionRefMutationResult as PackageWorkbookRefMutationResult,
   VersionResult as PackageWorkbookVersionResult,
+  VersionSaveMergeResolutionsRequest as PackageWorkbookSaveMergeResolutionsRequest,
   VersionHead as PackageWorkbookVersionHead,
   VersionSemanticDiffPage as PackageWorkbookSemanticDiffPage,
   VersionSemanticValue as PackageWorkbookSemanticValue,
+  VersionSealedResolutionPayloadRef as PackageWorkbookSealedResolutionPayloadRef,
   VersionStoreDiagnostic as PackageWorkbookStoreDiagnostic,
   WorkbookDiffPage as PackageWorkbookDiffPage,
   WorkbookVersion as PackageWorkbookVersion,
@@ -138,13 +150,17 @@ import type {
   VersionMergeAttemptPersistence as WorkbookNamespaceMergeAttemptPersistence,
   VersionMergeConflict as WorkbookNamespaceMergeConflict,
   VersionMergeConflictResolutionOption as WorkbookNamespaceMergeConflictResolutionOption,
+  VersionGetMergeConflictDetailRequest as WorkbookNamespaceGetMergeConflictDetailRequest,
   VersionMergeResult as WorkbookNamespaceMergeResult,
   VersionMergeResultId as WorkbookNamespaceMergeResultId,
+  VersionPutMergeResolutionPayloadResult as WorkbookNamespacePutMergeResolutionPayloadResult,
   VersionRefMutationResult as WorkbookNamespaceRefMutationResult,
   VersionResult as WorkbookNamespaceVersionResult,
+  VersionSaveMergeResolutionsRequest as WorkbookNamespaceSaveMergeResolutionsRequest,
   VersionHead as WorkbookNamespaceVersionHead,
   VersionSemanticDiffPage as WorkbookNamespaceSemanticDiffPage,
   VersionSemanticValue as WorkbookNamespaceSemanticValue,
+  VersionSealedResolutionPayloadRef as WorkbookNamespaceSealedResolutionPayloadRef,
   VersionStoreDiagnostic as WorkbookNamespaceStoreDiagnostic,
   WorkbookDiffPage as WorkbookNamespaceDiffPage,
   WorkbookVersion as WorkbookNamespaceVersion,
@@ -208,6 +224,18 @@ type _WorkbookNamespaceExportsMergeAttemptPersistence = Assert<
 >;
 type _WorkbookNamespaceExportsMergeResultId = Assert<
   IsEqual<WorkbookNamespaceMergeResultId, PackageWorkbookMergeResultId>
+>;
+type _WorkbookNamespaceExportsSaveMergeResolutionsRequest = Assert<
+  IsEqual<WorkbookNamespaceSaveMergeResolutionsRequest, PackageWorkbookSaveMergeResolutionsRequest>
+>;
+type _WorkbookNamespaceExportsGetMergeConflictDetailRequest = Assert<
+  IsEqual<WorkbookNamespaceGetMergeConflictDetailRequest, PackageWorkbookGetMergeConflictDetailRequest>
+>;
+type _WorkbookNamespaceExportsPutMergeResolutionPayloadResult = Assert<
+  IsEqual<WorkbookNamespacePutMergeResolutionPayloadResult, PackageWorkbookPutMergeResolutionPayloadResult>
+>;
+type _WorkbookNamespaceExportsSealedResolutionPayloadRef = Assert<
+  IsEqual<WorkbookNamespaceSealedResolutionPayloadRef, PackageWorkbookSealedResolutionPayloadRef>
 >;
 type _WorkbookNamespaceExportsDiffPage = Assert<
   IsEqual<WorkbookNamespaceDiffPage, PackageWorkbookDiffPage>
@@ -308,6 +336,18 @@ type _ApiRootExportsMergeAttemptPersistence = Assert<
   IsEqual<ApiRootMergeAttemptPersistence, PackageApiMergeAttemptPersistence>
 >;
 type _ApiRootExportsMergeResultId = Assert<IsEqual<ApiRootMergeResultId, PackageApiMergeResultId>>;
+type _ApiRootExportsSaveMergeResolutionsRequest = Assert<
+  IsEqual<ApiRootSaveMergeResolutionsRequest, PackageApiSaveMergeResolutionsRequest>
+>;
+type _ApiRootExportsGetMergeConflictDetailRequest = Assert<
+  IsEqual<ApiRootGetMergeConflictDetailRequest, PackageApiGetMergeConflictDetailRequest>
+>;
+type _ApiRootExportsPutMergeResolutionPayloadResult = Assert<
+  IsEqual<ApiRootPutMergeResolutionPayloadResult, PackageApiPutMergeResolutionPayloadResult>
+>;
+type _ApiRootExportsSealedResolutionPayloadRef = Assert<
+  IsEqual<ApiRootSealedResolutionPayloadRef, PackageApiSealedResolutionPayloadRef>
+>;
 type _ApiRootExportsCapabilityError = Assert<
   IsEqual<ApiRootCapabilityError, PackageApiCapabilityError>
 >;

@@ -5,7 +5,12 @@ import type {
 
 import type { DocumentContext } from '../../context';
 
-export type VersionMergePublicOperation = 'merge' | 'applyMerge';
+export type VersionMergePublicOperation =
+  | 'merge'
+  | 'applyMerge'
+  | 'saveMergeResolutions'
+  | 'getMergeConflictDetail'
+  | 'putMergeResolutionPayload';
 export type VersionMergePublicCapability = Extract<
   VersionCapability,
   'version:mergePreview' | 'version:mergeApply'

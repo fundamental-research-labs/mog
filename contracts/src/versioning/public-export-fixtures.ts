@@ -10,11 +10,15 @@ import type {
   VersionCommitOptions as ContractsApiCommitOptions,
   VersionCreateBranchOptions as ContractsApiCreateBranchOptions,
   VersionDiffEntry as ContractsApiDiffEntry,
+  VersionGetMergeConflictDetailRequest as ContractsApiGetMergeConflictDetailRequest,
+  VersionPutMergeResolutionPayloadResult as ContractsApiPutMergeResolutionPayloadResult,
   VersionRefMutationResult as ContractsApiRefMutationResult,
   VersionResult as ContractsApiVersionResult,
+  VersionSaveMergeResolutionsRequest as ContractsApiSaveMergeResolutionsRequest,
   VersionHead as ContractsApiVersionHead,
   VersionSemanticDiffPage as ContractsApiSemanticDiffPage,
   VersionSemanticValue as ContractsApiSemanticValue,
+  VersionSealedResolutionPayloadRef as ContractsApiSealedResolutionPayloadRef,
   VersionStoreDiagnostic as ContractsApiStoreDiagnostic,
   Workbook as ContractsApiWorkbook,
   WorkbookDiffPage as ContractsApiDiffPage,
@@ -33,11 +37,15 @@ import type {
   VersionCommitOptions as ContractsWorkbookCommitOptions,
   VersionCreateBranchOptions as ContractsWorkbookCreateBranchOptions,
   VersionDiffEntry as ContractsWorkbookDiffEntry,
+  VersionGetMergeConflictDetailRequest as ContractsWorkbookGetMergeConflictDetailRequest,
+  VersionPutMergeResolutionPayloadResult as ContractsWorkbookPutMergeResolutionPayloadResult,
   VersionRefMutationResult as ContractsWorkbookRefMutationResult,
   VersionResult as ContractsWorkbookVersionResult,
+  VersionSaveMergeResolutionsRequest as ContractsWorkbookSaveMergeResolutionsRequest,
   VersionHead as ContractsWorkbookVersionHead,
   VersionSemanticDiffPage as ContractsWorkbookSemanticDiffPage,
   VersionSemanticValue as ContractsWorkbookSemanticValue,
+  VersionSealedResolutionPayloadRef as ContractsWorkbookSealedResolutionPayloadRef,
   VersionStoreDiagnostic as ContractsWorkbookStoreDiagnostic,
   WorkbookDiffPage as ContractsWorkbookDiffPage,
   WorkbookVersion as ContractsWorkbookVersion,
@@ -123,6 +131,18 @@ type _ContractsApiWorkbookEntryExportsSemanticDiffPage = Assert<
 type _ContractsApiWorkbookEntryExportsPaged = Assert<
   IsEqual<ContractsApiPaged<string>, ContractsWorkbookPaged<string>>
 >;
+type _ContractsApiWorkbookEntryExportsSaveMergeResolutionsRequest = Assert<
+  IsEqual<ContractsApiSaveMergeResolutionsRequest, ContractsWorkbookSaveMergeResolutionsRequest>
+>;
+type _ContractsApiWorkbookEntryExportsGetMergeConflictDetailRequest = Assert<
+  IsEqual<ContractsApiGetMergeConflictDetailRequest, ContractsWorkbookGetMergeConflictDetailRequest>
+>;
+type _ContractsApiWorkbookEntryExportsPutMergeResolutionPayloadResult = Assert<
+  IsEqual<ContractsApiPutMergeResolutionPayloadResult, ContractsWorkbookPutMergeResolutionPayloadResult>
+>;
+type _ContractsApiWorkbookEntryExportsSealedResolutionPayloadRef = Assert<
+  IsEqual<ContractsApiSealedResolutionPayloadRef, ContractsWorkbookSealedResolutionPayloadRef>
+>;
 
 type PublicVersionApiSurface = {
   readonly workbook: ContractsApiWorkbook;
@@ -145,6 +165,10 @@ type PublicVersionApiSurface = {
   readonly versionResult: ContractsApiVersionResult<string>;
   readonly versionHead: ContractsApiVersionHead;
   readonly semanticDiffPage: ContractsApiSemanticDiffPage;
+  readonly saveMergeResolutionsRequest: ContractsApiSaveMergeResolutionsRequest;
+  readonly getMergeConflictDetailRequest: ContractsApiGetMergeConflictDetailRequest;
+  readonly putMergeResolutionPayloadResult: ContractsApiPutMergeResolutionPayloadResult;
+  readonly sealedResolutionPayloadRef: ContractsApiSealedResolutionPayloadRef;
   readonly page: ContractsApiPaged<string>;
 };
 

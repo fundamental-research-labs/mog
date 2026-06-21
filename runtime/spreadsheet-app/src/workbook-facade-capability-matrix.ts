@@ -3692,6 +3692,10 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
       decision: 'allow',
       capability: 'version:read',
     },
+    getMergeConflictDetail: {
+      decision: 'allow',
+      capability: 'version:mergePreview',
+    },
     getRef: {
       decision: 'allow',
       capability: 'version:read',
@@ -3716,9 +3720,17 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
       decision: 'allow',
       capability: 'version:mergePreview',
     },
+    putMergeResolutionPayload: {
+      decision: 'allow',
+      capability: 'version:mergeApply',
+    },
     readRef: {
       decision: 'allow',
       capability: 'version:read',
+    },
+    saveMergeResolutions: {
+      decision: 'allow',
+      capability: 'version:mergeApply',
     },
     updateBranch: {
       decision: 'allow',

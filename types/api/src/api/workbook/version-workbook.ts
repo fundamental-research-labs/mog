@@ -1,0 +1,88 @@
+import type {
+  CheckoutVersionResult,
+  GetVersionHeadInput,
+  ListVersionCommitsInput,
+  ListVersionRefsInput,
+  Paged,
+  VersionApplyMergeInput,
+  VersionApplyMergeOptions,
+  VersionApplyMergeResult,
+  VersionBranchName,
+  VersionBranchRefReadResult,
+  VersionCheckoutOptions,
+  VersionCheckoutTarget,
+  VersionCommitish,
+  VersionCommitOptions,
+  VersionCreateBranchOptions,
+  VersionDeleteRefOptions,
+  VersionDiffOptions,
+  VersionFastForwardBranchOptions,
+  VersionHead,
+  VersionMainRefName,
+  VersionMergeInput,
+  VersionMergeOptions,
+  VersionMergeResult,
+  VersionRef,
+  VersionRefName,
+  VersionRefReadResult,
+  VersionRefSelector,
+  VersionSemanticDiffPage,
+  VersionSymbolicRefReadResult,
+  VersionUpdateBranchOptions,
+  WorkbookCommitSummary,
+  WorkbookVersionStatus,
+  VersionSurfaceStatus,
+} from './version';
+import type { VersionResult } from './version-shared';
+import type {
+  VersionGetMergeConflictDetailRequest,
+  VersionMergeConflictDetailResult,
+  VersionPutMergeResolutionPayloadRequest,
+  VersionPutMergeResolutionPayloadResult,
+  VersionSaveMergeResolutionsRequest,
+  VersionSaveMergeResolutionsResult,
+} from './version-merge-review';
+
+export interface WorkbookVersion {
+  getStatus(): Promise<WorkbookVersionStatus>;
+  getSurfaceStatus(): Promise<VersionSurfaceStatus>;
+  getHead(): Promise<VersionResult<VersionHead>>;
+  getHead(options: GetVersionHeadInput): Promise<VersionResult<VersionHead>>;
+  listCommits(options?: ListVersionCommitsInput): Promise<VersionResult<Paged<WorkbookCommitSummary>>>;
+  commit(options?: VersionCommitOptions): Promise<VersionResult<WorkbookCommitSummary>>;
+  checkout(
+    target: VersionCheckoutTarget,
+    options?: VersionCheckoutOptions,
+  ): Promise<VersionResult<CheckoutVersionResult>>;
+  merge(input: VersionMergeInput, options?: VersionMergeOptions): Promise<VersionResult<VersionMergeResult>>;
+  applyMerge(
+    input: VersionApplyMergeInput,
+    options?: VersionApplyMergeOptions,
+  ): Promise<VersionResult<VersionApplyMergeResult>>;
+  saveMergeResolutions(
+    input: VersionSaveMergeResolutionsRequest,
+  ): Promise<VersionResult<VersionSaveMergeResolutionsResult>>;
+  getMergeConflictDetail(
+    input: VersionGetMergeConflictDetailRequest,
+  ): Promise<VersionResult<VersionMergeConflictDetailResult>>;
+  putMergeResolutionPayload(
+    input: VersionPutMergeResolutionPayloadRequest,
+  ): Promise<VersionResult<VersionPutMergeResolutionPayloadResult>>;
+  diff(
+    base: VersionCommitish,
+    target: VersionCommitish,
+    options?: VersionDiffOptions,
+  ): Promise<VersionResult<VersionSemanticDiffPage>>;
+  readRef(name: 'HEAD'): Promise<VersionResult<VersionSymbolicRefReadResult>>;
+  readRef(name: VersionMainRefName | VersionRefName | VersionBranchName): Promise<VersionResult<VersionBranchRefReadResult>>;
+  readRef(name: VersionRefSelector | VersionBranchName): Promise<VersionResult<VersionRefReadResult>>;
+  getRef(name: 'HEAD'): Promise<VersionResult<VersionSymbolicRefReadResult>>;
+  getRef(name: VersionMainRefName | VersionRefName | VersionBranchName): Promise<VersionResult<VersionBranchRefReadResult>>;
+  getRef(name: VersionRefSelector | VersionBranchName): Promise<VersionResult<VersionRefReadResult>>;
+  listRefs(options?: ListVersionRefsInput): Promise<VersionResult<Paged<VersionRef>>>;
+  createBranch(options: VersionCreateBranchOptions): Promise<VersionResult<VersionRef>>;
+  fastForwardBranch(options: VersionFastForwardBranchOptions): Promise<VersionResult<VersionRef>>;
+  updateBranch(options: VersionUpdateBranchOptions): Promise<VersionResult<VersionRef>>;
+  deleteBranch(options: VersionDeleteRefOptions): Promise<VersionResult<VersionRef>>;
+  deleteRef(options: VersionDeleteRefOptions): Promise<VersionResult<VersionRef>>;
+}

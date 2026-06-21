@@ -21,6 +21,7 @@ import type {
   VersionDegradedHeadResult,
   VersionHead,
 } from '@mog-sdk/contracts/api';
+import type { VersionMergePublicOperation } from './version-merge-capability';
 
 type VersionResultOperation =
   | 'getHead'
@@ -35,6 +36,9 @@ type VersionResultOperation =
   | 'checkout'
   | 'diff'
   | 'merge'
+  | 'getMergeConflictDetail'
+  | 'putMergeResolutionPayload'
+  | 'saveMergeResolutions'
   | 'applyMerge'
   | 'readRef'
   | 'updateBranch';
@@ -182,7 +186,7 @@ export function versionFailureFromStoreDiagnostics<T>(
 }
 
 function versionFailureFromOperationDiagnostics<T>(
-  operation: Extract<VersionResultOperation, 'merge' | 'applyMerge'>,
+  operation: VersionMergePublicOperation,
   diagnostics: readonly VersionStoreDiagnostic[],
 ): VersionResult<T> {
   const capabilityDisabled = diagnostics.find(
@@ -203,6 +207,13 @@ function versionFailureFromOperationDiagnostics<T>(
   return versionFailureFromStoreDiagnostics(operation, diagnostics);
 }
 
+export function versionResultFromMergeEndpointDiagnostics<T>(
+  operation: VersionMergePublicOperation,
+  diagnostics: readonly VersionStoreDiagnostic[],
+): VersionResult<T> {
+  return versionFailureFromOperationDiagnostics(operation, diagnostics);
+}
+
 function capabilityDependency(diagnostic: VersionStoreDiagnostic): 'featureGate' | 'hostCapability' {
   const reason = diagnostic.payload?.reason;
   return reason === 'hostCapabilityDenied' || reason === 'hostCapabilityApprovalRequired'
@@ -211,9 +222,17 @@ function capabilityDependency(diagnostic: VersionStoreDiagnostic): 'featureGate'
 }
 
 function capabilityForMergeOperation(
-  operation: Extract<VersionResultOperation, 'merge' | 'applyMerge'>,
+  operation: VersionMergePublicOperation,
 ): VersionCapability {
-  return operation === 'merge' ? 'version:mergePreview' : 'version:mergeApply';
+  switch (operation) {
+    case 'merge':
+    case 'getMergeConflictDetail':
+      return 'version:mergePreview';
+    case 'applyMerge':
+    case 'saveMergeResolutions':
+    case 'putMergeResolutionPayload':
+      return 'version:mergeApply';
+  }
 }
 
 function toVersionDiagnostic(diagnostic: VersionStoreDiagnostic): VersionDiagnostic {

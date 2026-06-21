@@ -12,7 +12,6 @@ import type {
   VersionCapability,
   VersionCapabilityDependency,
   VersionDiagnostic,
-  VersionResult,
 } from './version-shared';
 
 export type {
@@ -31,6 +30,9 @@ export type {
   VersionError,
   VersionResult,
 } from './version-shared';
+
+export type { WorkbookVersion } from './version-workbook';
+export type * from './version-merge-review';
 
 export type WorkbookVersionRolloutStage =
   | 'disabled'
@@ -961,38 +963,3 @@ export type VersionRefMutationResult =
       readonly ref: VersionRef | null;
       readonly diagnostics: readonly VersionStoreDiagnostic[];
     };
-
-export interface WorkbookVersion {
-  getStatus(): Promise<WorkbookVersionStatus>;
-  getSurfaceStatus(): Promise<VersionSurfaceStatus>;
-  getHead(): Promise<VersionResult<VersionHead>>;
-  getHead(options: GetVersionHeadInput): Promise<VersionResult<VersionHead>>;
-  listCommits(options?: ListVersionCommitsInput): Promise<VersionResult<Paged<WorkbookCommitSummary>>>;
-  commit(options?: VersionCommitOptions): Promise<VersionResult<WorkbookCommitSummary>>;
-  checkout(
-    target: VersionCheckoutTarget,
-    options?: VersionCheckoutOptions,
-  ): Promise<VersionResult<CheckoutVersionResult>>;
-  merge(input: VersionMergeInput, options?: VersionMergeOptions): Promise<VersionResult<VersionMergeResult>>;
-  applyMerge(
-    input: VersionApplyMergeInput,
-    options?: VersionApplyMergeOptions,
-  ): Promise<VersionResult<VersionApplyMergeResult>>;
-  diff(
-    base: VersionCommitish,
-    target: VersionCommitish,
-    options?: VersionDiffOptions,
-  ): Promise<VersionResult<VersionSemanticDiffPage>>;
-  readRef(name: 'HEAD'): Promise<VersionResult<VersionSymbolicRefReadResult>>;
-  readRef(name: VersionMainRefName | VersionRefName | VersionBranchName): Promise<VersionResult<VersionBranchRefReadResult>>;
-  readRef(name: VersionRefSelector | VersionBranchName): Promise<VersionResult<VersionRefReadResult>>;
-  getRef(name: 'HEAD'): Promise<VersionResult<VersionSymbolicRefReadResult>>;
-  getRef(name: VersionMainRefName | VersionRefName | VersionBranchName): Promise<VersionResult<VersionBranchRefReadResult>>;
-  getRef(name: VersionRefSelector | VersionBranchName): Promise<VersionResult<VersionRefReadResult>>;
-  listRefs(options?: ListVersionRefsInput): Promise<VersionResult<Paged<VersionRef>>>;
-  createBranch(options: VersionCreateBranchOptions): Promise<VersionResult<VersionRef>>;
-  fastForwardBranch(options: VersionFastForwardBranchOptions): Promise<VersionResult<VersionRef>>;
-  updateBranch(options: VersionUpdateBranchOptions): Promise<VersionResult<VersionRef>>;
-  deleteBranch(options: VersionDeleteRefOptions): Promise<VersionResult<VersionRef>>;
-  deleteRef(options: VersionDeleteRefOptions): Promise<VersionResult<VersionRef>>;
-}

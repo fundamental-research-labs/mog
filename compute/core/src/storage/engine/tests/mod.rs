@@ -62,3 +62,4 @@ mod test_xlsx_export_print;
 mod test_xlsx_export_protection;
 mod test_xlsx_export_tables;
 mod test_xlsx_export_validations;
+mod test_xlsx_export_vc03;

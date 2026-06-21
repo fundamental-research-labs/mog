@@ -117,14 +117,19 @@ export class VersionObjectMemoryBackend {
   ): VersionObjectRecord<unknown> | undefined {
     return this.records.get(versionObjectStorageKey(namespace, digest));
   }
-
   put(record: VersionObjectRecord<unknown>): void {
     this.records.set(
       versionObjectStorageKey(record.namespace, record.digest),
       cloneVersionObjectRecord(record),
     );
   }
-
+  list(namespace: VersionGraphNamespace): readonly VersionObjectRecord<unknown>[] {
+    const prefix = `${versionGraphNamespaceKey(namespace)}\u0000`;
+    const out = [...this.records.entries()]
+      .filter(([key]) => key.startsWith(prefix))
+      .map(([, record]) => cloneVersionObjectRecord(record));
+    return Object.freeze(out.sort((left, right) => left.digest.digest.localeCompare(right.digest.digest)));
+  }
   putCorruptRecordForTesting(
     namespace: VersionGraphNamespace,
     digest: ObjectDigest,
@@ -140,10 +145,8 @@ export class VersionObjectMemoryBackend {
 export type InMemoryVersionObjectStoreOptions = {
   readonly backend?: VersionObjectMemoryBackend;
 };
-
 export class InMemoryVersionObjectStore implements VersionObjectStore {
   readonly namespace: VersionGraphNamespace;
-
   private readonly backend: VersionObjectMemoryBackend;
   private readonly namespaceKey: string;
 
@@ -152,7 +155,6 @@ export class InMemoryVersionObjectStore implements VersionObjectStore {
     this.namespaceKey = versionGraphNamespaceKey(this.namespace);
     this.backend = options.backend ?? new VersionObjectMemoryBackend();
   }
-
   async putObjects(
     batch: readonly VersionObjectRecord<unknown>[],
   ): Promise<VersionObjectPutBatchResult> {
@@ -163,7 +165,6 @@ export class InMemoryVersionObjectStore implements VersionObjectStore {
         }),
       ]);
     }
-
     const staged = new Map<string, ValidatedVersionObjectRecord<unknown>>();
     const diagnostics: VersionObjectStoreDiagnostic[] = [];
 
@@ -336,6 +337,7 @@ export class InMemoryVersionObjectStore implements VersionObjectStore {
     const record = this.backend.get(this.namespace, dependency.digest);
     return Boolean(record && dependencyMatchesRecord(dependency, record));
   }
+  listObjectRecords(): readonly VersionObjectRecord<unknown>[] { return this.backend.list(this.namespace); }
 }
 
 export function createInMemoryVersionObjectStore(

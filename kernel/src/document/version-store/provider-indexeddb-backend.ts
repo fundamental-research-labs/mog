@@ -47,6 +47,7 @@ import {
   normalizeVersionGraphNamespace,
   versionGraphNamespaceKey,
   type VersionGraphNamespace,
+  type VersionObjectPutBatchResult,
   type VersionObjectRecord,
 } from './object-store';
 import type { ReadWorkbookCommitResult } from './commit-store';
@@ -71,6 +72,7 @@ import {
   liveMainFromSnapshot,
   mapGraphDiagnostics,
   normalizeVersionAccessContext,
+  persistObjectRecords,
   persistGraphSnapshot,
   readOnlyCapabilities,
   registryEnvelope,
@@ -669,6 +671,36 @@ class IndexedDbVersionGraphStore implements VersionGraphStore {
     );
   }
 
+  async putObjects(
+    batch: readonly VersionObjectRecord<unknown>[],
+  ): Promise<VersionObjectPutBatchResult> {
+    let graph: InMemoryVersionGraphStore;
+    try {
+      graph = await this.loadGraph('putObjects');
+    } catch (error) {
+      return failedObjectBatch('IndexedDB graph could not be loaded while writing objects.', {
+        cause: errorMessage(error),
+      });
+    }
+
+    const putResult = await graph.putObjects(batch);
+    if (putResult.status !== 'success') return putResult;
+
+    try {
+      await persistObjectRecords({
+        db: await this.getDb(),
+        namespace: this.namespace,
+        documentScope: this.documentScope,
+        records: putResult.records,
+      });
+      return putResult;
+    } catch (error) {
+      return failedObjectBatch('IndexedDB graph object batch could not be persisted.', {
+        cause: errorMessage(error),
+      });
+    }
+  }
+
   private async commitWithLoadedGraph(
     operation: 'commit' | 'mergeCommit' | 'fastForwardRef',
     input: CommitVersionGraphInput | MergeVersionGraphInput | FastForwardVersionGraphInput,
@@ -864,4 +896,22 @@ class IndexedDbVersionGraphStore implements VersionGraphStore {
 
 function storageRefNameFromGraphRefName(name: string): string {
   return name.startsWith(REF_NAME_STORAGE_PREFIX) ? name.slice(REF_NAME_STORAGE_PREFIX.length) : name;
+}
+
+function failedObjectBatch(
+  message: string,
+  details: Readonly<Record<string, string | number | boolean | null>>,
+): VersionObjectPutBatchResult {
+  return {
+    status: 'failed',
+    diagnostics: [
+      {
+        code: 'VERSION_STORE_UNAVAILABLE',
+        severity: 'error',
+        message,
+        details,
+      },
+    ],
+    mutationGuarantee: 'no-objects-written',
+  };
 }

@@ -11,6 +11,7 @@ import {
   versionGraphNamespaceKey,
   type InMemoryVersionObjectStore,
   type VersionGraphNamespace,
+  type VersionObjectPutBatchResult,
   type VersionObjectRecord,
   type VersionObjectStoreDiagnostic,
 } from './object-store';
@@ -333,6 +334,12 @@ export class InMemoryVersionGraphStore {
     return fastForwardGraphRef(this, input);
   }
 
+  async putObjects(
+    batch: readonly VersionObjectRecord<unknown>[],
+  ): Promise<VersionObjectPutBatchResult> {
+    return this.objectStore.putObjects(batch);
+  }
+
   private async commitWithParentPlan(
     input: CommitVersionGraphInput | MergeVersionGraphInput,
     parentPlan: GraphCommitParentPlan,
@@ -594,33 +601,9 @@ export class InMemoryVersionGraphStore {
       throw new Error('Version graph refs could not be snapshotted.');
     }
 
-    const recordsByDigest = new Map<string, VersionObjectRecord<unknown>>();
-    for (const ref of listedRefs.refs) {
-      if (ref.state !== 'live') continue;
-      const closure = await this.readCommitClosure(ref.targetCommitId);
-      if (closure.status !== 'success') {
-        throw new Error('Version graph commit closure could not be snapshotted.');
-      }
-      for (const commit of closure.commits) {
-        recordsByDigest.set(commit.record.digest.digest, commit.record);
-        const pendingDependencies = [...commit.record.preimage.dependencies];
-        for (let index = 0; index < pendingDependencies.length; index++) {
-          const dependency = pendingDependencies[index];
-          const dependencyRecord = await this.objectStore.getObjectRecord<unknown>(dependency);
-          if (recordsByDigest.has(dependencyRecord.digest.digest)) continue;
-          recordsByDigest.set(dependencyRecord.digest.digest, dependencyRecord);
-          pendingDependencies.push(...dependencyRecord.preimage.dependencies);
-        }
-      }
-    }
-
     return Object.freeze({
       namespace: this.namespace,
-      objectRecords: Object.freeze(
-        [...recordsByDigest.values()].sort((left, right) =>
-          left.digest.digest.localeCompare(right.digest.digest),
-        ),
-      ),
+      objectRecords: this.objectStore.listObjectRecords(),
       refStore: this.refStore.exportSnapshot(),
     });
   }

@@ -24,7 +24,11 @@ import type {
   VersionGraphWriteResult,
 } from './graph-store';
 import type { VersionDependencyRef, WorkbookCommitId } from './object-digest';
-import type { VersionGraphNamespace, VersionObjectRecord } from './object-store';
+import type {
+  VersionGraphNamespace,
+  VersionObjectPutBatchResult,
+  VersionObjectRecord,
+} from './object-store';
 
 export interface VersionGraphStore {
   readonly namespace: VersionGraphNamespace;
@@ -32,6 +36,7 @@ export interface VersionGraphStore {
   commit(input: CommitVersionGraphInput): Promise<VersionGraphWriteResult>;
   mergeCommit(input: MergeVersionGraphInput): Promise<VersionGraphWriteResult>;
   fastForwardRef(input: FastForwardVersionGraphInput): Promise<VersionGraphWriteResult>;
+  putObjects(batch: readonly VersionObjectRecord<unknown>[]): Promise<VersionObjectPutBatchResult>;
   readCommit(commitId: WorkbookCommitId | string): Promise<ReadWorkbookCommitResult>;
   getObjectRecord<TPayload>(ref: VersionDependencyRef): Promise<VersionObjectRecord<TPayload>>;
   hasObject(ref: VersionDependencyRef): Promise<boolean>;

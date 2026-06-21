@@ -3,6 +3,7 @@ export type VersionGraphStoreOperation =
   | 'commit'
   | 'mergeCommit'
   | 'fastForwardRef'
+  | 'putObjects'
   | 'createBranch'
   | 'readBranch'
   | 'listBranches'

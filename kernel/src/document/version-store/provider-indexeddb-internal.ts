@@ -254,6 +254,42 @@ export async function persistGraphSnapshot(options: {
   await idbTransactionDone(tx);
 }
 
+export async function persistObjectRecords(options: {
+  readonly db: IDBDatabase;
+  readonly namespace: VersionGraphNamespace;
+  readonly documentScope: VersionDocumentScope;
+  readonly records: readonly VersionObjectRecord<unknown>[];
+}): Promise<void> {
+  const namespace = normalizeVersionGraphNamespace(options.namespace);
+  const namespaceKey = versionGraphNamespaceKey(namespace);
+  const documentScopeKey = versionDocumentScopeKey(
+    normalizeVersionDocumentScope(options.documentScope),
+  );
+  const namespaceDocumentScopeKey = versionDocumentScopeKey(
+    normalizeVersionDocumentScope({
+      ...(namespace.workspaceId === undefined ? {} : { workspaceId: namespace.workspaceId }),
+      documentId: namespace.documentId,
+      ...(namespace.principalScope === undefined
+        ? {}
+        : { principalScope: namespace.principalScope }),
+    }),
+  );
+  if (namespaceDocumentScopeKey !== documentScopeKey) {
+    throw new Error('IndexedDB object batch namespace does not match the requested document scope.');
+  }
+
+  const tx = options.db.transaction(
+    [OBJECTS_STORE, COMMIT_INDEXES_STORE, PARENT_INDEXES_STORE],
+    'readwrite',
+  );
+  writeObjectRecords(tx, {
+    namespaceKey,
+    documentScopeKey,
+    records: options.records,
+  });
+  await idbTransactionDone(tx);
+}
+
 type RefWritePlan =
   | { readonly kind: 'all' }
   | {
@@ -285,55 +321,16 @@ function writeSnapshotStores(
     readonly refWritePlan: RefWritePlan;
   },
 ): void {
-  const objectStore = tx.objectStore(OBJECTS_STORE);
-  const commitIndexStore = tx.objectStore(COMMIT_INDEXES_STORE);
-  const parentIndexStore = tx.objectStore(PARENT_INDEXES_STORE);
   const refStore = tx.objectStore(REFS_STORE);
   const symbolicRefStore = tx.objectStore(SYMBOLIC_REFS_STORE);
   const manifestStore = tx.objectStore(INDEX_MANIFESTS_STORE);
   const intentStore = tx.objectStore(INTENTS_STORE);
 
-  for (const record of options.snapshot.objectRecords) {
-    objectStore.put(
-      {
-        schemaVersion: 1,
-        namespaceKey: options.namespaceKey,
-        documentScopeKey: options.documentScopeKey,
-        record: cloneJson(record),
-      } satisfies StoredObjectRecord,
-      objectKey(options.namespaceKey, record),
-    );
-    if (record.preimage.objectType !== 'workbook.commit.v1') continue;
-
-    const commitId = workbookCommitIdFromObjectDigest(record.digest);
-    const payload = record.preimage.payload as WorkbookCommitPayload;
-    commitIndexStore.put(
-      {
-        schemaVersion: 1,
-        namespaceKey: options.namespaceKey,
-        documentScopeKey: options.documentScopeKey,
-        commitId,
-        parentCommitIds: [...payload.parentCommitIds],
-        createdAt: payload.createdAt,
-        author: cloneJson(payload.author),
-        objectDigest: cloneJson(record.digest),
-      } satisfies StoredCommitIndex,
-      commitIndexKey(options.namespaceKey, commitId),
-    );
-    for (const parentCommitId of payload.parentCommitIds) {
-      parentIndexStore.put(
-        {
-          schemaVersion: 1,
-          namespaceKey: options.namespaceKey,
-          documentScopeKey: options.documentScopeKey,
-          parentLookupKey: parentLookupKey(options.namespaceKey, parentCommitId),
-          parentCommitId,
-          childCommitId: commitId,
-        } satisfies StoredParentIndex,
-        parentIndexKey(options.namespaceKey, parentCommitId, commitId),
-      );
-    }
-  }
+  writeObjectRecords(tx, {
+    namespaceKey: options.namespaceKey,
+    documentScopeKey: options.documentScopeKey,
+    records: options.snapshot.objectRecords,
+  });
 
   const selectedRefNames =
     options.refWritePlan.kind === 'selected' ? new Set(options.refWritePlan.refNames) : null;
@@ -390,6 +387,61 @@ function writeSnapshotStores(
     } satisfies StoredIntent,
     `${options.namespaceKey}\u0000${Date.now()}\u0000${Math.random().toString(16).slice(2)}`,
   );
+}
+
+function writeObjectRecords(
+  tx: IDBTransaction,
+  options: {
+    readonly namespaceKey: string;
+    readonly documentScopeKey: string;
+    readonly records: readonly VersionObjectRecord<unknown>[];
+  },
+): void {
+  const objectStore = tx.objectStore(OBJECTS_STORE);
+  const commitIndexStore = tx.objectStore(COMMIT_INDEXES_STORE);
+  const parentIndexStore = tx.objectStore(PARENT_INDEXES_STORE);
+
+  for (const record of options.records) {
+    objectStore.put(
+      {
+        schemaVersion: 1,
+        namespaceKey: options.namespaceKey,
+        documentScopeKey: options.documentScopeKey,
+        record: cloneJson(record),
+      } satisfies StoredObjectRecord,
+      objectKey(options.namespaceKey, record),
+    );
+    if (record.preimage.objectType !== 'workbook.commit.v1') continue;
+
+    const commitId = workbookCommitIdFromObjectDigest(record.digest);
+    const payload = record.preimage.payload as WorkbookCommitPayload;
+    commitIndexStore.put(
+      {
+        schemaVersion: 1,
+        namespaceKey: options.namespaceKey,
+        documentScopeKey: options.documentScopeKey,
+        commitId,
+        parentCommitIds: [...payload.parentCommitIds],
+        createdAt: payload.createdAt,
+        author: cloneJson(payload.author),
+        objectDigest: cloneJson(record.digest),
+      } satisfies StoredCommitIndex,
+      commitIndexKey(options.namespaceKey, commitId),
+    );
+    for (const parentCommitId of payload.parentCommitIds) {
+      parentIndexStore.put(
+        {
+          schemaVersion: 1,
+          namespaceKey: options.namespaceKey,
+          documentScopeKey: options.documentScopeKey,
+          parentLookupKey: parentLookupKey(options.namespaceKey, parentCommitId),
+          parentCommitId,
+          childCommitId: commitId,
+        } satisfies StoredParentIndex,
+        parentIndexKey(options.namespaceKey, parentCommitId, commitId),
+      );
+    }
+  }
 }
 
 export async function decodeRegistryEnvelope(

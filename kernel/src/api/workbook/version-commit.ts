@@ -601,6 +601,8 @@ function safeMessageForIssue(issueCode: string): string {
       return 'The attached version store is read-only for this document.';
     case 'VERSION_REF_CONFLICT':
       return 'The version ref changed while the commit was in progress.';
+    case 'VERSION_MISSING_CHANGE_SET':
+      return 'The version commit has no eligible captured change set.';
     case 'VERSION_INVALID_COMMIT_PAYLOAD':
       return 'The version write service returned an invalid public commit payload.';
     default:
@@ -614,6 +616,7 @@ function recoverabilityForIssue(issueCode: string): VersionStoreDiagnostic['reco
       return 'retry';
     case 'VERSION_DANGLING_REF':
     case 'VERSION_MISSING_OBJECT':
+    case 'VERSION_MISSING_CHANGE_SET':
     case 'VERSION_OBJECT_STORE_FAILURE':
     case 'VERSION_INVALID_COMMIT_PAYLOAD':
       return 'repair';
@@ -701,6 +704,7 @@ function sdkCodeForVersionIssue(issueCode: string): MogSdkError['code'] {
     case 'VERSION_PROVIDER_FAILED':
     case 'VERSION_OBJECT_STORE_FAILURE':
     case 'VERSION_GRAPH_UNINITIALIZED':
+    case 'VERSION_MISSING_CHANGE_SET':
     case 'VERSION_STORE_UNAVAILABLE':
       return 'PROVIDER_ERROR';
     default:

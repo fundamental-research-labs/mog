@@ -104,6 +104,7 @@ export type VersionStoreOperation =
   | 'readGraphRegistry'
   | 'initializeGraph'
   | 'openGraph'
+  | 'commitGraphWrite'
   | 'scanDocumentIntegrity'
   | 'close'
   | 'dispose';
@@ -794,7 +795,7 @@ function initializeSuccess(
   };
 }
 
-function failedStoreResult(
+export function failedStoreResult(
   diagnostics: readonly VersionStoreDiagnostic[],
   mutationGuarantee: VersionStoreFailure['mutationGuarantee'],
   retryable = false,
@@ -807,7 +808,7 @@ function failedStoreResult(
   };
 }
 
-function mapGraphDiagnostics(
+export function mapGraphDiagnostics(
   diagnostics: readonly VersionGraphStoreDiagnostic[],
   operation: VersionStoreOperation,
 ): readonly VersionStoreDiagnostic[] {
@@ -848,7 +849,7 @@ function registryRecordResult(
   };
 }
 
-function versionStoreDiagnostic(
+export function versionStoreDiagnostic(
   code: VersionStoreDiagnosticCode,
   options: {
     readonly operation: VersionStoreOperation;

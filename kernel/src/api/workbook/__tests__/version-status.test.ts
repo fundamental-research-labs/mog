@@ -1,6 +1,22 @@
 import { jest } from '@jest/globals';
 
+import type { VersionAuthor } from '@mog-sdk/contracts/versioning';
 import type { WorkbookConfig } from '../types';
+import type { VersionNormalCommitCapture } from '../../../document/version-store/commit-service';
+import { VERSION_GRAPH_MAIN_REF } from '../../../document/version-store/graph-store';
+import {
+  createVersionObjectRecord,
+  type VersionGraphNamespace,
+  type VersionObjectRecord,
+} from '../../../document/version-store/object-store';
+import type { VersionObjectType } from '../../../document/version-store/object-digest';
+import {
+  createInMemoryVersionStoreProvider,
+  namespaceForDocumentScope,
+  type VersionDocumentScope,
+  type VersionGraphInitializeInput,
+  type VersionGraphInitializeResult,
+} from '../../../document/version-store/provider';
 
 const createCheckpointManagerMock = jest.fn();
 const worksheetImplMock = jest.fn().mockImplementation((sheetId: string) => ({
@@ -56,6 +72,16 @@ const CHILD_COMMIT_ID = `commit:sha256:${'2'.repeat(64)}`;
 const REF_REVISION = { kind: 'counter', value: '2' } as const;
 const CREATED_AT = '2026-06-20T00:00:00.000Z';
 const DIFF_PAGE_TOKEN = 'vpt_aaaaaaaaaaaa';
+const DOCUMENT_SCOPE: VersionDocumentScope = {
+  workspaceId: 'workspace-1',
+  documentId: 'document-1',
+  principalScope: 'principal-1',
+};
+const VERSION_AUTHOR: VersionAuthor = {
+  authorId: 'user-1',
+  actorKind: 'user',
+  displayName: 'User One',
+};
 
 function createMockCtx(overrides: Record<string, unknown> = {}) {
   return {
@@ -515,6 +541,125 @@ describe('WorkbookVersion status slice', () => {
     });
   });
 
+  it('routes public commit through the attached provider-backed normal commit service', async () => {
+    const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
+    const initialized = await provider.initializeGraph(await initializeInput('graph-1', 'root'));
+    expectInitializeSuccess(initialized);
+    const captureNormalCommit = jest.fn(createNormalCommitCapture('child'));
+    const wb = createWorkbook({
+      versioning: {
+        provider,
+        captureNormalCommit,
+      },
+    });
+
+    const committed = await wb.version.commit({
+      expectedHead: {
+        commitId: initialized.rootCommit.id,
+        revision: initialized.initialHead.revision,
+        symbolicHeadRevision: initialized.symbolicHead.revision,
+      },
+    });
+
+    expect(captureNormalCommit).toHaveBeenCalledTimes(1);
+    expect(committed).toMatchObject({
+      refName: VERSION_GRAPH_MAIN_REF,
+      resolvedFrom: 'HEAD',
+      refRevision: { kind: 'counter', value: '1' },
+    });
+    expect(committed.id).not.toBe(initialized.rootCommit.id);
+
+    await expect(wb.version.getHead()).resolves.toMatchObject({
+      id: committed.id,
+      refName: VERSION_GRAPH_MAIN_REF,
+      resolvedFrom: 'HEAD',
+      refRevision: { kind: 'counter', value: '1' },
+    });
+    await expect(wb.version.listCommits()).resolves.toMatchObject({
+      status: 'success',
+      items: [
+        expect.objectContaining({ id: committed.id, parents: [initialized.rootCommit.id] }),
+        expect.objectContaining({ id: initialized.rootCommit.id, parents: [] }),
+      ],
+      order: 'topological-newest',
+    });
+
+    const graph = await provider.openGraph(namespaceForDocumentScope(DOCUMENT_SCOPE, 'graph-1'));
+    await expect(graph.readHead()).resolves.toMatchObject({
+      status: 'success',
+      head: {
+        id: committed.id,
+        refRevision: { kind: 'counter', value: '1' },
+      },
+    });
+  });
+
+  it('returns graph-uninitialized diagnostics before capture when provider registry is absent', async () => {
+    const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
+    const captureNormalCommit = jest.fn(createNormalCommitCapture('should-not-run'));
+    const wb = createWorkbook({
+      versioning: {
+        provider,
+        captureNormalCommit,
+      },
+    });
+
+    await expect(wb.version.commit()).rejects.toMatchObject({
+      name: 'MogSdkError',
+      code: 'PROVIDER_ERROR',
+      operation: 'workbook.version.commit',
+      details: {
+        versionIssueCode: 'VERSION_GRAPH_UNINITIALIZED',
+        diagnostics: [
+          expect.objectContaining({
+            issueCode: 'VERSION_GRAPH_UNINITIALIZED',
+            mutationGuarantee: 'no-write-attempted',
+            redacted: true,
+          }),
+        ],
+      },
+    });
+    expect(captureNormalCommit).not.toHaveBeenCalled();
+  });
+
+  it('rejects empty normal capture without advancing the initialized main ref', async () => {
+    const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
+    const initialized = await provider.initializeGraph(await initializeInput('graph-1', 'root'));
+    expectInitializeSuccess(initialized);
+    const captureNormalCommit = jest.fn(createEmptyNormalCommitCapture('empty'));
+    const wb = createWorkbook({
+      versioning: {
+        provider,
+        captureNormalCommit,
+      },
+    });
+
+    await expect(wb.version.commit()).rejects.toMatchObject({
+      name: 'MogSdkError',
+      code: 'PROVIDER_ERROR',
+      details: {
+        versionIssueCode: 'VERSION_MISSING_CHANGE_SET',
+        diagnostics: [
+          expect.objectContaining({
+            issueCode: 'VERSION_MISSING_CHANGE_SET',
+            mutationGuarantee: 'no-write-attempted',
+            redacted: true,
+          }),
+        ],
+      },
+    });
+    expect(captureNormalCommit).toHaveBeenCalledTimes(1);
+
+    const graph = await provider.openGraph(namespaceForDocumentScope(DOCUMENT_SCOPE, 'graph-1'));
+    await expect(graph.readHead()).resolves.toMatchObject({
+      status: 'success',
+      head: {
+        id: initialized.rootCommit.id,
+        refRevision: initialized.initialHead.revision,
+      },
+    });
+  });
+
   it.each([
     ['targetRef', 'VERSION_REF_WRITE_UNAVAILABLE', 'AUTHORIZATION_DENIED'],
     ['author', 'VERSION_PERMISSION_DENIED', 'AUTHORIZATION_DENIED'],
@@ -605,6 +750,99 @@ describe('WorkbookVersion status slice', () => {
     expect('listRefs' in wb.version).toBe(false);
   });
 });
+
+function expectInitializeSuccess(
+  result: VersionGraphInitializeResult,
+): asserts result is Extract<VersionGraphInitializeResult, { status: 'success' }> {
+  expect(result.status).toBe('success');
+  if (result.status !== 'success') {
+    throw new Error(`expected initialize success: ${result.diagnostics[0]?.code}`);
+  }
+}
+
+async function objectRecord(
+  namespace: VersionGraphNamespace,
+  objectType: VersionObjectType,
+  payload: unknown,
+): Promise<VersionObjectRecord<unknown>> {
+  return createVersionObjectRecord(namespace, {
+    objectType,
+    schemaVersion: 1,
+    payloadEncoding: 'mog-canonical-json-v1',
+    dependencies: [],
+    payload,
+  });
+}
+
+async function initializeInput(
+  graphId: string,
+  label: string,
+): Promise<VersionGraphInitializeInput> {
+  const namespace = namespaceForDocumentScope(DOCUMENT_SCOPE, graphId);
+  return {
+    expectedRegistryRevision: null,
+    graphId,
+    rootWrite: {
+      snapshotRootRecord: await objectRecord(namespace, 'workbook.snapshotRoot.v1', {
+        label,
+        sheets: [],
+      }),
+      semanticChangeSetRecord: await objectRecord(namespace, 'workbook.semanticChangeSet.v1', {
+        label,
+        changes: [],
+      }),
+      author: VERSION_AUTHOR,
+      createdAt: CREATED_AT,
+      completenessDiagnostics: [],
+    },
+  };
+}
+
+function createNormalCommitCapture(label: string): VersionNormalCommitCapture {
+  return async ({ namespace, currentMain }) => ({
+    status: 'success',
+    input: {
+      snapshotRootRecord: await objectRecord(namespace, 'workbook.snapshotRoot.v1', {
+        label,
+        parent: currentMain.commitId,
+        sheets: [],
+      }),
+      semanticChangeSetRecord: await objectRecord(namespace, 'workbook.semanticChangeSet.v1', {
+        label,
+        changes: [{ id: `${label}-change-1`, domain: 'test' }],
+      }),
+      mutationSegmentRecords: [
+        await objectRecord(namespace, 'workbook.mutationSegment.v1', {
+          segmentId: `${label}-segment-1`,
+          baseCommitId: currentMain.commitId,
+        }),
+      ],
+      author: VERSION_AUTHOR,
+      createdAt: CREATED_AT,
+      completenessDiagnostics: [],
+    },
+  });
+}
+
+function createEmptyNormalCommitCapture(label: string): VersionNormalCommitCapture {
+  return async ({ namespace }) => ({
+    status: 'success',
+    input: {
+      snapshotRootRecord: await objectRecord(namespace, 'workbook.snapshotRoot.v1', {
+        label,
+        sheets: [],
+      }),
+      semanticChangeSetRecord: await objectRecord(namespace, 'workbook.semanticChangeSet.v1', {
+        label,
+        changes: [],
+      }),
+      mutationSegmentRecords: [],
+      author: VERSION_AUTHOR,
+      createdAt: CREATED_AT,
+      completenessDiagnostics: [],
+    },
+  });
+}
 
 function createFakeGraphStore(options: { readonly includeDiff?: boolean } = {}) {
   const graphStore = {

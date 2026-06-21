@@ -835,6 +835,7 @@ function createDocumentHandle(
           onSave: config.onSave,
           writeFile: config.writeFile,
           importWarnings: config.importWarnings ?? importWarnings,
+          versioning: config.versioning,
           liveness: createWorkbookLiveness('document.workbook(config)'),
         });
       }

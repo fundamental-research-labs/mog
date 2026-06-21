@@ -15,6 +15,7 @@ import type {
 import type { TrapError } from '@mog/transport';
 import type { PresenceState, RoomSnapshot, SidecarStatus } from '../../document/collab/ws-sidecar';
 import type { DocumentByteSyncPort, Provider } from '../../document/providers/provider';
+import type { WorkbookVersioningConfig } from '../workbook/types';
 
 export interface DocumentHandleTrapRecovery {
   onTrap(listener: (trap: TrapError) => void): () => void;
@@ -30,6 +31,7 @@ export interface DocumentHandleWorkbookConfig {
   onSave?: (buffer: Uint8Array) => Promise<void>;
   writeFile?: (path: string, data: Uint8Array) => Promise<void>;
   importWarnings?: readonly DocumentImportWarning[];
+  versioning?: WorkbookVersioningConfig;
 }
 
 export interface CollaborationSidecarConfig {

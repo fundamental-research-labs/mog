@@ -21,6 +21,11 @@ import type {
 import type { DocumentSecurityConfig } from '@mog-sdk/contracts/security';
 import type { HostPrincipalLock } from '../../context/host-principal-lock';
 import type { DocumentContext } from '../../context';
+import type {
+  VersionNormalCommitCapture,
+  WorkbookVersionCommitService,
+} from '../../document/version-store/commit-service';
+import type { VersionStoreProvider } from '../../document/version-store/provider';
 import type { HandleLiveness } from '../lifecycle/handle-liveness';
 
 // =============================================================================
@@ -38,6 +43,12 @@ export type CodeExecutorFactory = (config: {
   eventBus: IEventBus;
   getActiveSheetId: () => SheetId;
 }) => CodeExecutorType;
+
+export interface WorkbookVersioningConfig {
+  readonly provider?: VersionStoreProvider;
+  readonly writeService?: WorkbookVersionCommitService;
+  readonly captureNormalCommit?: VersionNormalCommitCapture;
+}
 
 // =============================================================================
 // WorkbookConfig
@@ -80,6 +91,8 @@ export interface WorkbookConfig {
   importWarnings?: readonly DocumentImportWarning[];
   /** Shared liveness token for document-owned workbook facades. */
   liveness?: HandleLiveness;
+  /** Optional document-scoped version graph services for the public wb.version facade. */
+  versioning?: WorkbookVersioningConfig;
   /**
    * Host principal lock — when present, prevents `setActivePrincipal` and
    * `makePrincipal` from mutating the active principal. Installed by the

@@ -106,6 +106,7 @@ import type {
   CreateWorkbookOptions,
   WorkbookConfig,
 } from './types';
+import { attachWorkbookVersioning } from './version-wiring';
 import {
   getKnownSheetNames,
   resolveSheetNameToId as resolveWorkbookSheetNameToId,
@@ -269,6 +270,9 @@ export class WorkbookImpl implements WorkbookInternal {
   constructor(config: WorkbookConfig) {
     // Cast to DocumentContext — WorkbookImpl is internal kernel code and knows the runtime type
     this.ctx = config.ctx as DocumentContext;
+    if (config.versioning) {
+      attachWorkbookVersioning(this.ctx, config.versioning);
+    }
     this._liveness =
       config.liveness ??
       createHandleLiveness({

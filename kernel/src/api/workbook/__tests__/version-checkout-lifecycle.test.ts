@@ -2,7 +2,6 @@ import type { Workbook } from '@mog-sdk/contracts/api';
 import type { VersionAuthor } from '@mog-sdk/contracts/versioning';
 
 import { DocumentFactory } from '../../document/document-factory';
-import type { VersionNormalCommitCapture } from '../../../document/version-store/commit-service';
 import type { VersionObjectType } from '../../../document/version-store/object-digest';
 import {
   createVersionObjectRecord,
@@ -30,37 +29,38 @@ const VERSION_AUTHOR: VersionAuthor = {
 };
 
 describe('WorkbookVersion checkout lifecycle materialization', () => {
-  it('publishes a real snapshot-root checkout into a clean active workbook facade', async () => {
-    const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
-    const initialized = await provider.initializeGraph(await initializeInput('graph-1', 'root'));
-    expectInitializeSuccess(initialized);
-    const handle = await DocumentFactory.create({
+  it('publishes named ranges and tables from a real snapshot-root checkout into a clean active workbook facade', async () => {
+    const { provider, initialized } = await initializeVersionGraph();
+    const sourceHandle = await DocumentFactory.create({
       documentId: DOCUMENT_SCOPE.documentId,
       environment: 'headless',
       userTimezone: 'UTC',
     });
-    let wb: Workbook | undefined;
+    const checkoutHandle = await DocumentFactory.create({
+      documentId: DOCUMENT_SCOPE.documentId,
+      environment: 'headless',
+      userTimezone: 'UTC',
+    });
+    let sourceWb: Workbook | undefined;
+    let checkoutWb: Workbook | undefined;
 
     try {
-      wb = await handle.workbook({
-        versioning: {
-          provider,
-          captureNormalCommit: createNormalCommitCapture('checkpoint'),
-        },
-      });
+      sourceWb = await sourceHandle.workbook({ versioning: { provider } });
 
-      await wb.activeSheet.setCell('A1', 7);
-      await wb.activeSheet.setCell('A2', '=A1*6');
-      const committed = await wb.version.commit({
+      await authorVc06State(sourceWb);
+      const committed = await sourceWb.version.commit({
         expectedHead: {
           commitId: initialized.rootCommit.id,
           revision: initialized.initialHead.revision,
           symbolicHeadRevision: initialized.symbolicHead.revision,
         },
       });
-      wb.markClean();
+      sourceWb.markClean();
 
-      const result = await wb.version.checkout({ kind: 'commit', id: committed.id });
+      checkoutWb = await checkoutHandle.workbook({ versioning: { provider } });
+      checkoutWb.markClean();
+
+      const result = await checkoutWb.version.checkout({ kind: 'commit', id: committed.id });
 
       expect(result).toMatchObject({
         status: 'success',
@@ -72,23 +72,48 @@ describe('WorkbookVersion checkout lifecycle materialization', () => {
         },
         diagnostics: [],
       });
-      await expect(wb.activeSheet.getCell('A1')).resolves.toMatchObject({ value: 7 });
-      await expect(wb.activeSheet.getCell('A2')).resolves.toMatchObject({ value: 42 });
-      expect(wb.activeSheet.name).toBe('Sheet1');
-      expect(wb.activeSheet.index).toBe(0);
-      expect((await wb.getSheets()).map((sheet) => ({ name: sheet.name, index: sheet.index }))).toEqual([
-        { name: 'Sheet1', index: 0 },
+      await expect(checkoutWb.activeSheet.getCell('D1')).resolves.toMatchObject({ value: 7 });
+      await expect(checkoutWb.activeSheet.getCell('D2')).resolves.toMatchObject({ value: 42 });
+      expect(checkoutWb.activeSheet.name).toBe('Sheet1');
+      expect(checkoutWb.activeSheet.index).toBe(0);
+      expect(
+        (await checkoutWb.getSheets()).map((sheet) => ({
+          name: sheet.name,
+          index: sheet.index,
+        })),
+      ).toEqual([{ name: 'Sheet1', index: 0 }]);
+
+      await expect(checkoutWb.names.get('RevenueCells')).resolves.toMatchObject({
+        name: 'RevenueCells',
+        reference: 'Sheet1!B2:B3',
+        comment: 'VC-06 named range',
+      });
+      await expect(checkoutWb.names.list()).resolves.toEqual([
+        expect.objectContaining({
+          name: 'RevenueCells',
+          reference: 'Sheet1!B2:B3',
+          comment: 'VC-06 named range',
+        }),
       ]);
+
+      const table = await checkoutWb.activeSheet.tables.get('SalesTable');
+      expect(table).toMatchObject({
+        name: 'SalesTable',
+        range: 'A1:B3',
+        hasHeaderRow: true,
+        hasTotalsRow: false,
+      });
+      expect(table?.columns.map((column) => column.name)).toEqual(['Region', 'Revenue']);
     } finally {
-      if (wb) await wb.close('skipSave');
-      await handle.dispose();
+      if (checkoutWb) await checkoutWb.close('skipSave');
+      if (sourceWb) await sourceWb.close('skipSave');
+      await checkoutHandle.dispose();
+      await sourceHandle.dispose();
     }
   });
 
   it('rejects dirty post-commit checkout without discarding workbook edits', async () => {
-    const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
-    const initialized = await provider.initializeGraph(await initializeInput('graph-1', 'root'));
-    expectInitializeSuccess(initialized);
+    const { provider, initialized } = await initializeVersionGraph();
     const handle = await DocumentFactory.create({
       documentId: DOCUMENT_SCOPE.documentId,
       environment: 'headless',
@@ -97,12 +122,7 @@ describe('WorkbookVersion checkout lifecycle materialization', () => {
     let wb: Workbook | undefined;
 
     try {
-      wb = await handle.workbook({
-        versioning: {
-          provider,
-          captureNormalCommit: createNormalCommitCapture('checkpoint'),
-        },
-      });
+      wb = await handle.workbook({ versioning: { provider } });
 
       await wb.activeSheet.setCell('A1', 7);
       await wb.activeSheet.setCell('A2', '=A1*6');
@@ -150,6 +170,33 @@ function expectInitializeSuccess(
   }
 }
 
+async function initializeVersionGraph(): Promise<{
+  provider: ReturnType<typeof createInMemoryVersionStoreProvider>;
+  initialized: Extract<VersionGraphInitializeResult, { status: 'success' }>;
+}> {
+  const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
+  const initialized = await provider.initializeGraph(await initializeInput('graph-1', 'root'));
+  expectInitializeSuccess(initialized);
+  return { provider, initialized };
+}
+
+async function authorVc06State(wb: Workbook): Promise<void> {
+  const sheet = wb.activeSheet;
+  await sheet.setCell('A1', 'Region');
+  await sheet.setCell('B1', 'Revenue');
+  await sheet.setCell('A2', 'West');
+  await sheet.setCell('B2', 12);
+  await sheet.setCell('A3', 'East');
+  await sheet.setCell('B3', 30);
+  await sheet.setCell('D1', 7);
+  await sheet.setCell('D2', '=D1*6');
+  await wb.names.add('RevenueCells', 'Sheet1!B2:B3', 'VC-06 named range');
+  await sheet.tables.add('A1:B3', {
+    name: 'SalesTable',
+    hasHeaders: true,
+  });
+}
+
 async function objectRecord(
   namespace: VersionGraphNamespace,
   objectType: VersionObjectType,
@@ -186,30 +233,4 @@ async function initializeInput(
       completenessDiagnostics: [],
     },
   };
-}
-
-function createNormalCommitCapture(label: string): VersionNormalCommitCapture {
-  return async ({ namespace, currentMain }) => ({
-    status: 'success',
-    input: {
-      snapshotRootRecord: await objectRecord(namespace, 'workbook.snapshotRoot.v1', {
-        label,
-        parent: currentMain.commitId,
-        sheets: [],
-      }),
-      semanticChangeSetRecord: await objectRecord(namespace, 'workbook.semanticChangeSet.v1', {
-        label,
-        changes: [{ id: `${label}-change-1`, domain: 'test' }],
-      }),
-      mutationSegmentRecords: [
-        await objectRecord(namespace, 'workbook.mutationSegment.v1', {
-          segmentId: `${label}-segment-1`,
-          baseCommitId: currentMain.commitId,
-        }),
-      ],
-      author: VERSION_AUTHOR,
-      createdAt: CREATED_AT,
-      completenessDiagnostics: [],
-    },
-  });
 }

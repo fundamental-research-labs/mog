@@ -3,6 +3,7 @@
  */
 export type * from '@mog/types-api/api/workbook';
 export type {
+  CheckoutVersionResult,
   GetVersionHeadInput,
   JsonValue,
   ListVersionCommitsInput,

@@ -267,20 +267,20 @@ describe('WorkbookVersion checkout facade', () => {
     await expect(
       wb.version.checkout({ kind: 'commit', id: `commit:sha256:${'1'.repeat(64)}` }),
     ).resolves.toMatchObject({
-      status: 'degraded',
-      materialization: 'not-applied',
-      plan: null,
-      mutationGuarantee: 'no-workbook-mutation',
-      diagnostics: [
-        expect.objectContaining({
-          issueCode: 'VERSION_CHECKOUT_SERVICE_UNAVAILABLE',
-          recoverability: 'unsupported',
-          redacted: true,
-          payload: expect.objectContaining({
-            targetKind: 'commit',
+      ok: false,
+      error: {
+        code: 'target_unavailable',
+        diagnostics: [
+          expect.objectContaining({
+            code: 'VERSION_CHECKOUT_SERVICE_UNAVAILABLE',
+            data: expect.objectContaining({
+              recoverability: 'unsupported',
+              redacted: true,
+              payload: expect.objectContaining({ targetKind: 'commit' }),
+            }),
           }),
-        }),
-      ],
+        ],
+      },
     });
   });
 
@@ -306,24 +306,27 @@ describe('WorkbookVersion checkout facade', () => {
 
     expect(planCheckout).toHaveBeenCalledWith({ target: 'commit', commitId: commit.id });
     expect(result).toMatchObject({
-      status: 'success',
-      materialization: 'planned',
-      mutationGuarantee: 'no-workbook-mutation',
-      plan: {
-        strategy: 'fullSnapshot',
-        commitId: commit.id,
-        parentCommitIds: [],
-        target: {
-          kind: 'commit',
+      ok: true,
+      value: {
+        status: 'success',
+        materialization: 'planned',
+        mutationGuarantee: 'no-workbook-mutation',
+        plan: {
+          strategy: 'fullSnapshot',
           commitId: commit.id,
+          parentCommitIds: [],
+          target: {
+            kind: 'commit',
+            commitId: commit.id,
+          },
+          requiredDependencies: [
+            { role: 'snapshotRoot', objectType: 'workbook.snapshotRoot.v1' },
+            { role: 'semanticChangeSet', objectType: 'workbook.semanticChangeSet.v1' },
+          ],
+          requiredDependencyCount: 2,
         },
-        requiredDependencies: [
-          { role: 'snapshotRoot', objectType: 'workbook.snapshotRoot.v1' },
-          { role: 'semanticChangeSet', objectType: 'workbook.semanticChangeSet.v1' },
-        ],
-        requiredDependencyCount: 2,
+        diagnostics: [],
       },
-      diagnostics: [],
     });
     expect(JSON.stringify(result)).not.toContain('digest');
   });
@@ -348,17 +351,15 @@ describe('WorkbookVersion checkout facade', () => {
     });
 
     expect(result).toMatchObject({
-      status: 'degraded',
-      materialization: 'not-applied',
-      plan: null,
-      mutationGuarantee: 'no-workbook-mutation',
-      diagnostics: [
-        expect.objectContaining({
-          issueCode: 'VERSION_CHECKOUT_DIRTY_WORKING_STATE',
-          recoverability: 'none',
-          redacted: true,
-        }),
-      ],
+      ok: false,
+      error: {
+        diagnostics: [
+          expect.objectContaining({
+            code: 'VERSION_CHECKOUT_DIRTY_WORKING_STATE',
+            data: expect.objectContaining({ recoverability: 'none', redacted: true }),
+          }),
+        ],
+      },
     });
     expect(checkout).not.toHaveBeenCalled();
     expect(planCheckout).not.toHaveBeenCalled();
@@ -381,16 +382,18 @@ describe('WorkbookVersion checkout facade', () => {
     );
 
     expect(result).toMatchObject({
-      status: 'degraded',
-      materialization: 'not-applied',
-      mutationGuarantee: 'no-workbook-mutation',
-      diagnostics: [
-        expect.objectContaining({
-          issueCode: 'VERSION_CHECKOUT_REQUIRE_CLEAN_UNSUPPORTED',
-          recoverability: 'unsupported',
-          payload: expect.objectContaining({ option: 'requireClean' }),
-        }),
-      ],
+      ok: false,
+      error: {
+        diagnostics: [
+          expect.objectContaining({
+            code: 'VERSION_CHECKOUT_REQUIRE_CLEAN_UNSUPPORTED',
+            data: expect.objectContaining({
+              recoverability: 'unsupported',
+              payload: expect.objectContaining({ option: 'requireClean' }),
+            }),
+          }),
+        ],
+      },
     });
     expect(checkout).not.toHaveBeenCalled();
     expect(planCheckout).not.toHaveBeenCalled();
@@ -418,11 +421,14 @@ describe('WorkbookVersion checkout facade', () => {
 
     expect(checkout).toHaveBeenCalledWith({ target: 'commit', commitId: commit.id });
     expect(result).toMatchObject({
-      status: 'success',
-      materialization: 'planned',
-      mutationGuarantee: 'no-workbook-mutation',
-      plan: {
-        commitId: commit.id,
+      ok: true,
+      value: {
+        status: 'success',
+        materialization: 'planned',
+        mutationGuarantee: 'no-workbook-mutation',
+        plan: {
+          commitId: commit.id,
+        },
       },
     });
   });
@@ -454,13 +460,16 @@ describe('WorkbookVersion checkout facade', () => {
     const result = await wb.version.checkout({ kind: 'commit', id: commit.id });
 
     expect(result).toMatchObject({
-      status: 'success',
-      materialization: 'applied',
-      mutationGuarantee: 'workbook-state-materialized',
-      plan: {
-        commitId: commit.id,
+      ok: true,
+      value: {
+        status: 'success',
+        materialization: 'applied',
+        mutationGuarantee: 'workbook-state-materialized',
+        plan: {
+          commitId: commit.id,
+        },
+        diagnostics: [],
       },
-      diagnostics: [],
     });
     expect(applySnapshot).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -487,24 +496,27 @@ describe('WorkbookVersion checkout facade', () => {
     await expect(
       wb.version.checkout({ kind: 'commit', id: initialized.rootCommit.id }),
     ).resolves.toMatchObject({
-      status: 'success',
-      materialization: 'planned',
-      mutationGuarantee: 'no-workbook-mutation',
-      plan: {
-        strategy: 'fullSnapshot',
-        commitId: initialized.rootCommit.id,
-        parentCommitIds: [],
-        target: {
-          kind: 'commit',
+      ok: true,
+      value: {
+        status: 'success',
+        materialization: 'planned',
+        mutationGuarantee: 'no-workbook-mutation',
+        plan: {
+          strategy: 'fullSnapshot',
           commitId: initialized.rootCommit.id,
+          parentCommitIds: [],
+          target: {
+            kind: 'commit',
+            commitId: initialized.rootCommit.id,
+          },
+          requiredDependencies: [
+            { role: 'snapshotRoot', objectType: 'workbook.snapshotRoot.v1' },
+            { role: 'semanticChangeSet', objectType: 'workbook.semanticChangeSet.v1' },
+          ],
+          requiredDependencyCount: 2,
         },
-        requiredDependencies: [
-          { role: 'snapshotRoot', objectType: 'workbook.snapshotRoot.v1' },
-          { role: 'semanticChangeSet', objectType: 'workbook.semanticChangeSet.v1' },
-        ],
-        requiredDependencyCount: 2,
+        diagnostics: [],
       },
-      diagnostics: [],
     });
 
     await expect(wb.version.getHead()).resolves.toMatchObject({
@@ -548,23 +560,26 @@ describe('WorkbookVersion checkout facade', () => {
     await expect(
       wb.version.checkout({ kind: 'ref', name: 'refs/heads/scenario/checkout' as any }),
     ).resolves.toMatchObject({
-      status: 'success',
-      materialization: 'planned',
-      mutationGuarantee: 'no-workbook-mutation',
-      plan: {
-        strategy: 'fullSnapshot',
-        commitId: child.commit.id,
-        parentCommitIds: [initialized.rootCommit.id],
-        target: {
-          kind: 'ref',
-          refName: 'refs/heads/scenario/checkout',
+      ok: true,
+      value: {
+        status: 'success',
+        materialization: 'planned',
+        mutationGuarantee: 'no-workbook-mutation',
+        plan: {
+          strategy: 'fullSnapshot',
           commitId: child.commit.id,
-          refRevision: branch.ref.refVersion,
-          refIncarnationId: branch.ref.refIncarnationId,
+          parentCommitIds: [initialized.rootCommit.id],
+          target: {
+            kind: 'ref',
+            refName: 'refs/heads/scenario/checkout',
+            commitId: child.commit.id,
+            refRevision: branch.ref.refVersion,
+            refIncarnationId: branch.ref.refIncarnationId,
+          },
+          requiredDependencyCount: 2,
         },
-        requiredDependencyCount: 2,
+        diagnostics: [],
       },
-      diagnostics: [],
     });
   });
 });

@@ -2,6 +2,7 @@ import type {
   Paged as ContractsApiPaged,
   RedactionPolicy as ContractsApiRedactionPolicy,
   VersionCapabilityError as ContractsApiCapabilityError,
+  CheckoutVersionResult as ContractsApiCheckoutVersionResult,
   VersionBranchRefReadResult as ContractsApiBranchRefReadResult,
   VersionCheckoutMutationGuarantee as ContractsApiCheckoutMutationGuarantee,
   VersionCheckoutResult as ContractsApiCheckoutResult,
@@ -24,6 +25,7 @@ import type {
   Paged as ContractsWorkbookPaged,
   RedactionPolicy as ContractsWorkbookRedactionPolicy,
   VersionCapabilityError as ContractsWorkbookCapabilityError,
+  CheckoutVersionResult as ContractsWorkbookCheckoutVersionResult,
   VersionBranchRefReadResult as ContractsWorkbookBranchRefReadResult,
   VersionCheckoutMutationGuarantee as ContractsWorkbookCheckoutMutationGuarantee,
   VersionCheckoutResult as ContractsWorkbookCheckoutResult,
@@ -85,6 +87,9 @@ type _ContractsApiWorkbookEntryExportsCheckoutTarget = Assert<
 type _ContractsApiWorkbookEntryExportsCheckoutResult = Assert<
   IsEqual<ContractsApiCheckoutResult, ContractsWorkbookCheckoutResult>
 >;
+type _ContractsApiWorkbookEntryExportsCheckoutVersionResult = Assert<
+  IsEqual<ContractsApiCheckoutVersionResult, ContractsWorkbookCheckoutVersionResult>
+>;
 type _ContractsApiWorkbookEntryExportsCheckoutGuarantee = Assert<
   IsEqual<ContractsApiCheckoutMutationGuarantee, ContractsWorkbookCheckoutMutationGuarantee>
 >;
@@ -129,6 +134,7 @@ type PublicVersionApiSurface = {
   readonly diffPage: ContractsApiDiffPage;
   readonly checkoutTarget: ContractsApiCheckoutTarget;
   readonly checkoutResult: ContractsApiCheckoutResult;
+  readonly checkoutVersionResult: ContractsApiCheckoutVersionResult;
   readonly checkoutGuarantee: ContractsApiCheckoutMutationGuarantee;
   readonly createBranch: ContractsApiCreateBranchOptions;
   readonly branchRead: ContractsApiBranchRefReadResult;

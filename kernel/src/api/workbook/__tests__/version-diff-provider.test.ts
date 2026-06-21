@@ -129,13 +129,15 @@ describe('WorkbookVersion provider-backed diff facade', () => {
       },
     });
 
-    const committed = await wb.version.commit({
+    const commitResult = await wb.version.commit({
       expectedHead: {
         commitId: initialized.rootCommit.id,
         revision: initialized.initialHead.revision,
         symbolicHeadRevision: initialized.symbolicHead.revision,
       },
     });
+    if (!commitResult.ok) throw new Error(`expected commit success: ${commitResult.error.code}`);
+    const committed = commitResult.value;
 
     await expect(wb.version.diff(initialized.rootCommit.id, committed.id)).resolves.toEqual({
       ok: true,
@@ -177,13 +179,15 @@ describe('WorkbookVersion provider-backed diff facade', () => {
       },
     });
 
-    const committed = await wb.version.commit({
+    const commitResult = await wb.version.commit({
       expectedHead: {
         commitId: initialized.rootCommit.id,
         revision: initialized.initialHead.revision,
         symbolicHeadRevision: initialized.symbolicHead.revision,
       },
     });
+    if (!commitResult.ok) throw new Error(`expected commit success: ${commitResult.error.code}`);
+    const committed = commitResult.value;
 
     const result = await wb.version.diff(initialized.rootCommit.id, committed.id);
 
@@ -243,13 +247,15 @@ describe('WorkbookVersion provider-backed diff facade', () => {
       },
     });
 
-    const committed = await wb.version.commit({
+    const commitResult = await wb.version.commit({
       expectedHead: {
         commitId: initialized.rootCommit.id,
         revision: initialized.initialHead.revision,
         symbolicHeadRevision: initialized.symbolicHead.revision,
       },
     });
+    if (!commitResult.ok) throw new Error(`expected commit success: ${commitResult.error.code}`);
+    const committed = commitResult.value;
 
     const result = await wb.version.diff(initialized.rootCommit.id, committed.id);
 

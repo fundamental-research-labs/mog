@@ -13,6 +13,7 @@ export type {
   WorkbookLinkStatusScope,
   WorkbookCustomListInput,
   WorkbookCustomListUpdate,
+  CheckoutVersionResult,
   GetVersionHeadInput,
   JsonValue,
   ListVersionCommitsInput,

@@ -498,6 +498,11 @@ export type VersionCheckoutResult =
       >;
     };
 
+export type CheckoutVersionResult = Extract<
+  VersionCheckoutResult,
+  { readonly status: 'success' }
+>;
+
 export type VersionSemanticValue =
   | null
   | boolean
@@ -879,11 +884,11 @@ export interface WorkbookVersion {
   getHead(): Promise<VersionResult<VersionHead>>;
   getHead(options: GetVersionHeadInput): Promise<VersionResult<VersionHead>>;
   listCommits(options?: ListVersionCommitsInput): Promise<VersionResult<Paged<WorkbookCommitSummary>>>;
-  commit(options?: VersionCommitOptions): Promise<WorkbookCommitRef>;
+  commit(options?: VersionCommitOptions): Promise<VersionResult<WorkbookCommitSummary>>;
   checkout(
     target: VersionCheckoutTarget,
     options?: VersionCheckoutOptions,
-  ): Promise<VersionCheckoutResult>;
+  ): Promise<VersionResult<CheckoutVersionResult>>;
   merge(input: VersionMergeInput, options?: VersionMergeOptions): Promise<VersionMergeResult>;
   applyMerge(
     input: VersionApplyMergeInput,
@@ -901,7 +906,7 @@ export interface WorkbookVersion {
   getRef(name: VersionMainRefName | VersionRefName | VersionBranchName): Promise<VersionBranchRefReadResult>;
   getRef(name: VersionRefSelector | VersionBranchName): Promise<VersionRefReadResult>;
   listRefs(options?: ListVersionRefsInput): Promise<VersionResult<Paged<VersionRef>>>;
-  createBranch(options: VersionCreateBranchOptions): Promise<VersionRefMutationResult>;
+  createBranch(options: VersionCreateBranchOptions): Promise<VersionResult<VersionRef>>;
   fastForwardBranch(options: VersionFastForwardBranchOptions): Promise<VersionRefMutationResult>;
   updateBranch(options: VersionUpdateBranchOptions): Promise<VersionRefMutationResult>;
   deleteBranch(options: VersionDeleteRefOptions): Promise<VersionRefMutationResult>;

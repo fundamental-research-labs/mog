@@ -146,13 +146,12 @@ describe('WorkbookVersion provider-backed ref lifecycle facade', () => {
         targetCommitId: initialized.rootCommit.id,
       }),
     ).resolves.toMatchObject({
-      status: 'success',
-      ref: {
+      ok: true,
+      value: {
         name: 'refs/heads/scenario/provider-ref',
         commitId: initialized.rootCommit.id,
         revision: { kind: 'counter', value: '0' },
       },
-      diagnostics: [],
     });
 
     await expect(wb.version.readRef('refs/heads/scenario/provider-ref' as any)).resolves
@@ -244,14 +243,15 @@ describe('WorkbookVersion provider-backed ref lifecycle facade', () => {
         targetCommitId: initialized.rootCommit.id,
       }),
     ).resolves.toMatchObject({
-      status: 'degraded',
-      ref: null,
-      diagnostics: [
-        expect.objectContaining({
-          issueCode: 'VERSION_REF_WRITE_UNAVAILABLE',
-          mutationGuarantee: 'no-write-attempted',
-        }),
-      ],
+      ok: false,
+      error: {
+        diagnostics: [
+          expect.objectContaining({
+            code: 'VERSION_REF_WRITE_UNAVAILABLE',
+            data: expect.objectContaining({ mutationGuarantee: 'no-write-attempted' }),
+          }),
+        ],
+      },
     });
 
     await expect(wb.version.listRefs({ prefix: 'scenario' as any })).resolves.toMatchObject({
@@ -286,8 +286,8 @@ describe('WorkbookVersion provider-backed ref lifecycle facade', () => {
           targetCommitId: initialized.rootCommit.id,
         }),
       ).resolves.toMatchObject({
-        status: 'success',
-        ref: {
+        ok: true,
+        value: {
           name: 'refs/heads/scenario/provider-commit',
           commitId: initialized.rootCommit.id,
           revision: { kind: 'counter', value: '0' },
@@ -318,18 +318,22 @@ describe('WorkbookVersion provider-backed ref lifecycle facade', () => {
         }),
       );
       expect(committed).toMatchObject({
-        refName: 'refs/heads/scenario/provider-commit',
-        resolvedFrom: 'refs/heads/scenario/provider-commit',
-        refRevision: { kind: 'counter', value: '1' },
+        ok: true,
+        value: {
+          parents: [initialized.rootCommit.id],
+          createdAt: CREATED_AT,
+          author: { actorKind: 'user', displayName: 'User One', redacted: true },
+        },
       });
-      expect(committed.id).not.toBe(initialized.rootCommit.id);
+      if (!committed.ok) throw new Error(`expected commit success: ${committed.error.code}`);
+      expect(committed.value.id).not.toBe(initialized.rootCommit.id);
 
       await expect(wb.version.readRef('refs/heads/scenario/provider-commit' as any)).resolves
         .toMatchObject({
           status: 'success',
           ref: {
             name: 'refs/heads/scenario/provider-commit',
-            commitId: committed.id,
+            commitId: committed.value.id,
             revision: { kind: 'counter', value: '1' },
           },
         });
@@ -374,20 +378,20 @@ describe('WorkbookVersion provider-backed ref lifecycle facade', () => {
           symbolicHeadRevision: initialized.symbolicHead.revision,
         },
       }),
-    ).rejects.toMatchObject({
-      name: 'MogSdkError',
-      code: 'INVALID_ARGUMENT',
-      operation: 'workbook.version.commit',
-      details: {
-        versionIssueCode: 'VERSION_INVALID_OPTIONS',
+    ).resolves.toMatchObject({
+      ok: false,
+      error: {
+        code: 'target_unavailable',
         diagnostics: [
           expect.objectContaining({
-            issueCode: 'VERSION_INVALID_OPTIONS',
-            mutationGuarantee: 'no-write-attempted',
-            payload: expect.objectContaining({
-              option: 'expectedHead.symbolicHeadRevision',
+            code: 'VERSION_INVALID_OPTIONS',
+            data: expect.objectContaining({
+              mutationGuarantee: 'no-write-attempted',
+              payload: expect.objectContaining({
+                option: 'expectedHead.symbolicHeadRevision',
+              }),
+              redacted: true,
             }),
-            redacted: true,
           }),
         ],
       },

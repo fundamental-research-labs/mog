@@ -48,13 +48,15 @@ describe('WorkbookVersion checkout lifecycle materialization', () => {
       sourceWb = await sourceHandle.workbook({ versioning: { provider } });
 
       await authorVc06State(sourceWb);
-      const committed = await sourceWb.version.commit({
+      const commitResult = await sourceWb.version.commit({
         expectedHead: {
           commitId: initialized.rootCommit.id,
           revision: initialized.initialHead.revision,
           symbolicHeadRevision: initialized.symbolicHead.revision,
         },
       });
+      if (!commitResult.ok) throw new Error(`expected commit success: ${commitResult.error.code}`);
+      const committed = commitResult.value;
       sourceWb.markClean();
 
       checkoutWb = await checkoutHandle.workbook({ versioning: { provider } });
@@ -63,14 +65,17 @@ describe('WorkbookVersion checkout lifecycle materialization', () => {
       const result = await checkoutWb.version.checkout({ kind: 'commit', id: committed.id });
 
       expect(result).toMatchObject({
-        status: 'success',
-        materialization: 'applied',
-        mutationGuarantee: 'workbook-state-materialized',
-        plan: {
-          commitId: committed.id,
-          strategy: 'fullSnapshot',
+        ok: true,
+        value: {
+          status: 'success',
+          materialization: 'applied',
+          mutationGuarantee: 'workbook-state-materialized',
+          plan: {
+            commitId: committed.id,
+            strategy: 'fullSnapshot',
+          },
+          diagnostics: [],
         },
-        diagnostics: [],
       });
       await expect(checkoutWb.activeSheet.getCell('D1')).resolves.toMatchObject({ value: 7 });
       await expect(checkoutWb.activeSheet.getCell('D2')).resolves.toMatchObject({ value: 42 });
@@ -235,13 +240,15 @@ describe('WorkbookVersion checkout lifecycle materialization', () => {
 
       await wb.activeSheet.setCell('A1', 7);
       await wb.activeSheet.setCell('A2', '=A1*6');
-      const committed = await wb.version.commit({
+      const commitResult = await wb.version.commit({
         expectedHead: {
           commitId: initialized.rootCommit.id,
           revision: initialized.initialHead.revision,
           symbolicHeadRevision: initialized.symbolicHead.revision,
         },
       });
+      if (!commitResult.ok) throw new Error(`expected commit success: ${commitResult.error.code}`);
+      const committed = commitResult.value;
       wb.markClean();
 
       await wb.activeSheet.setCell('A1', 99);
@@ -250,16 +257,15 @@ describe('WorkbookVersion checkout lifecycle materialization', () => {
       const result = await wb.version.checkout({ kind: 'commit', id: committed.id });
 
       expect(result).toMatchObject({
-        status: 'degraded',
-        materialization: 'not-applied',
-        mutationGuarantee: 'no-workbook-mutation',
-        diagnostics: [
-          expect.objectContaining({
-            issueCode: 'VERSION_CHECKOUT_DIRTY_WORKING_STATE',
-            recoverability: 'none',
-            redacted: true,
-          }),
-        ],
+        ok: false,
+        error: {
+          diagnostics: [
+            expect.objectContaining({
+              code: 'VERSION_CHECKOUT_DIRTY_WORKING_STATE',
+              data: expect.objectContaining({ recoverability: 'none', redacted: true }),
+            }),
+          ],
+        },
       });
       await expect(wb.activeSheet.getCell('A1')).resolves.toMatchObject({ value: 99 });
       await expect(wb.activeSheet.getCell('A2')).resolves.toMatchObject({ value: 100 });
@@ -287,13 +293,17 @@ describe('WorkbookVersion checkout lifecycle materialization', () => {
     try {
       sourceWb = await sourceHandle.workbook({ versioning: { provider } });
       await sourceWb.activeSheet.setCell('A1', 'branch-v1');
-      const branchBase = await sourceWb.version.commit({
+      const branchBaseResult = await sourceWb.version.commit({
         expectedHead: {
           commitId: initialized.rootCommit.id,
           revision: initialized.initialHead.revision,
           symbolicHeadRevision: initialized.symbolicHead.revision,
         },
       });
+      if (!branchBaseResult.ok) {
+        throw new Error(`expected branch base commit success: ${branchBaseResult.error.code}`);
+      }
+      const branchBase = branchBaseResult.value;
       sourceWb.markClean();
 
       const created = await sourceWb.version.createBranch({
@@ -301,24 +311,25 @@ describe('WorkbookVersion checkout lifecycle materialization', () => {
         targetCommitId: branchBase.id,
       });
       expect(created).toMatchObject({
-        status: 'success',
-        ref: {
+        ok: true,
+        value: {
           name: 'refs/heads/scenario/status',
           commitId: branchBase.id,
         },
       });
-      if (created.status !== 'success' || !created.ref) {
-        throw new Error(`expected branch create success: ${created.diagnostics[0]?.issueCode}`);
-      }
+      if (!created.ok) throw new Error(`expected branch create success: ${created.error.code}`);
 
       checkoutWb = await checkoutHandle.workbook({ versioning: { provider } });
       checkoutWb.markClean();
       await expect(
         checkoutWb.version.checkout({ kind: 'ref', name: 'refs/heads/scenario/status' as any }),
       ).resolves.toMatchObject({
-        status: 'success',
-        materialization: 'applied',
-        mutationGuarantee: 'workbook-state-materialized',
+        ok: true,
+        value: {
+          status: 'success',
+          materialization: 'applied',
+          mutationGuarantee: 'workbook-state-materialized',
+        },
       });
 
       await expect(checkoutWb.version.getSurfaceStatus()).resolves.toMatchObject({
@@ -338,13 +349,15 @@ describe('WorkbookVersion checkout lifecycle materialization', () => {
       });
 
       await sourceWb.activeSheet.setCell('A2', 'branch-v2');
-      const moved = await sourceWb.version.commit({
+      const movedResult = await sourceWb.version.commit({
         targetRef: 'refs/heads/scenario/status' as any,
         expectedHead: {
           commitId: branchBase.id,
-          revision: created.ref.revision,
+          revision: created.value.revision,
         },
       });
+      if (!movedResult.ok) throw new Error(`expected moved commit success: ${movedResult.error.code}`);
+      const moved = movedResult.value;
       sourceWb.markClean();
 
       await expect(checkoutWb.version.getSurfaceStatus()).resolves.toMatchObject({

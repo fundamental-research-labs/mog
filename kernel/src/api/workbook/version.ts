@@ -1,8 +1,9 @@
 import type {
+  CheckoutVersionResult,
   Paged,
   RedactedVersionAuthor, VersionBranchName, VersionBranchRefReadResult,
   VersionApplyMergeInput, VersionApplyMergeOptions, VersionApplyMergeResult,
-  VersionCheckoutOptions, VersionCheckoutResult, VersionCheckoutTarget, VersionCommitish,
+  VersionCheckoutOptions, VersionCheckoutTarget, VersionCommitish,
   VersionCreateBranchOptions, VersionCommitOptions, VersionCommitPage, VersionDegradedHeadResult,
   VersionDeleteRefOptions, VersionDiffOptions, VersionDiagnosticPublicPayload,
   VersionFastForwardBranchOptions, VersionGetHeadOptions, VersionListCommitsOptions,
@@ -25,7 +26,7 @@ import { checkoutWorkbookVersion, hasAttachedVersionCheckoutService, type Versio
 import { commitWorkbookVersion, hasAttachedVersionWriteService } from './version-commit';
 import { diffWorkbookVersion } from './version-diff';
 import { hasAttachedVersionMergeService, mergeWorkbookVersion } from './version-merge';
-import { versionResultFromCommitPage, versionResultFromDiffPage, versionResultFromHead, versionResultFromRefList } from './version-result';
+import { versionResultFromCheckout, versionResultFromCommitPage, versionResultFromDiffPage, versionResultFromHead, versionResultFromRefList, versionResultFromRefMutation } from './version-result';
 import { getWorkbookVersionSurfaceStatus } from './version-surface-status';
 import {
   createWorkbookVersionBranch,
@@ -326,11 +327,9 @@ export class WorkbookVersionImpl implements WorkbookVersion {
       return versionResultFromCommitPage(degradedCommitPage([providerErrorDiagnostic('listCommits')]), limit);
     }
   }
-  async commit(options: VersionCommitOptions = {}): Promise<WorkbookCommitRef> {
-    return commitWorkbookVersion(this.ctx, options);
-  }
-  async checkout(target: VersionCheckoutTarget, options: VersionCheckoutOptions = {}): Promise<VersionCheckoutResult> {
-    return checkoutWorkbookVersion(this.ctx, target, options, this.options.checkoutTransactionGuard);
+  async commit(options: VersionCommitOptions = {}): Promise<VersionResult<WorkbookCommitSummary>> { return commitWorkbookVersion(this.ctx, options); }
+  async checkout(target: VersionCheckoutTarget, options: VersionCheckoutOptions = {}): Promise<VersionResult<CheckoutVersionResult>> {
+    return versionResultFromCheckout(await checkoutWorkbookVersion(this.ctx, target, options, this.options.checkoutTransactionGuard));
   }
   async merge(input: VersionMergeInput, options: VersionMergeOptions = {}): Promise<VersionMergeResult> {
     return mergeWorkbookVersion(this.ctx, input, options);
@@ -373,9 +372,7 @@ export class WorkbookVersionImpl implements WorkbookVersion {
     return versionResultFromRefList(await listWorkbookVersionRefs(this.ctx, options), VERSION_LIST_REFS_DEFAULT_PAGE_SIZE);
   }
 
-  async createBranch(options: VersionCreateBranchOptions): Promise<VersionRefMutationResult> {
-    return createWorkbookVersionBranch(this.ctx, options);
-  }
+  async createBranch(options: VersionCreateBranchOptions): Promise<VersionResult<VersionRef>> { return versionResultFromRefMutation('createBranch', await createWorkbookVersionBranch(this.ctx, options)); }
 
   async fastForwardBranch(options: VersionFastForwardBranchOptions): Promise<VersionRefMutationResult> {
     return fastForwardWorkbookVersionBranch(this.ctx, options);

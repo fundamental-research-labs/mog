@@ -59,14 +59,16 @@ describe('WorkbookVersion public ref lifecycle facade', () => {
     await expect(
       version.createBranch({ name: 'scenario/missing' as any, targetCommitId: COMMIT_A }),
     ).resolves.toMatchObject({
-      status: 'degraded',
-      ref: null,
-      diagnostics: [
-        expect.objectContaining({
-          issueCode: 'VERSION_REF_WRITE_UNAVAILABLE',
-          mutationGuarantee: 'no-write-attempted',
-        }),
-      ],
+      ok: false,
+      error: {
+        code: 'target_unavailable',
+        diagnostics: [
+          expect.objectContaining({
+            code: 'VERSION_REF_WRITE_UNAVAILABLE',
+            data: expect.objectContaining({ mutationGuarantee: 'no-write-attempted' }),
+          }),
+        ],
+      },
     });
   });
 
@@ -79,14 +81,13 @@ describe('WorkbookVersion public ref lifecycle facade', () => {
         targetCommitId: COMMIT_A,
       }),
     ).resolves.toEqual({
-      status: 'success',
-      ref: {
+      ok: true,
+      value: {
         name: 'refs/heads/scenario/budget',
         commitId: COMMIT_A,
         revision: refVersion('0'),
         updatedAt: '2026-06-20T00:00:00.000Z',
       },
-      diagnostics: [],
     });
 
     await expect(version.readRef('refs/heads/scenario/budget' as any)).resolves.toMatchObject({
@@ -187,12 +188,19 @@ describe('WorkbookVersion public ref lifecycle facade', () => {
       name: 'Scenario/Budget' as any,
       targetCommitId: COMMIT_A,
     });
-    expect(invalidName).toMatchObject({ status: 'degraded' });
-    expect(invalidName.diagnostics).toEqual(
+    expect(invalidName).toMatchObject({
+      ok: false,
+      error: { code: 'target_unavailable' },
+    });
+    expect(invalidName.ok).toBe(false);
+    if (invalidName.ok) throw new Error('expected invalid createBranch to fail');
+    expect(invalidName.error.diagnostics).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          issueCode: 'VERSION_INVALID_OPTIONS',
-          payload: expect.objectContaining({ refName: 'redacted', issue: 'containsUppercase' }),
+          code: 'VERSION_INVALID_OPTIONS',
+          data: expect.objectContaining({
+            payload: expect.objectContaining({ refName: 'redacted', issue: 'containsUppercase' }),
+          }),
         }),
       ]),
     );
@@ -201,13 +209,15 @@ describe('WorkbookVersion public ref lifecycle facade', () => {
     await expect(
       version.createBranch({ name: 'main' as any, targetCommitId: COMMIT_A }),
     ).resolves.toMatchObject({
-      status: 'degraded',
-      diagnostics: [
-        expect.objectContaining({
-          issueCode: 'VERSION_PERMISSION_DENIED',
-          mutationGuarantee: 'no-write-attempted',
-        }),
-      ],
+      ok: false,
+      error: {
+        diagnostics: [
+          expect.objectContaining({
+            code: 'VERSION_PERMISSION_DENIED',
+            data: expect.objectContaining({ mutationGuarantee: 'no-write-attempted' }),
+          }),
+        ],
+      },
     });
     expect(createBranch).not.toHaveBeenCalled();
 

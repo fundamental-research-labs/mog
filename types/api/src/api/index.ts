@@ -30,6 +30,7 @@ export type {
   CustomList,
   WorkbookCustomListInput,
   WorkbookCustomListUpdate,
+  CheckoutVersionResult,
   GetVersionHeadInput,
   ListVersionCommitsInput,
   ListVersionRefsInput,

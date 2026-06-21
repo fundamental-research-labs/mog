@@ -202,17 +202,17 @@ describe('WorkbookVersion status slice', () => {
       ...versionUnavailable('diff', 'VERSION_UNMATERIALIZABLE_COMMIT'),
     });
 
-    await expect(wb.version.commit()).rejects.toMatchObject({
-      name: 'MogSdkError',
-      code: 'PROVIDER_ERROR',
-      operation: 'workbook.version.commit',
-      details: {
-        versionIssueCode: 'VERSION_GRAPH_UNINITIALIZED',
+    await expect(wb.version.commit()).resolves.toMatchObject({
+      ok: false,
+      error: {
+        code: 'target_unavailable',
         diagnostics: [
           expect.objectContaining({
-            issueCode: 'VERSION_GRAPH_UNINITIALIZED',
-            mutationGuarantee: 'no-write-attempted',
-            redacted: true,
+            code: 'VERSION_GRAPH_UNINITIALIZED',
+            data: expect.objectContaining({
+              mutationGuarantee: 'no-write-attempted',
+              redacted: true,
+            }),
           }),
         ],
       },
@@ -493,11 +493,11 @@ describe('WorkbookVersion status slice', () => {
   it('maps public commit options to an attached version write service', async () => {
     const commit = jest.fn(async () => ({
       status: 'success',
-      commitRef: {
+      summary: {
         id: CHILD_COMMIT_ID,
-        refName: 'refs/heads/main',
-        resolvedFrom: 'HEAD',
-        refRevision: REF_REVISION,
+        parents: [ROOT_COMMIT_ID],
+        createdAt: CREATED_AT,
+        author: VERSION_AUTHOR,
       },
     }));
     const wb = createWorkbook({
@@ -527,10 +527,13 @@ describe('WorkbookVersion status slice', () => {
         },
       }),
     ).resolves.toEqual({
-      id: CHILD_COMMIT_ID,
-      refName: 'refs/heads/main',
-      resolvedFrom: 'HEAD',
-      refRevision: REF_REVISION,
+      ok: true,
+      value: {
+        id: CHILD_COMMIT_ID,
+        parents: [ROOT_COMMIT_ID],
+        createdAt: CREATED_AT,
+        author: { actorKind: 'user', displayName: 'User One', redacted: true },
+      },
     });
     expect(commit).toHaveBeenCalledWith({
       message: 'Capture forecast edits',
@@ -568,19 +571,23 @@ describe('WorkbookVersion status slice', () => {
       },
     });
 
-    const committed = await wb.version.commit({
+    const committedResult = await wb.version.commit({
       expectedHead: {
         commitId: initialized.rootCommit.id,
         revision: initialized.initialHead.revision,
         symbolicHeadRevision: initialized.symbolicHead.revision,
       },
     });
+    if (!committedResult.ok) {
+      throw new Error(`expected provider-backed commit success: ${committedResult.error.code}`);
+    }
+    const committed = committedResult.value;
 
     expect(captureNormalCommit).toHaveBeenCalledTimes(1);
     expect(committed).toMatchObject({
-      refName: VERSION_GRAPH_MAIN_REF,
-      resolvedFrom: 'HEAD',
-      refRevision: { kind: 'counter', value: '1' },
+      parents: [initialized.rootCommit.id],
+      createdAt: CREATED_AT,
+      author: { actorKind: 'user', displayName: 'User One', redacted: true },
     });
     expect(committed.id).not.toBe(initialized.rootCommit.id);
 
@@ -629,17 +636,17 @@ describe('WorkbookVersion status slice', () => {
       },
     });
 
-    await expect(wb.version.commit()).rejects.toMatchObject({
-      name: 'MogSdkError',
-      code: 'PROVIDER_ERROR',
-      operation: 'workbook.version.commit',
-      details: {
-        versionIssueCode: 'VERSION_GRAPH_UNINITIALIZED',
+    await expect(wb.version.commit()).resolves.toMatchObject({
+      ok: false,
+      error: {
+        code: 'target_unavailable',
         diagnostics: [
           expect.objectContaining({
-            issueCode: 'VERSION_GRAPH_UNINITIALIZED',
-            mutationGuarantee: 'no-write-attempted',
-            redacted: true,
+            code: 'VERSION_GRAPH_UNINITIALIZED',
+            data: expect.objectContaining({
+              mutationGuarantee: 'no-write-attempted',
+              redacted: true,
+            }),
           }),
         ],
       },
@@ -659,16 +666,17 @@ describe('WorkbookVersion status slice', () => {
       },
     });
 
-    await expect(wb.version.commit()).rejects.toMatchObject({
-      name: 'MogSdkError',
-      code: 'PROVIDER_ERROR',
-      details: {
-        versionIssueCode: 'VERSION_MISSING_CHANGE_SET',
+    await expect(wb.version.commit()).resolves.toMatchObject({
+      ok: false,
+      error: {
+        code: 'target_unavailable',
         diagnostics: [
           expect.objectContaining({
-            issueCode: 'VERSION_MISSING_CHANGE_SET',
-            mutationGuarantee: 'no-write-attempted',
-            redacted: true,
+            code: 'VERSION_MISSING_CHANGE_SET',
+            data: expect.objectContaining({
+              mutationGuarantee: 'no-write-attempted',
+              redacted: true,
+            }),
           }),
         ],
       },
@@ -686,13 +694,13 @@ describe('WorkbookVersion status slice', () => {
   });
 
   it.each([
-    ['author', 'VERSION_PERMISSION_DENIED', 'AUTHORIZATION_DENIED'],
-    ['parents', 'VERSION_PERMISSION_DENIED', 'AUTHORIZATION_DENIED'],
-    ['segmentIds', 'VERSION_INVALID_OPTIONS', 'INVALID_ARGUMENT'],
-    ['unknownField', 'VERSION_INVALID_OPTIONS', 'INVALID_ARGUMENT'],
+    ['author', 'VERSION_PERMISSION_DENIED'],
+    ['parents', 'VERSION_PERMISSION_DENIED'],
+    ['segmentIds', 'VERSION_INVALID_OPTIONS'],
+    ['unknownField', 'VERSION_INVALID_OPTIONS'],
   ])(
     'rejects unsafe commit option %s before the write service is called',
-    async (field, issue, code) => {
+    async (field, issue) => {
       const commit = jest.fn();
       const wb = createWorkbook({
         ctx: createMockCtx({
@@ -702,16 +710,17 @@ describe('WorkbookVersion status slice', () => {
         }),
       });
 
-      await expect(wb.version.commit({ [field]: 'spoofed' } as any)).rejects.toMatchObject({
-        name: 'MogSdkError',
-        code,
-        details: {
-          versionIssueCode: issue,
+      await expect(wb.version.commit({ [field]: 'spoofed' } as any)).resolves.toMatchObject({
+        ok: false,
+        error: {
+          code: 'target_unavailable',
           diagnostics: [
             expect.objectContaining({
-              issueCode: issue,
-              mutationGuarantee: 'no-write-attempted',
-              redacted: true,
+              code: issue,
+              data: expect.objectContaining({
+                mutationGuarantee: 'no-write-attempted',
+                redacted: true,
+              }),
             }),
           ],
         },
@@ -730,11 +739,11 @@ describe('WorkbookVersion status slice', () => {
       }),
     });
 
-    await expect(wb.version.commit({ mode: { kind: 'root' } })).rejects.toMatchObject({
-      name: 'MogSdkError',
-      code: 'INVALID_ARGUMENT',
-      details: {
-        versionIssueCode: 'VERSION_INVALID_OPTIONS',
+    await expect(wb.version.commit({ mode: { kind: 'root' } })).resolves.toMatchObject({
+      ok: false,
+      error: {
+        code: 'target_unavailable',
+        diagnostics: [expect.objectContaining({ code: 'VERSION_INVALID_OPTIONS' })],
       },
     });
     expect(commit).not.toHaveBeenCalled();
@@ -755,10 +764,11 @@ describe('WorkbookVersion status slice', () => {
       }),
     });
 
-    await expect(wb.version.commit()).rejects.toMatchObject({
-      code: 'PROVIDER_ERROR',
-      details: {
-        versionIssueCode: 'VERSION_GRAPH_UNINITIALIZED',
+    await expect(wb.version.commit()).resolves.toMatchObject({
+      ok: false,
+      error: {
+        code: 'target_unavailable',
+        diagnostics: [expect.objectContaining({ code: 'VERSION_GRAPH_UNINITIALIZED' })],
       },
     });
     expect(graphStore.commit).not.toHaveBeenCalled();

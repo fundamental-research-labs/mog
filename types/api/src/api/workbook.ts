@@ -84,6 +84,7 @@ export type { CustomList } from '@mog/types-editor/fill/custom-lists';
 export type { WorkbookId, WorkbookSessionId, DocumentId, LinkId, ActorId } from './types';
 export type { LinkStatus, LinkStatusReason, LinkStatusView } from './receipt-payloads';
 export type {
+  CheckoutVersionResult,
   GetVersionHeadInput,
   JsonValue, ObjectDigest, PageCursor, Paged,
   ListVersionCommitsInput, ListVersionRefsInput,

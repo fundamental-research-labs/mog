@@ -1,26 +1,27 @@
 import type {
+  RedactedVersionAuthor,
   RedactionPolicy,
+  VersionAnnotationText,
   VersionCommitOptions,
   VersionDiagnosticPublicPayload,
+  VersionResult,
   VersionMainRefName,
   VersionRecordRevision,
-  VersionRef,
   VersionRefName,
   VersionStoreDiagnostic,
-  VersionSymbolicRef,
   WorkbookCommitId,
-  WorkbookCommitRef,
+  WorkbookCommitAnnotationSummary,
+  WorkbookCommitSummary,
 } from '@mog-sdk/contracts/api';
 
 import type { DocumentContext } from '../../context';
 import { validateRefName } from '../../document/version-store/ref-name';
-import { MogSdkError } from '../../errors';
+import { versionFailureFromStoreDiagnostics } from './version-result';
 
 const VERSION_HEAD_REF = 'HEAD';
 const VERSION_MAIN_REF = 'refs/heads/main' satisfies VersionMainRefName;
 const VERSION_BRANCH_REF_PREFIX = 'refs/heads/';
 const WORKBOOK_COMMIT_ID_RE = /^commit:sha256:[0-9a-f]{64}$/;
-const VERSION_COMMIT_OPERATION = 'workbook.version.commit';
 
 const VERSION_COMMIT_OPTION_KEYS = new Set([
   'message',
@@ -105,22 +106,22 @@ export function hasAttachedVersionWriteService(ctx: DocumentContext): boolean {
 export async function commitWorkbookVersion(
   ctx: DocumentContext,
   options: VersionCommitOptions = {},
-): Promise<WorkbookCommitRef> {
+): Promise<VersionResult<WorkbookCommitSummary>> {
   const validated = validateCommitOptions(options);
   if (!validated.ok) {
-    throwVersionError(validated.diagnostics);
+    return versionFailureFromStoreDiagnostics('commit', validated.diagnostics);
   }
 
   const writeService = getAttachedVersionWriteService(ctx);
   if (!writeService?.commit) {
-    throwVersionError([serviceUnavailableDiagnostic()]);
+    return versionFailureFromStoreDiagnostics('commit', [serviceUnavailableDiagnostic()]);
   }
 
   let result: unknown;
   try {
     result = await writeService.commit(validated.options);
   } catch (error) {
-    throwVersionError(diagnosticsFromThrownError(error), error);
+    return versionFailureFromStoreDiagnostics('commit', diagnosticsFromThrownError(error));
   }
 
   return mapCommitWriteResult(result);
@@ -460,34 +461,38 @@ function invalidCommitOptionDiagnostic(
   });
 }
 
-function mapCommitWriteResult(value: unknown): WorkbookCommitRef {
-  const directRef = mapCommitRef(value);
-  if (directRef) return directRef;
+function mapCommitWriteResult(value: unknown): VersionResult<WorkbookCommitSummary> {
+  const directSummary = mapCommitSummary(value);
+  if (directSummary) return { ok: true, value: directSummary };
 
   if (!isRecord(value)) {
-    throwVersionError([providerErrorDiagnostic()]);
+    return versionFailureFromStoreDiagnostics('commit', [providerErrorDiagnostic()]);
   }
 
   if (value.status === 'failed' || value.status === 'degraded') {
-    throwVersionError(mapServiceDiagnostics(value.diagnostics));
+    return versionFailureFromStoreDiagnostics('commit', mapServiceDiagnostics(value.diagnostics));
   }
   if (value.status !== 'success') {
-    throwVersionError([providerErrorDiagnostic()]);
+    return versionFailureFromStoreDiagnostics('commit', [providerErrorDiagnostic()]);
   }
 
-  const commitRef =
-    mapCommitRef(value.commitRef) ??
-    mapCommitRef(value.head) ??
-    mapCommitRef(value.commit) ??
-    mapCommitRefFromCommitAndRef(value.commit, value.main) ??
-    mapCommitRefFromCommitAndRef(value.rootCommit, value.initialHead);
+  const summary =
+    mapCommitSummary(value.summary) ??
+    mapCommitSummary(value.commitSummary) ??
+    mapCommitSummary(value.commit) ??
+    mapCommitSummary(value.rootCommit);
 
-  if (commitRef) return commitRef;
+  if (summary) {
+    return {
+      ok: true,
+      value: withResultDiagnostics(summary, mapOptionalServiceDiagnostics(value.diagnostics)),
+    };
+  }
 
-  throwVersionError([
+  return versionFailureFromStoreDiagnostics('commit', [
     publicDiagnostic(
       'VERSION_INVALID_COMMIT_PAYLOAD',
-      'The version write service did not return a valid public commit ref.',
+      'The version write service did not return a valid public commit summary.',
       {
         severity: 'error',
         recoverability: 'repair',
@@ -497,58 +502,93 @@ function mapCommitWriteResult(value: unknown): WorkbookCommitRef {
   ]);
 }
 
-function mapCommitRefFromCommitAndRef(commit: unknown, ref: unknown): WorkbookCommitRef | null {
-  if (!isRecord(commit)) return null;
-  const id = toCommitId(commit.id);
-  if (!id) return null;
-  const mappedRef = mapRef(ref);
-
-  if (mappedRef && mappedRef.name !== VERSION_HEAD_REF) {
-    return {
-      id,
-      refName: mappedRef.name,
-      resolvedFrom: VERSION_HEAD_REF,
-      refRevision: mappedRef.revision,
-    };
-  }
-
-  return { id };
-}
-
-function mapCommitRef(value: unknown): WorkbookCommitRef | null {
+function mapCommitSummary(value: unknown): WorkbookCommitSummary | null {
   if (!isRecord(value)) return null;
+  const payload = isRecord(value.payload) ? value.payload : null;
   const id = toCommitId(value.id);
-  if (!id) return null;
+  const parentsValue = Array.isArray(value.parents)
+    ? value.parents
+    : Array.isArray(value.parentCommitIds)
+      ? value.parentCommitIds
+      : Array.isArray(payload?.parentCommitIds)
+        ? payload.parentCommitIds
+        : null;
+  const createdAt = typeof value.createdAt === 'string'
+    ? value.createdAt
+    : typeof payload?.createdAt === 'string'
+      ? payload.createdAt
+      : null;
+  const author = mapRedactedAuthor(value.author ?? payload?.author);
 
-  const refName = toRefName(value.refName);
-  const resolvedFrom =
-    value.resolvedFrom === VERSION_HEAD_REF ? VERSION_HEAD_REF : toRefName(value.resolvedFrom);
-  const refRevision = toRevision(value.refRevision);
+  if (!id || !parentsValue || !createdAt || !author) return null;
+  const parents = parentsValue.map(toCommitId);
+  if (parents.some((parent): parent is null => parent === null)) return null;
+
+  const annotation = mapCommitAnnotation(value.annotation);
+  const diagnostics = [
+    ...mapOptionalServiceDiagnostics(value.diagnostics),
+    ...mapCommitCompletenessDiagnostics(payload?.completenessDiagnostics),
+  ];
 
   return {
     id,
-    ...(refName ? { refName } : {}),
-    ...(resolvedFrom ? { resolvedFrom } : {}),
-    ...(refRevision ? { refRevision } : {}),
+    parents: parents as WorkbookCommitId[],
+    createdAt,
+    author,
+    ...(annotation ? { annotation } : {}),
+    ...(diagnostics.length > 0 ? { diagnostics } : {}),
   };
 }
 
-function mapRef(value: unknown): VersionRef | VersionSymbolicRef | null {
+function withResultDiagnostics(
+  summary: WorkbookCommitSummary,
+  diagnostics: readonly VersionStoreDiagnostic[],
+): WorkbookCommitSummary {
+  if (diagnostics.length === 0) return summary;
+  return {
+    ...summary,
+    diagnostics: [...(summary.diagnostics ?? []), ...diagnostics],
+  };
+}
+
+function mapRedactedAuthor(value: unknown): RedactedVersionAuthor | null {
   if (!isRecord(value)) return null;
+  return {
+    ...(typeof value.actorKind === 'string' ? { actorKind: value.actorKind } : {}),
+    ...(typeof value.displayName === 'string' ? { displayName: value.displayName } : {}),
+    redacted: true,
+  };
+}
 
-  if (value.name === VERSION_HEAD_REF) {
-    const target = toRefName(value.target);
-    const revision = toRevision(value.revision);
-    if (!target || !revision) return null;
-    return { name: VERSION_HEAD_REF, target, revision };
+function mapCommitAnnotation(value: unknown): WorkbookCommitAnnotationSummary | undefined {
+  if (!isRecord(value)) return undefined;
+  const message = mapAnnotationText(value.message);
+  const title = mapAnnotationText(value.title);
+  const tags = Array.isArray(value.tags)
+    ? value.tags.map(mapAnnotationText).filter((tag): tag is VersionAnnotationText => Boolean(tag))
+    : undefined;
+  if (!message && !title && (!tags || tags.length === 0)) return undefined;
+  return {
+    ...(message ? { message } : {}),
+    ...(title ? { title } : {}),
+    ...(tags && tags.length > 0 ? { tags } : {}),
+  };
+}
+
+function mapAnnotationText(value: unknown): VersionAnnotationText | undefined {
+  if (!isRecord(value)) return undefined;
+  if (value.kind === 'text' && typeof value.value === 'string') {
+    return { kind: 'text', value: value.value };
   }
-
-  const name = toRefName(value.name);
-  const commitId = toCommitId(value.commitId);
-  const revision = toRevision(value.revision);
-  if (!name || !commitId || !revision) return null;
-
-  return { name, commitId, revision };
+  if (
+    value.kind === 'redacted' &&
+    (value.reason === 'permission-denied' ||
+      value.reason === 'redaction-policy' ||
+      value.reason === 'historical-acl-unavailable')
+  ) {
+    return { kind: 'redacted', reason: value.reason };
+  }
+  return undefined;
 }
 
 function serviceUnavailableDiagnostic(): VersionStoreDiagnostic {
@@ -605,6 +645,11 @@ function mapServiceDiagnostics(value: unknown): readonly VersionStoreDiagnostic[
   return value.map(mapServiceDiagnostic);
 }
 
+function mapOptionalServiceDiagnostics(value: unknown): readonly VersionStoreDiagnostic[] {
+  if (!Array.isArray(value) || value.length === 0) return [];
+  return value.map(mapServiceDiagnostic);
+}
+
 function mapServiceDiagnostic(value: unknown): VersionStoreDiagnostic {
   if (!isRecord(value)) return providerErrorDiagnostic();
 
@@ -625,6 +670,47 @@ function mapServiceDiagnostic(value: unknown): VersionStoreDiagnostic {
     payload: sanitizeDiagnosticPayload(value),
     mutationGuarantee: toMutationGuarantee(value.mutationGuarantee),
   });
+}
+
+function mapCommitCompletenessDiagnostics(value: unknown): readonly VersionStoreDiagnostic[] {
+  if (!Array.isArray(value) || value.length === 0) return [];
+  return value.map(mapCommitCompletenessDiagnostic);
+}
+
+function mapCommitCompletenessDiagnostic(value: unknown): VersionStoreDiagnostic {
+  if (!isRecord(value)) return providerErrorDiagnostic();
+  const issueCode = typeof value.code === 'string' ? value.code : 'VERSION_PROVIDER_ERROR';
+  const severity = value.severity;
+  return publicDiagnostic(
+    issueCode,
+    typeof value.message === 'string'
+      ? value.message
+      : 'The version commit includes a completeness diagnostic.',
+    {
+      severity:
+        severity === 'info' || severity === 'warning' || severity === 'error'
+          ? severity
+          : 'error',
+      recoverability: recoverabilityForIssue(issueCode),
+      payload: sanitizeCompletenessDiagnosticPayload(value),
+    },
+  );
+}
+
+function sanitizeCompletenessDiagnosticPayload(
+  value: Readonly<Record<string, unknown>>,
+): VersionDiagnosticPublicPayload {
+  const payload: Record<string, string | number | boolean | null> = {
+    operation: 'commit',
+  };
+  if (typeof value.path === 'string') payload.path = value.path;
+  const details = isRecord(value.details) ? value.details : null;
+  if (details) {
+    for (const [key, detailValue] of Object.entries(details)) {
+      if (isPayloadPrimitive(detailValue)) payload[key] = detailValue;
+    }
+  }
+  return payload;
 }
 
 function sanitizeDiagnosticPayload(
@@ -695,25 +781,6 @@ function recoverabilityForIssue(issueCode: string): VersionStoreDiagnostic['reco
   }
 }
 
-function throwVersionError(diagnostics: readonly VersionStoreDiagnostic[], cause?: unknown): never {
-  const publicDiagnostics = diagnostics.length > 0 ? diagnostics : [providerErrorDiagnostic()];
-  const primary = selectPrimaryDiagnostic(publicDiagnostics);
-
-  throw new MogSdkError(sdkCodeForVersionIssue(primary.issueCode), primary.safeMessage, {
-    operation: VERSION_COMMIT_OPERATION,
-    details: {
-      versionIssueCode: primary.issueCode,
-      diagnostics: publicDiagnostics,
-    },
-    diagnostics: {
-      domain: 'VERSION',
-      issueCode: primary.issueCode,
-      severity: sdkSeverity(primary.severity),
-    },
-    cause,
-  });
-}
-
 function diagnosticsFromThrownError(error: unknown): readonly VersionStoreDiagnostic[] {
   if (isRecord(error)) {
     const detailsDiagnostics = isRecord(error.details) ? error.details.diagnostics : undefined;
@@ -725,73 +792,10 @@ function diagnosticsFromThrownError(error: unknown): readonly VersionStoreDiagno
   return [providerErrorDiagnostic()];
 }
 
-function selectPrimaryDiagnostic(
-  diagnostics: readonly VersionStoreDiagnostic[],
-): VersionStoreDiagnostic {
-  return diagnostics.reduce((selected, candidate) =>
-    severityRank(candidate.severity) > severityRank(selected.severity) ? candidate : selected,
-  );
-}
-
-function severityRank(severity: VersionStoreDiagnostic['severity']): number {
-  switch (severity) {
-    case 'fatal':
-      return 4;
-    case 'error':
-      return 3;
-    case 'warning':
-      return 2;
-    case 'info':
-      return 1;
-  }
-}
-
-function sdkSeverity(severity: VersionStoreDiagnostic['severity']): 'error' | 'warning' | 'info' {
-  return severity === 'fatal' ? 'error' : severity;
-}
-
-function sdkCodeForVersionIssue(issueCode: string): MogSdkError['code'] {
-  switch (issueCode) {
-    case 'VERSION_INVALID_OPTIONS':
-    case 'VERSION_INVALID_COMMIT_ID':
-    case 'VERSION_INVALID_COMMIT_PAYLOAD':
-      return 'INVALID_ARGUMENT';
-    case 'VERSION_PERMISSION_DENIED':
-    case 'VERSION_REF_WRITE_UNAVAILABLE':
-      return 'AUTHORIZATION_DENIED';
-    case 'VERSION_REF_CONFLICT':
-    case 'VERSION_GRAPH_CONFLICT':
-    case 'VERSION_STALE_PAGE_CURSOR':
-      return 'CONFLICT';
-    case 'VERSION_STORE_READ_ONLY':
-      return 'READ_ONLY';
-    case 'VERSION_PROVIDER_ERROR':
-    case 'VERSION_PROVIDER_FAILED':
-    case 'VERSION_OBJECT_STORE_FAILURE':
-    case 'VERSION_GRAPH_UNINITIALIZED':
-    case 'VERSION_MISSING_CHANGE_SET':
-    case 'VERSION_STORE_UNAVAILABLE':
-      return 'PROVIDER_ERROR';
-    default:
-      return 'INTERNAL_ERROR';
-  }
-}
-
 function toCommitId(value: unknown): WorkbookCommitId | null {
   return typeof value === 'string' && WORKBOOK_COMMIT_ID_RE.test(value)
     ? (value as WorkbookCommitId)
     : null;
-}
-
-function toRevision(value: unknown): VersionRecordRevision | undefined {
-  if (isRecord(value) && value.kind === 'counter' && typeof value.value === 'string') {
-    return { kind: 'counter', value: value.value };
-  }
-  if (isRecord(value) && value.kind === 'opaque' && typeof value.value === 'string') {
-    return { kind: 'opaque', value: value.value };
-  }
-  if (typeof value === 'string') return { kind: 'opaque', value };
-  return undefined;
 }
 
 function toPublicRevision(value: unknown): VersionRecordRevision | undefined {
@@ -815,14 +819,6 @@ function toMutationGuarantee(
     value === 'unknown-after-crash'
     ? value
     : undefined;
-}
-
-function toRefName(value: unknown): VersionMainRefName | VersionRefName | undefined {
-  if (value === VERSION_MAIN_REF) return VERSION_MAIN_REF;
-  if (typeof value === 'string' && value.startsWith('refs/heads/')) {
-    return value as VersionRefName;
-  }
-  return undefined;
 }
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {

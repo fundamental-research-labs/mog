@@ -1,10 +1,13 @@
 import type {
+  CheckoutVersionResult,
   PageCursor,
   Paged,
   VersionDiagnostic,
   VersionRef,
   VersionRefListResult,
+  VersionRefMutationResult,
   VersionResult,
+  VersionCheckoutResult,
   VersionSemanticDiffPage,
   VersionStoreDiagnostic,
   WorkbookCommitRef,
@@ -15,7 +18,14 @@ import type {
   VersionHead,
 } from '@mog-sdk/contracts/api';
 
-type VersionResultOperation = 'getHead' | 'listCommits' | 'listRefs' | 'diff';
+type VersionResultOperation =
+  | 'getHead'
+  | 'listCommits'
+  | 'commit'
+  | 'createBranch'
+  | 'listRefs'
+  | 'checkout'
+  | 'diff';
 
 type VersionPageLike<T> = {
   readonly status: 'success' | 'degraded';
@@ -54,6 +64,25 @@ export function versionResultFromRefList(
       limit,
     },
   };
+}
+
+export function versionResultFromRefMutation(
+  operation: Extract<VersionResultOperation, 'createBranch'>,
+  result: VersionRefMutationResult,
+): VersionResult<VersionRef> {
+  if (result.status === 'degraded') {
+    return versionFailureFromStoreDiagnostics(operation, result.diagnostics);
+  }
+  return { ok: true, value: result.ref };
+}
+
+export function versionResultFromCheckout(
+  result: VersionCheckoutResult,
+): VersionResult<CheckoutVersionResult> {
+  if (result.status === 'degraded') {
+    return versionFailureFromStoreDiagnostics('checkout', result.diagnostics);
+  }
+  return { ok: true, value: result };
 }
 
 export function versionResultFromDiffPage(
@@ -95,7 +124,7 @@ function versionResultFromPage<T>(
   };
 }
 
-function versionFailureFromStoreDiagnostics<T>(
+export function versionFailureFromStoreDiagnostics<T>(
   operation: VersionResultOperation,
   diagnostics: readonly VersionStoreDiagnostic[],
 ): VersionResult<T> {

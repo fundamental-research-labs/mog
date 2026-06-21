@@ -6,6 +6,7 @@
 
 export type { WorkbookHistory } from './history';
 export type {
+  CheckoutVersionResult,
   GetVersionHeadInput,
   JsonValue,
   ListVersionCommitsInput,

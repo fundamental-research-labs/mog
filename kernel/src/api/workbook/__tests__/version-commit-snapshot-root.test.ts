@@ -2,7 +2,6 @@ import { jest } from '@jest/globals';
 
 import type { VersionAuthor } from '@mog-sdk/contracts/versioning';
 import type { VersionNormalCommitCapture } from '../../../document/version-store/commit-service';
-import { VERSION_GRAPH_MAIN_REF } from '../../../document/version-store/graph-store';
 import type { VersionObjectType } from '../../../document/version-store/object-digest';
 import {
   createVersionObjectRecord,
@@ -50,13 +49,18 @@ describe('WorkbookVersion commit snapshot-root capture', () => {
       snapshotRootByteSyncPort: { encodeDiff },
     });
 
-    const committed = await version.commit();
-
-    expect(committed).toMatchObject({
-      refName: VERSION_GRAPH_MAIN_REF,
-      resolvedFrom: 'HEAD',
-      refRevision: { kind: 'counter', value: '1' },
+    const commitResult = await version.commit();
+    expect(commitResult).toMatchObject({
+      ok: true,
+      value: {
+        parents: [initialized.rootCommit.id],
+        createdAt: CREATED_AT,
+        author: { actorKind: 'user', displayName: 'User One', redacted: true },
+      },
     });
+    if (!commitResult.ok) throw new Error(`expected commit success: ${commitResult.error.code}`);
+    const committed = commitResult.value;
+
     expect(captureNormalCommit).toHaveBeenCalledTimes(1);
     expect(encodeDiff).toHaveBeenCalledTimes(1);
     expect(Array.from(encodeDiff.mock.calls[0]?.[0] as Uint8Array)).toEqual([0]);
@@ -96,16 +100,14 @@ describe('WorkbookVersion commit snapshot-root capture', () => {
       snapshotRootByteSyncPort: { encodeDiff },
     });
 
-    await expect(version.commit()).rejects.toMatchObject({
-      name: 'MogSdkError',
-      code: 'PROVIDER_ERROR',
-      details: {
-        versionIssueCode: 'VERSION_PROVIDER_FAILED',
+    await expect(version.commit()).resolves.toMatchObject({
+      ok: false,
+      error: {
+        code: 'target_unavailable',
         diagnostics: [
           expect.objectContaining({
-            issueCode: 'VERSION_PROVIDER_FAILED',
-            mutationGuarantee: 'no-write-attempted',
-            redacted: true,
+            code: 'VERSION_PROVIDER_FAILED',
+            data: expect.objectContaining({ mutationGuarantee: 'no-write-attempted' }),
           }),
         ],
       },
@@ -157,13 +159,18 @@ describe('WorkbookVersion commit snapshot-root capture', () => {
     });
     const version = new WorkbookVersionImpl(ctx);
 
-    const committed = await version.commit();
-
-    expect(committed).toMatchObject({
-      refName: VERSION_GRAPH_MAIN_REF,
-      resolvedFrom: 'HEAD',
-      refRevision: { kind: 'counter', value: '1' },
+    const commitResult = await version.commit();
+    expect(commitResult).toMatchObject({
+      ok: true,
+      value: {
+        parents: [initialized.rootCommit.id],
+        createdAt: expect.any(String),
+        author: { actorKind: 'system', displayName: 'Mog Version Capture', redacted: true },
+      },
     });
+    if (!commitResult.ok) throw new Error(`expected commit success: ${commitResult.error.code}`);
+    const committed = commitResult.value;
+
     expect(encodeDiff).toHaveBeenCalledTimes(1);
 
     const graph = await provider.openGraph(namespaceForDocumentScope(DOCUMENT_SCOPE, 'graph-1'));
@@ -194,9 +201,11 @@ describe('WorkbookVersion commit snapshot-root capture', () => {
       ],
     });
 
-    await expect(version.commit()).rejects.toMatchObject({
-      details: {
-        versionIssueCode: 'VERSION_MISSING_CHANGE_SET',
+    await expect(version.commit()).resolves.toMatchObject({
+      ok: false,
+      error: {
+        code: 'target_unavailable',
+        diagnostics: [expect.objectContaining({ code: 'VERSION_MISSING_CHANGE_SET' })],
       },
     });
     expect(encodeDiff).toHaveBeenCalledTimes(1);

@@ -2,6 +2,7 @@ import type {
   Paged as ApiRootPaged,
   RedactionPolicy as ApiRootRedactionPolicy,
   VersionCapabilityError as ApiRootCapabilityError,
+  CheckoutVersionResult as ApiRootCheckoutVersionResult,
   VersionApplyMergeInput as ApiRootApplyMergeInput,
   VersionApplyMergeMutationGuarantee as ApiRootApplyMergeMutationGuarantee,
   VersionApplyMergeOptions as ApiRootApplyMergeOptions,
@@ -34,6 +35,7 @@ import type {
   Paged as PackageApiPaged,
   RedactionPolicy as PackageApiRedactionPolicy,
   VersionCapabilityError as PackageApiCapabilityError,
+  CheckoutVersionResult as PackageApiCheckoutVersionResult,
   VersionApplyMergeInput as PackageApiApplyMergeInput,
   VersionApplyMergeMutationGuarantee as PackageApiApplyMergeMutationGuarantee,
   VersionApplyMergeOptions as PackageApiApplyMergeOptions,
@@ -66,6 +68,7 @@ import type {
   Paged as PackageWorkbookPaged,
   RedactionPolicy as PackageWorkbookRedactionPolicy,
   VersionCapabilityError as PackageWorkbookCapabilityError,
+  CheckoutVersionResult as PackageWorkbookCheckoutVersionResult,
   VersionApplyMergeInput as PackageWorkbookApplyMergeInput,
   VersionApplyMergeMutationGuarantee as PackageWorkbookApplyMergeMutationGuarantee,
   VersionApplyMergeOptions as PackageWorkbookApplyMergeOptions,
@@ -98,6 +101,7 @@ import type {
   Paged as WorkbookNamespacePaged,
   RedactionPolicy as WorkbookNamespaceRedactionPolicy,
   VersionCapabilityError as WorkbookNamespaceCapabilityError,
+  CheckoutVersionResult as WorkbookNamespaceCheckoutVersionResult,
   VersionApplyMergeInput as WorkbookNamespaceApplyMergeInput,
   VersionApplyMergeMutationGuarantee as WorkbookNamespaceApplyMergeMutationGuarantee,
   VersionApplyMergeOptions as WorkbookNamespaceApplyMergeOptions,
@@ -184,6 +188,9 @@ type _WorkbookNamespaceExportsCheckoutPlan = Assert<
 >;
 type _WorkbookNamespaceExportsCheckoutResult = Assert<
   IsEqual<WorkbookNamespaceCheckoutResult, PackageWorkbookCheckoutResult>
+>;
+type _WorkbookNamespaceExportsCheckoutVersionResult = Assert<
+  IsEqual<WorkbookNamespaceCheckoutVersionResult, PackageWorkbookCheckoutVersionResult>
 >;
 type _WorkbookNamespaceExportsCheckoutGuarantee = Assert<
   IsEqual<WorkbookNamespaceCheckoutMutationGuarantee, PackageWorkbookCheckoutMutationGuarantee>
@@ -274,6 +281,9 @@ type _ApiRootExportsCheckoutOptions = Assert<
 type _ApiRootExportsCheckoutPlan = Assert<IsEqual<ApiRootCheckoutPlan, PackageApiCheckoutPlan>>;
 type _ApiRootExportsCheckoutResult = Assert<
   IsEqual<ApiRootCheckoutResult, PackageApiCheckoutResult>
+>;
+type _ApiRootExportsCheckoutVersionResult = Assert<
+  IsEqual<ApiRootCheckoutVersionResult, PackageApiCheckoutVersionResult>
 >;
 type _ApiRootExportsCheckoutGuarantee = Assert<
   IsEqual<ApiRootCheckoutMutationGuarantee, PackageApiCheckoutMutationGuarantee>

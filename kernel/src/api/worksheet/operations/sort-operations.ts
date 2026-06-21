@@ -11,11 +11,21 @@ import type {
   BridgeSortOptions,
   SortOrder,
 } from '../../../bridges/compute/compute-types.gen';
+import type { MutationAdmissionOptions } from '../../../bridges/compute';
 import type { CellValue, SheetId } from '@mog-sdk/contracts/core';
+import type { VersionOperationContext } from '@mog-sdk/contracts/versioning';
 import { KernelError } from '../../../errors';
 import { isValidRange, normalizeRange } from '../../internal/utils';
+import { createVersionOperationContext } from '../../internal/version-operation-context';
 
 import type { ApiSortOptions, CellRange, DocumentContext } from './shared';
+
+type SortMutationOptions = MutationAdmissionOptions & {
+  readonly operationContext: VersionOperationContext;
+};
+
+const SORT_DOMAIN_IDS = ['sorts'] as const;
+const SORT_CF_REPAIR_DOMAIN_IDS = ['sorts', 'conditional-formatting'] as const;
 
 /** Map API-level `'asc'`/`'desc'` to bridge-level `SortOrder`. */
 function toSortOrder(dir: string): SortOrder {
@@ -150,6 +160,11 @@ export async function sortRange(
     cfOverlaps = false;
   }
 
+  const sortAdmissionOptions = cfOverlaps
+    ? ensureSortMutationGroup(createSortMutationOptions(ctx, sheetId, 'sorts.sortRange'))
+    : createSortMutationOptions(ctx, sheetId, 'sorts.sortRange');
+  const sortGroupId = sortAdmissionOptions.operationContext.groupId;
+
   await ctx.computeBridge.sortRange(
     sheetId,
     normalized.startRow,
@@ -157,6 +172,7 @@ export async function sortRange(
     normalized.endRow,
     normalized.endCol,
     sortOptions,
+    sortAdmissionOptions,
   );
 
   if (cfOverlaps) {
@@ -167,7 +183,18 @@ export async function sortRange(
     // ranges, which are unaffected by sort.
     for (const formatId of overlappingFormatIds) {
       try {
-        await ctx.computeBridge.updateCfRule(sheetId, formatId, { rangeIdentities: null });
+        await ctx.computeBridge.updateCfRule(
+          sheetId,
+          formatId,
+          { rangeIdentities: null },
+          createSortMutationOptions(
+            ctx,
+            sheetId,
+            'sorts.sortRange.repairConditionalFormatting',
+            SORT_CF_REPAIR_DOMAIN_IDS,
+            sortGroupId,
+          ),
+        );
       } catch {
         // Non-fatal: forceRefreshAllViewports below may still partially recover.
       }
@@ -176,4 +203,31 @@ export async function sortRange(
     // and bypass the binary-format-mismatch issue in the pre-built WASM.
     await ctx.computeBridge.forceRefreshAllViewports();
   }
+}
+
+function createSortMutationOptions(
+  ctx: DocumentContext,
+  sheetId: SheetId,
+  operationIdPrefix: string,
+  domainIds: readonly string[] = SORT_DOMAIN_IDS,
+  groupId?: string,
+): SortMutationOptions {
+  return {
+    operationContext: createVersionOperationContext(ctx, {
+      operationIdPrefix,
+      sheetIds: [sheetId],
+      domainIds,
+      groupId,
+    }),
+  };
+}
+
+function ensureSortMutationGroup(options: SortMutationOptions): SortMutationOptions {
+  const groupId = options.operationContext.groupId ?? options.operationContext.operationId;
+  return {
+    operationContext: {
+      ...options.operationContext,
+      groupId,
+    },
+  };
 }

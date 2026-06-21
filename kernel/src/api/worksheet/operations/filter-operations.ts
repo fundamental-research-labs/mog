@@ -8,7 +8,9 @@
 import type { CellValue, SheetId } from '@mog-sdk/contracts/core';
 import type { ColumnFilterCriteria } from '@mog-sdk/contracts/filter';
 import type { FilterMutationReceipt } from '@mog-sdk/contracts/api';
+import type { VersionOperationContext } from '@mog-sdk/contracts/versioning';
 
+import type { MutationAdmissionOptions } from '../../../bridges/compute';
 import type {
   ColumnFilter,
   FilterSortState,
@@ -28,10 +30,17 @@ import {
   assertFilterMutationAllowed,
   assertNoProtectedTableFilterCreation,
 } from '../protected-table-operations';
+import { createVersionOperationContext } from '../../internal/version-operation-context';
 
 // =============================================================================
 // Filter Operations
 // =============================================================================
+
+type FilterMutationOptions = MutationAdmissionOptions & {
+  readonly operationContext: VersionOperationContext;
+};
+
+const FILTER_DOMAIN_IDS = ['filters.auto-filter'] as const;
 
 /**
  * Create a filter on a sheet.
@@ -79,7 +88,11 @@ export async function createFilter(
       endRow,
       endCol,
     });
-    await ctx.computeBridge.createFilter(sheetId, { startRow, startCol, endRow, endCol, tableId });
+    await ctx.computeBridge.createFilter(
+      sheetId,
+      { startRow, startCol, endRow, endCol, tableId },
+      createFilterMutationOptions(ctx, sheetId, 'filters.add'),
+    );
     return { success: true, data: undefined };
   } catch (e) {
     return {
@@ -105,7 +118,11 @@ export async function deleteFilter(
   try {
     await ctx.awaitMaterialized?.('allSheets');
     await assertFilterMutationAllowed(ctx, sheetId, 'filters.remove', filterId);
-    await ctx.computeBridge.deleteFilter(sheetId, filterId);
+    await ctx.computeBridge.deleteFilter(
+      sheetId,
+      filterId,
+      createFilterMutationOptions(ctx, sheetId, 'filters.remove'),
+    );
     return { success: true, data: undefined };
   } catch (e) {
     return {
@@ -161,6 +178,7 @@ export async function setColumnFilter(
       filterId,
       headerCol,
       columnFilterCriteriaToCompute(criteria),
+      createFilterMutationOptions(ctx, sheetId, 'filters.setColumnFilter'),
     );
     return {
       success: true,
@@ -229,7 +247,12 @@ export async function clearColumnFilter(
       };
     }
     await assertFilterMutationAllowed(ctx, sheetId, 'filters.clearColumnFilter', filterId);
-    const result = await ctx.computeBridge.clearColumnFilter(sheetId, filterId, headerCol);
+    const result = await ctx.computeBridge.clearColumnFilter(
+      sheetId,
+      filterId,
+      headerCol,
+      createFilterMutationOptions(ctx, sheetId, 'filters.clearColumnFilter'),
+    );
     return {
       success: true,
       data: buildFilterMutationReceipt({
@@ -294,7 +317,11 @@ export async function clearAllColumnFilters(
       };
     }
     await assertFilterMutationAllowed(ctx, sheetId, 'filters.clearAllColumnFilters', filterId);
-    const result = await ctx.computeBridge.clearAllColumnFilters(sheetId, filterId);
+    const result = await ctx.computeBridge.clearAllColumnFilters(
+      sheetId,
+      filterId,
+      createFilterMutationOptions(ctx, sheetId, 'filters.clearAllColumnFilters'),
+    );
     return {
       success: true,
       data: buildFilterMutationReceipt({
@@ -357,7 +384,11 @@ export async function applyFilter(
     }
     await assertFilterMutationAllowed(ctx, sheetId, 'filters.apply', filterId);
     const range = await resolveFilterRange(ctx, sheetId, filter);
-    const result = await ctx.computeBridge.applyFilter(sheetId, filterId);
+    const result = await ctx.computeBridge.applyFilter(
+      sheetId,
+      filterId,
+      createFilterMutationOptions(ctx, sheetId, 'filters.apply'),
+    );
     return {
       success: true,
       data: buildFilterMutationReceipt({
@@ -401,7 +432,11 @@ export async function reapplyFilter(
     }
     await assertFilterMutationAllowed(ctx, sheetId, 'filters.reapply', filterId);
     const range = await resolveFilterRange(ctx, sheetId, filter);
-    const result = await ctx.computeBridge.reapplyFilter(sheetId, filterId);
+    const result = await ctx.computeBridge.reapplyFilter(
+      sheetId,
+      filterId,
+      createFilterMutationOptions(ctx, sheetId, 'filters.reapply'),
+    );
     return {
       success: true,
       data: buildFilterMutationReceipt({
@@ -558,7 +593,12 @@ export async function setFilterSortState(
   try {
     await ctx.awaitMaterialized?.('allSheets');
     await assertFilterMutationAllowed(ctx, sheetId, 'filters.setSortState', filterId);
-    await ctx.computeBridge.setFilterSortState(sheetId, filterId, state);
+    await ctx.computeBridge.setFilterSortState(
+      sheetId,
+      filterId,
+      state,
+      createFilterMutationOptions(ctx, sheetId, 'filters.setSortState'),
+    );
     return { success: true, data: undefined };
   } catch (e) {
     return {
@@ -566,4 +606,18 @@ export async function setFilterSortState(
       error: e instanceof KernelError ? e : operationFailed('setFilterSortState', String(e)),
     };
   }
+}
+
+function createFilterMutationOptions(
+  ctx: DocumentContext,
+  sheetId: SheetId,
+  operationIdPrefix: string,
+): FilterMutationOptions {
+  return {
+    operationContext: createVersionOperationContext(ctx, {
+      operationIdPrefix,
+      sheetIds: [sheetId],
+      domainIds: FILTER_DOMAIN_IDS,
+    }),
+  };
 }

@@ -28,14 +28,44 @@ const SHEET_ID = sheetId('sheet-1');
 
 function createMockCtx() {
   return {
-    computeBridge: {
-      sortRange: jest.fn().mockResolvedValue({ success: true }),
+    clock: {
+      now: jest.fn(() => 1_700_000_000_000),
     },
+    computeBridge: {
+      getAllCfRules: jest.fn().mockResolvedValue([]),
+      sortRange: jest.fn().mockResolvedValue({ success: true }),
+      updateCfRule: jest.fn().mockResolvedValue({ success: true }),
+      forceRefreshAllViewports: jest.fn().mockResolvedValue(undefined),
+    },
+    workbookLinkScope: jest.fn(() => ({
+      actor: 'user-1',
+      requestingDocumentId: 'workbook-1',
+      requestingSessionId: 'session-1',
+    })),
   } as any;
 }
 
 function makeRange(startRow: number, startCol: number, endRow: number, endCol: number) {
   return { sheetId: SHEET_ID, startRow, startCol, endRow, endCol };
+}
+
+function expectSortAdmissionOptions(
+  operationIdPrefix: string,
+  domainIds: readonly string[] = ['sorts'],
+  groupId?: string,
+) {
+  return expect.objectContaining({
+    operationContext: expect.objectContaining({
+      operationId: expect.stringMatching(
+        new RegExp(`^${operationIdPrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}:`),
+      ),
+      sheetIds: [SHEET_ID],
+      domainIds,
+      capturePolicy: 'commitEligible',
+      writeAdmissionMode: 'capture',
+      ...(groupId ? { groupId } : {}),
+    }),
+  });
 }
 
 /**
@@ -105,6 +135,7 @@ describe('SortOps.sortRange', () => {
         ],
         hasHeaders: false,
       }),
+      expectSortAdmissionOptions('sorts.sortRange'),
     );
   });
 
@@ -175,6 +206,7 @@ describe('SortOps.sortRange', () => {
         ],
         hasHeaders: false,
       }),
+      expectSortAdmissionOptions('sorts.sortRange'),
     );
   });
 
@@ -215,6 +247,79 @@ describe('SortOps.sortRange', () => {
 
     const callArgs = ctx.computeBridge.sortRange.mock.calls[0];
     expect(callArgs[5].visibleRowsOnly).toBe(true);
+  });
+
+  it('passes version admission options to the sort bridge mutation', async () => {
+    const ctx = createMockCtx();
+    const range = makeRange(0, 0, 9, 2);
+
+    await SortOps.sortRange(ctx, SHEET_ID, range, {
+      sortBy: [{ column: 0, direction: 'asc' }],
+      hasHeaders: false,
+    });
+
+    expect(ctx.computeBridge.sortRange.mock.calls[0][6]).toEqual(
+      expectSortAdmissionOptions('sorts.sortRange'),
+    );
+  });
+
+  it('groups sort and conditional-format repair mutation contexts', async () => {
+    const ctx = createMockCtx();
+    const range = makeRange(0, 0, 9, 2);
+    ctx.computeBridge.getAllCfRules.mockResolvedValue([
+      {
+        id: 'cf-1',
+        ranges: [{ startRow: 0, startCol: 0, endRow: 3, endCol: 1 }],
+      },
+      {
+        id: 'cf-2',
+        ranges: [{ startRow: 8, startCol: 1, endRow: 12, endCol: 2 }],
+      },
+    ]);
+
+    await SortOps.sortRange(ctx, SHEET_ID, range, {
+      sortBy: [{ column: 0, direction: 'asc' }],
+      hasHeaders: false,
+    });
+
+    const sortContext = ctx.computeBridge.sortRange.mock.calls[0][6].operationContext;
+    expect(sortContext).toEqual(
+      expect.objectContaining({
+        operationId: expect.stringMatching(/^sorts\.sortRange:/),
+        sheetIds: [SHEET_ID],
+        domainIds: ['sorts'],
+        capturePolicy: 'commitEligible',
+        writeAdmissionMode: 'capture',
+      }),
+    );
+    expect(sortContext.groupId).toBe(sortContext.operationId);
+
+    expect(ctx.computeBridge.updateCfRule).toHaveBeenCalledTimes(2);
+    const firstRepairContext = ctx.computeBridge.updateCfRule.mock.calls[0][3].operationContext;
+    const secondRepairContext = ctx.computeBridge.updateCfRule.mock.calls[1][3].operationContext;
+    expect(firstRepairContext).toEqual(
+      expect.objectContaining({
+        operationId: expect.stringMatching(/^sorts\.sortRange\.repairConditionalFormatting:/),
+        sheetIds: [SHEET_ID],
+        domainIds: ['sorts', 'conditional-formatting'],
+        groupId: sortContext.groupId,
+        capturePolicy: 'commitEligible',
+        writeAdmissionMode: 'capture',
+      }),
+    );
+    expect(secondRepairContext).toEqual(
+      expect.objectContaining({
+        operationId: expect.stringMatching(/^sorts\.sortRange\.repairConditionalFormatting:/),
+        sheetIds: [SHEET_ID],
+        domainIds: ['sorts', 'conditional-formatting'],
+        groupId: sortContext.groupId,
+        capturePolicy: 'commitEligible',
+        writeAdmissionMode: 'capture',
+      }),
+    );
+    expect(firstRepairContext).not.toBe(secondRepairContext);
+    expect(firstRepairContext.operationId).not.toBe(secondRepairContext.operationId);
+    expect(firstRepairContext.operationId).not.toBe(sortContext.operationId);
   });
 
   it('defaults sortBy to "value" and caseSensitive to false', async () => {
@@ -335,6 +440,7 @@ describe('worksheet-impl sortRange transformation', () => {
         ],
         hasHeaders: true,
       }),
+      expectSortAdmissionOptions('sorts.sortRange'),
     );
   });
 });

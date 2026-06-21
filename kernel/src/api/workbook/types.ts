@@ -23,6 +23,7 @@ import type { HostPrincipalLock } from '../../context/host-principal-lock';
 import type { DocumentContext } from '../../context';
 import type {
   VersionNormalCommitCapture,
+  VersionMergeCommitCapture,
   WorkbookVersionCommitService,
 } from '../../document/version-store/commit-service';
 import type { WorkbookVersionMergeService } from '../../document/version-store/merge-service';
@@ -52,10 +53,11 @@ export interface WorkbookVersioningConfig {
   readonly provider?: VersionStoreProvider;
   readonly writeService?: Pick<
     WorkbookVersionCommitService,
-    'readHead' | 'readRef' | 'listCommits' | 'commit'
+    'readHead' | 'readRef' | 'listCommits' | 'commit' | 'mergeCommit'
   >;
   readonly mergeService?: Pick<WorkbookVersionMergeService, 'merge'>;
   readonly captureNormalCommit?: VersionNormalCommitCapture;
+  readonly captureMergeCommit?: VersionMergeCommitCapture;
   readonly snapshotRootByteSyncPort?: SnapshotRootByteSyncPort;
   readonly checkoutSnapshotMaterializer?: CheckoutSnapshotMaterializer;
 }

@@ -28,6 +28,7 @@ export function attachWorkbookVersioning(
       ? createWorkbookVersionCommitService({
           provider: config.provider,
           captureNormalCommit,
+          captureMergeCommit: config.captureMergeCommit,
           snapshotRootByteSyncPort: config.snapshotRootByteSyncPort,
         })
       : undefined);

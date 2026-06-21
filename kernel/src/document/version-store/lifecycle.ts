@@ -1,4 +1,8 @@
-import type { VersionNormalCommitCapture, WorkbookVersionCommitService } from './commit-service';
+import type {
+  VersionMergeCommitCapture,
+  VersionNormalCommitCapture,
+  WorkbookVersionCommitService,
+} from './commit-service';
 import type { CheckoutSnapshotMaterializer } from './checkout-apply';
 import type { SnapshotRootByteSyncPort } from './snapshot-root-capture';
 import {
@@ -29,9 +33,10 @@ export type ResolvedWorkbookVersioningConfig = {
   readonly provider?: VersionStoreProvider;
   readonly writeService?: Pick<
     WorkbookVersionCommitService,
-    'readHead' | 'readRef' | 'listCommits' | 'commit'
+    'readHead' | 'readRef' | 'listCommits' | 'commit' | 'mergeCommit'
   >;
   readonly captureNormalCommit?: VersionNormalCommitCapture;
+  readonly captureMergeCommit?: VersionMergeCommitCapture;
   readonly snapshotRootByteSyncPort?: SnapshotRootByteSyncPort;
   readonly checkoutSnapshotMaterializer?: CheckoutSnapshotMaterializer;
 };
@@ -84,6 +89,12 @@ export type VersionStoreLifecycleFailureReadService = {
     readonly diagnostics: readonly VersionStoreDiagnostic[];
   }>;
   commit(): Promise<{
+    readonly status: 'failed';
+    readonly diagnostics: readonly VersionStoreDiagnostic[];
+    readonly mutationGuarantee: 'no-write-attempted';
+    readonly retryable: false;
+  }>;
+  mergeCommit(): Promise<{
     readonly status: 'failed';
     readonly diagnostics: readonly VersionStoreDiagnostic[];
     readonly mutationGuarantee: 'no-write-attempted';
@@ -146,6 +157,7 @@ export async function resolveDocumentWorkbookVersioningLifecycle(input: {
     versioning: {
       provider,
       captureNormalCommit: config.captureNormalCommit,
+      captureMergeCommit: config.captureMergeCommit,
       snapshotRootByteSyncPort: config.snapshotRootByteSyncPort,
       writeService: config.writeService,
       checkoutSnapshotMaterializer: config.checkoutSnapshotMaterializer,
@@ -169,6 +181,14 @@ export function createLifecycleFailureReadService(
       return { status: 'failed', diagnostics: frozenDiagnostics };
     },
     async commit() {
+      return {
+        status: 'failed',
+        diagnostics: frozenDiagnostics,
+        mutationGuarantee: 'no-write-attempted',
+        retryable: false,
+      };
+    },
+    async mergeCommit() {
       return {
         status: 'failed',
         diagnostics: frozenDiagnostics,

@@ -571,11 +571,18 @@ export interface VersionApplyMergeInput extends VersionMergeInput {
 }
 
 export interface VersionApplyMergeOptions {
-  readonly mode?: 'preview';
+  readonly mode?: 'preview' | 'apply';
+  readonly targetRef?: VersionMainRefName | VersionRefName;
+  readonly expectedTargetHead?: VersionCommitExpectedHead;
   readonly includeDiagnostics?: boolean;
 }
 
-export type VersionApplyMergeMutationGuarantee = 'preview-only';
+export type VersionApplyMergeMutationGuarantee =
+  | 'preview-only'
+  | 'merge-commit-created'
+  | 'no-write-attempted'
+  | 'ref-not-mutated'
+  | 'unknown-after-crash';
 
 export type VersionApplyMergeResult =
   | {
@@ -583,6 +590,18 @@ export type VersionApplyMergeResult =
       readonly base: WorkbookCommitId;
       readonly ours: WorkbookCommitId;
       readonly theirs: WorkbookCommitId;
+      readonly changes: readonly VersionMergeChange[];
+      readonly conflicts: readonly [];
+      readonly diagnostics: readonly [];
+      readonly resolutionCount: number;
+      readonly mutationGuarantee: VersionApplyMergeMutationGuarantee;
+    }
+  | {
+      readonly status: 'applied';
+      readonly base: WorkbookCommitId;
+      readonly ours: WorkbookCommitId;
+      readonly theirs: WorkbookCommitId;
+      readonly commitRef: WorkbookCommitRef;
       readonly changes: readonly VersionMergeChange[];
       readonly conflicts: readonly [];
       readonly diagnostics: readonly [];

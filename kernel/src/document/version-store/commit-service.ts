@@ -1,4 +1,10 @@
-import type { VersionCommitOptions } from '@mog-sdk/contracts/api';
+import type {
+  VersionCommitExpectedHead,
+  VersionCommitOptions,
+  VersionMainRefName,
+  VersionMergeChange,
+  VersionRefName,
+} from '@mog-sdk/contracts/api';
 
 import {
   VERSION_GRAPH_HEAD_REF,
@@ -13,6 +19,10 @@ import {
   type VersionGraphSymbolicRef,
   type VersionGraphWriteResult,
 } from './graph-store';
+import {
+  expectedHeadForMergeCommit,
+  finalizeMergeCommitCapture,
+} from './commit-service-merge-helpers';
 import { parseWorkbookCommitId, type WorkbookCommitId } from './object-digest';
 import { type VersionGraphNamespace } from './object-store';
 import {
@@ -47,6 +57,22 @@ export type VersionNormalCommitCaptureInput = {
   readonly options: VersionCommitOptions;
 };
 
+export type VersionMergeCommitCaptureInput = {
+  readonly provider: VersionStoreProvider;
+  readonly graph: VersionGraphStore;
+  readonly accessContext: VersionAccessContext;
+  readonly namespace: VersionGraphNamespace;
+  readonly registry: VersionGraphRegistry;
+  readonly currentRef: VersionGraphRef;
+  readonly base: WorkbookCommitId;
+  readonly ours: WorkbookCommitId;
+  readonly theirs: WorkbookCommitId;
+  readonly targetRef: VersionMainRefName | VersionRefName;
+  readonly expectedTargetHead: VersionCommitExpectedHead;
+  readonly changes: readonly VersionMergeChange[];
+  readonly resolutionCount: number;
+};
+
 export type VersionNormalCommitCaptureFinalizeResult =
   | {
       readonly status: 'success';
@@ -74,6 +100,17 @@ export type VersionNormalCommitCaptureResult =
   | VersionNormalCommitCaptureSuccess
   | VersionStoreFailure;
 
+export type VersionMergeCommitCaptureSuccess = {
+  readonly status: 'success';
+  readonly input: VersionGraphCommitContentInput;
+  readonly diagnostics?: readonly VersionStoreDiagnostic[];
+  readonly finalize?: (result: VersionNormalCommitCaptureFinalizeResult) => void;
+};
+
+export type VersionMergeCommitCaptureResult =
+  | VersionMergeCommitCaptureSuccess
+  | VersionStoreFailure;
+
 type VersionNormalCommitMaterializedCaptureSuccess = Omit<
   VersionNormalCommitCaptureSuccess,
   'input'
@@ -89,9 +126,24 @@ export type VersionNormalCommitCapture = (
   input: VersionNormalCommitCaptureInput,
 ) => Promise<VersionNormalCommitCaptureResult> | VersionNormalCommitCaptureResult;
 
+export type VersionMergeCommitCapture = (
+  input: VersionMergeCommitCaptureInput,
+) => Promise<VersionMergeCommitCaptureResult> | VersionMergeCommitCaptureResult;
+
+export type WorkbookVersionCommitServiceMergeCommitInput = {
+  readonly base: WorkbookCommitId;
+  readonly ours: WorkbookCommitId;
+  readonly theirs: WorkbookCommitId;
+  readonly targetRef: VersionMainRefName | VersionRefName;
+  readonly expectedTargetHead: VersionCommitExpectedHead;
+  readonly changes: readonly VersionMergeChange[];
+  readonly resolutionCount: number;
+};
+
 export type WorkbookVersionCommitServiceOptions = {
   readonly provider: VersionStoreProvider;
   readonly captureNormalCommit?: VersionNormalCommitCapture;
+  readonly captureMergeCommit?: VersionMergeCommitCapture;
   readonly snapshotRootByteSyncPort?: SnapshotRootByteSyncPort;
 };
 
@@ -139,11 +191,13 @@ type NormalizedCommitTargetRefResult =
 export class WorkbookVersionCommitService {
   private readonly provider: VersionStoreProvider;
   private readonly captureNormalCommit?: VersionNormalCommitCapture;
+  private readonly captureMergeCommit?: VersionMergeCommitCapture;
   private readonly snapshotRootByteSyncPort?: SnapshotRootByteSyncPort;
 
   constructor(options: WorkbookVersionCommitServiceOptions) {
     this.provider = options.provider;
     this.captureNormalCommit = options.captureNormalCommit;
+    this.captureMergeCommit = options.captureMergeCommit;
     this.snapshotRootByteSyncPort = options.snapshotRootByteSyncPort;
   }
 
@@ -387,6 +441,179 @@ export class WorkbookVersionCommitService {
     }
     const diagnostics = mapGraphDiagnostics(result.diagnostics, 'commitGraphWrite');
     finalizeNormalCommitCapture(captured, { status: 'failed', diagnostics });
+    return failedStoreResult(
+      diagnostics,
+      result.mutationGuarantee,
+      isRetryableGraphWriteFailure(result.diagnostics),
+    );
+  }
+
+  async mergeCommit(
+    input: WorkbookVersionCommitServiceMergeCommitInput,
+  ): Promise<WorkbookVersionCommitServiceCommitResult> {
+    if (!this.provider.capabilities.reads.graphRegistry) {
+      return failedStoreResult(
+        [
+          versionStoreDiagnostic('VERSION_STORE_UNAVAILABLE', {
+            operation: 'commitGraphWrite',
+            documentScope: this.provider.documentScope,
+            safeMessage: 'Version graph registry reads are unavailable for this document.',
+            recoverability: 'retry',
+            mutationGuarantee: 'no-write-attempted',
+          }),
+        ],
+        'no-write-attempted',
+        true,
+      );
+    }
+
+    if (!this.provider.capabilities.writes.commitGraphWrite) {
+      return failedStoreResult(
+        [
+          versionStoreDiagnostic('VERSION_STORE_READ_ONLY', {
+            operation: 'commitGraphWrite',
+            documentScope: this.provider.documentScope,
+            safeMessage: 'Version graph writes are disabled for this document.',
+            mutationGuarantee: 'no-write-attempted',
+          }),
+        ],
+        'no-write-attempted',
+      );
+    }
+
+    const opened = await this.openVisibleGraph('commitGraphWrite');
+    if (!opened.ok) {
+      return failedStoreResult(opened.diagnostics, 'no-write-attempted', opened.retryable);
+    }
+
+    const target = await opened.graph.readRef(input.targetRef);
+    if (target.status !== 'success' || target.ref.name === VERSION_GRAPH_HEAD_REF) {
+      return failedStoreResult(
+        diagnosticsForGraphRead(target.diagnostics, 'commitGraphWrite'),
+        'no-write-attempted',
+      );
+    }
+
+    const expectedHead = expectedHeadForMergeCommit(input, target.ref);
+    if (!expectedHead.ok) {
+      return failedStoreResult(expectedHead.diagnostics, 'no-write-attempted', true);
+    }
+
+    if (!this.captureMergeCommit) {
+      return failedStoreResult(
+        [
+          versionStoreDiagnostic('VERSION_MISSING_CHANGE_SET', {
+            operation: 'commitGraphWrite',
+            documentScope: this.provider.documentScope,
+            namespace: opened.namespace,
+            refName: target.ref.name,
+            commitId: target.ref.commitId,
+            safeMessage:
+              'No production merge materialization service is attached for merge commits.',
+            mutationGuarantee: 'no-write-attempted',
+          }),
+        ],
+        'no-write-attempted',
+      );
+    }
+
+    let captured: VersionMergeCommitCaptureResult;
+    try {
+      captured = await this.captureMergeCommit({
+        provider: this.provider,
+        graph: opened.graph,
+        accessContext: this.provider.accessContext,
+        namespace: opened.namespace,
+        registry: opened.registry,
+        currentRef: target.ref,
+        base: input.base,
+        ours: input.ours,
+        theirs: input.theirs,
+        targetRef: input.targetRef,
+        expectedTargetHead: input.expectedTargetHead,
+        changes: input.changes,
+        resolutionCount: input.resolutionCount,
+      });
+    } catch {
+      return failedStoreResult(
+        [
+          versionStoreDiagnostic('VERSION_PROVIDER_FAILED', {
+            operation: 'commitGraphWrite',
+            documentScope: this.provider.documentScope,
+            namespace: opened.namespace,
+            refName: target.ref.name,
+            commitId: target.ref.commitId,
+            safeMessage: 'Version merge materialization failed before graph mutation.',
+            recoverability: 'retry',
+            mutationGuarantee: 'no-write-attempted',
+          }),
+        ],
+        'no-write-attempted',
+        true,
+      );
+    }
+
+    if (captured.status !== 'success') {
+      return captured;
+    }
+
+    if ((captured.input.mutationSegmentRecords?.length ?? 0) === 0) {
+      finalizeMergeCommitCapture(captured, {
+        status: 'failed',
+        diagnostics: [
+          versionStoreDiagnostic('VERSION_MISSING_CHANGE_SET', {
+            operation: 'commitGraphWrite',
+            documentScope: this.provider.documentScope,
+            namespace: opened.namespace,
+            refName: target.ref.name,
+            commitId: target.ref.commitId,
+            safeMessage: 'Merge commits require a non-empty authored merge mutation segment.',
+            mutationGuarantee: 'no-write-attempted',
+          }),
+        ],
+      });
+      return failedStoreResult(
+        [
+          versionStoreDiagnostic('VERSION_MISSING_CHANGE_SET', {
+            operation: 'commitGraphWrite',
+            documentScope: this.provider.documentScope,
+            namespace: opened.namespace,
+            refName: target.ref.name,
+            commitId: target.ref.commitId,
+            safeMessage: 'Merge commits require a non-empty authored merge mutation segment.',
+            mutationGuarantee: 'no-write-attempted',
+          }),
+        ],
+        'no-write-attempted',
+      );
+    }
+
+    const result = await opened.graph.mergeCommit({
+      ...captured.input,
+      targetRef: target.ref.name,
+      expectedHeadCommitId: input.ours,
+      expectedTargetRefVersion: expectedHead.revision,
+      mergeParentCommitId: input.theirs,
+    });
+
+    if (result.status === 'success') {
+      finalizeMergeCommitCapture(captured, {
+        status: 'success',
+        commitId: result.commit.id,
+      });
+      return {
+        ...result,
+        commitRef: {
+          id: result.commit.id,
+          refName: result.ref.name,
+          resolvedFrom: result.ref.name,
+          refRevision: result.ref.revision,
+        },
+      };
+    }
+
+    const diagnostics = mapGraphDiagnostics(result.diagnostics, 'commitGraphWrite');
+    finalizeMergeCommitCapture(captured, { status: 'failed', diagnostics });
     return failedStoreResult(
       diagnostics,
       result.mutationGuarantee,

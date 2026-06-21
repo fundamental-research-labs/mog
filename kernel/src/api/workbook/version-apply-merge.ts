@@ -3,26 +3,70 @@ import type {
   VersionApplyMergeOptions,
   VersionApplyMergeResolution,
   VersionApplyMergeResult,
+  VersionCommitExpectedHead,
+  VersionMainRefName,
   VersionMergeChange,
   VersionMergeConflict,
   VersionMergeInput,
+  VersionMergeOptions,
+  VersionRecordRevision,
+  VersionRefName,
   VersionStoreDiagnostic,
   WorkbookCommitId,
+  WorkbookCommitRef,
 } from '@mog-sdk/contracts/api';
 
 import type { DocumentContext } from '../../context';
+import { validateRefName } from '../../document/version-store/ref-name';
 import { mergeWorkbookVersion } from './version-merge';
 
 const WORKBOOK_COMMIT_ID_RE = /^commit:sha256:[0-9a-f]{64}$/;
 const VERSION_APPLY_MERGE_INPUT_KEYS = new Set(['base', 'ours', 'theirs', 'resolutions']);
-const VERSION_APPLY_MERGE_OPTION_KEYS = new Set(['mode', 'includeDiagnostics']);
+const VERSION_APPLY_MERGE_OPTION_KEYS = new Set([
+  'mode',
+  'targetRef',
+  'expectedTargetHead',
+  'includeDiagnostics',
+]);
+const VERSION_APPLY_MERGE_EXPECTED_HEAD_KEYS = new Set([
+  'commitId',
+  'revision',
+  'symbolicHeadRevision',
+]);
+const VERSION_HEAD_REF = 'HEAD';
+const VERSION_MAIN_REF = 'refs/heads/main' satisfies VersionMainRefName;
+const VERSION_BRANCH_REF_PREFIX = 'refs/heads/';
+
+type MaybePromise<T> = T | Promise<T>;
+type BoundMethod = (...args: readonly unknown[]) => MaybePromise<unknown>;
+
+type AttachedVersionApplyMergeService = {
+  mergeCommit: (input: VersionApplyMergeWriteInput) => MaybePromise<unknown>;
+};
+
+type VersionApplyMergeWriteInput = {
+  readonly base: WorkbookCommitId;
+  readonly ours: WorkbookCommitId;
+  readonly theirs: WorkbookCommitId;
+  readonly targetRef: VersionMainRefName | VersionRefName;
+  readonly expectedTargetHead: VersionCommitExpectedHead;
+  readonly changes: readonly VersionMergeChange[];
+  readonly resolutionCount: number;
+};
+
+type MaybeVersionRuntimeContext = DocumentContext & {
+  readonly versioning?: unknown;
+  readonly versionStore?: unknown;
+  readonly version?: unknown;
+};
 
 type ApplyMergeValidationResult =
   | {
       readonly ok: true;
       readonly mergeInput: VersionMergeInput;
       readonly resolutions: readonly VersionApplyMergeResolution[];
-      readonly options: VersionApplyMergeOptions;
+      readonly previewOptions: VersionMergeOptions;
+      readonly applyOptions: NormalizedApplyMergeOptions;
     }
   | {
       readonly ok: false;
@@ -42,6 +86,18 @@ type ResolutionPlanResult =
       readonly diagnostics: readonly VersionStoreDiagnostic[];
     };
 
+type NormalizedApplyMergeOptions =
+  | {
+      readonly mode: 'preview';
+      readonly includeDiagnostics?: boolean;
+    }
+  | {
+      readonly mode: 'apply';
+      readonly includeDiagnostics?: boolean;
+      readonly targetRef: VersionMainRefName | VersionRefName;
+      readonly expectedTargetHead: VersionCommitExpectedHead;
+    };
+
 export async function applyMergeWorkbookVersion(
   ctx: DocumentContext,
   input: VersionApplyMergeInput,
@@ -57,7 +113,7 @@ export async function applyMergeWorkbookVersion(
     );
   }
 
-  const preview = await mergeWorkbookVersion(ctx, validated.mergeInput, validated.options);
+  const preview = await mergeWorkbookVersion(ctx, validated.mergeInput, validated.previewOptions);
   if (preview.status === 'blocked') {
     return blockedApplyMergeResult(preview.base, preview.ours, preview.theirs, preview.diagnostics);
   }
@@ -68,20 +124,22 @@ export async function applyMergeWorkbookVersion(
         resolutionMismatchDiagnostic('clean merge previews do not accept conflict resolutions.'),
       ]);
     }
-    return {
-      status: 'planned',
+    return finalizeApplyMergePlan(ctx, validated.applyOptions, {
       base: preview.base,
       ours: preview.ours,
       theirs: preview.theirs,
       changes: preview.changes,
-      conflicts: [],
-      diagnostics: [],
       resolutionCount: 0,
-      mutationGuarantee: 'preview-only',
-    };
+    });
   }
 
   if (validated.resolutions.length === 0) {
+    if (validated.applyOptions.mode === 'apply') {
+      return blockedApplyMergeResult(preview.base, preview.ours, preview.theirs, [
+        resolutionMismatchDiagnostic('applyMerge apply mode requires resolutions for conflicted previews.'),
+      ]);
+    }
+
     return {
       status: 'conflicted',
       base: preview.base,
@@ -100,17 +158,63 @@ export async function applyMergeWorkbookVersion(
     return blockedApplyMergeResult(preview.base, preview.ours, preview.theirs, plan.diagnostics);
   }
 
-  return {
-    status: 'planned',
+  return finalizeApplyMergePlan(ctx, validated.applyOptions, {
     base: preview.base,
     ours: preview.ours,
     theirs: preview.theirs,
     changes: [...preview.changes, ...plan.changes],
-    conflicts: [],
-    diagnostics: [],
     resolutionCount: validated.resolutions.length,
-    mutationGuarantee: 'preview-only',
-  };
+  });
+}
+
+async function finalizeApplyMergePlan(
+  ctx: DocumentContext,
+  options: NormalizedApplyMergeOptions,
+  plan: {
+    readonly base: WorkbookCommitId;
+    readonly ours: WorkbookCommitId;
+    readonly theirs: WorkbookCommitId;
+    readonly changes: readonly VersionMergeChange[];
+    readonly resolutionCount: number;
+  },
+): Promise<VersionApplyMergeResult> {
+  if (options.mode === 'preview') {
+    return {
+      status: 'planned',
+      base: plan.base,
+      ours: plan.ours,
+      theirs: plan.theirs,
+      changes: plan.changes,
+      conflicts: [],
+      diagnostics: [],
+      resolutionCount: plan.resolutionCount,
+      mutationGuarantee: 'preview-only',
+    };
+  }
+
+  if (options.expectedTargetHead.commitId !== plan.ours) {
+    return blockedApplyMergeResult(plan.base, plan.ours, plan.theirs, [
+      resolutionMismatchDiagnostic('applyMerge expectedTargetHead must match the ours commit.'),
+    ]);
+  }
+
+  const service = getAttachedVersionApplyMergeService(ctx);
+  if (!service) {
+    return blockedApplyMergeResult(plan.base, plan.ours, plan.theirs, [
+      applyMergeServiceUnavailableDiagnostic(),
+    ]);
+  }
+
+  try {
+    const result = await service.mergeCommit({
+      ...plan,
+      targetRef: options.targetRef,
+      expectedTargetHead: options.expectedTargetHead,
+    });
+    return mapApplyMergeWriteResult(result, plan);
+  } catch {
+    return blockedApplyMergeResult(plan.base, plan.ours, plan.theirs, [providerErrorDiagnostic()]);
+  }
 }
 
 function validateApplyMergeRequest(
@@ -136,7 +240,13 @@ function validateApplyMergeRequest(
     ok: true,
     mergeInput: normalizedInput.mergeInput,
     resolutions: normalizedInput.resolutions,
-    options: normalizedOptions,
+    previewOptions: {
+      mode: 'preview',
+      ...(normalizedOptions.includeDiagnostics === undefined
+        ? {}
+        : { includeDiagnostics: normalizedOptions.includeDiagnostics }),
+    },
+    applyOptions: normalizedOptions,
   };
 }
 
@@ -264,8 +374,7 @@ function normalizeResolution(
 function normalizeApplyMergeOptions(
   input: VersionApplyMergeOptions,
   diagnostics: VersionStoreDiagnostic[],
-): VersionApplyMergeOptions | null {
-  if (input === undefined) return {};
+): NormalizedApplyMergeOptions | null {
   if (!isRecord(input) || Array.isArray(input)) {
     diagnostics.push(
       invalidApplyMergeOptionDiagnostic('options', 'applyMerge options must be an object.'),
@@ -278,16 +387,17 @@ function normalizeApplyMergeOptions(
     diagnostics.push(invalidApplyMergeOptionDiagnostic(key, `Unknown applyMerge option "${key}".`));
   }
 
-  const options: { mode?: 'preview'; includeDiagnostics?: boolean } = {};
+  let mode: 'preview' | 'apply' = 'apply';
   if (input.mode !== undefined) {
-    if (input.mode !== 'preview') {
-      diagnostics.push(
-        invalidApplyMergeOptionDiagnostic('mode', 'applyMerge mode must be "preview" when supplied.'),
-      );
+    if (input.mode === 'preview' || input.mode === 'apply') {
+      mode = input.mode;
     } else {
-      options.mode = input.mode;
+      diagnostics.push(
+        invalidApplyMergeOptionDiagnostic('mode', 'applyMerge mode must be "preview" or "apply".'),
+      );
     }
   }
+  const baseOptions: { mode: 'preview' | 'apply'; includeDiagnostics?: boolean } = { mode };
 
   if (input.includeDiagnostics !== undefined) {
     if (typeof input.includeDiagnostics !== 'boolean') {
@@ -295,11 +405,328 @@ function normalizeApplyMergeOptions(
         invalidApplyMergeOptionDiagnostic('includeDiagnostics', 'includeDiagnostics must be a boolean.'),
       );
     } else {
-      options.includeDiagnostics = input.includeDiagnostics;
+      baseOptions.includeDiagnostics = input.includeDiagnostics;
     }
   }
 
-  return options;
+  if (mode === 'preview') {
+    if (input.targetRef !== undefined) {
+      diagnostics.push(
+        invalidApplyMergeOptionDiagnostic('targetRef', 'targetRef is valid only in apply mode.'),
+      );
+    }
+    if (input.expectedTargetHead !== undefined) {
+      diagnostics.push(
+        invalidApplyMergeOptionDiagnostic(
+          'expectedTargetHead',
+          'expectedTargetHead is valid only in apply mode.',
+        ),
+      );
+    }
+    return diagnostics.length === 0 ? { ...baseOptions, mode: 'preview' } : null;
+  }
+
+  const targetRef = validateTargetRef(input.targetRef, diagnostics);
+  const expectedTargetHead = validateExpectedTargetHead(input.expectedTargetHead, diagnostics);
+  return diagnostics.length === 0 && targetRef && expectedTargetHead
+    ? { ...baseOptions, mode: 'apply', targetRef, expectedTargetHead }
+    : null;
+}
+
+function validateTargetRef(
+  value: unknown,
+  diagnostics: VersionStoreDiagnostic[],
+): VersionMainRefName | VersionRefName | undefined {
+  if (typeof value !== 'string') {
+    diagnostics.push(invalidApplyMergeOptionDiagnostic('targetRef', 'targetRef is required.'));
+    return undefined;
+  }
+  if (value === VERSION_HEAD_REF) {
+    diagnostics.push(
+      invalidApplyMergeOptionDiagnostic('targetRef', 'targetRef must be a concrete refs/heads/* ref.'),
+    );
+    return undefined;
+  }
+
+  const branchName = value.startsWith(VERSION_BRANCH_REF_PREFIX)
+    ? value.slice(VERSION_BRANCH_REF_PREFIX.length)
+    : value;
+  const parsed = validateRefName(branchName, 'targetRef');
+  if (!parsed.ok) {
+    diagnostics.push(
+      ...parsed.diagnostics.map((item) =>
+        publicDiagnostic('VERSION_INVALID_OPTIONS', 'targetRef must name a public-safe version branch.', {
+          recoverability: 'none',
+          payload: { option: 'targetRef', issue: item.issue, refName: 'redacted' },
+        }),
+      ),
+    );
+    return undefined;
+  }
+
+  return parsed.name === 'main'
+    ? VERSION_MAIN_REF
+    : (`${VERSION_BRANCH_REF_PREFIX}${parsed.name}` as VersionRefName);
+}
+
+function validateExpectedTargetHead(
+  value: unknown,
+  diagnostics: VersionStoreDiagnostic[],
+): VersionCommitExpectedHead | undefined {
+  if (!isRecord(value) || Array.isArray(value)) {
+    diagnostics.push(
+      invalidApplyMergeOptionDiagnostic(
+        'expectedTargetHead',
+        'expectedTargetHead is required in apply mode.',
+      ),
+    );
+    return undefined;
+  }
+
+  for (const key of Object.keys(value)) {
+    if (VERSION_APPLY_MERGE_EXPECTED_HEAD_KEYS.has(key)) continue;
+    diagnostics.push(
+      invalidApplyMergeOptionDiagnostic(
+        `expectedTargetHead.${key}`,
+        `Unknown expectedTargetHead field "${key}".`,
+      ),
+    );
+  }
+
+  const commitId = toCommitId(value.commitId);
+  const revision = toPublicRevision(value.revision);
+  const symbolicHeadRevision =
+    value.symbolicHeadRevision === undefined
+      ? undefined
+      : toPublicRevision(value.symbolicHeadRevision);
+
+  if (!commitId) {
+    diagnostics.push(
+      invalidApplyMergeOptionDiagnostic(
+        'expectedTargetHead.commitId',
+        'expectedTargetHead.commitId is invalid.',
+      ),
+    );
+  }
+  if (!revision) {
+    diagnostics.push(
+      invalidApplyMergeOptionDiagnostic(
+        'expectedTargetHead.revision',
+        'expectedTargetHead.revision is invalid.',
+      ),
+    );
+  }
+  if ('symbolicHeadRevision' in value && !symbolicHeadRevision) {
+    diagnostics.push(
+      invalidApplyMergeOptionDiagnostic(
+        'expectedTargetHead.symbolicHeadRevision',
+        'expectedTargetHead.symbolicHeadRevision is invalid.',
+      ),
+    );
+  }
+  return commitId && revision && (!('symbolicHeadRevision' in value) || symbolicHeadRevision)
+    ? {
+        commitId,
+        revision,
+        ...(symbolicHeadRevision ? { symbolicHeadRevision } : {}),
+      }
+    : undefined;
+}
+
+function getAttachedVersionApplyMergeService(
+  ctx: DocumentContext,
+): AttachedVersionApplyMergeService | null {
+  const runtime = ctx as MaybeVersionRuntimeContext;
+  const services = runtime.versioning ?? runtime.versionStore ?? runtime.version ?? null;
+  if (!isRecord(services)) return null;
+
+  for (const candidate of [
+    services.applyMergeService,
+    services.versionApplyMergeService,
+    services.writeService,
+    services.commitService,
+    services.publicService,
+  ]) {
+    const service = toApplyMergeService(candidate);
+    if (service) return service;
+  }
+
+  return null;
+}
+
+function toApplyMergeService(value: unknown): AttachedVersionApplyMergeService | null {
+  const mergeCommit =
+    bindMethod(value, 'mergeCommit') ??
+    bindMethod(value, 'applyMerge') ??
+    bindMethod(value, 'applyMergeVersion') ??
+    bindMethod(value, 'applyMergeCommit');
+  if (!mergeCommit) return null;
+  return { mergeCommit: (input) => mergeCommit(input) };
+}
+
+function bindMethod(value: unknown, name: string): BoundMethod | null {
+  if (!isRecord(value)) return null;
+  const method = value[name];
+  if (typeof method !== 'function') return null;
+  return (...args) => Reflect.apply(method, value, args) as MaybePromise<unknown>;
+}
+
+function mapApplyMergeWriteResult(
+  value: unknown,
+  plan: {
+    readonly base: WorkbookCommitId;
+    readonly ours: WorkbookCommitId;
+    readonly theirs: WorkbookCommitId;
+    readonly changes: readonly VersionMergeChange[];
+    readonly resolutionCount: number;
+  },
+): VersionApplyMergeResult {
+  if (!isRecord(value)) {
+    return blockedApplyMergeResult(plan.base, plan.ours, plan.theirs, [providerErrorDiagnostic()]);
+  }
+
+  if (value.status !== 'success' && value.status !== 'applied') {
+    return blockedApplyMergeResult(
+      plan.base,
+      plan.ours,
+      plan.theirs,
+      mapWriteDiagnostics(value.diagnostics),
+      toApplyMergeMutationGuarantee(value.mutationGuarantee),
+    );
+  }
+
+  const commit = mapWorkbookCommitRef(value.commitRef ?? value.commit);
+  const diagnostics = Array.isArray(value.diagnostics) ? mapWriteDiagnostics(value.diagnostics) : [];
+  if (!commit || diagnostics.length > 0) {
+    return blockedApplyMergeResult(plan.base, plan.ours, plan.theirs, [
+      ...diagnostics,
+      providerErrorDiagnostic(),
+    ]);
+  }
+
+  return {
+    status: 'applied',
+    base: plan.base,
+    ours: plan.ours,
+    theirs: plan.theirs,
+    commitRef: commit,
+    changes: plan.changes,
+    conflicts: [],
+    diagnostics: [],
+    resolutionCount: plan.resolutionCount,
+    mutationGuarantee: 'merge-commit-created',
+  };
+}
+
+function mapWorkbookCommitRef(value: unknown): WorkbookCommitRef | null {
+  if (!isRecord(value)) return null;
+  const id = toCommitId(value.id);
+  if (!id) return null;
+
+  const refName = value.refName === undefined ? undefined : validatePublicRefNameValue(value.refName);
+  const resolvedFrom =
+    value.resolvedFrom === undefined ? undefined : validatePublicRefSelectorValue(value.resolvedFrom);
+  const refRevision = value.refRevision === undefined ? undefined : toPublicRevision(value.refRevision);
+  if (
+    (value.refName !== undefined && !refName) ||
+    (value.resolvedFrom !== undefined && !resolvedFrom) ||
+    (value.refRevision !== undefined && !refRevision)
+  ) {
+    return null;
+  }
+
+  return {
+    id,
+    ...(refName ? { refName } : {}),
+    ...(resolvedFrom ? { resolvedFrom } : {}),
+    ...(refRevision ? { refRevision } : {}),
+  };
+}
+
+function mapWriteDiagnostics(value: unknown): readonly VersionStoreDiagnostic[] {
+  if (!Array.isArray(value)) return [providerErrorDiagnostic()];
+  return value.map(mapWriteDiagnostic);
+}
+
+function mapWriteDiagnostic(value: unknown): VersionStoreDiagnostic {
+  if (isRecord(value) && typeof value.issueCode === 'string') {
+    return {
+      issueCode: value.issueCode,
+      severity: isSeverity(value.severity) ? value.severity : 'error',
+      recoverability: isRecoverability(value.recoverability) ? value.recoverability : 'none',
+      messageTemplateId:
+        typeof value.messageTemplateId === 'string'
+          ? value.messageTemplateId
+          : `version.applyMerge.${value.issueCode}`,
+      safeMessage:
+        typeof value.safeMessage === 'string'
+          ? value.safeMessage
+          : typeof value.message === 'string'
+            ? value.message
+            : 'Version applyMerge failed.',
+      ...(isRecord(value.payload) ? { payload: mapPayload(value.payload) } : {}),
+      redacted: value.redacted === true,
+      ...(toDiagnosticMutationGuarantee(value.mutationGuarantee)
+        ? { mutationGuarantee: toDiagnosticMutationGuarantee(value.mutationGuarantee) }
+        : {}),
+    };
+  }
+  if (isRecord(value) && typeof value.code === 'string') {
+    return publicDiagnostic(value.code, typeof value.message === 'string' ? value.message : 'Version applyMerge failed.', {
+      recoverability: value.code === 'VERSION_REF_CONFLICT' ? 'retry' : 'none',
+      mutationGuarantee: toDiagnosticMutationGuarantee(value.mutationGuarantee),
+    });
+  }
+  return providerErrorDiagnostic();
+}
+
+function toPublicRevision(value: unknown): VersionRecordRevision | undefined {
+  if (isRecord(value) && value.kind === 'counter' && typeof value.value === 'string') {
+    return { kind: 'counter', value: value.value };
+  }
+  if (isRecord(value) && value.kind === 'opaque' && typeof value.value === 'string') {
+    return { kind: 'opaque', value: value.value };
+  }
+  if (typeof value === 'string') return { kind: 'opaque', value };
+  return undefined;
+}
+
+function validatePublicRefNameValue(value: unknown): VersionMainRefName | VersionRefName | undefined {
+  if (value === VERSION_MAIN_REF) return VERSION_MAIN_REF;
+  if (typeof value === 'string' && value.startsWith(VERSION_BRANCH_REF_PREFIX)) {
+    return value as VersionRefName;
+  }
+  return undefined;
+}
+
+function validatePublicRefSelectorValue(
+  value: unknown,
+): typeof VERSION_HEAD_REF | VersionMainRefName | VersionRefName | undefined {
+  if (value === VERSION_HEAD_REF) return VERSION_HEAD_REF;
+  return validatePublicRefNameValue(value);
+}
+
+function toApplyMergeMutationGuarantee(
+  value: unknown,
+): VersionApplyMergeResult['mutationGuarantee'] | undefined {
+  return value === 'preview-only' ||
+    value === 'merge-commit-created' ||
+    value === 'no-write-attempted' ||
+    value === 'ref-not-mutated' ||
+    value === 'unknown-after-crash'
+    ? value
+    : undefined;
+}
+
+function toDiagnosticMutationGuarantee(
+  value: unknown,
+): VersionStoreDiagnostic['mutationGuarantee'] | undefined {
+  return value === 'no-write-attempted' ||
+    value === 'ref-not-mutated' ||
+    value === 'registry-not-visible' ||
+    value === 'unknown-after-crash'
+    ? value
+    : undefined;
 }
 
 function planResolvedConflicts(
@@ -367,6 +794,7 @@ function blockedApplyMergeResult(
   ours: WorkbookCommitId | null,
   theirs: WorkbookCommitId | null,
   diagnostics: readonly VersionStoreDiagnostic[],
+  mutationGuarantee: VersionApplyMergeResult['mutationGuarantee'] = 'no-write-attempted',
 ): VersionApplyMergeResult {
   return {
     status: 'blocked',
@@ -376,7 +804,7 @@ function blockedApplyMergeResult(
     changes: [],
     conflicts: [],
     diagnostics,
-    mutationGuarantee: 'preview-only',
+    mutationGuarantee,
   };
 }
 
@@ -396,12 +824,27 @@ function resolutionMismatchDiagnostic(safeMessage: string): VersionStoreDiagnost
   });
 }
 
+function applyMergeServiceUnavailableDiagnostic(): VersionStoreDiagnostic {
+  return publicDiagnostic(
+    'VERSION_STORE_UNAVAILABLE',
+    'No production merge-apply service is attached for version graph writes.',
+    { recoverability: 'unsupported' },
+  );
+}
+
+function providerErrorDiagnostic(): VersionStoreDiagnostic {
+  return publicDiagnostic('VERSION_PROVIDER_FAILED', 'Version applyMerge provider failed.', {
+    recoverability: 'retry',
+  });
+}
+
 function publicDiagnostic(
   issueCode: string,
   safeMessage: string,
   options: {
     readonly recoverability?: VersionStoreDiagnostic['recoverability'];
     readonly payload?: VersionStoreDiagnostic['payload'];
+    readonly mutationGuarantee?: VersionStoreDiagnostic['mutationGuarantee'];
   } = {},
 ): VersionStoreDiagnostic {
   return {
@@ -412,8 +855,28 @@ function publicDiagnostic(
     safeMessage,
     ...(options.payload ? { payload: { operation: 'applyMerge', ...options.payload } } : {}),
     redacted: true,
-    mutationGuarantee: 'no-write-attempted',
+    mutationGuarantee: options.mutationGuarantee ?? 'no-write-attempted',
   };
+}
+
+function mapPayload(value: Readonly<Record<string, unknown>>): VersionStoreDiagnostic['payload'] {
+  const payload: Record<string, string | number | boolean | null> = {};
+  for (const [key, item] of Object.entries(value)) {
+    payload[key] = isPayloadPrimitive(item) ? item : String(item);
+  }
+  return payload;
+}
+
+function isSeverity(value: unknown): value is VersionStoreDiagnostic['severity'] {
+  return value === 'info' || value === 'warning' || value === 'error' || value === 'fatal';
+}
+
+function isRecoverability(value: unknown): value is VersionStoreDiagnostic['recoverability'] {
+  return value === 'retry' || value === 'repair' || value === 'unsupported' || value === 'none';
+}
+
+function isPayloadPrimitive(value: unknown): value is string | number | boolean | null {
+  return value === null || ['string', 'number', 'boolean'].includes(typeof value);
 }
 
 function toCommitId(value: unknown): WorkbookCommitId | null {

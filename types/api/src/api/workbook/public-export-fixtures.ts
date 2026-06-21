@@ -1,5 +1,8 @@
 import type {
   RedactionPolicy as ApiRootRedactionPolicy,
+  VersionApplyMergeInput as ApiRootApplyMergeInput,
+  VersionApplyMergeMutationGuarantee as ApiRootApplyMergeMutationGuarantee,
+  VersionApplyMergeOptions as ApiRootApplyMergeOptions,
   VersionApplyMergeResult as ApiRootApplyMergeResult,
   VersionBranchRefReadResult as ApiRootBranchRefReadResult,
   VersionCheckoutMutationGuarantee as ApiRootCheckoutMutationGuarantee,
@@ -24,6 +27,9 @@ import type {
 } from '../index';
 import type {
   RedactionPolicy as PackageApiRedactionPolicy,
+  VersionApplyMergeInput as PackageApiApplyMergeInput,
+  VersionApplyMergeMutationGuarantee as PackageApiApplyMergeMutationGuarantee,
+  VersionApplyMergeOptions as PackageApiApplyMergeOptions,
   VersionApplyMergeResult as PackageApiApplyMergeResult,
   VersionBranchRefReadResult as PackageApiBranchRefReadResult,
   VersionCheckoutMutationGuarantee as PackageApiCheckoutMutationGuarantee,
@@ -48,6 +54,9 @@ import type {
 } from '@mog/types-api/api';
 import type {
   RedactionPolicy as PackageWorkbookRedactionPolicy,
+  VersionApplyMergeInput as PackageWorkbookApplyMergeInput,
+  VersionApplyMergeMutationGuarantee as PackageWorkbookApplyMergeMutationGuarantee,
+  VersionApplyMergeOptions as PackageWorkbookApplyMergeOptions,
   VersionApplyMergeResult as PackageWorkbookApplyMergeResult,
   VersionBranchRefReadResult as PackageWorkbookBranchRefReadResult,
   VersionCheckoutMutationGuarantee as PackageWorkbookCheckoutMutationGuarantee,
@@ -72,6 +81,9 @@ import type {
 } from '@mog/types-api/api/workbook';
 import type {
   RedactionPolicy as WorkbookNamespaceRedactionPolicy,
+  VersionApplyMergeInput as WorkbookNamespaceApplyMergeInput,
+  VersionApplyMergeMutationGuarantee as WorkbookNamespaceApplyMergeMutationGuarantee,
+  VersionApplyMergeOptions as WorkbookNamespaceApplyMergeOptions,
   VersionApplyMergeResult as WorkbookNamespaceApplyMergeResult,
   VersionBranchRefReadResult as WorkbookNamespaceBranchRefReadResult,
   VersionCheckoutMutationGuarantee as WorkbookNamespaceCheckoutMutationGuarantee,
@@ -107,6 +119,15 @@ type _WorkbookNamespaceExportsStatus = Assert<
 >;
 type _WorkbookNamespaceExportsApplyMergeResult = Assert<
   IsEqual<WorkbookNamespaceApplyMergeResult, PackageWorkbookApplyMergeResult>
+>;
+type _WorkbookNamespaceExportsApplyMergeInput = Assert<
+  IsEqual<WorkbookNamespaceApplyMergeInput, PackageWorkbookApplyMergeInput>
+>;
+type _WorkbookNamespaceExportsApplyMergeOptions = Assert<
+  IsEqual<WorkbookNamespaceApplyMergeOptions, PackageWorkbookApplyMergeOptions>
+>;
+type _WorkbookNamespaceExportsApplyMergeGuarantee = Assert<
+  IsEqual<WorkbookNamespaceApplyMergeMutationGuarantee, PackageWorkbookApplyMergeMutationGuarantee>
 >;
 type _WorkbookNamespaceExportsCommitOptions = Assert<
   IsEqual<WorkbookNamespaceCommitOptions, PackageWorkbookCommitOptions>
@@ -172,6 +193,15 @@ type _ApiRootExportsStatus = Assert<
 >;
 type _ApiRootExportsApplyMergeResult = Assert<
   IsEqual<ApiRootApplyMergeResult, PackageApiApplyMergeResult>
+>;
+type _ApiRootExportsApplyMergeInput = Assert<
+  IsEqual<ApiRootApplyMergeInput, PackageApiApplyMergeInput>
+>;
+type _ApiRootExportsApplyMergeOptions = Assert<
+  IsEqual<ApiRootApplyMergeOptions, PackageApiApplyMergeOptions>
+>;
+type _ApiRootExportsApplyMergeGuarantee = Assert<
+  IsEqual<ApiRootApplyMergeMutationGuarantee, PackageApiApplyMergeMutationGuarantee>
 >;
 type _ApiRootExportsCommitOptions = Assert<
   IsEqual<ApiRootCommitOptions, PackageApiCommitOptions>

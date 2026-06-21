@@ -12,6 +12,12 @@ import { WorkbookVersionImpl } from '../version';
 const BASE = `commit:sha256:${'1'.repeat(64)}` as VersionMergeInput['base'];
 const OURS = `commit:sha256:${'2'.repeat(64)}` as VersionMergeInput['ours'];
 const THEIRS = `commit:sha256:${'3'.repeat(64)}` as VersionMergeInput['theirs'];
+const MERGE = `commit:sha256:${'4'.repeat(64)}` as VersionMergeInput['ours'];
+const TARGET_REF = 'refs/heads/main';
+const EXPECTED_TARGET_HEAD = {
+  commitId: OURS,
+  revision: { kind: 'counter' as const, value: '1' },
+};
 
 describe('WorkbookVersion applyMerge preview planner', () => {
   it('plans clean merge previews without mutating through a write service', async () => {
@@ -38,7 +44,9 @@ describe('WorkbookVersion applyMerge preview planner', () => {
       versioning: { mergeService: { merge }, writeService: { commit: write } },
     } as any);
 
-    await expect(version.applyMerge({ base: BASE, ours: OURS, theirs: THEIRS })).resolves.toEqual({
+    await expect(
+      version.applyMerge({ base: BASE, ours: OURS, theirs: THEIRS }, { mode: 'preview' }),
+    ).resolves.toEqual({
       status: 'planned',
       base: BASE,
       ours: OURS,
@@ -49,8 +57,82 @@ describe('WorkbookVersion applyMerge preview planner', () => {
       resolutionCount: 0,
       mutationGuarantee: 'preview-only',
     });
-    expect(merge).toHaveBeenCalledWith({ base: BASE, ours: OURS, theirs: THEIRS }, {});
+    expect(merge).toHaveBeenCalledWith(
+      { base: BASE, ours: OURS, theirs: THEIRS },
+      { mode: 'preview' },
+    );
     expect(write).not.toHaveBeenCalled();
+  });
+
+  it('applies clean merge plans through a two-parent merge commit write service', async () => {
+    const result: VersionMergeResult = {
+      status: 'clean',
+      base: BASE,
+      ours: OURS,
+      theirs: THEIRS,
+      changes: [
+        {
+          structural: metadata('merge-change-a1', 'sheet-1!A1'),
+          base: { kind: 'value', value: null },
+          ours: { kind: 'value', value: 'ours' },
+          theirs: { kind: 'value', value: 'theirs' },
+          merged: { kind: 'value', value: 'theirs' },
+        },
+      ],
+      conflicts: [],
+      diagnostics: [],
+      mutationGuarantee: 'preview-only',
+    };
+    const merge = jest.fn(async () => result);
+    const mergeCommit = jest.fn(async () => ({
+      status: 'success',
+      commitRef: {
+        id: MERGE,
+        refName: TARGET_REF,
+        resolvedFrom: TARGET_REF,
+        refRevision: { kind: 'counter' as const, value: '2' },
+      },
+      diagnostics: [],
+    }));
+    const version = new WorkbookVersionImpl({
+      versioning: { mergeService: { merge }, writeService: { mergeCommit } },
+    } as any);
+
+    await expect(
+      version.applyMerge(
+        { base: BASE, ours: OURS, theirs: THEIRS },
+        { targetRef: TARGET_REF as any, expectedTargetHead: EXPECTED_TARGET_HEAD },
+      ),
+    ).resolves.toEqual({
+      status: 'applied',
+      base: BASE,
+      ours: OURS,
+      theirs: THEIRS,
+      commitRef: {
+        id: MERGE,
+        refName: TARGET_REF,
+        resolvedFrom: TARGET_REF,
+        refRevision: { kind: 'counter', value: '2' },
+      },
+      changes: result.changes,
+      conflicts: [],
+      diagnostics: [],
+      resolutionCount: 0,
+      mutationGuarantee: 'merge-commit-created',
+    });
+    expect(merge).toHaveBeenCalledWith(
+      { base: BASE, ours: OURS, theirs: THEIRS },
+      { mode: 'preview' },
+    );
+    expect(mergeCommit).toHaveBeenCalledWith({
+      base: BASE,
+      ours: OURS,
+      theirs: THEIRS,
+      targetRef: TARGET_REF,
+      expectedTargetHead: EXPECTED_TARGET_HEAD,
+      changes: result.changes,
+      resolutionCount: 0,
+    });
   });
 
   it('returns conflicted previews when resolutions are not supplied', async () => {
@@ -58,7 +140,9 @@ describe('WorkbookVersion applyMerge preview planner', () => {
     const merge = jest.fn(async () => conflictedResult(conflict));
     const version = new WorkbookVersionImpl({ versioning: { mergeService: { merge } } } as any);
 
-    await expect(version.applyMerge({ base: BASE, ours: OURS, theirs: THEIRS })).resolves.toEqual({
+    await expect(
+      version.applyMerge({ base: BASE, ours: OURS, theirs: THEIRS }, { mode: 'preview' }),
+    ).resolves.toEqual({
       status: 'conflicted',
       base: BASE,
       ours: OURS,
@@ -77,12 +161,15 @@ describe('WorkbookVersion applyMerge preview planner', () => {
     const version = new WorkbookVersionImpl({ versioning: { mergeService: { merge } } } as any);
 
     await expect(
-      version.applyMerge({
-        base: BASE,
-        ours: OURS,
-        theirs: THEIRS,
-        resolutions: [resolutionFor(conflict, 'acceptTheirs')],
-      }),
+      version.applyMerge(
+        {
+          base: BASE,
+          ours: OURS,
+          theirs: THEIRS,
+          resolutions: [resolutionFor(conflict, 'acceptTheirs')],
+        },
+        { mode: 'preview' },
+      ),
     ).resolves.toMatchObject({
       status: 'planned',
       base: BASE,
@@ -104,6 +191,64 @@ describe('WorkbookVersion applyMerge preview planner', () => {
     });
   });
 
+  it('applies resolved conflicts through the merge commit write service', async () => {
+    const conflict = sameCellConflict();
+    const merge = jest.fn(async () => conflictedResult(conflict));
+    const mergeCommit = jest.fn(async () => ({
+      status: 'success',
+      commitRef: {
+        id: MERGE,
+        refName: TARGET_REF,
+        resolvedFrom: TARGET_REF,
+        refRevision: { kind: 'counter' as const, value: '2' },
+      },
+      diagnostics: [],
+    }));
+    const version = new WorkbookVersionImpl({
+      versioning: { mergeService: { merge }, writeService: { mergeCommit } },
+    } as any);
+    const resolution = resolutionFor(conflict, 'acceptTheirs');
+    const resolvedChange = {
+      structural: conflict.structural,
+      base: conflict.base,
+      ours: conflict.ours,
+      theirs: conflict.theirs,
+      merged: { kind: 'value' as const, value: 'theirs' },
+    };
+
+    await expect(
+      version.applyMerge(
+        { base: BASE, ours: OURS, theirs: THEIRS, resolutions: [resolution] },
+        { targetRef: TARGET_REF as any, expectedTargetHead: EXPECTED_TARGET_HEAD },
+      ),
+    ).resolves.toMatchObject({
+      status: 'applied',
+      base: BASE,
+      ours: OURS,
+      theirs: THEIRS,
+      commitRef: {
+        id: MERGE,
+        refName: TARGET_REF,
+        resolvedFrom: TARGET_REF,
+        refRevision: { kind: 'counter', value: '2' },
+      },
+      changes: [resolvedChange],
+      conflicts: [],
+      diagnostics: [],
+      resolutionCount: 1,
+      mutationGuarantee: 'merge-commit-created',
+    });
+    expect(mergeCommit).toHaveBeenCalledWith({
+      base: BASE,
+      ours: OURS,
+      theirs: THEIRS,
+      targetRef: TARGET_REF,
+      expectedTargetHead: EXPECTED_TARGET_HEAD,
+      changes: [resolvedChange],
+      resolutionCount: 1,
+    });
+  });
+
   it('blocks resolution sets with stale conflict digests', async () => {
     const conflict = sameCellConflict();
     const merge = jest.fn(async () => conflictedResult(conflict));
@@ -114,7 +259,10 @@ describe('WorkbookVersion applyMerge preview planner', () => {
     };
 
     await expect(
-      version.applyMerge({ base: BASE, ours: OURS, theirs: THEIRS, resolutions: [resolution] }),
+      version.applyMerge(
+        { base: BASE, ours: OURS, theirs: THEIRS, resolutions: [resolution] },
+        { mode: 'preview' },
+      ),
     ).resolves.toMatchObject({
       status: 'blocked',
       base: BASE,
@@ -129,8 +277,27 @@ describe('WorkbookVersion applyMerge preview planner', () => {
           mutationGuarantee: 'no-write-attempted',
         }),
       ],
-      mutationGuarantee: 'preview-only',
+      mutationGuarantee: 'no-write-attempted',
     });
+  });
+
+  it('blocks apply mode before preview when target head fencing is incomplete', async () => {
+    const merge = jest.fn();
+    const version = new WorkbookVersionImpl({ versioning: { mergeService: { merge } } } as any);
+
+    await expect(
+      version.applyMerge({ base: BASE, ours: OURS, theirs: THEIRS }),
+    ).resolves.toMatchObject({
+      status: 'blocked',
+      base: BASE,
+      ours: OURS,
+      theirs: THEIRS,
+      diagnostics: expect.arrayContaining([
+        expect.objectContaining({ issueCode: 'VERSION_INVALID_OPTIONS' }),
+      ]),
+      mutationGuarantee: 'no-write-attempted',
+    });
+    expect(merge).not.toHaveBeenCalled();
   });
 
   it('validates applyMerge input before merge preview is requested', async () => {
@@ -153,7 +320,7 @@ describe('WorkbookVersion applyMerge preview planner', () => {
       diagnostics: expect.arrayContaining([
         expect.objectContaining({ issueCode: 'VERSION_INVALID_OPTIONS' }),
       ]),
-      mutationGuarantee: 'preview-only',
+      mutationGuarantee: 'no-write-attempted',
     });
     expect(merge).not.toHaveBeenCalled();
   });

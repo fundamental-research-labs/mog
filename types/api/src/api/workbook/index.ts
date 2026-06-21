@@ -6,8 +6,12 @@
 
 export type { WorkbookHistory } from './history';
 export type {
+  RedactionPolicy,
   RedactedVersionAuthor,
   VersionBranchRefReadResult,
+  VersionCommitExpectedHead,
+  VersionCommitMode,
+  VersionCommitOptions,
   VersionCommitPage,
   VersionDegradedHeadResult,
   VersionDiagnosticCode,
@@ -24,6 +28,7 @@ export type {
   VersionRefName,
   VersionRefReadResult,
   VersionRefSelector,
+  VersionRedactionClass,
   VersionStoreDiagnostic,
   VersionSymbolicRef,
   VersionSymbolicRefReadResult,

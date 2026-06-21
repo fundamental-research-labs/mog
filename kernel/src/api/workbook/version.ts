@@ -1,6 +1,7 @@
 import type {
   RedactedVersionAuthor,
   VersionBranchRefReadResult,
+  VersionCommitOptions,
   VersionCommitPage,
   VersionDegradedHeadResult,
   VersionDiagnosticPublicPayload,
@@ -30,6 +31,7 @@ import { observeMutationAdmission } from '../../bridges/compute/mutation-admissi
 import type { DocumentContext } from '../../context';
 import { VERSION_OBJECT_SCHEMA_VERSION } from '../../document/version-store/object-store';
 import { REF_NAME_STORAGE_PREFIX } from '../../document/version-store/ref-name';
+import { commitWorkbookVersion, hasAttachedVersionWriteService } from './version-commit';
 
 const VERSION_HEAD_REF = 'HEAD';
 const VERSION_MAIN_REF = 'refs/heads/main' satisfies VersionMainRefName;
@@ -40,6 +42,7 @@ const VERSION_LIST_COMMITS_MAX_PAGE_SIZE = 500;
 type MaybePromise<T> = T | Promise<T>;
 
 type BoundMethod = (...args: readonly unknown[]) => MaybePromise<unknown>;
+type VersionPublicOperation = 'getHead' | 'listCommits' | 'readRef';
 
 type AttachedVersionReadService = {
   readHead?: () => MaybePromise<unknown>;
@@ -153,6 +156,7 @@ export class WorkbookVersionImpl implements WorkbookVersion {
 
   async getStatus(): Promise<WorkbookVersionStatus> {
     const services = getAttachedVersionServices(this.ctx);
+    const writeServiceAttached = hasAttachedVersionWriteService(this.ctx);
     const provenanceAdmissionPresent = typeof observeMutationAdmission === 'function';
     const rolloutStage = getRolloutStage(provenanceAdmissionPresent);
 
@@ -185,8 +189,14 @@ export class WorkbookVersionImpl implements WorkbookVersion {
     const commitApiPending = diagnostic(
       'version.commitApi.pending',
       'warning',
-      'Public commit APIs are pending and are not exposed by this read-only slice.',
+      'Public commit API is exposed but no document-scoped version write service is attached yet.',
       'VC-04',
+    );
+    const commitApiServiceAttached = diagnostic(
+      'version.commitApi.serviceAttached',
+      'info',
+      'Document-scoped public version commit service is attached.',
+      'version-service',
     );
     const checkoutPending = diagnostic(
       'version.checkout.pending',
@@ -217,11 +227,14 @@ export class WorkbookVersionImpl implements WorkbookVersion {
     const refLifecycleDiagnostics = services?.refStore
       ? [refLifecycleFoundation]
       : [refLifecycleFoundation, refLifecycleServiceUnavailable];
+    const commitApiDiagnostics = writeServiceAttached
+      ? [commitApiServiceAttached]
+      : [commitApiPending];
 
     const diagnostics = [
       ...objectStoreDiagnostics,
       ...refLifecycleDiagnostics,
-      commitApiPending,
+      ...commitApiDiagnostics,
       checkoutPending,
       mergePending,
       provenanceAdmission,
@@ -232,7 +245,12 @@ export class WorkbookVersionImpl implements WorkbookVersion {
       rolloutStage,
       objectStoreFoundation: capability('present', true, 'VC-04', objectStoreDiagnostics),
       refLifecycleFoundation: capability('present', true, 'VC-05', refLifecycleDiagnostics),
-      commitApi: capability('pending', false, 'VC-04', [commitApiPending]),
+      commitApi: capability(
+        writeServiceAttached ? 'present' : 'pending',
+        writeServiceAttached,
+        'VC-04',
+        commitApiDiagnostics,
+      ),
       checkout: capability('pending', false, 'VC-05', [checkoutPending]),
       merge: capability('pending', false, 'VC-07', [mergePending]),
       provenanceAdmission: capability(
@@ -288,6 +306,10 @@ export class WorkbookVersionImpl implements WorkbookVersion {
     } catch {
       return degradedCommitPage([providerErrorDiagnostic('listCommits')]);
     }
+  }
+
+  async commit(options: VersionCommitOptions = {}): Promise<WorkbookCommitRef> {
+    return commitWorkbookVersion(this.ctx, options);
   }
 
   async readRef(name: 'HEAD'): Promise<VersionSymbolicRefReadResult>;
@@ -670,7 +692,7 @@ function redactAuthor(value: unknown): RedactedVersionAuthor {
 
 function mapGraphDiagnostics(
   value: unknown,
-  operation: 'getHead' | 'listCommits' | 'readRef',
+  operation: VersionPublicOperation,
   fallbackPayload: VersionDiagnosticPublicPayload = {},
 ): readonly VersionStoreDiagnostic[] {
   if (!Array.isArray(value) || value.length === 0) {
@@ -684,14 +706,19 @@ function mapGraphDiagnostics(
 
 function mapGraphDiagnostic(
   value: unknown,
-  operation: 'getHead' | 'listCommits' | 'readRef',
+  operation: VersionPublicOperation,
   fallbackPayload: VersionDiagnosticPublicPayload,
 ): VersionStoreDiagnostic {
   if (!isRecord(value)) {
     return providerErrorDiagnostic(operation, fallbackPayload);
   }
 
-  const issueCode = typeof value.code === 'string' ? value.code : 'VERSION_PROVIDER_ERROR';
+  const issueCode =
+    typeof value.issueCode === 'string'
+      ? value.issueCode
+      : typeof value.code === 'string'
+        ? value.code
+        : 'VERSION_PROVIDER_ERROR';
   const severity = value.severity === 'corruption' ? 'error' : value.severity;
 
   return publicDiagnostic(issueCode, operation, safeMessageForIssue(issueCode, operation), {
@@ -706,7 +733,7 @@ function mapGraphDiagnostic(
 
 function sanitizeDiagnosticPayload(
   value: Readonly<Record<string, unknown>>,
-  operation: 'getHead' | 'listCommits' | 'readRef',
+  operation: VersionPublicOperation,
   fallbackPayload: VersionDiagnosticPublicPayload,
 ): VersionDiagnosticPublicPayload {
   const payload: Record<string, string | number | boolean | null> = {
@@ -739,7 +766,7 @@ function sanitizeDiagnosticPayload(
 }
 
 function serviceUnavailableDiagnostic(
-  operation: 'getHead' | 'listCommits' | 'readRef',
+  operation: VersionPublicOperation,
   payload: VersionDiagnosticPublicPayload = {},
 ): VersionStoreDiagnostic {
   return publicDiagnostic(
@@ -755,7 +782,7 @@ function serviceUnavailableDiagnostic(
 }
 
 function graphUninitializedDiagnostic(
-  operation: 'getHead' | 'listCommits' | 'readRef',
+  operation: VersionPublicOperation,
   payload: VersionDiagnosticPublicPayload = {},
 ): VersionStoreDiagnostic {
   return publicDiagnostic(
@@ -771,7 +798,7 @@ function graphUninitializedDiagnostic(
 }
 
 function providerErrorDiagnostic(
-  operation: 'getHead' | 'listCommits' | 'readRef',
+  operation: VersionPublicOperation,
   payload: VersionDiagnosticPublicPayload = {},
 ): VersionStoreDiagnostic {
   return publicDiagnostic(
@@ -788,7 +815,7 @@ function providerErrorDiagnostic(
 
 function publicDiagnostic(
   issueCode: string,
-  operation: 'getHead' | 'listCommits' | 'readRef',
+  operation: VersionPublicOperation,
   safeMessage: string,
   options: {
     readonly severity?: VersionStoreDiagnostic['severity'];
@@ -807,10 +834,7 @@ function publicDiagnostic(
   };
 }
 
-function safeMessageForIssue(
-  issueCode: string,
-  operation: 'getHead' | 'listCommits' | 'readRef',
-): string {
+function safeMessageForIssue(issueCode: string, operation: VersionPublicOperation): string {
   switch (issueCode) {
     case 'VERSION_GRAPH_UNINITIALIZED':
       return 'The workbook version graph is not initialized for this document.';

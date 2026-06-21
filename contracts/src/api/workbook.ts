@@ -3,9 +3,13 @@
  */
 export type * from '@mog/types-api/api/workbook';
 export type {
+  RedactionPolicy,
   RedactedVersionAuthor,
   VersionAnnotationText,
   VersionBranchRefReadResult,
+  VersionCommitExpectedHead,
+  VersionCommitMode,
+  VersionCommitOptions,
   VersionCommitPage,
   VersionDegradedHeadResult,
   VersionDiagnosticCode,
@@ -19,6 +23,7 @@ export type {
   VersionPageToken,
   VersionRecordRevision,
   VersionRedactedValue,
+  VersionRedactionClass,
   VersionRef,
   VersionRefName,
   VersionRefReadResult,

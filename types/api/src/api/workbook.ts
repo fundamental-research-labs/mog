@@ -84,9 +84,13 @@ export type { CustomList } from '@mog/types-editor/fill/custom-lists';
 export type { WorkbookId, WorkbookSessionId, DocumentId, LinkId, ActorId } from './types';
 export type { LinkStatus, LinkStatusReason, LinkStatusView } from './receipt-payloads';
 export type {
+  RedactionPolicy,
   RedactedVersionAuthor,
   VersionAnnotationText,
   VersionBranchRefReadResult,
+  VersionCommitExpectedHead,
+  VersionCommitMode,
+  VersionCommitOptions,
   VersionCommitPage,
   VersionDegradedHeadResult,
   VersionDiagnosticCode,
@@ -100,6 +104,7 @@ export type {
   VersionPageToken,
   VersionRecordRevision,
   VersionRedactedValue,
+  VersionRedactionClass,
   VersionRef,
   VersionRefName,
   VersionRefReadResult,

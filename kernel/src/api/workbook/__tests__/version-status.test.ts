@@ -121,9 +121,10 @@ describe('WorkbookVersion status slice', () => {
 
     expect('listCommits' in wb.version).toBe(true);
     expect('readRef' in wb.version).toBe(true);
+    expect('commit' in wb.version).toBe(true);
   });
 
-  it('degrades read APIs before a graph read service is attached', async () => {
+  it('degrades read APIs and rejects commit before graph services are attached', async () => {
     const wb = createWorkbook();
 
     await expect(wb.version.getHead()).resolves.toMatchObject({
@@ -157,6 +158,22 @@ describe('WorkbookVersion status slice', () => {
           redacted: true,
         }),
       ],
+    });
+
+    await expect(wb.version.commit()).rejects.toMatchObject({
+      name: 'MogSdkError',
+      code: 'PROVIDER_ERROR',
+      operation: 'workbook.version.commit',
+      details: {
+        versionIssueCode: 'VERSION_GRAPH_UNINITIALIZED',
+        diagnostics: [
+          expect.objectContaining({
+            issueCode: 'VERSION_GRAPH_UNINITIALIZED',
+            mutationGuarantee: 'no-write-attempted',
+            redacted: true,
+          }),
+        ],
+      },
     });
   });
 
@@ -279,10 +296,155 @@ describe('WorkbookVersion status slice', () => {
     expect(graphStore.readRef).not.toHaveBeenCalled();
   });
 
-  it('does not expose deferred version mutation, checkout, merge, or diff methods', () => {
+  it('maps public commit options to an attached version write service', async () => {
+    const commit = jest.fn(async () => ({
+      status: 'success',
+      commitRef: {
+        id: CHILD_COMMIT_ID,
+        refName: 'refs/heads/main',
+        resolvedFrom: 'HEAD',
+        refRevision: REF_REVISION,
+      },
+    }));
+    const wb = createWorkbook({
+      ctx: createMockCtx({
+        versioning: {
+          objectStore: {},
+          refStore: {},
+          writeService: { commit },
+        },
+      }),
+    });
+
+    await expect(
+      wb.version.commit({
+        message: 'Capture forecast edits',
+        mode: { kind: 'normal' },
+        expectedHead: {
+          commitId: ROOT_COMMIT_ID,
+          revision: REF_REVISION,
+          symbolicHeadRevision: { kind: 'opaque', value: 'head-rev-1' },
+        },
+        redactionPolicy: {
+          mode: 'strict',
+          redactSecrets: true,
+          redactExternalLinks: true,
+          redactAgentTrace: true,
+        },
+      }),
+    ).resolves.toEqual({
+      id: CHILD_COMMIT_ID,
+      refName: 'refs/heads/main',
+      resolvedFrom: 'HEAD',
+      refRevision: REF_REVISION,
+    });
+    expect(commit).toHaveBeenCalledWith({
+      message: 'Capture forecast edits',
+      mode: { kind: 'normal' },
+      expectedHead: {
+        commitId: ROOT_COMMIT_ID,
+        revision: REF_REVISION,
+        symbolicHeadRevision: { kind: 'opaque', value: 'head-rev-1' },
+      },
+      redactionPolicy: {
+        mode: 'strict',
+        redactSecrets: true,
+        redactExternalLinks: true,
+        redactAgentTrace: true,
+      },
+    });
+
+    await expect(wb.version.getStatus()).resolves.toMatchObject({
+      commitApi: {
+        stage: 'present',
+        available: true,
+      },
+    });
+  });
+
+  it.each([
+    ['targetRef', 'VERSION_REF_WRITE_UNAVAILABLE', 'AUTHORIZATION_DENIED'],
+    ['author', 'VERSION_PERMISSION_DENIED', 'AUTHORIZATION_DENIED'],
+    ['parents', 'VERSION_PERMISSION_DENIED', 'AUTHORIZATION_DENIED'],
+    ['segmentIds', 'VERSION_INVALID_OPTIONS', 'INVALID_ARGUMENT'],
+    ['unknownField', 'VERSION_INVALID_OPTIONS', 'INVALID_ARGUMENT'],
+  ])(
+    'rejects unsafe commit option %s before the write service is called',
+    async (field, issue, code) => {
+      const commit = jest.fn();
+      const wb = createWorkbook({
+        ctx: createMockCtx({
+          versioning: {
+            writeService: { commit },
+          },
+        }),
+      });
+
+      await expect(wb.version.commit({ [field]: 'spoofed' } as any)).rejects.toMatchObject({
+        name: 'MogSdkError',
+        code,
+        details: {
+          versionIssueCode: issue,
+          diagnostics: [
+            expect.objectContaining({
+              issueCode: issue,
+              mutationGuarantee: 'no-write-attempted',
+              redacted: true,
+            }),
+          ],
+        },
+      });
+      expect(commit).not.toHaveBeenCalled();
+    },
+  );
+
+  it('rejects unsupported root/import commit modes before the write service is called', async () => {
+    const commit = jest.fn();
+    const wb = createWorkbook({
+      ctx: createMockCtx({
+        versioning: {
+          writeService: { commit },
+        },
+      }),
+    });
+
+    await expect(wb.version.commit({ mode: { kind: 'root' } })).rejects.toMatchObject({
+      name: 'MogSdkError',
+      code: 'INVALID_ARGUMENT',
+      details: {
+        versionIssueCode: 'VERSION_INVALID_OPTIONS',
+      },
+    });
+    expect(commit).not.toHaveBeenCalled();
+  });
+
+  it('does not treat a raw graph store commit method as the public write service', async () => {
+    const graphStore = {
+      ...createFakeGraphStore(),
+      initializeGraph: jest.fn(),
+      readCommitClosure: jest.fn(),
+      commit: jest.fn(),
+    };
+    const wb = createWorkbook({
+      ctx: createMockCtx({
+        versioning: {
+          graphStore,
+        },
+      }),
+    });
+
+    await expect(wb.version.commit()).rejects.toMatchObject({
+      code: 'PROVIDER_ERROR',
+      details: {
+        versionIssueCode: 'VERSION_GRAPH_UNINITIALIZED',
+      },
+    });
+    expect(graphStore.commit).not.toHaveBeenCalled();
+  });
+
+  it('does not expose deferred checkout, merge, or diff methods', () => {
     const wb = createWorkbook();
 
-    expect('commit' in wb.version).toBe(false);
     expect('checkout' in wb.version).toBe(false);
     expect('merge' in wb.version).toBe(false);
     expect('diff' in wb.version).toBe(false);

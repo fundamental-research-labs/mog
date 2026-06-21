@@ -1,8 +1,9 @@
 /**
- * WorkbookVersion -- first read-only version-control public API slice.
+ * WorkbookVersion -- public version-control API slice.
  *
- * This surface intentionally exposes status and read-only graph inspection only.
- * Commit, checkout, merge, and branch mutation APIs are not part of this slice.
+ * This surface exposes status, read-only graph inspection, and the first public
+ * commit entrypoint. Checkout, merge, and branch mutation APIs are not part of
+ * this slice.
  */
 
 export type WorkbookVersionRolloutStage =
@@ -25,6 +26,7 @@ export type WorkbookVersionDiagnosticCode =
   | 'version.refLifecycle.foundationPresent'
   | 'version.refLifecycle.serviceUnavailable'
   | 'version.commitApi.pending'
+  | 'version.commitApi.serviceAttached'
   | 'version.checkout.pending'
   | 'version.merge.pending'
   | 'version.provenanceAdmission.present'
@@ -98,6 +100,7 @@ export type VersionPageOrder = 'topological-newest';
 
 export type VersionDiagnosticCode =
   | 'VERSION_DANGLING_REF'
+  | 'VERSION_GRAPH_CONFLICT'
   | 'VERSION_GRAPH_UNINITIALIZED'
   | 'VERSION_INVALID_COMMIT_ID'
   | 'VERSION_INVALID_COMMIT_PAYLOAD'
@@ -108,8 +111,12 @@ export type VersionDiagnosticCode =
   | 'VERSION_OBJECT_STORE_FAILURE'
   | 'VERSION_PERMISSION_DENIED'
   | 'VERSION_PROVIDER_ERROR'
+  | 'VERSION_REF_WRITE_UNAVAILABLE'
+  | 'VERSION_REDACTION_VIOLATION'
   | 'VERSION_REF_CONFLICT'
   | 'VERSION_STALE_PAGE_CURSOR'
+  | 'VERSION_STORE_READ_ONLY'
+  | 'VERSION_STORE_UNAVAILABLE'
   | 'VERSION_UNSUPPORTED_PAGE_TOKEN'
   | 'VERSION_UNSUPPORTED_PARENT_COMMIT'
   | 'VERSION_WRONG_DOCUMENT'
@@ -231,6 +238,47 @@ export interface VersionListCommitsOptions {
   readonly includeDiagnostics?: boolean;
 }
 
+export type RedactionPolicy = {
+  readonly mode: 'default' | 'strict' | 'clean';
+  readonly redactSecrets: boolean;
+  readonly redactExternalLinks: boolean;
+  readonly redactAgentTrace: boolean;
+};
+
+export type VersionRedactionClass =
+  | 'secret'
+  | 'credential'
+  | 'local-path'
+  | 'external-link-private-evidence'
+  | 'agent-trace'
+  | 'host-handle'
+  | 'protected-value'
+  | 'opaque-sensitive-state';
+
+export type VersionCommitMode =
+  | {
+      readonly kind: 'normal';
+    }
+  | {
+      readonly kind: 'root';
+    }
+  | {
+      readonly kind: 'import-root';
+    };
+
+export interface VersionCommitExpectedHead {
+  readonly commitId: WorkbookCommitId;
+  readonly revision: VersionRecordRevision;
+  readonly symbolicHeadRevision?: VersionRecordRevision;
+}
+
+export interface VersionCommitOptions {
+  readonly message?: string;
+  readonly redactionPolicy?: RedactionPolicy;
+  readonly expectedHead?: VersionCommitExpectedHead;
+  readonly mode?: VersionCommitMode;
+}
+
 export type VersionSymbolicRefReadResult =
   | {
       readonly status: 'success';
@@ -269,6 +317,7 @@ export interface WorkbookVersion {
   getHead(): Promise<WorkbookCommitRef | VersionDegradedHeadResult>;
   getHead(options: VersionGetHeadOptions): Promise<WorkbookCommitRef | VersionDegradedHeadResult>;
   listCommits(options?: VersionListCommitsOptions): Promise<VersionCommitPage>;
+  commit(options?: VersionCommitOptions): Promise<WorkbookCommitRef>;
   readRef(name: 'HEAD'): Promise<VersionSymbolicRefReadResult>;
   readRef(name: VersionMainRefName | VersionRefName): Promise<VersionBranchRefReadResult>;
   readRef(name: VersionRefSelector): Promise<VersionRefReadResult>;

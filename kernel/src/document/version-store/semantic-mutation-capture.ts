@@ -167,6 +167,18 @@ function mapMutationResultToSemanticChanges(
   if (input.operation === 'compute_set_tab_color') {
     return mapSheetTabColorChanges(input.result.sheetChanges ?? [], sequence);
   }
+  if (input.operation === 'compute_create_sheet_with_default_col_width') {
+    return mapSheetCreateChanges(input.result.sheetChanges ?? [], sequence);
+  }
+  if (input.operation === 'compute_delete_sheet') {
+    return mapSheetRemoveChanges(input.result.sheetChanges ?? [], sequence);
+  }
+  if (input.operation === 'compute_copy_sheet') {
+    return mapSheetCopyChanges(input.result.sheetChanges ?? [], sequence);
+  }
+  if (input.operation === 'compute_move_sheet') {
+    return mapSheetMoveChanges(input.result.sheetChanges ?? [], sequence);
+  }
   return [];
 }
 
@@ -273,6 +285,174 @@ function mapSheetTabColorChanges(
     });
   }
   return changes;
+}
+
+function mapSheetCreateChanges(
+  sheetChanges: readonly SheetChange[],
+  sequence: number,
+): readonly VersionSemanticChangeRecord[] {
+  const changes: VersionSemanticChangeRecord[] = [];
+  for (const change of sheetChanges) {
+    if (
+      change.field !== 'sheet' ||
+      change.kind !== 'Set' ||
+      !isStableSheetId(change.sheetId) ||
+      typeof change.name !== 'string' ||
+      !isSheetIndex(change.index) ||
+      change.sourceSheetId !== undefined
+    ) {
+      continue;
+    }
+    changes.push({
+      structural: {
+        kind: 'metadata',
+        changeId: `mutation-${sequence}:sheet:${changes.length}`,
+        domain: 'sheet',
+        entityId: change.sheetId,
+        propertyPath: ['sheet'],
+      },
+      before: { kind: 'value', value: null },
+      after: {
+        kind: 'value',
+        value: semanticSheetValue({ name: change.name, index: change.index }),
+      },
+      display: {
+        entityLabel: { kind: 'value', value: change.name },
+      },
+    });
+  }
+  return changes;
+}
+
+function mapSheetRemoveChanges(
+  sheetChanges: readonly SheetChange[],
+  sequence: number,
+): readonly VersionSemanticChangeRecord[] {
+  const changes: VersionSemanticChangeRecord[] = [];
+  for (const change of sheetChanges) {
+    if (
+      change.field !== 'sheet' ||
+      change.kind !== 'Removed' ||
+      !isStableSheetId(change.sheetId) ||
+      typeof change.name !== 'string'
+    ) {
+      continue;
+    }
+    changes.push({
+      structural: {
+        kind: 'metadata',
+        changeId: `mutation-${sequence}:sheet:${changes.length}`,
+        domain: 'sheet',
+        entityId: change.sheetId,
+        propertyPath: ['sheet'],
+      },
+      before: {
+        kind: 'value',
+        value: semanticSheetValue({ name: change.name }),
+      },
+      after: { kind: 'value', value: null },
+      display: {
+        entityLabel: { kind: 'value', value: change.name },
+      },
+    });
+  }
+  return changes;
+}
+
+function mapSheetCopyChanges(
+  sheetChanges: readonly SheetChange[],
+  sequence: number,
+): readonly VersionSemanticChangeRecord[] {
+  const changes: VersionSemanticChangeRecord[] = [];
+  for (const change of sheetChanges) {
+    if (
+      change.field !== 'sheet' ||
+      change.kind !== 'Set' ||
+      !isStableSheetId(change.sheetId) ||
+      typeof change.name !== 'string' ||
+      !isSheetIndex(change.index) ||
+      !isStableSheetId(change.sourceSheetId)
+    ) {
+      continue;
+    }
+    changes.push({
+      structural: {
+        kind: 'metadata',
+        changeId: `mutation-${sequence}:sheet:${changes.length}`,
+        domain: 'sheet',
+        entityId: change.sheetId,
+        propertyPath: ['sheet'],
+      },
+      before: { kind: 'value', value: null },
+      after: {
+        kind: 'value',
+        value: semanticSheetValue({
+          name: change.name,
+          index: change.index,
+          sourceSheetId: change.sourceSheetId,
+        }),
+      },
+      display: {
+        entityLabel: { kind: 'value', value: change.name },
+      },
+    });
+  }
+  return changes;
+}
+
+function mapSheetMoveChanges(
+  sheetChanges: readonly SheetChange[],
+  sequence: number,
+): readonly VersionSemanticChangeRecord[] {
+  const changes: VersionSemanticChangeRecord[] = [];
+  for (const change of sheetChanges) {
+    if (
+      change.field !== 'order' ||
+      change.kind !== 'Set' ||
+      !isStableSheetId(change.sheetId) ||
+      !isSheetIndex(change.oldIndex) ||
+      !isSheetIndex(change.index)
+    ) {
+      continue;
+    }
+    changes.push({
+      structural: {
+        kind: 'metadata',
+        changeId: `mutation-${sequence}:sheet:${changes.length}`,
+        domain: 'sheet',
+        entityId: change.sheetId,
+        propertyPath: ['order'],
+      },
+      before: { kind: 'value', value: change.oldIndex },
+      after: { kind: 'value', value: change.index },
+    });
+  }
+  return changes;
+}
+
+function semanticSheetValue(input: {
+  readonly name: string;
+  readonly index?: number;
+  readonly sourceSheetId?: string;
+}): VersionSemanticValue {
+  const fields: { key: string; value: VersionSemanticValue }[] = [
+    { key: 'name', value: input.name },
+  ];
+  if (input.index !== undefined) {
+    fields.push({ key: 'index', value: input.index });
+  }
+  if (input.sourceSheetId !== undefined) {
+    fields.push({ key: 'sourceSheetId', value: input.sourceSheetId });
+  }
+  return { kind: 'object', fields };
+}
+
+function isStableSheetId(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0;
+}
+
+function isSheetIndex(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0;
 }
 
 function semanticCellEditValue(

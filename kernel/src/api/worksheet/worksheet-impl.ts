@@ -113,6 +113,7 @@ import { ERROR_DISPLAY_MAP, isCellError } from '@mog/spreadsheet-utils/errors';
 import { resolveCell, resolveRange, resolveRangeToA1 } from '../internal/address-resolver';
 import { parseCellAddress, parseCellRange, toA1 } from '../internal/utils';
 import { classifyRangeValueType, normalizeCellValue } from '../internal/value-conversions';
+import { createVersionOperationContext } from '../internal/version-operation-context';
 import { renameSheet } from '../workbook/operations/sheet-crud-operations';
 import { calendarPartsInTz, parseIsoDate } from './operations/calendar-tz';
 import * as CellOps from './operations/cell-operations';
@@ -453,7 +454,13 @@ export class WorksheetImpl implements Worksheet {
     this._assertLive('worksheet.setName');
     this._ensureWritable('worksheet.setName');
     this._invalidateActiveCellEditSourceForSheet(this.sheetId);
-    await renameSheet(this.ctx, this.sheetId, name);
+    await renameSheet(this.ctx, this.sheetId, name, {
+      operationContext: createVersionOperationContext(this.ctx, {
+        operationIdPrefix: 'worksheet.setName',
+        sheetIds: [this.sheetId],
+        domainIds: ['sheets'],
+      }),
+    });
     this._cachedName = name;
     // Sync workbook-level cached sheet metadata so wb.sheetNames reflects the rename
     await (this.workbook as WorkbookInternal | null)?.refreshSheetMetadata();
@@ -779,7 +786,13 @@ export class WorksheetImpl implements Worksheet {
     }
 
     this._invalidateActiveCellEditSourceForCell(row, col);
-    await CellOps.setCell(this.ctx, this.sheetId, row, col, value as CellValuePrimitive);
+    await CellOps.setCell(this.ctx, this.sheetId, row, col, value as CellValuePrimitive, {
+      operationContext: createVersionOperationContext(this.ctx, {
+        operationIdPrefix: 'worksheet.setCell',
+        sheetIds: [this.sheetId],
+        domainIds: ['cells'],
+      }),
+    });
   }
 
   async setValue(
@@ -815,7 +828,13 @@ export class WorksheetImpl implements Worksheet {
     }
 
     this._invalidateActiveCellEditSourceForCell(row, col);
-    await CellOps.setCell(this.ctx, this.sheetId, row, col, value as CellValuePrimitive);
+    await CellOps.setCell(this.ctx, this.sheetId, row, col, value as CellValuePrimitive, {
+      operationContext: createVersionOperationContext(this.ctx, {
+        operationIdPrefix: 'worksheet.setValue',
+        sheetIds: [this.sheetId],
+        domainIds: ['cells'],
+      }),
+    });
   }
 
   async setFormula(address: string, formula: string): Promise<void>;
@@ -828,7 +847,13 @@ export class WorksheetImpl implements Worksheet {
 
     await this.ensureCellEditable(row, col);
     this._invalidateActiveCellEditSourceForCell(row, col);
-    await CellOps.setCell(this.ctx, this.sheetId, row, col, formula);
+    await CellOps.setCell(this.ctx, this.sheetId, row, col, formula, {
+      operationContext: createVersionOperationContext(this.ctx, {
+        operationIdPrefix: 'worksheet.setFormula',
+        sheetIds: [this.sheetId],
+        domainIds: ['cells'],
+      }),
+    });
   }
 
   async setFormulas(range: string, formulas: string[][]): Promise<void>;

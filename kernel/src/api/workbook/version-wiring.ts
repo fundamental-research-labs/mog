@@ -4,6 +4,7 @@ import { createProviderBackedCheckoutMaterializationService } from '../../docume
 import { createWorkbookVersionCommitService } from '../../document/version-store/commit-service';
 import { createWorkbookVersionDiffService } from '../../document/version-store/diff-service';
 import { createWorkbookVersionMergeService } from '../../document/version-store/merge-service';
+import { createSemanticMutationCapture } from '../../document/version-store/semantic-mutation-capture';
 import type { WorkbookVersioningConfig } from './types';
 
 type MutableVersioningContext = DocumentContext & {
@@ -14,19 +15,24 @@ export function attachWorkbookVersioning(
   ctx: DocumentContext,
   config: WorkbookVersioningConfig,
 ): void {
+  const runtime = ctx as MutableVersioningContext;
+  const existing = isRecord(runtime.versioning) ? runtime.versioning : {};
+  const semanticCapture =
+    !config.captureNormalCommit && config.provider && config.snapshotRootByteSyncPort
+      ? createSemanticMutationCapture()
+      : undefined;
+  const captureNormalCommit = config.captureNormalCommit ?? semanticCapture?.captureNormalCommit;
   const writeService =
     config.writeService ??
     (config.provider
       ? createWorkbookVersionCommitService({
           provider: config.provider,
-          captureNormalCommit: config.captureNormalCommit,
+          captureNormalCommit,
           snapshotRootByteSyncPort: config.snapshotRootByteSyncPort,
         })
       : undefined);
   if (!writeService) return;
 
-  const runtime = ctx as MutableVersioningContext;
-  const existing = isRecord(runtime.versioning) ? runtime.versioning : {};
   const diffService =
     existing.diffService ??
     existing.versionDiffService ??
@@ -59,6 +65,7 @@ export function attachWorkbookVersioning(
     ...(config.provider ? { provider: config.provider } : {}),
     writeService,
     readService: existing.readService ?? writeService,
+    ...(semanticCapture ? { mutationCapture: semanticCapture.mutationCapture } : {}),
     ...(diffService ? { diffService } : {}),
     ...(checkoutService ? { checkoutService } : {}),
     ...(mergeService ? { mergeService } : {}),

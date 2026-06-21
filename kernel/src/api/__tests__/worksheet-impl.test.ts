@@ -247,6 +247,22 @@ const Merges = await import('../../domain/formatting/merges');
 
 const SHEET_ID = sheetId('sheet-1');
 
+function expectVersionOperationOptions(operationIdPrefix: string, domainIds: readonly string[]) {
+  return expect.objectContaining({
+    operationContext: expect.objectContaining({
+      operationId: expect.stringMatching(
+        new RegExp(`^${operationIdPrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}:`),
+      ),
+      kind: 'mutation',
+      author: expect.objectContaining({ actorKind: 'user' }),
+      sheetIds: [SHEET_ID],
+      domainIds,
+      capturePolicy: 'commitEligible',
+      writeAdmissionMode: 'capture',
+    }),
+  });
+}
+
 function createMockCtx(): any {
   return {
     __apiTestNamedRanges: [],
@@ -468,7 +484,14 @@ describe('WorksheetImpl', () => {
 
       await ws.setCell('A1', 'hello');
 
-      expect(CellOps.setCell).toHaveBeenCalledWith(ctx, SHEET_ID, 0, 0, 'hello');
+      expect(CellOps.setCell).toHaveBeenCalledWith(
+        ctx,
+        SHEET_ID,
+        0,
+        0,
+        'hello',
+        expectVersionOperationOptions('worksheet.setCell', ['cells']),
+      );
     });
 
     it('setCell("B3", 42) resolves to (2, 1) and delegates to CellOps.setCell', async () => {
@@ -476,7 +499,14 @@ describe('WorksheetImpl', () => {
 
       await ws.setCell('B3', 42);
 
-      expect(CellOps.setCell).toHaveBeenCalledWith(ctx, SHEET_ID, 2, 1, 42);
+      expect(CellOps.setCell).toHaveBeenCalledWith(
+        ctx,
+        SHEET_ID,
+        2,
+        1,
+        42,
+        expectVersionOperationOptions('worksheet.setCell', ['cells']),
+      );
     });
 
     it('setCell("A1", value, { asFormula: true }) prepends = to non-formula string', async () => {
@@ -484,7 +514,14 @@ describe('WorksheetImpl', () => {
 
       await ws.setCell('A1', 'SUM(A1:A10)', { asFormula: true });
 
-      expect(CellOps.setCell).toHaveBeenCalledWith(ctx, SHEET_ID, 0, 0, '=SUM(A1:A10)');
+      expect(CellOps.setCell).toHaveBeenCalledWith(
+        ctx,
+        SHEET_ID,
+        0,
+        0,
+        '=SUM(A1:A10)',
+        expectVersionOperationOptions('worksheet.setCell', ['cells']),
+      );
     });
 
     it('setCell("A1", "=SUM(A1:A10)", { asFormula: true }) does not double-prepend =', async () => {
@@ -492,7 +529,14 @@ describe('WorksheetImpl', () => {
 
       await ws.setCell('A1', '=SUM(A1:A10)', { asFormula: true });
 
-      expect(CellOps.setCell).toHaveBeenCalledWith(ctx, SHEET_ID, 0, 0, '=SUM(A1:A10)');
+      expect(CellOps.setCell).toHaveBeenCalledWith(
+        ctx,
+        SHEET_ID,
+        0,
+        0,
+        '=SUM(A1:A10)',
+        expectVersionOperationOptions('worksheet.setCell', ['cells']),
+      );
     });
 
     it('setCell throws KernelError when operation fails', async () => {
@@ -549,7 +593,14 @@ describe('WorksheetImpl', () => {
 
       await ws.setCell(0, 0, 'hello');
 
-      expect(CellOps.setCell).toHaveBeenCalledWith(ctx, SHEET_ID, 0, 0, 'hello');
+      expect(CellOps.setCell).toHaveBeenCalledWith(
+        ctx,
+        SHEET_ID,
+        0,
+        0,
+        'hello',
+        expectVersionOperationOptions('worksheet.setCell', ['cells']),
+      );
     });
 
     it('setCell(5, 3, 100) passes correct row/col', async () => {
@@ -557,7 +608,14 @@ describe('WorksheetImpl', () => {
 
       await ws.setCell(5, 3, 100);
 
-      expect(CellOps.setCell).toHaveBeenCalledWith(ctx, SHEET_ID, 5, 3, 100);
+      expect(CellOps.setCell).toHaveBeenCalledWith(
+        ctx,
+        SHEET_ID,
+        5,
+        3,
+        100,
+        expectVersionOperationOptions('worksheet.setCell', ['cells']),
+      );
     });
 
     it('setCell(0, 0, value, { asFormula: true }) prepends =', async () => {
@@ -565,7 +623,14 @@ describe('WorksheetImpl', () => {
 
       await ws.setCell(0, 0, 'A1+B1', { asFormula: true });
 
-      expect(CellOps.setCell).toHaveBeenCalledWith(ctx, SHEET_ID, 0, 0, '=A1+B1');
+      expect(CellOps.setCell).toHaveBeenCalledWith(
+        ctx,
+        SHEET_ID,
+        0,
+        0,
+        '=A1+B1',
+        expectVersionOperationOptions('worksheet.setCell', ['cells']),
+      );
     });
 
     it('getCell(0, 0) uses numeric path', async () => {

@@ -213,6 +213,63 @@ describe('Compute mutation admission', () => {
     ]);
   });
 
+  it('records public mutation results to the version mutation capture sink', async () => {
+    const recordMutationResult = jest.fn();
+    const ctx = makeMockContext({
+      versioning: {
+        mutationCapture: { recordMutationResult },
+      },
+    } as unknown as Partial<IKernelContext>);
+    const result = mutationResult({
+      recalc: {
+        changedCells: [
+          {
+            cellId: 'cell-a1',
+            sheetId: 'sheet-1',
+            position: { row: 0, col: 0 },
+            oldValue: null,
+            value: 7,
+            extraFlags: 0,
+          },
+        ],
+        projectionChanges: [],
+        errors: [],
+        validationAnnotations: [],
+        metrics: {},
+      },
+    });
+    const transport: BridgeTransport & { call: jest.Mock } = {
+      call: jest.fn(async () => [new Uint8Array(), result]),
+    };
+    const core = createStartedCore(ctx, transport);
+    const operationContext = {
+      operationId: 'operation-1',
+      kind: 'mutation',
+      author: { authorId: 'user-1', actorKind: 'user' },
+      createdAt: '2026-06-20T00:00:00.000Z',
+      domainIds: ['cell'],
+      capturePolicy: 'commitEligible',
+      writeAdmissionMode: 'capture',
+    };
+
+    await core.mutatePublic(
+      'compute_batch_set_cells_by_position',
+      () =>
+        transport.call('compute_batch_set_cells_by_position', { docId: 'test-doc' }) as Promise<
+          [Uint8Array, MutationResult]
+        >,
+      [{ sheetId: 'sheet-1', row: 0, col: 0 }],
+      { operationContext: operationContext as any },
+    );
+
+    expect(recordMutationResult).toHaveBeenCalledWith({
+      operation: 'compute_batch_set_cells_by_position',
+      result,
+      directEdits: [{ sheetId: 'sheet-1', row: 0, col: 0 }],
+      operationContext,
+    });
+  });
+
   it('records unclassified write diagnostics before transport execution', async () => {
     const diagnostics: MutationAdmissionDiagnostic[] = [];
     const ctx = makeMockContext({

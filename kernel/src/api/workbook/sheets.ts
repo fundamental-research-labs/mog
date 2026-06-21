@@ -27,6 +27,7 @@ import type { ProtectedWorkbookOperation } from '@mog-sdk/contracts/protection';
 import type { DocumentContext } from '../../context';
 import { getOrder } from '../../domain/sheets/sheet-meta';
 import * as WorkbookDomain from '../../domain/workbook/workbook';
+import { createVersionOperationContext } from '../internal/version-operation-context';
 
 import {
   copySheet,
@@ -195,7 +196,13 @@ export class WorkbookSheetsImpl implements WorkbookSheets {
     // Validate: no other sheet may have this name (case-insensitive, Excel semantics)
     await assertNameNotTaken(ctx, newName, sheetId);
 
-    await renameSheet(ctx, sheetId, newName);
+    await renameSheet(ctx, sheetId, newName, {
+      operationContext: createVersionOperationContext(ctx, {
+        operationIdPrefix: 'workbook.sheets.rename',
+        sheetIds: [sheetId],
+        domainIds: ['sheets'],
+      }),
+    });
     // Sync cached worksheet metadata so getName() reflects the new name
     await (workbook as WorkbookInternal).refreshSheetMetadata();
     return { kind: 'sheetRename', oldName, newName };

@@ -38,6 +38,7 @@ import { calendarPartsInTz } from './calendar-tz';
 import { type CellInput, toCellInput } from './cell-input';
 import { prepareExternalFormulaWrite } from '../../../services/external-formulas';
 import { assertUnprotectedTableDefinition } from '../protected-table-operations';
+import type { MutationAdmissionOptions } from '../../../bridges/compute';
 
 // =============================================================================
 // Cell Read Operations
@@ -400,6 +401,7 @@ export async function setCell(
   row: number,
   col: number,
   value: CellValuePrimitive,
+  options?: MutationAdmissionOptions,
 ): Promise<void> {
   if (!isValidAddress(row, col)) {
     throw KernelError.from(null, 'COMPUTE_ERROR', `Invalid cell address: row=${row}, col=${col}`);
@@ -424,7 +426,7 @@ export async function setCell(
   // Single-element batch — Rust handles CellId resolution, recalc, AND
   // locale-aware date format inference (e.g. "3/15/2024" → number value +
   // M/d/yyyy format applied atomically inside the mutation pipeline).
-  await ctx.computeBridge.setCellsByPosition(sheetId, [{ row, col, input }]);
+  await ctx.computeBridge.setCellsByPosition(sheetId, [{ row, col, input }], options);
   await reapplyActiveFiltersAfterWrite(ctx, sheetId);
 }
 

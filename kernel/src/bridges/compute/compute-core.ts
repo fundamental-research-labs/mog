@@ -46,6 +46,7 @@ import { refreshViewportsAfterHistoryReplay } from './history-replay-refresh';
 import {
   admitPublicMutation as admitPublicMutationForCore,
   observeMutationAdmission,
+  recordVersionMutationCapture,
   type DirectEditPosition,
   type MutationAdmissionOptions,
   type MutationTuple,
@@ -848,6 +849,8 @@ export class ComputeCore {
     promise: Promise<MutationTuple>,
     directEdits?: DirectEditPosition[],
     operation = 'mutateCore',
+    options?: MutationAdmissionOptions,
+    captureMutation = false,
   ): Promise<MutationResult> {
     // Write gate check: if a gate is installed, verify the mutation is
     // allowed before executing. The gate throws WriteGateRejectionError
@@ -856,6 +859,14 @@ export class ComputeCore {
     this._writeGate?.assertWritable(operation);
 
     const [viewportPatchesBinary, result] = await promise;
+    if (captureMutation) {
+      recordVersionMutationCapture(this.ctx, {
+        operation,
+        result,
+        ...(directEdits ? { directEdits } : {}),
+        ...(options?.operationContext ? { operationContext: options.operationContext } : {}),
+      });
+    }
 
     // Guard for early calls: if not initialized, skip all post-processing.
     // Remote/provider sync can still advance the Rust engine before any
@@ -987,8 +998,16 @@ export class ComputeCore {
     promise: Promise<MutationTuple>,
     directEdits?: DirectEditPosition[],
     operation = 'mutate',
+    options?: MutationAdmissionOptions,
+    captureMutation = false,
   ): Promise<MutationResult> {
-    const result = await this.mutateCore(promise, directEdits, operation);
+    const result = await this.mutateCore(
+      promise,
+      directEdits,
+      operation,
+      options,
+      captureMutation,
+    );
     if (this.undoGroupDepth === 0) {
       await this.ctx.services?.undo.notifyForwardMutation();
     }
@@ -1006,7 +1025,7 @@ export class ComputeCore {
     options?: MutationAdmissionOptions,
   ): Promise<MutationResult> {
     await this.admitPublicMutation(operation, options);
-    return this.mutate(call(), directEdits, operation);
+    return this.mutate(call(), directEdits, operation, options, true);
   }
 
   /**
@@ -1029,7 +1048,7 @@ export class ComputeCore {
     });
     this.ensureInitialized();
     this._writeGate?.assertWritable(operation);
-    return this.mutate(call(), directEdits, operation);
+    return this.mutate(call(), directEdits, operation, options, true);
   }
 
   /**
@@ -1049,6 +1068,8 @@ export class ComputeCore {
       Promise.resolve(toMutationTuple(raw)),
       directEdits,
       operation,
+      options,
+      true,
     );
     return { raw, mutation };
   }

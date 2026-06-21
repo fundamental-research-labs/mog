@@ -31,6 +31,13 @@ export interface MutationAdmissionOptions {
   readonly awaitMaterialization?: boolean;
 }
 
+export interface VersionMutationCaptureRecordInput {
+  readonly operation: string;
+  readonly result: MutationResult;
+  readonly directEdits?: readonly DirectEditPosition[];
+  readonly operationContext?: VersionOperationContext;
+}
+
 interface PublicWriteMaterializationContext {
   awaitMaterialized?: (scope?: SheetId | 'allSheets') => Promise<void>;
 }
@@ -44,6 +51,16 @@ interface MutationAdmissionDiagnosticContext {
   versioningAdmissionDiagnostics?:
     | MutationAdmissionDiagnosticSink
     | ((diagnostic: MutationAdmissionDiagnostic) => void);
+}
+
+interface VersionMutationCaptureSink {
+  recordMutationResult?(input: VersionMutationCaptureRecordInput): void;
+}
+
+interface VersionMutationCaptureContext {
+  versioning?: {
+    readonly mutationCapture?: VersionMutationCaptureSink;
+  };
 }
 
 export function recordMutationAdmissionDiagnostic(
@@ -62,6 +79,23 @@ export function recordMutationAdmissionDiagnostic(
     'versioning:admission-diagnostic',
     diagnostic,
   );
+}
+
+export function recordVersionMutationCapture(
+  ctx: IKernelContext,
+  input: VersionMutationCaptureRecordInput,
+): void {
+  const capture = (ctx as IKernelContext & VersionMutationCaptureContext).versioning
+    ?.mutationCapture;
+  if (!capture?.recordMutationResult) return;
+  try {
+    capture.recordMutationResult(input);
+  } catch {
+    (ctx.eventBus?.emit as unknown as ((eventName: string, payload: unknown) => void) | undefined)?.(
+      'versioning:mutation-capture-error',
+      { operation: input.operation },
+    );
+  }
 }
 
 export function observeMutationAdmission(

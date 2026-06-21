@@ -60,6 +60,20 @@ const { WorkbookSheetsImpl } = await import('../sheets');
 // Helpers
 // =============================================================================
 
+function expectVersionOperationOptions(sheetId: string) {
+  return expect.objectContaining({
+    operationContext: expect.objectContaining({
+      operationId: expect.stringMatching(/^workbook\.sheets\.rename:/),
+      kind: 'mutation',
+      author: expect.objectContaining({ actorKind: 'user' }),
+      sheetIds: [sheetId],
+      domainIds: ['sheets'],
+      capturePolicy: 'commitEligible',
+      writeAdmissionMode: 'capture',
+    }),
+  });
+}
+
 function createMockDeps(sheets: Record<string, string>): WorkbookSheetsDeps {
   // sheets: { sheetId: 'DisplayName', ... }
   const ids = Object.keys(sheets);
@@ -163,7 +177,12 @@ describe('WorkbookSheetsImpl.rename()', () => {
 
     await impl.rename('Sheet1', 'MySheet');
 
-    expect(SheetOps.renameSheet).toHaveBeenCalledWith(deps.ctx, 's1', 'MySheet');
+    expect(SheetOps.renameSheet).toHaveBeenCalledWith(
+      deps.ctx,
+      's1',
+      'MySheet',
+      expectVersionOperationOptions('s1'),
+    );
   });
 
   it('throws KernelError when new name exactly matches another sheet', async () => {
@@ -190,7 +209,12 @@ describe('WorkbookSheetsImpl.rename()', () => {
 
     // Renaming "Sheet1" → "SHEET1" should succeed (same sheet, case change only)
     await impl.rename('Sheet1', 'SHEET1');
-    expect(SheetOps.renameSheet).toHaveBeenCalledWith(deps.ctx, 's1', 'SHEET1');
+    expect(SheetOps.renameSheet).toHaveBeenCalledWith(
+      deps.ctx,
+      's1',
+      'SHEET1',
+      expectVersionOperationOptions('s1'),
+    );
   });
 
   it('allows renaming to a completely new name', async () => {
@@ -198,7 +222,12 @@ describe('WorkbookSheetsImpl.rename()', () => {
     const impl = new WorkbookSheetsImpl(deps);
 
     await impl.rename('Alpha', 'Delta');
-    expect(SheetOps.renameSheet).toHaveBeenCalledWith(deps.ctx, 's1', 'Delta');
+    expect(SheetOps.renameSheet).toHaveBeenCalledWith(
+      deps.ctx,
+      's1',
+      'Delta',
+      expectVersionOperationOptions('s1'),
+    );
   });
 
   it('rejects rename by index when target name is taken', async () => {
@@ -222,7 +251,12 @@ describe('WorkbookSheetsImpl.rename()', () => {
 
     // No collision
     await impl.rename('Jan', 'January');
-    expect(SheetOps.renameSheet).toHaveBeenCalledWith(deps.ctx, 's1', 'January');
+    expect(SheetOps.renameSheet).toHaveBeenCalledWith(
+      deps.ctx,
+      's1',
+      'January',
+      expectVersionOperationOptions('s1'),
+    );
 
     jest.clearAllMocks();
 

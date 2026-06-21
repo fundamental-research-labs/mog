@@ -10,6 +10,7 @@
 import type { SheetId } from '@mog-sdk/contracts/core';
 
 import type { DocumentContext } from '../../worksheet/operations/shared';
+import type { MutationAdmissionOptions } from '../../../bridges/compute';
 
 // =============================================================================
 // Sheet CRUD
@@ -55,8 +56,9 @@ export async function renameSheet(
   ctx: DocumentContext,
   sheetId: SheetId,
   name: string,
+  options?: MutationAdmissionOptions,
 ): Promise<void> {
-  await ctx.computeBridge.renameSheet(sheetId, name);
+  await ctx.computeBridge.renameSheet(sheetId, name, options);
 }
 
 /**

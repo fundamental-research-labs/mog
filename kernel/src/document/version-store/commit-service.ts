@@ -47,12 +47,42 @@ export type VersionNormalCommitCaptureInput = {
   readonly options: VersionCommitOptions;
 };
 
-export type VersionNormalCommitCaptureResult =
+export type VersionNormalCommitCaptureFinalizeResult =
   | {
       readonly status: 'success';
-      readonly input: VersionGraphCommitContentInput;
-      readonly diagnostics?: readonly VersionStoreDiagnostic[];
+      readonly commitId: WorkbookCommitId;
     }
+  | {
+      readonly status: 'failed';
+      readonly diagnostics?: readonly VersionStoreDiagnostic[];
+    };
+
+export type VersionNormalCommitContentInput = Omit<
+  VersionGraphCommitContentInput,
+  'snapshotRootRecord'
+> &
+  Partial<Pick<VersionGraphCommitContentInput, 'snapshotRootRecord'>>;
+
+export type VersionNormalCommitCaptureSuccess = {
+  readonly status: 'success';
+  readonly input: VersionNormalCommitContentInput;
+  readonly diagnostics?: readonly VersionStoreDiagnostic[];
+  readonly finalize?: (result: VersionNormalCommitCaptureFinalizeResult) => void;
+};
+
+export type VersionNormalCommitCaptureResult =
+  | VersionNormalCommitCaptureSuccess
+  | VersionStoreFailure;
+
+type VersionNormalCommitMaterializedCaptureSuccess = Omit<
+  VersionNormalCommitCaptureSuccess,
+  'input'
+> & {
+  readonly input: VersionGraphCommitContentInput;
+};
+
+type VersionNormalCommitMaterializedCaptureResult =
+  | VersionNormalCommitMaterializedCaptureSuccess
   | VersionStoreFailure;
 
 export type VersionNormalCommitCapture = (
@@ -292,6 +322,20 @@ export class WorkbookVersionCommitService {
     }
 
     if ((captured.input.mutationSegmentRecords?.length ?? 0) === 0) {
+      finalizeNormalCommitCapture(captured, {
+        status: 'failed',
+        diagnostics: [
+          versionStoreDiagnostic('VERSION_MISSING_CHANGE_SET', {
+            operation: 'commitGraphWrite',
+            documentScope: this.provider.documentScope,
+            namespace: opened.namespace,
+            refName: target.ref.name,
+            commitId: target.ref.commitId,
+            safeMessage: 'Normal version commits require a non-empty captured mutation range.',
+            mutationGuarantee: 'no-write-attempted',
+          }),
+        ],
+      });
       return failedStoreResult(
         [
           versionStoreDiagnostic('VERSION_MISSING_CHANGE_SET', {
@@ -310,6 +354,10 @@ export class WorkbookVersionCommitService {
 
     const commitContent = await this.materializeSnapshotRootForNormalCommit(opened, captured);
     if (commitContent.status !== 'success') {
+      finalizeNormalCommitCapture(captured, {
+        status: 'failed',
+        diagnostics: commitContent.diagnostics,
+      });
       return commitContent;
     }
 
@@ -322,6 +370,10 @@ export class WorkbookVersionCommitService {
     });
 
     if (result.status === 'success') {
+      finalizeNormalCommitCapture(captured, {
+        status: 'success',
+        commitId: result.commit.id,
+      });
       return {
         ...result,
         commitRef: {
@@ -333,8 +385,10 @@ export class WorkbookVersionCommitService {
         },
       };
     }
+    const diagnostics = mapGraphDiagnostics(result.diagnostics, 'commitGraphWrite');
+    finalizeNormalCommitCapture(captured, { status: 'failed', diagnostics });
     return failedStoreResult(
-      mapGraphDiagnostics(result.diagnostics, 'commitGraphWrite'),
+      diagnostics,
       result.mutationGuarantee,
       isRetryableGraphWriteFailure(result.diagnostics),
     );
@@ -345,8 +399,25 @@ export class WorkbookVersionCommitService {
       readonly namespace: VersionGraphNamespace;
     },
     captured: Extract<VersionNormalCommitCaptureResult, { status: 'success' }>,
-  ): Promise<VersionNormalCommitCaptureResult> {
-    if (!this.snapshotRootByteSyncPort) return captured;
+  ): Promise<VersionNormalCommitMaterializedCaptureResult> {
+    if (!this.snapshotRootByteSyncPort) {
+      if (captured.input.snapshotRootRecord) {
+        return captured as VersionNormalCommitMaterializedCaptureSuccess;
+      }
+      return failedStoreResult(
+        [
+          versionStoreDiagnostic('VERSION_MISSING_CHANGE_SET', {
+            operation: 'commitGraphWrite',
+            documentScope: this.provider.documentScope,
+            namespace: opened.namespace,
+            safeMessage:
+              'No production snapshot-root capture service is attached for normal version commits.',
+            mutationGuarantee: 'no-write-attempted',
+          }),
+        ],
+        'no-write-attempted',
+      );
+    }
 
     try {
       const snapshotRootRecord = await captureWorkbookSnapshotRootRecord(
@@ -486,6 +557,18 @@ function invalidTargetRefDiagnostic(
     mutationGuarantee: 'no-write-attempted',
     details,
   });
+}
+
+function finalizeNormalCommitCapture(
+  captured: VersionNormalCommitCaptureSuccess,
+  result: VersionNormalCommitCaptureFinalizeResult,
+): void {
+  try {
+    captured.finalize?.(result);
+  } catch {
+    // Commit success/failure is authoritative; capture finalization must not
+    // mask the graph write result returned to the caller.
+  }
 }
 
 export function createWorkbookVersionCommitService(

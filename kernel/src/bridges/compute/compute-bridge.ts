@@ -46,6 +46,7 @@ import {
   type PositionedCellInput,
   type TableHeaderRename,
 } from './table-header-write-intercept';
+import type { MutationAdmissionOptions } from './mutation-admission';
 
 export interface PivotCreateWithSheetOptions {
   insertBeforeSheetId?: SheetId;
@@ -1217,7 +1218,11 @@ export class ComputeBridge extends GeneratedBridgeBase {
   }
 
   /** Rename a sheet. */
-  async renameSheet(sheetId: SheetId, name: string): Promise<void> {
+  async renameSheet(
+    sheetId: SheetId,
+    name: string,
+    options?: MutationAdmissionOptions,
+  ): Promise<void> {
     // See `removeSheet` above for the rationale: `compute_rename_compute_sheet`
     // is `#[bridge::skip(ts_bridge)]`, so the bytes-tuple return from Rust is
     // NOT auto-unpacked by the transport. Normalize explicitly, then route
@@ -1235,6 +1240,8 @@ export class ComputeBridge extends GeneratedBridgeBase {
           },
         ),
       (raw) => normalizeBytesTuple(raw as [Uint8Array, MutationResult] | Uint8Array),
+      undefined,
+      options,
     );
     // Rust's `mutation_rename_sheet` rewrites Yrs formula text and
     // regenerates the `formula_strings` cache — no TS-side mirror needed.
@@ -1705,6 +1712,7 @@ export class ComputeBridge extends GeneratedBridgeBase {
   async setCellsByPosition(
     sheetId: SheetId,
     edits: PositionedCellInput[],
+    options?: MutationAdmissionOptions,
   ): Promise<MutationResult> {
     const { normalEdits, headerRenames } = await splitTableHeaderWritesForSetCells(
       this,
@@ -1732,6 +1740,7 @@ export class ComputeBridge extends GeneratedBridgeBase {
           },
         ),
       normalEdits.map((edit) => ({ sheetId, row: edit.row, col: edit.col })),
+      options,
     );
     return this.applyDateFormulaFormatCompatibility(sheetId, normalEdits, result);
   }

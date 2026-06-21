@@ -122,6 +122,85 @@ describe('WorkbookVersion commit snapshot-root capture', () => {
       },
     });
   });
+
+  it('installs default semantic mutation capture for provider-backed commits', async () => {
+    const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
+    const initialized = await provider.initializeGraph(await initializeInput('graph-1', 'root'));
+    expectInitializeSuccess(initialized);
+    const encodeDiff = jest.fn(async () => new Uint8Array([0x05, 0x06]));
+    const ctx = {} as any;
+    attachWorkbookVersioning(ctx, {
+      provider,
+      snapshotRootByteSyncPort: { encodeDiff },
+    });
+    ctx.versioning.mutationCapture.recordMutationResult({
+      operation: 'compute_batch_set_cells_by_position',
+      directEdits: [{ sheetId: 'sheet-1', row: 0, col: 0 }],
+      result: {
+        recalc: {
+          changedCells: [
+            {
+              cellId: 'cell-a1',
+              sheetId: 'sheet-1',
+              position: { row: 0, col: 0 },
+              oldValue: null,
+              value: 42,
+              extraFlags: 0,
+            },
+          ],
+          projectionChanges: [],
+          errors: [],
+          validationAnnotations: [],
+          metrics: {},
+        },
+      },
+    });
+    const version = new WorkbookVersionImpl(ctx);
+
+    const committed = await version.commit();
+
+    expect(committed).toMatchObject({
+      refName: VERSION_GRAPH_MAIN_REF,
+      resolvedFrom: 'HEAD',
+      refRevision: { kind: 'counter', value: '1' },
+    });
+    expect(encodeDiff).toHaveBeenCalledTimes(1);
+
+    const graph = await provider.openGraph(namespaceForDocumentScope(DOCUMENT_SCOPE, 'graph-1'));
+    const read = await graph.readCommit(committed.id);
+    expect(read.status).toBe('success');
+    if (read.status !== 'success') throw new Error('expected committed record to be readable');
+
+    const semanticChangeSetRecord = await graph.getObjectRecord({
+      kind: 'object',
+      objectType: 'workbook.semanticChangeSet.v1',
+      digest: read.commit.payload.semanticChangeSetDigest,
+    });
+    expect(semanticChangeSetRecord.preimage.payload).toEqual({
+      schemaVersion: 1,
+      changes: [
+        {
+          structural: {
+            kind: 'metadata',
+            changeId: 'mutation-1:cell:0',
+            domain: 'cell',
+            entityId: 'sheet-1!A1',
+            propertyPath: ['value'],
+          },
+          before: { kind: 'value', value: null },
+          after: { kind: 'value', value: 42 },
+          display: { address: { kind: 'value', value: 'A1' } },
+        },
+      ],
+    });
+
+    await expect(version.commit()).rejects.toMatchObject({
+      details: {
+        versionIssueCode: 'VERSION_MISSING_CHANGE_SET',
+      },
+    });
+    expect(encodeDiff).toHaveBeenCalledTimes(1);
+  });
 });
 
 function createWorkbookVersion(

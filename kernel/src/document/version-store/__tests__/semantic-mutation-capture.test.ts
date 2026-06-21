@@ -1,0 +1,180 @@
+import type { VersionAuthor } from '@mog-sdk/contracts/versioning';
+
+import type { MutationResult } from '../../../bridges/compute/compute-types.gen';
+import { createSemanticMutationCapture } from '../semantic-mutation-capture';
+import type { VersionGraphNamespace } from '../object-store';
+import type { WorkbookCommitId } from '../object-digest';
+import type {
+  VersionNormalCommitCaptureInput,
+  VersionNormalCommitCaptureResult,
+} from '../commit-service';
+
+const NAMESPACE: VersionGraphNamespace = {
+  workspaceId: 'workspace-1',
+  documentId: 'document-1',
+  graphId: 'graph-1',
+  principalScope: 'principal-1',
+};
+
+const AUTHOR: VersionAuthor = {
+  authorId: 'user-1',
+  actorKind: 'user',
+  displayName: 'User One',
+};
+
+const NOW = new Date('2026-06-20T00:00:00.000Z');
+const COMMIT_ID = `commit:sha256:${'a'.repeat(64)}` as WorkbookCommitId;
+
+describe('semantic mutation capture', () => {
+  it('captures only direct cell edits and drains after successful commit finalization', async () => {
+    const capture = createSemanticMutationCapture({ author: AUTHOR, now: () => NOW });
+
+    capture.mutationCapture.recordMutationResult({
+      operation: 'compute_batch_set_cells_by_position',
+      directEdits: [{ sheetId: 'sheet-1', row: 0, col: 0 }],
+      result: mutationResult({
+        recalc: {
+          changedCells: [
+            {
+              cellId: 'cell-a1',
+              sheetId: 'sheet-1',
+              position: { row: 0, col: 0 },
+              oldFormula: '=1',
+              newFormula: '=1+1',
+              oldValue: 1,
+              value: 2,
+              extraFlags: 0,
+            },
+            {
+              cellId: 'cell-b1',
+              sheetId: 'sheet-1',
+              position: { row: 0, col: 1 },
+              oldValue: 10,
+              value: 20,
+              extraFlags: 0,
+            },
+          ],
+          projectionChanges: [],
+          errors: [],
+          validationAnnotations: [],
+          metrics: {},
+        },
+      }),
+    });
+
+    const first = expectCaptureSuccess(await capture.captureNormalCommit(captureInput()));
+    expect(first.input.semanticChangeSetRecord.preimage.payload).toEqual({
+      schemaVersion: 1,
+      changes: [
+        {
+          structural: {
+            kind: 'metadata',
+            changeId: 'mutation-1:cell:0',
+            domain: 'cell',
+            entityId: 'sheet-1!A1',
+            propertyPath: ['value'],
+          },
+          before: { kind: 'value', value: { kind: 'formula', formula: '=1', result: 1 } },
+          after: { kind: 'value', value: { kind: 'formula', formula: '=1+1', result: 2 } },
+          display: { address: { kind: 'value', value: 'A1' } },
+        },
+      ],
+    });
+    expect(first.input.mutationSegmentRecords).toHaveLength(1);
+    expect(first.input.mutationSegmentRecords?.[0]?.preimage.payload).toMatchObject({
+      schemaVersion: 1,
+      segmentId: 'mutation-1',
+      operation: 'compute_batch_set_cells_by_position',
+      changeIds: ['mutation-1:cell:0'],
+      directEdits: [{ sheetId: 'sheet-1', row: 0, col: 0, address: 'A1' }],
+    });
+
+    const retryBeforeFinalize = expectCaptureSuccess(
+      await capture.captureNormalCommit(captureInput()),
+    );
+    expect(retryBeforeFinalize.input.mutationSegmentRecords).toHaveLength(1);
+
+    first.finalize?.({ status: 'failed' });
+    const retryAfterFailure = expectCaptureSuccess(await capture.captureNormalCommit(captureInput()));
+    expect(retryAfterFailure.input.mutationSegmentRecords).toHaveLength(1);
+
+    first.finalize?.({ status: 'success', commitId: COMMIT_ID });
+    const afterSuccess = expectCaptureSuccess(await capture.captureNormalCommit(captureInput()));
+    expect(afterSuccess.input.semanticChangeSetRecord.preimage.payload).toEqual({
+      schemaVersion: 1,
+      changes: [],
+    });
+    expect(afterSuccess.input.mutationSegmentRecords).toEqual([]);
+  });
+
+  it('captures local sheet renames and skips observer renames without old names', async () => {
+    const capture = createSemanticMutationCapture({ author: AUTHOR, now: () => NOW });
+
+    capture.mutationCapture.recordMutationResult({
+      operation: 'compute_rename_compute_sheet',
+      result: mutationResult({
+        sheetChanges: [
+          {
+            sheetId: 'sheet-1',
+            kind: 'Set',
+            field: 'name',
+            oldName: 'Sheet1',
+            name: 'Forecast',
+          },
+          {
+            sheetId: 'sheet-2',
+            kind: 'Set',
+            field: 'name',
+            name: 'RemoteOnly',
+          },
+        ],
+      }),
+    });
+
+    const captured = expectCaptureSuccess(await capture.captureNormalCommit(captureInput()));
+    expect(captured.input.semanticChangeSetRecord.preimage.payload).toEqual({
+      schemaVersion: 1,
+      changes: [
+        {
+          structural: {
+            kind: 'metadata',
+            changeId: 'mutation-1:sheet:0',
+            domain: 'sheet',
+            entityId: 'sheet-1',
+            propertyPath: ['name'],
+          },
+          before: { kind: 'value', value: 'Sheet1' },
+          after: { kind: 'value', value: 'Forecast' },
+          display: { entityLabel: { kind: 'value', value: 'Forecast' } },
+        },
+      ],
+    });
+  });
+});
+
+function mutationResult(overrides: Partial<MutationResult> = {}): MutationResult {
+  return {
+    recalc: {
+      changedCells: [],
+      projectionChanges: [],
+      errors: [],
+      validationAnnotations: [],
+      metrics: {},
+    },
+    ...overrides,
+  } as MutationResult;
+}
+
+function captureInput(): VersionNormalCommitCaptureInput {
+  return { namespace: NAMESPACE } as VersionNormalCommitCaptureInput;
+}
+
+function expectCaptureSuccess(
+  result: VersionNormalCommitCaptureResult,
+): Extract<VersionNormalCommitCaptureResult, { status: 'success' }> {
+  expect(result.status).toBe('success');
+  if (result.status !== 'success') {
+    throw new Error(`expected capture success: ${result.diagnostics[0]?.code}`);
+  }
+  return result;
+}

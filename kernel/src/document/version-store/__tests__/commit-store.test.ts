@@ -1,0 +1,329 @@
+import type { VersionAuthor } from '@mog-sdk/contracts/versioning';
+
+import {
+  workbookCommitIdFromObjectDigest,
+  type VersionDependencyRef,
+  type VersionObjectType,
+} from '../object-digest';
+import {
+  InMemoryVersionObjectStore,
+  createVersionObjectRecord,
+  type VersionGraphNamespace,
+  type VersionObjectPutBatchResult,
+  type VersionObjectRecord,
+} from '../object-store';
+import {
+  createInMemoryWorkbookCommitStore,
+  type CreateWorkbookCommitInput,
+  type CreateWorkbookCommitResult,
+  type ReadWorkbookCommitResult,
+  type WorkbookCommitPayload,
+} from '../commit-store';
+
+const NAMESPACE: VersionGraphNamespace = {
+  workspaceId: 'workspace-1',
+  documentId: 'document-1',
+  graphId: 'graph-1',
+  principalScope: 'principal-1',
+};
+
+const AUTHOR: VersionAuthor = {
+  authorId: 'user-1',
+  actorKind: 'user',
+  displayName: 'User One',
+};
+
+const OTHER_AUTHOR: VersionAuthor = {
+  authorId: 'user-2',
+  actorKind: 'user',
+  displayName: 'User Two',
+};
+
+function expectCreateSuccess(
+  result: CreateWorkbookCommitResult,
+): asserts result is Extract<CreateWorkbookCommitResult, { status: 'success' }> {
+  expect(result.status).toBe('success');
+  if (result.status !== 'success') {
+    throw new Error(`expected commit create success: ${result.diagnostics[0]?.code}`);
+  }
+}
+
+function expectCreateFailed(
+  result: CreateWorkbookCommitResult,
+): asserts result is Extract<CreateWorkbookCommitResult, { status: 'failed' }> {
+  expect(result.status).toBe('failed');
+  if (result.status !== 'failed') {
+    throw new Error('expected commit create failure');
+  }
+}
+
+function expectReadSuccess(
+  result: ReadWorkbookCommitResult,
+): asserts result is Extract<ReadWorkbookCommitResult, { status: 'success' }> {
+  expect(result.status).toBe('success');
+  if (result.status !== 'success') {
+    throw new Error(`expected commit read success: ${result.diagnostics[0]?.code}`);
+  }
+}
+
+function expectReadFailed(
+  result: ReadWorkbookCommitResult,
+): asserts result is Extract<ReadWorkbookCommitResult, { status: 'failed' }> {
+  expect(result.status).toBe('failed');
+  if (result.status !== 'failed') {
+    throw new Error('expected commit read failure');
+  }
+}
+
+async function objectRecord(
+  objectType: VersionObjectType,
+  payload: unknown,
+  dependencies: readonly VersionDependencyRef[] = [],
+): Promise<VersionObjectRecord<unknown>> {
+  return createVersionObjectRecord(NAMESPACE, {
+    objectType,
+    schemaVersion: 1,
+    payloadEncoding: 'mog-canonical-json-v1',
+    dependencies,
+    payload,
+  });
+}
+
+function baseInput(
+  snapshotRootRecord: VersionObjectRecord<unknown>,
+  semanticChangeSetRecord: VersionObjectRecord<unknown>,
+): CreateWorkbookCommitInput {
+  return {
+    documentId: NAMESPACE.documentId,
+    snapshotRootRecord,
+    semanticChangeSetRecord,
+    author: AUTHOR,
+    createdAt: '2026-06-20T00:00:00.000Z',
+    message: 'Initial workbook snapshot',
+    completenessDiagnostics: [],
+  };
+}
+
+describe('InMemoryWorkbookCommitStore root commits', () => {
+  it('creates and reads a root commit with stable id and snapshot/change-set dependencies', async () => {
+    const objectStore = new InMemoryVersionObjectStore(NAMESPACE);
+    const commitStore = createInMemoryWorkbookCommitStore(objectStore);
+    const snapshotRoot = await objectRecord('workbook.snapshotRoot.v1', { sheets: [] });
+    const semanticChangeSet = await objectRecord('workbook.semanticChangeSet.v1', {
+      changes: [],
+    });
+
+    const created = await commitStore.createWorkbookCommit(
+      baseInput(snapshotRoot, semanticChangeSet),
+    );
+    expectCreateSuccess(created);
+
+    expect(created.commit.id).toBe(workbookCommitIdFromObjectDigest(created.commit.record.digest));
+    expect(created.commit.payload).toMatchObject({
+      schemaVersion: 1,
+      documentId: NAMESPACE.documentId,
+      parentCommitIds: [],
+      snapshotRootDigest: snapshotRoot.digest,
+      semanticChangeSetDigest: semanticChangeSet.digest,
+      author: AUTHOR,
+      createdAt: '2026-06-20T00:00:00.000Z',
+      message: 'Initial workbook snapshot',
+      completenessDiagnostics: [],
+    } satisfies Partial<WorkbookCommitPayload>);
+    expect(created.commit.record.preimage.dependencies).toEqual([
+      {
+        kind: 'object',
+        objectType: 'workbook.semanticChangeSet.v1',
+        digest: semanticChangeSet.digest,
+      },
+      {
+        kind: 'object',
+        objectType: 'workbook.snapshotRoot.v1',
+        digest: snapshotRoot.digest,
+      },
+    ]);
+
+    const read = await commitStore.readCommit(created.commit.id);
+    expectReadSuccess(read);
+    expect(read.commit).toEqual(created.commit);
+
+    const repeated = await commitStore.createWorkbookCommit(
+      baseInput(snapshotRoot, semanticChangeSet),
+    );
+    expectCreateSuccess(repeated);
+    expect(repeated.commit.id).toBe(created.commit.id);
+  });
+
+  it('rejects missing snapshot and change-set object records before writing', async () => {
+    const objectStore = new InMemoryVersionObjectStore(NAMESPACE);
+    const commitStore = createInMemoryWorkbookCommitStore(objectStore);
+
+    const result = await commitStore.createWorkbookCommit({
+      ...baseInput(
+        undefined as unknown as VersionObjectRecord<unknown>,
+        undefined as unknown as VersionObjectRecord<unknown>,
+      ),
+    });
+
+    expectCreateFailed(result);
+    expect(result.mutationGuarantee).toBe('no-objects-written');
+    expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
+      'VERSION_MISSING_DEPENDENCY',
+      'VERSION_MISSING_DEPENDENCY',
+    ]);
+  });
+
+  it('writes the dependency records and commit object in one object-store batch', async () => {
+    class CapturingObjectStore extends InMemoryVersionObjectStore {
+      readonly batches: readonly VersionObjectRecord<unknown>[][] = [];
+
+      override async putObjects(
+        batch: readonly VersionObjectRecord<unknown>[],
+      ): Promise<VersionObjectPutBatchResult> {
+        (this.batches as VersionObjectRecord<unknown>[][]).push([...batch]);
+        return super.putObjects(batch);
+      }
+    }
+
+    const objectStore = new CapturingObjectStore(NAMESPACE);
+    const commitStore = createInMemoryWorkbookCommitStore(objectStore);
+    const snapshotRoot = await objectRecord('workbook.snapshotRoot.v1', { sheets: [] });
+    const semanticChangeSet = await objectRecord('workbook.semanticChangeSet.v1', {
+      changes: [],
+    });
+    const mutationSegment = await objectRecord('workbook.mutationSegment.v1', {
+      segmentId: 'segment-1',
+    });
+
+    const created = await commitStore.createWorkbookCommit({
+      ...baseInput(snapshotRoot, semanticChangeSet),
+      mutationSegmentRecords: [mutationSegment],
+    });
+
+    expectCreateSuccess(created);
+    expect(objectStore.batches).toHaveLength(1);
+    expect(objectStore.batches[0].map((record) => record.preimage.objectType)).toEqual([
+      'workbook.snapshotRoot.v1',
+      'workbook.semanticChangeSet.v1',
+      'workbook.mutationSegment.v1',
+      'workbook.commit.v1',
+    ]);
+    expect(created.objectBatch.map((record) => record.digest)).toEqual(
+      objectStore.batches[0].map((record) => record.digest),
+    );
+  });
+
+  it('returns object-store diagnostics when the dependency batch cannot be written', async () => {
+    const objectStore = new InMemoryVersionObjectStore(NAMESPACE);
+    const commitStore = createInMemoryWorkbookCommitStore(objectStore);
+    const missingSnapshotChunk = await objectRecord('workbook.snapshotChunk.v1', {
+      chunk: 'not-written',
+    });
+    const snapshotRoot = await objectRecord('workbook.snapshotRoot.v1', { sheets: [] }, [
+      {
+        kind: 'object',
+        objectType: 'workbook.snapshotChunk.v1',
+        digest: missingSnapshotChunk.digest,
+      },
+    ]);
+    const semanticChangeSet = await objectRecord('workbook.semanticChangeSet.v1', {
+      changes: [],
+    });
+
+    const result = await commitStore.createWorkbookCommit(
+      baseInput(snapshotRoot, semanticChangeSet),
+    );
+
+    expectCreateFailed(result);
+    expect(result.diagnostics).toEqual([
+      expect.objectContaining({
+        code: 'VERSION_OBJECT_STORE_FAILURE',
+        sourceDiagnostics: [
+          expect.objectContaining({
+            code: 'VERSION_MISSING_DEPENDENCY',
+          }),
+        ],
+      }),
+    ]);
+  });
+
+  it('validates commit id grammar and payload document id on read', async () => {
+    const objectStore = new InMemoryVersionObjectStore(NAMESPACE);
+    const commitStore = createInMemoryWorkbookCommitStore(objectStore);
+    const snapshotRoot = await objectRecord('workbook.snapshotRoot.v1', { sheets: [] });
+    const semanticChangeSet = await objectRecord('workbook.semanticChangeSet.v1', {
+      changes: [],
+    });
+    const wrongDocumentPayload: WorkbookCommitPayload = {
+      schemaVersion: 1,
+      documentId: 'document-2',
+      parentCommitIds: [],
+      snapshotRootDigest: snapshotRoot.digest,
+      semanticChangeSetDigest: semanticChangeSet.digest,
+      author: AUTHOR,
+      createdAt: '2026-06-20T00:00:00.000Z',
+      completenessDiagnostics: [],
+    };
+    const wrongDocumentRecord = await createVersionObjectRecord(NAMESPACE, {
+      objectType: 'workbook.commit.v1',
+      schemaVersion: 1,
+      payloadEncoding: 'mog-canonical-json-v1',
+      dependencies: [
+        {
+          kind: 'object',
+          objectType: 'workbook.semanticChangeSet.v1',
+          digest: semanticChangeSet.digest,
+        },
+        {
+          kind: 'object',
+          objectType: 'workbook.snapshotRoot.v1',
+          digest: snapshotRoot.digest,
+        },
+      ],
+      payload: wrongDocumentPayload,
+    });
+
+    const putResult = await objectStore.putObjects([
+      snapshotRoot,
+      semanticChangeSet,
+      wrongDocumentRecord,
+    ]);
+    expect(putResult.status).toBe('success');
+
+    const invalidId = await commitStore.readCommit('not-a-commit-id');
+    expectReadFailed(invalidId);
+    expect(invalidId.diagnostics[0]).toMatchObject({ code: 'VERSION_INVALID_COMMIT_ID' });
+
+    const wrongDocument = await commitStore.readCommit(
+      workbookCommitIdFromObjectDigest(wrongDocumentRecord.digest),
+    );
+    expectReadFailed(wrongDocument);
+    expect(wrongDocument.diagnostics[0]).toMatchObject({
+      code: 'VERSION_WRONG_DOCUMENT',
+      documentId: 'document-2',
+      expectedDocumentId: NAMESPACE.documentId,
+    });
+  });
+
+  it('changes the commit digest when authored payload changes', async () => {
+    const objectStore = new InMemoryVersionObjectStore(NAMESPACE);
+    const commitStore = createInMemoryWorkbookCommitStore(objectStore);
+    const snapshotRoot = await objectRecord('workbook.snapshotRoot.v1', { sheets: [] });
+    const semanticChangeSet = await objectRecord('workbook.semanticChangeSet.v1', {
+      changes: [],
+    });
+
+    const first = await commitStore.createWorkbookCommit(
+      baseInput(snapshotRoot, semanticChangeSet),
+    );
+    const second = await commitStore.createWorkbookCommit({
+      ...baseInput(snapshotRoot, semanticChangeSet),
+      author: OTHER_AUTHOR,
+    });
+
+    expectCreateSuccess(first);
+    expectCreateSuccess(second);
+    expect(second.commit.id).not.toBe(first.commit.id);
+    expect(second.commit.record.digest.digest).not.toBe(first.commit.record.digest.digest);
+  });
+});

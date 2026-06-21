@@ -69,11 +69,7 @@ export type SyncUpdateSourceKind =
   | 'legacyRawUnknown';
 
 export type SyncUpdateOriginKind = 'provider' | 'room' | 'import' | 'system' | 'legacyRaw';
-export type SyncUpdateTrustStatus =
-  | 'verified'
-  | 'trustedLocalSystem'
-  | 'unverified'
-  | 'legacyRaw';
+export type SyncUpdateTrustStatus = 'verified' | 'trustedLocalSystem' | 'unverified' | 'legacyRaw';
 export type SyncUpdateCapturePolicy = 'excluded' | 'commitEligible' | 'derivedOnly';
 
 export type SyncUpdateExclusionReason =
@@ -97,14 +93,8 @@ export type SyncUpdateExclusionReason =
 export interface ProvenanceRedactionPolicy {
   readonly schemaVersion: 'provenance-redaction-policy-v1';
   readonly mode: 'metadata-only' | 'opaque-digest-only' | 'diagnostic-only' | 'drop';
-  readonly durableAuthorIdentity:
-    | 'unknown'
-    | 'opaque-subject-ref'
-    | 'hmac-sha256-digest';
-  readonly durableProviderIdentity:
-    | 'unknown'
-    | 'opaque-provider-ref'
-    | 'hmac-sha256-digest';
+  readonly durableAuthorIdentity: 'unknown' | 'opaque-subject-ref' | 'hmac-sha256-digest';
+  readonly durableProviderIdentity: 'unknown' | 'opaque-provider-ref' | 'hmac-sha256-digest';
   /**
    * Required when durable author/provider identity uses an HMAC digest. Without
    * a key, admission must keep authorship unknown instead of persisting raw
@@ -257,13 +247,12 @@ export type SystemRepairSyncUpdateProvenance = SyncUpdateProvenanceBase<'systemR
   readonly capturePolicy: 'excluded' | 'derivedOnly';
 };
 
-export type LegacyRawUnknownSyncUpdateProvenance =
-  SyncUpdateProvenanceBase<'legacyRawUnknown'> & {
-    readonly capturePolicy: 'excluded';
-    readonly trust: SyncUpdateTrust & { readonly status: 'legacyRaw' };
-    readonly author: Extract<SyncUpdateAuthorState, { readonly kind: 'unknown' }>;
-    readonly exclusionDiagnostic: SyncUpdateExclusionDiagnostic;
-  };
+export type LegacyRawUnknownSyncUpdateProvenance = SyncUpdateProvenanceBase<'legacyRawUnknown'> & {
+  readonly capturePolicy: 'excluded';
+  readonly trust: SyncUpdateTrust & { readonly status: 'legacyRaw' };
+  readonly author: Extract<SyncUpdateAuthorState, { readonly kind: 'unknown' }>;
+  readonly exclusionDiagnostic: SyncUpdateExclusionDiagnostic;
+};
 
 export type SyncUpdateProvenance =
   | ProviderReplaySyncUpdateProvenance
@@ -378,6 +367,109 @@ export interface SyncUpdateValidationResult {
 export interface ProviderInboundUpdateValidationOptions {
   readonly expectedPayloadHash?: string;
   readonly requireProofCoverage?: boolean;
+}
+
+export interface ProviderInboundUpdateDiagnosticEvidenceOptions extends ProviderInboundUpdateValidationOptions {
+  readonly legacyClassification?: LegacyProviderClassificationOptions;
+}
+
+export type SyncUpdateDiagnosticEvidenceEnvelopeVersion =
+  | 'provenance-only'
+  | 'provider-inbound-update-v1'
+  | 'provider-inbound-update-v2';
+
+export interface SyncUpdateDiagnosticEvidenceDiagnostic {
+  readonly reason: SyncUpdateValidationReason;
+  readonly subreason?: SyncUpdateValidationSubreason;
+  readonly field?: ProviderInboundProofField | 'capturePolicy' | 'author';
+}
+
+export interface SyncUpdateDiagnosticEvidenceAdmission {
+  readonly status: 'accepted' | 'rejected';
+  readonly diagnosticCount: number;
+  readonly diagnostics: readonly SyncUpdateDiagnosticEvidenceDiagnostic[];
+  readonly exclusionReason?: SyncUpdateExclusionReason;
+  readonly exclusionSubreason?: string;
+}
+
+export interface SyncUpdateDiagnosticEvidenceIdentity {
+  readonly originKind: SyncUpdateOriginKind;
+  readonly hasStableOriginId: boolean;
+  readonly hasProviderId: boolean;
+  readonly providerKind?: string;
+  readonly hasProviderRefId: boolean;
+  readonly storageScopeKind?: StorageScopeBinding['kind'];
+  readonly hasRoomId: boolean;
+  readonly hasAuthorityRef: boolean;
+  readonly hasEpoch: boolean;
+  readonly hasUpdateId: boolean;
+  readonly hasSequence: boolean;
+  readonly hasPayloadHash: boolean;
+  readonly hasProvenancePayloadHash: boolean;
+}
+
+export interface SyncUpdateDiagnosticEvidenceTrust {
+  readonly status: SyncUpdateTrustStatus;
+  readonly hasAuthorityRef: boolean;
+  readonly proofKind?: ProviderAuthorityProof['kind'];
+  readonly proofCoverage: readonly ProviderInboundProofField[];
+  readonly hasIssuer: boolean;
+  readonly hasVerifiedAt: boolean;
+}
+
+export type SyncUpdateDiagnosticEvidenceAuthor =
+  | {
+      readonly kind: 'singleRemote';
+      readonly remoteRefKind: RedactedRemoteAuthorRef['kind'];
+      readonly remoteRefKeyIdPresent: boolean;
+    }
+  | {
+      readonly kind: 'mixedRemote';
+      readonly participantCount?: number;
+      readonly reason: Extract<SyncUpdateAuthorState, { readonly kind: 'mixedRemote' }>['reason'];
+    }
+  | {
+      readonly kind: 'unknown';
+      readonly reason: Extract<SyncUpdateAuthorState, { readonly kind: 'unknown' }>['reason'];
+    }
+  | {
+      readonly kind: 'agent';
+      readonly agentRefKind: RedactedAgentRef['kind'];
+      readonly agentRefKeyIdPresent: boolean;
+    }
+  | {
+      readonly kind: 'system';
+      readonly systemRef: Extract<SyncUpdateAuthorState, { readonly kind: 'system' }>['systemRef'];
+    };
+
+export interface SyncUpdateDiagnosticEvidenceRedaction {
+  readonly mode: ProvenanceRedactionPolicy['mode'];
+  readonly durableAuthorIdentity: ProvenanceRedactionPolicy['durableAuthorIdentity'];
+  readonly durableProviderIdentity: ProvenanceRedactionPolicy['durableProviderIdentity'];
+  readonly redactionKeyIdPresent: boolean;
+  readonly proofMaterial: ProvenanceRedactionPolicy['proofMaterial'];
+  readonly proofMaterialExported: false;
+}
+
+export interface SyncUpdateDiagnosticEvidenceCorrelation {
+  readonly hasRemoteSessionId: boolean;
+  readonly hasCorrelationId: boolean;
+  readonly causationIdCount: number;
+}
+
+export interface SyncUpdateDiagnosticEvidence {
+  readonly schemaVersion: 'sync-update-diagnostic-evidence-v1';
+  readonly envelopeVersion: SyncUpdateDiagnosticEvidenceEnvelopeVersion;
+  readonly sourceKind: SyncUpdateSourceKind;
+  readonly capturePolicy: SyncUpdateCapturePolicy;
+  readonly replay: boolean;
+  readonly system: boolean;
+  readonly admission: SyncUpdateDiagnosticEvidenceAdmission;
+  readonly identity: SyncUpdateDiagnosticEvidenceIdentity;
+  readonly trust: SyncUpdateDiagnosticEvidenceTrust;
+  readonly author: SyncUpdateDiagnosticEvidenceAuthor;
+  readonly redaction: SyncUpdateDiagnosticEvidenceRedaction;
+  readonly correlation: SyncUpdateDiagnosticEvidenceCorrelation;
 }
 
 export interface LegacyProviderClassificationOptions {
@@ -574,6 +666,160 @@ export function validateSyncUpdateProvenance(
   return { ok: diagnostics.length === 0, diagnostics };
 }
 
+export function exportSyncUpdateProvenanceEvidence(
+  provenance: SyncUpdateProvenance,
+  validation: SyncUpdateValidationResult = validateSyncUpdateProvenance(provenance),
+): SyncUpdateDiagnosticEvidence {
+  return buildSyncUpdateDiagnosticEvidence('provenance-only', provenance, validation);
+}
+
+export function exportProviderInboundUpdateAdmissionEvidence(
+  envelope: ProviderInboundUpdateEnvelopeAny,
+  options: ProviderInboundUpdateDiagnosticEvidenceOptions = {},
+): SyncUpdateDiagnosticEvidence {
+  if (!isProviderInboundUpdateEnvelopeV2(envelope)) {
+    const provenance = classifyLegacyProviderInboundUpdate(envelope, options.legacyClassification);
+    const validation = validateSyncUpdateProvenance(provenance, {
+      expectedPayloadHash: options.expectedPayloadHash,
+    });
+    return buildSyncUpdateDiagnosticEvidence('provider-inbound-update-v1', provenance, validation);
+  }
+
+  return buildSyncUpdateDiagnosticEvidence(
+    'provider-inbound-update-v2',
+    envelope.provenance,
+    validateProviderInboundUpdateEnvelope(envelope, options),
+  );
+}
+
+function buildSyncUpdateDiagnosticEvidence(
+  envelopeVersion: SyncUpdateDiagnosticEvidenceEnvelopeVersion,
+  provenance: SyncUpdateProvenance,
+  validation: SyncUpdateValidationResult,
+): SyncUpdateDiagnosticEvidence {
+  const identity = provenance.updateIdentity;
+  return {
+    schemaVersion: 'sync-update-diagnostic-evidence-v1',
+    envelopeVersion,
+    sourceKind: provenance.sourceKind,
+    capturePolicy: provenance.capturePolicy,
+    replay: provenance.replay,
+    system: provenance.system,
+    admission: {
+      status: validation.ok ? 'accepted' : 'rejected',
+      diagnosticCount: validation.diagnostics.length,
+      diagnostics: sortedEvidenceDiagnostics(validation.diagnostics),
+      ...(provenance.exclusionDiagnostic === undefined
+        ? {}
+        : {
+            exclusionReason: provenance.exclusionDiagnostic.reason,
+            ...(provenance.exclusionDiagnostic.subreason === undefined
+              ? {}
+              : { exclusionSubreason: provenance.exclusionDiagnostic.subreason }),
+          }),
+    },
+    identity: {
+      originKind: identity.originKind,
+      hasStableOriginId: identity.stableOriginId !== undefined,
+      hasProviderId: identity.providerId !== undefined,
+      ...(identity.providerKind === undefined ? {} : { providerKind: identity.providerKind }),
+      hasProviderRefId: identity.providerRefId !== undefined,
+      ...(identity.storageScope === undefined
+        ? {}
+        : { storageScopeKind: identity.storageScope.kind }),
+      hasRoomId: identity.roomId !== undefined,
+      hasAuthorityRef: identity.authorityRef !== undefined,
+      hasEpoch: identity.epoch !== undefined,
+      hasUpdateId: identity.updateId !== undefined,
+      hasSequence: identity.sequence !== undefined,
+      hasPayloadHash: identity.payloadHash.length > 0,
+      hasProvenancePayloadHash: identity.provenancePayloadHash !== undefined,
+    },
+    trust: {
+      status: provenance.trust.status,
+      hasAuthorityRef: provenance.trust.authorityRef !== undefined,
+      ...(provenance.trust.proofKind === undefined
+        ? {}
+        : { proofKind: provenance.trust.proofKind }),
+      proofCoverage: sortedProofCoverage(provenance.trust.proofCoverage),
+      hasIssuer: provenance.trust.issuer !== undefined,
+      hasVerifiedAt: provenance.trust.verifiedAt !== undefined,
+    },
+    author: summarizeEvidenceAuthor(provenance.author),
+    redaction: {
+      mode: provenance.redaction.mode,
+      durableAuthorIdentity: provenance.redaction.durableAuthorIdentity,
+      durableProviderIdentity: provenance.redaction.durableProviderIdentity,
+      redactionKeyIdPresent: provenance.redaction.redactionKeyId !== undefined,
+      proofMaterial: provenance.redaction.proofMaterial,
+      proofMaterialExported: false,
+    },
+    correlation: {
+      hasRemoteSessionId: provenance.remoteSessionId !== undefined,
+      hasCorrelationId: provenance.correlationId !== undefined,
+      causationIdCount: provenance.causationIds?.length ?? 0,
+    },
+  };
+}
+
+function summarizeEvidenceAuthor(
+  author: SyncUpdateAuthorState,
+): SyncUpdateDiagnosticEvidenceAuthor {
+  switch (author.kind) {
+    case 'singleRemote':
+      return {
+        kind: author.kind,
+        remoteRefKind: author.remoteAuthorRef.kind,
+        remoteRefKeyIdPresent: author.remoteAuthorRef.keyId !== undefined,
+      };
+    case 'mixedRemote':
+      return {
+        kind: author.kind,
+        ...(author.participantCount === undefined
+          ? {}
+          : { participantCount: author.participantCount }),
+        reason: author.reason,
+      };
+    case 'unknown':
+      return { kind: author.kind, reason: author.reason };
+    case 'agent':
+      return {
+        kind: author.kind,
+        agentRefKind: author.agentRef.kind,
+        agentRefKeyIdPresent: author.agentRef.keyId !== undefined,
+      };
+    case 'system':
+      return { kind: author.kind, systemRef: author.systemRef };
+  }
+}
+
+function sortedProofCoverage(
+  proofCoverage: readonly ProviderInboundProofField[] | undefined,
+): readonly ProviderInboundProofField[] {
+  return [...new Set(proofCoverage ?? [])].sort(compareStrings);
+}
+
+function sortedEvidenceDiagnostics(
+  diagnostics: readonly SyncUpdateValidationDiagnostic[],
+): readonly SyncUpdateDiagnosticEvidenceDiagnostic[] {
+  return diagnostics
+    .map((diagnostic) => ({
+      reason: diagnostic.reason,
+      ...(diagnostic.subreason === undefined ? {} : { subreason: diagnostic.subreason }),
+      ...(diagnostic.field === undefined ? {} : { field: diagnostic.field }),
+    }))
+    .sort((left, right) =>
+      compareStrings(
+        `${left.reason}:${left.subreason ?? ''}:${left.field ?? ''}`,
+        `${right.reason}:${right.subreason ?? ''}:${right.field ?? ''}`,
+      ),
+    );
+}
+
+function compareStrings(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
 function validatePayloadHash(
   declaredPayloadHash: string,
   provenance: SyncUpdateProvenance,
@@ -639,7 +885,10 @@ function validateProviderProofCoverage(
   }
 
   const provenancePayloadHash = provenance.updateIdentity.provenancePayloadHash;
-  if (!provenancePayloadHash || envelope.authorityProof.canonicalPayloadHash !== provenancePayloadHash) {
+  if (
+    !provenancePayloadHash ||
+    envelope.authorityProof.canonicalPayloadHash !== provenancePayloadHash
+  ) {
     diagnostics.push({
       reason: 'provenancePayloadHashMismatch',
       subreason: 'provenancePayloadHashMismatch',

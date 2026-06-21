@@ -7,12 +7,15 @@ import {
   PROVIDER_INBOUND_V2_SINGLE_AUTHOR_PROOF_FIELDS,
   classifyLegacyProviderInboundUpdate,
   classifyLegacyRawUpdate,
+  exportProviderInboundUpdateAdmissionEvidence,
+  exportSyncUpdateProvenanceEvidence,
   validateProviderInboundUpdateEnvelope,
   validateSyncUpdateProvenance,
   type ProviderAuthorityProof,
   type ProviderInboundProofField,
   type ProviderInboundUpdateEnvelope,
   type ProviderInboundUpdateEnvelopeV2,
+  type SyncUpdateDiagnosticEvidence,
   type SyncUpdateProvenance,
 } from '../inbound-updates';
 
@@ -41,7 +44,9 @@ function proof(coveredFields: readonly ProviderInboundProofField[]): ProviderAut
   };
 }
 
-function makeV1(overrides: Partial<ProviderInboundUpdateEnvelope> = {}): ProviderInboundUpdateEnvelope {
+function makeV1(
+  overrides: Partial<ProviderInboundUpdateEnvelope> = {},
+): ProviderInboundUpdateEnvelope {
   return {
     providerRefId: 'provider-session-1',
     authorityRef: 'authority-1',
@@ -110,7 +115,9 @@ function makeLiveProvenance(overrides: Partial<SyncUpdateProvenance> = {}): Sync
   };
 }
 
-function makeV2(overrides: Partial<ProviderInboundUpdateEnvelopeV2> = {}): ProviderInboundUpdateEnvelopeV2 {
+function makeV2(
+  overrides: Partial<ProviderInboundUpdateEnvelopeV2> = {},
+): ProviderInboundUpdateEnvelopeV2 {
   const provenance = overrides.provenance ?? makeLiveProvenance();
   return {
     ...makeV1(),
@@ -124,6 +131,30 @@ function makeV2(overrides: Partial<ProviderInboundUpdateEnvelopeV2> = {}): Provi
     ]),
     ...overrides,
   };
+}
+
+function assertExportSafeEvidence(evidence: SyncUpdateDiagnosticEvidence): void {
+  const serialized = JSON.stringify(evidence);
+  for (const rawValue of [
+    PAYLOAD_HASH,
+    OTHER_PAYLOAD_HASH,
+    PROVENANCE_HASH,
+    'proof-ref-1',
+    'issuer-1',
+    'provider-stable-1',
+    'provider-session-1',
+    'authority-1',
+    'local-session-1',
+    'remote-session-1',
+    'subject-ref-1',
+    'decision-1',
+    'doc-1',
+    'update-1',
+    'correlation-1',
+    'cause-1',
+  ]) {
+    assert.equal(serialized.includes(rawValue), false, `leaked raw value: ${rawValue}`);
+  }
 }
 
 describe('VC-09 inbound update provenance helpers', () => {
@@ -185,9 +216,7 @@ describe('VC-09 inbound update provenance helpers', () => {
           diagnostic.reason === 'partialCoverage' && diagnostic.field === 'remoteAuthorRef',
       ),
     );
-    assert.ok(
-      result.diagnostics.some((diagnostic) => diagnostic.reason === 'payloadHashMismatch'),
-    );
+    assert.ok(result.diagnostics.some((diagnostic) => diagnostic.reason === 'payloadHashMismatch'));
   });
 
   it('rejects commit eligibility when local authorship would have to be inferred', () => {
@@ -206,5 +235,133 @@ describe('VC-09 inbound update provenance helpers', () => {
           diagnostic.subreason === 'localAuthorInferenceNotAllowed',
       ),
     );
+  });
+});
+
+describe('VC-09 inbound update export-safe diagnostic evidence', () => {
+  it('exports verified provenance without raw proof, hash, session, or author material', () => {
+    const unsortedCoverage = [
+      'providerKind',
+      'providerId',
+      ...[...PROVIDER_INBOUND_V2_SINGLE_AUTHOR_PROOF_FIELDS].reverse(),
+      ...[...PROVIDER_INBOUND_V2_BASE_PROOF_FIELDS].reverse(),
+    ] satisfies ProviderInboundProofField[];
+    const provenance = makeLiveProvenance({
+      trust: {
+        ...makeLiveProvenance().trust,
+        proofCoverage: unsortedCoverage,
+      },
+    });
+    const evidence = exportSyncUpdateProvenanceEvidence(provenance);
+
+    assert.equal(evidence.schemaVersion, 'sync-update-diagnostic-evidence-v1');
+    assert.equal(evidence.envelopeVersion, 'provenance-only');
+    assert.equal(evidence.admission.status, 'accepted');
+    assert.deepEqual(evidence.admission.diagnostics, []);
+    assert.equal(evidence.sourceKind, 'providerLiveInbound');
+    assert.equal(evidence.capturePolicy, 'commitEligible');
+    assert.deepEqual(evidence.author, {
+      kind: 'singleRemote',
+      remoteRefKind: 'opaque-subject-ref',
+      remoteRefKeyIdPresent: false,
+    });
+    assert.equal(evidence.redaction.proofMaterialExported, false);
+    assert.deepEqual(evidence.trust.proofCoverage, [...new Set(unsortedCoverage)].sort());
+    assertExportSafeEvidence(evidence);
+  });
+
+  it('exports unverified admission rejection as diagnostics-only evidence', () => {
+    const envelope = makeV2({
+      provenance: makeLiveProvenance({
+        trust: { status: 'unverified' },
+      }),
+    });
+    const evidence = exportProviderInboundUpdateAdmissionEvidence(envelope, {
+      expectedPayloadHash: PAYLOAD_HASH,
+    });
+
+    assert.equal(evidence.envelopeVersion, 'provider-inbound-update-v2');
+    assert.equal(evidence.admission.status, 'rejected');
+    assert.deepEqual(evidence.admission.diagnostics, [
+      {
+        reason: 'unverifiedProvenance',
+        subreason: 'unverifiedTrust',
+      },
+    ]);
+    assert.equal(evidence.trust.status, 'unverified');
+    assertExportSafeEvidence(evidence);
+  });
+
+  it('exports payload hash mismatch without serializing either hash', () => {
+    const evidence = exportProviderInboundUpdateAdmissionEvidence(makeV2(), {
+      expectedPayloadHash: OTHER_PAYLOAD_HASH,
+    });
+
+    assert.equal(evidence.admission.status, 'rejected');
+    assert.deepEqual(evidence.admission.diagnostics, [
+      {
+        reason: 'payloadHashMismatch',
+        subreason: 'payloadHashMismatch',
+        field: 'payloadHash',
+      },
+    ]);
+    assert.equal(evidence.identity.hasPayloadHash, true);
+    assert.equal(evidence.identity.hasProvenancePayloadHash, true);
+    assertExportSafeEvidence(evidence);
+  });
+
+  it('exports mixed-author provenance as excluded evidence without participant identity', () => {
+    const provenance = makeLiveProvenance({
+      sourceKind: 'providerMixedInbound',
+      capturePolicy: 'excluded',
+      author: {
+        kind: 'mixedRemote',
+        participantCount: 2,
+        reason: 'multipleProvenAuthors',
+      },
+      exclusionDiagnostic: {
+        reason: 'mixedAuthors',
+        message: 'Multiple remote authors were aggregated before admission.',
+      },
+    });
+    const evidence = exportProviderInboundUpdateAdmissionEvidence(makeV2({ provenance }), {
+      expectedPayloadHash: PAYLOAD_HASH,
+    });
+
+    assert.equal(evidence.admission.status, 'accepted');
+    assert.equal(evidence.admission.exclusionReason, 'mixedAuthors');
+    assert.equal(evidence.sourceKind, 'providerMixedInbound');
+    assert.equal(evidence.capturePolicy, 'excluded');
+    assert.deepEqual(evidence.author, {
+      kind: 'mixedRemote',
+      participantCount: 2,
+      reason: 'multipleProvenAuthors',
+    });
+    assertExportSafeEvidence(evidence);
+  });
+
+  it('exports provider replay admission as excluded system evidence without local envelope identity', () => {
+    const evidence = exportProviderInboundUpdateAdmissionEvidence(makeV1(), {
+      expectedPayloadHash: PAYLOAD_HASH,
+      legacyClassification: {
+        providerId: 'provider-stable-1',
+        stableOriginId: 'provider-stable-1',
+      },
+    });
+
+    assert.equal(evidence.envelopeVersion, 'provider-inbound-update-v1');
+    assert.equal(evidence.admission.status, 'accepted');
+    assert.equal(evidence.admission.exclusionReason, 'providerReplay');
+    assert.equal(evidence.sourceKind, 'providerReplay');
+    assert.equal(evidence.capturePolicy, 'excluded');
+    assert.equal(evidence.replay, true);
+    assert.equal(evidence.system, true);
+    assert.deepEqual(evidence.author, {
+      kind: 'unknown',
+      reason: 'providerReplay',
+    });
+    assert.equal(evidence.identity.hasStableOriginId, true);
+    assert.equal(evidence.identity.hasProviderId, true);
+    assertExportSafeEvidence(evidence);
   });
 });

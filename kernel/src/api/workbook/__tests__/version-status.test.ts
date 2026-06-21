@@ -135,6 +135,9 @@ describe('WorkbookVersion status slice', () => {
     expect(status.checkout.stage).toBe('pending');
     expect(status.merge.stage).toBe('pending');
     expect(status.provenanceAdmission.stage).toBe('present');
+    expect(new Set(status.diagnostics.map((diagnostic) => diagnostic.code)).size).toBe(
+      status.diagnostics.length,
+    );
     expect(status.diagnostics.map((diagnostic) => diagnostic.code)).toEqual(
       expect.arrayContaining([
         'version.objectStore.serviceUnavailable',

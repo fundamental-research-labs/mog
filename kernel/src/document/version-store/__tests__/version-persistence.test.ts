@@ -58,10 +58,11 @@ describe('VersionPersistence', () => {
         namespace,
         snapshotRootPayload,
       );
+      const semanticChangeSetPayload = vc06SemanticChangeSetPayload();
       const semanticChangeSetRecord = await objectRecord(
         namespace,
         'workbook.semanticChangeSet.v1',
-        { schemaVersion: 1, changes: [] },
+        semanticChangeSetPayload,
       );
       const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
       const initialized = await provider.initializeGraph({
@@ -107,6 +108,49 @@ describe('VersionPersistence', () => {
       });
       await expect(materialized.workbook.activeSheet.getCell('A2')).resolves.toMatchObject({
         value: 42,
+      });
+
+      const reloadedGraph = await provider.openGraph(namespace);
+      const reloadedCommit = await reloadedGraph.readCommit(initialized.rootCommit.id);
+      expect(reloadedCommit.status).toBe('success');
+      if (reloadedCommit.status !== 'success') {
+        throw new Error(
+          `expected reloaded commit read success: ${reloadedCommit.diagnostics[0]?.code}`,
+        );
+      }
+      expect(reloadedCommit.commit.payload.semanticChangeSetDigest).toEqual(
+        semanticChangeSetRecord.digest,
+      );
+      const reloadedSemanticChangeSetRecord = await reloadedGraph.getObjectRecord({
+        kind: 'object',
+        objectType: 'workbook.semanticChangeSet.v1',
+        digest: reloadedCommit.commit.payload.semanticChangeSetDigest,
+      });
+      expect(reloadedSemanticChangeSetRecord.preimage.payload).toEqual(semanticChangeSetPayload);
+      expect(reloadedSemanticChangeSetRecord.preimage.payload).toMatchObject({
+        changes: expect.arrayContaining([
+          expect.objectContaining({
+            structural: expect.objectContaining({ domain: 'named-ranges' }),
+          }),
+          expect.objectContaining({
+            structural: expect.objectContaining({ domain: 'tables' }),
+          }),
+          expect.objectContaining({
+            structural: expect.objectContaining({ domain: 'comments-notes' }),
+          }),
+          expect.objectContaining({
+            structural: expect.objectContaining({ domain: 'filters' }),
+          }),
+          expect.objectContaining({
+            structural: expect.objectContaining({ domain: 'sorts' }),
+          }),
+          expect.objectContaining({
+            structural: expect.objectContaining({ domain: 'charts.source-range' }),
+          }),
+          expect.objectContaining({
+            structural: expect.objectContaining({ domain: 'floating-objects.anchors' }),
+          }),
+        ]),
       });
 
       await sourceWorkbook.activeSheet.setCell('A1', 99);
@@ -233,6 +277,142 @@ async function objectRecord(
     dependencies: [],
     payload,
   });
+}
+
+function vc06SemanticChangeSetPayload() {
+  return {
+    schemaVersion: 1,
+    changes: [
+      metadataChange({
+        changeId: 'mutation-1:named-range:0',
+        domain: 'named-ranges',
+        entityId: 'name:RevenueTotal',
+        propertyPath: ['definition'],
+        after: semanticObjectValue([
+          { key: 'kind', value: 'Set' },
+          { key: 'name', value: 'RevenueTotal' },
+        ]),
+        display: { entityLabel: { kind: 'value', value: 'RevenueTotal' } },
+      }),
+      metadataChange({
+        changeId: 'mutation-1:table:0',
+        domain: 'tables',
+        entityId: 'sheet-1!table:table-1',
+        propertyPath: ['definition'],
+        after: semanticObjectValue([
+          { key: 'kind', value: 'Set' },
+          { key: 'tableId', value: 'table-1' },
+          { key: 'name', value: 'SalesTable' },
+          { key: 'sheetId', value: 'sheet-1' },
+        ]),
+        display: { entityLabel: { kind: 'value', value: 'SalesTable' } },
+      }),
+      metadataChange({
+        changeId: 'mutation-1:comment:0',
+        domain: 'comments-notes',
+        entityId: 'sheet-1!comment:cell-a1',
+        propertyPath: ['cell'],
+        after: semanticObjectValue([
+          { key: 'kind', value: 'Set' },
+          { key: 'cellId', value: 'cell-a1' },
+          { key: 'address', value: 'A1' },
+        ]),
+        display: { address: { kind: 'value', value: 'A1' } },
+      }),
+      metadataChange({
+        changeId: 'mutation-1:filter:0',
+        domain: 'filters',
+        entityId: 'sheet-1!autoFilter',
+        propertyPath: ['state'],
+        after: semanticObjectValue([
+          { key: 'kind', value: 'Set' },
+          { key: 'hasActiveFilter', value: true },
+          { key: 'visibleRowCount', value: 2 },
+        ]),
+        display: { entityLabel: { kind: 'value', value: 'AutoFilter' } },
+      }),
+      metadataChange({
+        changeId: 'mutation-1:sort:0',
+        domain: 'sorts',
+        entityId: 'sheet-1!A1:B2',
+        propertyPath: ['order'],
+        after: semanticObjectValue([
+          { key: 'kind', value: 'Applied' },
+          { key: 'range', value: 'A1:B2' },
+          { key: 'rowsMoved', value: 1 },
+        ]),
+        display: { address: { kind: 'value', value: 'A1:B2' } },
+      }),
+      metadataChange({
+        changeId: 'mutation-1:chart:0',
+        domain: 'charts.source-range',
+        entityId: 'sheet-1!chart:chart-1',
+        propertyPath: ['sourceRange'],
+        after: semanticObjectValue([
+          { key: 'kind', value: 'created' },
+          { key: 'objectId', value: 'chart-1' },
+          { key: 'objectType', value: 'chart' },
+          { key: 'chartType', value: 'bar' },
+          { key: 'dataRange', value: 'A1:B10' },
+          { key: 'seriesRange', value: 'A1:A10' },
+          { key: 'categoryRange', value: 'B1:B10' },
+        ]),
+        display: { entityLabel: { kind: 'value', value: 'chart-1' } },
+      }),
+      metadataChange({
+        changeId: 'mutation-1:floating-object:0',
+        domain: 'floating-objects.anchors',
+        entityId: 'sheet-1!object:picture-1',
+        propertyPath: ['anchor'],
+        after: semanticObjectValue([
+          { key: 'kind', value: 'updated' },
+          { key: 'objectId', value: 'picture-1' },
+          { key: 'objectType', value: 'picture' },
+          { key: 'changedFields', value: { kind: 'array', values: ['anchor', 'width'] } },
+          {
+            key: 'bounds',
+            value: semanticObjectValue([
+              { key: 'x', value: 10 },
+              { key: 'y', value: 20 },
+              { key: 'width', value: 320 },
+              { key: 'height', value: 180 },
+              { key: 'rotation', value: 0 },
+            ]),
+          },
+        ]),
+        display: { entityLabel: { kind: 'value', value: 'picture-1' } },
+      }),
+    ],
+  };
+}
+
+function metadataChange(input: {
+  readonly changeId: string;
+  readonly domain: string;
+  readonly entityId: string;
+  readonly propertyPath: readonly string[];
+  readonly after: unknown;
+  readonly display?: {
+    readonly address?: { readonly kind: 'value'; readonly value: string };
+    readonly entityLabel?: { readonly kind: 'value'; readonly value: string };
+  };
+}) {
+  return {
+    structural: {
+      kind: 'metadata',
+      changeId: input.changeId,
+      domain: input.domain,
+      entityId: input.entityId,
+      propertyPath: input.propertyPath,
+    },
+    before: { kind: 'value', value: null },
+    after: { kind: 'value', value: input.after },
+    ...(input.display ? { display: input.display } : {}),
+  };
+}
+
+function semanticObjectValue(fields: readonly { readonly key: string; readonly value: unknown }[]) {
+  return { kind: 'object', fields };
 }
 
 function expectInitializeSuccess(

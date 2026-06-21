@@ -3,6 +3,7 @@ import { jest } from '@jest/globals';
 import { WorkbookVersionImpl } from '../version';
 
 const CHILD_COMMIT_ID = `commit:sha256:${'2'.repeat(64)}`;
+const MOVED_COMMIT_ID = `commit:sha256:${'3'.repeat(64)}`;
 const REF_REVISION = { kind: 'counter', value: '2' } as const;
 
 const SURFACE_CAPABILITY_KEYS = [
@@ -46,7 +47,10 @@ function createSurfaceReadyVersion() {
   return createSurfaceReadyVersionWithContext();
 }
 
-function createSurfaceReadyVersionWithContext(ctxOverrides: Record<string, unknown> = {}) {
+function createSurfaceReadyVersionWithContext(
+  ctxOverrides: Record<string, unknown> = {},
+  versioningOverrides: Record<string, unknown> = {},
+) {
   const readHead = jest.fn(async () => ({
     status: 'success',
     head: {
@@ -115,6 +119,7 @@ function createSurfaceReadyVersionWithContext(ctxOverrides: Record<string, unkno
         },
         checkoutService: { planCheckout },
         mergeService: { merge },
+        ...versioningOverrides,
       },
     }),
   );
@@ -212,6 +217,131 @@ describe('WorkbookVersion surface status', () => {
     expect(surfaceReady.planCheckout).not.toHaveBeenCalled();
     expect(surfaceReady.merge).not.toHaveBeenCalled();
     expect(surfaceReady.diff).not.toHaveBeenCalled();
+  });
+
+  it('uses attached real dirty status without invoking checkout planning', async () => {
+    const dirtyStatus = {
+      statusRevision: 'dirty-revision-1',
+      checkoutPreflightToken: 'checkout-preflight-token-1',
+      hasUncommittedLocalChanges: false,
+      commitEligibleChanges: false,
+      unsupportedDirtyDomains: [],
+      pendingProviderWrites: false,
+      pendingRecalc: false,
+      checkoutSafe: true,
+      unsafeReasons: [],
+      source: 'VC-05' as const,
+      diagnostics: [],
+    };
+    const readDirtyStatus = jest.fn(() => dirtyStatus);
+    const surfaceReady = createSurfaceReadyVersionWithContext(
+      {},
+      {
+        surfaceStatusService: {
+          readDirtyStatus,
+        },
+      },
+    );
+
+    const surface = await surfaceReady.version.getSurfaceStatus();
+
+    expect(surface.dirty).toEqual(dirtyStatus);
+    expect(surface.diagnostics.map((diagnostic) => diagnostic.code)).not.toContain(
+      'version.surfaceStatus.dirtyTokenUnavailable',
+    );
+    expect(readDirtyStatus).toHaveBeenCalledTimes(1);
+    expect(surfaceReady.planCheckout).not.toHaveBeenCalled();
+  });
+
+  it('reports stale active checkout-session status from current ref head', async () => {
+    const readDirtyStatus = jest.fn(() => ({
+      statusRevision: 'dirty-revision-clean',
+      checkoutPreflightToken: 'checkout-preflight-token-clean',
+      hasUncommittedLocalChanges: false,
+      commitEligibleChanges: false,
+      unsupportedDirtyDomains: [],
+      pendingProviderWrites: false,
+      pendingRecalc: false,
+      checkoutSafe: true,
+      unsafeReasons: [],
+      source: 'VC-05' as const,
+      diagnostics: [],
+    }));
+    const readActiveCheckoutSession = jest.fn(() => ({
+      checkedOutCommitId: CHILD_COMMIT_ID,
+      branchName: 'main',
+      refHeadAtMaterialization: CHILD_COMMIT_ID,
+      detached: false,
+    }));
+    const readHeadShouldNotRun = jest.fn();
+    const sessionReadRef = jest.fn(async () => ({
+      status: 'success',
+      ref: {
+        name: 'refs/heads/main',
+        commitId: MOVED_COMMIT_ID,
+        revision: REF_REVISION,
+      },
+      diagnostics: [],
+    }));
+    const surfaceReady = createSurfaceReadyVersionWithContext(
+      {},
+      {
+        surfaceStatusService: {
+          readDirtyStatus,
+          readActiveCheckoutSession,
+        },
+        readService: {
+          readHead: readHeadShouldNotRun,
+          readRef: sessionReadRef,
+          listCommits: jest.fn(),
+        },
+      },
+    );
+
+    const surface = await surfaceReady.version.getSurfaceStatus();
+
+    expect(surface.current).toMatchObject({
+      headCommitId: CHILD_COMMIT_ID,
+      checkedOutCommitId: CHILD_COMMIT_ID,
+      branchName: 'main',
+      refHeadAtMaterialization: CHILD_COMMIT_ID,
+      currentRefHeadId: MOVED_COMMIT_ID,
+      detached: false,
+      stale: true,
+      staleReason: 'refMoved',
+    });
+    expect(readActiveCheckoutSession).toHaveBeenCalledTimes(1);
+    expect(readHeadShouldNotRun).not.toHaveBeenCalled();
+    expect(sessionReadRef).toHaveBeenCalledWith('refs/heads/main');
+    expect(surfaceReady.planCheckout).not.toHaveBeenCalled();
+  });
+
+  it('falls back to conservative dirty status when the adapter payload is invalid', async () => {
+    const readDirtyStatus = jest.fn(() => ({
+      checkoutSafe: true,
+    }));
+    const { version } = createSurfaceReadyVersionWithContext(
+      {},
+      {
+        surfaceStatusService: {
+          readDirtyStatus,
+        },
+      },
+    );
+
+    const surface = await version.getSurfaceStatus();
+
+    expect(surface.dirty).toMatchObject({
+      source: 'VC-05',
+      checkoutSafe: false,
+      checkoutPreflightToken: 'VC-05-checkout-preflight-unavailable',
+    });
+    expect(surface.diagnostics.map((diagnostic) => diagnostic.code)).toEqual(
+      expect.arrayContaining([
+        'version.surfaceStatus.dirtyStatusInvalid',
+        'version.surfaceStatus.dirtyTokenUnavailable',
+      ]),
+    );
   });
 
   it('keeps proposal, revert, and provenance disabled by upstream dependency', async () => {

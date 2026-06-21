@@ -110,7 +110,10 @@ import type {
   WorkbookConfig,
   WorkbookVersioningConfig,
 } from './types';
-import { attachWorkbookVersioning } from './version-wiring';
+import {
+  attachWorkbookVersioning,
+  attachWorkbookVersionSurfaceStatusService,
+} from './version-wiring';
 import {
   getKnownSheetNames,
   resolveSheetNameToId as resolveWorkbookSheetNameToId,
@@ -187,6 +190,7 @@ import {
   type WorkbookContextBinding,
 } from './context-binding';
 import { createWorkbookCheckoutSnapshotMaterializer } from './version-checkout-materializer';
+import { createWorkbookVersionSurfaceStatusService } from './version-surface-status-service';
 
 import { DEFAULT_CHROME_THEME } from '@mog-sdk/contracts/rendering';
 import { NO_HOST_OPERATION_GATE, OperationDeniedError } from '../../document/host-operation-gate';
@@ -254,6 +258,16 @@ export class WorkbookImpl implements WorkbookInternal {
   private readonly _checkoutMaterializations = new Set<SnapshotRootFreshLifecycleMaterialization>();
   private _checkoutTransactionSequence = 0;
   private _activeCheckoutTransaction: WorkbookCheckoutTransactionToken | null = null;
+  private _dirtyStatusSequence = 0;
+  private readonly versionSurfaceStatusService = createWorkbookVersionSurfaceStatusService({
+    readDirtyState: () => ({
+      hasUncommittedLocalChanges: this._dirty,
+      calculationState: this._calculationState,
+      checkoutInProgress: this._activeCheckoutTransaction !== null,
+      revision: this._dirtyStatusSequence,
+      contextGeneration: this.contextBinding.generation,
+    }),
+  });
   private readonly checkoutTransactionGuard: VersionCheckoutTransactionGuard = {
     beginCheckoutTransaction: () => this.beginCheckoutTransaction(),
     endCheckoutTransaction: (token) => this.endCheckoutTransaction(token),
@@ -321,6 +335,7 @@ export class WorkbookImpl implements WorkbookInternal {
     if (versioning) {
       attachWorkbookVersioning(this.ctx, versioning);
     }
+    attachWorkbookVersionSurfaceStatusService(this.ctx, this.versionSurfaceStatusService);
     this._liveness =
       config.liveness ??
       createHandleLiveness({
@@ -379,7 +394,7 @@ export class WorkbookImpl implements WorkbookInternal {
 
     // Subscribe to all events to track dirty state.
     const unsub = this.eventBus.onAll(() => {
-      this._dirty = true;
+      this.markDirty();
     });
     if (unsub) {
       this._disposables.track(toDisposable(unsub));
@@ -496,7 +511,7 @@ export class WorkbookImpl implements WorkbookInternal {
 
   private async publishCheckoutMaterialization(
     materialization: SnapshotRootFreshLifecycleMaterialization,
-    _input: CheckoutSnapshotApplyInput,
+    input: CheckoutSnapshotApplyInput,
   ): Promise<void> {
     const nextContext = materialization.context;
     const currentVersioning = (this.ctx as DocumentContext & { versioning?: unknown }).versioning;
@@ -508,6 +523,7 @@ export class WorkbookImpl implements WorkbookInternal {
     mutableNextContext.eventBus = this.eventBus;
 
     this.contextBinding.publish(nextContext);
+    this.versionSurfaceStatusService.recordCheckoutMaterialization(input);
     this._checkoutMaterializations.add(materialization);
     this.resetRuntimeCachesAfterCheckoutPublish();
     await this.refreshSheetMetadata();
@@ -522,7 +538,7 @@ export class WorkbookImpl implements WorkbookInternal {
     this._cachedSheetIds = [];
     this._cachedSheetNames = [];
     this._cachedSheetCount = 0;
-    this._dirty = false;
+    this.setDirtyState(false);
     this._calcSuspended = false;
     this._calculationState = 'done';
     this._cachedCalcMode = null;
@@ -587,8 +603,18 @@ export class WorkbookImpl implements WorkbookInternal {
     return this._dirty;
   }
 
+  private markDirty(): void {
+    this.setDirtyState(true);
+  }
+
+  private setDirtyState(next: boolean): void {
+    if (this._dirty === next) return;
+    this._dirty = next;
+    this._dirtyStatusSequence += 1;
+  }
+
   markClean(): void {
-    this._dirty = false;
+    this.setDirtyState(false);
   }
 
   get previouslySaved(): boolean {

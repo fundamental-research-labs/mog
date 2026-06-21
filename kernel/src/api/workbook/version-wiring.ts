@@ -6,6 +6,7 @@ import { createWorkbookVersionDiffService } from '../../document/version-store/d
 import { createWorkbookVersionMergeService } from '../../document/version-store/merge-service';
 import { createSemanticMutationCapture } from '../../document/version-store/semantic-mutation-capture';
 import type { WorkbookVersioningConfig } from './types';
+import type { WorkbookVersionSurfaceStatusService } from './version-surface-status-service';
 
 type MutableVersioningContext = DocumentContext & {
   versioning?: unknown;
@@ -71,6 +72,19 @@ export function attachWorkbookVersioning(
     ...(checkoutService ? { checkoutService } : {}),
     ...(mergeService ? { mergeService } : {}),
     ...(branchService ? { branchService } : {}),
+  };
+}
+
+export function attachWorkbookVersionSurfaceStatusService(
+  ctx: DocumentContext,
+  service: WorkbookVersionSurfaceStatusService,
+): void {
+  const runtime = ctx as MutableVersioningContext;
+  const existing = isRecord(runtime.versioning) ? runtime.versioning : {};
+  runtime.versioning = {
+    ...existing,
+    surfaceStatusService: service,
+    versionSurfaceStatusService: service,
   };
 }
 

@@ -17,6 +17,13 @@ import { hasAttachedVersionCheckoutService } from './version-checkout';
 import { hasAttachedVersionWriteService } from './version-commit';
 import { hasAttachedVersionMergeService } from './version-merge';
 import { hasAttachedVersionRefLifecycleService } from './version-refs';
+import {
+  getAttachedVersionSurfaceStatusService,
+  readCheckoutSessionCurrentStatus,
+  readVersionSurfaceCheckoutSession,
+  readVersionSurfaceDirtyStatus,
+} from './version-surface-status-service';
+import type { VersionSurfaceCheckoutSession } from './version-surface-status-service';
 
 const VERSION_HEAD_REF = 'HEAD';
 const VERSION_MAIN_REF = 'refs/heads/main' satisfies VersionMainRefName;
@@ -78,6 +85,10 @@ type AttachedVersionServices = AttachedVersionReadService & {
   readonly mergeService?: unknown;
   readonly versionMergeService?: unknown;
   readonly publicService?: unknown;
+  readonly surfaceStatusService?: unknown;
+  readonly versionSurfaceStatusService?: unknown;
+  readonly statusService?: unknown;
+  readonly dirtyStatusService?: unknown;
 };
 
 type MaybeVersionRuntimeContext = DocumentContext & {
@@ -132,6 +143,7 @@ export async function getWorkbookVersionSurfaceStatus(
   workbookStatus?: WorkbookVersionStatus,
 ): Promise<VersionSurfaceStatus> {
   const services = getAttachedVersionServices(ctx);
+  const surfaceStatusService = getAttachedVersionSurfaceStatusService(services);
   const featureGate = getFeatureGateStatus(ctx);
   const hostCapabilityDecisions = getHostCapabilityDecisions(ctx);
   const diagnostics: VersionDiagnostic[] = [];
@@ -181,10 +193,14 @@ export async function getWorkbookVersionSurfaceStatus(
   };
 
   diagnostics.push(...storage.diagnostics);
+  const activeCheckoutSession = await readVersionSurfaceCheckoutSession(
+    surfaceStatusService,
+    diagnostics,
+  );
   const current = featureGate.enabled
-    ? await readCurrentStatus(readService, diagnostics)
+    ? await readCurrentStatus(readService, diagnostics, activeCheckoutSession)
     : defaultCurrentStatus();
-  const dirty = conservativeDirtyStatus();
+  const dirty = await readVersionSurfaceDirtyStatus(surfaceStatusService, diagnostics);
   diagnostics.push(...dirty.diagnostics);
   const capabilities = buildCapabilityStates(
     featureGate,
@@ -274,7 +290,16 @@ function getStorageStatus(
 async function readCurrentStatus(
   readService: AttachedVersionReadService | null,
   diagnostics: VersionDiagnostic[],
+  activeCheckoutSession: VersionSurfaceCheckoutSession | null,
 ): Promise<VersionSurfaceStatus['current']> {
+  if (activeCheckoutSession) {
+    return readCheckoutSessionCurrentStatus({
+      session: activeCheckoutSession,
+      ...(readService?.readRef ? { readRef: readService.readRef } : {}),
+      diagnostics,
+    });
+  }
+
   if (!readService) {
     diagnostics.push(
       surfaceDiagnostic(
@@ -343,28 +368,6 @@ async function readCurrentStatus(
     ...(currentRefHeadId ? { currentRefHeadId } : {}),
     detached: !head.refName,
     stale: false,
-  };
-}
-
-function conservativeDirtyStatus(): VersionSurfaceStatus['dirty'] {
-  const diagnostic = surfaceDiagnostic(
-    'version.surfaceStatus.dirtyTokenUnavailable',
-    'warning',
-    'VC-05 dirty checkout preflight tokens are not attached; checkout is disabled conservatively.',
-    'VC-05',
-  );
-  return {
-    statusRevision: 'VC-05-dirty-status-unavailable',
-    checkoutPreflightToken: 'VC-05-checkout-preflight-unavailable',
-    hasUncommittedLocalChanges: false,
-    commitEligibleChanges: false,
-    unsupportedDirtyDomains: ['unknown'],
-    pendingProviderWrites: false,
-    pendingRecalc: false,
-    checkoutSafe: false,
-    unsafeReasons: [diagnostic],
-    source: 'VC-05',
-    diagnostics: [diagnostic],
   };
 }
 

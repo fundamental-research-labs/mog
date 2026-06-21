@@ -268,6 +268,104 @@ describe('WorkbookVersion checkout lifecycle materialization', () => {
       await handle.dispose();
     }
   });
+
+  it('reports applied branch checkout session status and stale external ref movement', async () => {
+    const { provider, initialized } = await initializeVersionGraph();
+    const sourceHandle = await DocumentFactory.create({
+      documentId: DOCUMENT_SCOPE.documentId,
+      environment: 'headless',
+      userTimezone: 'UTC',
+    });
+    const checkoutHandle = await DocumentFactory.create({
+      documentId: DOCUMENT_SCOPE.documentId,
+      environment: 'headless',
+      userTimezone: 'UTC',
+    });
+    let sourceWb: Workbook | undefined;
+    let checkoutWb: Workbook | undefined;
+
+    try {
+      sourceWb = await sourceHandle.workbook({ versioning: { provider } });
+      await sourceWb.activeSheet.setCell('A1', 'branch-v1');
+      const branchBase = await sourceWb.version.commit({
+        expectedHead: {
+          commitId: initialized.rootCommit.id,
+          revision: initialized.initialHead.revision,
+          symbolicHeadRevision: initialized.symbolicHead.revision,
+        },
+      });
+      sourceWb.markClean();
+
+      const created = await sourceWb.version.createBranch({
+        name: 'scenario/status' as any,
+        targetCommitId: branchBase.id,
+      });
+      expect(created).toMatchObject({
+        status: 'success',
+        ref: {
+          name: 'refs/heads/scenario/status',
+          commitId: branchBase.id,
+        },
+      });
+      if (created.status !== 'success' || !created.ref) {
+        throw new Error(`expected branch create success: ${created.diagnostics[0]?.issueCode}`);
+      }
+
+      checkoutWb = await checkoutHandle.workbook({ versioning: { provider } });
+      checkoutWb.markClean();
+      await expect(
+        checkoutWb.version.checkout({ kind: 'ref', name: 'refs/heads/scenario/status' as any }),
+      ).resolves.toMatchObject({
+        status: 'success',
+        materialization: 'applied',
+        mutationGuarantee: 'workbook-state-materialized',
+      });
+
+      await expect(checkoutWb.version.getSurfaceStatus()).resolves.toMatchObject({
+        current: {
+          headCommitId: branchBase.id,
+          checkedOutCommitId: branchBase.id,
+          branchName: 'scenario/status',
+          refHeadAtMaterialization: branchBase.id,
+          currentRefHeadId: branchBase.id,
+          detached: false,
+          stale: false,
+        },
+        dirty: {
+          checkoutSafe: true,
+          hasUncommittedLocalChanges: false,
+        },
+      });
+
+      await sourceWb.activeSheet.setCell('A2', 'branch-v2');
+      const moved = await sourceWb.version.commit({
+        targetRef: 'refs/heads/scenario/status' as any,
+        expectedHead: {
+          commitId: branchBase.id,
+          revision: created.ref.revision,
+        },
+      });
+      sourceWb.markClean();
+
+      await expect(checkoutWb.version.getSurfaceStatus()).resolves.toMatchObject({
+        current: {
+          headCommitId: branchBase.id,
+          checkedOutCommitId: branchBase.id,
+          branchName: 'scenario/status',
+          refHeadAtMaterialization: branchBase.id,
+          currentRefHeadId: moved.id,
+          detached: false,
+          stale: true,
+          staleReason: 'refMoved',
+        },
+      });
+    } finally {
+      if (checkoutWb) await checkoutWb.close('skipSave');
+      if (sourceWb) await sourceWb.close('skipSave');
+      await checkoutHandle.dispose();
+      await sourceHandle.dispose();
+    }
+  });
 });
 
 function expectInitializeSuccess(

@@ -80,22 +80,38 @@ export interface VersionMergeConflictValuePageRef {
   readonly expiresAt?: string;
 }
 
+export interface VersionMergeConflictDetailResolutionOption {
+  readonly optionId: string;
+  readonly conflictId: string;
+  readonly kind: VersionMergeConflictResolutionOptionKind;
+  readonly value: VersionDiffValue;
+  readonly recalcRequired: boolean;
+}
+
+export interface VersionMergeConflictDetailBase {
+  readonly conflictId: string;
+  readonly conflictDigest: string;
+  readonly valueRole: VersionMergeConflictValueRole;
+  readonly purpose: VersionMergeConflictDetailPurpose;
+  readonly resolutionOptions: readonly VersionMergeConflictDetailResolutionOption[];
+}
+
 export type VersionMergeConflictDetailResult =
-  | {
+  | (VersionMergeConflictDetailBase & {
       readonly schemaVersion: 1;
       readonly kind: 'reviewValue';
       readonly value: VersionDiffValue;
       readonly page?: VersionMergeConflictValuePageRef;
       readonly nextPageToken?: PageCursor;
-    }
-  | {
+    })
+  | (VersionMergeConflictDetailBase & {
       readonly schemaVersion: 1;
       readonly kind: 'resolutionPayload';
       readonly value: VersionDiffValue;
       readonly sealedPayloadRef?: VersionSealedResolutionPayloadRef;
       readonly page?: VersionMergeConflictValuePageRef;
       readonly nextPageToken?: PageCursor;
-    };
+    });
 
 export type VersionMergeResolutionPayloadPurpose = 'chooseValue' | 'custom';
 export type VersionSealedResolutionPayloadStorageMode = 'serverEncrypted' | 'localOnly';

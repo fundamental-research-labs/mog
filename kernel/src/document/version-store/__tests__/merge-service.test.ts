@@ -574,6 +574,72 @@ describe('WorkbookVersionMergeService', () => {
         },
       },
     });
+
+    await expect(
+      service.merge(
+        {
+          base: graph.rootCommitId,
+          ours: graph.oursCommitId,
+          theirs: theirsDescendantCommitId,
+        },
+        {
+          mode: 'preview',
+          targetRef: 'refs/heads/main' as any,
+          expectedTargetHead: {
+            commitId: graph.oursCommitId,
+            revision: { kind: 'counter', value: '1' },
+          },
+          persistReviewRecord: true,
+        },
+      ),
+    ).resolves.toMatchObject({
+      status: 'fastForward',
+      resultId: result.resultId,
+      resultDigest: result.resultDigest,
+      attemptPersistence: 'persisted',
+      attemptKind: 'applyable',
+    });
+
+    await expect(
+      store.completeIntent({
+        intentId,
+        resolvedAttemptDigest: {
+          algorithm: 'sha256',
+          digest: resolvedAttemptDigest,
+        },
+        completedAt: '2026-06-21T00:00:01.000Z',
+        terminal: {
+          status: 'fastForwarded',
+          headBefore: graph.oursCommitId,
+          headAfter: theirsDescendantCommitId,
+          commitId: theirsDescendantCommitId,
+        },
+      }),
+    ).resolves.toMatchObject({ status: 'completed' });
+    await expect(
+      service.merge(
+        {
+          base: graph.rootCommitId,
+          ours: graph.oursCommitId,
+          theirs: theirsDescendantCommitId,
+        },
+        {
+          mode: 'preview',
+          targetRef: 'refs/heads/main' as any,
+          expectedTargetHead: {
+            commitId: graph.oursCommitId,
+            revision: { kind: 'counter', value: '1' },
+          },
+          persistReviewRecord: true,
+        },
+      ),
+    ).resolves.toMatchObject({
+      status: 'fastForward',
+      resultId: result.resultId,
+      resultDigest: result.resultDigest,
+      attemptPersistence: 'persisted',
+      attemptKind: 'applyable',
+    });
   });
 
   it('classifies incoming commits already reachable from ours as already merged', async () => {

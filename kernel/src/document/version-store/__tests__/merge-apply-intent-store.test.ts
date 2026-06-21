@@ -89,6 +89,12 @@ describe('merge apply intent store', () => {
       status: 'existing',
       record: { intentId: input.intentId },
     });
+    await expect(
+      store.beginIntent({ ...input, createdAt: '2026-06-21T00:00:02.000Z' }),
+    ).resolves.toMatchObject({
+      status: 'existing',
+      record: { intentId: input.intentId },
+    });
     await expect(store.readByIntentId(input.intentId)).resolves.toMatchObject({
       status: 'found',
       record: { idempotencyKey: input.idempotencyKey },
@@ -129,6 +135,12 @@ describe('merge apply intent store', () => {
       status: 'completed',
       record: { state: 'finalized', terminal: { status: 'fastForwarded' } },
     });
+    await expect(
+      store.beginIntent({ ...input, createdAt: '2026-06-21T00:00:03.000Z' }),
+    ).resolves.toMatchObject({
+      status: 'existing',
+      record: { state: 'finalized', terminal: { status: 'fastForwarded' } },
+    });
 
     const snapshot = await backend.exportSnapshot();
     const reloadedBackend = await InMemoryVersionDocumentProviderBackend.fromSnapshot(snapshot);
@@ -163,6 +175,12 @@ describe('merge apply intent store', () => {
       },
     });
     await expect(
+      reloadedStore.beginIntent({ ...input, createdAt: '2026-06-21T00:00:02.000Z' }),
+    ).resolves.toMatchObject({
+      status: 'existing',
+      record: { intentId: input.intentId },
+    });
+    await expect(
       reloadedStore.completeIntent({
         intentId: input.intentId,
         resolvedAttemptDigest: input.resolvedAttemptDigest,
@@ -170,6 +188,12 @@ describe('merge apply intent store', () => {
         terminal: { status: 'fastForwarded', headBefore: OURS, headAfter: THEIRS },
       }),
     ).resolves.toMatchObject({ status: 'completed' });
+    await expect(
+      reloadedStore.beginIntent({ ...input, createdAt: '2026-06-21T00:00:03.000Z' }),
+    ).resolves.toMatchObject({
+      status: 'existing',
+      record: { state: 'finalized', terminal: { status: 'fastForwarded' } },
+    });
   });
 });
 

@@ -285,7 +285,27 @@ export function cloneIntent(record: MergeApplyIntentRecord | undefined): MergeAp
 }
 
 export function intentsEquivalent(left: MergeApplyIntentRecord, right: MergeApplyIntentRecord): boolean {
-  return canonicalJsonStringify(left) === canonicalJsonStringify(right);
+  return canonicalJsonStringify(intentIdentity(left)) === canonicalJsonStringify(intentIdentity(right));
+}
+
+function intentIdentity(record: MergeApplyIntentRecord) {
+  return {
+    schemaVersion: record.schemaVersion,
+    recordKind: record.recordKind,
+    intentId: record.intentId,
+    idempotencyKey: record.idempotencyKey,
+    namespaceKey: record.namespaceKey,
+    documentScopeKey: record.documentScopeKey,
+    applyKind: record.applyKind,
+    base: record.base,
+    ours: record.ours,
+    theirs: record.theirs,
+    targetRef: record.targetRef,
+    expectedTargetHead: record.expectedTargetHead,
+    resultDigest: record.resultDigest,
+    resolutionSetDigest: record.resolutionSetDigest,
+    resolvedAttemptDigest: record.resolvedAttemptDigest,
+  };
 }
 
 export function objectDigestsEqual(left: ObjectDigest, right: ObjectDigest): boolean {

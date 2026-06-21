@@ -108,11 +108,43 @@ export type {
 } from './lifecycle';
 
 // Inbound update types
+export {
+  DEFAULT_PROVENANCE_REDACTION_POLICY,
+  PROVIDER_INBOUND_V2_BASE_PROOF_FIELDS,
+  PROVIDER_INBOUND_V2_SINGLE_AUTHOR_PROOF_FIELDS,
+  classifyLegacyProviderInboundUpdate,
+  classifyLegacyRawUpdate,
+  isProviderInboundUpdateEnvelopeV2,
+  validateProviderInboundUpdateEnvelope,
+  validateSyncUpdateProvenance,
+} from './inbound-updates';
+
 export type {
   ProviderAuthorityProof,
   ProviderInboundProofField,
   ProviderInboundUpdateEnvelope,
+  ProviderInboundUpdateEnvelopeAny,
+  ProviderInboundUpdateEnvelopeV2,
   ProviderInboundAssetDependency,
+  LegacyProviderClassificationOptions,
+  LegacyRawUpdateClassificationOptions,
+  ProvenanceRedactionPolicy,
+  RedactedAgentRef,
+  RedactedRemoteAuthorRef,
+  SyncUpdateAuthorState,
+  SyncUpdateCapturePolicy,
+  SyncUpdateExclusionDiagnostic,
+  SyncUpdateExclusionReason,
+  SyncUpdateIdentity,
+  SyncUpdateOriginKind,
+  SyncUpdateProvenance,
+  SyncUpdateSourceKind,
+  SyncUpdateTrust,
+  SyncUpdateTrustStatus,
+  SyncUpdateValidationDiagnostic,
+  SyncUpdateValidationReason,
+  SyncUpdateValidationResult,
+  SyncUpdateValidationSubreason,
 } from './inbound-updates';
 
 // High-water mark types

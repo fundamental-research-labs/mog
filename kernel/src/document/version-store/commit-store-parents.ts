@@ -11,17 +11,17 @@ type ParentCommitIdsResult =
   | { readonly ok: true; readonly parentCommitIds: readonly WorkbookCommitId[] }
   | { readonly ok: false; readonly diagnostics: readonly WorkbookCommitStoreDiagnostic[] };
 
-export function parseVc04ParentCommitIds(value: unknown): ParentCommitIdsResult {
+export function parseWorkbookCommitParentIds(value: unknown): ParentCommitIdsResult {
   if (!Array.isArray(value)) {
     return failed([
       diagnostic('VERSION_INVALID_COMMIT_ID', 'Commit parentCommitIds must be an array.'),
     ]);
   }
-  if (value.length > 1) {
+  if (value.length > 2) {
     return failed([
       diagnostic(
         'VERSION_UNSUPPORTED_PARENT_COMMIT',
-        'VC-04 supports root commits and single-parent forward commits only.',
+        'Workbook commits support root, single-parent, and two-parent merge commits only.',
         { details: { parentCommitCount: value.length } },
       ),
     ]);
@@ -30,59 +30,102 @@ export function parseVc04ParentCommitIds(value: unknown): ParentCommitIdsResult 
     return { ok: true, parentCommitIds: [] };
   }
 
+  const parentCommitIds: WorkbookCommitId[] = [];
+  for (let index = 0; index < value.length; index += 1) {
+    try {
+      parentCommitIds.push(parseWorkbookCommitId(value[index], `parentCommitIds[${index}]`));
+    } catch {
+      return failed([
+        diagnostic('VERSION_INVALID_COMMIT_ID', 'Parent commit id must be commit:sha256:<64 hex>.'),
+      ]);
+    }
+  }
+  if (parentCommitIds.length === 2 && parentCommitIds[0] === parentCommitIds[1]) {
+    return failed([
+      diagnostic(
+        'VERSION_UNSUPPORTED_PARENT_COMMIT',
+        'Two-parent merge commits require distinct parent commit ids.',
+        { details: { duplicateParentCommitId: parentCommitIds[0] } },
+      ),
+    ]);
+  }
+  return { ok: true, parentCommitIds };
+}
+
+export function parseVc04ParentCommitIds(value: unknown): ParentCommitIdsResult {
+  const parsed = parseWorkbookCommitParentIds(value);
+  if (!parsed.ok) return parsed;
+  if (parsed.parentCommitIds.length > 1) {
+    return failed([
+      diagnostic(
+        'VERSION_UNSUPPORTED_PARENT_COMMIT',
+        'VC-04 supports root commits and single-parent forward commits only.',
+        { details: { parentCommitCount: parsed.parentCommitIds.length } },
+      ),
+    ]);
+  }
+  return parsed;
+}
+
+export function parseWorkbookMergeParentCommitId(value: unknown): ParentCommitIdsResult {
   try {
     return {
       ok: true,
-      parentCommitIds: [parseWorkbookCommitId(value[0], 'parentCommitIds[0]')],
+      parentCommitIds: [parseWorkbookCommitId(value, 'mergeParentCommitId')],
     };
   } catch {
     return failed([
-      diagnostic('VERSION_INVALID_COMMIT_ID', 'Parent commit id must be commit:sha256:<64 hex>.'),
+      diagnostic(
+        'VERSION_INVALID_COMMIT_ID',
+        'Merge parent commit id must be commit:sha256:<64 hex>.',
+      ),
     ]);
   }
 }
 
-export async function validateVc04ParentCommitClosureForCreate(
+export async function validateWorkbookParentCommitClosureForCreate(
   objectStore: InMemoryVersionObjectStore,
   value: readonly (WorkbookCommitId | string)[],
 ): Promise<ParentCommitIdsResult> {
-  const parsed = parseVc04ParentCommitIds(value);
+  const parsed = parseWorkbookCommitParentIds(value);
   if (!parsed.ok || parsed.parentCommitIds.length === 0) {
     return parsed;
   }
 
-  const parentCommitId = parsed.parentCommitIds[0];
-  const parentDependency = commitDependency(parentCommitId);
-  try {
-    const parentRecord = await objectStore.getObjectRecord<WorkbookCommitPayload>(parentDependency);
-    const dependencyDiagnostics: WorkbookCommitStoreDiagnostic[] = [];
-    for (const dependency of parentRecord.preimage.dependencies) {
-      if (!(await objectStore.hasObject(dependency))) {
-        dependencyDiagnostics.push(missingDependencyDiagnostic(dependency));
+  for (const parentCommitId of parsed.parentCommitIds) {
+    const parentDependency = commitDependency(parentCommitId);
+    try {
+      const parentRecord =
+        await objectStore.getObjectRecord<WorkbookCommitPayload>(parentDependency);
+      const dependencyDiagnostics: WorkbookCommitStoreDiagnostic[] = [];
+      for (const dependency of parentRecord.preimage.dependencies) {
+        if (!(await objectStore.hasObject(dependency))) {
+          dependencyDiagnostics.push(missingDependencyDiagnostic(dependency));
+        }
       }
-    }
-    if (dependencyDiagnostics.length > 0) {
-      return failed(dependencyDiagnostics);
-    }
-  } catch (error) {
-    if (
-      error instanceof VersionObjectStoreError &&
-      error.diagnostic.code === 'VERSION_OBJECT_NOT_FOUND'
-    ) {
+      if (dependencyDiagnostics.length > 0) {
+        return failed(dependencyDiagnostics);
+      }
+    } catch (error) {
+      if (
+        error instanceof VersionObjectStoreError &&
+        error.diagnostic.code === 'VERSION_OBJECT_NOT_FOUND'
+      ) {
+        return failed([
+          diagnostic('VERSION_MISSING_PARENT', 'Parent commit object is missing.', {
+            commitId: parentCommitId,
+            dependency: parentDependency,
+          }),
+        ]);
+      }
       return failed([
-        diagnostic('VERSION_MISSING_PARENT', 'Parent commit object is missing.', {
+        diagnostic('VERSION_OBJECT_STORE_FAILURE', 'Parent commit validation failed.', {
           commitId: parentCommitId,
-          dependency: parentDependency,
+          sourceDiagnostics:
+            error instanceof VersionObjectStoreError ? [error.diagnostic] : undefined,
         }),
       ]);
     }
-    return failed([
-      diagnostic('VERSION_OBJECT_STORE_FAILURE', 'Parent commit validation failed.', {
-        commitId: parentCommitId,
-        sourceDiagnostics:
-          error instanceof VersionObjectStoreError ? [error.diagnostic] : undefined,
-      }),
-    ]);
   }
 
   return parsed;

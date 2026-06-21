@@ -18,8 +18,8 @@ import {
   type VersionObjectStoreDiagnostic,
 } from './object-store';
 import {
-  parseVc04ParentCommitIds,
-  validateVc04ParentCommitClosureForCreate,
+  parseWorkbookCommitParentIds,
+  validateWorkbookParentCommitClosureForCreate,
 } from './commit-store-parents';
 
 export type WorkbookCommitCompletenessDiagnostic = {
@@ -133,7 +133,7 @@ export class InMemoryWorkbookCommitStore {
       ]);
     }
 
-    const parentResult = await validateVc04ParentCommitClosureForCreate(
+    const parentResult = await validateWorkbookParentCommitClosureForCreate(
       this.objectStore,
       input.parentCommitIds ?? [],
     );
@@ -537,7 +537,7 @@ function parseCommitPayload(
       diagnostics: [diagnostic('VERSION_WRONG_DOCUMENT', 'Commit payload documentId is invalid.')],
     };
   }
-  const parentResult = parseVc04ParentCommitIds(payload.parentCommitIds);
+  const parentResult = parseWorkbookCommitParentIds(payload.parentCommitIds);
   if (!parentResult.ok) return { ok: false, diagnostics: parentResult.diagnostics };
 
   const diagnostics: WorkbookCommitStoreDiagnostic[] = [];

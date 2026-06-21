@@ -401,3 +401,89 @@ describe('InMemoryWorkbookCommitStore root commits', () => {
     expect(second.commit.record.digest.digest).not.toBe(first.commit.record.digest.digest);
   });
 });
+
+describe('InMemoryWorkbookCommitStore merge commit parents', () => {
+  it('creates and reads a two-parent commit with parent dependency edges', async () => {
+    const objectStore = new InMemoryVersionObjectStore(NAMESPACE);
+    const commitStore = createInMemoryWorkbookCommitStore(objectStore);
+    const parentA = await commitStore.createWorkbookCommit(
+      baseInput(
+        await objectRecord('workbook.snapshotRoot.v1', { label: 'parent-a' }),
+        await objectRecord('workbook.semanticChangeSet.v1', { label: 'parent-a' }),
+      ),
+    );
+    const parentB = await commitStore.createWorkbookCommit(
+      baseInput(
+        await objectRecord('workbook.snapshotRoot.v1', { label: 'parent-b' }),
+        await objectRecord('workbook.semanticChangeSet.v1', { label: 'parent-b' }),
+      ),
+    );
+    expectCreateSuccess(parentA);
+    expectCreateSuccess(parentB);
+
+    const merge = await commitStore.createWorkbookCommit({
+      ...baseInput(
+        await objectRecord('workbook.snapshotRoot.v1', { label: 'merge' }),
+        await objectRecord('workbook.semanticChangeSet.v1', { label: 'merge' }),
+      ),
+      parentCommitIds: [parentA.commit.id, parentB.commit.id],
+    });
+    expectCreateSuccess(merge);
+
+    expect(merge.commit.payload.parentCommitIds).toEqual([parentA.commit.id, parentB.commit.id]);
+    const parentDependencies = merge.commit.record.preimage.dependencies.filter(
+      (dependency) => dependency.kind === 'commit',
+    );
+    expect(parentDependencies).toHaveLength(2);
+    expect(parentDependencies).toEqual(expect.arrayContaining([
+      {
+        kind: 'commit',
+        commitId: parentA.commit.id,
+        digest: parentA.commit.record.digest,
+      },
+      {
+        kind: 'commit',
+        commitId: parentB.commit.id,
+        digest: parentB.commit.record.digest,
+      },
+    ]));
+
+    const read = await commitStore.readCommit(merge.commit.id);
+    expectReadSuccess(read);
+    expect(read.commit).toEqual(merge.commit);
+  });
+
+  it('rejects duplicate and more-than-two parent commit payloads', async () => {
+    const objectStore = new InMemoryVersionObjectStore(NAMESPACE);
+    const commitStore = createInMemoryWorkbookCommitStore(objectStore);
+    const parent = await commitStore.createWorkbookCommit(
+      baseInput(
+        await objectRecord('workbook.snapshotRoot.v1', { label: 'parent' }),
+        await objectRecord('workbook.semanticChangeSet.v1', { label: 'parent' }),
+      ),
+    );
+    expectCreateSuccess(parent);
+    const mergeInput = baseInput(
+      await objectRecord('workbook.snapshotRoot.v1', { label: 'merge' }),
+      await objectRecord('workbook.semanticChangeSet.v1', { label: 'merge' }),
+    );
+
+    const duplicate = await commitStore.createWorkbookCommit({
+      ...mergeInput,
+      parentCommitIds: [parent.commit.id, parent.commit.id],
+    });
+    expectCreateFailed(duplicate);
+    expect(duplicate.diagnostics[0]).toMatchObject({
+      code: 'VERSION_UNSUPPORTED_PARENT_COMMIT',
+    });
+
+    const tooMany = await commitStore.createWorkbookCommit({
+      ...mergeInput,
+      parentCommitIds: [parent.commit.id, parent.commit.id, parent.commit.id],
+    });
+    expectCreateFailed(tooMany);
+    expect(tooMany.diagnostics[0]).toMatchObject({
+      code: 'VERSION_UNSUPPORTED_PARENT_COMMIT',
+    });
+  });
+});

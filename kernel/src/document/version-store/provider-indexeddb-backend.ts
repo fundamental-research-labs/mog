@@ -5,6 +5,7 @@ import {
   type InMemoryVersionGraphStore,
   type InMemoryVersionGraphStoreSnapshot,
   type CommitVersionGraphInput,
+  type MergeVersionGraphInput,
   type VersionGraphClosureReadResult,
   type VersionGraphCommitPageResult,
   type VersionGraphListCommitsOptions,
@@ -634,28 +635,44 @@ class IndexedDbVersionGraphStore implements VersionGraphStore {
   }
 
   async commit(input: CommitVersionGraphInput): Promise<VersionGraphWriteResult> {
+    return this.commitWithLoadedGraph('commit', input, (graph) => graph.commit(input));
+  }
+
+  async mergeCommit(input: MergeVersionGraphInput): Promise<VersionGraphWriteResult> {
+    return this.commitWithLoadedGraph('mergeCommit', input, (graph) => graph.mergeCommit(input));
+  }
+
+  private async commitWithLoadedGraph(
+    operation: 'commit' | 'mergeCommit',
+    input: CommitVersionGraphInput | MergeVersionGraphInput,
+    write: (graph: InMemoryVersionGraphStore) => Promise<VersionGraphWriteResult>,
+  ): Promise<VersionGraphWriteResult> {
     let graph: InMemoryVersionGraphStore;
     try {
-      graph = await this.loadGraph('commit');
+      graph = await this.loadGraph(operation);
     } catch (error) {
       return failedGraphWrite(
-        [graphLoadDiagnostic(error, this.namespace, 'commit')],
+        [graphLoadDiagnostic(error, this.namespace, operation)],
         'no-write-attempted',
       );
     }
 
-    const result = await graph.commit(input);
+    const result = await write(graph);
     if (result.status !== 'success') return result;
     const expectedRefVersion = input.expectedTargetRefVersion ?? input.expectedMainRefVersion;
     if (expectedRefVersion === undefined) {
       return failedGraphWrite(
         [
-          graphDiagnostic('VERSION_INVALID_OPTIONS', 'IndexedDB graph commit is missing target ref CAS metadata.', {
-            refName: result.ref.name,
-            operation: 'commit',
-            namespace: this.namespace,
-            details: { missingField: 'expectedTargetRefVersion' },
-          }),
+          graphDiagnostic(
+            'VERSION_INVALID_OPTIONS',
+            'IndexedDB graph commit is missing target ref CAS metadata.',
+            {
+              refName: result.ref.name,
+              operation,
+              namespace: this.namespace,
+              details: { missingField: 'expectedTargetRefVersion' },
+            },
+          ),
         ],
         'no-write-attempted',
       );
@@ -684,7 +701,7 @@ class IndexedDbVersionGraphStore implements VersionGraphStore {
               {
                 refName: result.ref.name,
                 commitId: error.actualHead,
-                operation: 'commit',
+                operation,
                 namespace: this.namespace,
                 details: {
                   expectedHead: error.expectedHead,
@@ -701,7 +718,7 @@ class IndexedDbVersionGraphStore implements VersionGraphStore {
       return failedGraphWrite(
         [
           graphDiagnostic('VERSION_OBJECT_STORE_FAILURE', 'IndexedDB graph commit failed.', {
-            operation: 'commit',
+            operation,
             namespace: this.namespace,
             details: { cause: errorMessage(error) },
           }),

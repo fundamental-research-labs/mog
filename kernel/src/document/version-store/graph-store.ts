@@ -30,8 +30,16 @@ import {
   type VersionDiagnostic,
 } from './ref-store';
 import type { InMemoryRefStoreSnapshot } from './ref-store-snapshot';
-import { parseVc04ParentCommitIds } from './commit-store-parents';
 import { graphWriteSuccess, parseGraphCommitExpectedHead } from './graph-store-commit-helpers';
+import {
+  VERSION_GRAPH_LIST_COMMITS_DEFAULT_PAGE_SIZE,
+  VERSION_GRAPH_LIST_COMMITS_MAX_PAGE_SIZE,
+  parseListCommitsOptions,
+} from './graph-store-list-options';
+import {
+  parseGraphCommitParentPlan,
+  type GraphCommitParentPlan,
+} from './graph-store-parent-plans';
 import { orderTopologicalNewestFirst, uniqueSortedCommitIds } from './graph-store-traversal';
 import type { RefName } from './ref-name';
 import {
@@ -47,10 +55,11 @@ import {
   type VersionGraphBranchRefName,
 } from './graph-store-refs';
 
-export const VERSION_GRAPH_LIST_COMMITS_DEFAULT_PAGE_SIZE = 50;
-export const VERSION_GRAPH_LIST_COMMITS_MAX_PAGE_SIZE = 500;
-
 export { VERSION_GRAPH_HEAD_REF, VERSION_GRAPH_MAIN_REF } from './graph-store-refs';
+export {
+  VERSION_GRAPH_LIST_COMMITS_DEFAULT_PAGE_SIZE,
+  VERSION_GRAPH_LIST_COMMITS_MAX_PAGE_SIZE,
+} from './graph-store-list-options';
 export type { VersionGraphBranchRefName } from './graph-store-refs';
 
 export type VersionGraphCommitContentInput = Omit<
@@ -66,6 +75,14 @@ export type CommitVersionGraphInput = VersionGraphCommitContentInput & {
   readonly expectedMainRefVersion?: RefVersion;
   readonly expectedTargetRefVersion?: RefVersion;
   readonly parentCommitIds?: readonly (WorkbookCommitId | string)[];
+};
+
+export type MergeVersionGraphInput = VersionGraphCommitContentInput & {
+  readonly targetRef?: VersionGraphBranchRefName | string;
+  readonly expectedHeadCommitId: WorkbookCommitId | string;
+  readonly expectedMainRefVersion?: RefVersion;
+  readonly expectedTargetRefVersion?: RefVersion;
+  readonly mergeParentCommitId: WorkbookCommitId | string;
 };
 
 export type VersionGraphRef = {
@@ -149,6 +166,7 @@ export type VersionGraphCommitPageResult =
 export type VersionGraphStoreOperation =
   | 'initializeGraph'
   | 'commit'
+  | 'mergeCommit'
   | 'readCommitClosure'
   | 'readHead'
   | 'readRef'
@@ -289,6 +307,23 @@ export class InMemoryVersionGraphStore {
   }
 
   async commit(input: CommitVersionGraphInput): Promise<VersionGraphWriteResult> {
+    return this.commitWithParentPlan(input, {
+      kind: 'normal',
+      parentCommitIds: input.parentCommitIds,
+    });
+  }
+
+  async mergeCommit(input: MergeVersionGraphInput): Promise<VersionGraphWriteResult> {
+    return this.commitWithParentPlan(input, {
+      kind: 'merge',
+      mergeParentCommitId: input.mergeParentCommitId,
+    });
+  }
+
+  private async commitWithParentPlan(
+    input: CommitVersionGraphInput | MergeVersionGraphInput,
+    parentPlan: GraphCommitParentPlan,
+  ): Promise<VersionGraphWriteResult> {
     const namespaceDiagnostics = validateInputNamespaces(this.namespaceKey, input);
     if (namespaceDiagnostics.length > 0) {
       return failedWrite(namespaceDiagnostics, 'no-write-attempted');
@@ -323,7 +358,11 @@ export class InMemoryVersionGraphStore {
     if (!expectedHead.ok) {
       return failedWrite(expectedHead.diagnostics, 'no-write-attempted');
     }
-    const parentResult = parseNormalCommitParents(input.parentCommitIds, current.ref);
+    const parentResult = parseGraphCommitParentPlan(parentPlan, current.ref, {
+      diagnostic,
+      mapCommitDiagnostics,
+      refConflictDiagnostic,
+    });
     if (!parentResult.ok) {
       return failedWrite(parentResult.diagnostics, 'no-write-attempted');
     }
@@ -340,7 +379,7 @@ export class InMemoryVersionGraphStore {
     const created = await this.commitStore.createWorkbookCommit({
       ...input,
       documentId: this.namespace.documentId,
-      parentCommitIds: [current.ref.targetCommitId],
+      parentCommitIds: parentResult.parentCommitIds,
     });
     if (created.status !== 'success') {
       return failedWrite(mapCommitDiagnostics(created.diagnostics), 'ref-not-mutated');
@@ -451,7 +490,7 @@ export class InMemoryVersionGraphStore {
   async listCommits(
     options: VersionGraphListCommitsOptions = {},
   ): Promise<VersionGraphCommitPageResult> {
-    const parsedOptions = parseListCommitsOptions(options);
+    const parsedOptions = parseListCommitsOptions(options, diagnostic);
     if (!parsedOptions.ok) {
       return { status: 'failed', diagnostics: parsedOptions.diagnostics };
     }
@@ -705,81 +744,6 @@ export async function createInMemoryVersionGraphStoreFromSnapshot(
       snapshot: snapshot.refStore,
     }),
   });
-}
-
-function parseListCommitsOptions(
-  options: VersionGraphListCommitsOptions,
-):
-  | { readonly ok: true; readonly pageSize: number }
-  | { readonly ok: false; readonly diagnostics: readonly VersionGraphStoreDiagnostic[] } {
-  const pageSize = options.pageSize ?? VERSION_GRAPH_LIST_COMMITS_DEFAULT_PAGE_SIZE;
-  if (
-    !Number.isInteger(pageSize) ||
-    pageSize < 1 ||
-    pageSize > VERSION_GRAPH_LIST_COMMITS_MAX_PAGE_SIZE
-  ) {
-    return {
-      ok: false,
-      diagnostics: [
-        diagnostic(
-          'VERSION_INVALID_OPTIONS',
-          'listCommits pageSize must be an integer from 1 through 500.',
-          {
-            operation: 'listCommits',
-            option: 'pageSize',
-            details: {
-              min: 1,
-              max: VERSION_GRAPH_LIST_COMMITS_MAX_PAGE_SIZE,
-              receivedPageSize: Number.isFinite(pageSize) ? pageSize : String(pageSize),
-            },
-          },
-        ),
-      ],
-    };
-  }
-
-  if (options.pageToken !== undefined) {
-    return {
-      ok: false,
-      diagnostics: [
-        diagnostic(
-          'VERSION_STALE_PAGE_CURSOR',
-          'listCommits page tokens are not implemented by this in-memory graph store slice.',
-          {
-            operation: 'listCommits',
-            option: 'pageToken',
-            details: { pageTokenUnsupported: true },
-          },
-        ),
-      ],
-    };
-  }
-
-  return { ok: true, pageSize };
-}
-
-function parseNormalCommitParents(
-  value: readonly (WorkbookCommitId | string)[] | undefined,
-  currentRef: LiveRefRecord,
-):
-  | { readonly ok: true }
-  | { readonly ok: false; readonly diagnostics: readonly VersionGraphStoreDiagnostic[] } {
-  if (value === undefined) return { ok: true };
-
-  const parsed = parseVc04ParentCommitIds(value);
-  if (!parsed.ok) return { ok: false, diagnostics: mapCommitDiagnostics(parsed.diagnostics) };
-  if (
-    parsed.parentCommitIds.length !== 1 ||
-    parsed.parentCommitIds[0] !== currentRef.targetCommitId
-  ) {
-    return {
-      ok: false,
-      diagnostics: [
-        refConflictDiagnostic(currentRef, parsed.parentCommitIds[0] ?? currentRef.targetCommitId),
-      ],
-    };
-  }
-  return { ok: true };
 }
 
 function validateInputNamespaces(

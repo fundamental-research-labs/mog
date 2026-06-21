@@ -2,30 +2,21 @@ import {
   VERSION_GRAPH_HEAD_REF,
   VERSION_GRAPH_MAIN_REF,
   createInMemoryVersionGraphStore,
-  type CommitVersionGraphInput,
   type InitializeVersionGraphInput,
   type InMemoryVersionGraphStore,
-  type VersionGraphClosureReadResult,
-  type VersionGraphCommitPageResult,
   type VersionGraphCommitRef,
-  type VersionGraphListCommitsOptions,
   type VersionGraphRef,
-  type VersionGraphReadHeadResult,
-  type VersionGraphReadRefResult,
-  type VersionGraphRefSelector,
   type VersionGraphStoreDiagnostic,
   type VersionGraphStoreDiagnosticCode,
   type VersionGraphSymbolicRef,
-  type VersionGraphWriteResult,
 } from './graph-store';
-import type { ReadWorkbookCommitResult } from './commit-store';
-import type { VersionDependencyRef, WorkbookCommitId } from './object-digest';
+import type { WorkbookCommitId } from './object-digest';
 import {
   normalizeVersionGraphNamespace,
   versionGraphNamespaceKey,
   type VersionGraphNamespace,
-  type VersionObjectRecord,
 } from './object-store';
+import type { VersionGraphStore } from './provider-graph-store';
 import {
   InMemoryVersionDocumentProviderBackend,
   type InMemoryVersionProviderDurability,
@@ -55,6 +46,7 @@ export {
   InMemoryVersionDocumentProviderBackend,
   type InMemoryVersionDocumentProviderBackendSnapshot,
 } from './provider-memory-backend';
+export type { VersionGraphStore } from './provider-graph-store';
 
 export type VersionAccessContext = {
   readonly principalScope?: string;
@@ -228,19 +220,6 @@ export type VersionIntegrityReport = {
   readonly scanScope: 'document';
   readonly diagnostics: readonly VersionStoreDiagnostic[];
 };
-
-export interface VersionGraphStore {
-  readonly namespace: VersionGraphNamespace;
-  initializeGraph(input: InitializeVersionGraphInput): Promise<VersionGraphWriteResult>;
-  commit(input: CommitVersionGraphInput): Promise<VersionGraphWriteResult>;
-  readCommit(commitId: WorkbookCommitId | string): Promise<ReadWorkbookCommitResult>;
-  getObjectRecord<TPayload>(ref: VersionDependencyRef): Promise<VersionObjectRecord<TPayload>>;
-  hasObject(ref: VersionDependencyRef): Promise<boolean>;
-  readHead(): Promise<VersionGraphReadHeadResult>;
-  readRef(name: VersionGraphRefSelector | string): Promise<VersionGraphReadRefResult>;
-  listCommits(options?: VersionGraphListCommitsOptions): Promise<VersionGraphCommitPageResult>;
-  readCommitClosure(commitId: WorkbookCommitId | string): Promise<VersionGraphClosureReadResult>;
-}
 
 export interface VersionStoreProvider {
   readonly documentScope: VersionDocumentScope;

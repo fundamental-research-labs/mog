@@ -1,0 +1,328 @@
+import 'fake-indexeddb/auto';
+
+import type { VersionAuthor } from '@mog-sdk/contracts/versioning';
+
+import { VERSION_GRAPH_MAIN_REF, type VersionGraphReadHeadResult } from '../graph-store';
+import {
+  createVersionObjectRecord,
+  type VersionGraphNamespace,
+  type VersionObjectRecord,
+} from '../object-store';
+import type { VersionObjectType } from '../object-digest';
+import {
+  createIndexedDbVersionStoreProvider,
+  INDEXEDDB_VERSION_STORE_CAPABILITIES,
+} from '../provider-indexeddb-backend';
+import {
+  COMMIT_INDEXES_STORE,
+  INDEX_MANIFESTS_STORE,
+  INTENTS_STORE,
+  OBJECTS_STORE,
+  PARENT_INDEXES_STORE,
+  REFS_STORE,
+  REGISTRIES_STORE,
+  SYMBOLIC_REFS_STORE,
+  deleteVersionStoreIndexedDbForTesting,
+  openVersionStoreIndexedDb,
+} from '../provider-indexeddb-schema';
+import {
+  createDefaultVersionStoreProviderRegistry,
+  selectVersionStoreProvider,
+} from '../provider-registry';
+import {
+  createVersionGraphRegistry,
+  namespaceForDocumentScope,
+  versionDocumentScopeKey,
+  type VersionDocumentScope,
+  type VersionGraphInitializeInput,
+  type VersionGraphInitializeResult,
+  type VersionGraphRegistryReadResult,
+} from '../provider';
+
+const DOCUMENT_SCOPE: VersionDocumentScope = {
+  workspaceId: 'workspace-1',
+  documentId: 'document-1',
+  principalScope: 'principal-1',
+};
+
+const AUTHOR: VersionAuthor = {
+  authorId: 'user-1',
+  actorKind: 'user',
+  displayName: 'User One',
+};
+
+beforeEach(async () => {
+  await deleteVersionStoreIndexedDbForTesting();
+});
+
+afterEach(async () => {
+  await deleteVersionStoreIndexedDbForTesting();
+});
+
+function expectRegistryOk(
+  result: VersionGraphRegistryReadResult,
+): asserts result is Extract<VersionGraphRegistryReadResult, { status: 'ok' }> {
+  expect(result.status).toBe('ok');
+  if (result.status !== 'ok')
+    throw new Error(`expected registry ok: ${result.diagnostics[0]?.code}`);
+}
+
+function expectInitializeSuccess(
+  result: VersionGraphInitializeResult,
+): asserts result is Extract<VersionGraphInitializeResult, { status: 'success' }> {
+  expect(result.status).toBe('success');
+  if (result.status !== 'success') {
+    throw new Error(`expected initialize success: ${result.diagnostics[0]?.code}`);
+  }
+}
+
+function expectReadHeadSuccess(
+  result: VersionGraphReadHeadResult,
+): asserts result is Extract<VersionGraphReadHeadResult, { status: 'success' }> {
+  expect(result.status).toBe('success');
+  if (result.status !== 'success') throw new Error(`expected readHead success`);
+}
+
+async function objectRecord(
+  objectType: VersionObjectType,
+  payload: unknown,
+  namespace: VersionGraphNamespace,
+): Promise<VersionObjectRecord<unknown>> {
+  return createVersionObjectRecord(namespace, {
+    objectType,
+    schemaVersion: 1,
+    payloadEncoding: 'mog-canonical-json-v1',
+    dependencies: [],
+    payload,
+  });
+}
+
+async function rootWrite(
+  label: string,
+  namespace: VersionGraphNamespace,
+): Promise<VersionGraphInitializeInput['rootWrite']> {
+  return {
+    snapshotRootRecord: await objectRecord(
+      'workbook.snapshotRoot.v1',
+      { label, sheets: [] },
+      namespace,
+    ),
+    semanticChangeSetRecord: await objectRecord(
+      'workbook.semanticChangeSet.v1',
+      { label, changes: [] },
+      namespace,
+    ),
+    author: AUTHOR,
+    createdAt: '2026-06-20T00:00:00.000Z',
+    completenessDiagnostics: [],
+  };
+}
+
+async function initializeInput(
+  graphId: string,
+  label = 'root',
+): Promise<VersionGraphInitializeInput> {
+  const namespace = namespaceForDocumentScope(DOCUMENT_SCOPE, graphId);
+  return {
+    expectedRegistryRevision: null,
+    graphId,
+    rootWrite: await rootWrite(label, namespace),
+  };
+}
+
+describe('IndexedDbVersionStoreProvider', () => {
+  it('creates separate VC stores and reports truthful browser capabilities', async () => {
+    const db = await openVersionStoreIndexedDb();
+    for (const store of [
+      REGISTRIES_STORE,
+      OBJECTS_STORE,
+      REFS_STORE,
+      SYMBOLIC_REFS_STORE,
+      COMMIT_INDEXES_STORE,
+      PARENT_INDEXES_STORE,
+      INDEX_MANIFESTS_STORE,
+      INTENTS_STORE,
+    ]) {
+      expect(db.objectStoreNames.contains(store)).toBe(true);
+    }
+    db.close();
+
+    expect(INDEXEDDB_VERSION_STORE_CAPABILITIES).toMatchObject({
+      durableGraphRegistry: true,
+      durableObjects: true,
+      casGraphRegistry: true,
+      casRefs: true,
+      multiProcessCasGraphRegistry: false,
+      multiProcessCasRefs: false,
+      reads: { graphRegistry: true, objects: true, refs: true, commits: true },
+      writes: { initializeGraph: true, putObjects: true, commitGraphWrite: true },
+    });
+  });
+
+  it('initializes object-first, publishes registry last, and reloads from IndexedDB', async () => {
+    const provider = createIndexedDbVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
+    const initialized = await provider.initializeGraph(await initializeInput('graph-1'));
+    expectInitializeSuccess(initialized);
+
+    const registryRead = await provider.readGraphRegistry();
+    expectRegistryOk(registryRead);
+    expect(registryRead.registry).toEqual(initialized.registry);
+
+    const db = await openVersionStoreIndexedDb();
+    const tx = db.transaction(
+      [
+        OBJECTS_STORE,
+        REFS_STORE,
+        SYMBOLIC_REFS_STORE,
+        COMMIT_INDEXES_STORE,
+        INDEX_MANIFESTS_STORE,
+        INTENTS_STORE,
+      ],
+      'readonly',
+    );
+    const objectCount = count(tx.objectStore(OBJECTS_STORE));
+    const refCount = count(tx.objectStore(REFS_STORE));
+    const symbolicRefCount = count(tx.objectStore(SYMBOLIC_REFS_STORE));
+    const commitIndexCount = count(tx.objectStore(COMMIT_INDEXES_STORE));
+    const manifestCount = count(tx.objectStore(INDEX_MANIFESTS_STORE));
+    const intentCount = count(tx.objectStore(INTENTS_STORE));
+    await expect(objectCount).resolves.toBeGreaterThan(0);
+    await expect(refCount).resolves.toBeGreaterThan(0);
+    await expect(symbolicRefCount).resolves.toBeGreaterThan(0);
+    await expect(commitIndexCount).resolves.toBeGreaterThan(0);
+    await expect(manifestCount).resolves.toBeGreaterThan(0);
+    await expect(intentCount).resolves.toBeGreaterThan(0);
+    db.close();
+
+    await provider.close('test-teardown');
+    const reloaded = createIndexedDbVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
+    const reloadedRegistry = await reloaded.readGraphRegistry();
+    expectRegistryOk(reloadedRegistry);
+    expect(reloadedRegistry.registry).toEqual(initialized.registry);
+
+    const graph = await reloaded.openGraph(namespaceForDocumentScope(DOCUMENT_SCOPE, 'graph-1'));
+    const head = await graph.readHead();
+    expectReadHeadSuccess(head);
+    expect(head.head.id).toBe(initialized.rootCommit.id);
+  });
+
+  it('fails closed on corrupt and unsupported visible registries', async () => {
+    const corrupt = await createVersionGraphRegistry({
+      documentScope: DOCUMENT_SCOPE,
+      graphId: 'graph-corrupt',
+      rootCommitId:
+        'commit:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      createdAt: '2026-06-20T00:00:00.000Z',
+    });
+    await putRegistryEnvelope({
+      schemaVersion: 1,
+      registry: {
+        ...corrupt,
+        registryChecksum: { ...corrupt.registryChecksum, digest: '0'.repeat(64) },
+      },
+    });
+
+    const corruptProvider = createIndexedDbVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
+    await expect(
+      corruptProvider.openGraph(namespaceForDocumentScope(DOCUMENT_SCOPE, 'graph-corrupt')),
+    ).rejects.toMatchObject({
+      diagnostic: expect.objectContaining({ code: 'VERSION_CORRUPT_REGISTRY' }),
+    });
+    expect(await corruptProvider.readGraphRegistry()).toMatchObject({
+      status: 'corrupt',
+      mutationGuarantee: 'no-write-attempted',
+    });
+    expect(
+      await corruptProvider.initializeGraph(await initializeInput('replacement')),
+    ).toMatchObject({
+      status: 'failed',
+      mutationGuarantee: 'no-write-attempted',
+      diagnostics: [expect.objectContaining({ code: 'VERSION_CORRUPT_REGISTRY' })],
+    });
+
+    await corruptProvider.close('test-teardown');
+    await deleteVersionStoreIndexedDbForTesting();
+    await putRegistryEnvelope({ schemaVersion: 99, registry: null });
+    const unsupportedProvider = createIndexedDbVersionStoreProvider({
+      documentScope: DOCUMENT_SCOPE,
+    });
+    expect(await unsupportedProvider.readGraphRegistry()).toMatchObject({
+      status: 'unsupported',
+      diagnostics: [expect.objectContaining({ code: 'VERSION_UNSUPPORTED_REGISTRY' })],
+    });
+  });
+
+  it('enforces single-process ref CAS for stale graph commits', async () => {
+    const provider = createIndexedDbVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
+    const initialized = await provider.initializeGraph(await initializeInput('graph-cas'));
+    expectInitializeSuccess(initialized);
+
+    const namespace = namespaceForDocumentScope(DOCUMENT_SCOPE, 'graph-cas');
+    const left = await provider.openGraph(namespace);
+    const right = await provider.openGraph(namespace);
+    const leftHead = await left.readHead();
+    const rightHead = await right.readHead();
+    expectReadHeadSuccess(leftHead);
+    expectReadHeadSuccess(rightHead);
+
+    const leftCommit = await left.commit({
+      ...(await rootWrite('left', namespace)),
+      expectedHeadCommitId: leftHead.head.id,
+      expectedMainRefVersion: leftHead.main.revision,
+      parentCommitIds: [leftHead.head.id],
+    });
+    expect(leftCommit.status).toBe('success');
+
+    const staleCommit = await right.commit({
+      ...(await rootWrite('right', namespace)),
+      expectedHeadCommitId: rightHead.head.id,
+      expectedMainRefVersion: rightHead.main.revision,
+      parentCommitIds: [rightHead.head.id],
+    });
+    expect(staleCommit).toMatchObject({
+      status: 'failed',
+      mutationGuarantee: 'no-write-attempted',
+      diagnostics: [expect.objectContaining({ code: 'VERSION_REF_CONFLICT' })],
+    });
+  });
+});
+
+describe('VersionStoreProviderRegistry IndexedDB registration', () => {
+  it('selects the explicit IndexedDB provider when durable persistence is required', () => {
+    const registry = createDefaultVersionStoreProviderRegistry();
+    expect(registry.capabilities('indexeddb')).toMatchObject({
+      durableGraphRegistry: true,
+      durableObjects: true,
+      multiProcessCasGraphRegistry: false,
+      multiProcessCasRefs: false,
+    });
+
+    const provider = selectVersionStoreProvider({
+      kind: 'indexeddb',
+      documentScope: DOCUMENT_SCOPE,
+      requireDurablePersistence: true,
+    });
+    expect(provider.capabilities.durableGraphRegistry).toBe(true);
+    expect(provider.capabilities.durableObjects).toBe(true);
+  });
+});
+
+function count(store: IDBObjectStore): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const request = store.count();
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error ?? new Error('count failed'));
+  });
+}
+
+async function putRegistryEnvelope(value: unknown): Promise<void> {
+  const db = await openVersionStoreIndexedDb();
+  const tx = db.transaction(REGISTRIES_STORE, 'readwrite');
+  tx.objectStore(REGISTRIES_STORE).put(value, versionDocumentScopeKey(DOCUMENT_SCOPE));
+  await new Promise<void>((resolve, reject) => {
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error ?? new Error('registry put failed'));
+    tx.onabort = () => reject(tx.error ?? new Error('registry put aborted'));
+  });
+  db.close();
+}

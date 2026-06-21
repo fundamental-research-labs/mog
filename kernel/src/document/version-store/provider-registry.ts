@@ -11,9 +11,18 @@ import type {
   InMemoryVersionDocumentProviderBackend,
   InMemoryVersionProviderDurability,
 } from './provider-memory-backend';
+import {
+  INDEXEDDB_VERSION_STORE_CAPABILITIES,
+  INDEXEDDB_VERSION_STORE_PROVIDER_KIND,
+  createIndexedDbVersionStoreProvider,
+} from './provider-indexeddb-backend';
 import type { VersionDocumentScope } from './registry';
 
-export type VersionStoreProviderKind = 'memory' | 'memory-durable-snapshot' | 'unavailable';
+export type VersionStoreProviderKind =
+  | 'memory'
+  | 'memory-durable-snapshot'
+  | typeof INDEXEDDB_VERSION_STORE_PROVIDER_KIND
+  | 'unavailable';
 
 export type VersionStoreProviderRequest = {
   readonly kind: VersionStoreProviderKind | (string & {});
@@ -70,6 +79,17 @@ export function createDefaultVersionStoreProviderRegistry(): VersionStoreProvide
       IN_MEMORY_DURABLE_SNAPSHOT_VERSION_STORE_CAPABILITIES,
     ),
   );
+  registry.register({
+    kind: INDEXEDDB_VERSION_STORE_PROVIDER_KIND,
+    capabilities: INDEXEDDB_VERSION_STORE_CAPABILITIES,
+    productionDurable: true,
+    create: (request) =>
+      createIndexedDbVersionStoreProvider({
+        documentScope: request.documentScope,
+        accessContext: request.accessContext,
+        readOnly: request.readOnly,
+      }),
+  });
   registry.register({
     kind: 'unavailable',
     capabilities: unavailableProvider({ kind: 'unavailable', documentScope: { documentId: 'x' } })

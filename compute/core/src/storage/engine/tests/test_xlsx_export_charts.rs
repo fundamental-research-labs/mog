@@ -2,12 +2,15 @@
 
 use super::super::*;
 use super::helpers::{archive_text, engine_from_parse_output_normal, sheet_id, simple_snapshot};
+use std::sync::Arc;
+
 use domain_types::chart::{
     ChartRelationshipData, StandardChartAuthorityValidity, StandardChartExportAuthority,
     StandardChartProvenance,
 };
 use domain_types::domain::floating_object::ChartDrawingFrameOoxmlProps;
-use domain_types::{ChartSpec, ParseOutput, SheetData};
+use domain_types::{CellData, ChartSpec, ParseOutput, SheetData};
+use value_types::{CellValue, FiniteF64};
 
 const STANDARD_CHART_PROJECTION_SCHEMA_VERSION: u32 = 6;
 
@@ -76,10 +79,8 @@ fn assert_sdk_authored_chart_color_style_export(
         .expect("chart color style should exist");
 
     assert!(content_types.contains("/xl/charts/colors1.xml"));
-    assert!(
-        chart_rels
-            .contains("http://schemas.microsoft.com/office/2011/relationships/chartColorStyle")
-    );
+    assert!(chart_rels
+        .contains("http://schemas.microsoft.com/office/2011/relationships/chartColorStyle"));
     assert!(chart_rels.contains(r#"Target="colors1.xml""#));
     assert!(color_style.contains(expected_scheme));
     if let Some(expected_color) = expected_color {
@@ -88,7 +89,7 @@ fn assert_sdk_authored_chart_color_style_export(
 }
 
 #[test]
-fn imported_standard_chart_preserves_package_identity_through_yrs_export() {
+fn imported_standard_chart_metadata_survives_yrs_without_auxiliary_package_replay() {
     let input = ParseOutput {
         sheets: vec![SheetData {
             name: "Data".to_string(),
@@ -126,49 +127,176 @@ fn imported_standard_chart_preserves_package_identity_through_yrs_export() {
             .and_then(|authority| authority.package_owner.as_deref()),
         Some("xl/charts/chart2.xml")
     );
-    assert!(
-        chart
-            .chart_relationships
-            .iter()
-            .any(|relationship| relationship.target.as_deref() == Some("style2.xml"))
-    );
-    assert!(
-        chart
-            .chart_relationships
-            .iter()
-            .any(|relationship| relationship.target.as_deref() == Some("colors2.xml"))
-    );
-    assert!(
-        chart
-            .chart_auxiliary_files
-            .iter()
-            .any(|(path, _)| path == "xl/charts/style2.xml")
-    );
-    assert!(
-        chart
-            .chart_auxiliary_files
-            .iter()
-            .any(|(path, _)| path == "xl/charts/colors2.xml")
-    );
+    assert!(chart
+        .chart_relationships
+        .iter()
+        .any(|relationship| relationship.target.as_deref() == Some("style2.xml")));
+    assert!(chart
+        .chart_relationships
+        .iter()
+        .any(|relationship| relationship.target.as_deref() == Some("colors2.xml")));
+    assert!(chart
+        .chart_auxiliary_files
+        .iter()
+        .any(|(path, _)| path == "xl/charts/style2.xml"));
+    assert!(chart
+        .chart_auxiliary_files
+        .iter()
+        .any(|(path, _)| path == "xl/charts/colors2.xml"));
 
     let exported_bytes = engine.export_to_xlsx_bytes().expect("export xlsx bytes");
     let archive =
         xlsx_parser::zip::XlsxArchive::new(&exported_bytes).expect("exported XLSX is readable");
-    let drawing_rels = archive_text(&exported_bytes, "xl/drawings/_rels/drawing1.xml.rels")
-        .expect("drawing relationships should exist");
-    let chart_rels = archive_text(&exported_bytes, "xl/charts/_rels/chart2.xml.rels")
-        .expect("chart relationships should exist");
 
-    assert!(archive.contains("xl/charts/chart2.xml"));
-    assert!(archive.contains("xl/charts/_rels/chart2.xml.rels"));
-    assert!(archive.contains("xl/charts/style2.xml"));
-    assert!(archive.contains("xl/charts/colors2.xml"));
-    assert!(!archive.contains("xl/charts/chart1.xml"));
-    assert!(drawing_rels.contains(r#"Id="rId2""#));
-    assert!(drawing_rels.contains(r#"Target="../charts/chart2.xml""#));
-    assert!(!drawing_rels.contains(r#"Target="../charts/chart1.xml""#));
-    assert!(chart_rels.contains(r#"Target="style2.xml""#));
-    assert!(chart_rels.contains(r#"Target="colors2.xml""#));
+    assert!(archive.contains("xl/charts/chart1.xml"));
+    assert!(!archive.contains("xl/charts/chart2.xml"));
+    assert!(!archive.contains("xl/charts/_rels/chart2.xml.rels"));
+    assert!(!archive.contains("xl/charts/style2.xml"));
+    assert!(!archive.contains("xl/charts/colors2.xml"));
+}
+
+fn chart_text_cell(row: u32, col: u32, text: &str) -> CellData {
+    CellData {
+        row,
+        col,
+        value: CellValue::Text(Arc::from(text)),
+        ..Default::default()
+    }
+}
+
+fn chart_number_cell(row: u32, col: u32, number: f64) -> CellData {
+    CellData {
+        row,
+        col,
+        value: CellValue::Number(FiniteF64::must(number)),
+        ..Default::default()
+    }
+}
+
+fn bounded_source_range_chart() -> ChartSpec {
+    serde_json::from_value(serde_json::json!({
+        "chartType": "column",
+        "title": "Bounded Source Range",
+        "position": {
+            "anchorRow": 1,
+            "anchorCol": 4,
+            "anchorRowOffset": 11,
+            "anchorColOffset": 22,
+            "endRow": 12,
+            "endCol": 9,
+            "endRowOffset": 33,
+            "endColOffset": 44
+        },
+        "size": {
+            "width": 480.0,
+            "height": 320.0
+        },
+        "zIndex": 0,
+        "dataRange": "Data!A1:C4",
+        "seriesRange": "Data!B1:C1",
+        "categoryRange": "Data!A2:A4",
+        "series": [
+            {
+                "name": "Revenue",
+                "nameRef": "Data!B1",
+                "values": "Data!B2:B4",
+                "categories": "Data!A2:A4"
+            },
+            {
+                "name": "Profit",
+                "nameRef": "Data!C1",
+                "values": "Data!C2:C4",
+                "categories": "Data!A2:A4"
+            }
+        ]
+    }))
+    .expect("valid bounded source range chart")
+}
+
+fn assert_same_sheet_ref(actual: Option<&str>, expected_unqualified: &str) {
+    let actual = actual.expect("expected chart source reference");
+    let unqualified = actual.strip_prefix("Data!").unwrap_or(actual);
+    assert_eq!(unqualified, expected_unqualified);
+}
+
+fn assert_bounded_source_range_chart(chart: &ChartSpec) {
+    assert_same_sheet_ref(chart.data_range.as_deref(), "A1:C4");
+    assert_same_sheet_ref(chart.series_range.as_deref(), "B1:C1");
+    assert_same_sheet_ref(chart.category_range.as_deref(), "A2:A4");
+    assert_eq!(chart.position.anchor_row, 1);
+    assert_eq!(chart.position.anchor_col, 4);
+    assert_eq!(chart.position.anchor_row_offset, 11);
+    assert_eq!(chart.position.anchor_col_offset, 22);
+    assert_eq!(chart.position.end_row, Some(12));
+    assert_eq!(chart.position.end_col, Some(9));
+    assert_eq!(chart.position.end_row_offset, Some(33));
+    assert_eq!(chart.position.end_col_offset, Some(44));
+    assert_eq!(chart.series.len(), 2);
+    assert_same_sheet_ref(chart.series[0].name_ref.as_deref(), "B1");
+    assert_same_sheet_ref(chart.series[0].values.as_deref(), "B2:B4");
+    assert_same_sheet_ref(chart.series[0].categories.as_deref(), "A2:A4");
+    assert_same_sheet_ref(chart.series[1].name_ref.as_deref(), "C1");
+    assert_same_sheet_ref(chart.series[1].values.as_deref(), "C2:C4");
+    assert_same_sheet_ref(chart.series[1].categories.as_deref(), "A2:A4");
+}
+
+fn assert_reparsed_source_ranges(chart: &ChartSpec) {
+    assert_eq!(chart.series.len(), 2);
+    assert_same_sheet_ref(chart.series[0].name_ref.as_deref(), "B1");
+    assert_same_sheet_ref(chart.series[0].values.as_deref(), "B2:B4");
+    assert_same_sheet_ref(chart.series[0].categories.as_deref(), "A2:A4");
+    assert_same_sheet_ref(chart.series[1].name_ref.as_deref(), "C1");
+    assert_same_sheet_ref(chart.series[1].values.as_deref(), "C2:C4");
+    assert_same_sheet_ref(chart.series[1].categories.as_deref(), "A2:A4");
+    assert_eq!(chart.position.anchor_row, 1);
+    assert_eq!(chart.position.anchor_col, 4);
+    assert_eq!(chart.position.end_row, Some(12));
+    assert_eq!(chart.position.end_col, Some(9));
+}
+
+#[test]
+fn imported_bounded_chart_source_ranges_survive_yrs_and_xlsx_export() {
+    let input = ParseOutput {
+        sheets: vec![SheetData {
+            name: "Data".to_string(),
+            rows: 16,
+            cols: 10,
+            cells: vec![
+                chart_text_cell(0, 0, "Quarter"),
+                chart_text_cell(0, 1, "Revenue"),
+                chart_text_cell(0, 2, "Profit"),
+                chart_text_cell(1, 0, "Q1"),
+                chart_number_cell(1, 1, 100.0),
+                chart_number_cell(1, 2, 25.0),
+                chart_text_cell(2, 0, "Q2"),
+                chart_number_cell(2, 1, 125.0),
+                chart_number_cell(2, 2, 35.0),
+                chart_text_cell(3, 0, "Q3"),
+                chart_number_cell(3, 1, 140.0),
+                chart_number_cell(3, 2, 44.0),
+            ],
+            charts: vec![bounded_source_range_chart()],
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    let engine = engine_from_parse_output_normal(&input);
+    let exported = engine.export_to_parse_output().unwrap().parse_output;
+    let chart = exported.sheets[0]
+        .charts
+        .first()
+        .expect("exported chart should exist");
+    assert_bounded_source_range_chart(chart);
+
+    let exported_bytes = engine.export_to_xlsx_bytes().expect("export xlsx bytes");
+    let (reparsed, _diagnostics) =
+        xlsx_parser::parse_xlsx_to_output(&exported_bytes).expect("parse exported xlsx");
+    let reparsed_chart = reparsed.sheets[0]
+        .charts
+        .first()
+        .expect("reparsed chart should exist");
+    assert_reparsed_source_ranges(reparsed_chart);
 }
 
 fn imported_current_standard_chart2() -> ChartSpec {

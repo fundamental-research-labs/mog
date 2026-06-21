@@ -91,29 +91,23 @@ fn sdk_authored_threaded_comments_export_with_person_identity() {
     let authored = engine.get_comments_for_cell_by_position(&sid, 1, 1);
     assert_eq!(authored.len(), 2);
     assert!(authored.iter().all(|comment| comment.person_id.is_some()));
-    assert!(
-        authored
-            .iter()
-            .all(|comment| comment.resolved == Some(true))
-    );
+    assert!(authored
+        .iter()
+        .all(|comment| comment.resolved == Some(true)));
 
     let exported_bytes = engine.export_to_xlsx_bytes().expect("export xlsx bytes");
     let parsed = xlsx_api::parse(&exported_bytes)
         .expect("exported XLSX should parse")
         .output;
 
-    assert!(
-        parsed
-            .persons
-            .iter()
-            .any(|person| person.display_name == "Alice Threader")
-    );
-    assert!(
-        parsed
-            .persons
-            .iter()
-            .any(|person| person.display_name == "Bob Reviewer")
-    );
+    assert!(parsed
+        .persons
+        .iter()
+        .any(|person| person.display_name == "Alice Threader"));
+    assert!(parsed
+        .persons
+        .iter()
+        .any(|person| person.display_name == "Bob Reviewer"));
     let root = parsed.sheets[0]
         .comments
         .iter()
@@ -135,6 +129,52 @@ fn sdk_authored_threaded_comments_export_with_person_identity() {
     assert!(reply.person_id.is_some());
     assert_eq!(root.resolved, Some(true));
     assert_eq!(reply.resolved, Some(true));
+}
+
+#[test]
+fn sdk_authored_note_exports_as_legacy_note_without_person_identity() {
+    let snap = simple_snapshot();
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let sid = sheet_id();
+
+    engine
+        .add_comment_by_position(
+            &sid,
+            2,
+            2,
+            "SDK legacy note survives export",
+            "Nora Notes",
+            None,
+            None,
+            CommentType::Note,
+        )
+        .expect("add note");
+
+    let authored = engine.get_comments_for_cell_by_position(&sid, 2, 2);
+    assert_eq!(authored.len(), 1);
+    assert_eq!(authored[0].comment_type, CommentType::Note);
+    assert!(authored[0].person_id.is_none());
+    assert!(authored[0].thread_id.is_none());
+
+    let exported_bytes = engine.export_to_xlsx_bytes().expect("export xlsx bytes");
+    let parsed = xlsx_api::parse(&exported_bytes)
+        .expect("exported XLSX should parse")
+        .output;
+
+    assert!(parsed.persons.is_empty());
+    let note = parsed.sheets[0]
+        .comments
+        .iter()
+        .find(|comment| comment.author == "Nora Notes")
+        .expect("parsed note");
+    assert_eq!(note.cell_ref, "C3");
+    assert_eq!(note.comment_type, CommentType::Note);
+    assert!(note.person_id.is_none());
+    assert!(note.thread_id.is_none());
+    assert!(note
+        .content
+        .as_deref()
+        .is_some_and(|content| content.contains("SDK legacy note survives export")));
 }
 
 #[test]

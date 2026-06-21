@@ -499,6 +499,8 @@ export interface VersionMergeChange {
 }
 
 export interface VersionMergeConflict {
+  readonly conflictId: string;
+  readonly conflictDigest: string;
   readonly conflictKind: 'same-property';
   readonly structural: VersionDiffStructuralMetadata;
   readonly base: VersionDiffValue;

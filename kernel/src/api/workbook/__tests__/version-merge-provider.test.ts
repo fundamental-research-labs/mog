@@ -33,6 +33,97 @@ describe('WorkbookVersion merge facade', () => {
     );
   });
 
+  it('passes through provider conflicts with stable identity fields', async () => {
+    const result: VersionMergeResult = {
+      status: 'conflicted',
+      base: BASE,
+      ours: OURS,
+      theirs: THEIRS,
+      changes: [],
+      conflicts: [
+        {
+          conflictId: 'conflict:cell:sheet-1:B1:value',
+          conflictDigest: 'sha256:merge-conflict-digest',
+          conflictKind: 'same-property',
+          structural: {
+            kind: 'metadata',
+            changeId: 'merge-conflict-1',
+            domain: 'cell',
+            entityId: 'sheet-1!B1',
+            propertyPath: ['value'],
+          },
+          base: { kind: 'value', value: 'base' },
+          ours: { kind: 'value', value: 'ours' },
+          theirs: { kind: 'value', value: 'theirs' },
+        },
+      ],
+      diagnostics: [],
+      mutationGuarantee: 'preview-only',
+    };
+    const merge = jest.fn(async () => result);
+    const version = new WorkbookVersionImpl({
+      versioning: { mergeService: { merge } },
+    } as any);
+
+    await expect(version.merge({ base: BASE, ours: OURS, theirs: THEIRS })).resolves.toStrictEqual(
+      result,
+    );
+  });
+
+  it.each(['conflictId', 'conflictDigest'] as const)(
+    'blocks provider conflicts without %s',
+    async (missingField) => {
+      const conflict: Record<string, unknown> = {
+        conflictId: 'conflict:cell:sheet-1:B1:value',
+        conflictDigest: 'sha256:merge-conflict-digest',
+        conflictKind: 'same-property',
+        structural: {
+          kind: 'metadata',
+          changeId: 'merge-conflict-1',
+          domain: 'cell',
+          entityId: 'sheet-1!B1',
+          propertyPath: ['value'],
+        },
+        base: { kind: 'value', value: 'base' },
+        ours: { kind: 'value', value: 'ours' },
+        theirs: { kind: 'value', value: 'theirs' },
+      };
+      delete conflict[missingField];
+
+      const merge = jest.fn(async () => ({
+        status: 'conflicted',
+        base: BASE,
+        ours: OURS,
+        theirs: THEIRS,
+        changes: [],
+        conflicts: [conflict],
+        diagnostics: [],
+        mutationGuarantee: 'preview-only',
+      }));
+      const version = new WorkbookVersionImpl({
+        versioning: { mergeService: { merge } },
+      } as any);
+
+      await expect(
+        version.merge({ base: BASE, ours: OURS, theirs: THEIRS }),
+      ).resolves.toMatchObject({
+        status: 'blocked',
+        base: BASE,
+        ours: OURS,
+        theirs: THEIRS,
+        changes: [],
+        conflicts: [],
+        diagnostics: [
+          expect.objectContaining({
+            issueCode: 'VERSION_INVALID_COMMIT_PAYLOAD',
+            redacted: true,
+          }),
+        ],
+        mutationGuarantee: 'preview-only',
+      });
+    },
+  );
+
   it('returns a blocked preview result when merge input is malformed', async () => {
     const merge = jest.fn();
     const version = new WorkbookVersionImpl({

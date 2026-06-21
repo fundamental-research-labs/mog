@@ -373,11 +373,15 @@ function mapMergeConflicts(values: readonly unknown[]): readonly VersionMergeCon
 function mapMergeConflict(value: unknown): VersionMergeConflict | null {
   if (!isRecord(value) || value.conflictKind !== 'same-property') return null;
 
+  const conflictId = typeof value.conflictId === 'string' ? value.conflictId : null;
+  const conflictDigest = typeof value.conflictDigest === 'string' ? value.conflictDigest : null;
   const structural = mapStructuralMetadata(value.structural);
   const base = mapDiffValue(value.base);
   const ours = mapDiffValue(value.ours);
   const theirs = mapDiffValue(value.theirs);
-  if (!structural || !base || !ours || !theirs) return null;
+  if (conflictId === null || conflictDigest === null || !structural || !base || !ours || !theirs) {
+    return null;
+  }
 
   const display = value.display === undefined ? undefined : mapDiffDisplay(value.display);
   if (value.display !== undefined && !display) return null;
@@ -386,6 +390,8 @@ function mapMergeConflict(value: unknown): VersionMergeConflict | null {
     : undefined;
 
   return {
+    conflictId,
+    conflictDigest,
     conflictKind: 'same-property',
     structural,
     base,

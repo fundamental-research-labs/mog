@@ -253,6 +253,12 @@ export {
 export {
   VersionPersistence,
   createVersionPersistence,
+  type VersionPersistenceBoundaryDiagnostic,
+  type VersionPersistenceBoundaryDiagnosticCode,
+  type VersionPersistenceBoundaryDiagnosticSource,
+  type VersionPersistenceBoundaryKind,
+  type VersionPersistenceBoundaryRequest,
+  type VersionPersistenceBoundaryResult,
   type VersionPersistenceOptions,
   type VersionPersistenceReloadDiagnostic,
   type VersionPersistenceReloadDiagnosticCode,

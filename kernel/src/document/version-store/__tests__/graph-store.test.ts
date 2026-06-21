@@ -14,10 +14,14 @@ import {
 } from '../object-store';
 import { createInMemoryRefStore, type RefVersion } from '../ref-store';
 import {
+  VERSION_GRAPH_HEAD_REF,
   VERSION_GRAPH_MAIN_REF,
   createInMemoryVersionGraphStore,
   type CommitVersionGraphInput,
   type InitializeVersionGraphInput,
+  type VersionGraphCommitPageResult,
+  type VersionGraphReadHeadResult,
+  type VersionGraphReadRefResult,
   type VersionGraphWriteResult,
 } from '../graph-store';
 
@@ -62,6 +66,60 @@ function expectGraphFailed(
   expect(result.status).toBe('failed');
   if (result.status !== 'failed') {
     throw new Error('expected graph write failure');
+  }
+}
+
+function expectReadHeadSuccess(
+  result: VersionGraphReadHeadResult,
+): asserts result is Extract<VersionGraphReadHeadResult, { status: 'success' }> {
+  expect(result.status).toBe('success');
+  if (result.status !== 'success') {
+    throw new Error(`expected readHead success: ${result.diagnostics[0]?.code}`);
+  }
+}
+
+function expectReadHeadDegraded(
+  result: VersionGraphReadHeadResult,
+): asserts result is Extract<VersionGraphReadHeadResult, { status: 'degraded' }> {
+  expect(result.status).toBe('degraded');
+  if (result.status !== 'degraded') {
+    throw new Error('expected readHead degraded result');
+  }
+}
+
+function expectReadRefSuccess(
+  result: VersionGraphReadRefResult,
+): asserts result is Extract<VersionGraphReadRefResult, { status: 'success' }> {
+  expect(result.status).toBe('success');
+  if (result.status !== 'success') {
+    throw new Error(`expected readRef success: ${result.diagnostics[0]?.code}`);
+  }
+}
+
+function expectReadRefDegraded(
+  result: VersionGraphReadRefResult,
+): asserts result is Extract<VersionGraphReadRefResult, { status: 'degraded' }> {
+  expect(result.status).toBe('degraded');
+  if (result.status !== 'degraded') {
+    throw new Error('expected readRef degraded result');
+  }
+}
+
+function expectListSuccess(
+  result: VersionGraphCommitPageResult,
+): asserts result is Extract<VersionGraphCommitPageResult, { status: 'success' }> {
+  expect(result.status).toBe('success');
+  if (result.status !== 'success') {
+    throw new Error(`expected listCommits success: ${result.diagnostics[0]?.code}`);
+  }
+}
+
+function expectListFailed(
+  result: VersionGraphCommitPageResult,
+): asserts result is Extract<VersionGraphCommitPageResult, { status: 'failed' }> {
+  expect(result.status).toBe('failed');
+  if (result.status !== 'failed') {
+    throw new Error('expected listCommits failure');
   }
 }
 
@@ -121,6 +179,40 @@ function commitInput(
 }
 
 describe('InMemoryVersionGraphStore initialization', () => {
+  it('returns degraded read diagnostics before main is initialized', async () => {
+    const graph = createInMemoryVersionGraphStore({ namespace: NAMESPACE });
+
+    const head = await graph.readHead();
+    expectReadHeadDegraded(head);
+    expect(head.head).toBeNull();
+    expect(head.diagnostics).toEqual([
+      expect.objectContaining({
+        code: 'VERSION_GRAPH_UNINITIALIZED',
+        operation: 'readHead',
+        refName: VERSION_GRAPH_MAIN_REF,
+      }),
+    ]);
+
+    const symbolic = await graph.readRef(VERSION_GRAPH_HEAD_REF);
+    expectReadRefDegraded(symbolic);
+    expect(symbolic.ref).toBeNull();
+    expect(symbolic.diagnostics).toEqual([
+      expect.objectContaining({
+        code: 'VERSION_GRAPH_UNINITIALIZED',
+        operation: 'readRef',
+        refName: VERSION_GRAPH_MAIN_REF,
+      }),
+    ]);
+
+    const main = await graph.readRef(VERSION_GRAPH_MAIN_REF);
+    expectReadRefDegraded(main);
+    expect(main.ref).toBeNull();
+    expect(main.diagnostics[0]).toMatchObject({
+      code: 'VERSION_GRAPH_UNINITIALIZED',
+      operation: 'readRef',
+    });
+  });
+
   it('initializes a graph with a root commit and refs/heads/main', async () => {
     const graph = createInMemoryVersionGraphStore({ namespace: NAMESPACE });
     const initialized = await graph.initializeGraph(await graphInput('root'));
@@ -137,6 +229,34 @@ describe('InMemoryVersionGraphStore initialization', () => {
     expect(closure.status).toBe('success');
     if (closure.status !== 'success') throw new Error('expected closure success');
     expect(closure.commits.map((commitRecord) => commitRecord.id)).toEqual([initialized.commit.id]);
+  });
+
+  it('reads HEAD and refs/heads/main after initialization', async () => {
+    const graph = createInMemoryVersionGraphStore({ namespace: NAMESPACE });
+    const initialized = await graph.initializeGraph(await graphInput('root'));
+    expectGraphSuccess(initialized);
+
+    const head = await graph.readHead();
+    expectReadHeadSuccess(head);
+    expect(head.head).toEqual({
+      id: initialized.commit.id,
+      refName: VERSION_GRAPH_MAIN_REF,
+      resolvedFrom: VERSION_GRAPH_HEAD_REF,
+      refRevision: initialized.main.revision,
+    });
+    expect(head.main).toEqual(initialized.main);
+
+    const symbolic = await graph.readRef(VERSION_GRAPH_HEAD_REF);
+    expectReadRefSuccess(symbolic);
+    expect(symbolic.ref).toEqual({
+      name: VERSION_GRAPH_HEAD_REF,
+      target: VERSION_GRAPH_MAIN_REF,
+      revision: initialized.main.revision,
+    });
+
+    const main = await graph.readRef(VERSION_GRAPH_MAIN_REF);
+    expectReadRefSuccess(main);
+    expect(main.ref).toEqual(initialized.main);
   });
 
   it('is idempotent when the same root commit is initialized again', async () => {
@@ -180,6 +300,29 @@ describe('InMemoryVersionGraphStore normal commits', () => {
     ]);
   });
 
+  it('reads the advanced HEAD and main ref after a normal commit', async () => {
+    const graph = createInMemoryVersionGraphStore({ namespace: NAMESPACE });
+    const initialized = await graph.initializeGraph(await graphInput('root'));
+    expectGraphSuccess(initialized);
+    const committed = await graph.commit(
+      commitInput(await graphInput('child'), initialized.commit.id, initialized.main.revision),
+    );
+    expectGraphSuccess(committed);
+
+    const head = await graph.readHead();
+    expectReadHeadSuccess(head);
+    expect(head.head).toMatchObject({
+      id: committed.commit.id,
+      refName: VERSION_GRAPH_MAIN_REF,
+      resolvedFrom: VERSION_GRAPH_HEAD_REF,
+      refRevision: committed.main.revision,
+    });
+
+    const main = await graph.readRef(VERSION_GRAPH_MAIN_REF);
+    expectReadRefSuccess(main);
+    expect(main.ref).toEqual(committed.main);
+  });
+
   it('rejects stale expected-head commits without advancing main', async () => {
     const graph = createInMemoryVersionGraphStore({ namespace: NAMESPACE });
     const initialized = await graph.initializeGraph(await graphInput('root'));
@@ -218,6 +361,49 @@ describe('InMemoryVersionGraphStore normal commits', () => {
       ok: true,
       ref: { targetCommitId: missingParent, refVersion: main.ref.refVersion },
     });
+  });
+
+  it('returns dangling-ref diagnostics when main points at a missing commit', async () => {
+    const objectStore = new InMemoryVersionObjectStore(NAMESPACE);
+    const refStore = createInMemoryRefStore({ versionDocumentId: NAMESPACE.documentId });
+    const missingParent = commit('ed');
+    const main = refStore.initializeMain({ targetCommitId: missingParent, createdBy: AUTHOR });
+    expect(main.ok).toBe(true);
+    if (!main.ok) throw new Error('expected fake main initialization');
+    const graph = createInMemoryVersionGraphStore({ namespace: NAMESPACE, objectStore, refStore });
+
+    const head = await graph.readHead();
+    expectReadHeadDegraded(head);
+    expect(head.main).toMatchObject({ name: VERSION_GRAPH_MAIN_REF, commitId: missingParent });
+    expect(head.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
+      'VERSION_DANGLING_REF',
+      'VERSION_MISSING_OBJECT',
+    ]);
+    expect(head.diagnostics[0]).toMatchObject({
+      operation: 'readHead',
+      refName: VERSION_GRAPH_MAIN_REF,
+      commitId: missingParent,
+      objectKind: 'commit',
+    });
+
+    const symbolic = await graph.readRef(VERSION_GRAPH_HEAD_REF);
+    expectReadRefDegraded(symbolic);
+    expect(symbolic.ref).toEqual({
+      name: VERSION_GRAPH_HEAD_REF,
+      target: VERSION_GRAPH_MAIN_REF,
+      revision: main.ref.refVersion,
+    });
+    expect(symbolic.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
+      'VERSION_DANGLING_REF',
+      'VERSION_MISSING_OBJECT',
+    ]);
+
+    const listed = await graph.listCommits();
+    expectListFailed(listed);
+    expect(listed.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
+      'VERSION_DANGLING_REF',
+      'VERSION_MISSING_OBJECT',
+    ]);
   });
 
   it('rejects wrong-namespace dependency records before object writes', async () => {
@@ -290,5 +476,70 @@ describe('InMemoryVersionGraphStore normal commits', () => {
       ok: true,
       ref: { targetCommitId: initialized.commit.id, refVersion: initialized.main.revision },
     });
+  });
+});
+
+describe('InMemoryVersionGraphStore commit listing', () => {
+  it('lists current main commits in topological newest-first order', async () => {
+    const graph = createInMemoryVersionGraphStore({ namespace: NAMESPACE });
+    const initialized = await graph.initializeGraph(await graphInput('root'));
+    expectGraphSuccess(initialized);
+    const child = await graph.commit(
+      commitInput(await graphInput('child'), initialized.commit.id, initialized.main.revision),
+    );
+    expectGraphSuccess(child);
+    const grandchild = await graph.commit(
+      commitInput(await graphInput('grandchild'), child.commit.id, child.main.revision),
+    );
+    expectGraphSuccess(grandchild);
+
+    const page = await graph.listCommits();
+    expectListSuccess(page);
+    expect(page).toMatchObject({
+      order: 'topological-newest',
+      pageSize: 50,
+      readRevision: grandchild.main.revision,
+    });
+    expect(page.commits.map((commitRecord) => commitRecord.id)).toEqual([
+      grandchild.commit.id,
+      child.commit.id,
+      initialized.commit.id,
+    ]);
+    expect(page.commits.map((commitRecord) => commitRecord.parents)).toEqual([
+      [child.commit.id],
+      [initialized.commit.id],
+      [],
+    ]);
+  });
+
+  it('rejects invalid list page sizes before reading refs', async () => {
+    const graph = createInMemoryVersionGraphStore({ namespace: NAMESPACE });
+
+    for (const pageSize of [0, 501, 1.5]) {
+      const page = await graph.listCommits({ pageSize });
+      expectListFailed(page);
+      expect(page.diagnostics).toEqual([
+        expect.objectContaining({
+          code: 'VERSION_INVALID_OPTIONS',
+          operation: 'listCommits',
+          option: 'pageSize',
+        }),
+      ]);
+    }
+  });
+
+  it('returns an explicit stale cursor diagnostic for unsupported page tokens', async () => {
+    const graph = createInMemoryVersionGraphStore({ namespace: NAMESPACE });
+
+    const page = await graph.listCommits({ pageToken: 'vpt_pending_token_1234' });
+    expectListFailed(page);
+    expect(page.diagnostics).toEqual([
+      expect.objectContaining({
+        code: 'VERSION_STALE_PAGE_CURSOR',
+        operation: 'listCommits',
+        option: 'pageToken',
+        details: { pageTokenUnsupported: true },
+      }),
+    ]);
   });
 });

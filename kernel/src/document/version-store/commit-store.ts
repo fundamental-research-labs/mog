@@ -282,6 +282,7 @@ export class InMemoryWorkbookCommitStore {
         status: 'failed',
         diagnostics: [
           diagnostic('VERSION_OBJECT_STORE_FAILURE', 'Commit object read failed.', {
+            commitId,
             sourceDiagnostics:
               error instanceof VersionObjectStoreError ? [error.diagnostic] : undefined,
           }),

@@ -407,6 +407,79 @@ fn unsupported_imported_table_autofilter_runtime_diagnostics_distinguish_apply_a
     );
 }
 
+#[test]
+fn unsupported_table_autofilter_roundtrip_preserves_metadata_without_runtime_claim() {
+    let input = unsupported_people_table_filter_parse_output();
+    let input_bytes = xlsx_api::export_from_parse_output(&input).expect("write input xlsx");
+    let (engine, _) = crate::storage::engine::YrsComputeEngine::from_xlsx_bytes(&input_bytes)
+        .expect("from_xlsx_bytes");
+    let sheet_id =
+        SheetId::from_uuid_str(&engine.get_all_sheet_ids()[0]).expect("valid hydrated sheet id");
+    let filter = engine
+        .get_filters_in_sheet(&sheet_id)
+        .into_iter()
+        .find(|filter| {
+            filter.filter_kind == crate::storage::sheet::filters::FilterKind::TableFilter
+        })
+        .expect("unsupported imported table AutoFilter should materialize a shell");
+    let stable_table_id = filter
+        .table_id
+        .clone()
+        .expect("unsupported imported table filter should use stable table id");
+
+    assert!(
+        filter.column_filters.is_empty(),
+        "unsupported table filter must not fabricate executable runtime criteria"
+    );
+    let binding = crate::storage::sheet::filters::get_filter_metadata_binding(
+        engine.stores.storage.doc(),
+        engine.stores.storage.sheets(),
+        &sheet_id,
+        &filter.id,
+    )
+    .expect("unsupported table shell should have a metadata binding");
+    assert_eq!(
+        binding.shell.capability,
+        crate::storage::sheet::filters::FilterCapability::Unsupported
+    );
+    assert_eq!(
+        binding.shell.unsupported_reasons,
+        vec![crate::storage::sheet::filters::ImportFilterUnsupportedReason::IconFilterUnsupported]
+    );
+    assert_eq!(binding.table_id.as_deref(), Some(stable_table_id.as_str()));
+    assert_eq!(binding.shell.lossless_criteria[0].kind, "icon");
+
+    let exported = engine
+        .export_to_parse_output()
+        .expect("export_to_parse_output")
+        .parse_output;
+    assert_unsupported_icon_table_filter(&exported.sheets[0].tables[0]);
+
+    let exported_bytes = engine.export_to_xlsx_bytes().expect("export_to_xlsx_bytes");
+    let (reparsed, _diagnostics) =
+        xlsx_parser::parse_xlsx_to_output(&exported_bytes).expect("parse exported xlsx");
+    assert_unsupported_icon_table_filter(&reparsed.sheets[0].tables[0]);
+}
+
+fn assert_unsupported_icon_table_filter(table: &TableSpec) {
+    assert_eq!(table.name, "People");
+    assert_eq!(table.range_ref, "A1:B4");
+    assert_eq!(table.auto_filter_ref.as_deref(), Some("A1:B4"));
+    assert_eq!(
+        table.filter_columns.len(),
+        1,
+        "unsupported table filter metadata should remain losslessly preserved"
+    );
+    assert_eq!(table.filter_columns[0].col_id, 1);
+    match &table.filter_columns[0].filter {
+        FilterSpec::Icon { icon_set, icon_id } => {
+            assert_eq!(icon_set, "3TrafficLights1");
+            assert_eq!(*icon_id, Some(1));
+        }
+        other => panic!("expected preserved icon filter metadata, got {other:?}"),
+    }
+}
+
 fn assert_unsupported_runtime_diagnostic(
     result: &MutationResult,
     operation: &str,

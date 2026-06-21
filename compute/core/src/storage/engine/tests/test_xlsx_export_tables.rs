@@ -6,6 +6,7 @@ use cell_types::SheetPos;
 use compute_document::schema::KEY_SLICERS;
 use domain_types::{
     ParseOutput, SheetData, SheetDimensions,
+    domain::filter::{ColumnFilter, FilterCapability, FilterKind, FilterMetadataOwnerPath},
     domain::{
         connections::{QueryTable, QueryTableField},
         slicer::SlicerSource,
@@ -17,6 +18,7 @@ use domain_types::{
 };
 use formula_types::StructureChange;
 use ooxml_types::slicers::{SlicerCacheDef, SlicerDef, SlicerSortOrder, TableSlicerCache};
+use std::sync::Arc;
 use value_types::CellValue;
 use yrs::{Map, Transact};
 
@@ -27,6 +29,15 @@ fn archive_entry_names(bytes: &[u8]) -> Vec<String> {
         .iter()
         .map(|entry| entry.name.clone())
         .collect()
+}
+
+fn text_cell(row: u32, col: u32, value: &str) -> domain_types::CellData {
+    domain_types::CellData {
+        row,
+        col,
+        value: CellValue::Text(Arc::from(value)),
+        ..Default::default()
+    }
 }
 
 #[test]
@@ -384,6 +395,248 @@ fn runtime_created_table_exports_totals_row_metadata_from_cells() {
     assert!(table_xml.contains(r#"totalsRowLabel="Total""#));
     assert!(table_xml.contains("<totalsRowFormula>"));
     assert!(table_xml.contains("SUM(D2:D5)"));
+}
+
+#[test]
+fn xlsx_import_export_preserves_table_identity_schema_and_supported_filter_projection() {
+    let input = ParseOutput {
+        sheets: vec![SheetData {
+            name: "ImportedTables".to_string(),
+            rows: 6,
+            cols: 5,
+            dimensions: SheetDimensions::default(),
+            cells: vec![
+                text_cell(1, 1, "Region"),
+                text_cell(1, 2, "Dept"),
+                text_cell(1, 3, "Amount"),
+                text_cell(2, 1, "West"),
+                text_cell(2, 2, "Eng"),
+                text_cell(2, 3, "10"),
+                text_cell(3, 1, "East"),
+                text_cell(3, 2, "Sales"),
+                text_cell(3, 3, "20"),
+                text_cell(4, 1, "Central"),
+                text_cell(4, 2, "Eng"),
+                text_cell(4, 3, "30"),
+            ],
+            tables: vec![TableSpec {
+                id: 42,
+                name: "RevenueTable".to_string(),
+                display_name: "RevenueTable".to_string(),
+                range_ref: "B2:D5".to_string(),
+                has_headers: true,
+                has_totals: false,
+                style_name: Some("TableStyleMedium7".to_string()),
+                row_stripes: true,
+                col_stripes: true,
+                first_col_highlight: true,
+                last_col_highlight: false,
+                auto_filter_ref: Some("B2:D5".to_string()),
+                columns: vec![
+                    TableColumnSpec {
+                        id: 11,
+                        name: "Region".to_string(),
+                        unique_name: Some("RegionUnique".to_string()),
+                        ..Default::default()
+                    },
+                    TableColumnSpec {
+                        id: 15,
+                        name: "Dept".to_string(),
+                        unique_name: Some("DeptUnique".to_string()),
+                        ..Default::default()
+                    },
+                    TableColumnSpec {
+                        id: 19,
+                        name: "Amount".to_string(),
+                        unique_name: Some("AmountUnique".to_string()),
+                        ..Default::default()
+                    },
+                ],
+                filter_columns: vec![FilterColumnSpec {
+                    col_id: 1,
+                    hidden_button: false,
+                    show_button: true,
+                    filter: FilterSpec::Values {
+                        blank: false,
+                        values: vec!["Eng".to_string()],
+                        calendar_type: None,
+                        date_group_items: Vec::new(),
+                    },
+                    ext_lst_raw: None,
+                }],
+                ..Default::default()
+            }],
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    let input_bytes = xlsx_api::export_from_parse_output(&input).expect("write input xlsx");
+    let (engine, _) = YrsComputeEngine::from_xlsx_bytes(&input_bytes).expect("from_xlsx_bytes");
+    let sheet_id =
+        cell_types::SheetId::from_uuid_str(&engine.get_all_sheet_ids()[0]).expect("sheet id");
+
+    let runtime_table = engine
+        .get_all_tables_in_sheet(&sheet_id)
+        .into_iter()
+        .find(|table| table.name == "RevenueTable")
+        .expect("RevenueTable should hydrate into the runtime table catalog");
+    assert!(runtime_table.id.starts_with("tbl-"));
+    assert_eq!(runtime_table.ooxml_table_id, Some(42));
+    assert_eq!(runtime_table.range.start_row(), 1);
+    assert_eq!(runtime_table.range.start_col(), 1);
+    assert_eq!(runtime_table.range.end_row(), 4);
+    assert_eq!(runtime_table.range.end_col(), 3);
+    assert_eq!(
+        runtime_table
+            .columns
+            .iter()
+            .map(|column| (column.name.as_str(), column.ooxml_column_id))
+            .collect::<Vec<_>>(),
+        vec![
+            ("Region", Some(11)),
+            ("Dept", Some(15)),
+            ("Amount", Some(19))
+        ]
+    );
+    assert!(
+        runtime_table
+            .columns
+            .iter()
+            .all(|column| column.id.starts_with("col-")),
+        "import must allocate stable Mog column IDs instead of treating OOXML ids as stable ids"
+    );
+    let stable_table_id = runtime_table.id.clone();
+    let stable_dept_column_id = runtime_table.columns[1].id.clone();
+
+    let runtime_filter = engine
+        .get_table_filter(&sheet_id, &stable_table_id)
+        .expect("supported table AutoFilter should materialize as a runtime table filter");
+    assert_eq!(runtime_filter.filter_kind, FilterKind::TableFilter);
+    assert_eq!(
+        runtime_filter.table_id.as_deref(),
+        Some(stable_table_id.as_str())
+    );
+    assert_eq!(runtime_filter.column_filters.len(), 1);
+    let dept_filter = runtime_filter
+        .column_filters
+        .values()
+        .next()
+        .expect("Dept filter criteria");
+    match dept_filter {
+        ColumnFilter::Values {
+            values,
+            include_blanks,
+        } => {
+            assert!(!include_blanks);
+            assert_eq!(values, &vec![serde_json::Value::String("Eng".to_string())]);
+        }
+        other => panic!("expected supported values filter projection, got {other:?}"),
+    }
+    assert_eq!(
+        engine.get_hidden_rows(&sheet_id),
+        vec![3],
+        "supported imported table values filter should hide the non-matching data row"
+    );
+
+    let binding = crate::storage::sheet::filters::get_filter_metadata_binding(
+        engine.stores.storage.doc(),
+        engine.stores.storage.sheets(),
+        &sheet_id,
+        &runtime_filter.id,
+    )
+    .expect("table filter should retain import metadata binding");
+    assert_eq!(binding.shell.capability, FilterCapability::Supported);
+    assert_eq!(
+        binding.owner_path,
+        FilterMetadataOwnerPath::TableAutoFilter {
+            sheet_id: sheet_id.to_uuid_string(),
+            table_id: stable_table_id.clone(),
+        }
+    );
+    assert_eq!(
+        binding.shell.lossless_criteria[0]
+            .table_column_id
+            .as_deref(),
+        Some(stable_dept_column_id.as_str())
+    );
+    assert_eq!(binding.shell.lossless_criteria[0].kind, "values");
+
+    let exported = engine
+        .export_to_parse_output()
+        .expect("export_to_parse_output")
+        .parse_output;
+    let exported_table = exported.sheets[0]
+        .tables
+        .iter()
+        .find(|table| table.name == "RevenueTable")
+        .expect("exported RevenueTable");
+    assert_revenue_table_projection(exported_table);
+
+    let exported_bytes = engine.export_to_xlsx_bytes().expect("export_to_xlsx_bytes");
+    let (reparsed, _diagnostics) =
+        xlsx_parser::parse_xlsx_to_output(&exported_bytes).expect("parse exported xlsx");
+    let reparsed_table = reparsed.sheets[0]
+        .tables
+        .iter()
+        .find(|table| table.name == "RevenueTable")
+        .expect("reparsed RevenueTable");
+    assert_revenue_table_projection(reparsed_table);
+
+    let archive = xlsx_parser::zip::XlsxArchive::new(&exported_bytes).expect("xlsx archive");
+    let table_part_path = exported_table
+        .table_part_path_hint
+        .as_deref()
+        .expect("export should project a table part path");
+    let table_xml = String::from_utf8(archive.read_file(table_part_path).unwrap()).unwrap();
+    assert!(table_xml.contains(r#"id="42""#), "{table_xml}");
+    assert!(table_xml.contains(r#"ref="B2:D5""#), "{table_xml}");
+    assert!(
+        table_xml.contains(r#"<filterColumn colId="1"><filters><filter val="Eng"/>"#),
+        "{table_xml}"
+    );
+}
+
+fn assert_revenue_table_projection(table: &TableSpec) {
+    assert_eq!(table.id, 42);
+    assert_eq!(table.display_name, "RevenueTable");
+    assert_eq!(table.range_ref, "B2:D5");
+    assert_eq!(table.style_name.as_deref(), Some("TableStyleMedium7"));
+    assert!(table.row_stripes);
+    assert!(table.col_stripes);
+    assert!(table.first_col_highlight);
+    assert_eq!(table.auto_filter_ref.as_deref(), Some("B2:D5"));
+    assert_eq!(
+        table
+            .columns
+            .iter()
+            .map(|column| (
+                column.id,
+                column.name.as_str(),
+                column.unique_name.as_deref()
+            ))
+            .collect::<Vec<_>>(),
+        vec![
+            (11, "Region", Some("RegionUnique")),
+            (15, "Dept", Some("DeptUnique")),
+            (19, "Amount", Some("AmountUnique")),
+        ]
+    );
+    assert_eq!(table.filter_columns.len(), 1);
+    assert_eq!(table.filter_columns[0].col_id, 1);
+    match &table.filter_columns[0].filter {
+        FilterSpec::Values {
+            blank,
+            values,
+            calendar_type,
+            date_group_items,
+        } => {
+            assert!(!blank);
+            assert_eq!(values, &vec!["Eng".to_string()]);
+            assert!(calendar_type.is_none());
+            assert!(date_group_items.is_empty());
+        }
+        other => panic!("expected values filter, got {other:?}"),
+    }
 }
 
 #[test]

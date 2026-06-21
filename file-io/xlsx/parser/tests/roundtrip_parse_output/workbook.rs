@@ -358,6 +358,85 @@ fn roundtrip_named_ranges() {
     assert!(sheet_scoped.xml_space_preserve);
 }
 
+#[test]
+fn roundtrip_named_ranges_preserves_scopes_and_opaque_refs() {
+    let mut output = ParseOutput {
+        sheets: vec![
+            SheetData {
+                name: "Data".to_string(),
+                rows: 4,
+                cols: 4,
+                ..Default::default()
+            },
+            SheetData {
+                name: "Local Names".to_string(),
+                rows: 4,
+                cols: 4,
+                ..Default::default()
+            },
+        ],
+        ..Default::default()
+    };
+    output.named_ranges = vec![
+        NamedRange {
+            name: "WorkbookScope".to_string(),
+            refers_to: "Data!$A$1:$A$2".to_string(),
+            ..Default::default()
+        },
+        NamedRange {
+            name: "SheetScope".to_string(),
+            refers_to: "'Local Names'!$B$2:$C$3".to_string(),
+            local_sheet_id: Some(1),
+            ..Default::default()
+        },
+        NamedRange {
+            name: "BrokenLocal".to_string(),
+            refers_to: "#REF!".to_string(),
+            local_sheet_id: Some(1),
+            hidden: true,
+            ..Default::default()
+        },
+        NamedRange {
+            name: "ExternalWorkbook".to_string(),
+            refers_to: "'[Budget 2026.xlsx]Summary Data'!$D$5".to_string(),
+            xml_space_preserve: true,
+            ..Default::default()
+        },
+    ];
+    let expected = [
+        ("WorkbookScope", None, "Data!$A$1:$A$2", false, false),
+        (
+            "SheetScope",
+            Some(1),
+            "'Local Names'!$B$2:$C$3",
+            false,
+            false,
+        ),
+        ("BrokenLocal", Some(1), "#REF!", true, false),
+        (
+            "ExternalWorkbook",
+            None,
+            "'[Budget 2026.xlsx]Summary Data'!$D$5",
+            false,
+            true,
+        ),
+    ];
+
+    let rt = roundtrip(&output);
+
+    assert_eq!(rt.named_ranges.len(), expected.len());
+    for (name, scope, refers_to, hidden, xml_space_preserve) in expected {
+        let range = rt
+            .named_ranges
+            .iter()
+            .find(|range| range.name == name && range.local_sheet_id == scope)
+            .unwrap_or_else(|| panic!("missing named range {name} in scope {scope:?}"));
+        assert_eq!(range.refers_to, refers_to);
+        assert_eq!(range.hidden, hidden);
+        assert_eq!(range.xml_space_preserve, xml_space_preserve);
+    }
+}
+
 // =============================================================================
 // Multiple sheets
 // =============================================================================

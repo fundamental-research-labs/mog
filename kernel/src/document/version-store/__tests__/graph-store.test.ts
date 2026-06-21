@@ -824,9 +824,10 @@ describe('InMemoryVersionGraphStore commit listing', () => {
     const graph = createInMemoryVersionGraphStore({ namespace: NAMESPACE });
     const initialized = await graph.initializeGraph(await graphInput('root'));
     expectGraphSuccess(initialized);
+    const missingCommitId = parseWorkbookCommitId(`commit:sha256:${'9'.repeat(64)}`);
     const branch = graph.refStore.createBranch({
       name: 'scenario/dangling-list',
-      targetCommitId: commit('9'),
+      targetCommitId: missingCommitId,
       expectedAbsent: true,
       createdBy: AUTHOR,
     });
@@ -843,7 +844,7 @@ describe('InMemoryVersionGraphStore commit listing', () => {
       expect.objectContaining({
         code: 'VERSION_MISSING_OBJECT',
         operation: 'listCommits',
-        commitId: commit('9'),
+        commitId: missingCommitId,
       }),
     ]);
   });

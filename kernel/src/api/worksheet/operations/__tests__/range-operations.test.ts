@@ -78,13 +78,19 @@ describe('clearRange', () => {
       options as any,
     );
 
+    const captureOptions = {
+      ...options,
+      directEditRanges: [
+        { sheetId: SHEET_ID, startRow: 0, startCol: 0, endRow: 1, endCol: 1 },
+      ],
+    };
     expect(ctx.computeBridge.clearRangeByPosition).toHaveBeenCalledWith(
       SHEET_ID,
       0,
       0,
       1,
       1,
-      options,
+      captureOptions,
     );
   });
 

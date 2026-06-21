@@ -51,6 +51,8 @@ export {
 export {
   observeMutationAdmission,
   recordMutationAdmissionDiagnostic,
+  withDirectEditRange,
+  type DirectEditRange,
   type MutationAdmissionDiagnostic,
   type MutationAdmissionDiagnosticCode,
   type MutationAdmissionOptions,

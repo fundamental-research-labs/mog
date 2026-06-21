@@ -4,7 +4,7 @@ use cell_types::{CellId, SheetId, SheetPos};
 use value_types::{CellValue, ComputeError};
 
 use crate::mirror::CellMirror;
-use crate::snapshot::{PolicyPreservedParseOutcome, RecalcResult};
+use crate::snapshot::{CellChange, CellPosition, PolicyPreservedParseOutcome, RecalcResult};
 use crate::storage::cells::values::InputParseContext;
 use crate::storage::engine::mutation::CellInput;
 use crate::storage::engine::mutation_coordinator::MutationCoordinator;
@@ -14,6 +14,76 @@ use crate::storage::engine::stores::EngineStores;
 use super::edits::{canonicalize_resolved_cell_inputs, validate_edit_bounds};
 use super::outcomes::{attach_policy_preserved_outcomes, truncate_submitted_text};
 use super::yrs_writes::write_prepared_cell_inputs_to_yrs;
+
+fn formula_body_to_display_formula(body: &str) -> String {
+    if body.starts_with('=') {
+        body.to_string()
+    } else {
+        format!("={body}")
+    }
+}
+
+fn result_has_direct_change(
+    result: &RecalcResult,
+    cell_id: CellId,
+    sheet_id: &SheetId,
+    row: u32,
+    col: u32,
+) -> bool {
+    let cell_id = cell_id.to_uuid_string();
+    let sheet_id = sheet_id.to_uuid_string();
+    result.changed_cells.iter().any(|change| {
+        change.cell_id == cell_id
+            || (change.sheet_id == sheet_id
+                && change
+                    .position
+                    .as_ref()
+                    .is_some_and(|position| position.row == row && position.col == col))
+    })
+}
+
+fn append_missing_direct_changes(
+    result: &mut RecalcResult,
+    edits: &[(SheetId, CellId, u32, u32, CellInput)],
+    prepared_values: &[(CellValue, Option<String>)],
+    direct_edit_old_values: &mut HashMap<CellId, CellValue>,
+    direct_edit_old_formulas: &mut HashMap<CellId, String>,
+) {
+    for ((sheet_id, cell_id, row, col, _), (value, formula)) in
+        edits.iter().zip(prepared_values.iter())
+    {
+        if result_has_direct_change(result, *cell_id, sheet_id, *row, *col) {
+            continue;
+        }
+
+        let old_value = direct_edit_old_values
+            .remove(cell_id)
+            .unwrap_or(CellValue::Null);
+        let old_formula = direct_edit_old_formulas.remove(cell_id);
+        let new_formula = formula.as_deref().map(formula_body_to_display_formula);
+        if old_value == *value && old_formula == new_formula {
+            continue;
+        }
+
+        result.changed_cells.push(CellChange {
+            cell_id: cell_id.to_uuid_string(),
+            sheet_id: sheet_id.to_uuid_string(),
+            position: Some(CellPosition {
+                row: *row,
+                col: *col,
+            }),
+            value: value.clone(),
+            display_text: None,
+            old_display_text: None,
+            old_formula: Some(old_formula.unwrap_or_else(|| NO_OLD_FORMULA_SENTINEL.to_string())),
+            new_formula,
+            number_format: None,
+            format_idx: None,
+            extra_flags: 0,
+            old_value: Some(old_value),
+        });
+    }
+}
 
 // ---------------------------------------------------------------------------
 // mutation_set_cells
@@ -234,6 +304,13 @@ pub(in crate::storage::engine) fn mutation_set_cells(
             }
         }
     }
+    append_missing_direct_changes(
+        &mut result,
+        &edits,
+        &prepared_values,
+        &mut direct_edit_old_values,
+        &mut direct_edit_old_formulas,
+    );
 
     attach_policy_preserved_outcomes(&mut result, preserved_outcomes);
     Ok(result)

@@ -3,6 +3,7 @@ use value_types::ComputeError;
 
 use crate::engine_types::queries::FindInRangeOptions;
 use crate::mirror::CellMirror;
+use crate::snapshot::RecalcResult;
 use crate::storage::engine::mutation::CellInput;
 use crate::storage::engine::mutation_coordinator::MutationCoordinator;
 use crate::storage::engine::stores::EngineStores;
@@ -18,7 +19,7 @@ use super::cell_mutations::mutation_set_cells_by_position;
 /// `mutation_set_cells_by_position` for proper undo/redo support.
 ///
 /// Skips formula cells (only replaces literal values).
-/// Returns the number of cells that were modified.
+/// Returns the number of cells that were modified plus the resulting recalc evidence.
 #[allow(clippy::too_many_arguments)]
 pub(in crate::storage::engine) fn replace_all_in_range(
     stores: &mut EngineStores,
@@ -32,9 +33,9 @@ pub(in crate::storage::engine) fn replace_all_in_range(
     text: &str,
     replacement: &str,
     options: &FindInRangeOptions,
-) -> Result<u32, ComputeError> {
+) -> Result<(u32, RecalcResult), ComputeError> {
     if text.is_empty() {
-        return Ok(0);
+        return Ok((0, RecalcResult::empty()));
     }
 
     // Build regex (same logic as find_in_range)
@@ -50,14 +51,14 @@ pub(in crate::storage::engine) fn replace_all_in_range(
         .build()
     {
         Ok(r) => r,
-        Err(_) => return Ok(0),
+        Err(_) => return Ok((0, RecalcResult::empty())),
     };
 
     // Collect matching non-formula cells
     let range = cell_types::RangePos::new(*sheet_id, start_row, start_col, end_row, end_col);
     let mut edits: Vec<(SheetId, u32, u32, CellInput)> = Vec::new();
     let Some(grid) = stores.grid_indexes.get(sheet_id) else {
-        return Ok(0);
+        return Ok((0, RecalcResult::empty()));
     };
 
     cell_iter::for_each_cell_in_range(
@@ -91,9 +92,11 @@ pub(in crate::storage::engine) fn replace_all_in_range(
 
     let count = edits.len() as u32;
 
-    if !edits.is_empty() {
-        mutation_set_cells_by_position(stores, mirror, mutation, edits, false)?;
-    }
+    let recalc = if edits.is_empty() {
+        RecalcResult::empty()
+    } else {
+        mutation_set_cells_by_position(stores, mirror, mutation, edits, false)?
+    };
 
-    Ok(count)
+    Ok((count, recalc))
 }

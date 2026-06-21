@@ -77,7 +77,8 @@ describe('WorkbookVersion public cell edit commit/diff vertical', () => {
         redacted: true,
       });
 
-      await expect(wb.version.getHead()).resolves.toMatchObject({
+      const committedHeadResult = await wb.version.getHead();
+      expect(committedHeadResult).toMatchObject({
         ok: true,
         value: {
           id: committed.id,
@@ -85,6 +86,13 @@ describe('WorkbookVersion public cell edit commit/diff vertical', () => {
           resolvedFrom: 'HEAD',
         },
       });
+      if (!committedHeadResult.ok) {
+        throw new Error(`expected committed head: ${committedHeadResult.error.code}`);
+      }
+      const committedHead = committedHeadResult.value;
+      if (!committedHead.refRevision) {
+        throw new Error('expected committed head to expose a ref revision');
+      }
       await expect(wb.version.listCommits()).resolves.toMatchObject({
         ok: true,
         value: {
@@ -116,6 +124,54 @@ describe('WorkbookVersion public cell edit commit/diff vertical', () => {
       if (!diffResult.ok) throw new Error(`expected public diff success: ${diffResult.error.code}`);
       expect(diffResult.value.items).toHaveLength(8);
 
+      await wb.activeSheet.clearData('A1:A2');
+      await wb.activeSheet.clear('B1:B2', 'contents');
+      await expect(wb.activeSheet.replaceAll('C1:D1', '0', '5')).resolves.toBe(2);
+
+      const clearReplaceCommitResult = await wb.version.commit({
+        expectedHead: {
+          commitId: committedHead.id,
+          revision: committedHead.refRevision,
+        },
+      });
+      if (!clearReplaceCommitResult.ok) {
+        throw new Error(
+          `expected public clear/replace commit success: ${clearReplaceCommitResult.error.code}`,
+        );
+      }
+      const clearReplaceCommitted = clearReplaceCommitResult.value;
+
+      expect(clearReplaceCommitted.parents).toEqual([committed.id]);
+      await expect(wb.version.getHead()).resolves.toMatchObject({
+        ok: true,
+        value: {
+          id: clearReplaceCommitted.id,
+          refName: 'refs/heads/main',
+          resolvedFrom: 'HEAD',
+        },
+      });
+
+      const clearReplaceDiff = await wb.version.diff(committed.id, clearReplaceCommitted.id);
+      expect(clearReplaceDiff).toMatchObject({
+        ok: true,
+        value: {
+          order: 'semantic-change-order',
+          limit: 50,
+          items: expect.arrayContaining([
+            expectedCellDiff('A1', null),
+            expectedCellDiff('A2', null),
+            expectedCellDiff('B1', null),
+            expectedCellDiff('B2', null),
+            expectedCellDiff('C1', 15),
+            expectedCellDiff('D1', 25),
+          ]),
+        },
+      });
+      if (!clearReplaceDiff.ok) {
+        throw new Error(`expected public clear/replace diff success: ${clearReplaceDiff.error.code}`);
+      }
+      expect(clearReplaceDiff.value.items).toHaveLength(6);
+
       await wb.close('skipSave');
       wb = undefined;
       await handle.dispose();
@@ -130,7 +186,7 @@ describe('WorkbookVersion public cell edit commit/diff vertical', () => {
       await expect(reopenedWb.version.getHead()).resolves.toMatchObject({
         ok: true,
         value: {
-          id: committed.id,
+          id: clearReplaceCommitted.id,
           refName: 'refs/heads/main',
           resolvedFrom: 'HEAD',
         },
@@ -139,6 +195,7 @@ describe('WorkbookVersion public cell edit commit/diff vertical', () => {
         ok: true,
         value: {
           items: expect.arrayContaining([
+            expect.objectContaining({ id: clearReplaceCommitted.id }),
             expect.objectContaining({ id: committed.id }),
             expect.objectContaining({ id: initialized.rootCommit.id }),
           ]),
@@ -158,6 +215,21 @@ describe('WorkbookVersion public cell edit commit/diff vertical', () => {
             expectedCellDiff('D1', 20),
             expectedCellDiff('C2', { kind: 'formula', formula: '=C1+1', result: 11 }),
             expectedCellDiff('D2', { kind: 'formula', formula: '=D1+1', result: 21 }),
+          ]),
+        },
+      });
+      await expect(
+        reopenedWb.version.diff(committed.id, clearReplaceCommitted.id),
+      ).resolves.toMatchObject({
+        ok: true,
+        value: {
+          items: expect.arrayContaining([
+            expectedCellDiff('A1', null),
+            expectedCellDiff('A2', null),
+            expectedCellDiff('B1', null),
+            expectedCellDiff('B2', null),
+            expectedCellDiff('C1', 15),
+            expectedCellDiff('D1', 25),
           ]),
         },
       });

@@ -294,7 +294,7 @@ pub(in crate::storage::engine) fn replace_all_in_range(
     replacement: String,
     options: crate::engine_types::queries::FindInRangeOptions,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-    let count = services::mutation_handlers::replace_all_in_range(
+    let (count, mut recalc) = services::mutation_handlers::replace_all_in_range(
         &mut engine.stores,
         &mut engine.mirror,
         &mut engine.mutation,
@@ -307,6 +307,10 @@ pub(in crate::storage::engine) fn replace_all_in_range(
         &replacement,
         &options,
     )?;
+    engine.prepare_recalc_for_flush(&mut recalc);
     let patches = engine.flush_viewport_patches();
-    Ok((patches, MutationResult::empty().with_data(&count)?))
+    Ok((
+        patches,
+        MutationResult::from_recalc(recalc).with_data(&count)?,
+    ))
 }

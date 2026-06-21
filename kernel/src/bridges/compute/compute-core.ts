@@ -864,6 +864,7 @@ export class ComputeCore {
         operation,
         result,
         ...(directEdits ? { directEdits } : {}),
+        ...(options?.directEditRanges ? { directEditRanges: options.directEditRanges } : {}),
         ...(options?.operationContext ? { operationContext: options.operationContext } : {}),
       });
     }

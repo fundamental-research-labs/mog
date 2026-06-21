@@ -418,6 +418,144 @@ describe('Compute mutation admission', () => {
     });
   });
 
+  it('records direct edit ranges for range bridge writes', async () => {
+    const recordMutationResult = jest.fn();
+    const ctx = makeMockContext({
+      versioning: {
+        mutationCapture: { recordMutationResult },
+      },
+    } as unknown as Partial<IKernelContext>);
+    const result = mutationResult({
+      recalc: {
+        changedCells: [
+          {
+            cellId: 'cell-a1',
+            sheetId: 'sheet-1',
+            position: { row: 0, col: 0 },
+            oldValue: 1,
+            value: null,
+            extraFlags: 0,
+          },
+        ],
+        projectionChanges: [],
+        errors: [],
+        validationAnnotations: [],
+        metrics: {},
+      },
+    });
+    const transport: BridgeTransport & { call: jest.Mock } = {
+      call: jest.fn(async () => [new Uint8Array(), result]),
+    };
+    const bridge = createStartedBridge(ctx, transport);
+    const operationContext = {
+      operationId: 'operation-1',
+      kind: 'mutation',
+      author: { authorId: 'user-1', actorKind: 'user' },
+      createdAt: '2026-06-20T00:00:00.000Z',
+      domainIds: ['cells'],
+      capturePolicy: 'commitEligible',
+      writeAdmissionMode: 'capture',
+    };
+    const directEditRanges = [
+      { sheetId: 'sheet-1', startRow: 0, startCol: 0, endRow: 1, endCol: 1 },
+    ];
+
+    await bridge.clearRangeByPosition(sheetId('sheet-1'), 0, 0, 1, 1, {
+      operationContext: operationContext as any,
+      directEditRanges,
+    });
+
+    expect(recordMutationResult).toHaveBeenCalledWith({
+      operation: 'compute_clear_range_by_position',
+      result,
+      directEdits: undefined,
+      directEditRanges,
+      operationContext,
+    });
+  });
+
+  it('derives exact direct edits for replaceAll range writes', async () => {
+    const recordMutationResult = jest.fn();
+    const ctx = makeMockContext({
+      versioning: {
+        mutationCapture: { recordMutationResult },
+      },
+    } as unknown as Partial<IKernelContext>);
+    const result = mutationResult({
+      recalc: {
+        changedCells: [
+          {
+            cellId: 'cell-a1',
+            sheetId: 'sheet-1',
+            position: { row: 0, col: 0 },
+            oldValue: 10,
+            value: 15,
+            extraFlags: 0,
+          },
+          {
+            cellId: 'cell-b1-formula',
+            sheetId: 'sheet-1',
+            position: { row: 0, col: 1 },
+            oldFormula: '=A1*2',
+            newFormula: '=A1*2',
+            oldValue: 20,
+            value: 30,
+            extraFlags: 0,
+          },
+          {
+            cellId: 'cell-c1-outside-range',
+            sheetId: 'sheet-1',
+            position: { row: 0, col: 2 },
+            oldValue: 'old',
+            value: 'new',
+            extraFlags: 0,
+          },
+        ],
+        projectionChanges: [],
+        errors: [],
+        validationAnnotations: [],
+        metrics: {},
+      },
+    });
+    const transport: BridgeTransport & { call: jest.Mock } = {
+      call: jest.fn(async () => [new Uint8Array(), result]),
+    };
+    const core = createStartedCore(ctx, transport);
+    const operationContext = {
+      operationId: 'operation-1',
+      kind: 'mutation',
+      author: { authorId: 'user-1', actorKind: 'user' },
+      createdAt: '2026-06-20T00:00:00.000Z',
+      domainIds: ['cells'],
+      capturePolicy: 'commitEligible',
+      writeAdmissionMode: 'capture',
+    };
+    const directEditRanges = [
+      { sheetId: 'sheet-1', startRow: 0, startCol: 0, endRow: 0, endCol: 1 },
+    ];
+
+    await core.mutatePublic(
+      'compute_replace_all_in_range',
+      () =>
+        transport.call('compute_replace_all_in_range', { docId: 'test-doc' }) as Promise<
+          [Uint8Array, MutationResult]
+        >,
+      undefined,
+      {
+        operationContext: operationContext as any,
+        directEditRanges,
+      },
+    );
+
+    expect(recordMutationResult).toHaveBeenCalledWith({
+      operation: 'compute_replace_all_in_range',
+      result,
+      directEdits: [{ sheetId: 'sheet-1', row: 0, col: 0 }],
+      directEditRanges,
+      operationContext,
+    });
+  });
+
   it('records unclassified write diagnostics before transport execution', async () => {
     const diagnostics: MutationAdmissionDiagnostic[] = [];
     const ctx = makeMockContext({

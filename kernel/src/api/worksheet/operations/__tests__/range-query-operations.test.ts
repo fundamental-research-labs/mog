@@ -145,7 +145,7 @@ describe('clearWithMode', () => {
     expect(ctx.computeBridge.clearHyperlinksInRange).not.toHaveBeenCalled();
   });
 
-  it('passes mutation admission options to every clear bridge call', async () => {
+  it('passes direct edit range metadata only to value-clearing bridge calls', async () => {
     const ctx = createMockCtx();
     const options = {
       operationContext: {
@@ -162,13 +162,19 @@ describe('clearWithMode', () => {
 
     await RangeQueryOps.clearWithMode(ctx, SHEET_ID, RANGE, 'all', options as any);
 
+    const captureOptions = {
+      ...options,
+      directEditRanges: [
+        { sheetId: SHEET_ID, startRow: 0, startCol: 0, endRow: 1, endCol: 1 },
+      ],
+    };
     expect(ctx.computeBridge.clearRangeByPosition).toHaveBeenCalledWith(
       SHEET_ID,
       0,
       0,
       1,
       1,
-      options,
+      captureOptions,
     );
     expect(ctx.computeBridge.clearFormatForRanges).toHaveBeenCalledWith(
       SHEET_ID,
@@ -183,6 +189,31 @@ describe('clearWithMode', () => {
       1,
       options,
     );
+  });
+
+  it('passes direct edit range metadata to contents clear calls', async () => {
+    const ctx = createMockCtx();
+    const options = {
+      operationContext: {
+        operationId: 'worksheet.clear:contents',
+        kind: 'mutation',
+        author: { authorId: 'user-1', actorKind: 'user' },
+        createdAt: '2026-06-20T00:00:00.000Z',
+        sheetIds: [SHEET_ID],
+        domainIds: ['cells'],
+        capturePolicy: 'commitEligible',
+        writeAdmissionMode: 'capture',
+      },
+    };
+
+    await RangeQueryOps.clearWithMode(ctx, SHEET_ID, RANGE, 'contents', options as any);
+
+    expect(ctx.computeBridge.clearRange).toHaveBeenCalledWith(SHEET_ID, 0, 0, 1, 1, {
+      ...options,
+      directEditRanges: [
+        { sheetId: SHEET_ID, startRow: 0, startCol: 0, endRow: 1, endCol: 1 },
+      ],
+    });
   });
 });
 
@@ -213,6 +244,12 @@ describe('replaceAll', () => {
     );
 
     expect(result).toBe(2);
+    const captureOptions = {
+      ...options,
+      directEditRanges: [
+        { sheetId: SHEET_ID, startRow: 0, startCol: 0, endRow: 1, endCol: 1 },
+      ],
+    };
     expect(ctx.computeBridge.replaceAllInRange).toHaveBeenCalledWith(
       SHEET_ID,
       0,
@@ -227,7 +264,7 @@ describe('replaceAll', () => {
         wholeCell: null,
         includeFormulas: null,
       },
-      options,
+      captureOptions,
     );
   });
 });

@@ -4,6 +4,7 @@
 //! cells are edited, cleared, sorted, batch-set, or undone.
 
 use super::*;
+use crate::engine_types::queries::FindInRangeOptions;
 use crate::snapshot::{CellData, SheetSnapshot, WorkbookSnapshot};
 use value_types::{CellValue, FiniteF64};
 
@@ -892,4 +893,42 @@ fn test_integration_clear_range_old_values() {
         "expected at least 3 changes, got {}",
         changes.len()
     );
+}
+
+#[test]
+fn test_integration_replace_all_returns_changed_cells_and_count() {
+    let snap = simple_snapshot();
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+
+    let (_patches, mutation_result) = engine
+        .replace_all_in_range(
+            &sheet_id(),
+            0,
+            0,
+            1,
+            1,
+            "0".to_string(),
+            "5".to_string(),
+            FindInRangeOptions {
+                text: "0".to_string(),
+                case_sensitive: None,
+                whole_cell: None,
+                include_formulas: None,
+            },
+        )
+        .unwrap();
+
+    assert_eq!(mutation_result.extract_data::<u32>(), Some(2));
+    let changes = &mutation_result.recalc.changed_cells;
+
+    assert_old_value(changes, 0, 0, Some(num(10.0)));
+    assert_new_value(changes, 0, 0, num(15.0));
+    assert_old_value(changes, 0, 1, Some(num(20.0)));
+    assert_new_value(changes, 0, 1, num(25.0));
+    let a2_change = find_change(changes, 1, 0)
+        .expect("formula dependency should recalculate after replaceAll changes A1/B1");
+    assert_eq!(a2_change.old_formula.as_deref(), Some("=A1+B1"));
+    assert_eq!(a2_change.new_formula.as_deref(), Some("=A1+B1"));
+    assert_old_value(changes, 1, 0, Some(num(30.0)));
+    assert_new_value(changes, 1, 0, num(40.0));
 }

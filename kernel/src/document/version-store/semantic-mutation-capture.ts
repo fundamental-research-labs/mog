@@ -17,7 +17,10 @@ import type {
   SortingChange,
   TableChange,
 } from '../../bridges/compute/compute-types.gen';
-import type { DirectEditPosition } from '../../bridges/compute/mutation-admission';
+import type {
+  DirectEditPosition,
+  DirectEditRange,
+} from '../../bridges/compute/mutation-admission';
 import { decodeRangeMetaJson, type RangeMeta } from '../../bridges/wire/range-metadata-cache';
 import type {
   VersionNormalCommitCapture,
@@ -29,6 +32,7 @@ export interface VersionMutationCaptureRecordInput {
   readonly operation: string;
   readonly result: MutationResult;
   readonly directEdits?: readonly DirectEditPosition[];
+  readonly directEditRanges?: readonly DirectEditRange[];
   readonly operationContext?: VersionOperationContext;
 }
 
@@ -77,6 +81,7 @@ type PendingSemanticMutation = {
   readonly capturedAt: string;
   readonly operationContext?: VersionOperationContext;
   readonly directEdits: readonly DirectEditPosition[];
+  readonly directEditRanges: readonly DirectEditRange[];
   readonly changes: readonly VersionSemanticChangeRecord[];
 };
 
@@ -126,6 +131,7 @@ class SemanticMutationCaptureBuffer implements VersionMutationCaptureSink {
     const sequence = this.nextSequence;
     const capturedAt = input.operationContext?.createdAt ?? this.now().toISOString();
     const directEdits = input.directEdits ? [...input.directEdits] : [];
+    const directEditRanges = input.directEditRanges ? [...input.directEditRanges] : [];
     const changes = mapMutationResultToSemanticChanges(input, sequence);
     if (changes.length === 0) return;
     this.nextSequence++;
@@ -136,6 +142,7 @@ class SemanticMutationCaptureBuffer implements VersionMutationCaptureSink {
       capturedAt,
       ...(input.operationContext ? { operationContext: input.operationContext } : {}),
       directEdits,
+      directEditRanges,
       changes,
     });
   }
@@ -188,7 +195,12 @@ function mapMutationResultToSemanticChanges(
   const changes: VersionSemanticChangeRecord[] = [];
   if (isDirectCellValueOperation(input.operation)) {
     changes.push(
-      ...mapCellWriteChanges(input.result.recalc?.changedCells ?? [], input.directEdits ?? [], sequence),
+      ...mapCellWriteChanges(
+        input.result.recalc?.changedCells ?? [],
+        input.directEdits ?? [],
+        input.directEditRanges ?? [],
+        sequence,
+      ),
     );
   }
   if (input.operation === 'compute_rename_compute_sheet') {
@@ -224,17 +236,23 @@ function isDirectCellValueOperation(operation: string): boolean {
   return (
     operation === 'compute_batch_set_cells_by_position' ||
     operation === 'compute_set_date_value' ||
-    operation === 'compute_set_time_value'
+    operation === 'compute_set_time_value' ||
+    operation === 'compute_clear_range_by_position' ||
+    operation === 'compute_clear_range' ||
+    operation === 'compute_clear_range_and_return_ids' ||
+    operation === 'compute_clear_range_with_mode' ||
+    operation === 'compute_replace_all_in_range'
   );
 }
 
 function mapCellWriteChanges(
   changedCells: readonly CellChange[],
   directEdits: readonly DirectEditPosition[],
+  directEditRanges: readonly DirectEditRange[],
   sequence: number,
 ): readonly VersionSemanticChangeRecord[] {
   const directEditKeys = new Set(directEdits.map((edit) => directEditKey(edit)));
-  if (directEditKeys.size === 0) return [];
+  if (directEditKeys.size === 0 && directEditRanges.length === 0) return [];
 
   const changes: VersionSemanticChangeRecord[] = [];
   for (const cell of changedCells) {
@@ -244,7 +262,7 @@ function mapCellWriteChanges(
       row: cell.position.row,
       col: cell.position.col,
     });
-    if (!directEditKeys.has(key)) continue;
+    if (directEditKeys.size > 0 ? !directEditKeys.has(key) : !isInDirectEditRange(cell, directEditRanges)) continue;
 
     const address = toA1(cell.position.row, cell.position.col);
     changes.push({
@@ -960,6 +978,19 @@ function directEditKey(edit: DirectEditPosition): string {
   return `${edit.sheetId}\u0000${edit.row}\u0000${edit.col}`;
 }
 
+function isInDirectEditRange(cell: CellChange, ranges: readonly DirectEditRange[]): boolean {
+  if (!cell.position) return false;
+  return ranges.some(
+    (range) =>
+      range.sheetId === cell.sheetId &&
+      cell.position !== undefined &&
+      cell.position.row >= range.startRow &&
+      cell.position.row <= range.endRow &&
+      cell.position.col >= range.startCol &&
+      cell.position.col <= range.endCol,
+  );
+}
+
 function mutationSegmentPayload(record: PendingSemanticMutation): unknown {
   return {
     schemaVersion: 1,
@@ -973,6 +1004,14 @@ function mutationSegmentPayload(record: PendingSemanticMutation): unknown {
       col: edit.col,
       address: toA1(edit.row, edit.col),
     })),
+    ...(record.directEditRanges.length === 0
+      ? {}
+      : {
+          directEditRanges: record.directEditRanges.map((range) => ({
+            ...range,
+            address: `${toA1(range.startRow, range.startCol)}:${toA1(range.endRow, range.endCol)}`,
+          })),
+        }),
     ...(record.operationContext ? { operationContext: record.operationContext } : {}),
   };
 }

@@ -26,7 +26,10 @@ import { colToLetter } from '@mog/spreadsheet-utils/a1';
 import { normalizeCellValue, cellValueToString } from '../../internal/value-conversions';
 import { normalizeRange } from '../../internal/utils';
 import { KernelError } from '../../../errors';
-import type { MutationAdmissionOptions } from '../../../bridges/compute';
+import {
+  withDirectEditRange,
+  type MutationAdmissionOptions,
+} from '../../../bridges/compute/mutation-admission';
 import type { FindInRangeOptions } from '../../../bridges/compute/compute-types.gen';
 import type { CellAddress, DocumentContext } from './shared';
 import { parseRefIdSimple } from './validation-helpers';
@@ -94,20 +97,23 @@ export async function clearWithMode(
   const mode = validateClearApplyTo(applyTo);
 
   const n = normalizeRange(range);
+  const cellContentOptions = options
+    ? withDirectEditRange(options, sheetId, n.startRow, n.startCol, n.endRow, n.endCol)
+    : undefined;
   const promises: Promise<unknown>[] = [];
 
   if (mode === 'all') {
     // 'all' mode: full cell deletion (values + formulas + formats + hyperlinks).
     // clearRangeByPosition wipes cell properties (including format) along with values.
     promises.push(
-      options
+      cellContentOptions
         ? ctx.computeBridge.clearRangeByPosition(
             sheetId,
             n.startRow,
             n.startCol,
             n.endRow,
             n.endCol,
-            options,
+            cellContentOptions,
           )
         : ctx.computeBridge.clearRangeByPosition(
             sheetId,
@@ -124,8 +130,15 @@ export async function clearWithMode(
     // etc.) survives the wipe. Do NOT use `clearRangeByPosition` here — it drops
     // properties unconditionally.
     promises.push(
-      options
-        ? ctx.computeBridge.clearRange(sheetId, n.startRow, n.startCol, n.endRow, n.endCol, options)
+      cellContentOptions
+        ? ctx.computeBridge.clearRange(
+            sheetId,
+            n.startRow,
+            n.startCol,
+            n.endRow,
+            n.endCol,
+            cellContentOptions,
+          )
         : ctx.computeBridge.clearRange(sheetId, n.startRow, n.startCol, n.endRow, n.endCol),
     );
   }
@@ -327,7 +340,10 @@ export async function replaceAll(
     wholeCell: options?.wholeCell ?? null,
     includeFormulas: options?.includeFormulas ?? null,
   };
-  const result = admissionOptions
+  const captureOptions = admissionOptions
+    ? withDirectEditRange(admissionOptions, sheetId, n.startRow, n.startCol, n.endRow, n.endCol)
+    : undefined;
+  const result = captureOptions
     ? await ctx.computeBridge.replaceAllInRange(
         sheetId,
         n.startRow,
@@ -337,7 +353,7 @@ export async function replaceAll(
         text,
         replacement,
         bridgeOptions,
-        admissionOptions,
+        captureOptions,
       )
     : await ctx.computeBridge.replaceAllInRange(
         sheetId,

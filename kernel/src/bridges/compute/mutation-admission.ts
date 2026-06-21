@@ -12,6 +12,13 @@ import {
 export type MutationTuple = [Uint8Array, MutationResult];
 
 export type DirectEditPosition = { sheetId: string; row: number; col: number };
+export type DirectEditRange = {
+  readonly sheetId: string;
+  readonly startRow: number;
+  readonly startCol: number;
+  readonly endRow: number;
+  readonly endCol: number;
+};
 
 export type MutationAdmissionDiagnosticCode =
   | 'versioning.admission.missing-context'
@@ -29,12 +36,14 @@ export interface MutationAdmissionOptions {
   readonly operationContext?: VersionOperationContext;
   readonly invocation?: OperationInvocationKind;
   readonly awaitMaterialization?: boolean;
+  readonly directEditRanges?: readonly DirectEditRange[];
 }
 
 export interface VersionMutationCaptureRecordInput {
   readonly operation: string;
   readonly result: MutationResult;
   readonly directEdits?: readonly DirectEditPosition[];
+  readonly directEditRanges?: readonly DirectEditRange[];
   readonly operationContext?: VersionOperationContext;
 }
 
@@ -89,7 +98,7 @@ export function recordVersionMutationCapture(
     ?.mutationCapture;
   if (!capture?.recordMutationResult) return;
   try {
-    capture.recordMutationResult(input);
+    capture.recordMutationResult(normalizeVersionMutationCaptureInput(input));
   } catch {
     (ctx.eventBus?.emit as unknown as ((eventName: string, payload: unknown) => void) | undefined)?.(
       'versioning:mutation-capture-error',
@@ -160,4 +169,75 @@ export function runSystemMutation<T>(
     ...options,
   });
   return writeGate ? writeGate.withBypass(run) : run();
+}
+
+export function withDirectEditRange(
+  options: MutationAdmissionOptions | undefined,
+  sheetId: string,
+  startRow: number,
+  startCol: number,
+  endRow: number,
+  endCol: number,
+): MutationAdmissionOptions {
+  const range: DirectEditRange = {
+    sheetId,
+    startRow: Math.min(startRow, endRow),
+    startCol: Math.min(startCol, endCol),
+    endRow: Math.max(startRow, endRow),
+    endCol: Math.max(startCol, endCol),
+  };
+  return {
+    ...options,
+    directEditRanges: [...(options?.directEditRanges ?? []), range],
+  };
+}
+
+function normalizeVersionMutationCaptureInput(
+  input: VersionMutationCaptureRecordInput,
+): VersionMutationCaptureRecordInput {
+  if (
+    input.operation !== 'compute_replace_all_in_range' ||
+    input.directEdits !== undefined ||
+    !input.directEditRanges?.length
+  ) {
+    return input;
+  }
+
+  const directEdits = (input.result.recalc?.changedCells ?? [])
+    .filter((cell) => cell.position)
+    .filter((cell) => isCellInDirectEditRanges(cell, input.directEditRanges ?? []))
+    .filter((cell) => !isUnchangedFormulaRecalc(cell))
+    .map((cell) => ({
+      sheetId: cell.sheetId,
+      row: cell.position!.row,
+      col: cell.position!.col,
+    }));
+
+  return directEdits.length === 0 ? input : { ...input, directEdits };
+}
+
+type MutationCellChange = NonNullable<MutationResult['recalc']>['changedCells'][number];
+
+function isCellInDirectEditRanges(
+  cell: MutationCellChange,
+  ranges: readonly DirectEditRange[],
+): boolean {
+  if (!cell.position) return false;
+  return ranges.some(
+    (range) =>
+      range.sheetId === cell.sheetId &&
+      cell.position !== undefined &&
+      cell.position.row >= range.startRow &&
+      cell.position.row <= range.endRow &&
+      cell.position.col >= range.startCol &&
+      cell.position.col <= range.endCol,
+  );
+}
+
+function isUnchangedFormulaRecalc(cell: MutationCellChange): boolean {
+  return (
+    cell.oldFormula !== undefined &&
+    cell.newFormula !== undefined &&
+    cell.oldFormula === cell.newFormula
+  );
 }

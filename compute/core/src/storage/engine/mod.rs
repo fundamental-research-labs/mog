@@ -67,6 +67,8 @@ mod validation;
 #[cfg(test)]
 mod integration_tests_old_value;
 #[cfg(test)]
+mod integration_tests_replace_all;
+#[cfg(test)]
 mod tests;
 #[cfg(test)]
 use crate::{CellId, RangePos, SheetId, WorkbookSnapshot};

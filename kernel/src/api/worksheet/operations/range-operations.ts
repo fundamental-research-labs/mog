@@ -25,7 +25,10 @@ import { prepareExternalFormulaWrite } from '../../../services/external-formulas
 import type { CellData, CellRange, CellValue, CellValuePrimitive, DocumentContext } from './shared';
 import { invalidRange, isValidAddress, isValidRange } from './shared';
 import { toCellInput } from './cell-input';
-import type { MutationAdmissionOptions } from '../../../bridges/compute';
+import {
+  withDirectEditRange,
+  type MutationAdmissionOptions,
+} from '../../../bridges/compute/mutation-admission';
 
 // Re-export validation utilities from types for convenience
 export { isValidAddress, isValidRange } from './shared';
@@ -350,16 +353,26 @@ export async function clearRange(
   }
 
   const normalized = normalizeRange(range);
+  const captureOptions = options
+    ? withDirectEditRange(
+        options,
+        sheetId,
+        normalized.startRow,
+        normalized.startCol,
+        normalized.endRow,
+        normalized.endCol,
+      )
+    : undefined;
 
   await ctx.awaitMaterialized?.('allSheets');
-  if (options) {
+  if (captureOptions) {
     await ctx.computeBridge.clearRangeByPosition(
       sheetId,
       normalized.startRow,
       normalized.startCol,
       normalized.endRow,
       normalized.endCol,
-      options,
+      captureOptions,
     );
   } else {
     await ctx.computeBridge.clearRangeByPosition(

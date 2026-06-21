@@ -23,6 +23,7 @@ import { checkoutWorkbookVersion, hasAttachedVersionCheckoutService, type Versio
 import { commitWorkbookVersion, hasAttachedVersionWriteService } from './version-commit';
 import { diffWorkbookVersion } from './version-diff';
 import { hasAttachedVersionMergeService, mergeWorkbookVersion } from './version-merge';
+import { getWorkbookVersionSurfaceStatus } from './version-surface-status';
 import {
   createWorkbookVersionBranch,
   deleteWorkbookVersionBranch,
@@ -252,7 +253,6 @@ export class WorkbookVersionImpl implements WorkbookVersion {
       : [checkoutPending];
     const checkoutStage = checkoutServiceAttached ? 'present' : 'pending';
     const checkoutDependency = checkoutServiceAttached ? 'version-service' : 'VC-05';
-
     const diagnostics = [
       ...objectStoreDiagnostics,
       ...refLifecycleDiagnostics,
@@ -261,7 +261,6 @@ export class WorkbookVersionImpl implements WorkbookVersion {
       mergeServiceAttached ? mergeServiceAttachedDiagnostic : mergePending,
       provenanceAdmission,
     ];
-
     return {
       schemaVersion: 1,
       rolloutStage,
@@ -284,7 +283,7 @@ export class WorkbookVersionImpl implements WorkbookVersion {
       diagnostics,
     };
   }
-
+  async getSurfaceStatus() { return getWorkbookVersionSurfaceStatus(this.ctx, await this.getStatus()); }
   async getHead(): Promise<WorkbookCommitRef | VersionDegradedHeadResult>;
   async getHead(options: VersionGetHeadOptions): Promise<WorkbookCommitRef | VersionDegradedHeadResult>;
   async getHead(_options: VersionGetHeadOptions = {}): Promise<WorkbookCommitRef | VersionDegradedHeadResult> {

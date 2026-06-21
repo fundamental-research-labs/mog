@@ -62,6 +62,119 @@ export interface WorkbookVersionStatus {
   readonly diagnostics: readonly WorkbookVersionDiagnostic[];
 }
 
+export type VersionSurfaceStage =
+  | 'off'
+  | 'readOnly'
+  | 'authoring'
+  | 'proposal'
+  | 'merge'
+  | 'provenance';
+
+export type VersionSurfaceStorageBackend = 'indexeddb' | 'memory' | 'remote' | 'unknown';
+
+export type VersionCapability =
+  | 'version:read'
+  | 'version:diff'
+  | 'version:commit'
+  | 'version:branch'
+  | 'version:checkout'
+  | 'version:reviewRead'
+  | 'version:reviewWrite'
+  | 'version:proposal'
+  | 'version:mergePreview'
+  | 'version:mergeApply'
+  | 'version:revert'
+  | 'version:provenance';
+
+export type VersionCapabilityDependency =
+  | 'VC-04'
+  | 'VC-05'
+  | 'VC-07'
+  | 'VC-09'
+  | 'storage'
+  | 'featureGate'
+  | 'hostCapability'
+  | 'upstreamRevertContract';
+
+export type VersionCapabilityState =
+  | { readonly enabled: true }
+  | {
+      readonly enabled: false;
+      readonly dependency?: VersionCapabilityDependency;
+      readonly reason: string;
+      readonly retryable: boolean;
+    };
+
+export type VersionSurfaceDiagnosticSeverity = 'info' | 'warning' | 'error';
+
+export type VersionSurfaceDiagnosticCode =
+  | 'version.surfaceStatus.featureGateDefaultEnabled'
+  | 'version.surfaceStatus.featureGateDisabled'
+  | 'version.surfaceStatus.editingDisabled'
+  | 'version.surfaceStatus.hostCapabilityDenied'
+  | 'version.surfaceStatus.storageUnavailable'
+  | 'version.surfaceStatus.storageReady'
+  | 'version.surfaceStatus.storageBackendUnknown'
+  | 'version.surfaceStatus.readUnavailable'
+  | 'version.surfaceStatus.currentReadFailed'
+  | 'version.surfaceStatus.dirtyTokenUnavailable'
+  | 'version.surfaceStatus.diffUnavailable'
+  | 'version.surfaceStatus.commitUnavailable'
+  | 'version.surfaceStatus.branchUnavailable'
+  | 'version.surfaceStatus.checkoutUnavailable'
+  | 'version.surfaceStatus.reviewUnavailable'
+  | 'version.surfaceStatus.proposalUnavailable'
+  | 'version.surfaceStatus.mergePreviewUnavailable'
+  | 'version.surfaceStatus.mergeApplyUnavailable'
+  | 'version.surfaceStatus.revertUnavailable'
+  | 'version.surfaceStatus.provenanceUnavailable'
+  | (string & {});
+
+export interface VersionDiagnostic {
+  readonly code: VersionSurfaceDiagnosticCode;
+  readonly severity: VersionSurfaceDiagnosticSeverity;
+  readonly message: string;
+  readonly dependency?: VersionCapabilityDependency;
+  readonly data?: Readonly<Record<string, string | number | boolean | null>>;
+}
+
+export interface VersionSurfaceStatus {
+  readonly schemaVersion: 1;
+  readonly documentId: string;
+  readonly stage: VersionSurfaceStage;
+  readonly featureGateEnabled: boolean;
+  readonly storage: {
+    readonly ready: boolean;
+    readonly backend: VersionSurfaceStorageBackend;
+    readonly diagnostics: readonly VersionDiagnostic[];
+  };
+  readonly current: {
+    readonly headCommitId?: string;
+    readonly branchName?: string;
+    readonly checkedOutCommitId?: string;
+    readonly refHeadAtMaterialization?: string;
+    readonly currentRefHeadId?: string;
+    readonly detached: boolean;
+    readonly stale: boolean;
+    readonly staleReason?: 'refMoved' | 'activeSessionBehind' | 'unknown';
+  };
+  readonly dirty: {
+    readonly statusRevision: string;
+    readonly checkoutPreflightToken: string;
+    readonly hasUncommittedLocalChanges: boolean;
+    readonly commitEligibleChanges: boolean;
+    readonly unsupportedDirtyDomains: readonly string[];
+    readonly pendingProviderWrites: boolean;
+    readonly pendingRecalc: boolean;
+    readonly checkoutSafe: boolean;
+    readonly unsafeReasons: readonly VersionDiagnostic[];
+    readonly source: 'VC-05';
+    readonly diagnostics: readonly VersionDiagnostic[];
+  };
+  readonly capabilities: Record<VersionCapability, VersionCapabilityState>;
+  readonly diagnostics: readonly VersionDiagnostic[];
+}
+
 export interface WorkbookVersionHead {
   readonly commitId: string;
   readonly branchName?: string;
@@ -753,6 +866,7 @@ export type VersionRefMutationResult =
 
 export interface WorkbookVersion {
   getStatus(): Promise<WorkbookVersionStatus>;
+  getSurfaceStatus(): Promise<VersionSurfaceStatus>;
   getHead(): Promise<WorkbookCommitRef | VersionDegradedHeadResult>;
   getHead(options: VersionGetHeadOptions): Promise<WorkbookCommitRef | VersionDegradedHeadResult>;
   listCommits(options?: VersionListCommitsOptions): Promise<VersionCommitPage>;

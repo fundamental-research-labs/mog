@@ -83,6 +83,19 @@ import type { CodeExecutionResult, CodeExecutionOptions } from '@mog/types-comma
 export type { CustomList } from '@mog/types-editor/fill/custom-lists';
 export type { WorkbookId, WorkbookSessionId, DocumentId, LinkId, ActorId } from './types';
 export type { LinkStatus, LinkStatusReason, LinkStatusView } from './receipt-payloads';
+export type {
+  WorkbookVersion,
+  WorkbookVersionCapabilityStage,
+  WorkbookVersionCapabilityStatus,
+  WorkbookVersionDependency,
+  WorkbookVersionDiagnostic,
+  WorkbookVersionDiagnosticCode,
+  WorkbookVersionDiagnosticSeverity,
+  WorkbookVersionHead,
+  WorkbookVersionHeadStatus,
+  WorkbookVersionRolloutStage,
+  WorkbookVersionStatus,
+} from './workbook/version';
 
 /** Options for wb.calculate() — all optional, backward compatible. */
 export interface CalculateOptions {

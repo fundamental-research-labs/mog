@@ -13,6 +13,17 @@ export type {
   WorkbookLinkStatusScope,
   WorkbookCustomListInput,
   WorkbookCustomListUpdate,
+  WorkbookVersion,
+  WorkbookVersionCapabilityStage,
+  WorkbookVersionCapabilityStatus,
+  WorkbookVersionDependency,
+  WorkbookVersionDiagnostic,
+  WorkbookVersionDiagnosticCode,
+  WorkbookVersionDiagnosticSeverity,
+  WorkbookVersionHead,
+  WorkbookVersionHeadStatus,
+  WorkbookVersionRolloutStage,
+  WorkbookVersionStatus,
 } from './workbook';
 export type {
   Worksheet,

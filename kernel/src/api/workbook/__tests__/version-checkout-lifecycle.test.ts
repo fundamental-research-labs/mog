@@ -74,6 +74,11 @@ describe('WorkbookVersion checkout lifecycle materialization', () => {
       });
       await expect(wb.activeSheet.getCell('A1')).resolves.toMatchObject({ value: 7 });
       await expect(wb.activeSheet.getCell('A2')).resolves.toMatchObject({ value: 42 });
+      expect(wb.activeSheet.name).toBe('Sheet1');
+      expect(wb.activeSheet.index).toBe(0);
+      expect((await wb.getSheets()).map((sheet) => ({ name: sheet.name, index: sheet.index }))).toEqual([
+        { name: 'Sheet1', index: 0 },
+      ]);
     } finally {
       if (wb) await wb.close('skipSave');
       await handle.dispose();

@@ -268,6 +268,7 @@ export class WorkbookImpl implements WorkbookInternal {
   private _worksheetInstances: Map<SheetId, WorksheetImpl> = new Map();
 
   // Cached sheet metadata — populated by refreshSheetMetadata(), kept in sync on mutations
+  private _cachedSheetIds: SheetId[] = [];
   private _cachedSheetNames: string[] = [];
   private _cachedSheetCount: number = 0;
 
@@ -518,6 +519,7 @@ export class WorkbookImpl implements WorkbookInternal {
       ws.dispose();
     }
     this._worksheetInstances.clear();
+    this._cachedSheetIds = [];
     this._cachedSheetNames = [];
     this._cachedSheetCount = 0;
     this._dirty = false;
@@ -799,9 +801,19 @@ export class WorkbookImpl implements WorkbookInternal {
   _getOrCreateWorksheet(sheetId: SheetId, name?: string): WorksheetWithInternals {
     let ws = this._worksheetInstances.get(sheetId);
     if (!ws) {
+      const order = this.ctx.mirror.getSheetIds();
+      const index = this._cachedSheetIds.indexOf(sheetId);
+      const mirrorIndex = order.indexOf(sheetId);
+      const meta = this.ctx.mirror.getSheetMeta(sheetId);
       ws = new WorksheetImpl(sheetId, this.ctx, {
         workbook: this as Workbook,
-        name,
+        name:
+          name ??
+          (index >= 0 ? this._cachedSheetNames[index] : undefined) ??
+          meta.name ??
+          String(sheetId),
+        index: index >= 0 ? index : mirrorIndex >= 0 ? mirrorIndex : undefined,
+        visible: meta.hidden === undefined ? undefined : !meta.hidden,
         floatingObjectManager: this._floatingObjectManager,
         liveness: this._liveness,
       });
@@ -835,6 +847,7 @@ export class WorkbookImpl implements WorkbookInternal {
       }),
     );
     // Update workbook-level cached sheet metadata
+    this._cachedSheetIds = [...order];
     this._cachedSheetNames = names;
     this._cachedSheetCount = order.length;
   }

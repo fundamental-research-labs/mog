@@ -1,6 +1,6 @@
 import type { VersionAuthor } from '@mog-sdk/contracts/versioning';
 
-import type { MutationResult } from '../../../bridges/compute/compute-types.gen';
+import type { MutationResult, RangeChange } from '../../../bridges/compute/compute-types.gen';
 import { createSemanticMutationCapture } from '../semantic-mutation-capture';
 import type { VersionGraphNamespace } from '../object-store';
 import type { WorkbookCommitId } from '../object-digest';
@@ -738,6 +738,192 @@ describe('semantic mutation capture', () => {
     });
     expect(captured.input.mutationSegmentRecords).toEqual([]);
   });
+
+  it('captures named range, table, and comment receipts with stable identities', async () => {
+    const capture = createSemanticMutationCapture({ author: AUTHOR, now: () => NOW });
+
+    capture.mutationCapture.recordMutationResult({
+      operation: 'compute_vc06_domain_receipts',
+      result: mutationResult({
+        namedRangeChanges: [
+          { name: 'RevenueTotal', kind: 'Set' },
+          { name: 'OldName', kind: 'Removed' },
+          { name: '3 names imported', kind: 'Set' },
+        ],
+        tableChanges: [
+          { sheetId: 'sheet-1', tableId: 'table-1', name: 'SalesTable', kind: 'Set' },
+          { sheetId: 'sheet-1', tableId: 'table-old', name: 'OldTable', kind: 'Removed' },
+          { sheetId: '', name: 'StyleOnly', kind: 'Set' },
+        ],
+        commentChanges: [
+          { sheetId: 'sheet-1', cellId: 'cell-a1', position: { row: 0, col: 0 }, kind: 'Set' },
+          { sheetId: 'sheet-1', cellId: 'cell-b2', position: { row: 1, col: 1 }, kind: 'Removed' },
+        ],
+      }),
+    });
+
+    const captured = expectCaptureSuccess(await capture.captureNormalCommit(captureInput()));
+    const changes = capturedChanges(captured);
+    expect(changes).toHaveLength(6);
+    expect(changes.map((change) => change.structural)).toEqual([
+      { kind: 'metadata', changeId: 'mutation-1:named-range:0', domain: 'named-ranges', entityId: 'name:RevenueTotal', propertyPath: ['definition'] },
+      { kind: 'metadata', changeId: 'mutation-1:named-range:1', domain: 'named-ranges', entityId: 'name:OldName', propertyPath: ['definition'] },
+      { kind: 'metadata', changeId: 'mutation-1:table:0', domain: 'tables', entityId: 'sheet-1!table:table-1', propertyPath: ['definition'] },
+      { kind: 'metadata', changeId: 'mutation-1:table:1', domain: 'tables', entityId: 'sheet-1!table:table-old', propertyPath: ['definition'] },
+      { kind: 'metadata', changeId: 'mutation-1:comment:0', domain: 'comments-notes', entityId: 'sheet-1!comment:cell-a1', propertyPath: ['cell'] },
+      { kind: 'metadata', changeId: 'mutation-1:comment:1', domain: 'comments-notes', entityId: 'sheet-1!comment:cell-b2', propertyPath: ['cell'] },
+    ]);
+    expect(changes[0].after).toEqual(semanticAfterObject([{ key: 'kind', value: 'Set' }, { key: 'name', value: 'RevenueTotal' }]));
+    expect(changes[2].after).toEqual(semanticAfterObject([{ key: 'kind', value: 'Set' }, { key: 'tableId', value: 'table-1' }, { key: 'name', value: 'SalesTable' }, { key: 'sheetId', value: 'sheet-1' }]));
+    expect(changes[4]).toMatchObject({ display: { address: { kind: 'value', value: 'A1' } } });
+    expect(captured.input.mutationSegmentRecords?.[0]?.preimage.payload).toMatchObject({
+      segmentId: 'mutation-1',
+      changeIds: ['mutation-1:named-range:0', 'mutation-1:named-range:1', 'mutation-1:table:0', 'mutation-1:table:1', 'mutation-1:comment:0', 'mutation-1:comment:1'],
+    });
+  });
+
+  it('captures conditional-format and range metadata receipts conservatively', async () => {
+    const capture = createSemanticMutationCapture({ author: AUTHOR, now: () => NOW });
+
+    capture.mutationCapture.recordMutationResult({
+      operation: 'compute_cf_and_range_receipts',
+      result: mutationResult({
+        cfChanges: [
+          { sheetId: 'sheet-1', ruleId: 'cf-rule-1', kind: 'Set' },
+          { sheetId: 'sheet-1', ruleId: 'cf-rule-old', kind: 'Removed' },
+          { sheetId: 'sheet-1', kind: 'Set' },
+        ],
+        rangeChanges: [
+          encodedRangeChange('sheet-1', 'validation-range', 'Created', 'Validation'),
+          encodedRangeChange('sheet-1', 'cf-range', 'Removed', 'CondFormat'),
+          encodedRangeChange('sheet-1', 'data-range', 'Created', 'Data'),
+          { sheetId: 'sheet-1', rangeId: 'bad-range', kind: 'Created', data: new Uint8Array([1]) },
+        ],
+      }),
+    });
+
+    const captured = expectCaptureSuccess(await capture.captureNormalCommit(captureInput()));
+    const changes = capturedChanges(captured);
+    expect(changes).toHaveLength(4);
+    expect(changes.map((change) => change.structural.domain)).toEqual([
+      'conditional-formatting',
+      'conditional-formatting',
+      'data-validation',
+      'conditional-formatting',
+    ]);
+    expect(changes[2]).toMatchObject({
+      structural: {
+        kind: 'metadata',
+        changeId: 'mutation-1:range:0',
+        domain: 'data-validation',
+        entityId: 'sheet-1!range:validation-range',
+        propertyPath: ['range'],
+      },
+      before: { kind: 'value', value: null },
+      after: semanticAfterObject([
+        { key: 'kind', value: 'Created' },
+        { key: 'rangeKind', value: 'Validation' },
+        { key: 'rangeId', value: 'validation-range' },
+        { key: 'encoding', value: 'None' },
+        { key: 'rowCount', value: 2 },
+        { key: 'colCount', value: 2 },
+        {
+          key: 'anchor',
+          value: {
+            kind: 'object',
+            fields: [
+              { key: 'kind', value: 'Elastic' },
+              { key: 'startRow', value: 'row-1' },
+              { key: 'endRow', value: 'row-2' },
+              { key: 'startCol', value: 'col-1' },
+              { key: 'endCol', value: 'col-2' },
+            ],
+          },
+        },
+      ]),
+    });
+    expect(changes[3]).toMatchObject({
+      structural: expect.objectContaining({
+        changeId: 'mutation-1:range:1',
+        domain: 'conditional-formatting',
+        entityId: 'sheet-1!range:cf-range',
+      }),
+      after: { kind: 'value', value: null },
+    });
+  });
+
+  it('captures floating object anchors and chart source range receipts', async () => {
+    const capture = createSemanticMutationCapture({ author: AUTHOR, now: () => NOW });
+
+    capture.mutationCapture.recordMutationResult({
+      operation: 'compute_floating_and_chart_receipts',
+      result: mutationResult({
+        floatingObjectChanges: [
+          {
+            sheetId: 'sheet-1',
+            objectId: 'picture-1',
+            objectType: 'picture',
+            kind: { type: 'updated', changedFields: ['anchor', 'width'] },
+            data: floatingObjectData('picture-1', 'picture', { src: 'image.png' }),
+            bounds: { x: 10, y: 20, width: 320, height: 180, rotation: 0 },
+          },
+          {
+            sheetId: 'sheet-1',
+            objectId: 'chart-1',
+            objectType: 'chart',
+            kind: { type: 'created' },
+            data: floatingObjectData('chart-1', 'chart', {
+              chartType: 'bar',
+              dataRange: 'A1:B10',
+              seriesRange: 'A1:A10',
+              categoryRange: 'B1:B10',
+            }),
+          },
+          { sheetId: '', objectId: 'missing-sheet', kind: { type: 'removed' } },
+        ],
+      }),
+    });
+
+    const captured = expectCaptureSuccess(await capture.captureNormalCommit(captureInput()));
+    const changes = capturedChanges(captured);
+    expect(changes).toHaveLength(2);
+    expect(changes[0]).toMatchObject({
+      structural: expect.objectContaining({
+        changeId: 'mutation-1:floating-object:0',
+        domain: 'floating-objects.anchors',
+        entityId: 'sheet-1!object:picture-1',
+      }),
+      after: {
+        kind: 'value',
+        value: expect.objectContaining({
+          fields: expect.arrayContaining([
+            { key: 'objectType', value: 'picture' },
+            { key: 'changedFields', value: { kind: 'array', values: ['anchor', 'width'] } },
+            { key: 'width', value: 320 },
+          ]),
+        }),
+      },
+    });
+    expect(changes[1]).toMatchObject({
+      structural: expect.objectContaining({
+        changeId: 'mutation-1:chart:1',
+        domain: 'charts.source-range',
+        entityId: 'sheet-1!chart:chart-1',
+      }),
+      after: {
+        kind: 'value',
+        value: expect.objectContaining({
+          fields: expect.arrayContaining([
+            { key: 'objectType', value: 'chart' },
+            { key: 'chartType', value: 'bar' },
+            { key: 'dataRange', value: 'A1:B10' },
+            { key: 'seriesRange', value: 'A1:A10' },
+            { key: 'categoryRange', value: 'B1:B10' },
+          ]),
+        }),
+      },
+    });
+  });
 });
 
 function mutationResult(overrides: Partial<MutationResult> = {}): MutationResult {
@@ -753,9 +939,53 @@ function mutationResult(overrides: Partial<MutationResult> = {}): MutationResult
   } as MutationResult;
 }
 
-function captureInput(): VersionNormalCommitCaptureInput {
-  return { namespace: NAMESPACE } as VersionNormalCommitCaptureInput;
+function capturedChanges(captured: Extract<VersionNormalCommitCaptureResult, { status: 'success' }>): any[] {
+  return (captured.input.semanticChangeSetRecord.preimage.payload as any).changes;
 }
+
+function semanticAfterObject(fields: { key: string; value: unknown }[]) { return { kind: 'value', value: { kind: 'object', fields } }; }
+
+function encodedRangeChange(
+  sheetId: string,
+  rangeId: string,
+  changeKind: RangeChange['kind'],
+  rangeKind: string,
+): RangeChange {
+  const meta = {
+    rangeId,
+    kind: rangeKind,
+    anchor: { Elastic: { startRow: 'row-1', endRow: 'row-2', startCol: 'col-1', endCol: 'col-2' } },
+    encoding: 'None',
+    rowIds: ['row-1', 'row-2'],
+    colIds: ['col-1', 'col-2'],
+  };
+  return { sheetId, rangeId, kind: changeKind, data: new TextEncoder().encode(JSON.stringify(meta)) };
+}
+
+function floatingObjectData(id: string, type: string, data: Record<string, unknown>) {
+  return {
+    id,
+    sheetId: 'sheet-1',
+    type,
+    anchor: { anchorRow: 1, anchorCol: 2, anchorRowOffsetEmu: 0, anchorColOffsetEmu: 0, anchorMode: 'twoCell', endRow: 4, endCol: 5, endRowOffsetEmu: 0, endColOffsetEmu: 0 },
+    width: 320,
+    height: 180,
+    zIndex: 3,
+    rotation: 0,
+    flipH: false,
+    flipV: false,
+    locked: false,
+    visible: true,
+    printable: true,
+    opacity: 1,
+    name: id,
+    createdAt: 1,
+    updatedAt: 2,
+    ...data,
+  } as any;
+}
+
+function captureInput(): VersionNormalCommitCaptureInput { return { namespace: NAMESPACE } as VersionNormalCommitCaptureInput; }
 
 function expectCaptureSuccess(
   result: VersionNormalCommitCaptureResult,

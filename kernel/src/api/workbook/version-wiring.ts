@@ -6,6 +6,10 @@ import { createWorkbookVersionDiffService } from '../../document/version-store/d
 import { createWorkbookVersionMergeService } from '../../document/version-store/merge-service';
 import { createSemanticMutationCapture } from '../../document/version-store/semantic-mutation-capture';
 import type { WorkbookVersioningConfig } from './types';
+import {
+  DEFAULT_MERGE_COMMIT_MATERIALIZER_KIND,
+  createSemanticMergeCommitCapture,
+} from './version-merge-materializer';
 import type { WorkbookVersionSurfaceStatusService } from './version-surface-status-service';
 
 type MutableVersioningContext = DocumentContext & {
@@ -23,13 +27,18 @@ export function attachWorkbookVersioning(
       ? createSemanticMutationCapture()
       : undefined;
   const captureNormalCommit = config.captureNormalCommit ?? semanticCapture?.captureNormalCommit;
+  const captureMergeCommit =
+    config.captureMergeCommit ??
+    (config.provider && config.snapshotRootByteSyncPort
+      ? createSemanticMergeCommitCapture({ userTimezone: ctx.userTimezone })
+      : undefined);
   const writeService =
     config.writeService ??
     (config.provider
       ? createWorkbookVersionCommitService({
           provider: config.provider,
           captureNormalCommit,
-          captureMergeCommit: config.captureMergeCommit,
+          captureMergeCommit,
           snapshotRootByteSyncPort: config.snapshotRootByteSyncPort,
         })
       : undefined);
@@ -68,6 +77,14 @@ export function attachWorkbookVersioning(
     writeService,
     readService: existing.readService ?? writeService,
     ...(semanticCapture ? { mutationCapture: semanticCapture.mutationCapture } : {}),
+    ...(captureMergeCommit
+      ? {
+          captureMergeCommit,
+          mergeCommitMaterializer: {
+            kind: config.captureMergeCommit ? 'custom' : DEFAULT_MERGE_COMMIT_MATERIALIZER_KIND,
+          },
+        }
+      : {}),
     ...(diffService ? { diffService } : {}),
     ...(checkoutService ? { checkoutService } : {}),
     ...(mergeService ? { mergeService } : {}),

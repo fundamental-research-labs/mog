@@ -176,12 +176,12 @@ describe('WorkbookVersion surface status', () => {
     );
   });
 
-  it('enables surface capabilities for attached read, write, ref, checkout, and merge services', async () => {
+  it('enables merge preview but not merge apply when no merge materializer is attached', async () => {
     const surfaceReady = createSurfaceReadyVersion();
 
     const surface = await surfaceReady.version.getSurfaceStatus();
 
-    expect(surface.stage).toBe('merge');
+    expect(surface.stage).toBe('authoring');
     expect(surface.storage).toMatchObject({
       ready: true,
       backend: 'memory',
@@ -200,10 +200,13 @@ describe('WorkbookVersion surface status', () => {
       'version:branch',
       'version:checkout',
       'version:mergePreview',
-      'version:mergeApply',
     ] as const) {
       expect(surface.capabilities[capability]).toEqual({ enabled: true });
     }
+    expect(surface.capabilities['version:mergeApply']).toMatchObject({
+      enabled: false,
+      dependency: 'VC-07',
+    });
     expect(surface.dirty.checkoutSafe).toBe(false);
     expect(surfaceReady.readHead).toHaveBeenCalledTimes(1);
     expect(surfaceReady.readRef).toHaveBeenCalledWith('refs/heads/main');
@@ -217,6 +220,22 @@ describe('WorkbookVersion surface status', () => {
     expect(surfaceReady.planCheckout).not.toHaveBeenCalled();
     expect(surfaceReady.merge).not.toHaveBeenCalled();
     expect(surfaceReady.diff).not.toHaveBeenCalled();
+  });
+
+  it('enables merge apply when the attached write service has a merge materializer', async () => {
+    const surfaceReady = createSurfaceReadyVersionWithContext(
+      {},
+      {
+        captureMergeCommit: jest.fn(),
+        mergeCommitMaterializer: { kind: 'test-materializer' },
+      },
+    );
+
+    const surface = await surfaceReady.version.getSurfaceStatus();
+
+    expect(surface.stage).toBe('merge');
+    expect(surface.capabilities['version:mergePreview']).toEqual({ enabled: true });
+    expect(surface.capabilities['version:mergeApply']).toEqual({ enabled: true });
   });
 
   it('uses attached real dirty status without invoking checkout planning', async () => {

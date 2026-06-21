@@ -69,6 +69,8 @@ type AttachedVersionServices = AttachedVersionReadService & {
   readonly versionDiffService?: unknown;
   readonly writeService?: unknown;
   readonly commitService?: unknown;
+  readonly captureMergeCommit?: unknown;
+  readonly mergeCommitMaterializer?: unknown;
   readonly applyMergeService?: unknown;
   readonly versionApplyMergeService?: unknown;
   readonly checkoutService?: unknown;
@@ -681,20 +683,22 @@ function hasAttachedVersionDiffService(services: AttachedVersionServices | null)
 
 function hasAttachedVersionApplyMergeService(services: AttachedVersionServices | null): boolean {
   if (!services) return false;
-  return [
+  const hasDirectApplyService = [
     services.applyMergeService,
     services.versionApplyMergeService,
-    services.writeService,
-    services.commitService,
     services.publicService,
   ].some((candidate) =>
     Boolean(
-      bindMethod(candidate, 'mergeCommit') ??
-        bindMethod(candidate, 'applyMerge') ??
+      bindMethod(candidate, 'applyMerge') ??
         bindMethod(candidate, 'applyMergeVersion') ??
         bindMethod(candidate, 'applyMergeCommit'),
     ),
   );
+  if (hasDirectApplyService) return true;
+  const hasMergeCommitWriter = [services.writeService, services.commitService].some((candidate) =>
+    Boolean(bindMethod(candidate, 'mergeCommit')),
+  );
+  return hasMergeCommitWriter && Boolean(services.captureMergeCommit || services.mergeCommitMaterializer);
 }
 
 function hasAnyVersionAttachment(services: AttachedVersionServices): boolean {

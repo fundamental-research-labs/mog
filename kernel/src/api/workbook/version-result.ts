@@ -2,6 +2,7 @@ import type {
   CheckoutVersionResult,
   PageCursor,
   Paged,
+  VersionCapability,
   VersionApplyMergeResult,
   VersionDiagnostic,
   VersionMergeResult,
@@ -184,7 +185,35 @@ function versionFailureFromOperationDiagnostics<T>(
   operation: Extract<VersionResultOperation, 'merge' | 'applyMerge'>,
   diagnostics: readonly VersionStoreDiagnostic[],
 ): VersionResult<T> {
+  const capabilityDisabled = diagnostics.find(
+    (diagnostic) => diagnostic.issueCode === 'VERSION_MERGE_CAPABILITY_DISABLED',
+  );
+  if (capabilityDisabled) {
+    return {
+      ok: false,
+      error: {
+        code: 'version_capability_unavailable',
+        capability: capabilityForMergeOperation(operation),
+        dependency: capabilityDependency(capabilityDisabled),
+        reason: capabilityDisabled.safeMessage,
+        retryable: false,
+      },
+    };
+  }
   return versionFailureFromStoreDiagnostics(operation, diagnostics);
+}
+
+function capabilityDependency(diagnostic: VersionStoreDiagnostic): 'featureGate' | 'hostCapability' {
+  const reason = diagnostic.payload?.reason;
+  return reason === 'hostCapabilityDenied' || reason === 'hostCapabilityApprovalRequired'
+    ? 'hostCapability'
+    : 'featureGate';
+}
+
+function capabilityForMergeOperation(
+  operation: Extract<VersionResultOperation, 'merge' | 'applyMerge'>,
+): VersionCapability {
+  return operation === 'merge' ? 'version:mergePreview' : 'version:mergeApply';
 }
 
 function toVersionDiagnostic(diagnostic: VersionStoreDiagnostic): VersionDiagnostic {

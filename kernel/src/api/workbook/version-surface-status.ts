@@ -15,6 +15,13 @@ import type {
 import type { DocumentContext } from '../../context';
 import { hasAttachedVersionCheckoutService } from './version-checkout';
 import { hasAttachedVersionWriteService } from './version-commit';
+import {
+  getVersionHostCapabilityDecisions,
+  getVersionControlGateStatus,
+  VERSION_CAPABILITY_KEYS,
+  type HostCapabilityDecisions,
+  type VersionControlGateStatus,
+} from './version-merge-capability';
 import { hasAttachedVersionMergeService } from './version-merge';
 import { hasAttachedVersionRefLifecycleService } from './version-refs';
 import {
@@ -29,21 +36,6 @@ const VERSION_HEAD_REF = 'HEAD';
 const VERSION_MAIN_REF = 'refs/heads/main' satisfies VersionMainRefName;
 const VERSION_BRANCH_REF_PREFIX = 'refs/heads/';
 const WORKBOOK_COMMIT_ID_RE = /^commit:sha256:[0-9a-f]{64}$/;
-
-const VERSION_CAPABILITY_KEYS = [
-  'version:read',
-  'version:diff',
-  'version:commit',
-  'version:branch',
-  'version:checkout',
-  'version:reviewRead',
-  'version:reviewWrite',
-  'version:proposal',
-  'version:mergePreview',
-  'version:mergeApply',
-  'version:revert',
-  'version:provenance',
-] as const satisfies readonly VersionCapability[];
 
 type MaybePromise<T> = T | Promise<T>;
 type BoundMethod = (...args: readonly unknown[]) => MaybePromise<unknown>;
@@ -97,23 +89,9 @@ type MaybeVersionRuntimeContext = DocumentContext & {
   readonly versioning?: unknown;
   readonly versionStore?: unknown;
   readonly version?: unknown;
-  readonly featureGates?: unknown;
-  readonly hostFeatureGates?: unknown;
-  readonly gates?: unknown;
-  readonly policy?: unknown;
-  readonly policySnapshot?: unknown;
-  readonly versionPolicy?: unknown;
-  readonly hostCapabilityPolicy?: unknown;
-  readonly hostPolicy?: unknown;
   readonly kernelHostContext?: unknown;
   readonly documentId?: unknown;
   readonly docId?: unknown;
-};
-
-type FeatureGateStatus = {
-  readonly enabled: boolean;
-  readonly discovered: boolean;
-  readonly editingEnabled: boolean;
 };
 
 type CapabilityAvailability = {
@@ -125,9 +103,6 @@ type CapabilityAvailability = {
   readonly mergePreview: boolean;
   readonly mergeApply: boolean;
 };
-
-type HostCapabilityDecision = 'allowed' | 'denied' | 'approval-required';
-type HostCapabilityDecisions = Partial<Record<VersionCapability, HostCapabilityDecision>>;
 
 type ProjectedHead = {
   readonly id: string;
@@ -146,8 +121,8 @@ export async function getWorkbookVersionSurfaceStatus(
 ): Promise<VersionSurfaceStatus> {
   const services = getAttachedVersionServices(ctx);
   const surfaceStatusService = getAttachedVersionSurfaceStatusService(services);
-  const featureGate = getFeatureGateStatus(ctx);
-  const hostCapabilityDecisions = getHostCapabilityDecisions(ctx);
+  const featureGate = getVersionControlGateStatus(ctx);
+  const hostCapabilityDecisions = getVersionHostCapabilityDecisions(ctx);
   const diagnostics: VersionDiagnostic[] = [];
 
   if (!featureGate.discovered) {
@@ -165,6 +140,25 @@ export async function getWorkbookVersionSurfaceStatus(
         'version.surfaceStatus.featureGateDisabled',
         'warning',
         'The versionControl feature gate is disabled for this workbook.',
+        'featureGate',
+      ),
+    );
+  } else if (featureGate.mergeDiscovered && !featureGate.mergeEnabled) {
+    diagnostics.push(
+      surfaceDiagnostic(
+        'version.surfaceStatus.mergeCapabilityDisabled',
+        'warning',
+        'The versionControl.merge feature gate is disabled for this workbook.',
+        'featureGate',
+      ),
+    );
+  }
+  if (featureGate.mergeKillSwitchActive) {
+    diagnostics.push(
+      surfaceDiagnostic(
+        'version.surfaceStatus.mergeKillSwitchActive',
+        'warning',
+        'The versionControl.merge runtime kill switch is active.',
         'featureGate',
       ),
     );
@@ -374,7 +368,7 @@ async function readCurrentStatus(
 }
 
 function buildCapabilityStates(
-  featureGate: FeatureGateStatus,
+  featureGate: VersionControlGateStatus,
   storageReady: boolean,
   availability: CapabilityAvailability,
   hostCapabilityDecisions: HostCapabilityDecisions,
@@ -445,6 +439,37 @@ function buildCapabilityStates(
     !featureGate.editingEnabled
       ? disabledByEditingGate(capability)
       : availableCapability(capability, available, dependency, reason, retryable, code);
+
+  const mergeCapability = (
+    capability: Extract<VersionCapability, 'version:mergePreview' | 'version:mergeApply'>,
+    available: boolean,
+    reason: string,
+    code: VersionDiagnostic['code'],
+  ): VersionCapabilityState => {
+    if (!featureGate.mergeEnabled) {
+      return disabledCapability(
+        diagnostics,
+        capability,
+        'featureGate',
+        'The versionControl.merge feature gate is disabled.',
+        false,
+        'version.surfaceStatus.mergeCapabilityDisabled',
+      );
+    }
+    if (featureGate.mergeKillSwitchActive) {
+      return disabledCapability(
+        diagnostics,
+        capability,
+        'featureGate',
+        'The versionControl.merge runtime kill switch is active.',
+        false,
+        'version.surfaceStatus.mergeKillSwitchActive',
+      );
+    }
+    return capability === 'version:mergeApply'
+      ? mutableCapability(capability, available, 'VC-07', reason, true, code)
+      : availableCapability(capability, available, 'VC-07', reason, true, code);
+  };
 
   const storageDisabled = (
     capability: VersionCapability,
@@ -559,20 +584,16 @@ function buildCapabilityStates(
       false,
       'version.surfaceStatus.proposalUnavailable',
     ),
-    'version:mergePreview': availableCapability(
+    'version:mergePreview': mergeCapability(
       'version:mergePreview',
       availability.mergePreview,
-      'VC-07',
       'Version merge preview services are not attached.',
-      true,
       'version.surfaceStatus.mergePreviewUnavailable',
     ),
-    'version:mergeApply': mutableCapability(
+    'version:mergeApply': mergeCapability(
       'version:mergeApply',
       availability.mergeApply,
-      'VC-07',
       'Version merge apply requires merge preview and merge-commit write services.',
-      true,
       'version.surfaceStatus.mergeApplyUnavailable',
     ),
     'version:revert': mutableCapability(
@@ -595,7 +616,7 @@ function buildCapabilityStates(
 }
 
 function determineStage(
-  featureGate: FeatureGateStatus,
+  featureGate: VersionControlGateStatus,
   capabilities: Record<VersionCapability, VersionCapabilityState>,
 ): VersionSurfaceStage {
   if (!featureGate.enabled) return 'off';
@@ -725,57 +746,6 @@ function hasAnyVersionAttachment(services: AttachedVersionServices): boolean {
       bindMethod(services, 'createBranch') ||
       bindMethod(services, 'merge'),
   );
-}
-
-function getFeatureGateStatus(ctx: DocumentContext): FeatureGateStatus {
-  const runtime = ctx as MaybeVersionRuntimeContext;
-  let versionControl: boolean | undefined;
-  let editing: boolean | undefined;
-  for (const candidate of [runtime.featureGates, runtime.hostFeatureGates, runtime.gates]) {
-    versionControl ??= readVersionControlGate(candidate);
-    editing ??= readEditingGate(candidate);
-  }
-  return {
-    enabled: versionControl ?? true,
-    discovered: versionControl !== undefined,
-    editingEnabled: editing ?? true,
-  };
-}
-
-function readVersionControlGate(value: unknown): boolean | undefined {
-  if (!isRecord(value)) return undefined;
-  const capabilities = isRecord(value.capabilities) ? value.capabilities : null;
-  if (typeof capabilities?.versionControl === 'boolean') return capabilities.versionControl;
-  if (typeof value.versionControl === 'boolean') return value.versionControl;
-  return undefined;
-}
-
-function readEditingGate(value: unknown): boolean | undefined {
-  if (!isRecord(value)) return undefined;
-  return typeof value.editing === 'boolean' ? value.editing : undefined;
-}
-
-function getHostCapabilityDecisions(ctx: DocumentContext): HostCapabilityDecisions {
-  const runtime = ctx as MaybeVersionRuntimeContext;
-  for (const candidate of [runtime.policy, runtime.policySnapshot, runtime.versionPolicy, runtime.hostCapabilityPolicy, runtime.hostPolicy]) {
-    const decisions = readHostCapabilityDecisions(candidate);
-    if (decisions) return decisions;
-  }
-  return {};
-}
-
-function readHostCapabilityDecisions(value: unknown): HostCapabilityDecisions | null {
-  const source = Array.isArray(value) ? value : isRecord(value) && Array.isArray(value.decisions) ? value.decisions : null;
-  if (!source) return null;
-
-  const decisions: HostCapabilityDecisions = {};
-  for (const entry of source) {
-    if (!isRecord(entry)) continue;
-    const capability = toVersionCapability(entry.capability);
-    const decision = toHostCapabilityDecision(entry.decision);
-    if (capability && decision) decisions[capability] = decision;
-  }
-  return Object.keys(decisions).length > 0 ? decisions : null;
 }
 
 function getDocumentId(ctx: DocumentContext, services: AttachedVersionServices | null): string {
@@ -951,14 +921,6 @@ function toRefName(value: unknown): VersionMainRefName | VersionRefName | undefi
     return value as VersionRefName;
   }
   return undefined;
-}
-
-function toVersionCapability(value: unknown): VersionCapability | null {
-  return typeof value === 'string' && (VERSION_CAPABILITY_KEYS as readonly string[]).includes(value) ? (value as VersionCapability) : null;
-}
-
-function toHostCapabilityDecision(value: unknown): HostCapabilityDecision | null {
-  return value === 'allowed' || value === 'denied' || value === 'approval-required' ? value : null;
 }
 
 function legacyBranchNameToRefName(

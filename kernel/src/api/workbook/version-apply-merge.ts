@@ -28,6 +28,10 @@ import {
 } from './version-apply-merge-write-result';
 import { applyPersistedMergeResult } from './version-apply-merge-persisted';
 import { mergeWorkbookVersion } from './version-merge';
+import {
+  getVersionMergeCapabilityDecision,
+  versionMergeCapabilityDisabledDiagnostic,
+} from './version-merge-capability';
 
 const WORKBOOK_COMMIT_ID_RE = /^commit:sha256:[0-9a-f]{64}$/;
 const VERSION_APPLY_MERGE_INPUT_KEYS = new Set(['base', 'ours', 'theirs', 'resolutions']);
@@ -118,6 +122,13 @@ export async function applyMergeWorkbookVersion(
   input: VersionApplyMergeInput,
   options: VersionApplyMergeOptions = {},
 ): Promise<VersionApplyMergeResult> {
+  const capability = getVersionMergeCapabilityDecision(ctx, 'version:mergeApply');
+  if (!capability.enabled) {
+    return blockedApplyMergeResult(null, null, null, [
+      versionMergeCapabilityDisabledDiagnostic('applyMerge', capability),
+    ]);
+  }
+
   if (isRecord(input) && 'resultId' in input) {
     return applyPersistedMergeResult(ctx, input, options);
   }

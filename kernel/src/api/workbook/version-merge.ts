@@ -26,6 +26,10 @@ import {
   mapPublicTargetRef,
   mapVersionMergeAttemptMetadata,
 } from './version-attempt-metadata';
+import {
+  getVersionMergeCapabilityDecision,
+  versionMergeCapabilityDisabledDiagnostic,
+} from './version-merge-capability';
 
 const WORKBOOK_COMMIT_ID_RE = /^commit:sha256:[0-9a-f]{64}$/;
 const VERSION_MERGE_INPUT_KEYS = new Set(['base', 'ours', 'theirs']);
@@ -94,6 +98,13 @@ export async function mergeWorkbookVersion(
   input: VersionMergeInput,
   options: VersionMergeOptions = {},
 ): Promise<VersionMergeResult> {
+  const capability = getVersionMergeCapabilityDecision(ctx, 'version:mergePreview');
+  if (!capability.enabled) {
+    return blockedMergeResult(null, null, null, [
+      versionMergeCapabilityDisabledDiagnostic('merge', capability),
+    ]);
+  }
+
   const validated = validateMergeRequest(input, options);
   if (!validated.ok) {
     return blockedMergeResult(validated.base, validated.ours, validated.theirs, validated.diagnostics);

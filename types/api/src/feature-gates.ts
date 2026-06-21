@@ -104,6 +104,10 @@ export interface FeatureGates {
     dataValidation?: boolean;
     conditionalFormatting?: boolean;
     versionControl?: boolean;
+    /** Disable only public version merge endpoints while leaving version reads/status available. */
+    versionControlMerge?: boolean;
+    /** String-key alias for hosts that model the gate as versionControl.merge. */
+    'versionControl.merge'?: boolean;
   };
 }
 

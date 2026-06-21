@@ -1,6 +1,5 @@
 import {
   objectDigestFromWorkbookCommitId,
-  parseWorkbookCommitId,
   type VersionDependencyRef,
   type WorkbookCommitId,
 } from './object-digest';
@@ -32,6 +31,7 @@ import {
 } from './ref-store';
 import type { InMemoryRefStoreSnapshot } from './ref-store-snapshot';
 import { parseVc04ParentCommitIds } from './commit-store-parents';
+import { graphWriteSuccess, parseGraphCommitExpectedHead } from './graph-store-commit-helpers';
 import { orderTopologicalNewestFirst, uniqueSortedCommitIds } from './graph-store-traversal';
 import type { RefName } from './ref-name';
 import {
@@ -40,6 +40,8 @@ import {
   commitRefFromLiveRef,
   graphRefFromLiveRef,
   graphRefNameFromRefName,
+  missingGraphCommitExpectedRefVersionDiagnostic,
+  parseGraphCommitTargetRef,
   parseGraphRefSelector,
   symbolicHeadFromLiveRef,
   type VersionGraphBranchRefName,
@@ -59,8 +61,10 @@ export type VersionGraphCommitContentInput = Omit<
 export type InitializeVersionGraphInput = VersionGraphCommitContentInput;
 
 export type CommitVersionGraphInput = VersionGraphCommitContentInput & {
+  readonly targetRef?: VersionGraphBranchRefName | string;
   readonly expectedHeadCommitId: WorkbookCommitId | string;
-  readonly expectedMainRefVersion: RefVersion;
+  readonly expectedMainRefVersion?: RefVersion;
+  readonly expectedTargetRefVersion?: RefVersion;
   readonly parentCommitIds?: readonly (WorkbookCommitId | string)[];
 };
 
@@ -189,6 +193,7 @@ export type VersionGraphStoreDiagnostic = {
 export type VersionGraphWriteSuccess = {
   readonly status: 'success';
   readonly commit: WorkbookCommit;
+  readonly ref: VersionGraphRef;
   readonly main: VersionGraphRef;
   readonly diagnostics: readonly [];
 };
@@ -263,12 +268,12 @@ export class InMemoryVersionGraphStore {
       protected: true,
     });
     if (initialized.ok) {
-      return successWrite(created.commit, initialized.ref);
+      return graphWriteSuccess(created.commit, initialized.ref);
     }
 
     const existing = this.refStore.getRef('main');
     if (existing.ok && existing.ref?.targetCommitId === created.commit.id) {
-      return successWrite(created.commit, existing.ref);
+      return graphWriteSuccess(created.commit, existing.ref);
     }
 
     return failedWrite(
@@ -289,12 +294,32 @@ export class InMemoryVersionGraphStore {
       return failedWrite(namespaceDiagnostics, 'no-write-attempted');
     }
 
-    const current = this.readMainRef();
+    const target = parseGraphCommitTargetRef(input.targetRef, diagnostic);
+    if (!target.ok) {
+      return failedWrite(target.diagnostics, 'no-write-attempted');
+    }
+
+    const expectedRefVersion = input.expectedTargetRefVersion ?? input.expectedMainRefVersion;
+    if (expectedRefVersion === undefined) {
+      return failedWrite(
+        [missingGraphCommitExpectedRefVersionDiagnostic(target.name, diagnostic)],
+        'no-write-attempted',
+      );
+    }
+
+    const current = target.refName === 'main'
+      ? this.readMainRef('commit')
+      : this.readBranchRef(target.refName, 'commit');
     if (!current.ok) {
       return failedWrite(current.diagnostics, 'no-write-attempted');
     }
 
-    const expectedHead = parseExpectedHead(input.expectedHeadCommitId);
+    const main = target.refName === 'main' ? undefined : this.readMainRef('commit');
+    if (main !== undefined && !main.ok) {
+      return failedWrite(main.diagnostics, 'no-write-attempted');
+    }
+
+    const expectedHead = parseGraphCommitExpectedHead(input.expectedHeadCommitId, diagnostic);
     if (!expectedHead.ok) {
       return failedWrite(expectedHead.diagnostics, 'no-write-attempted');
     }
@@ -304,7 +329,7 @@ export class InMemoryVersionGraphStore {
     }
     if (
       current.ref.targetCommitId !== expectedHead.commitId ||
-      !refVersionsEqual(current.ref.refVersion, input.expectedMainRefVersion)
+      !refVersionsEqual(current.ref.refVersion, expectedRefVersion)
     ) {
       return failedWrite(
         [refConflictDiagnostic(current.ref, expectedHead.commitId)],
@@ -322,7 +347,7 @@ export class InMemoryVersionGraphStore {
     }
 
     const advanced = this.refStore.advanceRefForGraphWrite({
-      name: 'main',
+      name: current.ref.name,
       nextCommitId: created.commit.id,
       expectedHead: current.ref.targetCommitId,
       expectedRefVersion: current.ref.refVersion,
@@ -335,7 +360,7 @@ export class InMemoryVersionGraphStore {
       );
     }
 
-    return successWrite(created.commit, advanced.ref);
+    return graphWriteSuccess(created.commit, advanced.ref, main?.ref ?? advanced.ref);
   }
 
   async readCommit(commitId: WorkbookCommitId | string): Promise<ReadWorkbookCommitResult> {
@@ -489,7 +514,7 @@ export class InMemoryVersionGraphStore {
   async readCommitClosure(
     commitIdInput: WorkbookCommitId | string,
   ): Promise<VersionGraphClosureReadResult> {
-    const start = parseExpectedHead(commitIdInput);
+    const start = parseGraphCommitExpectedHead(commitIdInput, diagnostic);
     if (!start.ok) {
       return { status: 'failed', diagnostics: start.diagnostics };
     }
@@ -733,23 +758,6 @@ function parseListCommitsOptions(
   return { ok: true, pageSize };
 }
 
-function parseExpectedHead(
-  value: WorkbookCommitId | string,
-):
-  | { readonly ok: true; readonly commitId: WorkbookCommitId }
-  | { readonly ok: false; readonly diagnostics: readonly VersionGraphStoreDiagnostic[] } {
-  try {
-    return { ok: true, commitId: parseWorkbookCommitId(value) };
-  } catch {
-    return {
-      ok: false,
-      diagnostics: [
-        diagnostic('VERSION_INVALID_COMMIT_ID', 'Commit id must be commit:sha256:<64 hex>.'),
-      ],
-    };
-  }
-}
-
 function parseNormalCommitParents(
   value: readonly (WorkbookCommitId | string)[] | undefined,
   currentRef: LiveRefRecord,
@@ -932,8 +940,8 @@ function refConflictDiagnostic(
   expectedHead: WorkbookCommitId,
   sourceDiagnostics: readonly VersionDiagnostic[] = [],
 ): VersionGraphStoreDiagnostic {
-  return diagnostic('VERSION_REF_CONFLICT', 'Graph main ref no longer matches expected head.', {
-    refName: VERSION_GRAPH_MAIN_REF,
+  return diagnostic('VERSION_REF_CONFLICT', 'Graph ref no longer matches expected head.', {
+    refName: graphRefNameFromRefName(currentRef.name),
     commitId: currentRef.targetCommitId,
     details: {
       expectedHead,
@@ -954,15 +962,6 @@ function refStoreDiagnostic(
     operation,
     sourceDiagnostics,
   });
-}
-
-function successWrite(commit: WorkbookCommit, ref: LiveRefRecord): VersionGraphWriteSuccess {
-  return {
-    status: 'success',
-    commit,
-    main: graphRefFromLiveRef(ref),
-    diagnostics: [],
-  };
 }
 
 function failedWrite(

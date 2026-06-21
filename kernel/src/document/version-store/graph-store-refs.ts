@@ -26,13 +26,15 @@ export type ParsedGraphRefSelector =
     }
   | { readonly ok: false; readonly diagnostics: readonly VersionGraphStoreDiagnostic[] };
 
+type GraphRefDiagnosticFactory = (
+  code: 'VERSION_INVALID_OPTIONS',
+  message: string,
+  options: Omit<VersionGraphStoreDiagnostic, 'code' | 'severity' | 'message'>,
+) => VersionGraphStoreDiagnostic;
+
 export function parseGraphRefSelector(
   value: VersionGraphRefSelector | string,
-  diagnostic: (
-    code: 'VERSION_INVALID_OPTIONS',
-    message: string,
-    options: Omit<VersionGraphStoreDiagnostic, 'code' | 'severity' | 'message'>,
-  ) => VersionGraphStoreDiagnostic,
+  diagnostic: GraphRefDiagnosticFactory,
 ): ParsedGraphRefSelector {
   if (value === VERSION_GRAPH_HEAD_REF) {
     return { ok: true, name: value };
@@ -77,6 +79,45 @@ export function parseGraphRefSelector(
       ),
     ],
   };
+}
+
+export function parseGraphCommitTargetRef(
+  value: VersionGraphBranchRefName | string | undefined,
+  diagnostic: GraphRefDiagnosticFactory,
+):
+  | { readonly ok: true; readonly name: VersionGraphBranchRefName; readonly refName: RefName }
+  | { readonly ok: false; readonly diagnostics: readonly VersionGraphStoreDiagnostic[] } {
+  const parsed = parseGraphRefSelector(value ?? VERSION_GRAPH_MAIN_REF, diagnostic);
+  if (!parsed.ok) return parsed;
+  if (parsed.name === VERSION_GRAPH_HEAD_REF) {
+    return {
+      ok: false,
+      diagnostics: [
+        diagnostic(
+          'VERSION_INVALID_OPTIONS',
+          'Graph commits must target refs/heads/<public branch>; HEAD is symbolic.',
+          { operation: 'commit', option: 'ref' },
+        ),
+      ],
+    };
+  }
+  return parsed;
+}
+
+export function missingGraphCommitExpectedRefVersionDiagnostic(
+  refName: VersionGraphBranchRefName,
+  diagnostic: GraphRefDiagnosticFactory,
+): VersionGraphStoreDiagnostic {
+  return diagnostic(
+    'VERSION_INVALID_OPTIONS',
+    'Graph commit requires an expected ref version for the target ref.',
+    {
+      operation: 'commit',
+      option: 'ref',
+      refName,
+      details: { missingField: 'expectedTargetRefVersion' },
+    },
+  );
 }
 
 export function graphRefFromLiveRef(ref: LiveRefRecord): VersionGraphRef {

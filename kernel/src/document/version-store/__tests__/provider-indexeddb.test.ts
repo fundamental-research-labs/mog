@@ -356,6 +356,65 @@ describe('IndexedDbVersionStoreProvider', () => {
       diagnostics: [expect.objectContaining({ code: 'VERSION_REF_CONFLICT' })],
     });
   });
+
+  it('persists target branch commits with branch-scoped CAS', async () => {
+    const provider = createIndexedDbVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
+    const initialized = await provider.initializeGraph(await initializeInput('graph-branch-cas'));
+    expectInitializeSuccess(initialized);
+
+    const namespace = namespaceForDocumentScope(DOCUMENT_SCOPE, 'graph-branch-cas');
+    await copyMainRefToBranch(namespace, 'scenario/idb-branch');
+    const left = await provider.openGraph(namespace);
+    const right = await provider.openGraph(namespace);
+    const leftBranch = await left.readRef('refs/heads/scenario/idb-branch');
+    expect(leftBranch.status).toBe('success');
+    if (leftBranch.status !== 'success' || !('commitId' in leftBranch.ref)) {
+      throw new Error('expected readable branch ref');
+    }
+
+    const leftCommit = await left.commit({
+      ...(await rootWrite('left-branch', namespace)),
+      targetRef: 'refs/heads/scenario/idb-branch',
+      expectedHeadCommitId: leftBranch.ref.commitId,
+      expectedTargetRefVersion: leftBranch.ref.revision,
+      parentCommitIds: [leftBranch.ref.commitId],
+    });
+    expect(leftCommit.status).toBe('success');
+
+    const staleCommit = await right.commit({
+      ...(await rootWrite('right-branch', namespace)),
+      targetRef: 'refs/heads/scenario/idb-branch',
+      expectedHeadCommitId: leftBranch.ref.commitId,
+      expectedTargetRefVersion: leftBranch.ref.revision,
+      parentCommitIds: [leftBranch.ref.commitId],
+    });
+    expect(staleCommit).toMatchObject({
+      status: 'failed',
+      mutationGuarantee: 'no-write-attempted',
+      diagnostics: [
+        expect.objectContaining({
+          code: 'VERSION_REF_CONFLICT',
+          refName: 'refs/heads/scenario/idb-branch',
+        }),
+      ],
+    });
+
+    const reloaded = await provider.openGraph(namespace);
+    await expect(reloaded.readRef(VERSION_GRAPH_MAIN_REF)).resolves.toMatchObject({
+      status: 'success',
+      ref: {
+        commitId: initialized.rootCommit.id,
+        revision: initialized.initialHead.revision,
+      },
+    });
+    await expect(reloaded.readRef('refs/heads/scenario/idb-branch')).resolves.toMatchObject({
+      status: 'success',
+      ref: {
+        commitId: leftCommit.status === 'success' ? leftCommit.commit.id : undefined,
+        revision: { kind: 'counter', value: '1' },
+      },
+    });
+  });
 });
 
 describe('VersionStoreProviderRegistry IndexedDB registration', () => {
@@ -395,6 +454,31 @@ async function putRegistryEnvelope(value: unknown): Promise<void> {
     tx.onerror = () => reject(tx.error ?? new Error('registry put failed'));
     tx.onabort = () => reject(tx.error ?? new Error('registry put aborted'));
   });
+  db.close();
+}
+
+async function copyMainRefToBranch(
+  namespace: VersionGraphNamespace,
+  branchName: string,
+): Promise<void> {
+  const db = await openVersionStoreIndexedDb();
+  const tx = db.transaction(REFS_STORE, 'readwrite');
+  const done = transactionDone(tx, 'branch ref seed transaction failed');
+  const namespaceKey = versionGraphNamespaceKey(namespace);
+  const mainRow = asRecord(
+    await requestValue(tx.objectStore(REFS_STORE).get(`${namespaceKey}\u0000main`)),
+  );
+  const branchRow = JSON.parse(JSON.stringify(mainRow)) as Record<string, unknown>;
+  const record = asRecord(branchRow.record);
+  branchRow.record = {
+    ...record,
+    name: branchName,
+    protected: false,
+    providerRefId: `test-ref-${branchName}`,
+    refIncarnationId: `test-incarnation-${branchName}`,
+  };
+  tx.objectStore(REFS_STORE).put(branchRow, `${namespaceKey}\u0000${branchName}`);
+  await done;
   db.close();
 }
 
@@ -445,6 +529,13 @@ function transactionDone(tx: IDBTransaction, message: string): Promise<void> {
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error ?? new Error(message));
     tx.onabort = () => reject(tx.error ?? new Error(message));
+  });
+}
+
+function requestValue<T>(request: IDBRequest<T>): Promise<T> {
+  return new Promise((resolve, reject) => {
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error ?? new Error('IndexedDB request failed'));
   });
 }
 

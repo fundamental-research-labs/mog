@@ -54,6 +54,7 @@ import {
   type WorkbookCommitId,
 } from './object-digest';
 import { REGISTRIES_STORE, openVersionStoreIndexedDb } from './provider-indexeddb-schema';
+import { REF_NAME_STORAGE_PREFIX } from './ref-name';
 import {
   RefCasConflictError,
   cloneJson,
@@ -645,6 +646,20 @@ class IndexedDbVersionGraphStore implements VersionGraphStore {
 
     const result = await graph.commit(input);
     if (result.status !== 'success') return result;
+    const expectedRefVersion = input.expectedTargetRefVersion ?? input.expectedMainRefVersion;
+    if (expectedRefVersion === undefined) {
+      return failedGraphWrite(
+        [
+          graphDiagnostic('VERSION_INVALID_OPTIONS', 'IndexedDB graph commit is missing target ref CAS metadata.', {
+            refName: result.ref.name,
+            operation: 'commit',
+            namespace: this.namespace,
+            details: { missingField: 'expectedTargetRefVersion' },
+          }),
+        ],
+        'no-write-attempted',
+      );
+    }
 
     try {
       await persistGraphSnapshot({
@@ -653,8 +668,9 @@ class IndexedDbVersionGraphStore implements VersionGraphStore {
         documentScope: this.documentScope,
         mode: {
           kind: 'commit',
+          targetRefName: storageRefNameFromGraphRefName(result.ref.name),
           expectedHeadCommitId: parseWorkbookCommitId(input.expectedHeadCommitId),
-          expectedMainRefVersion: input.expectedMainRefVersion,
+          expectedRefVersion,
         },
       });
       return result;
@@ -664,9 +680,9 @@ class IndexedDbVersionGraphStore implements VersionGraphStore {
           [
             graphDiagnostic(
               'VERSION_REF_CONFLICT',
-              'Graph main ref no longer matches expected head.',
+              'Graph ref no longer matches expected head.',
               {
-                refName: VERSION_GRAPH_MAIN_REF,
+                refName: result.ref.name,
                 commitId: error.actualHead,
                 operation: 'commit',
                 namespace: this.namespace,
@@ -794,4 +810,8 @@ class IndexedDbVersionGraphStore implements VersionGraphStore {
     void operation;
     return loadGraphSnapshot(await this.getDb(), this.namespace, this.documentScope);
   }
+}
+
+function storageRefNameFromGraphRefName(name: string): string {
+  return name.startsWith(REF_NAME_STORAGE_PREFIX) ? name.slice(REF_NAME_STORAGE_PREFIX.length) : name;
 }

@@ -158,8 +158,9 @@ export async function persistGraphSnapshot(options: {
     | { readonly kind: 'initialize' }
     | {
         readonly kind: 'commit';
+        readonly targetRefName: string;
         readonly expectedHeadCommitId: WorkbookCommitId;
-        readonly expectedMainRefVersion: RefVersion;
+        readonly expectedRefVersion: RefVersion;
       };
 }): Promise<void> {
   const namespace = normalizeVersionGraphNamespace(options.snapshot.namespace);
@@ -171,19 +172,19 @@ export async function persistGraphSnapshot(options: {
 
   if (options.mode.kind === 'commit') {
     const currentRef = await idbRequest<StoredRefRecord | undefined>(
-      tx.objectStore(REFS_STORE).get(refKey(namespaceKey, 'main')),
+      tx.objectStore(REFS_STORE).get(refKey(namespaceKey, options.mode.targetRefName)),
     );
     const actual = currentRef?.record;
     if (
       !actual ||
       actual.state !== 'live' ||
       actual.targetCommitId !== options.mode.expectedHeadCommitId ||
-      !refVersionsEqual(actual.refVersion, options.mode.expectedMainRefVersion)
+      !refVersionsEqual(actual.refVersion, options.mode.expectedRefVersion)
     ) {
       tx.abort();
       throw new RefCasConflictError({
         expectedHead: options.mode.expectedHeadCommitId,
-        expectedRefVersion: options.mode.expectedMainRefVersion,
+        expectedRefVersion: options.mode.expectedRefVersion,
         actualHead:
           actual?.state === 'live' ? actual.targetCommitId : options.mode.expectedHeadCommitId,
         actualRefVersion:

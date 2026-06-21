@@ -81,6 +81,10 @@ import {
   type RegistryRecordRead,
   type StoredRegistryEnvelope,
 } from './provider-indexeddb-internal';
+import {
+  createIndexedDbGraphBranchLifecycle,
+  type IndexedDbGraphBranchLifecycle,
+} from './provider-indexeddb-branch-lifecycle';
 import { graphLoadDiagnostic, loadGraphSnapshot } from './provider-indexeddb-reload';
 import { IndexedDbMergeApplyIntentStore } from './provider-indexeddb-merge-intents';
 
@@ -599,6 +603,7 @@ class IndexedDbVersionGraphStore implements VersionGraphStore {
   private readonly documentScope: VersionDocumentScope;
   private readonly accessContext: VersionAccessContext;
   private readonly getDb: () => Promise<IDBDatabase>;
+  private readonly branchLifecycle: IndexedDbGraphBranchLifecycle;
 
   constructor(options: {
     readonly namespace: VersionGraphNamespace;
@@ -610,6 +615,11 @@ class IndexedDbVersionGraphStore implements VersionGraphStore {
     this.documentScope = normalizeVersionDocumentScope(options.documentScope);
     this.accessContext = normalizeVersionAccessContext(options.accessContext);
     this.getDb = options.getDb;
+    this.branchLifecycle = createIndexedDbGraphBranchLifecycle({
+      namespace: this.namespace,
+      documentScope: this.documentScope,
+      getDb: this.getDb,
+    });
   }
 
   async initializeGraph(
@@ -813,6 +823,12 @@ class IndexedDbVersionGraphStore implements VersionGraphStore {
       };
     }
   }
+
+  async createBranch(...args: Parameters<IndexedDbGraphBranchLifecycle['createBranch']>) { return this.branchLifecycle.createBranch(...args); }
+  async readBranch(...args: Parameters<IndexedDbGraphBranchLifecycle['readBranch']>) { return this.branchLifecycle.readBranch(...args); }
+  async listBranches(...args: Parameters<IndexedDbGraphBranchLifecycle['listBranches']>) { return this.branchLifecycle.listBranches(...args); }
+  async fastForwardBranch(...args: Parameters<IndexedDbGraphBranchLifecycle['fastForwardBranch']>) { return this.branchLifecycle.fastForwardBranch(...args); }
+  async getHead() { return this.branchLifecycle.getHead(); }
 
   async listCommits(
     options?: VersionGraphListCommitsOptions,

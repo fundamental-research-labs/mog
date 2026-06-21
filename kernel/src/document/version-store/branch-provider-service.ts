@@ -1,7 +1,5 @@
 import {
-  createInMemoryBranchService,
   type BranchFailureResult,
-  type BranchRefStore,
   type BranchServiceErrorCode,
   type CreateBranchInput,
   type CreateBranchResult,
@@ -27,16 +25,12 @@ type BranchProviderOperation =
 type OpenBranchServiceResult =
   | {
       readonly ok: true;
-      readonly service: ReturnType<typeof createInMemoryBranchService>;
+      readonly service: VersionGraphStore;
     }
   | {
       readonly ok: false;
       readonly result: BranchFailureResult;
     };
-
-type VersionGraphStoreWithRefStore = VersionGraphStore & {
-  readonly refStore: BranchRefStore;
-};
 
 export interface ProviderBackedBranchLifecycleServiceOptions {
   readonly provider: VersionStoreProvider;
@@ -112,18 +106,8 @@ export class ProviderBackedBranchLifecycleService {
         namespaceForRegistry(registryRead.registry),
         this.provider.accessContext,
       );
-      if (!hasBranchRefStore(graph)) {
-        return branchFailure(
-          'versionCapabilityDisabled',
-          'The visible version graph does not expose a branch ref lifecycle store.',
-          operation,
-        );
-      }
 
-      return {
-        ok: true,
-        service: createInMemoryBranchService({ refStore: graph.refStore }),
-      };
+      return { ok: true, service: graph };
     } catch {
       return branchFailure(
         'versionCapabilityDisabled',
@@ -138,17 +122,6 @@ export function createProviderBackedBranchLifecycleService(
   options: ProviderBackedBranchLifecycleServiceOptions,
 ): ProviderBackedBranchLifecycleService {
   return new ProviderBackedBranchLifecycleService(options);
-}
-
-function hasBranchRefStore(graph: VersionGraphStore): graph is VersionGraphStoreWithRefStore {
-  const candidate = (graph as { readonly refStore?: unknown }).refStore;
-  return (
-    isRecord(candidate) &&
-    typeof candidate.createBranch === 'function' &&
-    typeof candidate.getRef === 'function' &&
-    typeof candidate.listRefs === 'function' &&
-    typeof candidate.updateRef === 'function'
-  );
 }
 
 function branchFailure(
@@ -178,8 +151,4 @@ function diagnostic(
     message,
     details: Object.freeze({ cause: operation }),
   });
-}
-
-function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
-  return typeof value === 'object' && value !== null;
 }

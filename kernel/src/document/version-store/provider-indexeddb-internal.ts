@@ -150,12 +150,42 @@ export class RefCasConflictError extends Error {
   }
 }
 
+export class RefAlreadyExistsError extends Error {
+  readonly refName: string;
+
+  constructor(refName: string) {
+    super('IndexedDB version graph ref already exists.');
+    this.name = 'RefAlreadyExistsError';
+    this.refName = refName;
+  }
+}
+
+export class RefStoreManifestConflictError extends Error {
+  readonly expectedRefStoreNextGeneratedId: number;
+  readonly actualRefStoreNextGeneratedId: number | null;
+
+  constructor(input: {
+    readonly expectedRefStoreNextGeneratedId: number;
+    readonly actualRefStoreNextGeneratedId: number | null;
+  }) {
+    super('IndexedDB version graph ref manifest CAS conflict.');
+    this.name = 'RefStoreManifestConflictError';
+    this.expectedRefStoreNextGeneratedId = input.expectedRefStoreNextGeneratedId;
+    this.actualRefStoreNextGeneratedId = input.actualRefStoreNextGeneratedId;
+  }
+}
+
 export async function persistGraphSnapshot(options: {
   readonly db: IDBDatabase;
   readonly snapshot: InMemoryVersionGraphStoreSnapshot;
   readonly documentScope: VersionDocumentScope;
   readonly mode:
     | { readonly kind: 'initialize' }
+    | {
+        readonly kind: 'createBranch';
+        readonly targetRefName: string;
+        readonly expectedRefStoreNextGeneratedId: number;
+      }
     | {
         readonly kind: 'commit';
         readonly targetRefName: string;
@@ -192,14 +222,57 @@ export async function persistGraphSnapshot(options: {
       });
     }
   }
+  if (options.mode.kind === 'createBranch') {
+    const currentRef = await idbRequest<StoredRefRecord | undefined>(
+      tx.objectStore(REFS_STORE).get(refKey(namespaceKey, options.mode.targetRefName)),
+    );
+    if (currentRef !== undefined) {
+      tx.abort();
+      throw new RefAlreadyExistsError(options.mode.targetRefName);
+    }
+    const manifest = await idbRequest<StoredIndexManifest | undefined>(
+      tx.objectStore(INDEX_MANIFESTS_STORE).get(namespaceKey),
+    );
+    if (
+      manifest?.refStoreNextGeneratedId !== options.mode.expectedRefStoreNextGeneratedId
+    ) {
+      tx.abort();
+      throw new RefStoreManifestConflictError({
+        expectedRefStoreNextGeneratedId: options.mode.expectedRefStoreNextGeneratedId,
+        actualRefStoreNextGeneratedId: manifest?.refStoreNextGeneratedId ?? null,
+      });
+    }
+  }
 
   writeSnapshotStores(tx, {
     namespace,
     namespaceKey,
     documentScopeKey,
     snapshot: options.snapshot,
+    refWritePlan: refWritePlanForMode(options.mode),
   });
   await idbTransactionDone(tx);
+}
+
+type RefWritePlan =
+  | { readonly kind: 'all' }
+  | {
+      readonly kind: 'selected';
+      readonly refNames: readonly string[];
+      readonly writeSymbolicHead: boolean;
+      readonly writeManifest: boolean;
+    };
+
+function refWritePlanForMode(
+  mode: Parameters<typeof persistGraphSnapshot>[0]['mode'],
+): RefWritePlan {
+  if (mode.kind === 'initialize') return { kind: 'all' };
+  return {
+    kind: 'selected',
+    refNames: Object.freeze([mode.targetRefName]),
+    writeSymbolicHead: mode.targetRefName === 'main',
+    writeManifest: mode.kind === 'createBranch',
+  };
 }
 
 function writeSnapshotStores(
@@ -209,6 +282,7 @@ function writeSnapshotStores(
     readonly namespaceKey: string;
     readonly documentScopeKey: string;
     readonly snapshot: InMemoryVersionGraphStoreSnapshot;
+    readonly refWritePlan: RefWritePlan;
   },
 ): void {
   const objectStore = tx.objectStore(OBJECTS_STORE);
@@ -261,7 +335,10 @@ function writeSnapshotStores(
     }
   }
 
+  const selectedRefNames =
+    options.refWritePlan.kind === 'selected' ? new Set(options.refWritePlan.refNames) : null;
   for (const record of options.snapshot.refStore.records) {
+    if (selectedRefNames !== null && !selectedRefNames.has(record.name)) continue;
     refStore.put(
       {
         schemaVersion: 1,
@@ -273,32 +350,36 @@ function writeSnapshotStores(
     );
   }
 
-  const main = liveMainFromSnapshot(options.snapshot);
-  symbolicRefStore.put(
-    {
-      schemaVersion: 1,
-      namespaceKey: options.namespaceKey,
-      documentScopeKey: options.documentScopeKey,
-      ref: {
-        name: VERSION_GRAPH_HEAD_REF,
-        target: VERSION_GRAPH_MAIN_REF,
-        revision: cloneJson(main.refVersion),
-      },
-    } satisfies StoredSymbolicRef,
-    refKey(options.namespaceKey, VERSION_GRAPH_HEAD_REF),
-  );
+  if (options.refWritePlan.kind === 'all' || options.refWritePlan.writeSymbolicHead) {
+    const main = liveMainFromSnapshot(options.snapshot);
+    symbolicRefStore.put(
+      {
+        schemaVersion: 1,
+        namespaceKey: options.namespaceKey,
+        documentScopeKey: options.documentScopeKey,
+        ref: {
+          name: VERSION_GRAPH_HEAD_REF,
+          target: VERSION_GRAPH_MAIN_REF,
+          revision: cloneJson(main.refVersion),
+        },
+      } satisfies StoredSymbolicRef,
+      refKey(options.namespaceKey, VERSION_GRAPH_HEAD_REF),
+    );
+  }
 
-  manifestStore.put(
-    {
-      schemaVersion: 1,
-      namespaceKey: options.namespaceKey,
-      documentScopeKey: options.documentScopeKey,
-      namespace: cloneJson(options.namespace),
-      refStoreNextGeneratedId: options.snapshot.refStore.nextGeneratedId,
-      updatedAt: new Date().toISOString(),
-    } satisfies StoredIndexManifest,
-    options.namespaceKey,
-  );
+  if (options.refWritePlan.kind === 'all' || options.refWritePlan.writeManifest) {
+    manifestStore.put(
+      {
+        schemaVersion: 1,
+        namespaceKey: options.namespaceKey,
+        documentScopeKey: options.documentScopeKey,
+        namespace: cloneJson(options.namespace),
+        refStoreNextGeneratedId: options.snapshot.refStore.nextGeneratedId,
+        updatedAt: new Date().toISOString(),
+      } satisfies StoredIndexManifest,
+      options.namespaceKey,
+    );
+  }
   intentStore.put(
     {
       schemaVersion: 1,

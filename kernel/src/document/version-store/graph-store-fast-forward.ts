@@ -23,10 +23,10 @@ import type {
   FastForwardVersionGraphInput,
   VersionGraphClosureReadResult,
   VersionGraphStoreDiagnostic,
-  VersionGraphStoreOperation,
   VersionGraphWriteFailure,
   VersionGraphWriteResult,
 } from './graph-store';
+import type { VersionGraphStoreOperation } from './graph-store-operation';
 
 const MAIN_REF_NAME = 'main' as RefName;
 

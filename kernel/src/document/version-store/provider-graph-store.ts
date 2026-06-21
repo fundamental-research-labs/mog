@@ -1,5 +1,16 @@
 import type { ReadWorkbookCommitResult } from './commit-store';
 import type {
+  CreateBranchInput,
+  CreateBranchResult,
+  FastForwardBranchInput,
+  FastForwardBranchResult,
+  GetBranchHeadResult,
+  ListBranchesInput,
+  ListBranchesResult,
+  ReadBranchInput,
+  ReadBranchResult,
+} from './branch-service';
+import type {
   CommitVersionGraphInput,
   FastForwardVersionGraphInput,
   InitializeVersionGraphInput,
@@ -26,6 +37,11 @@ export interface VersionGraphStore {
   hasObject(ref: VersionDependencyRef): Promise<boolean>;
   readHead(): Promise<VersionGraphReadHeadResult>;
   readRef(name: VersionGraphRefSelector | string): Promise<VersionGraphReadRefResult>;
+  createBranch(input: CreateBranchInput): Promise<CreateBranchResult>;
+  readBranch(input: ReadBranchInput | string): Promise<ReadBranchResult>;
+  listBranches(input?: ListBranchesInput): Promise<ListBranchesResult>;
+  fastForwardBranch(input: FastForwardBranchInput): Promise<FastForwardBranchResult>;
+  getHead(): Promise<GetBranchHeadResult>;
   listCommits(options?: VersionGraphListCommitsOptions): Promise<VersionGraphCommitPageResult>;
   readCommitClosure(commitId: WorkbookCommitId | string): Promise<VersionGraphClosureReadResult>;
 }

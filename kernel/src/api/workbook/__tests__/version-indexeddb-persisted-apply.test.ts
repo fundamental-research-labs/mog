@@ -1,0 +1,262 @@
+import 'fake-indexeddb/auto';
+
+import type { VersionHead, Workbook, WorkbookCommitSummary } from '@mog-sdk/contracts/api';
+import type { VersionAuthor } from '@mog-sdk/contracts/versioning';
+
+import { DocumentFactory } from '../../document/document-factory';
+import type { VersionObjectType } from '../../../document/version-store/object-digest';
+import {
+  createVersionObjectRecord,
+  type VersionGraphNamespace,
+  type VersionObjectRecord,
+} from '../../../document/version-store/object-store';
+import { INDEXEDDB_VERSION_STORE_PROVIDER_KIND } from '../../../document/version-store/provider-indexeddb-backend';
+import { deleteVersionStoreIndexedDbForTesting } from '../../../document/version-store/provider-indexeddb-schema';
+import {
+  namespaceForDocumentScope,
+  type VersionDocumentScope,
+  type VersionGraphInitializeInput,
+} from '../../../document/version-store/provider';
+
+const DOCUMENT_ID = 'vc07-indexeddb-persisted-apply';
+const DOCUMENT_SCOPE: VersionDocumentScope = { documentId: DOCUMENT_ID };
+const GRAPH_ID = 'graph-indexeddb-persisted-apply';
+const CREATED_AT = '2026-06-21T00:00:00.000Z';
+const AUTHOR: VersionAuthor = {
+  authorId: 'user-1',
+  actorKind: 'user',
+  displayName: 'User One',
+};
+
+beforeEach(async () => {
+  await deleteVersionStoreIndexedDbForTesting();
+});
+
+afterEach(async () => {
+  await deleteVersionStoreIndexedDbForTesting();
+});
+
+describe('WorkbookVersion IndexedDB persisted applyMerge', () => {
+  it('applies a persisted fast-forward result after provider-selection reopen', async () => {
+    const firstHandle = await DocumentFactory.create({
+      documentId: DOCUMENT_ID,
+      environment: 'headless',
+      userTimezone: 'UTC',
+    });
+    let firstWb: Workbook | undefined;
+    let reopenedHandle: Awaited<ReturnType<typeof DocumentFactory.create>> | undefined;
+    let reopenedWb: Workbook | undefined;
+    let checkoutHandle: Awaited<ReturnType<typeof DocumentFactory.create>> | undefined;
+    let checkoutWb: Workbook | undefined;
+
+    try {
+      firstWb = await firstHandle.workbook({
+        versioning: {
+          providerSelection: {
+            kind: INDEXEDDB_VERSION_STORE_PROVIDER_KIND,
+            requireDurablePersistence: true,
+            initialize: {
+              graphId: GRAPH_ID,
+              rootWrite: await rootWrite('root'),
+            },
+          },
+        },
+      });
+      const rootHead = await expectHead(firstWb);
+
+      await firstWb.activeSheet.setCell('A1', 'base');
+      const baseCommit = await expectCommit(
+        firstWb.version.commit({
+          expectedHead: {
+            commitId: rootHead.id,
+            revision: requireRefRevision(rootHead),
+          },
+        }),
+      );
+      const baseHead = await expectHead(firstWb);
+
+      await firstWb.activeSheet.setCell('B1', 'ours');
+      const oursCommit = await expectCommit(
+        firstWb.version.commit({
+          expectedHead: {
+            commitId: baseCommit.id,
+            revision: requireRefRevision(baseHead),
+          },
+        }),
+      );
+      const oursHead = await expectHead(firstWb);
+
+      const branch = await firstWb.version.createBranch({
+        name: 'scenario/indexeddb-persisted-incoming' as any,
+        targetCommitId: oursCommit.id,
+        expectedAbsent: true,
+      });
+      if (!branch.ok) throw new Error(`expected branch create success: ${branch.error.code}`);
+
+      await firstWb.activeSheet.setCell('C1', 'theirs');
+      const theirsCommit = await expectCommit(
+        firstWb.version.commit({
+          targetRef: 'scenario/indexeddb-persisted-incoming' as any,
+          expectedHead: {
+            commitId: oursCommit.id,
+            revision: branch.value.revision,
+          },
+        }),
+      );
+
+      const expectedTargetHead = {
+        commitId: oursCommit.id,
+        revision: requireRefRevision(oursHead),
+      };
+      const preview = await firstWb.version.merge(
+        {
+          base: baseCommit.id,
+          ours: oursCommit.id,
+          theirs: theirsCommit.id,
+        },
+        {
+          mode: 'preview',
+          targetRef: 'refs/heads/main' as any,
+          expectedTargetHead,
+          persistReviewRecord: true,
+        },
+      );
+      if (!preview.ok) throw new Error(`expected persisted merge preview success: ${preview.error.code}`);
+      expect(preview.value).toMatchObject({
+        status: 'fastForward',
+        resultId: expect.stringMatching(/^merge-result:[0-9a-f]{64}$/),
+        resultDigest: {
+          algorithm: 'sha256',
+          digest: expect.stringMatching(/^[0-9a-f]{64}$/),
+        },
+        attemptPersistence: 'persisted',
+        attemptKind: 'applyable',
+      });
+      if (preview.value.status !== 'fastForward' || !preview.value.resultId || !preview.value.resultDigest) {
+        throw new Error('expected persisted fast-forward preview to expose result id and digest');
+      }
+
+      await firstWb.close('skipSave');
+      firstWb = undefined;
+      await firstHandle.dispose();
+
+      reopenedHandle = await DocumentFactory.create({
+        documentId: DOCUMENT_ID,
+        environment: 'headless',
+        userTimezone: 'UTC',
+      });
+      reopenedWb = await reopenedHandle.workbook({
+        versioning: {
+          providerSelection: {
+            kind: INDEXEDDB_VERSION_STORE_PROVIDER_KIND,
+            requireDurablePersistence: true,
+          },
+        },
+      });
+
+      const applied = await reopenedWb.version.applyMerge(
+        {
+          resultId: preview.value.resultId,
+          resultDigest: preview.value.resultDigest,
+        },
+        {
+          targetRef: 'refs/heads/main' as any,
+          expectedTargetHead,
+        },
+      );
+      if (!applied.ok) throw new Error(`expected persisted apply success after reopen: ${applied.error.code}`);
+      expect(applied.value).toMatchObject({
+        status: 'fastForwarded',
+        ours: oursCommit.id,
+        theirs: theirsCommit.id,
+        commitRef: {
+          id: theirsCommit.id,
+          refName: 'refs/heads/main',
+          resolvedFrom: 'refs/heads/main',
+        },
+        resultId: preview.value.resultId,
+        resultDigest: preview.value.resultDigest,
+        targetRef: 'refs/heads/main',
+        headBefore: oursCommit.id,
+        headAfter: theirsCommit.id,
+        mutationGuarantee: 'ref-fast-forwarded',
+      });
+
+      checkoutHandle = await DocumentFactory.create({
+        documentId: DOCUMENT_ID,
+        environment: 'headless',
+        userTimezone: 'UTC',
+      });
+      checkoutWb = await checkoutHandle.workbook({
+        versioning: {
+          providerSelection: {
+            kind: INDEXEDDB_VERSION_STORE_PROVIDER_KIND,
+            requireDurablePersistence: true,
+          },
+        },
+      });
+      const checkout = await checkoutWb.version.checkout({ kind: 'commit', id: theirsCommit.id });
+      if (!checkout.ok) throw new Error(`expected checkout after persisted apply: ${checkout.error.code}`);
+      await expect(checkoutWb.activeSheet.getCell('A1')).resolves.toMatchObject({ value: 'base' });
+      await expect(checkoutWb.activeSheet.getCell('B1')).resolves.toMatchObject({ value: 'ours' });
+      await expect(checkoutWb.activeSheet.getCell('C1')).resolves.toMatchObject({ value: 'theirs' });
+    } finally {
+      if (checkoutWb) await checkoutWb.close('skipSave');
+      if (checkoutHandle) await checkoutHandle.dispose();
+      if (reopenedWb) await reopenedWb.close('skipSave');
+      if (reopenedHandle) await reopenedHandle.dispose();
+      if (firstWb) await firstWb.close('skipSave');
+      await firstHandle.dispose();
+    }
+  });
+});
+
+async function expectCommit(
+  resultPromise: ReturnType<Workbook['version']['commit']>,
+): Promise<WorkbookCommitSummary> {
+  const result = await resultPromise;
+  if (!result.ok) throw new Error(`expected commit success: ${result.error.code}`);
+  return result.value;
+}
+
+async function expectHead(wb: Workbook): Promise<VersionHead> {
+  const result = await wb.version.getHead();
+  if (!result.ok) throw new Error(`expected getHead success: ${result.error.code}`);
+  return result.value;
+}
+
+function requireRefRevision(head: VersionHead) {
+  if (!head.refRevision) throw new Error('expected head to expose a ref revision');
+  return head.refRevision;
+}
+
+async function rootWrite(label: string): Promise<VersionGraphInitializeInput['rootWrite']> {
+  const namespace = namespaceForDocumentScope(DOCUMENT_SCOPE, GRAPH_ID);
+  return {
+    snapshotRootRecord: await objectRecord(namespace, 'workbook.snapshotRoot.v1', {
+      label,
+      sheets: [],
+    }),
+    semanticChangeSetRecord: await objectRecord(namespace, 'workbook.semanticChangeSet.v1', {
+      label,
+      changes: [],
+    }),
+    author: AUTHOR,
+    createdAt: CREATED_AT,
+    completenessDiagnostics: [],
+  };
+}
+
+async function objectRecord(
+  namespace: VersionGraphNamespace,
+  objectType: VersionObjectType,
+  payload: unknown,
+): Promise<VersionObjectRecord<unknown>> {
+  return createVersionObjectRecord(namespace, {
+    objectType,
+    schemaVersion: 1,
+    payloadEncoding: 'mog-canonical-json-v1',
+    dependencies: [],
+    payload,
+  });
+}

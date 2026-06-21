@@ -32,6 +32,10 @@ import {
   type VersionDiagnostic,
 } from './ref-store';
 import type { InMemoryRefStoreSnapshot } from './ref-store-snapshot';
+import {
+  createGraphBranchLifecycle,
+  type GraphBranchLifecycle,
+} from './graph-store-branch-lifecycle';
 import { graphWriteSuccess, parseGraphCommitExpectedHead } from './graph-store-commit-helpers';
 import { fastForwardGraphRef } from './graph-store-fast-forward';
 import {
@@ -39,6 +43,7 @@ import {
   VERSION_GRAPH_LIST_COMMITS_MAX_PAGE_SIZE,
   parseListCommitsOptions,
 } from './graph-store-list-options';
+import type { VersionGraphStoreOperation } from './graph-store-operation';
 import {
   parseGraphCommitParentPlan,
   type GraphCommitParentPlan,
@@ -63,6 +68,7 @@ export {
   VERSION_GRAPH_LIST_COMMITS_DEFAULT_PAGE_SIZE,
   VERSION_GRAPH_LIST_COMMITS_MAX_PAGE_SIZE,
 } from './graph-store-list-options';
+export type { VersionGraphStoreOperation } from './graph-store-operation';
 export type { VersionGraphBranchRefName } from './graph-store-refs';
 
 export type VersionGraphCommitContentInput = Omit<
@@ -174,16 +180,6 @@ export type VersionGraphCommitPageResult =
       readonly status: 'failed';
       readonly diagnostics: readonly VersionGraphStoreDiagnostic[];
     };
-
-export type VersionGraphStoreOperation =
-  | 'initializeGraph'
-  | 'commit'
-  | 'mergeCommit'
-  | 'fastForwardRef'
-  | 'readCommitClosure'
-  | 'readHead'
-  | 'readRef'
-  | 'listCommits';
 
 export type VersionGraphStoreDiagnosticCode =
   | 'VERSION_WRONG_NAMESPACE'
@@ -504,6 +500,12 @@ export class InMemoryVersionGraphStore {
     return { status: 'success', ref, diagnostics: [] };
   }
 
+  async createBranch(...args: Parameters<GraphBranchLifecycle['createBranch']>) { return this.branchService().createBranch(...args); }
+  async readBranch(...args: Parameters<GraphBranchLifecycle['readBranch']>) { return this.branchService().readBranch(...args); }
+  async listBranches(...args: Parameters<GraphBranchLifecycle['listBranches']>) { return this.branchService().listBranches(...args); }
+  async fastForwardBranch(...args: Parameters<GraphBranchLifecycle['fastForwardBranch']>) { return this.branchService().fastForwardBranch(...args); }
+  async getHead() { return this.branchService().getHead(); }
+
   async listCommits(
     options: VersionGraphListCommitsOptions = {},
   ): Promise<VersionGraphCommitPageResult> {
@@ -735,6 +737,10 @@ export class InMemoryVersionGraphStore {
       };
     }
     return { ok: true, ref: result.ref };
+  }
+
+  private branchService(): GraphBranchLifecycle {
+    return createGraphBranchLifecycle(this.refStore);
   }
 }
 

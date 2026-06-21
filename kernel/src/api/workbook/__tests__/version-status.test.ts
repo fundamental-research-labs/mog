@@ -243,7 +243,7 @@ describe('WorkbookVersion status slice', () => {
       },
     });
 
-    await expect(wb.version.listCommits({ pageSize: 2 })).resolves.toEqual({
+    await expect(wb.version.listCommits({ ref: 'refs/heads/main', pageSize: 2 })).resolves.toEqual({
       ok: true,
       value: {
         items: [
@@ -270,7 +270,7 @@ describe('WorkbookVersion status slice', () => {
         limit: 2,
       },
     });
-    expect(graphStore.listCommits).toHaveBeenCalledWith({ pageSize: 2 });
+    expect(graphStore.listCommits).toHaveBeenCalledWith({ ref: 'refs/heads/main', pageSize: 2 });
 
     await expect(wb.version.readRef('HEAD')).resolves.toEqual({
       ok: true,

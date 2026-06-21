@@ -13,6 +13,7 @@ import {
   type VersionGraphCommitRef,
   type VersionGraphCommitContentInput,
   type VersionGraphCommitPageResult,
+  type VersionGraphListCommitsOptions,
   type VersionGraphReadHeadResult,
   type VersionGraphReadRefResult,
   type VersionGraphRef,
@@ -230,9 +231,7 @@ export class WorkbookVersionCommitService {
   }
 
   async listCommits(
-    options: {
-      readonly pageSize?: number;
-    } = {},
+    options: VersionGraphListCommitsOptions = {},
   ): Promise<WorkbookVersionCommitServiceListCommitsResult> {
     const opened = await this.openVisibleGraph('listCommits');
     if (!opened.ok) {

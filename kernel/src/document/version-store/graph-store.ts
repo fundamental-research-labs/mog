@@ -44,6 +44,7 @@ import {
   VERSION_GRAPH_LIST_COMMITS_MAX_PAGE_SIZE,
   parseListCommitsOptions,
 } from './graph-store-list-options';
+import { resolveListCommitsRoot } from './graph-store-list-commits-root';
 import type { VersionGraphStoreOperation } from './graph-store-operation';
 import {
   parseGraphCommitParentPlan,
@@ -164,6 +165,8 @@ export type VersionGraphReadRefResult =
     };
 
 export type VersionGraphListCommitsOptions = {
+  readonly ref?: VersionGraphRefSelector | string;
+  readonly from?: WorkbookCommitId | string;
   readonly pageSize?: number;
   readonly pageToken?: string;
 };
@@ -208,7 +211,7 @@ export type VersionGraphStoreDiagnostic = {
   readonly commitId?: WorkbookCommitId;
   readonly objectKind?: 'commit';
   readonly operation?: VersionGraphStoreOperation;
-  readonly option?: 'pageSize' | 'pageToken' | 'ref';
+  readonly option?: 'pageSize' | 'pageToken' | 'ref' | 'from';
   readonly namespace?: VersionGraphNamespace;
   readonly details?: Readonly<Record<string, string | number | boolean | null>>;
   readonly sourceDiagnostics?: readonly (
@@ -521,27 +524,30 @@ export class InMemoryVersionGraphStore {
       return { status: 'failed', diagnostics: parsedOptions.diagnostics };
     }
 
-    const current = this.readMainRef('listCommits');
-    if (!current.ok) {
-      return { status: 'failed', diagnostics: current.diagnostics };
+    const root = resolveListCommitsRoot(parsedOptions.target, {
+      readMainRef: () => this.readMainRef('listCommits'),
+      readBranchRef: (refName) => this.readBranchRef(refName, 'listCommits'),
+    });
+    if (!root.ok) {
+      return { status: 'failed', diagnostics: root.diagnostics };
     }
 
-    const collected = await this.collectReachableCommits(current.ref.targetCommitId, 'listCommits');
+    const collected = await this.collectReachableCommits(root.commitId, 'listCommits');
     if (!collected.ok) {
-      const diagnostics = collected.commits.has(current.ref.targetCommitId)
-        ? collected.diagnostics
-        : [
+      const diagnostics = root.ref && !collected.commits.has(root.commitId)
+        ? [
             danglingRefDiagnostic(
-              graphRefFromLiveRef(current.ref),
+              root.ref,
               'listCommits',
               collected.sourceDiagnostics,
             ),
             ...collected.diagnostics,
-          ];
+          ]
+        : collected.diagnostics;
       return { status: 'failed', diagnostics };
     }
 
-    const ordered = orderTopologicalNewestFirst(current.ref.targetCommitId, collected.commits);
+    const ordered = orderTopologicalNewestFirst(root.commitId, collected.commits);
     if (ordered.diagnostics.length > 0) {
       return { status: 'failed', diagnostics: ordered.diagnostics };
     }
@@ -555,7 +561,7 @@ export class InMemoryVersionGraphStore {
             {
               operation: 'listCommits',
               option: 'pageToken',
-              refName: VERSION_GRAPH_MAIN_REF,
+              ...(root.ref ? { refName: root.ref.name } : {}),
               details: {
                 pageSize: parsedOptions.pageSize,
                 commitCount: ordered.commits.length,
@@ -569,7 +575,7 @@ export class InMemoryVersionGraphStore {
     return {
       status: 'success',
       commits: ordered.commits.map(commitSummary),
-      readRevision: current.ref.refVersion,
+      readRevision: root.readRevision,
       order: 'topological-newest',
       pageSize: parsedOptions.pageSize,
       diagnostics: [],

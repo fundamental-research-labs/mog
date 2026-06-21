@@ -11,6 +11,7 @@ import type {
   VersionGraphStoreDiagnostic,
   VersionGraphSymbolicRef,
 } from './graph-store';
+import type { VersionGraphStoreOperation } from './graph-store-operation';
 
 export const VERSION_GRAPH_MAIN_REF = 'refs/heads/main';
 export const VERSION_GRAPH_HEAD_REF = 'HEAD';
@@ -35,6 +36,7 @@ type GraphRefDiagnosticFactory = (
 export function parseGraphRefSelector(
   value: VersionGraphRefSelector | string,
   diagnostic: GraphRefDiagnosticFactory,
+  operation: VersionGraphStoreOperation = 'readRef',
 ): ParsedGraphRefSelector {
   if (value === VERSION_GRAPH_HEAD_REF) {
     return { ok: true, name: value };
@@ -47,7 +49,7 @@ export function parseGraphRefSelector(
         ok: false,
         diagnostics: [
           diagnostic('VERSION_INVALID_OPTIONS', decoded.message, {
-            operation: 'readRef',
+            operation,
             option: 'ref',
             details: { receivedRef: String(value) },
           }),
@@ -72,7 +74,7 @@ export function parseGraphRefSelector(
         'VERSION_INVALID_OPTIONS',
         'Graph reads support HEAD or refs/heads/<public branch> refs.',
         {
-          operation: 'readRef',
+          operation,
           option: 'ref',
           details: { receivedRef: String(value) },
         },

@@ -43,12 +43,17 @@ type MaybePromise<T> = T | Promise<T>;
 
 type BoundMethod = (...args: readonly unknown[]) => MaybePromise<unknown>;
 type VersionPublicOperation = 'getHead' | 'listCommits' | 'readRef';
+type AttachedListCommitsOptions = {
+  readonly ref?: VersionRefSelector;
+  readonly from?: WorkbookCommitId;
+  readonly pageSize?: number;
+};
 
 type AttachedVersionReadService = {
   readHead?: () => MaybePromise<unknown>;
   getHead?: () => MaybePromise<unknown>;
   readRef?: (name: string) => MaybePromise<unknown>;
-  listCommits?: (options?: { readonly pageSize?: number }) => MaybePromise<unknown>;
+  listCommits?: (options?: AttachedListCommitsOptions) => MaybePromise<unknown>;
 };
 
 type AttachedVersionServices = AttachedVersionReadService & {
@@ -313,7 +318,11 @@ export class WorkbookVersionImpl implements WorkbookVersion {
     }
 
     try {
-      const result = await readService.listCommits({ pageSize: options.pageSize });
+      const result = await readService.listCommits({
+        ...(options.ref === undefined ? {} : { ref: options.ref }),
+        ...(options.from === undefined ? {} : { from: options.from }),
+        ...(options.pageSize === undefined ? {} : { pageSize: options.pageSize }),
+      });
       return versionResultFromCommitPage(mapCommitPageResult(result), limit);
     } catch {
       return versionResultFromCommitPage(degradedCommitPage([providerErrorDiagnostic('listCommits')]), limit);
@@ -429,36 +438,35 @@ function validateListCommitsOptions(options: VersionListCommitsOptions): readonl
     );
   }
 
-  if (
-    options.ref !== undefined &&
-    options.ref !== VERSION_HEAD_REF &&
-    options.ref !== VERSION_MAIN_REF
-  ) {
-    diagnostics.push(
-      publicDiagnostic(
-        'VERSION_PERMISSION_DENIED',
-        'listCommits',
-        'This version read slice can list commits only from HEAD or refs/heads/main.',
-        {
-          severity: 'error',
-          recoverability: 'unsupported',
-          payload: { option: 'ref' },
-        },
-      ),
-    );
-  }
-
-  if (options.from !== undefined) {
+  if (options.ref !== undefined && options.from !== undefined) {
     diagnostics.push(
       publicDiagnostic(
         'VERSION_INVALID_OPTIONS',
         'listCommits',
-        'listCommits from-root traversal is pending a later graph pagination slice.',
-        {
-          severity: 'error',
-          recoverability: 'unsupported',
-          payload: { option: 'from' },
-        },
+        'listCommits accepts either ref or from, not both.',
+        { severity: 'error', recoverability: 'none', payload: { option: 'ref' } },
+      ),
+    );
+  }
+
+  if (options.ref !== undefined && !toRefSelector(options.ref)) {
+    diagnostics.push(
+      publicDiagnostic(
+        'VERSION_INVALID_OPTIONS',
+        'listCommits',
+        'listCommits ref must be HEAD or refs/heads/<public branch>.',
+        { severity: 'error', recoverability: 'none', payload: { option: 'ref' } },
+      ),
+    );
+  }
+
+  if (options.from !== undefined && !toCommitId(options.from)) {
+    diagnostics.push(
+      publicDiagnostic(
+        'VERSION_INVALID_COMMIT_ID',
+        'listCommits',
+        'listCommits from must be commit:sha256:<64 lowercase hex>.',
+        { severity: 'error', recoverability: 'none', payload: { option: 'from' } },
       ),
     );
   }

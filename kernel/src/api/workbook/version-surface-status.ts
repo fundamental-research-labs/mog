@@ -3,6 +3,7 @@ import type {
   VersionCapabilityDependency,
   VersionCapabilityState,
   VersionDiagnostic,
+  VersionListCommitsOptions,
   VersionMainRefName,
   VersionRefName,
   VersionRefSelector,
@@ -39,12 +40,13 @@ const WORKBOOK_COMMIT_ID_RE = /^commit:sha256:[0-9a-f]{64}$/;
 
 type MaybePromise<T> = T | Promise<T>;
 type BoundMethod = (...args: readonly unknown[]) => MaybePromise<unknown>;
+type AttachedListCommitsOptions = Pick<VersionListCommitsOptions, 'ref' | 'from' | 'pageSize'>;
 
 type AttachedVersionReadService = {
   readHead?: () => MaybePromise<unknown>;
   getHead?: () => MaybePromise<unknown>;
   readRef?: (name: string) => MaybePromise<unknown>;
-  listCommits?: (options?: { readonly pageSize?: number }) => MaybePromise<unknown>;
+  listCommits?: (options?: AttachedListCommitsOptions) => MaybePromise<unknown>;
 };
 
 type AttachedVersionServices = AttachedVersionReadService & {
@@ -678,7 +680,7 @@ function toReadService(value: unknown): AttachedVersionReadService | null {
     ...(readHead ? { readHead: () => readHead() } : {}),
     ...(getHead ? { getHead: () => getHead() } : {}),
     ...(readRef ? { readRef: (name: string) => readRef(name) } : {}),
-    ...(listCommits ? { listCommits: (options?: { readonly pageSize?: number }) => listCommits(options) } : {}),
+    ...(listCommits ? { listCommits: (options?: AttachedListCommitsOptions) => listCommits(options) } : {}),
   };
 }
 

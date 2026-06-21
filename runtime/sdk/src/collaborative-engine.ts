@@ -14,8 +14,14 @@
  * changes in minor versions.
  */
 
-import { createHeadlessEngine, _getDocumentSyncPort, type NapiAddonModule } from './boot';
+import {
+  createHeadlessEngine,
+  _getDocumentSyncPort,
+  type DocumentByteSyncPort,
+  type NapiAddonModule,
+} from './boot';
 import type { Workbook, Worksheet } from '@mog-sdk/contracts/api';
+import type { DocumentByteSyncPortClassifiedRawProvenance } from './document-sync-port-types';
 
 // =============================================================================
 // Types
@@ -77,6 +83,89 @@ export interface FlushResult {
 export interface SyncResult {
   pushed: boolean;
   pulled: boolean;
+}
+
+type CoordinatorRawUpdateClassification = 'hydration' | 'mixedRemote';
+
+const COORDINATOR_RAW_UPDATE_REDACTION_POLICY = Object.freeze({
+  schemaVersion: 'provenance-redaction-policy-v1',
+  mode: 'diagnostic-only',
+  durableAuthorIdentity: 'unknown',
+  durableProviderIdentity: 'unknown',
+  proofMaterial: 'diagnostics-only',
+} satisfies DocumentByteSyncPortClassifiedRawProvenance['redaction']);
+
+/** @internal */
+export async function _applyCoordinatorRawUpdate(
+  syncPort: DocumentByteSyncPort,
+  update: Uint8Array,
+  classification: CoordinatorRawUpdateClassification,
+): Promise<void> {
+  if (typeof syncPort.applyClassifiedRawUpdate !== 'function') {
+    await syncPort.applyUpdate(update);
+    return;
+  }
+
+  const payloadHash = await sha256Hex(update);
+  await syncPort.applyClassifiedRawUpdate(
+    update,
+    buildCoordinatorRawUpdateProvenance(classification, payloadHash),
+  );
+}
+
+function buildCoordinatorRawUpdateProvenance(
+  classification: CoordinatorRawUpdateClassification,
+  payloadHash: string,
+): DocumentByteSyncPortClassifiedRawProvenance {
+  const updateIdentity = {
+    originKind: 'room' as const,
+    updateId: `sdk-coordinator-${classification}:${payloadHash}`,
+    payloadHash,
+  };
+
+  if (classification === 'hydration') {
+    return {
+      schemaVersion: 'sync-update-provenance-v1',
+      sourceKind: 'collaborationHydration',
+      updateIdentity,
+      trust: { status: 'trustedLocalSystem' },
+      author: { kind: 'system', systemRef: 'collaboration-hydration' },
+      replay: true,
+      system: true,
+      capturePolicy: 'excluded',
+      redaction: COORDINATOR_RAW_UPDATE_REDACTION_POLICY,
+      exclusionDiagnostic: {
+        reason: 'hydration',
+        message: 'Coordinator bootstrap alignment is replayed as collaboration hydration.',
+      },
+    };
+  }
+
+  return {
+    schemaVersion: 'sync-update-provenance-v1',
+    sourceKind: 'collaborationMixedRemote',
+    updateIdentity,
+    trust: { status: 'unverified' },
+    author: { kind: 'mixedRemote', reason: 'aggregateWithoutBoundaries' },
+    replay: false,
+    system: false,
+    capturePolicy: 'excluded',
+    redaction: COORDINATOR_RAW_UPDATE_REDACTION_POLICY,
+    exclusionDiagnostic: {
+      reason: 'mixedAuthors',
+      message: 'Aggregate coordinator diff lacks per-update provenance boundaries.',
+    },
+  };
+}
+
+async function sha256Hex(bytes: Uint8Array): Promise<string> {
+  if (typeof globalThis.crypto?.subtle?.digest !== 'function') {
+    throw new Error('CollaborativeEngine coordinator sync classification requires SHA-256 digest');
+  }
+  const digest = await globalThis.crypto.subtle.digest('SHA-256', new Uint8Array(bytes));
+  return Array.from(new Uint8Array(digest))
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('');
 }
 
 // =============================================================================
@@ -312,7 +401,11 @@ export class CollaborativeEngine {
       );
       // Apply any existing state from the coordinator back to this engine
       if (pushRaw.ok && pushRaw.serverDiff && pushRaw.serverDiff.length > 0) {
-        await syncPort.applyUpdate(new Uint8Array(pushRaw.serverDiff));
+        await _applyCoordinatorRawUpdate(
+          syncPort,
+          new Uint8Array(pushRaw.serverDiff),
+          'hydration',
+        );
       }
     }
 
@@ -373,7 +466,11 @@ export class CollaborativeEngine {
         Buffer.from(initSv),
       );
       if (pushRaw.ok && pushRaw.serverDiff && pushRaw.serverDiff.length > 0) {
-        await syncPort.applyUpdate(new Uint8Array(pushRaw.serverDiff));
+        await _applyCoordinatorRawUpdate(
+          syncPort,
+          new Uint8Array(pushRaw.serverDiff),
+          'hydration',
+        );
       }
     }
 
@@ -449,7 +546,11 @@ export class CollaborativeEngine {
 
     // Apply server diff (changes from other participants)
     if (result.serverDiff && result.serverDiff.length > 0) {
-      await syncPort.applyUpdate(new Uint8Array(result.serverDiff));
+      await _applyCoordinatorRawUpdate(
+        syncPort,
+        new Uint8Array(result.serverDiff),
+        'mixedRemote',
+      );
     }
 
     this._touchedSheets.clear();
@@ -469,7 +570,7 @@ export class CollaborativeEngine {
     const diff = this._coordinator.pull(this._participantId, Buffer.from(localSv));
 
     if (diff.length > 0) {
-      await syncPort.applyUpdate(diff);
+      await _applyCoordinatorRawUpdate(syncPort, diff, 'mixedRemote');
     }
   }
 

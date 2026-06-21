@@ -45,6 +45,13 @@ import {
   workbookCommitIdFromObjectDigest,
   type WorkbookCommitId,
 } from './object-digest';
+import {
+  computeMergeApplyRefCasProof,
+  mergeApplyRefCasProofStorageKey,
+  type MergeApplyIntentApplyKind,
+  type MergeApplyRefCasProof,
+  type MergeApplyRefCasProofLookup,
+} from './merge-apply-intent-store';
 import { refVersionsEqual, type LiveRefRecord, type RefRecord, type RefVersion } from './ref-store';
 import type { InMemoryRefStoreSnapshot } from './ref-store-snapshot';
 import type { WorkbookCommitPayload } from './commit-store';
@@ -129,6 +136,16 @@ type StoredIntent = {
   readonly recordedAt: string;
 };
 
+type StoredRefCasProofIntent = {
+  readonly schemaVersion: 1;
+  readonly namespaceKey: string;
+  readonly documentScopeKey: string;
+  readonly operation: 'merge-ref-cas-proof';
+  readonly lookup: MergeApplyRefCasProofLookup;
+  readonly proof: MergeApplyRefCasProof;
+  readonly recordedAt: string;
+};
+
 export class RefCasConflictError extends Error {
   readonly expectedHead: WorkbookCommitId;
   readonly expectedRefVersion: RefVersion;
@@ -191,6 +208,9 @@ export async function persistGraphSnapshot(options: {
         readonly targetRefName: string;
         readonly expectedHeadCommitId: WorkbookCommitId;
         readonly expectedRefVersion: RefVersion;
+        readonly refCasProof?: {
+          readonly applyKind: MergeApplyIntentApplyKind;
+        };
       };
 }): Promise<void> {
   const namespace = normalizeVersionGraphNamespace(options.snapshot.namespace);
@@ -198,6 +218,12 @@ export async function persistGraphSnapshot(options: {
   const documentScopeKey = versionDocumentScopeKey(
     normalizeVersionDocumentScope(options.documentScope),
   );
+  const refCasProofRow = await refCasProofRowForMode({
+    namespaceKey,
+    documentScopeKey,
+    snapshot: options.snapshot,
+    mode: options.mode,
+  });
   const tx = options.db.transaction(VERSION_STORE_INDEXEDDB_STORES, 'readwrite');
 
   if (options.mode.kind === 'commit') {
@@ -250,6 +276,7 @@ export async function persistGraphSnapshot(options: {
     documentScopeKey,
     snapshot: options.snapshot,
     refWritePlan: refWritePlanForMode(options.mode),
+    refCasProofRow,
   });
   await idbTransactionDone(tx);
 }
@@ -311,6 +338,41 @@ function refWritePlanForMode(
   };
 }
 
+async function refCasProofRowForMode(input: {
+  readonly namespaceKey: string;
+  readonly documentScopeKey: string;
+  readonly snapshot: InMemoryVersionGraphStoreSnapshot;
+  readonly mode: Parameters<typeof persistGraphSnapshot>[0]['mode'];
+}): Promise<StoredRefCasProofIntent | null> {
+  const mode = input.mode;
+  if (mode.kind !== 'commit' || !mode.refCasProof) return null;
+  const ref = input.snapshot.refStore.records.find(
+    (candidate): candidate is LiveRefRecord =>
+      candidate.state === 'live' && candidate.name === mode.targetRefName,
+  );
+  if (!ref) throw new Error('IndexedDB ref CAS proof target ref is missing from snapshot.');
+  const lookup: MergeApplyRefCasProofLookup = {
+    applyKind: mode.refCasProof.applyKind,
+    targetRef: graphRefNameFromStorageRefName(mode.targetRefName),
+    headBefore: mode.expectedHeadCommitId,
+    headAfter: ref.targetCommitId,
+  };
+  return {
+    schemaVersion: 1,
+    namespaceKey: input.namespaceKey,
+    documentScopeKey: input.documentScopeKey,
+    operation: 'merge-ref-cas-proof',
+    lookup,
+    proof: await computeMergeApplyRefCasProof(lookup),
+    recordedAt: new Date().toISOString(),
+  };
+}
+
+function graphRefNameFromStorageRefName(name: string): MergeApplyRefCasProofLookup['targetRef'] {
+  if (name === 'main') return VERSION_GRAPH_MAIN_REF;
+  return `refs/heads/${name}` as MergeApplyRefCasProofLookup['targetRef'];
+}
+
 function writeSnapshotStores(
   tx: IDBTransaction,
   options: {
@@ -319,6 +381,7 @@ function writeSnapshotStores(
     readonly documentScopeKey: string;
     readonly snapshot: InMemoryVersionGraphStoreSnapshot;
     readonly refWritePlan: RefWritePlan;
+    readonly refCasProofRow: StoredRefCasProofIntent | null;
   },
 ): void {
   const refStore = tx.objectStore(REFS_STORE);
@@ -387,6 +450,12 @@ function writeSnapshotStores(
     } satisfies StoredIntent,
     `${options.namespaceKey}\u0000${Date.now()}\u0000${Math.random().toString(16).slice(2)}`,
   );
+  if (options.refCasProofRow) {
+    intentStore.put(
+      cloneJson(options.refCasProofRow),
+      mergeApplyRefCasProofStorageKey(options.namespace, options.refCasProofRow.lookup),
+    );
+  }
 }
 
 function writeObjectRecords(

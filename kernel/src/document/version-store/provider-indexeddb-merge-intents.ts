@@ -5,12 +5,16 @@ import {
   type MergeApplyIntentCompleteResult,
   type MergeApplyIntentId,
   type MergeApplyIntentIdempotencyKey,
+  type MergeApplyRefCasProof,
+  type MergeApplyRefCasProofLookup,
+  type MergeApplyRefCasProofReadResult,
   type MergeApplyIntentReadResult,
   type MergeApplyIntentRecord,
   type MergeApplyIntentStore,
   cloneIntent,
   intentsEquivalent,
   isMergeApplyIntentRecord,
+  mergeApplyRefCasProofStorageKey,
   mergeApplyIntentTerminalsEqual,
   mergeApplyIntentStorageKey,
   objectDigestsEqual,
@@ -30,6 +34,16 @@ type StoredMergeApplyIntent = {
   readonly documentScopeKey: string;
   readonly operation: 'merge-apply-intent';
   readonly record: MergeApplyIntentRecord;
+};
+
+type StoredMergeApplyRefCasProof = {
+  readonly schemaVersion: 1;
+  readonly namespaceKey: string;
+  readonly documentScopeKey: string;
+  readonly operation: 'merge-ref-cas-proof';
+  readonly lookup: MergeApplyRefCasProofLookup;
+  readonly proof: MergeApplyRefCasProof;
+  readonly recordedAt: string;
 };
 
 export class IndexedDbMergeApplyIntentStore implements MergeApplyIntentStore {
@@ -119,6 +133,43 @@ export class IndexedDbMergeApplyIntentStore implements MergeApplyIntentStore {
         : missingRead('Merge apply intent was not found by idempotency key.');
     } catch {
       return failedRead('IndexedDB merge apply intent read failed.');
+    }
+  }
+
+  async readRefCasProof(input: MergeApplyRefCasProofLookup): Promise<MergeApplyRefCasProofReadResult> {
+    try {
+      const db = await this.getDb();
+      const row = await idbRequest<unknown | undefined>(
+        db.transaction(INTENTS_STORE, 'readonly')
+          .objectStore(INTENTS_STORE)
+          .get(mergeApplyRefCasProofStorageKey(this.namespace, input)),
+      );
+      const proof = decodeStoredMergeApplyRefCasProof(row, this.namespaceKey, this.documentScopeKey, input);
+      return proof
+        ? { status: 'found', proof, diagnostics: [] }
+        : {
+            status: 'missing',
+            proof: null,
+            diagnostics: [
+              {
+                code: 'VERSION_INTENT_NOT_FOUND',
+                message: 'IndexedDB merge apply ref CAS proof was not found.',
+                recoverability: 'repair',
+              },
+            ],
+          };
+    } catch {
+      return {
+        status: 'failed',
+        proof: null,
+        diagnostics: [
+          {
+            code: 'VERSION_PROVIDER_FAILED',
+            message: 'IndexedDB merge apply ref CAS proof read failed.',
+            recoverability: 'retry',
+          },
+        ],
+      };
     }
   }
 
@@ -255,6 +306,54 @@ function decodeStoredMergeApplyIntent(
   }
   if (value.namespaceKey !== namespaceKey || value.documentScopeKey !== documentScopeKey) return null;
   return isMergeApplyIntentRecord(value.record) ? cloneJson(value.record) : null;
+}
+
+function decodeStoredMergeApplyRefCasProof(
+  value: unknown,
+  namespaceKey: string,
+  documentScopeKey: string,
+  expectedLookup: MergeApplyRefCasProofLookup,
+): MergeApplyRefCasProof | null {
+  if (!isRecord(value) || value.schemaVersion !== 1 || value.operation !== 'merge-ref-cas-proof') {
+    return null;
+  }
+  const row = value as StoredMergeApplyRefCasProof;
+  if (row.namespaceKey !== namespaceKey || row.documentScopeKey !== documentScopeKey) return null;
+  if (
+    !isRecord(row.lookup) ||
+    row.lookup.applyKind !== expectedLookup.applyKind ||
+    row.lookup.targetRef !== expectedLookup.targetRef ||
+    row.lookup.headBefore !== expectedLookup.headBefore ||
+    row.lookup.headAfter !== expectedLookup.headAfter
+  ) {
+    return null;
+  }
+  return isMergeApplyRefCasProof(row.proof) ? cloneJson(row.proof) : null;
+}
+
+function isMergeApplyRefCasProof(value: unknown): value is MergeApplyRefCasProof {
+  if (!isRecord(value) || value.schemaVersion !== 1) return false;
+  if (
+    value.applyKind !== 'fastForward' &&
+    value.applyKind !== 'alreadyMerged' &&
+    value.applyKind !== 'mergeCommit'
+  ) {
+    return false;
+  }
+  return (
+    isObjectDigest(value.commitMetadataDigest) &&
+    isObjectDigest(value.refUpdateMetadataDigest) &&
+    isObjectDigest(value.refLogEventDigest)
+  );
+}
+
+function isObjectDigest(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    value.algorithm === 'sha256' &&
+    typeof value.digest === 'string' &&
+    /^[0-9a-f]{64}$/.test(value.digest)
+  );
 }
 
 function missingRead(message: string): MergeApplyIntentReadResult {

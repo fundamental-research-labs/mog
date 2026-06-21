@@ -6,7 +6,8 @@ import type {
   WorkbookCommitId,
 } from '@mog-sdk/contracts/api';
 
-import type { ObjectDigest } from './object-digest';
+import type { ObjectDigest, WorkbookCommitId as StoreWorkbookCommitId } from './object-digest';
+import { objectDigestFromWorkbookCommitId } from './object-digest';
 import {
   normalizeVersionGraphNamespace,
   versionGraphNamespaceKey,
@@ -29,6 +30,21 @@ export type MergeApplyIntentTerminalStatus =
 
 export type MergeApplyIntentId = `merge-apply-intent:sha256:${string}`;
 export type MergeApplyIntentIdempotencyKey = `merge-apply:${string}`;
+
+export type MergeApplyRefCasProof = {
+  readonly schemaVersion: 1;
+  readonly applyKind: MergeApplyIntentApplyKind;
+  readonly commitMetadataDigest: ObjectDigest;
+  readonly refUpdateMetadataDigest: ObjectDigest;
+  readonly refLogEventDigest: ObjectDigest;
+};
+
+export type MergeApplyRefCasProofLookup = {
+  readonly applyKind: MergeApplyIntentApplyKind;
+  readonly targetRef: VersionMainRefName | VersionRefName;
+  readonly headBefore: WorkbookCommitId;
+  readonly headAfter: WorkbookCommitId;
+};
 
 export type MergeApplyIntentRecord = {
   readonly schemaVersion: 1;
@@ -54,6 +70,7 @@ export type MergeApplyIntentRecord = {
     readonly headBefore: WorkbookCommitId;
     readonly headAfter?: WorkbookCommitId;
     readonly commitId?: WorkbookCommitId;
+    readonly refCasProof?: MergeApplyRefCasProof;
   };
 };
 
@@ -100,11 +117,16 @@ export type MergeApplyIntentCompleteResult =
   | { readonly status: 'completed'; readonly record: MergeApplyIntentRecord; readonly diagnostics: readonly [] }
   | { readonly status: 'missing' | 'conflict' | 'failed'; readonly record: MergeApplyIntentRecord | null; readonly diagnostics: readonly MergeApplyIntentStoreDiagnostic[] };
 
+export type MergeApplyRefCasProofReadResult =
+  | { readonly status: 'found'; readonly proof: MergeApplyRefCasProof; readonly diagnostics: readonly [] }
+  | { readonly status: 'missing' | 'failed'; readonly proof: null; readonly diagnostics: readonly MergeApplyIntentStoreDiagnostic[] };
+
 export interface MergeApplyIntentStore {
   readonly namespace: VersionGraphNamespace;
   beginIntent(input: BeginMergeApplyIntentInput): Promise<MergeApplyIntentBeginResult>;
   readByIntentId(intentId: MergeApplyIntentId): Promise<MergeApplyIntentReadResult>;
   readByIdempotencyKey(idempotencyKey: MergeApplyIntentIdempotencyKey): Promise<MergeApplyIntentReadResult>;
+  readRefCasProof(input: MergeApplyRefCasProofLookup): Promise<MergeApplyRefCasProofReadResult>;
   completeIntent(input: CompleteMergeApplyIntentInput): Promise<MergeApplyIntentCompleteResult>;
 }
 
@@ -114,10 +136,15 @@ export type MergeApplyIntentStoreProvider = {
 
 export type MergeApplyIntentMemoryBackendSnapshot = {
   readonly records: readonly MergeApplyIntentRecord[];
+  readonly refCasProofs?: readonly {
+    readonly key: string;
+    readonly proof: MergeApplyRefCasProof;
+  }[];
 };
 
 export class MergeApplyIntentMemoryBackend {
   private readonly recordsByKey = new Map<string, MergeApplyIntentRecord>();
+  private readonly refCasProofsByKey = new Map<string, MergeApplyRefCasProof>();
 
   get(namespace: VersionGraphNamespace, idempotencyKey: MergeApplyIntentIdempotencyKey): MergeApplyIntentRecord | undefined {
     return cloneIntent(this.recordsByKey.get(memoryKey(namespace, idempotencyKey)));
@@ -135,13 +162,30 @@ export class MergeApplyIntentMemoryBackend {
     this.recordsByKey.set(memoryKeyFromRecord(record), cloneIntent(record));
   }
 
+  getRefCasProof(namespace: VersionGraphNamespace, input: MergeApplyRefCasProofLookup): MergeApplyRefCasProof | undefined {
+    return cloneJson(this.refCasProofsByKey.get(mergeApplyRefCasProofStorageKey(namespace, input)));
+  }
+
+  putRefCasProof(namespace: VersionGraphNamespace, input: MergeApplyRefCasProofLookup, proof: MergeApplyRefCasProof): void {
+    this.refCasProofsByKey.set(mergeApplyRefCasProofStorageKey(namespace, input), cloneJson(proof));
+  }
+
   exportSnapshot(): MergeApplyIntentMemoryBackendSnapshot {
-    return { records: [...this.recordsByKey.values()].map((record) => cloneIntent(record)) };
+    return {
+      records: [...this.recordsByKey.values()].map((record) => cloneIntent(record)),
+      refCasProofs: [...this.refCasProofsByKey.entries()].map(([key, proof]) => ({
+        key,
+        proof: cloneJson(proof),
+      })),
+    };
   }
 
   static fromSnapshot(snapshot: MergeApplyIntentMemoryBackendSnapshot): MergeApplyIntentMemoryBackend {
     const backend = new MergeApplyIntentMemoryBackend();
     for (const record of snapshot.records) backend.put(record);
+    for (const item of snapshot.refCasProofs ?? []) {
+      backend.refCasProofsByKey.set(item.key, cloneJson(item.proof));
+    }
     return backend;
   }
 }
@@ -192,6 +236,13 @@ export class InMemoryMergeApplyIntentStore implements MergeApplyIntentStore {
     return record
       ? { status: 'found', record, diagnostics: [] }
       : missingRead('Merge apply intent was not found by idempotency key.');
+  }
+
+  async readRefCasProof(input: MergeApplyRefCasProofLookup): Promise<MergeApplyRefCasProofReadResult> {
+    const proof = this.backend.getRefCasProof(this.namespace, input);
+    return proof
+      ? { status: 'found', proof, diagnostics: [] }
+      : missingProofRead('Merge apply ref CAS proof was not found.');
   }
 
   async completeIntent(input: CompleteMergeApplyIntentInput): Promise<MergeApplyIntentCompleteResult> {
@@ -329,8 +380,44 @@ export function mergeApplyIntentTerminalsEqual(
     left.status === right.status &&
     left.headBefore === right.headBefore &&
     left.headAfter === right.headAfter &&
-    left.commitId === right.commitId
+    left.commitId === right.commitId &&
+    canonicalJsonStringify(left.refCasProof ?? null) === canonicalJsonStringify(right.refCasProof ?? null)
   );
+}
+
+export async function computeMergeApplyRefCasProof(
+  input: MergeApplyRefCasProofLookup,
+): Promise<MergeApplyRefCasProof> {
+  const commitMetadataDigest = objectDigestFromWorkbookCommitId(
+    input.headAfter as StoreWorkbookCommitId,
+  );
+  const refUpdateMetadataDigest = await objectDigestFor('mog.version.merge.ref-update-metadata.v1', {
+    schemaVersion: 1,
+    applyKind: input.applyKind,
+    targetRef: input.targetRef,
+    headBefore: input.headBefore,
+    headAfter: input.headAfter,
+  });
+  const refLogEventDigest = await objectDigestFor('mog.version.merge.ref-log-event.v1', {
+    schemaVersion: 1,
+    applyKind: input.applyKind,
+    commitMetadataDigest,
+    refUpdateMetadataDigest,
+  });
+  return {
+    schemaVersion: 1,
+    applyKind: input.applyKind,
+    commitMetadataDigest,
+    refUpdateMetadataDigest,
+    refLogEventDigest,
+  };
+}
+
+export function mergeApplyRefCasProofStorageKey(
+  namespace: VersionGraphNamespace,
+  input: MergeApplyRefCasProofLookup,
+): string {
+  return `${versionGraphNamespaceKey(namespace)}\u0000mergeRefCasProof\u0000${canonicalJsonStringify(input)}`;
 }
 
 export function mergeApplyIntentStorageKey(
@@ -366,6 +453,14 @@ function missingRead(message: string): MergeApplyIntentReadResult {
   return {
     status: 'missing',
     record: null,
+    diagnostics: [diagnostic('VERSION_INTENT_NOT_FOUND', message, 'repair')],
+  };
+}
+
+function missingProofRead(message: string): MergeApplyRefCasProofReadResult {
+  return {
+    status: 'missing',
+    proof: null,
     diagnostics: [diagnostic('VERSION_INTENT_NOT_FOUND', message, 'repair')],
   };
 }

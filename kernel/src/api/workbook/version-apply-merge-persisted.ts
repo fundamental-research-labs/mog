@@ -16,7 +16,9 @@ import type { DocumentContext } from '../../context';
 import {
   hasMergeApplyIntentStoreProvider,
   intentIdForMergeResultId,
+  computeMergeApplyRefCasProof,
   type MergeApplyIntentRecord,
+  type MergeApplyRefCasProof,
   type MergeApplyIntentStore,
   type MergeApplyIntentStoreDiagnostic,
   type MergeApplyIntentStoreProvider,
@@ -503,7 +505,39 @@ async function completeFastForwardIntentIfAlreadyApplied(
   const current = await readCurrentTargetHead(provider, record);
   if (!current.ok || current.commitId !== record.theirs) return null;
 
-  const completed = await completeFastForwardIntent(store, record, record.theirs);
+  const proofRead = await store.readRefCasProof({
+    applyKind: 'fastForward',
+    targetRef: record.targetRef,
+    headBefore: record.ours,
+    headAfter: record.theirs,
+  });
+  if (proofRead.status !== 'found') {
+    return blockedApplyMergeResult(
+      record.base,
+      record.ours,
+      record.theirs,
+      intentStoreDiagnostics(proofRead.diagnostics),
+      'ref-not-mutated',
+    );
+  }
+
+  const proofDiagnostics = await validateFastForwardRefCasProof(record, proofRead.proof);
+  if (proofDiagnostics.length > 0) {
+    return blockedApplyMergeResult(
+      record.base,
+      record.ours,
+      record.theirs,
+      proofDiagnostics,
+      'ref-not-mutated',
+    );
+  }
+
+  const completed = await completeFastForwardIntent(
+    store,
+    record,
+    record.theirs,
+    proofRead.proof,
+  );
   if (completed.status !== 'completed') {
     return blockedApplyMergeResult(
       record.base,
@@ -521,6 +555,7 @@ function completeFastForwardIntent(
   store: MergeApplyIntentStore,
   record: MergeApplyIntentRecord,
   commitId: WorkbookCommitId,
+  refCasProof?: MergeApplyRefCasProof,
 ) {
   return store.completeIntent({
     intentId: record.intentId,
@@ -531,8 +566,43 @@ function completeFastForwardIntent(
       headBefore: record.ours,
       headAfter: commitId,
       commitId,
+      ...(refCasProof ? { refCasProof } : {}),
     },
   });
+}
+
+async function validateFastForwardRefCasProof(
+  record: MergeApplyIntentRecord,
+  proof: MergeApplyRefCasProof,
+): Promise<readonly VersionStoreDiagnostic[]> {
+  const expected = await computeMergeApplyRefCasProof({
+    applyKind: 'fastForward',
+    targetRef: record.targetRef,
+    headBefore: record.ours,
+    headAfter: record.theirs,
+  });
+  const diagnostics: VersionStoreDiagnostic[] = [];
+  if (proof.applyKind !== 'fastForward') {
+    diagnostics.push(
+      resolutionMismatchDiagnostic('persisted merge ref CAS proof apply kind does not match.'),
+    );
+  }
+  if (!digestsEqual(proof.commitMetadataDigest, expected.commitMetadataDigest)) {
+    diagnostics.push(
+      resolutionMismatchDiagnostic('persisted merge ref CAS proof commit metadata does not match.'),
+    );
+  }
+  if (!digestsEqual(proof.refUpdateMetadataDigest, expected.refUpdateMetadataDigest)) {
+    diagnostics.push(
+      resolutionMismatchDiagnostic('persisted merge ref CAS proof ref update does not match.'),
+    );
+  }
+  if (!digestsEqual(proof.refLogEventDigest, expected.refLogEventDigest)) {
+    diagnostics.push(
+      resolutionMismatchDiagnostic('persisted merge ref CAS proof event log does not match.'),
+    );
+  }
+  return diagnostics;
 }
 
 async function resultFromTerminalIntent(

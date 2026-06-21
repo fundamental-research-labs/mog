@@ -747,6 +747,9 @@ class IndexedDbVersionGraphStore implements VersionGraphStore {
           targetRefName: storageRefNameFromGraphRefName(result.ref.name),
           expectedHeadCommitId: parseWorkbookCommitId(input.expectedHeadCommitId),
           expectedRefVersion,
+          ...(operation === 'fastForwardRef'
+            ? { refCasProof: { applyKind: 'fastForward' as const } }
+            : {}),
         },
       });
       return result;

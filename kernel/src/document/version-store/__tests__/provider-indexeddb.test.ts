@@ -15,6 +15,7 @@ import {
   type VersionObjectRecord,
 } from '../object-store';
 import type { VersionObjectType } from '../object-digest';
+import { objectDigestFromWorkbookCommitId } from '../object-digest';
 import {
   createIndexedDbVersionStoreProvider,
   INDEXEDDB_VERSION_STORE_CAPABILITIES,
@@ -616,6 +617,22 @@ describe('IndexedDbVersionStoreProvider', () => {
         payload: {
           parentCommitIds: [initialized.rootCommit.id],
         },
+      },
+    });
+    const intentStore = await provider.openMergeApplyIntentStore(namespace);
+    await expect(
+      intentStore.readRefCasProof({
+        applyKind: 'fastForward',
+        targetRef: VERSION_GRAPH_MAIN_REF,
+        headBefore: initialized.rootCommit.id,
+        headAfter: incoming.commit.id,
+      }),
+    ).resolves.toMatchObject({
+      status: 'found',
+      proof: {
+        schemaVersion: 1,
+        applyKind: 'fastForward',
+        commitMetadataDigest: objectDigestFromWorkbookCommitId(incoming.commit.id),
       },
     });
   });

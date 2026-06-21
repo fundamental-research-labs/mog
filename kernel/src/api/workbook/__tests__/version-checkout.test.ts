@@ -508,10 +508,13 @@ describe('WorkbookVersion checkout facade', () => {
     });
 
     await expect(wb.version.getHead()).resolves.toMatchObject({
-      id: initialized.rootCommit.id,
-      refName: VERSION_GRAPH_MAIN_REF,
-      resolvedFrom: 'HEAD',
-      refRevision: initialized.initialHead.revision,
+      ok: true,
+      value: {
+        id: initialized.rootCommit.id,
+        refName: VERSION_GRAPH_MAIN_REF,
+        resolvedFrom: 'HEAD',
+        refRevision: initialized.initialHead.revision,
+      },
     });
   });
 

@@ -167,14 +167,15 @@ describe('WorkbookVersion provider-backed ref lifecycle facade', () => {
       });
 
     await expect(wb.version.listRefs({ prefix: 'scenario' as any })).resolves.toMatchObject({
-      status: 'success',
-      items: [
-        expect.objectContaining({
-          name: 'refs/heads/scenario/provider-ref',
-          commitId: initialized.rootCommit.id,
-        }),
-      ],
-      diagnostics: [],
+      ok: true,
+      value: {
+        items: [
+          expect.objectContaining({
+            name: 'refs/heads/scenario/provider-ref',
+            commitId: initialized.rootCommit.id,
+          }),
+        ],
+      },
     });
 
     await expect(
@@ -224,14 +225,15 @@ describe('WorkbookVersion provider-backed ref lifecycle facade', () => {
     });
 
     await expect(wb.version.listRefs()).resolves.toMatchObject({
-      status: 'success',
-      items: [
-        expect.objectContaining({
-          name: 'refs/heads/main',
-          commitId: initialized.rootCommit.id,
-        }),
-      ],
-      diagnostics: [],
+      ok: true,
+      value: {
+        items: [
+          expect.objectContaining({
+            name: 'refs/heads/main',
+            commitId: initialized.rootCommit.id,
+          }),
+        ],
+      },
     });
 
     await expect(
@@ -251,9 +253,10 @@ describe('WorkbookVersion provider-backed ref lifecycle facade', () => {
     });
 
     await expect(wb.version.listRefs({ prefix: 'scenario' as any })).resolves.toMatchObject({
-      status: 'success',
-      items: [],
-      diagnostics: [],
+      ok: true,
+      value: {
+        items: [],
+      },
     });
   });
 
@@ -336,10 +339,13 @@ describe('WorkbookVersion provider-backed ref lifecycle facade', () => {
         },
       });
       await expect(wb.version.getHead()).resolves.toMatchObject({
-        id: initialized.rootCommit.id,
-        refName: 'refs/heads/main',
-        resolvedFrom: 'HEAD',
-        refRevision: initialized.symbolicHead.revision,
+        ok: true,
+        value: {
+          id: initialized.rootCommit.id,
+          refName: 'refs/heads/main',
+          resolvedFrom: 'HEAD',
+          refRevision: initialized.symbolicHead.revision,
+        },
       });
     },
   );

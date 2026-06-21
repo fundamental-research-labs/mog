@@ -6,7 +6,10 @@
 
 export type { WorkbookHistory } from './history';
 export type {
+  GetVersionHeadInput,
   JsonValue,
+  ListVersionCommitsInput,
+  ListVersionRefsInput,
   ObjectDigest,
   PageCursor,
   Paged,
@@ -46,6 +49,7 @@ export type {
   VersionDiffDisplay,
   VersionDiffDisplayValue,
   VersionDiffEntry,
+  VersionDiffInput,
   VersionDiffOptions,
   VersionDiffStructuralMetadata,
   VersionDiffValue,
@@ -57,6 +61,7 @@ export type {
   VersionError,
   VersionFastForwardBranchOptions,
   VersionGetHeadOptions,
+  VersionHead,
   VersionListCommitsOptions,
   VersionListRefsOptions,
   VersionMainRefName,
@@ -82,6 +87,7 @@ export type {
   VersionRefSelector,
   VersionRedactionClass,
   VersionResult,
+  VersionSemanticDiffPage,
   VersionSemanticValue,
   VersionStoreDiagnostic,
   VersionSurfaceDiagnosticCode,

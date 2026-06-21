@@ -138,27 +138,29 @@ describe('WorkbookVersion provider-backed diff facade', () => {
     });
 
     await expect(wb.version.diff(initialized.rootCommit.id, committed.id)).resolves.toEqual({
-      status: 'success',
-      items: [
-        {
-          structural: {
-            kind: 'metadata',
-            changeId: 'child-change-1',
-            domain: 'cell',
-            entityId: 'sheet-1!A1',
-            propertyPath: ['value'],
+      ok: true,
+      value: {
+        items: [
+          {
+            structural: {
+              kind: 'metadata',
+              changeId: 'child-change-1',
+              domain: 'cell',
+              entityId: 'sheet-1!A1',
+              propertyPath: ['value'],
+            },
+            before: { kind: 'value', value: 1 },
+            after: { kind: 'value', value: 2 },
+            display: {
+              sheetName: { kind: 'value', value: 'Sheet1' },
+              address: { kind: 'value', value: 'A1' },
+            },
           },
-          before: { kind: 'value', value: 1 },
-          after: { kind: 'value', value: 2 },
-          display: {
-            sheetName: { kind: 'value', value: 'Sheet1' },
-            address: { kind: 'value', value: 'A1' },
-          },
-        },
-      ],
-      readRevision: { kind: 'counter', value: '1' },
-      order: 'semantic-change-order',
-      diagnostics: [],
+        ],
+        limit: 50,
+        readRevision: { kind: 'counter', value: '1' },
+        order: 'semantic-change-order',
+      },
     });
   });
 
@@ -186,14 +188,16 @@ describe('WorkbookVersion provider-backed diff facade', () => {
     const result = await wb.version.diff(initialized.rootCommit.id, committed.id);
 
     expect(result).toMatchObject({
-      status: 'success',
-      items: semanticChanges,
-      readRevision: { kind: 'counter', value: '1' },
-      order: 'semantic-change-order',
-      diagnostics: [],
+      ok: true,
+      value: {
+        items: semanticChanges,
+        readRevision: { kind: 'counter', value: '1' },
+        order: 'semantic-change-order',
+      },
     });
+    if (!result.ok) throw new Error(`expected diff success: ${result.error.code}`);
     expect(
-      result.items.map((entry) =>
+      result.value.items.map((entry) =>
         entry.structural.kind === 'metadata' ? entry.structural.domain : entry.structural.kind,
       ),
     ).toEqual([
@@ -207,7 +211,7 @@ describe('WorkbookVersion provider-backed diff facade', () => {
       'charts.source-range',
       'floating-objects.anchors',
     ]);
-    expect(result.items[0]?.display).toEqual(redactedEntityLabelDisplay());
+    expect(result.value.items[0]?.display).toEqual(redactedEntityLabelDisplay());
   });
 
   it('fails closed through wb.version.diff for unsupported VC-06 raw payload fields', async () => {
@@ -250,10 +254,11 @@ describe('WorkbookVersion provider-backed diff facade', () => {
     const result = await wb.version.diff(initialized.rootCommit.id, committed.id);
 
     expect(result).toMatchObject({
-      status: 'degraded',
-      items: [],
-      order: 'semantic-change-order',
-      diagnostics: [expect.objectContaining({ issueCode: 'VERSION_UNSUPPORTED_SCHEMA' })],
+      ok: false,
+      error: {
+        code: 'target_unavailable',
+        diagnostics: [expect.objectContaining({ code: 'VERSION_UNSUPPORTED_SCHEMA' })],
+      },
     });
     expect(JSON.stringify(result)).not.toContain(rawSecret);
     expect(JSON.stringify(result)).not.toContain('secretFormula');
@@ -271,15 +276,16 @@ describe('WorkbookVersion provider-backed diff facade', () => {
     await expect(
       wb.version.diff(`commit:sha256:${'1'.repeat(64)}`, `commit:sha256:${'2'.repeat(64)}`),
     ).resolves.toMatchObject({
-      status: 'degraded',
-      items: [],
-      order: 'semantic-change-order',
-      diagnostics: [
-        expect.objectContaining({
-          issueCode: 'VERSION_GRAPH_UNINITIALIZED',
-          redacted: true,
-        }),
-      ],
+      ok: false,
+      error: {
+        code: 'target_unavailable',
+        diagnostics: [
+          expect.objectContaining({
+            code: 'VERSION_GRAPH_UNINITIALIZED',
+            data: expect.objectContaining({ redacted: true }),
+          }),
+        ],
+      },
     });
   });
 });

@@ -49,9 +49,11 @@ describe('WorkbookVersion public ref lifecycle facade', () => {
     const version = new WorkbookVersionImpl({ versioning: {} } as any);
 
     await expect(version.listRefs()).resolves.toMatchObject({
-      status: 'degraded',
-      items: [],
-      diagnostics: [expect.objectContaining({ issueCode: 'VERSION_GRAPH_UNINITIALIZED' })],
+      ok: false,
+      error: {
+        code: 'target_unavailable',
+        diagnostics: [expect.objectContaining({ code: 'VERSION_GRAPH_UNINITIALIZED' })],
+      },
     });
 
     await expect(
@@ -115,11 +117,13 @@ describe('WorkbookVersion public ref lifecycle facade', () => {
     });
 
     await expect(version.listRefs()).resolves.toMatchObject({
-      status: 'success',
-      items: [
-        expect.objectContaining({ name: 'refs/heads/main', commitId: COMMIT_A }),
-        expect.objectContaining({ name: 'refs/heads/scenario/budget', commitId: COMMIT_A }),
-      ],
+      ok: true,
+      value: {
+        items: [
+          expect.objectContaining({ name: 'refs/heads/main', commitId: COMMIT_A }),
+          expect.objectContaining({ name: 'refs/heads/scenario/budget', commitId: COMMIT_A }),
+        ],
+      },
     });
 
     expect(branchService.readBranch('scenario/budget')).toMatchObject({
@@ -138,25 +142,29 @@ describe('WorkbookVersion public ref lifecycle facade', () => {
     await version.createBranch({ name: 'agent/run-1' as any, targetCommitId: COMMIT_A });
 
     const scenarioRefs = await version.listRefs({ prefix: 'scenario' as any });
-    expect(scenarioRefs.status).toBe('success');
-    expect(scenarioRefs.items).toEqual(
+    expect(scenarioRefs.ok).toBe(true);
+    if (!scenarioRefs.ok) throw new Error(`expected listRefs success: ${scenarioRefs.error.code}`);
+    expect(scenarioRefs.value.items).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ name: 'refs/heads/scenario/budget' }),
         expect.objectContaining({ name: 'refs/heads/scenario/forecast/q1' }),
       ]),
     );
-    expect(scenarioRefs.items).toHaveLength(2);
+    expect(scenarioRefs.value.items).toHaveLength(2);
 
     const filtered = await version.listRefs({ prefix: 'refs/heads/scenario/forecast' as any });
     expect(filtered).toMatchObject({
-      status: 'success',
-      items: [expect.objectContaining({ name: 'refs/heads/scenario/forecast/q1' })],
+      ok: true,
+      value: {
+        items: [expect.objectContaining({ name: 'refs/heads/scenario/forecast/q1' })],
+      },
     });
-    expect(filtered.items).toHaveLength(1);
+    expect(filtered.ok && filtered.value.items).toHaveLength(1);
 
     const allRefs = await version.listRefs();
-    expect(allRefs.status).toBe('success');
-    expect(allRefs.items).toEqual(
+    expect(allRefs.ok).toBe(true);
+    if (!allRefs.ok) throw new Error(`expected listRefs success: ${allRefs.error.code}`);
+    expect(allRefs.value.items).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ name: 'refs/heads/main' }),
         expect.objectContaining({ name: 'refs/heads/agent/run-1' }),
@@ -164,7 +172,7 @@ describe('WorkbookVersion public ref lifecycle facade', () => {
         expect.objectContaining({ name: 'refs/heads/scenario/forecast/q1' }),
       ]),
     );
-    expect(allRefs.items).toHaveLength(4);
+    expect(allRefs.value.items).toHaveLength(4);
   });
 
   it('rejects invalid names and protected main mutations before service calls', async () => {
@@ -328,9 +336,11 @@ describe('WorkbookVersion public ref lifecycle facade', () => {
     } as any);
 
     await expect(version.listRefs()).resolves.toMatchObject({
-      status: 'degraded',
-      items: [],
-      diagnostics: [expect.objectContaining({ issueCode: 'VERSION_GRAPH_UNINITIALIZED' })],
+      ok: false,
+      error: {
+        code: 'target_unavailable',
+        diagnostics: [expect.objectContaining({ code: 'VERSION_GRAPH_UNINITIALIZED' })],
+      },
     });
   });
 });

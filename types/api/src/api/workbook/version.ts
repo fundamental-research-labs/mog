@@ -7,9 +7,11 @@
  */
 
 import type {
+  Paged,
   VersionCapability,
   VersionCapabilityDependency,
   VersionDiagnostic,
+  VersionResult,
 } from './version-shared';
 
 export type {
@@ -581,6 +583,22 @@ export interface VersionDiffEntry {
 
 export type WorkbookDiffPage = VersionPage<VersionDiffEntry, 'semantic-change-order'>;
 
+export type GetVersionHeadInput = VersionGetHeadOptions;
+export type VersionHead = WorkbookCommitRef;
+export type ListVersionCommitsInput = VersionListCommitsOptions;
+export type ListVersionRefsInput = VersionListRefsOptions;
+
+export interface VersionDiffInput {
+  readonly base: VersionCommitish;
+  readonly target: VersionCommitish;
+  readonly options?: VersionDiffOptions;
+}
+
+export interface VersionSemanticDiffPage extends Paged<VersionDiffEntry> {
+  readonly readRevision: VersionRecordRevision;
+  readonly order: 'semantic-change-order';
+}
+
 export interface VersionMergeInput {
   readonly base: WorkbookCommitId;
   readonly ours: WorkbookCommitId;
@@ -858,9 +876,9 @@ export type VersionRefMutationResult =
 export interface WorkbookVersion {
   getStatus(): Promise<WorkbookVersionStatus>;
   getSurfaceStatus(): Promise<VersionSurfaceStatus>;
-  getHead(): Promise<WorkbookCommitRef | VersionDegradedHeadResult>;
-  getHead(options: VersionGetHeadOptions): Promise<WorkbookCommitRef | VersionDegradedHeadResult>;
-  listCommits(options?: VersionListCommitsOptions): Promise<VersionCommitPage>;
+  getHead(): Promise<VersionResult<VersionHead>>;
+  getHead(options: GetVersionHeadInput): Promise<VersionResult<VersionHead>>;
+  listCommits(options?: ListVersionCommitsInput): Promise<VersionResult<Paged<WorkbookCommitSummary>>>;
   commit(options?: VersionCommitOptions): Promise<WorkbookCommitRef>;
   checkout(
     target: VersionCheckoutTarget,
@@ -875,14 +893,14 @@ export interface WorkbookVersion {
     base: VersionCommitish,
     target: VersionCommitish,
     options?: VersionDiffOptions,
-  ): Promise<WorkbookDiffPage>;
+  ): Promise<VersionResult<VersionSemanticDiffPage>>;
   readRef(name: 'HEAD'): Promise<VersionSymbolicRefReadResult>;
   readRef(name: VersionMainRefName | VersionRefName): Promise<VersionBranchRefReadResult>;
   readRef(name: VersionRefSelector): Promise<VersionRefReadResult>;
   getRef(name: 'HEAD'): Promise<VersionSymbolicRefReadResult>;
   getRef(name: VersionMainRefName | VersionRefName | VersionBranchName): Promise<VersionBranchRefReadResult>;
   getRef(name: VersionRefSelector | VersionBranchName): Promise<VersionRefReadResult>;
-  listRefs(options?: VersionListRefsOptions): Promise<VersionRefListResult>;
+  listRefs(options?: ListVersionRefsInput): Promise<VersionResult<Paged<VersionRef>>>;
   createBranch(options: VersionCreateBranchOptions): Promise<VersionRefMutationResult>;
   fastForwardBranch(options: VersionFastForwardBranchOptions): Promise<VersionRefMutationResult>;
   updateBranch(options: VersionUpdateBranchOptions): Promise<VersionRefMutationResult>;

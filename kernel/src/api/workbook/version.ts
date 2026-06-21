@@ -1,4 +1,5 @@
 import type {
+  Paged,
   RedactedVersionAuthor, VersionBranchName, VersionBranchRefReadResult,
   VersionApplyMergeInput, VersionApplyMergeOptions, VersionApplyMergeResult,
   VersionCheckoutOptions, VersionCheckoutResult, VersionCheckoutTarget, VersionCommitish,
@@ -8,8 +9,9 @@ import type {
   VersionListRefsOptions, VersionMainRefName, VersionMergeInput, VersionMergeOptions,
   VersionMergeResult, VersionRecordRevision, VersionRef, VersionRefListResult,
   VersionRefMutationResult, VersionRefName, VersionRefReadResult, VersionRefSelector,
+  VersionResult, VersionSemanticDiffPage,
   VersionStoreDiagnostic, VersionSymbolicRef, VersionSymbolicRefReadResult,
-  VersionUpdateBranchOptions, WorkbookCommitId, WorkbookCommitRef, WorkbookCommitSummary,
+  VersionUpdateBranchOptions, VersionHead, WorkbookCommitId, WorkbookCommitRef, WorkbookCommitSummary,
   WorkbookDiffPage, WorkbookVersion, WorkbookVersionCapabilityStatus, WorkbookVersionDiagnostic,
   WorkbookVersionRolloutStage, WorkbookVersionStatus,
 } from '@mog-sdk/contracts/api';
@@ -23,6 +25,7 @@ import { checkoutWorkbookVersion, hasAttachedVersionCheckoutService, type Versio
 import { commitWorkbookVersion, hasAttachedVersionWriteService } from './version-commit';
 import { diffWorkbookVersion } from './version-diff';
 import { hasAttachedVersionMergeService, mergeWorkbookVersion } from './version-merge';
+import { versionResultFromCommitPage, versionResultFromDiffPage, versionResultFromHead, versionResultFromRefList } from './version-result';
 import { getWorkbookVersionSurfaceStatus } from './version-surface-status';
 import {
   createWorkbookVersionBranch,
@@ -284,44 +287,42 @@ export class WorkbookVersionImpl implements WorkbookVersion {
     };
   }
   async getSurfaceStatus() { return getWorkbookVersionSurfaceStatus(this.ctx, await this.getStatus()); }
-  async getHead(): Promise<WorkbookCommitRef | VersionDegradedHeadResult>;
-  async getHead(options: VersionGetHeadOptions): Promise<WorkbookCommitRef | VersionDegradedHeadResult>;
-  async getHead(_options: VersionGetHeadOptions = {}): Promise<WorkbookCommitRef | VersionDegradedHeadResult> {
+  async getHead(): Promise<VersionResult<VersionHead>>;
+  async getHead(options: VersionGetHeadOptions): Promise<VersionResult<VersionHead>>;
+  async getHead(_options: VersionGetHeadOptions = {}): Promise<VersionResult<VersionHead>> {
+    const failHead = (diagnostics: readonly VersionStoreDiagnostic[]) =>
+      versionResultFromHead(degradedHead(diagnostics));
     const readService = getAttachedVersionReadService(this.ctx);
-    if (!readService) {
-      return degradedHead([serviceUnavailableDiagnostic('getHead')]);
-    }
+    if (!readService) return failHead([serviceUnavailableDiagnostic('getHead')]);
 
     try {
       if (readService.readHead) {
-        return mapHeadResult(await readService.readHead());
+        return versionResultFromHead(mapHeadResult(await readService.readHead()));
       }
       if (readService.getHead) {
-        return mapLegacyHeadResult(await readService.getHead());
+        return versionResultFromHead(mapLegacyHeadResult(await readService.getHead()));
       }
-    } catch {
-      return degradedHead([providerErrorDiagnostic('getHead')]);
-    }
-
-    return degradedHead([serviceUnavailableDiagnostic('getHead')]);
+    } catch { return failHead([providerErrorDiagnostic('getHead')]); }
+    return failHead([serviceUnavailableDiagnostic('getHead')]);
   }
 
-  async listCommits(options: VersionListCommitsOptions = {}): Promise<VersionCommitPage> {
+  async listCommits(options: VersionListCommitsOptions = {}): Promise<VersionResult<Paged<WorkbookCommitSummary>>> {
+    const limit = options.pageSize ?? VERSION_LIST_COMMITS_DEFAULT_PAGE_SIZE;
     const optionDiagnostics = validateListCommitsOptions(options);
     if (optionDiagnostics.length > 0) {
-      return degradedCommitPage(optionDiagnostics);
+      return versionResultFromCommitPage(degradedCommitPage(optionDiagnostics), limit);
     }
 
     const readService = getAttachedVersionReadService(this.ctx);
     if (!readService?.listCommits) {
-      return degradedCommitPage([serviceUnavailableDiagnostic('listCommits')]);
+      return versionResultFromCommitPage(degradedCommitPage([serviceUnavailableDiagnostic('listCommits')]), limit);
     }
 
     try {
       const result = await readService.listCommits({ pageSize: options.pageSize });
-      return mapCommitPageResult(result);
+      return versionResultFromCommitPage(mapCommitPageResult(result), limit);
     } catch {
-      return degradedCommitPage([providerErrorDiagnostic('listCommits')]);
+      return versionResultFromCommitPage(degradedCommitPage([providerErrorDiagnostic('listCommits')]), limit);
     }
   }
   async commit(options: VersionCommitOptions = {}): Promise<WorkbookCommitRef> {
@@ -336,8 +337,8 @@ export class WorkbookVersionImpl implements WorkbookVersion {
   async applyMerge(input: VersionApplyMergeInput, options: VersionApplyMergeOptions = {}): Promise<VersionApplyMergeResult> {
     return applyMergeWorkbookVersion(this.ctx, input, options);
   }
-  async diff(base: VersionCommitish, target: VersionCommitish, options: VersionDiffOptions = {}): Promise<WorkbookDiffPage> {
-    return diffWorkbookVersion(this.ctx, base, target, options);
+  async diff(base: VersionCommitish, target: VersionCommitish, options: VersionDiffOptions = {}): Promise<VersionResult<VersionSemanticDiffPage>> {
+    return versionResultFromDiffPage(await diffWorkbookVersion(this.ctx, base, target, options), options.pageSize ?? 50);
   }
   async readRef(name: 'HEAD'): Promise<VersionSymbolicRefReadResult>;
   async readRef(name: VersionMainRefName | VersionRefName | VersionBranchName): Promise<VersionBranchRefReadResult>;
@@ -367,8 +368,8 @@ export class WorkbookVersionImpl implements WorkbookVersion {
     return getWorkbookVersionRef(this.ctx, name);
   }
 
-  async listRefs(options: VersionListRefsOptions = {}): Promise<VersionRefListResult> {
-    return listWorkbookVersionRefs(this.ctx, options);
+  async listRefs(options: VersionListRefsOptions = {}): Promise<VersionResult<Paged<VersionRef>>> {
+    return versionResultFromRefList(await listWorkbookVersionRefs(this.ctx, options));
   }
 
   async createBranch(options: VersionCreateBranchOptions): Promise<VersionRefMutationResult> {

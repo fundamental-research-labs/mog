@@ -22,6 +22,8 @@ import type {
   VersionMergeResult as ApiRootMergeResult,
   VersionRefMutationResult as ApiRootRefMutationResult,
   VersionResult as ApiRootVersionResult,
+  VersionHead as ApiRootVersionHead,
+  VersionSemanticDiffPage as ApiRootSemanticDiffPage,
   VersionSemanticValue as ApiRootSemanticValue,
   VersionStoreDiagnostic as ApiRootStoreDiagnostic,
   WorkbookDiffPage as ApiRootDiffPage,
@@ -52,6 +54,8 @@ import type {
   VersionMergeResult as PackageApiMergeResult,
   VersionRefMutationResult as PackageApiRefMutationResult,
   VersionResult as PackageApiVersionResult,
+  VersionHead as PackageApiVersionHead,
+  VersionSemanticDiffPage as PackageApiSemanticDiffPage,
   VersionSemanticValue as PackageApiSemanticValue,
   VersionStoreDiagnostic as PackageApiStoreDiagnostic,
   WorkbookDiffPage as PackageApiDiffPage,
@@ -82,6 +86,8 @@ import type {
   VersionMergeResult as PackageWorkbookMergeResult,
   VersionRefMutationResult as PackageWorkbookRefMutationResult,
   VersionResult as PackageWorkbookVersionResult,
+  VersionHead as PackageWorkbookVersionHead,
+  VersionSemanticDiffPage as PackageWorkbookSemanticDiffPage,
   VersionSemanticValue as PackageWorkbookSemanticValue,
   VersionStoreDiagnostic as PackageWorkbookStoreDiagnostic,
   WorkbookDiffPage as PackageWorkbookDiffPage,
@@ -112,6 +118,8 @@ import type {
   VersionMergeResult as WorkbookNamespaceMergeResult,
   VersionRefMutationResult as WorkbookNamespaceRefMutationResult,
   VersionResult as WorkbookNamespaceVersionResult,
+  VersionHead as WorkbookNamespaceVersionHead,
+  VersionSemanticDiffPage as WorkbookNamespaceSemanticDiffPage,
   VersionSemanticValue as WorkbookNamespaceSemanticValue,
   VersionStoreDiagnostic as WorkbookNamespaceStoreDiagnostic,
   WorkbookDiffPage as WorkbookNamespaceDiffPage,
@@ -204,6 +212,12 @@ type _WorkbookNamespaceExportsCapabilityError = Assert<
 type _WorkbookNamespaceExportsVersionResult = Assert<
   IsEqual<WorkbookNamespaceVersionResult<string>, PackageWorkbookVersionResult<string>>
 >;
+type _WorkbookNamespaceExportsVersionHead = Assert<
+  IsEqual<WorkbookNamespaceVersionHead, PackageWorkbookVersionHead>
+>;
+type _WorkbookNamespaceExportsSemanticDiffPage = Assert<
+  IsEqual<WorkbookNamespaceSemanticDiffPage, PackageWorkbookSemanticDiffPage>
+>;
 type _WorkbookNamespaceExportsPaged = Assert<
   IsEqual<WorkbookNamespacePaged<string>, PackageWorkbookPaged<string>>
 >;
@@ -244,6 +258,10 @@ type _ApiRootExportsCapabilityError = Assert<
 >;
 type _ApiRootExportsVersionResult = Assert<
   IsEqual<ApiRootVersionResult<string>, PackageApiVersionResult<string>>
+>;
+type _ApiRootExportsVersionHead = Assert<IsEqual<ApiRootVersionHead, PackageApiVersionHead>>;
+type _ApiRootExportsSemanticDiffPage = Assert<
+  IsEqual<ApiRootSemanticDiffPage, PackageApiSemanticDiffPage>
 >;
 type _ApiRootExportsPaged = Assert<IsEqual<ApiRootPaged<string>, PackageApiPaged<string>>>;
 type _ApiRootExportsDiffPage = Assert<IsEqual<ApiRootDiffPage, PackageApiDiffPage>>;

@@ -117,6 +117,26 @@ function createWorkbook(overrides?: Partial<WorkbookConfig>) {
   });
 }
 
+function versionUnavailable(
+  operation: 'getHead' | 'listCommits' | 'diff',
+  code: string,
+  data: Record<string, unknown> = {},
+) {
+  return {
+    ok: false,
+    error: {
+      code: 'target_unavailable',
+      target: `workbook.version.${operation}`,
+      diagnostics: [
+        expect.objectContaining({
+          code,
+          data: expect.objectContaining({ redacted: true, ...data }),
+        }),
+      ],
+    },
+  };
+}
+
 describe('WorkbookVersion status slice', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -160,25 +180,11 @@ describe('WorkbookVersion status slice', () => {
     const wb = createWorkbook();
 
     await expect(wb.version.getHead()).resolves.toMatchObject({
-      status: 'degraded',
-      diagnostics: [
-        expect.objectContaining({
-          issueCode: 'VERSION_GRAPH_UNINITIALIZED',
-          redacted: true,
-        }),
-      ],
+      ...versionUnavailable('getHead', 'VERSION_GRAPH_UNINITIALIZED'),
     });
 
     await expect(wb.version.listCommits()).resolves.toMatchObject({
-      status: 'degraded',
-      items: [],
-      order: 'topological-newest',
-      diagnostics: [
-        expect.objectContaining({
-          issueCode: 'VERSION_GRAPH_UNINITIALIZED',
-          redacted: true,
-        }),
-      ],
+      ...versionUnavailable('listCommits', 'VERSION_GRAPH_UNINITIALIZED'),
     });
 
     await expect(wb.version.readRef('HEAD')).resolves.toMatchObject({
@@ -193,15 +199,7 @@ describe('WorkbookVersion status slice', () => {
     });
 
     await expect(wb.version.diff(ROOT_COMMIT_ID, CHILD_COMMIT_ID)).resolves.toMatchObject({
-      status: 'degraded',
-      items: [],
-      order: 'semantic-change-order',
-      diagnostics: [
-        expect.objectContaining({
-          issueCode: 'VERSION_GRAPH_UNINITIALIZED',
-          redacted: true,
-        }),
-      ],
+      ...versionUnavailable('diff', 'VERSION_UNMATERIALIZABLE_COMMIT'),
     });
 
     await expect(wb.version.commit()).rejects.toMatchObject({
@@ -234,38 +232,41 @@ describe('WorkbookVersion status slice', () => {
     });
 
     await expect(wb.version.getHead()).resolves.toEqual({
-      id: CHILD_COMMIT_ID,
-      refName: 'refs/heads/main',
-      resolvedFrom: 'HEAD',
-      refRevision: REF_REVISION,
+      ok: true,
+      value: {
+        id: CHILD_COMMIT_ID,
+        refName: 'refs/heads/main',
+        resolvedFrom: 'HEAD',
+        refRevision: REF_REVISION,
+      },
     });
 
     await expect(wb.version.listCommits({ pageSize: 2 })).resolves.toEqual({
-      status: 'success',
-      items: [
-        {
-          id: CHILD_COMMIT_ID,
-          parents: [ROOT_COMMIT_ID],
-          createdAt: CREATED_AT,
-          author: {
-            actorKind: 'user',
-            displayName: 'Public Reader',
-            redacted: true,
+      ok: true,
+      value: {
+        items: [
+          {
+            id: CHILD_COMMIT_ID,
+            parents: [ROOT_COMMIT_ID],
+            createdAt: CREATED_AT,
+            author: {
+              actorKind: 'user',
+              displayName: 'Public Reader',
+              redacted: true,
+            },
           },
-        },
-        {
-          id: ROOT_COMMIT_ID,
-          parents: [],
-          createdAt: CREATED_AT,
-          author: {
-            actorKind: 'system',
-            redacted: true,
+          {
+            id: ROOT_COMMIT_ID,
+            parents: [],
+            createdAt: CREATED_AT,
+            author: {
+              actorKind: 'system',
+              redacted: true,
+            },
           },
-        },
-      ],
-      readRevision: REF_REVISION,
-      order: 'topological-newest',
-      diagnostics: [],
+        ],
+        limit: 2,
+      },
     });
     expect(graphStore.listCommits).toHaveBeenCalledWith({ pageSize: 2 });
 
@@ -301,31 +302,33 @@ describe('WorkbookVersion status slice', () => {
         },
       ),
     ).resolves.toEqual({
-      status: 'success',
-      items: [
-        {
-          structural: {
-            kind: 'metadata',
-            changeId: 'change-1',
-            domain: 'cell',
-            entityId: 'sheet-1!A1',
-            propertyPath: ['value'],
+      ok: true,
+      value: {
+        items: [
+          {
+            structural: {
+              kind: 'metadata',
+              changeId: 'change-1',
+              domain: 'cell',
+              entityId: 'sheet-1!A1',
+              propertyPath: ['value'],
+            },
+            before: { kind: 'value', value: 1 },
+            after: {
+              kind: 'value',
+              value: { kind: 'formula', formula: '=A1+1', result: 2 },
+            },
+            display: {
+              sheetName: { kind: 'value', value: 'Sheet1' },
+              address: { kind: 'value', value: 'A1' },
+            },
           },
-          before: { kind: 'value', value: 1 },
-          after: {
-            kind: 'value',
-            value: { kind: 'formula', formula: '=A1+1', result: 2 },
-          },
-          display: {
-            sheetName: { kind: 'value', value: 'Sheet1' },
-            address: { kind: 'value', value: 'A1' },
-          },
-        },
-      ],
-      nextPageToken: DIFF_PAGE_TOKEN,
-      readRevision: REF_REVISION,
-      order: 'semantic-change-order',
-      diagnostics: [],
+        ],
+        nextCursor: DIFF_PAGE_TOKEN,
+        limit: 25,
+        readRevision: REF_REVISION,
+        order: 'semantic-change-order',
+      },
     });
     expect(graphStore.diff).toHaveBeenCalledWith(
       { kind: 'commit', id: ROOT_COMMIT_ID },
@@ -350,16 +353,9 @@ describe('WorkbookVersion status slice', () => {
     });
 
     await expect(wb.version.listCommits({ pageToken: 'opaque-token' })).resolves.toMatchObject({
-      status: 'degraded',
-      items: [],
-      order: 'topological-newest',
-      diagnostics: [
-        expect.objectContaining({
-          issueCode: 'VERSION_STALE_PAGE_CURSOR',
-          recoverability: 'unsupported',
-          redacted: true,
-        }),
-      ],
+      ...versionUnavailable('listCommits', 'VERSION_STALE_PAGE_CURSOR', {
+        recoverability: 'unsupported',
+      }),
     });
     expect(graphStore.listCommits).not.toHaveBeenCalled();
   });
@@ -426,16 +422,9 @@ describe('WorkbookVersion status slice', () => {
     });
 
     await expect(wb.version.diff(ROOT_COMMIT_ID, CHILD_COMMIT_ID)).resolves.toMatchObject({
-      status: 'degraded',
-      items: [],
-      order: 'semantic-change-order',
-      diagnostics: [
-        expect.objectContaining({
-          issueCode: 'VERSION_UNMATERIALIZABLE_COMMIT',
-          recoverability: 'unsupported',
-          redacted: true,
-        }),
-      ],
+      ...versionUnavailable('diff', 'VERSION_UNMATERIALIZABLE_COMMIT', {
+        recoverability: 'unsupported',
+      }),
     });
   });
 
@@ -462,15 +451,16 @@ describe('WorkbookVersion status slice', () => {
         } as any,
       ),
     ).resolves.toMatchObject({
-      status: 'degraded',
-      items: [],
-      order: 'semantic-change-order',
-      diagnostics: expect.arrayContaining([
-        expect.objectContaining({
-          issueCode: 'VERSION_INVALID_OPTIONS',
-          redacted: true,
-        }),
-      ]),
+      ok: false,
+      error: {
+        code: 'target_unavailable',
+        diagnostics: expect.arrayContaining([
+          expect.objectContaining({
+            code: 'VERSION_INVALID_OPTIONS',
+            data: expect.objectContaining({ redacted: true }),
+          }),
+        ]),
+      },
     });
     expect(graphStore.diff).not.toHaveBeenCalled();
   });
@@ -491,17 +481,10 @@ describe('WorkbookVersion status slice', () => {
     );
 
     expect(result).toMatchObject({
-      status: 'degraded',
-      items: [],
-      order: 'semantic-change-order',
-      diagnostics: [
-        expect.objectContaining({
-          issueCode: 'VERSION_PERMISSION_DENIED',
-          recoverability: 'unsupported',
-          payload: expect.objectContaining({ refName: 'redacted' }),
-          redacted: true,
-        }),
-      ],
+      ...versionUnavailable('diff', 'VERSION_PERMISSION_DENIED', {
+        recoverability: 'unsupported',
+        payload: expect.objectContaining({ refName: 'redacted' }),
+      }),
     });
     expect(JSON.stringify(result)).not.toContain('private-review');
     expect(graphStore.diff).not.toHaveBeenCalled();
@@ -602,18 +585,23 @@ describe('WorkbookVersion status slice', () => {
     expect(committed.id).not.toBe(initialized.rootCommit.id);
 
     await expect(wb.version.getHead()).resolves.toMatchObject({
-      id: committed.id,
-      refName: VERSION_GRAPH_MAIN_REF,
-      resolvedFrom: 'HEAD',
-      refRevision: { kind: 'counter', value: '1' },
+      ok: true,
+      value: {
+        id: committed.id,
+        refName: VERSION_GRAPH_MAIN_REF,
+        resolvedFrom: 'HEAD',
+        refRevision: { kind: 'counter', value: '1' },
+      },
     });
     await expect(wb.version.listCommits()).resolves.toMatchObject({
-      status: 'success',
-      items: [
-        expect.objectContaining({ id: committed.id, parents: [initialized.rootCommit.id] }),
-        expect.objectContaining({ id: initialized.rootCommit.id, parents: [] }),
-      ],
-      order: 'topological-newest',
+      ok: true,
+      value: {
+        items: [
+          expect.objectContaining({ id: committed.id, parents: [initialized.rootCommit.id] }),
+          expect.objectContaining({ id: initialized.rootCommit.id, parents: [] }),
+        ],
+        limit: 50,
+      },
     });
     const status = await wb.version.getStatus();
     expect(status.checkout).toMatchObject({ stage: 'present', available: true });

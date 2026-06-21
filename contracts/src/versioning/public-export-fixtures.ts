@@ -11,6 +11,8 @@ import type {
   VersionDiffEntry as ContractsApiDiffEntry,
   VersionRefMutationResult as ContractsApiRefMutationResult,
   VersionResult as ContractsApiVersionResult,
+  VersionHead as ContractsApiVersionHead,
+  VersionSemanticDiffPage as ContractsApiSemanticDiffPage,
   VersionSemanticValue as ContractsApiSemanticValue,
   VersionStoreDiagnostic as ContractsApiStoreDiagnostic,
   Workbook as ContractsApiWorkbook,
@@ -31,6 +33,8 @@ import type {
   VersionDiffEntry as ContractsWorkbookDiffEntry,
   VersionRefMutationResult as ContractsWorkbookRefMutationResult,
   VersionResult as ContractsWorkbookVersionResult,
+  VersionHead as ContractsWorkbookVersionHead,
+  VersionSemanticDiffPage as ContractsWorkbookSemanticDiffPage,
   VersionSemanticValue as ContractsWorkbookSemanticValue,
   VersionStoreDiagnostic as ContractsWorkbookStoreDiagnostic,
   WorkbookDiffPage as ContractsWorkbookDiffPage,
@@ -105,6 +109,12 @@ type _ContractsApiWorkbookEntryExportsCapabilityError = Assert<
 type _ContractsApiWorkbookEntryExportsVersionResult = Assert<
   IsEqual<ContractsApiVersionResult<string>, ContractsWorkbookVersionResult<string>>
 >;
+type _ContractsApiWorkbookEntryExportsVersionHead = Assert<
+  IsEqual<ContractsApiVersionHead, ContractsWorkbookVersionHead>
+>;
+type _ContractsApiWorkbookEntryExportsSemanticDiffPage = Assert<
+  IsEqual<ContractsApiSemanticDiffPage, ContractsWorkbookSemanticDiffPage>
+>;
 type _ContractsApiWorkbookEntryExportsPaged = Assert<
   IsEqual<ContractsApiPaged<string>, ContractsWorkbookPaged<string>>
 >;
@@ -127,6 +137,8 @@ type PublicVersionApiSurface = {
   readonly redactionPolicy: ContractsApiRedactionPolicy;
   readonly capabilityError: ContractsApiCapabilityError;
   readonly versionResult: ContractsApiVersionResult<string>;
+  readonly versionHead: ContractsApiVersionHead;
+  readonly semanticDiffPage: ContractsApiSemanticDiffPage;
   readonly page: ContractsApiPaged<string>;
 };
 

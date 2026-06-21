@@ -3,7 +3,10 @@
  */
 export type * from '@mog/types-api/api/workbook';
 export type {
+  GetVersionHeadInput,
   JsonValue,
+  ListVersionCommitsInput,
+  ListVersionRefsInput,
   ObjectDigest,
   PageCursor,
   Paged,
@@ -43,6 +46,7 @@ export type {
   VersionDiffDisplay,
   VersionDiffDisplayValue,
   VersionDiffEntry,
+  VersionDiffInput,
   VersionDiffOptions,
   VersionDiffStructuralMetadata,
   VersionDiffValue,
@@ -54,6 +58,7 @@ export type {
   VersionError,
   VersionFastForwardBranchOptions,
   VersionGetHeadOptions,
+  VersionHead,
   VersionListCommitsOptions,
   VersionListRefsOptions,
   VersionMainRefName,
@@ -79,6 +84,7 @@ export type {
   VersionRefReadResult,
   VersionRefSelector,
   VersionResult,
+  VersionSemanticDiffPage,
   VersionSemanticValue,
   VersionStoreDiagnostic,
   VersionSurfaceDiagnosticCode,

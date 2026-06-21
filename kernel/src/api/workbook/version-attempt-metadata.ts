@@ -93,6 +93,10 @@ export function mapCommitId(value: unknown): WorkbookCommitId | undefined {
     : undefined;
 }
 
+export function mapPublicObjectDigest(value: unknown): ObjectDigest | undefined {
+  return mapObjectDigest(value);
+}
+
 function copyDigest(
   source: Readonly<Record<string, unknown>>,
   target: Record<string, unknown>,

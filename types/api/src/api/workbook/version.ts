@@ -728,9 +728,17 @@ export interface VersionApplyMergeResolution {
   readonly kind: VersionMergeConflictResolutionOptionKind;
 }
 
-export interface VersionApplyMergeInput extends VersionMergeInput {
-  readonly resolutions?: readonly VersionApplyMergeResolution[];
-}
+export type VersionApplyMergeInput =
+  | (VersionMergeInput & {
+      readonly resolutions?: readonly VersionApplyMergeResolution[];
+    })
+  | {
+      readonly resultId: VersionMergeResultId;
+      readonly resultDigest: ObjectDigest;
+      readonly resolutionSetDigest?: ObjectDigest;
+      readonly resolvedAttemptDigest?: ObjectDigest;
+      readonly resolutions?: readonly VersionApplyMergeResolution[];
+    };
 
 export interface VersionApplyMergeOptions {
   readonly mode?: 'preview' | 'apply';

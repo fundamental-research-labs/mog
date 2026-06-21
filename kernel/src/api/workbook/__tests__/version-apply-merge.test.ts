@@ -576,6 +576,31 @@ describe('WorkbookVersion applyMerge preview planner', () => {
     });
     expect(merge).not.toHaveBeenCalled();
   });
+
+  it('validates persisted result inputs before merge preview is requested', async () => {
+    const merge = jest.fn();
+    const version = new WorkbookVersionImpl({ versioning: { mergeService: { merge } } } as any);
+
+    await expect(
+      version.applyMerge(
+        {
+          resultId: 'merge-result:not-a-digest',
+          resultDigest: DIGEST_A,
+        } as any,
+        { targetRef: TARGET_REF as any, expectedTargetHead: EXPECTED_TARGET_HEAD },
+      ),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: {
+        code: 'target_unavailable',
+        target: 'workbook.version.applyMerge',
+        diagnostics: expect.arrayContaining([
+          expect.objectContaining({ code: 'VERSION_INVALID_OPTIONS' }),
+        ]),
+      },
+    });
+    expect(merge).not.toHaveBeenCalled();
+  });
 });
 
 function conflictedResult(conflict: VersionMergeConflict): VersionMergeResult {

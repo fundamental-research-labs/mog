@@ -13,7 +13,6 @@ import type {
   VersionRefName,
   VersionStoreDiagnostic,
   WorkbookCommitId,
-  WorkbookCommitRef,
 } from '@mog-sdk/contracts/api';
 
 import type { DocumentContext } from '../../context';
@@ -27,6 +26,7 @@ import {
   isNonFastForwardWriteResult,
   mapApplyMergeWriteResult,
 } from './version-apply-merge-write-result';
+import { applyPersistedMergeResult } from './version-apply-merge-persisted';
 import { mergeWorkbookVersion } from './version-merge';
 
 const WORKBOOK_COMMIT_ID_RE = /^commit:sha256:[0-9a-f]{64}$/;
@@ -118,6 +118,10 @@ export async function applyMergeWorkbookVersion(
   input: VersionApplyMergeInput,
   options: VersionApplyMergeOptions = {},
 ): Promise<VersionApplyMergeResult> {
+  if (isRecord(input) && 'resultId' in input) {
+    return applyPersistedMergeResult(ctx, input, options);
+  }
+
   const validated = validateApplyMergeRequest(input, options);
   if (!validated.ok) {
     return blockedApplyMergeResult(
@@ -317,12 +321,13 @@ function validateApplyMergeRequest(
   const normalizedOptions = normalizeApplyMergeOptions(options, diagnostics);
 
   if (!normalizedInput || !normalizedOptions || diagnostics.length > 0) {
+    const inputRecord = isRecord(input) ? (input as Readonly<Record<string, unknown>>) : null;
     return {
       ok: false,
-      base: normalizedInput?.mergeInput.base ?? toCommitId(isRecord(input) ? input.base : undefined),
-      ours: normalizedInput?.mergeInput.ours ?? toCommitId(isRecord(input) ? input.ours : undefined),
+      base: normalizedInput?.mergeInput.base ?? toCommitId(inputRecord?.base),
+      ours: normalizedInput?.mergeInput.ours ?? toCommitId(inputRecord?.ours),
       theirs:
-        normalizedInput?.mergeInput.theirs ?? toCommitId(isRecord(input) ? input.theirs : undefined),
+        normalizedInput?.mergeInput.theirs ?? toCommitId(inputRecord?.theirs),
       diagnostics,
     };
   }
@@ -351,24 +356,25 @@ function normalizeApplyMergeInput(
     );
     return null;
   }
+  const inputRecord = input as Readonly<Record<string, unknown>>;
 
-  for (const key of Object.keys(input)) {
+  for (const key of Object.keys(inputRecord)) {
     if (VERSION_APPLY_MERGE_INPUT_KEYS.has(key)) continue;
     diagnostics.push(
       invalidApplyMergeOptionDiagnostic(`input.${key}`, `Unknown applyMerge input "${key}".`),
     );
   }
 
-  const base = toCommitId(input.base);
-  const ours = toCommitId(input.ours);
-  const theirs = toCommitId(input.theirs);
+  const base = toCommitId(inputRecord.base);
+  const ours = toCommitId(inputRecord.ours);
+  const theirs = toCommitId(inputRecord.theirs);
   if (!base) diagnostics.push(invalidApplyMergeOptionDiagnostic('base', 'base must be a commit id.'));
   if (!ours) diagnostics.push(invalidApplyMergeOptionDiagnostic('ours', 'ours must be a commit id.'));
   if (!theirs) {
     diagnostics.push(invalidApplyMergeOptionDiagnostic('theirs', 'theirs must be a commit id.'));
   }
 
-  const resolutions = normalizeResolutions(input.resolutions, diagnostics);
+  const resolutions = normalizeResolutions(inputRecord.resolutions, diagnostics);
   return base && ours && theirs && resolutions
     ? { mergeInput: { base, ours, theirs }, resolutions }
     : null;

@@ -1,6 +1,7 @@
 import type { VersionAuthor } from '@mog-sdk/contracts/versioning';
 
 import { createInMemoryWorkbookCommitStore } from '../commit-store';
+import { intentIdForMergeResultId } from '../merge-apply-intent-store';
 import { createWorkbookVersionMergeService } from '../merge-service';
 import {
   createVersionObjectRecord,
@@ -486,6 +487,92 @@ describe('WorkbookVersionMergeService', () => {
       conflicts: [],
       diagnostics: [],
       mutationGuarantee: 'preview-only',
+    });
+  });
+
+  it('persists applyable fast-forward preview intents when requested', async () => {
+    const graph = await graphWithRootAndDetachedChildren({
+      oursSemanticPayload: validSemanticPayload([
+        valueChange('ours-a1', 'cell', 'sheet-1!A1', ['value'], 1, 2),
+      ]),
+      theirsSemanticPayload: validSemanticPayload([]),
+    });
+    const theirsDescendantCommitId = await createDetachedChild(graph, {
+      label: 'theirs-descendant',
+      parentCommitId: graph.oursCommitId,
+      semanticPayload: validSemanticPayload([
+        valueChange('theirs-descendant-b1', 'cell', 'sheet-1!B1', ['value'], null, 'ready'),
+      ]),
+    });
+    const service = createWorkbookVersionMergeService({ provider: graph.provider });
+
+    const result = await service.merge(
+      {
+        base: graph.rootCommitId,
+        ours: graph.oursCommitId,
+        theirs: theirsDescendantCommitId,
+      },
+      {
+        mode: 'preview',
+        targetRef: 'refs/heads/main' as any,
+        expectedTargetHead: {
+          commitId: graph.oursCommitId,
+          revision: { kind: 'counter', value: '1' },
+        },
+        persistReviewRecord: true,
+      },
+    );
+
+    expect(result).toMatchObject({
+      status: 'fastForward',
+      base: graph.rootCommitId,
+      ours: graph.oursCommitId,
+      theirs: theirsDescendantCommitId,
+      attemptPersistence: 'persisted',
+      attemptKind: 'applyable',
+      targetRef: 'refs/heads/main',
+      expectedTargetHead: {
+        commitId: graph.oursCommitId,
+        revision: { kind: 'counter', value: '1' },
+      },
+      resultDigest: {
+        algorithm: 'sha256',
+        digest: expect.stringMatching(/^[0-9a-f]{64}$/),
+      },
+      resultId: expect.stringMatching(/^merge-result:[0-9a-f]{64}$/),
+    });
+    if (result.status !== 'fastForward' || !result.resultId || !result.resultDigest) {
+      throw new Error('expected a persisted fast-forward merge result id and digest');
+    }
+
+    const intentId = intentIdForMergeResultId(result.resultId);
+    if (!intentId) throw new Error('expected persisted result id to map to an intent id');
+    const resolvedAttemptDigest = result.resultId.slice('merge-result:'.length);
+    const store = await graph.provider.openMergeApplyIntentStore(graph.namespace);
+    const read = await store.readByIntentId(intentId);
+    expect(read).toMatchObject({
+      status: 'found',
+      record: {
+        intentId,
+        applyKind: 'fastForward',
+        base: graph.rootCommitId,
+        ours: graph.oursCommitId,
+        theirs: theirsDescendantCommitId,
+        targetRef: 'refs/heads/main',
+        expectedTargetHead: {
+          commitId: graph.oursCommitId,
+          revision: { kind: 'counter', value: '1' },
+        },
+        resultDigest: result.resultDigest,
+        resolutionSetDigest: {
+          algorithm: 'sha256',
+          digest: expect.stringMatching(/^[0-9a-f]{64}$/),
+        },
+        resolvedAttemptDigest: {
+          algorithm: 'sha256',
+          digest: resolvedAttemptDigest,
+        },
+      },
     });
   });
 

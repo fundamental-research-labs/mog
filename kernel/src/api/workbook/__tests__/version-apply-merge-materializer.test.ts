@@ -332,7 +332,7 @@ describe('WorkbookVersion applyMerge production materializer', () => {
     }
   });
 
-  it('fast-forwards applyMerge to an existing descendant commit without a merge commit', async () => {
+  it('applies a persisted fast-forward merge result to an existing descendant commit', async () => {
     const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
     const initialized = await provider.initializeGraph(await initializeInput('graph-fast-forward', 'root'));
     expectInitializeSuccess(initialized);
@@ -393,23 +393,54 @@ describe('WorkbookVersion applyMerge production materializer', () => {
         }),
       );
 
-      const applied = await sourceWb.version.applyMerge(
+      const expectedTargetHead = {
+        commitId: oursCommit.id,
+        revision: requireRefRevision(oursHead),
+      };
+      const preview = await sourceWb.version.merge(
         {
           base: baseCommit.id,
           ours: oursCommit.id,
           theirs: theirsCommit.id,
         },
         {
+          mode: 'preview',
           targetRef: 'refs/heads/main' as any,
-          expectedTargetHead: {
-            commitId: oursCommit.id,
-            revision: requireRefRevision(oursHead),
-          },
+          expectedTargetHead,
+          persistReviewRecord: true,
+        },
+      );
+      if (!preview.ok) throw new Error(`expected persisted merge preview success: ${preview.error.code}`);
+      expect(preview.value).toMatchObject({
+        status: 'fastForward',
+        ours: oursCommit.id,
+        theirs: theirsCommit.id,
+        resultId: expect.stringMatching(/^merge-result:[0-9a-f]{64}$/),
+        resultDigest: {
+          algorithm: 'sha256',
+          digest: expect.stringMatching(/^[0-9a-f]{64}$/),
+        },
+        attemptPersistence: 'persisted',
+        attemptKind: 'applyable',
+        targetRef: 'refs/heads/main',
+      });
+      if (preview.value.status !== 'fastForward' || !preview.value.resultId || !preview.value.resultDigest) {
+        throw new Error('expected fast-forward preview to expose a persisted result id and digest');
+      }
+
+      const applied = await sourceWb.version.applyMerge(
+        {
+          resultId: preview.value.resultId,
+          resultDigest: preview.value.resultDigest,
+        },
+        {
+          targetRef: 'refs/heads/main' as any,
+          expectedTargetHead,
         },
       );
       if (!applied.ok) throw new Error(`expected applyMerge success: ${applied.error.code}`);
       expect(applied.value).toMatchObject({
-        status: 'applied',
+        status: 'fastForwarded',
         ours: oursCommit.id,
         theirs: theirsCommit.id,
         commitRef: {
@@ -418,6 +449,19 @@ describe('WorkbookVersion applyMerge production materializer', () => {
           resolvedFrom: 'refs/heads/main',
           refRevision: { kind: 'counter', value: '3' },
         },
+        resultId: preview.value.resultId,
+        resultDigest: preview.value.resultDigest,
+        resolutionSetDigest: {
+          algorithm: 'sha256',
+          digest: expect.stringMatching(/^[0-9a-f]{64}$/),
+        },
+        resolvedAttemptDigest: {
+          algorithm: 'sha256',
+          digest: expect.stringMatching(/^[0-9a-f]{64}$/),
+        },
+        targetRef: 'refs/heads/main',
+        headBefore: oursCommit.id,
+        headAfter: theirsCommit.id,
         changes: [],
         resolutionCount: 0,
         mutationGuarantee: 'ref-fast-forwarded',

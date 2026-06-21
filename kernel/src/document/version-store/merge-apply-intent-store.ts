@@ -1,6 +1,7 @@
 import type {
   VersionCommitExpectedHead,
   VersionMainRefName,
+  VersionMergeResultId,
   VersionRefName,
   WorkbookCommitId,
 } from '@mog-sdk/contracts/api';
@@ -17,7 +18,7 @@ import {
   type VersionDocumentScope,
 } from './registry';
 
-export type MergeApplyIntentApplyKind = 'fastForward' | 'mergeCommit';
+export type MergeApplyIntentApplyKind = 'fastForward' | 'alreadyMerged' | 'mergeCommit';
 export type MergeApplyIntentState = 'staging' | 'casCommitted' | 'finalized' | 'aborted';
 export type MergeApplyIntentTerminalStatus =
   | 'applied'
@@ -257,6 +258,15 @@ export async function computeResolvedAttemptDigest(input: {
 
 export function intentIdForResolvedAttemptDigest(digest: ObjectDigest): MergeApplyIntentId {
   return `merge-apply-intent:sha256:${digest.digest}`;
+}
+
+export function mergeResultIdForResolvedAttemptDigest(digest: ObjectDigest): VersionMergeResultId {
+  return `merge-result:${digest.digest}` as VersionMergeResultId;
+}
+
+export function intentIdForMergeResultId(resultId: VersionMergeResultId): MergeApplyIntentId | null {
+  const digest = resultId.slice('merge-result:'.length);
+  return /^[0-9a-f]{64}$/.test(digest) ? `merge-apply-intent:sha256:${digest}` : null;
 }
 
 export function idempotencyKeyForResolvedAttempt(input: {

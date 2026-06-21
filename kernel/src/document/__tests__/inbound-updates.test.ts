@@ -8,9 +8,19 @@
  */
 
 import { jest } from '@jest/globals';
+import { createHash } from 'node:crypto';
+import {
+  DEFAULT_PROVENANCE_REDACTION_POLICY,
+  PROVIDER_INBOUND_V2_BASE_PROOF_FIELDS,
+  PROVIDER_INBOUND_V2_SINGLE_AUTHOR_PROOF_FIELDS,
+  type ProviderAuthorityProof,
+  type ProviderInboundProofField,
+  type ProviderInboundUpdateEnvelope,
+  type ProviderInboundUpdateEnvelopeV2,
+  type SyncUpdateProvenance,
+} from '@mog-sdk/types-document/storage';
 import { RustDocument } from '../rust-document';
-import type { ProviderInboundUpdateEnvelope } from '../rust-document';
-import type { Provider } from '../providers/provider';
+import type { Provider, ProviderDocApplyUpdateMetadata } from '../providers/provider';
 
 // ---------------------------------------------------------------------------
 // Stub bridge (same pattern as orchestrator tests)
@@ -22,15 +32,18 @@ interface StubBridge {
   createEngineFromYrsState(state: Uint8Array): Promise<unknown>;
   flushUndoCapture(): Promise<unknown>;
   syncApply(u: Uint8Array): Promise<unknown>;
+  recordProviderDocApplyUpdateAdmission(metadata: ProviderDocApplyUpdateMetadata): void;
   encodeDiff(sv: Uint8Array): Promise<Uint8Array>;
   currentStateVector(): Promise<Uint8Array>;
   flushPendingUpdateV1(): Promise<void>;
   emit(update: Uint8Array): void;
+  admissions: ProviderDocApplyUpdateMetadata[];
   subscriberCount(): number;
 }
 
 function makeStubBridge(): StubBridge {
   const subscribers = new Set<(u: Uint8Array) => void>();
+  const admissions: ProviderDocApplyUpdateMetadata[] = [];
   const emit = (update: Uint8Array) => {
     for (const cb of subscribers) cb(update);
   };
@@ -54,10 +67,14 @@ function makeStubBridge(): StubBridge {
       emit(u);
       return { recalc: { changedCells: [] } };
     },
+    recordProviderDocApplyUpdateAdmission(metadata) {
+      admissions.push(metadata);
+    },
     encodeDiff: async () => new Uint8Array(),
     currentStateVector: async () => new Uint8Array(),
     flushPendingUpdateV1: async () => {},
     emit,
+    admissions,
     subscriberCount() {
       return subscribers.size;
     },
@@ -75,6 +92,34 @@ async function makeOrchestrator(): Promise<{ doc: RustDocument; bridge: StubBrid
   });
   await doc.ready;
   return { doc, bridge };
+}
+
+const storageScope = {
+  kind: 'scoped',
+  scope: {
+    tenantId: { kind: 'single-tenant' },
+    workspaceId: { kind: 'no-workspace' },
+    documentId: 'inbound-test-doc',
+  },
+} as const;
+
+function sha256Hex(bytes: Uint8Array): string {
+  return createHash('sha256').update(bytes).digest('hex');
+}
+
+function proof(
+  coveredFields: readonly ProviderInboundProofField[],
+  canonicalPayloadHash = 'c'.repeat(64),
+): ProviderAuthorityProof {
+  return {
+    kind: 'signed-provider-message',
+    issuer: 'issuer-1',
+    algorithm: 'ed25519',
+    issuedAt: 1,
+    coveredFields,
+    canonicalPayloadHash,
+    proofBytesOrRef: 'proof-ref-1',
+  };
 }
 
 /**
@@ -101,13 +146,100 @@ function makeRecordingProvider(name: string): Provider & { observed: Uint8Array[
 function makeEnvelope(
   overrides: Partial<ProviderInboundUpdateEnvelope> = {},
 ): ProviderInboundUpdateEnvelope {
+  const payload = overrides.payload ?? new Uint8Array([0x01, 0x02, 0x03]);
   return {
     providerRefId: 'ProviderA',
+    authorityRef: 'authority-1',
+    storageScope,
+    decisionId: 'decision-1',
+    sessionId: 'local-session-1',
     payloadKind: 'yrs-update-v1',
-    payload: new Uint8Array([0x01, 0x02, 0x03]),
+    payload,
+    payloadHash: sha256Hex(payload),
     updateId: `update-${Math.random().toString(36).slice(2)}`,
     providerEpoch: '1',
+    authorityProof: proof(['payloadHash', 'updateId']),
     ...overrides,
+  };
+}
+
+function makeLiveProvenance(
+  envelope: ProviderInboundUpdateEnvelope,
+  overrides: Partial<SyncUpdateProvenance> = {},
+): SyncUpdateProvenance {
+  const provenancePayloadHash = 'c'.repeat(64);
+  return {
+    schemaVersion: 'sync-update-provenance-v1',
+    sourceKind: 'providerLiveInbound',
+    updateIdentity: {
+      originKind: 'provider',
+      stableOriginId: 'provider-stable-1',
+      providerId: 'provider-stable-1',
+      providerKind: 'test-provider',
+      providerRefId: envelope.providerRefId,
+      storageScope: envelope.storageScope,
+      authorityRef: envelope.authorityRef,
+      epoch: envelope.providerEpoch,
+      updateId: envelope.updateId,
+      payloadHash: envelope.payloadHash,
+      provenancePayloadHash,
+    },
+    trust: {
+      status: 'verified',
+      authorityRef: 'authority-1',
+      proofKind: 'signed-provider-message',
+      proofCoverage: [
+        ...PROVIDER_INBOUND_V2_BASE_PROOF_FIELDS,
+        ...PROVIDER_INBOUND_V2_SINGLE_AUTHOR_PROOF_FIELDS,
+        'providerId',
+        'providerKind',
+      ],
+      issuer: 'issuer-1',
+    },
+    author: {
+      kind: 'singleRemote',
+      remoteAuthorRef: {
+        kind: 'opaque-subject-ref',
+        value: 'subject-ref-1',
+      },
+    },
+    remoteSessionId: 'remote-session-1',
+    correlationId: 'correlation-1',
+    causationIds: ['cause-1'],
+    replay: false,
+    system: false,
+    capturePolicy: 'commitEligible',
+    redaction: {
+      ...DEFAULT_PROVENANCE_REDACTION_POLICY,
+      mode: 'opaque-digest-only',
+      durableAuthorIdentity: 'opaque-subject-ref',
+      durableProviderIdentity: 'opaque-provider-ref',
+    },
+    ...overrides,
+  };
+}
+
+function makeV2Envelope(
+  overrides: Partial<ProviderInboundUpdateEnvelopeV2> = {},
+): ProviderInboundUpdateEnvelopeV2 {
+  const v1 = makeEnvelope(overrides);
+  const provenance = overrides.provenance ?? makeLiveProvenance(v1);
+  const provenancePayloadHash = provenance.updateIdentity.provenancePayloadHash ?? 'c'.repeat(64);
+  return {
+    ...v1,
+    schemaVersion: 'provider-inbound-update-v2',
+    provenance,
+    authorityProof:
+      overrides.authorityProof ??
+      proof(
+        [
+          ...PROVIDER_INBOUND_V2_BASE_PROOF_FIELDS,
+          ...PROVIDER_INBOUND_V2_SINGLE_AUTHOR_PROOF_FIELDS,
+          'providerId',
+          'providerKind',
+        ],
+        provenancePayloadHash,
+      ),
   };
 }
 
@@ -137,10 +269,47 @@ describe('RustDocument.applyProviderUpdate — inbound update orchestration', ()
 
       expect(result.status).toBe('applied');
       expect(result.updateId).toBe(envelope.updateId);
+      expect(result.provenance?.sourceKind).toBe('providerReplay');
+      expect(result.provenance?.capturePolicy).toBe('excluded');
+      expect(result.provenance?.author.kind).toBe('unknown');
 
       // The payload was applied to the engine
       expect(applied).toHaveLength(1);
       expect(Array.from(applied[0]!)).toEqual([0xaa, 0xbb]);
+      expect(bridge.admissions).toHaveLength(1);
+      expect(bridge.admissions[0]?.provenance.sourceKind).toBe('providerReplay');
+      expect(bridge.admissions[0]?.provenance.capturePolicy).toBe('excluded');
+
+      await doc.destroy();
+    });
+
+    it('applies valid V2 live single-author provenance and passes admission metadata', async () => {
+      const { doc, bridge } = await makeOrchestrator();
+      const providerA = makeRecordingProvider('ProviderA');
+      const providerB = makeRecordingProvider('ProviderB');
+      await doc.attachProvider(providerA);
+      await doc.attachProvider(providerB);
+
+      const envelope = makeV2Envelope({
+        payload: new Uint8Array([0x10, 0x20]),
+        updateId: 'v2-live-1',
+      });
+      const result = await doc.applyProviderUpdate(envelope);
+
+      expect(result.status).toBe('applied');
+      expect(result.provenance).toBe(envelope.provenance);
+      expect(bridge.admissions).toHaveLength(1);
+      expect(bridge.admissions[0]).toMatchObject({
+        source: 'provider-inbound',
+        docId: 'inbound-test-doc',
+        envelopeVersion: 'provider-inbound-update-v2',
+        providerRefId: 'ProviderA',
+        providerEpoch: '1',
+        updateId: 'v2-live-1',
+        payloadHash: envelope.payloadHash,
+        validationDiagnostics: [],
+      });
+      expect(bridge.admissions[0]?.provenance).toBe(envelope.provenance);
 
       await doc.destroy();
     });
@@ -308,6 +477,81 @@ describe('RustDocument.applyProviderUpdate — inbound update orchestration', ()
 
       expect(result.status).toBe('rejected');
       expect(result).toHaveProperty('reason', expect.stringContaining('unsupported-payload-kind'));
+
+      await doc.destroy();
+    });
+
+    it('rejects invalid V2 provenance before syncApply', async () => {
+      const { doc, bridge } = await makeOrchestrator();
+      const providerA = makeRecordingProvider('ProviderA');
+      await doc.attachProvider(providerA);
+      const syncApply = jest.spyOn(bridge, 'syncApply');
+
+      const valid = makeV2Envelope({
+        payload: new Uint8Array([0x31, 0x32]),
+        updateId: 'invalid-v2-1',
+      });
+      const envelope: ProviderInboundUpdateEnvelopeV2 = {
+        ...valid,
+        payloadHash: 'b'.repeat(64),
+        authorityProof: proof(
+          [
+            ...PROVIDER_INBOUND_V2_BASE_PROOF_FIELDS,
+            ...PROVIDER_INBOUND_V2_SINGLE_AUTHOR_PROOF_FIELDS.filter(
+              (field) => field !== 'remoteAuthorRef',
+            ),
+            'providerId',
+            'providerKind',
+          ],
+          valid.provenance.updateIdentity.provenancePayloadHash,
+        ),
+      };
+
+      const result = await doc.applyProviderUpdate(envelope);
+
+      expect(result.status).toBe('rejected');
+      expect(result.reason).toBe('provenance-validation-failed');
+      expect(result.diagnostics).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ reason: 'payloadHashMismatch' }),
+          expect.objectContaining({ reason: 'partialCoverage', field: 'remoteAuthorRef' }),
+        ]),
+      );
+      expect(syncApply).not.toHaveBeenCalled();
+      expect(bridge.admissions).toHaveLength(0);
+
+      await doc.destroy();
+    });
+
+    it('rejects commit-eligible V2 unknown authors before syncApply', async () => {
+      const { doc, bridge } = await makeOrchestrator();
+      const providerA = makeRecordingProvider('ProviderA');
+      await doc.attachProvider(providerA);
+      const syncApply = jest.spyOn(bridge, 'syncApply');
+
+      const v1 = makeEnvelope({
+        payload: new Uint8Array([0x41, 0x42]),
+        updateId: 'unknown-author-1',
+      });
+      const provenance = makeLiveProvenance(v1, {
+        author: { kind: 'unknown', reason: 'notProvided' },
+      });
+      const envelope = makeV2Envelope({ ...v1, provenance });
+
+      const result = await doc.applyProviderUpdate(envelope);
+
+      expect(result.status).toBe('rejected');
+      expect(result.reason).toBe('provenance-validation-failed');
+      expect(result.diagnostics).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            reason: 'unknownAuthor',
+            subreason: 'localAuthorInferenceNotAllowed',
+          }),
+        ]),
+      );
+      expect(syncApply).not.toHaveBeenCalled();
+      expect(bridge.admissions).toHaveLength(0);
 
       await doc.destroy();
     });

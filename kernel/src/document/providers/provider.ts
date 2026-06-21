@@ -20,6 +20,10 @@
 
 import type { StorageProviderCapabilities } from '@mog-sdk/types-document/storage/provider-capabilities';
 import type { StorageProviderIdentity } from '@mog-sdk/types-document/storage/provider-identity';
+import type {
+  SyncUpdateProvenance,
+  SyncUpdateValidationDiagnostic,
+} from '@mog-sdk/types-document/storage';
 
 /**
  * The transport-side interface: persistence, replication, or both.
@@ -200,6 +204,18 @@ export type ProviderCheckpointResult =
 export type ProviderAttachReturn = ProviderAttachResult | void;
 export type ProviderCheckpointReturn = ProviderCheckpointResult | void;
 
+export interface ProviderDocApplyUpdateMetadata {
+  readonly source: 'provider-inbound';
+  readonly docId: string;
+  readonly envelopeVersion: 'provider-inbound-update-v1' | 'provider-inbound-update-v2';
+  readonly providerRefId: string;
+  readonly providerEpoch: string;
+  readonly updateId: string;
+  readonly payloadHash: string;
+  readonly provenance: SyncUpdateProvenance;
+  readonly validationDiagnostics: readonly SyncUpdateValidationDiagnostic[];
+}
+
 /**
  * The doc-side interface: a thin handle over the engine's yrs Doc.
  *
@@ -216,7 +232,7 @@ export interface ProviderDoc {
    * Apply a yrs `update_v1` byte stream into the doc. Idempotent
    * (re-applying the same update is a no-op per yrs CRDT semantics).
    */
-  applyUpdate(update: Uint8Array): Promise<void>;
+  applyUpdate(update: Uint8Array, metadata?: ProviderDocApplyUpdateMetadata): Promise<void>;
 
   /**
    * Encode all updates the local doc has that the remote (described by

@@ -23,7 +23,16 @@
  */
 
 import type { ComputeBridge } from '../../bridges/compute/compute-bridge';
-import type { ProviderDoc } from './provider';
+import { slog } from '../../lib/slog';
+import type { ProviderDoc, ProviderDocApplyUpdateMetadata } from './provider';
+
+export interface BridgeBackedProviderDocOptions {
+  readonly onApplyUpdateAdmission?: (metadata: ProviderDocApplyUpdateMetadata) => void;
+}
+
+type ComputeBridgeAdmissionHooks = {
+  recordProviderDocApplyUpdateAdmission?: (metadata: ProviderDocApplyUpdateMetadata) => void;
+};
 
 /**
  * Build a `ProviderDoc` backed by `bridge`. The returned object is stable
@@ -44,10 +53,20 @@ import type { ProviderDoc } from './provider';
  *               itself owns docId routing internally, so the shim does
  *               not have to thread the docId through every call.
  */
-export function createBridgeBackedProviderDoc(bridge: ComputeBridge, docId: string): ProviderDoc {
+export function createBridgeBackedProviderDoc(
+  bridge: ComputeBridge,
+  docId: string,
+  options: BridgeBackedProviderDocOptions = {},
+): ProviderDoc {
   return {
     docId,
-    async applyUpdate(update: Uint8Array): Promise<void> {
+    async applyUpdate(
+      update: Uint8Array,
+      metadata?: ProviderDocApplyUpdateMetadata,
+    ): Promise<void> {
+      if (metadata) {
+        emitApplyUpdateAdmission(bridge, options, metadata);
+      }
       // `syncApply` is a mutation route — its return is the recalc result,
       // which Providers don't observe. We `await` so failures surface to the
       // caller (Provider attach replay would otherwise swallow apply errors).
@@ -60,4 +79,24 @@ export function createBridgeBackedProviderDoc(bridge: ComputeBridge, docId: stri
       return bridge.currentStateVector();
     },
   };
+}
+
+function emitApplyUpdateAdmission(
+  bridge: ComputeBridge,
+  options: BridgeBackedProviderDocOptions,
+  metadata: ProviderDocApplyUpdateMetadata,
+): void {
+  try {
+    options.onApplyUpdateAdmission?.(metadata);
+  } catch (err) {
+    slog('bridgeProviderDoc.applyUpdateAdmissionSinkFailed', { error: err });
+  }
+
+  try {
+    (bridge as unknown as ComputeBridgeAdmissionHooks).recordProviderDocApplyUpdateAdmission?.(
+      metadata,
+    );
+  } catch (err) {
+    slog('bridgeProviderDoc.bridgeAdmissionHookFailed', { error: err });
+  }
 }

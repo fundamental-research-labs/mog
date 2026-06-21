@@ -41,7 +41,16 @@ import type {
   ProviderCheckpointStatus,
   StorageLifecycleError,
 } from '@mog-sdk/types-document/storage/lifecycle';
-import type { ProviderInboundUpdateEnvelope } from '@mog-sdk/types-document/storage/inbound-updates';
+import {
+  classifyLegacyProviderInboundUpdate,
+  isProviderInboundUpdateEnvelopeV2,
+  validateProviderInboundUpdateEnvelope,
+  type ProviderInboundUpdateEnvelope,
+  type ProviderInboundUpdateEnvelopeAny,
+  type ProviderInboundUpdateEnvelopeV2,
+  type SyncUpdateProvenance,
+  type SyncUpdateValidationDiagnostic,
+} from '@mog-sdk/types-document/storage';
 import type { ComputeBridge } from '../bridges/compute/compute-bridge';
 import type {
   Provider,
@@ -49,18 +58,35 @@ import type {
   ProviderAttachResult,
   ProviderCheckpointMode,
   ProviderCheckpointResult,
+  ProviderDocApplyUpdateMetadata,
 } from './providers/provider';
 import type { WriteGate } from './write-gate';
 import { touchDoc } from './providers/indexeddb-meta';
 import { slog } from '../lib/slog';
+
+export type {
+  ProviderInboundUpdateEnvelope,
+  ProviderInboundUpdateEnvelopeAny,
+  ProviderInboundUpdateEnvelopeV2,
+};
 
 export type UpdateOrigin = 'local' | `provider:${string}`;
 
 export interface ProviderInboundUpdateResult {
   readonly status: 'applied' | 'duplicate' | 'rejected';
   readonly updateId: string;
-  readonly reason?: string;
+  readonly reason?: ProviderInboundUpdateReason;
+  readonly diagnostics?: readonly SyncUpdateValidationDiagnostic[];
+  readonly provenance?: SyncUpdateProvenance;
 }
+
+export type ProviderInboundUpdateReason =
+  | 'document-destroyed'
+  | 'duplicate-update-id'
+  | 'provenance-validation-failed'
+  | `unknown-provider: ${string}`
+  | `unsupported-payload-kind: ${ProviderInboundUpdateEnvelopeAny['payloadKind']}`
+  | `stale-epoch: ${string} < ${string}`;
 
 // =============================================================================
 // Types
@@ -595,7 +621,7 @@ export class RustDocument {
   // ---------------------------------------------------------------------------
 
   async applyProviderUpdate(
-    envelope: ProviderInboundUpdateEnvelope,
+    envelope: ProviderInboundUpdateEnvelopeAny,
   ): Promise<ProviderInboundUpdateResult> {
     if (this.destroyed) {
       return { status: 'rejected', updateId: envelope.updateId, reason: 'document-destroyed' };
@@ -631,11 +657,47 @@ export class RustDocument {
       return { status: 'rejected', updateId: envelope.updateId, reason: 'duplicate-update-id' };
     }
 
+    const actualPayloadHash = await sha256Hex(envelope.payload);
+    const envelopeVersion = providerEnvelopeVersion(envelope);
+    const isV2Envelope = isProviderInboundUpdateEnvelopeV2(envelope);
+    const validation = validateProviderInboundUpdateEnvelope(envelope, {
+      expectedPayloadHash: isV2Envelope ? actualPayloadHash : undefined,
+    });
+    const providerIdentity = matchingProvider.getIdentity?.();
+    const provenance = isV2Envelope
+      ? envelope.provenance
+      : classifyLegacyProviderInboundUpdate(envelope, {
+          providerId: providerIdentity?.providerId,
+          stableOriginId: providerIdentity?.providerId,
+        });
+
+    if (isV2Envelope && !validation.ok) {
+      return {
+        status: 'rejected',
+        updateId: envelope.updateId,
+        reason: 'provenance-validation-failed',
+        diagnostics: validation.diagnostics,
+        provenance,
+      } as const satisfies ProviderInboundUpdateResult;
+    }
+
+    const metadata: ProviderDocApplyUpdateMetadata = {
+      source: 'provider-inbound',
+      docId: this.docId,
+      envelopeVersion,
+      providerRefId: envelope.providerRefId,
+      providerEpoch: envelope.providerEpoch,
+      updateId: envelope.updateId,
+      payloadHash: actualPayloadHash,
+      provenance,
+      validationDiagnostics: validation.diagnostics,
+    };
+
     this._currentUpdateOrigin = `provider:${envelope.providerRefId}`;
     try {
       const { createBridgeBackedProviderDoc } = await import('./providers/bridge-provider-doc');
       const doc = createBridgeBackedProviderDoc(this.computeBridge, this.docId);
-      await doc.applyUpdate(envelope.payload);
+      await doc.applyUpdate(envelope.payload, metadata);
     } finally {
       this._currentUpdateOrigin = 'local';
     }
@@ -649,7 +711,7 @@ export class RustDocument {
 
     this._providerEpochs.set(envelope.providerRefId, envelope.providerEpoch);
 
-    return { status: 'applied', updateId: envelope.updateId };
+    return { status: 'applied', updateId: envelope.updateId, provenance };
   }
 
   /**
@@ -1219,6 +1281,24 @@ export class RustDocument {
       slog('rustDocument.touchDocFailed', { error: err });
     }
   }
+}
+
+function providerEnvelopeVersion(
+  envelope: ProviderInboundUpdateEnvelopeAny,
+): ProviderDocApplyUpdateMetadata['envelopeVersion'] {
+  return isProviderInboundUpdateEnvelopeV2(envelope)
+    ? 'provider-inbound-update-v2'
+    : 'provider-inbound-update-v1';
+}
+
+async function sha256Hex(bytes: Uint8Array): Promise<string> {
+  if (typeof globalThis.crypto?.subtle?.digest !== 'function') {
+    throw new Error('RustDocument.applyProviderUpdate: SHA-256 digest is unavailable');
+  }
+  const digest = await globalThis.crypto.subtle.digest('SHA-256', new Uint8Array(bytes));
+  return Array.from(new Uint8Array(digest))
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('');
 }
 
 function isReadOnlyAttach(result: ProviderAttachResult | void): boolean {

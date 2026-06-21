@@ -61,6 +61,11 @@ function createMockContext() {
       encodeDiff: jest.fn().mockResolvedValue(FULL_STATE_BYTES as never),
       currentStateVector: jest.fn().mockResolvedValue(new Uint8Array([0x01]) as never),
     },
+    mirror: {
+      getSheetIds: jest.fn().mockReturnValue([SHEET_ID]),
+      getSheetMeta: jest.fn().mockReturnValue({ name: 'Sheet1', hidden: false }),
+      getWorkbookSettings: jest.fn().mockReturnValue({}),
+    },
     writeGate: {
       assertWritable: jest.fn(),
     },
@@ -179,17 +184,27 @@ describe('IndexedDB version provider document/workbook lifecycle', () => {
       },
       captureNormalCommit,
     });
-    const initialHead = await first.wb.version.getHead();
-    expect(initialHead).toMatchObject({
-      id: expect.stringMatching(/^commit:sha256:[0-9a-f]{64}$/),
-      refName: 'refs/heads/main',
+    const initialHeadResult = await first.wb.version.getHead();
+    expect(initialHeadResult).toMatchObject({
+      ok: true,
+      value: {
+        id: expect.stringMatching(/^commit:sha256:[0-9a-f]{64}$/),
+        refName: 'refs/heads/main',
+      },
     });
+    if (!initialHeadResult.ok) throw new Error(`expected head: ${initialHeadResult.error.code}`);
+    const initialHead = initialHeadResult.value;
 
-    const committed = await first.wb.version.commit({ message: 'normal lifecycle commit' });
-    expect(committed).toMatchObject({
-      id: expect.stringMatching(/^commit:sha256:[0-9a-f]{64}$/),
-      refName: 'refs/heads/main',
+    const committedResult = await first.wb.version.commit({ message: 'normal lifecycle commit' });
+    expect(committedResult).toMatchObject({
+      ok: true,
+      value: {
+        id: expect.stringMatching(/^commit:sha256:[0-9a-f]{64}$/),
+        parents: [initialHead.id],
+      },
     });
+    if (!committedResult.ok) throw new Error(`expected commit: ${committedResult.error.code}`);
+    const committed = committedResult.value;
     expect(committed.id).not.toBe(initialHead.id);
 
     const reader = createIndexedDbVersionStoreProvider({ documentScope });
@@ -223,16 +238,20 @@ describe('IndexedDB version provider document/workbook lifecycle', () => {
       captureNormalCommit,
     });
     await expect(reopened.wb.version.getHead()).resolves.toMatchObject({
-      id: committed.id,
-      refName: 'refs/heads/main',
+      ok: true,
+      value: {
+        id: committed.id,
+        refName: 'refs/heads/main',
+      },
     });
     await expect(reopened.wb.version.listCommits()).resolves.toMatchObject({
-      status: 'success',
-      items: expect.arrayContaining([
-        expect.objectContaining({ id: committed.id }),
-        expect.objectContaining({ id: initialHead.id }),
-      ]),
-      order: 'topological-newest',
+      ok: true,
+      value: {
+        items: expect.arrayContaining([
+          expect.objectContaining({ id: committed.id }),
+          expect.objectContaining({ id: initialHead.id }),
+        ]),
+      },
     });
     await reopened.handle.dispose();
   });
@@ -246,8 +265,10 @@ describe('IndexedDB version provider document/workbook lifecycle', () => {
     const wb = await handle.workbook({});
 
     await expect(wb.version.getHead()).resolves.toMatchObject({
-      status: 'degraded',
-      diagnostics: [expect.objectContaining({ issueCode: 'VERSION_GRAPH_UNINITIALIZED' })],
+      ok: false,
+      error: {
+        diagnostics: [expect.objectContaining({ code: 'VERSION_GRAPH_UNINITIALIZED' })],
+      },
     });
 
     await handle.dispose();
@@ -275,12 +296,16 @@ describe('IndexedDB version provider document/workbook lifecycle', () => {
       captureNormalCommit,
     });
     await expect(corruptWorkbook.wb.version.getHead()).resolves.toMatchObject({
-      status: 'degraded',
-      diagnostics: [expect.objectContaining({ issueCode: 'VERSION_CORRUPT_REGISTRY' })],
+      ok: false,
+      error: {
+        diagnostics: [expect.objectContaining({ code: 'VERSION_CORRUPT_REGISTRY' })],
+      },
     });
     await expect(corruptWorkbook.wb.version.listCommits()).resolves.toMatchObject({
-      status: 'degraded',
-      diagnostics: [expect.objectContaining({ issueCode: 'VERSION_CORRUPT_REGISTRY' })],
+      ok: false,
+      error: {
+        diagnostics: [expect.objectContaining({ code: 'VERSION_CORRUPT_REGISTRY' })],
+      },
     });
     await corruptWorkbook.handle.dispose();
 
@@ -291,8 +316,10 @@ describe('IndexedDB version provider document/workbook lifecycle', () => {
       captureNormalCommit,
     });
     await expect(unsupportedWorkbook.wb.version.getHead()).resolves.toMatchObject({
-      status: 'degraded',
-      diagnostics: [expect.objectContaining({ issueCode: 'VERSION_UNSUPPORTED_REGISTRY' })],
+      ok: false,
+      error: {
+        diagnostics: [expect.objectContaining({ code: 'VERSION_UNSUPPORTED_REGISTRY' })],
+      },
     });
     await unsupportedWorkbook.handle.dispose();
   });
@@ -322,8 +349,10 @@ describe('IndexedDB version provider document/workbook lifecycle', () => {
       captureNormalCommit,
     });
     await expect(reopened.wb.version.getHead()).resolves.toMatchObject({
-      status: 'degraded',
-      diagnostics: [expect.objectContaining({ issueCode: 'VERSION_OBJECT_STORE_FAILURE' })],
+      ok: false,
+      error: {
+        diagnostics: [expect.objectContaining({ code: 'VERSION_OBJECT_STORE_FAILURE' })],
+      },
     });
     await reopened.handle.dispose();
 
@@ -334,10 +363,10 @@ describe('IndexedDB version provider document/workbook lifecycle', () => {
       },
       captureNormalCommit,
     });
-    await expect(readOnly.wb.version.commit({ message: 'blocked' })).rejects.toMatchObject({
-      code: 'READ_ONLY',
-      details: {
-        versionIssueCode: 'VERSION_STORE_READ_ONLY',
+    await expect(readOnly.wb.version.commit({ message: 'blocked' })).resolves.toMatchObject({
+      ok: false,
+      error: {
+        diagnostics: [expect.objectContaining({ code: 'VERSION_STORE_READ_ONLY' })],
       },
     });
     await readOnly.handle.dispose();
@@ -356,7 +385,9 @@ describe('IndexedDB version provider document/workbook lifecycle', () => {
       },
       captureNormalCommit,
     });
-    const head = await writable.wb.version.getHead();
+    const headResult = await writable.wb.version.getHead();
+    if (!headResult.ok) throw new Error(`expected writable head: ${headResult.error.code}`);
+    const head = headResult.value;
     await writable.handle.dispose();
 
     const readOnly = await openWorkbook(documentId, {
@@ -367,14 +398,16 @@ describe('IndexedDB version provider document/workbook lifecycle', () => {
       captureNormalCommit,
     });
     await expect(readOnly.wb.version.getHead()).resolves.toMatchObject({
-      id: head.id,
-      refName: 'refs/heads/main',
+      ok: true,
+      value: {
+        id: head.id,
+        refName: 'refs/heads/main',
+      },
     });
-    await expect(readOnly.wb.version.commit({ message: 'blocked' })).rejects.toMatchObject({
-      code: 'READ_ONLY',
-      details: {
-        versionIssueCode: 'VERSION_STORE_READ_ONLY',
-        diagnostics: [expect.objectContaining({ issueCode: 'VERSION_STORE_READ_ONLY' })],
+    await expect(readOnly.wb.version.commit({ message: 'blocked' })).resolves.toMatchObject({
+      ok: false,
+      error: {
+        diagnostics: [expect.objectContaining({ code: 'VERSION_STORE_READ_ONLY' })],
       },
     });
     await readOnly.handle.dispose();
@@ -392,12 +425,15 @@ describe('IndexedDB version provider document/workbook lifecycle', () => {
     const wb = await handle.workbook({ versioning: { provider } });
 
     await expect(wb.version.getHead()).resolves.toMatchObject({
-      status: 'degraded',
-      diagnostics: [expect.objectContaining({ issueCode: 'VERSION_WRONG_NAMESPACE' })],
+      ok: false,
+      error: {
+        diagnostics: [expect.objectContaining({ code: 'VERSION_WRONG_NAMESPACE' })],
+      },
     });
-    await expect(wb.version.commit({ message: 'blocked' })).rejects.toMatchObject({
-      details: {
-        versionIssueCode: 'VERSION_WRONG_NAMESPACE',
+    await expect(wb.version.commit({ message: 'blocked' })).resolves.toMatchObject({
+      ok: false,
+      error: {
+        diagnostics: [expect.objectContaining({ code: 'VERSION_WRONG_NAMESPACE' })],
       },
     });
 

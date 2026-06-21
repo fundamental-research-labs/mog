@@ -139,6 +139,20 @@ describe('VersionPersistence', () => {
             structural: expect.objectContaining({ domain: 'comments-notes' }),
           }),
           expect.objectContaining({
+            structural: expect.objectContaining({
+              domain: 'conditional-formatting',
+              entityId: 'sheet-1!cf:cf-top-10',
+              propertyPath: ['rule'],
+            }),
+          }),
+          expect.objectContaining({
+            structural: expect.objectContaining({
+              domain: 'data-validation',
+              entityId: 'sheet-1!range:dv-status',
+              propertyPath: ['range'],
+            }),
+          }),
+          expect.objectContaining({
             structural: expect.objectContaining({ domain: 'filters' }),
           }),
           expect.objectContaining({
@@ -318,6 +332,44 @@ function vc06SemanticChangeSetPayload() {
           { key: 'address', value: 'A1' },
         ]),
         display: { address: { kind: 'value', value: 'A1' } },
+      }),
+      metadataChange({
+        changeId: 'mutation-1:conditional-format:0',
+        domain: 'conditional-formatting',
+        entityId: 'sheet-1!cf:cf-top-10',
+        propertyPath: ['rule'],
+        after: semanticObjectValue([
+          { key: 'kind', value: 'Set' },
+          { key: 'ruleId', value: 'cf-top-10' },
+          { key: 'appliesTo', value: 'B2:B20' },
+          { key: 'type', value: 'top10' },
+        ]),
+        display: { entityLabel: { kind: 'value', value: 'cf-top-10' } },
+      }),
+      metadataChange({
+        changeId: 'mutation-1:range:0',
+        domain: 'data-validation',
+        entityId: 'sheet-1!range:dv-status',
+        propertyPath: ['range'],
+        after: semanticObjectValue([
+          { key: 'kind', value: 'Set' },
+          { key: 'rangeKind', value: 'Validation' },
+          { key: 'rangeId', value: 'dv-status' },
+          { key: 'encoding', value: 'mog-range-meta-json-v1' },
+          { key: 'rowCount', value: 19 },
+          { key: 'colCount', value: 1 },
+          {
+            key: 'anchor',
+            value: semanticObjectValue([
+              { key: 'kind', value: 'Elastic' },
+              { key: 'startRow', value: 1 },
+              { key: 'endRow', value: 19 },
+              { key: 'startCol', value: 4 },
+              { key: 'endCol', value: 4 },
+            ]),
+          },
+        ]),
+        display: { entityLabel: { kind: 'value', value: 'Validation:dv-status' } },
       }),
       metadataChange({
         changeId: 'mutation-1:filter:0',

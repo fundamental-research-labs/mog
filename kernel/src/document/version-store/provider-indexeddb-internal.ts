@@ -1,8 +1,6 @@
 import {
   VERSION_GRAPH_HEAD_REF,
   VERSION_GRAPH_MAIN_REF,
-  createInMemoryVersionGraphStoreFromSnapshot,
-  type InMemoryVersionGraphStore,
   type InMemoryVersionGraphStoreSnapshot,
   type VersionGraphRef,
   type VersionGraphStoreDiagnostic,
@@ -113,7 +111,7 @@ type StoredParentIndex = {
   readonly childCommitId: WorkbookCommitId;
 };
 
-type StoredIndexManifest = {
+export type StoredIndexManifest = {
   readonly schemaVersion: 1;
   readonly namespaceKey: string;
   readonly documentScopeKey: string;
@@ -149,38 +147,6 @@ export class RefCasConflictError extends Error {
     this.actualHead = input.actualHead;
     this.actualRefVersion = input.actualRefVersion;
   }
-}
-
-export async function loadGraphSnapshot(
-  db: IDBDatabase,
-  namespace: VersionGraphNamespace,
-): Promise<InMemoryVersionGraphStore> {
-  const normalized = normalizeVersionGraphNamespace(namespace);
-  const namespaceKey = versionGraphNamespaceKey(normalized);
-  const tx = db.transaction([OBJECTS_STORE, REFS_STORE, INDEX_MANIFESTS_STORE], 'readonly');
-  const objects = await readAllByIndex<StoredObjectRecord>(
-    tx.objectStore(OBJECTS_STORE),
-    'namespaceKey',
-    namespaceKey,
-  );
-  const refs = await readAllByIndex<StoredRefRecord>(
-    tx.objectStore(REFS_STORE),
-    'namespaceKey',
-    namespaceKey,
-  );
-  const manifest = await idbRequest<StoredIndexManifest | undefined>(
-    tx.objectStore(INDEX_MANIFESTS_STORE).get(namespaceKey),
-  );
-  await idbTransactionDone(tx);
-
-  return createInMemoryVersionGraphStoreFromSnapshot({
-    namespace: normalized,
-    objectRecords: objects.map((entry) => cloneJson(entry.record)),
-    refStore: {
-      records: refs.map((entry) => cloneJson(entry.record)),
-      nextGeneratedId: manifest?.refStoreNextGeneratedId ?? 0,
-    },
-  });
 }
 
 export async function persistGraphSnapshot(options: {
@@ -643,22 +609,6 @@ function recoverabilityForCode(
   )
     return 'repair';
   return 'none';
-}
-
-export function graphLoadDiagnostic(
-  error: unknown,
-  namespace: VersionGraphNamespace,
-  operation: VersionGraphStoreDiagnostic['operation'],
-): VersionGraphStoreDiagnostic {
-  return graphDiagnostic(
-    'VERSION_OBJECT_STORE_FAILURE',
-    'IndexedDB graph snapshot could not be loaded.',
-    {
-      namespace,
-      operation,
-      details: { cause: errorMessage(error) },
-    },
-  );
 }
 
 export function graphDiagnostic(

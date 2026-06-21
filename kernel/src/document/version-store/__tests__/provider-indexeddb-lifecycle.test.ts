@@ -7,6 +7,7 @@ import type { VersionNormalCommitCapture } from '../commit-service';
 import type { VersionObjectType } from '../object-digest';
 import {
   createVersionObjectRecord,
+  versionGraphNamespaceKey,
   type VersionGraphNamespace,
   type VersionObjectRecord,
 } from '../object-store';
@@ -15,6 +16,7 @@ import {
   INDEXEDDB_VERSION_STORE_PROVIDER_KIND,
 } from '../provider-indexeddb-backend';
 import {
+  OBJECTS_STORE,
   deleteVersionStoreIndexedDbForTesting,
   openVersionStoreIndexedDb,
   REGISTRIES_STORE,
@@ -264,6 +266,52 @@ describe('IndexedDB version provider document/workbook lifecycle', () => {
     await unsupportedWorkbook.handle.dispose();
   });
 
+  it('surfaces graph reload corruption through wb.version reads without masking read-only writes', async () => {
+    const documentId = 'vc04-lifecycle-reload-corrupt-row';
+    const documentScope: VersionDocumentScope = { documentId };
+    const graphId = 'graph-reload-corrupt-row';
+    const root = await rootWrite('root', namespaceForDocumentScope(documentScope, graphId));
+
+    const writable = await openWorkbook(documentId, {
+      providerSelection: {
+        kind: INDEXEDDB_VERSION_STORE_PROVIDER_KIND,
+        initialize: { graphId, rootWrite: root },
+      },
+      captureNormalCommit,
+    });
+    await writable.handle.dispose();
+
+    await updateFirstByNamespace(OBJECTS_STORE, namespaceForDocumentScope(documentScope, graphId), (row) => ({
+      ...row,
+      schemaVersion: 99,
+    }));
+
+    const reopened = await openWorkbook(documentId, {
+      providerSelection: { kind: INDEXEDDB_VERSION_STORE_PROVIDER_KIND },
+      captureNormalCommit,
+    });
+    await expect(reopened.wb.version.getHead()).resolves.toMatchObject({
+      status: 'degraded',
+      diagnostics: [expect.objectContaining({ issueCode: 'VERSION_OBJECT_STORE_FAILURE' })],
+    });
+    await reopened.handle.dispose();
+
+    const readOnly = await openWorkbook(documentId, {
+      providerSelection: {
+        kind: INDEXEDDB_VERSION_STORE_PROVIDER_KIND,
+        readOnly: true,
+      },
+      captureNormalCommit,
+    });
+    await expect(readOnly.wb.version.commit({ message: 'blocked' })).rejects.toMatchObject({
+      code: 'READ_ONLY',
+      details: {
+        versionIssueCode: 'VERSION_STORE_READ_ONLY',
+      },
+    });
+    await readOnly.handle.dispose();
+  });
+
   it('rejects read-only provider writes with VERSION_STORE_READ_ONLY while preserving reads', async () => {
     const documentId = 'vc04-lifecycle-readonly';
     const documentScope: VersionDocumentScope = { documentId };
@@ -398,4 +446,44 @@ async function putRegistryEnvelope(documentScope: VersionDocumentScope, value: u
     tx.onabort = () => reject(tx.error ?? new Error('registry put aborted'));
   });
   db.close();
+}
+
+async function updateFirstByNamespace(
+  storeName: string,
+  namespace: VersionGraphNamespace,
+  mutate: (row: Record<string, unknown>) => Record<string, unknown>,
+): Promise<void> {
+  const db = await openVersionStoreIndexedDb();
+  const tx = db.transaction(storeName, 'readwrite');
+  const done = new Promise<void>((resolve, reject) => {
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error ?? new Error(`${storeName} transaction failed`));
+    tx.onabort = () => reject(tx.error ?? new Error(`${storeName} transaction aborted`));
+  });
+  const request = tx
+    .objectStore(storeName)
+    .index('namespaceKey')
+    .openCursor(IDBKeyRange.only(versionGraphNamespaceKey(namespace)));
+  await new Promise<void>((resolve, reject) => {
+    request.onsuccess = () => {
+      const cursor = request.result;
+      if (!cursor) {
+        reject(new Error(`No ${storeName} row found for namespace.`));
+        return;
+      }
+      const update = cursor.update(mutate(asRecord(cursor.value)));
+      update.onsuccess = () => resolve();
+      update.onerror = () => reject(update.error ?? new Error(`${storeName} update failed`));
+    };
+    request.onerror = () => reject(request.error ?? new Error(`${storeName} cursor failed`));
+  });
+  await done;
+  db.close();
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+  throw new Error('IndexedDB row is not an object.');
 }

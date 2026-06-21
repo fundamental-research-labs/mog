@@ -5,6 +5,7 @@ import type { VersionAuthor } from '@mog-sdk/contracts/versioning';
 import { VERSION_GRAPH_MAIN_REF, type VersionGraphReadHeadResult } from '../graph-store';
 import {
   createVersionObjectRecord,
+  versionGraphNamespaceKey,
   type VersionGraphNamespace,
   type VersionObjectRecord,
 } from '../object-store';
@@ -206,6 +207,76 @@ describe('IndexedDbVersionStoreProvider', () => {
     expect(head.head.id).toBe(initialized.rootCommit.id);
   });
 
+  it('fails closed on unsupported persisted object rows during durable reload', async () => {
+    const provider = createIndexedDbVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
+    await expect(provider.initializeGraph(await initializeInput('graph-unsupported-row'))).resolves
+      .toMatchObject({ status: 'success' });
+    const namespace = namespaceForDocumentScope(DOCUMENT_SCOPE, 'graph-unsupported-row');
+    await updateFirstByNamespace(OBJECTS_STORE, namespace, (row) => ({
+      ...row,
+      schemaVersion: 99,
+    }));
+
+    const reloaded = createIndexedDbVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
+    expectRegistryOk(await reloaded.readGraphRegistry());
+    await expect(reloaded.openGraph(namespace)).rejects.toMatchObject({
+      diagnostic: expect.objectContaining({
+        code: 'VERSION_OBJECT_STORE_FAILURE',
+        operation: 'openGraph',
+        details: expect.objectContaining({
+          reloadIssue: 'unsupported',
+          store: OBJECTS_STORE,
+        }),
+      }),
+    });
+  });
+
+  it('fails closed on wrong-scope persisted ref rows during durable reload', async () => {
+    const provider = createIndexedDbVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
+    await expect(provider.initializeGraph(await initializeInput('graph-wrong-ref-scope'))).resolves
+      .toMatchObject({ status: 'success' });
+    const namespace = namespaceForDocumentScope(DOCUMENT_SCOPE, 'graph-wrong-ref-scope');
+    await updateFirstByNamespace(REFS_STORE, namespace, (row) => ({
+      ...row,
+      documentScopeKey: versionDocumentScopeKey({ documentId: 'other-document' }),
+    }));
+
+    const reloaded = createIndexedDbVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
+    expectRegistryOk(await reloaded.readGraphRegistry());
+    await expect(reloaded.openGraph(namespace)).rejects.toMatchObject({
+      diagnostic: expect.objectContaining({
+        code: 'VERSION_WRONG_NAMESPACE',
+        operation: 'openGraph',
+        details: expect.objectContaining({
+          reloadIssue: 'wrong-namespace',
+          store: REFS_STORE,
+          path: 'documentScopeKey',
+        }),
+      }),
+    });
+  });
+
+  it('fails closed when the visible registry points at a graph without a reload manifest', async () => {
+    const provider = createIndexedDbVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
+    await expect(provider.initializeGraph(await initializeInput('graph-missing-manifest'))).resolves
+      .toMatchObject({ status: 'success' });
+    const namespace = namespaceForDocumentScope(DOCUMENT_SCOPE, 'graph-missing-manifest');
+    await deleteStoreRecord(INDEX_MANIFESTS_STORE, versionGraphNamespaceKey(namespace));
+
+    const reloaded = createIndexedDbVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
+    expectRegistryOk(await reloaded.readGraphRegistry());
+    await expect(reloaded.openGraph(namespace)).rejects.toMatchObject({
+      diagnostic: expect.objectContaining({
+        code: 'VERSION_OBJECT_STORE_FAILURE',
+        operation: 'openGraph',
+        details: expect.objectContaining({
+          reloadIssue: 'corrupt',
+          store: INDEX_MANIFESTS_STORE,
+        }),
+      }),
+    });
+  });
+
   it('fails closed on corrupt and unsupported visible registries', async () => {
     const corrupt = await createVersionGraphRegistry({
       documentScope: DOCUMENT_SCOPE,
@@ -325,4 +396,61 @@ async function putRegistryEnvelope(value: unknown): Promise<void> {
     tx.onabort = () => reject(tx.error ?? new Error('registry put aborted'));
   });
   db.close();
+}
+
+async function updateFirstByNamespace(
+  storeName: string,
+  namespace: VersionGraphNamespace,
+  mutate: (row: Record<string, unknown>) => Record<string, unknown>,
+): Promise<void> {
+  const db = await openVersionStoreIndexedDb();
+  const tx = db.transaction(storeName, 'readwrite');
+  const done = transactionDone(tx, `${storeName} update transaction failed`);
+  const request = tx
+    .objectStore(storeName)
+    .index('namespaceKey')
+    .openCursor(IDBKeyRange.only(versionGraphNamespaceKey(namespace)));
+  await new Promise<void>((resolve, reject) => {
+    request.onsuccess = () => {
+      const cursor = request.result;
+      if (!cursor) {
+        reject(new Error(`No ${storeName} row found for namespace.`));
+        return;
+      }
+      const update = cursor.update(mutate(asRecord(cursor.value)));
+      update.onsuccess = () => resolve();
+      update.onerror = () => reject(update.error ?? new Error(`${storeName} update failed`));
+    };
+    request.onerror = () => reject(request.error ?? new Error(`${storeName} cursor failed`));
+  });
+  await done;
+  db.close();
+}
+
+async function deleteStoreRecord(storeName: string, key: IDBValidKey): Promise<void> {
+  const db = await openVersionStoreIndexedDb();
+  const tx = db.transaction(storeName, 'readwrite');
+  const done = transactionDone(tx, `${storeName} delete transaction failed`);
+  const request = tx.objectStore(storeName).delete(key);
+  await new Promise<void>((resolve, reject) => {
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error ?? new Error(`${storeName} delete failed`));
+  });
+  await done;
+  db.close();
+}
+
+function transactionDone(tx: IDBTransaction, message: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error ?? new Error(message));
+    tx.onabort = () => reject(tx.error ?? new Error(message));
+  });
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+  throw new Error('IndexedDB row is not an object.');
 }

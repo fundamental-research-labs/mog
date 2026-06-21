@@ -56,12 +56,10 @@ import {
   failedGraphWrite,
   failedStoreResult,
   graphDiagnostic,
-  graphLoadDiagnostic,
   idbRequest,
   idbTransactionDone,
   initializeSuccess,
   liveMainFromSnapshot,
-  loadGraphSnapshot,
   mapGraphDiagnostics,
   normalizeVersionAccessContext,
   persistGraphSnapshot,
@@ -74,6 +72,7 @@ import {
   type RegistryRecordRead,
   type StoredRegistryEnvelope,
 } from './provider-indexeddb-internal';
+import { graphLoadDiagnostic, loadGraphSnapshot } from './provider-indexeddb-reload';
 
 export const INDEXEDDB_VERSION_STORE_PROVIDER_KIND = 'indexeddb' as const;
 
@@ -311,6 +310,14 @@ export class IndexedDbVersionStoreProvider implements VersionStoreProvider {
           namespace,
           safeMessage: 'Requested graph namespace does not match the visible graph registry.',
         }),
+      );
+    }
+
+    try {
+      await loadGraphSnapshot(await this.getDb(), namespace, this.documentScope);
+    } catch (error) {
+      throw new VersionStoreProviderError(
+        mapGraphDiagnostics([graphLoadDiagnostic(error, namespace, 'readHead')], 'openGraph')[0],
       );
     }
 
@@ -734,6 +741,6 @@ class IndexedDbVersionGraphStore implements VersionGraphStore {
 
   private async loadGraph(operation: string): Promise<InMemoryVersionGraphStore> {
     void operation;
-    return loadGraphSnapshot(await this.getDb(), this.namespace);
+    return loadGraphSnapshot(await this.getDb(), this.namespace, this.documentScope);
   }
 }

@@ -156,13 +156,16 @@ describe('WorkbookVersion provider-backed ref lifecycle facade', () => {
 
     await expect(wb.version.readRef('refs/heads/scenario/provider-ref' as any)).resolves
       .toMatchObject({
-        status: 'success',
-        ref: {
-          name: 'refs/heads/scenario/provider-ref',
-          commitId: initialized.rootCommit.id,
-          revision: { kind: 'counter', value: '0' },
+        ok: true,
+        value: {
+          status: 'success',
+          ref: {
+            name: 'refs/heads/scenario/provider-ref',
+            commitId: initialized.rootCommit.id,
+            revision: { kind: 'counter', value: '0' },
+          },
+          diagnostics: [],
         },
-        diagnostics: [],
       });
 
     await expect(wb.version.listRefs({ prefix: 'scenario' as any })).resolves.toMatchObject({
@@ -186,13 +189,12 @@ describe('WorkbookVersion provider-backed ref lifecycle facade', () => {
         expectedRefRevision: { kind: 'counter', value: '0' },
       }),
     ).resolves.toMatchObject({
-      status: 'success',
-      ref: {
+      ok: true,
+      value: {
         name: 'refs/heads/scenario/provider-ref',
         commitId: child.commit.id,
         revision: { kind: 'counter', value: '1' },
       },
-      diagnostics: [],
     });
 
     const status = await wb.version.getStatus();
@@ -330,19 +332,25 @@ describe('WorkbookVersion provider-backed ref lifecycle facade', () => {
 
       await expect(wb.version.readRef('refs/heads/scenario/provider-commit' as any)).resolves
         .toMatchObject({
-          status: 'success',
-          ref: {
-            name: 'refs/heads/scenario/provider-commit',
-            commitId: committed.value.id,
-            revision: { kind: 'counter', value: '1' },
+          ok: true,
+          value: {
+            status: 'success',
+            ref: {
+              name: 'refs/heads/scenario/provider-commit',
+              commitId: committed.value.id,
+              revision: { kind: 'counter', value: '1' },
+            },
           },
         });
       await expect(wb.version.readRef('refs/heads/main')).resolves.toMatchObject({
-        status: 'success',
-        ref: {
-          name: 'refs/heads/main',
-          commitId: initialized.rootCommit.id,
-          revision: initialized.initialHead.revision,
+        ok: true,
+        value: {
+          status: 'success',
+          ref: {
+            name: 'refs/heads/main',
+            commitId: initialized.rootCommit.id,
+            revision: initialized.initialHead.revision,
+          },
         },
       });
       await expect(wb.version.getHead()).resolves.toMatchObject({

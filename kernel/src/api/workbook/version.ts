@@ -26,7 +26,7 @@ import { checkoutWorkbookVersion, hasAttachedVersionCheckoutService, type Versio
 import { commitWorkbookVersion, hasAttachedVersionWriteService } from './version-commit';
 import { diffWorkbookVersion } from './version-diff';
 import { hasAttachedVersionMergeService, mergeWorkbookVersion } from './version-merge';
-import { versionResultFromCheckout, versionResultFromCommitPage, versionResultFromDiffPage, versionResultFromHead, versionResultFromRefList, versionResultFromRefMutation } from './version-result';
+import { versionResultFromApplyMerge, versionResultFromCheckout, versionResultFromCommitPage, versionResultFromDiffPage, versionResultFromHead, versionResultFromMerge, versionResultFromRefList, versionResultFromRefMutation, versionResultFromRefRead } from './version-result';
 import { getWorkbookVersionSurfaceStatus } from './version-surface-status';
 import {
   createWorkbookVersionBranch,
@@ -331,41 +331,41 @@ export class WorkbookVersionImpl implements WorkbookVersion {
   async checkout(target: VersionCheckoutTarget, options: VersionCheckoutOptions = {}): Promise<VersionResult<CheckoutVersionResult>> {
     return versionResultFromCheckout(await checkoutWorkbookVersion(this.ctx, target, options, this.options.checkoutTransactionGuard));
   }
-  async merge(input: VersionMergeInput, options: VersionMergeOptions = {}): Promise<VersionMergeResult> {
-    return mergeWorkbookVersion(this.ctx, input, options);
+  async merge(input: VersionMergeInput, options: VersionMergeOptions = {}): Promise<VersionResult<VersionMergeResult>> {
+    return versionResultFromMerge(await mergeWorkbookVersion(this.ctx, input, options));
   }
-  async applyMerge(input: VersionApplyMergeInput, options: VersionApplyMergeOptions = {}): Promise<VersionApplyMergeResult> {
-    return applyMergeWorkbookVersion(this.ctx, input, options);
+  async applyMerge(input: VersionApplyMergeInput, options: VersionApplyMergeOptions = {}): Promise<VersionResult<VersionApplyMergeResult>> {
+    return versionResultFromApplyMerge(await applyMergeWorkbookVersion(this.ctx, input, options));
   }
   async diff(base: VersionCommitish, target: VersionCommitish, options: VersionDiffOptions = {}): Promise<VersionResult<VersionSemanticDiffPage>> {
     return versionResultFromDiffPage(await diffWorkbookVersion(this.ctx, base, target, options), options.pageSize ?? 50);
   }
-  async readRef(name: 'HEAD'): Promise<VersionSymbolicRefReadResult>;
-  async readRef(name: VersionMainRefName | VersionRefName | VersionBranchName): Promise<VersionBranchRefReadResult>;
-  async readRef(name: VersionRefSelector | VersionBranchName): Promise<VersionRefReadResult>;
-  async readRef(name: VersionRefSelector | VersionBranchName): Promise<VersionRefReadResult> {
+  async readRef(name: 'HEAD'): Promise<VersionResult<VersionSymbolicRefReadResult>>;
+  async readRef(name: VersionMainRefName | VersionRefName | VersionBranchName): Promise<VersionResult<VersionBranchRefReadResult>>;
+  async readRef(name: VersionRefSelector | VersionBranchName): Promise<VersionResult<VersionRefReadResult>>;
+  async readRef(name: VersionRefSelector | VersionBranchName): Promise<VersionResult<VersionRefReadResult>> {
     if (name !== VERSION_HEAD_REF && name !== VERSION_MAIN_REF) {
-      return readWorkbookVersionRef(this.ctx, name);
+      return versionResultFromRefRead('readRef', await readWorkbookVersionRef(this.ctx, name));
     }
 
     const publicReadName = name as VersionRefSelector;
     const readService = getAttachedVersionReadService(this.ctx);
     if (!readService?.readRef) {
-      return degradedRef(null, [serviceUnavailableDiagnostic('readRef', { refName: publicReadName })]);
+      return versionResultFromRefRead('readRef', degradedRef(null, [serviceUnavailableDiagnostic('readRef', { refName: publicReadName })]));
     }
 
     try {
-      return mapRefResult(await readService.readRef(publicReadName), publicReadName);
+      return versionResultFromRefRead('readRef', mapRefResult(await readService.readRef(publicReadName), publicReadName));
     } catch {
-      return degradedRef(null, [providerErrorDiagnostic('readRef', { refName: publicReadName })]);
+      return versionResultFromRefRead('readRef', degradedRef(null, [providerErrorDiagnostic('readRef', { refName: publicReadName })]));
     }
   }
 
-  async getRef(name: 'HEAD'): Promise<VersionSymbolicRefReadResult>;
-  async getRef(name: VersionMainRefName | VersionRefName | VersionBranchName): Promise<VersionBranchRefReadResult>;
-  async getRef(name: VersionRefSelector | VersionBranchName): Promise<VersionRefReadResult>;
-  async getRef(name: VersionRefSelector | VersionBranchName): Promise<VersionRefReadResult> {
-    return getWorkbookVersionRef(this.ctx, name);
+  async getRef(name: 'HEAD'): Promise<VersionResult<VersionSymbolicRefReadResult>>;
+  async getRef(name: VersionMainRefName | VersionRefName | VersionBranchName): Promise<VersionResult<VersionBranchRefReadResult>>;
+  async getRef(name: VersionRefSelector | VersionBranchName): Promise<VersionResult<VersionRefReadResult>>;
+  async getRef(name: VersionRefSelector | VersionBranchName): Promise<VersionResult<VersionRefReadResult>> {
+    return versionResultFromRefRead('getRef', await getWorkbookVersionRef(this.ctx, name));
   }
 
   async listRefs(options: VersionListRefsOptions = {}): Promise<VersionResult<Paged<VersionRef>>> {
@@ -374,20 +374,20 @@ export class WorkbookVersionImpl implements WorkbookVersion {
 
   async createBranch(options: VersionCreateBranchOptions): Promise<VersionResult<VersionRef>> { return versionResultFromRefMutation('createBranch', await createWorkbookVersionBranch(this.ctx, options)); }
 
-  async fastForwardBranch(options: VersionFastForwardBranchOptions): Promise<VersionRefMutationResult> {
-    return fastForwardWorkbookVersionBranch(this.ctx, options);
+  async fastForwardBranch(options: VersionFastForwardBranchOptions): Promise<VersionResult<VersionRef>> {
+    return versionResultFromRefMutation('fastForwardBranch', await fastForwardWorkbookVersionBranch(this.ctx, options));
   }
 
-  async updateBranch(options: VersionUpdateBranchOptions): Promise<VersionRefMutationResult> {
-    return updateWorkbookVersionBranch(this.ctx, options);
+  async updateBranch(options: VersionUpdateBranchOptions): Promise<VersionResult<VersionRef>> {
+    return versionResultFromRefMutation('updateBranch', await updateWorkbookVersionBranch(this.ctx, options));
   }
 
-  async deleteBranch(options: VersionDeleteRefOptions): Promise<VersionRefMutationResult> {
-    return deleteWorkbookVersionBranch(this.ctx, options);
+  async deleteBranch(options: VersionDeleteRefOptions): Promise<VersionResult<VersionRef>> {
+    return versionResultFromRefMutation('deleteBranch', await deleteWorkbookVersionBranch(this.ctx, options));
   }
 
-  async deleteRef(options: VersionDeleteRefOptions): Promise<VersionRefMutationResult> {
-    return deleteWorkbookVersionRef(this.ctx, options);
+  async deleteRef(options: VersionDeleteRefOptions): Promise<VersionResult<VersionRef>> {
+    return versionResultFromRefMutation('deleteRef', await deleteWorkbookVersionRef(this.ctx, options));
   }
 }
 

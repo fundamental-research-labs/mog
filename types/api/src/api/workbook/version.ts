@@ -889,26 +889,26 @@ export interface WorkbookVersion {
     target: VersionCheckoutTarget,
     options?: VersionCheckoutOptions,
   ): Promise<VersionResult<CheckoutVersionResult>>;
-  merge(input: VersionMergeInput, options?: VersionMergeOptions): Promise<VersionMergeResult>;
+  merge(input: VersionMergeInput, options?: VersionMergeOptions): Promise<VersionResult<VersionMergeResult>>;
   applyMerge(
     input: VersionApplyMergeInput,
     options?: VersionApplyMergeOptions,
-  ): Promise<VersionApplyMergeResult>;
+  ): Promise<VersionResult<VersionApplyMergeResult>>;
   diff(
     base: VersionCommitish,
     target: VersionCommitish,
     options?: VersionDiffOptions,
   ): Promise<VersionResult<VersionSemanticDiffPage>>;
-  readRef(name: 'HEAD'): Promise<VersionSymbolicRefReadResult>;
-  readRef(name: VersionMainRefName | VersionRefName): Promise<VersionBranchRefReadResult>;
-  readRef(name: VersionRefSelector): Promise<VersionRefReadResult>;
-  getRef(name: 'HEAD'): Promise<VersionSymbolicRefReadResult>;
-  getRef(name: VersionMainRefName | VersionRefName | VersionBranchName): Promise<VersionBranchRefReadResult>;
-  getRef(name: VersionRefSelector | VersionBranchName): Promise<VersionRefReadResult>;
+  readRef(name: 'HEAD'): Promise<VersionResult<VersionSymbolicRefReadResult>>;
+  readRef(name: VersionMainRefName | VersionRefName | VersionBranchName): Promise<VersionResult<VersionBranchRefReadResult>>;
+  readRef(name: VersionRefSelector | VersionBranchName): Promise<VersionResult<VersionRefReadResult>>;
+  getRef(name: 'HEAD'): Promise<VersionResult<VersionSymbolicRefReadResult>>;
+  getRef(name: VersionMainRefName | VersionRefName | VersionBranchName): Promise<VersionResult<VersionBranchRefReadResult>>;
+  getRef(name: VersionRefSelector | VersionBranchName): Promise<VersionResult<VersionRefReadResult>>;
   listRefs(options?: ListVersionRefsInput): Promise<VersionResult<Paged<VersionRef>>>;
   createBranch(options: VersionCreateBranchOptions): Promise<VersionResult<VersionRef>>;
-  fastForwardBranch(options: VersionFastForwardBranchOptions): Promise<VersionRefMutationResult>;
-  updateBranch(options: VersionUpdateBranchOptions): Promise<VersionRefMutationResult>;
-  deleteBranch(options: VersionDeleteRefOptions): Promise<VersionRefMutationResult>;
-  deleteRef(options: VersionDeleteRefOptions): Promise<VersionRefMutationResult>;
+  fastForwardBranch(options: VersionFastForwardBranchOptions): Promise<VersionResult<VersionRef>>;
+  updateBranch(options: VersionUpdateBranchOptions): Promise<VersionResult<VersionRef>>;
+  deleteBranch(options: VersionDeleteRefOptions): Promise<VersionResult<VersionRef>>;
+  deleteRef(options: VersionDeleteRefOptions): Promise<VersionResult<VersionRef>>;
 }

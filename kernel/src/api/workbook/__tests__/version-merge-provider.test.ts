@@ -26,7 +26,7 @@ describe('WorkbookVersion merge facade', () => {
 
     await expect(
       version.merge({ base: BASE, ours: OURS, theirs: THEIRS }, { mode: 'preview' }),
-    ).resolves.toStrictEqual(result);
+    ).resolves.toStrictEqual({ ok: true, value: result });
     expect(merge).toHaveBeenCalledWith(
       { base: BASE, ours: OURS, theirs: THEIRS },
       { mode: 'preview' },
@@ -70,9 +70,10 @@ describe('WorkbookVersion merge facade', () => {
       versioning: { mergeService: { merge } },
     } as any);
 
-    await expect(version.merge({ base: BASE, ours: OURS, theirs: THEIRS })).resolves.toStrictEqual(
-      result,
-    );
+    await expect(version.merge({ base: BASE, ours: OURS, theirs: THEIRS })).resolves.toStrictEqual({
+      ok: true,
+      value: result,
+    });
   });
 
   it.each(['conflictId', 'conflictDigest', 'resolutionOptions'] as const)(
@@ -117,19 +118,17 @@ describe('WorkbookVersion merge facade', () => {
       await expect(
         version.merge({ base: BASE, ours: OURS, theirs: THEIRS }),
       ).resolves.toMatchObject({
-        status: 'blocked',
-        base: BASE,
-        ours: OURS,
-        theirs: THEIRS,
-        changes: [],
-        conflicts: [],
-        diagnostics: [
-          expect.objectContaining({
-            issueCode: 'VERSION_INVALID_COMMIT_PAYLOAD',
-            redacted: true,
-          }),
-        ],
-        mutationGuarantee: 'preview-only',
+        ok: false,
+        error: {
+          code: 'target_unavailable',
+          target: 'workbook.version.merge',
+          diagnostics: [
+            expect.objectContaining({
+              code: 'VERSION_INVALID_COMMIT_PAYLOAD',
+              data: expect.objectContaining({ redacted: true }),
+            }),
+          ],
+        },
       });
     },
   );
@@ -170,14 +169,17 @@ describe('WorkbookVersion merge facade', () => {
     } as any);
 
     await expect(version.merge({ base: BASE, ours: OURS, theirs: THEIRS })).resolves.toMatchObject({
-      status: 'blocked',
-      diagnostics: [
-        expect.objectContaining({
-          issueCode: 'VERSION_INVALID_COMMIT_PAYLOAD',
-          redacted: true,
-        }),
-      ],
-      mutationGuarantee: 'preview-only',
+      ok: false,
+      error: {
+        code: 'target_unavailable',
+        target: 'workbook.version.merge',
+        diagnostics: [
+          expect.objectContaining({
+            code: 'VERSION_INVALID_COMMIT_PAYLOAD',
+            data: expect.objectContaining({ redacted: true }),
+          }),
+        ],
+      },
     });
   });
 
@@ -190,14 +192,12 @@ describe('WorkbookVersion merge facade', () => {
     await expect(
       version.merge({ base: 'not-a-commit', ours: OURS, theirs: THEIRS } as any),
     ).resolves.toMatchObject({
-      status: 'blocked',
-      base: null,
-      ours: OURS,
-      theirs: THEIRS,
-      changes: [],
-      conflicts: [],
-      diagnostics: [expect.objectContaining({ issueCode: 'VERSION_INVALID_OPTIONS' })],
-      mutationGuarantee: 'preview-only',
+      ok: false,
+      error: {
+        code: 'target_unavailable',
+        target: 'workbook.version.merge',
+        diagnostics: [expect.objectContaining({ code: 'VERSION_INVALID_OPTIONS' })],
+      },
     });
     expect(merge).not.toHaveBeenCalled();
   });
@@ -206,9 +206,12 @@ describe('WorkbookVersion merge facade', () => {
     const version = new WorkbookVersionImpl({ versioning: {} } as any);
 
     await expect(version.merge({ base: BASE, ours: OURS, theirs: THEIRS })).resolves.toMatchObject({
-      status: 'blocked',
-      diagnostics: [expect.objectContaining({ issueCode: 'VERSION_MERGE_SERVICE_UNAVAILABLE' })],
-      mutationGuarantee: 'preview-only',
+      ok: false,
+      error: {
+        code: 'target_unavailable',
+        target: 'workbook.version.merge',
+        diagnostics: [expect.objectContaining({ code: 'VERSION_MERGE_SERVICE_UNAVAILABLE' })],
+      },
     });
     await expect(version.getStatus()).resolves.toMatchObject({
       merge: {

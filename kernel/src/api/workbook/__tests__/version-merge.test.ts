@@ -43,27 +43,30 @@ describe('WorkbookVersion merge facade', () => {
         { mode: 'preview', includeDiagnostics: true },
       ),
     ).resolves.toEqual({
-      status: 'clean',
-      base: BASE_COMMIT_ID,
-      ours: OURS_COMMIT_ID,
-      theirs: THEIRS_COMMIT_ID,
-      changes: [
-        {
-          structural: {
-            kind: 'metadata',
-            changeId: 'merge-change-1',
-            domain: 'cell',
-            entityId: 'sheet-1!B1',
-            propertyPath: ['value'],
+      ok: true,
+      value: {
+        status: 'clean',
+        base: BASE_COMMIT_ID,
+        ours: OURS_COMMIT_ID,
+        theirs: THEIRS_COMMIT_ID,
+        changes: [
+          {
+            structural: {
+              kind: 'metadata',
+              changeId: 'merge-change-1',
+              domain: 'cell',
+              entityId: 'sheet-1!B1',
+              propertyPath: ['value'],
+            },
+            base: { kind: 'value', value: null },
+            theirs: { kind: 'value', value: 'ready' },
+            merged: { kind: 'value', value: 'ready' },
           },
-          base: { kind: 'value', value: null },
-          theirs: { kind: 'value', value: 'ready' },
-          merged: { kind: 'value', value: 'ready' },
-        },
-      ],
-      conflicts: [],
-      diagnostics: [],
-      mutationGuarantee: 'preview-only',
+        ],
+        conflicts: [],
+        diagnostics: [],
+        mutationGuarantee: 'preview-only',
+      },
     });
     expect(merge).toHaveBeenCalledWith(
       {
@@ -90,19 +93,17 @@ describe('WorkbookVersion merge facade', () => {
         { mode: 'apply' as any, includeDiagnostics: 'yes' as any },
       ),
     ).resolves.toMatchObject({
-      status: 'blocked',
-      base: null,
-      ours: OURS_COMMIT_ID,
-      theirs: THEIRS_COMMIT_ID,
-      changes: [],
-      conflicts: [],
-      diagnostics: expect.arrayContaining([
-        expect.objectContaining({
-          issueCode: 'VERSION_INVALID_OPTIONS',
-          redacted: true,
-        }),
-      ]),
-      mutationGuarantee: 'preview-only',
+      ok: false,
+      error: {
+        code: 'target_unavailable',
+        target: 'workbook.version.merge',
+        diagnostics: expect.arrayContaining([
+          expect.objectContaining({
+            code: 'VERSION_INVALID_OPTIONS',
+            data: expect.objectContaining({ redacted: true }),
+          }),
+        ]),
+      },
     });
     expect(merge).not.toHaveBeenCalled();
   });
@@ -117,17 +118,20 @@ describe('WorkbookVersion merge facade', () => {
         theirs: THEIRS_COMMIT_ID,
       }),
     ).resolves.toMatchObject({
-      status: 'blocked',
-      changes: [],
-      conflicts: [],
-      diagnostics: [
-        expect.objectContaining({
-          issueCode: 'VERSION_MERGE_SERVICE_UNAVAILABLE',
-          recoverability: 'unsupported',
-          redacted: true,
-        }),
-      ],
-      mutationGuarantee: 'preview-only',
+      ok: false,
+      error: {
+        code: 'target_unavailable',
+        target: 'workbook.version.merge',
+        diagnostics: [
+          expect.objectContaining({
+            code: 'VERSION_MERGE_SERVICE_UNAVAILABLE',
+            data: expect.objectContaining({
+              recoverability: 'unsupported',
+              redacted: true,
+            }),
+          }),
+        ],
+      },
     });
   });
 });

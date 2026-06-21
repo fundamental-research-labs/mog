@@ -91,30 +91,39 @@ describe('WorkbookVersion public ref lifecycle facade', () => {
     });
 
     await expect(version.readRef('refs/heads/scenario/budget' as any)).resolves.toMatchObject({
-      status: 'success',
-      ref: {
-        name: 'refs/heads/scenario/budget',
-        commitId: COMMIT_A,
-        revision: refVersion('0'),
+      ok: true,
+      value: {
+        status: 'success',
+        ref: {
+          name: 'refs/heads/scenario/budget',
+          commitId: COMMIT_A,
+          revision: refVersion('0'),
+        },
       },
     });
 
     await expect(version.getRef('scenario/budget' as any)).resolves.toMatchObject({
-      status: 'success',
-      ref: {
-        name: 'refs/heads/scenario/budget',
-        commitId: COMMIT_A,
+      ok: true,
+      value: {
+        status: 'success',
+        ref: {
+          name: 'refs/heads/scenario/budget',
+          commitId: COMMIT_A,
+        },
       },
     });
 
     await expect(version.getRef('HEAD')).resolves.toEqual({
-      status: 'success',
-      ref: {
-        name: 'HEAD',
-        target: 'refs/heads/main',
-        revision: refVersion('0'),
+      ok: true,
+      value: {
+        status: 'success',
+        ref: {
+          name: 'HEAD',
+          target: 'refs/heads/main',
+          revision: refVersion('0'),
+        },
+        diagnostics: [],
       },
-      diagnostics: [],
     });
 
     await expect(version.listRefs()).resolves.toMatchObject({
@@ -229,8 +238,11 @@ describe('WorkbookVersion public ref lifecycle facade', () => {
         expectedRefRevision: refVersion('0'),
       }),
     ).resolves.toMatchObject({
-      status: 'degraded',
-      diagnostics: [expect.objectContaining({ issueCode: 'VERSION_PERMISSION_DENIED' })],
+      ok: false,
+      error: {
+        code: 'target_unavailable',
+        diagnostics: [expect.objectContaining({ code: 'VERSION_PERMISSION_DENIED' })],
+      },
     });
     expect(fastForwardBranch).not.toHaveBeenCalled();
   });
@@ -247,8 +259,8 @@ describe('WorkbookVersion public ref lifecycle facade', () => {
         expectedRefRevision: refVersion('0'),
       }),
     ).resolves.toMatchObject({
-      status: 'success',
-      ref: {
+      ok: true,
+      value: {
         name: 'refs/heads/scenario/advance',
         commitId: COMMIT_B,
         revision: refVersion('1'),
@@ -263,8 +275,8 @@ describe('WorkbookVersion public ref lifecycle facade', () => {
         expectedRefRevision: refVersion('1'),
       }),
     ).resolves.toMatchObject({
-      status: 'success',
-      ref: {
+      ok: true,
+      value: {
         name: 'refs/heads/scenario/advance',
         commitId: COMMIT_C,
         revision: refVersion('2'),
@@ -277,12 +289,16 @@ describe('WorkbookVersion public ref lifecycle facade', () => {
       expectedHead: COMMIT_B,
       expectedRefRevision: refVersion('1'),
     });
-    expect(stale).toMatchObject({ status: 'degraded' });
-    expect(stale.diagnostics).toEqual(
+    expect(stale).toMatchObject({
+      ok: false,
+      error: { code: 'target_unavailable' },
+    });
+    if (stale.ok) throw new Error('expected stale fastForwardBranch to fail');
+    expect(stale.error.diagnostics).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          issueCode: 'VERSION_REF_CONFLICT',
-          recoverability: 'retry',
+          code: 'VERSION_REF_CONFLICT',
+          data: expect.objectContaining({ recoverability: 'retry' }),
         }),
       ]),
     );
@@ -309,20 +325,25 @@ describe('WorkbookVersion public ref lifecycle facade', () => {
         expectedRefRevision: refVersion('0'),
       }),
     ).resolves.toMatchObject({
-      status: 'degraded',
-      ref: null,
-      diagnostics: [
-        expect.objectContaining({
-          issueCode: 'VERSION_REF_WRITE_UNAVAILABLE',
-          mutationGuarantee: 'no-write-attempted',
-        }),
-      ],
+      ok: false,
+      error: {
+        code: 'target_unavailable',
+        diagnostics: [
+          expect.objectContaining({
+            code: 'VERSION_REF_WRITE_UNAVAILABLE',
+            data: expect.objectContaining({ mutationGuarantee: 'no-write-attempted' }),
+          }),
+        ],
+      },
     });
 
     await expect(version.deleteRef({ name: 'refs/heads/scenario/delete-me' as any })).resolves
       .toMatchObject({
-        status: 'degraded',
-        diagnostics: [expect.objectContaining({ issueCode: 'VERSION_REF_WRITE_UNAVAILABLE' })],
+        ok: false,
+        error: {
+          code: 'target_unavailable',
+          diagnostics: [expect.objectContaining({ code: 'VERSION_REF_WRITE_UNAVAILABLE' })],
+        },
       });
 
     expect(branchService.readBranch('scenario/delete-me')).toMatchObject({

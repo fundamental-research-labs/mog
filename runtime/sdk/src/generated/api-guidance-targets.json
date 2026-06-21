@@ -4837,8 +4837,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "applyMerge(\n    input: VersionApplyMergeInput,\n    options?: VersionApplyMergeOptions,\n  ): Promise<VersionApplyMergeResult>;",
-      "typeText": "Promise<VersionApplyMergeResult>",
+      "signature": "applyMerge(\n    input: VersionApplyMergeInput,\n    options?: VersionApplyMergeOptions,\n  ): Promise<VersionResult<VersionApplyMergeResult>>;",
+      "typeText": "Promise<VersionResult<VersionApplyMergeResult>>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/workbook/version.ts"
@@ -4913,8 +4913,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "deleteBranch(options: VersionDeleteRefOptions): Promise<VersionRefMutationResult>;",
-      "typeText": "Promise<VersionRefMutationResult>",
+      "signature": "deleteBranch(options: VersionDeleteRefOptions): Promise<VersionResult<VersionRef>>;",
+      "typeText": "Promise<VersionResult<VersionRef>>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/workbook/version.ts"
@@ -4932,8 +4932,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "deleteRef(options: VersionDeleteRefOptions): Promise<VersionRefMutationResult>;",
-      "typeText": "Promise<VersionRefMutationResult>",
+      "signature": "deleteRef(options: VersionDeleteRefOptions): Promise<VersionResult<VersionRef>>;",
+      "typeText": "Promise<VersionResult<VersionRef>>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/workbook/version.ts"
@@ -4970,8 +4970,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "fastForwardBranch(options: VersionFastForwardBranchOptions): Promise<VersionRefMutationResult>;",
-      "typeText": "Promise<VersionRefMutationResult>",
+      "signature": "fastForwardBranch(options: VersionFastForwardBranchOptions): Promise<VersionResult<VersionRef>>;",
+      "typeText": "Promise<VersionResult<VersionRef>>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/workbook/version.ts"
@@ -5008,8 +5008,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "getRef(name: 'HEAD'): Promise<VersionSymbolicRefReadResult>;",
-      "typeText": "Promise<VersionSymbolicRefReadResult>",
+      "signature": "getRef(name: 'HEAD'): Promise<VersionResult<VersionSymbolicRefReadResult>>;",
+      "typeText": "Promise<VersionResult<VersionSymbolicRefReadResult>>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/workbook/version.ts"
@@ -5103,8 +5103,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "merge(input: VersionMergeInput, options?: VersionMergeOptions): Promise<VersionMergeResult>;",
-      "typeText": "Promise<VersionMergeResult>",
+      "signature": "merge(input: VersionMergeInput, options?: VersionMergeOptions): Promise<VersionResult<VersionMergeResult>>;",
+      "typeText": "Promise<VersionResult<VersionMergeResult>>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/workbook/version.ts"
@@ -5122,8 +5122,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "readRef(name: 'HEAD'): Promise<VersionSymbolicRefReadResult>;",
-      "typeText": "Promise<VersionSymbolicRefReadResult>",
+      "signature": "readRef(name: 'HEAD'): Promise<VersionResult<VersionSymbolicRefReadResult>>;",
+      "typeText": "Promise<VersionResult<VersionSymbolicRefReadResult>>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/workbook/version.ts"
@@ -5141,8 +5141,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "updateBranch(options: VersionUpdateBranchOptions): Promise<VersionRefMutationResult>;",
-      "typeText": "Promise<VersionRefMutationResult>",
+      "signature": "updateBranch(options: VersionUpdateBranchOptions): Promise<VersionResult<VersionRef>>;",
+      "typeText": "Promise<VersionResult<VersionRef>>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/workbook/version.ts"
@@ -23692,8 +23692,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "applyMerge(\n    input: VersionApplyMergeInput,\n    options?: VersionApplyMergeOptions,\n  ): Promise<VersionApplyMergeResult>;",
-      "typeText": "Promise<VersionApplyMergeResult>",
+      "signature": "applyMerge(\n    input: VersionApplyMergeInput,\n    options?: VersionApplyMergeOptions,\n  ): Promise<VersionResult<VersionApplyMergeResult>>;",
+      "typeText": "Promise<VersionResult<VersionApplyMergeResult>>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/workbook/version.ts"
@@ -23768,8 +23768,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "deleteBranch(options: VersionDeleteRefOptions): Promise<VersionRefMutationResult>;",
-      "typeText": "Promise<VersionRefMutationResult>",
+      "signature": "deleteBranch(options: VersionDeleteRefOptions): Promise<VersionResult<VersionRef>>;",
+      "typeText": "Promise<VersionResult<VersionRef>>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/workbook/version.ts"
@@ -23787,8 +23787,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "deleteRef(options: VersionDeleteRefOptions): Promise<VersionRefMutationResult>;",
-      "typeText": "Promise<VersionRefMutationResult>",
+      "signature": "deleteRef(options: VersionDeleteRefOptions): Promise<VersionResult<VersionRef>>;",
+      "typeText": "Promise<VersionResult<VersionRef>>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/workbook/version.ts"
@@ -23825,8 +23825,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "fastForwardBranch(options: VersionFastForwardBranchOptions): Promise<VersionRefMutationResult>;",
-      "typeText": "Promise<VersionRefMutationResult>",
+      "signature": "fastForwardBranch(options: VersionFastForwardBranchOptions): Promise<VersionResult<VersionRef>>;",
+      "typeText": "Promise<VersionResult<VersionRef>>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/workbook/version.ts"
@@ -23863,8 +23863,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "getRef(name: 'HEAD'): Promise<VersionSymbolicRefReadResult>;",
-      "typeText": "Promise<VersionSymbolicRefReadResult>",
+      "signature": "getRef(name: 'HEAD'): Promise<VersionResult<VersionSymbolicRefReadResult>>;",
+      "typeText": "Promise<VersionResult<VersionSymbolicRefReadResult>>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/workbook/version.ts"
@@ -23958,8 +23958,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "merge(input: VersionMergeInput, options?: VersionMergeOptions): Promise<VersionMergeResult>;",
-      "typeText": "Promise<VersionMergeResult>",
+      "signature": "merge(input: VersionMergeInput, options?: VersionMergeOptions): Promise<VersionResult<VersionMergeResult>>;",
+      "typeText": "Promise<VersionResult<VersionMergeResult>>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/workbook/version.ts"
@@ -23977,8 +23977,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "readRef(name: 'HEAD'): Promise<VersionSymbolicRefReadResult>;",
-      "typeText": "Promise<VersionSymbolicRefReadResult>",
+      "signature": "readRef(name: 'HEAD'): Promise<VersionResult<VersionSymbolicRefReadResult>>;",
+      "typeText": "Promise<VersionResult<VersionSymbolicRefReadResult>>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/workbook/version.ts"
@@ -23996,8 +23996,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "updateBranch(options: VersionUpdateBranchOptions): Promise<VersionRefMutationResult>;",
-      "typeText": "Promise<VersionRefMutationResult>",
+      "signature": "updateBranch(options: VersionUpdateBranchOptions): Promise<VersionResult<VersionRef>>;",
+      "typeText": "Promise<VersionResult<VersionRef>>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/workbook/version.ts"

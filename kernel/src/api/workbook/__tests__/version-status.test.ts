@@ -188,14 +188,16 @@ describe('WorkbookVersion status slice', () => {
     });
 
     await expect(wb.version.readRef('HEAD')).resolves.toMatchObject({
-      status: 'degraded',
-      ref: null,
-      diagnostics: [
-        expect.objectContaining({
-          issueCode: 'VERSION_GRAPH_UNINITIALIZED',
-          redacted: true,
-        }),
-      ],
+      ok: false,
+      error: {
+        code: 'target_unavailable',
+        diagnostics: [
+          expect.objectContaining({
+            code: 'VERSION_GRAPH_UNINITIALIZED',
+            data: expect.objectContaining({ redacted: true }),
+          }),
+        ],
+      },
     });
 
     await expect(wb.version.diff(ROOT_COMMIT_ID, CHILD_COMMIT_ID)).resolves.toMatchObject({
@@ -271,24 +273,30 @@ describe('WorkbookVersion status slice', () => {
     expect(graphStore.listCommits).toHaveBeenCalledWith({ pageSize: 2 });
 
     await expect(wb.version.readRef('HEAD')).resolves.toEqual({
-      status: 'success',
-      ref: {
-        name: 'HEAD',
-        target: 'refs/heads/main',
-        revision: REF_REVISION,
+      ok: true,
+      value: {
+        status: 'success',
+        ref: {
+          name: 'HEAD',
+          target: 'refs/heads/main',
+          revision: REF_REVISION,
+        },
+        diagnostics: [],
       },
-      diagnostics: [],
     });
 
     await expect(wb.version.readRef('refs/heads/main')).resolves.toEqual({
-      status: 'success',
-      ref: {
-        name: 'refs/heads/main',
-        commitId: CHILD_COMMIT_ID,
-        revision: REF_REVISION,
-        updatedAt: CREATED_AT,
+      ok: true,
+      value: {
+        status: 'success',
+        ref: {
+          name: 'refs/heads/main',
+          commitId: CHILD_COMMIT_ID,
+          revision: REF_REVISION,
+          updatedAt: CREATED_AT,
+        },
+        diagnostics: [],
       },
-      diagnostics: [],
     });
 
     await expect(
@@ -372,15 +380,18 @@ describe('WorkbookVersion status slice', () => {
 
     const result = await wb.version.readRef('refs/heads/private-review');
     expect(result).toMatchObject({
-      status: 'degraded',
-      ref: null,
+      ok: false,
+      error: { code: 'target_unavailable' },
     });
-    expect(result.diagnostics).toEqual(
+    if (result.ok) throw new Error('expected private readRef to fail');
+    expect(result.error.diagnostics).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          issueCode: 'VERSION_INVALID_OPTIONS',
-          payload: expect.objectContaining({ refName: 'redacted' }),
-          redacted: true,
+          code: 'VERSION_INVALID_OPTIONS',
+          data: expect.objectContaining({
+            payload: expect.objectContaining({ refName: 'redacted' }),
+            redacted: true,
+          }),
         }),
       ]),
     );
@@ -398,15 +409,19 @@ describe('WorkbookVersion status slice', () => {
     });
 
     await expect(wb.version.readRef('refs/heads/review/private-review')).resolves.toMatchObject({
-      status: 'degraded',
-      ref: null,
-      diagnostics: [
-        expect.objectContaining({
-          issueCode: 'VERSION_GRAPH_UNINITIALIZED',
-          recoverability: 'unsupported',
-          redacted: true,
-        }),
-      ],
+      ok: false,
+      error: {
+        code: 'target_unavailable',
+        diagnostics: [
+          expect.objectContaining({
+            code: 'VERSION_GRAPH_UNINITIALIZED',
+            data: expect.objectContaining({
+              recoverability: 'unsupported',
+              redacted: true,
+            }),
+          }),
+        ],
+      },
     });
     expect(graphStore.readRef).not.toHaveBeenCalled();
   });

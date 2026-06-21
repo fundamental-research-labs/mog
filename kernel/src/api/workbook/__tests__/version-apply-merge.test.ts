@@ -47,15 +47,18 @@ describe('WorkbookVersion applyMerge preview planner', () => {
     await expect(
       version.applyMerge({ base: BASE, ours: OURS, theirs: THEIRS }, { mode: 'preview' }),
     ).resolves.toEqual({
-      status: 'planned',
-      base: BASE,
-      ours: OURS,
-      theirs: THEIRS,
-      changes: result.changes,
-      conflicts: [],
-      diagnostics: [],
-      resolutionCount: 0,
-      mutationGuarantee: 'preview-only',
+      ok: true,
+      value: {
+        status: 'planned',
+        base: BASE,
+        ours: OURS,
+        theirs: THEIRS,
+        changes: result.changes,
+        conflicts: [],
+        diagnostics: [],
+        resolutionCount: 0,
+        mutationGuarantee: 'preview-only',
+      },
     });
     expect(merge).toHaveBeenCalledWith(
       { base: BASE, ours: OURS, theirs: THEIRS },
@@ -104,21 +107,24 @@ describe('WorkbookVersion applyMerge preview planner', () => {
         { targetRef: TARGET_REF as any, expectedTargetHead: EXPECTED_TARGET_HEAD },
       ),
     ).resolves.toEqual({
-      status: 'applied',
-      base: BASE,
-      ours: OURS,
-      theirs: THEIRS,
-      commitRef: {
-        id: MERGE,
-        refName: TARGET_REF,
-        resolvedFrom: TARGET_REF,
-        refRevision: { kind: 'counter', value: '2' },
+      ok: true,
+      value: {
+        status: 'applied',
+        base: BASE,
+        ours: OURS,
+        theirs: THEIRS,
+        commitRef: {
+          id: MERGE,
+          refName: TARGET_REF,
+          resolvedFrom: TARGET_REF,
+          refRevision: { kind: 'counter', value: '2' },
+        },
+        changes: result.changes,
+        conflicts: [],
+        diagnostics: [],
+        resolutionCount: 0,
+        mutationGuarantee: 'merge-commit-created',
       },
-      changes: result.changes,
-      conflicts: [],
-      diagnostics: [],
-      resolutionCount: 0,
-      mutationGuarantee: 'merge-commit-created',
     });
     expect(merge).toHaveBeenCalledWith(
       { base: BASE, ours: OURS, theirs: THEIRS },
@@ -143,15 +149,18 @@ describe('WorkbookVersion applyMerge preview planner', () => {
     await expect(
       version.applyMerge({ base: BASE, ours: OURS, theirs: THEIRS }, { mode: 'preview' }),
     ).resolves.toEqual({
-      status: 'conflicted',
-      base: BASE,
-      ours: OURS,
-      theirs: THEIRS,
-      changes: [],
-      conflicts: [conflict],
-      diagnostics: [],
-      requiredResolutionCount: 1,
-      mutationGuarantee: 'preview-only',
+      ok: true,
+      value: {
+        status: 'conflicted',
+        base: BASE,
+        ours: OURS,
+        theirs: THEIRS,
+        changes: [],
+        conflicts: [conflict],
+        diagnostics: [],
+        requiredResolutionCount: 1,
+        mutationGuarantee: 'preview-only',
+      },
     });
   });
 
@@ -171,23 +180,26 @@ describe('WorkbookVersion applyMerge preview planner', () => {
         { mode: 'preview' },
       ),
     ).resolves.toMatchObject({
-      status: 'planned',
-      base: BASE,
-      ours: OURS,
-      theirs: THEIRS,
-      changes: [
-        {
-          structural: conflict.structural,
-          base: conflict.base,
-          ours: conflict.ours,
-          theirs: conflict.theirs,
-          merged: { kind: 'value', value: 'theirs' },
-        },
-      ],
-      conflicts: [],
-      diagnostics: [],
-      resolutionCount: 1,
-      mutationGuarantee: 'preview-only',
+      ok: true,
+      value: {
+        status: 'planned',
+        base: BASE,
+        ours: OURS,
+        theirs: THEIRS,
+        changes: [
+          {
+            structural: conflict.structural,
+            base: conflict.base,
+            ours: conflict.ours,
+            theirs: conflict.theirs,
+            merged: { kind: 'value', value: 'theirs' },
+          },
+        ],
+        conflicts: [],
+        diagnostics: [],
+        resolutionCount: 1,
+        mutationGuarantee: 'preview-only',
+      },
     });
   });
 
@@ -222,21 +234,24 @@ describe('WorkbookVersion applyMerge preview planner', () => {
         { targetRef: TARGET_REF as any, expectedTargetHead: EXPECTED_TARGET_HEAD },
       ),
     ).resolves.toMatchObject({
-      status: 'applied',
-      base: BASE,
-      ours: OURS,
-      theirs: THEIRS,
-      commitRef: {
-        id: MERGE,
-        refName: TARGET_REF,
-        resolvedFrom: TARGET_REF,
-        refRevision: { kind: 'counter', value: '2' },
+      ok: true,
+      value: {
+        status: 'applied',
+        base: BASE,
+        ours: OURS,
+        theirs: THEIRS,
+        commitRef: {
+          id: MERGE,
+          refName: TARGET_REF,
+          resolvedFrom: TARGET_REF,
+          refRevision: { kind: 'counter', value: '2' },
+        },
+        changes: [resolvedChange],
+        conflicts: [],
+        diagnostics: [],
+        resolutionCount: 1,
+        mutationGuarantee: 'merge-commit-created',
       },
-      changes: [resolvedChange],
-      conflicts: [],
-      diagnostics: [],
-      resolutionCount: 1,
-      mutationGuarantee: 'merge-commit-created',
     });
     expect(mergeCommit).toHaveBeenCalledWith({
       base: BASE,
@@ -264,20 +279,20 @@ describe('WorkbookVersion applyMerge preview planner', () => {
         { mode: 'preview' },
       ),
     ).resolves.toMatchObject({
-      status: 'blocked',
-      base: BASE,
-      ours: OURS,
-      theirs: THEIRS,
-      changes: [],
-      conflicts: [],
-      diagnostics: [
-        expect.objectContaining({
-          issueCode: 'VERSION_MERGE_RESOLUTION_MISMATCH',
-          redacted: true,
-          mutationGuarantee: 'no-write-attempted',
-        }),
-      ],
-      mutationGuarantee: 'no-write-attempted',
+      ok: false,
+      error: {
+        code: 'target_unavailable',
+        target: 'workbook.version.applyMerge',
+        diagnostics: [
+          expect.objectContaining({
+            code: 'VERSION_MERGE_RESOLUTION_MISMATCH',
+            data: expect.objectContaining({
+              redacted: true,
+              mutationGuarantee: 'no-write-attempted',
+            }),
+          }),
+        ],
+      },
     });
   });
 
@@ -288,14 +303,14 @@ describe('WorkbookVersion applyMerge preview planner', () => {
     await expect(
       version.applyMerge({ base: BASE, ours: OURS, theirs: THEIRS }),
     ).resolves.toMatchObject({
-      status: 'blocked',
-      base: BASE,
-      ours: OURS,
-      theirs: THEIRS,
-      diagnostics: expect.arrayContaining([
-        expect.objectContaining({ issueCode: 'VERSION_INVALID_OPTIONS' }),
-      ]),
-      mutationGuarantee: 'no-write-attempted',
+      ok: false,
+      error: {
+        code: 'target_unavailable',
+        target: 'workbook.version.applyMerge',
+        diagnostics: expect.arrayContaining([
+          expect.objectContaining({ code: 'VERSION_INVALID_OPTIONS' }),
+        ]),
+      },
     });
     expect(merge).not.toHaveBeenCalled();
   });
@@ -313,14 +328,14 @@ describe('WorkbookVersion applyMerge preview planner', () => {
         extra: true,
       } as any),
     ).resolves.toMatchObject({
-      status: 'blocked',
-      base: null,
-      ours: OURS,
-      theirs: THEIRS,
-      diagnostics: expect.arrayContaining([
-        expect.objectContaining({ issueCode: 'VERSION_INVALID_OPTIONS' }),
-      ]),
-      mutationGuarantee: 'no-write-attempted',
+      ok: false,
+      error: {
+        code: 'target_unavailable',
+        target: 'workbook.version.applyMerge',
+        diagnostics: expect.arrayContaining([
+          expect.objectContaining({ code: 'VERSION_INVALID_OPTIONS' }),
+        ]),
+      },
     });
     expect(merge).not.toHaveBeenCalled();
   });

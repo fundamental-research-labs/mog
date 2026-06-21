@@ -43,6 +43,14 @@ fn make_sheet_with_validations(
     }
 }
 
+fn validation_spec(range: &str, rule: ValidationRule) -> ValidationSpec {
+    ValidationSpec {
+        ranges: vec![range.to_string()],
+        rule,
+        ..Default::default()
+    }
+}
+
 #[test]
 fn data_validations_typed_field_round_trips_losslessly() {
     let original = vec![
@@ -92,6 +100,87 @@ fn data_validations_typed_field_round_trips_losslessly() {
     assert_eq!(dvs.len(), original.len());
     assert_eq!(dvs[0], original[0]);
     assert_eq!(dvs[1], original[1]);
+}
+
+#[test]
+fn data_validations_classic_rule_variants_round_trip_as_typed_subset() {
+    let original = vec![
+        validation_spec(
+            "A1:A10",
+            ValidationRule::WholeNumber {
+                operator: ValidationOperator::Between,
+                formula1: "1".to_string(),
+                formula2: Some("100".to_string()),
+            },
+        ),
+        validation_spec(
+            "B1:B10",
+            ValidationRule::Decimal {
+                operator: ValidationOperator::GreaterThan,
+                formula1: "1.5".to_string(),
+                formula2: None,
+            },
+        ),
+        validation_spec(
+            "C1:C10",
+            ValidationRule::List {
+                formula1: "\"Red,Green,Blue\"".to_string(),
+                show_dropdown: true,
+            },
+        ),
+        validation_spec(
+            "D1:D10",
+            ValidationRule::Date {
+                operator: ValidationOperator::Between,
+                formula1: "DATE(2024,1,1)".to_string(),
+                formula2: Some("DATE(2024,12,31)".to_string()),
+            },
+        ),
+        validation_spec(
+            "E1:E10",
+            ValidationRule::Time {
+                operator: ValidationOperator::LessThanOrEqual,
+                formula1: "TIME(17,0,0)".to_string(),
+                formula2: None,
+            },
+        ),
+        validation_spec(
+            "F1:F10",
+            ValidationRule::TextLength {
+                operator: ValidationOperator::LessThanOrEqual,
+                formula1: "20".to_string(),
+                formula2: None,
+            },
+        ),
+        validation_spec(
+            "G1:G10",
+            ValidationRule::Custom {
+                formula1: "AND(G1<>\"\",LEN(G1)<=8)".to_string(),
+            },
+        ),
+        validation_spec(
+            "H1:H10",
+            ValidationRule::None {
+                formula1: "H1<>\"\"".to_string(),
+            },
+        ),
+    ];
+
+    let po = make_sheet_with_validations(original.clone(), false, None, None);
+    let bytes = write_xlsx_from_parse_output(&po).expect("write");
+    let (rt, _diag) = parse_xlsx_to_output(&bytes).expect("parse");
+
+    let dvs = &rt.sheets[0].data_validations;
+    assert_eq!(dvs.len(), original.len());
+    for (actual, expected) in dvs.iter().zip(&original) {
+        assert_eq!(actual.ranges, expected.ranges);
+        assert_eq!(actual.rule, expected.rule);
+        assert_eq!(actual.allow_blank, expected.allow_blank);
+        assert_eq!(actual.show_error, expected.show_error);
+        assert_eq!(actual.show_prompt, expected.show_prompt);
+        assert_eq!(actual.ime_mode, expected.ime_mode);
+        assert_eq!(actual.uid, expected.uid);
+    }
 }
 
 #[test]

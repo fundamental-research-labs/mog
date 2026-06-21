@@ -3,12 +3,12 @@
 use super::super::*;
 use super::helpers::*;
 use domain_types::{
-    ParseOutput, SheetData,
     domain::validation::{
         EnforcementLevel, ErrorMessage, ErrorStyle, IdentityRangeSchemaRef, ImeMode, InputMessage,
         RangeSchema, RangeSchemaDefinition, RangeSchemaUi, SchemaConstraints, SchemaType,
         ValidationOperator, ValidationRule, ValidationSpec,
     },
+    ParseOutput, SheetData,
 };
 
 fn range_ref(start_id: &str, end_id: &str) -> IdentityRangeSchemaRef {
@@ -16,6 +16,97 @@ fn range_ref(start_id: &str, end_id: &str) -> IdentityRangeSchemaRef {
         start_id: start_id.to_string(),
         end_id: end_id.to_string(),
         sheet_id: None,
+    }
+}
+
+fn validation_spec(range: &str, rule: ValidationRule) -> ValidationSpec {
+    ValidationSpec {
+        ranges: vec![range.to_string()],
+        rule,
+        error_style: ErrorStyle::Stop,
+        show_error: true,
+        error_title: None,
+        error_message: None,
+        show_prompt: false,
+        prompt_title: None,
+        prompt_message: None,
+        allow_blank: true,
+        ime_mode: ImeMode::NoControl,
+        uid: None,
+    }
+}
+
+fn canonical_classic_validation_specs() -> Vec<ValidationSpec> {
+    vec![
+        validation_spec(
+            "A1:A10",
+            ValidationRule::WholeNumber {
+                operator: ValidationOperator::Between,
+                formula1: "1".to_string(),
+                formula2: Some("100".to_string()),
+            },
+        ),
+        validation_spec(
+            "B1:B10",
+            ValidationRule::Decimal {
+                operator: ValidationOperator::GreaterThan,
+                formula1: "1.5".to_string(),
+                formula2: None,
+            },
+        ),
+        validation_spec(
+            "C1:C10",
+            ValidationRule::List {
+                formula1: "\"Red,Green,Blue\"".to_string(),
+                show_dropdown: true,
+            },
+        ),
+        validation_spec(
+            "D1:D10",
+            ValidationRule::Date {
+                operator: ValidationOperator::Between,
+                formula1: "45292".to_string(),
+                formula2: Some("45657".to_string()),
+            },
+        ),
+        validation_spec(
+            "E1:E10",
+            ValidationRule::Time {
+                operator: ValidationOperator::LessThanOrEqual,
+                formula1: "0.75".to_string(),
+                formula2: None,
+            },
+        ),
+        validation_spec(
+            "F1:F10",
+            ValidationRule::TextLength {
+                operator: ValidationOperator::LessThanOrEqual,
+                formula1: "20".to_string(),
+                formula2: None,
+            },
+        ),
+        validation_spec(
+            "G1:G10",
+            ValidationRule::Custom {
+                formula1: "AND(G1<>\"\",LEN(G1)<=8)".to_string(),
+            },
+        ),
+    ]
+}
+
+fn assert_classic_validation_specs(actual: &[ValidationSpec], expected: &[ValidationSpec]) {
+    assert_eq!(actual.len(), expected.len());
+    for expected_spec in expected {
+        let actual_spec = actual
+            .iter()
+            .find(|spec| spec.ranges == expected_spec.ranges)
+            .unwrap_or_else(|| panic!("missing validation for {:?}", expected_spec.ranges));
+        assert_eq!(actual_spec.rule, expected_spec.rule);
+        assert_eq!(actual_spec.allow_blank, expected_spec.allow_blank);
+        assert_eq!(actual_spec.show_error, expected_spec.show_error);
+        assert_eq!(actual_spec.show_prompt, expected_spec.show_prompt);
+        assert_eq!(actual_spec.ime_mode, expected_spec.ime_mode);
+        assert_eq!(actual_spec.uid, expected_spec.uid);
     }
 }
 
@@ -75,6 +166,45 @@ fn whole_number_validation_schema() -> RangeSchema {
             input_message: None,
         }),
     }
+}
+
+#[test]
+fn imported_classic_validations_survive_hydrate_export_roundtrip() {
+    let expected = canonical_classic_validation_specs();
+    let mut input = ParseOutput {
+        sheets: vec![SheetData {
+            name: "DV_Classic".to_string(),
+            rows: 10,
+            cols: 7,
+            data_validations: expected.clone(),
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    input.sheets[0].data_validations_declared_count = Some(expected.len() as u32);
+
+    let bytes = xlsx_parser::write::write_xlsx_from_parse_output(&input)
+        .expect("write_xlsx_from_parse_output");
+    let (engine, _) = YrsComputeEngine::from_xlsx_bytes(&bytes).expect("from_xlsx_bytes");
+
+    let exported = engine
+        .export_to_parse_output()
+        .expect("export_to_parse_output")
+        .parse_output;
+    assert_eq!(
+        exported.sheets[0].data_validations_declared_count,
+        Some(expected.len() as u32)
+    );
+    assert!(exported.sheets[0].x14_data_validations.is_empty());
+    assert_classic_validation_specs(&exported.sheets[0].data_validations, &expected);
+
+    let exported_bytes = engine
+        .export_to_xlsx_bytes()
+        .expect("canonical validations should export to XLSX bytes");
+    let (reparsed, _diags) =
+        xlsx_parser::parse_xlsx_to_output(&exported_bytes).expect("parse exported xlsx");
+    assert_classic_validation_specs(&reparsed.sheets[0].data_validations, &expected);
+    assert!(reparsed.sheets[0].x14_data_validations.is_empty());
 }
 
 #[test]

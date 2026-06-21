@@ -12,7 +12,7 @@ use domain_types::{
     CFCellRange, CFColorPoint, CFColorScale, CFDataBar, CFIconSet, CFIconThreshold, CFRule,
     CFStyle, CFValueRef, ConditionalFormat, ParseOutput, SheetData, SheetDimensions,
 };
-use ooxml_types::cond_format::{CfOperator, IconSetType};
+use ooxml_types::cond_format::{CfOperator, CfTimePeriod, IconSetType};
 use xlsx_parser::parse_xlsx_to_output;
 use xlsx_parser::write::write_xlsx_from_parse_output;
 
@@ -29,6 +29,10 @@ fn make_sheet_with_cf(cf: ConditionalFormat) -> ParseOutput {
         }],
         ..Default::default()
     }
+}
+
+fn rule_matches(rules: &[CFRule], predicate: impl Fn(&CFRule) -> bool) -> bool {
+    rules.iter().any(predicate)
 }
 
 #[test]
@@ -217,6 +221,145 @@ fn cf_icon_set_rule_round_trips() {
         }
         other => panic!("expected IconSet rule, got {:?}", other),
     }
+}
+
+#[test]
+fn cf_classic_rule_variants_round_trip_as_typed_subset() {
+    let cf = ConditionalFormat {
+        id: "cf-classic-rules".to_string(),
+        sheet_id: String::new(),
+        pivot: None,
+        ranges: vec![CFCellRange::new(0, 0, 9, 0)], // A1:A10
+        range_identities: None,
+        rules: vec![
+            CFRule::Top10 {
+                id: "rule-top10".to_string(),
+                priority: 1,
+                stop_if_true: None,
+                rank: 5,
+                percent: Some(true),
+                bottom: Some(true),
+                style: CFStyle::default(),
+            },
+            CFRule::AboveAverage {
+                id: "rule-above-average".to_string(),
+                priority: 2,
+                stop_if_true: Some(true),
+                above_average: false,
+                equal_average: Some(true),
+                std_dev: Some(2),
+                style: CFStyle::default(),
+                formula: Some("A1<AVERAGE($A$1:$A$10)".to_string()),
+            },
+            CFRule::DuplicateValues {
+                id: "rule-unique-values".to_string(),
+                priority: 3,
+                stop_if_true: None,
+                unique: Some(true),
+                style: CFStyle::default(),
+            },
+            CFRule::ContainsText {
+                id: "rule-begins-with".to_string(),
+                priority: 4,
+                stop_if_true: None,
+                operator: CfOperator::BeginsWith,
+                text: "INV".to_string(),
+                style: CFStyle::default(),
+                formula: Some("LEFT(A1,3)=\"INV\"".to_string()),
+            },
+            CFRule::ContainsBlanks {
+                id: "rule-not-blank".to_string(),
+                priority: 5,
+                stop_if_true: None,
+                blanks: false,
+                style: CFStyle::default(),
+                formula: Some("LEN(TRIM(A1))>0".to_string()),
+            },
+            CFRule::ContainsErrors {
+                id: "rule-not-error".to_string(),
+                priority: 6,
+                stop_if_true: None,
+                errors: false,
+                style: CFStyle::default(),
+                formula: Some("NOT(ISERROR(A1))".to_string()),
+            },
+            CFRule::TimePeriod {
+                id: "rule-last-week".to_string(),
+                priority: 7,
+                stop_if_true: None,
+                time_period: CfTimePeriod::LastWeek,
+                style: CFStyle::default(),
+                formula: Some("AND(TODAY()-A1>=7,TODAY()-A1<14)".to_string()),
+            },
+        ],
+    };
+
+    let po = make_sheet_with_cf(cf);
+    let bytes = write_xlsx_from_parse_output(&po).expect("write");
+    let (rt, _diag) = parse_xlsx_to_output(&bytes).expect("parse");
+
+    let rules = &rt.sheets[0].conditional_formats[0].rules;
+    assert_eq!(rules.len(), 7, "classic CF rules should all round-trip");
+    assert!(rule_matches(rules, |rule| matches!(
+        rule,
+        CFRule::Top10 {
+            rank: 5,
+            percent: Some(true),
+            bottom: Some(true),
+            ..
+        }
+    )));
+    assert!(rule_matches(rules, |rule| matches!(
+        rule,
+        CFRule::AboveAverage {
+            above_average: false,
+            equal_average: Some(true),
+            std_dev: Some(2),
+            stop_if_true: Some(true),
+            formula: Some(formula),
+            ..
+        } if formula == "A1<AVERAGE($A$1:$A$10)"
+    )));
+    assert!(rule_matches(rules, |rule| matches!(
+        rule,
+        CFRule::DuplicateValues {
+            unique: Some(true),
+            ..
+        }
+    )));
+    assert!(rule_matches(rules, |rule| matches!(
+        rule,
+        CFRule::ContainsText {
+            operator: CfOperator::BeginsWith,
+            text,
+            formula: Some(formula),
+            ..
+        } if text == "INV" && formula == "LEFT(A1,3)=\"INV\""
+    )));
+    assert!(rule_matches(rules, |rule| matches!(
+        rule,
+        CFRule::ContainsBlanks {
+            blanks: false,
+            formula: Some(formula),
+            ..
+        } if formula == "LEN(TRIM(A1))>0"
+    )));
+    assert!(rule_matches(rules, |rule| matches!(
+        rule,
+        CFRule::ContainsErrors {
+            errors: false,
+            formula: Some(formula),
+            ..
+        } if formula == "NOT(ISERROR(A1))"
+    )));
+    assert!(rule_matches(rules, |rule| matches!(
+        rule,
+        CFRule::TimePeriod {
+            time_period: CfTimePeriod::LastWeek,
+            formula: Some(formula),
+            ..
+        } if formula == "AND(TODAY()-A1>=7,TODAY()-A1<14)"
+    )));
 }
 
 #[test]

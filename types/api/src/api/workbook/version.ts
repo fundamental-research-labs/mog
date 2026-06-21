@@ -707,6 +707,7 @@ export interface VersionApplyMergeOptions {
 export type VersionApplyMergeMutationGuarantee =
   | 'preview-only'
   | 'merge-commit-created'
+  | 'ref-fast-forwarded'
   | 'no-write-attempted'
   | 'ref-not-mutated'
   | 'unknown-after-crash';

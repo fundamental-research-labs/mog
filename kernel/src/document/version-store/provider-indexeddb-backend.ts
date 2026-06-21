@@ -5,6 +5,7 @@ import {
   type InMemoryVersionGraphStore,
   type InMemoryVersionGraphStoreSnapshot,
   type CommitVersionGraphInput,
+  type FastForwardVersionGraphInput,
   type MergeVersionGraphInput,
   type VersionGraphClosureReadResult,
   type VersionGraphCommitPageResult,
@@ -642,9 +643,15 @@ class IndexedDbVersionGraphStore implements VersionGraphStore {
     return this.commitWithLoadedGraph('mergeCommit', input, (graph) => graph.mergeCommit(input));
   }
 
+  async fastForwardRef(input: FastForwardVersionGraphInput): Promise<VersionGraphWriteResult> {
+    return this.commitWithLoadedGraph('fastForwardRef', input, (graph) =>
+      graph.fastForwardRef(input),
+    );
+  }
+
   private async commitWithLoadedGraph(
-    operation: 'commit' | 'mergeCommit',
-    input: CommitVersionGraphInput | MergeVersionGraphInput,
+    operation: 'commit' | 'mergeCommit' | 'fastForwardRef',
+    input: CommitVersionGraphInput | MergeVersionGraphInput | FastForwardVersionGraphInput,
     write: (graph: InMemoryVersionGraphStore) => Promise<VersionGraphWriteResult>,
   ): Promise<VersionGraphWriteResult> {
     let graph: InMemoryVersionGraphStore;

@@ -600,6 +600,63 @@ describe('InMemoryVersionGraphStore normal commits', () => {
     });
   });
 
+  it('fast-forwards the target ref to an existing descendant commit without creating a commit', async () => {
+    const graph = createInMemoryVersionGraphStore({ namespace: NAMESPACE });
+    const initialized = await graph.initializeGraph(await graphInput('root'));
+    expectGraphSuccess(initialized);
+    const branch = graph.refStore.createBranch({
+      name: 'scenario/fast-forward',
+      targetCommitId: initialized.commit.id,
+      expectedAbsent: true,
+      createdBy: AUTHOR,
+    });
+    expect(branch.ok).toBe(true);
+    if (!branch.ok) throw new Error(`expected branch create success: ${branch.error.code}`);
+
+    const incoming = await graph.commit({
+      ...(await graphInput('incoming')),
+      targetRef: 'refs/heads/scenario/fast-forward',
+      expectedHeadCommitId: initialized.commit.id,
+      expectedTargetRefVersion: branch.ref.refVersion,
+      parentCommitIds: [initialized.commit.id],
+    });
+    expectGraphSuccess(incoming);
+
+    const fastForward = await graph.fastForwardRef({
+      expectedHeadCommitId: initialized.commit.id,
+      expectedMainRefVersion: initialized.main.revision,
+      nextCommitId: incoming.commit.id,
+      updatedBy: AUTHOR,
+    });
+    expectGraphSuccess(fastForward);
+    expect(fastForward.commit.id).toBe(incoming.commit.id);
+    expect(fastForward.main).toMatchObject({
+      name: VERSION_GRAPH_MAIN_REF,
+      commitId: incoming.commit.id,
+      revision: refVersion('1'),
+    });
+
+    const page = await graph.listCommits();
+    expectListSuccess(page);
+    expect(page.commits.map((commitRecord) => commitRecord.id)).toEqual([
+      incoming.commit.id,
+      initialized.commit.id,
+    ]);
+    expect(page.commits[0].parents).toEqual([initialized.commit.id]);
+
+    const stale = await graph.fastForwardRef({
+      expectedHeadCommitId: initialized.commit.id,
+      expectedMainRefVersion: initialized.main.revision,
+      nextCommitId: incoming.commit.id,
+      updatedBy: AUTHOR,
+    });
+    expectGraphFailed(stale);
+    expect(stale).toMatchObject({
+      mutationGuarantee: 'no-write-attempted',
+      diagnostics: [expect.objectContaining({ code: 'VERSION_REF_CONFLICT' })],
+    });
+  });
+
   it('returns object-store failure diagnostics without advancing main', async () => {
     const graph = createInMemoryVersionGraphStore({ namespace: NAMESPACE });
     const initialized = await graph.initializeGraph(await graphInput('root'));

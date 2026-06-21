@@ -331,6 +331,132 @@ describe('WorkbookVersion applyMerge production materializer', () => {
       await sourceHandle.dispose();
     }
   });
+
+  it('fast-forwards applyMerge to an existing descendant commit without a merge commit', async () => {
+    const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
+    const initialized = await provider.initializeGraph(await initializeInput('graph-fast-forward', 'root'));
+    expectInitializeSuccess(initialized);
+
+    const sourceHandle = await DocumentFactory.create({
+      documentId: DOCUMENT_ID,
+      environment: 'headless',
+      userTimezone: 'UTC',
+    });
+    const mergedHandle = await DocumentFactory.create({
+      documentId: DOCUMENT_ID,
+      environment: 'headless',
+      userTimezone: 'UTC',
+    });
+    let sourceWb: Workbook | undefined;
+    let mergedWb: Workbook | undefined;
+
+    try {
+      sourceWb = await sourceHandle.workbook({ versioning: { provider } });
+      await sourceWb.activeSheet.setCell('A1', 'base');
+      const baseCommit = await expectCommit(
+        sourceWb.version.commit({
+          expectedHead: {
+            commitId: initialized.rootCommit.id,
+            revision: initialized.initialHead.revision,
+            symbolicHeadRevision: initialized.symbolicHead.revision,
+          },
+        }),
+      );
+      const baseHead = await expectHead(sourceWb);
+
+      await sourceWb.activeSheet.setCell('B1', 'ours');
+      const oursCommit = await expectCommit(
+        sourceWb.version.commit({
+          expectedHead: {
+            commitId: baseCommit.id,
+            revision: requireRefRevision(baseHead),
+          },
+        }),
+      );
+      const oursHead = await expectHead(sourceWb);
+
+      const branch = await sourceWb.version.createBranch({
+        name: 'scenario/fast-forward-incoming' as any,
+        targetCommitId: oursCommit.id,
+        expectedAbsent: true,
+      });
+      if (!branch.ok) throw new Error(`expected branch create success: ${branch.error.code}`);
+
+      await sourceWb.activeSheet.setCell('C1', 'theirs');
+      const theirsCommit = await expectCommit(
+        sourceWb.version.commit({
+          targetRef: 'scenario/fast-forward-incoming' as any,
+          expectedHead: {
+            commitId: oursCommit.id,
+            revision: branch.value.revision,
+          },
+        }),
+      );
+
+      const applied = await sourceWb.version.applyMerge(
+        {
+          base: baseCommit.id,
+          ours: oursCommit.id,
+          theirs: theirsCommit.id,
+        },
+        {
+          targetRef: 'refs/heads/main' as any,
+          expectedTargetHead: {
+            commitId: oursCommit.id,
+            revision: requireRefRevision(oursHead),
+          },
+        },
+      );
+      if (!applied.ok) throw new Error(`expected applyMerge success: ${applied.error.code}`);
+      expect(applied.value).toMatchObject({
+        status: 'applied',
+        ours: oursCommit.id,
+        theirs: theirsCommit.id,
+        commitRef: {
+          id: theirsCommit.id,
+          refName: 'refs/heads/main',
+          resolvedFrom: 'refs/heads/main',
+          refRevision: { kind: 'counter', value: '3' },
+        },
+        changes: [],
+        resolutionCount: 0,
+        mutationGuarantee: 'ref-fast-forwarded',
+      });
+
+      const commits = await sourceWb.version.listCommits();
+      if (!commits.ok) throw new Error(`expected listCommits success: ${commits.error.code}`);
+      expect(commits.value.items).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: theirsCommit.id,
+            parents: [oursCommit.id],
+          }),
+        ]),
+      );
+      expect(
+        commits.value.items.some(
+          (item) => item.parents[0] === oursCommit.id && item.parents[1] === theirsCommit.id,
+        ),
+      ).toBe(false);
+
+      mergedWb = await mergedHandle.workbook({ versioning: { provider } });
+      const checkoutMerged = await mergedWb.version.checkout({
+        kind: 'commit',
+        id: theirsCommit.id,
+      });
+      if (!checkoutMerged.ok) {
+        throw new Error(`expected fast-forwarded checkout success: ${checkoutMerged.error.code}`);
+      }
+      await expect(mergedWb.activeSheet.getCell('A1')).resolves.toMatchObject({ value: 'base' });
+      await expect(mergedWb.activeSheet.getCell('B1')).resolves.toMatchObject({ value: 'ours' });
+      await expect(mergedWb.activeSheet.getCell('C1')).resolves.toMatchObject({ value: 'theirs' });
+    } finally {
+      if (mergedWb) await mergedWb.close('skipSave');
+      if (sourceWb) await sourceWb.close('skipSave');
+      await mergedHandle.dispose();
+      await sourceHandle.dispose();
+    }
+  });
 });
 
 async function expectCommit(

@@ -20,6 +20,11 @@ import {
   type VersionGraphWriteResult,
 } from './graph-store';
 import {
+  fastForwardMergeCommit,
+  type WorkbookVersionCommitServiceFastForwardMergeResult,
+} from './commit-service-fast-forward';
+import {
+  expectedHeadForCommit,
   expectedHeadForMergeCommit,
   finalizeMergeCommitCapture,
 } from './commit-service-merge-helpers';
@@ -139,6 +144,11 @@ export type WorkbookVersionCommitServiceMergeCommitInput = {
   readonly changes: readonly VersionMergeChange[];
   readonly resolutionCount: number;
 };
+
+export type WorkbookVersionCommitServiceFastForwardMergeInput = Omit<
+  WorkbookVersionCommitServiceMergeCommitInput,
+  'changes' | 'resolutionCount'
+>;
 
 export type WorkbookVersionCommitServiceOptions = {
   readonly provider: VersionStoreProvider;
@@ -621,6 +631,16 @@ export class WorkbookVersionCommitService {
     );
   }
 
+  async fastForwardMerge(
+    input: WorkbookVersionCommitServiceFastForwardMergeInput,
+  ): Promise<WorkbookVersionCommitServiceFastForwardMergeResult> {
+    return fastForwardMergeCommit({
+      input,
+      provider: this.provider,
+      openVisibleGraph: () => this.openVisibleGraph('commitGraphWrite'),
+    });
+  }
+
   private async materializeSnapshotRootForNormalCommit(
     opened: {
       readonly namespace: VersionGraphNamespace;
@@ -802,128 +822,6 @@ export function createWorkbookVersionCommitService(
   options: WorkbookVersionCommitServiceOptions,
 ): WorkbookVersionCommitService {
   return new WorkbookVersionCommitService(options);
-}
-
-function expectedHeadForCommit(
-  options: VersionCommitOptions,
-  target: VersionGraphRef,
-  head: VersionGraphSymbolicRef,
-):
-  | {
-      readonly ok: true;
-      readonly commitId: WorkbookCommitId;
-      readonly revision: RefVersion;
-    }
-  | {
-      readonly ok: false;
-      readonly diagnostics: readonly VersionStoreDiagnostic[];
-    } {
-  const expected = options.expectedHead;
-  if (!expected) {
-    return { ok: true, commitId: target.commitId, revision: target.revision };
-  }
-
-  if (options.targetRef !== undefined && expected.symbolicHeadRevision !== undefined) {
-    return {
-      ok: false,
-      diagnostics: [
-        versionStoreDiagnostic('VERSION_INVALID_OPTIONS', {
-          operation: 'commitGraphWrite',
-          refName: target.name,
-          commitId: target.commitId,
-          safeMessage: 'symbolicHeadRevision is valid only for implicit HEAD commits.',
-          recoverability: 'none',
-          mutationGuarantee: 'no-write-attempted',
-          details: { option: 'expectedHead.symbolicHeadRevision' },
-        }),
-      ],
-    };
-  }
-
-  let expectedCommitId: WorkbookCommitId;
-  try {
-    expectedCommitId = parseWorkbookCommitId(expected.commitId, 'expectedHead.commitId');
-  } catch {
-    return {
-      ok: false,
-      diagnostics: [
-        versionStoreDiagnostic('VERSION_INVALID_COMMIT_ID', {
-          operation: 'commitGraphWrite',
-          refName: target.name,
-          commitId: target.commitId,
-          safeMessage: 'Expected version head commit id is invalid.',
-          recoverability: 'repair',
-          mutationGuarantee: 'no-write-attempted',
-        }),
-      ],
-    };
-  }
-
-  if (
-    expectedCommitId !== target.commitId ||
-    !isCounterRevision(expected.revision) ||
-    !refVersionsEqual(target.revision, expected.revision)
-  ) {
-    return {
-      ok: false,
-      diagnostics: [
-        refConflictDiagnostic(target.commitId, expectedCommitId, target.name, {
-          expectedRevisionKind: expected.revision.kind,
-          actualRevision: target.revision.value,
-        }),
-      ],
-    };
-  }
-
-  if (
-    expected.symbolicHeadRevision !== undefined &&
-    (!isCounterRevision(expected.symbolicHeadRevision) ||
-      !refVersionsEqual(head.revision, expected.symbolicHeadRevision))
-  ) {
-    return {
-      ok: false,
-      diagnostics: [
-        refConflictDiagnostic(target.commitId, expectedCommitId, 'HEAD', {
-          expectedRevisionKind: expected.symbolicHeadRevision.kind,
-          actualRevision: head.revision.value,
-        }),
-      ],
-    };
-  }
-
-  return { ok: true, commitId: expectedCommitId, revision: expected.revision };
-}
-
-function refConflictDiagnostic(
-  actualCommitId: WorkbookCommitId,
-  expectedCommitId: WorkbookCommitId,
-  refName: string,
-  details: Readonly<Record<string, string | number | boolean | null>>,
-): VersionStoreDiagnostic {
-  return versionStoreDiagnostic('VERSION_REF_CONFLICT', {
-    operation: 'commitGraphWrite',
-    refName,
-    commitId: actualCommitId,
-    safeMessage: 'Version graph head no longer matches the expected commit head.',
-    recoverability: 'retry',
-    mutationGuarantee: 'no-write-attempted',
-    details: {
-      expectedHead: expectedCommitId,
-      actualHead: actualCommitId,
-      ...details,
-    },
-  });
-}
-
-function isCounterRevision(value: unknown): value is RefVersion {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    'kind' in value &&
-    value.kind === 'counter' &&
-    'value' in value &&
-    typeof value.value === 'string'
-  );
 }
 
 function diagnosticsForGraphRead(

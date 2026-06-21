@@ -1,6 +1,7 @@
 import type { ReadWorkbookCommitResult } from './commit-store';
 import type {
   CommitVersionGraphInput,
+  FastForwardVersionGraphInput,
   InitializeVersionGraphInput,
   MergeVersionGraphInput,
   VersionGraphClosureReadResult,
@@ -19,6 +20,7 @@ export interface VersionGraphStore {
   initializeGraph(input: InitializeVersionGraphInput): Promise<VersionGraphWriteResult>;
   commit(input: CommitVersionGraphInput): Promise<VersionGraphWriteResult>;
   mergeCommit(input: MergeVersionGraphInput): Promise<VersionGraphWriteResult>;
+  fastForwardRef(input: FastForwardVersionGraphInput): Promise<VersionGraphWriteResult>;
   readCommit(commitId: WorkbookCommitId | string): Promise<ReadWorkbookCommitResult>;
   getObjectRecord<TPayload>(ref: VersionDependencyRef): Promise<VersionObjectRecord<TPayload>>;
   hasObject(ref: VersionDependencyRef): Promise<boolean>;

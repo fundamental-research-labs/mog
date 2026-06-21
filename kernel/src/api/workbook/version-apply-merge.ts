@@ -41,7 +41,8 @@ type MaybePromise<T> = T | Promise<T>;
 type BoundMethod = (...args: readonly unknown[]) => MaybePromise<unknown>;
 
 type AttachedVersionApplyMergeService = {
-  mergeCommit: (input: VersionApplyMergeWriteInput) => MaybePromise<unknown>;
+  readonly mergeCommit?: (input: VersionApplyMergeWriteInput) => MaybePromise<unknown>;
+  readonly fastForwardMerge?: (input: VersionApplyMergeFastForwardInput) => MaybePromise<unknown>;
 };
 
 type VersionApplyMergeWriteInput = {
@@ -53,6 +54,11 @@ type VersionApplyMergeWriteInput = {
   readonly changes: readonly VersionMergeChange[];
   readonly resolutionCount: number;
 };
+
+type VersionApplyMergeFastForwardInput = Omit<
+  VersionApplyMergeWriteInput,
+  'changes' | 'resolutionCount'
+>;
 
 type MaybeVersionRuntimeContext = DocumentContext & {
   readonly versioning?: unknown;
@@ -111,6 +117,17 @@ export async function applyMergeWorkbookVersion(
       validated.theirs,
       validated.diagnostics,
     );
+  }
+
+  if (validated.applyOptions.mode === 'apply' && validated.resolutions.length === 0) {
+    const fastForward = await tryApplyFastForwardMerge(
+      ctx,
+      validated.mergeInput,
+      validated.applyOptions,
+    );
+    if (fastForward.kind === 'applied' || fastForward.kind === 'blocked') {
+      return fastForward.result;
+    }
   }
 
   const preview = await mergeWorkbookVersion(ctx, validated.mergeInput, validated.previewOptions);
@@ -199,7 +216,7 @@ async function finalizeApplyMergePlan(
   }
 
   const service = getAttachedVersionApplyMergeService(ctx);
-  if (!service) {
+  if (!service?.mergeCommit) {
     return blockedApplyMergeResult(plan.base, plan.ours, plan.theirs, [
       applyMergeServiceUnavailableDiagnostic(),
     ]);
@@ -211,9 +228,63 @@ async function finalizeApplyMergePlan(
       targetRef: options.targetRef,
       expectedTargetHead: options.expectedTargetHead,
     });
-    return mapApplyMergeWriteResult(result, plan);
+    return mapApplyMergeWriteResult(result, plan, 'merge-commit-created');
   } catch {
     return blockedApplyMergeResult(plan.base, plan.ours, plan.theirs, [providerErrorDiagnostic()]);
+  }
+}
+
+async function tryApplyFastForwardMerge(
+  ctx: DocumentContext,
+  input: VersionMergeInput,
+  options: Extract<NormalizedApplyMergeOptions, { readonly mode: 'apply' }>,
+): Promise<
+  | { readonly kind: 'applied'; readonly result: VersionApplyMergeResult }
+  | { readonly kind: 'blocked'; readonly result: VersionApplyMergeResult }
+  | { readonly kind: 'not-fast-forward' }
+> {
+  if (options.expectedTargetHead.commitId !== input.ours) {
+    return {
+      kind: 'blocked',
+      result: blockedApplyMergeResult(input.base, input.ours, input.theirs, [
+        resolutionMismatchDiagnostic('applyMerge expectedTargetHead must match the ours commit.'),
+      ]),
+    };
+  }
+
+  const service = getAttachedVersionApplyMergeService(ctx);
+  if (!service?.fastForwardMerge) return { kind: 'not-fast-forward' };
+
+  try {
+    const result = await service.fastForwardMerge({
+      base: input.base,
+      ours: input.ours,
+      theirs: input.theirs,
+      targetRef: options.targetRef,
+      expectedTargetHead: options.expectedTargetHead,
+    });
+    if (isNonFastForwardWriteResult(result)) return { kind: 'not-fast-forward' };
+    const mapped = mapApplyMergeWriteResult(
+      result,
+      {
+        base: input.base,
+        ours: input.ours,
+        theirs: input.theirs,
+        changes: [],
+        resolutionCount: 0,
+      },
+      'ref-fast-forwarded',
+    );
+    return mapped.status === 'applied'
+      ? { kind: 'applied', result: mapped }
+      : { kind: 'blocked', result: mapped };
+  } catch {
+    return {
+      kind: 'blocked',
+      result: blockedApplyMergeResult(input.base, input.ours, input.theirs, [
+        providerErrorDiagnostic(),
+      ]),
+    };
   }
 }
 
@@ -560,8 +631,15 @@ function toApplyMergeService(value: unknown): AttachedVersionApplyMergeService |
     bindMethod(value, 'applyMerge') ??
     bindMethod(value, 'applyMergeVersion') ??
     bindMethod(value, 'applyMergeCommit');
-  if (!mergeCommit) return null;
-  return { mergeCommit: (input) => mergeCommit(input) };
+  const fastForwardMerge =
+    bindMethod(value, 'fastForwardMerge') ??
+    bindMethod(value, 'fastForwardApplyMerge') ??
+    bindMethod(value, 'applyMergeFastForward');
+  if (!mergeCommit && !fastForwardMerge) return null;
+  return {
+    ...(mergeCommit ? { mergeCommit: (input) => mergeCommit(input) } : {}),
+    ...(fastForwardMerge ? { fastForwardMerge: (input) => fastForwardMerge(input) } : {}),
+  };
 }
 
 function bindMethod(value: unknown, name: string): BoundMethod | null {
@@ -580,6 +658,7 @@ function mapApplyMergeWriteResult(
     readonly changes: readonly VersionMergeChange[];
     readonly resolutionCount: number;
   },
+  successMutationGuarantee: VersionApplyMergeResult['mutationGuarantee'],
 ): VersionApplyMergeResult {
   if (!isRecord(value)) {
     return blockedApplyMergeResult(plan.base, plan.ours, plan.theirs, [providerErrorDiagnostic()]);
@@ -614,8 +693,20 @@ function mapApplyMergeWriteResult(
     conflicts: [],
     diagnostics: [],
     resolutionCount: plan.resolutionCount,
-    mutationGuarantee: 'merge-commit-created',
+    mutationGuarantee: successMutationGuarantee,
   };
+}
+
+function isNonFastForwardWriteResult(value: unknown): boolean {
+  if (!isRecord(value) || value.status === 'success' || value.status === 'applied') return false;
+  if (!Array.isArray(value.diagnostics)) return false;
+  return value.diagnostics.some((diagnostic) => {
+    if (!isRecord(diagnostic)) return false;
+    return (
+      diagnostic.code === 'VERSION_UNSUPPORTED_PARENT_COMMIT' ||
+      diagnostic.issueCode === 'VERSION_UNSUPPORTED_PARENT_COMMIT'
+    );
+  });
 }
 
 function mapWorkbookCommitRef(value: unknown): WorkbookCommitRef | null {
@@ -711,6 +802,7 @@ function toApplyMergeMutationGuarantee(
 ): VersionApplyMergeResult['mutationGuarantee'] | undefined {
   return value === 'preview-only' ||
     value === 'merge-commit-created' ||
+    value === 'ref-fast-forwarded' ||
     value === 'no-write-attempted' ||
     value === 'ref-not-mutated' ||
     value === 'unknown-after-crash'

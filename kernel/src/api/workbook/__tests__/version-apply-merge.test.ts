@@ -141,6 +141,63 @@ describe('WorkbookVersion applyMerge preview planner', () => {
     });
   });
 
+  it('fast-forwards apply mode without previewing or creating a merge commit', async () => {
+    const merge = jest.fn();
+    const mergeCommit = jest.fn();
+    const fastForwardMerge = jest.fn(async () => ({
+      status: 'success',
+      commitRef: {
+        id: THEIRS,
+        refName: TARGET_REF,
+        resolvedFrom: TARGET_REF,
+        refRevision: { kind: 'counter' as const, value: '2' },
+      },
+      diagnostics: [],
+      mutationGuarantee: 'ref-fast-forwarded',
+    }));
+    const version = new WorkbookVersionImpl({
+      versioning: {
+        mergeService: { merge },
+        writeService: { fastForwardMerge, mergeCommit },
+      },
+    } as any);
+
+    await expect(
+      version.applyMerge(
+        { base: BASE, ours: OURS, theirs: THEIRS },
+        { targetRef: TARGET_REF as any, expectedTargetHead: EXPECTED_TARGET_HEAD },
+      ),
+    ).resolves.toEqual({
+      ok: true,
+      value: {
+        status: 'applied',
+        base: BASE,
+        ours: OURS,
+        theirs: THEIRS,
+        commitRef: {
+          id: THEIRS,
+          refName: TARGET_REF,
+          resolvedFrom: TARGET_REF,
+          refRevision: { kind: 'counter', value: '2' },
+        },
+        changes: [],
+        conflicts: [],
+        diagnostics: [],
+        resolutionCount: 0,
+        mutationGuarantee: 'ref-fast-forwarded',
+      },
+    });
+    expect(fastForwardMerge).toHaveBeenCalledWith({
+      base: BASE,
+      ours: OURS,
+      theirs: THEIRS,
+      targetRef: TARGET_REF,
+      expectedTargetHead: EXPECTED_TARGET_HEAD,
+    });
+    expect(merge).not.toHaveBeenCalled();
+    expect(mergeCommit).not.toHaveBeenCalled();
+  });
+
   it('returns conflicted previews when resolutions are not supplied', async () => {
     const conflict = sameCellConflict();
     const merge = jest.fn(async () => conflictedResult(conflict));

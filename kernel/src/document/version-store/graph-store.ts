@@ -1,3 +1,5 @@
+import type { VersionAuthor } from '@mog-sdk/contracts/versioning';
+
 import {
   objectDigestFromWorkbookCommitId,
   type VersionDependencyRef,
@@ -31,6 +33,7 @@ import {
 } from './ref-store';
 import type { InMemoryRefStoreSnapshot } from './ref-store-snapshot';
 import { graphWriteSuccess, parseGraphCommitExpectedHead } from './graph-store-commit-helpers';
+import { fastForwardGraphRef } from './graph-store-fast-forward';
 import {
   VERSION_GRAPH_LIST_COMMITS_DEFAULT_PAGE_SIZE,
   VERSION_GRAPH_LIST_COMMITS_MAX_PAGE_SIZE,
@@ -83,6 +86,15 @@ export type MergeVersionGraphInput = VersionGraphCommitContentInput & {
   readonly expectedMainRefVersion?: RefVersion;
   readonly expectedTargetRefVersion?: RefVersion;
   readonly mergeParentCommitId: WorkbookCommitId | string;
+};
+
+export type FastForwardVersionGraphInput = {
+  readonly targetRef?: VersionGraphBranchRefName | string;
+  readonly expectedHeadCommitId: WorkbookCommitId | string;
+  readonly expectedMainRefVersion?: RefVersion;
+  readonly expectedTargetRefVersion?: RefVersion;
+  readonly nextCommitId: WorkbookCommitId | string;
+  readonly updatedBy: VersionAuthor;
 };
 
 export type VersionGraphRef = {
@@ -167,6 +179,7 @@ export type VersionGraphStoreOperation =
   | 'initializeGraph'
   | 'commit'
   | 'mergeCommit'
+  | 'fastForwardRef'
   | 'readCommitClosure'
   | 'readHead'
   | 'readRef'
@@ -318,6 +331,10 @@ export class InMemoryVersionGraphStore {
       kind: 'merge',
       mergeParentCommitId: input.mergeParentCommitId,
     });
+  }
+
+  async fastForwardRef(input: FastForwardVersionGraphInput): Promise<VersionGraphWriteResult> {
+    return fastForwardGraphRef(this, input);
   }
 
   private async commitWithParentPlan(

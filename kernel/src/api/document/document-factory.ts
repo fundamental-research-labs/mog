@@ -61,6 +61,7 @@ import {
   type XlsxDocumentImportOptions,
 } from './xlsx-document-import';
 import { createHandleLiveness, type HandleLiveness } from '../lifecycle/handle-liveness';
+import { createDocumentByteSyncPort } from './document-sync-port';
 
 export { INTERNAL_INTERACTIVE_DEFERRED_IMPORT } from './xlsx-document-import';
 export type {
@@ -678,21 +679,11 @@ function createDocumentHandle(
       assertNotDisposed('createSyncPort');
       if (cachedSyncPort) return cachedSyncPort;
 
-      cachedSyncPort = {
-        docId: documentId,
-        async applyUpdate(update: Uint8Array): Promise<void> {
-          assertNotDisposed('syncPort.applyUpdate');
-          await lifecycle.computeBridge.syncApply(update);
-        },
-        encodeDiff(remoteStateVector: Uint8Array): Promise<Uint8Array> {
-          assertNotDisposed('syncPort.encodeDiff');
-          return lifecycle.computeBridge.encodeDiff(remoteStateVector);
-        },
-        currentStateVector(): Promise<Uint8Array> {
-          assertNotDisposed('syncPort.currentStateVector');
-          return lifecycle.computeBridge.currentStateVector();
-        },
-      };
+      cachedSyncPort = createDocumentByteSyncPort({
+        documentId,
+        getComputeBridge: () => lifecycle.computeBridge,
+        assertNotDisposed,
+      });
 
       return cachedSyncPort;
     },

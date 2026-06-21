@@ -2,6 +2,7 @@ import type {
   RedactedVersionAuthor,
   VersionBranchName,
   VersionBranchRefReadResult,
+  VersionCheckoutOptions, VersionCheckoutResult, VersionCheckoutTarget,
   VersionCommitish,
   VersionCreateBranchOptions,
   VersionCommitOptions,
@@ -41,6 +42,7 @@ import { observeMutationAdmission } from '../../bridges/compute/mutation-admissi
 import type { DocumentContext } from '../../context';
 import { VERSION_OBJECT_SCHEMA_VERSION } from '../../document/version-store/object-store';
 import { REF_NAME_STORAGE_PREFIX } from '../../document/version-store/ref-name';
+import { checkoutWorkbookVersion } from './version-checkout';
 import { commitWorkbookVersion, hasAttachedVersionWriteService } from './version-commit';
 import { diffWorkbookVersion } from './version-diff';
 import {
@@ -224,7 +226,7 @@ export class WorkbookVersionImpl implements WorkbookVersion {
     const checkoutPending = diagnostic(
       'version.checkout.pending',
       'warning',
-      'Checkout materialization APIs are pending and are not exposed by this read-only slice.',
+      'Public checkout facade is exposed, but no production materializer lifecycle attachment is reported yet.',
       'VC-05',
     );
     const mergePending = diagnostic(
@@ -331,11 +333,11 @@ export class WorkbookVersionImpl implements WorkbookVersion {
     return commitWorkbookVersion(this.ctx, options);
   }
 
-  async diff(
-    base: VersionCommitish,
-    target: VersionCommitish,
-    options: VersionDiffOptions = {},
-  ): Promise<WorkbookDiffPage> {
+  async checkout(target: VersionCheckoutTarget, options: VersionCheckoutOptions = {}): Promise<VersionCheckoutResult> {
+    return checkoutWorkbookVersion(this.ctx, target, options);
+  }
+
+  async diff(base: VersionCommitish, target: VersionCommitish, options: VersionDiffOptions = {}): Promise<WorkbookDiffPage> {
     return diffWorkbookVersion(this.ctx, base, target, options);
   }
 
@@ -392,9 +394,7 @@ export class WorkbookVersionImpl implements WorkbookVersion {
   }
 }
 
-function validateListCommitsOptions(
-  options: VersionListCommitsOptions,
-): readonly VersionStoreDiagnostic[] {
+function validateListCommitsOptions(options: VersionListCommitsOptions): readonly VersionStoreDiagnostic[] {
   const diagnostics: VersionStoreDiagnostic[] = [];
   const pageSize = options.pageSize ?? VERSION_LIST_COMMITS_DEFAULT_PAGE_SIZE;
 

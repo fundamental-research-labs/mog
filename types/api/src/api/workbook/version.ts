@@ -1,9 +1,9 @@
 /**
  * WorkbookVersion -- public version-control API slice.
  *
- * This surface exposes status, read-only graph inspection, and the first public
- * commit entrypoint. Checkout, merge, and branch mutation APIs are not part of
- * this slice.
+ * This surface exposes status, graph inspection, public commit/ref mutation,
+ * semantic diff, and a checkout materialization planning facade. Merge APIs
+ * are not part of this slice.
  */
 
 export type WorkbookVersionRolloutStage =
@@ -107,6 +107,22 @@ export type VersionDiagnosticCode =
   | 'VERSION_DANGLING_REF'
   | 'VERSION_GRAPH_CONFLICT'
   | 'VERSION_GRAPH_UNINITIALIZED'
+  | 'VERSION_CHECKOUT_COMMIT_COMPLETENESS_DIAGNOSTIC'
+  | 'VERSION_CHECKOUT_COMMIT_READ_FAILED'
+  | 'VERSION_CHECKOUT_DEPENDENCY_READ_FAILED'
+  | 'VERSION_CHECKOUT_DETACHED_HEAD_UNSUPPORTED'
+  | 'VERSION_CHECKOUT_DETACHED_TARGET_UNSUPPORTED'
+  | 'VERSION_CHECKOUT_INVALID_TARGET'
+  | 'VERSION_CHECKOUT_MISSING_COMMIT'
+  | 'VERSION_CHECKOUT_MISSING_DEPENDENCY'
+  | 'VERSION_CHECKOUT_MISSING_HEAD_READER'
+  | 'VERSION_CHECKOUT_MISSING_REF'
+  | 'VERSION_CHECKOUT_MISSING_REF_READER'
+  | 'VERSION_CHECKOUT_PROVIDER_ERROR'
+  | 'VERSION_CHECKOUT_REF_READ_FAILED'
+  | 'VERSION_CHECKOUT_SERVICE_UNAVAILABLE'
+  | 'VERSION_CHECKOUT_UNMATERIALIZABLE_COMMIT'
+  | 'VERSION_CHECKOUT_UNSUPPORTED_TARGET'
   | 'VERSION_INVALID_COMMIT_ID'
   | 'VERSION_INVALID_COMMIT_PAYLOAD'
   | 'VERSION_INVALID_OPTIONS'
@@ -271,6 +287,81 @@ export interface VersionDiffOptions {
   readonly includeDerivedImpact?: boolean;
   readonly includeDiagnostics?: boolean;
 }
+
+export type VersionCheckoutTarget =
+  | {
+      readonly kind: 'head';
+    }
+  | {
+      readonly kind: 'commit';
+      readonly id: WorkbookCommitId;
+    }
+  | {
+      readonly kind: 'ref';
+      readonly name: VersionRefSelector | VersionBranchName | VersionRefName;
+    };
+
+export interface VersionCheckoutOptions {
+  readonly includeDiagnostics?: boolean;
+}
+
+export type VersionCheckoutDependencyRole =
+  | 'snapshotRoot'
+  | 'semanticChangeSet'
+  | 'mutationSegment'
+  | 'redactionSummary'
+  | 'verificationSummary';
+
+export interface VersionCheckoutDependencySummary {
+  readonly role: VersionCheckoutDependencyRole;
+  readonly objectType: string;
+  readonly index?: number;
+}
+
+export type VersionCheckoutResolvedTarget =
+  | {
+      readonly kind: 'commit';
+      readonly commitId: WorkbookCommitId;
+    }
+  | {
+      readonly kind: 'ref';
+      readonly refName: VersionMainRefName | VersionRefName;
+      readonly commitId: WorkbookCommitId;
+      readonly refRevision: VersionRecordRevision;
+      readonly refIncarnationId?: string;
+    }
+  | {
+      readonly kind: 'head';
+      readonly refName: VersionMainRefName | VersionRefName;
+      readonly commitId: WorkbookCommitId;
+      readonly refRevision?: VersionRecordRevision;
+      readonly refIncarnationId?: string;
+    };
+
+export interface VersionCheckoutPlan {
+  readonly strategy: 'fullSnapshot';
+  readonly target: VersionCheckoutResolvedTarget;
+  readonly commitId: WorkbookCommitId;
+  readonly parentCommitIds: readonly WorkbookCommitId[];
+  readonly requiredDependencies: readonly VersionCheckoutDependencySummary[];
+  readonly requiredDependencyCount: number;
+}
+
+export type VersionCheckoutResult =
+  | {
+      readonly status: 'success';
+      readonly materialization: 'planned';
+      readonly plan: VersionCheckoutPlan;
+      readonly diagnostics: readonly VersionStoreDiagnostic[];
+      readonly mutationGuarantee: 'no-workbook-mutation';
+    }
+  | {
+      readonly status: 'degraded';
+      readonly materialization: 'not-applied';
+      readonly plan: null;
+      readonly diagnostics: readonly VersionStoreDiagnostic[];
+      readonly mutationGuarantee: 'no-workbook-mutation';
+    };
 
 export type VersionSemanticValue =
   | null
@@ -483,6 +574,10 @@ export interface WorkbookVersion {
   getHead(options: VersionGetHeadOptions): Promise<WorkbookCommitRef | VersionDegradedHeadResult>;
   listCommits(options?: VersionListCommitsOptions): Promise<VersionCommitPage>;
   commit(options?: VersionCommitOptions): Promise<WorkbookCommitRef>;
+  checkout(
+    target: VersionCheckoutTarget,
+    options?: VersionCheckoutOptions,
+  ): Promise<VersionCheckoutResult>;
   diff(
     base: VersionCommitish,
     target: VersionCommitish,

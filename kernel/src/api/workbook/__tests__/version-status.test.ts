@@ -767,10 +767,10 @@ describe('WorkbookVersion status slice', () => {
     expect(graphStore.commit).not.toHaveBeenCalled();
   });
 
-  it('exposes ref lifecycle methods but not deferred checkout or merge methods', () => {
+  it('exposes checkout and ref lifecycle methods but not merge methods', () => {
     const wb = createWorkbook();
 
-    expect('checkout' in wb.version).toBe(false);
+    expect('checkout' in wb.version).toBe(true);
     expect('merge' in wb.version).toBe(false);
     expect('diff' in wb.version).toBe(true);
     expect('createBranch' in wb.version).toBe(true);

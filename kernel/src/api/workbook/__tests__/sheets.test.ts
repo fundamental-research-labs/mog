@@ -60,18 +60,32 @@ const { WorkbookSheetsImpl } = await import('../sheets');
 // Helpers
 // =============================================================================
 
-function expectVersionOperationOptions(sheetId: string) {
+function expectVersionOperationOptions({
+  operationIdPrefix,
+  sheetIds,
+  groupId,
+}: {
+  operationIdPrefix: string;
+  sheetIds?: readonly string[];
+  groupId?: unknown;
+}) {
+  const operationContext: Record<string, unknown> = {
+    operationId: expect.stringMatching(new RegExp(`^${escapeRegExp(operationIdPrefix)}:`)),
+    kind: 'mutation',
+    author: expect.objectContaining({ actorKind: 'user' }),
+    domainIds: ['sheets'],
+    capturePolicy: 'commitEligible',
+    writeAdmissionMode: 'capture',
+  };
+  if (sheetIds) operationContext.sheetIds = sheetIds;
+  if (groupId !== undefined) operationContext.groupId = groupId;
   return expect.objectContaining({
-    operationContext: expect.objectContaining({
-      operationId: expect.stringMatching(/^workbook\.sheets\.rename:/),
-      kind: 'mutation',
-      author: expect.objectContaining({ actorKind: 'user' }),
-      sheetIds: [sheetId],
-      domainIds: ['sheets'],
-      capturePolicy: 'commitEligible',
-      writeAdmissionMode: 'capture',
-    }),
+    operationContext: expect.objectContaining(operationContext),
   });
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function createMockDeps(sheets: Record<string, string>): WorkbookSheetsDeps {
@@ -87,6 +101,7 @@ function createMockDeps(sheets: Record<string, string>): WorkbookSheetsDeps {
       return Promise.resolve(sheets[id] ?? null);
     }),
     getAllSheetIds: jest.fn().mockResolvedValue(ids),
+    isSheetHidden: jest.fn().mockResolvedValue(false),
   };
 
   // getOrder mock returns the sheet IDs
@@ -147,6 +162,56 @@ describe('WorkbookSheetsImpl.add()', () => {
     expect(deps.setActiveSheetId).toHaveBeenCalledWith(newSheetId);
   });
 
+  it('passes version operation options when adding a sheet', async () => {
+    const deps = createMockDeps({ s1: 'Sheet1' });
+    const newSheetId = makeSheetId('s2');
+    (SheetOps.createSheet as jest.Mock).mockResolvedValue(newSheetId);
+    const impl = new WorkbookSheetsImpl(deps);
+
+    await impl.add('Revenue');
+
+    expect(SheetOps.createSheet).toHaveBeenCalledWith(
+      deps.ctx,
+      'Revenue',
+      expectVersionOperationOptions({
+        operationIdPrefix: 'workbook.sheets.add',
+      }),
+    );
+  });
+
+  it('groups add and optional move as one user operation', async () => {
+    const deps = createMockDeps({ s1: 'Sheet1', s2: 'Revenue' });
+    const newSheetId = makeSheetId('s2');
+    (SheetOps.createSheet as jest.Mock).mockResolvedValue(newSheetId);
+    const impl = new WorkbookSheetsImpl(deps);
+
+    await impl.add('Revenue', 0);
+
+    const createOptions = (SheetOps.createSheet as jest.Mock).mock.calls[0][2] as {
+      operationContext: { groupId?: string };
+    };
+    const groupId = createOptions.operationContext.groupId;
+    expect(groupId).toEqual(expect.any(String));
+    expect(SheetOps.createSheet).toHaveBeenCalledWith(
+      deps.ctx,
+      'Revenue',
+      expectVersionOperationOptions({
+        operationIdPrefix: 'workbook.sheets.add',
+        groupId,
+      }),
+    );
+    expect(SheetOps.moveSheet).toHaveBeenCalledWith(
+      deps.ctx,
+      's2',
+      0,
+      expectVersionOperationOptions({
+        operationIdPrefix: 'workbook.sheets.add.move',
+        sheetIds: ['s2'],
+        groupId,
+      }),
+    );
+  });
+
   it('emits sheet:activated event after adding', async () => {
     const deps = createMockDeps({ s1: 'Sheet1' });
     const newSheetId = makeSheetId('s2');
@@ -161,6 +226,113 @@ describe('WorkbookSheetsImpl.add()', () => {
         sheetId: newSheetId,
         name: 'Revenue',
         source: 'user',
+      }),
+    );
+  });
+});
+
+describe('WorkbookSheetsImpl.remove()', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('passes version operation options when removing a sheet', async () => {
+    const deps = createMockDeps({ s1: 'Sheet1', s2: 'Sheet2' });
+    (SheetOps.removeSheet as jest.Mock).mockResolvedValue(true);
+    const impl = new WorkbookSheetsImpl(deps);
+
+    await impl.remove('Sheet1');
+
+    expect(SheetOps.removeSheet).toHaveBeenCalledWith(
+      deps.ctx,
+      's1',
+      expectVersionOperationOptions({
+        operationIdPrefix: 'workbook.sheets.remove',
+        sheetIds: ['s1'],
+      }),
+    );
+  });
+});
+
+describe('WorkbookSheetsImpl.move()', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('passes version operation options when moving a sheet', async () => {
+    const deps = createMockDeps({ s1: 'Sheet1', s2: 'Sheet2' });
+    (SheetOps.moveSheet as jest.Mock).mockResolvedValue(true);
+    const impl = new WorkbookSheetsImpl(deps);
+
+    await impl.move('Sheet1', 1);
+
+    expect(SheetOps.moveSheet).toHaveBeenCalledWith(
+      deps.ctx,
+      's1',
+      1,
+      expectVersionOperationOptions({
+        operationIdPrefix: 'workbook.sheets.move',
+        sheetIds: ['s1'],
+      }),
+    );
+  });
+});
+
+describe('WorkbookSheetsImpl.copy()', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('passes version operation options when copying a sheet', async () => {
+    const deps = createMockDeps({ s1: 'Sheet1' });
+    const newSheetId = makeSheetId('s2');
+    (SheetOps.copySheet as jest.Mock).mockResolvedValue(newSheetId);
+    const impl = new WorkbookSheetsImpl(deps);
+
+    await impl.copy('Sheet1', 'Revenue Copy');
+
+    expect(SheetOps.copySheet).toHaveBeenCalledWith(
+      deps.ctx,
+      's1',
+      'Revenue Copy',
+      expectVersionOperationOptions({
+        operationIdPrefix: 'workbook.sheets.copy',
+        sheetIds: ['s1'],
+      }),
+    );
+  });
+
+  it('groups copy and optional move as one user operation', async () => {
+    const deps = createMockDeps({ s1: 'Sheet1', s2: 'Sheet1 (Copy)' });
+    const newSheetId = makeSheetId('s2');
+    (SheetOps.copySheet as jest.Mock).mockResolvedValue(newSheetId);
+    const impl = new WorkbookSheetsImpl(deps);
+
+    await impl.copy('Sheet1', undefined, 0);
+
+    const copyOptions = (SheetOps.copySheet as jest.Mock).mock.calls[0][3] as {
+      operationContext: { groupId?: string };
+    };
+    const groupId = copyOptions.operationContext.groupId;
+    expect(groupId).toEqual(expect.any(String));
+    expect(SheetOps.copySheet).toHaveBeenCalledWith(
+      deps.ctx,
+      's1',
+      'Sheet1 (Copy)',
+      expectVersionOperationOptions({
+        operationIdPrefix: 'workbook.sheets.copy',
+        sheetIds: ['s1'],
+        groupId,
+      }),
+    );
+    expect(SheetOps.moveSheet).toHaveBeenCalledWith(
+      deps.ctx,
+      's2',
+      0,
+      expectVersionOperationOptions({
+        operationIdPrefix: 'workbook.sheets.copy.move',
+        sheetIds: ['s2'],
+        groupId,
       }),
     );
   });
@@ -181,7 +353,10 @@ describe('WorkbookSheetsImpl.rename()', () => {
       deps.ctx,
       's1',
       'MySheet',
-      expectVersionOperationOptions('s1'),
+      expectVersionOperationOptions({
+        operationIdPrefix: 'workbook.sheets.rename',
+        sheetIds: ['s1'],
+      }),
     );
   });
 
@@ -213,7 +388,10 @@ describe('WorkbookSheetsImpl.rename()', () => {
       deps.ctx,
       's1',
       'SHEET1',
-      expectVersionOperationOptions('s1'),
+      expectVersionOperationOptions({
+        operationIdPrefix: 'workbook.sheets.rename',
+        sheetIds: ['s1'],
+      }),
     );
   });
 
@@ -226,7 +404,10 @@ describe('WorkbookSheetsImpl.rename()', () => {
       deps.ctx,
       's1',
       'Delta',
-      expectVersionOperationOptions('s1'),
+      expectVersionOperationOptions({
+        operationIdPrefix: 'workbook.sheets.rename',
+        sheetIds: ['s1'],
+      }),
     );
   });
 
@@ -255,7 +436,10 @@ describe('WorkbookSheetsImpl.rename()', () => {
       deps.ctx,
       's1',
       'January',
-      expectVersionOperationOptions('s1'),
+      expectVersionOperationOptions({
+        operationIdPrefix: 'workbook.sheets.rename',
+        sheetIds: ['s1'],
+      }),
     );
 
     jest.clearAllMocks();

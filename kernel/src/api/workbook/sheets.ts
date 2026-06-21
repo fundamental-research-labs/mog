@@ -19,15 +19,20 @@ import type {
   Worksheet,
 } from '@mog-sdk/contracts/api';
 import type { SheetId } from '@mog-sdk/contracts/core';
+import type { VersionOperationContext } from '@mog-sdk/contracts/versioning';
 import { type CallableDisposable, toDisposable } from '@mog/spreadsheet-utils/disposable';
 import { KernelError, toMogSdkError } from '../../errors';
 import { protectedWorkbook } from '../../errors/api';
 
 import type { ProtectedWorkbookOperation } from '@mog-sdk/contracts/protection';
 import type { DocumentContext } from '../../context';
+import type { MutationAdmissionOptions } from '../../bridges/compute';
 import { getOrder } from '../../domain/sheets/sheet-meta';
 import * as WorkbookDomain from '../../domain/workbook/workbook';
-import { createVersionOperationContext } from '../internal/version-operation-context';
+import {
+  createVersionOperationContext,
+  type CreateVersionOperationContextInput,
+} from '../internal/version-operation-context';
 
 import {
   copySheet,
@@ -38,6 +43,10 @@ import {
   setSheetHidden,
 } from './operations/sheet-crud-operations';
 import { EVENT_TO_INTERNAL } from './event-mapping';
+
+type SheetCrudMutationOptions = MutationAdmissionOptions & {
+  readonly operationContext: VersionOperationContext;
+};
 
 /**
  * Dependencies injected from WorkbookImpl.
@@ -88,14 +97,34 @@ export class WorkbookSheetsImpl implements WorkbookSheets {
     // a unique "SheetN" name by checking existing sheet names atomically.
     const sheetName = name ?? '';
 
-    const newSheetId = await createSheet(ctx, sheetName);
+    const createOptions =
+      index !== undefined
+        ? createGroupedSheetCrudMutationOptions(ctx, {
+            operationIdPrefix: 'workbook.sheets.add',
+            domainIds: ['sheets'],
+          })
+        : createSheetCrudMutationOptions(ctx, {
+            operationIdPrefix: 'workbook.sheets.add',
+            domainIds: ['sheets'],
+          });
+    const newSheetId = await createSheet(ctx, sheetName, createOptions);
 
     // If a specific index was requested, move the sheet there
     if (index !== undefined) {
       const order = await getOrder(ctx);
       const currentIndex = order.indexOf(newSheetId);
       if (currentIndex !== index && index >= 0 && index < order.length) {
-        await moveSheet(ctx, newSheetId, index);
+        await moveSheet(
+          ctx,
+          newSheetId,
+          index,
+          createSheetCrudMutationOptions(ctx, {
+            operationIdPrefix: 'workbook.sheets.add.move',
+            sheetIds: [newSheetId],
+            domainIds: ['sheets'],
+            groupId: createOptions.operationContext.groupId,
+          }),
+        );
       }
     }
 
@@ -158,7 +187,15 @@ export class WorkbookSheetsImpl implements WorkbookSheets {
       }
     }
 
-    const deleted = await removeSheet(ctx, sheetId);
+    const deleted = await removeSheet(
+      ctx,
+      sheetId,
+      createSheetCrudMutationOptions(ctx, {
+        operationIdPrefix: 'workbook.sheets.remove',
+        sheetIds: [sheetId],
+        domainIds: ['sheets'],
+      }),
+    );
     if (!deleted) {
       throw new KernelError(
         'COMPUTE_ERROR',
@@ -177,7 +214,16 @@ export class WorkbookSheetsImpl implements WorkbookSheets {
     const { ctx, resolveTarget, getSheetName } = this.deps;
     const sheetId = await resolveTarget(target);
     const name = (await getSheetName(sheetId)) ?? String(target);
-    const moved = await moveSheet(ctx, sheetId, toIndex);
+    const moved = await moveSheet(
+      ctx,
+      sheetId,
+      toIndex,
+      createSheetCrudMutationOptions(ctx, {
+        operationIdPrefix: 'workbook.sheets.move',
+        sheetIds: [sheetId],
+        domainIds: ['sheets'],
+      }),
+    );
     if (!moved) {
       throw new KernelError('COMPUTE_ERROR', `Failed to move sheet "${name}" to index ${toIndex}.`);
     }
@@ -235,7 +281,19 @@ export class WorkbookSheetsImpl implements WorkbookSheets {
     const sourceName = await getSheetName(sourceId);
     const copyName = newName ?? `${sourceName ?? 'Sheet'} (Copy)`;
 
-    const newSheetId = await copySheet(ctx, sourceId, copyName);
+    const copyOptions =
+      index !== undefined
+        ? createGroupedSheetCrudMutationOptions(ctx, {
+            operationIdPrefix: 'workbook.sheets.copy',
+            sheetIds: [sourceId],
+            domainIds: ['sheets'],
+          })
+        : createSheetCrudMutationOptions(ctx, {
+            operationIdPrefix: 'workbook.sheets.copy',
+            sheetIds: [sourceId],
+            domainIds: ['sheets'],
+          });
+    const newSheetId = await copySheet(ctx, sourceId, copyName, copyOptions);
 
     if (!newSheetId) {
       throw new KernelError('COMPUTE_ERROR', `Failed to copy sheet. Source sheet may not exist.`);
@@ -246,7 +304,17 @@ export class WorkbookSheetsImpl implements WorkbookSheets {
       const currentIndex = order.indexOf(newSheetId);
       const targetIndex = Math.max(0, Math.min(index, order.length - 1));
       if (currentIndex !== -1 && currentIndex !== targetIndex) {
-        await moveSheet(ctx, newSheetId, targetIndex);
+        await moveSheet(
+          ctx,
+          newSheetId,
+          targetIndex,
+          createSheetCrudMutationOptions(ctx, {
+            operationIdPrefix: 'workbook.sheets.copy.move',
+            sheetIds: [newSheetId],
+            domainIds: ['sheets'],
+            groupId: copyOptions.operationContext.groupId,
+          }),
+        );
       }
     }
 
@@ -358,4 +426,26 @@ async function assertNameNotTaken(
       );
     }
   }
+}
+
+function createSheetCrudMutationOptions(
+  ctx: DocumentContext,
+  input: CreateVersionOperationContextInput,
+): SheetCrudMutationOptions {
+  return {
+    operationContext: createVersionOperationContext(ctx, input),
+  };
+}
+
+function createGroupedSheetCrudMutationOptions(
+  ctx: DocumentContext,
+  input: CreateVersionOperationContextInput,
+): SheetCrudMutationOptions {
+  const options = createSheetCrudMutationOptions(ctx, input);
+  return {
+    operationContext: {
+      ...options.operationContext,
+      groupId: options.operationContext.groupId ?? options.operationContext.operationId,
+    },
+  };
 }

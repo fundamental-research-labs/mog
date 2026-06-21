@@ -249,3 +249,15 @@ export {
   type SnapshotRootMaterializationResult,
   type SnapshotRootMaterializationServiceOptions,
 } from './document/version-store/snapshot-root-materialization-service';
+
+export {
+  VersionPersistence,
+  createVersionPersistence,
+  type VersionPersistenceOptions,
+  type VersionPersistenceReloadDiagnostic,
+  type VersionPersistenceReloadDiagnosticCode,
+  type VersionPersistenceReloadDiagnosticSource,
+  type VersionPersistenceReloadRequest,
+  type VersionPersistenceReloadResult,
+  type VersionPersistenceSnapshotRootMaterializer,
+} from './document/version-store/version-persistence';

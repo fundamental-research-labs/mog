@@ -644,6 +644,122 @@ describe('WorkbookVersion applyMerge production materializer', () => {
       await sourceHandle.dispose();
     }
   });
+
+  it('rejects a persisted fast-forward result when the target head moved after preview', async () => {
+    const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
+    const initialized = await provider.initializeGraph(await initializeInput('graph-stale-fast-forward', 'root'));
+    expectInitializeSuccess(initialized);
+
+    const sourceHandle = await DocumentFactory.create({
+      documentId: DOCUMENT_ID,
+      environment: 'headless',
+      userTimezone: 'UTC',
+    });
+    let sourceWb: Workbook | undefined;
+
+    try {
+      sourceWb = await sourceHandle.workbook({ versioning: { provider } });
+      await sourceWb.activeSheet.setCell('A1', 'base');
+      const baseCommit = await expectCommit(
+        sourceWb.version.commit({
+          expectedHead: {
+            commitId: initialized.rootCommit.id,
+            revision: initialized.initialHead.revision,
+            symbolicHeadRevision: initialized.symbolicHead.revision,
+          },
+        }),
+      );
+      const baseHead = await expectHead(sourceWb);
+
+      await sourceWb.activeSheet.setCell('B1', 'ours');
+      const oursCommit = await expectCommit(
+        sourceWb.version.commit({
+          expectedHead: {
+            commitId: baseCommit.id,
+            revision: requireRefRevision(baseHead),
+          },
+        }),
+      );
+      const oursHead = await expectHead(sourceWb);
+
+      const branch = await sourceWb.version.createBranch({
+        name: 'scenario/stale-fast-forward-incoming' as any,
+        targetCommitId: oursCommit.id,
+        expectedAbsent: true,
+      });
+      if (!branch.ok) throw new Error(`expected branch create success: ${branch.error.code}`);
+
+      await sourceWb.activeSheet.setCell('C1', 'theirs');
+      const theirsCommit = await expectCommit(
+        sourceWb.version.commit({
+          targetRef: 'scenario/stale-fast-forward-incoming' as any,
+          expectedHead: {
+            commitId: oursCommit.id,
+            revision: branch.value.revision,
+          },
+        }),
+      );
+
+      const expectedTargetHead = {
+        commitId: oursCommit.id,
+        revision: requireRefRevision(oursHead),
+      };
+      const preview = await sourceWb.version.merge(
+        {
+          base: baseCommit.id,
+          ours: oursCommit.id,
+          theirs: theirsCommit.id,
+        },
+        {
+          mode: 'preview',
+          targetRef: 'refs/heads/main' as any,
+          expectedTargetHead,
+          persistReviewRecord: true,
+        },
+      );
+      if (!preview.ok) throw new Error(`expected persisted merge preview success: ${preview.error.code}`);
+      if (preview.value.status !== 'fastForward' || !preview.value.resultId || !preview.value.resultDigest) {
+        throw new Error('expected fast-forward preview to expose a persisted result id and digest');
+      }
+
+      await sourceWb.activeSheet.setCell('D1', 'interloper');
+      const interloperCommit = await expectCommit(
+        sourceWb.version.commit({
+          expectedHead: expectedTargetHead,
+        }),
+      );
+
+      const stale = await sourceWb.version.applyMerge(
+        {
+          resultId: preview.value.resultId,
+          resultDigest: preview.value.resultDigest,
+        },
+        {
+          targetRef: 'refs/heads/main' as any,
+          expectedTargetHead,
+        },
+      );
+      expect(stale).toMatchObject({
+        ok: false,
+        error: {
+          code: 'target_unavailable',
+          target: 'workbook.version.applyMerge',
+          diagnostics: expect.arrayContaining([
+            expect.objectContaining({ code: 'VERSION_REF_CONFLICT' }),
+          ]),
+        },
+      });
+
+      const head = await expectHead(sourceWb);
+      expect(head).toMatchObject({
+        id: interloperCommit.id,
+        refRevision: { kind: 'counter', value: '3' },
+      });
+    } finally {
+      if (sourceWb) await sourceWb.close('skipSave');
+      await sourceHandle.dispose();
+    }
+  });
 });
 
 async function expectCommit(

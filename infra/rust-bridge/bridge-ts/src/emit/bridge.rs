@@ -21,6 +21,10 @@ pub enum BridgePattern {
     Skip,
 }
 
+fn accepts_mutation_admission_options(pattern: BridgePattern) -> bool {
+    matches!(pattern, BridgePattern::Mutate | BridgePattern::SystemMutate)
+}
+
 /// Check if a return type is a binary mutation tuple like `[Uint8Array, MutationResult]`.
 pub fn is_binary_mutation_return(ty: &TsType) -> bool {
     matches!(ty, TsType::Tuple(elems) if elems.len() == 2
@@ -173,6 +177,9 @@ pub fn emit_bridge(
         "import type {{ {} }} from '{}';\n",
         config.core_type_name, config.core_import_path
     ));
+    if bridge_uses_mutation_admission_options(api) {
+        out.push_str("import type { MutationAdmissionOptions } from './mutation-admission';\n");
+    }
 
     if let Some(import_config) = imports {
         let referenced = collect_named_from_bridge(api);
@@ -240,12 +247,20 @@ pub fn emit_bridge(
     out
 }
 
+fn bridge_uses_mutation_admission_options(api: &TsApi) -> bool {
+    api.services.iter().any(|svc| {
+        svc.methods
+            .iter()
+            .any(|method| accepts_mutation_admission_options(classify_bridge_pattern(method)))
+    })
+}
+
 /// Emit one method signature in the bridge interface (no key param).
 fn emit_bridge_interface_method(method: &TsMethod, pattern: BridgePattern) -> String {
     let camel_name = to_camel_case(&method.rust_name);
     let return_ts = bridge_return_type(method, pattern);
 
-    let params: Vec<String> = method
+    let mut params: Vec<String> = method
         .params
         .iter()
         .map(|p| {
@@ -256,6 +271,9 @@ fn emit_bridge_interface_method(method: &TsMethod, pattern: BridgePattern) -> St
             )
         })
         .collect();
+    if accepts_mutation_admission_options(pattern) {
+        params.push("admissionOptions?: MutationAdmissionOptions".to_string());
+    }
 
     let params_str = params.join(", ");
 
@@ -273,7 +291,7 @@ pub fn emit_bridge_class_method(
     let command_name = method_command_name(effective_prefix, &method.rust_name);
 
     // Build parameter list with types (no key param — bridge hides it)
-    let params: Vec<String> = method
+    let mut params: Vec<String> = method
         .params
         .iter()
         .map(|p| {
@@ -284,6 +302,9 @@ pub fn emit_bridge_class_method(
             )
         })
         .collect();
+    if accepts_mutation_admission_options(pattern) {
+        params.push("admissionOptions?: MutationAdmissionOptions".to_string());
+    }
     let params_str = params.join(", ");
 
     // Return type: unwrapped for mutation helpers (they strip the Uint8Array), raw otherwise.
@@ -315,10 +336,14 @@ pub fn emit_bridge_class_method(
 
     let body = match pattern {
         BridgePattern::Mutate => {
-            format!("this.core.mutatePublic('{command_name}', () => {call_expr})")
+            format!(
+                "this.core.mutatePublic('{command_name}', () => {call_expr}, undefined, admissionOptions)"
+            )
         }
         BridgePattern::SystemMutate => {
-            format!("this.core.mutateSystem('{command_name}', () => {call_expr})")
+            format!(
+                "this.core.mutateSystem('{command_name}', () => {call_expr}, undefined, admissionOptions)"
+            )
         }
         BridgePattern::Query => format!("this.core.query({})", call_expr),
         BridgePattern::Pure => call_expr,

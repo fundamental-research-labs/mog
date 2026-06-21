@@ -2,6 +2,7 @@
 
 import type { BridgeTransport } from '@rust-bridge/client';
 import type { ComputeCore } from './compute-core';
+import type { MutationAdmissionOptions } from './mutation-admission';
 import type { A1CellRef, A1RangeRef, AutoExpansionResult, BatchCellInput, BatchRangeRequest, BatchRangeResponse, BridgeAutoFillPreviewResult, BridgeAutoFillRequest, BridgeFlashFillRequest, BridgeSortOptions, CFColorScale, CFDataBar, CFIconSetName, CFIconSetPreset, CFPresetCategory, CFRule, CacheInvalidationEventReason, Table as CanonicalTable, CellCFResult, CalculationSettings, ChartStatistics, Comment, CommentMention, CommentType, CellEdit, CellInput, CellPosition, CellPositionResult, CellInfo, CellStyleDef, CellMergeInfo, SheetPos, CellValidationResult, ColumnEdge, ColumnFilter, AdvancedFilterRequest, DynamicFilterRule, ConditionalFormat, CopyType, CreateBindingInput, CreateShapeConfig, DefaultFont, DefinedName, DefinedNameInput, DefinedNameWire, DisconnectionEventReason, DocumentProperties, FilterHeaderInfo, FilterRecordCount, FilterSortState, FilterState, FormulaReferenceDiagnosticsOptions, FormulaReferenceDiagnosticsPage, RuntimeDiagnosticsOptions, RuntimeDiagnosticsPage, FloatingObjectBounds, FlipAxis, FrozenPanes, GroupDefinition, Hyperlink, IdentityCell, ImportDiagnostic, MergeRegion, MoveTarget, MutationResult, NameValidationResult, NamedRangeUpdate, OutlineLevel, OutlineLevelButton, OutlineRenderData, OutlineSettingsUpdate, OutlineSymbol, ProjectionData, ProtectedWorkbookOperation, RawCellData, RangeQueryResult, RangeSchema, RectBounds, RowEdge, RegexSearchOptions, RegexSearchResult, ResolvedMergedRegion, ResizeConfig, Scenario, ScenarioActiveState, ScenarioCreateInput, ScenarioUpdateInput, SelectionAggregates, SetCellsBatchResult, FloatingObject, SerializedFloatingObjectGroup, ShapeStyleUpdate, SheetDataBinding, FindInRangeOptions, FindInRangeResult, WorkbookSearchResult, SignCheckOptions, SignCheckResult, SheetGroupingConfig, SheetMeta, SheetProtectionConfig, SheetProtectionOptions, SheetScrollPosition, SheetSettings, SheetSnapshot, SheetViewOptions, SplitViewConfig, SlicerItem, StoredSlicer, StoredSlicerUpdate, SlicerCustomStyle, NamedSlicerStyle, CsvImportOptions, PivotFieldItems, ImportedPivotViewRecord, PivotTableConfig, PivotTableResult, PivotField, HeaderFooterImageInfo, HfImagePosition, PrintRange, PrintSettings, PrintTitles, Sparkline, SparklineGroup, SparklineUpdate, SubtotalOptions, CustomTableStyleConfig, TableBoolOption, TableColumn, TableHitRegion, TableNameValidationResult, TableTopBottomFilter, TextToColumnsOptions, ThemeData, Transform, TotalsFunction, UndoState, UpdateBindingFields, RustWorkbookSettingsPatch, Viewport, WorkbookProtectionOptions, WorkbookComment, WorkbookPivotTable, WorkbookSettings, WorkbookTable, ZOrderEntry } from './compute-types.gen';
 import type { IdentityFormulaWire as IdentityFormula, ColumnSchemaWire as ColumnSchema, SchemaTypeWire as SchemaType, ValidationResultWire as ValidationResult, EditorTypeResolutionInputWire as EditorTypeResolutionInput, EditorTypeResolutionResultWire as EditorTypeResolutionResult, InferredSchemaWire as InferredSchema, NamedRangeDef, DataRow, Point, RegressionMethod, RegressionOptions, RegressionOutput, DensityResult, HistogramBin, StackInput, StackMode, StackOutput, FormatEntry, DateValueResult, ParsedDateInput, FormulaCircularReferenceValidation, CFRuleWire, CfPresets, GoalSeekParams, GoalSeekResult, CreateDataTableInput, DataTableParams, DataTableResult, SchemaMapEntryWire, PageBreaks, TableRange, SlicerSortOrder, CFCellRange } from './types';
 import type { Table, FilterCriteria, Slicer, SlicerCache, SortSpec, RowVisibility, TableCellFormat, TableStyleDef, StructuredRef, DynamicFilter, FilterDropdownData, TableStructureChange } from '@mog/table-engine';
@@ -88,126 +89,126 @@ export interface GeneratedBridgeMethods {
   tableCellValuesEqual(a: CellValue, b: CellValue): Promise<boolean>;
   tableValueInList(value: CellValue, list: CellValue[]): Promise<boolean>;
   tableFormatCellDisplay(value: CellValue): Promise<string>;
-  importFromXlsxBytes(xlsxData: Uint8Array, doRecalc: boolean): Promise<MutationResult>;
-  importFromXlsxBytesDeferred(xlsxData: Uint8Array): Promise<MutationResult>;
-  completeDeferredHydration(): Promise<MutationResult>;
-  settleForMirror(): Promise<MutationResult>;
-  importFromCsvBytes(csvData: Uint8Array, options: CsvImportOptions): Promise<MutationResult>;
+  importFromXlsxBytes(xlsxData: Uint8Array, doRecalc: boolean, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  importFromXlsxBytesDeferred(xlsxData: Uint8Array, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  completeDeferredHydration(admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  settleForMirror(admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  importFromCsvBytes(csvData: Uint8Array, options: CsvImportOptions, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   importSheetsFromXlsx(xlsxData: Uint8Array, sheetNames: string[], insertPosition: number | null): Promise<string[]>;
-  setCulture(culture: string): Promise<MutationResult>;
-  setWorkbookTheme(theme: ThemeData): Promise<MutationResult>;
+  setCulture(culture: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  setWorkbookTheme(theme: ThemeData, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   getWorkbookTheme(): Promise<ThemeData>;
-  setCell(sheetId: SheetId, cellId: CellId, row: number, col: number, input: CellInput): Promise<MutationResult>;
-  setCellBinary(sheetId: SheetId, cellId: CellId, row: number, col: number, input: CellInput): Promise<MutationResult>;
-  setArrayFormula(sheetId: SheetId, topRow: number, leftCol: number, bottomRow: number, rightCol: number, formula: string): Promise<MutationResult>;
-  setCellValueParsed(sheetId: SheetId, row: number, col: number, rawInput: string): Promise<MutationResult>;
-  setCellValueAsText(sheetId: SheetId, row: number, col: number, value: string): Promise<MutationResult>;
-  setCellValuesParsed(sheetId: SheetId, updates: [number, number, string][]): Promise<MutationResult>;
-  importValues(sheetId: SheetId, updates: [number, number, CellValue, string | null][]): Promise<MutationResult>;
-  undo(): Promise<MutationResult>;
-  redo(): Promise<MutationResult>;
+  setCell(sheetId: SheetId, cellId: CellId, row: number, col: number, input: CellInput, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  setCellBinary(sheetId: SheetId, cellId: CellId, row: number, col: number, input: CellInput, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  setArrayFormula(sheetId: SheetId, topRow: number, leftCol: number, bottomRow: number, rightCol: number, formula: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  setCellValueParsed(sheetId: SheetId, row: number, col: number, rawInput: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  setCellValueAsText(sheetId: SheetId, row: number, col: number, value: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  setCellValuesParsed(sheetId: SheetId, updates: [number, number, string][], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  importValues(sheetId: SheetId, updates: [number, number, CellValue, string | null][], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  undo(admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  redo(admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   canUndo(): Promise<boolean>;
   canRedo(): Promise<boolean>;
   getUndoState(): Promise<UndoState>;
-  beginUndoGroup(): Promise<MutationResult>;
-  endUndoGroup(): Promise<MutationResult>;
-  applySyncUpdate(update: Uint8Array): Promise<MutationResult>;
+  beginUndoGroup(admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  endUndoGroup(admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  applySyncUpdate(update: Uint8Array, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   encodeStateVector(): Promise<Uint8Array>;
   currentStateVector(): Promise<Uint8Array>;
   encodeDiff(remoteSv: Uint8Array): Promise<Uint8Array>;
   drainPendingUpdates(): Promise<Uint8Array[]>;
-  flushUndoCapture(): Promise<MutationResult>;
+  flushUndoCapture(admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   captureScreenshot(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number, dpr: number, showHeaders: boolean, showGridlines: boolean, maxWidth: number | null, maxHeight: number | null): Promise<Uint8Array>;
-  createScenario(input: ScenarioCreateInput): Promise<MutationResult>;
-  updateScenario(scenarioId: string, input: ScenarioUpdateInput): Promise<MutationResult>;
-  removeScenario(scenarioId: string): Promise<MutationResult>;
+  createScenario(input: ScenarioCreateInput, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  updateScenario(scenarioId: string, input: ScenarioUpdateInput, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  removeScenario(scenarioId: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   getAllScenarios(): Promise<Scenario[]>;
   getActiveScenarioState(): Promise<ScenarioActiveState | null>;
-  applyScenario(scenarioId: string): Promise<MutationResult>;
-  restoreScenario(baselineId: string): Promise<MutationResult>;
-  setActiveScenario(scenarioId: string | null): Promise<MutationResult>;
-  createBinding(sheetId: SheetId, binding: CreateBindingInput): Promise<MutationResult>;
-  updateBinding(sheetId: SheetId, bindingId: string, updates: UpdateBindingFields): Promise<MutationResult>;
-  removeBinding(sheetId: SheetId, bindingId: string): Promise<MutationResult>;
+  applyScenario(scenarioId: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  restoreScenario(baselineId: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  setActiveScenario(scenarioId: string | null, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  createBinding(sheetId: SheetId, binding: CreateBindingInput, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  updateBinding(sheetId: SheetId, bindingId: string, updates: UpdateBindingFields, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  removeBinding(sheetId: SheetId, bindingId: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   getAllBindings(sheetId: SheetId): Promise<SheetDataBinding[]>;
   getBinding(sheetId: SheetId, bindingId: string): Promise<SheetDataBinding | null>;
   getBindingsForConnection(connectionId: string): Promise<SheetDataBinding[]>;
-  updateRefreshMetadata(sheetId: SheetId, bindingId: string, lastRefresh: number, lastRowCount: number): Promise<MutationResult>;
-  removeBindingsForConnection(connectionId: string): Promise<MutationResult>;
-  batchSetCells(edits: [SheetId, CellId, number, number, CellInput][], skipCycleCheck: boolean): Promise<MutationResult>;
-  batchClearCells(cellIds: CellId[]): Promise<MutationResult>;
-  batchSetCellsByPosition(edits: [SheetId, number, number, CellInput][], skipCycleCheck: boolean): Promise<MutationResult>;
+  updateRefreshMetadata(sheetId: SheetId, bindingId: string, lastRefresh: number, lastRowCount: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  removeBindingsForConnection(connectionId: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  batchSetCells(edits: [SheetId, CellId, number, number, CellInput][], skipCycleCheck: boolean, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  batchClearCells(cellIds: CellId[], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  batchSetCellsByPosition(edits: [SheetId, number, number, CellInput][], skipCycleCheck: boolean, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   setCellsBatch(sheetId: SheetId, cells: BatchCellInput[]): Promise<SetCellsBatchResult>;
-  setDateValue(sheetId: SheetId, row: number, col: number, year: number, month: number, day: number): Promise<MutationResult>;
-  setTimeValue(sheetId: SheetId, row: number, col: number, hours: number, minutes: number, seconds: number): Promise<MutationResult>;
-  clearRangeByPosition(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number): Promise<MutationResult>;
-  applyChanges(changes: CellEdit[], skipCycleCheck: boolean): Promise<MutationResult>;
-  addComputeSheet(snapshot: SheetSnapshot): Promise<MutationResult>;
-  removeComputeSheet(sheetId: SheetId): Promise<MutationResult>;
-  setNamedRange(name: string, def: NamedRangeDef): Promise<MutationResult>;
-  removeNamedRange(name: string): Promise<MutationResult>;
+  setDateValue(sheetId: SheetId, row: number, col: number, year: number, month: number, day: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  setTimeValue(sheetId: SheetId, row: number, col: number, hours: number, minutes: number, seconds: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  clearRangeByPosition(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  applyChanges(changes: CellEdit[], skipCycleCheck: boolean, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  addComputeSheet(snapshot: SheetSnapshot, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  removeComputeSheet(sheetId: SheetId, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  setNamedRange(name: string, def: NamedRangeDef, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  removeNamedRange(name: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   evalCf(sheetId: SheetId, rules: CFRuleWire[]): Promise<CellCFResult[]>;
   toIdentityFormula(sheetId: SheetId, formulaA1: string): Promise<IdentityFormula>;
   toA1Display(sheetId: SheetId, formula: IdentityFormula): Promise<string>;
   toA1DisplayQualified(sheetId: SheetId, formula: IdentityFormula): Promise<string>;
   goalSeek(params: GoalSeekParams): Promise<GoalSeekResult>;
   dataTable(params: DataTableParams): Promise<DataTableResult>;
-  createDataTable(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number, input: CreateDataTableInput): Promise<MutationResult>;
+  createDataTable(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number, input: CreateDataTableInput, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   syncFullState(): Promise<Uint8Array>;
-  reorderSheets(newOrder: string[]): Promise<MutationResult>;
-  setFrozenPanes(sheetId: SheetId, rows: number, cols: number): Promise<MutationResult>;
-  setViewOption(sheetId: SheetId, key: string, value: boolean): Promise<MutationResult>;
-  setScrollPosition(sheetId: SheetId, topRow: number, leftCol: number): Promise<MutationResult>;
-  moveSheet(sheetId: SheetId, newIndex: number): Promise<MutationResult>;
-  setTabColor(sheetId: SheetId, color: string | null): Promise<MutationResult>;
-  setSheetHidden(sheetId: SheetId, hidden: boolean): Promise<MutationResult>;
-  setSheetEnableCalculation(sheetId: SheetId, enabled: boolean): Promise<MutationResult>;
-  setSheetVisibility(sheetId: SheetId, state: string): Promise<MutationResult>;
+  reorderSheets(newOrder: string[], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  setFrozenPanes(sheetId: SheetId, rows: number, cols: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  setViewOption(sheetId: SheetId, key: string, value: boolean, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  setScrollPosition(sheetId: SheetId, topRow: number, leftCol: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  moveSheet(sheetId: SheetId, newIndex: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  setTabColor(sheetId: SheetId, color: string | null, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  setSheetHidden(sheetId: SheetId, hidden: boolean, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  setSheetEnableCalculation(sheetId: SheetId, enabled: boolean, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  setSheetVisibility(sheetId: SheetId, state: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   getSheetVisibility(sheetId: SheetId): Promise<string>;
   getSheetSettings(sheetId: SheetId): Promise<SheetSettings>;
-  setSheetSetting(sheetId: SheetId, key: string, value: string): Promise<MutationResult>;
-  protectSheet(sheetId: SheetId, passwordHash: string | null): Promise<MutationResult>;
-  protectSheetWithOptions(sheetId: SheetId, passwordHash: string | null, options: SheetProtectionOptions): Promise<MutationResult>;
-  setSheetProtectionOptions(sheetId: SheetId, options: SheetProtectionOptions): Promise<MutationResult>;
-  unprotectSheet(sheetId: SheetId, passwordHash: string | null): Promise<MutationResult>;
+  setSheetSetting(sheetId: SheetId, key: string, value: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  protectSheet(sheetId: SheetId, passwordHash: string | null, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  protectSheetWithOptions(sheetId: SheetId, passwordHash: string | null, options: SheetProtectionOptions, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  setSheetProtectionOptions(sheetId: SheetId, options: SheetProtectionOptions, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  unprotectSheet(sheetId: SheetId, passwordHash: string | null, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   getPageBreaks(sheetId: SheetId): Promise<PageBreaks>;
-  addHorizontalPageBreak(sheetId: SheetId, row: number): Promise<MutationResult>;
-  removeHorizontalPageBreak(sheetId: SheetId, row: number): Promise<MutationResult>;
-  addVerticalPageBreak(sheetId: SheetId, col: number): Promise<MutationResult>;
-  removeVerticalPageBreak(sheetId: SheetId, col: number): Promise<MutationResult>;
-  clearAllPageBreaks(sheetId: SheetId): Promise<MutationResult>;
+  addHorizontalPageBreak(sheetId: SheetId, row: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  removeHorizontalPageBreak(sheetId: SheetId, row: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  addVerticalPageBreak(sheetId: SheetId, col: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  removeVerticalPageBreak(sheetId: SheetId, col: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  clearAllPageBreaks(sheetId: SheetId, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   getPrintArea(sheetId: SheetId): Promise<PrintRange | null>;
-  setPrintArea(sheetId: SheetId, area: PrintRange | null): Promise<MutationResult>;
+  setPrintArea(sheetId: SheetId, area: PrintRange | null, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   getPrintTitles(sheetId: SheetId): Promise<PrintTitles>;
-  setPrintTitles(sheetId: SheetId, titles: PrintTitles): Promise<MutationResult>;
+  setPrintTitles(sheetId: SheetId, titles: PrintTitles, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   getSplitConfig(sheetId: SheetId): Promise<SplitViewConfig | null>;
-  setSplitConfig(sheetId: SheetId, config: SplitViewConfig | null): Promise<MutationResult>;
-  createNamedRange(input: DefinedNameInput): Promise<MutationResult>;
-  updateNamedRange(id: string, updates: NamedRangeUpdate): Promise<MutationResult>;
-  removeNamedRangeById(id: string): Promise<MutationResult>;
-  removeNamedRangesByScope(scope: string | null): Promise<MutationResult>;
-  importNamedRanges(names: DefinedName[]): Promise<MutationResult>;
-  setPrintSettings(sheetId: SheetId, settings: PrintSettings): Promise<MutationResult>;
-  setHfImage(sheetId: SheetId, info: HeaderFooterImageInfo): Promise<MutationResult>;
-  removeHfImage(sheetId: SheetId, position: HfImagePosition): Promise<MutationResult>;
-  clearRange(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number): Promise<MutationResult>;
-  clearRangeAndReturnIds(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number): Promise<MutationResult>;
-  replaceAllInRange(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number, text: string, replacement: string, options: FindInRangeOptions): Promise<MutationResult>;
+  setSplitConfig(sheetId: SheetId, config: SplitViewConfig | null, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  createNamedRange(input: DefinedNameInput, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  updateNamedRange(id: string, updates: NamedRangeUpdate, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  removeNamedRangeById(id: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  removeNamedRangesByScope(scope: string | null, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  importNamedRanges(names: DefinedName[], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  setPrintSettings(sheetId: SheetId, settings: PrintSettings, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  setHfImage(sheetId: SheetId, info: HeaderFooterImageInfo, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  removeHfImage(sheetId: SheetId, position: HfImagePosition, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  clearRange(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  clearRangeAndReturnIds(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  replaceAllInRange(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number, text: string, replacement: string, options: FindInRangeOptions, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   getFormula(cellId: CellId): Promise<string | null>;
   getSelectionAggregates(sheetId: SheetId, ranges: [number, number, number, number][]): Promise<SelectionAggregates>;
   parseDateInput(text: string): Promise<ParsedDateInput | null>;
   formatValues(entries: FormatEntry[]): Promise<string[]>;
   getViewportBinary(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number, showFormulas: boolean): Promise<Uint8Array>;
   getViewportBinaryDelta(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number, showFormulas: boolean): Promise<Uint8Array>;
-  resetViewportState(sheetId: SheetId): Promise<MutationResult>;
+  resetViewportState(sheetId: SheetId, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   getWorkbookSettings(): Promise<WorkbookSettings>;
   getFormulaReferenceDiagnostics(options: FormulaReferenceDiagnosticsOptions): Promise<FormulaReferenceDiagnosticsPage>;
   getImportDiagnostics(): Promise<ImportDiagnostic[]>;
   getRuntimeDiagnostics(options: RuntimeDiagnosticsOptions): Promise<RuntimeDiagnosticsPage>;
-  setWorkbookSettings(settings: WorkbookSettings): Promise<MutationResult>;
-  patchWorkbookSettings(patch: RustWorkbookSettingsPatch): Promise<MutationResult>;
+  setWorkbookSettings(settings: WorkbookSettings, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  patchWorkbookSettings(patch: RustWorkbookSettingsPatch, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   getDocumentProperties(): Promise<DocumentProperties>;
-  setDocumentProperties(props: DocumentProperties): Promise<MutationResult>;
+  setDocumentProperties(props: DocumentProperties, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   getAllSheetIds(): Promise<string[]>;
   getSheetName(sheetId: SheetId): Promise<string | null>;
   isSheetHidden(sheetId: SheetId): Promise<boolean>;
@@ -248,32 +249,32 @@ export interface GeneratedBridgeMethods {
   getCalcMode(): Promise<string>;
   getDefaultFont(): Promise<DefaultFont>;
   getWorkbookSetting(key: string): Promise<unknown | null>;
-  setWorkbookSetting(key: string, value: unknown): Promise<MutationResult>;
-  resetWorkbookSettings(): Promise<MutationResult>;
+  setWorkbookSetting(key: string, value: unknown, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  resetWorkbookSettings(admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   getCalculationSettings(): Promise<CalculationSettings>;
-  setCalculationSettings(settings: CalculationSettings): Promise<MutationResult>;
+  setCalculationSettings(settings: CalculationSettings, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   isIterativeCalculationEnabled(): Promise<boolean>;
-  setIterativeCalculationEnabled(enabled: boolean): Promise<MutationResult>;
-  protectWorkbook(passwordHash: string | null, options: WorkbookProtectionOptions | null): Promise<MutationResult>;
-  unprotectWorkbook(passwordHash: string | null): Promise<MutationResult>;
+  setIterativeCalculationEnabled(enabled: boolean, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  protectWorkbook(passwordHash: string | null, options: WorkbookProtectionOptions | null, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  unprotectWorkbook(passwordHash: string | null, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   getWorkbookProtectionOptions(): Promise<WorkbookProtectionOptions>;
   hasWorkbookProtectionPassword(): Promise<boolean>;
   isWorkbookProtected(): Promise<boolean>;
   isWorkbookOperationAllowed(operation: ProtectedWorkbookOperation): Promise<boolean>;
-  setDefaultTableStyleId(styleId: string | null): Promise<MutationResult>;
+  setDefaultTableStyleId(styleId: string | null, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   getDefaultTableStyleId(): Promise<string | null>;
-  setDefaultSlicerStyle(styleId: string | null): Promise<MutationResult>;
+  setDefaultSlicerStyle(styleId: string | null, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   getDefaultSlicerStyle(): Promise<string | null>;
   getSlicerStyleCount(): Promise<number>;
   getSlicerStyle(name: string): Promise<NamedSlicerStyle | null>;
   listSlicerStyles(): Promise<NamedSlicerStyle[]>;
-  addSlicerStyle(name: string, style: SlicerCustomStyle, makeUniqueName: boolean): Promise<MutationResult>;
-  deleteSlicerStyle(name: string): Promise<MutationResult>;
-  duplicateSlicerStyle(name: string): Promise<MutationResult>;
-  setDefaultPivotTableStyle(styleId: string | null): Promise<MutationResult>;
+  addSlicerStyle(name: string, style: SlicerCustomStyle, makeUniqueName: boolean, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  deleteSlicerStyle(name: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  duplicateSlicerStyle(name: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  setDefaultPivotTableStyle(styleId: string | null, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   getDefaultPivotTableStyle(): Promise<string | null>;
   getCustomSetting(key: string): Promise<string | null>;
-  setCustomSetting(key: string, value: string | null): Promise<MutationResult>;
+  setCustomSetting(key: string, value: string | null, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   listCustomSettings(): Promise<[string, string][]>;
   getNamedRangeById(id: string): Promise<DefinedName | null>;
   getNamedRangeByName(name: string, scope: string | null): Promise<DefinedName | null>;
@@ -329,56 +330,56 @@ export interface GeneratedBridgeMethods {
   validateFormulaSyntax(sheetId: SheetId, formula: string): Promise<[string, number | null] | null>;
   validateFormulaCircularReference(sheetId: SheetId, row: number, col: number, formula: string): Promise<FormulaCircularReferenceValidation | null>;
   evaluateExpression(sheetId: SheetId, expression: string): Promise<CellValue>;
-  relocateCells(sheetId: SheetId, srcStartRow: number, srcStartCol: number, srcEndRow: number, srcEndCol: number, targetRow: number, targetCol: number): Promise<MutationResult>;
-  insertCellsWithShift(sheetId: SheetId, row: number, col: number, rowCount: number, colCount: number, shiftRight: boolean): Promise<MutationResult>;
-  deleteCellsWithShift(sheetId: SheetId, row: number, col: number, rowCount: number, colCount: number, shiftLeft: boolean): Promise<MutationResult>;
-  setRowHeight(sheetId: SheetId, row: number, heightPx: number): Promise<MutationResult>;
-  setColWidth(sheetId: SheetId, col: number, widthPx: number): Promise<MutationResult>;
-  setColWidths(sheetId: SheetId, widths: [number, number][]): Promise<MutationResult>;
-  setColWidthChars(sheetId: SheetId, col: number, widthChars: number): Promise<MutationResult>;
-  setColWidthsChars(sheetId: SheetId, widths: [number, number][]): Promise<MutationResult>;
-  hideRows(sheetId: SheetId, rows: number[]): Promise<MutationResult>;
-  unhideRows(sheetId: SheetId, rows: number[]): Promise<MutationResult>;
-  hideColumns(sheetId: SheetId, cols: number[]): Promise<MutationResult>;
-  unhideColumns(sheetId: SheetId, cols: number[]): Promise<MutationResult>;
-  mergeRange(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number): Promise<MutationResult>;
-  unmergeRange(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number): Promise<MutationResult>;
-  mergeAcross(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number): Promise<MutationResult>;
-  mergeAndCenter(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number): Promise<MutationResult>;
+  relocateCells(sheetId: SheetId, srcStartRow: number, srcStartCol: number, srcEndRow: number, srcEndCol: number, targetRow: number, targetCol: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  insertCellsWithShift(sheetId: SheetId, row: number, col: number, rowCount: number, colCount: number, shiftRight: boolean, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  deleteCellsWithShift(sheetId: SheetId, row: number, col: number, rowCount: number, colCount: number, shiftLeft: boolean, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  setRowHeight(sheetId: SheetId, row: number, heightPx: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  setColWidth(sheetId: SheetId, col: number, widthPx: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  setColWidths(sheetId: SheetId, widths: [number, number][], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  setColWidthChars(sheetId: SheetId, col: number, widthChars: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  setColWidthsChars(sheetId: SheetId, widths: [number, number][], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  hideRows(sheetId: SheetId, rows: number[], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  unhideRows(sheetId: SheetId, rows: number[], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  hideColumns(sheetId: SheetId, cols: number[], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  unhideColumns(sheetId: SheetId, cols: number[], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  mergeRange(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  unmergeRange(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  mergeAcross(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  mergeAndCenter(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   checkMergeDataLoss(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number): Promise<[boolean, number]>;
   isMergeOrigin(sheetId: SheetId, row: number, col: number): Promise<boolean>;
-  clearAllMerges(sheetId: SheetId): Promise<MutationResult>;
-  validateAndCleanMerges(sheetId: SheetId): Promise<MutationResult>;
-  getOrCreateCellId(sheetId: SheetId, row: number, col: number): Promise<MutationResult>;
-  updateCellPosition(sheetId: SheetId, cellIdHex: string, newRow: number, newCol: number): Promise<MutationResult>;
-  relocateCellsYrs(sourceSheetId: SheetId, srcStartRow: number, srcStartCol: number, srcEndRow: number, srcEndCol: number, targetSheetId: SheetId, targetRow: number, targetCol: number): Promise<MutationResult>;
+  clearAllMerges(sheetId: SheetId, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  validateAndCleanMerges(sheetId: SheetId, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  getOrCreateCellId(sheetId: SheetId, row: number, col: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  updateCellPosition(sheetId: SheetId, cellIdHex: string, newRow: number, newCol: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  relocateCellsYrs(sourceSheetId: SheetId, srcStartRow: number, srcStartCol: number, srcEndRow: number, srcEndCol: number, targetSheetId: SheetId, targetRow: number, targetCol: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   setSchemaMap(entries: SchemaMapEntryWire[], version: number): Promise<void>;
   updateSchema(sheetId: string, column: number, schema: ColumnSchema, version: number): Promise<boolean>;
   removeSchema(sheetId: string, column: number, version: number): Promise<boolean>;
-  clearSchemas(): Promise<MutationResult>;
+  clearSchemas(admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   getCellFormat(sheetId: SheetId, cellId: CellId, row: number, col: number): Promise<CellFormat>;
   getCellFormatWithCf(sheetId: SheetId, cellId: CellId, row: number, col: number): Promise<CellFormat>;
   getResolvedFormat(sheetId: SheetId, row: number, col: number): Promise<ResolvedCellFormat>;
-  setCellFormat(sheetId: SheetId, cellId: CellId, format: CellFormat): Promise<MutationResult>;
-  clearCellFormat(sheetId: SheetId, cellId: CellId): Promise<MutationResult>;
-  toggleFormatProperty(sheetId: SheetId, ranges: [number, number, number, number][], property: string, activeRow: number, activeCol: number): Promise<MutationResult>;
-  setFormatForRanges(sheetId: SheetId, ranges: [number, number, number, number][], format: CellFormat): Promise<MutationResult>;
-  setFormatForRangesUiState(sheetId: SheetId, ranges: [number, number, number, number][], format: CellFormat): Promise<MutationResult>;
-  clearFormatForRanges(sheetId: SheetId, ranges: [number, number, number, number][]): Promise<MutationResult>;
-  setCellPropertiesBatch(sheetId: SheetId, updates: [number, number, CellFormat][]): Promise<MutationResult>;
-  addCfRule(sheetId: SheetId, rule: unknown): Promise<MutationResult>;
-  updateCfRule(sheetId: SheetId, ruleId: string, updates: unknown): Promise<MutationResult>;
-  deleteCfRule(sheetId: SheetId, ruleId: string): Promise<MutationResult>;
-  reorderCfRules(sheetId: SheetId, ruleIds: string[]): Promise<MutationResult>;
+  setCellFormat(sheetId: SheetId, cellId: CellId, format: CellFormat, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  clearCellFormat(sheetId: SheetId, cellId: CellId, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  toggleFormatProperty(sheetId: SheetId, ranges: [number, number, number, number][], property: string, activeRow: number, activeCol: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  setFormatForRanges(sheetId: SheetId, ranges: [number, number, number, number][], format: CellFormat, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  setFormatForRangesUiState(sheetId: SheetId, ranges: [number, number, number, number][], format: CellFormat, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  clearFormatForRanges(sheetId: SheetId, ranges: [number, number, number, number][], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  setCellPropertiesBatch(sheetId: SheetId, updates: [number, number, CellFormat][], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  addCfRule(sheetId: SheetId, rule: unknown, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  updateCfRule(sheetId: SheetId, ruleId: string, updates: unknown, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  deleteCfRule(sheetId: SheetId, ruleId: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  reorderCfRules(sheetId: SheetId, ruleIds: string[], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   getAllCfRules(sheetId: SheetId): Promise<ConditionalFormat[]>;
   getCfRulesForCell(sheetId: SheetId, row: number, col: number): Promise<ConditionalFormat[]>;
   getConditionalFormat(sheetId: SheetId, formatId: string): Promise<ConditionalFormat | null>;
   hasCfForCell(sheetId: SheetId, row: number, col: number): Promise<boolean>;
-  updateCfRanges(sheetId: SheetId, formatId: string, newRanges: CFCellRange[]): Promise<MutationResult>;
-  clearCfFormatsForSheet(sheetId: SheetId): Promise<MutationResult>;
-  addRuleToCf(sheetId: SheetId, formatId: string, rule: CFRule): Promise<MutationResult>;
-  updateRuleInCf(sheetId: SheetId, formatId: string, ruleId: string, updates: unknown): Promise<MutationResult>;
-  deleteRuleFromCf(sheetId: SheetId, formatId: string, ruleId: string): Promise<MutationResult>;
+  updateCfRanges(sheetId: SheetId, formatId: string, newRanges: CFCellRange[], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  clearCfFormatsForSheet(sheetId: SheetId, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  addRuleToCf(sheetId: SheetId, formatId: string, rule: CFRule, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  updateRuleInCf(sheetId: SheetId, formatId: string, ruleId: string, updates: unknown, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  deleteRuleFromCf(sheetId: SheetId, formatId: string, ruleId: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   cfRangesOverlap(a: CFCellRange, b: CFCellRange): Promise<boolean>;
   cfRangeContains(outer: CFCellRange, inner: CFCellRange): Promise<boolean>;
   cfSubtractRange(original: CFCellRange, subtract: CFCellRange): Promise<CFCellRange[]>;
@@ -386,132 +387,132 @@ export interface GeneratedBridgeMethods {
   cfIsValidRange(range: CFCellRange): Promise<boolean>;
   getIconSetPresets(): Promise<CFIconSetPreset[]>;
   getCfPresetById(id: string): Promise<CFPresetCategory | null>;
-  setRowFormat(sheetId: SheetId, row: number, format: CellFormat): Promise<MutationResult>;
-  setColFormat(sheetId: SheetId, col: number, format: CellFormat): Promise<MutationResult>;
-  clearColFormat(sheetId: SheetId, col: number): Promise<MutationResult>;
-  setColFormatRange(sheetId: SheetId, startCol: number, endCol: number, format: CellFormat): Promise<MutationResult>;
+  setRowFormat(sheetId: SheetId, row: number, format: CellFormat, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  setColFormat(sheetId: SheetId, col: number, format: CellFormat, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  clearColFormat(sheetId: SheetId, col: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  setColFormatRange(sheetId: SheetId, startCol: number, endCol: number, format: CellFormat, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   getRowFormats(sheetId: SheetId, rows: number[]): Promise<[number, CellFormat | null][]>;
-  setRowFormats(sheetId: SheetId, updates: [number, CellFormat][]): Promise<MutationResult>;
+  setRowFormats(sheetId: SheetId, updates: [number, CellFormat][], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   getColFormats(sheetId: SheetId, cols: number[]): Promise<[number, CellFormat | null][]>;
-  setColFormats(sheetId: SheetId, updates: [number, CellFormat][]): Promise<MutationResult>;
+  setColFormats(sheetId: SheetId, updates: [number, CellFormat][], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   queryRangeProperties(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number): Promise<(CellFormat | null)[][]>;
   getDisplayedCellProperties(sheetId: SheetId, row: number, col: number): Promise<CellFormat>;
   getDisplayedRangeProperties(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number): Promise<CellFormat[][]>;
   getColumnSchema(sheetId: SheetId, colIndex: number): Promise<ColumnSchema | null>;
-  setColumnSchema(sheetId: SheetId, colIndex: number, schema: ColumnSchema): Promise<MutationResult>;
-  clearColumnSchema(sheetId: SheetId, colIndex: number): Promise<MutationResult>;
+  setColumnSchema(sheetId: SheetId, colIndex: number, schema: ColumnSchema, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  clearColumnSchema(sheetId: SheetId, colIndex: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   getAllColumnSchemas(sheetId: SheetId): Promise<[number, ColumnSchema][]>;
   getRangeSchema(sheetId: SheetId, schemaId: string): Promise<RangeSchema | null>;
   getRangeSchemasForSheet(sheetId: SheetId): Promise<RangeSchema[]>;
-  setRangeSchema(sheetId: SheetId, schema: RangeSchema): Promise<MutationResult>;
-  updateRangeSchema(sheetId: SheetId, schemaId: string, updates: RangeSchema): Promise<MutationResult>;
-  deleteRangeSchema(sheetId: SheetId, schemaId: string): Promise<MutationResult>;
+  setRangeSchema(sheetId: SheetId, schema: RangeSchema, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  updateRangeSchema(sheetId: SheetId, schemaId: string, updates: RangeSchema, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  deleteRangeSchema(sheetId: SheetId, schemaId: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   validateCellValue(sheetId: SheetId, row: number, col: number, value: string): Promise<CellValidationResult>;
   getAllTablesInSheet(sheetId: SheetId): Promise<CanonicalTable[]>;
   getTableAtCell(sheetId: SheetId, row: number, col: number): Promise<CanonicalTable | null>;
   getTableByName(tableName: string): Promise<CanonicalTable | null>;
   getTableHitRegion(sheetId: SheetId, row: number, col: number): Promise<TableHitRegion | null>;
-  createTable(sheetId: SheetId, name: string, startRow: number, startCol: number, endRow: number, endCol: number, columns: string[], hasHeaders: boolean): Promise<MutationResult>;
-  createTableLifecycle(sheetId: SheetId, requestedName: string | null, startRow: number, startCol: number, endRow: number, endCol: number, columns: string[], hasHeaders: boolean, style: string | null): Promise<MutationResult>;
-  deleteTable(tableName: string): Promise<MutationResult>;
-  renameTable(oldName: string, newName: string): Promise<MutationResult>;
-  resizeTable(tableName: string, newStartRow: number, newStartCol: number, newEndRow: number, newEndCol: number): Promise<MutationResult>;
-  setTableStyle(tableName: string, styleName: string): Promise<MutationResult>;
-  toggleTotalsRow(tableName: string): Promise<MutationResult>;
-  toggleHeaderRow(tableName: string): Promise<MutationResult>;
-  toggleBandedRows(tableName: string): Promise<MutationResult>;
-  toggleBandedCols(tableName: string): Promise<MutationResult>;
-  setTableBoolOption(tableName: string, option: string, value: boolean): Promise<MutationResult>;
-  setTableAutoExpand(tableName: string, enabled: boolean): Promise<MutationResult>;
-  setTableAutoCalculatedColumns(tableName: string, enabled: boolean): Promise<MutationResult>;
-  setTableTotalsFunction(tableName: string, columnId: string, func: TotalsFunction): Promise<MutationResult>;
-  addTableDataRow(tableName: string, relativeRow: number | null): Promise<MutationResult>;
-  removeTableDataRow(tableName: string, relativeRow: number): Promise<MutationResult>;
-  addTableColumn(tableName: string, columnName: string, position: number): Promise<MutationResult>;
-  renameTableColumn(tableName: string, columnIndex: number, newColumnName: string): Promise<MutationResult>;
-  removeTableColumn(tableName: string, columnIndex: number): Promise<MutationResult>;
-  setCalculatedColumnFormula(tableName: string, columnIndex: number, formula: string): Promise<MutationResult>;
-  applyCalculatedFormulasToRow(tableName: string, row: number, formulas: [number, string][]): Promise<MutationResult>;
-  addCalculatedColumn(tableName: string, columnName: string, formula: string): Promise<MutationResult>;
-  removeCalculatedColumn(tableName: string, columnIndex: number): Promise<MutationResult>;
-  updateCalculatedColumn(tableName: string, columnIndex: number, formula: string): Promise<MutationResult>;
+  createTable(sheetId: SheetId, name: string, startRow: number, startCol: number, endRow: number, endCol: number, columns: string[], hasHeaders: boolean, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  createTableLifecycle(sheetId: SheetId, requestedName: string | null, startRow: number, startCol: number, endRow: number, endCol: number, columns: string[], hasHeaders: boolean, style: string | null, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  deleteTable(tableName: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  renameTable(oldName: string, newName: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  resizeTable(tableName: string, newStartRow: number, newStartCol: number, newEndRow: number, newEndCol: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  setTableStyle(tableName: string, styleName: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  toggleTotalsRow(tableName: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  toggleHeaderRow(tableName: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  toggleBandedRows(tableName: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  toggleBandedCols(tableName: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  setTableBoolOption(tableName: string, option: string, value: boolean, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  setTableAutoExpand(tableName: string, enabled: boolean, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  setTableAutoCalculatedColumns(tableName: string, enabled: boolean, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  setTableTotalsFunction(tableName: string, columnId: string, func: TotalsFunction, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  addTableDataRow(tableName: string, relativeRow: number | null, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  removeTableDataRow(tableName: string, relativeRow: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  addTableColumn(tableName: string, columnName: string, position: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  renameTableColumn(tableName: string, columnIndex: number, newColumnName: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  removeTableColumn(tableName: string, columnIndex: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  setCalculatedColumnFormula(tableName: string, columnIndex: number, formula: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  applyCalculatedFormulasToRow(tableName: string, row: number, formulas: [number, string][], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  addCalculatedColumn(tableName: string, columnName: string, formula: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  removeCalculatedColumn(tableName: string, columnIndex: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  updateCalculatedColumn(tableName: string, columnIndex: number, formula: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   detectAutoExpansion(sheetId: SheetId, tableName: string): Promise<AutoExpansionResult>;
-  applyAutoExpansion(sheetId: SheetId, tableName: string): Promise<MutationResult>;
-  createCustomTableStyle(style: CustomTableStyleConfig): Promise<MutationResult>;
-  deleteCustomTableStyle(styleName: string): Promise<MutationResult>;
-  updateCustomTableStyle(styleName: string, style: CustomTableStyleConfig): Promise<MutationResult>;
+  applyAutoExpansion(sheetId: SheetId, tableName: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  createCustomTableStyle(style: CustomTableStyleConfig, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  deleteCustomTableStyle(styleName: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  updateCustomTableStyle(styleName: string, style: CustomTableStyleConfig, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   getAllCustomTableStyles(): Promise<CustomTableStyleConfig[]>;
   resolveTableFormatAtCell(sheetId: SheetId, row: number, col: number): Promise<CellFormat | null>;
-  convertTableToRange(tableName: string): Promise<MutationResult>;
-  createFilter(sheetId: SheetId, config: unknown): Promise<MutationResult>;
-  deleteFilter(sheetId: SheetId, filterId: string): Promise<MutationResult>;
-  setColumnFilter(sheetId: SheetId, filterId: string, headerCol: number, criteria: ColumnFilter): Promise<MutationResult>;
-  clearColumnFilter(sheetId: SheetId, filterId: string, headerCol: number): Promise<MutationResult>;
-  clearAllColumnFilters(sheetId: SheetId, filterId: string): Promise<MutationResult>;
+  convertTableToRange(tableName: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  createFilter(sheetId: SheetId, config: unknown, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  deleteFilter(sheetId: SheetId, filterId: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  setColumnFilter(sheetId: SheetId, filterId: string, headerCol: number, criteria: ColumnFilter, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  clearColumnFilter(sheetId: SheetId, filterId: string, headerCol: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  clearAllColumnFilters(sheetId: SheetId, filterId: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   getFiltersInSheet(sheetId: SheetId): Promise<FilterState[]>;
   getFilterHeaderInfo(sheetId: SheetId): Promise<FilterHeaderInfo[]>;
-  applyAdvancedFilter(sheetId: SheetId, request: AdvancedFilterRequest): Promise<MutationResult>;
-  applyFilter(sheetId: SheetId, filterId: string): Promise<MutationResult>;
-  reapplyFilter(sheetId: SheetId, filterId: string): Promise<MutationResult>;
+  applyAdvancedFilter(sheetId: SheetId, request: AdvancedFilterRequest, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  applyFilter(sheetId: SheetId, filterId: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  reapplyFilter(sheetId: SheetId, filterId: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   getUniqueColumnValues(sheetId: SheetId, filterId: string, headerCol: number): Promise<CellValue[]>;
   computeDynamicFilterSerialRange(rule: DynamicFilterRule): Promise<[number, number] | null>;
-  sortRange(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number, options: BridgeSortOptions): Promise<MutationResult>;
-  autoFill(sheetId: SheetId, request: BridgeAutoFillRequest): Promise<MutationResult>;
+  sortRange(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number, options: BridgeSortOptions, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  autoFill(sheetId: SheetId, request: BridgeAutoFillRequest, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   autoFillPreview(sheetId: SheetId, request: BridgeAutoFillRequest): Promise<BridgeAutoFillPreviewResult>;
-  flashFill(sheetId: SheetId, request: BridgeFlashFillRequest): Promise<MutationResult>;
-  copyRange(sourceSheetId: SheetId, srcStartRow: number, srcStartCol: number, srcEndRow: number, srcEndCol: number, targetSheetId: SheetId, targetRow: number, targetCol: number, copyType: CopyType, skipBlanks: boolean, transpose: boolean): Promise<MutationResult>;
-  groupRows(sheetId: SheetId, startRow: number, endRow: number): Promise<MutationResult>;
-  ungroupRows(sheetId: SheetId, startRow: number, endRow: number): Promise<MutationResult>;
-  groupColumns(sheetId: SheetId, startCol: number, endCol: number): Promise<MutationResult>;
-  ungroupColumns(sheetId: SheetId, startCol: number, endCol: number): Promise<MutationResult>;
-  setGroupCollapsed(sheetId: SheetId, groupId: string, collapsed: boolean): Promise<MutationResult>;
-  toggleGroupCollapsed(sheetId: SheetId, groupId: string): Promise<MutationResult>;
-  expandAllGroups(sheetId: SheetId): Promise<MutationResult>;
-  collapseAllGroups(sheetId: SheetId): Promise<MutationResult>;
+  flashFill(sheetId: SheetId, request: BridgeFlashFillRequest, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  copyRange(sourceSheetId: SheetId, srcStartRow: number, srcStartCol: number, srcEndRow: number, srcEndCol: number, targetSheetId: SheetId, targetRow: number, targetCol: number, copyType: CopyType, skipBlanks: boolean, transpose: boolean, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  groupRows(sheetId: SheetId, startRow: number, endRow: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  ungroupRows(sheetId: SheetId, startRow: number, endRow: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  groupColumns(sheetId: SheetId, startCol: number, endCol: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  ungroupColumns(sheetId: SheetId, startCol: number, endCol: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  setGroupCollapsed(sheetId: SheetId, groupId: string, collapsed: boolean, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  toggleGroupCollapsed(sheetId: SheetId, groupId: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  expandAllGroups(sheetId: SheetId, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  collapseAllGroups(sheetId: SheetId, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   getSheetGroupingConfig(sheetId: SheetId): Promise<SheetGroupingConfig>;
   getGroups(sheetId: SheetId, axis: string): Promise<GroupDefinition[]>;
-  createSlicer(sheetId: SheetId, config: StoredSlicer): Promise<MutationResult>;
-  deleteSlicer(sheetId: SheetId, slicerId: string): Promise<MutationResult>;
-  updateSlicerConfig(sheetId: SheetId, slicerId: string, update: StoredSlicerUpdate): Promise<MutationResult>;
+  createSlicer(sheetId: SheetId, config: StoredSlicer, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  deleteSlicer(sheetId: SheetId, slicerId: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  updateSlicerConfig(sheetId: SheetId, slicerId: string, update: StoredSlicerUpdate, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   getAllSlicers(sheetId: SheetId): Promise<StoredSlicer[]>;
   getAllSlicersWorkbook(): Promise<StoredSlicer[]>;
   getSlicerState(sheetId: SheetId, slicerId: string): Promise<StoredSlicer | null>;
-  toggleSlicerItem(sheetId: SheetId, slicerId: string, value: CellValue): Promise<MutationResult>;
-  clearSlicerSelection(sheetId: SheetId, slicerId: string): Promise<MutationResult>;
+  toggleSlicerItem(sheetId: SheetId, slicerId: string, value: CellValue, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  clearSlicerSelection(sheetId: SheetId, slicerId: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   mapSlicerInvalidationReason(reason: string): Promise<CacheInvalidationEventReason>;
   mapSlicerDisconnectionReason(reason: string): Promise<DisconnectionEventReason>;
   getSlicerItemsFromCache(cache: SlicerCache): Promise<SlicerItem[]>;
   isSlicerColumnConnected(sourceColumnId: string, tableColumns: TableColumn[]): Promise<boolean>;
   findSlicersForTable(slicerList: Slicer[], tableId: string): Promise<number[]>;
   findDisconnectedSlicers(slicerList: Slicer[], existingTableIds: string[]): Promise<number[]>;
-  createSubtotals(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number, options: SubtotalOptions): Promise<MutationResult>;
-  removeSubtotals(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number): Promise<MutationResult>;
-  autoOutline(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number): Promise<MutationResult>;
+  createSubtotals(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number, options: SubtotalOptions, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  removeSubtotals(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  autoOutline(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   getSubtotalConfig(sheetId: SheetId): Promise<SheetGroupingConfig>;
-  addSparkline(sheetId: SheetId, sparkline: Sparkline): Promise<MutationResult>;
-  updateSparkline(sheetId: SheetId, sparklineId: string, updates: SparklineUpdate): Promise<MutationResult>;
-  deleteSparkline(sheetId: SheetId, sparklineId: string): Promise<MutationResult>;
+  addSparkline(sheetId: SheetId, sparkline: Sparkline, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  updateSparkline(sheetId: SheetId, sparklineId: string, updates: SparklineUpdate, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  deleteSparkline(sheetId: SheetId, sparklineId: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   getSparklinesInSheet(sheetId: SheetId): Promise<Sparkline[]>;
-  removeDuplicates(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number, columns: number[], hasHeaders: boolean): Promise<MutationResult>;
-  textToColumns(sheetId: SheetId, startRow: number, endRow: number, sourceCol: number, destRow: number, destCol: number, options: unknown): Promise<MutationResult>;
-  textToColumnsSimple(sheetId: SheetId, startRow: number, endRow: number, sourceCol: number, destRow: number, destCol: number, delimiter: string, customDelimiter: string | null, treatConsecutiveAsOne: boolean, textQualifier: string): Promise<MutationResult>;
+  removeDuplicates(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number, columns: number[], hasHeaders: boolean, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  textToColumns(sheetId: SheetId, startRow: number, endRow: number, sourceCol: number, destRow: number, destCol: number, options: unknown, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  textToColumnsSimple(sheetId: SheetId, startRow: number, endRow: number, sourceCol: number, destRow: number, destCol: number, delimiter: string, customDelimiter: string | null, treatConsecutiveAsOne: boolean, textQualifier: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   getFilter(sheetId: SheetId, filterId: string): Promise<FilterState | null>;
   getFilterCount(sheetId: SheetId): Promise<number>;
   getTableFilter(sheetId: SheetId, tableId: string): Promise<FilterState | null>;
   getActiveFilters(sheetId: SheetId): Promise<FilterState[]>;
   getActiveFilterCount(sheetId: SheetId): Promise<number>;
-  setFilterSortState(sheetId: SheetId, filterId: string, sortState: FilterSortState | null): Promise<MutationResult>;
+  setFilterSortState(sheetId: SheetId, filterId: string, sortState: FilterSortState | null, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   getFilterSortState(sheetId: SheetId, filterId: string): Promise<FilterSortState | null>;
-  clearAllFilters(sheetId: SheetId): Promise<MutationResult>;
+  clearAllFilters(sheetId: SheetId, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   getFilteredRecordCount(sheetId: SheetId, filterId: string): Promise<FilterRecordCount | null>;
   getSparkline(sheetId: SheetId, sparklineId: string): Promise<Sparkline | null>;
   getSparklineAtCell(sheetId: SheetId, row: number, col: number): Promise<Sparkline | null>;
-  addSparklineGroup(sheetId: SheetId, group: SparklineGroup): Promise<MutationResult>;
+  addSparklineGroup(sheetId: SheetId, group: SparklineGroup, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   getSparklineGroup(sheetId: SheetId, groupId: string): Promise<SparklineGroup | null>;
   getSparklineGroupsInSheet(sheetId: SheetId): Promise<SparklineGroup[]>;
-  deleteSparklineGroup(sheetId: SheetId, groupId: string, deleteSparklines: boolean): Promise<MutationResult>;
-  clearSparklinesInRange(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number): Promise<MutationResult>;
-  clearSparklinesForSheet(sheetId: SheetId): Promise<MutationResult>;
+  deleteSparklineGroup(sheetId: SheetId, groupId: string, deleteSparklines: boolean, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  clearSparklinesInRange(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  clearSparklinesForSheet(sheetId: SheetId, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   hasSparkline(sheetId: SheetId, row: number, col: number): Promise<boolean>;
   getGroupInSheet(sheetId: SheetId, groupId: string): Promise<GroupDefinition | null>;
   getRowOutlineLevels(sheetId: SheetId, startRow: number, endRow: number): Promise<OutlineLevel[]>;
@@ -526,17 +527,17 @@ export interface GeneratedBridgeMethods {
   getAffectedColumnsByGroup(sheetId: SheetId, groupId: string): Promise<number[]>;
   isRowVisibleByGroups(sheetId: SheetId, row: number): Promise<boolean>;
   isColumnVisibleByGroups(sheetId: SheetId, col: number): Promise<boolean>;
-  setLevelCollapsed(sheetId: SheetId, axis: string, level: number, collapsed: boolean): Promise<MutationResult>;
-  setOutlineSettings(sheetId: SheetId, settings: OutlineSettingsUpdate): Promise<MutationResult>;
-  clearRowGrouping(sheetId: SheetId, startRow: number, endRow: number): Promise<MutationResult>;
-  clearColumnGrouping(sheetId: SheetId, startCol: number, endCol: number): Promise<MutationResult>;
-  clearAllGrouping(sheetId: SheetId): Promise<MutationResult>;
+  setLevelCollapsed(sheetId: SheetId, axis: string, level: number, collapsed: boolean, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  setOutlineSettings(sheetId: SheetId, settings: OutlineSettingsUpdate, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  clearRowGrouping(sheetId: SheetId, startRow: number, endRow: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  clearColumnGrouping(sheetId: SheetId, startCol: number, endCol: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  clearAllGrouping(sheetId: SheetId, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   checkSortRangeMerges(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number): Promise<unknown>;
   previewTextToColumns(sheetId: SheetId, sourceStartRow: number, sourceEndRow: number, sourceCol: number, options: TextToColumnsOptions, maxPreviewRows: number): Promise<string[][]>;
-  convertNoteToThread(sheetId: SheetId, commentId: string): Promise<MutationResult>;
-  updateComment(sheetId: SheetId, commentId: string, text: string): Promise<MutationResult>;
-  deleteComment(sheetId: SheetId, commentId: string): Promise<MutationResult>;
-  setThreadResolved(sheetId: SheetId, cellId: string, resolved: boolean): Promise<MutationResult>;
+  convertNoteToThread(sheetId: SheetId, commentId: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  updateComment(sheetId: SheetId, commentId: string, text: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  deleteComment(sheetId: SheetId, commentId: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  setThreadResolved(sheetId: SheetId, cellId: string, resolved: boolean, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   getCommentsForCell(sheetId: SheetId, cellId: string): Promise<Comment[]>;
   getAllComments(sheetId: SheetId): Promise<Comment[]>;
   getComment(sheetId: SheetId, commentId: string): Promise<Comment | null>;
@@ -544,98 +545,98 @@ export interface GeneratedBridgeMethods {
   getCommentCount(sheetId: SheetId): Promise<number>;
   getNoteCount(sheetId: SheetId): Promise<number>;
   getAllNotes(sheetId: SheetId): Promise<Comment[]>;
-  setNoteVisible(sheetId: SheetId, commentId: string, visible: boolean): Promise<MutationResult>;
-  setNoteDimensions(sheetId: SheetId, commentId: string, height: number | null, width: number | null): Promise<MutationResult>;
+  setNoteVisible(sheetId: SheetId, commentId: string, visible: boolean, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  setNoteDimensions(sheetId: SheetId, commentId: string, height: number | null, width: number | null, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   hasComments(sheetId: SheetId, cellId: string): Promise<boolean>;
-  deleteCommentsForCell(sheetId: SheetId, cellId: string): Promise<MutationResult>;
-  clearAllComments(sheetId: SheetId): Promise<MutationResult>;
-  validateAndCleanComments(sheetId: SheetId): Promise<MutationResult>;
-  updateCommentMentions(sheetId: SheetId, commentId: string, content: string, mentions: CommentMention[]): Promise<MutationResult>;
-  addCommentByPosition(sheetId: SheetId, row: number, col: number, text: string, author: string, authorId: string | null, parentId: string | null, commentType: CommentType): Promise<MutationResult>;
+  deleteCommentsForCell(sheetId: SheetId, cellId: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  clearAllComments(sheetId: SheetId, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  validateAndCleanComments(sheetId: SheetId, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  updateCommentMentions(sheetId: SheetId, commentId: string, content: string, mentions: CommentMention[], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  addCommentByPosition(sheetId: SheetId, row: number, col: number, text: string, author: string, authorId: string | null, parentId: string | null, commentType: CommentType, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   getCommentsForCellByPosition(sheetId: SheetId, row: number, col: number): Promise<Comment[]>;
   hasCommentsByPosition(sheetId: SheetId, row: number, col: number): Promise<boolean>;
-  deleteCommentsForCellByPosition(sheetId: SheetId, row: number, col: number): Promise<MutationResult>;
-  createChart(sheetId: SheetId, config: unknown): Promise<MutationResult>;
-  updateChart(sheetId: SheetId, chartId: string, updates: unknown): Promise<MutationResult>;
-  deleteChart(sheetId: SheetId, chartId: string): Promise<MutationResult>;
+  deleteCommentsForCellByPosition(sheetId: SheetId, row: number, col: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  createChart(sheetId: SheetId, config: unknown, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  updateChart(sheetId: SheetId, chartId: string, updates: unknown, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  deleteChart(sheetId: SheetId, chartId: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   getChart(sheetId: SheetId, chartId: string): Promise<FloatingObject | null>;
   getAllCharts(sheetId: SheetId): Promise<FloatingObject[]>;
-  bringChartToFront(sheetId: SheetId, chartId: string): Promise<MutationResult>;
-  sendChartToBack(sheetId: SheetId, chartId: string): Promise<MutationResult>;
-  bringChartForward(sheetId: SheetId, chartId: string): Promise<MutationResult>;
-  sendChartBackward(sheetId: SheetId, chartId: string): Promise<MutationResult>;
+  bringChartToFront(sheetId: SheetId, chartId: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  sendChartToBack(sheetId: SheetId, chartId: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  bringChartForward(sheetId: SheetId, chartId: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  sendChartBackward(sheetId: SheetId, chartId: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   getChartsInZOrder(sheetId: SheetId): Promise<FloatingObject[]>;
-  linkChartToTable(sheetId: SheetId, chartId: string, tableId: string): Promise<MutationResult>;
-  unlinkChartFromTable(sheetId: SheetId, chartId: string): Promise<MutationResult>;
+  linkChartToTable(sheetId: SheetId, chartId: string, tableId: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  unlinkChartFromTable(sheetId: SheetId, chartId: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   isChartLinkedToTable(sheetId: SheetId, chartId: string): Promise<boolean>;
   getChartsLinkedToTable(sheetId: SheetId, tableId: string): Promise<FloatingObject[]>;
   getMaxZIndex(sheetId: SheetId): Promise<number>;
   getMinZIndex(sheetId: SheetId): Promise<number>;
-  setFloatingObject(sheetId: SheetId, objectId: string, json: unknown): Promise<MutationResult>;
+  setFloatingObject(sheetId: SheetId, objectId: string, json: unknown, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   getFloatingObject(sheetId: SheetId, objectId: string): Promise<unknown | null>;
   getFloatingObjectsInSheet(sheetId: SheetId): Promise<[string, unknown][]>;
-  deleteFloatingObject(sheetId: SheetId, objectId: string): Promise<MutationResult>;
-  createFloatingObject(sheetId: SheetId, config: unknown): Promise<MutationResult>;
-  updateFloatingObject(sheetId: SheetId, objectId: string, updates: unknown): Promise<MutationResult>;
-  createShape(sheetId: SheetId, config: CreateShapeConfig): Promise<MutationResult>;
-  moveFloatingObjectTyped(sheetId: SheetId, objectId: string, target: MoveTarget): Promise<MutationResult>;
-  resizeFloatingObjectTyped(sheetId: SheetId, objectId: string, config: ResizeConfig): Promise<MutationResult>;
-  rotateFloatingObjectTyped(sheetId: SheetId, objectId: string, rotation: number): Promise<MutationResult>;
-  updateShapeStyle(sheetId: SheetId, objectId: string, style: ShapeStyleUpdate): Promise<MutationResult>;
-  flipFloatingObjectTyped(sheetId: SheetId, objectId: string, axis: FlipAxis): Promise<MutationResult>;
-  duplicateFloatingObjectTyped(sheetId: SheetId, objectId: string, offsetX: number, offsetY: number): Promise<MutationResult>;
+  deleteFloatingObject(sheetId: SheetId, objectId: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  createFloatingObject(sheetId: SheetId, config: unknown, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  updateFloatingObject(sheetId: SheetId, objectId: string, updates: unknown, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  createShape(sheetId: SheetId, config: CreateShapeConfig, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  moveFloatingObjectTyped(sheetId: SheetId, objectId: string, target: MoveTarget, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  resizeFloatingObjectTyped(sheetId: SheetId, objectId: string, config: ResizeConfig, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  rotateFloatingObjectTyped(sheetId: SheetId, objectId: string, rotation: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  updateShapeStyle(sheetId: SheetId, objectId: string, style: ShapeStyleUpdate, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  flipFloatingObjectTyped(sheetId: SheetId, objectId: string, axis: FlipAxis, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  duplicateFloatingObjectTyped(sheetId: SheetId, objectId: string, offsetX: number, offsetY: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   findConnectorsForShape(sheetId: SheetId, shapeId: string): Promise<FloatingObject[]>;
   getFloatingObjectTyped(sheetId: SheetId, objectId: string): Promise<FloatingObject | null>;
   getAllFloatingObjectsTyped(sheetId: SheetId): Promise<FloatingObject[]>;
   computeAllObjectBounds(sheetId: SheetId): Promise<[string, FloatingObjectBounds][]>;
-  setFloatingObjectGroup(sheetId: SheetId, groupId: string, json: unknown): Promise<MutationResult>;
+  setFloatingObjectGroup(sheetId: SheetId, groupId: string, json: unknown, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   getFloatingObjectGroup(sheetId: SheetId, groupId: string): Promise<unknown | null>;
   getFloatingObjectGroupsInSheet(sheetId: SheetId): Promise<[string, unknown][]>;
-  deleteFloatingObjectGroup(sheetId: SheetId, groupId: string): Promise<MutationResult>;
-  createFloatingObjectGroup(sheetId: SheetId, config: unknown): Promise<MutationResult>;
-  updateFloatingObjectGroup(sheetId: SheetId, groupId: string, updates: unknown): Promise<MutationResult>;
+  deleteFloatingObjectGroup(sheetId: SheetId, groupId: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  createFloatingObjectGroup(sheetId: SheetId, config: unknown, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  updateFloatingObjectGroup(sheetId: SheetId, groupId: string, updates: unknown, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   getFloatingObjectGroupTyped(sheetId: SheetId, groupId: string): Promise<SerializedFloatingObjectGroup | null>;
   getAllFloatingObjectGroupsTyped(sheetId: SheetId): Promise<SerializedFloatingObjectGroup[]>;
-  bringFloatingObjectToFront(sheetId: SheetId, objectId: string): Promise<MutationResult>;
-  sendFloatingObjectToBack(sheetId: SheetId, objectId: string): Promise<MutationResult>;
-  bringFloatingObjectForward(sheetId: SheetId, objectId: string): Promise<MutationResult>;
-  sendFloatingObjectBackward(sheetId: SheetId, objectId: string): Promise<MutationResult>;
+  bringFloatingObjectToFront(sheetId: SheetId, objectId: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  sendFloatingObjectToBack(sheetId: SheetId, objectId: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  bringFloatingObjectForward(sheetId: SheetId, objectId: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  sendFloatingObjectBackward(sheetId: SheetId, objectId: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   getFloatingObjectsInZOrder(sheetId: SheetId): Promise<FloatingObject[]>;
   getFloatingObjectMaxZIndex(sheetId: SheetId): Promise<number>;
   getFloatingObjectMinZIndex(sheetId: SheetId): Promise<number>;
   getMaxZIndexAll(sheetId: SheetId): Promise<number>;
   getMinZIndexAll(sheetId: SheetId): Promise<number>;
   getAllInZOrder(sheetId: SheetId): Promise<ZOrderEntry[]>;
-  setHyperlink(sheetId: SheetId, row: number, col: number, url: string): Promise<MutationResult>;
-  removeHyperlink(sheetId: SheetId, row: number, col: number): Promise<MutationResult>;
+  setHyperlink(sheetId: SheetId, row: number, col: number, url: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  removeHyperlink(sheetId: SheetId, row: number, col: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   getHyperlink(sheetId: SheetId, row: number, col: number): Promise<string | null>;
   getHyperlinks(sheetId: SheetId): Promise<Hyperlink[]>;
-  clearHyperlinksInRange(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number): Promise<MutationResult>;
-  pivotCreate(config: unknown): Promise<MutationResult>;
-  pivotUpdate(sheetId: SheetId, pivotId: string, config: PivotTableConfig): Promise<MutationResult>;
-  pivotDelete(sheetId: SheetId, pivotId: string): Promise<MutationResult>;
+  clearHyperlinksInRange(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  pivotCreate(config: unknown, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  pivotUpdate(sheetId: SheetId, pivotId: string, config: PivotTableConfig, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  pivotDelete(sheetId: SheetId, pivotId: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   pivotGet(sheetId: SheetId, pivotId: string): Promise<PivotTableConfig | null>;
   pivotGetAll(sheetId: SheetId): Promise<PivotTableConfig[]>;
   pivotGetImportedViewRecords(sheetId: SheetId): Promise<ImportedPivotViewRecord[]>;
   pivotComputeFromSource(sheetId: SheetId, pivotId: string, expansionState: PivotExpansionState | null): Promise<PivotTableResult>;
   pivotGetAllItems(sheetId: SheetId, pivotId: string, expansionState: PivotExpansionState | null): Promise<PivotFieldItems[]>;
-  pivotRegisterDef(sheetId: SheetId, pivotId: string, totalRows: number, totalCols: number, firstDataRow: number, firstDataCol: number): Promise<MutationResult>;
-  pivotUnregisterDef(sheetId: SheetId, pivotName: string): Promise<MutationResult>;
+  pivotRegisterDef(sheetId: SheetId, pivotId: string, totalRows: number, totalCols: number, firstDataRow: number, firstDataCol: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  pivotUnregisterDef(sheetId: SheetId, pivotName: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   pivotMaterialize(sheetId: SheetId, pivotId: string, expansionState: PivotExpansionState | null): Promise<PivotTableResult>;
-  registerViewport(viewportId: string, sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number): Promise<MutationResult>;
-  updateViewportBounds(viewportId: string, startRow: number, startCol: number, endRow: number, endCol: number): Promise<MutationResult>;
-  unregisterViewport(viewportId: string): Promise<MutationResult>;
+  registerViewport(viewportId: string, sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  updateViewportBounds(viewportId: string, startRow: number, startCol: number, endRow: number, endCol: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  unregisterViewport(viewportId: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   getRegisteredViewports(): Promise<[string, string, number, number, number, number][]>;
-  resetSheetViewports(sheetId: SheetId): Promise<MutationResult>;
+  resetSheetViewports(sheetId: SheetId, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   getRowPosition(sheetId: SheetId, row: number): Promise<number>;
   getColPosition(sheetId: SheetId, col: number): Promise<number>;
   getRowAtPixel(sheetId: SheetId, y: number): Promise<number>;
   getColAtPixel(sheetId: SheetId, x: number): Promise<number>;
   getRowHeightFromIndex(sheetId: SheetId, row: number): Promise<number>;
   getColWidthFromIndex(sheetId: SheetId, col: number): Promise<number>;
-  autoFitColumnAndSet(sheetId: SheetId, col: number): Promise<MutationResult>;
-  autoFitColumnsAndSet(sheetId: SheetId, cols: number[]): Promise<MutationResult>;
-  autoFitRowsAndSet(sheetId: SheetId, rows: number[]): Promise<MutationResult>;
+  autoFitColumnAndSet(sheetId: SheetId, col: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  autoFitColumnsAndSet(sheetId: SheetId, cols: number[], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  autoFitRowsAndSet(sheetId: SheetId, rows: number[], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   getCellValue(sheetId: SheetId, row: number, col: number): Promise<CellValue>;
   getRangeValues2d(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number): Promise<CellValue[][]>;
   getCellInfo(sheetId: SheetId, row: number, col: number): Promise<CellInfo | null>;
@@ -650,20 +651,20 @@ export interface GeneratedBridgeMethods {
   getAllCommentsWorkbook(): Promise<WorkbookComment[]>;
   getAllPivotTablesWorkbook(): Promise<WorkbookPivotTable[]>;
   signCheckA1(sheetId: SheetId, rangeA1: string | null, options: SignCheckOptions): Promise<SignCheckResult>;
-  setCalculationMode(mode: string): Promise<MutationResult>;
-  setMaxIterations(n: number): Promise<MutationResult>;
-  setIterativeCalculation(enabled: boolean): Promise<MutationResult>;
-  setConvergenceThreshold(threshold: number): Promise<MutationResult>;
-  setUsePrecisionAsDisplayed(enabled: boolean): Promise<MutationResult>;
-  clearRangeWithMode(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number, mode: string): Promise<MutationResult>;
+  setCalculationMode(mode: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  setMaxIterations(n: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  setIterativeCalculation(enabled: boolean, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  setConvergenceThreshold(threshold: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  setUsePrecisionAsDisplayed(enabled: boolean, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  clearRangeWithMode(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number, mode: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   canEditCell(sheetId: SheetId, row: number, col: number): Promise<boolean>;
   canDoStructureOp(sheetId: SheetId, operation: string): Promise<boolean>;
-  freezeRows(sheetId: SheetId, count: number): Promise<MutationResult>;
-  freezeColumns(sheetId: SheetId, count: number): Promise<MutationResult>;
+  freezeRows(sheetId: SheetId, count: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  freezeColumns(sheetId: SheetId, count: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   getAllCustomCellStyles(): Promise<CellStyleDef[]>;
-  createCustomCellStyle(style: CellStyleDef): Promise<MutationResult>;
-  updateCustomCellStyle(id: string, style: CellStyleDef): Promise<MutationResult>;
-  deleteCustomCellStyle(id: string): Promise<MutationResult>;
+  createCustomCellStyle(style: CellStyleDef, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  updateCustomCellStyle(id: string, style: CellStyleDef, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  deleteCustomCellStyle(id: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
 }
 
 export class GeneratedBridgeBase implements GeneratedBridgeMethods {
@@ -965,76 +966,76 @@ export class GeneratedBridgeBase implements GeneratedBridgeMethods {
     return this.core.transport.call<string>('table_format_cell_display', { value });
   }
 
-  importFromXlsxBytes(xlsxData: Uint8Array, doRecalc: boolean): Promise<MutationResult> {
-    return this.core.mutateSystem('compute_import_from_xlsx_bytes', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_import_from_xlsx_bytes', { docId: this.core.docId, xlsxData, doRecalc }));
+  importFromXlsxBytes(xlsxData: Uint8Array, doRecalc: boolean, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutateSystem('compute_import_from_xlsx_bytes', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_import_from_xlsx_bytes', { docId: this.core.docId, xlsxData, doRecalc }), undefined, admissionOptions);
   }
 
-  importFromXlsxBytesDeferred(xlsxData: Uint8Array): Promise<MutationResult> {
-    return this.core.mutateSystem('compute_import_from_xlsx_bytes_deferred', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_import_from_xlsx_bytes_deferred', { docId: this.core.docId, xlsxData }));
+  importFromXlsxBytesDeferred(xlsxData: Uint8Array, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutateSystem('compute_import_from_xlsx_bytes_deferred', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_import_from_xlsx_bytes_deferred', { docId: this.core.docId, xlsxData }), undefined, admissionOptions);
   }
 
-  completeDeferredHydration(): Promise<MutationResult> {
-    return this.core.mutateSystem('compute_complete_deferred_hydration', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_complete_deferred_hydration', { docId: this.core.docId }));
+  completeDeferredHydration(admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutateSystem('compute_complete_deferred_hydration', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_complete_deferred_hydration', { docId: this.core.docId }), undefined, admissionOptions);
   }
 
-  settleForMirror(): Promise<MutationResult> {
-    return this.core.mutateSystem('compute_settle_for_mirror', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_settle_for_mirror', { docId: this.core.docId }));
+  settleForMirror(admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutateSystem('compute_settle_for_mirror', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_settle_for_mirror', { docId: this.core.docId }), undefined, admissionOptions);
   }
 
-  importFromCsvBytes(csvData: Uint8Array, options: CsvImportOptions): Promise<MutationResult> {
-    return this.core.mutateSystem('compute_import_from_csv_bytes', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_import_from_csv_bytes', { docId: this.core.docId, csvData, options }));
+  importFromCsvBytes(csvData: Uint8Array, options: CsvImportOptions, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutateSystem('compute_import_from_csv_bytes', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_import_from_csv_bytes', { docId: this.core.docId, csvData, options }), undefined, admissionOptions);
   }
 
   importSheetsFromXlsx(xlsxData: Uint8Array, sheetNames: string[], insertPosition: number | null): Promise<string[]> {
     return this.core.query(this.core.transport.call<string[]>('compute_import_sheets_from_xlsx', { docId: this.core.docId, xlsxData, sheetNames, insertPosition }));
   }
 
-  setCulture(culture: string): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_set_culture', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_culture', { docId: this.core.docId, culture }));
+  setCulture(culture: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_set_culture', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_culture', { docId: this.core.docId, culture }), undefined, admissionOptions);
   }
 
-  setWorkbookTheme(theme: ThemeData): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_set_workbook_theme', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_workbook_theme', { docId: this.core.docId, theme }));
+  setWorkbookTheme(theme: ThemeData, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_set_workbook_theme', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_workbook_theme', { docId: this.core.docId, theme }), undefined, admissionOptions);
   }
 
   getWorkbookTheme(): Promise<ThemeData> {
     return this.core.query(this.core.transport.call<ThemeData>('compute_get_workbook_theme', { docId: this.core.docId }));
   }
 
-  setCell(sheetId: SheetId, cellId: CellId, row: number, col: number, input: CellInput): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_set_cell', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_cell', { docId: this.core.docId, sheetId, cellId, row, col, input }));
+  setCell(sheetId: SheetId, cellId: CellId, row: number, col: number, input: CellInput, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_set_cell', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_cell', { docId: this.core.docId, sheetId, cellId, row, col, input }), undefined, admissionOptions);
   }
 
-  setCellBinary(sheetId: SheetId, cellId: CellId, row: number, col: number, input: CellInput): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_set_cell_binary', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_cell_binary', { docId: this.core.docId, sheetId, cellId, row, col, input }));
+  setCellBinary(sheetId: SheetId, cellId: CellId, row: number, col: number, input: CellInput, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_set_cell_binary', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_cell_binary', { docId: this.core.docId, sheetId, cellId, row, col, input }), undefined, admissionOptions);
   }
 
-  setArrayFormula(sheetId: SheetId, topRow: number, leftCol: number, bottomRow: number, rightCol: number, formula: string): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_set_array_formula', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_array_formula', { docId: this.core.docId, sheetId, topRow, leftCol, bottomRow, rightCol, formula }));
+  setArrayFormula(sheetId: SheetId, topRow: number, leftCol: number, bottomRow: number, rightCol: number, formula: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_set_array_formula', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_array_formula', { docId: this.core.docId, sheetId, topRow, leftCol, bottomRow, rightCol, formula }), undefined, admissionOptions);
   }
 
-  setCellValueParsed(sheetId: SheetId, row: number, col: number, rawInput: string): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_set_cell_value_parsed', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_cell_value_parsed', { docId: this.core.docId, sheetId, row, col, rawInput }));
+  setCellValueParsed(sheetId: SheetId, row: number, col: number, rawInput: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_set_cell_value_parsed', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_cell_value_parsed', { docId: this.core.docId, sheetId, row, col, rawInput }), undefined, admissionOptions);
   }
 
-  setCellValueAsText(sheetId: SheetId, row: number, col: number, value: string): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_set_cell_value_as_text', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_cell_value_as_text', { docId: this.core.docId, sheetId, row, col, value }));
+  setCellValueAsText(sheetId: SheetId, row: number, col: number, value: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_set_cell_value_as_text', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_cell_value_as_text', { docId: this.core.docId, sheetId, row, col, value }), undefined, admissionOptions);
   }
 
-  setCellValuesParsed(sheetId: SheetId, updates: [number, number, string][]): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_set_cell_values_parsed', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_cell_values_parsed', { docId: this.core.docId, sheetId, updates }));
+  setCellValuesParsed(sheetId: SheetId, updates: [number, number, string][], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_set_cell_values_parsed', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_cell_values_parsed', { docId: this.core.docId, sheetId, updates }), undefined, admissionOptions);
   }
 
-  importValues(sheetId: SheetId, updates: [number, number, CellValue, string | null][]): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_import_values', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_import_values', { docId: this.core.docId, sheetId, updates }));
+  importValues(sheetId: SheetId, updates: [number, number, CellValue, string | null][], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_import_values', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_import_values', { docId: this.core.docId, sheetId, updates }), undefined, admissionOptions);
   }
 
-  undo(): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_undo', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_undo', { docId: this.core.docId }));
+  undo(admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_undo', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_undo', { docId: this.core.docId }), undefined, admissionOptions);
   }
 
-  redo(): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_redo', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_redo', { docId: this.core.docId }));
+  redo(admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_redo', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_redo', { docId: this.core.docId }), undefined, admissionOptions);
   }
 
   canUndo(): Promise<boolean> {
@@ -1049,16 +1050,16 @@ export class GeneratedBridgeBase implements GeneratedBridgeMethods {
     return this.core.query(this.core.transport.call<UndoState>('compute_get_undo_state', { docId: this.core.docId }));
   }
 
-  beginUndoGroup(): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_begin_undo_group', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_begin_undo_group', { docId: this.core.docId }));
+  beginUndoGroup(admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_begin_undo_group', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_begin_undo_group', { docId: this.core.docId }), undefined, admissionOptions);
   }
 
-  endUndoGroup(): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_end_undo_group', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_end_undo_group', { docId: this.core.docId }));
+  endUndoGroup(admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_end_undo_group', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_end_undo_group', { docId: this.core.docId }), undefined, admissionOptions);
   }
 
-  applySyncUpdate(update: Uint8Array): Promise<MutationResult> {
-    return this.core.mutateSystem('compute_apply_sync_update', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_apply_sync_update', { docId: this.core.docId, update }));
+  applySyncUpdate(update: Uint8Array, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutateSystem('compute_apply_sync_update', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_apply_sync_update', { docId: this.core.docId, update }), undefined, admissionOptions);
   }
 
   encodeStateVector(): Promise<Uint8Array> {
@@ -1077,24 +1078,24 @@ export class GeneratedBridgeBase implements GeneratedBridgeMethods {
     return this.core.query(this.core.transport.call<Uint8Array[]>('compute_drain_pending_updates', { docId: this.core.docId }));
   }
 
-  flushUndoCapture(): Promise<MutationResult> {
-    return this.core.mutateSystem('compute_flush_undo_capture', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_flush_undo_capture', { docId: this.core.docId }));
+  flushUndoCapture(admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutateSystem('compute_flush_undo_capture', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_flush_undo_capture', { docId: this.core.docId }), undefined, admissionOptions);
   }
 
   captureScreenshot(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number, dpr: number, showHeaders: boolean, showGridlines: boolean, maxWidth: number | null, maxHeight: number | null): Promise<Uint8Array> {
     return this.core.query(this.core.transport.call<Uint8Array>('compute_capture_screenshot', { docId: this.core.docId, sheetId, startRow, startCol, endRow, endCol, dpr, showHeaders, showGridlines, maxWidth, maxHeight }));
   }
 
-  createScenario(input: ScenarioCreateInput): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_create_scenario', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_create_scenario', { docId: this.core.docId, input }));
+  createScenario(input: ScenarioCreateInput, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_create_scenario', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_create_scenario', { docId: this.core.docId, input }), undefined, admissionOptions);
   }
 
-  updateScenario(scenarioId: string, input: ScenarioUpdateInput): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_update_scenario', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_update_scenario', { docId: this.core.docId, scenarioId, input }));
+  updateScenario(scenarioId: string, input: ScenarioUpdateInput, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_update_scenario', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_update_scenario', { docId: this.core.docId, scenarioId, input }), undefined, admissionOptions);
   }
 
-  removeScenario(scenarioId: string): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_remove_scenario', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_remove_scenario', { docId: this.core.docId, scenarioId }));
+  removeScenario(scenarioId: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_remove_scenario', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_remove_scenario', { docId: this.core.docId, scenarioId }), undefined, admissionOptions);
   }
 
   getAllScenarios(): Promise<Scenario[]> {
@@ -1105,28 +1106,28 @@ export class GeneratedBridgeBase implements GeneratedBridgeMethods {
     return this.core.query(this.core.transport.call<ScenarioActiveState | null>('compute_get_active_scenario_state', { docId: this.core.docId }));
   }
 
-  applyScenario(scenarioId: string): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_apply_scenario', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_apply_scenario', { docId: this.core.docId, scenarioId }));
+  applyScenario(scenarioId: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_apply_scenario', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_apply_scenario', { docId: this.core.docId, scenarioId }), undefined, admissionOptions);
   }
 
-  restoreScenario(baselineId: string): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_restore_scenario', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_restore_scenario', { docId: this.core.docId, baselineId }));
+  restoreScenario(baselineId: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_restore_scenario', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_restore_scenario', { docId: this.core.docId, baselineId }), undefined, admissionOptions);
   }
 
-  setActiveScenario(scenarioId: string | null): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_set_active_scenario', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_active_scenario', { docId: this.core.docId, scenarioId }));
+  setActiveScenario(scenarioId: string | null, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_set_active_scenario', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_active_scenario', { docId: this.core.docId, scenarioId }), undefined, admissionOptions);
   }
 
-  createBinding(sheetId: SheetId, binding: CreateBindingInput): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_create_binding', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_create_binding', { docId: this.core.docId, sheetId, binding }));
+  createBinding(sheetId: SheetId, binding: CreateBindingInput, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_create_binding', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_create_binding', { docId: this.core.docId, sheetId, binding }), undefined, admissionOptions);
   }
 
-  updateBinding(sheetId: SheetId, bindingId: string, updates: UpdateBindingFields): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_update_binding', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_update_binding', { docId: this.core.docId, sheetId, bindingId, updates }));
+  updateBinding(sheetId: SheetId, bindingId: string, updates: UpdateBindingFields, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_update_binding', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_update_binding', { docId: this.core.docId, sheetId, bindingId, updates }), undefined, admissionOptions);
   }
 
-  removeBinding(sheetId: SheetId, bindingId: string): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_remove_binding', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_remove_binding', { docId: this.core.docId, sheetId, bindingId }));
+  removeBinding(sheetId: SheetId, bindingId: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_remove_binding', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_remove_binding', { docId: this.core.docId, sheetId, bindingId }), undefined, admissionOptions);
   }
 
   getAllBindings(sheetId: SheetId): Promise<SheetDataBinding[]> {
@@ -1141,60 +1142,60 @@ export class GeneratedBridgeBase implements GeneratedBridgeMethods {
     return this.core.query(this.core.transport.call<SheetDataBinding[]>('compute_get_bindings_for_connection', { docId: this.core.docId, connectionId }));
   }
 
-  updateRefreshMetadata(sheetId: SheetId, bindingId: string, lastRefresh: number, lastRowCount: number): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_update_refresh_metadata', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_update_refresh_metadata', { docId: this.core.docId, sheetId, bindingId, lastRefresh, lastRowCount }));
+  updateRefreshMetadata(sheetId: SheetId, bindingId: string, lastRefresh: number, lastRowCount: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_update_refresh_metadata', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_update_refresh_metadata', { docId: this.core.docId, sheetId, bindingId, lastRefresh, lastRowCount }), undefined, admissionOptions);
   }
 
-  removeBindingsForConnection(connectionId: string): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_remove_bindings_for_connection', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_remove_bindings_for_connection', { docId: this.core.docId, connectionId }));
+  removeBindingsForConnection(connectionId: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_remove_bindings_for_connection', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_remove_bindings_for_connection', { docId: this.core.docId, connectionId }), undefined, admissionOptions);
   }
 
-  batchSetCells(edits: [SheetId, CellId, number, number, CellInput][], skipCycleCheck: boolean): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_batch_set_cells', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_batch_set_cells', { docId: this.core.docId, edits, skipCycleCheck }));
+  batchSetCells(edits: [SheetId, CellId, number, number, CellInput][], skipCycleCheck: boolean, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_batch_set_cells', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_batch_set_cells', { docId: this.core.docId, edits, skipCycleCheck }), undefined, admissionOptions);
   }
 
-  batchClearCells(cellIds: CellId[]): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_batch_clear_cells', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_batch_clear_cells', { docId: this.core.docId, cellIds }));
+  batchClearCells(cellIds: CellId[], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_batch_clear_cells', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_batch_clear_cells', { docId: this.core.docId, cellIds }), undefined, admissionOptions);
   }
 
-  batchSetCellsByPosition(edits: [SheetId, number, number, CellInput][], skipCycleCheck: boolean): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_batch_set_cells_by_position', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_batch_set_cells_by_position', { docId: this.core.docId, edits, skipCycleCheck }));
+  batchSetCellsByPosition(edits: [SheetId, number, number, CellInput][], skipCycleCheck: boolean, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_batch_set_cells_by_position', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_batch_set_cells_by_position', { docId: this.core.docId, edits, skipCycleCheck }), undefined, admissionOptions);
   }
 
   setCellsBatch(sheetId: SheetId, cells: BatchCellInput[]): Promise<SetCellsBatchResult> {
     return this.core.query(this.core.transport.call<SetCellsBatchResult>('compute_set_cells_batch', { docId: this.core.docId, sheetId, cells }));
   }
 
-  setDateValue(sheetId: SheetId, row: number, col: number, year: number, month: number, day: number): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_set_date_value', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_date_value', { docId: this.core.docId, sheetId, row, col, year, month, day }));
+  setDateValue(sheetId: SheetId, row: number, col: number, year: number, month: number, day: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_set_date_value', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_date_value', { docId: this.core.docId, sheetId, row, col, year, month, day }), undefined, admissionOptions);
   }
 
-  setTimeValue(sheetId: SheetId, row: number, col: number, hours: number, minutes: number, seconds: number): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_set_time_value', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_time_value', { docId: this.core.docId, sheetId, row, col, hours, minutes, seconds }));
+  setTimeValue(sheetId: SheetId, row: number, col: number, hours: number, minutes: number, seconds: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_set_time_value', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_time_value', { docId: this.core.docId, sheetId, row, col, hours, minutes, seconds }), undefined, admissionOptions);
   }
 
-  clearRangeByPosition(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_clear_range_by_position', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_clear_range_by_position', { docId: this.core.docId, sheetId, startRow, startCol, endRow, endCol }));
+  clearRangeByPosition(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_clear_range_by_position', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_clear_range_by_position', { docId: this.core.docId, sheetId, startRow, startCol, endRow, endCol }), undefined, admissionOptions);
   }
 
-  applyChanges(changes: CellEdit[], skipCycleCheck: boolean): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_apply_changes', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_apply_changes', { docId: this.core.docId, changes, skipCycleCheck }));
+  applyChanges(changes: CellEdit[], skipCycleCheck: boolean, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_apply_changes', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_apply_changes', { docId: this.core.docId, changes, skipCycleCheck }), undefined, admissionOptions);
   }
 
-  addComputeSheet(snapshot: SheetSnapshot): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_add_compute_sheet', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_add_compute_sheet', { docId: this.core.docId, snapshot }));
+  addComputeSheet(snapshot: SheetSnapshot, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_add_compute_sheet', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_add_compute_sheet', { docId: this.core.docId, snapshot }), undefined, admissionOptions);
   }
 
-  removeComputeSheet(sheetId: SheetId): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_remove_compute_sheet', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_remove_compute_sheet', { docId: this.core.docId, sheetId }));
+  removeComputeSheet(sheetId: SheetId, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_remove_compute_sheet', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_remove_compute_sheet', { docId: this.core.docId, sheetId }), undefined, admissionOptions);
   }
 
-  setNamedRange(name: string, def: NamedRangeDef): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_set_named_range', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_named_range', { docId: this.core.docId, name, def }));
+  setNamedRange(name: string, def: NamedRangeDef, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_set_named_range', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_named_range', { docId: this.core.docId, name, def }), undefined, admissionOptions);
   }
 
-  removeNamedRange(name: string): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_remove_named_range', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_remove_named_range', { docId: this.core.docId, name }));
+  removeNamedRange(name: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_remove_named_range', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_remove_named_range', { docId: this.core.docId, name }), undefined, admissionOptions);
   }
 
   evalCf(sheetId: SheetId, rules: CFRuleWire[]): Promise<CellCFResult[]> {
@@ -1221,48 +1222,48 @@ export class GeneratedBridgeBase implements GeneratedBridgeMethods {
     return this.core.query(this.core.transport.call<DataTableResult>('compute_data_table', { docId: this.core.docId, params }));
   }
 
-  createDataTable(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number, input: CreateDataTableInput): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_create_data_table', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_create_data_table', { docId: this.core.docId, sheetId, startRow, startCol, endRow, endCol, input }));
+  createDataTable(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number, input: CreateDataTableInput, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_create_data_table', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_create_data_table', { docId: this.core.docId, sheetId, startRow, startCol, endRow, endCol, input }), undefined, admissionOptions);
   }
 
   syncFullState(): Promise<Uint8Array> {
     return this.core.query(this.core.transport.call<Uint8Array>('compute_sync_full_state', { docId: this.core.docId }));
   }
 
-  reorderSheets(newOrder: string[]): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_reorder_sheets', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_reorder_sheets', { docId: this.core.docId, newOrder }));
+  reorderSheets(newOrder: string[], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_reorder_sheets', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_reorder_sheets', { docId: this.core.docId, newOrder }), undefined, admissionOptions);
   }
 
-  setFrozenPanes(sheetId: SheetId, rows: number, cols: number): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_set_frozen_panes', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_frozen_panes', { docId: this.core.docId, sheetId, rows, cols }));
+  setFrozenPanes(sheetId: SheetId, rows: number, cols: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_set_frozen_panes', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_frozen_panes', { docId: this.core.docId, sheetId, rows, cols }), undefined, admissionOptions);
   }
 
-  setViewOption(sheetId: SheetId, key: string, value: boolean): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_set_view_option', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_view_option', { docId: this.core.docId, sheetId, key, value }));
+  setViewOption(sheetId: SheetId, key: string, value: boolean, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_set_view_option', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_view_option', { docId: this.core.docId, sheetId, key, value }), undefined, admissionOptions);
   }
 
-  setScrollPosition(sheetId: SheetId, topRow: number, leftCol: number): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_set_scroll_position', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_scroll_position', { docId: this.core.docId, sheetId, topRow, leftCol }));
+  setScrollPosition(sheetId: SheetId, topRow: number, leftCol: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_set_scroll_position', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_scroll_position', { docId: this.core.docId, sheetId, topRow, leftCol }), undefined, admissionOptions);
   }
 
-  moveSheet(sheetId: SheetId, newIndex: number): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_move_sheet', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_move_sheet', { docId: this.core.docId, sheetId, newIndex }));
+  moveSheet(sheetId: SheetId, newIndex: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_move_sheet', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_move_sheet', { docId: this.core.docId, sheetId, newIndex }), undefined, admissionOptions);
   }
 
-  setTabColor(sheetId: SheetId, color: string | null): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_set_tab_color', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_tab_color', { docId: this.core.docId, sheetId, color }));
+  setTabColor(sheetId: SheetId, color: string | null, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_set_tab_color', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_tab_color', { docId: this.core.docId, sheetId, color }), undefined, admissionOptions);
   }
 
-  setSheetHidden(sheetId: SheetId, hidden: boolean): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_set_sheet_hidden', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_sheet_hidden', { docId: this.core.docId, sheetId, hidden }));
+  setSheetHidden(sheetId: SheetId, hidden: boolean, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_set_sheet_hidden', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_sheet_hidden', { docId: this.core.docId, sheetId, hidden }), undefined, admissionOptions);
   }
 
-  setSheetEnableCalculation(sheetId: SheetId, enabled: boolean): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_set_sheet_enable_calculation', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_sheet_enable_calculation', { docId: this.core.docId, sheetId, enabled }));
+  setSheetEnableCalculation(sheetId: SheetId, enabled: boolean, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_set_sheet_enable_calculation', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_sheet_enable_calculation', { docId: this.core.docId, sheetId, enabled }), undefined, admissionOptions);
   }
 
-  setSheetVisibility(sheetId: SheetId, state: string): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_set_sheet_visibility', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_sheet_visibility', { docId: this.core.docId, sheetId, state }));
+  setSheetVisibility(sheetId: SheetId, state: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_set_sheet_visibility', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_sheet_visibility', { docId: this.core.docId, sheetId, state }), undefined, admissionOptions);
   }
 
   getSheetVisibility(sheetId: SheetId): Promise<string> {
@@ -1273,116 +1274,116 @@ export class GeneratedBridgeBase implements GeneratedBridgeMethods {
     return this.core.query(this.core.transport.call<SheetSettings>('compute_get_sheet_settings', { docId: this.core.docId, sheetId }));
   }
 
-  setSheetSetting(sheetId: SheetId, key: string, value: string): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_set_sheet_setting', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_sheet_setting', { docId: this.core.docId, sheetId, key, value }));
+  setSheetSetting(sheetId: SheetId, key: string, value: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_set_sheet_setting', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_sheet_setting', { docId: this.core.docId, sheetId, key, value }), undefined, admissionOptions);
   }
 
-  protectSheet(sheetId: SheetId, passwordHash: string | null): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_protect_sheet', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_protect_sheet', { docId: this.core.docId, sheetId, passwordHash }));
+  protectSheet(sheetId: SheetId, passwordHash: string | null, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_protect_sheet', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_protect_sheet', { docId: this.core.docId, sheetId, passwordHash }), undefined, admissionOptions);
   }
 
-  protectSheetWithOptions(sheetId: SheetId, passwordHash: string | null, options: SheetProtectionOptions): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_protect_sheet_with_options', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_protect_sheet_with_options', { docId: this.core.docId, sheetId, passwordHash, options }));
+  protectSheetWithOptions(sheetId: SheetId, passwordHash: string | null, options: SheetProtectionOptions, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_protect_sheet_with_options', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_protect_sheet_with_options', { docId: this.core.docId, sheetId, passwordHash, options }), undefined, admissionOptions);
   }
 
-  setSheetProtectionOptions(sheetId: SheetId, options: SheetProtectionOptions): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_set_sheet_protection_options', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_sheet_protection_options', { docId: this.core.docId, sheetId, options }));
+  setSheetProtectionOptions(sheetId: SheetId, options: SheetProtectionOptions, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_set_sheet_protection_options', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_sheet_protection_options', { docId: this.core.docId, sheetId, options }), undefined, admissionOptions);
   }
 
-  unprotectSheet(sheetId: SheetId, passwordHash: string | null): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_unprotect_sheet', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_unprotect_sheet', { docId: this.core.docId, sheetId, passwordHash }));
+  unprotectSheet(sheetId: SheetId, passwordHash: string | null, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_unprotect_sheet', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_unprotect_sheet', { docId: this.core.docId, sheetId, passwordHash }), undefined, admissionOptions);
   }
 
   getPageBreaks(sheetId: SheetId): Promise<PageBreaks> {
     return this.core.query(this.core.transport.call<PageBreaks>('compute_get_page_breaks', { docId: this.core.docId, sheetId }));
   }
 
-  addHorizontalPageBreak(sheetId: SheetId, row: number): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_add_horizontal_page_break', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_add_horizontal_page_break', { docId: this.core.docId, sheetId, row }));
+  addHorizontalPageBreak(sheetId: SheetId, row: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_add_horizontal_page_break', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_add_horizontal_page_break', { docId: this.core.docId, sheetId, row }), undefined, admissionOptions);
   }
 
-  removeHorizontalPageBreak(sheetId: SheetId, row: number): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_remove_horizontal_page_break', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_remove_horizontal_page_break', { docId: this.core.docId, sheetId, row }));
+  removeHorizontalPageBreak(sheetId: SheetId, row: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_remove_horizontal_page_break', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_remove_horizontal_page_break', { docId: this.core.docId, sheetId, row }), undefined, admissionOptions);
   }
 
-  addVerticalPageBreak(sheetId: SheetId, col: number): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_add_vertical_page_break', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_add_vertical_page_break', { docId: this.core.docId, sheetId, col }));
+  addVerticalPageBreak(sheetId: SheetId, col: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_add_vertical_page_break', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_add_vertical_page_break', { docId: this.core.docId, sheetId, col }), undefined, admissionOptions);
   }
 
-  removeVerticalPageBreak(sheetId: SheetId, col: number): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_remove_vertical_page_break', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_remove_vertical_page_break', { docId: this.core.docId, sheetId, col }));
+  removeVerticalPageBreak(sheetId: SheetId, col: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_remove_vertical_page_break', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_remove_vertical_page_break', { docId: this.core.docId, sheetId, col }), undefined, admissionOptions);
   }
 
-  clearAllPageBreaks(sheetId: SheetId): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_clear_all_page_breaks', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_clear_all_page_breaks', { docId: this.core.docId, sheetId }));
+  clearAllPageBreaks(sheetId: SheetId, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_clear_all_page_breaks', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_clear_all_page_breaks', { docId: this.core.docId, sheetId }), undefined, admissionOptions);
   }
 
   getPrintArea(sheetId: SheetId): Promise<PrintRange | null> {
     return this.core.query(this.core.transport.call<PrintRange | null>('compute_get_print_area', { docId: this.core.docId, sheetId }));
   }
 
-  setPrintArea(sheetId: SheetId, area: PrintRange | null): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_set_print_area', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_print_area', { docId: this.core.docId, sheetId, area }));
+  setPrintArea(sheetId: SheetId, area: PrintRange | null, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_set_print_area', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_print_area', { docId: this.core.docId, sheetId, area }), undefined, admissionOptions);
   }
 
   getPrintTitles(sheetId: SheetId): Promise<PrintTitles> {
     return this.core.query(this.core.transport.call<PrintTitles>('compute_get_print_titles', { docId: this.core.docId, sheetId }));
   }
 
-  setPrintTitles(sheetId: SheetId, titles: PrintTitles): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_set_print_titles', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_print_titles', { docId: this.core.docId, sheetId, titles }));
+  setPrintTitles(sheetId: SheetId, titles: PrintTitles, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_set_print_titles', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_print_titles', { docId: this.core.docId, sheetId, titles }), undefined, admissionOptions);
   }
 
   getSplitConfig(sheetId: SheetId): Promise<SplitViewConfig | null> {
     return this.core.query(this.core.transport.call<SplitViewConfig | null>('compute_get_split_config', { docId: this.core.docId, sheetId }));
   }
 
-  setSplitConfig(sheetId: SheetId, config: SplitViewConfig | null): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_set_split_config', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_split_config', { docId: this.core.docId, sheetId, config }));
+  setSplitConfig(sheetId: SheetId, config: SplitViewConfig | null, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_set_split_config', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_split_config', { docId: this.core.docId, sheetId, config }), undefined, admissionOptions);
   }
 
-  createNamedRange(input: DefinedNameInput): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_create_named_range', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_create_named_range', { docId: this.core.docId, input }));
+  createNamedRange(input: DefinedNameInput, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_create_named_range', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_create_named_range', { docId: this.core.docId, input }), undefined, admissionOptions);
   }
 
-  updateNamedRange(id: string, updates: NamedRangeUpdate): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_update_named_range', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_update_named_range', { docId: this.core.docId, id, updates }));
+  updateNamedRange(id: string, updates: NamedRangeUpdate, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_update_named_range', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_update_named_range', { docId: this.core.docId, id, updates }), undefined, admissionOptions);
   }
 
-  removeNamedRangeById(id: string): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_remove_named_range_by_id', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_remove_named_range_by_id', { docId: this.core.docId, id }));
+  removeNamedRangeById(id: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_remove_named_range_by_id', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_remove_named_range_by_id', { docId: this.core.docId, id }), undefined, admissionOptions);
   }
 
-  removeNamedRangesByScope(scope: string | null): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_remove_named_ranges_by_scope', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_remove_named_ranges_by_scope', { docId: this.core.docId, scope }));
+  removeNamedRangesByScope(scope: string | null, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_remove_named_ranges_by_scope', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_remove_named_ranges_by_scope', { docId: this.core.docId, scope }), undefined, admissionOptions);
   }
 
-  importNamedRanges(names: DefinedName[]): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_import_named_ranges', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_import_named_ranges', { docId: this.core.docId, names }));
+  importNamedRanges(names: DefinedName[], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_import_named_ranges', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_import_named_ranges', { docId: this.core.docId, names }), undefined, admissionOptions);
   }
 
-  setPrintSettings(sheetId: SheetId, settings: PrintSettings): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_set_print_settings', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_print_settings', { docId: this.core.docId, sheetId, settings }));
+  setPrintSettings(sheetId: SheetId, settings: PrintSettings, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_set_print_settings', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_print_settings', { docId: this.core.docId, sheetId, settings }), undefined, admissionOptions);
   }
 
-  setHfImage(sheetId: SheetId, info: HeaderFooterImageInfo): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_set_hf_image', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_hf_image', { docId: this.core.docId, sheetId, info }));
+  setHfImage(sheetId: SheetId, info: HeaderFooterImageInfo, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_set_hf_image', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_hf_image', { docId: this.core.docId, sheetId, info }), undefined, admissionOptions);
   }
 
-  removeHfImage(sheetId: SheetId, position: HfImagePosition): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_remove_hf_image', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_remove_hf_image', { docId: this.core.docId, sheetId, position }));
+  removeHfImage(sheetId: SheetId, position: HfImagePosition, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_remove_hf_image', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_remove_hf_image', { docId: this.core.docId, sheetId, position }), undefined, admissionOptions);
   }
 
-  clearRange(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_clear_range', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_clear_range', { docId: this.core.docId, sheetId, startRow, startCol, endRow, endCol }));
+  clearRange(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_clear_range', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_clear_range', { docId: this.core.docId, sheetId, startRow, startCol, endRow, endCol }), undefined, admissionOptions);
   }
 
-  clearRangeAndReturnIds(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_clear_range_and_return_ids', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_clear_range_and_return_ids', { docId: this.core.docId, sheetId, startRow, startCol, endRow, endCol }));
+  clearRangeAndReturnIds(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_clear_range_and_return_ids', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_clear_range_and_return_ids', { docId: this.core.docId, sheetId, startRow, startCol, endRow, endCol }), undefined, admissionOptions);
   }
 
-  replaceAllInRange(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number, text: string, replacement: string, options: FindInRangeOptions): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_replace_all_in_range', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_replace_all_in_range', { docId: this.core.docId, sheetId, startRow, startCol, endRow, endCol, text, replacement, options }));
+  replaceAllInRange(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number, text: string, replacement: string, options: FindInRangeOptions, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_replace_all_in_range', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_replace_all_in_range', { docId: this.core.docId, sheetId, startRow, startCol, endRow, endCol, text, replacement, options }), undefined, admissionOptions);
   }
 
   getFormula(cellId: CellId): Promise<string | null> {
@@ -1409,8 +1410,8 @@ export class GeneratedBridgeBase implements GeneratedBridgeMethods {
     return this.core.query(this.core.transport.call<Uint8Array>('compute_get_viewport_binary_delta', { docId: this.core.docId, sheetId, startRow, startCol, endRow, endCol, showFormulas }));
   }
 
-  resetViewportState(sheetId: SheetId): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_reset_viewport_state', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_reset_viewport_state', { docId: this.core.docId, sheetId }));
+  resetViewportState(sheetId: SheetId, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_reset_viewport_state', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_reset_viewport_state', { docId: this.core.docId, sheetId }), undefined, admissionOptions);
   }
 
   getWorkbookSettings(): Promise<WorkbookSettings> {
@@ -1429,20 +1430,20 @@ export class GeneratedBridgeBase implements GeneratedBridgeMethods {
     return this.core.query(this.core.transport.call<RuntimeDiagnosticsPage>('compute_get_runtime_diagnostics', { docId: this.core.docId, options }));
   }
 
-  setWorkbookSettings(settings: WorkbookSettings): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_set_workbook_settings', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_workbook_settings', { docId: this.core.docId, settings }));
+  setWorkbookSettings(settings: WorkbookSettings, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_set_workbook_settings', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_workbook_settings', { docId: this.core.docId, settings }), undefined, admissionOptions);
   }
 
-  patchWorkbookSettings(patch: RustWorkbookSettingsPatch): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_patch_workbook_settings', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_patch_workbook_settings', { docId: this.core.docId, patch }));
+  patchWorkbookSettings(patch: RustWorkbookSettingsPatch, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_patch_workbook_settings', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_patch_workbook_settings', { docId: this.core.docId, patch }), undefined, admissionOptions);
   }
 
   getDocumentProperties(): Promise<DocumentProperties> {
     return this.core.query(this.core.transport.call<DocumentProperties>('compute_get_document_properties', { docId: this.core.docId }));
   }
 
-  setDocumentProperties(props: DocumentProperties): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_set_document_properties', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_document_properties', { docId: this.core.docId, props }));
+  setDocumentProperties(props: DocumentProperties, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_set_document_properties', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_document_properties', { docId: this.core.docId, props }), undefined, admissionOptions);
   }
 
   getAllSheetIds(): Promise<string[]> {
@@ -1605,36 +1606,36 @@ export class GeneratedBridgeBase implements GeneratedBridgeMethods {
     return this.core.query(this.core.transport.call<unknown | null>('compute_get_workbook_setting', { docId: this.core.docId, key }));
   }
 
-  setWorkbookSetting(key: string, value: unknown): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_set_workbook_setting', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_workbook_setting', { docId: this.core.docId, key, value }));
+  setWorkbookSetting(key: string, value: unknown, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_set_workbook_setting', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_workbook_setting', { docId: this.core.docId, key, value }), undefined, admissionOptions);
   }
 
-  resetWorkbookSettings(): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_reset_workbook_settings', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_reset_workbook_settings', { docId: this.core.docId }));
+  resetWorkbookSettings(admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_reset_workbook_settings', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_reset_workbook_settings', { docId: this.core.docId }), undefined, admissionOptions);
   }
 
   getCalculationSettings(): Promise<CalculationSettings> {
     return this.core.query(this.core.transport.call<CalculationSettings>('compute_get_calculation_settings', { docId: this.core.docId }));
   }
 
-  setCalculationSettings(settings: CalculationSettings): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_set_calculation_settings', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_calculation_settings', { docId: this.core.docId, settings }));
+  setCalculationSettings(settings: CalculationSettings, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_set_calculation_settings', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_calculation_settings', { docId: this.core.docId, settings }), undefined, admissionOptions);
   }
 
   isIterativeCalculationEnabled(): Promise<boolean> {
     return this.core.query(this.core.transport.call<boolean>('compute_is_iterative_calculation_enabled', { docId: this.core.docId }));
   }
 
-  setIterativeCalculationEnabled(enabled: boolean): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_set_iterative_calculation_enabled', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_iterative_calculation_enabled', { docId: this.core.docId, enabled }));
+  setIterativeCalculationEnabled(enabled: boolean, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_set_iterative_calculation_enabled', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_iterative_calculation_enabled', { docId: this.core.docId, enabled }), undefined, admissionOptions);
   }
 
-  protectWorkbook(passwordHash: string | null, options: WorkbookProtectionOptions | null): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_protect_workbook', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_protect_workbook', { docId: this.core.docId, passwordHash, options }));
+  protectWorkbook(passwordHash: string | null, options: WorkbookProtectionOptions | null, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_protect_workbook', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_protect_workbook', { docId: this.core.docId, passwordHash, options }), undefined, admissionOptions);
   }
 
-  unprotectWorkbook(passwordHash: string | null): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_unprotect_workbook', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_unprotect_workbook', { docId: this.core.docId, passwordHash }));
+  unprotectWorkbook(passwordHash: string | null, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_unprotect_workbook', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_unprotect_workbook', { docId: this.core.docId, passwordHash }), undefined, admissionOptions);
   }
 
   getWorkbookProtectionOptions(): Promise<WorkbookProtectionOptions> {
@@ -1653,16 +1654,16 @@ export class GeneratedBridgeBase implements GeneratedBridgeMethods {
     return this.core.query(this.core.transport.call<boolean>('compute_is_workbook_operation_allowed', { docId: this.core.docId, operation }));
   }
 
-  setDefaultTableStyleId(styleId: string | null): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_set_default_table_style_id', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_default_table_style_id', { docId: this.core.docId, styleId }));
+  setDefaultTableStyleId(styleId: string | null, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_set_default_table_style_id', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_default_table_style_id', { docId: this.core.docId, styleId }), undefined, admissionOptions);
   }
 
   getDefaultTableStyleId(): Promise<string | null> {
     return this.core.query(this.core.transport.call<string | null>('compute_get_default_table_style_id', { docId: this.core.docId }));
   }
 
-  setDefaultSlicerStyle(styleId: string | null): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_set_default_slicer_style', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_default_slicer_style', { docId: this.core.docId, styleId }));
+  setDefaultSlicerStyle(styleId: string | null, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_set_default_slicer_style', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_default_slicer_style', { docId: this.core.docId, styleId }), undefined, admissionOptions);
   }
 
   getDefaultSlicerStyle(): Promise<string | null> {
@@ -1681,20 +1682,20 @@ export class GeneratedBridgeBase implements GeneratedBridgeMethods {
     return this.core.query(this.core.transport.call<NamedSlicerStyle[]>('compute_list_slicer_styles', { docId: this.core.docId }));
   }
 
-  addSlicerStyle(name: string, style: SlicerCustomStyle, makeUniqueName: boolean): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_add_slicer_style', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_add_slicer_style', { docId: this.core.docId, name, style, makeUniqueName }));
+  addSlicerStyle(name: string, style: SlicerCustomStyle, makeUniqueName: boolean, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_add_slicer_style', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_add_slicer_style', { docId: this.core.docId, name, style, makeUniqueName }), undefined, admissionOptions);
   }
 
-  deleteSlicerStyle(name: string): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_delete_slicer_style', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_delete_slicer_style', { docId: this.core.docId, name }));
+  deleteSlicerStyle(name: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_delete_slicer_style', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_delete_slicer_style', { docId: this.core.docId, name }), undefined, admissionOptions);
   }
 
-  duplicateSlicerStyle(name: string): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_duplicate_slicer_style', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_duplicate_slicer_style', { docId: this.core.docId, name }));
+  duplicateSlicerStyle(name: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_duplicate_slicer_style', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_duplicate_slicer_style', { docId: this.core.docId, name }), undefined, admissionOptions);
   }
 
-  setDefaultPivotTableStyle(styleId: string | null): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_set_default_pivot_table_style', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_default_pivot_table_style', { docId: this.core.docId, styleId }));
+  setDefaultPivotTableStyle(styleId: string | null, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_set_default_pivot_table_style', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_default_pivot_table_style', { docId: this.core.docId, styleId }), undefined, admissionOptions);
   }
 
   getDefaultPivotTableStyle(): Promise<string | null> {
@@ -1705,8 +1706,8 @@ export class GeneratedBridgeBase implements GeneratedBridgeMethods {
     return this.core.query(this.core.transport.call<string | null>('compute_get_custom_setting', { docId: this.core.docId, key }));
   }
 
-  setCustomSetting(key: string, value: string | null): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_set_custom_setting', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_custom_setting', { docId: this.core.docId, key, value }));
+  setCustomSetting(key: string, value: string | null, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_set_custom_setting', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_custom_setting', { docId: this.core.docId, key, value }), undefined, admissionOptions);
   }
 
   listCustomSettings(): Promise<[string, string][]> {
@@ -1929,68 +1930,68 @@ export class GeneratedBridgeBase implements GeneratedBridgeMethods {
     return this.core.query(this.core.transport.call<CellValue>('compute_evaluate_expression', { docId: this.core.docId, sheetId, expression }));
   }
 
-  relocateCells(sheetId: SheetId, srcStartRow: number, srcStartCol: number, srcEndRow: number, srcEndCol: number, targetRow: number, targetCol: number): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_relocate_cells', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_relocate_cells', { docId: this.core.docId, sheetId, srcStartRow, srcStartCol, srcEndRow, srcEndCol, targetRow, targetCol }));
+  relocateCells(sheetId: SheetId, srcStartRow: number, srcStartCol: number, srcEndRow: number, srcEndCol: number, targetRow: number, targetCol: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_relocate_cells', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_relocate_cells', { docId: this.core.docId, sheetId, srcStartRow, srcStartCol, srcEndRow, srcEndCol, targetRow, targetCol }), undefined, admissionOptions);
   }
 
-  insertCellsWithShift(sheetId: SheetId, row: number, col: number, rowCount: number, colCount: number, shiftRight: boolean): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_insert_cells_with_shift', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_insert_cells_with_shift', { docId: this.core.docId, sheetId, row, col, rowCount, colCount, shiftRight }));
+  insertCellsWithShift(sheetId: SheetId, row: number, col: number, rowCount: number, colCount: number, shiftRight: boolean, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_insert_cells_with_shift', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_insert_cells_with_shift', { docId: this.core.docId, sheetId, row, col, rowCount, colCount, shiftRight }), undefined, admissionOptions);
   }
 
-  deleteCellsWithShift(sheetId: SheetId, row: number, col: number, rowCount: number, colCount: number, shiftLeft: boolean): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_delete_cells_with_shift', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_delete_cells_with_shift', { docId: this.core.docId, sheetId, row, col, rowCount, colCount, shiftLeft }));
+  deleteCellsWithShift(sheetId: SheetId, row: number, col: number, rowCount: number, colCount: number, shiftLeft: boolean, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_delete_cells_with_shift', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_delete_cells_with_shift', { docId: this.core.docId, sheetId, row, col, rowCount, colCount, shiftLeft }), undefined, admissionOptions);
   }
 
-  setRowHeight(sheetId: SheetId, row: number, heightPx: number): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_set_row_height', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_row_height', { docId: this.core.docId, sheetId, row, heightPx }));
+  setRowHeight(sheetId: SheetId, row: number, heightPx: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_set_row_height', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_row_height', { docId: this.core.docId, sheetId, row, heightPx }), undefined, admissionOptions);
   }
 
-  setColWidth(sheetId: SheetId, col: number, widthPx: number): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_set_col_width', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_col_width', { docId: this.core.docId, sheetId, col, widthPx }));
+  setColWidth(sheetId: SheetId, col: number, widthPx: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_set_col_width', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_col_width', { docId: this.core.docId, sheetId, col, widthPx }), undefined, admissionOptions);
   }
 
-  setColWidths(sheetId: SheetId, widths: [number, number][]): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_set_col_widths', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_col_widths', { docId: this.core.docId, sheetId, widths }));
+  setColWidths(sheetId: SheetId, widths: [number, number][], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_set_col_widths', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_col_widths', { docId: this.core.docId, sheetId, widths }), undefined, admissionOptions);
   }
 
-  setColWidthChars(sheetId: SheetId, col: number, widthChars: number): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_set_col_width_chars', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_col_width_chars', { docId: this.core.docId, sheetId, col, widthChars }));
+  setColWidthChars(sheetId: SheetId, col: number, widthChars: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_set_col_width_chars', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_col_width_chars', { docId: this.core.docId, sheetId, col, widthChars }), undefined, admissionOptions);
   }
 
-  setColWidthsChars(sheetId: SheetId, widths: [number, number][]): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_set_col_widths_chars', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_col_widths_chars', { docId: this.core.docId, sheetId, widths }));
+  setColWidthsChars(sheetId: SheetId, widths: [number, number][], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_set_col_widths_chars', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_col_widths_chars', { docId: this.core.docId, sheetId, widths }), undefined, admissionOptions);
   }
 
-  hideRows(sheetId: SheetId, rows: number[]): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_hide_rows', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_hide_rows', { docId: this.core.docId, sheetId, rows }));
+  hideRows(sheetId: SheetId, rows: number[], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_hide_rows', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_hide_rows', { docId: this.core.docId, sheetId, rows }), undefined, admissionOptions);
   }
 
-  unhideRows(sheetId: SheetId, rows: number[]): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_unhide_rows', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_unhide_rows', { docId: this.core.docId, sheetId, rows }));
+  unhideRows(sheetId: SheetId, rows: number[], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_unhide_rows', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_unhide_rows', { docId: this.core.docId, sheetId, rows }), undefined, admissionOptions);
   }
 
-  hideColumns(sheetId: SheetId, cols: number[]): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_hide_columns', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_hide_columns', { docId: this.core.docId, sheetId, cols }));
+  hideColumns(sheetId: SheetId, cols: number[], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_hide_columns', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_hide_columns', { docId: this.core.docId, sheetId, cols }), undefined, admissionOptions);
   }
 
-  unhideColumns(sheetId: SheetId, cols: number[]): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_unhide_columns', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_unhide_columns', { docId: this.core.docId, sheetId, cols }));
+  unhideColumns(sheetId: SheetId, cols: number[], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_unhide_columns', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_unhide_columns', { docId: this.core.docId, sheetId, cols }), undefined, admissionOptions);
   }
 
-  mergeRange(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_merge_range', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_merge_range', { docId: this.core.docId, sheetId, startRow, startCol, endRow, endCol }));
+  mergeRange(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_merge_range', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_merge_range', { docId: this.core.docId, sheetId, startRow, startCol, endRow, endCol }), undefined, admissionOptions);
   }
 
-  unmergeRange(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_unmerge_range', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_unmerge_range', { docId: this.core.docId, sheetId, startRow, startCol, endRow, endCol }));
+  unmergeRange(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_unmerge_range', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_unmerge_range', { docId: this.core.docId, sheetId, startRow, startCol, endRow, endCol }), undefined, admissionOptions);
   }
 
-  mergeAcross(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_merge_across', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_merge_across', { docId: this.core.docId, sheetId, startRow, startCol, endRow, endCol }));
+  mergeAcross(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_merge_across', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_merge_across', { docId: this.core.docId, sheetId, startRow, startCol, endRow, endCol }), undefined, admissionOptions);
   }
 
-  mergeAndCenter(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_merge_and_center', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_merge_and_center', { docId: this.core.docId, sheetId, startRow, startCol, endRow, endCol }));
+  mergeAndCenter(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_merge_and_center', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_merge_and_center', { docId: this.core.docId, sheetId, startRow, startCol, endRow, endCol }), undefined, admissionOptions);
   }
 
   checkMergeDataLoss(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number): Promise<[boolean, number]> {
@@ -2001,24 +2002,24 @@ export class GeneratedBridgeBase implements GeneratedBridgeMethods {
     return this.core.query(this.core.transport.call<boolean>('compute_is_merge_origin', { docId: this.core.docId, sheetId, row, col }));
   }
 
-  clearAllMerges(sheetId: SheetId): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_clear_all_merges', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_clear_all_merges', { docId: this.core.docId, sheetId }));
+  clearAllMerges(sheetId: SheetId, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_clear_all_merges', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_clear_all_merges', { docId: this.core.docId, sheetId }), undefined, admissionOptions);
   }
 
-  validateAndCleanMerges(sheetId: SheetId): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_validate_and_clean_merges', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_validate_and_clean_merges', { docId: this.core.docId, sheetId }));
+  validateAndCleanMerges(sheetId: SheetId, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_validate_and_clean_merges', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_validate_and_clean_merges', { docId: this.core.docId, sheetId }), undefined, admissionOptions);
   }
 
-  getOrCreateCellId(sheetId: SheetId, row: number, col: number): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_get_or_create_cell_id', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_get_or_create_cell_id', { docId: this.core.docId, sheetId, row, col }));
+  getOrCreateCellId(sheetId: SheetId, row: number, col: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_get_or_create_cell_id', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_get_or_create_cell_id', { docId: this.core.docId, sheetId, row, col }), undefined, admissionOptions);
   }
 
-  updateCellPosition(sheetId: SheetId, cellIdHex: string, newRow: number, newCol: number): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_update_cell_position', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_update_cell_position', { docId: this.core.docId, sheetId, cellIdHex, newRow, newCol }));
+  updateCellPosition(sheetId: SheetId, cellIdHex: string, newRow: number, newCol: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_update_cell_position', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_update_cell_position', { docId: this.core.docId, sheetId, cellIdHex, newRow, newCol }), undefined, admissionOptions);
   }
 
-  relocateCellsYrs(sourceSheetId: SheetId, srcStartRow: number, srcStartCol: number, srcEndRow: number, srcEndCol: number, targetSheetId: SheetId, targetRow: number, targetCol: number): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_relocate_cells_yrs', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_relocate_cells_yrs', { docId: this.core.docId, sourceSheetId, srcStartRow, srcStartCol, srcEndRow, srcEndCol, targetSheetId, targetRow, targetCol }));
+  relocateCellsYrs(sourceSheetId: SheetId, srcStartRow: number, srcStartCol: number, srcEndRow: number, srcEndCol: number, targetSheetId: SheetId, targetRow: number, targetCol: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_relocate_cells_yrs', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_relocate_cells_yrs', { docId: this.core.docId, sourceSheetId, srcStartRow, srcStartCol, srcEndRow, srcEndCol, targetSheetId, targetRow, targetCol }), undefined, admissionOptions);
   }
 
   setSchemaMap(entries: SchemaMapEntryWire[], version: number): Promise<void> {
@@ -2033,8 +2034,8 @@ export class GeneratedBridgeBase implements GeneratedBridgeMethods {
     return this.core.query(this.core.transport.call<boolean>('compute_remove_schema', { docId: this.core.docId, sheetId, column, version }));
   }
 
-  clearSchemas(): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_clear_schemas', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_clear_schemas', { docId: this.core.docId }));
+  clearSchemas(admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_clear_schemas', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_clear_schemas', { docId: this.core.docId }), undefined, admissionOptions);
   }
 
   getCellFormat(sheetId: SheetId, cellId: CellId, row: number, col: number): Promise<CellFormat> {
@@ -2049,48 +2050,48 @@ export class GeneratedBridgeBase implements GeneratedBridgeMethods {
     return this.core.query(this.core.transport.call<ResolvedCellFormat>('compute_get_resolved_format', { docId: this.core.docId, sheetId, row, col }));
   }
 
-  setCellFormat(sheetId: SheetId, cellId: CellId, format: CellFormat): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_set_cell_format', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_cell_format', { docId: this.core.docId, sheetId, cellId, format }));
+  setCellFormat(sheetId: SheetId, cellId: CellId, format: CellFormat, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_set_cell_format', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_cell_format', { docId: this.core.docId, sheetId, cellId, format }), undefined, admissionOptions);
   }
 
-  clearCellFormat(sheetId: SheetId, cellId: CellId): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_clear_cell_format', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_clear_cell_format', { docId: this.core.docId, sheetId, cellId }));
+  clearCellFormat(sheetId: SheetId, cellId: CellId, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_clear_cell_format', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_clear_cell_format', { docId: this.core.docId, sheetId, cellId }), undefined, admissionOptions);
   }
 
-  toggleFormatProperty(sheetId: SheetId, ranges: [number, number, number, number][], property: string, activeRow: number, activeCol: number): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_toggle_format_property', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_toggle_format_property', { docId: this.core.docId, sheetId, ranges, property, activeRow, activeCol }));
+  toggleFormatProperty(sheetId: SheetId, ranges: [number, number, number, number][], property: string, activeRow: number, activeCol: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_toggle_format_property', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_toggle_format_property', { docId: this.core.docId, sheetId, ranges, property, activeRow, activeCol }), undefined, admissionOptions);
   }
 
-  setFormatForRanges(sheetId: SheetId, ranges: [number, number, number, number][], format: CellFormat): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_set_format_for_ranges', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_format_for_ranges', { docId: this.core.docId, sheetId, ranges, format }));
+  setFormatForRanges(sheetId: SheetId, ranges: [number, number, number, number][], format: CellFormat, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_set_format_for_ranges', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_format_for_ranges', { docId: this.core.docId, sheetId, ranges, format }), undefined, admissionOptions);
   }
 
-  setFormatForRangesUiState(sheetId: SheetId, ranges: [number, number, number, number][], format: CellFormat): Promise<MutationResult> {
-    return this.core.mutateSystem('compute_set_format_for_ranges_ui_state', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_format_for_ranges_ui_state', { docId: this.core.docId, sheetId, ranges, format }));
+  setFormatForRangesUiState(sheetId: SheetId, ranges: [number, number, number, number][], format: CellFormat, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutateSystem('compute_set_format_for_ranges_ui_state', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_format_for_ranges_ui_state', { docId: this.core.docId, sheetId, ranges, format }), undefined, admissionOptions);
   }
 
-  clearFormatForRanges(sheetId: SheetId, ranges: [number, number, number, number][]): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_clear_format_for_ranges', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_clear_format_for_ranges', { docId: this.core.docId, sheetId, ranges }));
+  clearFormatForRanges(sheetId: SheetId, ranges: [number, number, number, number][], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_clear_format_for_ranges', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_clear_format_for_ranges', { docId: this.core.docId, sheetId, ranges }), undefined, admissionOptions);
   }
 
-  setCellPropertiesBatch(sheetId: SheetId, updates: [number, number, CellFormat][]): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_set_cell_properties_batch', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_cell_properties_batch', { docId: this.core.docId, sheetId, updates }));
+  setCellPropertiesBatch(sheetId: SheetId, updates: [number, number, CellFormat][], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_set_cell_properties_batch', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_cell_properties_batch', { docId: this.core.docId, sheetId, updates }), undefined, admissionOptions);
   }
 
-  addCfRule(sheetId: SheetId, rule: unknown): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_add_cf_rule', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_add_cf_rule', { docId: this.core.docId, sheetId, rule }));
+  addCfRule(sheetId: SheetId, rule: unknown, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_add_cf_rule', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_add_cf_rule', { docId: this.core.docId, sheetId, rule }), undefined, admissionOptions);
   }
 
-  updateCfRule(sheetId: SheetId, ruleId: string, updates: unknown): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_update_cf_rule', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_update_cf_rule', { docId: this.core.docId, sheetId, ruleId, updates }));
+  updateCfRule(sheetId: SheetId, ruleId: string, updates: unknown, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_update_cf_rule', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_update_cf_rule', { docId: this.core.docId, sheetId, ruleId, updates }), undefined, admissionOptions);
   }
 
-  deleteCfRule(sheetId: SheetId, ruleId: string): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_delete_cf_rule', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_delete_cf_rule', { docId: this.core.docId, sheetId, ruleId }));
+  deleteCfRule(sheetId: SheetId, ruleId: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_delete_cf_rule', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_delete_cf_rule', { docId: this.core.docId, sheetId, ruleId }), undefined, admissionOptions);
   }
 
-  reorderCfRules(sheetId: SheetId, ruleIds: string[]): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_reorder_cf_rules', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_reorder_cf_rules', { docId: this.core.docId, sheetId, ruleIds }));
+  reorderCfRules(sheetId: SheetId, ruleIds: string[], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_reorder_cf_rules', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_reorder_cf_rules', { docId: this.core.docId, sheetId, ruleIds }), undefined, admissionOptions);
   }
 
   getAllCfRules(sheetId: SheetId): Promise<ConditionalFormat[]> {
@@ -2109,24 +2110,24 @@ export class GeneratedBridgeBase implements GeneratedBridgeMethods {
     return this.core.query(this.core.transport.call<boolean>('compute_has_cf_for_cell', { docId: this.core.docId, sheetId, row, col }));
   }
 
-  updateCfRanges(sheetId: SheetId, formatId: string, newRanges: CFCellRange[]): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_update_cf_ranges', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_update_cf_ranges', { docId: this.core.docId, sheetId, formatId, newRanges }));
+  updateCfRanges(sheetId: SheetId, formatId: string, newRanges: CFCellRange[], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_update_cf_ranges', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_update_cf_ranges', { docId: this.core.docId, sheetId, formatId, newRanges }), undefined, admissionOptions);
   }
 
-  clearCfFormatsForSheet(sheetId: SheetId): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_clear_cf_formats_for_sheet', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_clear_cf_formats_for_sheet', { docId: this.core.docId, sheetId }));
+  clearCfFormatsForSheet(sheetId: SheetId, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_clear_cf_formats_for_sheet', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_clear_cf_formats_for_sheet', { docId: this.core.docId, sheetId }), undefined, admissionOptions);
   }
 
-  addRuleToCf(sheetId: SheetId, formatId: string, rule: CFRule): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_add_rule_to_cf', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_add_rule_to_cf', { docId: this.core.docId, sheetId, formatId, rule }));
+  addRuleToCf(sheetId: SheetId, formatId: string, rule: CFRule, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_add_rule_to_cf', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_add_rule_to_cf', { docId: this.core.docId, sheetId, formatId, rule }), undefined, admissionOptions);
   }
 
-  updateRuleInCf(sheetId: SheetId, formatId: string, ruleId: string, updates: unknown): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_update_rule_in_cf', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_update_rule_in_cf', { docId: this.core.docId, sheetId, formatId, ruleId, updates }));
+  updateRuleInCf(sheetId: SheetId, formatId: string, ruleId: string, updates: unknown, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_update_rule_in_cf', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_update_rule_in_cf', { docId: this.core.docId, sheetId, formatId, ruleId, updates }), undefined, admissionOptions);
   }
 
-  deleteRuleFromCf(sheetId: SheetId, formatId: string, ruleId: string): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_delete_rule_from_cf', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_delete_rule_from_cf', { docId: this.core.docId, sheetId, formatId, ruleId }));
+  deleteRuleFromCf(sheetId: SheetId, formatId: string, ruleId: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_delete_rule_from_cf', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_delete_rule_from_cf', { docId: this.core.docId, sheetId, formatId, ruleId }), undefined, admissionOptions);
   }
 
   cfRangesOverlap(a: CFCellRange, b: CFCellRange): Promise<boolean> {
@@ -2157,36 +2158,36 @@ export class GeneratedBridgeBase implements GeneratedBridgeMethods {
     return this.core.query(this.core.transport.call<CFPresetCategory | null>('compute_get_cf_preset_by_id', { docId: this.core.docId, id }));
   }
 
-  setRowFormat(sheetId: SheetId, row: number, format: CellFormat): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_set_row_format', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_row_format', { docId: this.core.docId, sheetId, row, format }));
+  setRowFormat(sheetId: SheetId, row: number, format: CellFormat, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_set_row_format', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_row_format', { docId: this.core.docId, sheetId, row, format }), undefined, admissionOptions);
   }
 
-  setColFormat(sheetId: SheetId, col: number, format: CellFormat): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_set_col_format', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_col_format', { docId: this.core.docId, sheetId, col, format }));
+  setColFormat(sheetId: SheetId, col: number, format: CellFormat, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_set_col_format', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_col_format', { docId: this.core.docId, sheetId, col, format }), undefined, admissionOptions);
   }
 
-  clearColFormat(sheetId: SheetId, col: number): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_clear_col_format', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_clear_col_format', { docId: this.core.docId, sheetId, col }));
+  clearColFormat(sheetId: SheetId, col: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_clear_col_format', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_clear_col_format', { docId: this.core.docId, sheetId, col }), undefined, admissionOptions);
   }
 
-  setColFormatRange(sheetId: SheetId, startCol: number, endCol: number, format: CellFormat): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_set_col_format_range', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_col_format_range', { docId: this.core.docId, sheetId, startCol, endCol, format }));
+  setColFormatRange(sheetId: SheetId, startCol: number, endCol: number, format: CellFormat, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_set_col_format_range', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_col_format_range', { docId: this.core.docId, sheetId, startCol, endCol, format }), undefined, admissionOptions);
   }
 
   getRowFormats(sheetId: SheetId, rows: number[]): Promise<[number, CellFormat | null][]> {
     return this.core.query(this.core.transport.call<[number, CellFormat | null][]>('compute_get_row_formats', { docId: this.core.docId, sheetId, rows }));
   }
 
-  setRowFormats(sheetId: SheetId, updates: [number, CellFormat][]): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_set_row_formats', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_row_formats', { docId: this.core.docId, sheetId, updates }));
+  setRowFormats(sheetId: SheetId, updates: [number, CellFormat][], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_set_row_formats', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_row_formats', { docId: this.core.docId, sheetId, updates }), undefined, admissionOptions);
   }
 
   getColFormats(sheetId: SheetId, cols: number[]): Promise<[number, CellFormat | null][]> {
     return this.core.query(this.core.transport.call<[number, CellFormat | null][]>('compute_get_col_formats', { docId: this.core.docId, sheetId, cols }));
   }
 
-  setColFormats(sheetId: SheetId, updates: [number, CellFormat][]): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_set_col_formats', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_col_formats', { docId: this.core.docId, sheetId, updates }));
+  setColFormats(sheetId: SheetId, updates: [number, CellFormat][], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_set_col_formats', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_col_formats', { docId: this.core.docId, sheetId, updates }), undefined, admissionOptions);
   }
 
   queryRangeProperties(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number): Promise<(CellFormat | null)[][]> {
@@ -2205,12 +2206,12 @@ export class GeneratedBridgeBase implements GeneratedBridgeMethods {
     return this.core.query(this.core.transport.call<ColumnSchema | null>('compute_get_column_schema', { docId: this.core.docId, sheetId, colIndex }));
   }
 
-  setColumnSchema(sheetId: SheetId, colIndex: number, schema: ColumnSchema): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_set_column_schema', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_column_schema', { docId: this.core.docId, sheetId, colIndex, schema }));
+  setColumnSchema(sheetId: SheetId, colIndex: number, schema: ColumnSchema, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_set_column_schema', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_column_schema', { docId: this.core.docId, sheetId, colIndex, schema }), undefined, admissionOptions);
   }
 
-  clearColumnSchema(sheetId: SheetId, colIndex: number): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_clear_column_schema', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_clear_column_schema', { docId: this.core.docId, sheetId, colIndex }));
+  clearColumnSchema(sheetId: SheetId, colIndex: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_clear_column_schema', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_clear_column_schema', { docId: this.core.docId, sheetId, colIndex }), undefined, admissionOptions);
   }
 
   getAllColumnSchemas(sheetId: SheetId): Promise<[number, ColumnSchema][]> {
@@ -2225,16 +2226,16 @@ export class GeneratedBridgeBase implements GeneratedBridgeMethods {
     return this.core.query(this.core.transport.call<RangeSchema[]>('compute_get_range_schemas_for_sheet', { docId: this.core.docId, sheetId }));
   }
 
-  setRangeSchema(sheetId: SheetId, schema: RangeSchema): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_set_range_schema', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_range_schema', { docId: this.core.docId, sheetId, schema }));
+  setRangeSchema(sheetId: SheetId, schema: RangeSchema, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_set_range_schema', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_range_schema', { docId: this.core.docId, sheetId, schema }), undefined, admissionOptions);
   }
 
-  updateRangeSchema(sheetId: SheetId, schemaId: string, updates: RangeSchema): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_update_range_schema', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_update_range_schema', { docId: this.core.docId, sheetId, schemaId, updates }));
+  updateRangeSchema(sheetId: SheetId, schemaId: string, updates: RangeSchema, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_update_range_schema', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_update_range_schema', { docId: this.core.docId, sheetId, schemaId, updates }), undefined, admissionOptions);
   }
 
-  deleteRangeSchema(sheetId: SheetId, schemaId: string): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_delete_range_schema', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_delete_range_schema', { docId: this.core.docId, sheetId, schemaId }));
+  deleteRangeSchema(sheetId: SheetId, schemaId: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_delete_range_schema', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_delete_range_schema', { docId: this.core.docId, sheetId, schemaId }), undefined, admissionOptions);
   }
 
   validateCellValue(sheetId: SheetId, row: number, col: number, value: string): Promise<CellValidationResult> {
@@ -2257,120 +2258,120 @@ export class GeneratedBridgeBase implements GeneratedBridgeMethods {
     return this.core.query(this.core.transport.call<TableHitRegion | null>('compute_get_table_hit_region', { docId: this.core.docId, sheetId, row, col }));
   }
 
-  createTable(sheetId: SheetId, name: string, startRow: number, startCol: number, endRow: number, endCol: number, columns: string[], hasHeaders: boolean): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_create_table', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_create_table', { docId: this.core.docId, sheetId, name, startRow, startCol, endRow, endCol, columns, hasHeaders }));
+  createTable(sheetId: SheetId, name: string, startRow: number, startCol: number, endRow: number, endCol: number, columns: string[], hasHeaders: boolean, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_create_table', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_create_table', { docId: this.core.docId, sheetId, name, startRow, startCol, endRow, endCol, columns, hasHeaders }), undefined, admissionOptions);
   }
 
-  createTableLifecycle(sheetId: SheetId, requestedName: string | null, startRow: number, startCol: number, endRow: number, endCol: number, columns: string[], hasHeaders: boolean, style: string | null): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_create_table_lifecycle', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_create_table_lifecycle', { docId: this.core.docId, sheetId, requestedName, startRow, startCol, endRow, endCol, columns, hasHeaders, style }));
+  createTableLifecycle(sheetId: SheetId, requestedName: string | null, startRow: number, startCol: number, endRow: number, endCol: number, columns: string[], hasHeaders: boolean, style: string | null, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_create_table_lifecycle', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_create_table_lifecycle', { docId: this.core.docId, sheetId, requestedName, startRow, startCol, endRow, endCol, columns, hasHeaders, style }), undefined, admissionOptions);
   }
 
-  deleteTable(tableName: string): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_delete_table', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_delete_table', { docId: this.core.docId, tableName }));
+  deleteTable(tableName: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_delete_table', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_delete_table', { docId: this.core.docId, tableName }), undefined, admissionOptions);
   }
 
-  renameTable(oldName: string, newName: string): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_rename_table', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_rename_table', { docId: this.core.docId, oldName, newName }));
+  renameTable(oldName: string, newName: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_rename_table', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_rename_table', { docId: this.core.docId, oldName, newName }), undefined, admissionOptions);
   }
 
-  resizeTable(tableName: string, newStartRow: number, newStartCol: number, newEndRow: number, newEndCol: number): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_resize_table', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_resize_table', { docId: this.core.docId, tableName, newStartRow, newStartCol, newEndRow, newEndCol }));
+  resizeTable(tableName: string, newStartRow: number, newStartCol: number, newEndRow: number, newEndCol: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_resize_table', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_resize_table', { docId: this.core.docId, tableName, newStartRow, newStartCol, newEndRow, newEndCol }), undefined, admissionOptions);
   }
 
-  setTableStyle(tableName: string, styleName: string): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_set_table_style', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_table_style', { docId: this.core.docId, tableName, styleName }));
+  setTableStyle(tableName: string, styleName: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_set_table_style', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_table_style', { docId: this.core.docId, tableName, styleName }), undefined, admissionOptions);
   }
 
-  toggleTotalsRow(tableName: string): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_toggle_totals_row', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_toggle_totals_row', { docId: this.core.docId, tableName }));
+  toggleTotalsRow(tableName: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_toggle_totals_row', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_toggle_totals_row', { docId: this.core.docId, tableName }), undefined, admissionOptions);
   }
 
-  toggleHeaderRow(tableName: string): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_toggle_header_row', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_toggle_header_row', { docId: this.core.docId, tableName }));
+  toggleHeaderRow(tableName: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_toggle_header_row', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_toggle_header_row', { docId: this.core.docId, tableName }), undefined, admissionOptions);
   }
 
-  toggleBandedRows(tableName: string): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_toggle_banded_rows', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_toggle_banded_rows', { docId: this.core.docId, tableName }));
+  toggleBandedRows(tableName: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_toggle_banded_rows', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_toggle_banded_rows', { docId: this.core.docId, tableName }), undefined, admissionOptions);
   }
 
-  toggleBandedCols(tableName: string): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_toggle_banded_cols', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_toggle_banded_cols', { docId: this.core.docId, tableName }));
+  toggleBandedCols(tableName: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_toggle_banded_cols', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_toggle_banded_cols', { docId: this.core.docId, tableName }), undefined, admissionOptions);
   }
 
-  setTableBoolOption(tableName: string, option: string, value: boolean): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_set_table_bool_option', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_table_bool_option', { docId: this.core.docId, tableName, option, value }));
+  setTableBoolOption(tableName: string, option: string, value: boolean, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_set_table_bool_option', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_table_bool_option', { docId: this.core.docId, tableName, option, value }), undefined, admissionOptions);
   }
 
-  setTableAutoExpand(tableName: string, enabled: boolean): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_set_table_auto_expand', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_table_auto_expand', { docId: this.core.docId, tableName, enabled }));
+  setTableAutoExpand(tableName: string, enabled: boolean, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_set_table_auto_expand', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_table_auto_expand', { docId: this.core.docId, tableName, enabled }), undefined, admissionOptions);
   }
 
-  setTableAutoCalculatedColumns(tableName: string, enabled: boolean): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_set_table_auto_calculated_columns', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_table_auto_calculated_columns', { docId: this.core.docId, tableName, enabled }));
+  setTableAutoCalculatedColumns(tableName: string, enabled: boolean, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_set_table_auto_calculated_columns', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_table_auto_calculated_columns', { docId: this.core.docId, tableName, enabled }), undefined, admissionOptions);
   }
 
-  setTableTotalsFunction(tableName: string, columnId: string, func: TotalsFunction): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_set_table_totals_function', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_table_totals_function', { docId: this.core.docId, tableName, columnId, func }));
+  setTableTotalsFunction(tableName: string, columnId: string, func: TotalsFunction, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_set_table_totals_function', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_table_totals_function', { docId: this.core.docId, tableName, columnId, func }), undefined, admissionOptions);
   }
 
-  addTableDataRow(tableName: string, relativeRow: number | null): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_add_table_data_row', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_add_table_data_row', { docId: this.core.docId, tableName, relativeRow }));
+  addTableDataRow(tableName: string, relativeRow: number | null, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_add_table_data_row', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_add_table_data_row', { docId: this.core.docId, tableName, relativeRow }), undefined, admissionOptions);
   }
 
-  removeTableDataRow(tableName: string, relativeRow: number): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_remove_table_data_row', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_remove_table_data_row', { docId: this.core.docId, tableName, relativeRow }));
+  removeTableDataRow(tableName: string, relativeRow: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_remove_table_data_row', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_remove_table_data_row', { docId: this.core.docId, tableName, relativeRow }), undefined, admissionOptions);
   }
 
-  addTableColumn(tableName: string, columnName: string, position: number): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_add_table_column', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_add_table_column', { docId: this.core.docId, tableName, columnName, position }));
+  addTableColumn(tableName: string, columnName: string, position: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_add_table_column', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_add_table_column', { docId: this.core.docId, tableName, columnName, position }), undefined, admissionOptions);
   }
 
-  renameTableColumn(tableName: string, columnIndex: number, newColumnName: string): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_rename_table_column', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_rename_table_column', { docId: this.core.docId, tableName, columnIndex, newColumnName }));
+  renameTableColumn(tableName: string, columnIndex: number, newColumnName: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_rename_table_column', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_rename_table_column', { docId: this.core.docId, tableName, columnIndex, newColumnName }), undefined, admissionOptions);
   }
 
-  removeTableColumn(tableName: string, columnIndex: number): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_remove_table_column', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_remove_table_column', { docId: this.core.docId, tableName, columnIndex }));
+  removeTableColumn(tableName: string, columnIndex: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_remove_table_column', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_remove_table_column', { docId: this.core.docId, tableName, columnIndex }), undefined, admissionOptions);
   }
 
-  setCalculatedColumnFormula(tableName: string, columnIndex: number, formula: string): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_set_calculated_column_formula', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_calculated_column_formula', { docId: this.core.docId, tableName, columnIndex, formula }));
+  setCalculatedColumnFormula(tableName: string, columnIndex: number, formula: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_set_calculated_column_formula', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_calculated_column_formula', { docId: this.core.docId, tableName, columnIndex, formula }), undefined, admissionOptions);
   }
 
-  applyCalculatedFormulasToRow(tableName: string, row: number, formulas: [number, string][]): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_apply_calculated_formulas_to_row', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_apply_calculated_formulas_to_row', { docId: this.core.docId, tableName, row, formulas }));
+  applyCalculatedFormulasToRow(tableName: string, row: number, formulas: [number, string][], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_apply_calculated_formulas_to_row', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_apply_calculated_formulas_to_row', { docId: this.core.docId, tableName, row, formulas }), undefined, admissionOptions);
   }
 
-  addCalculatedColumn(tableName: string, columnName: string, formula: string): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_add_calculated_column', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_add_calculated_column', { docId: this.core.docId, tableName, columnName, formula }));
+  addCalculatedColumn(tableName: string, columnName: string, formula: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_add_calculated_column', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_add_calculated_column', { docId: this.core.docId, tableName, columnName, formula }), undefined, admissionOptions);
   }
 
-  removeCalculatedColumn(tableName: string, columnIndex: number): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_remove_calculated_column', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_remove_calculated_column', { docId: this.core.docId, tableName, columnIndex }));
+  removeCalculatedColumn(tableName: string, columnIndex: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_remove_calculated_column', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_remove_calculated_column', { docId: this.core.docId, tableName, columnIndex }), undefined, admissionOptions);
   }
 
-  updateCalculatedColumn(tableName: string, columnIndex: number, formula: string): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_update_calculated_column', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_update_calculated_column', { docId: this.core.docId, tableName, columnIndex, formula }));
+  updateCalculatedColumn(tableName: string, columnIndex: number, formula: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_update_calculated_column', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_update_calculated_column', { docId: this.core.docId, tableName, columnIndex, formula }), undefined, admissionOptions);
   }
 
   detectAutoExpansion(sheetId: SheetId, tableName: string): Promise<AutoExpansionResult> {
     return this.core.query(this.core.transport.call<AutoExpansionResult>('compute_detect_auto_expansion', { docId: this.core.docId, sheetId, tableName }));
   }
 
-  applyAutoExpansion(sheetId: SheetId, tableName: string): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_apply_auto_expansion', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_apply_auto_expansion', { docId: this.core.docId, sheetId, tableName }));
+  applyAutoExpansion(sheetId: SheetId, tableName: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_apply_auto_expansion', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_apply_auto_expansion', { docId: this.core.docId, sheetId, tableName }), undefined, admissionOptions);
   }
 
-  createCustomTableStyle(style: CustomTableStyleConfig): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_create_custom_table_style', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_create_custom_table_style', { docId: this.core.docId, style }));
+  createCustomTableStyle(style: CustomTableStyleConfig, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_create_custom_table_style', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_create_custom_table_style', { docId: this.core.docId, style }), undefined, admissionOptions);
   }
 
-  deleteCustomTableStyle(styleName: string): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_delete_custom_table_style', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_delete_custom_table_style', { docId: this.core.docId, styleName }));
+  deleteCustomTableStyle(styleName: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_delete_custom_table_style', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_delete_custom_table_style', { docId: this.core.docId, styleName }), undefined, admissionOptions);
   }
 
-  updateCustomTableStyle(styleName: string, style: CustomTableStyleConfig): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_update_custom_table_style', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_update_custom_table_style', { docId: this.core.docId, styleName, style }));
+  updateCustomTableStyle(styleName: string, style: CustomTableStyleConfig, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_update_custom_table_style', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_update_custom_table_style', { docId: this.core.docId, styleName, style }), undefined, admissionOptions);
   }
 
   getAllCustomTableStyles(): Promise<CustomTableStyleConfig[]> {
@@ -2381,28 +2382,28 @@ export class GeneratedBridgeBase implements GeneratedBridgeMethods {
     return this.core.query(this.core.transport.call<CellFormat | null>('compute_resolve_table_format_at_cell', { docId: this.core.docId, sheetId, row, col }));
   }
 
-  convertTableToRange(tableName: string): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_convert_table_to_range', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_convert_table_to_range', { docId: this.core.docId, tableName }));
+  convertTableToRange(tableName: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_convert_table_to_range', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_convert_table_to_range', { docId: this.core.docId, tableName }), undefined, admissionOptions);
   }
 
-  createFilter(sheetId: SheetId, config: unknown): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_create_filter', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_create_filter', { docId: this.core.docId, sheetId, config }));
+  createFilter(sheetId: SheetId, config: unknown, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_create_filter', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_create_filter', { docId: this.core.docId, sheetId, config }), undefined, admissionOptions);
   }
 
-  deleteFilter(sheetId: SheetId, filterId: string): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_delete_filter', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_delete_filter', { docId: this.core.docId, sheetId, filterId }));
+  deleteFilter(sheetId: SheetId, filterId: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_delete_filter', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_delete_filter', { docId: this.core.docId, sheetId, filterId }), undefined, admissionOptions);
   }
 
-  setColumnFilter(sheetId: SheetId, filterId: string, headerCol: number, criteria: ColumnFilter): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_set_column_filter', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_column_filter', { docId: this.core.docId, sheetId, filterId, headerCol, criteria }));
+  setColumnFilter(sheetId: SheetId, filterId: string, headerCol: number, criteria: ColumnFilter, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_set_column_filter', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_column_filter', { docId: this.core.docId, sheetId, filterId, headerCol, criteria }), undefined, admissionOptions);
   }
 
-  clearColumnFilter(sheetId: SheetId, filterId: string, headerCol: number): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_clear_column_filter', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_clear_column_filter', { docId: this.core.docId, sheetId, filterId, headerCol }));
+  clearColumnFilter(sheetId: SheetId, filterId: string, headerCol: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_clear_column_filter', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_clear_column_filter', { docId: this.core.docId, sheetId, filterId, headerCol }), undefined, admissionOptions);
   }
 
-  clearAllColumnFilters(sheetId: SheetId, filterId: string): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_clear_all_column_filters', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_clear_all_column_filters', { docId: this.core.docId, sheetId, filterId }));
+  clearAllColumnFilters(sheetId: SheetId, filterId: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_clear_all_column_filters', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_clear_all_column_filters', { docId: this.core.docId, sheetId, filterId }), undefined, admissionOptions);
   }
 
   getFiltersInSheet(sheetId: SheetId): Promise<FilterState[]> {
@@ -2413,16 +2414,16 @@ export class GeneratedBridgeBase implements GeneratedBridgeMethods {
     return this.core.query(this.core.transport.call<FilterHeaderInfo[]>('compute_get_filter_header_info', { docId: this.core.docId, sheetId }));
   }
 
-  applyAdvancedFilter(sheetId: SheetId, request: AdvancedFilterRequest): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_apply_advanced_filter', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_apply_advanced_filter', { docId: this.core.docId, sheetId, request }));
+  applyAdvancedFilter(sheetId: SheetId, request: AdvancedFilterRequest, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_apply_advanced_filter', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_apply_advanced_filter', { docId: this.core.docId, sheetId, request }), undefined, admissionOptions);
   }
 
-  applyFilter(sheetId: SheetId, filterId: string): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_apply_filter', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_apply_filter', { docId: this.core.docId, sheetId, filterId }));
+  applyFilter(sheetId: SheetId, filterId: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_apply_filter', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_apply_filter', { docId: this.core.docId, sheetId, filterId }), undefined, admissionOptions);
   }
 
-  reapplyFilter(sheetId: SheetId, filterId: string): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_reapply_filter', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_reapply_filter', { docId: this.core.docId, sheetId, filterId }));
+  reapplyFilter(sheetId: SheetId, filterId: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_reapply_filter', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_reapply_filter', { docId: this.core.docId, sheetId, filterId }), undefined, admissionOptions);
   }
 
   getUniqueColumnValues(sheetId: SheetId, filterId: string, headerCol: number): Promise<CellValue[]> {
@@ -2433,56 +2434,56 @@ export class GeneratedBridgeBase implements GeneratedBridgeMethods {
     return this.core.query(this.core.transport.call<[number, number] | null>('compute_compute_dynamic_filter_serial_range', { docId: this.core.docId, rule }));
   }
 
-  sortRange(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number, options: BridgeSortOptions): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_sort_range', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_sort_range', { docId: this.core.docId, sheetId, startRow, startCol, endRow, endCol, options }));
+  sortRange(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number, options: BridgeSortOptions, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_sort_range', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_sort_range', { docId: this.core.docId, sheetId, startRow, startCol, endRow, endCol, options }), undefined, admissionOptions);
   }
 
-  autoFill(sheetId: SheetId, request: BridgeAutoFillRequest): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_auto_fill', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_auto_fill', { docId: this.core.docId, sheetId, request }));
+  autoFill(sheetId: SheetId, request: BridgeAutoFillRequest, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_auto_fill', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_auto_fill', { docId: this.core.docId, sheetId, request }), undefined, admissionOptions);
   }
 
   autoFillPreview(sheetId: SheetId, request: BridgeAutoFillRequest): Promise<BridgeAutoFillPreviewResult> {
     return this.core.query(this.core.transport.call<BridgeAutoFillPreviewResult>('compute_auto_fill_preview', { docId: this.core.docId, sheetId, request }));
   }
 
-  flashFill(sheetId: SheetId, request: BridgeFlashFillRequest): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_flash_fill', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_flash_fill', { docId: this.core.docId, sheetId, request }));
+  flashFill(sheetId: SheetId, request: BridgeFlashFillRequest, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_flash_fill', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_flash_fill', { docId: this.core.docId, sheetId, request }), undefined, admissionOptions);
   }
 
-  copyRange(sourceSheetId: SheetId, srcStartRow: number, srcStartCol: number, srcEndRow: number, srcEndCol: number, targetSheetId: SheetId, targetRow: number, targetCol: number, copyType: CopyType, skipBlanks: boolean, transpose: boolean): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_copy_range', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_copy_range', { docId: this.core.docId, sourceSheetId, srcStartRow, srcStartCol, srcEndRow, srcEndCol, targetSheetId, targetRow, targetCol, copyType, skipBlanks, transpose }));
+  copyRange(sourceSheetId: SheetId, srcStartRow: number, srcStartCol: number, srcEndRow: number, srcEndCol: number, targetSheetId: SheetId, targetRow: number, targetCol: number, copyType: CopyType, skipBlanks: boolean, transpose: boolean, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_copy_range', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_copy_range', { docId: this.core.docId, sourceSheetId, srcStartRow, srcStartCol, srcEndRow, srcEndCol, targetSheetId, targetRow, targetCol, copyType, skipBlanks, transpose }), undefined, admissionOptions);
   }
 
-  groupRows(sheetId: SheetId, startRow: number, endRow: number): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_group_rows', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_group_rows', { docId: this.core.docId, sheetId, startRow, endRow }));
+  groupRows(sheetId: SheetId, startRow: number, endRow: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_group_rows', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_group_rows', { docId: this.core.docId, sheetId, startRow, endRow }), undefined, admissionOptions);
   }
 
-  ungroupRows(sheetId: SheetId, startRow: number, endRow: number): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_ungroup_rows', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_ungroup_rows', { docId: this.core.docId, sheetId, startRow, endRow }));
+  ungroupRows(sheetId: SheetId, startRow: number, endRow: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_ungroup_rows', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_ungroup_rows', { docId: this.core.docId, sheetId, startRow, endRow }), undefined, admissionOptions);
   }
 
-  groupColumns(sheetId: SheetId, startCol: number, endCol: number): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_group_columns', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_group_columns', { docId: this.core.docId, sheetId, startCol, endCol }));
+  groupColumns(sheetId: SheetId, startCol: number, endCol: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_group_columns', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_group_columns', { docId: this.core.docId, sheetId, startCol, endCol }), undefined, admissionOptions);
   }
 
-  ungroupColumns(sheetId: SheetId, startCol: number, endCol: number): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_ungroup_columns', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_ungroup_columns', { docId: this.core.docId, sheetId, startCol, endCol }));
+  ungroupColumns(sheetId: SheetId, startCol: number, endCol: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_ungroup_columns', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_ungroup_columns', { docId: this.core.docId, sheetId, startCol, endCol }), undefined, admissionOptions);
   }
 
-  setGroupCollapsed(sheetId: SheetId, groupId: string, collapsed: boolean): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_set_group_collapsed', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_group_collapsed', { docId: this.core.docId, sheetId, groupId, collapsed }));
+  setGroupCollapsed(sheetId: SheetId, groupId: string, collapsed: boolean, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_set_group_collapsed', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_group_collapsed', { docId: this.core.docId, sheetId, groupId, collapsed }), undefined, admissionOptions);
   }
 
-  toggleGroupCollapsed(sheetId: SheetId, groupId: string): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_toggle_group_collapsed', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_toggle_group_collapsed', { docId: this.core.docId, sheetId, groupId }));
+  toggleGroupCollapsed(sheetId: SheetId, groupId: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_toggle_group_collapsed', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_toggle_group_collapsed', { docId: this.core.docId, sheetId, groupId }), undefined, admissionOptions);
   }
 
-  expandAllGroups(sheetId: SheetId): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_expand_all_groups', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_expand_all_groups', { docId: this.core.docId, sheetId }));
+  expandAllGroups(sheetId: SheetId, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_expand_all_groups', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_expand_all_groups', { docId: this.core.docId, sheetId }), undefined, admissionOptions);
   }
 
-  collapseAllGroups(sheetId: SheetId): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_collapse_all_groups', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_collapse_all_groups', { docId: this.core.docId, sheetId }));
+  collapseAllGroups(sheetId: SheetId, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_collapse_all_groups', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_collapse_all_groups', { docId: this.core.docId, sheetId }), undefined, admissionOptions);
   }
 
   getSheetGroupingConfig(sheetId: SheetId): Promise<SheetGroupingConfig> {
@@ -2493,16 +2494,16 @@ export class GeneratedBridgeBase implements GeneratedBridgeMethods {
     return this.core.query(this.core.transport.call<GroupDefinition[]>('compute_get_groups', { docId: this.core.docId, sheetId, axis }));
   }
 
-  createSlicer(sheetId: SheetId, config: StoredSlicer): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_create_slicer', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_create_slicer', { docId: this.core.docId, sheetId, config }));
+  createSlicer(sheetId: SheetId, config: StoredSlicer, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_create_slicer', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_create_slicer', { docId: this.core.docId, sheetId, config }), undefined, admissionOptions);
   }
 
-  deleteSlicer(sheetId: SheetId, slicerId: string): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_delete_slicer', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_delete_slicer', { docId: this.core.docId, sheetId, slicerId }));
+  deleteSlicer(sheetId: SheetId, slicerId: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_delete_slicer', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_delete_slicer', { docId: this.core.docId, sheetId, slicerId }), undefined, admissionOptions);
   }
 
-  updateSlicerConfig(sheetId: SheetId, slicerId: string, update: StoredSlicerUpdate): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_update_slicer_config', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_update_slicer_config', { docId: this.core.docId, sheetId, slicerId, update }));
+  updateSlicerConfig(sheetId: SheetId, slicerId: string, update: StoredSlicerUpdate, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_update_slicer_config', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_update_slicer_config', { docId: this.core.docId, sheetId, slicerId, update }), undefined, admissionOptions);
   }
 
   getAllSlicers(sheetId: SheetId): Promise<StoredSlicer[]> {
@@ -2517,12 +2518,12 @@ export class GeneratedBridgeBase implements GeneratedBridgeMethods {
     return this.core.query(this.core.transport.call<StoredSlicer | null>('compute_get_slicer_state', { docId: this.core.docId, sheetId, slicerId }));
   }
 
-  toggleSlicerItem(sheetId: SheetId, slicerId: string, value: CellValue): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_toggle_slicer_item', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_toggle_slicer_item', { docId: this.core.docId, sheetId, slicerId, value }));
+  toggleSlicerItem(sheetId: SheetId, slicerId: string, value: CellValue, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_toggle_slicer_item', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_toggle_slicer_item', { docId: this.core.docId, sheetId, slicerId, value }), undefined, admissionOptions);
   }
 
-  clearSlicerSelection(sheetId: SheetId, slicerId: string): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_clear_slicer_selection', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_clear_slicer_selection', { docId: this.core.docId, sheetId, slicerId }));
+  clearSlicerSelection(sheetId: SheetId, slicerId: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_clear_slicer_selection', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_clear_slicer_selection', { docId: this.core.docId, sheetId, slicerId }), undefined, admissionOptions);
   }
 
   mapSlicerInvalidationReason(reason: string): Promise<CacheInvalidationEventReason> {
@@ -2549,48 +2550,48 @@ export class GeneratedBridgeBase implements GeneratedBridgeMethods {
     return this.core.query(this.core.transport.call<number[]>('compute_find_disconnected_slicers', { docId: this.core.docId, slicerList, existingTableIds }));
   }
 
-  createSubtotals(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number, options: SubtotalOptions): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_create_subtotals', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_create_subtotals', { docId: this.core.docId, sheetId, startRow, startCol, endRow, endCol, options }));
+  createSubtotals(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number, options: SubtotalOptions, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_create_subtotals', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_create_subtotals', { docId: this.core.docId, sheetId, startRow, startCol, endRow, endCol, options }), undefined, admissionOptions);
   }
 
-  removeSubtotals(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_remove_subtotals', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_remove_subtotals', { docId: this.core.docId, sheetId, startRow, startCol, endRow, endCol }));
+  removeSubtotals(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_remove_subtotals', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_remove_subtotals', { docId: this.core.docId, sheetId, startRow, startCol, endRow, endCol }), undefined, admissionOptions);
   }
 
-  autoOutline(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_auto_outline', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_auto_outline', { docId: this.core.docId, sheetId, startRow, startCol, endRow, endCol }));
+  autoOutline(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_auto_outline', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_auto_outline', { docId: this.core.docId, sheetId, startRow, startCol, endRow, endCol }), undefined, admissionOptions);
   }
 
   getSubtotalConfig(sheetId: SheetId): Promise<SheetGroupingConfig> {
     return this.core.query(this.core.transport.call<SheetGroupingConfig>('compute_get_subtotal_config', { docId: this.core.docId, sheetId }));
   }
 
-  addSparkline(sheetId: SheetId, sparkline: Sparkline): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_add_sparkline', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_add_sparkline', { docId: this.core.docId, sheetId, sparkline }));
+  addSparkline(sheetId: SheetId, sparkline: Sparkline, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_add_sparkline', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_add_sparkline', { docId: this.core.docId, sheetId, sparkline }), undefined, admissionOptions);
   }
 
-  updateSparkline(sheetId: SheetId, sparklineId: string, updates: SparklineUpdate): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_update_sparkline', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_update_sparkline', { docId: this.core.docId, sheetId, sparklineId, updates }));
+  updateSparkline(sheetId: SheetId, sparklineId: string, updates: SparklineUpdate, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_update_sparkline', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_update_sparkline', { docId: this.core.docId, sheetId, sparklineId, updates }), undefined, admissionOptions);
   }
 
-  deleteSparkline(sheetId: SheetId, sparklineId: string): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_delete_sparkline', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_delete_sparkline', { docId: this.core.docId, sheetId, sparklineId }));
+  deleteSparkline(sheetId: SheetId, sparklineId: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_delete_sparkline', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_delete_sparkline', { docId: this.core.docId, sheetId, sparklineId }), undefined, admissionOptions);
   }
 
   getSparklinesInSheet(sheetId: SheetId): Promise<Sparkline[]> {
     return this.core.query(this.core.transport.call<Sparkline[]>('compute_get_sparklines_in_sheet', { docId: this.core.docId, sheetId }));
   }
 
-  removeDuplicates(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number, columns: number[], hasHeaders: boolean): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_remove_duplicates', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_remove_duplicates', { docId: this.core.docId, sheetId, startRow, startCol, endRow, endCol, columns, hasHeaders }));
+  removeDuplicates(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number, columns: number[], hasHeaders: boolean, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_remove_duplicates', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_remove_duplicates', { docId: this.core.docId, sheetId, startRow, startCol, endRow, endCol, columns, hasHeaders }), undefined, admissionOptions);
   }
 
-  textToColumns(sheetId: SheetId, startRow: number, endRow: number, sourceCol: number, destRow: number, destCol: number, options: unknown): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_text_to_columns', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_text_to_columns', { docId: this.core.docId, sheetId, startRow, endRow, sourceCol, destRow, destCol, options }));
+  textToColumns(sheetId: SheetId, startRow: number, endRow: number, sourceCol: number, destRow: number, destCol: number, options: unknown, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_text_to_columns', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_text_to_columns', { docId: this.core.docId, sheetId, startRow, endRow, sourceCol, destRow, destCol, options }), undefined, admissionOptions);
   }
 
-  textToColumnsSimple(sheetId: SheetId, startRow: number, endRow: number, sourceCol: number, destRow: number, destCol: number, delimiter: string, customDelimiter: string | null, treatConsecutiveAsOne: boolean, textQualifier: string): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_text_to_columns_simple', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_text_to_columns_simple', { docId: this.core.docId, sheetId, startRow, endRow, sourceCol, destRow, destCol, delimiter, customDelimiter, treatConsecutiveAsOne, textQualifier }));
+  textToColumnsSimple(sheetId: SheetId, startRow: number, endRow: number, sourceCol: number, destRow: number, destCol: number, delimiter: string, customDelimiter: string | null, treatConsecutiveAsOne: boolean, textQualifier: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_text_to_columns_simple', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_text_to_columns_simple', { docId: this.core.docId, sheetId, startRow, endRow, sourceCol, destRow, destCol, delimiter, customDelimiter, treatConsecutiveAsOne, textQualifier }), undefined, admissionOptions);
   }
 
   getFilter(sheetId: SheetId, filterId: string): Promise<FilterState | null> {
@@ -2613,16 +2614,16 @@ export class GeneratedBridgeBase implements GeneratedBridgeMethods {
     return this.core.query(this.core.transport.call<number>('compute_get_active_filter_count', { docId: this.core.docId, sheetId }));
   }
 
-  setFilterSortState(sheetId: SheetId, filterId: string, sortState: FilterSortState | null): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_set_filter_sort_state', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_filter_sort_state', { docId: this.core.docId, sheetId, filterId, sortState }));
+  setFilterSortState(sheetId: SheetId, filterId: string, sortState: FilterSortState | null, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_set_filter_sort_state', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_filter_sort_state', { docId: this.core.docId, sheetId, filterId, sortState }), undefined, admissionOptions);
   }
 
   getFilterSortState(sheetId: SheetId, filterId: string): Promise<FilterSortState | null> {
     return this.core.query(this.core.transport.call<FilterSortState | null>('compute_get_filter_sort_state', { docId: this.core.docId, sheetId, filterId }));
   }
 
-  clearAllFilters(sheetId: SheetId): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_clear_all_filters', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_clear_all_filters', { docId: this.core.docId, sheetId }));
+  clearAllFilters(sheetId: SheetId, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_clear_all_filters', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_clear_all_filters', { docId: this.core.docId, sheetId }), undefined, admissionOptions);
   }
 
   getFilteredRecordCount(sheetId: SheetId, filterId: string): Promise<FilterRecordCount | null> {
@@ -2637,8 +2638,8 @@ export class GeneratedBridgeBase implements GeneratedBridgeMethods {
     return this.core.query(this.core.transport.call<Sparkline | null>('compute_get_sparkline_at_cell', { docId: this.core.docId, sheetId, row, col }));
   }
 
-  addSparklineGroup(sheetId: SheetId, group: SparklineGroup): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_add_sparkline_group', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_add_sparkline_group', { docId: this.core.docId, sheetId, group }));
+  addSparklineGroup(sheetId: SheetId, group: SparklineGroup, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_add_sparkline_group', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_add_sparkline_group', { docId: this.core.docId, sheetId, group }), undefined, admissionOptions);
   }
 
   getSparklineGroup(sheetId: SheetId, groupId: string): Promise<SparklineGroup | null> {
@@ -2649,16 +2650,16 @@ export class GeneratedBridgeBase implements GeneratedBridgeMethods {
     return this.core.query(this.core.transport.call<SparklineGroup[]>('compute_get_sparkline_groups_in_sheet', { docId: this.core.docId, sheetId }));
   }
 
-  deleteSparklineGroup(sheetId: SheetId, groupId: string, deleteSparklines: boolean): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_delete_sparkline_group', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_delete_sparkline_group', { docId: this.core.docId, sheetId, groupId, deleteSparklines }));
+  deleteSparklineGroup(sheetId: SheetId, groupId: string, deleteSparklines: boolean, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_delete_sparkline_group', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_delete_sparkline_group', { docId: this.core.docId, sheetId, groupId, deleteSparklines }), undefined, admissionOptions);
   }
 
-  clearSparklinesInRange(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_clear_sparklines_in_range', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_clear_sparklines_in_range', { docId: this.core.docId, sheetId, startRow, startCol, endRow, endCol }));
+  clearSparklinesInRange(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_clear_sparklines_in_range', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_clear_sparklines_in_range', { docId: this.core.docId, sheetId, startRow, startCol, endRow, endCol }), undefined, admissionOptions);
   }
 
-  clearSparklinesForSheet(sheetId: SheetId): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_clear_sparklines_for_sheet', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_clear_sparklines_for_sheet', { docId: this.core.docId, sheetId }));
+  clearSparklinesForSheet(sheetId: SheetId, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_clear_sparklines_for_sheet', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_clear_sparklines_for_sheet', { docId: this.core.docId, sheetId }), undefined, admissionOptions);
   }
 
   hasSparkline(sheetId: SheetId, row: number, col: number): Promise<boolean> {
@@ -2717,24 +2718,24 @@ export class GeneratedBridgeBase implements GeneratedBridgeMethods {
     return this.core.query(this.core.transport.call<boolean>('compute_is_column_visible_by_groups', { docId: this.core.docId, sheetId, col }));
   }
 
-  setLevelCollapsed(sheetId: SheetId, axis: string, level: number, collapsed: boolean): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_set_level_collapsed', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_level_collapsed', { docId: this.core.docId, sheetId, axis, level, collapsed }));
+  setLevelCollapsed(sheetId: SheetId, axis: string, level: number, collapsed: boolean, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_set_level_collapsed', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_level_collapsed', { docId: this.core.docId, sheetId, axis, level, collapsed }), undefined, admissionOptions);
   }
 
-  setOutlineSettings(sheetId: SheetId, settings: OutlineSettingsUpdate): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_set_outline_settings', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_outline_settings', { docId: this.core.docId, sheetId, settings }));
+  setOutlineSettings(sheetId: SheetId, settings: OutlineSettingsUpdate, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_set_outline_settings', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_outline_settings', { docId: this.core.docId, sheetId, settings }), undefined, admissionOptions);
   }
 
-  clearRowGrouping(sheetId: SheetId, startRow: number, endRow: number): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_clear_row_grouping', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_clear_row_grouping', { docId: this.core.docId, sheetId, startRow, endRow }));
+  clearRowGrouping(sheetId: SheetId, startRow: number, endRow: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_clear_row_grouping', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_clear_row_grouping', { docId: this.core.docId, sheetId, startRow, endRow }), undefined, admissionOptions);
   }
 
-  clearColumnGrouping(sheetId: SheetId, startCol: number, endCol: number): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_clear_column_grouping', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_clear_column_grouping', { docId: this.core.docId, sheetId, startCol, endCol }));
+  clearColumnGrouping(sheetId: SheetId, startCol: number, endCol: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_clear_column_grouping', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_clear_column_grouping', { docId: this.core.docId, sheetId, startCol, endCol }), undefined, admissionOptions);
   }
 
-  clearAllGrouping(sheetId: SheetId): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_clear_all_grouping', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_clear_all_grouping', { docId: this.core.docId, sheetId }));
+  clearAllGrouping(sheetId: SheetId, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_clear_all_grouping', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_clear_all_grouping', { docId: this.core.docId, sheetId }), undefined, admissionOptions);
   }
 
   checkSortRangeMerges(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number): Promise<unknown> {
@@ -2745,20 +2746,20 @@ export class GeneratedBridgeBase implements GeneratedBridgeMethods {
     return this.core.query(this.core.transport.call<string[][]>('compute_preview_text_to_columns', { docId: this.core.docId, sheetId, sourceStartRow, sourceEndRow, sourceCol, options, maxPreviewRows }));
   }
 
-  convertNoteToThread(sheetId: SheetId, commentId: string): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_convert_note_to_thread', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_convert_note_to_thread', { docId: this.core.docId, sheetId, commentId }));
+  convertNoteToThread(sheetId: SheetId, commentId: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_convert_note_to_thread', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_convert_note_to_thread', { docId: this.core.docId, sheetId, commentId }), undefined, admissionOptions);
   }
 
-  updateComment(sheetId: SheetId, commentId: string, text: string): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_update_comment', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_update_comment', { docId: this.core.docId, sheetId, commentId, text }));
+  updateComment(sheetId: SheetId, commentId: string, text: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_update_comment', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_update_comment', { docId: this.core.docId, sheetId, commentId, text }), undefined, admissionOptions);
   }
 
-  deleteComment(sheetId: SheetId, commentId: string): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_delete_comment', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_delete_comment', { docId: this.core.docId, sheetId, commentId }));
+  deleteComment(sheetId: SheetId, commentId: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_delete_comment', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_delete_comment', { docId: this.core.docId, sheetId, commentId }), undefined, admissionOptions);
   }
 
-  setThreadResolved(sheetId: SheetId, cellId: string, resolved: boolean): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_set_thread_resolved', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_thread_resolved', { docId: this.core.docId, sheetId, cellId, resolved }));
+  setThreadResolved(sheetId: SheetId, cellId: string, resolved: boolean, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_set_thread_resolved', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_thread_resolved', { docId: this.core.docId, sheetId, cellId, resolved }), undefined, admissionOptions);
   }
 
   getCommentsForCell(sheetId: SheetId, cellId: string): Promise<Comment[]> {
@@ -2789,36 +2790,36 @@ export class GeneratedBridgeBase implements GeneratedBridgeMethods {
     return this.core.query(this.core.transport.call<Comment[]>('compute_get_all_notes', { docId: this.core.docId, sheetId }));
   }
 
-  setNoteVisible(sheetId: SheetId, commentId: string, visible: boolean): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_set_note_visible', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_note_visible', { docId: this.core.docId, sheetId, commentId, visible }));
+  setNoteVisible(sheetId: SheetId, commentId: string, visible: boolean, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_set_note_visible', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_note_visible', { docId: this.core.docId, sheetId, commentId, visible }), undefined, admissionOptions);
   }
 
-  setNoteDimensions(sheetId: SheetId, commentId: string, height: number | null, width: number | null): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_set_note_dimensions', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_note_dimensions', { docId: this.core.docId, sheetId, commentId, height, width }));
+  setNoteDimensions(sheetId: SheetId, commentId: string, height: number | null, width: number | null, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_set_note_dimensions', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_note_dimensions', { docId: this.core.docId, sheetId, commentId, height, width }), undefined, admissionOptions);
   }
 
   hasComments(sheetId: SheetId, cellId: string): Promise<boolean> {
     return this.core.query(this.core.transport.call<boolean>('compute_has_comments', { docId: this.core.docId, sheetId, cellId }));
   }
 
-  deleteCommentsForCell(sheetId: SheetId, cellId: string): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_delete_comments_for_cell', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_delete_comments_for_cell', { docId: this.core.docId, sheetId, cellId }));
+  deleteCommentsForCell(sheetId: SheetId, cellId: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_delete_comments_for_cell', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_delete_comments_for_cell', { docId: this.core.docId, sheetId, cellId }), undefined, admissionOptions);
   }
 
-  clearAllComments(sheetId: SheetId): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_clear_all_comments', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_clear_all_comments', { docId: this.core.docId, sheetId }));
+  clearAllComments(sheetId: SheetId, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_clear_all_comments', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_clear_all_comments', { docId: this.core.docId, sheetId }), undefined, admissionOptions);
   }
 
-  validateAndCleanComments(sheetId: SheetId): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_validate_and_clean_comments', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_validate_and_clean_comments', { docId: this.core.docId, sheetId }));
+  validateAndCleanComments(sheetId: SheetId, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_validate_and_clean_comments', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_validate_and_clean_comments', { docId: this.core.docId, sheetId }), undefined, admissionOptions);
   }
 
-  updateCommentMentions(sheetId: SheetId, commentId: string, content: string, mentions: CommentMention[]): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_update_comment_mentions', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_update_comment_mentions', { docId: this.core.docId, sheetId, commentId, content, mentions }));
+  updateCommentMentions(sheetId: SheetId, commentId: string, content: string, mentions: CommentMention[], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_update_comment_mentions', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_update_comment_mentions', { docId: this.core.docId, sheetId, commentId, content, mentions }), undefined, admissionOptions);
   }
 
-  addCommentByPosition(sheetId: SheetId, row: number, col: number, text: string, author: string, authorId: string | null, parentId: string | null, commentType: CommentType): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_add_comment_by_position', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_add_comment_by_position', { docId: this.core.docId, sheetId, row, col, text, author, authorId, parentId, commentType }));
+  addCommentByPosition(sheetId: SheetId, row: number, col: number, text: string, author: string, authorId: string | null, parentId: string | null, commentType: CommentType, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_add_comment_by_position', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_add_comment_by_position', { docId: this.core.docId, sheetId, row, col, text, author, authorId, parentId, commentType }), undefined, admissionOptions);
   }
 
   getCommentsForCellByPosition(sheetId: SheetId, row: number, col: number): Promise<Comment[]> {
@@ -2829,20 +2830,20 @@ export class GeneratedBridgeBase implements GeneratedBridgeMethods {
     return this.core.query(this.core.transport.call<boolean>('compute_has_comments_by_position', { docId: this.core.docId, sheetId, row, col }));
   }
 
-  deleteCommentsForCellByPosition(sheetId: SheetId, row: number, col: number): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_delete_comments_for_cell_by_position', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_delete_comments_for_cell_by_position', { docId: this.core.docId, sheetId, row, col }));
+  deleteCommentsForCellByPosition(sheetId: SheetId, row: number, col: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_delete_comments_for_cell_by_position', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_delete_comments_for_cell_by_position', { docId: this.core.docId, sheetId, row, col }), undefined, admissionOptions);
   }
 
-  createChart(sheetId: SheetId, config: unknown): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_create_chart', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_create_chart', { docId: this.core.docId, sheetId, config }));
+  createChart(sheetId: SheetId, config: unknown, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_create_chart', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_create_chart', { docId: this.core.docId, sheetId, config }), undefined, admissionOptions);
   }
 
-  updateChart(sheetId: SheetId, chartId: string, updates: unknown): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_update_chart', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_update_chart', { docId: this.core.docId, sheetId, chartId, updates }));
+  updateChart(sheetId: SheetId, chartId: string, updates: unknown, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_update_chart', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_update_chart', { docId: this.core.docId, sheetId, chartId, updates }), undefined, admissionOptions);
   }
 
-  deleteChart(sheetId: SheetId, chartId: string): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_delete_chart', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_delete_chart', { docId: this.core.docId, sheetId, chartId }));
+  deleteChart(sheetId: SheetId, chartId: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_delete_chart', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_delete_chart', { docId: this.core.docId, sheetId, chartId }), undefined, admissionOptions);
   }
 
   getChart(sheetId: SheetId, chartId: string): Promise<FloatingObject | null> {
@@ -2853,32 +2854,32 @@ export class GeneratedBridgeBase implements GeneratedBridgeMethods {
     return this.core.query(this.core.transport.call<FloatingObject[]>('compute_get_all_charts', { docId: this.core.docId, sheetId }));
   }
 
-  bringChartToFront(sheetId: SheetId, chartId: string): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_bring_chart_to_front', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_bring_chart_to_front', { docId: this.core.docId, sheetId, chartId }));
+  bringChartToFront(sheetId: SheetId, chartId: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_bring_chart_to_front', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_bring_chart_to_front', { docId: this.core.docId, sheetId, chartId }), undefined, admissionOptions);
   }
 
-  sendChartToBack(sheetId: SheetId, chartId: string): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_send_chart_to_back', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_send_chart_to_back', { docId: this.core.docId, sheetId, chartId }));
+  sendChartToBack(sheetId: SheetId, chartId: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_send_chart_to_back', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_send_chart_to_back', { docId: this.core.docId, sheetId, chartId }), undefined, admissionOptions);
   }
 
-  bringChartForward(sheetId: SheetId, chartId: string): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_bring_chart_forward', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_bring_chart_forward', { docId: this.core.docId, sheetId, chartId }));
+  bringChartForward(sheetId: SheetId, chartId: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_bring_chart_forward', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_bring_chart_forward', { docId: this.core.docId, sheetId, chartId }), undefined, admissionOptions);
   }
 
-  sendChartBackward(sheetId: SheetId, chartId: string): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_send_chart_backward', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_send_chart_backward', { docId: this.core.docId, sheetId, chartId }));
+  sendChartBackward(sheetId: SheetId, chartId: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_send_chart_backward', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_send_chart_backward', { docId: this.core.docId, sheetId, chartId }), undefined, admissionOptions);
   }
 
   getChartsInZOrder(sheetId: SheetId): Promise<FloatingObject[]> {
     return this.core.query(this.core.transport.call<FloatingObject[]>('compute_get_charts_in_z_order', { docId: this.core.docId, sheetId }));
   }
 
-  linkChartToTable(sheetId: SheetId, chartId: string, tableId: string): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_link_chart_to_table', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_link_chart_to_table', { docId: this.core.docId, sheetId, chartId, tableId }));
+  linkChartToTable(sheetId: SheetId, chartId: string, tableId: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_link_chart_to_table', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_link_chart_to_table', { docId: this.core.docId, sheetId, chartId, tableId }), undefined, admissionOptions);
   }
 
-  unlinkChartFromTable(sheetId: SheetId, chartId: string): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_unlink_chart_from_table', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_unlink_chart_from_table', { docId: this.core.docId, sheetId, chartId }));
+  unlinkChartFromTable(sheetId: SheetId, chartId: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_unlink_chart_from_table', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_unlink_chart_from_table', { docId: this.core.docId, sheetId, chartId }), undefined, admissionOptions);
   }
 
   isChartLinkedToTable(sheetId: SheetId, chartId: string): Promise<boolean> {
@@ -2897,8 +2898,8 @@ export class GeneratedBridgeBase implements GeneratedBridgeMethods {
     return this.core.query(this.core.transport.call<number>('compute_get_min_z_index', { docId: this.core.docId, sheetId }));
   }
 
-  setFloatingObject(sheetId: SheetId, objectId: string, json: unknown): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_set_floating_object', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_floating_object', { docId: this.core.docId, sheetId, objectId, json }));
+  setFloatingObject(sheetId: SheetId, objectId: string, json: unknown, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_set_floating_object', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_floating_object', { docId: this.core.docId, sheetId, objectId, json }), undefined, admissionOptions);
   }
 
   getFloatingObject(sheetId: SheetId, objectId: string): Promise<unknown | null> {
@@ -2909,44 +2910,44 @@ export class GeneratedBridgeBase implements GeneratedBridgeMethods {
     return this.core.query(this.core.transport.call<[string, unknown][]>('compute_get_floating_objects_in_sheet', { docId: this.core.docId, sheetId }));
   }
 
-  deleteFloatingObject(sheetId: SheetId, objectId: string): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_delete_floating_object', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_delete_floating_object', { docId: this.core.docId, sheetId, objectId }));
+  deleteFloatingObject(sheetId: SheetId, objectId: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_delete_floating_object', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_delete_floating_object', { docId: this.core.docId, sheetId, objectId }), undefined, admissionOptions);
   }
 
-  createFloatingObject(sheetId: SheetId, config: unknown): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_create_floating_object', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_create_floating_object', { docId: this.core.docId, sheetId, config }));
+  createFloatingObject(sheetId: SheetId, config: unknown, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_create_floating_object', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_create_floating_object', { docId: this.core.docId, sheetId, config }), undefined, admissionOptions);
   }
 
-  updateFloatingObject(sheetId: SheetId, objectId: string, updates: unknown): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_update_floating_object', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_update_floating_object', { docId: this.core.docId, sheetId, objectId, updates }));
+  updateFloatingObject(sheetId: SheetId, objectId: string, updates: unknown, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_update_floating_object', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_update_floating_object', { docId: this.core.docId, sheetId, objectId, updates }), undefined, admissionOptions);
   }
 
-  createShape(sheetId: SheetId, config: CreateShapeConfig): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_create_shape', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_create_shape', { docId: this.core.docId, sheetId, config }));
+  createShape(sheetId: SheetId, config: CreateShapeConfig, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_create_shape', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_create_shape', { docId: this.core.docId, sheetId, config }), undefined, admissionOptions);
   }
 
-  moveFloatingObjectTyped(sheetId: SheetId, objectId: string, target: MoveTarget): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_move_floating_object_typed', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_move_floating_object_typed', { docId: this.core.docId, sheetId, objectId, target }));
+  moveFloatingObjectTyped(sheetId: SheetId, objectId: string, target: MoveTarget, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_move_floating_object_typed', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_move_floating_object_typed', { docId: this.core.docId, sheetId, objectId, target }), undefined, admissionOptions);
   }
 
-  resizeFloatingObjectTyped(sheetId: SheetId, objectId: string, config: ResizeConfig): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_resize_floating_object_typed', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_resize_floating_object_typed', { docId: this.core.docId, sheetId, objectId, config }));
+  resizeFloatingObjectTyped(sheetId: SheetId, objectId: string, config: ResizeConfig, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_resize_floating_object_typed', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_resize_floating_object_typed', { docId: this.core.docId, sheetId, objectId, config }), undefined, admissionOptions);
   }
 
-  rotateFloatingObjectTyped(sheetId: SheetId, objectId: string, rotation: number): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_rotate_floating_object_typed', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_rotate_floating_object_typed', { docId: this.core.docId, sheetId, objectId, rotation }));
+  rotateFloatingObjectTyped(sheetId: SheetId, objectId: string, rotation: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_rotate_floating_object_typed', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_rotate_floating_object_typed', { docId: this.core.docId, sheetId, objectId, rotation }), undefined, admissionOptions);
   }
 
-  updateShapeStyle(sheetId: SheetId, objectId: string, style: ShapeStyleUpdate): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_update_shape_style', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_update_shape_style', { docId: this.core.docId, sheetId, objectId, style }));
+  updateShapeStyle(sheetId: SheetId, objectId: string, style: ShapeStyleUpdate, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_update_shape_style', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_update_shape_style', { docId: this.core.docId, sheetId, objectId, style }), undefined, admissionOptions);
   }
 
-  flipFloatingObjectTyped(sheetId: SheetId, objectId: string, axis: FlipAxis): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_flip_floating_object_typed', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_flip_floating_object_typed', { docId: this.core.docId, sheetId, objectId, axis }));
+  flipFloatingObjectTyped(sheetId: SheetId, objectId: string, axis: FlipAxis, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_flip_floating_object_typed', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_flip_floating_object_typed', { docId: this.core.docId, sheetId, objectId, axis }), undefined, admissionOptions);
   }
 
-  duplicateFloatingObjectTyped(sheetId: SheetId, objectId: string, offsetX: number, offsetY: number): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_duplicate_floating_object_typed', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_duplicate_floating_object_typed', { docId: this.core.docId, sheetId, objectId, offsetX, offsetY }));
+  duplicateFloatingObjectTyped(sheetId: SheetId, objectId: string, offsetX: number, offsetY: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_duplicate_floating_object_typed', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_duplicate_floating_object_typed', { docId: this.core.docId, sheetId, objectId, offsetX, offsetY }), undefined, admissionOptions);
   }
 
   findConnectorsForShape(sheetId: SheetId, shapeId: string): Promise<FloatingObject[]> {
@@ -2965,8 +2966,8 @@ export class GeneratedBridgeBase implements GeneratedBridgeMethods {
     return this.core.query(this.core.transport.call<[string, FloatingObjectBounds][]>('compute_compute_all_object_bounds', { docId: this.core.docId, sheetId }));
   }
 
-  setFloatingObjectGroup(sheetId: SheetId, groupId: string, json: unknown): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_set_floating_object_group', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_floating_object_group', { docId: this.core.docId, sheetId, groupId, json }));
+  setFloatingObjectGroup(sheetId: SheetId, groupId: string, json: unknown, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_set_floating_object_group', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_floating_object_group', { docId: this.core.docId, sheetId, groupId, json }), undefined, admissionOptions);
   }
 
   getFloatingObjectGroup(sheetId: SheetId, groupId: string): Promise<unknown | null> {
@@ -2977,16 +2978,16 @@ export class GeneratedBridgeBase implements GeneratedBridgeMethods {
     return this.core.query(this.core.transport.call<[string, unknown][]>('compute_get_floating_object_groups_in_sheet', { docId: this.core.docId, sheetId }));
   }
 
-  deleteFloatingObjectGroup(sheetId: SheetId, groupId: string): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_delete_floating_object_group', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_delete_floating_object_group', { docId: this.core.docId, sheetId, groupId }));
+  deleteFloatingObjectGroup(sheetId: SheetId, groupId: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_delete_floating_object_group', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_delete_floating_object_group', { docId: this.core.docId, sheetId, groupId }), undefined, admissionOptions);
   }
 
-  createFloatingObjectGroup(sheetId: SheetId, config: unknown): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_create_floating_object_group', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_create_floating_object_group', { docId: this.core.docId, sheetId, config }));
+  createFloatingObjectGroup(sheetId: SheetId, config: unknown, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_create_floating_object_group', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_create_floating_object_group', { docId: this.core.docId, sheetId, config }), undefined, admissionOptions);
   }
 
-  updateFloatingObjectGroup(sheetId: SheetId, groupId: string, updates: unknown): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_update_floating_object_group', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_update_floating_object_group', { docId: this.core.docId, sheetId, groupId, updates }));
+  updateFloatingObjectGroup(sheetId: SheetId, groupId: string, updates: unknown, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_update_floating_object_group', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_update_floating_object_group', { docId: this.core.docId, sheetId, groupId, updates }), undefined, admissionOptions);
   }
 
   getFloatingObjectGroupTyped(sheetId: SheetId, groupId: string): Promise<SerializedFloatingObjectGroup | null> {
@@ -2997,20 +2998,20 @@ export class GeneratedBridgeBase implements GeneratedBridgeMethods {
     return this.core.query(this.core.transport.call<SerializedFloatingObjectGroup[]>('compute_get_all_floating_object_groups_typed', { docId: this.core.docId, sheetId }));
   }
 
-  bringFloatingObjectToFront(sheetId: SheetId, objectId: string): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_bring_floating_object_to_front', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_bring_floating_object_to_front', { docId: this.core.docId, sheetId, objectId }));
+  bringFloatingObjectToFront(sheetId: SheetId, objectId: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_bring_floating_object_to_front', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_bring_floating_object_to_front', { docId: this.core.docId, sheetId, objectId }), undefined, admissionOptions);
   }
 
-  sendFloatingObjectToBack(sheetId: SheetId, objectId: string): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_send_floating_object_to_back', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_send_floating_object_to_back', { docId: this.core.docId, sheetId, objectId }));
+  sendFloatingObjectToBack(sheetId: SheetId, objectId: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_send_floating_object_to_back', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_send_floating_object_to_back', { docId: this.core.docId, sheetId, objectId }), undefined, admissionOptions);
   }
 
-  bringFloatingObjectForward(sheetId: SheetId, objectId: string): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_bring_floating_object_forward', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_bring_floating_object_forward', { docId: this.core.docId, sheetId, objectId }));
+  bringFloatingObjectForward(sheetId: SheetId, objectId: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_bring_floating_object_forward', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_bring_floating_object_forward', { docId: this.core.docId, sheetId, objectId }), undefined, admissionOptions);
   }
 
-  sendFloatingObjectBackward(sheetId: SheetId, objectId: string): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_send_floating_object_backward', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_send_floating_object_backward', { docId: this.core.docId, sheetId, objectId }));
+  sendFloatingObjectBackward(sheetId: SheetId, objectId: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_send_floating_object_backward', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_send_floating_object_backward', { docId: this.core.docId, sheetId, objectId }), undefined, admissionOptions);
   }
 
   getFloatingObjectsInZOrder(sheetId: SheetId): Promise<FloatingObject[]> {
@@ -3037,12 +3038,12 @@ export class GeneratedBridgeBase implements GeneratedBridgeMethods {
     return this.core.query(this.core.transport.call<ZOrderEntry[]>('compute_get_all_in_z_order', { docId: this.core.docId, sheetId }));
   }
 
-  setHyperlink(sheetId: SheetId, row: number, col: number, url: string): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_set_hyperlink', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_hyperlink', { docId: this.core.docId, sheetId, row, col, url }));
+  setHyperlink(sheetId: SheetId, row: number, col: number, url: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_set_hyperlink', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_hyperlink', { docId: this.core.docId, sheetId, row, col, url }), undefined, admissionOptions);
   }
 
-  removeHyperlink(sheetId: SheetId, row: number, col: number): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_remove_hyperlink', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_remove_hyperlink', { docId: this.core.docId, sheetId, row, col }));
+  removeHyperlink(sheetId: SheetId, row: number, col: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_remove_hyperlink', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_remove_hyperlink', { docId: this.core.docId, sheetId, row, col }), undefined, admissionOptions);
   }
 
   getHyperlink(sheetId: SheetId, row: number, col: number): Promise<string | null> {
@@ -3053,20 +3054,20 @@ export class GeneratedBridgeBase implements GeneratedBridgeMethods {
     return this.core.query(this.core.transport.call<Hyperlink[]>('compute_get_hyperlinks', { docId: this.core.docId, sheetId }));
   }
 
-  clearHyperlinksInRange(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_clear_hyperlinks_in_range', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_clear_hyperlinks_in_range', { docId: this.core.docId, sheetId, startRow, startCol, endRow, endCol }));
+  clearHyperlinksInRange(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_clear_hyperlinks_in_range', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_clear_hyperlinks_in_range', { docId: this.core.docId, sheetId, startRow, startCol, endRow, endCol }), undefined, admissionOptions);
   }
 
-  pivotCreate(config: unknown): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_pivot_create', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_pivot_create', { docId: this.core.docId, config }));
+  pivotCreate(config: unknown, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_pivot_create', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_pivot_create', { docId: this.core.docId, config }), undefined, admissionOptions);
   }
 
-  pivotUpdate(sheetId: SheetId, pivotId: string, config: PivotTableConfig): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_pivot_update', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_pivot_update', { docId: this.core.docId, sheetId, pivotId, config }));
+  pivotUpdate(sheetId: SheetId, pivotId: string, config: PivotTableConfig, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_pivot_update', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_pivot_update', { docId: this.core.docId, sheetId, pivotId, config }), undefined, admissionOptions);
   }
 
-  pivotDelete(sheetId: SheetId, pivotId: string): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_pivot_delete', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_pivot_delete', { docId: this.core.docId, sheetId, pivotId }));
+  pivotDelete(sheetId: SheetId, pivotId: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_pivot_delete', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_pivot_delete', { docId: this.core.docId, sheetId, pivotId }), undefined, admissionOptions);
   }
 
   pivotGet(sheetId: SheetId, pivotId: string): Promise<PivotTableConfig | null> {
@@ -3089,36 +3090,36 @@ export class GeneratedBridgeBase implements GeneratedBridgeMethods {
     return this.core.query(this.core.transport.call<PivotFieldItems[]>('compute_pivot_get_all_items', { docId: this.core.docId, sheetId, pivotId, expansionState }));
   }
 
-  pivotRegisterDef(sheetId: SheetId, pivotId: string, totalRows: number, totalCols: number, firstDataRow: number, firstDataCol: number): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_pivot_register_def', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_pivot_register_def', { docId: this.core.docId, sheetId, pivotId, totalRows, totalCols, firstDataRow, firstDataCol }));
+  pivotRegisterDef(sheetId: SheetId, pivotId: string, totalRows: number, totalCols: number, firstDataRow: number, firstDataCol: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_pivot_register_def', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_pivot_register_def', { docId: this.core.docId, sheetId, pivotId, totalRows, totalCols, firstDataRow, firstDataCol }), undefined, admissionOptions);
   }
 
-  pivotUnregisterDef(sheetId: SheetId, pivotName: string): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_pivot_unregister_def', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_pivot_unregister_def', { docId: this.core.docId, sheetId, pivotName }));
+  pivotUnregisterDef(sheetId: SheetId, pivotName: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_pivot_unregister_def', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_pivot_unregister_def', { docId: this.core.docId, sheetId, pivotName }), undefined, admissionOptions);
   }
 
   pivotMaterialize(sheetId: SheetId, pivotId: string, expansionState: PivotExpansionState | null): Promise<PivotTableResult> {
     return this.core.query(this.core.transport.call<PivotTableResult>('compute_pivot_materialize', { docId: this.core.docId, sheetId, pivotId, expansionState }));
   }
 
-  registerViewport(viewportId: string, sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number): Promise<MutationResult> {
-    return this.core.mutateSystem('compute_register_viewport', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_register_viewport', { docId: this.core.docId, viewportId, sheetId, startRow, startCol, endRow, endCol }));
+  registerViewport(viewportId: string, sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutateSystem('compute_register_viewport', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_register_viewport', { docId: this.core.docId, viewportId, sheetId, startRow, startCol, endRow, endCol }), undefined, admissionOptions);
   }
 
-  updateViewportBounds(viewportId: string, startRow: number, startCol: number, endRow: number, endCol: number): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_update_viewport_bounds', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_update_viewport_bounds', { docId: this.core.docId, viewportId, startRow, startCol, endRow, endCol }));
+  updateViewportBounds(viewportId: string, startRow: number, startCol: number, endRow: number, endCol: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_update_viewport_bounds', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_update_viewport_bounds', { docId: this.core.docId, viewportId, startRow, startCol, endRow, endCol }), undefined, admissionOptions);
   }
 
-  unregisterViewport(viewportId: string): Promise<MutationResult> {
-    return this.core.mutateSystem('compute_unregister_viewport', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_unregister_viewport', { docId: this.core.docId, viewportId }));
+  unregisterViewport(viewportId: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutateSystem('compute_unregister_viewport', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_unregister_viewport', { docId: this.core.docId, viewportId }), undefined, admissionOptions);
   }
 
   getRegisteredViewports(): Promise<[string, string, number, number, number, number][]> {
     return this.core.query(this.core.transport.call<[string, string, number, number, number, number][]>('compute_get_registered_viewports', { docId: this.core.docId }));
   }
 
-  resetSheetViewports(sheetId: SheetId): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_reset_sheet_viewports', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_reset_sheet_viewports', { docId: this.core.docId, sheetId }));
+  resetSheetViewports(sheetId: SheetId, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_reset_sheet_viewports', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_reset_sheet_viewports', { docId: this.core.docId, sheetId }), undefined, admissionOptions);
   }
 
   getRowPosition(sheetId: SheetId, row: number): Promise<number> {
@@ -3145,16 +3146,16 @@ export class GeneratedBridgeBase implements GeneratedBridgeMethods {
     return this.core.query(this.core.transport.call<number>('compute_get_col_width_from_index', { docId: this.core.docId, sheetId, col }));
   }
 
-  autoFitColumnAndSet(sheetId: SheetId, col: number): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_auto_fit_column_and_set', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_auto_fit_column_and_set', { docId: this.core.docId, sheetId, col }));
+  autoFitColumnAndSet(sheetId: SheetId, col: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_auto_fit_column_and_set', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_auto_fit_column_and_set', { docId: this.core.docId, sheetId, col }), undefined, admissionOptions);
   }
 
-  autoFitColumnsAndSet(sheetId: SheetId, cols: number[]): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_auto_fit_columns_and_set', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_auto_fit_columns_and_set', { docId: this.core.docId, sheetId, cols }));
+  autoFitColumnsAndSet(sheetId: SheetId, cols: number[], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_auto_fit_columns_and_set', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_auto_fit_columns_and_set', { docId: this.core.docId, sheetId, cols }), undefined, admissionOptions);
   }
 
-  autoFitRowsAndSet(sheetId: SheetId, rows: number[]): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_auto_fit_rows_and_set', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_auto_fit_rows_and_set', { docId: this.core.docId, sheetId, rows }));
+  autoFitRowsAndSet(sheetId: SheetId, rows: number[], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_auto_fit_rows_and_set', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_auto_fit_rows_and_set', { docId: this.core.docId, sheetId, rows }), undefined, admissionOptions);
   }
 
   getCellValue(sheetId: SheetId, row: number, col: number): Promise<CellValue> {
@@ -3213,28 +3214,28 @@ export class GeneratedBridgeBase implements GeneratedBridgeMethods {
     return this.core.query(this.core.transport.call<SignCheckResult>('compute_sign_check_a1', { docId: this.core.docId, sheetId, rangeA1, options }));
   }
 
-  setCalculationMode(mode: string): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_set_calculation_mode', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_calculation_mode', { docId: this.core.docId, mode }));
+  setCalculationMode(mode: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_set_calculation_mode', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_calculation_mode', { docId: this.core.docId, mode }), undefined, admissionOptions);
   }
 
-  setMaxIterations(n: number): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_set_max_iterations', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_max_iterations', { docId: this.core.docId, n }));
+  setMaxIterations(n: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_set_max_iterations', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_max_iterations', { docId: this.core.docId, n }), undefined, admissionOptions);
   }
 
-  setIterativeCalculation(enabled: boolean): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_set_iterative_calculation', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_iterative_calculation', { docId: this.core.docId, enabled }));
+  setIterativeCalculation(enabled: boolean, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_set_iterative_calculation', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_iterative_calculation', { docId: this.core.docId, enabled }), undefined, admissionOptions);
   }
 
-  setConvergenceThreshold(threshold: number): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_set_convergence_threshold', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_convergence_threshold', { docId: this.core.docId, threshold }));
+  setConvergenceThreshold(threshold: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_set_convergence_threshold', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_convergence_threshold', { docId: this.core.docId, threshold }), undefined, admissionOptions);
   }
 
-  setUsePrecisionAsDisplayed(enabled: boolean): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_set_use_precision_as_displayed', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_use_precision_as_displayed', { docId: this.core.docId, enabled }));
+  setUsePrecisionAsDisplayed(enabled: boolean, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_set_use_precision_as_displayed', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_use_precision_as_displayed', { docId: this.core.docId, enabled }), undefined, admissionOptions);
   }
 
-  clearRangeWithMode(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number, mode: string): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_clear_range_with_mode', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_clear_range_with_mode', { docId: this.core.docId, sheetId, startRow, startCol, endRow, endCol, mode }));
+  clearRangeWithMode(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number, mode: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_clear_range_with_mode', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_clear_range_with_mode', { docId: this.core.docId, sheetId, startRow, startCol, endRow, endCol, mode }), undefined, admissionOptions);
   }
 
   canEditCell(sheetId: SheetId, row: number, col: number): Promise<boolean> {
@@ -3245,28 +3246,28 @@ export class GeneratedBridgeBase implements GeneratedBridgeMethods {
     return this.core.query(this.core.transport.call<boolean>('compute_can_do_structure_op', { docId: this.core.docId, sheetId, operation }));
   }
 
-  freezeRows(sheetId: SheetId, count: number): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_freeze_rows', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_freeze_rows', { docId: this.core.docId, sheetId, count }));
+  freezeRows(sheetId: SheetId, count: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_freeze_rows', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_freeze_rows', { docId: this.core.docId, sheetId, count }), undefined, admissionOptions);
   }
 
-  freezeColumns(sheetId: SheetId, count: number): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_freeze_columns', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_freeze_columns', { docId: this.core.docId, sheetId, count }));
+  freezeColumns(sheetId: SheetId, count: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_freeze_columns', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_freeze_columns', { docId: this.core.docId, sheetId, count }), undefined, admissionOptions);
   }
 
   getAllCustomCellStyles(): Promise<CellStyleDef[]> {
     return this.core.query(this.core.transport.call<CellStyleDef[]>('compute_get_all_custom_cell_styles', { docId: this.core.docId }));
   }
 
-  createCustomCellStyle(style: CellStyleDef): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_create_custom_cell_style', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_create_custom_cell_style', { docId: this.core.docId, style }));
+  createCustomCellStyle(style: CellStyleDef, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_create_custom_cell_style', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_create_custom_cell_style', { docId: this.core.docId, style }), undefined, admissionOptions);
   }
 
-  updateCustomCellStyle(id: string, style: CellStyleDef): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_update_custom_cell_style', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_update_custom_cell_style', { docId: this.core.docId, id, style }));
+  updateCustomCellStyle(id: string, style: CellStyleDef, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_update_custom_cell_style', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_update_custom_cell_style', { docId: this.core.docId, id, style }), undefined, admissionOptions);
   }
 
-  deleteCustomCellStyle(id: string): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_delete_custom_cell_style', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_delete_custom_cell_style', { docId: this.core.docId, id }));
+  deleteCustomCellStyle(id: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_delete_custom_cell_style', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_delete_custom_cell_style', { docId: this.core.docId, id }), undefined, admissionOptions);
   }
 
 }

@@ -84,8 +84,8 @@ fn classify_ui_state_format_write_as_system_mutation() {
 #[test]
 fn classify_write_without_binary_tuple_uses_query() {
     // Write methods returning bare MutationResult (not wrapped in a binary tuple)
-    // are classified as Query. All write methods should return (Vec<u8>, MutationResult)
-    // tuples; bare MutationResult on a write is a legacy pattern that gets Query treatment.
+    // are classified as write-as-query. They do not enter mutation admission
+    // until their Rust return shape changes to (Vec<u8>, MutationResult).
     let method = TsMethod {
         rust_name: "set_name".into(),
         access: MethodAccess::Write,
@@ -113,7 +113,7 @@ fn classify_write_void_return() {
 #[test]
 fn classify_write_non_mutation_result_uses_query() {
     // Write methods that return a concrete type other than MutationResult
-    // (e.g. IdentityFormula, Uint8Array) should use Query to preserve the type.
+    // (e.g. IdentityFormula, Uint8Array) use write-as-query to preserve the type.
     let method = TsMethod {
         rust_name: "to_identity_formula".into(),
         access: MethodAccess::Write,

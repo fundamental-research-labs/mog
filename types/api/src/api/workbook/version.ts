@@ -6,6 +6,29 @@
  * preview facade.
  */
 
+import type {
+  VersionCapability,
+  VersionCapabilityDependency,
+  VersionDiagnostic,
+} from './version-shared';
+
+export type {
+  JsonValue,
+  ObjectDigest,
+  PageCursor,
+  Paged,
+  RedactionSummary,
+  VerificationSummary,
+  VersionAuthor,
+  VersionCapability,
+  VersionCapabilityDependency,
+  VersionCapabilityError,
+  VersionDiagnostic,
+  VersionDiagnosticSeverity,
+  VersionError,
+  VersionResult,
+} from './version-shared';
+
 export type WorkbookVersionRolloutStage =
   | 'disabled'
   | 'shadow-only'
@@ -72,30 +95,6 @@ export type VersionSurfaceStage =
 
 export type VersionSurfaceStorageBackend = 'indexeddb' | 'memory' | 'remote' | 'unknown';
 
-export type VersionCapability =
-  | 'version:read'
-  | 'version:diff'
-  | 'version:commit'
-  | 'version:branch'
-  | 'version:checkout'
-  | 'version:reviewRead'
-  | 'version:reviewWrite'
-  | 'version:proposal'
-  | 'version:mergePreview'
-  | 'version:mergeApply'
-  | 'version:revert'
-  | 'version:provenance';
-
-export type VersionCapabilityDependency =
-  | 'VC-04'
-  | 'VC-05'
-  | 'VC-07'
-  | 'VC-09'
-  | 'storage'
-  | 'featureGate'
-  | 'hostCapability'
-  | 'upstreamRevertContract';
-
 export type VersionCapabilityState =
   | { readonly enabled: true }
   | {
@@ -129,14 +128,6 @@ export type VersionSurfaceDiagnosticCode =
   | 'version.surfaceStatus.revertUnavailable'
   | 'version.surfaceStatus.provenanceUnavailable'
   | (string & {});
-
-export interface VersionDiagnostic {
-  readonly code: VersionSurfaceDiagnosticCode;
-  readonly severity: VersionSurfaceDiagnosticSeverity;
-  readonly message: string;
-  readonly dependency?: VersionCapabilityDependency;
-  readonly data?: Readonly<Record<string, string | number | boolean | null>>;
-}
 
 export interface VersionSurfaceStatus {
   readonly schemaVersion: 1;

@@ -1,5 +1,7 @@
 import type {
+  Paged as ContractsApiPaged,
   RedactionPolicy as ContractsApiRedactionPolicy,
+  VersionCapabilityError as ContractsApiCapabilityError,
   VersionBranchRefReadResult as ContractsApiBranchRefReadResult,
   VersionCheckoutMutationGuarantee as ContractsApiCheckoutMutationGuarantee,
   VersionCheckoutResult as ContractsApiCheckoutResult,
@@ -8,6 +10,7 @@ import type {
   VersionCreateBranchOptions as ContractsApiCreateBranchOptions,
   VersionDiffEntry as ContractsApiDiffEntry,
   VersionRefMutationResult as ContractsApiRefMutationResult,
+  VersionResult as ContractsApiVersionResult,
   VersionSemanticValue as ContractsApiSemanticValue,
   VersionStoreDiagnostic as ContractsApiStoreDiagnostic,
   Workbook as ContractsApiWorkbook,
@@ -16,7 +19,9 @@ import type {
   WorkbookVersionStatus as ContractsApiWorkbookVersionStatus,
 } from '@mog-sdk/contracts/api';
 import type {
+  Paged as ContractsWorkbookPaged,
   RedactionPolicy as ContractsWorkbookRedactionPolicy,
+  VersionCapabilityError as ContractsWorkbookCapabilityError,
   VersionBranchRefReadResult as ContractsWorkbookBranchRefReadResult,
   VersionCheckoutMutationGuarantee as ContractsWorkbookCheckoutMutationGuarantee,
   VersionCheckoutResult as ContractsWorkbookCheckoutResult,
@@ -25,6 +30,7 @@ import type {
   VersionCreateBranchOptions as ContractsWorkbookCreateBranchOptions,
   VersionDiffEntry as ContractsWorkbookDiffEntry,
   VersionRefMutationResult as ContractsWorkbookRefMutationResult,
+  VersionResult as ContractsWorkbookVersionResult,
   VersionSemanticValue as ContractsWorkbookSemanticValue,
   VersionStoreDiagnostic as ContractsWorkbookStoreDiagnostic,
   WorkbookDiffPage as ContractsWorkbookDiffPage,
@@ -93,6 +99,15 @@ type _ContractsApiWorkbookEntryExportsSemanticValue = Assert<
 type _ContractsApiWorkbookEntryExportsRedactionPolicy = Assert<
   IsEqual<ContractsApiRedactionPolicy, ContractsWorkbookRedactionPolicy>
 >;
+type _ContractsApiWorkbookEntryExportsCapabilityError = Assert<
+  IsEqual<ContractsApiCapabilityError, ContractsWorkbookCapabilityError>
+>;
+type _ContractsApiWorkbookEntryExportsVersionResult = Assert<
+  IsEqual<ContractsApiVersionResult<string>, ContractsWorkbookVersionResult<string>>
+>;
+type _ContractsApiWorkbookEntryExportsPaged = Assert<
+  IsEqual<ContractsApiPaged<string>, ContractsWorkbookPaged<string>>
+>;
 
 type PublicVersionApiSurface = {
   readonly workbook: ContractsApiWorkbook;
@@ -110,6 +125,9 @@ type PublicVersionApiSurface = {
   readonly branchMutation: ContractsApiRefMutationResult;
   readonly semanticValue: ContractsApiSemanticValue;
   readonly redactionPolicy: ContractsApiRedactionPolicy;
+  readonly capabilityError: ContractsApiCapabilityError;
+  readonly versionResult: ContractsApiVersionResult<string>;
+  readonly page: ContractsApiPaged<string>;
 };
 
 const vc03ExportSurfaceDomainIds = Object.freeze([

@@ -1,5 +1,7 @@
 import type {
+  Paged as ApiRootPaged,
   RedactionPolicy as ApiRootRedactionPolicy,
+  VersionCapabilityError as ApiRootCapabilityError,
   VersionApplyMergeInput as ApiRootApplyMergeInput,
   VersionApplyMergeMutationGuarantee as ApiRootApplyMergeMutationGuarantee,
   VersionApplyMergeOptions as ApiRootApplyMergeOptions,
@@ -19,6 +21,7 @@ import type {
   VersionMergeConflictResolutionOption as ApiRootMergeConflictResolutionOption,
   VersionMergeResult as ApiRootMergeResult,
   VersionRefMutationResult as ApiRootRefMutationResult,
+  VersionResult as ApiRootVersionResult,
   VersionSemanticValue as ApiRootSemanticValue,
   VersionStoreDiagnostic as ApiRootStoreDiagnostic,
   WorkbookDiffPage as ApiRootDiffPage,
@@ -26,7 +29,9 @@ import type {
   WorkbookVersionStatus as ApiRootWorkbookVersionStatus,
 } from '../index';
 import type {
+  Paged as PackageApiPaged,
   RedactionPolicy as PackageApiRedactionPolicy,
+  VersionCapabilityError as PackageApiCapabilityError,
   VersionApplyMergeInput as PackageApiApplyMergeInput,
   VersionApplyMergeMutationGuarantee as PackageApiApplyMergeMutationGuarantee,
   VersionApplyMergeOptions as PackageApiApplyMergeOptions,
@@ -46,6 +51,7 @@ import type {
   VersionMergeConflictResolutionOption as PackageApiMergeConflictResolutionOption,
   VersionMergeResult as PackageApiMergeResult,
   VersionRefMutationResult as PackageApiRefMutationResult,
+  VersionResult as PackageApiVersionResult,
   VersionSemanticValue as PackageApiSemanticValue,
   VersionStoreDiagnostic as PackageApiStoreDiagnostic,
   WorkbookDiffPage as PackageApiDiffPage,
@@ -53,7 +59,9 @@ import type {
   WorkbookVersionStatus as PackageApiWorkbookVersionStatus,
 } from '@mog/types-api/api';
 import type {
+  Paged as PackageWorkbookPaged,
   RedactionPolicy as PackageWorkbookRedactionPolicy,
+  VersionCapabilityError as PackageWorkbookCapabilityError,
   VersionApplyMergeInput as PackageWorkbookApplyMergeInput,
   VersionApplyMergeMutationGuarantee as PackageWorkbookApplyMergeMutationGuarantee,
   VersionApplyMergeOptions as PackageWorkbookApplyMergeOptions,
@@ -73,6 +81,7 @@ import type {
   VersionMergeConflictResolutionOption as PackageWorkbookMergeConflictResolutionOption,
   VersionMergeResult as PackageWorkbookMergeResult,
   VersionRefMutationResult as PackageWorkbookRefMutationResult,
+  VersionResult as PackageWorkbookVersionResult,
   VersionSemanticValue as PackageWorkbookSemanticValue,
   VersionStoreDiagnostic as PackageWorkbookStoreDiagnostic,
   WorkbookDiffPage as PackageWorkbookDiffPage,
@@ -80,7 +89,9 @@ import type {
   WorkbookVersionStatus as PackageWorkbookVersionStatus,
 } from '@mog/types-api/api/workbook';
 import type {
+  Paged as WorkbookNamespacePaged,
   RedactionPolicy as WorkbookNamespaceRedactionPolicy,
+  VersionCapabilityError as WorkbookNamespaceCapabilityError,
   VersionApplyMergeInput as WorkbookNamespaceApplyMergeInput,
   VersionApplyMergeMutationGuarantee as WorkbookNamespaceApplyMergeMutationGuarantee,
   VersionApplyMergeOptions as WorkbookNamespaceApplyMergeOptions,
@@ -100,6 +111,7 @@ import type {
   VersionMergeConflictResolutionOption as WorkbookNamespaceMergeConflictResolutionOption,
   VersionMergeResult as WorkbookNamespaceMergeResult,
   VersionRefMutationResult as WorkbookNamespaceRefMutationResult,
+  VersionResult as WorkbookNamespaceVersionResult,
   VersionSemanticValue as WorkbookNamespaceSemanticValue,
   VersionStoreDiagnostic as WorkbookNamespaceStoreDiagnostic,
   WorkbookDiffPage as WorkbookNamespaceDiffPage,
@@ -186,6 +198,15 @@ type _WorkbookNamespaceExportsSemanticValue = Assert<
 type _WorkbookNamespaceExportsRedactionPolicy = Assert<
   IsEqual<WorkbookNamespaceRedactionPolicy, PackageWorkbookRedactionPolicy>
 >;
+type _WorkbookNamespaceExportsCapabilityError = Assert<
+  IsEqual<WorkbookNamespaceCapabilityError, PackageWorkbookCapabilityError>
+>;
+type _WorkbookNamespaceExportsVersionResult = Assert<
+  IsEqual<WorkbookNamespaceVersionResult<string>, PackageWorkbookVersionResult<string>>
+>;
+type _WorkbookNamespaceExportsPaged = Assert<
+  IsEqual<WorkbookNamespacePaged<string>, PackageWorkbookPaged<string>>
+>;
 
 type _ApiRootExportsVersionApi = Assert<IsEqual<ApiRootWorkbookVersion, PackageApiWorkbookVersion>>;
 type _ApiRootExportsStatus = Assert<
@@ -218,6 +239,13 @@ type _ApiRootExportsMergeConflictResolutionOption = Assert<
   IsEqual<ApiRootMergeConflictResolutionOption, PackageApiMergeConflictResolutionOption>
 >;
 type _ApiRootExportsMergeResult = Assert<IsEqual<ApiRootMergeResult, PackageApiMergeResult>>;
+type _ApiRootExportsCapabilityError = Assert<
+  IsEqual<ApiRootCapabilityError, PackageApiCapabilityError>
+>;
+type _ApiRootExportsVersionResult = Assert<
+  IsEqual<ApiRootVersionResult<string>, PackageApiVersionResult<string>>
+>;
+type _ApiRootExportsPaged = Assert<IsEqual<ApiRootPaged<string>, PackageApiPaged<string>>>;
 type _ApiRootExportsDiffPage = Assert<IsEqual<ApiRootDiffPage, PackageApiDiffPage>>;
 type _ApiRootExportsCheckoutTarget = Assert<
   IsEqual<ApiRootCheckoutTarget, PackageApiCheckoutTarget>

@@ -152,7 +152,13 @@ export async function applyPersistedMergeResult(
     ]);
   }
 
-  return applyPersistedFastForwardIntent(ctx, opened.store, record, normalizedInput.resultId);
+  return applyPersistedFastForwardIntent(
+    ctx,
+    opened.provider,
+    opened.store,
+    record,
+    normalizedInput.resultId,
+  );
 }
 
 function normalizePersistedApplyMergeInput(
@@ -384,18 +390,27 @@ async function completeAlreadyMergedIntent(
 
 async function applyPersistedFastForwardIntent(
   ctx: DocumentContext,
+  provider: VersionStoreProvider,
   store: MergeApplyIntentStore,
   record: MergeApplyIntentRecord,
   resultId: VersionMergeResultId,
 ): Promise<VersionApplyMergeResult> {
-  const service = getAttachedVersionApplyMergeService(ctx);
-  if (!service?.fastForwardMerge) {
-    return blockedApplyMergeResult(record.base, record.ours, record.theirs, [
-      applyMergeServiceUnavailableDiagnostic(),
-    ]);
-  }
-
   try {
+    const recovered = await completeFastForwardIntentIfAlreadyApplied(
+      provider,
+      store,
+      record,
+      resultId,
+    );
+    if (recovered) return recovered;
+
+    const service = getAttachedVersionApplyMergeService(ctx);
+    if (!service?.fastForwardMerge) {
+      return blockedApplyMergeResult(record.base, record.ours, record.theirs, [
+        applyMergeServiceUnavailableDiagnostic(),
+      ]);
+    }
+
     const raw = await service.fastForwardMerge({
       base: record.base,
       ours: record.ours,
@@ -413,17 +428,7 @@ async function applyPersistedFastForwardIntent(
     const commitRef = 'commitRef' in mapped ? mapped.commitRef : null;
     if (!commitRef) return mapped;
 
-    const completed = await store.completeIntent({
-      intentId: record.intentId,
-      resolvedAttemptDigest: record.resolvedAttemptDigest,
-      completedAt: new Date().toISOString(),
-      terminal: {
-        status: 'fastForwarded',
-        headBefore: record.ours,
-        headAfter: commitRef.id,
-        commitId: commitRef.id,
-      },
-    });
+    const completed = await completeFastForwardIntent(store, record, commitRef.id);
     if (completed.status !== 'completed') {
       return blockedApplyMergeResult(
         record.base,
@@ -437,6 +442,47 @@ async function applyPersistedFastForwardIntent(
   } catch {
     return blockedApplyMergeResult(record.base, record.ours, record.theirs, [providerErrorDiagnostic()]);
   }
+}
+
+async function completeFastForwardIntentIfAlreadyApplied(
+  provider: VersionStoreProvider,
+  store: MergeApplyIntentStore,
+  record: MergeApplyIntentRecord,
+  resultId: VersionMergeResultId,
+): Promise<VersionApplyMergeResult | null> {
+  const current = await readCurrentTargetHead(provider, record);
+  if (!current.ok || current.commitId !== record.theirs) return null;
+
+  const completed = await completeFastForwardIntent(store, record, record.theirs);
+  if (completed.status !== 'completed') {
+    return blockedApplyMergeResult(
+      record.base,
+      record.ours,
+      record.theirs,
+      intentStoreDiagnostics(completed.diagnostics),
+      'ref-not-mutated',
+    );
+  }
+
+  return resultFromTerminalIntent(provider, completed.record);
+}
+
+function completeFastForwardIntent(
+  store: MergeApplyIntentStore,
+  record: MergeApplyIntentRecord,
+  commitId: WorkbookCommitId,
+) {
+  return store.completeIntent({
+    intentId: record.intentId,
+    resolvedAttemptDigest: record.resolvedAttemptDigest,
+    completedAt: new Date().toISOString(),
+    terminal: {
+      status: 'fastForwarded',
+      headBefore: record.ours,
+      headAfter: commitId,
+      commitId,
+    },
+  });
 }
 
 async function resultFromTerminalIntent(

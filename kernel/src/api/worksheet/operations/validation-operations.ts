@@ -17,6 +17,7 @@ import type {
   SchemaTypeWire,
   ValidationResultWire,
 } from '../../../bridges/compute/compute-bridge';
+import type { MutationAdmissionOptions } from '../../../bridges/compute';
 import { type CellValue, type SheetId, sheetId as toSheetId } from '@mog-sdk/contracts/core';
 import { isCellError } from '@mog/spreadsheet-utils/errors';
 import { KernelError } from '../../../errors';
@@ -264,9 +265,10 @@ export async function setRangeSchema(
   ctx: DocumentContext,
   sheetId: SheetId,
   schema: RangeSchema,
+  admissionOptions?: MutationAdmissionOptions,
 ): Promise<void> {
   invalidateWorksheetValidationCache(ctx, sheetId);
-  await ctx.computeBridge.setRangeSchema(sheetId, schema);
+  await ctx.computeBridge.setRangeSchema(sheetId, schema, admissionOptions);
 }
 
 /**
@@ -276,9 +278,10 @@ export async function deleteRangeSchema(
   ctx: DocumentContext,
   sheetId: SheetId,
   schemaId: string,
+  admissionOptions?: MutationAdmissionOptions,
 ): Promise<void> {
   invalidateWorksheetValidationCache(ctx, sheetId);
-  await ctx.computeBridge.deleteRangeSchema(sheetId, schemaId);
+  await ctx.computeBridge.deleteRangeSchema(sheetId, schemaId, admissionOptions);
 }
 
 /**

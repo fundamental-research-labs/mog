@@ -47,6 +47,14 @@ function createCtx(initialSchemas: RangeSchema[] = []): TestDocumentContext {
       for (const listener of undoListeners) listener({ trigger });
     },
     eventBus: createEventBus(),
+    clock: {
+      now: jest.fn(() => 1_700_000_000_000),
+    },
+    workbookLinkScope: jest.fn(() => ({
+      actor: 'test-user',
+      requestingDocumentId: 'doc-1',
+      requestingSessionId: 'session-1',
+    })),
     writeGate: {
       assertWritable: jest.fn(),
     },
@@ -81,6 +89,31 @@ function createCtx(initialSchemas: RangeSchema[] = []): TestDocumentContext {
       })),
     },
   } as unknown as TestDocumentContext;
+}
+
+function expectValidationAdmissionOptions(
+  value: unknown,
+  operationPrefix: string,
+  groupId?: string,
+): void {
+  expect(value).toEqual({
+    operationContext: expect.objectContaining({
+      operationId: expect.stringMatching(new RegExp(`^${operationPrefix}:`)),
+      kind: 'mutation',
+      author: {
+        authorId: 'test-user',
+        actorKind: 'user',
+        sessionId: 'session-1',
+      },
+      createdAt: '2023-11-14T22:13:20.000Z',
+      workbookId: 'doc-1',
+      sheetIds: [SHEET_ID],
+      domainIds: ['data-validation'],
+      capturePolicy: 'commitEligible',
+      writeAdmissionMode: 'capture',
+      ...(groupId ? { groupId } : {}),
+    }),
+  });
 }
 
 describe('WorksheetValidationImpl sheet cache', () => {
@@ -133,7 +166,15 @@ describe('WorksheetValidationImpl sheet cache', () => {
       ],
       diagnostics: [],
     });
-    expect(ctx.computeBridge.deleteRangeSchema).toHaveBeenCalledWith(SHEET_ID, 'old');
+    expect(ctx.computeBridge.deleteRangeSchema).toHaveBeenCalledWith(
+      SHEET_ID,
+      'old',
+      expect.any(Object),
+    );
+    expectValidationAdmissionOptions(
+      (ctx.computeBridge.deleteRangeSchema as jest.Mock).mock.calls[0]?.[2],
+      'validation.remove',
+    );
     expect(ctx.computeBridge.getRangeSchemasForSheet).toHaveBeenCalledTimes(2);
     expect(validations.peek(0, 0)).toBeNull();
   });
@@ -147,8 +188,27 @@ describe('WorksheetValidationImpl sheet cache', () => {
 
     const receipt = await validations.remove(0, 0);
 
-    expect(ctx.computeBridge.deleteRangeSchema).toHaveBeenCalledWith(SHEET_ID, 'first');
-    expect(ctx.computeBridge.deleteRangeSchema).toHaveBeenCalledWith(SHEET_ID, 'second');
+    expect(ctx.computeBridge.deleteRangeSchema).toHaveBeenCalledWith(
+      SHEET_ID,
+      'first',
+      expect.any(Object),
+    );
+    expect(ctx.computeBridge.deleteRangeSchema).toHaveBeenCalledWith(
+      SHEET_ID,
+      'second',
+      expect.any(Object),
+    );
+    const deleteCalls = (ctx.computeBridge.deleteRangeSchema as jest.Mock).mock.calls;
+    expectValidationAdmissionOptions(
+      deleteCalls[0]?.[2],
+      'validation.remove',
+      'validation.remove:1700000000000',
+    );
+    expectValidationAdmissionOptions(
+      deleteCalls[1]?.[2],
+      'validation.remove',
+      'validation.remove:1700000000000',
+    );
     expect(receipt.removed).toEqual({
       address: 'R0C0',
       ids: ['first', 'second'],
@@ -374,6 +434,10 @@ describe('WorksheetValidationImpl list validation', () => {
       diagnostics: [],
     });
     expect(receipt.validation.id).toEqual(expect.stringMatching(/^rs-/));
+    expectValidationAdmissionOptions(
+      (ctx.computeBridge.setRangeSchema as jest.Mock).mock.calls[0]?.[2],
+      'validation.set',
+    );
 
     const schema = Array.from(ctx.__schemas.values())[0];
     expect(schema.ranges).toEqual([{ startId: '1:1', endId: '3:1' }]);

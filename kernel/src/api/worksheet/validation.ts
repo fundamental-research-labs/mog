@@ -22,9 +22,11 @@ import type {
 import type { RangeSchemaCreatedEvent, RangeSchemaDeletedEvent } from '@mog-sdk/contracts/events';
 
 import type { RangeSchema } from '../../bridges/compute/compute-bridge';
+import type { MutationAdmissionOptions } from '../../bridges/compute';
 import type { DocumentContext } from '../../context';
 import * as Properties from '../../domain/cells/cell-properties';
 import { KernelError } from '../../errors';
+import { createVersionOperationContext } from '../internal/version-operation-context';
 import { resolveCell, resolveRange } from '../internal/address-resolver';
 import { parseCellRange, rangeToA1 } from '../internal/utils';
 import {
@@ -269,6 +271,25 @@ export class WorksheetValidationImpl implements WorksheetValidation {
     this.ctx.writeGate.assertWritable(op);
   }
 
+  private _versionAdmissionOptions(
+    operationIdPrefix: string,
+    groupId?: string,
+  ): MutationAdmissionOptions {
+    return {
+      operationContext: createVersionOperationContext(this.ctx, {
+        operationIdPrefix,
+        sheetIds: [this.sheetId],
+        domainIds: ['data-validation'],
+        ...(groupId ? { groupId } : {}),
+      }),
+    };
+  }
+
+  private _validationGroupId(operationIdPrefix: string): string {
+    const now = this.ctx.clock?.now?.() ?? Date.now();
+    return `${operationIdPrefix}:${now}`;
+  }
+
   async setList(
     a: string | number | CellRange,
     b: ListValidationSource | number,
@@ -363,7 +384,12 @@ export class WorksheetValidationImpl implements WorksheetValidation {
       },
     };
 
-    await setRangeSchema(this.ctx, this.sheetId, schema);
+    await setRangeSchema(
+      this.ctx,
+      this.sheetId,
+      schema,
+      this._versionAdmissionOptions('validation.set'),
+    );
     this.ctx.eventBus.emit({
       type: 'range-schema:created',
       timestamp: Date.now(),
@@ -462,8 +488,10 @@ export class WorksheetValidationImpl implements WorksheetValidation {
         this.sheetId,
         a,
       );
+      const groupId =
+        schemas.length > 1 ? this._validationGroupId('validation.remove') : undefined;
       for (const schema of schemas) {
-        await this.deleteSchemaAndEmit(schema);
+        await this.deleteSchemaAndEmit(schema, 'validation.remove', groupId);
       }
       const address = rangeToA1(a);
       return validationRemoveReceipt({
@@ -492,8 +520,9 @@ export class WorksheetValidationImpl implements WorksheetValidation {
       this.sheetId,
       range,
     );
+    const groupId = schemas.length > 1 ? this._validationGroupId('validation.remove') : undefined;
     for (const schema of schemas) {
-      await this.deleteSchemaAndEmit(schema);
+      await this.deleteSchemaAndEmit(schema, 'validation.remove', groupId);
     }
     return validationRemoveReceipt({
       sheetId: this.sheetId,
@@ -503,8 +532,17 @@ export class WorksheetValidationImpl implements WorksheetValidation {
     });
   }
 
-  private async deleteSchemaAndEmit(schema: RangeSchema): Promise<void> {
-    await deleteRangeSchema(this.ctx, this.sheetId, schema.id);
+  private async deleteSchemaAndEmit(
+    schema: RangeSchema,
+    operationIdPrefix: string,
+    groupId?: string,
+  ): Promise<void> {
+    await deleteRangeSchema(
+      this.ctx,
+      this.sheetId,
+      schema.id,
+      this._versionAdmissionOptions(operationIdPrefix, groupId),
+    );
     this.ctx.eventBus.emit({
       type: 'range-schema:deleted',
       timestamp: Date.now(),
@@ -604,8 +642,9 @@ export class WorksheetValidationImpl implements WorksheetValidation {
     this._ensureWritable('validation.clear');
     // No-arg: remove ALL validation rules from the sheet
     const schemas = await getWorksheetValidationCache(this.ctx).getSchemasForSheet(this.sheetId);
+    const groupId = schemas.length > 1 ? this._validationGroupId('validation.clear') : undefined;
     for (const schema of schemas) {
-      await this.deleteSchemaAndEmit(schema);
+      await this.deleteSchemaAndEmit(schema, 'validation.clear', groupId);
     }
     return validationClearReceipt({
       sheetId: this.sheetId,
@@ -620,8 +659,10 @@ export class WorksheetValidationImpl implements WorksheetValidation {
       this.sheetId,
       bounds,
     );
+    const groupId =
+      schemas.length > 1 ? this._validationGroupId('validation.clearInRange') : undefined;
     for (const schema of schemas) {
-      await this.deleteSchemaAndEmit(schema);
+      await this.deleteSchemaAndEmit(schema, 'validation.clearInRange', groupId);
     }
     const address = typeof range === 'string' ? range : rangeToA1(bounds);
     return validationClearReceipt({
@@ -637,9 +678,14 @@ export class WorksheetValidationImpl implements WorksheetValidation {
     const schemas = await this.ctx.computeBridge.getRangeSchemasForSheet(this.sheetId);
     const target = schemas.find((s) => s.id === id);
     if (target) {
-      await this.deleteSchemaAndEmit(target);
+      await this.deleteSchemaAndEmit(target, 'validation.removeById');
     } else {
-      await deleteRangeSchema(this.ctx, this.sheetId, id);
+      await deleteRangeSchema(
+        this.ctx,
+        this.sheetId,
+        id,
+        this._versionAdmissionOptions('validation.removeById'),
+      );
     }
     return validationRemoveReceipt({
       sheetId: this.sheetId,

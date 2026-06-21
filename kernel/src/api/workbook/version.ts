@@ -1,9 +1,11 @@
 import type {
   RedactedVersionAuthor,
+  VersionCommitish,
   VersionBranchRefReadResult,
   VersionCommitOptions,
   VersionCommitPage,
   VersionDegradedHeadResult,
+  VersionDiffOptions,
   VersionDiagnosticPublicPayload,
   VersionGetHeadOptions,
   VersionListCommitsOptions,
@@ -19,6 +21,7 @@ import type {
   WorkbookCommitId,
   WorkbookCommitRef,
   WorkbookCommitSummary,
+  WorkbookDiffPage,
   WorkbookVersion,
   WorkbookVersionCapabilityStatus,
   WorkbookVersionDiagnostic,
@@ -32,6 +35,7 @@ import type { DocumentContext } from '../../context';
 import { VERSION_OBJECT_SCHEMA_VERSION } from '../../document/version-store/object-store';
 import { REF_NAME_STORAGE_PREFIX } from '../../document/version-store/ref-name';
 import { commitWorkbookVersion, hasAttachedVersionWriteService } from './version-commit';
+import { diffWorkbookVersion } from './version-diff';
 
 const VERSION_HEAD_REF = 'HEAD';
 const VERSION_MAIN_REF = 'refs/heads/main' satisfies VersionMainRefName;
@@ -310,6 +314,14 @@ export class WorkbookVersionImpl implements WorkbookVersion {
 
   async commit(options: VersionCommitOptions = {}): Promise<WorkbookCommitRef> {
     return commitWorkbookVersion(this.ctx, options);
+  }
+
+  async diff(
+    base: VersionCommitish,
+    target: VersionCommitish,
+    options: VersionDiffOptions = {},
+  ): Promise<WorkbookDiffPage> {
+    return diffWorkbookVersion(this.ctx, base, target, options);
   }
 
   async readRef(name: 'HEAD'): Promise<VersionSymbolicRefReadResult>;

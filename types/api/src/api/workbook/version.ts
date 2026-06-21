@@ -96,7 +96,7 @@ export type VersionRefName = string & {
 };
 export type VersionRefSelector = 'HEAD' | VersionMainRefName | VersionRefName;
 
-export type VersionPageOrder = 'topological-newest';
+export type VersionPageOrder = 'topological-newest' | 'semantic-change-order';
 
 export type VersionDiagnosticCode =
   | 'VERSION_DANGLING_REF'
@@ -117,6 +117,8 @@ export type VersionDiagnosticCode =
   | 'VERSION_STALE_PAGE_CURSOR'
   | 'VERSION_STORE_READ_ONLY'
   | 'VERSION_STORE_UNAVAILABLE'
+  | 'VERSION_UNMATERIALIZABLE_COMMIT'
+  | 'VERSION_UNSUPPORTED_SCHEMA'
   | 'VERSION_UNSUPPORTED_PAGE_TOKEN'
   | 'VERSION_UNSUPPORTED_PARENT_COMMIT'
   | 'VERSION_WRONG_DOCUMENT'
@@ -238,6 +240,109 @@ export interface VersionListCommitsOptions {
   readonly includeDiagnostics?: boolean;
 }
 
+export type VersionCommitish =
+  | WorkbookCommitId
+  | {
+      readonly kind: 'commit';
+      readonly id: WorkbookCommitId;
+    }
+  | {
+      readonly kind: 'ref';
+      readonly name: VersionRefSelector;
+    };
+
+export interface VersionDiffOptions {
+  readonly pageSize?: number;
+  readonly pageToken?: VersionPageToken | string;
+  readonly includeDerivedImpact?: boolean;
+  readonly includeDiagnostics?: boolean;
+}
+
+export type VersionSemanticValue =
+  | null
+  | boolean
+  | number
+  | string
+  | {
+      readonly kind: 'blank';
+    }
+  | {
+      readonly kind: 'dateTime';
+      readonly iso: string;
+    }
+  | {
+      readonly kind: 'duration';
+      readonly iso: string;
+    }
+  | {
+      readonly kind: 'error';
+      readonly code: string;
+      readonly message?: string;
+    }
+  | {
+      readonly kind: 'formula';
+      readonly formula: string;
+      readonly result?: VersionSemanticValue;
+    }
+  | {
+      readonly kind: 'array';
+      readonly values: readonly VersionSemanticValue[];
+    }
+  | {
+      readonly kind: 'richText';
+      readonly runs: readonly {
+        readonly text: string;
+        readonly styleRef?: string;
+      }[];
+    }
+  | {
+      readonly kind: 'object';
+      readonly fields: readonly {
+        readonly key: string;
+        readonly value: VersionSemanticValue;
+      }[];
+    };
+
+export type VersionDiffValue =
+  | {
+      readonly kind: 'value';
+      readonly value: VersionSemanticValue;
+    }
+  | VersionRedactedValue;
+
+export type VersionDiffDisplayValue =
+  | {
+      readonly kind: 'value';
+      readonly value: string;
+    }
+  | VersionRedactedValue;
+
+export interface VersionDiffDisplay {
+  readonly sheetName?: VersionDiffDisplayValue;
+  readonly address?: VersionDiffDisplayValue;
+  readonly entityLabel?: VersionDiffDisplayValue;
+}
+
+export type VersionDiffStructuralMetadata =
+  | {
+      readonly kind: 'metadata';
+      readonly changeId: string;
+      readonly domain: string;
+      readonly entityId: string;
+      readonly propertyPath: readonly string[];
+    }
+  | VersionRedactedValue;
+
+export interface VersionDiffEntry {
+  readonly structural: VersionDiffStructuralMetadata;
+  readonly before: VersionDiffValue;
+  readonly after: VersionDiffValue;
+  readonly display?: VersionDiffDisplay;
+  readonly diagnostics?: readonly VersionStoreDiagnostic[];
+}
+
+export type WorkbookDiffPage = VersionPage<VersionDiffEntry, 'semantic-change-order'>;
+
 export type RedactionPolicy = {
   readonly mode: 'default' | 'strict' | 'clean';
   readonly redactSecrets: boolean;
@@ -318,6 +423,11 @@ export interface WorkbookVersion {
   getHead(options: VersionGetHeadOptions): Promise<WorkbookCommitRef | VersionDegradedHeadResult>;
   listCommits(options?: VersionListCommitsOptions): Promise<VersionCommitPage>;
   commit(options?: VersionCommitOptions): Promise<WorkbookCommitRef>;
+  diff(
+    base: VersionCommitish,
+    target: VersionCommitish,
+    options?: VersionDiffOptions,
+  ): Promise<WorkbookDiffPage>;
   readRef(name: 'HEAD'): Promise<VersionSymbolicRefReadResult>;
   readRef(name: VersionMainRefName | VersionRefName): Promise<VersionBranchRefReadResult>;
   readRef(name: VersionRefSelector): Promise<VersionRefReadResult>;

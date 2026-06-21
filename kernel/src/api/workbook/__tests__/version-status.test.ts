@@ -55,6 +55,7 @@ const ROOT_COMMIT_ID = `commit:sha256:${'1'.repeat(64)}`;
 const CHILD_COMMIT_ID = `commit:sha256:${'2'.repeat(64)}`;
 const REF_REVISION = { kind: 'counter', value: '2' } as const;
 const CREATED_AT = '2026-06-20T00:00:00.000Z';
+const DIFF_PAGE_TOKEN = 'vpt_aaaaaaaaaaaa';
 
 function createMockCtx(overrides: Record<string, unknown> = {}) {
   return {
@@ -122,9 +123,10 @@ describe('WorkbookVersion status slice', () => {
     expect('listCommits' in wb.version).toBe(true);
     expect('readRef' in wb.version).toBe(true);
     expect('commit' in wb.version).toBe(true);
+    expect('diff' in wb.version).toBe(true);
   });
 
-  it('degrades read APIs and rejects commit before graph services are attached', async () => {
+  it('degrades read and diff APIs and rejects commit before graph services are attached', async () => {
     const wb = createWorkbook();
 
     await expect(wb.version.getHead()).resolves.toMatchObject({
@@ -152,6 +154,18 @@ describe('WorkbookVersion status slice', () => {
     await expect(wb.version.readRef('HEAD')).resolves.toMatchObject({
       status: 'degraded',
       ref: null,
+      diagnostics: [
+        expect.objectContaining({
+          issueCode: 'VERSION_GRAPH_UNINITIALIZED',
+          redacted: true,
+        }),
+      ],
+    });
+
+    await expect(wb.version.diff(ROOT_COMMIT_ID, CHILD_COMMIT_ID)).resolves.toMatchObject({
+      status: 'degraded',
+      items: [],
+      order: 'semantic-change-order',
       diagnostics: [
         expect.objectContaining({
           issueCode: 'VERSION_GRAPH_UNINITIALIZED',
@@ -245,6 +259,53 @@ describe('WorkbookVersion status slice', () => {
       },
       diagnostics: [],
     });
+
+    await expect(
+      wb.version.diff(
+        ROOT_COMMIT_ID,
+        { kind: 'ref', name: 'HEAD' },
+        {
+          pageSize: 25,
+          includeDerivedImpact: true,
+          includeDiagnostics: true,
+        },
+      ),
+    ).resolves.toEqual({
+      status: 'success',
+      items: [
+        {
+          structural: {
+            kind: 'metadata',
+            changeId: 'change-1',
+            domain: 'cell',
+            entityId: 'sheet-1!A1',
+            propertyPath: ['value'],
+          },
+          before: { kind: 'value', value: 1 },
+          after: {
+            kind: 'value',
+            value: { kind: 'formula', formula: '=A1+1', result: 2 },
+          },
+          display: {
+            sheetName: { kind: 'value', value: 'Sheet1' },
+            address: { kind: 'value', value: 'A1' },
+          },
+        },
+      ],
+      nextPageToken: DIFF_PAGE_TOKEN,
+      readRevision: REF_REVISION,
+      order: 'semantic-change-order',
+      diagnostics: [],
+    });
+    expect(graphStore.diff).toHaveBeenCalledWith(
+      { kind: 'commit', id: ROOT_COMMIT_ID },
+      { kind: 'ref', name: 'HEAD' },
+      {
+        pageSize: 25,
+        includeDerivedImpact: true,
+        includeDiagnostics: true,
+      },
+    );
   });
 
   it('returns a stale unsupported diagnostic for page tokens without calling the graph service', async () => {
@@ -294,6 +355,98 @@ describe('WorkbookVersion status slice', () => {
       ],
     });
     expect(graphStore.readRef).not.toHaveBeenCalled();
+  });
+
+  it('returns degraded diagnostics when no semantic diff service is attached', async () => {
+    const graphStore = createFakeGraphStore({ includeDiff: false });
+    const wb = createWorkbook({
+      ctx: createMockCtx({
+        versioning: {
+          graphStore,
+        },
+      }),
+    });
+
+    await expect(wb.version.diff(ROOT_COMMIT_ID, CHILD_COMMIT_ID)).resolves.toMatchObject({
+      status: 'degraded',
+      items: [],
+      order: 'semantic-change-order',
+      diagnostics: [
+        expect.objectContaining({
+          issueCode: 'VERSION_UNMATERIALIZABLE_COMMIT',
+          recoverability: 'unsupported',
+          redacted: true,
+        }),
+      ],
+    });
+  });
+
+  it('validates diff inputs before the diff service is called', async () => {
+    const graphStore = createFakeGraphStore();
+    const wb = createWorkbook({
+      ctx: createMockCtx({
+        versioning: {
+          graphStore,
+        },
+      }),
+    });
+
+    await expect(
+      wb.version.diff(
+        { kind: 'commit', id: 'commit:sha256:BAD' as any },
+        { kind: 'ref', name: 'refs/heads/main' },
+        {
+          pageSize: 0,
+          pageToken: 'bad-token',
+          includeDerivedImpact: 'yes' as any,
+          includeDiagnostics: true,
+          extra: true,
+        } as any,
+      ),
+    ).resolves.toMatchObject({
+      status: 'degraded',
+      items: [],
+      order: 'semantic-change-order',
+      diagnostics: expect.arrayContaining([
+        expect.objectContaining({
+          issueCode: 'VERSION_INVALID_OPTIONS',
+          redacted: true,
+        }),
+      ]),
+    });
+    expect(graphStore.diff).not.toHaveBeenCalled();
+  });
+
+  it('redacts unsupported diff ref selectors before the diff service is called', async () => {
+    const graphStore = createFakeGraphStore();
+    const wb = createWorkbook({
+      ctx: createMockCtx({
+        versioning: {
+          graphStore,
+        },
+      }),
+    });
+
+    const result = await wb.version.diff(
+      { kind: 'ref', name: 'refs/heads/private-review' as any },
+      { kind: 'ref', name: 'HEAD' },
+    );
+
+    expect(result).toMatchObject({
+      status: 'degraded',
+      items: [],
+      order: 'semantic-change-order',
+      diagnostics: [
+        expect.objectContaining({
+          issueCode: 'VERSION_PERMISSION_DENIED',
+          recoverability: 'unsupported',
+          payload: expect.objectContaining({ refName: 'redacted' }),
+          redacted: true,
+        }),
+      ],
+    });
+    expect(JSON.stringify(result)).not.toContain('private-review');
+    expect(graphStore.diff).not.toHaveBeenCalled();
   });
 
   it('maps public commit options to an attached version write service', async () => {
@@ -442,19 +595,19 @@ describe('WorkbookVersion status slice', () => {
     expect(graphStore.commit).not.toHaveBeenCalled();
   });
 
-  it('does not expose deferred checkout, merge, or diff methods', () => {
+  it('does not expose deferred checkout, merge, or branch lifecycle methods', () => {
     const wb = createWorkbook();
 
     expect('checkout' in wb.version).toBe(false);
     expect('merge' in wb.version).toBe(false);
-    expect('diff' in wb.version).toBe(false);
+    expect('diff' in wb.version).toBe(true);
     expect('createBranch' in wb.version).toBe(false);
     expect('listRefs' in wb.version).toBe(false);
   });
 });
 
-function createFakeGraphStore() {
-  return {
+function createFakeGraphStore(options: { readonly includeDiff?: boolean } = {}) {
+  const graphStore = {
     readHead: jest.fn(async () => ({
       status: 'success',
       head: {
@@ -517,5 +670,41 @@ function createFakeGraphStore() {
             },
       diagnostics: [],
     })),
+    diff: jest.fn(async () => ({
+      status: 'success',
+      items: [
+        {
+          structural: {
+            kind: 'metadata',
+            changeId: 'change-1',
+            domain: 'cell',
+            entityId: 'sheet-1!A1',
+            propertyPath: ['value'],
+          },
+          before: { kind: 'value', value: 1 },
+          after: {
+            kind: 'value',
+            value: { kind: 'formula', formula: '=A1+1', result: 2 },
+          },
+          display: {
+            sheetName: { kind: 'value', value: 'Sheet1' },
+            address: { kind: 'value', value: 'A1' },
+          },
+        },
+      ],
+      nextPageToken: DIFF_PAGE_TOKEN,
+      readRevision: REF_REVISION,
+      order: 'semantic-change-order',
+      diagnostics: [],
+    })),
   };
+
+  if (options.includeDiff === false) {
+    return {
+      ...graphStore,
+      diff: undefined,
+    };
+  }
+
+  return graphStore;
 }

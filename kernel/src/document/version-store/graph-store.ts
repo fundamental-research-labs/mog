@@ -26,17 +26,30 @@ import {
   refVersionsEqual,
   type InMemoryRefStore,
   type LiveRefRecord,
+  type ProviderEpoch,
   type RefVersion,
   type VersionDiagnostic,
 } from './ref-store';
 import type { InMemoryRefStoreSnapshot } from './ref-store-snapshot';
 import { parseVc04ParentCommitIds } from './commit-store-parents';
 import { orderTopologicalNewestFirst, uniqueSortedCommitIds } from './graph-store-traversal';
+import type { RefName } from './ref-name';
+import {
+  VERSION_GRAPH_HEAD_REF,
+  VERSION_GRAPH_MAIN_REF,
+  commitRefFromLiveRef,
+  graphRefFromLiveRef,
+  graphRefNameFromRefName,
+  parseGraphRefSelector,
+  symbolicHeadFromLiveRef,
+  type VersionGraphBranchRefName,
+} from './graph-store-refs';
 
-export const VERSION_GRAPH_MAIN_REF = 'refs/heads/main';
-export const VERSION_GRAPH_HEAD_REF = 'HEAD';
 export const VERSION_GRAPH_LIST_COMMITS_DEFAULT_PAGE_SIZE = 50;
 export const VERSION_GRAPH_LIST_COMMITS_MAX_PAGE_SIZE = 500;
+
+export { VERSION_GRAPH_HEAD_REF, VERSION_GRAPH_MAIN_REF } from './graph-store-refs';
+export type { VersionGraphBranchRefName } from './graph-store-refs';
 
 export type VersionGraphCommitContentInput = Omit<
   CreateWorkbookCommitInput,
@@ -52,10 +65,14 @@ export type CommitVersionGraphInput = VersionGraphCommitContentInput & {
 };
 
 export type VersionGraphRef = {
-  readonly name: typeof VERSION_GRAPH_MAIN_REF;
+  readonly name: VersionGraphBranchRefName;
   readonly commitId: WorkbookCommitId;
   readonly revision: RefVersion;
   readonly updatedAt: string;
+  readonly providerRefId?: string;
+  readonly providerEpoch?: ProviderEpoch;
+  readonly refIncarnationId?: string;
+  readonly protected?: boolean;
 };
 
 export type VersionGraphSymbolicRef = {
@@ -64,11 +81,11 @@ export type VersionGraphSymbolicRef = {
   readonly revision: RefVersion;
 };
 
-export type VersionGraphRefSelector = typeof VERSION_GRAPH_HEAD_REF | typeof VERSION_GRAPH_MAIN_REF;
+export type VersionGraphRefSelector = typeof VERSION_GRAPH_HEAD_REF | VersionGraphBranchRefName;
 
 export type VersionGraphCommitRef = {
   readonly id: WorkbookCommitId;
-  readonly refName: typeof VERSION_GRAPH_MAIN_REF;
+  readonly refName: VersionGraphBranchRefName;
   readonly resolvedFrom: VersionGraphRefSelector;
   readonly refRevision: RefVersion;
 };
@@ -155,7 +172,7 @@ export type VersionGraphStoreDiagnostic = {
   readonly code: VersionGraphStoreDiagnosticCode;
   readonly severity: 'error' | 'corruption';
   readonly message: string;
-  readonly refName?: typeof VERSION_GRAPH_MAIN_REF;
+  readonly refName?: string;
   readonly commitId?: WorkbookCommitId;
   readonly objectKind?: 'commit';
   readonly operation?: VersionGraphStoreOperation;
@@ -341,7 +358,7 @@ export class InMemoryVersionGraphStore {
       return { status: 'degraded', head: null, diagnostics: current.diagnostics };
     }
 
-    const main = mainRefFromLiveRef(current.ref);
+    const main = graphRefFromLiveRef(current.ref);
     const readable = await this.readCommitFromRef(current.ref, 'readHead');
     if (!readable.ok) {
       return {
@@ -361,20 +378,39 @@ export class InMemoryVersionGraphStore {
   }
 
   async readRef(name: VersionGraphRefSelector | string): Promise<VersionGraphReadRefResult> {
-    const selector = parseGraphRefSelector(name);
+    const selector = parseGraphRefSelector(name, diagnostic);
     if (!selector.ok) {
       return { status: 'degraded', ref: null, diagnostics: selector.diagnostics };
     }
 
-    const current = this.readMainRef('readRef');
+    if (selector.name === VERSION_GRAPH_HEAD_REF) {
+      const current = this.readMainRef('readRef');
+      if (!current.ok) {
+        return { status: 'degraded', ref: null, diagnostics: current.diagnostics };
+      }
+
+      const ref = symbolicHeadFromLiveRef(current.ref);
+      const readable = await this.readCommitFromRef(current.ref, 'readRef');
+      if (!readable.ok) {
+        return {
+          status: 'degraded',
+          ref,
+          diagnostics: readable.diagnostics,
+        };
+      }
+
+      return { status: 'success', ref, diagnostics: [] };
+    }
+
+    const current =
+      selector.refName === 'main'
+        ? this.readMainRef('readRef')
+        : this.readBranchRef(selector.refName, 'readRef');
     if (!current.ok) {
       return { status: 'degraded', ref: null, diagnostics: current.diagnostics };
     }
 
-    const ref =
-      selector.name === VERSION_GRAPH_HEAD_REF
-        ? symbolicHeadFromLiveRef(current.ref)
-        : mainRefFromLiveRef(current.ref);
+    const ref = graphRefFromLiveRef(current.ref);
     const readable = await this.readCommitFromRef(current.ref, 'readRef');
     if (!readable.ok) {
       return {
@@ -406,7 +442,7 @@ export class InMemoryVersionGraphStore {
         ? collected.diagnostics
         : [
             danglingRefDiagnostic(
-              mainRefFromLiveRef(current.ref),
+              graphRefFromLiveRef(current.ref),
               'listCommits',
               collected.sourceDiagnostics,
             ),
@@ -518,11 +554,11 @@ export class InMemoryVersionGraphStore {
       return { ok: true, commit: read.commit };
     }
 
-    const main = mainRefFromLiveRef(ref);
+    const graphRef = graphRefFromLiveRef(ref);
     return {
       ok: false,
       diagnostics: [
-        danglingRefDiagnostic(main, operation, read.diagnostics),
+        danglingRefDiagnostic(graphRef, operation, read.diagnostics),
         ...missingCommitDiagnostics(ref.targetCommitId, operation, read.diagnostics),
       ],
     };
@@ -593,6 +629,32 @@ export class InMemoryVersionGraphStore {
     }
     return { ok: true, ref: result.ref };
   }
+
+  private readBranchRef(
+    refName: RefName,
+    operation?: VersionGraphStoreOperation,
+  ):
+    | { readonly ok: true; readonly ref: LiveRefRecord }
+    | { readonly ok: false; readonly diagnostics: readonly VersionGraphStoreDiagnostic[] } {
+    const result = this.refStore.getRef(refName);
+    if (!result.ok) {
+      return { ok: false, diagnostics: [refStoreDiagnostic(result.diagnostics, operation)] };
+    }
+    if (result.ref === null) {
+      return {
+        ok: false,
+        diagnostics: [
+          diagnostic('VERSION_INVALID_OPTIONS', 'Graph branch ref was not found.', {
+            refName: graphRefNameFromRefName(refName),
+            operation,
+            option: 'ref',
+            details: { refMissing: true },
+          }),
+        ],
+      };
+    }
+    return { ok: true, ref: result.ref };
+  }
 }
 
 export function createInMemoryVersionGraphStore(
@@ -618,31 +680,6 @@ export async function createInMemoryVersionGraphStoreFromSnapshot(
       snapshot: snapshot.refStore,
     }),
   });
-}
-
-function parseGraphRefSelector(
-  value: VersionGraphRefSelector | string,
-):
-  | { readonly ok: true; readonly name: VersionGraphRefSelector }
-  | { readonly ok: false; readonly diagnostics: readonly VersionGraphStoreDiagnostic[] } {
-  if (value === VERSION_GRAPH_HEAD_REF || value === VERSION_GRAPH_MAIN_REF) {
-    return { ok: true, name: value };
-  }
-
-  return {
-    ok: false,
-    diagnostics: [
-      diagnostic(
-        'VERSION_INVALID_OPTIONS',
-        'VC-04 graph reads support only HEAD and refs/heads/main.',
-        {
-          operation: 'readRef',
-          option: 'ref',
-          details: { receivedRef: String(value) },
-        },
-      ),
-    ],
-  };
 }
 
 function parseListCommitsOptions(
@@ -879,7 +916,7 @@ function danglingRefDiagnostic(
 ): VersionGraphStoreDiagnostic {
   return diagnostic(
     'VERSION_DANGLING_REF',
-    'Graph main ref points at a missing or unreadable commit.',
+    'Graph ref points at a missing or unreadable commit.',
     {
       refName: ref.name,
       commitId: ref.commitId,
@@ -923,7 +960,7 @@ function successWrite(commit: WorkbookCommit, ref: LiveRefRecord): VersionGraphW
   return {
     status: 'success',
     commit,
-    main: mainRefFromLiveRef(ref),
+    main: graphRefFromLiveRef(ref),
     diagnostics: [],
   };
 }
@@ -933,35 +970,6 @@ function failedWrite(
   mutationGuarantee: VersionGraphWriteFailure['mutationGuarantee'],
 ): VersionGraphWriteFailure {
   return { status: 'failed', diagnostics, mutationGuarantee };
-}
-
-function mainRefFromLiveRef(ref: LiveRefRecord): VersionGraphRef {
-  return {
-    name: VERSION_GRAPH_MAIN_REF,
-    commitId: ref.targetCommitId,
-    revision: ref.refVersion,
-    updatedAt: ref.updatedAt,
-  };
-}
-
-function symbolicHeadFromLiveRef(ref: LiveRefRecord): VersionGraphSymbolicRef {
-  return {
-    name: VERSION_GRAPH_HEAD_REF,
-    target: VERSION_GRAPH_MAIN_REF,
-    revision: ref.refVersion,
-  };
-}
-
-function commitRefFromLiveRef(
-  ref: LiveRefRecord,
-  resolvedFrom: VersionGraphRefSelector,
-): VersionGraphCommitRef {
-  return {
-    id: ref.targetCommitId,
-    refName: VERSION_GRAPH_MAIN_REF,
-    resolvedFrom,
-    refRevision: ref.refVersion,
-  };
 }
 
 function commitSummary(commit: WorkbookCommit): VersionGraphCommitSummary {

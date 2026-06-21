@@ -1,15 +1,15 @@
 import type { VersionAuthor } from '@mog-sdk/contracts/versioning';
 
 import {
-  VERSION_GRAPH_MAIN_REF,
   type VersionGraphRef,
 } from './graph-store';
+import { graphRefNameFromRefName } from './graph-store-refs';
 import { type VersionGraphNamespace } from './object-store';
 import type { VersionGraphStore, VersionStoreDiagnostic, VersionStoreProvider } from './provider';
 import { VersionStoreProviderError } from './provider';
 import { namespaceForRegistry } from './registry';
 import type { LiveRefRecord, RefVersion, VersionDiagnostic } from './ref-store';
-import { validateRefName, type RefName } from './ref-name';
+import { REF_NAME_STORAGE_PREFIX, validateRefName, type RefName } from './ref-name';
 import {
   createCheckoutMaterializationService,
   type CheckoutHeadReadResult,
@@ -30,7 +30,6 @@ const PROVIDER_REF_AUTHOR: VersionAuthor = Object.freeze({
   actorKind: 'system',
   displayName: 'Version Store',
 });
-const PROVIDER_MAIN_REF_NAME = parseProviderMainRefName();
 
 export class ProviderBackedCheckoutMaterializationService {
   private readonly provider: VersionStoreProvider;
@@ -122,11 +121,11 @@ function createGraphCheckoutService(
     },
     refReader: {
       readRef: async (refName) => {
-        if (refName !== 'main') {
-          return { ok: true, ref: null, diagnostics: [] };
-        }
-        const result = await graph.readRef(VERSION_GRAPH_MAIN_REF);
-        if (result.status !== 'success' || result.ref.name !== VERSION_GRAPH_MAIN_REF) {
+        const result = await graph.readRef(graphRefNameFromRefName(refName));
+        if (result.status !== 'success') {
+          if (result.ref === null && isMissingGraphRef(result.diagnostics)) {
+            return { ok: true, ref: null, diagnostics: [] };
+          }
           return {
             ok: false,
             error: {
@@ -137,6 +136,20 @@ function createGraphCheckoutService(
               'VERSION_CHECKOUT_REF_READ_FAILED',
               'Version graph ref could not be read.',
               result.diagnostics,
+            ),
+          };
+        }
+        if (result.ref.name === 'HEAD') {
+          return {
+            ok: false,
+            error: {
+              code: 'versionCapabilityDisabled',
+              message: 'Version graph ref resolved to a symbolic ref.',
+            },
+            diagnostics: refDiagnostics(
+              'VERSION_CHECKOUT_REF_READ_FAILED',
+              'Version graph ref resolved to a symbolic ref.',
+              [],
             ),
           };
         }
@@ -179,18 +192,19 @@ function liveRefFromGraphRef(
   namespace: VersionGraphNamespace,
   ref: VersionGraphRef,
 ): LiveRefRecord {
+  const refName = parseProviderGraphRefName(ref.name);
   const refVersion = cloneRefVersion(ref.revision);
   return Object.freeze({
     state: 'live',
     schemaVersion: 1,
     versionDocumentId: namespace.documentId,
-    name: PROVIDER_MAIN_REF_NAME,
+    name: refName,
     kind: 'branch',
     targetCommitId: ref.commitId,
-    providerRefId: `graph-ref:${namespace.graphId}:main`,
-    providerEpoch: refVersion,
-    refIncarnationId: `ref-incarnation:${namespace.graphId}:main`,
-    protected: true,
+    providerRefId: ref.providerRefId ?? `graph-ref:${namespace.graphId}:${refName}`,
+    providerEpoch: ref.providerEpoch ?? refVersion,
+    refIncarnationId: ref.refIncarnationId ?? `ref-incarnation:${namespace.graphId}:${refName}`,
+    protected: ref.protected ?? refName === 'main',
     createdAt: ref.updatedAt,
     createdBy: PROVIDER_REF_AUTHOR,
     updatedAt: ref.updatedAt,
@@ -270,10 +284,26 @@ function cloneRefVersion(refVersion: RefVersion): RefVersion {
   return Object.freeze({ kind: refVersion.kind, value: refVersion.value });
 }
 
-function parseProviderMainRefName(): RefName {
-  const parsed = validateRefName('main');
+function parseProviderGraphRefName(value: string): RefName {
+  const branchName = value.startsWith(REF_NAME_STORAGE_PREFIX)
+    ? value.slice(REF_NAME_STORAGE_PREFIX.length)
+    : value;
+  const parsed = validateRefName(branchName);
   if (!parsed.ok) {
-    throw new Error('Internal provider main ref name is invalid.');
+    throw new Error('Provider graph returned an invalid branch ref name.');
   }
   return parsed.name;
+}
+
+function isMissingGraphRef(
+  diagnostics: readonly {
+    readonly code: string;
+    readonly details?: Readonly<Record<string, string | number | boolean | null>>;
+  }[],
+): boolean {
+  return diagnostics.some(
+    (item) =>
+      item.code === 'VERSION_INVALID_OPTIONS' &&
+      item.details?.refMissing === true,
+  );
 }

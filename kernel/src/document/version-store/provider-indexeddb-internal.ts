@@ -8,6 +8,7 @@ import {
   type VersionGraphSymbolicRef,
   type VersionGraphWriteResult,
 } from './graph-store';
+import { graphRefFromLiveRef } from './graph-store-refs';
 import {
   cloneVersionStoreCapabilities,
   type VersionAccessContext,
@@ -419,12 +420,7 @@ export function rootCommitFromSnapshot(
 }
 
 export function versionGraphRefFromLiveRef(ref: LiveRefRecord): VersionGraphRef {
-  return {
-    name: VERSION_GRAPH_MAIN_REF,
-    commitId: ref.targetCommitId,
-    revision: cloneJson(ref.refVersion),
-    updatedAt: ref.updatedAt,
-  };
+  return graphRefFromLiveRef(ref);
 }
 
 export function initializeSuccess(
@@ -517,7 +513,7 @@ export function versionStoreDiagnostic(
     readonly operation: VersionStoreOperation;
     readonly documentScope?: VersionDocumentScope;
     readonly namespace?: VersionGraphNamespace;
-    readonly refName?: typeof VERSION_GRAPH_MAIN_REF | typeof VERSION_GRAPH_HEAD_REF;
+    readonly refName?: string;
     readonly commitId?: WorkbookCommitId;
     readonly safeMessage: string;
     readonly recoverability?: VersionStoreDiagnostic['recoverability'];

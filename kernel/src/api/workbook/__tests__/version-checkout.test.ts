@@ -2,7 +2,10 @@ import { jest } from '@jest/globals';
 
 import type { VersionAuthor } from '@mog-sdk/contracts/versioning';
 import type { WorkbookConfig } from '../types';
-import { VERSION_GRAPH_MAIN_REF } from '../../../document/version-store/graph-store';
+import {
+  VERSION_GRAPH_MAIN_REF,
+  type VersionGraphWriteResult,
+} from '../../../document/version-store/graph-store';
 import {
   createCheckoutMaterializationService,
 } from '../../../document/version-store/checkout-service';
@@ -182,6 +185,15 @@ function expectInitializeSuccess(
   expect(result.status).toBe('success');
   if (result.status !== 'success') {
     throw new Error(`expected initialize success: ${result.diagnostics[0]?.code}`);
+  }
+}
+
+function expectGraphWriteSuccess(
+  result: VersionGraphWriteResult,
+): asserts result is Extract<VersionGraphWriteResult, { status: 'success' }> {
+  expect(result.status).toBe('success');
+  if (result.status !== 'success') {
+    throw new Error(`expected graph write success: ${result.diagnostics[0]?.code}`);
   }
 }
 
@@ -424,6 +436,56 @@ describe('WorkbookVersion checkout facade', () => {
       refName: VERSION_GRAPH_MAIN_REF,
       resolvedFrom: 'HEAD',
       refRevision: initialized.initialHead.revision,
+    });
+  });
+
+  it('resolves provider-backed checkout planning for a non-main live branch ref', async () => {
+    const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
+    const initialized = await provider.initializeGraph(await initializeInput('graph-1', 'root'));
+    expectInitializeSuccess(initialized);
+    const graph = await provider.openGraph(namespaceForDocumentScope(DOCUMENT_SCOPE, 'graph-1'));
+    const childInput = await initializeInput('graph-1', 'scenario-target');
+    const child = await graph.commit({
+      ...childInput.rootWrite,
+      expectedHeadCommitId: initialized.rootCommit.id,
+      expectedMainRefVersion: initialized.initialHead.revision,
+    });
+    expectGraphWriteSuccess(child);
+    const branch = graph.refStore.createBranch({
+      name: 'scenario/checkout',
+      targetCommitId: child.commit.id,
+      expectedAbsent: true,
+      baseCommitId: initialized.rootCommit.id,
+      createdBy: AUTHOR,
+    });
+    expect(branch.ok).toBe(true);
+    if (!branch.ok) throw new Error(`expected branch create success: ${branch.error.code}`);
+    const wb = createWorkbook({
+      versioning: {
+        provider,
+      },
+    });
+
+    await expect(
+      wb.version.checkout({ kind: 'ref', name: 'refs/heads/scenario/checkout' as any }),
+    ).resolves.toMatchObject({
+      status: 'success',
+      materialization: 'planned',
+      mutationGuarantee: 'no-workbook-mutation',
+      plan: {
+        strategy: 'fullSnapshot',
+        commitId: child.commit.id,
+        parentCommitIds: [initialized.rootCommit.id],
+        target: {
+          kind: 'ref',
+          refName: 'refs/heads/scenario/checkout',
+          commitId: child.commit.id,
+          refRevision: branch.ref.refVersion,
+          refIncarnationId: branch.ref.refIncarnationId,
+        },
+        requiredDependencyCount: 2,
+      },
+      diagnostics: [],
     });
   });
 });

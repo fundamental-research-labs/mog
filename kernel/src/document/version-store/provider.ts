@@ -157,7 +157,7 @@ export type VersionStoreDiagnostic = {
   readonly redacted: true;
   readonly documentScope?: VersionDocumentScope;
   readonly namespace?: VersionGraphNamespace;
-  readonly refName?: typeof VERSION_GRAPH_MAIN_REF | typeof VERSION_GRAPH_HEAD_REF;
+  readonly refName?: string;
   readonly commitId?: WorkbookCommitId;
   readonly mutationGuarantee?: VersionStoreMutationGuarantee;
   readonly lifecycleState?: VersionStoreLifecycleState;
@@ -860,7 +860,7 @@ export function versionStoreDiagnostic(
     readonly operation: VersionStoreOperation;
     readonly documentScope?: VersionDocumentScope;
     readonly namespace?: VersionGraphNamespace;
-    readonly refName?: typeof VERSION_GRAPH_MAIN_REF | typeof VERSION_GRAPH_HEAD_REF;
+    readonly refName?: string;
     readonly commitId?: WorkbookCommitId;
     readonly safeMessage: string;
     readonly recoverability?: VersionStoreDiagnostic['recoverability'];

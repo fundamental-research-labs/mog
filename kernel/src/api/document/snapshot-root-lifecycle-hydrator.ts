@@ -1,5 +1,6 @@
 import type { Workbook } from '@mog-sdk/contracts/api';
 
+import type { DocumentContext } from '../../context';
 import type {
   SnapshotRootFreshLifecycleHydrationInput,
   SnapshotRootFreshLifecycleHydrationResult,
@@ -7,7 +8,7 @@ import type {
   SnapshotRootReloadDiagnostic,
 } from '../../document/version-store/snapshot-root-reload-service';
 import { DocumentFactory } from './document-factory';
-import type { DocumentHandle } from './document-handle-types';
+import type { DocumentHandle, DocumentHandleInternal } from './document-handle-types';
 
 type CreateFreshDocument = (options: {
   readonly documentId: string;
@@ -22,6 +23,7 @@ export interface SnapshotRootFreshLifecycleMaterialization {
   readonly kind: 'snapshot-root-fresh-lifecycle';
   readonly documentId: string;
   readonly handle: DocumentHandle;
+  readonly context: DocumentContext;
   readonly workbook: Workbook;
   dispose(): Promise<void>;
 }
@@ -66,10 +68,12 @@ function createMaterialization(
   handle: DocumentHandle,
   workbook: Workbook,
 ): SnapshotRootFreshLifecycleMaterialization {
+  const context = (handle as DocumentHandleInternal).context as DocumentContext;
   return Object.freeze({
     kind: 'snapshot-root-fresh-lifecycle' as const,
     documentId: handle.documentId,
     handle,
+    context,
     workbook,
     dispose: () => handle.dispose(),
   });

@@ -89,6 +89,8 @@ import { toComputeWorkbookSettings } from '../../domain/workbook/workbook-settin
 import type { SpreadsheetObjectManager } from '../../floating-objects';
 import { createCheckpointManager } from '../../services/checkpoint';
 import type { ICheckpointManager } from '../../services/checkpoint';
+import type { CheckoutSnapshotApplyInput } from '../../document/version-store/checkout-apply';
+import type { SnapshotRootFreshLifecycleMaterialization } from '../document/snapshot-root-lifecycle-hydrator';
 import {
   getFunctionCatalog as getCatalog,
   getFunctionInfo as getInfo,
@@ -105,6 +107,7 @@ import type {
   CodeExecutorType,
   CreateWorkbookOptions,
   WorkbookConfig,
+  WorkbookVersioningConfig,
 } from './types';
 import { attachWorkbookVersioning } from './version-wiring';
 import {
@@ -171,6 +174,11 @@ import { WorkbookViewportImpl } from './viewport';
 import { WorkbookChangesImpl } from './changes';
 import { WorkbookDiagnosticsImpl } from './diagnostics';
 import { WorkbookLinksImpl } from './links';
+import {
+  createWorkbookContextBinding,
+  type WorkbookContextBinding,
+} from './context-binding';
+import { createWorkbookCheckoutSnapshotMaterializer } from './version-checkout-materializer';
 
 import { DEFAULT_CHROME_THEME } from '@mog-sdk/contracts/rendering';
 import { NO_HOST_OPERATION_GATE, OperationDeniedError } from '../../document/host-operation-gate';
@@ -206,10 +214,10 @@ export class WorkbookImpl implements WorkbookInternal {
    * WorkbookImpl is kernel-internal code and knows the runtime type is always DocumentContext.
    */
   private readonly ctx: DocumentContext;
+  private readonly contextBinding: WorkbookContextBinding;
   private readonly stateProvider: WorkbookStateProvider;
   private readonly eventBus: IEventBus;
-  private readonly checkpointManager: ICheckpointManager;
-  private readonly _floatingObjectManager: SpreadsheetObjectManager;
+  private checkpointManager: ICheckpointManager;
   private readonly _disposables = new DisposableStore();
 
   private codeExecutor: CodeExecutorType | null = null;
@@ -217,6 +225,11 @@ export class WorkbookImpl implements WorkbookInternal {
   private _formControlManager?: FormControlManager;
   private _links?: WorkbookLinks;
   private _diagnostics?: WorkbookDiagnosticsImpl;
+  private readonly _checkoutMaterializations = new Set<SnapshotRootFreshLifecycleMaterialization>();
+
+  private get _floatingObjectManager(): SpreadsheetObjectManager {
+    return this.ctx.floatingObjectManager as SpreadsheetObjectManager;
+  }
 
   // Instance cache for getSheetById() — returns the same WorksheetImpl for the same sheetId
   // to provide referential stability (prevents infinite re-render loops when used in React deps)
@@ -269,9 +282,11 @@ export class WorkbookImpl implements WorkbookInternal {
 
   constructor(config: WorkbookConfig) {
     // Cast to DocumentContext — WorkbookImpl is internal kernel code and knows the runtime type
-    this.ctx = config.ctx as DocumentContext;
-    if (config.versioning) {
-      attachWorkbookVersioning(this.ctx, config.versioning);
+    this.contextBinding = createWorkbookContextBinding(config.ctx as DocumentContext);
+    this.ctx = this.contextBinding.context;
+    const versioning = this.versioningWithDefaultCheckoutMaterializer(config.versioning);
+    if (versioning) {
+      attachWorkbookVersioning(this.ctx, versioning);
     }
     this._liveness =
       config.liveness ??
@@ -310,9 +325,6 @@ export class WorkbookImpl implements WorkbookInternal {
       this.ctx.services?.undo,
     );
 
-    // Read the document-scoped singleton from context (created in createDocumentContext).
-    this._floatingObjectManager = this.ctx.floatingObjectManager as SpreadsheetObjectManager;
-
     if (config.codeExecutorFactory) {
       this.codeExecutorFactory = config.codeExecutorFactory;
     }
@@ -338,6 +350,95 @@ export class WorkbookImpl implements WorkbookInternal {
     });
     if (unsub) {
       this._disposables.track(toDisposable(unsub));
+    }
+  }
+
+  private versioningWithDefaultCheckoutMaterializer(
+    versioning: WorkbookVersioningConfig | undefined,
+  ): WorkbookVersioningConfig | undefined {
+    if (
+      !versioning ||
+      versioning.checkoutSnapshotMaterializer ||
+      !versioning.snapshotRootByteSyncPort
+    ) {
+      return versioning;
+    }
+
+    return {
+      ...versioning,
+      checkoutSnapshotMaterializer: createWorkbookCheckoutSnapshotMaterializer({
+        currentContext: () => this.ctx,
+        publishCheckoutMaterialization: (materialization, input) =>
+          this.publishCheckoutMaterialization(materialization, input),
+      }),
+    };
+  }
+
+  private async publishCheckoutMaterialization(
+    materialization: SnapshotRootFreshLifecycleMaterialization,
+    _input: CheckoutSnapshotApplyInput,
+  ): Promise<void> {
+    const nextContext = materialization.context;
+    const currentVersioning = (this.ctx as DocumentContext & { versioning?: unknown }).versioning;
+    const mutableNextContext = nextContext as unknown as {
+      eventBus: IEventBus;
+      versioning?: unknown;
+    };
+    mutableNextContext.versioning = currentVersioning;
+    mutableNextContext.eventBus = this.eventBus;
+
+    this.contextBinding.publish(nextContext);
+    this._checkoutMaterializations.add(materialization);
+    this.resetRuntimeCachesAfterCheckoutPublish();
+    await this.refreshSheetMetadata();
+    await this.reconcileActiveSheetAfterCheckout();
+  }
+
+  private resetRuntimeCachesAfterCheckoutPublish(): void {
+    for (const ws of this._worksheetInstances.values()) {
+      ws.dispose();
+    }
+    this._worksheetInstances.clear();
+    this._cachedSheetNames = [];
+    this._cachedSheetCount = 0;
+    this._dirty = false;
+    this._calcSuspended = false;
+    this._calculationState = 'done';
+    this._cachedCalcMode = null;
+    this._cachedCultureInfo = null;
+
+    if (this.codeExecutor) {
+      this.codeExecutor.dispose();
+      this.codeExecutor = null;
+    }
+
+    this.checkpointManager.clear();
+    this.checkpointManager = createCheckpointManager(
+      this.ctx.computeBridge,
+      this.ctx.services?.undo,
+    );
+
+    if (this._sheetRuntimeAdapterRegistration) {
+      this._disposables.untrack(this._sheetRuntimeAdapterRegistration);
+      this._sheetRuntimeAdapterRegistration.dispose();
+      this._sheetRuntimeAdapterRegistration = null;
+      this._sheetRuntimeAdapterHandler = null;
+    }
+    this.registerSheetRuntimeAdapter();
+
+    this._records = null;
+    this._links = undefined;
+    this._diagnostics = undefined;
+    this._viewport = undefined;
+    this._notifications = undefined;
+  }
+
+  private async reconcileActiveSheetAfterCheckout(): Promise<void> {
+    const order = await getOrder(this.ctx);
+    if (order.length === 0) return;
+    const active = this.stateProvider.getActiveSheetId();
+    if (!active || !order.includes(sheetId(active))) {
+      this.stateProvider.setActiveSheetId(String(order[0]));
     }
   }
 
@@ -1681,6 +1782,7 @@ export class WorkbookImpl implements WorkbookInternal {
     if (closeBehavior === 'save') {
       await this.save();
     }
+    await this.disposeCheckoutMaterializations();
     this.dispose();
   }
 
@@ -1712,6 +1814,8 @@ export class WorkbookImpl implements WorkbookInternal {
       this.codeExecutor = null;
     }
 
+    void this.disposeCheckoutMaterializations();
+
     this._floatingObjectManager.dispose();
 
     // Dispose all cached WorksheetImpl instances (cleans up CellMetadataCache,
@@ -1729,6 +1833,18 @@ export class WorkbookImpl implements WorkbookInternal {
       this._formControlManager.clear();
       this._formControlManager = undefined;
     }
+  }
+
+  private async disposeCheckoutMaterializations(): Promise<void> {
+    const materializations = [...this._checkoutMaterializations];
+    this._checkoutMaterializations.clear();
+    await Promise.all(
+      materializations.map((materialization) =>
+        materialization.dispose().catch((err) => {
+          slog('workbook.checkoutMaterializationDisposeFailed', { error: err });
+        }),
+      ),
+    );
   }
 
   // ===========================================================================

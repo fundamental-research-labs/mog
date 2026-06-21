@@ -35,7 +35,6 @@ export type WorkbookCommitPayload = {
   readonly mutationSegmentDigests?: readonly ObjectDigest[];
   readonly author: VersionAuthor;
   readonly createdAt: string;
-  readonly message?: string;
   readonly completenessDiagnostics: readonly WorkbookCommitCompletenessDiagnostic[];
   readonly redactionSummaryDigest?: ObjectDigest;
   readonly verificationSummaryDigest?: ObjectDigest;
@@ -51,6 +50,7 @@ export type WorkbookCommitStoreDiagnosticCode =
   | 'VERSION_WRONG_DOCUMENT'
   | 'VERSION_MISSING_DEPENDENCY'
   | 'VERSION_OBJECT_STORE_FAILURE'
+  | 'VERSION_INVALID_COMMIT_PAYLOAD'
   | 'VERSION_INVALID_COMMIT_ID'
   | 'VERSION_UNSUPPORTED_PARENT_COMMIT';
 
@@ -75,7 +75,6 @@ export type CreateWorkbookCommitInput = {
   readonly mutationSegmentRecords?: readonly VersionObjectRecord<unknown>[];
   readonly author: VersionAuthor;
   readonly createdAt: string;
-  readonly message?: string;
   readonly completenessDiagnostics?: readonly WorkbookCommitCompletenessDiagnostic[];
   readonly redactionSummaryRecord?: VersionObjectRecord<unknown>;
   readonly verificationSummaryRecord?: VersionObjectRecord<unknown>;
@@ -147,6 +146,23 @@ export class InMemoryWorkbookCommitStore {
       return failedCreate(records.diagnostics);
     }
 
+    const payloadDiagnostics: WorkbookCommitStoreDiagnostic[] = [];
+    const author = parseVersionAuthor(input.author, 'author', payloadDiagnostics);
+    const createdAt = parseString(input.createdAt, 'createdAt', payloadDiagnostics);
+    const completenessDiagnostics = parseCompletenessDiagnostics(
+      input.completenessDiagnostics ?? [],
+      'completenessDiagnostics',
+      payloadDiagnostics,
+    );
+    if (
+      payloadDiagnostics.length > 0 ||
+      author === undefined ||
+      createdAt === undefined ||
+      completenessDiagnostics === undefined
+    ) {
+      return failedCreate(payloadDiagnostics);
+    }
+
     const payload: WorkbookCommitPayload = {
       schemaVersion: 1,
       documentId,
@@ -160,12 +176,9 @@ export class InMemoryWorkbookCommitStore {
               cloneDigest(record.digest),
             ),
           }),
-      author: cloneAuthor(input.author),
-      createdAt: input.createdAt,
-      ...(input.message === undefined ? {} : { message: input.message }),
-      completenessDiagnostics: (input.completenessDiagnostics ?? []).map(
-        cloneCompletenessDiagnostic,
-      ),
+      author,
+      createdAt,
+      completenessDiagnostics,
       ...(records.redactionSummaryRecord === undefined
         ? {}
         : { redactionSummaryDigest: cloneDigest(records.redactionSummaryRecord.digest) }),
@@ -484,6 +497,32 @@ function parseCommitPayload(
       ],
     };
   }
+  const unsupportedPayloadKey = Object.keys(payload).find(
+    (key) =>
+      ![
+        'schemaVersion',
+        'documentId',
+        'parentCommitIds',
+        'snapshotRootDigest',
+        'semanticChangeSetDigest',
+        'mutationSegmentDigests',
+        'author',
+        'createdAt',
+        'completenessDiagnostics',
+        'redactionSummaryDigest',
+        'verificationSummaryDigest',
+      ].includes(key),
+  );
+  if (unsupportedPayloadKey !== undefined) {
+    return {
+      ok: false,
+      diagnostics: [
+        diagnostic('VERSION_INVALID_COMMIT_PAYLOAD', 'Commit payload has an unsupported field.', {
+          details: { path: unsupportedPayloadKey },
+        }),
+      ],
+    };
+  }
   if (typeof payload.documentId !== 'string') {
     return {
       ok: false,
@@ -537,11 +576,21 @@ function parseCommitPayload(
     'verificationSummaryDigest',
     diagnostics,
   );
+  const author = parseVersionAuthor(payload.author, 'author', diagnostics);
+  const createdAt = parseString(payload.createdAt, 'createdAt', diagnostics);
+  const completenessDiagnostics = parseCompletenessDiagnostics(
+    payload.completenessDiagnostics,
+    'completenessDiagnostics',
+    diagnostics,
+  );
 
   if (
     diagnostics.length > 0 ||
     snapshotRootDigest === undefined ||
-    semanticChangeSetDigest === undefined
+    semanticChangeSetDigest === undefined ||
+    author === undefined ||
+    createdAt === undefined ||
+    completenessDiagnostics === undefined
   ) {
     return { ok: false, diagnostics };
   }
@@ -555,12 +604,9 @@ function parseCommitPayload(
       snapshotRootDigest,
       semanticChangeSetDigest,
       ...(mutationSegmentDigests.length === 0 ? {} : { mutationSegmentDigests }),
-      author: payload.author as VersionAuthor,
-      createdAt: String(payload.createdAt),
-      ...(typeof payload.message === 'string' ? { message: payload.message } : {}),
-      completenessDiagnostics: Array.isArray(payload.completenessDiagnostics)
-        ? (payload.completenessDiagnostics as readonly WorkbookCommitCompletenessDiagnostic[])
-        : [],
+      author,
+      createdAt,
+      completenessDiagnostics,
       ...(redactionSummaryDigest === undefined ? {} : { redactionSummaryDigest }),
       ...(verificationSummaryDigest === undefined ? {} : { verificationSummaryDigest }),
     },
@@ -703,6 +749,202 @@ function parseOptionalDigestArray(
   });
 }
 
+function parseVersionAuthor(
+  value: unknown,
+  path: string,
+  diagnostics: WorkbookCommitStoreDiagnostic[],
+): VersionAuthor | undefined {
+  if (!isPlainRecord(value)) {
+    diagnostics.push(invalidPayloadDiagnostic(`${path}`, 'Commit author must be an object.'));
+    return undefined;
+  }
+
+  const unsupportedKey = Object.keys(value).find(
+    (key) => !['authorId', 'actorKind', 'displayName', 'clientId', 'sessionId'].includes(key),
+  );
+  if (unsupportedKey !== undefined) {
+    diagnostics.push(
+      invalidPayloadDiagnostic(
+        `${path}.${unsupportedKey}`,
+        'Commit author has an unsupported field.',
+      ),
+    );
+    return undefined;
+  }
+
+  const authorId = parseString(value.authorId, `${path}.authorId`, diagnostics);
+  const actorKind = parseVersionActorKind(value.actorKind, `${path}.actorKind`, diagnostics);
+  const displayName = parseOptionalString(value.displayName, `${path}.displayName`, diagnostics);
+  const clientId = parseOptionalString(value.clientId, `${path}.clientId`, diagnostics);
+  const sessionId = parseOptionalString(value.sessionId, `${path}.sessionId`, diagnostics);
+
+  if (authorId === undefined || actorKind === undefined) {
+    return undefined;
+  }
+
+  return {
+    authorId,
+    actorKind,
+    ...(displayName === undefined ? {} : { displayName }),
+    ...(clientId === undefined ? {} : { clientId }),
+    ...(sessionId === undefined ? {} : { sessionId }),
+  };
+}
+
+function parseVersionActorKind(
+  value: unknown,
+  path: string,
+  diagnostics: WorkbookCommitStoreDiagnostic[],
+): VersionAuthor['actorKind'] | undefined {
+  if (
+    value === 'user' ||
+    value === 'service' ||
+    value === 'system' ||
+    value === 'migration' ||
+    value === 'automation'
+  ) {
+    return value;
+  }
+  diagnostics.push(invalidPayloadDiagnostic(path, 'Commit author actorKind is invalid.'));
+  return undefined;
+}
+
+function parseCompletenessDiagnostics(
+  value: unknown,
+  path: string,
+  diagnostics: WorkbookCommitStoreDiagnostic[],
+): readonly WorkbookCommitCompletenessDiagnostic[] | undefined {
+  const diagnosticStart = diagnostics.length;
+  if (!Array.isArray(value)) {
+    diagnostics.push(invalidPayloadDiagnostic(path, 'Completeness diagnostics must be an array.'));
+    return undefined;
+  }
+
+  const parsed: WorkbookCommitCompletenessDiagnostic[] = [];
+  for (let index = 0; index < value.length; index++) {
+    const item = parseCompletenessDiagnostic(value[index], `${path}[${index}]`, diagnostics);
+    if (item !== undefined) {
+      parsed.push(item);
+    }
+  }
+  return diagnostics.length > diagnosticStart ? undefined : parsed;
+}
+
+function parseCompletenessDiagnostic(
+  value: unknown,
+  path: string,
+  diagnostics: WorkbookCommitStoreDiagnostic[],
+): WorkbookCommitCompletenessDiagnostic | undefined {
+  if (!isPlainRecord(value)) {
+    diagnostics.push(invalidPayloadDiagnostic(path, 'Completeness diagnostic must be an object.'));
+    return undefined;
+  }
+
+  const unsupportedKey = Object.keys(value).find(
+    (key) => !['code', 'severity', 'message', 'path', 'details'].includes(key),
+  );
+  if (unsupportedKey !== undefined) {
+    diagnostics.push(
+      invalidPayloadDiagnostic(
+        `${path}.${unsupportedKey}`,
+        'Completeness diagnostic has an unsupported field.',
+      ),
+    );
+    return undefined;
+  }
+
+  const code = parseString(value.code, `${path}.code`, diagnostics);
+  const severity = parseCompletenessSeverity(value.severity, `${path}.severity`, diagnostics);
+  const message = parseString(value.message, `${path}.message`, diagnostics);
+  const diagnosticPath = parseOptionalString(value.path, `${path}.path`, diagnostics);
+  const details = parseOptionalDiagnosticDetails(value.details, `${path}.details`, diagnostics);
+
+  if (code === undefined || severity === undefined || message === undefined) {
+    return undefined;
+  }
+
+  return {
+    code,
+    severity,
+    message,
+    ...(diagnosticPath === undefined ? {} : { path: diagnosticPath }),
+    ...(details === undefined ? {} : { details }),
+  };
+}
+
+function parseCompletenessSeverity(
+  value: unknown,
+  path: string,
+  diagnostics: WorkbookCommitStoreDiagnostic[],
+): WorkbookCommitCompletenessDiagnostic['severity'] | undefined {
+  if (value === 'info' || value === 'warning' || value === 'error') {
+    return value;
+  }
+  diagnostics.push(invalidPayloadDiagnostic(path, 'Completeness diagnostic severity is invalid.'));
+  return undefined;
+}
+
+function parseOptionalDiagnosticDetails(
+  value: unknown,
+  path: string,
+  diagnostics: WorkbookCommitStoreDiagnostic[],
+): Readonly<Record<string, string | number | boolean | null>> | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (!isPlainRecord(value)) {
+    diagnostics.push(invalidPayloadDiagnostic(path, 'Diagnostic details must be an object.'));
+    return undefined;
+  }
+
+  const details: Record<string, string | number | boolean | null> = {};
+  for (const [key, detailValue] of Object.entries(value)) {
+    if (
+      detailValue === null ||
+      typeof detailValue === 'string' ||
+      typeof detailValue === 'boolean' ||
+      (typeof detailValue === 'number' && Number.isFinite(detailValue))
+    ) {
+      details[key] = detailValue;
+      continue;
+    }
+    diagnostics.push(
+      invalidPayloadDiagnostic(
+        `${path}.${key}`,
+        'Diagnostic detail values must be string, number, boolean, or null.',
+      ),
+    );
+  }
+  return details;
+}
+
+function parseString(
+  value: unknown,
+  path: string,
+  diagnostics: WorkbookCommitStoreDiagnostic[],
+): string | undefined {
+  if (typeof value === 'string') {
+    return value;
+  }
+  diagnostics.push(invalidPayloadDiagnostic(path, 'Commit payload field must be a string.'));
+  return undefined;
+}
+
+function parseOptionalString(
+  value: unknown,
+  path: string,
+  diagnostics: WorkbookCommitStoreDiagnostic[],
+): string | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  return parseString(value, path, diagnostics);
+}
+
+function invalidPayloadDiagnostic(path: string, message: string): WorkbookCommitStoreDiagnostic {
+  return diagnostic('VERSION_INVALID_COMMIT_PAYLOAD', message, { details: { path } });
+}
+
 function dependencyKey(dependency: VersionDependencyRef): string {
   if (dependency.kind === 'object') {
     return [
@@ -722,22 +964,6 @@ function dependencyKey(dependency: VersionDependencyRef): string {
 
 function cloneDigest(digest: ObjectDigest): ObjectDigest {
   return { algorithm: digest.algorithm, digest: digest.digest };
-}
-
-function cloneAuthor(author: VersionAuthor): VersionAuthor {
-  return { ...author };
-}
-
-function cloneCompletenessDiagnostic(
-  diagnosticValue: WorkbookCommitCompletenessDiagnostic,
-): WorkbookCommitCompletenessDiagnostic {
-  return {
-    code: diagnosticValue.code,
-    severity: diagnosticValue.severity,
-    message: diagnosticValue.message,
-    ...(diagnosticValue.path === undefined ? {} : { path: diagnosticValue.path }),
-    ...(diagnosticValue.details === undefined ? {} : { details: { ...diagnosticValue.details } }),
-  };
 }
 
 function isVersionObjectRecord(value: unknown): value is VersionObjectRecord<unknown> {

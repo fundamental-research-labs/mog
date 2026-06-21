@@ -99,8 +99,23 @@ function baseInput(
     semanticChangeSetRecord,
     author: AUTHOR,
     createdAt: '2026-06-20T00:00:00.000Z',
-    message: 'Initial workbook snapshot',
     completenessDiagnostics: [],
+  };
+}
+
+function assertCreateInputRejectsMessage(
+  snapshotRootRecord: VersionObjectRecord<unknown>,
+  semanticChangeSetRecord: VersionObjectRecord<unknown>,
+): CreateWorkbookCommitInput {
+  return {
+    documentId: NAMESPACE.documentId,
+    snapshotRootRecord,
+    semanticChangeSetRecord,
+    author: AUTHOR,
+    createdAt: '2026-06-20T00:00:00.000Z',
+    completenessDiagnostics: [],
+    // @ts-expect-error messages live in mutable commit annotations, not immutable payloads.
+    message: 'annotation text',
   };
 }
 
@@ -127,9 +142,9 @@ describe('InMemoryWorkbookCommitStore root commits', () => {
       semanticChangeSetDigest: semanticChangeSet.digest,
       author: AUTHOR,
       createdAt: '2026-06-20T00:00:00.000Z',
-      message: 'Initial workbook snapshot',
       completenessDiagnostics: [],
     } satisfies Partial<WorkbookCommitPayload>);
+    expect(created.commit.payload).not.toHaveProperty('message');
     expect(created.commit.record.preimage.dependencies).toEqual([
       {
         kind: 'object',
@@ -303,6 +318,65 @@ describe('InMemoryWorkbookCommitStore root commits', () => {
       documentId: 'document-2',
       expectedDocumentId: NAMESPACE.documentId,
     });
+  });
+
+  it('rejects malformed persisted commit payload fields on read', async () => {
+    const objectStore = new InMemoryVersionObjectStore(NAMESPACE);
+    const commitStore = createInMemoryWorkbookCommitStore(objectStore);
+    const snapshotRoot = await objectRecord('workbook.snapshotRoot.v1', { sheets: [] });
+    const semanticChangeSet = await objectRecord('workbook.semanticChangeSet.v1', {
+      changes: [],
+    });
+    const validPayload = {
+      schemaVersion: 1,
+      documentId: NAMESPACE.documentId,
+      parentCommitIds: [],
+      snapshotRootDigest: snapshotRoot.digest,
+      semanticChangeSetDigest: semanticChangeSet.digest,
+      author: AUTHOR,
+      createdAt: '2026-06-20T00:00:00.000Z',
+      completenessDiagnostics: [],
+    };
+    const invalidPayloads = [
+      ['author', { ...validPayload, author: 'user-1' }],
+      ['createdAt', { ...validPayload, createdAt: 123 }],
+      [
+        'completenessDiagnostics',
+        {
+          ...validPayload,
+          completenessDiagnostics: [{ code: 'incomplete', severity: 'fatal', message: 'bad' }],
+        },
+      ],
+      ['message', { ...validPayload, message: 'must be an annotation' }],
+    ] as const;
+
+    for (const [_label, payload] of invalidPayloads) {
+      const record = await createVersionObjectRecord(NAMESPACE, {
+        objectType: 'workbook.commit.v1',
+        schemaVersion: 1,
+        payloadEncoding: 'mog-canonical-json-v1',
+        dependencies: [
+          {
+            kind: 'object',
+            objectType: 'workbook.semanticChangeSet.v1',
+            digest: semanticChangeSet.digest,
+          },
+          {
+            kind: 'object',
+            objectType: 'workbook.snapshotRoot.v1',
+            digest: snapshotRoot.digest,
+          },
+        ],
+        payload,
+      });
+
+      const putResult = await objectStore.putObjects([snapshotRoot, semanticChangeSet, record]);
+      expect(putResult.status).toBe('success');
+
+      const read = await commitStore.readCommit(workbookCommitIdFromObjectDigest(record.digest));
+      expectReadFailed(read);
+      expect(read.diagnostics[0]).toMatchObject({ code: 'VERSION_INVALID_COMMIT_PAYLOAD' });
+    }
   });
 
   it('changes the commit digest when authored payload changes', async () => {

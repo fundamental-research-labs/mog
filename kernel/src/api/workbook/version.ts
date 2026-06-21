@@ -1,33 +1,67 @@
 import type {
+  RedactedVersionAuthor,
+  VersionBranchRefReadResult,
+  VersionCommitPage,
+  VersionDegradedHeadResult,
+  VersionDiagnosticPublicPayload,
+  VersionGetHeadOptions,
+  VersionListCommitsOptions,
+  VersionMainRefName,
+  VersionRecordRevision,
+  VersionRef,
+  VersionRefName,
+  VersionRefReadResult,
+  VersionRefSelector,
+  VersionStoreDiagnostic,
+  VersionSymbolicRef,
+  VersionSymbolicRefReadResult,
+  WorkbookCommitId,
+  WorkbookCommitRef,
+  WorkbookCommitSummary,
   WorkbookVersion,
   WorkbookVersionCapabilityStatus,
   WorkbookVersionDiagnostic,
   WorkbookVersionHead,
-  WorkbookVersionHeadStatus,
   WorkbookVersionRolloutStage,
   WorkbookVersionStatus,
 } from '@mog-sdk/contracts/api';
 
 import { observeMutationAdmission } from '../../bridges/compute/mutation-admission';
 import type { DocumentContext } from '../../context';
-import { REF_NAME_STORAGE_PREFIX } from '../../document/version-store/ref-name';
 import { VERSION_OBJECT_SCHEMA_VERSION } from '../../document/version-store/object-store';
+import { REF_NAME_STORAGE_PREFIX } from '../../document/version-store/ref-name';
 
-type AttachedVersionHeadService = {
-  getHead(): Promise<WorkbookVersionHead | WorkbookVersionHeadStatus | null>;
+const VERSION_HEAD_REF = 'HEAD';
+const VERSION_MAIN_REF = 'refs/heads/main' satisfies VersionMainRefName;
+const WORKBOOK_COMMIT_ID_RE = /^commit:sha256:[0-9a-f]{64}$/;
+const VERSION_LIST_COMMITS_DEFAULT_PAGE_SIZE = 50;
+const VERSION_LIST_COMMITS_MAX_PAGE_SIZE = 500;
+
+type MaybePromise<T> = T | Promise<T>;
+
+type BoundMethod = (...args: readonly unknown[]) => MaybePromise<unknown>;
+
+type AttachedVersionReadService = {
+  readHead?: () => MaybePromise<unknown>;
+  getHead?: () => MaybePromise<unknown>;
+  readRef?: (name: string) => MaybePromise<unknown>;
+  listCommits?: (options?: { readonly pageSize?: number }) => MaybePromise<unknown>;
 };
 
-type AttachedVersionServices = {
+type AttachedVersionServices = AttachedVersionReadService & {
   readonly objectStore?: unknown;
   readonly refStore?: unknown;
-  readonly headService?: AttachedVersionHeadService;
-  readonly getHead?: AttachedVersionHeadService['getHead'];
+  readonly graphStore?: unknown;
+  readonly graphService?: unknown;
+  readonly graph?: unknown;
+  readonly readService?: unknown;
+  readonly headService?: unknown;
 };
 
 type MaybeVersionRuntimeContext = DocumentContext & {
-  readonly versioning?: AttachedVersionServices;
-  readonly versionStore?: AttachedVersionServices;
-  readonly version?: AttachedVersionServices;
+  readonly versioning?: unknown;
+  readonly versionStore?: unknown;
+  readonly version?: unknown;
 };
 
 function diagnostic(
@@ -62,53 +96,56 @@ function capability(
 
 function getAttachedVersionServices(ctx: DocumentContext): AttachedVersionServices | null {
   const runtime = ctx as MaybeVersionRuntimeContext;
-  return runtime.versioning ?? runtime.versionStore ?? runtime.version ?? null;
+  const services = runtime.versioning ?? runtime.versionStore ?? runtime.version ?? null;
+  return isRecord(services) ? (services as AttachedVersionServices) : null;
 }
 
-function getHeadReader(
-  services: AttachedVersionServices | null,
-): AttachedVersionHeadService['getHead'] | null {
-  if (services?.headService?.getHead) {
-    return services.headService.getHead.bind(services.headService);
+function getAttachedVersionReadService(ctx: DocumentContext): AttachedVersionReadService | null {
+  const services = getAttachedVersionServices(ctx);
+  if (!services) return null;
+
+  for (const candidate of [
+    services.graphStore,
+    services.graphService,
+    services.graph,
+    services.readService,
+    services.headService,
+    services,
+  ]) {
+    const readService = toReadService(candidate);
+    if (readService) return readService;
   }
-  if (services?.getHead) {
-    return services.getHead.bind(services);
-  }
+
   return null;
+}
+
+function toReadService(value: unknown): AttachedVersionReadService | null {
+  const readHead = bindMethod(value, 'readHead');
+  const getHead = bindMethod(value, 'getHead');
+  const readRef = bindMethod(value, 'readRef');
+  const listCommits = bindMethod(value, 'listCommits');
+
+  if (!readHead && !getHead && !readRef && !listCommits) return null;
+
+  const service: AttachedVersionReadService = {};
+  if (readHead) service.readHead = () => readHead();
+  if (getHead) service.getHead = () => getHead();
+  if (readRef) service.readRef = (name) => readRef(name);
+  if (listCommits) {
+    service.listCommits = (options) => listCommits(options);
+  }
+  return service;
+}
+
+function bindMethod(value: unknown, name: string): BoundMethod | null {
+  if (!isRecord(value)) return null;
+  const method = value[name];
+  if (typeof method !== 'function') return null;
+  return (...args) => Reflect.apply(method, value, args) as MaybePromise<unknown>;
 }
 
 function getRolloutStage(provenanceAdmissionPresent: boolean): WorkbookVersionRolloutStage {
   return provenanceAdmissionPresent ? 'shadow-only' : 'disabled';
-}
-
-function normalizeHeadResult(
-  result: WorkbookVersionHead | WorkbookVersionHeadStatus | null,
-  rolloutStage: WorkbookVersionRolloutStage,
-): WorkbookVersionHeadStatus {
-  if (result === null) {
-    return {
-      schemaVersion: 1,
-      rolloutStage,
-      head: null,
-      diagnostics: [],
-    };
-  }
-
-  if ('head' in result) {
-    return {
-      schemaVersion: 1,
-      rolloutStage: result.rolloutStage,
-      head: result.head,
-      diagnostics: result.diagnostics,
-    };
-  }
-
-  return {
-    schemaVersion: 1,
-    rolloutStage,
-    head: result,
-    diagnostics: [],
-  };
 }
 
 export class WorkbookVersionImpl implements WorkbookVersion {
@@ -208,28 +245,691 @@ export class WorkbookVersionImpl implements WorkbookVersion {
     };
   }
 
-  async getHead(): Promise<WorkbookVersionHeadStatus> {
-    const provenanceAdmissionPresent = typeof observeMutationAdmission === 'function';
-    const rolloutStage = getRolloutStage(provenanceAdmissionPresent);
-    const services = getAttachedVersionServices(this.ctx);
-    const getHead = getHeadReader(services);
-
-    if (!getHead) {
-      return {
-        schemaVersion: 1,
-        rolloutStage,
-        head: null,
-        diagnostics: [
-          diagnostic(
-            'version.head.serviceUnavailable',
-            'warning',
-            'No commit/ref head service is attached yet; no commit history is fabricated.',
-            'version-service',
-          ),
-        ],
-      };
+  async getHead(): Promise<WorkbookCommitRef | VersionDegradedHeadResult>;
+  async getHead(
+    options: VersionGetHeadOptions,
+  ): Promise<WorkbookCommitRef | VersionDegradedHeadResult>;
+  async getHead(
+    _options: VersionGetHeadOptions = {},
+  ): Promise<WorkbookCommitRef | VersionDegradedHeadResult> {
+    const readService = getAttachedVersionReadService(this.ctx);
+    if (!readService) {
+      return degradedHead([serviceUnavailableDiagnostic('getHead')]);
     }
 
-    return normalizeHeadResult(await getHead(), rolloutStage);
+    try {
+      if (readService.readHead) {
+        return mapHeadResult(await readService.readHead());
+      }
+      if (readService.getHead) {
+        return mapLegacyHeadResult(await readService.getHead());
+      }
+    } catch {
+      return degradedHead([providerErrorDiagnostic('getHead')]);
+    }
+
+    return degradedHead([serviceUnavailableDiagnostic('getHead')]);
   }
+
+  async listCommits(options: VersionListCommitsOptions = {}): Promise<VersionCommitPage> {
+    const optionDiagnostics = validateListCommitsOptions(options);
+    if (optionDiagnostics.length > 0) {
+      return degradedCommitPage(optionDiagnostics);
+    }
+
+    const readService = getAttachedVersionReadService(this.ctx);
+    if (!readService?.listCommits) {
+      return degradedCommitPage([serviceUnavailableDiagnostic('listCommits')]);
+    }
+
+    try {
+      const result = await readService.listCommits({ pageSize: options.pageSize });
+      return mapCommitPageResult(result);
+    } catch {
+      return degradedCommitPage([providerErrorDiagnostic('listCommits')]);
+    }
+  }
+
+  async readRef(name: 'HEAD'): Promise<VersionSymbolicRefReadResult>;
+  async readRef(name: VersionMainRefName | VersionRefName): Promise<VersionBranchRefReadResult>;
+  async readRef(name: VersionRefSelector): Promise<VersionRefReadResult>;
+  async readRef(name: VersionRefSelector): Promise<VersionRefReadResult> {
+    const optionDiagnostics = validateReadRefName(name);
+    if (optionDiagnostics.length > 0) {
+      return degradedRef(null, optionDiagnostics);
+    }
+
+    const readService = getAttachedVersionReadService(this.ctx);
+    if (!readService?.readRef) {
+      return degradedRef(null, [serviceUnavailableDiagnostic('readRef', { refName: name })]);
+    }
+
+    try {
+      return mapRefResult(await readService.readRef(name), name);
+    } catch {
+      return degradedRef(null, [providerErrorDiagnostic('readRef', { refName: name })]);
+    }
+  }
+}
+
+function validateListCommitsOptions(
+  options: VersionListCommitsOptions,
+): readonly VersionStoreDiagnostic[] {
+  const diagnostics: VersionStoreDiagnostic[] = [];
+  const pageSize = options.pageSize ?? VERSION_LIST_COMMITS_DEFAULT_PAGE_SIZE;
+
+  if (
+    !Number.isInteger(pageSize) ||
+    pageSize < 1 ||
+    pageSize > VERSION_LIST_COMMITS_MAX_PAGE_SIZE
+  ) {
+    diagnostics.push(
+      publicDiagnostic(
+        'VERSION_INVALID_OPTIONS',
+        'listCommits',
+        'listCommits pageSize must be an integer from 1 through 500.',
+        {
+          severity: 'error',
+          recoverability: 'none',
+          payload: {
+            option: 'pageSize',
+            min: 1,
+            max: VERSION_LIST_COMMITS_MAX_PAGE_SIZE,
+            receivedPageSize: formatPrimitiveForPayload(pageSize),
+          },
+        },
+      ),
+    );
+  }
+
+  if (options.pageToken !== undefined) {
+    diagnostics.push(
+      publicDiagnostic(
+        'VERSION_STALE_PAGE_CURSOR',
+        'listCommits',
+        'listCommits page tokens are not supported by this version graph read slice.',
+        {
+          severity: 'error',
+          recoverability: 'unsupported',
+          payload: { option: 'pageToken', pageTokenUnsupported: true },
+        },
+      ),
+    );
+  }
+
+  if (
+    options.ref !== undefined &&
+    options.ref !== VERSION_HEAD_REF &&
+    options.ref !== VERSION_MAIN_REF
+  ) {
+    diagnostics.push(
+      publicDiagnostic(
+        'VERSION_PERMISSION_DENIED',
+        'listCommits',
+        'This version read slice can list commits only from HEAD or refs/heads/main.',
+        {
+          severity: 'error',
+          recoverability: 'unsupported',
+          payload: { option: 'ref' },
+        },
+      ),
+    );
+  }
+
+  if (options.from !== undefined) {
+    diagnostics.push(
+      publicDiagnostic(
+        'VERSION_INVALID_OPTIONS',
+        'listCommits',
+        'listCommits from-root traversal is pending a later graph pagination slice.',
+        {
+          severity: 'error',
+          recoverability: 'unsupported',
+          payload: { option: 'from' },
+        },
+      ),
+    );
+  }
+
+  if (options.includeOrphans === true) {
+    diagnostics.push(
+      publicDiagnostic(
+        'VERSION_PERMISSION_DENIED',
+        'listCommits',
+        'Orphan commit listing requires diagnostics support that is not exposed by this slice.',
+        {
+          severity: 'error',
+          recoverability: 'unsupported',
+          payload: { option: 'includeOrphans' },
+        },
+      ),
+    );
+  }
+
+  return diagnostics;
+}
+
+function validateReadRefName(name: VersionRefSelector): readonly VersionStoreDiagnostic[] {
+  if (name === VERSION_HEAD_REF || name === VERSION_MAIN_REF) return [];
+
+  return [
+    publicDiagnostic(
+      'VERSION_PERMISSION_DENIED',
+      'readRef',
+      'This version read slice can read only HEAD or refs/heads/main.',
+      {
+        severity: 'error',
+        recoverability: 'unsupported',
+        payload: { refName: 'redacted' },
+      },
+    ),
+  ];
+}
+
+function mapHeadResult(value: unknown): WorkbookCommitRef | VersionDegradedHeadResult {
+  if (!isRecord(value)) {
+    return degradedHead([providerErrorDiagnostic('getHead')]);
+  }
+
+  if (value.status === 'success') {
+    const head = mapCommitRef(value.head);
+    if (head) return head;
+    return degradedHead([
+      publicDiagnostic(
+        'VERSION_INVALID_COMMIT_PAYLOAD',
+        'getHead',
+        'The version graph head result did not contain a valid public commit ref.',
+        { severity: 'error', recoverability: 'repair' },
+      ),
+    ]);
+  }
+
+  if (value.status === 'degraded' || value.status === 'failed') {
+    const ref = mapRef(value.ref) ?? mapRef(value.main);
+    return degradedHead(mapGraphDiagnostics(value.diagnostics, 'getHead'), ref ?? undefined);
+  }
+
+  return mapLegacyHeadResult(value);
+}
+
+function mapLegacyHeadResult(value: unknown): WorkbookCommitRef | VersionDegradedHeadResult {
+  if (value === null) {
+    return degradedHead([graphUninitializedDiagnostic('getHead')]);
+  }
+
+  if (!isRecord(value)) {
+    return degradedHead([providerErrorDiagnostic('getHead')]);
+  }
+
+  if ('head' in value) {
+    const head = mapLegacyHead(value.head);
+    if (head) return head;
+    return degradedHead(mapGraphDiagnostics(value.diagnostics, 'getHead'));
+  }
+
+  const head = mapLegacyHead(value);
+  if (head) return head;
+  return degradedHead([providerErrorDiagnostic('getHead')]);
+}
+
+function mapLegacyHead(value: unknown): WorkbookCommitRef | null {
+  if (!isRecord(value)) return null;
+  const id = toCommitId(value.commitId);
+  if (!id) return null;
+  const refName = legacyBranchNameToRefName(value.branchName);
+  return {
+    id,
+    ...(refName ? { refName } : {}),
+    ...(refName ? { resolvedFrom: VERSION_HEAD_REF } : {}),
+  };
+}
+
+function mapCommitPageResult(value: unknown): VersionCommitPage {
+  if (!isRecord(value)) {
+    return degradedCommitPage([providerErrorDiagnostic('listCommits')]);
+  }
+
+  if (value.status === 'failed' || value.status === 'degraded') {
+    return degradedCommitPage(mapGraphDiagnostics(value.diagnostics, 'listCommits'));
+  }
+
+  if (value.status !== 'success') {
+    return degradedCommitPage([providerErrorDiagnostic('listCommits')]);
+  }
+
+  const readRevision = toRevision(value.readRevision);
+  const sourceItems = Array.isArray(value.commits)
+    ? value.commits
+    : Array.isArray(value.items)
+      ? value.items
+      : null;
+
+  if (!readRevision || !sourceItems) {
+    return degradedCommitPage([
+      publicDiagnostic(
+        'VERSION_INVALID_COMMIT_PAYLOAD',
+        'listCommits',
+        'The version graph commit page did not contain a valid public page shape.',
+        { severity: 'error', recoverability: 'repair' },
+      ),
+    ]);
+  }
+
+  const { items, diagnostics } = mapCommitSummaries(sourceItems);
+  if (diagnostics.length > 0) {
+    return {
+      status: 'degraded',
+      items,
+      readRevision,
+      order: 'topological-newest',
+      diagnostics,
+    };
+  }
+
+  return {
+    status: 'success',
+    items,
+    readRevision,
+    order: 'topological-newest',
+    diagnostics: [],
+  };
+}
+
+function mapRefResult(value: unknown, requestedName: VersionRefSelector): VersionRefReadResult {
+  if (!isRecord(value)) {
+    return degradedRef(null, [providerErrorDiagnostic('readRef', { refName: requestedName })]);
+  }
+
+  if (value.status === 'success') {
+    const ref = mapRef(value.ref);
+    if (ref) {
+      return { status: 'success', ref, diagnostics: [] } as VersionRefReadResult;
+    }
+    return degradedRef(null, [
+      publicDiagnostic(
+        'VERSION_INVALID_COMMIT_PAYLOAD',
+        'readRef',
+        'The version graph ref result did not contain a valid public ref.',
+        {
+          severity: 'error',
+          recoverability: 'repair',
+          payload: { refName: requestedName },
+        },
+      ),
+    ]);
+  }
+
+  if (value.status === 'degraded' || value.status === 'failed') {
+    return degradedRef(
+      mapRef(value.ref),
+      mapGraphDiagnostics(value.diagnostics, 'readRef', { refName: requestedName }),
+    );
+  }
+
+  return degradedRef(null, [providerErrorDiagnostic('readRef', { refName: requestedName })]);
+}
+
+function mapCommitRef(value: unknown): WorkbookCommitRef | null {
+  if (!isRecord(value)) return null;
+  const id = toCommitId(value.id);
+  if (!id) return null;
+
+  const refName = toRefName(value.refName);
+  const resolvedFrom = toRefSelector(value.resolvedFrom);
+  const refRevision = toRevision(value.refRevision);
+
+  return {
+    id,
+    ...(refName ? { refName } : {}),
+    ...(resolvedFrom ? { resolvedFrom } : {}),
+    ...(refRevision ? { refRevision } : {}),
+  };
+}
+
+function mapRef(value: unknown): VersionRef | VersionSymbolicRef | null {
+  if (!isRecord(value)) return null;
+
+  if (value.name === VERSION_HEAD_REF) {
+    const target = toRefName(value.target);
+    const revision = toRevision(value.revision);
+    if (!target || !revision) return null;
+    return { name: VERSION_HEAD_REF, target, revision };
+  }
+
+  const name = toRefName(value.name);
+  const commitId = toCommitId(value.commitId);
+  const revision = toRevision(value.revision);
+  if (!name || !commitId || !revision) return null;
+
+  return {
+    name,
+    commitId,
+    revision,
+    ...(typeof value.updatedAt === 'string' ? { updatedAt: value.updatedAt } : {}),
+  };
+}
+
+function mapCommitSummaries(values: readonly unknown[]): {
+  readonly items: readonly WorkbookCommitSummary[];
+  readonly diagnostics: readonly VersionStoreDiagnostic[];
+} {
+  const items: WorkbookCommitSummary[] = [];
+  const diagnostics: VersionStoreDiagnostic[] = [];
+
+  values.forEach((value, index) => {
+    const summary = mapCommitSummary(value);
+    if (summary) {
+      items.push(summary);
+      return;
+    }
+
+    diagnostics.push(
+      publicDiagnostic(
+        'VERSION_INVALID_COMMIT_PAYLOAD',
+        'listCommits',
+        'A version graph commit summary could not be safely projected.',
+        {
+          severity: 'error',
+          recoverability: 'repair',
+          payload: { itemIndex: index },
+        },
+      ),
+    );
+  });
+
+  return { items, diagnostics };
+}
+
+function mapCommitSummary(value: unknown): WorkbookCommitSummary | null {
+  if (!isRecord(value)) return null;
+
+  const id = toCommitId(value.id);
+  if (!id || typeof value.createdAt !== 'string') return null;
+
+  const parents = Array.isArray(value.parents)
+    ? value.parents.map(toCommitId).filter((parent): parent is WorkbookCommitId => Boolean(parent))
+    : null;
+  if (!parents || parents.length !== (value.parents as readonly unknown[]).length) return null;
+
+  return {
+    id,
+    parents,
+    createdAt: value.createdAt,
+    author: redactAuthor(value.author),
+  };
+}
+
+function redactAuthor(value: unknown): RedactedVersionAuthor {
+  if (!isRecord(value)) return { redacted: true };
+  return {
+    ...(typeof value.actorKind === 'string' ? { actorKind: value.actorKind } : {}),
+    ...(typeof value.displayName === 'string' ? { displayName: value.displayName } : {}),
+    redacted: true,
+  };
+}
+
+function mapGraphDiagnostics(
+  value: unknown,
+  operation: 'getHead' | 'listCommits' | 'readRef',
+  fallbackPayload: VersionDiagnosticPublicPayload = {},
+): readonly VersionStoreDiagnostic[] {
+  if (!Array.isArray(value) || value.length === 0) {
+    return [graphUninitializedDiagnostic(operation, fallbackPayload)];
+  }
+
+  return value.map((diagnosticValue) =>
+    mapGraphDiagnostic(diagnosticValue, operation, fallbackPayload),
+  );
+}
+
+function mapGraphDiagnostic(
+  value: unknown,
+  operation: 'getHead' | 'listCommits' | 'readRef',
+  fallbackPayload: VersionDiagnosticPublicPayload,
+): VersionStoreDiagnostic {
+  if (!isRecord(value)) {
+    return providerErrorDiagnostic(operation, fallbackPayload);
+  }
+
+  const issueCode = typeof value.code === 'string' ? value.code : 'VERSION_PROVIDER_ERROR';
+  const severity = value.severity === 'corruption' ? 'error' : value.severity;
+
+  return publicDiagnostic(issueCode, operation, safeMessageForIssue(issueCode, operation), {
+    severity:
+      severity === 'info' || severity === 'warning' || severity === 'error' || severity === 'fatal'
+        ? severity
+        : 'error',
+    recoverability: recoverabilityForIssue(issueCode),
+    payload: sanitizeDiagnosticPayload(value, operation, fallbackPayload),
+  });
+}
+
+function sanitizeDiagnosticPayload(
+  value: Readonly<Record<string, unknown>>,
+  operation: 'getHead' | 'listCommits' | 'readRef',
+  fallbackPayload: VersionDiagnosticPublicPayload,
+): VersionDiagnosticPublicPayload {
+  const payload: Record<string, string | number | boolean | null> = {
+    operation,
+    ...fallbackPayload,
+  };
+
+  if (typeof value.operation === 'string') payload.operation = value.operation;
+  if (typeof value.option === 'string') payload.option = value.option;
+  const refName = value.refName;
+  if (refName === VERSION_HEAD_REF || refName === VERSION_MAIN_REF) {
+    payload.refName = refName;
+  }
+
+  const details = isRecord(value.details) ? value.details : null;
+  if (details) {
+    for (const key of [
+      'min',
+      'max',
+      'pageSize',
+      'receivedPageSize',
+      'pageTokenUnsupported',
+    ] as const) {
+      const detailValue = details[key];
+      if (isPayloadPrimitive(detailValue)) payload[key] = detailValue;
+    }
+  }
+
+  return payload;
+}
+
+function serviceUnavailableDiagnostic(
+  operation: 'getHead' | 'listCommits' | 'readRef',
+  payload: VersionDiagnosticPublicPayload = {},
+): VersionStoreDiagnostic {
+  return publicDiagnostic(
+    'VERSION_GRAPH_UNINITIALIZED',
+    operation,
+    'No document-scoped version graph read service is attached; no commit history is fabricated.',
+    {
+      severity: 'warning',
+      recoverability: 'unsupported',
+      payload,
+    },
+  );
+}
+
+function graphUninitializedDiagnostic(
+  operation: 'getHead' | 'listCommits' | 'readRef',
+  payload: VersionDiagnosticPublicPayload = {},
+): VersionStoreDiagnostic {
+  return publicDiagnostic(
+    'VERSION_GRAPH_UNINITIALIZED',
+    operation,
+    'The workbook version graph is not initialized for this document.',
+    {
+      severity: 'warning',
+      recoverability: 'unsupported',
+      payload,
+    },
+  );
+}
+
+function providerErrorDiagnostic(
+  operation: 'getHead' | 'listCommits' | 'readRef',
+  payload: VersionDiagnosticPublicPayload = {},
+): VersionStoreDiagnostic {
+  return publicDiagnostic(
+    'VERSION_PROVIDER_ERROR',
+    operation,
+    'The version graph read service failed before returning a usable public result.',
+    {
+      severity: 'error',
+      recoverability: 'retry',
+      payload,
+    },
+  );
+}
+
+function publicDiagnostic(
+  issueCode: string,
+  operation: 'getHead' | 'listCommits' | 'readRef',
+  safeMessage: string,
+  options: {
+    readonly severity?: VersionStoreDiagnostic['severity'];
+    readonly recoverability?: VersionStoreDiagnostic['recoverability'];
+    readonly payload?: VersionDiagnosticPublicPayload;
+  } = {},
+): VersionStoreDiagnostic {
+  return {
+    issueCode,
+    severity: options.severity ?? 'error',
+    recoverability: options.recoverability ?? recoverabilityForIssue(issueCode),
+    messageTemplateId: `version.${operation}.${issueCode}`,
+    safeMessage,
+    ...(options.payload ? { payload: options.payload } : {}),
+    redacted: true,
+  };
+}
+
+function safeMessageForIssue(
+  issueCode: string,
+  operation: 'getHead' | 'listCommits' | 'readRef',
+): string {
+  switch (issueCode) {
+    case 'VERSION_GRAPH_UNINITIALIZED':
+      return 'The workbook version graph is not initialized for this document.';
+    case 'VERSION_STALE_PAGE_CURSOR':
+      return 'The version page token is stale or unsupported by this read slice.';
+    case 'VERSION_UNSUPPORTED_PAGE_TOKEN':
+      return 'The version graph cannot serve a follow-up page token in this slice.';
+    case 'VERSION_INVALID_OPTIONS':
+      return 'The version read options are invalid for this method.';
+    case 'VERSION_PERMISSION_DENIED':
+      return 'The requested version read is not exposed by this public slice.';
+    case 'VERSION_DANGLING_REF':
+    case 'VERSION_MISSING_OBJECT':
+    case 'VERSION_OBJECT_STORE_FAILURE':
+      return 'The version graph could not validate the requested commit closure.';
+    case 'VERSION_REF_CONFLICT':
+      return 'The version ref changed while the read was in progress.';
+    default:
+      return `The version graph could not complete ${operation}.`;
+  }
+}
+
+function recoverabilityForIssue(issueCode: string): VersionStoreDiagnostic['recoverability'] {
+  switch (issueCode) {
+    case 'VERSION_STALE_PAGE_CURSOR':
+    case 'VERSION_REF_CONFLICT':
+      return 'retry';
+    case 'VERSION_DANGLING_REF':
+    case 'VERSION_MISSING_OBJECT':
+    case 'VERSION_OBJECT_STORE_FAILURE':
+      return 'repair';
+    case 'VERSION_GRAPH_UNINITIALIZED':
+    case 'VERSION_UNSUPPORTED_PAGE_TOKEN':
+    case 'VERSION_PERMISSION_DENIED':
+      return 'unsupported';
+    default:
+      return 'none';
+  }
+}
+
+function degradedHead(
+  diagnostics: readonly VersionStoreDiagnostic[],
+  ref?: VersionRef | VersionSymbolicRef,
+): VersionDegradedHeadResult {
+  return {
+    status: 'degraded',
+    ...(ref ? { ref } : {}),
+    diagnostics,
+  };
+}
+
+function degradedCommitPage(diagnostics: readonly VersionStoreDiagnostic[]): VersionCommitPage {
+  return {
+    status: 'degraded',
+    items: [],
+    order: 'topological-newest',
+    diagnostics,
+  };
+}
+
+function degradedRef(
+  ref: VersionRef | VersionSymbolicRef | null,
+  diagnostics: readonly VersionStoreDiagnostic[],
+): VersionRefReadResult {
+  return {
+    status: 'degraded',
+    ref,
+    diagnostics,
+  };
+}
+
+function toCommitId(value: unknown): WorkbookCommitId | null {
+  return typeof value === 'string' && WORKBOOK_COMMIT_ID_RE.test(value)
+    ? (value as WorkbookCommitId)
+    : null;
+}
+
+function toRevision(value: unknown): VersionRecordRevision | undefined {
+  if (isRecord(value) && value.kind === 'counter' && typeof value.value === 'string') {
+    return { kind: 'counter', value: value.value };
+  }
+  if (isRecord(value) && value.kind === 'opaque' && typeof value.value === 'string') {
+    return { kind: 'opaque', value: value.value };
+  }
+  if (typeof value === 'string') return { kind: 'opaque', value };
+  return undefined;
+}
+
+function toRefSelector(value: unknown): VersionRefSelector | undefined {
+  if (value === VERSION_HEAD_REF) return VERSION_HEAD_REF;
+  return toRefName(value);
+}
+
+function toRefName(value: unknown): VersionMainRefName | VersionRefName | undefined {
+  if (value === VERSION_MAIN_REF) return VERSION_MAIN_REF;
+  if (typeof value === 'string' && value.startsWith('refs/heads/')) {
+    return value as VersionRefName;
+  }
+  return undefined;
+}
+
+function legacyBranchNameToRefName(
+  value: unknown,
+): VersionMainRefName | VersionRefName | undefined {
+  if (value === undefined) return undefined;
+  if (value === 'main') return VERSION_MAIN_REF;
+  if (typeof value === 'string' && value.startsWith('refs/heads/')) return value as VersionRefName;
+  if (typeof value === 'string' && value.length > 0) return `refs/heads/${value}` as VersionRefName;
+  return undefined;
+}
+
+function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
+  return typeof value === 'object' && value !== null;
+}
+
+function isPayloadPrimitive(value: unknown): value is string | number | boolean | null {
+  return value === null || ['string', 'number', 'boolean'].includes(typeof value);
+}
+
+function formatPrimitiveForPayload(value: unknown): string | number | boolean | null {
+  return isPayloadPrimitive(value) ? value : String(value);
 }

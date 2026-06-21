@@ -41,6 +41,9 @@ function createMockCtx(overrides?: {
   const changes = overrides?.floatingObjectChanges ?? [];
   const mutationResult = { floatingObjectChanges: changes };
   return {
+    clock: {
+      now: jest.fn(() => 1_700_000_000_000),
+    },
     computeBridge: {
       createShape: jest.fn().mockResolvedValue(mutationResult),
       deleteFloatingObject: jest.fn().mockResolvedValue({}),
@@ -67,7 +70,34 @@ function createMockCtx(overrides?: {
       rotateFloatingObjectTyped: jest.fn().mockResolvedValue(mutationResult),
       duplicateFloatingObjectTyped: jest.fn().mockResolvedValue(mutationResult),
     },
+    workbookLinkScope: jest.fn(() => ({
+      actor: 'user-1',
+      requestingDocumentId: 'workbook-1',
+      requestingSessionId: 'session-1',
+    })),
   } as any;
+}
+
+function expectShapeAdmissionOptions(operationIdPrefix: string, groupId?: string) {
+  return expect.objectContaining({
+    operationContext: expect.objectContaining({
+      operationId: expect.stringMatching(
+        new RegExp(`^${operationIdPrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}:`),
+      ),
+      kind: 'mutation',
+      sheetIds: [SHEET_ID],
+      domainIds: ['floating-objects.anchors'],
+      capturePolicy: 'commitEligible',
+      writeAdmissionMode: 'capture',
+      ...(groupId ? { groupId } : {}),
+    }),
+  });
+}
+
+function lastCallArg(mock: jest.Mock, indexFromEnd = 0): unknown {
+  const call = mock.mock.calls.at(-1);
+  if (!call) return undefined;
+  return call[call.length - 1 - indexFromEnd];
 }
 
 // =============================================================================
@@ -96,6 +126,11 @@ describe('createShape — receipt construction', () => {
       height: 150,
     });
 
+    expect(ctx.computeBridge.createShape).toHaveBeenCalledWith(
+      SHEET_ID,
+      expect.objectContaining({ shapeType: 'rect' }),
+      expectShapeAdmissionOptions('shapes.create'),
+    );
     expect(receipt.domain).toBe('floatingObject');
     expect(receipt.action).toBe('create');
   });
@@ -273,10 +308,15 @@ describe('updateShape — receipt construction', () => {
 
     const receipt = await updateShape(ctx, SHEET_ID, 'shape-1', { width: 240 });
 
-    expect(ctx.computeBridge.resizeFloatingObjectTyped).toHaveBeenCalledWith(SHEET_ID, 'shape-1', {
-      width: 240,
-      height: 80,
-    });
+    expect(ctx.computeBridge.resizeFloatingObjectTyped).toHaveBeenCalledWith(
+      SHEET_ID,
+      'shape-1',
+      {
+        width: 240,
+        height: 80,
+      },
+      expectShapeAdmissionOptions('shapes.update'),
+    );
     expect(receipt.status).toBe('applied');
   });
 
@@ -345,13 +385,66 @@ describe('updateShape — receipt construction', () => {
 
     await updateShape(ctx, SHEET_ID, 'shape-1', { anchorRow: 8, yOffset: 12 });
 
-    expect(ctx.computeBridge.moveFloatingObjectTyped).toHaveBeenCalledWith(SHEET_ID, 'shape-1', {
-      type: 'absolute',
-      anchorRow: 8,
-      anchorCol: 4,
-      xOffset: 1,
-      yOffset: 12,
+    expect(ctx.computeBridge.moveFloatingObjectTyped).toHaveBeenCalledWith(
+      SHEET_ID,
+      'shape-1',
+      {
+        type: 'absolute',
+        anchorRow: 8,
+        anchorCol: 4,
+        xOffset: 1,
+        yOffset: 12,
+      },
+      expectShapeAdmissionOptions('shapes.update'),
+    );
+  });
+
+  it('uses one grouped operation context for multi-step shape updates', async () => {
+    const ctx = createMockCtx({
+      floatingObjectChanges: [
+        {
+          objectId: 'shape-1',
+          kind: { type: 'updated' },
+          data: { id: 'shape-1', type: 'shape', shapeType: 'rect' },
+          bounds: { x: 0, y: 0, width: 240, height: 80, rotation: 30 },
+        },
+      ],
+      currentWire: {
+        id: 'shape-1',
+        type: 'shape',
+        sheetId: SHEET_ID,
+        anchor: {
+          anchorRow: 3,
+          anchorCol: 4,
+          anchorRowOffsetEmu: 0,
+          anchorColOffsetEmu: 0,
+          anchorMode: 'oneCell',
+        },
+        width: 120,
+        height: 80,
+      },
     });
+
+    await updateShape(ctx, SHEET_ID, 'shape-1', {
+      fill: { type: 'solid', color: '#ff0000' } as any,
+      name: 'Updated',
+      width: 240,
+      anchorRow: 8,
+      rotation: 30,
+    });
+
+    const options = [
+      lastCallArg(ctx.computeBridge.updateShapeStyle),
+      lastCallArg(ctx.computeBridge.updateFloatingObject),
+      lastCallArg(ctx.computeBridge.resizeFloatingObjectTyped),
+      lastCallArg(ctx.computeBridge.moveFloatingObjectTyped),
+      lastCallArg(ctx.computeBridge.rotateFloatingObjectTyped),
+    ] as Array<{ operationContext: { groupId?: string } }>;
+    const groupId = options[0].operationContext.groupId;
+
+    for (const option of options) {
+      expect(option).toEqual(expectShapeAdmissionOptions('shapes.update', groupId));
+    }
   });
 });
 

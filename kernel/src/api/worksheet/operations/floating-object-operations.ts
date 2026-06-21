@@ -24,6 +24,7 @@ import type { FloatingObject, PictureObject } from '@mog-sdk/contracts/floating-
 
 import type { ObjectBounds } from '@mog-sdk/contracts/kernel';
 import type { SheetId } from '@mog-sdk/contracts/core';
+import type { VersionOperationContext } from '@mog-sdk/contracts/versioning';
 import type {
   FloatingObjectAnchor,
   FloatingObjectChange,
@@ -34,7 +35,9 @@ import {
   createMinimalFloatingObject,
 } from '../../../bridges/compute/floating-object-mapper';
 import { objectNotFound, operationFailed } from '../../../errors/api';
+import type { MutationAdmissionOptions } from '../../../bridges/compute';
 import type { ComputeBridge } from '../../../bridges/compute/compute-bridge';
+import { createVersionOperationContext } from '../../internal/version-operation-context';
 import {
   withFloatingObjectMutationReceiptBase,
   withFloatingObjectRemoveReceiptBase,
@@ -60,6 +63,70 @@ const API_FLOATING_OBJECT_TYPES: ReadonlySet<string> = new Set([
   'formControl',
   'slicer',
 ]);
+
+type FloatingObjectMutationOptions = MutationAdmissionOptions & {
+  readonly operationContext: VersionOperationContext;
+};
+
+const FLOATING_OBJECT_ANCHOR_DOMAIN_IDS = ['floating-objects.anchors'] as const;
+
+function uniqueSheetIds(sheetIds: SheetId | readonly SheetId[]): SheetId[] {
+  const ids = Array.isArray(sheetIds) ? sheetIds : [sheetIds];
+  return [...new Set(ids)];
+}
+
+function createFloatingObjectMutationOptions(
+  ctx: DocumentContext,
+  operationIdPrefix: string,
+  sheetIds: SheetId | readonly SheetId[],
+  groupId?: string,
+  options?: MutationAdmissionOptions,
+): FloatingObjectMutationOptions {
+  return {
+    ...options,
+    operationContext: createVersionOperationContext(ctx, {
+      operationIdPrefix,
+      sheetIds: uniqueSheetIds(sheetIds),
+      domainIds: FLOATING_OBJECT_ANCHOR_DOMAIN_IDS,
+      ...(groupId ? { groupId } : {}),
+    }),
+  };
+}
+
+function floatingObjectOptions(
+  ctx: DocumentContext,
+  operationIdPrefix: string,
+  sheetIds: SheetId | readonly SheetId[],
+  options?: MutationAdmissionOptions,
+): FloatingObjectMutationOptions {
+  return createFloatingObjectMutationOptions(ctx, operationIdPrefix, sheetIds, undefined, options);
+}
+
+function createGroupedFloatingObjectMutationOptions(
+  ctx: DocumentContext,
+  operationIdPrefix: string,
+  sheetIds: SheetId | readonly SheetId[],
+  options?: MutationAdmissionOptions,
+): () => FloatingObjectMutationOptions {
+  let groupId: string | undefined = options?.operationContext?.groupId;
+  return () => {
+    const mutationOptions = createFloatingObjectMutationOptions(
+      ctx,
+      operationIdPrefix,
+      sheetIds,
+      groupId,
+      options,
+    );
+    groupId = mutationOptions.operationContext.groupId ?? mutationOptions.operationContext.operationId;
+    return {
+      ...mutationOptions,
+      operationContext: {
+        ...mutationOptions.operationContext,
+        groupId,
+      },
+    };
+  };
+}
 
 /**
  * Convert an internal FloatingObject to the API FloatingObjectInfo format.
@@ -167,9 +234,11 @@ export async function deleteFloatingObject(
   ctx: DocumentContext,
   sheetId: SheetId,
   objectId: string,
+  admissionOptions?: MutationAdmissionOptions,
 ): Promise<FloatingObjectRemoveReceipt> {
   await requireObject(ctx.computeBridge, sheetId, objectId);
-  await ctx.computeBridge.deleteFloatingObject(sheetId, objectId);
+  const options = floatingObjectOptions(ctx, 'floatingObjects.delete', sheetId, admissionOptions);
+  await ctx.computeBridge.deleteFloatingObject(sheetId, objectId, options);
   return withFloatingObjectRemoveReceiptBase(
     { domain: 'floatingObject', action: 'remove', id: objectId },
     sheetId,
@@ -188,13 +257,16 @@ export async function moveFloatingObject(
   objectId: string,
   x: number,
   y: number,
+  admissionOptions?: MutationAdmissionOptions,
 ): Promise<FloatingObjectMutationReceipt> {
   await requireObject(ctx.computeBridge, sheetId, objectId);
-  await ctx.computeBridge.moveFloatingObjectTyped(sheetId, objectId, {
-    type: 'delta',
-    dx: x,
-    dy: y,
-  });
+  const options = floatingObjectOptions(ctx, 'floatingObjects.move', sheetId, admissionOptions);
+  await ctx.computeBridge.moveFloatingObjectTyped(
+    sheetId,
+    objectId,
+    { type: 'delta', dx: x, dy: y },
+    options,
+  );
   return buildMutationReceipt(ctx.computeBridge, sheetId, objectId, 'update');
 }
 
@@ -210,9 +282,11 @@ export async function resizeFloatingObject(
   objectId: string,
   width: number,
   height: number,
+  admissionOptions?: MutationAdmissionOptions,
 ): Promise<FloatingObjectMutationReceipt> {
   await requireObject(ctx.computeBridge, sheetId, objectId);
-  await ctx.computeBridge.resizeFloatingObjectTyped(sheetId, objectId, { width, height });
+  const options = floatingObjectOptions(ctx, 'floatingObjects.resize', sheetId, admissionOptions);
+  await ctx.computeBridge.resizeFloatingObjectTyped(sheetId, objectId, { width, height }, options);
   return buildMutationReceipt(ctx.computeBridge, sheetId, objectId, 'update');
 }
 
@@ -225,9 +299,11 @@ export async function rotateFloatingObject(
   sheetId: SheetId,
   objectId: string,
   angle: number,
+  admissionOptions?: MutationAdmissionOptions,
 ): Promise<void> {
   await requireObject(ctx.computeBridge, sheetId, objectId);
-  await ctx.computeBridge.rotateFloatingObjectTyped(sheetId, objectId, angle);
+  const options = floatingObjectOptions(ctx, 'floatingObjects.rotate', sheetId, admissionOptions);
+  await ctx.computeBridge.rotateFloatingObjectTyped(sheetId, objectId, angle, options);
 }
 
 /**
@@ -239,9 +315,11 @@ export async function flipFloatingObject(
   sheetId: SheetId,
   objectId: string,
   direction: 'horizontal' | 'vertical',
+  admissionOptions?: MutationAdmissionOptions,
 ): Promise<void> {
   await requireObject(ctx.computeBridge, sheetId, objectId);
-  await ctx.computeBridge.flipFloatingObjectTyped(sheetId, objectId, direction);
+  const options = floatingObjectOptions(ctx, 'floatingObjects.flip', sheetId, admissionOptions);
+  await ctx.computeBridge.flipFloatingObjectTyped(sheetId, objectId, direction, options);
 }
 
 /**
@@ -254,9 +332,22 @@ export async function duplicateFloatingObject(
   ctx: DocumentContext,
   sheetId: SheetId,
   objectId: string,
+  admissionOptions?: MutationAdmissionOptions,
 ): Promise<FloatingObjectMutationReceipt> {
   await requireObject(ctx.computeBridge, sheetId, objectId);
-  const result = await ctx.computeBridge.duplicateFloatingObjectTyped(sheetId, objectId, 20, 20);
+  const options = floatingObjectOptions(
+    ctx,
+    'floatingObjects.duplicate',
+    sheetId,
+    admissionOptions,
+  );
+  const result = await ctx.computeBridge.duplicateFloatingObjectTyped(
+    sheetId,
+    objectId,
+    20,
+    20,
+    options,
+  );
   // The mutation result contains the new object ID in the floating object changes
   const newId = result.floatingObjectChanges?.[0]?.objectId;
   if (!newId) {
@@ -303,9 +394,11 @@ export async function updateFloatingObject(
   sheetId: SheetId,
   objectId: string,
   updates: Record<string, unknown>,
+  admissionOptions?: MutationAdmissionOptions,
 ): Promise<void> {
   await requireObject(ctx.computeBridge, sheetId, objectId);
-  await ctx.computeBridge.updateFloatingObject(sheetId, objectId, updates);
+  const options = floatingObjectOptions(ctx, 'floatingObjects.update', sheetId, admissionOptions);
+  await ctx.computeBridge.updateFloatingObject(sheetId, objectId, updates, options);
 }
 
 /**
@@ -316,11 +409,18 @@ export async function deleteManyFloatingObjects(
   ctx: DocumentContext,
   sheetId: SheetId,
   objectIds: string[],
+  admissionOptions?: MutationAdmissionOptions,
 ): Promise<number> {
   let count = 0;
+  const nextMutationOptions = createGroupedFloatingObjectMutationOptions(
+    ctx,
+    'floatingObjects.delete',
+    sheetId,
+    admissionOptions,
+  );
   for (const id of objectIds) {
     try {
-      await ctx.computeBridge.deleteFloatingObject(sheetId, id);
+      await ctx.computeBridge.deleteFloatingObject(sheetId, id, nextMutationOptions());
       count++;
     } catch {
       // Object may not exist; count only successful deletes
@@ -341,9 +441,11 @@ export async function bringToFront(
   ctx: DocumentContext,
   sheetId: SheetId,
   objectId: string,
+  admissionOptions?: MutationAdmissionOptions,
 ): Promise<void> {
   await requireObject(ctx.computeBridge, sheetId, objectId);
-  await ctx.computeBridge.bringFloatingObjectToFront(sheetId, objectId);
+  const options = floatingObjectOptions(ctx, 'floatingObjects.zOrder', sheetId, admissionOptions);
+  await ctx.computeBridge.bringFloatingObjectToFront(sheetId, objectId, options);
 }
 
 /**
@@ -354,9 +456,11 @@ export async function sendToBack(
   ctx: DocumentContext,
   sheetId: SheetId,
   objectId: string,
+  admissionOptions?: MutationAdmissionOptions,
 ): Promise<void> {
   await requireObject(ctx.computeBridge, sheetId, objectId);
-  await ctx.computeBridge.sendFloatingObjectToBack(sheetId, objectId);
+  const options = floatingObjectOptions(ctx, 'floatingObjects.zOrder', sheetId, admissionOptions);
+  await ctx.computeBridge.sendFloatingObjectToBack(sheetId, objectId, options);
 }
 
 /**
@@ -367,9 +471,11 @@ export async function bringForward(
   ctx: DocumentContext,
   sheetId: SheetId,
   objectId: string,
+  admissionOptions?: MutationAdmissionOptions,
 ): Promise<void> {
   await requireObject(ctx.computeBridge, sheetId, objectId);
-  await ctx.computeBridge.bringFloatingObjectForward(sheetId, objectId);
+  const options = floatingObjectOptions(ctx, 'floatingObjects.zOrder', sheetId, admissionOptions);
+  await ctx.computeBridge.bringFloatingObjectForward(sheetId, objectId, options);
 }
 
 /**
@@ -380,9 +486,11 @@ export async function sendBackward(
   ctx: DocumentContext,
   sheetId: SheetId,
   objectId: string,
+  admissionOptions?: MutationAdmissionOptions,
 ): Promise<void> {
   await requireObject(ctx.computeBridge, sheetId, objectId);
-  await ctx.computeBridge.sendFloatingObjectBackward(sheetId, objectId);
+  const options = floatingObjectOptions(ctx, 'floatingObjects.zOrder', sheetId, admissionOptions);
+  await ctx.computeBridge.sendFloatingObjectBackward(sheetId, objectId, options);
 }
 
 // =============================================================================
@@ -399,10 +507,14 @@ export async function groupFloatingObjects(
   ctx: DocumentContext,
   sheetId: SheetId,
   objectIds: string[],
+  admissionOptions?: MutationAdmissionOptions,
 ): Promise<string> {
-  const result = await ctx.computeBridge.createFloatingObjectGroup(sheetId, {
-    memberIds: objectIds,
-  });
+  const options = floatingObjectOptions(ctx, 'floatingObjects.group', sheetId, admissionOptions);
+  const result = await ctx.computeBridge.createFloatingObjectGroup(
+    sheetId,
+    { memberIds: objectIds },
+    options,
+  );
   const groupId = result.floatingObjectGroupChanges?.[0]?.objectId;
   if (!groupId) {
     throw operationFailed('groupFloatingObjects', 'grouping returned no group ID');
@@ -418,8 +530,10 @@ export async function ungroupFloatingObjects(
   ctx: DocumentContext,
   sheetId: SheetId,
   groupId: string,
+  admissionOptions?: MutationAdmissionOptions,
 ): Promise<void> {
-  await ctx.computeBridge.deleteFloatingObjectGroup(sheetId, groupId);
+  const options = floatingObjectOptions(ctx, 'floatingObjects.ungroup', sheetId, admissionOptions);
+  await ctx.computeBridge.deleteFloatingObjectGroup(sheetId, groupId, options);
 }
 
 // =============================================================================
@@ -459,6 +573,7 @@ export async function addPicture(
   ctx: DocumentContext,
   sheetId: SheetId,
   config: PictureConfig,
+  admissionOptions?: MutationAdmissionOptions,
 ): Promise<FloatingObjectMutationReceipt> {
   const anchor = config.anchorCell ?? { row: 0, col: 0 };
   const xPx = config.x ?? config.position?.x ?? config.position?.from?.xOffset ?? 0;
@@ -496,7 +611,8 @@ export async function addPicture(
     printable: config.printable,
   };
 
-  const result = await ctx.computeBridge.createFloatingObject(sheetId, pictureConfig);
+  const options = floatingObjectOptions(ctx, 'floatingObjects.create', sheetId, admissionOptions);
+  const result = await ctx.computeBridge.createFloatingObject(sheetId, pictureConfig, options);
   const newId = result.floatingObjectChanges?.[0]?.objectId;
   if (!newId) {
     throw operationFailed('addPicture', 'creation returned no object ID');
@@ -513,6 +629,7 @@ export async function updatePicture(
   sheetId: SheetId,
   objectId: string,
   updates: Partial<PictureConfig>,
+  admissionOptions?: MutationAdmissionOptions,
 ): Promise<void> {
   const wire = await ctx.computeBridge.getFloatingObjectTyped(sheetId, objectId);
   if (!wire) {
@@ -523,6 +640,12 @@ export async function updatePicture(
     throw operationFailed('updatePicture', `object ${objectId} is ${current.type}, not picture`);
   }
 
+  const nextMutationOptions = createGroupedFloatingObjectMutationOptions(
+    ctx,
+    'floatingObjects.update',
+    sheetId,
+    admissionOptions,
+  );
   const objectUpdates: Record<string, unknown> = {};
 
   if (updates.name !== undefined) {
@@ -566,29 +689,44 @@ export async function updatePicture(
   }
 
   if (Object.keys(objectUpdates).length > 0) {
-    await ctx.computeBridge.updateFloatingObject(sheetId, objectId, objectUpdates);
+    await ctx.computeBridge.updateFloatingObject(
+      sheetId,
+      objectId,
+      objectUpdates,
+      nextMutationOptions(),
+    );
   }
 
   const nextWidth = updates.width ?? updates.position?.width;
   const nextHeight = updates.height ?? updates.position?.height;
   if (nextWidth !== undefined || nextHeight !== undefined) {
-    await ctx.computeBridge.resizeFloatingObjectTyped(sheetId, objectId, {
-      width: nextWidth ?? current.position.width ?? wire.width,
-      height: nextHeight ?? current.position.height ?? wire.height,
-    });
+    await ctx.computeBridge.resizeFloatingObjectTyped(
+      sheetId,
+      objectId,
+      {
+        width: nextWidth ?? current.position.width ?? wire.width,
+        height: nextHeight ?? current.position.height ?? wire.height,
+      },
+      nextMutationOptions(),
+    );
   }
 
   const nextX = updates.x ?? updates.position?.x ?? updates.position?.from?.xOffset;
   const nextY = updates.y ?? updates.position?.y ?? updates.position?.from?.yOffset;
   const anchorChanged = updates.anchorCell !== undefined;
   if (anchorChanged || nextX !== undefined || nextY !== undefined) {
-    await ctx.computeBridge.moveFloatingObjectTyped(sheetId, objectId, {
-      type: 'absolute',
-      anchorRow: updates.anchorCell?.row ?? wire.anchor.anchorRow,
-      anchorCol: updates.anchorCell?.col ?? wire.anchor.anchorCol,
-      xOffset: nextX ?? anchorOffsetPx(wire.anchor, 'x'),
-      yOffset: nextY ?? anchorOffsetPx(wire.anchor, 'y'),
-    });
+    await ctx.computeBridge.moveFloatingObjectTyped(
+      sheetId,
+      objectId,
+      {
+        type: 'absolute',
+        anchorRow: updates.anchorCell?.row ?? wire.anchor.anchorRow,
+        anchorCol: updates.anchorCell?.col ?? wire.anchor.anchorCol,
+        xOffset: nextX ?? anchorOffsetPx(wire.anchor, 'x'),
+        yOffset: nextY ?? anchorOffsetPx(wire.anchor, 'y'),
+      },
+      nextMutationOptions(),
+    );
   }
 }
 
@@ -606,6 +744,7 @@ export async function addTextBox(
   ctx: DocumentContext,
   sheetId: SheetId,
   config: TextBoxConfig,
+  admissionOptions?: MutationAdmissionOptions,
 ): Promise<FloatingObjectMutationReceipt> {
   const anchor = config.anchorCell ?? { row: 0, col: 0 };
   const xPx = config.x ?? 0;
@@ -634,7 +773,8 @@ export async function addTextBox(
     name: config.name,
   };
 
-  const result = await ctx.computeBridge.createFloatingObject(sheetId, textBoxConfig);
+  const options = floatingObjectOptions(ctx, 'floatingObjects.create', sheetId, admissionOptions);
+  const result = await ctx.computeBridge.createFloatingObject(sheetId, textBoxConfig, options);
   const newId = result.floatingObjectChanges?.[0]?.objectId;
   if (!newId) {
     throw operationFailed('addTextBox', 'creation returned no object ID');
@@ -656,11 +796,16 @@ export async function connectBeginShape(
   connectorId: string,
   targetShapeId: string,
   siteIndex: number,
+  admissionOptions?: MutationAdmissionOptions,
 ): Promise<void> {
   await requireObject(ctx.computeBridge, sheetId, connectorId);
-  await ctx.computeBridge.updateFloatingObject(sheetId, connectorId, {
-    startConnection: { shapeId: targetShapeId, siteIndex },
-  });
+  const options = floatingObjectOptions(ctx, 'floatingObjects.update', sheetId, admissionOptions);
+  await ctx.computeBridge.updateFloatingObject(
+    sheetId,
+    connectorId,
+    { startConnection: { shapeId: targetShapeId, siteIndex } },
+    options,
+  );
 }
 
 /**
@@ -673,11 +818,16 @@ export async function connectEndShape(
   connectorId: string,
   targetShapeId: string,
   siteIndex: number,
+  admissionOptions?: MutationAdmissionOptions,
 ): Promise<void> {
   await requireObject(ctx.computeBridge, sheetId, connectorId);
-  await ctx.computeBridge.updateFloatingObject(sheetId, connectorId, {
-    endConnection: { shapeId: targetShapeId, siteIndex },
-  });
+  const options = floatingObjectOptions(ctx, 'floatingObjects.update', sheetId, admissionOptions);
+  await ctx.computeBridge.updateFloatingObject(
+    sheetId,
+    connectorId,
+    { endConnection: { shapeId: targetShapeId, siteIndex } },
+    options,
+  );
 }
 
 /**
@@ -687,11 +837,16 @@ export async function disconnectBeginShape(
   ctx: DocumentContext,
   sheetId: SheetId,
   connectorId: string,
+  admissionOptions?: MutationAdmissionOptions,
 ): Promise<void> {
   await requireObject(ctx.computeBridge, sheetId, connectorId);
-  await ctx.computeBridge.updateFloatingObject(sheetId, connectorId, {
-    startConnection: null,
-  });
+  const options = floatingObjectOptions(ctx, 'floatingObjects.update', sheetId, admissionOptions);
+  await ctx.computeBridge.updateFloatingObject(
+    sheetId,
+    connectorId,
+    { startConnection: null },
+    options,
+  );
 }
 
 /**
@@ -701,11 +856,16 @@ export async function disconnectEndShape(
   ctx: DocumentContext,
   sheetId: SheetId,
   connectorId: string,
+  admissionOptions?: MutationAdmissionOptions,
 ): Promise<void> {
   await requireObject(ctx.computeBridge, sheetId, connectorId);
-  await ctx.computeBridge.updateFloatingObject(sheetId, connectorId, {
-    endConnection: null,
-  });
+  const options = floatingObjectOptions(ctx, 'floatingObjects.update', sheetId, admissionOptions);
+  await ctx.computeBridge.updateFloatingObject(
+    sheetId,
+    connectorId,
+    { endConnection: null },
+    options,
+  );
 }
 
 /**
@@ -890,6 +1050,7 @@ export async function addLine(
   endX: number,
   endY: number,
   connectorType?: 'straight' | 'elbow' | 'curve',
+  admissionOptions?: MutationAdmissionOptions,
 ): Promise<FloatingObjectMutationReceipt> {
   // Compute bounding box from start/end points
   const x = Math.min(startX, endX);
@@ -924,7 +1085,8 @@ export async function addLine(
     pixelY: y,
   };
 
-  const result = await ctx.computeBridge.createShape(sheetId, config as any);
+  const options = floatingObjectOptions(ctx, 'floatingObjects.create', sheetId, admissionOptions);
+  const result = await ctx.computeBridge.createShape(sheetId, config as any, options);
   const change = result.floatingObjectChanges?.[0];
   return buildBridgeMutationReceipt(change, 'create', '', sheetId, 'connector');
 }
@@ -963,12 +1125,15 @@ export async function incrementLeft(
   sheetId: SheetId,
   objectId: string,
   delta: number,
+  admissionOptions?: MutationAdmissionOptions,
 ): Promise<FloatingObjectMutationReceipt> {
-  const result = await ctx.computeBridge.moveFloatingObjectTyped(sheetId, objectId, {
-    type: 'delta',
-    dx: delta,
-    dy: 0,
-  });
+  const options = floatingObjectOptions(ctx, 'floatingObjects.move', sheetId, admissionOptions);
+  const result = await ctx.computeBridge.moveFloatingObjectTyped(
+    sheetId,
+    objectId,
+    { type: 'delta', dx: delta, dy: 0 },
+    options,
+  );
   const change = result.floatingObjectChanges?.[0];
   return buildBridgeMutationReceipt(change, 'update', objectId, sheetId);
 }
@@ -982,12 +1147,15 @@ export async function incrementTop(
   sheetId: SheetId,
   objectId: string,
   delta: number,
+  admissionOptions?: MutationAdmissionOptions,
 ): Promise<FloatingObjectMutationReceipt> {
-  const result = await ctx.computeBridge.moveFloatingObjectTyped(sheetId, objectId, {
-    type: 'delta',
-    dx: 0,
-    dy: delta,
-  });
+  const options = floatingObjectOptions(ctx, 'floatingObjects.move', sheetId, admissionOptions);
+  const result = await ctx.computeBridge.moveFloatingObjectTyped(
+    sheetId,
+    objectId,
+    { type: 'delta', dx: 0, dy: delta },
+    options,
+  );
   const change = result.floatingObjectChanges?.[0];
   return buildBridgeMutationReceipt(change, 'update', objectId, sheetId);
 }
@@ -1001,14 +1169,19 @@ export async function incrementBrightness(
   sheetId: SheetId,
   pictureId: string,
   delta: number,
+  admissionOptions?: MutationAdmissionOptions,
 ): Promise<void> {
   const obj = await requireObject(ctx.computeBridge, sheetId, pictureId);
   const picture = obj as PictureObject;
   const currentBrightness = picture.adjustments?.brightness ?? 0;
   const newBrightness = Math.max(-100, Math.min(100, currentBrightness + delta));
-  await ctx.computeBridge.updateFloatingObject(sheetId, pictureId, {
-    adjustments: { ...picture.adjustments, brightness: newBrightness },
-  });
+  const options = floatingObjectOptions(ctx, 'floatingObjects.update', sheetId, admissionOptions);
+  await ctx.computeBridge.updateFloatingObject(
+    sheetId,
+    pictureId,
+    { adjustments: { ...picture.adjustments, brightness: newBrightness } },
+    options,
+  );
 }
 
 /**
@@ -1020,14 +1193,19 @@ export async function incrementContrast(
   sheetId: SheetId,
   pictureId: string,
   delta: number,
+  admissionOptions?: MutationAdmissionOptions,
 ): Promise<void> {
   const obj = await requireObject(ctx.computeBridge, sheetId, pictureId);
   const picture = obj as PictureObject;
   const currentContrast = picture.adjustments?.contrast ?? 0;
   const newContrast = Math.max(-100, Math.min(100, currentContrast + delta));
-  await ctx.computeBridge.updateFloatingObject(sheetId, pictureId, {
-    adjustments: { ...picture.adjustments, contrast: newContrast },
-  });
+  const options = floatingObjectOptions(ctx, 'floatingObjects.update', sheetId, admissionOptions);
+  await ctx.computeBridge.updateFloatingObject(
+    sheetId,
+    pictureId,
+    { adjustments: { ...picture.adjustments, contrast: newContrast } },
+    options,
+  );
 }
 
 // =============================================================================
@@ -1043,14 +1221,22 @@ export async function copyToSheet(
   sourceSheetId: SheetId,
   objectId: string,
   targetSheetId: SheetId,
+  admissionOptions?: MutationAdmissionOptions,
 ): Promise<FloatingObjectMutationReceipt> {
   await requireObject(ctx.computeBridge, sourceSheetId, objectId);
+  const nextMutationOptions = createGroupedFloatingObjectMutationOptions(
+    ctx,
+    'floatingObjects.duplicate',
+    [sourceSheetId, targetSheetId],
+    admissionOptions,
+  );
 
   const result = await ctx.computeBridge.duplicateFloatingObjectTyped(
     sourceSheetId,
     objectId,
     0,
     0,
+    nextMutationOptions(),
   );
   const change = result.floatingObjectChanges?.[0];
   if (!change) {
@@ -1060,7 +1246,7 @@ export async function copyToSheet(
   if (sourceSheetId !== targetSheetId) {
     await ctx.computeBridge.updateFloatingObject(sourceSheetId, change.objectId, {
       sheetId: targetSheetId,
-    });
+    }, nextMutationOptions());
   }
 
   // After a potential sheet move, the object now lives on `targetSheetId`.
@@ -1080,6 +1266,7 @@ export async function setConnectorType(
   sheetId: SheetId,
   connectorId: string,
   connectorType: 'straight' | 'elbow' | 'curve',
+  admissionOptions?: MutationAdmissionOptions,
 ): Promise<void> {
   await requireObject(ctx.computeBridge, sheetId, connectorId);
 
@@ -1097,5 +1284,6 @@ export async function setConnectorType(
       break;
   }
 
-  await ctx.computeBridge.updateFloatingObject(sheetId, connectorId, { shapeType });
+  const options = floatingObjectOptions(ctx, 'floatingObjects.update', sheetId, admissionOptions);
+  await ctx.computeBridge.updateFloatingObject(sheetId, connectorId, { shapeType }, options);
 }

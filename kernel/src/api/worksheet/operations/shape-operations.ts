@@ -17,6 +17,7 @@ import type {
 import type { ObjectBounds } from '@mog-sdk/contracts/kernel';
 import type { SheetId } from '@mog-sdk/contracts/core';
 import type { FloatingObject, ShapeObject, ShapeText } from '@mog-sdk/contracts/floating-objects';
+import type { VersionOperationContext } from '@mog-sdk/contracts/versioning';
 
 import type {
   CreateShapeConfig,
@@ -29,7 +30,9 @@ import {
   createMinimalFloatingObject,
 } from '../../../bridges/compute/floating-object-mapper';
 import { invalidShapeConfig, operationFailed } from '../../../errors/api';
+import type { MutationAdmissionOptions } from '../../../bridges/compute';
 import type { SpreadsheetObjectManager } from '../../../floating-objects';
+import { createVersionOperationContext } from '../../internal/version-operation-context';
 import {
   withFloatingObjectMutationReceiptBase,
   withFloatingObjectRemoveReceiptBase,
@@ -43,6 +46,43 @@ import type { DocumentContext } from './shared';
 // =============================================================================
 
 const EMU_PER_PX = 9525;
+const FLOATING_OBJECT_ANCHOR_DOMAIN_IDS = ['floating-objects.anchors'] as const;
+
+type ShapeMutationOptions = MutationAdmissionOptions & {
+  readonly operationContext: VersionOperationContext;
+};
+
+function shapeOptions(
+  ctx: DocumentContext,
+  operationIdPrefix: string,
+  sheetId: SheetId,
+  admissionOptions?: MutationAdmissionOptions,
+  groupId?: string,
+): ShapeMutationOptions {
+  return {
+    ...admissionOptions,
+    operationContext: createVersionOperationContext(ctx, {
+      operationIdPrefix,
+      sheetIds: [sheetId],
+      domainIds: FLOATING_OBJECT_ANCHOR_DOMAIN_IDS,
+      ...(groupId ? { groupId } : {}),
+    }),
+  };
+}
+
+function groupedShapeOptions(
+  ctx: DocumentContext,
+  operationIdPrefix: string,
+  sheetId: SheetId,
+  admissionOptions?: MutationAdmissionOptions,
+): () => ShapeMutationOptions {
+  let groupId: string | undefined = admissionOptions?.operationContext?.groupId;
+  return () => {
+    const options = shapeOptions(ctx, operationIdPrefix, sheetId, admissionOptions, groupId);
+    groupId = options.operationContext.groupId ?? options.operationContext.operationId;
+    return { ...options, operationContext: { ...options.operationContext, groupId } };
+  };
+}
 
 function anchorOffsetPx(
   anchor: { anchorColOffsetEmu?: number; anchorRowOffsetEmu?: number },
@@ -173,6 +213,7 @@ export async function createShape(
   ctx: DocumentContext,
   sheetId: SheetId,
   config: ShapeConfig,
+  admissionOptions?: MutationAdmissionOptions,
 ): Promise<FloatingObjectMutationReceipt> {
   if (!config.type) {
     throw invalidShapeConfig('type is required');
@@ -198,7 +239,8 @@ export async function createShape(
     lockAspectRatio: config.lockAspectRatio,
   } as CreateShapeConfig;
 
-  const result = await ctx.computeBridge.createShape(sheetId, bridgeConfig);
+  const options = shapeOptions(ctx, 'shapes.create', sheetId, admissionOptions);
+  const result = await ctx.computeBridge.createShape(sheetId, bridgeConfig, options);
 
   const change = result.floatingObjectChanges?.[0];
   if (change?.objectId) {
@@ -270,12 +312,14 @@ export async function updateShape(
   sheetId: SheetId,
   shapeId: string,
   updates: Partial<ShapeConfig>,
+  admissionOptions?: MutationAdmissionOptions,
 ): Promise<FloatingObjectMutationReceipt> {
   // Collect style updates for the typed bridge API
   const styleUpdate: ShapeStyleUpdate = {};
   let hasStyleUpdate = false;
   let lastResult: { floatingObjectChanges?: FloatingObjectChange[] } | undefined;
   let currentWire: WireFloatingObject | null | undefined;
+  const nextMutationOptions = groupedShapeOptions(ctx, 'shapes.update', sheetId, admissionOptions);
 
   async function readCurrentWire(): Promise<WireFloatingObject> {
     if (currentWire === undefined) {
@@ -313,7 +357,12 @@ export async function updateShape(
   }
 
   if (hasStyleUpdate) {
-    lastResult = await ctx.computeBridge.updateShapeStyle(sheetId, shapeId, styleUpdate);
+    lastResult = await ctx.computeBridge.updateShapeStyle(
+      sheetId,
+      shapeId,
+      styleUpdate,
+      nextMutationOptions(),
+    );
   }
 
   // Handle visibility, anchor mode, and metadata via generic update path
@@ -339,16 +388,26 @@ export async function updateShape(
     if (updates.displayName !== undefined) genericUpdates.displayName = updates.displayName;
     if (updates.pixelX !== undefined) genericUpdates.pixelX = updates.pixelX;
     if (updates.pixelY !== undefined) genericUpdates.pixelY = updates.pixelY;
-    lastResult = await ctx.computeBridge.updateFloatingObject(sheetId, shapeId, genericUpdates);
+    lastResult = await ctx.computeBridge.updateFloatingObject(
+      sheetId,
+      shapeId,
+      genericUpdates,
+      nextMutationOptions(),
+    );
   }
 
   // Handle position updates separately
   if (updates.width !== undefined || updates.height !== undefined) {
     const wire = await readCurrentWire();
-    lastResult = await ctx.computeBridge.resizeFloatingObjectTyped(sheetId, shapeId, {
-      width: updates.width ?? wire.width ?? 0,
-      height: updates.height ?? wire.height ?? 0,
-    });
+    lastResult = await ctx.computeBridge.resizeFloatingObjectTyped(
+      sheetId,
+      shapeId,
+      {
+        width: updates.width ?? wire.width ?? 0,
+        height: updates.height ?? wire.height ?? 0,
+      },
+      nextMutationOptions(),
+    );
   }
   if (
     updates.anchorRow !== undefined ||
@@ -357,19 +416,25 @@ export async function updateShape(
     updates.yOffset !== undefined
   ) {
     const wire = await readCurrentWire();
-    lastResult = await ctx.computeBridge.moveFloatingObjectTyped(sheetId, shapeId, {
-      type: 'absolute',
-      anchorRow: updates.anchorRow ?? wire.anchor.anchorRow,
-      anchorCol: updates.anchorCol ?? wire.anchor.anchorCol,
-      xOffset: updates.xOffset ?? anchorOffsetPx(wire.anchor, 'x'),
-      yOffset: updates.yOffset ?? anchorOffsetPx(wire.anchor, 'y'),
-    });
+    lastResult = await ctx.computeBridge.moveFloatingObjectTyped(
+      sheetId,
+      shapeId,
+      {
+        type: 'absolute',
+        anchorRow: updates.anchorRow ?? wire.anchor.anchorRow,
+        anchorCol: updates.anchorCol ?? wire.anchor.anchorCol,
+        xOffset: updates.xOffset ?? anchorOffsetPx(wire.anchor, 'x'),
+        yOffset: updates.yOffset ?? anchorOffsetPx(wire.anchor, 'y'),
+      },
+      nextMutationOptions(),
+    );
   }
   if (updates.rotation !== undefined) {
     lastResult = await ctx.computeBridge.rotateFloatingObjectTyped(
       sheetId,
       shapeId,
       updates.rotation,
+      nextMutationOptions(),
     );
   }
 
@@ -400,8 +465,10 @@ export async function deleteShape(
   ctx: DocumentContext,
   sheetId: SheetId,
   shapeId: string,
+  admissionOptions?: MutationAdmissionOptions,
 ): Promise<FloatingObjectRemoveReceipt> {
-  await ctx.computeBridge.deleteFloatingObject(sheetId, shapeId);
+  const options = shapeOptions(ctx, 'shapes.delete', sheetId, admissionOptions);
+  await ctx.computeBridge.deleteFloatingObject(sheetId, shapeId, options);
   return withFloatingObjectRemoveReceiptBase(
     { domain: 'floatingObject', action: 'remove', id: shapeId },
     sheetId,
@@ -420,12 +487,15 @@ export async function moveShape(
   shapeId: string,
   x: number,
   y: number,
+  admissionOptions?: MutationAdmissionOptions,
 ): Promise<FloatingObjectMutationReceipt> {
-  const result = await ctx.computeBridge.moveFloatingObjectTyped(sheetId, shapeId, {
-    type: 'delta',
-    dx: x,
-    dy: y,
-  });
+  const options = shapeOptions(ctx, 'shapes.move', sheetId, admissionOptions);
+  const result = await ctx.computeBridge.moveFloatingObjectTyped(
+    sheetId,
+    shapeId,
+    { type: 'delta', dx: x, dy: y },
+    options,
+  );
 
   const change = result.floatingObjectChanges?.[0];
   if (change?.objectId) {
@@ -453,11 +523,15 @@ export async function resizeShape(
   shapeId: string,
   width: number,
   height: number,
+  admissionOptions?: MutationAdmissionOptions,
 ): Promise<FloatingObjectMutationReceipt> {
-  const result = await ctx.computeBridge.resizeFloatingObjectTyped(sheetId, shapeId, {
-    width,
-    height,
-  });
+  const options = shapeOptions(ctx, 'shapes.resize', sheetId, admissionOptions);
+  const result = await ctx.computeBridge.resizeFloatingObjectTyped(
+    sheetId,
+    shapeId,
+    { width, height },
+    options,
+  );
 
   const change = result.floatingObjectChanges?.[0];
   if (change?.objectId) {
@@ -482,8 +556,10 @@ export async function rotateShape(
   sheetId: SheetId,
   shapeId: string,
   angle: number,
+  admissionOptions?: MutationAdmissionOptions,
 ): Promise<void> {
-  await ctx.computeBridge.rotateFloatingObjectTyped(sheetId, shapeId, angle);
+  const options = shapeOptions(ctx, 'shapes.rotate', sheetId, admissionOptions);
+  await ctx.computeBridge.rotateFloatingObjectTyped(sheetId, shapeId, angle, options);
 }
 
 /**
@@ -495,8 +571,10 @@ export async function flipShape(
   sheetId: SheetId,
   shapeId: string,
   direction: 'horizontal' | 'vertical',
+  admissionOptions?: MutationAdmissionOptions,
 ): Promise<void> {
-  await ctx.computeBridge.flipFloatingObjectTyped(sheetId, shapeId, direction);
+  const options = shapeOptions(ctx, 'shapes.flip', sheetId, admissionOptions);
+  await ctx.computeBridge.flipFloatingObjectTyped(sheetId, shapeId, direction, options);
 }
 
 /**
@@ -510,12 +588,15 @@ export async function duplicateShape(
   shapeId: string,
   offsetX?: number,
   offsetY?: number,
+  admissionOptions?: MutationAdmissionOptions,
 ): Promise<FloatingObjectMutationReceipt> {
+  const options = shapeOptions(ctx, 'shapes.duplicate', sheetId, admissionOptions);
   const result = await ctx.computeBridge.duplicateFloatingObjectTyped(
     sheetId,
     shapeId,
     offsetX ?? 20,
     offsetY ?? 20,
+    options,
   );
   const change = result.floatingObjectChanges?.[0];
   if (change?.objectId) {
@@ -538,8 +619,10 @@ export async function bringShapeToFront(
   ctx: DocumentContext,
   sheetId: SheetId,
   shapeId: string,
+  admissionOptions?: MutationAdmissionOptions,
 ): Promise<void> {
-  await ctx.computeBridge.bringFloatingObjectToFront(sheetId, shapeId);
+  const options = shapeOptions(ctx, 'shapes.zOrder', sheetId, admissionOptions);
+  await ctx.computeBridge.bringFloatingObjectToFront(sheetId, shapeId, options);
 }
 
 /**
@@ -549,8 +632,10 @@ export async function sendShapeToBack(
   ctx: DocumentContext,
   sheetId: SheetId,
   shapeId: string,
+  admissionOptions?: MutationAdmissionOptions,
 ): Promise<void> {
-  await ctx.computeBridge.sendFloatingObjectToBack(sheetId, shapeId);
+  const options = shapeOptions(ctx, 'shapes.zOrder', sheetId, admissionOptions);
+  await ctx.computeBridge.sendFloatingObjectToBack(sheetId, shapeId, options);
 }
 
 // =============================================================================
@@ -566,11 +651,18 @@ export async function incrementRotation(
   sheetId: SheetId,
   shapeId: string,
   delta: number,
+  admissionOptions?: MutationAdmissionOptions,
 ): Promise<void> {
   // Read current rotation, add delta, set new rotation
   const result = await ctx.computeBridge.getFloatingObjectTyped(sheetId, shapeId);
   const currentRotation = result?.rotation ?? 0;
-  await ctx.computeBridge.rotateFloatingObjectTyped(sheetId, shapeId, currentRotation + delta);
+  const options = shapeOptions(ctx, 'shapes.rotate', sheetId, admissionOptions);
+  await ctx.computeBridge.rotateFloatingObjectTyped(
+    sheetId,
+    shapeId,
+    currentRotation + delta,
+    options,
+  );
 }
 
 /**
@@ -583,11 +675,19 @@ export async function scaleShape(
   shapeId: string,
   factorW: number,
   factorH: number,
+  admissionOptions?: MutationAdmissionOptions,
 ): Promise<FloatingObjectMutationReceipt> {
   const result = await ctx.computeBridge.getFloatingObjectTyped(sheetId, shapeId);
   const currentWidth = result?.width ?? 100;
   const currentHeight = result?.height ?? 100;
-  return resizeShape(ctx, sheetId, shapeId, currentWidth * factorW, currentHeight * factorH);
+  return resizeShape(
+    ctx,
+    sheetId,
+    shapeId,
+    currentWidth * factorW,
+    currentHeight * factorH,
+    admissionOptions,
+  );
 }
 
 /**
@@ -606,8 +706,9 @@ export async function deleteText(
   ctx: DocumentContext,
   sheetId: SheetId,
   shapeId: string,
+  admissionOptions?: MutationAdmissionOptions,
 ): Promise<FloatingObjectMutationReceipt> {
-  return updateShape(ctx, sheetId, shapeId, { text: { content: '' } });
+  return updateShape(ctx, sheetId, shapeId, { text: { content: '' } }, admissionOptions);
 }
 
 // =============================================================================
@@ -665,11 +766,12 @@ export async function setTextRuns(
   sheetId: SheetId,
   shapeId: string,
   runs: Array<{ text: string; format?: CellFormat }>,
+  admissionOptions?: MutationAdmissionOptions,
 ): Promise<FloatingObjectMutationReceipt> {
   const content = runs.map((r) => r.text).join('');
   return updateShape(ctx, sheetId, shapeId, {
     text: { content, runs } as any,
-  });
+  }, admissionOptions);
 }
 
 /**

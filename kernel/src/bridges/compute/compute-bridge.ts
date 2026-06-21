@@ -570,23 +570,34 @@ export class ComputeBridge extends GeneratedBridgeBase {
     return this.core.createEngineFromYrsState(yrsState);
   }
 
-  setFloatingObject(sheetId: SheetId, objectId: string, json: unknown): Promise<MutationResult> {
-    return super.setFloatingObject(sheetId, objectId, normalizeFloatingObjectForStorage(json));
+  setFloatingObject(
+    sheetId: SheetId,
+    objectId: string,
+    json: unknown,
+    admissionOptions?: MutationAdmissionOptions,
+  ): Promise<MutationResult> {
+    return super.setFloatingObject(sheetId, objectId, normalizeFloatingObjectForStorage(json), admissionOptions);
   }
 
-  createFloatingObject(sheetId: SheetId, config: unknown): Promise<MutationResult> {
-    return super.createFloatingObject(sheetId, normalizeFloatingObjectForStorage(config));
+  createFloatingObject(
+    sheetId: SheetId,
+    config: unknown,
+    admissionOptions?: MutationAdmissionOptions,
+  ): Promise<MutationResult> {
+    return super.createFloatingObject(sheetId, normalizeFloatingObjectForStorage(config), admissionOptions);
   }
 
   updateFloatingObject(
     sheetId: SheetId,
     objectId: string,
     updates: unknown,
+    admissionOptions?: MutationAdmissionOptions,
   ): Promise<MutationResult> {
     return super.updateFloatingObject(
       sheetId,
       objectId,
       normalizeFloatingObjectUpdateForStorage(updates),
+      admissionOptions,
     );
   }
 

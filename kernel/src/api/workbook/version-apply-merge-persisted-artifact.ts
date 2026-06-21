@@ -45,6 +45,7 @@ import type {
   NormalizedPersistedApplyMergeInput,
   NormalizedPersistedApplyMergeOptions,
 } from './version-apply-merge-persisted';
+import { recoverStagedMergeCommitIfAlreadyApplied } from './version-apply-merge-persisted-artifact-recovery';
 
 const WORKBOOK_COMMIT_ID_RE = /^commit:sha256:[0-9a-f]{64}$/;
 
@@ -163,6 +164,20 @@ export async function applyPersistedMergePreviewArtifact(
   if (prepared.intent.terminal) {
     return resultFromTerminalArtifactIntent(opened.graph, input, prepared.intent);
   }
+  const recovered = await recoverStagedMergeCommitIfAlreadyApplied({
+    graph: opened.graph,
+    store: prepared.store,
+    input,
+    record: prepared.intent,
+    readCurrentTargetHead,
+    resultFromTerminalArtifactIntent,
+    staleTargetHeadArtifactResult,
+    blockedApplyMergeResult,
+    mapProviderDiagnostics,
+    providerErrorDiagnostic,
+    intentStoreDiagnostics,
+  });
+  if (recovered) return recovered;
 
   const service = getAttachedVersionApplyMergeService(ctx);
   if (!service?.mergeCommit) {
@@ -307,7 +322,6 @@ async function openPersistedMergeGraph(
 ): Promise<
   | {
       readonly ok: true;
-      readonly provider: VersionStoreProvider;
       readonly namespace: VersionGraphNamespace;
       readonly graph: VersionGraphStore;
       readonly intentStore: MergeApplyIntentStore | null;
@@ -336,7 +350,6 @@ async function openPersistedMergeGraph(
     const namespace = namespaceForRegistry(registry.registry);
     return {
       ok: true,
-      provider,
       namespace,
       graph: await provider.openGraph(namespace, provider.accessContext),
       intentStore: hasMergeApplyIntentStoreProvider(provider)
@@ -435,9 +448,7 @@ function validatePreviewArtifactForApply(
   options: Extract<NormalizedPersistedApplyMergeOptions, { readonly mode: 'apply' }>,
 ): readonly VersionStoreDiagnostic[] {
   if (options.expectedTargetHead.commitId === payload.ours) return [];
-  return [
-    resolutionMismatchDiagnostic('applyMerge expectedTargetHead must match the ours commit.'),
-  ];
+  return [resolutionMismatchDiagnostic('applyMerge expectedTargetHead must match the ours commit.')];
 }
 
 async function prepareResolvedAttempt(
@@ -921,9 +932,7 @@ function isInternalSha256Digest(value: ObjectDigest): boolean {
 }
 
 function toInternalSha256Digest(value: ObjectDigest): InternalObjectDigest | null {
-  return value.algorithm === 'sha256'
-    ? (value as InternalObjectDigest)
-    : null;
+  return value.algorithm === 'sha256' ? (value as InternalObjectDigest) : null;
 }
 
 function isWorkbookCommitId(value: unknown): value is WorkbookCommitId {

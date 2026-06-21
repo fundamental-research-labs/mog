@@ -911,6 +911,53 @@ export const WORKBOOK_SUB_API_INTERFACES: WorkbookSubApiInterfaces = {
       },
       targetInterface: 'WorkbookTimelineStyles',
     },
+    version: {
+      signature: 'readonly version: WorkbookVersion;',
+      docstring: 'Version-control status and read-only diagnostics.',
+      usedTypes: ['WorkbookVersion'],
+      stableId: 'Workbook.version',
+      canonicalPath: 'wb.version',
+      root: 'subApi',
+      parentRoot: 'workbook',
+      interface: 'Workbook',
+      method: 'version',
+      kind: 'subApiAccessor',
+      visibility: 'public',
+      asyncModel: 'sync',
+      parameters: [],
+      returns: {
+        type: {
+          kind: 'objectRef',
+          name: 'WorkbookVersion',
+        },
+        typeText: 'WorkbookVersion',
+      },
+      typeScript: {
+        signature: 'readonly version: WorkbookVersion;',
+        parameters: [],
+        returnTypeText: 'WorkbookVersion',
+      },
+      ownership: {
+        package: '@mog/types-api',
+      },
+      ownerPackage: '@mog/types-api',
+      alias: {
+        aliasOf: null,
+        aliases: [],
+        replacement: null,
+      },
+      deprecation: {
+        deprecated: false,
+        message: null,
+        replacement: null,
+        since: null,
+      },
+      compatibility: [],
+      source: {
+        file: 'types/api/src/api/workbook.ts',
+      },
+      targetInterface: 'WorkbookVersion',
+    },
     viewport: {
       signature: 'readonly viewport: WorkbookViewport;',
       docstring: 'Viewport region lifecycle (handle-based — create, update, dispose).',
@@ -3608,6 +3655,76 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
       capability: 'workbook:write',
     },
   },
+  WorkbookVersion: {
+    applyMerge: {
+      decision: 'allow',
+      capability: 'version:mergeApply',
+    },
+    checkout: {
+      decision: 'allow',
+      capability: 'version:checkout',
+    },
+    commit: {
+      decision: 'allow',
+      capability: 'version:commit',
+    },
+    createBranch: {
+      decision: 'allow',
+      capability: 'version:branch',
+    },
+    deleteBranch: {
+      decision: 'allow',
+      capability: 'version:branch',
+    },
+    deleteRef: {
+      decision: 'allow',
+      capability: 'version:branch',
+    },
+    diff: {
+      decision: 'allow',
+      capability: 'version:diff',
+    },
+    fastForwardBranch: {
+      decision: 'allow',
+      capability: 'version:branch',
+    },
+    getHead: {
+      decision: 'allow',
+      capability: 'version:read',
+    },
+    getRef: {
+      decision: 'allow',
+      capability: 'version:read',
+    },
+    getStatus: {
+      decision: 'allow',
+      capability: 'version:read',
+    },
+    getSurfaceStatus: {
+      decision: 'allow',
+      capability: 'version:read',
+    },
+    listCommits: {
+      decision: 'allow',
+      capability: 'version:read',
+    },
+    listRefs: {
+      decision: 'allow',
+      capability: 'version:read',
+    },
+    merge: {
+      decision: 'allow',
+      capability: 'version:mergePreview',
+    },
+    readRef: {
+      decision: 'allow',
+      capability: 'version:read',
+    },
+    updateBranch: {
+      decision: 'allow',
+      capability: 'version:branch',
+    },
+  },
   WorkbookViewport: {
     createRegion: {
       decision: 'allow',
@@ -4169,6 +4286,10 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
       decision: 'allow',
       capability: 'workbook:read',
     },
+    getAppModel: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
     getAxisItem: {
       decision: 'allow',
       capability: 'workbook:read',
@@ -4293,11 +4414,19 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
       decision: 'allow',
       capability: 'workbook:write',
     },
+    setAxisVisible: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
     setBubbleSizes: {
       decision: 'allow',
       capability: 'workbook:write',
     },
     setCategoryNames: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    setChartTitleVisible: {
       decision: 'allow',
       capability: 'workbook:write',
     },
@@ -4310,6 +4439,10 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
       capability: 'workbook:write',
     },
     setDataRange: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    setLegendVisible: {
       decision: 'allow',
       capability: 'workbook:write',
     },
@@ -4342,6 +4475,10 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
       capability: 'workbook:write',
     },
     setType: {
+      decision: 'allow',
+      capability: 'workbook:write',
+    },
+    switchSeriesOrientation: {
       decision: 'allow',
       capability: 'workbook:write',
     },

@@ -1326,7 +1326,15 @@ function generate(): ApiSpec {
   // Skip `dist/` and `node_modules/` so we don't match compiled .d.ts copies
   // or dependency source.
   const skipSegments = [`${path.sep}dist${path.sep}`, `${path.sep}node_modules${path.sep}`];
+  const versionApiTypeFiles = [
+    path.join(TYPES_API_DIR, 'workbook/version-shared.ts'),
+    path.join(TYPES_API_DIR, 'workbook/version.ts'),
+  ].filter((p) => fs.existsSync(p));
   const typeSearchFiles = [
+    // The public workbook version facade intentionally migrated a subset of
+    // names away from legacy contracts versioning shapes. Prefer those public
+    // API files when duplicate names exist (for example WorkbookCommitSummary).
+    ...versionApiTypeFiles,
     ...collectTsFiles(CONTRACTS_SRC_DIR),
     ...collectTsFiles(TYPES_SRC_DIR).filter((p) => !skipSegments.some((s) => p.includes(s))),
   ];

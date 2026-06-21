@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import * as ts from 'typescript';
 
 import {
@@ -5,6 +6,27 @@ import {
   serializeInterfaceDefinition,
   type InterfaceResolution,
 } from '../scripts/api-spec-interface-serialization';
+
+interface GeneratedApiSpecFixture {
+  subApis: {
+    workbook: {
+      version?: {
+        canonicalPath: string;
+        targetInterface?: string;
+      };
+    };
+  };
+  interfaces: {
+    WorkbookVersion?: {
+      functions: Record<string, { signature: string }>;
+    };
+  };
+  types: Record<string, { source: { file: string } }>;
+}
+
+const apiSpec = JSON.parse(
+  readFileSync(new URL('../src/generated/api-spec.json', import.meta.url), 'utf8'),
+) as GeneratedApiSpecFixture;
 
 function parseSource(fileName: string, text: string): ts.SourceFile {
   return ts.createSourceFile(fileName, text, ts.ScriptTarget.Latest, true);
@@ -22,6 +44,37 @@ function findInterface(sourceFile: ts.SourceFile, name: string): ts.InterfaceDec
 }
 
 describe('api spec interface serialization', () => {
+  it('exposes the workbook version sub-api with migrated VersionResult signatures', () => {
+    expect(apiSpec.subApis.workbook.version).toEqual(
+      expect.objectContaining({
+        canonicalPath: 'wb.version',
+        targetInterface: 'WorkbookVersion',
+      }),
+    );
+
+    const workbookVersion = apiSpec.interfaces.WorkbookVersion;
+    expect(workbookVersion).toBeDefined();
+    if (!workbookVersion) throw new Error('Generated API spec is missing WorkbookVersion');
+    expect(workbookVersion.functions.getHead.signature).toContain(
+      'Promise<VersionResult<VersionHead>>',
+    );
+    expect(workbookVersion.functions.listCommits.signature).toContain(
+      'Promise<VersionResult<Paged<WorkbookCommitSummary>>>',
+    );
+    expect(workbookVersion.functions.commit.signature).toContain(
+      'Promise<VersionResult<WorkbookCommitSummary>>',
+    );
+    expect(workbookVersion.functions.diff.signature).toContain(
+      'Promise<VersionResult<VersionSemanticDiffPage>>',
+    );
+    expect(apiSpec.types.WorkbookCommitSummary.source.file).toBe(
+      'types/api/src/api/workbook/version.ts',
+    );
+    expect(apiSpec.types.RedactedVersionAuthor.source.file).toBe(
+      'types/api/src/api/workbook/version.ts',
+    );
+  });
+
   it('collects inherited interface members with their source files', () => {
     const baseSource = parseSource(
       'worksheet-fill.ts',

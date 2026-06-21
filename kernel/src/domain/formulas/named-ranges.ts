@@ -32,119 +32,21 @@ import type {
   DefinedNameInput,
   NameValidationResult,
 } from '@mog-sdk/contracts/named-ranges';
-import { toCellId, toColId, toRowId } from '@mog-sdk/contracts/cell-identity';
 import { getDefinedNameKey, validateName } from '@mog/spreadsheet-utils/data/named-ranges';
 
 import type { IKernelContext } from '@mog-sdk/contracts/kernel';
-import { identityFormulaToWire, type NamedRangeDef } from '../../bridges/compute/compute-bridge';
+import { identityFormulaToWire, type NamedRangeDef } from '../../bridges/compute';
 import type { RangeCellData } from '../../bridges/compute/compute-types.gen';
 import type { DocumentContext } from '../../context/types';
 import { KernelError } from '../../errors';
-
-// =============================================================================
-// Internal: Map CB result to DefinedName
-// =============================================================================
-
-/**
- * Convert a Rust NamedRangeDef (from getAllNamedRanges) to DefinedName.
- *
- * The Rust side returns objects with snake_case fields matching NamedRangeDef.
- * We convert refers_to (IdentityFormulaWire) to the camelCase IdentityFormula
- * used throughout the TS contracts layer.
- */
-function mapRustNamedRange(rust: any): DefinedName {
-  // Rust Scope enum: { Sheet: "uuid" } | "Workbook" — proper serde-tagged enum.
-  let scope: SheetId | undefined;
-  if (rust.scope && typeof rust.scope === 'object' && 'Sheet' in rust.scope) {
-    scope = toSheetId(rust.scope.Sheet as string);
-  } else {
-    scope = undefined;
-  }
-
-  // Both NAPI and WASM transports normalise snake_case → camelCase at the
-  // boundary (see infra/transport/src/case-normalize.ts), so inner enum
-  // variant fields (start_id, end_id, row_absolute, …) arrive camelCased.
-  // We map the externally-tagged enum variants (Cell/Range/FullRow/…) to
-  // the contract's discriminated {type, ...} format.
-  const rawRefs: any[] = rust.refersTo?.refs ?? [];
-  const refs = rawRefs.map((ref: any) => {
-    if (ref.Cell) {
-      return {
-        type: 'cell' as const,
-        id: toCellId(ref.Cell.id),
-        rowAbsolute: ref.Cell.rowAbsolute ?? false,
-        colAbsolute: ref.Cell.colAbsolute ?? false,
-      };
-    }
-    if (ref.Range) {
-      return {
-        type: 'range' as const,
-        startId: toCellId(ref.Range.startId),
-        endId: toCellId(ref.Range.endId),
-        startRowAbsolute: ref.Range.startRowAbsolute ?? false,
-        startColAbsolute: ref.Range.startColAbsolute ?? false,
-        endRowAbsolute: ref.Range.endRowAbsolute ?? false,
-        endColAbsolute: ref.Range.endColAbsolute ?? false,
-      };
-    }
-    if (ref.RectRange) {
-      return {
-        type: 'rectRange' as const,
-        sheetId: toSheetId(ref.RectRange.sheetId),
-        startRowId: toRowId(ref.RectRange.startRowId),
-        startColId: toColId(ref.RectRange.startColId),
-        endRowId: toRowId(ref.RectRange.endRowId),
-        endColId: toColId(ref.RectRange.endColId),
-        startRowAbsolute: ref.RectRange.startRowAbsolute ?? false,
-        startColAbsolute: ref.RectRange.startColAbsolute ?? false,
-        endRowAbsolute: ref.RectRange.endRowAbsolute ?? false,
-        endColAbsolute: ref.RectRange.endColAbsolute ?? false,
-      };
-    }
-    if (ref.FullRow) {
-      return {
-        type: 'fullRow' as const,
-        rowId: toRowId(ref.FullRow.rowId),
-        absolute: ref.FullRow.absolute ?? false,
-      };
-    }
-    if (ref.RowRange) {
-      return {
-        type: 'rowRange' as const,
-        startRowId: toRowId(ref.RowRange.startRowId),
-        endRowId: toRowId(ref.RowRange.endRowId),
-        startAbsolute: ref.RowRange.startAbsolute ?? false,
-        endAbsolute: ref.RowRange.endAbsolute ?? false,
-      };
-    }
-    if (ref.FullCol) {
-      return {
-        type: 'fullCol' as const,
-        colId: toColId(ref.FullCol.colId),
-        absolute: ref.FullCol.absolute ?? false,
-      };
-    }
-    if (ref.ColRange) {
-      return {
-        type: 'colRange' as const,
-        startColId: toColId(ref.ColRange.startColId),
-        endColId: toColId(ref.ColRange.endColId),
-        startAbsolute: ref.ColRange.startAbsolute ?? false,
-        endAbsolute: ref.ColRange.endAbsolute ?? false,
-      };
-    }
-    return ref;
-  });
-
-  return {
-    id: rust.id ?? rust.name,
-    name: rust.name,
-    refersTo: { template: rust.refersTo?.template ?? '', refs },
-    scope,
-    comment: rust.comment,
-    visible: rust.visible ?? true,
-  };
-}
+import {
+  createGroupedNamedRangeMutationOptions,
+  createNamedRangeMutationOptions,
+  namedRangeSheetIds,
+  nextNamedRangeMutationOptions,
+  type NamedRangeMutationOptionsInput,
+} from './named-range-mutation-context';
+import { mapRustNamedRange } from './named-range-wire';
 
 // =============================================================================
 // Validation
@@ -434,6 +336,7 @@ export async function create(
   input: DefinedNameInput,
   contextSheet: SheetId,
   _origin: StructureChangeSource = 'user',
+  mutationOptions?: NamedRangeMutationOptionsInput,
 ): Promise<void> {
   // Convert A1 to IdentityFormula via Rust.
   // The transport auto-camelCases field names but keeps externally-tagged enums,
@@ -517,9 +420,22 @@ export async function create(
     raw_expression: input.refersToA1,
   };
 
-  await ctx.computeBridge.setNamedRange(input.name, def);
+  const hasComment = typeof input.comment === 'string' && input.comment.length > 0;
+  const options =
+    mutationOptions ??
+    (hasComment
+      ? createGroupedNamedRangeMutationOptions(ctx, {
+          operationIdPrefix: 'namedRanges.create',
+          sheetIds: namedRangeSheetIds(input.scope, contextSheet),
+        })
+      : createNamedRangeMutationOptions(ctx, {
+          operationIdPrefix: 'namedRanges.create',
+          sheetIds: namedRangeSheetIds(input.scope, contextSheet),
+        }));
 
-  if (typeof input.comment === 'string' && input.comment.length > 0) {
+  await ctx.computeBridge.setNamedRange(input.name, def, nextNamedRangeMutationOptions(options));
+
+  if (hasComment) {
     const created = await getByName(ctx, input.name, input.scope);
     if (!created) {
       throw new KernelError(
@@ -528,12 +444,16 @@ export async function create(
       );
     }
 
-    await ctx.computeBridge.updateNamedRange(created.id, {
-      name: null,
-      refersTo: null,
-      comment: input.comment,
-      visible: null,
-    });
+    await ctx.computeBridge.updateNamedRange(
+      created.id,
+      {
+        name: null,
+        refersTo: null,
+        comment: input.comment ?? null,
+        visible: null,
+      },
+      nextNamedRangeMutationOptions(options),
+    );
   }
 }
 
@@ -552,8 +472,9 @@ export async function update(
   ctx: DocumentContext,
   id: string,
   updates: Partial<Omit<DefinedNameInput, 'scope'>> & { visible?: boolean },
-  _contextSheet: SheetId,
+  contextSheet: SheetId,
   _origin: StructureChangeSource = 'user',
+  mutationOptions?: NamedRangeMutationOptionsInput,
 ): Promise<void> {
   const existing = await getById(ctx, id);
   if (!existing) {
@@ -572,7 +493,13 @@ export async function update(
     refersTo: updates.refersToA1 ?? null,
     comment: updates.comment ?? null,
     visible: updates.visible ?? null,
-  });
+  }, nextNamedRangeMutationOptions(
+    mutationOptions ??
+      createNamedRangeMutationOptions(ctx, {
+        operationIdPrefix: 'namedRanges.update',
+        sheetIds: namedRangeSheetIds(existing.scope, contextSheet),
+      }),
+  ));
 }
 
 /**
@@ -588,13 +515,23 @@ export async function remove(
   ctx: DocumentContext,
   id: string,
   _origin: StructureChangeSource = 'user',
+  mutationOptions?: NamedRangeMutationOptionsInput,
 ): Promise<void> {
   const existing = await getById(ctx, id);
   if (!existing) {
     throw new KernelError('DOMAIN_DEFINED_NAME_NOT_FOUND', `Defined name with ID ${id} not found`);
   }
 
-  await ctx.computeBridge.removeNamedRangeById(existing.id);
+  await ctx.computeBridge.removeNamedRangeById(
+    existing.id,
+    nextNamedRangeMutationOptions(
+      mutationOptions ??
+        createNamedRangeMutationOptions(ctx, {
+          operationIdPrefix: 'namedRanges.remove',
+          sheetIds: namedRangeSheetIds(existing.scope),
+        }),
+    ),
+  );
 }
 
 /**
@@ -611,9 +548,20 @@ export async function removeByScope(
   ctx: DocumentContext,
   scope: SheetId | undefined,
   _origin: StructureChangeSource = 'system',
+  mutationOptions?: NamedRangeMutationOptionsInput,
 ): Promise<void> {
   const names = await getByScope(ctx, scope);
-  await Promise.all(names.map((name) => ctx.computeBridge.removeNamedRange(name.name)));
+  const options =
+    mutationOptions ??
+    createGroupedNamedRangeMutationOptions(ctx, {
+      operationIdPrefix: 'namedRanges.removeByScope',
+      sheetIds: namedRangeSheetIds(scope),
+    });
+  await Promise.all(
+    names.map((name) =>
+      ctx.computeBridge.removeNamedRange(name.name, nextNamedRangeMutationOptions(options)),
+    ),
+  );
 }
 
 // =============================================================================
@@ -635,6 +583,7 @@ export async function importNames(
   ctx: DocumentContext,
   names: DefinedName[],
   _origin: StructureChangeSource = 'import',
+  mutationOptions?: NamedRangeMutationOptionsInput,
 ): Promise<number> {
   const existing = await getAll(ctx);
   const existingKeys = new Set(existing.map((n) => getDefinedNameKey(n.name, n.scope)));
@@ -652,7 +601,17 @@ export async function importNames(
       refers_to: identityFormulaToWire(name.refersTo),
     };
 
-    void ctx.computeBridge.setNamedRange(name.name, def);
+    void ctx.computeBridge.setNamedRange(
+      name.name,
+      def,
+      nextNamedRangeMutationOptions(
+        mutationOptions ??
+          createNamedRangeMutationOptions(ctx, {
+            operationIdPrefix: 'namedRanges.import',
+            sheetIds: namedRangeSheetIds(name.scope),
+          }),
+      ),
+    );
     existingKeys.add(key);
     imported++;
   }

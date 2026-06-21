@@ -12,6 +12,19 @@ function buildCtx(bridge: Partial<Bridge>): DocumentContext {
   return { computeBridge: bridge } as unknown as DocumentContext;
 }
 
+function expectNamedRangeMutationOptions(value: unknown, sheetIds: string[] = ['sheet1']) {
+  expect(value).toEqual(
+    expect.objectContaining({
+      operationContext: expect.objectContaining({
+        domainIds: ['named-ranges'],
+        sheetIds,
+        capturePolicy: 'commitEligible',
+        writeAdmissionMode: 'capture',
+      }),
+    }),
+  );
+}
+
 function buildIdentityFormula() {
   return {
     template: '=Sheet1!A1:B2',
@@ -57,19 +70,34 @@ describe('NamedRanges.create', () => {
       'api',
     );
 
+    const createOptions = setNamedRange.mock.calls[0]?.[2];
+    const commentOptions = updateNamedRange.mock.calls[0]?.[2];
+    expectNamedRangeMutationOptions(createOptions);
+    expectNamedRangeMutationOptions(commentOptions);
+    expect((createOptions as any).operationContext.groupId).toBe(
+      (commentOptions as any).operationContext.groupId,
+    );
+    expect((createOptions as any).operationContext.operationId).not.toBe(
+      (commentOptions as any).operationContext.operationId,
+    );
     expect(setNamedRange).toHaveBeenCalledWith(
       'BugRange',
       expect.objectContaining({
         name: 'BugRange',
         raw_expression: '=Sheet1!A1:B2',
       }),
+      expect.anything(),
     );
-    expect(updateNamedRange).toHaveBeenCalledWith('defined-name-1', {
-      name: null,
-      refersTo: null,
-      comment: 'Created from manager',
-      visible: null,
-    });
+    expect(updateNamedRange).toHaveBeenCalledWith(
+      'defined-name-1',
+      {
+        name: null,
+        refersTo: null,
+        comment: 'Created from manager',
+        visible: null,
+      },
+      expect.anything(),
+    );
     expect(setNamedRange.mock.invocationCallOrder[0]).toBeLessThan(
       updateNamedRange.mock.invocationCallOrder[0],
     );
@@ -99,6 +127,7 @@ describe('NamedRanges.create', () => {
     );
 
     expect(setNamedRange).toHaveBeenCalledTimes(1);
+    expectNamedRangeMutationOptions(setNamedRange.mock.calls[0]?.[2]);
     expect(updateNamedRange).not.toHaveBeenCalled();
     expect(getAllNamedRangesWire).not.toHaveBeenCalled();
   });
@@ -129,6 +158,38 @@ describe('NamedRanges.create', () => {
     ).rejects.toThrow(KernelError);
 
     expect(setNamedRange).toHaveBeenCalledTimes(1);
+    expectNamedRangeMutationOptions(setNamedRange.mock.calls[0]?.[2]);
     expect(updateNamedRange).not.toHaveBeenCalled();
+  });
+
+  it('threads mutation context through update and remove writes', async () => {
+    const getAllNamedRangesWire = jest.fn(async () => [
+      {
+        id: 'defined-name-1',
+        name: 'BugRange',
+        refersTo: { template: '=Sheet1!A1:B2', refs: [] },
+        scope: { Sheet: 'sheet1' },
+        visible: true,
+      },
+    ]);
+    const updateNamedRange = jest.fn(async () => undefined);
+    const removeNamedRangeById = jest.fn(async () => undefined);
+    const ctx = buildCtx({
+      getAllNamedRangesWire,
+      updateNamedRange,
+      removeNamedRangeById,
+    } as unknown as Partial<Bridge>);
+
+    await NamedRanges.update(
+      ctx,
+      'defined-name-1',
+      { comment: 'updated' },
+      sheetId('sheet1'),
+      'api',
+    );
+    await NamedRanges.remove(ctx, 'defined-name-1', 'api');
+
+    expectNamedRangeMutationOptions(updateNamedRange.mock.calls[0]?.[2]);
+    expectNamedRangeMutationOptions(removeNamedRangeById.mock.calls[0]?.[1]);
   });
 });

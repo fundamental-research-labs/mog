@@ -6,6 +6,8 @@ import type {
   VersionDiffValue,
   VersionMergeChange,
   VersionMergeConflict,
+  VersionMergeConflictResolutionOption,
+  VersionMergeConflictResolutionOptionKind,
   VersionMergeInput,
   VersionMergeOptions,
   VersionMergeResult,
@@ -20,6 +22,16 @@ import type { DocumentContext } from '../../context';
 const WORKBOOK_COMMIT_ID_RE = /^commit:sha256:[0-9a-f]{64}$/;
 const VERSION_MERGE_INPUT_KEYS = new Set(['base', 'ours', 'theirs']);
 const VERSION_MERGE_OPTION_KEYS = new Set(['mode', 'includeDiagnostics']);
+const VERSION_MERGE_RESOLUTION_OPTION_KINDS = new Set<VersionMergeConflictResolutionOptionKind>([
+  'acceptOurs',
+  'acceptTheirs',
+  'acceptBase',
+]);
+const REQUIRED_VERSION_MERGE_RESOLUTION_OPTION_KINDS = [
+  'acceptOurs',
+  'acceptTheirs',
+  'acceptBase',
+] as const satisfies readonly VersionMergeConflictResolutionOptionKind[];
 const REDACTED_VALUE_REASONS = new Set([
   'permission-denied',
   'redaction-policy',
@@ -379,7 +391,18 @@ function mapMergeConflict(value: unknown): VersionMergeConflict | null {
   const base = mapDiffValue(value.base);
   const ours = mapDiffValue(value.ours);
   const theirs = mapDiffValue(value.theirs);
-  if (conflictId === null || conflictDigest === null || !structural || !base || !ours || !theirs) {
+  const resolutionOptions = Array.isArray(value.resolutionOptions)
+    ? mapMergeResolutionOptions(value.resolutionOptions, conflictId)
+    : null;
+  if (
+    conflictId === null ||
+    conflictDigest === null ||
+    !structural ||
+    !base ||
+    !ours ||
+    !theirs ||
+    !resolutionOptions
+  ) {
     return null;
   }
 
@@ -397,9 +420,80 @@ function mapMergeConflict(value: unknown): VersionMergeConflict | null {
     base,
     ours,
     theirs,
+    resolutionOptions,
     ...(display ? { display } : {}),
     ...(diagnostics && diagnostics.length > 0 ? { diagnostics } : {}),
   };
+}
+
+function mapMergeResolutionOptions(
+  values: readonly unknown[],
+  conflictId: string | null,
+): readonly VersionMergeConflictResolutionOption[] | null {
+  if (!conflictId) return null;
+  const options = values.map((value) => mapMergeResolutionOption(value, conflictId));
+  if (options.some((option) => option === null)) return null;
+  const mapped = options as VersionMergeConflictResolutionOption[];
+  const kinds = new Set(mapped.map((option) => option.kind));
+  if (
+    REQUIRED_VERSION_MERGE_RESOLUTION_OPTION_KINDS.some((kind) => !kinds.has(kind)) ||
+    mapped.length !== kinds.size
+  ) {
+    return null;
+  }
+  return [...mapped].sort((left, right) => compareResolutionOptionKinds(left.kind, right.kind));
+}
+
+function mapMergeResolutionOption(
+  value: unknown,
+  conflictId: string,
+): VersionMergeConflictResolutionOption | null {
+  if (!isRecord(value)) return null;
+
+  const optionId = typeof value.optionId === 'string' ? value.optionId : null;
+  const optionConflictId = typeof value.conflictId === 'string' ? value.conflictId : null;
+  const kind = isMergeResolutionOptionKind(value.kind) ? value.kind : null;
+  const optionValue = mapDiffValue(value.value);
+  const recalcRequired =
+    typeof value.recalcRequired === 'boolean' ? value.recalcRequired : null;
+  if (
+    !optionId ||
+    optionConflictId !== conflictId ||
+    !kind ||
+    !optionValue ||
+    recalcRequired === null
+  ) {
+    return null;
+  }
+
+  const diagnostics = Array.isArray(value.diagnostics)
+    ? mapGraphDiagnostics(value.diagnostics)
+    : undefined;
+
+  return {
+    optionId,
+    conflictId,
+    kind,
+    value: optionValue,
+    recalcRequired,
+    ...(diagnostics && diagnostics.length > 0 ? { diagnostics } : {}),
+  };
+}
+
+function isMergeResolutionOptionKind(
+  value: unknown,
+): value is VersionMergeConflictResolutionOptionKind {
+  return typeof value === 'string' && VERSION_MERGE_RESOLUTION_OPTION_KINDS.has(value as never);
+}
+
+function compareResolutionOptionKinds(
+  left: VersionMergeConflictResolutionOptionKind,
+  right: VersionMergeConflictResolutionOptionKind,
+): number {
+  return (
+    REQUIRED_VERSION_MERGE_RESOLUTION_OPTION_KINDS.indexOf(left) -
+    REQUIRED_VERSION_MERGE_RESOLUTION_OPTION_KINDS.indexOf(right)
+  );
 }
 
 function mapStructuralMetadata(value: unknown): VersionDiffStructuralMetadata | null {

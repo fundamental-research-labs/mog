@@ -15,6 +15,14 @@ import type {
 } from '@mog-sdk/contracts/api';
 
 import type { WorkbookCommit } from './commit-store';
+import {
+  compareMergeChanges,
+  compareMergeConflicts,
+  mergePropertyKey,
+  mergeStableStructuralMetadata,
+  stableMergeConflictIdentity,
+  stableMergeResolutionOptions,
+} from './merge-preview-evidence';
 import { VersionObjectStoreError } from './object-store';
 import {
   VersionStoreProviderError,
@@ -44,10 +52,6 @@ const SUPPORTED_SEMANTIC_MERGE_DOMAINS = new Set([
   'charts.source-range',
   'floating-objects.anchors',
 ]);
-
-const SEMANTIC_MERGE_DOMAIN_ORDER = new Map(
-  [...SUPPORTED_SEMANTIC_MERGE_DOMAINS].map((domain, index) => [domain, index]),
-);
 
 type MergeDiagnostic = PublicVersionStoreDiagnostic;
 
@@ -482,6 +486,12 @@ async function classifyValueChanges(
       base: oursChange.before,
       ours: oursChange.after,
       theirs: theirsChange.after,
+      resolutionOptions: await stableMergeResolutionOptions(
+        identity,
+        oursChange.before,
+        oursChange.after,
+        theirsChange.after,
+      ),
       ...(display ? { display } : {}),
     });
   }
@@ -520,159 +530,6 @@ function isSupportedSemanticValueChange(
   }
 
   return structural.propertyPath.length > 0;
-}
-
-function mergePropertyKey(
-  structural: Exclude<VersionDiffStructuralMetadata, VersionRedactedValue>,
-): string {
-  if (
-    structural.domain === 'cell' ||
-    (structural.domain === 'cells.values' &&
-      (structural.propertyPath.length === 0 ||
-        (structural.propertyPath.length === 1 && structural.propertyPath[0] === 'value')))
-  ) {
-    return JSON.stringify(['cells.values', structural.entityId, 'value']);
-  }
-
-  return JSON.stringify([structural.domain, structural.entityId, structural.propertyPath]);
-}
-
-async function mergeStableStructuralMetadata(
-  oursChange: SemanticValueChange,
-  theirsChange: SemanticValueChange,
-  status: 'clean' | 'conflict',
-): Promise<Exclude<VersionDiffStructuralMetadata, VersionRedactedValue>> {
-  const structural = normalizeMergeStructuralMetadata(oursChange.structural);
-  const changeId = await stableMergeChangeId(
-    status,
-    structural,
-    oursChange.before,
-    semanticValuesEqual(oursChange.after, theirsChange.after)
-      ? [oursChange.after]
-      : [oursChange.after, theirsChange.after].sort(compareDiffValues),
-  );
-
-  return {
-    ...structural,
-    changeId,
-  };
-}
-
-function normalizeMergeStructuralMetadata(
-  structural: Exclude<VersionDiffStructuralMetadata, VersionRedactedValue>,
-): Exclude<VersionDiffStructuralMetadata, VersionRedactedValue> {
-  if (
-    structural.domain === 'cell' ||
-    (structural.domain === 'cells.values' &&
-      (structural.propertyPath.length === 0 ||
-        (structural.propertyPath.length === 1 && structural.propertyPath[0] === 'value')))
-  ) {
-    return {
-      kind: 'metadata',
-      changeId: structural.changeId,
-      domain: 'cells.values',
-      entityId: structural.entityId,
-      propertyPath: ['value'],
-    };
-  }
-
-  return {
-    kind: 'metadata',
-    changeId: structural.changeId,
-    domain: structural.domain,
-    entityId: structural.entityId,
-    propertyPath: [...structural.propertyPath],
-  };
-}
-
-async function stableMergeChangeId(
-  status: 'clean' | 'conflict',
-  structural: Exclude<VersionDiffStructuralMetadata, VersionRedactedValue>,
-  base: VersionDiffValue,
-  afterValues: readonly VersionDiffValue[],
-): Promise<string> {
-  const canonical = JSON.stringify({
-    schemaVersion: 1,
-    status,
-    key: mergePropertyKey(structural),
-    base,
-    afterValues,
-  });
-
-  const digest = await sha256Hex(`mog.version.merge.change-id.v1\n${canonical}`);
-  return `merge-${status}:sha256:${digest}`;
-}
-
-async function stableMergeConflictIdentity(
-  structural: Exclude<VersionDiffStructuralMetadata, VersionRedactedValue>,
-  base: VersionDiffValue,
-  ours: VersionDiffValue,
-  theirs: VersionDiffValue,
-): Promise<{ readonly conflictId: string; readonly conflictDigest: string }> {
-  const sideValues = [ours, theirs].sort(compareDiffValues);
-  const canonical = JSON.stringify({
-    schemaVersion: 1,
-    conflictKind: 'same-property',
-    key: mergePropertyKey(structural),
-    base,
-    sideValues,
-  });
-  const conflictIdDigest = await sha256Hex(`mog.version.merge.conflict-id.v1\n${canonical}`);
-  const conflictDigest = await sha256Hex(`mog.version.merge.conflict-digest.v1\n${canonical}`);
-
-  return {
-    conflictId: `conflict:sha256:${conflictIdDigest}`,
-    conflictDigest: `sha256:${conflictDigest}`,
-  };
-}
-
-function compareMergeChanges(left: VersionMergeChange, right: VersionMergeChange): number {
-  return compareStructuralMetadata(left.structural, right.structural);
-}
-
-function compareMergeConflicts(left: VersionMergeConflict, right: VersionMergeConflict): number {
-  return compareStructuralMetadata(left.structural, right.structural);
-}
-
-function compareStructuralMetadata(
-  left: VersionDiffStructuralMetadata,
-  right: VersionDiffStructuralMetadata,
-): number {
-  if (hasRedactedValue(left) || hasRedactedValue(right)) return 0;
-  return compareStrings(structuralSortKey(left), structuralSortKey(right));
-}
-
-function structuralSortKey(
-  structural: Exclude<VersionDiffStructuralMetadata, VersionRedactedValue>,
-): string {
-  const normalized = normalizeMergeStructuralMetadata(structural);
-  const rank = SEMANTIC_MERGE_DOMAIN_ORDER.get(normalized.domain) ?? Number.MAX_SAFE_INTEGER;
-  return [
-    rank.toString().padStart(4, '0'),
-    normalized.domain,
-    normalized.entityId,
-    ...normalized.propertyPath,
-  ].join('\u0000');
-}
-
-function compareDiffValues(left: VersionDiffValue, right: VersionDiffValue): number {
-  return compareStrings(JSON.stringify(left), JSON.stringify(right));
-}
-
-function compareStrings(left: string, right: string): number {
-  if (left < right) return -1;
-  if (left > right) return 1;
-  return 0;
-}
-
-async function sha256Hex(input: string): Promise<string> {
-  if (typeof globalThis.crypto?.subtle?.digest !== 'function') {
-    throw new Error('WorkbookVersionMergeService requires SHA-256 support');
-  }
-  const digest = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(input));
-  return Array.from(new Uint8Array(digest))
-    .map((byte) => byte.toString(16).padStart(2, '0'))
-    .join('');
 }
 
 function mapStructuralMetadata(

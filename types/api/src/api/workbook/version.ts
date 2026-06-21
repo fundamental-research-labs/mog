@@ -498,6 +498,20 @@ export interface VersionMergeChange {
   readonly diagnostics?: readonly VersionStoreDiagnostic[];
 }
 
+export type VersionMergeConflictResolutionOptionKind =
+  | 'acceptOurs'
+  | 'acceptTheirs'
+  | 'acceptBase';
+
+export interface VersionMergeConflictResolutionOption {
+  readonly optionId: string;
+  readonly conflictId: string;
+  readonly kind: VersionMergeConflictResolutionOptionKind;
+  readonly value: VersionDiffValue;
+  readonly recalcRequired: boolean;
+  readonly diagnostics?: readonly VersionStoreDiagnostic[];
+}
+
 export interface VersionMergeConflict {
   readonly conflictId: string;
   readonly conflictDigest: string;
@@ -506,6 +520,7 @@ export interface VersionMergeConflict {
   readonly base: VersionDiffValue;
   readonly ours: VersionDiffValue;
   readonly theirs: VersionDiffValue;
+  readonly resolutionOptions: readonly VersionMergeConflictResolutionOption[];
   readonly display?: VersionDiffDisplay;
   readonly diagnostics?: readonly VersionStoreDiagnostic[];
 }

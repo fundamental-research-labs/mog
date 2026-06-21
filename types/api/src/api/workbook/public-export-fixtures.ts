@@ -12,6 +12,7 @@ import type {
   VersionCreateBranchOptions as ApiRootCreateBranchOptions,
   VersionDiffEntry as ApiRootDiffEntry,
   VersionMergeConflict as ApiRootMergeConflict,
+  VersionMergeConflictResolutionOption as ApiRootMergeConflictResolutionOption,
   VersionMergeResult as ApiRootMergeResult,
   VersionRefMutationResult as ApiRootRefMutationResult,
   VersionSemanticValue as ApiRootSemanticValue,
@@ -34,6 +35,7 @@ import type {
   VersionCreateBranchOptions as PackageApiCreateBranchOptions,
   VersionDiffEntry as PackageApiDiffEntry,
   VersionMergeConflict as PackageApiMergeConflict,
+  VersionMergeConflictResolutionOption as PackageApiMergeConflictResolutionOption,
   VersionMergeResult as PackageApiMergeResult,
   VersionRefMutationResult as PackageApiRefMutationResult,
   VersionSemanticValue as PackageApiSemanticValue,
@@ -56,6 +58,7 @@ import type {
   VersionCreateBranchOptions as PackageWorkbookCreateBranchOptions,
   VersionDiffEntry as PackageWorkbookDiffEntry,
   VersionMergeConflict as PackageWorkbookMergeConflict,
+  VersionMergeConflictResolutionOption as PackageWorkbookMergeConflictResolutionOption,
   VersionMergeResult as PackageWorkbookMergeResult,
   VersionRefMutationResult as PackageWorkbookRefMutationResult,
   VersionSemanticValue as PackageWorkbookSemanticValue,
@@ -78,6 +81,7 @@ import type {
   VersionCreateBranchOptions as WorkbookNamespaceCreateBranchOptions,
   VersionDiffEntry as WorkbookNamespaceDiffEntry,
   VersionMergeConflict as WorkbookNamespaceMergeConflict,
+  VersionMergeConflictResolutionOption as WorkbookNamespaceMergeConflictResolutionOption,
   VersionMergeResult as WorkbookNamespaceMergeResult,
   VersionRefMutationResult as WorkbookNamespaceRefMutationResult,
   VersionSemanticValue as WorkbookNamespaceSemanticValue,
@@ -111,6 +115,9 @@ type _WorkbookNamespaceExportsDiffEntry = Assert<
 >;
 type _WorkbookNamespaceExportsMergeConflict = Assert<
   IsEqual<WorkbookNamespaceMergeConflict, PackageWorkbookMergeConflict>
+>;
+type _WorkbookNamespaceExportsMergeConflictResolutionOption = Assert<
+  IsEqual<WorkbookNamespaceMergeConflictResolutionOption, PackageWorkbookMergeConflictResolutionOption>
 >;
 type _WorkbookNamespaceExportsMergeResult = Assert<
   IsEqual<WorkbookNamespaceMergeResult, PackageWorkbookMergeResult>
@@ -166,6 +173,9 @@ type _ApiRootExportsCommitMode = Assert<IsEqual<ApiRootCommitMode, PackageApiCom
 type _ApiRootExportsDiffEntry = Assert<IsEqual<ApiRootDiffEntry, PackageApiDiffEntry>>;
 type _ApiRootExportsMergeConflict = Assert<
   IsEqual<ApiRootMergeConflict, PackageApiMergeConflict>
+>;
+type _ApiRootExportsMergeConflictResolutionOption = Assert<
+  IsEqual<ApiRootMergeConflictResolutionOption, PackageApiMergeConflictResolutionOption>
 >;
 type _ApiRootExportsMergeResult = Assert<IsEqual<ApiRootMergeResult, PackageApiMergeResult>>;
 type _ApiRootExportsDiffPage = Assert<IsEqual<ApiRootDiffPage, PackageApiDiffPage>>;

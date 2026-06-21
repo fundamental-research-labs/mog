@@ -44,6 +44,8 @@ export type {
   VersionMainRefName,
   VersionMergeChange,
   VersionMergeConflict,
+  VersionMergeConflictResolutionOption,
+  VersionMergeConflictResolutionOptionKind,
   VersionMergeInput,
   VersionMergeMutationGuarantee,
   VersionMergeOptions,

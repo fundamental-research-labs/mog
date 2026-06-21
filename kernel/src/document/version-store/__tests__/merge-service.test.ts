@@ -103,6 +103,23 @@ describe('WorkbookVersionMergeService', () => {
           base: { kind: 'value', value: 1 },
           ours: { kind: 'value', value: 2 },
           theirs: { kind: 'value', value: 3 },
+          resolutionOptions: [
+            expect.objectContaining({
+              kind: 'acceptOurs',
+              value: { kind: 'value', value: 2 },
+              recalcRequired: true,
+            }),
+            expect.objectContaining({
+              kind: 'acceptTheirs',
+              value: { kind: 'value', value: 3 },
+              recalcRequired: true,
+            }),
+            expect.objectContaining({
+              kind: 'acceptBase',
+              value: { kind: 'value', value: 1 },
+              recalcRequired: true,
+            }),
+          ],
         },
       ],
       diagnostics: [],
@@ -170,6 +187,33 @@ describe('WorkbookVersionMergeService', () => {
     expect(forward.conflicts[0].conflictDigest).toMatch(/^sha256:[0-9a-f]{64}$/);
     expect(forward.conflicts[0].conflictId).toBe(reversed.conflicts[0].conflictId);
     expect(forward.conflicts[0].conflictDigest).toBe(reversed.conflicts[0].conflictDigest);
+    expect(forward.conflicts[0].resolutionOptions.map((option) => option.kind)).toEqual([
+      'acceptOurs',
+      'acceptTheirs',
+      'acceptBase',
+    ]);
+    expect(forward.conflicts[0].resolutionOptions.map((option) => option.optionId)).toEqual(
+      reversed.conflicts[0].resolutionOptions.map((option) => option.optionId),
+    );
+    expect(forward.conflicts[0].resolutionOptions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'acceptOurs',
+          conflictId: forward.conflicts[0].conflictId,
+          value: { kind: 'value', value: 2 },
+        }),
+        expect.objectContaining({
+          kind: 'acceptTheirs',
+          conflictId: forward.conflicts[0].conflictId,
+          value: { kind: 'value', value: 3 },
+        }),
+        expect.objectContaining({
+          kind: 'acceptBase',
+          conflictId: forward.conflicts[0].conflictId,
+          value: { kind: 'value', value: 1 },
+        }),
+      ]),
+    );
     expect(JSON.stringify(forward)).not.toContain('ours-a1-random-source-id');
     expect(JSON.stringify(forward)).not.toContain('theirs-a1-different-source-id');
   });

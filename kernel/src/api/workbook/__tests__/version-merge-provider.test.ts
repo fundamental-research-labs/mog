@@ -55,6 +55,11 @@ describe('WorkbookVersion merge facade', () => {
           base: { kind: 'value', value: 'base' },
           ours: { kind: 'value', value: 'ours' },
           theirs: { kind: 'value', value: 'theirs' },
+          resolutionOptions: [
+            resolutionOption('acceptOurs', 'ours'),
+            resolutionOption('acceptTheirs', 'theirs'),
+            resolutionOption('acceptBase', 'base'),
+          ],
         },
       ],
       diagnostics: [],
@@ -70,7 +75,7 @@ describe('WorkbookVersion merge facade', () => {
     );
   });
 
-  it.each(['conflictId', 'conflictDigest'] as const)(
+  it.each(['conflictId', 'conflictDigest', 'resolutionOptions'] as const)(
     'blocks provider conflicts without %s',
     async (missingField) => {
       const conflict: Record<string, unknown> = {
@@ -87,6 +92,11 @@ describe('WorkbookVersion merge facade', () => {
         base: { kind: 'value', value: 'base' },
         ours: { kind: 'value', value: 'ours' },
         theirs: { kind: 'value', value: 'theirs' },
+        resolutionOptions: [
+          resolutionOption('acceptOurs', 'ours'),
+          resolutionOption('acceptTheirs', 'theirs'),
+          resolutionOption('acceptBase', 'base'),
+        ],
       };
       delete conflict[missingField];
 
@@ -123,6 +133,53 @@ describe('WorkbookVersion merge facade', () => {
       });
     },
   );
+
+  it('blocks provider conflicts without the complete first-slice resolution option set', async () => {
+    const merge = jest.fn(async () => ({
+      status: 'conflicted',
+      base: BASE,
+      ours: OURS,
+      theirs: THEIRS,
+      changes: [],
+      conflicts: [
+        {
+          conflictId: 'conflict:cell:sheet-1:B1:value',
+          conflictDigest: 'sha256:merge-conflict-digest',
+          conflictKind: 'same-property',
+          structural: {
+            kind: 'metadata',
+            changeId: 'merge-conflict-1',
+            domain: 'cell',
+            entityId: 'sheet-1!B1',
+            propertyPath: ['value'],
+          },
+          base: { kind: 'value', value: 'base' },
+          ours: { kind: 'value', value: 'ours' },
+          theirs: { kind: 'value', value: 'theirs' },
+          resolutionOptions: [
+            resolutionOption('acceptOurs', 'ours'),
+            resolutionOption('acceptTheirs', 'theirs'),
+          ],
+        },
+      ],
+      diagnostics: [],
+      mutationGuarantee: 'preview-only',
+    }));
+    const version = new WorkbookVersionImpl({
+      versioning: { mergeService: { merge } },
+    } as any);
+
+    await expect(version.merge({ base: BASE, ours: OURS, theirs: THEIRS })).resolves.toMatchObject({
+      status: 'blocked',
+      diagnostics: [
+        expect.objectContaining({
+          issueCode: 'VERSION_INVALID_COMMIT_PAYLOAD',
+          redacted: true,
+        }),
+      ],
+      mutationGuarantee: 'preview-only',
+    });
+  });
 
   it('returns a blocked preview result when merge input is malformed', async () => {
     const merge = jest.fn();
@@ -161,3 +218,13 @@ describe('WorkbookVersion merge facade', () => {
     });
   });
 });
+
+function resolutionOption(kind: 'acceptOurs' | 'acceptTheirs' | 'acceptBase', value: string) {
+  return {
+    optionId: `option:${kind}`,
+    conflictId: 'conflict:cell:sheet-1:B1:value',
+    kind,
+    value: { kind: 'value', value },
+    recalcRequired: true,
+  };
+}

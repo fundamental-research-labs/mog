@@ -37,6 +37,7 @@ import {
   hasAttachedVersionReviewWriteService,
 } from './version-review-service-discovery';
 import { hasAttachedPendingRemotePromotionService } from './version-pending-remote';
+import { hasAttachedVersionProposalService } from './version-proposal-service-discovery';
 
 const VERSION_HEAD_REF = 'HEAD';
 const VERSION_MAIN_REF = 'refs/heads/main' satisfies VersionMainRefName;
@@ -89,6 +90,12 @@ type AttachedVersionServices = AttachedVersionReadService & {
   readonly versionReviewService?: unknown;
   readonly reviewRecordService?: unknown;
   readonly reviewMetadataStore?: unknown;
+  readonly proposalService?: unknown;
+  readonly versionProposalService?: unknown;
+  readonly agentProposalService?: unknown;
+  readonly proposalWorkspaceService?: unknown;
+  readonly proposalMetadataStore?: unknown;
+  readonly proposalStore?: unknown;
   readonly pendingRemotePromotionService?: unknown;
   readonly publicService?: unknown;
   readonly surfaceStatusService?: unknown;
@@ -114,6 +121,7 @@ type CapabilityAvailability = {
   readonly checkout: boolean;
   readonly reviewRead: boolean;
   readonly reviewWrite: boolean;
+  readonly proposal: boolean;
   readonly mergePreview: boolean;
   readonly mergeApply: boolean;
   readonly provenance: boolean;
@@ -199,6 +207,7 @@ export async function getWorkbookVersionSurfaceStatus(
     checkout: Boolean(workbookStatus?.checkout.available || hasAttachedVersionCheckoutService(ctx)),
     reviewRead: hasAttachedVersionReviewReadService(services),
     reviewWrite: hasAttachedVersionReviewWriteService(services),
+    proposal: hasAttachedVersionProposalService(services),
     mergePreview: Boolean(workbookStatus?.merge.available || hasAttachedVersionMergeService(ctx)),
     mergeApply:
       Boolean(workbookStatus?.merge.available || hasAttachedVersionMergeService(ctx)) &&
@@ -592,9 +601,9 @@ function buildCapabilityStates(
     ),
     'version:proposal': mutableCapability(
       'version:proposal',
-      false,
+      availability.proposal,
       'VC-05',
-      'Agent proposal workflows require branch-scoped materialization plumbing from a later slice.',
+      'Agent proposal workflows require an attached proposal service.',
       false,
       'version.surfaceStatus.proposalUnavailable',
     ),
@@ -750,6 +759,7 @@ function hasAnyVersionAttachment(services: AttachedVersionServices): boolean {
     hasAttachedVersionDiffService(services) ||
     hasAttachedVersionReviewReadService(services) ||
     hasAttachedVersionReviewWriteService(services) ||
+    hasAttachedVersionProposalService(services) ||
     hasAttachedVersionApplyMergeService(services) ||
     bindMethod(services.pendingRemotePromotionService, 'promotePendingRemoteSegments') ||
     bindMethod(services.writeService, 'commit') ||

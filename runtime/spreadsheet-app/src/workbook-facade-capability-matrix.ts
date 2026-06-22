@@ -1057,7 +1057,8 @@ export const WORKBOOK_SUB_API_INTERFACES: WorkbookSubApiInterfaces = {
     },
     cells: {
       signature: 'readonly cells: WorksheetCellsAccessor;',
-      docstring: 'Typed per-cell readback accessor (A1-only). See {@link CellRecord}.\n\nDistinct from {@link getCell}: `cells.get` returns a record with a\n`valueType` discriminant for every in-bounds cell, exposes the\nunified {@link RegionMeta} for array/Data Table membership, and\nreturns `undefined` (not `{value: null}`) for out-of-bounds reads.',
+      docstring:
+        'Typed per-cell readback accessor (A1-only). See {@link CellRecord}.\n\nDistinct from {@link getCell}: `cells.get` returns a record with a\n`valueType` discriminant for every in-bounds cell, exposes the\nunified {@link RegionMeta} for array/Data Table membership, and\nreturns `undefined` (not `{value: null}`) for out-of-bounds reads.',
       usedTypes: ['WorksheetCellsAccessor'],
       stableId: 'Worksheet.cells',
       canonicalPath: 'ws.cells',
@@ -1809,7 +1810,8 @@ export const WORKBOOK_SUB_API_INTERFACES: WorkbookSubApiInterfaces = {
     },
     objects: {
       signature: 'readonly objects: WorksheetObjectCollection;',
-      docstring: 'All floating objects: shapes, pictures, text boxes, equations, text-effects, diagram, ink',
+      docstring:
+        'All floating objects: shapes, pictures, text boxes, equations, text-effects, diagram, ink',
       usedTypes: ['WorksheetObjectCollection'],
       stableId: 'Worksheet.objects',
       canonicalPath: 'ws.objects',
@@ -3657,6 +3659,10 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
     },
   },
   WorkbookVersion: {
+    acceptProposal: {
+      decision: 'allow',
+      capabilities: ['version:proposal', 'version:branch'],
+    },
     appendReviewDecision: {
       decision: 'allow',
       capabilities: ['version:reviewWrite'],
@@ -3673,9 +3679,17 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
       decision: 'allow',
       capabilities: ['version:commit'],
     },
+    commitProposalWorkspace: {
+      decision: 'allow',
+      capabilities: ['version:proposal'],
+    },
     createBranch: {
       decision: 'allow',
       capabilities: ['version:branch'],
+    },
+    createProposal: {
+      decision: 'allow',
+      capabilities: ['version:proposal'],
     },
     createReview: {
       decision: 'allow',
@@ -3693,6 +3707,14 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
       decision: 'allow',
       capabilities: ['version:diff'],
     },
+    disposeProposalWorkspace: {
+      decision: 'allow',
+      capabilities: ['version:proposal'],
+    },
+    failProposal: {
+      decision: 'allow',
+      capabilities: ['version:proposal'],
+    },
     fastForwardBranch: {
       decision: 'allow',
       capabilities: ['version:branch'],
@@ -3704,6 +3726,14 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
     getMergeConflictDetail: {
       decision: 'allow',
       capabilities: ['version:mergePreview'],
+    },
+    getProposal: {
+      decision: 'allow',
+      capabilities: ['version:proposal'],
+    },
+    getProposalWorkspace: {
+      decision: 'allow',
+      capabilities: ['version:proposal'],
     },
     getRef: {
       decision: 'allow',
@@ -3729,6 +3759,10 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
       decision: 'allow',
       capabilities: ['version:read'],
     },
+    listProposals: {
+      decision: 'allow',
+      capabilities: ['version:proposal'],
+    },
     listRefs: {
       decision: 'allow',
       capabilities: ['version:read'],
@@ -3737,9 +3771,17 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
       decision: 'allow',
       capabilities: ['version:reviewRead'],
     },
+    markProposalVerified: {
+      decision: 'allow',
+      capabilities: ['version:proposal'],
+    },
     merge: {
       decision: 'allow',
       capabilities: ['version:mergePreview'],
+    },
+    openProposalReview: {
+      decision: 'allow',
+      capabilities: ['version:proposal'],
     },
     promotePendingRemote: {
       decision: 'allow',
@@ -3753,61 +3795,13 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
       decision: 'allow',
       capabilities: ['version:read'],
     },
-    saveMergeResolutions: {
-      decision: 'allow',
-      capabilities: ['version:mergePreview', 'version:mergeApply'],
-    },
-    updateBranch: {
-      decision: 'allow',
-      capabilities: ['version:branch'],
-    },
-    updateReviewStatus: {
-      decision: 'allow',
-      capabilities: ['version:reviewWrite'],
-    },
-    acceptProposal: {
-      decision: 'allow',
-      capabilities: ['version:proposal', 'version:branch'],
-    },
-    commitProposalWorkspace: {
-      decision: 'allow',
-      capabilities: ['version:proposal'],
-    },
-    createProposal: {
-      decision: 'allow',
-      capabilities: ['version:proposal'],
-    },
-    disposeProposalWorkspace: {
-      decision: 'allow',
-      capabilities: ['version:proposal'],
-    },
-    failProposal: {
-      decision: 'allow',
-      capabilities: ['version:proposal'],
-    },
-    getProposal: {
-      decision: 'allow',
-      capabilities: ['version:proposal'],
-    },
-    getProposalWorkspace: {
-      decision: 'allow',
-      capabilities: ['version:proposal'],
-    },
-    listProposals: {
-      decision: 'allow',
-      capabilities: ['version:proposal'],
-    },
-    markProposalVerified: {
-      decision: 'allow',
-      capabilities: ['version:proposal'],
-    },
-    openProposalReview: {
-      decision: 'allow',
-      capabilities: ['version:proposal'],
-    },
     rejectProposal: {
       decision: 'allow',
       capabilities: ['version:proposal'],
+    },
+    saveMergeResolutions: {
+      decision: 'allow',
+      capabilities: ['version:mergePreview', 'version:mergeApply'],
     },
     startProposalWorkspace: {
       decision: 'allow',
@@ -3816,6 +3810,14 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
     supersedeProposal: {
       decision: 'allow',
       capabilities: ['version:proposal'],
+    },
+    updateBranch: {
+      decision: 'allow',
+      capabilities: ['version:branch'],
+    },
+    updateReviewStatus: {
+      decision: 'allow',
+      capabilities: ['version:reviewWrite'],
     },
   },
   WorkbookViewport: {

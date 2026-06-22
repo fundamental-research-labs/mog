@@ -46,7 +46,20 @@ type VersionResultOperation =
   | 'putMergeResolutionPayload'
   | 'saveMergeResolutions'
   | 'applyMerge'
+  | 'acceptProposal'
+  | 'commitProposalWorkspace'
+  | 'createProposal'
+  | 'disposeProposalWorkspace'
+  | 'failProposal'
+  | 'getProposal'
+  | 'getProposalWorkspace'
+  | 'listProposals'
+  | 'markProposalVerified'
+  | 'openProposalReview'
   | 'readRef'
+  | 'rejectProposal'
+  | 'startProposalWorkspace'
+  | 'supersedeProposal'
   | 'updateReviewStatus'
   | 'updateBranch';
 
@@ -221,16 +234,16 @@ export function versionResultFromMergeEndpointDiagnostics<T>(
   return versionFailureFromOperationDiagnostics(operation, diagnostics);
 }
 
-function capabilityDependency(diagnostic: VersionStoreDiagnostic): 'featureGate' | 'hostCapability' {
+function capabilityDependency(
+  diagnostic: VersionStoreDiagnostic,
+): 'featureGate' | 'hostCapability' {
   const reason = diagnostic.payload?.reason;
   return reason === 'hostCapabilityDenied' || reason === 'hostCapabilityApprovalRequired'
     ? 'hostCapability'
     : 'featureGate';
 }
 
-function capabilityForMergeOperation(
-  operation: VersionMergePublicOperation,
-): VersionCapability {
+function capabilityForMergeOperation(operation: VersionMergePublicOperation): VersionCapability {
   switch (operation) {
     case 'merge':
     case 'getMergeConflictDetail':
@@ -256,9 +269,7 @@ function toVersionDiagnostic(diagnostic: VersionStoreDiagnostic): VersionDiagnos
       messageTemplateId: diagnostic.messageTemplateId,
       redacted: diagnostic.redacted,
       ...(diagnostic.payload ? { payload: diagnostic.payload } : {}),
-      ...(diagnostic.mutationGuarantee
-        ? { mutationGuarantee: diagnostic.mutationGuarantee }
-        : {}),
+      ...(diagnostic.mutationGuarantee ? { mutationGuarantee: diagnostic.mutationGuarantee } : {}),
     },
   };
 }

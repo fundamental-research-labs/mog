@@ -106,6 +106,21 @@ import {
   promotePendingRemoteWorkbookVersion,
 } from './version-pending-remote';
 import {
+  acceptWorkbookVersionProposal,
+  commitWorkbookVersionProposalWorkspace,
+  createWorkbookVersionProposal,
+  disposeWorkbookVersionProposalWorkspace,
+  failWorkbookVersionProposal,
+  getWorkbookVersionProposal,
+  getWorkbookVersionProposalWorkspace,
+  listWorkbookVersionProposals,
+  markWorkbookVersionProposalVerified,
+  openWorkbookVersionProposalReview,
+  rejectWorkbookVersionProposal,
+  startWorkbookVersionProposalWorkspace,
+  supersedeWorkbookVersionProposal,
+} from './version-proposal';
+import {
   appendWorkbookVersionReviewDecision,
   createWorkbookVersionReview,
   getWorkbookVersionReview,
@@ -145,20 +160,6 @@ type MaybePromise<T> = T | Promise<T>;
 
 type BoundMethod = (...args: readonly unknown[]) => MaybePromise<unknown>;
 type VersionPublicOperation = 'getHead' | 'readRef';
-type VersionProposalOperation =
-  | 'acceptProposal'
-  | 'commitProposalWorkspace'
-  | 'createProposal'
-  | 'disposeProposalWorkspace'
-  | 'failProposal'
-  | 'getProposal'
-  | 'getProposalWorkspace'
-  | 'listProposals'
-  | 'markProposalVerified'
-  | 'openProposalReview'
-  | 'rejectProposal'
-  | 'startProposalWorkspace'
-  | 'supersedeProposal';
 
 type AttachedVersionReadService = {
   readHead?: () => MaybePromise<unknown>;
@@ -527,62 +528,62 @@ export class WorkbookVersionImpl implements WorkbookVersion {
   ): Promise<VersionResult<WorkbookVersionReviewDiffPage>> {
     return getWorkbookVersionReviewDiff(this.ctx, input);
   }
-  async createProposal(_input: CreateAgentProposalInput): Promise<VersionResult<AgentProposal>> {
-    return proposalCapabilityUnavailable('createProposal');
+  async createProposal(input: CreateAgentProposalInput): Promise<VersionResult<AgentProposal>> {
+    return createWorkbookVersionProposal(this.ctx, input);
   }
   async startProposalWorkspace(
-    _input: StartProposalWorkspaceInput,
+    input: StartProposalWorkspaceInput,
   ): Promise<VersionResult<AgentProposalWorkspaceHandle>> {
-    return proposalCapabilityUnavailable('startProposalWorkspace');
+    return startWorkbookVersionProposalWorkspace(this.ctx, input);
   }
   async getProposalWorkspace(
-    _input: GetProposalWorkspaceInput,
+    input: GetProposalWorkspaceInput,
   ): Promise<VersionResult<AgentProposalWorkspaceHandle>> {
-    return proposalCapabilityUnavailable('getProposalWorkspace');
+    return getWorkbookVersionProposalWorkspace(this.ctx, input);
   }
   async disposeProposalWorkspace(
-    _input: DisposeProposalWorkspaceInput,
+    input: DisposeProposalWorkspaceInput,
   ): Promise<VersionResult<{ readonly disposed: true }>> {
-    return proposalCapabilityUnavailable('disposeProposalWorkspace');
+    return disposeWorkbookVersionProposalWorkspace(this.ctx, input);
   }
   async commitProposalWorkspace(
-    _input: CommitProposalWorkspaceInput,
+    input: CommitProposalWorkspaceInput,
   ): Promise<VersionResult<AgentProposal>> {
-    return proposalCapabilityUnavailable('commitProposalWorkspace');
+    return commitWorkbookVersionProposalWorkspace(this.ctx, input);
   }
-  async failProposal(_input: FailAgentProposalInput): Promise<VersionResult<AgentProposal>> {
-    return proposalCapabilityUnavailable('failProposal');
+  async failProposal(input: FailAgentProposalInput): Promise<VersionResult<AgentProposal>> {
+    return failWorkbookVersionProposal(this.ctx, input);
   }
-  async getProposal(_input: GetAgentProposalInput): Promise<VersionResult<AgentProposal>> {
-    return proposalCapabilityUnavailable('getProposal');
+  async getProposal(input: GetAgentProposalInput): Promise<VersionResult<AgentProposal>> {
+    return getWorkbookVersionProposal(this.ctx, input);
   }
   async listProposals(
-    _input: ListAgentProposalsInput,
+    input: ListAgentProposalsInput = {},
   ): Promise<VersionResult<Paged<AgentProposalSummary>>> {
-    return proposalCapabilityUnavailable('listProposals');
+    return listWorkbookVersionProposals(this.ctx, input);
   }
   async markProposalVerified(
-    _input: MarkAgentProposalVerifiedInput,
+    input: MarkAgentProposalVerifiedInput,
   ): Promise<VersionResult<AgentProposal>> {
-    return proposalCapabilityUnavailable('markProposalVerified');
+    return markWorkbookVersionProposalVerified(this.ctx, input);
   }
   async openProposalReview(
-    _input: OpenProposalReviewInput,
+    input: OpenProposalReviewInput,
   ): Promise<VersionResult<WorkbookVersionReviewRecord>> {
-    return proposalCapabilityUnavailable('openProposalReview');
+    return openWorkbookVersionProposalReview(this.ctx, input);
   }
   async acceptProposal(
-    _input: AcceptAgentProposalInput,
+    input: AcceptAgentProposalInput,
   ): Promise<VersionResult<AgentProposalAcceptResult>> {
-    return proposalCapabilityUnavailable('acceptProposal');
+    return acceptWorkbookVersionProposal(this.ctx, input);
   }
-  async rejectProposal(_input: RejectAgentProposalInput): Promise<VersionResult<AgentProposal>> {
-    return proposalCapabilityUnavailable('rejectProposal');
+  async rejectProposal(input: RejectAgentProposalInput): Promise<VersionResult<AgentProposal>> {
+    return rejectWorkbookVersionProposal(this.ctx, input);
   }
   async supersedeProposal(
-    _input: SupersedeAgentProposalInput,
+    input: SupersedeAgentProposalInput,
   ): Promise<VersionResult<AgentProposal>> {
-    return proposalCapabilityUnavailable('supersedeProposal');
+    return supersedeWorkbookVersionProposal(this.ctx, input);
   }
   async diff(
     base: VersionCommitish,
@@ -686,30 +687,6 @@ export class WorkbookVersionImpl implements WorkbookVersion {
       await deleteWorkbookVersionRef(this.ctx, options),
     );
   }
-}
-
-function proposalCapabilityUnavailable<T>(operation: VersionProposalOperation): VersionResult<T> {
-  const message =
-    'Agent proposal workflows require branch-scoped materialization support before they can run.';
-  return {
-    ok: false,
-    error: {
-      code: 'version_capability_unavailable',
-      capability: 'version:proposal',
-      dependency: 'VC-05',
-      reason: message,
-      retryable: false,
-      diagnostics: [
-        {
-          code: 'version.surfaceStatus.proposalUnavailable',
-          severity: 'warning',
-          message,
-          dependency: 'VC-05',
-          data: { operation },
-        },
-      ],
-    },
-  };
 }
 
 function mapHeadResult(value: unknown): WorkbookCommitRef | VersionDegradedHeadResult {

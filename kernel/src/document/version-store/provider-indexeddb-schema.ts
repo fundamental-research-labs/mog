@@ -8,7 +8,7 @@
  */
 
 export const VERSION_STORE_INDEXEDDB_NAME = 'mog-version-store';
-export const VERSION_STORE_INDEXEDDB_VERSION = 1;
+export const VERSION_STORE_INDEXEDDB_VERSION = 2;
 
 export const REGISTRIES_STORE = 'registries';
 export const OBJECTS_STORE = 'objects';
@@ -18,6 +18,7 @@ export const COMMIT_INDEXES_STORE = 'commitIndexes';
 export const PARENT_INDEXES_STORE = 'parentIndexes';
 export const INDEX_MANIFESTS_STORE = 'indexManifests';
 export const INTENTS_STORE = 'intents';
+export const PROPOSALS_STORE = 'proposals';
 
 export const VERSION_STORE_INDEXEDDB_STORES = Object.freeze([
   REGISTRIES_STORE,
@@ -28,6 +29,7 @@ export const VERSION_STORE_INDEXEDDB_STORES = Object.freeze([
   PARENT_INDEXES_STORE,
   INDEX_MANIFESTS_STORE,
   INTENTS_STORE,
+  PROPOSALS_STORE,
 ] as const);
 
 export type VersionStoreIndexedDbStoreName = (typeof VERSION_STORE_INDEXEDDB_STORES)[number];
@@ -44,6 +46,7 @@ function attemptOpen(resolve: (db: IDBDatabase) => void, reject: (error: unknown
   request.onupgradeneeded = () => {
     const db = request.result;
     createV1Stores(db);
+    createV2Stores(db);
   };
 
   request.onsuccess = () => {
@@ -100,6 +103,21 @@ function createV1Stores(db: IDBDatabase): void {
     const store = db.createObjectStore(INTENTS_STORE);
     store.createIndex('namespaceKey', 'namespaceKey', { unique: false });
     store.createIndex('documentScopeKey', 'documentScopeKey', { unique: false });
+  }
+}
+
+function createV2Stores(db: IDBDatabase): void {
+  if (!db.objectStoreNames.contains(PROPOSALS_STORE)) {
+    const store = db.createObjectStore(PROPOSALS_STORE);
+    store.createIndex('documentScopeKey', 'documentScopeKey', { unique: false });
+    store.createIndex('documentId', 'documentId', { unique: false });
+    store.createIndex('targetRef', 'targetRef', { unique: false });
+    store.createIndex('baseCommitId', 'baseCommitId', { unique: false });
+    store.createIndex('proposalCommitId', 'proposalCommitId', { unique: false });
+    store.createIndex('proposalBranchName', 'proposalBranchName', { unique: false });
+    store.createIndex('agentRunId', 'agentRunId', { unique: false });
+    store.createIndex('status', 'status', { unique: false });
+    store.createIndex('updatedAt', 'updatedAt', { unique: false });
   }
 }
 

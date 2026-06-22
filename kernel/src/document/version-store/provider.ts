@@ -19,6 +19,7 @@ import { InMemoryPendingRemoteSegmentStore } from './pending-remote-segment-stor
 import { InMemoryAppliedSyncUpdateIdentityStore } from './applied-sync-update-identity-store';
 import { InMemorySyncBatchStatusStore } from './sync-batch-status-store';
 import { InMemoryWorkbookVersionReviewRecordStore } from './review-service';
+import { InMemoryAgentProposalMetadataStore } from './proposal-store';
 import { cloneVersionGraphRegistry, createVersionGraphRegistry, namespaceForDocumentScope, namespaceForRegistry, normalizeVersionDocumentScope, normalizeVersionStoreString, type VersionDocumentScope, type VersionGraphRegistry, type VersionRecordRevision } from './registry';
 
 export {
@@ -575,6 +576,10 @@ export class InMemoryVersionStoreProvider implements VersionStoreProvider {
 
   async openWorkbookVersionReviewRecordStore(): Promise<InMemoryWorkbookVersionReviewRecordStore> {
     return new InMemoryWorkbookVersionReviewRecordStore({ documentScope: this.documentScope, backend: this.backend.reviewRecordBackend });
+  }
+
+  async openAgentProposalMetadataStore(): Promise<InMemoryAgentProposalMetadataStore> {
+    return new InMemoryAgentProposalMetadataStore({ documentScope: this.documentScope, backend: this.backend.proposalMetadataBackend });
   }
 
   async scanDocumentIntegrity(

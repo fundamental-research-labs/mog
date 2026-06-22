@@ -36,6 +36,10 @@ import {
   WorkbookVersionReviewRecordMemoryBackend,
   type WorkbookVersionReviewRecordMemoryBackendSnapshot,
 } from './review-service';
+import {
+  AgentProposalMetadataMemoryBackend,
+  type AgentProposalMetadataMemoryBackendSnapshot,
+} from './proposal-store';
 
 export type InMemoryVersionProviderDurability = 'ephemeral' | 'snapshot-test-double';
 
@@ -52,6 +56,7 @@ export type InMemoryVersionDocumentProviderBackendSnapshot = {
   readonly appliedSyncUpdateIdentities?: AppliedSyncUpdateIdentityMemoryBackendSnapshot;
   readonly syncBatchStatuses?: SyncBatchStatusMemoryBackendSnapshot;
   readonly reviewRecords?: WorkbookVersionReviewRecordMemoryBackendSnapshot;
+  readonly proposalMetadataRecords?: AgentProposalMetadataMemoryBackendSnapshot;
 };
 
 export class InMemoryVersionDocumentProviderBackend {
@@ -62,6 +67,7 @@ export class InMemoryVersionDocumentProviderBackend {
   readonly appliedSyncUpdateIdentityBackend: AppliedSyncUpdateIdentityMemoryBackend;
   readonly syncBatchStatusBackend: SyncBatchStatusMemoryBackend;
   readonly reviewRecordBackend: WorkbookVersionReviewRecordMemoryBackend;
+  readonly proposalMetadataBackend: AgentProposalMetadataMemoryBackend;
 
   constructor(
     options: {
@@ -70,6 +76,7 @@ export class InMemoryVersionDocumentProviderBackend {
       readonly appliedSyncUpdateIdentityBackend?: AppliedSyncUpdateIdentityMemoryBackend;
       readonly syncBatchStatusBackend?: SyncBatchStatusMemoryBackend;
       readonly reviewRecordBackend?: WorkbookVersionReviewRecordMemoryBackend;
+      readonly proposalMetadataBackend?: AgentProposalMetadataMemoryBackend;
     } = {},
   ) {
     this.mergeApplyIntentBackend =
@@ -82,6 +89,8 @@ export class InMemoryVersionDocumentProviderBackend {
       options.syncBatchStatusBackend ?? new SyncBatchStatusMemoryBackend();
     this.reviewRecordBackend =
       options.reviewRecordBackend ?? new WorkbookVersionReviewRecordMemoryBackend();
+    this.proposalMetadataBackend =
+      options.proposalMetadataBackend ?? new AgentProposalMetadataMemoryBackend();
   }
 
   readRegistryRecord(
@@ -147,6 +156,7 @@ export class InMemoryVersionDocumentProviderBackend {
       appliedSyncUpdateIdentities: this.appliedSyncUpdateIdentityBackend.exportSnapshot(),
       syncBatchStatuses: this.syncBatchStatusBackend.exportSnapshot(),
       reviewRecords: this.reviewRecordBackend.exportSnapshot(),
+      proposalMetadataRecords: this.proposalMetadataBackend.exportSnapshot(),
     });
   }
 
@@ -168,6 +178,9 @@ export class InMemoryVersionDocumentProviderBackend {
       ),
       reviewRecordBackend: WorkbookVersionReviewRecordMemoryBackend.fromSnapshot(
         snapshot.reviewRecords ?? { rows: [] },
+      ),
+      proposalMetadataBackend: AgentProposalMetadataMemoryBackend.fromSnapshot(
+        snapshot.proposalMetadataRecords ?? { rows: [] },
       ),
     });
     for (const [scope, record] of snapshot.registries) {

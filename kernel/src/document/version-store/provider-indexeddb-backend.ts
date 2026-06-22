@@ -93,6 +93,7 @@ import { IndexedDbPendingRemoteSegmentStore } from './provider-indexeddb-pending
 import { IndexedDbAppliedSyncUpdateIdentityStore } from './provider-indexeddb-applied-sync-updates';
 import { IndexedDbSyncBatchStatusStore } from './provider-indexeddb-sync-batch-statuses';
 import { IndexedDbWorkbookVersionReviewRecordStore } from './provider-indexeddb-review-records';
+import { IndexedDbAgentProposalMetadataStore } from './provider-indexeddb-proposals';
 
 export const INDEXEDDB_VERSION_STORE_PROVIDER_KIND = 'indexeddb' as const;
 
@@ -383,6 +384,13 @@ export class IndexedDbVersionStoreProvider implements VersionStoreProvider {
 
   async openWorkbookVersionReviewRecordStore(): Promise<IndexedDbWorkbookVersionReviewRecordStore> {
     return new IndexedDbWorkbookVersionReviewRecordStore({
+      documentScope: this.documentScope,
+      getDb: () => this.getDb(),
+    });
+  }
+
+  async openAgentProposalMetadataStore(): Promise<IndexedDbAgentProposalMetadataStore> {
+    return new IndexedDbAgentProposalMetadataStore({
       documentScope: this.documentScope,
       getDb: () => this.getDb(),
     });

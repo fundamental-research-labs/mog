@@ -27,6 +27,7 @@ import type {
 import type { VersionAuthor as GraphVersionAuthor } from '@mog-sdk/contracts/versioning';
 
 import type { CreateBranchResult, ReadBranchResult } from './branch-service';
+import { ensureProposalBranchHead } from './proposal-provider-branch-head-validation';
 import {
   hasAgentProposalMetadataStoreProvider,
   type AgentProposalMetadataStore,
@@ -43,7 +44,10 @@ import {
   publicProposalSummary,
 } from './proposal-provider-service-utils';
 import { acceptProviderBackedAgentProposal } from './proposal-provider-accept-service';
-import type { ProposalWorkspaceLifecycleService } from './proposal-workspace-lifecycle-service';
+import {
+  isProposalWorkspaceLifecycleService,
+  type ProposalWorkspaceLifecycleService,
+} from './proposal-workspace-lifecycle-service';
 import { namespaceForRegistry } from './registry';
 import type { WorkbookVersionReviewService } from './review-service';
 import type { RefVersion } from './ref-store';
@@ -135,6 +139,13 @@ export class ProviderBackedAgentProposalService {
         'invalid_proposal_base_commit',
         ['valid_baseCommitId', 'omitted_baseCommitId'],
         'Proposal baseCommitId must be a public workbook commit id.',
+      );
+    }
+    if (baseCommitId !== target.head.commitId) {
+      return invalidState(
+        'proposal_base_mismatch',
+        ['current_target_head'],
+        'Proposal baseCommitId must match the current target ref head.',
       );
     }
 
@@ -254,6 +265,13 @@ export class ProviderBackedAgentProposalService {
         'Only workspace-open proposals can be committed.',
       );
     }
+    if (proposal.value.workspaceId !== input.workspaceId) {
+      return invalidState(
+        'proposal_workspace_mismatch',
+        ['matching_workspace_id'],
+        'Proposal workspace commits must use the workspace opened for the proposal.',
+      );
+    }
 
     if (!this.workspaceService) return workspaceUnavailable('commitProposalWorkspace');
     const committed = await this.callWorkspaceService('commitProposalWorkspace', () =>
@@ -276,6 +294,13 @@ export class ProviderBackedAgentProposalService {
       'commitProposalWorkspace',
     );
     if (!commitExists.ok) return commitExists.result;
+    const branchHead = await ensureProposalBranchHead({
+      branchService: this.branchService,
+      operation: 'commitProposalWorkspace',
+      proposalBranchName: proposal.value.proposalBranchName,
+      expectedHeadCommitId: committed.value.proposalCommitId,
+    });
+    if (!branchHead.ok) return branchHead.result;
 
     return proposalStoreUpdateResult(
       await store.value.updateProposal({
@@ -966,18 +991,6 @@ function isWorkbookVersionReviewService(value: unknown): value is WorkbookVersio
     isRecord(value) &&
     typeof value.createReview === 'function' &&
     typeof value.getReview === 'function'
-  );
-}
-
-function isProposalWorkspaceLifecycleService(
-  value: unknown,
-): value is ProposalWorkspaceLifecycleService {
-  return (
-    isRecord(value) &&
-    typeof value.startProposalWorkspace === 'function' &&
-    typeof value.getProposalWorkspace === 'function' &&
-    typeof value.disposeProposalWorkspace === 'function' &&
-    typeof value.commitProposalWorkspace === 'function'
   );
 }
 

@@ -45,3 +45,19 @@ export type ProposalWorkspaceLifecycleService = {
     input: ProviderBackedCommitProposalWorkspaceInput,
   ): MaybePromise<VersionResult<ProviderBackedProposalWorkspaceCommitResult>>;
 };
+
+export function isProposalWorkspaceLifecycleService(
+  value: unknown,
+): value is ProposalWorkspaceLifecycleService {
+  return (
+    isRecord(value) &&
+    typeof value.startProposalWorkspace === 'function' &&
+    typeof value.getProposalWorkspace === 'function' &&
+    typeof value.disposeProposalWorkspace === 'function' &&
+    typeof value.commitProposalWorkspace === 'function'
+  );
+}
+
+function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
+  return typeof value === 'object' && value !== null;
+}

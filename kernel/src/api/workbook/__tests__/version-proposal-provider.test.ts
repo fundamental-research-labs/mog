@@ -118,6 +118,37 @@ describe('WorkbookVersion provider-backed proposal service', () => {
     });
   });
 
+  it('rejects proposal creation when an explicit base is not the target head', async () => {
+    const graph = await graphWithRoot();
+    const version = versionForProvider(graph.provider);
+    const movedMainCommitId = await commitMain(graph.provider, graph.rootCommitId);
+
+    await expect(
+      version.createProposal({
+        ...createProposalInput('proposal-create-stale-base'),
+        baseCommitId: graph.rootCommitId,
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: {
+        code: 'invalid_state',
+        state: 'proposal_base_mismatch',
+        allowed: ['current_target_head'],
+      },
+    });
+    await expect(version.listProposals({ targetRef: 'refs/heads/main' })).resolves.toMatchObject({
+      ok: true,
+      value: { items: [], totalEstimate: 0 },
+    });
+    await expect(version.readRef('refs/heads/main')).resolves.toMatchObject({
+      ok: true,
+      value: {
+        status: 'success',
+        ref: { commitId: movedMainCommitId },
+      },
+    });
+  });
+
   it('delegates workspace lifecycle to an attached branch-isolated workspace service before review', async () => {
     const graph = await graphWithRoot();
     const workspaceService = graphCommittingWorkspaceService(graph.provider);
@@ -165,6 +196,13 @@ describe('WorkbookVersion provider-backed proposal service', () => {
         status: 'committed',
         revision: 3,
         proposalCommitId: expect.stringMatching(/^commit:sha256:[0-9a-f]{64}$/),
+      },
+    });
+    await expect(version.getRef(created.value.proposalBranchName)).resolves.toMatchObject({
+      ok: true,
+      value: {
+        status: 'success',
+        ref: { commitId: committed.value.proposalCommitId },
       },
     });
 
@@ -273,6 +311,107 @@ describe('WorkbookVersion provider-backed proposal service', () => {
         status: 'fast_forwarded',
         proposalId: created.value.id,
         appliedCommitId: committed.value.proposalCommitId,
+      },
+    });
+  });
+
+  it('rejects proposal workspace commits with a stale workspace id', async () => {
+    const graph = await graphWithRoot();
+    const workspaceService = graphCommittingWorkspaceService(graph.provider);
+    const version = versionForProvider(graph.provider, {
+      proposalWorkspaceService: workspaceService,
+    });
+
+    const created = await version.createProposal(
+      createProposalInput('proposal-create-workspace-id'),
+    );
+    if (!created.ok) throw new Error(`expected proposal create success: ${created.error.code}`);
+    const opened = await version.startProposalWorkspace({
+      clientRequestId: 'workspace-open-id-check',
+      proposalId: created.value.id,
+      expectedRevision: 1,
+      actor: ACTOR,
+    });
+    if (!opened.ok) throw new Error(`expected workspace open success: ${opened.error.code}`);
+
+    await expect(
+      version.commitProposalWorkspace({
+        clientRequestId: 'workspace-commit-id-mismatch',
+        proposalId: created.value.id,
+        workspaceId: `${opened.value.workspaceId}:stale`,
+        expectedRevision: 2,
+        actor: ACTOR,
+        message: 'Wrong workspace commit',
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: {
+        code: 'invalid_state',
+        state: 'proposal_workspace_mismatch',
+        allowed: ['matching_workspace_id'],
+      },
+    });
+    await expect(version.getProposal({ proposalId: created.value.id })).resolves.toMatchObject({
+      ok: true,
+      value: { status: 'workspace_open', revision: 2 },
+    });
+    await expect(version.getRef(created.value.proposalBranchName)).resolves.toMatchObject({
+      ok: true,
+      value: {
+        status: 'success',
+        ref: { commitId: graph.rootCommitId },
+      },
+    });
+  });
+
+  it('rejects proposal workspace commits that are not the proposal branch head', async () => {
+    const graph = await graphWithRoot();
+    const workspaceService = wrongBranchCommittingWorkspaceService(
+      graph.provider,
+      graph.rootCommitId,
+    );
+    const version = versionForProvider(graph.provider, {
+      proposalWorkspaceService: workspaceService,
+    });
+
+    const created = await version.createProposal(
+      createProposalInput('proposal-create-wrong-branch'),
+    );
+    if (!created.ok) throw new Error(`expected proposal create success: ${created.error.code}`);
+    const opened = await version.startProposalWorkspace({
+      clientRequestId: 'workspace-open-wrong-branch',
+      proposalId: created.value.id,
+      expectedRevision: 1,
+      actor: ACTOR,
+    });
+    if (!opened.ok) throw new Error(`expected workspace open success: ${opened.error.code}`);
+
+    await expect(
+      version.commitProposalWorkspace({
+        clientRequestId: 'workspace-commit-wrong-branch',
+        proposalId: created.value.id,
+        workspaceId: opened.value.workspaceId,
+        expectedRevision: 2,
+        actor: ACTOR,
+        message: 'Wrong branch commit',
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: {
+        code: 'invalid_state',
+        state: 'proposal_commit_branch_head_mismatch',
+        allowed: ['proposal_branch_head_commit'],
+      },
+    });
+    await expect(version.getProposal({ proposalId: created.value.id })).resolves.toMatchObject({
+      ok: true,
+      value: { status: 'workspace_open', revision: 2 },
+    });
+    await expect(version.getRef(created.value.proposalBranchName)).resolves.toMatchObject({
+      ok: true,
+      value: {
+        status: 'success',
+        ref: { commitId: graph.rootCommitId },
       },
     });
   });
@@ -626,6 +765,25 @@ function graphCommittingWorkspaceService(
           },
         };
       }
+    },
+  };
+}
+
+function wrongBranchCommittingWorkspaceService(
+  provider: ReturnType<typeof createInMemoryVersionStoreProvider>,
+  mainHeadCommitId: WorkbookCommitId,
+): ProposalWorkspaceLifecycleService {
+  return {
+    ...graphCommittingWorkspaceService(provider),
+    async commitProposalWorkspace(input) {
+      const wrongBranchCommitId = await commitMain(provider, mainHeadCommitId);
+      return {
+        ok: true,
+        value: {
+          workspaceId: input.workspaceId,
+          proposalCommitId: wrongBranchCommitId,
+        },
+      };
     },
   };
 }

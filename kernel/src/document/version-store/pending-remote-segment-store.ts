@@ -66,6 +66,7 @@ export type PendingRemoteSegmentRecord = {
   readonly syncIdentity: PendingRemoteSegmentSyncIdentity;
   readonly operationContext: PendingRemoteSegmentOperationContext;
   readonly mutationSegmentDigest: ObjectDigest;
+  readonly snapshotRootDigest?: ObjectDigest;
   readonly semanticChangeSetDigest?: ObjectDigest;
   readonly state: PendingRemoteSegmentState;
   readonly createdAt: string;
@@ -122,6 +123,18 @@ export type PendingRemoteSegmentReadResult =
       readonly diagnostics: readonly PendingRemoteSegmentStoreDiagnostic[];
     };
 
+export type PendingRemoteSegmentListResult =
+  | {
+      readonly status: 'success';
+      readonly records: readonly PendingRemoteSegmentRecord[];
+      readonly diagnostics: readonly [];
+    }
+  | {
+      readonly status: 'failed';
+      readonly records: readonly [];
+      readonly diagnostics: readonly PendingRemoteSegmentStoreDiagnostic[];
+    };
+
 export type PendingRemoteSegmentReserveResult =
   | {
       readonly status: 'created' | 'existing';
@@ -160,6 +173,7 @@ export interface PendingRemoteSegmentStore {
   readByIdempotencyKey(
     idempotencyKey: PendingRemoteSegmentIdempotencyKey,
   ): Promise<PendingRemoteSegmentReadResult>;
+  listByState(state: PendingRemoteSegmentState): Promise<PendingRemoteSegmentListResult>;
   completeSegment(
     input: CompletePendingRemoteSegmentInput,
   ): Promise<PendingRemoteSegmentCompleteResult>;
@@ -220,6 +234,22 @@ export class PendingRemoteSegmentMemoryBackend {
       }
     }
     return undefined;
+  }
+
+  listByState(
+    namespace: VersionGraphNamespace,
+    documentScopeKey: string,
+    state: PendingRemoteSegmentState,
+  ): readonly PendingRemoteSegmentRecord[] {
+    const namespaceKey = versionGraphNamespaceKey(namespace);
+    return [...this.recordsByKey.values()]
+      .filter(
+        (record) =>
+          record.namespaceKey === namespaceKey &&
+          record.documentScopeKey === documentScopeKey &&
+          record.state === state,
+      )
+      .map((record) => clonePendingRemoteSegmentRecord(record));
   }
 
   put(record: PendingRemoteSegmentRecord): void {
@@ -316,6 +346,14 @@ export class InMemoryPendingRemoteSegmentStore implements PendingRemoteSegmentSt
     return record
       ? { status: 'found', record, diagnostics: [] }
       : missingRead('Pending remote segment was not found by idempotency key.');
+  }
+
+  async listByState(state: PendingRemoteSegmentState): Promise<PendingRemoteSegmentListResult> {
+    return {
+      status: 'success',
+      records: this.backend.listByState(this.namespace, this.documentScopeKey, state),
+      diagnostics: [],
+    };
   }
 
   async completeSegment(
@@ -440,7 +478,7 @@ export async function validatePendingRemoteSegmentObjects(
   graph: Pick<VersionGraphStore, 'getObjectRecord'>,
   input: Pick<
     ReservePendingRemoteSegmentInput,
-    'mutationSegmentDigest' | 'semanticChangeSetDigest'
+    'mutationSegmentDigest' | 'snapshotRootDigest' | 'semanticChangeSetDigest'
   >,
 ): Promise<PendingRemoteSegmentObjectValidationResult> {
   const diagnostics: PendingRemoteSegmentStoreDiagnostic[] = [];
@@ -451,6 +489,15 @@ export async function validatePendingRemoteSegmentObjects(
     'mutationSegmentDigest',
     diagnostics,
   );
+  if (input.snapshotRootDigest !== undefined) {
+    await validatePendingRemoteObject(
+      graph,
+      'workbook.snapshotRoot.v1',
+      input.snapshotRootDigest,
+      'snapshotRootDigest',
+      diagnostics,
+    );
+  }
   if (input.semanticChangeSetDigest !== undefined) {
     await validatePendingRemoteObject(
       graph,
@@ -534,6 +581,9 @@ export function isPendingRemoteSegmentRecord(value: unknown): value is PendingRe
   if (!isPendingRemoteSyncIdentity(value.syncIdentity)) return false;
   if (!isPendingRemoteOperationContext(value.operationContext)) return false;
   if (!isObjectDigest(value.mutationSegmentDigest)) return false;
+  if (value.snapshotRootDigest !== undefined && !isObjectDigest(value.snapshotRootDigest)) {
+    return false;
+  }
   if (
     value.semanticChangeSetDigest !== undefined &&
     !isObjectDigest(value.semanticChangeSetDigest)
@@ -557,6 +607,7 @@ function pendingRemoteSegmentReservationIdentity(record: PendingRemoteSegmentRec
     syncIdentity: record.syncIdentity,
     operationContext: stableOperationContextIdentity(record.operationContext),
     mutationSegmentDigest: record.mutationSegmentDigest,
+    snapshotRootDigest: record.snapshotRootDigest,
     semanticChangeSetDigest: record.semanticChangeSetDigest,
   };
 }

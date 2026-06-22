@@ -101,6 +101,10 @@ describe('pending remote segment store', () => {
     expect(created.status).toBe('created');
     if (created.status !== 'created') throw new Error('expected pending segment creation');
     await expectGraphHeadUnchanged(graph, headBefore);
+    await expect(store.listByState('pending')).resolves.toMatchObject({
+      status: 'success',
+      records: [{ pendingRemoteSegmentId: input.pendingRemoteSegmentId }],
+    });
 
     await expect(
       reservePersistedPendingRemoteSegment({
@@ -160,6 +164,14 @@ describe('pending remote segment store', () => {
     expect(completed).toMatchObject({
       status: 'completed',
       record: { state: 'promoted', terminal: { status: 'promoted' } },
+    });
+    await expect(store.listByState('pending')).resolves.toMatchObject({
+      status: 'success',
+      records: [],
+    });
+    await expect(store.listByState('promoted')).resolves.toMatchObject({
+      status: 'success',
+      records: [{ pendingRemoteSegmentId: input.pendingRemoteSegmentId }],
     });
     await expect(
       store.completeSegment({
@@ -244,6 +256,53 @@ describe('pending remote segment store', () => {
     ).resolves.toMatchObject({ status: 'created' });
   });
 
+  it('validates optional boundary snapshot roots before reserving pending remote segments', async () => {
+    const provider = createInMemoryVersionStoreProvider({
+      documentScope: DOCUMENT_SCOPE,
+      durability: 'memory',
+    });
+    const namespace = await initializeProvider(provider);
+    const graph = await provider.openGraph(namespace);
+    const store = await provider.openPendingRemoteSegmentStore(namespace);
+    const fixture = await pendingSegmentFixture(namespace, { includeSnapshotRoot: true });
+    const input = fixture.input;
+    const durableNonSnapshotObjects = fixture.objectRecords.filter(
+      (record) => record.preimage.objectType !== 'workbook.snapshotRoot.v1',
+    );
+
+    await expect(graph.putObjects(durableNonSnapshotObjects)).resolves.toMatchObject({
+      status: 'success',
+    });
+    await expect(
+      reservePersistedPendingRemoteSegment({ graph, store, input }),
+    ).resolves.toMatchObject({
+      status: 'failed',
+      diagnostics: [
+        {
+          code: 'VERSION_PENDING_REMOTE_MISSING_OBJECT',
+          details: { field: 'snapshotRootDigest', objectType: 'workbook.snapshotRoot.v1' },
+        },
+      ],
+    });
+    await expect(store.readByIdempotencyKey(input.idempotencyKey)).resolves.toMatchObject({
+      status: 'missing',
+    });
+
+    await expect(graph.putObjects(fixture.objectRecords)).resolves.toMatchObject({
+      status: 'success',
+    });
+    await expect(
+      reservePersistedPendingRemoteSegment({ graph, store, input }),
+    ).resolves.toMatchObject({
+      status: 'created',
+      record: { snapshotRootDigest: input.snapshotRootDigest },
+    });
+    await expect(store.listByState('pending')).resolves.toMatchObject({
+      status: 'success',
+      records: [{ snapshotRootDigest: input.snapshotRootDigest }],
+    });
+  });
+
   it('persists pending remote segments through IndexedDB provider reloads', async () => {
     const provider = createIndexedDbVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
     const namespace = await initializeProvider(provider);
@@ -289,6 +348,10 @@ describe('pending remote segment store', () => {
       status: 'found',
       record: { idempotencyKey: input.idempotencyKey },
     });
+    await expect(reloadedStore.listByState('pending')).resolves.toMatchObject({
+      status: 'success',
+      records: [{ pendingRemoteSegmentId: input.pendingRemoteSegmentId }],
+    });
     await expect(
       reservePersistedPendingRemoteSegment({
         graph: reloadedGraph,
@@ -311,6 +374,14 @@ describe('pending remote segment store', () => {
         terminal: { status: 'dropped', reason: 'duplicate' },
       }),
     ).resolves.toMatchObject({ status: 'completed' });
+    await expect(reloadedStore.listByState('pending')).resolves.toMatchObject({
+      status: 'success',
+      records: [],
+    });
+    await expect(reloadedStore.listByState('dropped')).resolves.toMatchObject({
+      status: 'success',
+      records: [{ idempotencyKey: input.idempotencyKey }],
+    });
     await expect(
       reloadedStore.completeSegment({
         pendingRemoteSegmentId: input.pendingRemoteSegmentId,
@@ -343,9 +414,15 @@ type PendingSegmentFixture = {
 
 async function pendingSegmentFixture(
   namespace: VersionGraphNamespace,
+  options: { readonly includeSnapshotRoot?: boolean } = {},
 ): Promise<PendingSegmentFixture> {
   const operationContext = syncOperationContext();
   const keys = await pendingRemoteSegmentKeyMaterialForOperationContext(operationContext);
+  const snapshotRootRecord = await objectRecord(
+    'workbook.snapshotRoot.v1',
+    { snapshotId: 'remote-boundary-snapshot-1', sheets: [] },
+    namespace,
+  );
   const semanticChangeSetRecord = await objectRecord(
     'workbook.semanticChangeSet.v1',
     { schemaVersion: 1, changes: [] },
@@ -362,10 +439,15 @@ async function pendingSegmentFixture(
       idempotencyKey: keys.idempotencyKey,
       operationContext,
       mutationSegmentDigest: mutationSegmentRecord.digest,
+      ...(options.includeSnapshotRoot ? { snapshotRootDigest: snapshotRootRecord.digest } : {}),
       semanticChangeSetDigest: semanticChangeSetRecord.digest,
       createdAt: '2026-06-21T00:00:00.000Z',
     },
-    objectRecords: [semanticChangeSetRecord, mutationSegmentRecord],
+    objectRecords: [
+      ...(options.includeSnapshotRoot ? [snapshotRootRecord] : []),
+      semanticChangeSetRecord,
+      mutationSegmentRecord,
+    ],
   };
 }
 
@@ -496,6 +578,18 @@ async function expectPersistedPendingObjects(
     digest: input.mutationSegmentDigest,
     preimage: { objectType: 'workbook.mutationSegment.v1' },
   });
+  if (input.snapshotRootDigest !== undefined) {
+    await expect(
+      graph.getObjectRecord({
+        kind: 'object',
+        objectType: 'workbook.snapshotRoot.v1',
+        digest: input.snapshotRootDigest,
+      }),
+    ).resolves.toMatchObject({
+      digest: input.snapshotRootDigest,
+      preimage: { objectType: 'workbook.snapshotRoot.v1' },
+    });
+  }
   if (input.semanticChangeSetDigest === undefined) return;
   await expect(
     graph.getObjectRecord({

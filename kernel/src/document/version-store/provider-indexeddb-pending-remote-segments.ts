@@ -3,9 +3,11 @@ import {
   type PendingRemoteSegmentCompleteResult,
   type PendingRemoteSegmentId,
   type PendingRemoteSegmentIdempotencyKey,
+  type PendingRemoteSegmentListResult,
   type PendingRemoteSegmentReadResult,
   type PendingRemoteSegmentRecord,
   type PendingRemoteSegmentReserveResult,
+  type PendingRemoteSegmentState,
   type PendingRemoteSegmentStoreDiagnostic,
   type PendingRemoteSegmentStore,
   type ReservePendingRemoteSegmentInput,
@@ -142,6 +144,25 @@ export class IndexedDbPendingRemoteSegmentStore implements PendingRemoteSegmentS
     }
   }
 
+  async listByState(state: PendingRemoteSegmentState): Promise<PendingRemoteSegmentListResult> {
+    try {
+      const records = await this.findByState(state);
+      return { status: 'success', records, diagnostics: [] };
+    } catch {
+      return {
+        status: 'failed',
+        records: [],
+        diagnostics: [
+          {
+            code: 'VERSION_PROVIDER_FAILED',
+            message: 'IndexedDB pending remote segment list failed.',
+            recoverability: 'retry',
+          },
+        ],
+      };
+    }
+  }
+
   async completeSegment(
     input: CompletePendingRemoteSegmentInput,
   ): Promise<PendingRemoteSegmentCompleteResult> {
@@ -227,6 +248,22 @@ export class IndexedDbPendingRemoteSegmentStore implements PendingRemoteSegmentS
     return record;
   }
 
+  private async findByState(
+    state: PendingRemoteSegmentState,
+  ): Promise<readonly PendingRemoteSegmentRecord[]> {
+    const db = await this.getDb();
+    const tx = db.transaction(INTENTS_STORE, 'readonly');
+    const done = idbTransactionDone(tx);
+    const records = await findByStateInStore(
+      tx.objectStore(INTENTS_STORE),
+      this.namespaceKey,
+      this.documentScopeKey,
+      state,
+    );
+    await done;
+    return records;
+  }
+
   private async putRecord(record: PendingRemoteSegmentRecord): Promise<void> {
     const db = await this.getDb();
     const tx = db.transaction(INTENTS_STORE, 'readwrite');
@@ -310,6 +347,36 @@ function findBySegmentIdInStore(
       if (candidate?.pendingRemoteSegmentId === segmentId) {
         resolve(candidate);
         return;
+      }
+      cursor.continue();
+    };
+  });
+}
+
+function findByStateInStore(
+  store: IDBObjectStore,
+  namespaceKey: string,
+  documentScopeKey: string,
+  state: PendingRemoteSegmentState,
+): Promise<readonly PendingRemoteSegmentRecord[]> {
+  return new Promise<readonly PendingRemoteSegmentRecord[]>((resolve, reject) => {
+    const records: PendingRemoteSegmentRecord[] = [];
+    const request = store.index('namespaceKey').openCursor(IDBKeyRange.only(namespaceKey));
+    request.onerror = () =>
+      reject(request.error ?? new Error('pending remote segment state cursor failed'));
+    request.onsuccess = () => {
+      const cursor = request.result;
+      if (!cursor) {
+        resolve(records);
+        return;
+      }
+      const candidate = decodeStoredPendingRemoteSegment(
+        cursor.value,
+        namespaceKey,
+        documentScopeKey,
+      );
+      if (candidate?.state === state) {
+        records.push(candidate);
       }
       cursor.continue();
     };

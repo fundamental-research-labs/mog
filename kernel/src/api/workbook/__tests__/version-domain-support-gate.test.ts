@@ -143,6 +143,90 @@ describe('WorkbookVersion domain support manifest gate', () => {
     expect(commit).not.toHaveBeenCalled();
   });
 
+  it('blocks commit before invoking the write service when a required capability is not supported', async () => {
+    const commit = jest.fn();
+    const version = new WorkbookVersionImpl({
+      versioning: {
+        writeService: { commit },
+        domainSupportManifest: freshManifest({
+          domains: REQUIRED_FIRST_SLICE_DOMAIN_IDS.map((id) =>
+            id === 'cells.values'
+              ? domainRow(id, {
+                  capabilityStates: {
+                    ...capabilityStates(),
+                    capture: 'contracted',
+                  },
+                })
+              : domainRow(id),
+          ),
+        }),
+        domainSupportManifestOptions: { now: NOW, maxAgeMs: TEN_MINUTES_MS },
+      },
+    } as any);
+
+    await expect(version.commit()).resolves.toMatchObject({
+      ok: false,
+      error: {
+        target: 'workbook.version.commit',
+        diagnostics: [
+          expect.objectContaining({
+            code: 'VERSION_DOMAIN_SUPPORT_MANIFEST_INVALID',
+            data: expect.objectContaining({
+              operation: 'commit',
+              mutationGuarantee: 'no-write-attempted',
+              payload: expect.objectContaining({
+                diagnosticCode: 'capability-state-blocked',
+                domainId: 'cells.values',
+                capabilityKey: 'capture',
+                capabilityState: 'contracted',
+              }),
+            }),
+          }),
+        ],
+      },
+    });
+    expect(commit).not.toHaveBeenCalled();
+  });
+
+  it('blocks commit when a manifest only carries the legacy scalar capabilityState', async () => {
+    const commit = jest.fn();
+    const legacyRow = domainRow('cells.values') as any;
+    delete legacyRow.capabilityStates;
+    legacyRow.capabilityState = 'supported';
+    const version = new WorkbookVersionImpl({
+      versioning: {
+        writeService: { commit },
+        domainSupportManifest: freshManifest({
+          domains: REQUIRED_FIRST_SLICE_DOMAIN_IDS.map((id) =>
+            id === 'cells.values' ? legacyRow : domainRow(id),
+          ),
+        }),
+        domainSupportManifestOptions: { now: NOW, maxAgeMs: TEN_MINUTES_MS },
+      },
+    } as any);
+
+    await expect(version.commit()).resolves.toMatchObject({
+      ok: false,
+      error: {
+        target: 'workbook.version.commit',
+        diagnostics: [
+          expect.objectContaining({
+            code: 'VERSION_DOMAIN_SUPPORT_MANIFEST_INVALID',
+            data: expect.objectContaining({
+              operation: 'commit',
+              mutationGuarantee: 'no-write-attempted',
+              payload: expect.objectContaining({
+                diagnosticCode: 'capability-states-missing',
+                domainId: 'cells.values',
+              }),
+            }),
+          }),
+        ],
+      },
+    });
+    expect(commit).not.toHaveBeenCalled();
+  });
+
   it('blocks checkout before invoking materialization services when a required domain is missing', async () => {
     const checkout = jest.fn();
     const planCheckout = jest.fn();
@@ -181,6 +265,53 @@ describe('WorkbookVersion domain support manifest gate', () => {
     expect(planCheckout).not.toHaveBeenCalled();
   });
 
+  it('blocks checkout based on checkout capability state', async () => {
+    const checkout = jest.fn();
+    const planCheckout = jest.fn();
+    const version = new WorkbookVersionImpl({
+      versioning: {
+        checkoutService: { checkout, planCheckout },
+        domainSupportManifest: freshManifest({
+          domains: REQUIRED_FIRST_SLICE_DOMAIN_IDS.map((id) =>
+            id === 'sheets'
+              ? domainRow(id, {
+                  capabilityStates: {
+                    ...capabilityStates(),
+                    checkout: 'not-started',
+                  },
+                })
+              : domainRow(id),
+          ),
+        }),
+        domainSupportManifestOptions: { now: NOW },
+      },
+    } as any);
+
+    await expect(version.checkout({ kind: 'commit', id: BASE })).resolves.toMatchObject({
+      ok: false,
+      error: {
+        target: 'workbook.version.checkout',
+        diagnostics: [
+          expect.objectContaining({
+            code: 'VERSION_DOMAIN_SUPPORT_MANIFEST_INVALID',
+            data: expect.objectContaining({
+              operation: 'checkout',
+              mutationGuarantee: 'no-write-attempted',
+              payload: expect.objectContaining({
+                diagnosticCode: 'capability-state-blocked',
+                domainId: 'sheets',
+                capabilityKey: 'checkout',
+                capabilityState: 'not-started',
+              }),
+            }),
+          }),
+        ],
+      },
+    });
+    expect(checkout).not.toHaveBeenCalled();
+    expect(planCheckout).not.toHaveBeenCalled();
+  });
+
   it('blocks merge preview before invoking the merge service when the manifest is invalid', async () => {
     const merge = jest.fn();
     const version = new WorkbookVersionImpl({
@@ -202,6 +333,50 @@ describe('WorkbookVersion domain support manifest gate', () => {
               operation: 'merge',
               payload: expect.objectContaining({
                 diagnosticCode: 'schema-version-unsupported',
+              }),
+            }),
+          }),
+        ],
+      },
+    });
+    expect(merge).not.toHaveBeenCalled();
+  });
+
+  it('blocks merge preview based on merge capability state', async () => {
+    const merge = jest.fn();
+    const version = new WorkbookVersionImpl({
+      versioning: {
+        mergeService: { merge },
+        domainSupportManifest: freshManifest({
+          domains: REQUIRED_FIRST_SLICE_DOMAIN_IDS.map((id) =>
+            id === 'cells.formulas'
+              ? domainRow(id, {
+                  capabilityStates: {
+                    ...capabilityStates(),
+                    merge: 'opaque-blocking',
+                  },
+                })
+              : domainRow(id),
+          ),
+        }),
+        domainSupportManifestOptions: { now: NOW },
+      },
+    } as any);
+
+    await expect(version.merge({ base: BASE, ours: OURS, theirs: THEIRS })).resolves.toMatchObject({
+      ok: false,
+      error: {
+        target: 'workbook.version.merge',
+        diagnostics: [
+          expect.objectContaining({
+            code: 'VERSION_DOMAIN_SUPPORT_MANIFEST_INVALID',
+            data: expect.objectContaining({
+              operation: 'merge',
+              payload: expect.objectContaining({
+                diagnosticCode: 'capability-state-blocked',
+                domainId: 'cells.formulas',
+                capabilityKey: 'merge',
+                capabilityState: 'opaque-blocking',
               }),
             }),
           }),

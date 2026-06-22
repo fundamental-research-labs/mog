@@ -51,6 +51,7 @@ export async function validateVersionDomainSupportManifestGate(
   const options: DomainSupportManifestValidationOptions = {
     ...gate.options,
     now: gate.options?.now instanceof Date ? gate.options.now : new Date(),
+    operation,
   };
   const validation = validateDomainSupportManifest(manifest, options);
   if (validation.ok) return [];
@@ -135,6 +136,8 @@ function domainSupportManifestInvalidDiagnostic(
     {
       diagnosticCode: diagnostic.code,
       ...(diagnostic.domainId ? { domainId: diagnostic.domainId } : {}),
+      ...(diagnostic.capabilityKey ? { capabilityKey: diagnostic.capabilityKey } : {}),
+      ...(diagnostic.capabilityState ? { capabilityState: diagnostic.capabilityState } : {}),
     },
   );
 }

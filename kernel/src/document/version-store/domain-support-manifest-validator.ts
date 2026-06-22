@@ -16,6 +16,7 @@ import {
   VERSION_DOMAIN_CLASSES,
   type DomainCapabilityPolicyManifest,
   type DomainSupportManifest,
+  type VersionDomainCapabilityKey,
   type VersionDomainCapabilityState,
   type VersionDomainClass,
 } from '@mog-sdk/contracts/versioning';
@@ -60,6 +61,7 @@ export type DomainSupportManifestDiagnosticCode =
   | 'capability-state-missing'
   | 'unknown-capability-key'
   | 'unknown-capability-state'
+  | 'capability-state-blocked'
   | 'detector-row-missing';
 
 export interface DomainSupportManifestDiagnostic {
@@ -67,6 +69,8 @@ export interface DomainSupportManifestDiagnostic {
   readonly message: string;
   /** Domain the diagnostic applies to, when domain-scoped. */
   readonly domainId?: string;
+  readonly capabilityKey?: VersionDomainCapabilityKey;
+  readonly capabilityState?: VersionDomainCapabilityState;
 }
 
 export interface DomainSupportManifestValidationOk {
@@ -132,7 +136,38 @@ export interface DomainSupportManifestValidationOptions {
    * manifest, otherwise the detector-row-missing fail-closed condition fires.
    */
   readonly detectorRows?: readonly DomainSupportDetectorRow[];
+  /**
+   * Durable operation whose required capability states should be enforced.
+   * Omit for shape-only validation.
+   */
+  readonly operation?: DomainSupportManifestValidationOperation;
+  /**
+   * Explicit capability keys to enforce. Overrides the default keys selected
+   * from `operation` when supplied.
+   */
+  readonly requiredCapabilityKeys?: readonly VersionDomainCapabilityKey[];
+  /**
+   * Opaque-preserved domains require preservation/invalidation proof that this
+   * validator does not model yet. Keep disabled for durable operations until a
+   * caller supplies that proof.
+   */
+  readonly allowOpaquePreserved?: boolean;
 }
+
+export type DomainSupportManifestValidationOperation =
+  | 'commit'
+  | 'checkout'
+  | 'merge'
+  | 'applyMerge';
+
+export const REQUIRED_CAPABILITY_KEYS_BY_OPERATION = Object.freeze({
+  commit: ['capture', 'persistence'],
+  checkout: ['checkout'],
+  merge: ['merge'],
+  applyMerge: ['merge', 'persistence'],
+} satisfies Readonly<
+  Record<DomainSupportManifestValidationOperation, readonly VersionDomainCapabilityKey[]>
+>);
 
 const CLASS_SET: ReadonlySet<string> = new Set(VERSION_DOMAIN_CLASSES);
 const CAPABILITY_KEY_SET: ReadonlySet<string> = new Set(VERSION_DOMAIN_CAPABILITY_KEYS);
@@ -198,6 +233,60 @@ function validateCapabilityStates(
   }
 }
 
+function requiredCapabilityKeysForOptions(
+  options: DomainSupportManifestValidationOptions,
+): readonly VersionDomainCapabilityKey[] {
+  if (options.requiredCapabilityKeys) return options.requiredCapabilityKeys;
+  if (options.operation) return REQUIRED_CAPABILITY_KEYS_BY_OPERATION[options.operation];
+  return [];
+}
+
+function validateRequiredCapabilityState(
+  domainId: string,
+  domainClass: VersionDomainClass,
+  capabilityStates: unknown,
+  requiredCapabilityKeys: readonly VersionDomainCapabilityKey[],
+  allowOpaquePreserved: boolean,
+  diagnostics: DomainSupportManifestDiagnostic[],
+): void {
+  if (requiredCapabilityKeys.length === 0 || !isPlainRecord(capabilityStates)) return;
+
+  for (const capabilityKey of requiredCapabilityKeys) {
+    const state = capabilityStates[capabilityKey];
+    if (!isVersionDomainCapabilityState(state)) continue;
+    if (isCapabilityStateAllowedForOperation(domainClass, state, allowOpaquePreserved)) continue;
+
+    diagnostics.push({
+      code: 'capability-state-blocked',
+      message: `Domain "${domainId}" has state "${state}" for capability "${capabilityKey}", which is not allowed for this durable operation.`,
+      domainId,
+      capabilityKey,
+      capabilityState: state,
+    });
+  }
+}
+
+function isCapabilityStateAllowedForOperation(
+  domainClass: VersionDomainClass,
+  state: VersionDomainCapabilityState,
+  allowOpaquePreserved: boolean,
+): boolean {
+  switch (state) {
+    case 'supported':
+      return true;
+    case 'derived':
+      return domainClass === 'derived';
+    case 'excluded':
+      return domainClass === 'transient';
+    case 'opaque-preserved':
+      return allowOpaquePreserved;
+    case 'not-started':
+    case 'contracted':
+    case 'opaque-blocking':
+      return false;
+  }
+}
+
 /**
  * Pure, fail-closed validation of a DomainSupportManifest.
  *
@@ -211,6 +300,7 @@ export function validateDomainSupportManifest(
   options: DomainSupportManifestValidationOptions = {},
 ): DomainSupportManifestValidationResult {
   const diagnostics: DomainSupportManifestDiagnostic[] = [];
+  const requiredCapabilityKeys = requiredCapabilityKeysForOptions(options);
 
   // --- structural shape ---------------------------------------------------
   if (manifest === null || typeof manifest !== 'object') {
@@ -324,7 +414,8 @@ export function validateDomainSupportManifest(
       seen.add(domainId);
       presentDomainIds.push(domainId);
 
-      if (!isVersionDomainClass(typed.domainClass)) {
+      const domainClass = typed.domainClass;
+      if (!isVersionDomainClass(domainClass)) {
         diagnostics.push({
           code: 'unknown-domain-class',
           message: `Domain "${domainId}" references unknown domainClass "${String(typed.domainClass)}".`,
@@ -332,6 +423,16 @@ export function validateDomainSupportManifest(
         });
       }
       validateCapabilityStates(domainId, typed.capabilityStates, diagnostics);
+      if (isVersionDomainClass(domainClass)) {
+        validateRequiredCapabilityState(
+          domainId,
+          domainClass,
+          typed.capabilityStates,
+          requiredCapabilityKeys,
+          options.allowOpaquePreserved === true,
+          diagnostics,
+        );
+      }
       if (
         typed.capabilityState !== undefined &&
         !isVersionDomainCapabilityState(typed.capabilityState)

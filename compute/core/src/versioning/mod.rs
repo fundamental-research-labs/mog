@@ -8,6 +8,8 @@ use snapshot_types::versioning::{
     semantic_workbook_state_digest,
 };
 
+mod semantic_reader;
+
 #[derive(Debug, thiserror::Error)]
 pub enum SemanticStateReadError {
     #[error("semantic workbook state reader is not implemented for {reader}")]

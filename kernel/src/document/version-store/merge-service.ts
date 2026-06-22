@@ -43,6 +43,7 @@ const REDACTED_VALUE_REASONS = new Set([
 const SUPPORTED_SEMANTIC_MERGE_DOMAINS = new Set([
   'cell',
   'cells.values',
+  'cells.formats.direct',
   'sheet',
   'filters',
   'sorts',

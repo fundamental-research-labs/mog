@@ -12,6 +12,7 @@ const SEMANTIC_MERGE_DOMAIN_ORDER = new Map(
   [
     'cell',
     'cells.values',
+    'cells.formats.direct',
     'sheet',
     'filters',
     'sorts',

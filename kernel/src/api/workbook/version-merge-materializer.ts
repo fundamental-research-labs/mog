@@ -1,4 +1,5 @@
 import type {
+  CellFormat,
   VersionDiffStructuralMetadata,
   VersionDiffValue,
   VersionMergeChange,
@@ -24,6 +25,7 @@ import { createSnapshotRootMaterializationService } from '../../document/version
 import { createDocumentLifecycleSnapshotRootHydrator } from '../document/snapshot-root-lifecycle-hydrator';
 import { parseCellAddress } from '../internal/utils';
 import * as CellOps from '../worksheet/operations/cell-operations';
+import * as FormatOps from '../worksheet/operations/format-operations';
 
 export const DEFAULT_MERGE_COMMIT_MATERIALIZER_KIND =
   'semantic-cell-merge-commit-materializer.v1';
@@ -40,6 +42,7 @@ export interface SemanticMergeCommitCaptureOptions {
 }
 
 type ParsedCellMergeChange = {
+  readonly kind: 'cellValue';
   readonly change: VersionMergeChange;
   readonly structural: Extract<VersionDiffStructuralMetadata, { readonly kind: 'metadata' }>;
   readonly sheetId: string;
@@ -48,6 +51,19 @@ type ParsedCellMergeChange = {
   readonly col: number;
   readonly merged: CellMergeValue;
 };
+
+type ParsedDirectFormatMergeChange = {
+  readonly kind: 'directCellFormat';
+  readonly change: VersionMergeChange;
+  readonly structural: Extract<VersionDiffStructuralMetadata, { readonly kind: 'metadata' }>;
+  readonly sheetId: string;
+  readonly address: string;
+  readonly row: number;
+  readonly col: number;
+  readonly merged: DirectFormatMergeValue;
+};
+
+type ParsedMergeChange = ParsedCellMergeChange | ParsedDirectFormatMergeChange;
 
 type CellMergeValue =
   | {
@@ -60,6 +76,15 @@ type CellMergeValue =
   | {
       readonly kind: 'scalar';
       readonly value: CellValuePrimitive;
+    };
+
+type DirectFormatMergeValue =
+  | {
+      readonly kind: 'clear';
+    }
+  | {
+      readonly kind: 'format';
+      readonly format: CellFormat;
     };
 
 export function createSemanticMergeCommitCapture(
@@ -102,7 +127,7 @@ export function createSemanticMergeCommitCapture(
 
     const materialized = materialization.materialized;
     try {
-      await applyCellMergeChanges(materialized.context, input, parsed.changes, createdAt);
+      await applyMergeChanges(materialized.context, input, parsed.changes, createdAt);
       const snapshotRootRecord = await captureWorkbookSnapshotRootRecord(
         input.namespace,
         materialized.context.computeBridge,
@@ -177,16 +202,16 @@ function parseMergeChanges(
 ):
   | {
       readonly ok: true;
-      readonly changes: readonly ParsedCellMergeChange[];
+      readonly changes: readonly ParsedMergeChange[];
     }
   | {
       readonly ok: false;
       readonly failure: VersionStoreFailure;
     } {
-  const parsed: ParsedCellMergeChange[] = [];
+  const parsed: ParsedMergeChange[] = [];
   for (let index = 0; index < input.changes.length; index++) {
     const change = input.changes[index];
-    const structural = parseCellStructural(change.structural);
+    const structural = parseCellStructural(change.structural) ?? parseDirectFormatStructural(change.structural);
     if (!structural) {
       return unsupportedMergeChange(input, index, change.structural);
     }
@@ -196,6 +221,25 @@ function parseMergeChanges(
         reason: 'unsupportedEntityId',
       });
     }
+    if (structural.domain === 'cells.formats.direct') {
+      const merged = parseDirectFormatMergeValue(change.merged);
+      if (!merged) {
+        return unsupportedMergeChange(input, index, structural, {
+          reason: 'unsupportedMergedValue',
+        });
+      }
+      parsed.push({
+        kind: 'directCellFormat',
+        change,
+        structural,
+        sheetId: target.sheetId,
+        address: target.address,
+        row: target.row,
+        col: target.col,
+        merged,
+      });
+      continue;
+    }
     const merged = parseCellMergeValue(change.merged);
     if (!merged) {
       return unsupportedMergeChange(input, index, structural, {
@@ -203,6 +247,7 @@ function parseMergeChanges(
       });
     }
     parsed.push({
+      kind: 'cellValue',
       change,
       structural,
       sheetId: target.sheetId,
@@ -224,6 +269,17 @@ function parseCellStructural(
     structural.propertyPath.length !== 0 &&
     !(structural.propertyPath.length === 1 && structural.propertyPath[0] === 'value')
   ) {
+    return null;
+  }
+  return structural;
+}
+
+function parseDirectFormatStructural(
+  structural: VersionDiffStructuralMetadata,
+): Extract<VersionDiffStructuralMetadata, { readonly kind: 'metadata' }> | null {
+  if (structural.kind !== 'metadata') return null;
+  if (structural.domain !== 'cells.formats.direct') return null;
+  if (structural.propertyPath.length !== 1 || structural.propertyPath[0] !== 'format') {
     return null;
   }
   return structural;
@@ -251,6 +307,14 @@ function parseCellMergeValue(value: VersionDiffValue): CellMergeValue | null {
   return parseSemanticCellValue(value.value);
 }
 
+function parseDirectFormatMergeValue(value: VersionDiffValue): DirectFormatMergeValue | null {
+  if (value.kind !== 'value') return null;
+  if (value.value === null) return { kind: 'clear' };
+  const plain = semanticFormatJsonValue(value.value);
+  if (!isMaterializableCellFormat(plain)) return null;
+  return { kind: 'format', format: plain };
+}
+
 function parseSemanticCellValue(value: VersionSemanticValue): CellMergeValue | null {
   if (value === null) return { kind: 'clear' };
   if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
@@ -266,16 +330,37 @@ function parseSemanticCellValue(value: VersionSemanticValue): CellMergeValue | n
   return null;
 }
 
-async function applyCellMergeChanges(
+async function applyMergeChanges(
   ctx: DocumentContext,
   input: VersionMergeCommitCaptureInput,
-  changes: readonly ParsedCellMergeChange[],
+  changes: readonly ParsedMergeChange[],
   createdAt: string,
 ): Promise<void> {
   for (let index = 0; index < changes.length; index++) {
     const change = changes[index];
     const operationContext = mergeOperationContext(input, change, index, createdAt);
     const sheet = toSheetId(change.sheetId);
+    if (change.kind === 'directCellFormat') {
+      if (change.merged.kind === 'clear') {
+        const result = await FormatOps.clearFormat(
+          ctx,
+          sheet,
+          change.row,
+          change.col,
+          { operationContext },
+        );
+        assertFormatOperationSuccess(result, 'clearFormat');
+        continue;
+      }
+      const result = await FormatOps.setCellProperties(
+        ctx,
+        sheet,
+        [{ row: change.row, col: change.col, format: change.merged.format }],
+        { operationContext },
+      );
+      assertFormatOperationSuccess(result, 'setCellProperties');
+      continue;
+    }
     if (change.merged.kind === 'formula') {
       await CellOps.setCell(ctx, sheet, change.row, change.col, change.merged.formula, {
         operationContext,
@@ -293,9 +378,18 @@ async function applyCellMergeChanges(
   }
 }
 
+function assertFormatOperationSuccess(
+  result: { readonly success: boolean; readonly error?: unknown },
+  operation: string,
+): void {
+  if (!result.success) {
+    throw new Error(`${operation} failed during version merge materialization`);
+  }
+}
+
 function mergeOperationContext(
   input: VersionMergeCommitCaptureInput,
-  change: ParsedCellMergeChange,
+  change: ParsedMergeChange,
   index: number,
   createdAt: string,
 ): VersionOperationContext {
@@ -324,7 +418,7 @@ function semanticMergeChangeRecord(change: VersionMergeChange) {
 
 function mergeMutationSegmentPayload(
   input: VersionMergeCommitCaptureInput,
-  changes: readonly ParsedCellMergeChange[],
+  changes: readonly ParsedMergeChange[],
   createdAt: string,
 ): unknown {
   return {
@@ -407,4 +501,36 @@ function shortCommitId(commitId: string): string {
 
 function errorName(error: unknown): string {
   return error instanceof Error ? error.name : typeof error;
+}
+
+function semanticFormatJsonValue(value: VersionSemanticValue, depth = 0): unknown {
+  if (depth > 16) return undefined;
+  if (value === null || typeof value === 'boolean' || typeof value === 'string') return value;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : undefined;
+  if (!isRecord(value)) return undefined;
+  if (value.kind === 'array') {
+    if (!Array.isArray(value.values)) return undefined;
+    const values = value.values.map((entry) => semanticFormatJsonValue(entry, depth + 1));
+    return values.some((entry) => entry === undefined) ? undefined : values;
+  }
+  if (value.kind === 'object') {
+    if (!Array.isArray(value.fields)) return undefined;
+    const record: Record<string, unknown> = {};
+    for (const field of value.fields) {
+      if (!isRecord(field) || typeof field.key !== 'string') return undefined;
+      const mapped = semanticFormatJsonValue(field.value as VersionSemanticValue, depth + 1);
+      if (mapped === undefined) return undefined;
+      record[field.key] = mapped;
+    }
+    return record;
+  }
+  return undefined;
+}
+
+function isMaterializableCellFormat(value: unknown): value is CellFormat {
+  return isRecord(value) && Object.keys(value).length > 0 && value.kind !== 'Removed';
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

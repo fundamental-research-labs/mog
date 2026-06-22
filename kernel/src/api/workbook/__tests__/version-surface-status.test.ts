@@ -453,7 +453,7 @@ describe('WorkbookVersion surface status', () => {
     );
   });
 
-  it('keeps proposal and revert disabled, and provenance unavailable until its service is attached', async () => {
+  it('keeps proposal and revert disabled, and provenance unavailable until VC09 truth is attached', async () => {
     const { version } = createSurfaceReadyVersion();
 
     const surface = await version.getSurfaceStatus();
@@ -475,7 +475,7 @@ describe('WorkbookVersion surface status', () => {
     });
   });
 
-  it('enables provenance when pending remote promotion service is attached', async () => {
+  it('does not enable provenance when only pending remote promotion service is attached', async () => {
     const promotePendingRemoteSegments = jest.fn();
     const { version } = createSurfaceReadyVersionWithContext(
       {},
@@ -488,9 +488,34 @@ describe('WorkbookVersion surface status', () => {
 
     const surface = await version.getSurfaceStatus();
 
+    expect(surface.stage).toBe('authoring');
+    expect(surface.capabilities['version:provenance']).toMatchObject({
+      enabled: false,
+      dependency: 'VC-09',
+      retryable: true,
+      reason:
+        'Complete VC-09 provenance truth is not attached; broad mutation admission and pending remote promotion plumbing are insufficient.',
+    });
+    expect(promotePendingRemoteSegments).not.toHaveBeenCalled();
+    expect(surface.diagnostics.map((diagnostic) => diagnostic.code)).toContain(
+      'version.surfaceStatus.provenanceUnavailable',
+    );
+  });
+
+  it('enables provenance only when status reports complete VC09 truth', async () => {
+    const { version } = createSurfaceReadyVersionWithContext(
+      {},
+      {
+        provenanceTruthService: {
+          vc09ProvenanceTruthComplete: true,
+        },
+      },
+    );
+
+    const surface = await version.getSurfaceStatus();
+
     expect(surface.stage).toBe('provenance');
     expect(surface.capabilities['version:provenance']).toEqual({ enabled: true });
-    expect(promotePendingRemoteSegments).not.toHaveBeenCalled();
     expect(surface.diagnostics.map((diagnostic) => diagnostic.code)).not.toContain(
       'version.surfaceStatus.provenanceUnavailable',
     );

@@ -5,6 +5,7 @@ import type {
   VersionDiagnosticPublicPayload,
   VersionListCommitsOptions,
   VersionMainRefName,
+  VersionPageToken,
   VersionRecordRevision,
   VersionRefSelector,
   VersionResult,
@@ -20,6 +21,7 @@ import { versionResultFromCommitPage } from './version-result';
 const VERSION_HEAD_REF = 'HEAD';
 const VERSION_MAIN_REF = 'refs/heads/main' satisfies VersionMainRefName;
 const WORKBOOK_COMMIT_ID_RE = /^commit:sha256:[0-9a-f]{64}$/;
+const VERSION_PAGE_TOKEN_RE = /^[A-Za-z0-9_-][A-Za-z0-9_.:-]*$/;
 const VERSION_LIST_COMMITS_DEFAULT_PAGE_SIZE = 50;
 const VERSION_LIST_COMMITS_MAX_PAGE_SIZE = 500;
 const VERSION_LIST_COMMITS_OPTION_KEYS = new Set([
@@ -38,6 +40,7 @@ type AttachedListCommitsOptions = {
   readonly ref?: VersionRefSelector;
   readonly from?: WorkbookCommitId;
   readonly pageSize?: number;
+  readonly pageToken?: VersionPageToken;
 };
 
 type AttachedVersionListCommitsService = {
@@ -68,11 +71,13 @@ export async function listWorkbookVersionCommits(
     );
   }
 
+  const pageToken = options.pageToken === undefined ? undefined : toPageToken(options.pageToken);
   try {
     const result = await readService.listCommits({
       ...(options.ref === undefined ? {} : { ref: options.ref }),
       ...(options.from === undefined ? {} : { from: options.from }),
       ...(options.pageSize === undefined ? {} : { pageSize: options.pageSize }),
+      ...(pageToken === undefined ? {} : { pageToken }),
     });
     return versionResultFromCommitPage(mapCommitPageResult(result), limit);
   } catch {
@@ -167,17 +172,16 @@ function validateListCommitsOptions(options: VersionListCommitsOptions): readonl
   }
 
   if (options.pageToken !== undefined) {
-    diagnostics.push(
-      publicDiagnostic(
-        'VERSION_STALE_PAGE_CURSOR',
-        'listCommits page tokens are not supported by this version graph read slice.',
-        {
-          severity: 'error',
-          recoverability: 'unsupported',
-          payload: { option: 'pageToken', pageTokenUnsupported: true },
-        },
-      ),
-    );
+    const pageToken = toPageToken(options.pageToken);
+    if (!pageToken) {
+      diagnostics.push(
+        publicDiagnostic(
+          'VERSION_INVALID_OPTIONS',
+          'listCommits pageToken is malformed or unsupported.',
+          { severity: 'error', recoverability: 'none', payload: { option: 'pageToken' } },
+        ),
+      );
+    }
   }
 
   if (options.ref !== undefined && options.from !== undefined) {
@@ -558,6 +562,15 @@ function toCommitId(value: unknown): WorkbookCommitId | null {
   return typeof value === 'string' && WORKBOOK_COMMIT_ID_RE.test(value)
     ? (value as WorkbookCommitId)
     : null;
+}
+
+function toPageToken(value: unknown): VersionPageToken | undefined {
+  return typeof value === 'string' &&
+    value.length >= 16 &&
+    value.length <= 2048 &&
+    VERSION_PAGE_TOKEN_RE.test(value)
+    ? (value as VersionPageToken)
+    : undefined;
 }
 
 function toRevision(value: unknown): VersionRecordRevision | undefined {

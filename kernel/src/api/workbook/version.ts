@@ -175,6 +175,9 @@ type AttachedVersionServices = AttachedVersionReadService & {
   readonly graph?: unknown;
   readonly readService?: unknown;
   readonly headService?: unknown;
+  readonly provenanceAdmissionService?: unknown;
+  readonly provenanceTruthService?: unknown;
+  readonly provenanceStatusService?: unknown;
 };
 
 type MaybeVersionRuntimeContext = DocumentContext & {
@@ -263,6 +266,26 @@ function getRolloutStage(provenanceAdmissionPresent: boolean): WorkbookVersionRo
   return provenanceAdmissionPresent ? 'shadow-only' : 'disabled';
 }
 
+function hasCompleteVc09ProvenanceTruth(services: AttachedVersionServices | null): boolean {
+  if (!services) return false;
+  return [
+    services.provenanceAdmissionService,
+    services.provenanceTruthService,
+    services.provenanceStatusService,
+    services,
+  ].some(hasExplicitCompleteVc09ProvenanceTruth);
+}
+
+function hasExplicitCompleteVc09ProvenanceTruth(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  return (
+    value.vc09ProvenanceTruthComplete === true ||
+    value.completeVc09ProvenanceAdmission === true ||
+    hasExplicitCompleteVc09ProvenanceTruth(value.vc09ProvenanceTruth) ||
+    hasExplicitCompleteVc09ProvenanceTruth(value.provenanceAdmissionTruth)
+  );
+}
+
 export class WorkbookVersionImpl implements WorkbookVersion {
   constructor(
     private readonly ctx: DocumentContext,
@@ -277,12 +300,12 @@ export class WorkbookVersionImpl implements WorkbookVersion {
     const refLifecycleServiceAttached = hasAttachedVersionRefLifecycleService(this.ctx);
     const checkoutServiceAttached = hasAttachedVersionCheckoutService(this.ctx);
     const mergeServiceAttached = hasAttachedVersionMergeService(this.ctx);
-    const provenanceAdmissionPresent = typeof observeMutationAdmission === 'function';
+    const mutationAdmissionFoundationPresent = typeof observeMutationAdmission === 'function';
     const pendingRemotePromotionServiceAttached = hasAttachedPendingRemotePromotionService(
       this.ctx,
     );
-    const provenanceAvailable = provenanceAdmissionPresent || pendingRemotePromotionServiceAttached;
-    const rolloutStage = getRolloutStage(provenanceAvailable);
+    const provenanceTruthComplete = hasCompleteVc09ProvenanceTruth(services);
+    const rolloutStage = getRolloutStage(provenanceTruthComplete);
 
     const objectStoreFoundation = diagnostic(
       'version.objectStore.foundationPresent',
@@ -346,21 +369,42 @@ export class WorkbookVersionImpl implements WorkbookVersion {
       'Document-scoped public merge preview service is attached.',
       'version-service',
     );
-    const provenanceAdmission = diagnostic(
-      provenanceAdmissionPresent
-        ? 'version.provenanceAdmission.present'
-        : 'version.provenanceAdmission.unavailable',
-      provenanceAdmissionPresent ? 'info' : 'warning',
-      provenanceAdmissionPresent
-        ? 'Mutation provenance admission foundation is present.'
-        : 'Mutation provenance admission foundation is unavailable.',
+    const provenanceAdmission = provenanceTruthComplete
+      ? diagnostic(
+          'version.provenanceAdmission.present',
+          'info',
+          'Complete VC-09 provenance admission truth is attached.',
+          'version-service',
+          { requiredSlice: 'VC-09' },
+        )
+      : diagnostic(
+          'version.provenanceAdmission.vc09TruthUnavailable',
+          'warning',
+          'Complete VC-09 provenance admission truth is not attached; broad mutation admission and pending remote promotion plumbing are insufficient.',
+          'version-service',
+          {
+            requiredSlice: 'VC-09',
+            mutationAdmissionFoundationPresent,
+            pendingRemotePromotionServiceAttached,
+          },
+        );
+    const mutationAdmissionFoundation = diagnostic(
+      mutationAdmissionFoundationPresent
+        ? 'version.provenanceAdmission.mutationAdmissionFoundationPresent'
+        : 'version.provenanceAdmission.mutationAdmissionFoundationUnavailable',
+      mutationAdmissionFoundationPresent ? 'info' : 'warning',
+      mutationAdmissionFoundationPresent
+        ? 'VC-02 mutation admission plumbing is present but does not prove complete VC-09 provenance truth.'
+        : 'VC-02 mutation admission plumbing is unavailable.',
       'VC-02',
+      { sufficientForVc09Truth: false },
     );
     const provenancePromotionServiceAttached = diagnostic(
       'version.provenancePromotion.serviceAttached',
       'info',
-      'Document-scoped pending remote provenance promotion service is attached.',
+      'Document-scoped pending remote provenance promotion service is attached but does not prove complete VC-09 provenance truth.',
       'version-service',
+      { sufficientForVc09Truth: false },
     );
 
     const objectStoreDiagnostics = services?.objectStore
@@ -376,9 +420,11 @@ export class WorkbookVersionImpl implements WorkbookVersion {
     const checkoutDiagnostics = checkoutServiceAttached
       ? [checkoutServiceAttachedDiagnostic]
       : [checkoutPending];
-    const provenanceDiagnostics = pendingRemotePromotionServiceAttached
-      ? [provenanceAdmission, provenancePromotionServiceAttached]
-      : [provenanceAdmission];
+    const provenanceDiagnostics = [
+      provenanceAdmission,
+      mutationAdmissionFoundation,
+      ...(pendingRemotePromotionServiceAttached ? [provenancePromotionServiceAttached] : []),
+    ];
     const checkoutStage = checkoutServiceAttached ? 'present' : 'pending';
     const checkoutDependency = checkoutServiceAttached ? 'version-service' : 'VC-05';
     const diagnostics = [
@@ -413,9 +459,9 @@ export class WorkbookVersionImpl implements WorkbookVersion {
         [mergeServiceAttached ? mergeServiceAttachedDiagnostic : mergePending],
       ),
       provenanceAdmission: capability(
-        provenanceAvailable ? 'present' : 'unavailable',
-        provenanceAvailable,
-        provenanceAdmissionPresent ? 'VC-02' : 'version-service',
+        provenanceTruthComplete ? 'present' : 'unavailable',
+        provenanceTruthComplete,
+        'version-service',
         provenanceDiagnostics,
       ),
       diagnostics,

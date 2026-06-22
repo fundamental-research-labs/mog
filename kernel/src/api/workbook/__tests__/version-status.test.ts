@@ -155,13 +155,14 @@ describe('WorkbookVersion status slice', () => {
     const status = await wb.version.getStatus();
 
     expect(status.schemaVersion).toBe(1);
-    expect(status.rolloutStage).toBe('shadow-only');
+    expect(status.rolloutStage).toBe('disabled');
     expect(status.objectStoreFoundation.stage).toBe('present');
     expect(status.refLifecycleFoundation.stage).toBe('present');
     expect(status.commitApi.stage).toBe('pending');
     expect(status.checkout.stage).toBe('pending');
     expect(status.merge.stage).toBe('pending');
-    expect(status.provenanceAdmission.stage).toBe('present');
+    expect(status.provenanceAdmission.stage).toBe('unavailable');
+    expect(status.provenanceAdmission.available).toBe(false);
     expect(new Set(status.diagnostics.map((diagnostic) => diagnostic.code)).size).toBe(
       status.diagnostics.length,
     );
@@ -172,7 +173,19 @@ describe('WorkbookVersion status slice', () => {
         'version.commitApi.pending',
         'version.checkout.pending',
         'version.merge.pending',
-        'version.provenanceAdmission.present',
+        'version.provenanceAdmission.vc09TruthUnavailable',
+        'version.provenanceAdmission.mutationAdmissionFoundationPresent',
+      ]),
+    );
+    expect(status.provenanceAdmission.diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'version.provenanceAdmission.vc09TruthUnavailable',
+          data: expect.objectContaining({
+            requiredSlice: 'VC-09',
+            pendingRemotePromotionServiceAttached: false,
+          }),
+        }),
       ]),
     );
 
@@ -356,7 +369,7 @@ describe('WorkbookVersion status slice', () => {
     );
   });
 
-  it('returns a stale unsupported diagnostic for page tokens without calling the graph service', async () => {
+  it('passes valid listCommits page tokens to the graph service', async () => {
     const graphStore = createFakeGraphStore();
     const wb = createWorkbook({
       ctx: createMockCtx({
@@ -366,12 +379,13 @@ describe('WorkbookVersion status slice', () => {
       }),
     });
 
-    await expect(wb.version.listCommits({ pageToken: 'opaque-token' })).resolves.toMatchObject({
-      ...versionUnavailable('listCommits', 'VERSION_STALE_PAGE_CURSOR', {
-        recoverability: 'unsupported',
-      }),
+    await expect(wb.version.listCommits({ pageToken: DIFF_PAGE_TOKEN })).resolves.toMatchObject({
+      ok: true,
+      value: {
+        limit: 50,
+      },
     });
-    expect(graphStore.listCommits).not.toHaveBeenCalled();
+    expect(graphStore.listCommits).toHaveBeenCalledWith({ pageToken: DIFF_PAGE_TOKEN });
   });
 
   it('redacts invalid private refs before any graph or branch service call', async () => {

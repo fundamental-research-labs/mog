@@ -5,6 +5,7 @@ const { WorkbookVersionImpl } = await import('../version');
 const ROOT_COMMIT_ID = `commit:sha256:${'1'.repeat(64)}`;
 const CHILD_COMMIT_ID = `commit:sha256:${'2'.repeat(64)}`;
 const MISSING_COMMIT_ID = `commit:sha256:${'9'.repeat(64)}`;
+const PAGE_TOKEN = 'vpt_aaaaaaaaaaaa';
 const REF_REVISION = { kind: 'counter', value: '2' } as const;
 const CREATED_AT = '2026-06-20T00:00:00.000Z';
 
@@ -127,6 +128,12 @@ describe('WorkbookVersion listCommits selectors', () => {
       value: { limit: 50 },
     });
     expect(graphStore.listCommits).toHaveBeenLastCalledWith({ from: ROOT_COMMIT_ID });
+
+    await expect(version.listCommits({ pageToken: PAGE_TOKEN })).resolves.toMatchObject({
+      ok: true,
+      value: { limit: 50 },
+    });
+    expect(graphStore.listCommits).toHaveBeenLastCalledWith({ pageToken: PAGE_TOKEN });
   });
 
   it('validates listCommits options before calling the graph service', async () => {
@@ -168,9 +175,9 @@ describe('WorkbookVersion listCommits selectors', () => {
         'includeDiagnostics',
       ],
       [
-        'unsupported pageToken',
-        { pageToken: 'opaque-token' },
-        'VERSION_STALE_PAGE_CURSOR',
+        'malformed pageToken',
+        { pageToken: 'bad-token' },
+        'VERSION_INVALID_OPTIONS',
         'pageToken',
       ],
     ];
@@ -235,6 +242,18 @@ describe('WorkbookVersion listCommits selectors', () => {
           },
         ],
       })
+      .mockResolvedValueOnce({
+        status: 'failed',
+        diagnostics: [
+          {
+            code: 'VERSION_STALE_PAGE_CURSOR',
+            severity: 'error',
+            message: 'Page cursor is stale.',
+            operation: 'listCommits',
+            option: 'pageToken',
+          },
+        ],
+      })
       .mockResolvedValueOnce(successPage({ nextPageToken: 'vpt_next_page' }));
     const version = createVersion(graphStore);
 
@@ -259,6 +278,10 @@ describe('WorkbookVersion listCommits selectors', () => {
       },
     });
     expect(graphStore.listCommits).toHaveBeenLastCalledWith({ from: MISSING_COMMIT_ID });
+
+    await expect(version.listCommits({ pageToken: PAGE_TOKEN })).resolves
+      .toMatchObject(expectUnavailable('VERSION_STALE_PAGE_CURSOR', 'pageToken'));
+    expect(graphStore.listCommits).toHaveBeenLastCalledWith({ pageToken: PAGE_TOKEN });
 
     await expect(version.listCommits()).resolves.toMatchObject({
       ok: true,

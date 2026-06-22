@@ -36,7 +36,6 @@ import {
   hasAttachedVersionReviewReadService,
   hasAttachedVersionReviewWriteService,
 } from './version-review-service-discovery';
-import { hasAttachedPendingRemotePromotionService } from './version-pending-remote';
 import * as proposalServiceDiscovery from './version-proposal-service-discovery';
 
 const VERSION_HEAD_REF = 'HEAD';
@@ -212,7 +211,7 @@ export async function getWorkbookVersionSurfaceStatus(
     mergeApply:
       Boolean(workbookStatus?.merge.available || hasAttachedVersionMergeService(ctx)) &&
       hasAttachedVersionApplyMergeService(services),
-    provenance: hasAttachedPendingRemotePromotionService(ctx),
+    provenance: Boolean(workbookStatus?.provenanceAdmission.available),
   };
 
   diagnostics.push(...storage.diagnostics);
@@ -541,7 +540,7 @@ function buildCapabilityStates(
       'version:provenance': deferredOrHostDisabled(
         'version:provenance',
         'VC-09',
-        'Remote provenance enrichment from VC-09 is not attached.',
+        'Complete VC-09 provenance truth is not attached; broad mutation admission and pending remote promotion plumbing are insufficient.',
         'version.surfaceStatus.provenanceUnavailable',
       ),
     };
@@ -636,7 +635,7 @@ function buildCapabilityStates(
       'version:provenance',
       availability.provenance,
       'VC-09',
-      'Remote provenance enrichment from VC-09 is not attached.',
+      'Complete VC-09 provenance truth is not attached; broad mutation admission and pending remote promotion plumbing are insufficient.',
       true,
       'version.surfaceStatus.provenanceUnavailable',
     ),

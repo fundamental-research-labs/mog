@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { VersionAuthor } from '@mog-sdk/contracts/versioning';
+import type { VersionAuthor, VersionOperationContext } from '@mog-sdk/contracts/versioning';
 import {
   DEFAULT_PROVENANCE_REDACTION_POLICY,
   PROVIDER_INBOUND_V2_BASE_PROOF_FIELDS,
@@ -35,8 +35,10 @@ import {
   InMemoryVersionDocumentProviderBackend,
   createInMemoryVersionStoreProvider,
   namespaceForDocumentScope,
+  type VersionGraphStore,
   type VersionDocumentScope,
 } from '../version-store/provider';
+import type { VersionPendingRemoteCaptureResult } from '../version-store/pending-remote-capture-service';
 import { createSemanticMutationCapture } from '../version-store/semantic-mutation-capture';
 
 type StubBridge = {
@@ -151,6 +153,236 @@ describe('RustDocument pending remote sync capture', () => {
     });
 
     await doc.destroy();
+  });
+
+  it('materializes matching pending-remote records and drains only that sync context', async () => {
+    const versionProvider = createInMemoryVersionStoreProvider({
+      documentScope: VERSION_DOCUMENT_SCOPE,
+      backend: new InMemoryVersionDocumentProviderBackend(),
+    });
+    const namespace = await initializeVersionGraph(
+      versionProvider,
+      'graph-pending-remote-direct-capture',
+    );
+    const { graph, registry, pendingRemoteSegmentStore } =
+      await openPendingRemoteCaptureDependencies(versionProvider, namespace);
+    const semanticMutationCapture = createSemanticMutationCapture({
+      author: VERSION_AUTHOR,
+      now: () => new Date('2026-06-21T00:00:00.000Z'),
+    });
+    const matchingContext = pendingRemoteOperationContext({
+      operationId: 'remote-operation-a',
+      updateId: 'remote-update-a',
+      payloadHash: 'a'.repeat(64),
+    });
+    const unrelatedContext = pendingRemoteOperationContext({
+      operationId: 'remote-operation-b',
+      updateId: 'remote-update-b',
+      payloadHash: 'b'.repeat(64),
+    });
+
+    semanticMutationCapture.mutationCapture.recordMutationResult({
+      operation: 'compute_apply_sync_update',
+      operationContext: matchingContext,
+      result: syncAuthoredCellMutationResult({ cellId: 'remote-cell-a', value: 'Remote A' }),
+    });
+    semanticMutationCapture.mutationCapture.recordMutationResult({
+      operation: 'compute_apply_sync_update',
+      operationContext: unrelatedContext,
+      result: syncAuthoredCellMutationResult({ cellId: 'remote-cell-b', value: 'Remote B' }),
+    });
+    semanticMutationCapture.mutationCapture.recordMutationResult({
+      operation: 'compute_rename_compute_sheet',
+      result: sheetRenameMutationResult('sheet-local', 'Sheet1', 'Local Sheet'),
+    });
+
+    const captured = expectPendingCaptureSuccess(
+      await semanticMutationCapture.capturePendingRemoteSegment({
+        provider: versionProvider,
+        graph,
+        accessContext: versionProvider.accessContext,
+        namespace,
+        registry,
+        pendingRemoteSegmentStore,
+        operationContext: matchingContext,
+        snapshotRootByteSyncPort: { encodeDiff: async () => new Uint8Array([0x01, 0x02]) },
+      }),
+    );
+
+    expect(captured.reservationStatus).toBe('created');
+    expect(captured.capturedRecordSequences).toEqual([1]);
+    expect(captured.objectRecords).toBeDefined();
+    expect(captured.objectRecords?.mutationSegmentRecord.preimage).toMatchObject({
+      objectType: 'workbook.mutationSegment.v1',
+      payload: {
+        lane: 'pendingRemote',
+        operationContext: matchingContext,
+        mutations: [expect.objectContaining({ operation: 'compute_apply_sync_update' })],
+      },
+    });
+    expect(captured.objectRecords?.semanticChangeSetRecord?.preimage).toMatchObject({
+      objectType: 'workbook.semanticChangeSet.v1',
+      payload: {
+        changes: [
+          expect.objectContaining({
+            after: expect.objectContaining({ value: 'Remote A' }),
+          }),
+        ],
+      },
+    });
+    expect(captured.objectRecords?.snapshotRootRecord?.preimage).toMatchObject({
+      objectType: 'workbook.snapshotRoot.v1',
+    });
+    await expectPersistedPendingObjects(graph, captured);
+    await expect(
+      pendingRemoteSegmentStore.readBySegmentId(captured.record.pendingRemoteSegmentId),
+    ).resolves.toMatchObject({
+      status: 'found',
+      record: {
+        pendingRemoteSegmentId: captured.record.pendingRemoteSegmentId,
+        state: 'pending',
+        mutationSegmentDigest: captured.record.mutationSegmentDigest,
+        semanticChangeSetDigest: captured.record.semanticChangeSetDigest,
+        snapshotRootDigest: captured.record.snapshotRootDigest,
+        operationContext: matchingContext,
+      },
+    });
+
+    expect(pendingRemoteSnapshots(semanticMutationCapture)).toMatchObject([
+      { sequence: 2, operationContext: unrelatedContext },
+    ]);
+    const normalCommitCapture = await semanticMutationCapture.captureNormalCommit({
+      namespace,
+    } as Parameters<typeof semanticMutationCapture.captureNormalCommit>[0]);
+    expect(normalCommitCapture.status).toBe('success');
+    if (normalCommitCapture.status !== 'success') {
+      throw new Error('expected normal commit capture success');
+    }
+    expect(normalCommitCapture.input.semanticChangeSetRecord.preimage.payload).toMatchObject({
+      changes: [
+        expect.objectContaining({
+          after: { kind: 'value', value: 'Local Sheet' },
+        }),
+      ],
+    });
+  });
+
+  it('ignores non-pending sync contexts without graph writes or pending drains', async () => {
+    const versionProvider = createInMemoryVersionStoreProvider({
+      documentScope: VERSION_DOCUMENT_SCOPE,
+      backend: new InMemoryVersionDocumentProviderBackend(),
+    });
+    const namespace = await initializeVersionGraph(
+      versionProvider,
+      'graph-pending-remote-ignore',
+    );
+    const { graph, registry, pendingRemoteSegmentStore } =
+      await openPendingRemoteCaptureDependencies(versionProvider, namespace);
+    const tracked = trackPutObjects(graph);
+    const semanticMutationCapture = createSemanticMutationCapture({
+      author: VERSION_AUTHOR,
+      now: () => new Date('2026-06-21T00:00:00.000Z'),
+    });
+    const pendingContext = pendingRemoteOperationContext({
+      operationId: 'remote-operation-ignore-buffered',
+      updateId: 'remote-update-ignore-buffered',
+      payloadHash: 'c'.repeat(64),
+    });
+
+    semanticMutationCapture.mutationCapture.recordMutationResult({
+      operation: 'compute_apply_sync_update',
+      operationContext: pendingContext,
+      result: syncAuthoredCellMutationResult({ cellId: 'remote-cell-ignore' }),
+    });
+
+    await expect(
+      semanticMutationCapture.capturePendingRemoteSegment({
+        provider: versionProvider,
+        graph: tracked.graph,
+        accessContext: versionProvider.accessContext,
+        namespace,
+        registry,
+        pendingRemoteSegmentStore,
+        operationContext: pendingRemoteOperationContext({
+          operationId: 'remote-operation-not-pending',
+          updateId: 'remote-update-not-pending',
+          payloadHash: 'd'.repeat(64),
+          commitGrouping: 'none',
+        }),
+      }),
+    ).resolves.toEqual({
+      status: 'ignored',
+      reason: 'not-pending-remote',
+      diagnostics: [],
+    });
+    expect(tracked.putObjects).not.toHaveBeenCalled();
+    expect(pendingRemoteSnapshots(semanticMutationCapture)).toHaveLength(1);
+  });
+
+  it('returns an existing segment for equivalent repeats without duplicating graph objects', async () => {
+    const versionProvider = createInMemoryVersionStoreProvider({
+      documentScope: VERSION_DOCUMENT_SCOPE,
+      backend: new InMemoryVersionDocumentProviderBackend(),
+    });
+    const namespace = await initializeVersionGraph(
+      versionProvider,
+      'graph-pending-remote-idempotent',
+    );
+    const { graph, registry, pendingRemoteSegmentStore } =
+      await openPendingRemoteCaptureDependencies(versionProvider, namespace);
+    const semanticMutationCapture = createSemanticMutationCapture({
+      author: VERSION_AUTHOR,
+      now: () => new Date('2026-06-21T00:00:00.000Z'),
+    });
+    const operationContext = pendingRemoteOperationContext({
+      operationId: 'remote-operation-idempotent',
+      updateId: 'remote-update-idempotent',
+      payloadHash: 'e'.repeat(64),
+    });
+
+    semanticMutationCapture.mutationCapture.recordMutationResult({
+      operation: 'compute_apply_sync_update',
+      operationContext,
+      result: syncAuthoredCellMutationResult({ cellId: 'remote-cell-idempotent' }),
+    });
+    const first = expectPendingCaptureSuccess(
+      await semanticMutationCapture.capturePendingRemoteSegment({
+        provider: versionProvider,
+        graph,
+        accessContext: versionProvider.accessContext,
+        namespace,
+        registry,
+        pendingRemoteSegmentStore,
+        operationContext,
+      }),
+    );
+    expect(first.reservationStatus).toBe('created');
+    expect(pendingRemoteSnapshots(semanticMutationCapture)).toEqual([]);
+
+    semanticMutationCapture.mutationCapture.recordMutationResult({
+      operation: 'compute_apply_sync_update',
+      operationContext,
+      result: syncAuthoredCellMutationResult({ cellId: 'remote-cell-idempotent' }),
+    });
+    const tracked = trackPutObjects(graph);
+    const second = expectPendingCaptureSuccess(
+      await semanticMutationCapture.capturePendingRemoteSegment({
+        provider: versionProvider,
+        graph: tracked.graph,
+        accessContext: versionProvider.accessContext,
+        namespace,
+        registry,
+        pendingRemoteSegmentStore,
+        operationContext,
+      }),
+    );
+
+    expect(second.reservationStatus).toBe('existing');
+    expect(second.record).toEqual(first.record);
+    expect(second.objectRecords).toBeUndefined();
+    expect(second.capturedRecordSequences).toEqual([2]);
+    expect(tracked.putObjects).not.toHaveBeenCalled();
+    expect(pendingRemoteSnapshots(semanticMutationCapture)).toEqual([]);
   });
 });
 
@@ -344,7 +576,13 @@ function proof(
   };
 }
 
-function syncAuthoredCellMutationResult(): MutationResult {
+function syncAuthoredCellMutationResult(
+  options: {
+    readonly cellId?: string;
+    readonly sheetId?: string;
+    readonly value?: string;
+  } = {},
+): MutationResult {
   return {
     recalc: {
       changedCells: [],
@@ -355,15 +593,40 @@ function syncAuthoredCellMutationResult(): MutationResult {
     },
     authoredCellChanges: [
       {
-        cellId: 'remote-cell-1',
-        sheetId: 'sheet-remote-1',
+        cellId: options.cellId ?? 'remote-cell-1',
+        sheetId: options.sheetId ?? 'sheet-remote-1',
         position: { row: 0, col: 0 },
         oldValue: null,
-        value: 'Remote',
+        value: options.value ?? 'Remote',
         extraFlags: 0,
       },
     ],
   } as unknown as MutationResult;
+}
+
+function sheetRenameMutationResult(
+  sheetId: string,
+  oldName: string,
+  name: string,
+): MutationResult {
+  return {
+    recalc: {
+      changedCells: [],
+      projectionChanges: [],
+      errors: [],
+      validationAnnotations: [],
+      metrics: {},
+    },
+    sheetChanges: [
+      {
+        sheetId,
+        kind: 'Set',
+        field: 'name',
+        oldName,
+        name,
+      },
+    ],
+  } as MutationResult;
 }
 
 async function initializeVersionGraph(
@@ -392,6 +655,22 @@ async function initializeVersionGraph(
   return namespace;
 }
 
+async function openPendingRemoteCaptureDependencies(
+  provider: ReturnType<typeof createInMemoryVersionStoreProvider>,
+  namespace: VersionGraphNamespace,
+) {
+  const registryRead = await provider.readGraphRegistry();
+  expect(registryRead.status).toBe('ok');
+  if (registryRead.status !== 'ok') {
+    throw new Error('expected initialized graph registry');
+  }
+  return {
+    registry: registryRead.registry,
+    graph: await provider.openGraph(namespace),
+    pendingRemoteSegmentStore: await provider.openPendingRemoteSegmentStore(namespace),
+  };
+}
+
 function versionObjectRecord(
   namespace: VersionGraphNamespace,
   objectType: VersionObjectType,
@@ -404,6 +683,126 @@ function versionObjectRecord(
     dependencies: [],
     payload,
   });
+}
+
+function pendingRemoteOperationContext(options: {
+  readonly operationId: string;
+  readonly updateId: string;
+  readonly payloadHash: string;
+  readonly commitGrouping?: NonNullable<
+    VersionOperationContext['collaboration']
+  >['commitGrouping'];
+}): VersionOperationContext {
+  return {
+    operationId: options.operationId,
+    kind: 'sync-import',
+    author: VERSION_AUTHOR,
+    createdAt: '2026-06-21T00:00:00.000Z',
+    domainIds: ['sync'],
+    capturePolicy: 'commitEligible',
+    writeAdmissionMode: 'capture',
+    collaboration: {
+      sourceKind: 'providerLiveInbound',
+      originKind: 'provider',
+      stableOriginId: 'provider-stable-1',
+      providerId: 'provider-stable-1',
+      roomId: 'room-1',
+      epoch: 'epoch-1',
+      updateId: options.updateId,
+      sequence: '1',
+      payloadHash: options.payloadHash,
+      trustStatus: 'verified',
+      authorState: 'singleRemote',
+      remoteSessionId: 'remote-session-1',
+      replay: false,
+      system: false,
+      commitGrouping: options.commitGrouping ?? 'pendingRemote',
+      validationDiagnosticCount: 0,
+    },
+  };
+}
+
+type PendingRemoteSnapshot = {
+  readonly sequence: number;
+  readonly operationContext?: VersionOperationContext;
+};
+
+function pendingRemoteSnapshots(
+  capture: ReturnType<typeof createSemanticMutationCapture>,
+): readonly PendingRemoteSnapshot[] {
+  const mutationCapture = capture.mutationCapture as unknown as {
+    snapshotPendingRemoteMutations(): readonly PendingRemoteSnapshot[];
+  };
+  return mutationCapture.snapshotPendingRemoteMutations();
+}
+
+function expectPendingCaptureSuccess(
+  result: VersionPendingRemoteCaptureResult,
+): Extract<VersionPendingRemoteCaptureResult, { status: 'success' }> {
+  expect(result.status).toBe('success');
+  if (result.status !== 'success') {
+    throw new Error('expected pending remote capture success');
+  }
+  return result;
+}
+
+async function expectPersistedPendingObjects(
+  graph: VersionGraphStore,
+  result: Extract<VersionPendingRemoteCaptureResult, { status: 'success' }>,
+): Promise<void> {
+  await expect(
+    graph.getObjectRecord({
+      kind: 'object',
+      objectType: 'workbook.mutationSegment.v1',
+      digest: result.record.mutationSegmentDigest,
+    }),
+  ).resolves.toMatchObject({
+    digest: result.record.mutationSegmentDigest,
+    preimage: { objectType: 'workbook.mutationSegment.v1' },
+  });
+  if (result.record.semanticChangeSetDigest !== undefined) {
+    await expect(
+      graph.getObjectRecord({
+        kind: 'object',
+        objectType: 'workbook.semanticChangeSet.v1',
+        digest: result.record.semanticChangeSetDigest,
+      }),
+    ).resolves.toMatchObject({
+      digest: result.record.semanticChangeSetDigest,
+      preimage: { objectType: 'workbook.semanticChangeSet.v1' },
+    });
+  }
+  if (result.record.snapshotRootDigest !== undefined) {
+    await expect(
+      graph.getObjectRecord({
+        kind: 'object',
+        objectType: 'workbook.snapshotRoot.v1',
+        digest: result.record.snapshotRootDigest,
+      }),
+    ).resolves.toMatchObject({
+      digest: result.record.snapshotRootDigest,
+      preimage: { objectType: 'workbook.snapshotRoot.v1' },
+    });
+  }
+}
+
+function trackPutObjects(graph: VersionGraphStore): {
+  readonly graph: VersionGraphStore;
+  readonly putObjects: jest.MockedFunction<VersionGraphStore['putObjects']>;
+} {
+  const putObjects = jest.fn((batch: Parameters<VersionGraphStore['putObjects']>[0]) =>
+    graph.putObjects(batch),
+  ) as jest.MockedFunction<VersionGraphStore['putObjects']>;
+  return {
+    graph: new Proxy(graph, {
+      get(target, property) {
+        if (property === 'putObjects') return putObjects;
+        const value = Reflect.get(target, property, target);
+        return typeof value === 'function' ? value.bind(target) : value;
+      },
+    }) as VersionGraphStore,
+    putObjects,
+  };
 }
 
 async function appliedIdentityKeyForAdmission(

@@ -17,6 +17,7 @@ import type { VersionGraphStore } from './provider-graph-store';
 import {
   pendingRemoteSegmentKeyMaterialForOperationContext,
   reservePersistedPendingRemoteSegment,
+  type PendingRemoteSegmentIdempotencyKey,
   type PendingRemoteSegmentOperationContext,
   type PendingRemoteSegmentRecord,
   type PendingRemoteSegmentStore,
@@ -121,9 +122,19 @@ export async function capturePendingRemoteSemanticMutations<
     operationContext,
     keyMaterial.idempotencyKey,
   );
+  const capturedRecordSequences = matchingRecords.map((record) => record.sequence);
+
+  const existing = await existingPendingRemoteSegment(
+    capture,
+    keyMaterial.idempotencyKey,
+    capturedRecordSequences,
+  );
+  if (existing.status === 'success' || existing.status === 'failed') {
+    return existing;
+  }
 
   if (matchingRecords.length === 0) {
-    return existingPendingRemoteSegment(capture, keyMaterial.idempotencyKey);
+    return existing;
   }
 
   const objectRecords = await materializePendingRemoteObjects({
@@ -171,7 +182,7 @@ export async function capturePendingRemoteSemanticMutations<
     reservationStatus: reserved.status,
     record: reserved.record,
     objectRecords: objectRecords.records,
-    capturedRecordSequences: matchingRecords.map((record) => record.sequence),
+    capturedRecordSequences,
     diagnostics: [],
   };
 }
@@ -244,7 +255,8 @@ async function existingPendingRemoteSegment(
   input: VersionPendingRemoteCaptureInput & {
     readonly operationContext: PendingRemoteSegmentOperationContext;
   },
-  idempotencyKey: Awaited<ReturnType<typeof pendingRemoteSegmentKeyMaterialForOperationContext>>['idempotencyKey'],
+  idempotencyKey: PendingRemoteSegmentIdempotencyKey,
+  capturedRecordSequences: readonly number[],
 ): Promise<VersionPendingRemoteCaptureResult> {
   const read = await input.pendingRemoteSegmentStore.readByIdempotencyKey(idempotencyKey);
   if (read.status === 'found') {
@@ -252,7 +264,7 @@ async function existingPendingRemoteSegment(
       status: 'success',
       reservationStatus: 'existing',
       record: read.record,
-      capturedRecordSequences: [],
+      capturedRecordSequences,
       diagnostics: [],
     };
   }

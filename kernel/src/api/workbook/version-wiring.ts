@@ -5,6 +5,10 @@ import { createWorkbookVersionCommitService } from '../../document/version-store
 import { createWorkbookVersionDiffService } from '../../document/version-store/diff-service';
 import { createWorkbookVersionMergeService } from '../../document/version-store/merge-service';
 import {
+  createPendingRemotePromotionService,
+  type PendingRemotePromotionService,
+} from '../../document/version-store/pending-remote-promotion-service';
+import {
   createSemanticMutationCapture,
   type SemanticMutationCaptureServices,
 } from '../../document/version-store/semantic-mutation-capture';
@@ -18,6 +22,11 @@ import type { WorkbookVersionSurfaceStatusService } from './version-surface-stat
 type MutableVersioningContext = DocumentContext & {
   versioning?: unknown;
 };
+
+type PendingRemotePromotionServiceLike = Pick<
+  PendingRemotePromotionService,
+  'promotePendingRemoteSegments'
+>;
 
 export function attachWorkbookVersioning(
   ctx: DocumentContext,
@@ -53,7 +62,20 @@ export function attachWorkbookVersioning(
           snapshotRootByteSyncPort: config.snapshotRootByteSyncPort,
         })
       : undefined);
-  if (!writeService && !semanticCapture && Object.keys(domainSupportManifestFields).length === 0) {
+  const pendingRemotePromotionService =
+    config.pendingRemotePromotionService ??
+    (isPendingRemotePromotionService(existing.pendingRemotePromotionService)
+      ? existing.pendingRemotePromotionService
+      : undefined) ??
+    (config.provider
+      ? createPendingRemotePromotionService({ provider: config.provider })
+      : undefined);
+  if (
+    !writeService &&
+    !semanticCapture &&
+    !pendingRemotePromotionService &&
+    Object.keys(domainSupportManifestFields).length === 0
+  ) {
     return;
   }
 
@@ -112,6 +134,17 @@ export function attachWorkbookVersioning(
     ...(checkoutService ? { checkoutService } : {}),
     ...(mergeService ? { mergeService } : {}),
     ...(branchService ? { branchService } : {}),
+    ...(pendingRemotePromotionService
+      ? {
+          pendingRemotePromotionService,
+          ...(typeof existing.promotePendingRemoteSegments === 'function'
+            ? {}
+            : {
+                promotePendingRemoteSegments: () =>
+                  pendingRemotePromotionService.promotePendingRemoteSegments(),
+              }),
+        }
+      : {}),
     ...domainSupportManifestFields,
   };
 }
@@ -143,6 +176,12 @@ function isSemanticMutationCaptureServices(
     typeof value.captureNormalCommit === 'function' &&
     typeof value.capturePendingRemoteSegment === 'function'
   );
+}
+
+function isPendingRemotePromotionService(
+  value: unknown,
+): value is PendingRemotePromotionServiceLike {
+  return isRecord(value) && typeof value.promotePendingRemoteSegments === 'function';
 }
 
 function domainSupportManifestAttachmentFields(

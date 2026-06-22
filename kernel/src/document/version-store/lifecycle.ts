@@ -5,6 +5,7 @@ import type {
 } from './commit-service';
 import type { CheckoutSnapshotMaterializer } from './checkout-apply';
 import type { PendingRemotePromotionService } from './pending-remote-promotion-service';
+import type { VersionProviderWriteActivityTracker } from './provider-write-activity';
 import {
   createSemanticMutationCapture,
   type SemanticMutationCaptureServices,
@@ -47,6 +48,7 @@ export type ResolvedWorkbookVersioningConfig = {
     PendingRemotePromotionService,
     'promotePendingRemoteSegments'
   >;
+  readonly providerWriteActivityTracker?: VersionProviderWriteActivityTracker;
   readonly snapshotRootByteSyncPort?: SnapshotRootByteSyncPort;
   readonly checkoutSnapshotMaterializer?: CheckoutSnapshotMaterializer;
 };
@@ -170,6 +172,7 @@ export async function resolveDocumentWorkbookVersioningLifecycle(input: {
       captureMergeCommit: config.captureMergeCommit,
       semanticMutationCapture: config.semanticMutationCapture,
       pendingRemotePromotionService: config.pendingRemotePromotionService,
+      providerWriteActivityTracker: config.providerWriteActivityTracker,
       snapshotRootByteSyncPort: config.snapshotRootByteSyncPort,
       writeService: config.writeService,
       checkoutSnapshotMaterializer: config.checkoutSnapshotMaterializer,

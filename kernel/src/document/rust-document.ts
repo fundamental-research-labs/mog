@@ -85,6 +85,10 @@ import {
 } from './pending-remote-sync-capture';
 import type { ResolvedWorkbookVersioningConfig } from './version-store/lifecycle';
 import type { VersionPendingRemoteCapture } from './version-store/pending-remote-capture-service';
+import {
+  createVersionProviderWriteActivityTracker,
+  type VersionProviderWriteActivityTracker,
+} from './version-store/provider-write-activity';
 import type { VersionStoreProvider } from './version-store/provider';
 import type { SnapshotRootByteSyncPort } from './version-store/snapshot-root-capture';
 import type { WriteGate } from './write-gate';
@@ -188,6 +192,8 @@ export interface RustDocumentOptions {
   internal?: boolean;
   /** Optional document-scoped identity store for verified live sync updates. */
   appliedSyncUpdateIdentityStore?: AppliedSyncUpdateIdentityStore;
+  /** Optional document-scoped in-process version provider write activity tracker. */
+  providerWriteActivityTracker?: VersionProviderWriteActivityTracker;
 }
 
 /**
@@ -242,6 +248,7 @@ export class RustDocument {
   private versionStoreProvider?: VersionStoreProvider;
   private versioningSnapshotRootByteSyncPort?: SnapshotRootByteSyncPort;
   private capturePendingRemoteSegment?: VersionPendingRemoteCapture;
+  private providerWriteActivityTracker: VersionProviderWriteActivityTracker;
   private appliedSyncUpdateIdentityStore?: AppliedSyncUpdateIdentityStore;
   private syncBatchStatusStore?: SyncBatchStatusStore;
   /**
@@ -364,6 +371,8 @@ export class RustDocument {
     this.initialSnapshot = options.initialSnapshot;
     this.yrsState = options.yrsState;
     this.appliedSyncUpdateIdentityStore = options.appliedSyncUpdateIdentityStore;
+    this.providerWriteActivityTracker =
+      options.providerWriteActivityTracker ?? createVersionProviderWriteActivityTracker();
 
     // Engine init runs immediately — `ready` resolves when status reaches
     // 'ready'. `subscribeUpdateV1` is wired *after* engine init so the
@@ -410,6 +419,10 @@ export class RustDocument {
    */
   get pendingUpdatesCount(): number {
     return this.updateQueue.length;
+  }
+
+  get versionProviderWriteActivityTracker(): VersionProviderWriteActivityTracker {
+    return this.providerWriteActivityTracker;
   }
 
   /**
@@ -657,7 +670,10 @@ export class RustDocument {
   async installVersionSyncServices(
     versioning: Pick<
       ResolvedWorkbookVersioningConfig,
-      'provider' | 'semanticMutationCapture' | 'snapshotRootByteSyncPort'
+      | 'provider'
+      | 'providerWriteActivityTracker'
+      | 'semanticMutationCapture'
+      | 'snapshotRootByteSyncPort'
     > | null | undefined,
   ): Promise<void> {
     if (versioning === null || versioning === undefined) return;
@@ -669,7 +685,11 @@ export class RustDocument {
 
     const capturePendingRemoteSegment =
       versioning?.semanticMutationCapture?.capturePendingRemoteSegment;
+    const providerWriteActivityTracker = versioning?.providerWriteActivityTracker;
     const snapshotRootByteSyncPort = versioning?.snapshotRootByteSyncPort;
+    if (providerWriteActivityTracker) {
+      this.providerWriteActivityTracker = providerWriteActivityTracker;
+    }
     if (
       this.versionSyncServicesProvider === provider &&
       this.capturePendingRemoteSegment === capturePendingRemoteSegment &&
@@ -810,113 +830,115 @@ export class RustDocument {
     };
 
     const admittedContext = createAdmittedSyncApplyContext(metadata);
-    const batchDecision = await prepareSyncBatchStatusBeforeApply({
-      store: this.syncBatchStatusStore,
-      admittedContext,
-    });
-    if (batchDecision.status === 'duplicate') {
-      return { status: 'duplicate', updateId: envelope.updateId, provenance };
-    }
-    if (batchDecision.status === 'rejected') {
-      return {
-        status: 'rejected',
-        updateId: envelope.updateId,
-        reason: batchDecision.reason,
-        provenance,
-      };
-    }
-    const batchReservation = batchDecision.reservation;
-
-    const identityDecision = await prepareAppliedSyncUpdateIdentityBeforeApply({
-      store: this.appliedSyncUpdateIdentityStore,
-      admittedContext,
-      inboundUpdateAlreadySeen: this._inboundUpdateLog.has(envelope.updateId),
-    });
-    if (identityDecision.status === 'duplicate') {
-      return { status: 'duplicate', updateId: envelope.updateId, provenance };
-    }
-    if (identityDecision.status === 'rejected') {
-      return {
-        status: 'rejected',
-        updateId: envelope.updateId,
-        reason: identityDecision.reason,
-        provenance,
-      };
-    }
-    const identityReservation = identityDecision.reservation;
-
-    this._currentUpdateOrigin = `provider:${envelope.providerRefId}`;
-    let applyResult: ProviderDocApplyUpdateResult | void;
-    let appliedTerminalMetadata: AppliedSyncUpdateIdentityAppliedTerminalMetadata | undefined;
-    try {
-      const { createBridgeBackedProviderDoc } = await import('./providers/bridge-provider-doc');
-      const doc = createBridgeBackedProviderDoc(this.computeBridge, this.docId);
-      applyResult = await doc.applyUpdate(envelope.payload, metadata);
-      appliedTerminalMetadata = await capturePendingRemoteSegmentForAdmittedContext({
-        docId: this.docId,
+    return this.providerWriteActivityTracker.trackRemoteSyncApply(async () => {
+      const batchDecision = await prepareSyncBatchStatusBeforeApply({
+        store: this.syncBatchStatusStore,
         admittedContext,
-        services: this.pendingRemoteSyncCaptureServices(),
       });
-    } catch (error) {
+      if (batchDecision.status === 'duplicate') {
+        return { status: 'duplicate', updateId: envelope.updateId, provenance };
+      }
+      if (batchDecision.status === 'rejected') {
+        return {
+          status: 'rejected',
+          updateId: envelope.updateId,
+          reason: batchDecision.reason,
+          provenance,
+        };
+      }
+      const batchReservation = batchDecision.reservation;
+
+      const identityDecision = await prepareAppliedSyncUpdateIdentityBeforeApply({
+        store: this.appliedSyncUpdateIdentityStore,
+        admittedContext,
+        inboundUpdateAlreadySeen: this._inboundUpdateLog.has(envelope.updateId),
+      });
+      if (identityDecision.status === 'duplicate') {
+        return { status: 'duplicate', updateId: envelope.updateId, provenance };
+      }
+      if (identityDecision.status === 'rejected') {
+        return {
+          status: 'rejected',
+          updateId: envelope.updateId,
+          reason: identityDecision.reason,
+          provenance,
+        };
+      }
+      const identityReservation = identityDecision.reservation;
+
+      this._currentUpdateOrigin = `provider:${envelope.providerRefId}`;
+      let applyResult: ProviderDocApplyUpdateResult | void;
+      let appliedTerminalMetadata: AppliedSyncUpdateIdentityAppliedTerminalMetadata | undefined;
+      try {
+        const { createBridgeBackedProviderDoc } = await import('./providers/bridge-provider-doc');
+        const doc = createBridgeBackedProviderDoc(this.computeBridge, this.docId);
+        applyResult = await doc.applyUpdate(envelope.payload, metadata);
+        appliedTerminalMetadata = await capturePendingRemoteSegmentForAdmittedContext({
+          docId: this.docId,
+          admittedContext,
+          services: this.pendingRemoteSyncCaptureServices(),
+        });
+      } catch (error) {
+        if (batchReservation) {
+          try {
+            await completeSyncBatchStatusFailedAfterMutation(batchReservation);
+          } catch (terminalError) {
+            slog('rustDocument.applyProviderUpdateSyncBatchFailedAfterMutationTerminalFailed', {
+              updateId: envelope.updateId,
+              error: terminalError,
+            });
+          }
+        }
+        if (identityReservation) {
+          try {
+            await completeAppliedSyncUpdateIdentityFailedAfterMutation(identityReservation);
+          } catch (terminalError) {
+            slog('rustDocument.applyProviderUpdateFailedAfterMutationTerminalFailed', {
+              updateId: envelope.updateId,
+              error: terminalError,
+            });
+          }
+        }
+        throw error;
+      } finally {
+        this._currentUpdateOrigin = 'local';
+      }
+
+      let terminalError: unknown;
       if (batchReservation) {
         try {
-          await completeSyncBatchStatusFailedAfterMutation(batchReservation);
-        } catch (terminalError) {
-          slog('rustDocument.applyProviderUpdateSyncBatchFailedAfterMutationTerminalFailed', {
-            updateId: envelope.updateId,
-            error: terminalError,
-          });
+          await completeSyncBatchStatus(batchReservation);
+        } catch (error) {
+          terminalError = error;
         }
       }
       if (identityReservation) {
         try {
-          await completeAppliedSyncUpdateIdentityFailedAfterMutation(identityReservation);
-        } catch (terminalError) {
-          slog('rustDocument.applyProviderUpdateFailedAfterMutationTerminalFailed', {
-            updateId: envelope.updateId,
-            error: terminalError,
-          });
+          await completeAppliedSyncUpdateIdentity(identityReservation, appliedTerminalMetadata);
+        } catch (error) {
+          terminalError ??= error;
         }
       }
-      throw error;
-    } finally {
-      this._currentUpdateOrigin = 'local';
-    }
-
-    let terminalError: unknown;
-    if (batchReservation) {
-      try {
-        await completeSyncBatchStatus(batchReservation);
-      } catch (error) {
-        terminalError = error;
+      if (terminalError) {
+        throw terminalError;
       }
-    }
-    if (identityReservation) {
-      try {
-        await completeAppliedSyncUpdateIdentity(identityReservation, appliedTerminalMetadata);
-      } catch (error) {
-        terminalError ??= error;
+
+      this._inboundUpdateLog.add(envelope.updateId);
+      this._inboundUpdateOrder.push(envelope.updateId);
+      while (this._inboundUpdateOrder.length > RustDocument.INBOUND_LOG_CAPACITY) {
+        const oldest = this._inboundUpdateOrder.shift()!;
+        this._inboundUpdateLog.delete(oldest);
       }
-    }
-    if (terminalError) {
-      throw terminalError;
-    }
 
-    this._inboundUpdateLog.add(envelope.updateId);
-    this._inboundUpdateOrder.push(envelope.updateId);
-    while (this._inboundUpdateOrder.length > RustDocument.INBOUND_LOG_CAPACITY) {
-      const oldest = this._inboundUpdateOrder.shift()!;
-      this._inboundUpdateLog.delete(oldest);
-    }
+      this._providerEpochs.set(envelope.providerRefId, envelope.providerEpoch);
 
-    this._providerEpochs.set(envelope.providerRefId, envelope.providerEpoch);
-
-    return {
-      status: 'applied',
-      updateId: envelope.updateId,
-      provenance,
-      ...(applyResult === undefined ? {} : { applyResult }),
-    };
+      return {
+        status: 'applied',
+        updateId: envelope.updateId,
+        provenance,
+        ...(applyResult === undefined ? {} : { applyResult }),
+      };
+    });
   }
 
   private pendingRemoteSyncCaptureServices(): PendingRemoteSyncCaptureServices {

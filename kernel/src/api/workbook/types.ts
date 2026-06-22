@@ -29,6 +29,7 @@ import type {
 } from '../../document/version-store/commit-service';
 import type { WorkbookVersionMergeService } from '../../document/version-store/merge-service';
 import type { PendingRemotePromotionService } from '../../document/version-store/pending-remote-promotion-service';
+import type { VersionProviderWriteActivityTracker } from '../../document/version-store/provider-write-activity';
 import type { CheckoutSnapshotMaterializer } from '../../document/version-store/checkout-apply';
 import type { SnapshotRootByteSyncPort } from '../../document/version-store/snapshot-root-capture';
 import type { SemanticMutationCaptureServices } from '../../document/version-store/semantic-mutation-capture';
@@ -68,6 +69,7 @@ export interface WorkbookVersioningConfig {
     PendingRemotePromotionService,
     'promotePendingRemoteSegments'
   >;
+  readonly providerWriteActivityTracker?: VersionProviderWriteActivityTracker;
   readonly captureNormalCommit?: VersionNormalCommitCapture;
   readonly captureMergeCommit?: VersionMergeCommitCapture;
   readonly semanticMutationCapture?: SemanticMutationCaptureServices;

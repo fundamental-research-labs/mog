@@ -829,7 +829,16 @@ function createDocumentHandle(
               }
             : undefined,
         });
-        await lifecycle.rustDocument?.installVersionSyncServices(resolvedVersioning.versioning);
+        const versioning =
+          resolvedVersioning.versioning && lifecycle.rustDocument
+            ? {
+                ...resolvedVersioning.versioning,
+                providerWriteActivityTracker:
+                  resolvedVersioning.versioning.providerWriteActivityTracker ??
+                  lifecycle.rustDocument.versionProviderWriteActivityTracker,
+              }
+            : resolvedVersioning.versioning;
+        await lifecycle.rustDocument?.installVersionSyncServices(versioning);
         return createWorkbookFromConfig({
           ctx: context,
           eventBus: context.eventBus,
@@ -840,7 +849,7 @@ function createDocumentHandle(
           onSave: config.onSave,
           writeFile: config.writeFile,
           importWarnings: config.importWarnings ?? importWarnings,
-          versioning: resolvedVersioning.versioning,
+          versioning,
           liveness: createWorkbookLiveness('document.workbook(config)'),
         });
       }

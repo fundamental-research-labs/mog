@@ -10,6 +10,12 @@ import {
 
 type MaybePromise<T> = T | Promise<T>;
 type BoundMethod = (...args: readonly unknown[]) => MaybePromise<unknown>;
+type PendingProviderWriteNumberPayload = {
+  pendingRemoteSegmentCount?: number;
+  remoteSyncApplyActiveCount?: number;
+  pendingRemotePromotionActiveCount?: number;
+  pendingRemotePromotionQueuedCount?: number;
+};
 
 type MaybeVersionRuntimeContext = DocumentContext & {
   readonly versioning?: unknown;
@@ -24,6 +30,9 @@ export type VersionCheckoutAdmissionBlock =
   | {
       readonly reason: 'pendingProviderWrites';
       readonly pendingRemoteSegmentCount?: number;
+      readonly remoteSyncApplyActiveCount?: number;
+      readonly pendingRemotePromotionActiveCount?: number;
+      readonly pendingRemotePromotionQueuedCount?: number;
     }
   | {
       readonly reason: 'pendingRecalc';
@@ -145,12 +154,30 @@ function pendingProviderWritePayload(
 ): Pick<
   Extract<VersionCheckoutAdmissionBlock, { reason: 'pendingProviderWrites' }>,
   'pendingRemoteSegmentCount'
+  | 'remoteSyncApplyActiveCount'
+  | 'pendingRemotePromotionActiveCount'
+  | 'pendingRemotePromotionQueuedCount'
 > {
-  const pendingReason = unsafeReasons.find(
-    (reason) => reason.code === 'version.surfaceStatus.pendingProviderWrites',
-  );
-  const count = pendingReason?.data?.pendingRemoteSegmentCount;
-  return typeof count === 'number' ? { pendingRemoteSegmentCount: count } : {};
+  const payload: PendingProviderWriteNumberPayload = {};
+  for (const reason of unsafeReasons) {
+    if (reason.code !== 'version.surfaceStatus.pendingProviderWrites') continue;
+    assignNumberPayload(payload, 'pendingRemoteSegmentCount', reason.data);
+    assignNumberPayload(payload, 'remoteSyncApplyActiveCount', reason.data);
+    assignNumberPayload(payload, 'pendingRemotePromotionActiveCount', reason.data);
+    assignNumberPayload(payload, 'pendingRemotePromotionQueuedCount', reason.data);
+  }
+  return payload;
+}
+
+function assignNumberPayload(
+  payload: PendingProviderWriteNumberPayload,
+  key: keyof PendingProviderWriteNumberPayload,
+  data: VersionDiagnostic['data'],
+): void {
+  const value = data?.[key];
+  if (typeof value === 'number') {
+    payload[key] = value;
+  }
 }
 
 function bindMethod(value: unknown, name: string): BoundMethod | null {

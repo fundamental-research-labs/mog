@@ -668,6 +668,15 @@ function checkoutAdmissionDiagnostic(
         ...(block.pendingRemoteSegmentCount === undefined
           ? {}
           : { pendingRemoteSegmentCount: block.pendingRemoteSegmentCount }),
+        ...(block.remoteSyncApplyActiveCount === undefined
+          ? {}
+          : { remoteSyncApplyActiveCount: block.remoteSyncApplyActiveCount }),
+        ...(block.pendingRemotePromotionActiveCount === undefined
+          ? {}
+          : { pendingRemotePromotionActiveCount: block.pendingRemotePromotionActiveCount }),
+        ...(block.pendingRemotePromotionQueuedCount === undefined
+          ? {}
+          : { pendingRemotePromotionQueuedCount: block.pendingRemotePromotionQueuedCount }),
       });
     case 'pendingRecalc':
       return checkoutPendingRecalcDiagnostic({ ...payload, reason: block.reason });

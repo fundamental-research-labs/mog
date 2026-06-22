@@ -9,6 +9,11 @@ import {
   type PendingRemotePromotionService,
 } from '../../document/version-store/pending-remote-promotion-service';
 import {
+  createVersionProviderWriteActivityTracker,
+  isVersionProviderWriteActivityTracker,
+  type VersionProviderWriteActivityTracker,
+} from '../../document/version-store/provider-write-activity';
+import {
   createSemanticMutationCapture,
   type SemanticMutationCaptureServices,
 } from '../../document/version-store/semantic-mutation-capture';
@@ -62,18 +67,33 @@ export function attachWorkbookVersioning(
           snapshotRootByteSyncPort: config.snapshotRootByteSyncPort,
         })
       : undefined);
+  const providerWriteActivityTracker =
+    config.providerWriteActivityTracker ??
+    providerWriteActivityTrackerFrom(config.pendingRemotePromotionService) ??
+    providerWriteActivityTrackerFrom(existing.pendingRemotePromotionService) ??
+    (isVersionProviderWriteActivityTracker(existing.providerWriteActivityTracker)
+      ? existing.providerWriteActivityTracker
+      : undefined) ??
+    (isVersionProviderWriteActivityTracker(existing.versionProviderWriteActivityTracker)
+      ? existing.versionProviderWriteActivityTracker
+      : undefined) ??
+    (config.provider ? createVersionProviderWriteActivityTracker() : undefined);
   const pendingRemotePromotionService =
     config.pendingRemotePromotionService ??
     (isPendingRemotePromotionService(existing.pendingRemotePromotionService)
       ? existing.pendingRemotePromotionService
       : undefined) ??
     (config.provider
-      ? createPendingRemotePromotionService({ provider: config.provider })
+      ? createPendingRemotePromotionService({
+          provider: config.provider,
+          providerWriteActivityTracker,
+        })
       : undefined);
   if (
     !writeService &&
     !semanticCapture &&
     !pendingRemotePromotionService &&
+    !providerWriteActivityTracker &&
     Object.keys(domainSupportManifestFields).length === 0
   ) {
     return;
@@ -142,7 +162,13 @@ export function attachWorkbookVersioning(
             : {
                 promotePendingRemoteSegments: () =>
                   pendingRemotePromotionService.promotePendingRemoteSegments(),
-              }),
+            }),
+        }
+      : {}),
+    ...(providerWriteActivityTracker
+      ? {
+          providerWriteActivityTracker,
+          versionProviderWriteActivityTracker: providerWriteActivityTracker,
         }
       : {}),
     ...domainSupportManifestFields,
@@ -182,6 +208,15 @@ function isPendingRemotePromotionService(
   value: unknown,
 ): value is PendingRemotePromotionServiceLike {
   return isRecord(value) && typeof value.promotePendingRemoteSegments === 'function';
+}
+
+function providerWriteActivityTrackerFrom(
+  value: unknown,
+): VersionProviderWriteActivityTracker | undefined {
+  if (!isRecord(value)) return undefined;
+  return isVersionProviderWriteActivityTracker(value.providerWriteActivityTracker)
+    ? value.providerWriteActivityTracker
+    : undefined;
 }
 
 function domainSupportManifestAttachmentFields(

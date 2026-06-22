@@ -29,6 +29,7 @@ import {
   type SyncBatchStatusStore,
   type SyncBatchStatusStoreDiagnostic,
 } from './sync-batch-status-store';
+import { createVersionProviderWriteActivityTracker, type VersionProviderWriteActivityTracker } from './provider-write-activity';
 
 export type PendingRemotePromotionStatus = 'success' | 'partial' | 'failed';
 
@@ -90,6 +91,7 @@ export type PendingRemotePromotionResult = {
 export type PendingRemotePromotionServiceOptions = {
   readonly provider: VersionStoreProvider;
   readonly now?: () => Date;
+  readonly providerWriteActivityTracker?: VersionProviderWriteActivityTracker;
 };
 
 type OpenedPromotionStores = {
@@ -158,15 +160,21 @@ type BatchStatusDecision =
     };
 
 export class PendingRemotePromotionService {
+  readonly providerWriteActivityTracker: VersionProviderWriteActivityTracker;
   private readonly provider: VersionStoreProvider;
   private readonly now: () => Date;
 
   constructor(options: PendingRemotePromotionServiceOptions) {
     this.provider = options.provider;
     this.now = options.now ?? (() => new Date());
+    this.providerWriteActivityTracker = options.providerWriteActivityTracker ?? createVersionProviderWriteActivityTracker();
   }
 
   async promotePendingRemoteSegments(): Promise<PendingRemotePromotionResult> {
+    return this.providerWriteActivityTracker.runExclusivePendingRemotePromotion(() => this.promotePendingRemoteSegmentsUnlocked());
+  }
+
+  private async promotePendingRemoteSegmentsUnlocked(): Promise<PendingRemotePromotionResult> {
     const opened = await this.openStores();
     if (opened.status === 'failed') return failedResult(opened.diagnostics);
 
@@ -934,7 +942,6 @@ function diagnostic(
       : { sourceDiagnostics: Object.freeze([...options.sourceDiagnostics]) }),
   });
 }
-
 function sortPendingRemoteSegments(
   records: readonly PendingRemoteSegmentRecord[],
 ): readonly PendingRemoteSegmentRecord[] {
@@ -946,11 +953,9 @@ function sortPendingRemoteSegments(
     }),
   );
 }
-
 function digestKey(digest: ObjectDigest): string {
   return `${digest.algorithm}:${digest.digest}`;
 }
-
 function stableJson(value: unknown): string {
   if (value === null || typeof value === 'boolean' || typeof value === 'string') {
     return JSON.stringify(value);
@@ -967,7 +972,6 @@ function stableJson(value: unknown): string {
     .map((key) => `${JSON.stringify(key)}:${stableJson(value[key])}`)
     .join(',')}}`;
 }
-
 function sourceDiagnosticsFromError(
   error: unknown,
 ): readonly PendingRemotePromotionSourceDiagnostic[] | undefined {
@@ -975,24 +979,19 @@ function sourceDiagnosticsFromError(
   if (!isRecord(error) || !Array.isArray(error.diagnostics)) return undefined;
   return error.diagnostics.filter(isPromotionSourceDiagnostic);
 }
-
 function diagnosticCodeFromError(error: unknown): string | undefined {
   if (!isRecord(error) || !isRecord(error.diagnostic)) return undefined;
   return typeof error.diagnostic.code === 'string' ? error.diagnostic.code : undefined;
 }
-
 function isPromotionSourceDiagnostic(value: unknown): value is PendingRemotePromotionSourceDiagnostic {
   return isRecord(value) && typeof value.code === 'string' && typeof value.message === 'string';
 }
-
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
   return typeof value === 'object' && value !== null;
 }
-
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
-
 function pushUnique<T>(items: T[], item: T): void {
   if (!items.includes(item)) items.push(item);
 }

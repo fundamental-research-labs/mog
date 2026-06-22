@@ -7,6 +7,10 @@ import type {
   VersionStoreProvider,
 } from '../../document/version-store/provider';
 import { namespaceForRegistry } from '../../document/version-store/registry';
+import {
+  isVersionProviderWriteActivityTracker,
+  type VersionProviderWriteActivitySnapshot,
+} from '../../document/version-store/provider-write-activity';
 
 type MaybeVersionRuntimeContext = DocumentContext & {
   readonly versioning?: unknown;
@@ -22,6 +26,18 @@ export type VersionPendingProviderWritesStatus = {
 };
 
 export async function readVersionPendingProviderWrites(
+  ctx: DocumentContext,
+): Promise<VersionPendingProviderWritesStatus> {
+  const activity = readAttachedProviderWriteActivity(ctx);
+  const persisted = await readPersistedPendingRemoteProviderWrites(ctx);
+  if (!activity || !hasProviderWriteActivity(activity)) return persisted;
+  return combinePendingProviderWriteStatuses(
+    activeProviderWriteActivityStatus(activity),
+    persisted,
+  );
+}
+
+async function readPersistedPendingRemoteProviderWrites(
   ctx: DocumentContext,
 ): Promise<VersionPendingProviderWritesStatus> {
   const provider = getAttachedVersionStoreProvider(ctx);
@@ -84,6 +100,79 @@ export async function readVersionPendingProviderWrites(
   }
 }
 
+function readAttachedProviderWriteActivity(
+  ctx: DocumentContext,
+): VersionProviderWriteActivitySnapshot | null {
+  const runtime = ctx as MaybeVersionRuntimeContext;
+  const services = runtime.versioning ?? runtime.versionStore ?? runtime.version ?? null;
+  if (!isRecord(services)) return null;
+  for (const candidate of [
+    services.providerWriteActivityTracker,
+    services.versionProviderWriteActivityTracker,
+    services.providerWriteActivity,
+    services.versionProviderWriteActivity,
+    services,
+  ]) {
+    if (!isVersionProviderWriteActivityTracker(candidate)) continue;
+    try {
+      return candidate.readActivity();
+    } catch {
+      return failedProviderWriteActivitySnapshot();
+    }
+  }
+  return null;
+}
+
+function hasProviderWriteActivity(activity: VersionProviderWriteActivitySnapshot): boolean {
+  return (
+    activity.remoteSyncApplyActiveCount > 0 ||
+    activity.pendingRemotePromotionActiveCount > 0 ||
+    activity.pendingRemotePromotionQueuedCount > 0
+  );
+}
+
+function activeProviderWriteActivityStatus(
+  activity: VersionProviderWriteActivitySnapshot,
+): VersionPendingProviderWritesStatus {
+  const reason = diagnostic(
+    'version.surfaceStatus.pendingProviderWrites',
+    'warning',
+    'Version provider writes are in flight; checkout is unsafe until they settle.',
+    {
+      remoteSyncApplyActiveCount: activity.remoteSyncApplyActiveCount,
+      pendingRemotePromotionActiveCount: activity.pendingRemotePromotionActiveCount,
+      pendingRemotePromotionQueuedCount: activity.pendingRemotePromotionQueuedCount,
+    },
+  );
+  return {
+    pendingProviderWrites: true,
+    statusRevision: `providerActivity:${activity.statusRevision}`,
+    unsafeReasons: [reason],
+    diagnostics: [reason],
+  };
+}
+
+function failedProviderWriteActivitySnapshot(): VersionProviderWriteActivitySnapshot {
+  return {
+    remoteSyncApplyActiveCount: 1,
+    pendingRemotePromotionActiveCount: 0,
+    pendingRemotePromotionQueuedCount: 0,
+    statusRevision: 'readFailed',
+  };
+}
+
+function combinePendingProviderWriteStatuses(
+  activity: VersionPendingProviderWritesStatus,
+  persisted: VersionPendingProviderWritesStatus,
+): VersionPendingProviderWritesStatus {
+  return {
+    pendingProviderWrites: activity.pendingProviderWrites || persisted.pendingProviderWrites,
+    statusRevision: `${activity.statusRevision}|${persisted.statusRevision}`,
+    unsafeReasons: dedupeDiagnostics([...activity.unsafeReasons, ...persisted.unsafeReasons]),
+    diagnostics: dedupeDiagnostics([...activity.diagnostics, ...persisted.diagnostics]),
+  };
+}
+
 function getAttachedVersionStoreProvider(ctx: DocumentContext): VersionStoreProvider | null {
   const runtime = ctx as MaybeVersionRuntimeContext;
   const services = runtime.versioning ?? runtime.versionStore ?? runtime.version ?? null;
@@ -124,6 +213,20 @@ function failedPendingProviderWritesRead(message: string): VersionPendingProvide
     unsafeReasons: [reason],
     diagnostics: [reason],
   };
+}
+
+function dedupeDiagnostics(
+  diagnostics: readonly VersionDiagnostic[],
+): readonly VersionDiagnostic[] {
+  const seen = new Set<string>();
+  const deduped: VersionDiagnostic[] = [];
+  for (const item of diagnostics) {
+    const key = `${item.code}:${item.message}:${JSON.stringify(item.data ?? {})}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(item);
+  }
+  return Object.freeze(deduped);
 }
 
 function diagnostic(

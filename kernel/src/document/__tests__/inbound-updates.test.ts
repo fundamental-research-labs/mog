@@ -35,6 +35,10 @@ import {
   createInMemoryVersionStoreProvider,
   type VersionDocumentScope,
 } from '../version-store/provider';
+import {
+  createVersionProviderWriteActivityTracker,
+  type VersionProviderWriteActivityTracker,
+} from '../version-store/provider-write-activity';
 
 // ---------------------------------------------------------------------------
 // Stub bridge (same pattern as orchestrator tests)
@@ -101,6 +105,7 @@ function makeStubBridge(): StubBridge {
 
 async function makeOrchestrator(options: {
   readonly appliedSyncUpdateIdentityStore?: AppliedSyncUpdateIdentityStore;
+  readonly providerWriteActivityTracker?: VersionProviderWriteActivityTracker;
 } = {}): Promise<{ doc: RustDocument; bridge: StubBridge }> {
   const bridge = makeStubBridge();
   const doc = new RustDocument({
@@ -110,6 +115,7 @@ async function makeOrchestrator(options: {
     internal: true,
     skipPersistenceLoad: true,
     appliedSyncUpdateIdentityStore: options.appliedSyncUpdateIdentityStore,
+    providerWriteActivityTracker: options.providerWriteActivityTracker,
   });
   await doc.ready;
   return { doc, bridge };
@@ -369,6 +375,56 @@ describe('RustDocument.applyProviderUpdate — inbound update orchestration', ()
         envelope.payload,
         expect.objectContaining({ operationContext: expect.any(Object) }),
       );
+
+      await doc.destroy();
+    });
+
+    it('reports provider write activity while an admitted live sync apply is in flight', async () => {
+      const providerWriteActivityTracker = createVersionProviderWriteActivityTracker();
+      const { doc, bridge } = await makeOrchestrator({ providerWriteActivityTracker });
+      const providerA = makeRecordingProvider('ProviderA');
+      await doc.attachProvider(providerA);
+      const mutationResult = { recalc: { changedCells: [] } } as unknown as MutationResult;
+      const metadata = {
+        mutationResult,
+        provenanceReport: {
+          pendingSegmentIds: [],
+        },
+      } as SyncApplyMutationMetadataWire;
+      let releaseApply!: () => void;
+      const applyBlocked = new Promise<void>((resolve) => {
+        releaseApply = resolve;
+      });
+      let observedApplyStart!: () => void;
+      const applyStarted = new Promise<void>((resolve) => {
+        observedApplyStart = resolve;
+      });
+      bridge.syncApplyWithMetadata = jest.fn(async (u: Uint8Array) => {
+        observedApplyStart();
+        await applyBlocked;
+        bridge.emit(u);
+        return { mutationResult, metadata };
+      });
+
+      const applying = doc.applyProviderUpdate(
+        makeV2Envelope({
+          payload: new Uint8Array([0x44, 0x45]),
+          updateId: 'v2-live-activity-1',
+        }),
+      );
+      await applyStarted;
+
+      expect(providerWriteActivityTracker.readActivity()).toMatchObject({
+        remoteSyncApplyActiveCount: 1,
+        pendingRemotePromotionActiveCount: 0,
+      });
+
+      releaseApply();
+      await expect(applying).resolves.toMatchObject({ status: 'applied' });
+      expect(providerWriteActivityTracker.readActivity()).toMatchObject({
+        remoteSyncApplyActiveCount: 0,
+        pendingRemotePromotionActiveCount: 0,
+      });
 
       await doc.destroy();
     });

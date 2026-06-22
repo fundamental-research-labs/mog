@@ -36,6 +36,7 @@ import {
   type VersionGraphInitializeResult,
   type VersionGraphStore,
 } from '../../../document/version-store/provider';
+import { createVersionProviderWriteActivityTracker } from '../../../document/version-store/provider-write-activity';
 
 const createCheckpointManagerMock = jest.fn();
 const worksheetImplMock = jest.fn().mockImplementation((sheetId: string) => ({
@@ -636,6 +637,127 @@ describe('WorkbookVersion checkout facade', () => {
         ],
       },
     });
+  });
+
+  it('blocks checkout while provider write activity is in flight', async () => {
+    const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
+    const initialized = await provider.initializeGraph(
+      await initializeInput('graph-active-provider-writes', 'root'),
+    );
+    expectInitializeSuccess(initialized);
+    const providerWriteActivityTracker = createVersionProviderWriteActivityTracker();
+    let releaseActivity!: () => void;
+    const activityHold = new Promise<void>((resolve) => {
+      releaseActivity = resolve;
+    });
+    const inFlightActivity = providerWriteActivityTracker.trackRemoteSyncApply(
+      async () => activityHold,
+    );
+    const wb = createWorkbook({
+      versioning: {
+        provider,
+        providerWriteActivityTracker,
+      },
+    });
+
+    try {
+      await expect(wb.version.getSurfaceStatus()).resolves.toMatchObject({
+        dirty: {
+          pendingProviderWrites: true,
+          checkoutSafe: false,
+          unsafeReasons: [
+            expect.objectContaining({
+              code: 'version.surfaceStatus.pendingProviderWrites',
+              data: expect.objectContaining({ remoteSyncApplyActiveCount: 1 }),
+            }),
+          ],
+        },
+      });
+
+      await expect(wb.version.checkout({ kind: 'head' })).resolves.toMatchObject({
+        ok: false,
+        error: {
+          diagnostics: [
+            expect.objectContaining({
+              code: 'VERSION_CHECKOUT_PENDING_PROVIDER_WRITES',
+              data: expect.objectContaining({
+                payload: expect.objectContaining({
+                  reason: 'pendingProviderWrites',
+                  remoteSyncApplyActiveCount: 1,
+                }),
+              }),
+            }),
+          ],
+        },
+      });
+    } finally {
+      releaseActivity();
+      await inFlightActivity;
+    }
+  });
+
+  it('blocks checkout while pending remote promotion activity is in flight', async () => {
+    const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
+    const initialized = await provider.initializeGraph(
+      await initializeInput('graph-active-promotion', 'root'),
+    );
+    expectInitializeSuccess(initialized);
+    const providerWriteActivityTracker = createVersionProviderWriteActivityTracker();
+    let releasePromotion!: () => void;
+    let markPromotionStarted!: () => void;
+    const promotionHold = new Promise<void>((resolve) => {
+      releasePromotion = resolve;
+    });
+    const promotionStarted = new Promise<void>((resolve) => {
+      markPromotionStarted = resolve;
+    });
+    const inFlightPromotion =
+      providerWriteActivityTracker.runExclusivePendingRemotePromotion(async () => {
+        markPromotionStarted();
+        await promotionHold;
+      });
+    await promotionStarted;
+    const wb = createWorkbook({
+      versioning: {
+        provider,
+        providerWriteActivityTracker,
+      },
+    });
+
+    try {
+      await expect(wb.version.getSurfaceStatus()).resolves.toMatchObject({
+        dirty: {
+          pendingProviderWrites: true,
+          checkoutSafe: false,
+          unsafeReasons: [
+            expect.objectContaining({
+              code: 'version.surfaceStatus.pendingProviderWrites',
+              data: expect.objectContaining({ pendingRemotePromotionActiveCount: 1 }),
+            }),
+          ],
+        },
+      });
+
+      await expect(wb.version.checkout({ kind: 'head' })).resolves.toMatchObject({
+        ok: false,
+        error: {
+          diagnostics: [
+            expect.objectContaining({
+              code: 'VERSION_CHECKOUT_PENDING_PROVIDER_WRITES',
+              data: expect.objectContaining({
+                payload: expect.objectContaining({
+                  reason: 'pendingProviderWrites',
+                  pendingRemotePromotionActiveCount: 1,
+                }),
+              }),
+            }),
+          ],
+        },
+      });
+    } finally {
+      releasePromotion();
+      await inFlightPromotion;
+    }
   });
 
   it('rejects requireClean:false without invoking checkout services', async () => {

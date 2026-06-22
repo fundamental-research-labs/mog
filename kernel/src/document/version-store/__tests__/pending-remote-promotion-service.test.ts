@@ -25,6 +25,7 @@ import {
 } from '../provider';
 import type { RefVersion } from '../ref-store';
 import { syncBatchStatusKeyMaterialForOperationContext } from '../sync-batch-status-store';
+import { createVersionProviderWriteActivityTracker } from '../provider-write-activity';
 
 const DOCUMENT_SCOPE: VersionDocumentScope = {
   workspaceId: 'workspace-1',
@@ -303,6 +304,60 @@ describe('PendingRemotePromotionService', () => {
       record: { state: 'pending' },
     });
   });
+
+  it('serializes concurrent promotions and reports active promotion activity', async () => {
+    const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
+    const namespace = await initializeProvider(provider);
+    const graph = await provider.openGraph(namespace);
+    const store = await provider.openPendingRemoteSegmentStore(namespace);
+    const fixture = await pendingSegmentFixture(namespace);
+    await persistAndReservePendingSegment(graph, store, fixture);
+    const commitGate = deferred<void>();
+    let commitAttempts = 0;
+    const providerWriteActivityTracker = createVersionProviderWriteActivityTracker();
+    const service = createPendingRemotePromotionService({
+      provider: providerWithGatedCommit(provider, {
+        beforeCommit: () => {
+          commitAttempts += 1;
+          commitGate.start();
+          return commitGate.promise;
+        },
+      }),
+      providerWriteActivityTracker,
+      now: () => PROMOTION_NOW,
+    });
+
+    const first = service.promotePendingRemoteSegments();
+    await commitGate.started;
+    const second = service.promotePendingRemoteSegments();
+    await Promise.resolve();
+
+    expect(commitAttempts).toBe(1);
+    expect(providerWriteActivityTracker.readActivity()).toMatchObject({
+      pendingRemotePromotionActiveCount: 1,
+      pendingRemotePromotionQueuedCount: 1,
+    });
+
+    commitGate.resolve();
+    const [firstResult, secondResult] = await Promise.all([first, second]);
+
+    expect(firstResult).toMatchObject({
+      status: 'success',
+      promotedSegmentIds: [fixture.input.pendingRemoteSegmentId],
+    });
+    expect(secondResult).toMatchObject({
+      status: 'success',
+      promotedSegmentIds: [],
+      commitIds: [],
+      skipped: [],
+      diagnostics: [],
+    });
+    expect(commitAttempts).toBe(1);
+    expect(providerWriteActivityTracker.readActivity()).toMatchObject({
+      pendingRemotePromotionActiveCount: 0,
+      pendingRemotePromotionQueuedCount: 0,
+    });
+  });
 });
 
 type PendingSegmentFixture = {
@@ -551,6 +606,28 @@ function providerWithCommitConflict(
   };
 }
 
+function providerWithGatedCommit(
+  provider: InMemoryProvider,
+  gate: { readonly beforeCommit: () => Promise<void> },
+): ConflictProvider {
+  return {
+    documentScope: provider.documentScope,
+    accessContext: provider.accessContext,
+    capabilities: provider.capabilities,
+    readGraphRegistry: provider.readGraphRegistry.bind(provider),
+    initializeGraph: provider.initializeGraph.bind(provider),
+    scanDocumentIntegrity: provider.scanDocumentIntegrity.bind(provider),
+    close: provider.close.bind(provider),
+    dispose: provider.dispose.bind(provider),
+    openPendingRemoteSegmentStore: provider.openPendingRemoteSegmentStore.bind(provider),
+    openSyncBatchStatusStore: provider.openSyncBatchStatusStore.bind(provider),
+    openGraph: async (requestedNamespace, accessContext) => {
+      const graph = await provider.openGraph(requestedNamespace, accessContext);
+      return graphWithGatedCommit(graph, gate);
+    },
+  };
+}
+
 function graphWithOneCommitConflict(
   graph: VersionGraphStore,
   namespace: VersionGraphNamespace,
@@ -590,6 +667,35 @@ function graphWithOneCommitConflict(
   };
 }
 
+function graphWithGatedCommit(
+  graph: VersionGraphStore,
+  gate: { readonly beforeCommit: () => Promise<void> },
+): VersionGraphStore {
+  return {
+    namespace: graph.namespace,
+    initializeGraph: (input) => graph.initializeGraph(input),
+    mergeCommit: (input) => graph.mergeCommit(input),
+    fastForwardRef: (input) => graph.fastForwardRef(input),
+    putObjects: (batch) => graph.putObjects(batch),
+    readCommit: (commitId) => graph.readCommit(commitId),
+    getObjectRecord: <TPayload>(ref) => graph.getObjectRecord<TPayload>(ref),
+    hasObject: (ref) => graph.hasObject(ref),
+    readHead: () => graph.readHead(),
+    readRef: (name) => graph.readRef(name),
+    createBranch: (input) => graph.createBranch(input),
+    readBranch: (input) => graph.readBranch(input),
+    listBranches: (input) => graph.listBranches(input),
+    fastForwardBranch: (input) => graph.fastForwardBranch(input),
+    getHead: () => graph.getHead(),
+    listCommits: (options) => graph.listCommits(options),
+    readCommitClosure: (commitId) => graph.readCommitClosure(commitId),
+    commit: async (input) => {
+      await gate.beforeCommit();
+      return graph.commit(input);
+    },
+  };
+}
+
 async function conflictCommitContent(namespace: VersionGraphNamespace) {
   return {
     snapshotRootRecord: await objectRecord(
@@ -606,4 +712,16 @@ async function conflictCommitContent(namespace: VersionGraphNamespace) {
     createdAt: '2026-06-21T00:00:09.000Z',
     completenessDiagnostics: [],
   };
+}
+
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let start!: () => void;
+  const promise = new Promise<T>((promiseResolve) => {
+    resolve = promiseResolve;
+  });
+  const started = new Promise<void>((promiseResolve) => {
+    start = promiseResolve;
+  });
+  return { promise, resolve, started, start };
 }

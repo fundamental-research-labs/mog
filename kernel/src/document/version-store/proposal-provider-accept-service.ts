@@ -88,6 +88,11 @@ export async function acceptProviderBackedAgentProposal(options: {
     getReview: options.getReview,
   });
   if (!reviewReady.ok) return reviewReady.result;
+  const reviewFinalizerReady = ensureReviewFinalizerAvailable({
+    reviewId: proposal.reviewId,
+    markReviewApplied: options.markReviewApplied,
+  });
+  if (!reviewFinalizerReady.ok) return reviewFinalizerReady.result;
 
   const commitExists = await options.ensureCommitExists(proposal.proposalCommitId);
   if (!commitExists.ok) return commitExists.result;
@@ -211,6 +216,22 @@ async function requireApprovedProposalReview(input: {
   return { ok: true, review: review.value };
 }
 
+function ensureReviewFinalizerAvailable(input: {
+  readonly reviewId?: string;
+  readonly markReviewApplied?: (
+    reviewInput: WorkbookVersionMarkReviewAppliedInput,
+  ) => Promise<VersionResult<WorkbookVersionReviewRecord>>;
+}): { readonly ok: true } | { readonly ok: false; readonly result: VersionResult<never> } {
+  if (!input.reviewId || input.markReviewApplied) return { ok: true };
+  return {
+    ok: false,
+    result: targetUnavailable(
+      'VERSION_REVIEW_FINALIZER_UNAVAILABLE',
+      'Proposal acceptance requires an attached review service that can finalize the linked review.',
+    ),
+  };
+}
+
 async function markLinkedReviewApplied(input: {
   readonly input: AcceptAgentProposalInput;
   readonly reviewId?: string;
@@ -218,8 +239,10 @@ async function markLinkedReviewApplied(input: {
     reviewInput: WorkbookVersionMarkReviewAppliedInput,
   ) => Promise<VersionResult<WorkbookVersionReviewRecord>>;
 }): Promise<{ readonly ok: true } | { readonly ok: false; readonly result: VersionResult<never> }> {
-  if (!input.reviewId || !input.markReviewApplied) return { ok: true };
-  const applied = await input.markReviewApplied({
+  const finalizerReady = ensureReviewFinalizerAvailable(input);
+  if (!finalizerReady.ok) return finalizerReady;
+  if (!input.reviewId) return { ok: true };
+  const applied = await input.markReviewApplied!({
     reviewId: input.reviewId,
     clientRequestId: `${input.input.clientRequestId}:review-applied`,
     actor: input.input.actor,

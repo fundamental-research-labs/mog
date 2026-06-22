@@ -73,6 +73,12 @@ const REVIEW_STATUSES = new Set<WorkbookVersionReviewStatus>([
   'superseded',
   'stale',
 ]);
+const USER_MUTABLE_REVIEW_STATUSES = new Set<WorkbookVersionReviewStatus>([
+  'open',
+  'approved',
+  'changes_requested',
+  'rejected',
+]);
 
 export type VersionReviewPublicOperation =
   | 'listReviews'
@@ -184,7 +190,9 @@ export function hasAttachedVersionReviewService(ctx: DocumentContext): boolean {
   return Boolean(getAttachedVersionReviewService(ctx));
 }
 
-function getAttachedVersionReviewService(ctx: DocumentContext): AttachedVersionReviewService | null {
+function getAttachedVersionReviewService(
+  ctx: DocumentContext,
+): AttachedVersionReviewService | null {
   const runtime = ctx as MaybeVersionRuntimeContext;
   const services = runtime.versioning ?? runtime.versionStore ?? runtime.version ?? null;
   if (!isRecord(services)) return null;
@@ -238,7 +246,9 @@ function normalizeListReviewsInput(
   if (!isPlainInput(input, 'listReviews', diagnostics)) return { ok: false, diagnostics };
   validateKnownKeys(input, LIST_REVIEWS_KEYS, 'listReviews', diagnostics);
   if ('subjectKind' in input && !REVIEW_SUBJECT_KINDS.has(String(input.subjectKind))) {
-    diagnostics.push(invalidOptionDiagnostic('listReviews', 'subjectKind', 'unknown review subject kind.'));
+    diagnostics.push(
+      invalidOptionDiagnostic('listReviews', 'subjectKind', 'unknown review subject kind.'),
+    );
   }
   validateOptionalString(input, 'proposalId', 'listReviews', diagnostics);
   validateOptionalCommitId(input, 'commitId', 'listReviews', diagnostics);
@@ -294,7 +304,7 @@ function normalizeUpdateReviewStatusInput(
   validateRequiredString(input, 'reviewId', 'updateReviewStatus', diagnostics);
   validateRequiredRevision(input, 'expectedRevision', 'updateReviewStatus', diagnostics);
   validateRequiredString(input, 'clientRequestId', 'updateReviewStatus', diagnostics);
-  validateRequiredReviewStatus(input, 'status', 'updateReviewStatus', diagnostics);
+  validateRequiredUserMutableReviewStatus(input, 'status', 'updateReviewStatus', diagnostics);
   validateRequiredRecord(input, 'actor', 'updateReviewStatus', diagnostics);
   validateOptionalString(input, 'reason', 'updateReviewStatus', diagnostics);
   return diagnostics.length > 0 ? { ok: false, diagnostics } : { ok: true, input };
@@ -337,7 +347,9 @@ function normalizeReviewIdInput<T extends VersionGetReviewInput>(
 
 function validateExplicitSubjectHeads(
   input: VersionCreateReviewInput,
-): { readonly ok: true } | { readonly ok: false; readonly result: VersionResult<WorkbookVersionReviewRecord> } {
+):
+  | { readonly ok: true }
+  | { readonly ok: false; readonly result: VersionResult<WorkbookVersionReviewRecord> } {
   const subjectBase = subjectBaseCommitId(input.subject);
   const subjectHead = subjectHeadCommitId(input.subject);
   if (input.baseCommitId && subjectBase && input.baseCommitId !== subjectBase) {
@@ -365,7 +377,9 @@ function validateExplicitSubjectHeads(
 
 function validateReviewDiffTarget(
   input: VersionGetReviewDiffInput,
-): { readonly ok: true } | { readonly ok: false; readonly result: VersionResult<WorkbookVersionReviewDiffPage> } {
+):
+  | { readonly ok: true }
+  | { readonly ok: false; readonly result: VersionResult<WorkbookVersionReviewDiffPage> } {
   if (input.reviewId || (input.baseCommitId && input.headCommitId)) return { ok: true };
   return {
     ok: false,
@@ -387,7 +401,9 @@ function validateReviewSubject(
     return false;
   }
   if (!REVIEW_SUBJECT_KINDS.has(String(value.kind))) {
-    diagnostics.push(invalidOptionDiagnostic(operation, 'subject.kind', 'unknown review subject kind.'));
+    diagnostics.push(
+      invalidOptionDiagnostic(operation, 'subject.kind', 'unknown review subject kind.'),
+    );
     return false;
   }
 
@@ -500,6 +516,18 @@ function validateRequiredReviewStatus(
   diagnostics.push(invalidOptionDiagnostic(operation, key, `${key} must be a review status.`));
 }
 
+function validateRequiredUserMutableReviewStatus(
+  input: Readonly<Record<string, unknown>>,
+  key: string,
+  operation: VersionReviewPublicOperation,
+  diagnostics: VersionStoreDiagnostic[],
+): void {
+  if (USER_MUTABLE_REVIEW_STATUSES.has(input[key] as WorkbookVersionReviewStatus)) return;
+  diagnostics.push(
+    invalidOptionDiagnostic(operation, key, `${key} must be a user-mutable review status.`),
+  );
+}
+
 function validateOptionalCommitId(
   input: Readonly<Record<string, unknown>>,
   key: string,
@@ -540,7 +568,9 @@ function validateOptionalLimit(
   if (!(key in input)) return;
   const value = input[key];
   if (Number.isInteger(value) && Number(value) >= 1 && Number(value) <= 100) return;
-  diagnostics.push(invalidOptionDiagnostic(operation, key, `${key} must be an integer from 1 to 100.`));
+  diagnostics.push(
+    invalidOptionDiagnostic(operation, key, `${key} must be an integer from 1 to 100.`),
+  );
 }
 
 function mapReviewServiceResult<T>(
@@ -592,7 +622,9 @@ function serviceUnavailableDiagnostic(
   );
 }
 
-function methodUnavailableDiagnostic(operation: VersionReviewPublicOperation): VersionStoreDiagnostic {
+function methodUnavailableDiagnostic(
+  operation: VersionReviewPublicOperation,
+): VersionStoreDiagnostic {
   return reviewDiagnostic(
     operation,
     'VERSION_REVIEW_METHOD_UNAVAILABLE',

@@ -17,7 +17,9 @@ const REDACTION_POLICY = {
   redactAgentTrace: true,
 } as const;
 
-function createReviewRecord(overrides: Partial<WorkbookVersionReviewRecord> = {}): WorkbookVersionReviewRecord {
+function createReviewRecord(
+  overrides: Partial<WorkbookVersionReviewRecord> = {},
+): WorkbookVersionReviewRecord {
   return {
     schemaVersion: 1,
     id: REVIEW_ID,
@@ -289,6 +291,33 @@ describe('WorkbookVersion review records facade', () => {
         code: 'target_unavailable',
         target: 'workbook.version.updateReviewStatus',
         diagnostics: [expect.objectContaining({ code: 'VERSION_INVALID_OPTIONS' })],
+      },
+    });
+    expect(updateReviewStatus).not.toHaveBeenCalled();
+
+    await expect(
+      version.updateReviewStatus({
+        reviewId: REVIEW_ID,
+        expectedRevision: 1,
+        clientRequestId: 'status-applied',
+        status: 'applied',
+        actor: AUTHOR,
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: {
+        code: 'target_unavailable',
+        target: 'workbook.version.updateReviewStatus',
+        diagnostics: [
+          expect.objectContaining({
+            code: 'VERSION_INVALID_OPTIONS',
+            data: expect.objectContaining({
+              payload: expect.objectContaining({
+                option: 'status',
+              }),
+            }),
+          }),
+        ],
       },
     });
     expect(updateReviewStatus).not.toHaveBeenCalled();

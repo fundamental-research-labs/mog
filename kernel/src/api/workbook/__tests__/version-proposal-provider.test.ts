@@ -1,5 +1,10 @@
 import type { VersionAuthor as GraphVersionAuthor } from '@mog-sdk/contracts/versioning';
-import type { VersionUpdateReviewStatusInput } from '@mog-sdk/contracts/api';
+import type {
+  VersionCreateReviewInput,
+  VersionGetReviewInput,
+  VersionUpdateReviewStatusInput,
+  WorkbookVersionReviewRecord,
+} from '@mog-sdk/contracts/api';
 import type {
   CommitVersionGraphInput,
   VersionGraphInitializeResult,
@@ -199,6 +204,7 @@ describe('WorkbookVersion provider-backed proposal service', () => {
     );
     expect(approved).toMatchObject({ ok: true, value: { status: 'approved' } });
     if (!approved.ok) throw new Error(`expected review approval success: ${approved.error.code}`);
+    if (!approved.value.approval) throw new Error('expected approval evidence');
 
     await expect(version.getProposal({ proposalId: created.value.id })).resolves.toMatchObject({
       ok: true,
@@ -248,7 +254,7 @@ describe('WorkbookVersion provider-backed proposal service', () => {
       value: {
         status: 'applied',
         revision: approved.value.revision + 1,
-        approval: { reviewRevision: approved.value.revision },
+        approval: approved.value.approval,
       },
     });
 
@@ -312,6 +318,47 @@ describe('WorkbookVersion provider-backed proposal service', () => {
     await expect(version.getReview({ reviewId: ready.reviewId })).resolves.toMatchObject({
       ok: true,
       value: { status: 'open' },
+    });
+  });
+
+  it('rejects proposal acceptance when the linked review cannot be finalized', async () => {
+    const graph = await graphWithRoot();
+    const workspaceService = graphCommittingWorkspaceService(graph.provider);
+    const version = versionForProvider(graph.provider, {
+      proposalWorkspaceService: workspaceService,
+      reviewService: approvedReviewServiceWithoutFinalizer(),
+    });
+    const ready = await createReadyReviewedProposal(version, graph, 'no-review-finalizer', {
+      approveReview: false,
+    });
+
+    const accepted = await version.acceptProposal({
+      clientRequestId: 'proposal-accept-no-review-finalizer',
+      proposalId: ready.proposalId,
+      expectedRevision: 5,
+      expectedTargetHeadId: graph.rootCommitId,
+      actor: ACTOR,
+      resolutionPolicy: 'fastForwardOnly',
+    });
+    expect(accepted).toMatchObject({
+      ok: false,
+      error: {
+        code: 'target_unavailable',
+        target: 'workbook.version.acceptProposal',
+        diagnostics: [expect.objectContaining({ code: 'VERSION_REVIEW_FINALIZER_UNAVAILABLE' })],
+      },
+    });
+
+    await expect(version.readRef('refs/heads/main')).resolves.toMatchObject({
+      ok: true,
+      value: {
+        status: 'success',
+        ref: { commitId: graph.rootCommitId },
+      },
+    });
+    await expect(version.getProposal({ proposalId: ready.proposalId })).resolves.toMatchObject({
+      ok: true,
+      value: { status: 'ready_for_review', revision: 5 },
     });
   });
 
@@ -443,6 +490,48 @@ function approveReview(
     status: 'approved',
     actor: ACTOR,
   });
+}
+
+function approvedReviewServiceWithoutFinalizer() {
+  const reviews = new Map<string, WorkbookVersionReviewRecord>();
+  return {
+    async createReview(input: VersionCreateReviewInput) {
+      const review: WorkbookVersionReviewRecord = {
+        schemaVersion: 1,
+        id: `review:${input.clientRequestId}`,
+        documentId: DOCUMENT_SCOPE.documentId,
+        subject: input.subject,
+        status: 'approved',
+        baseCommitId: input.baseCommitId,
+        headCommitId: input.headCommitId,
+        revision: 1,
+        createdBy: input.createdBy,
+        createdAt: '2026-06-22T00:00:00.000Z',
+        updatedAt: '2026-06-22T00:00:00.000Z',
+        decisions: [],
+        redaction: {
+          policy: input.redactionPolicy,
+          redactedFields: [],
+          diagnostics: [],
+        },
+        diagnostics: [],
+      };
+      reviews.set(review.id, review);
+      return { ok: true, value: review } as const;
+    },
+    async getReview(input: VersionGetReviewInput) {
+      const review = reviews.get(input.reviewId);
+      return review
+        ? ({ ok: true, value: review } as const)
+        : ({
+            ok: false,
+            error: {
+              code: 'not_found',
+              id: input.reviewId,
+            },
+          } as const);
+    },
+  };
 }
 
 async function commitMain(

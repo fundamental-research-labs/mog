@@ -7,6 +7,13 @@ import type {
   DomainCapabilityPolicyManifest,
   DomainPresenceDetector,
   ObjectDigest,
+  VersionAgentProposalAcceptResult,
+  VersionAgentProposalEvent,
+  VersionAgentProposalId,
+  VersionAgentProposalRecord,
+  VersionAgentProposalStatus,
+  VersionAppendAgentProposalEventInput,
+  VersionAuthor,
   VersionWriteAdmissionMode,
   VersionCapabilityGate,
   VersionDomainCapabilityKey,
@@ -15,6 +22,15 @@ import type {
   VersionDomainClass,
   VersionHistoryReadMode,
   VersionHistoryWriteMode,
+  VersionMergePreviewRecord,
+  VersionMergePreviewRecordStatus,
+  VersionMetadataDiagnostic,
+  VersionPendingRemotePromotionResultMetadata,
+  VersionPendingRemotePromotionSkipReason,
+  VersionPendingRemotePromotionStatus,
+  VersionPendingRemoteSegmentId,
+  VersionProposalVerificationSummary,
+  VersionRedactionSummary,
 } from './index';
 
 type Assert<T extends true> = T;
@@ -62,6 +78,34 @@ type ExpectedWriteAdmissionMode =
   | 'block';
 type ExpectedHistoryReadMode = 'none' | 'metadata-only' | 'full';
 type ExpectedHistoryWriteMode = 'none' | 'shadow-only' | 'gated' | 'full';
+type ExpectedPendingRemotePromotionStatus = 'success' | 'partial' | 'failed';
+type ExpectedPendingRemotePromotionSkipReason =
+  | 'batch-status-read-failed'
+  | 'batch-status-terminal'
+  | 'completion-failed'
+  | 'graph-ref-unavailable'
+  | 'graph-write-failed'
+  | 'inconsistent-group'
+  | 'ineligible-operation-context'
+  | 'ineligible-state'
+  | 'invalid-required-object'
+  | 'missing-required-object'
+  | 'missing-semantic-change-set'
+  | 'missing-snapshot-root'
+  | 'provider-read-failed';
+type ExpectedAgentProposalStatus =
+  | 'draft'
+  | 'workspace_open'
+  | 'committed'
+  | 'verified'
+  | 'ready_for_review'
+  | 'rejected'
+  | 'stale'
+  | 'superseded'
+  | 'merge_conflicted'
+  | 'failed'
+  | 'applied';
+type ExpectedMergePreviewRecordStatus = 'clean' | 'conflicted' | 'applied' | 'superseded';
 
 type _NoExpectedFailingDomainCapabilityState = Assert<
   IsNever<Extract<VersionDomainCapabilityState, 'expected-failing'>>
@@ -79,6 +123,18 @@ type _ExactWriteAdmissionModeSet = Assert<
 >;
 type _ExactHistoryReadModeSet = Assert<IsEqual<VersionHistoryReadMode, ExpectedHistoryReadMode>>;
 type _ExactHistoryWriteModeSet = Assert<IsEqual<VersionHistoryWriteMode, ExpectedHistoryWriteMode>>;
+type _ExactPendingRemotePromotionStatusSet = Assert<
+  IsEqual<VersionPendingRemotePromotionStatus, ExpectedPendingRemotePromotionStatus>
+>;
+type _ExactPendingRemotePromotionSkipReasonSet = Assert<
+  IsEqual<VersionPendingRemotePromotionSkipReason, ExpectedPendingRemotePromotionSkipReason>
+>;
+type _ExactAgentProposalStatusSet = Assert<
+  IsEqual<VersionAgentProposalStatus, ExpectedAgentProposalStatus>
+>;
+type _ExactMergePreviewRecordStatusSet = Assert<
+  IsEqual<VersionMergePreviewRecordStatus, ExpectedMergePreviewRecordStatus>
+>;
 type _CapabilityStatesFieldUsesCapabilityMap = Assert<
   IsEqual<DomainCapabilityPolicyManifest['capabilityStates'], VersionDomainCapabilityStateMap>
 >;
@@ -208,6 +264,131 @@ const controlPlaneCompareAndSwap: ControlPlaneCompareAndSwapRequest = Object.fre
     }),
 });
 
+const metadataDiagnostic: VersionMetadataDiagnostic = Object.freeze({
+  severity: 'info',
+  code: 'VERSION_FIXTURE_METADATA_ONLY',
+  message: 'Fixture proves public-safe version metadata export closure.',
+  data: Object.freeze({
+    redacted: true,
+  }),
+});
+
+const pendingRemoteSegmentId =
+  'pending-remote-segment:sha256:vc18-public-contract-fixture' as VersionPendingRemoteSegmentId;
+
+const pendingRemotePromotionResult: VersionPendingRemotePromotionResultMetadata = Object.freeze({
+  schemaVersion: 1,
+  promotionId: 'pending-remote-promotion:vc18-public-contract-fixture',
+  status: 'success',
+  promotedSegmentIds: Object.freeze([pendingRemoteSegmentId]),
+  commitIds: Object.freeze(['commit:sha256:vc18-pending-remote-promotion']),
+  skipped: Object.freeze([]),
+  diagnostics: Object.freeze([metadataDiagnostic]),
+  promotedAt: '2026-06-22T00:00:00.000Z',
+});
+
+const proposalAuthor: VersionAuthor = Object.freeze({
+  authorId: 'vc18-agent-proposal-fixture',
+  actorKind: 'automation',
+  displayName: 'VC18 Agent Proposal Fixture',
+});
+
+const proposalId = 'proposal:sha256:vc18-public-contract-fixture' as VersionAgentProposalId;
+
+const proposalVerification: VersionProposalVerificationSummary = Object.freeze({
+  status: 'passed',
+  checks: Object.freeze([
+    Object.freeze({
+      name: 'contract-export-closure',
+      status: 'passed',
+      diagnostics: Object.freeze([]),
+    }),
+  ]),
+  createdAt: pendingRemotePromotionResult.promotedAt,
+  trust: 'trusted',
+  attestationDigest: digest,
+});
+
+const proposalRedaction: VersionRedactionSummary = Object.freeze({
+  redactionId: 'redaction:vc18-agent-proposal-fixture',
+  policy: 'metadata-only',
+  redactedObjectCount: 0,
+  redactedFieldCount: 0,
+  preservedDigests: Object.freeze([digest]),
+});
+
+const agentProposalAcceptResult: VersionAgentProposalAcceptResult = Object.freeze({
+  status: 'fast_forwarded',
+  proposalId,
+  appliedCommitId: 'commit:sha256:vc18-agent-proposal-applied',
+  targetRef: 'main',
+  newHeadId: 'commit:sha256:vc18-agent-proposal-applied',
+  refUpdateReceiptId: 'ref-update:vc18-agent-proposal',
+});
+
+const agentProposalRecord: VersionAgentProposalRecord = Object.freeze({
+  schemaVersion: 1,
+  id: proposalId,
+  documentId: 'workbook:vc18-public-contract-fixture',
+  title: 'Public contract closure fixture',
+  targetRef: agentProposalAcceptResult.targetRef,
+  baseCommitId: 'commit:sha256:vc18-agent-proposal-base',
+  targetHeadIdAtCreation: 'commit:sha256:vc18-agent-proposal-base',
+  proposalBranchName: 'proposal-branch-fixture',
+  proposalBranchNameHint: 'agent-proposal-fixture',
+  proposalCommitId: agentProposalAcceptResult.appliedCommitId,
+  status: 'applied',
+  revision: 4,
+  agentRunId: 'agent-run:vc18-public-contract-fixture',
+  agent: proposalAuthor,
+  updatedAt: pendingRemotePromotionResult.promotedAt,
+  createdAt: pendingRemotePromotionResult.promotedAt,
+  createdBy: proposalAuthor,
+  lastActor: proposalAuthor,
+  reviewId: 'review:vc18-agent-proposal',
+  verification: proposalVerification,
+  accepted: agentProposalAcceptResult,
+  redaction: proposalRedaction,
+  diagnostics: Object.freeze([metadataDiagnostic]),
+});
+
+const agentProposalAcceptedEvent: VersionAgentProposalEvent = Object.freeze({
+  kind: 'accepted',
+  clientRequestId: 'client-request:vc18-agent-proposal-accepted',
+  actor: proposalAuthor,
+  result: agentProposalAcceptResult,
+  reviewApplied: true,
+  createdAt: pendingRemotePromotionResult.promotedAt,
+});
+
+const appendAgentProposalEventInput: VersionAppendAgentProposalEventInput = Object.freeze({
+  proposalId,
+  expectedRevision: 3,
+  event: agentProposalAcceptedEvent,
+});
+
+const mergePreviewRecord: VersionMergePreviewRecord = Object.freeze({
+  schemaVersion: 1,
+  mergePreviewId: 'merge-preview:vc18-public-contract-fixture',
+  documentId: agentProposalRecord.documentId,
+  targetRef: agentProposalRecord.targetRef,
+  baseCommitId: agentProposalRecord.baseCommitId,
+  oursCommitId: agentProposalRecord.targetHeadIdAtCreation,
+  theirsCommitId: agentProposalAcceptResult.appliedCommitId,
+  status: 'clean',
+  revision: 1,
+  conflictIds: Object.freeze([]),
+  createdAt: pendingRemotePromotionResult.promotedAt,
+  updatedAt: pendingRemotePromotionResult.promotedAt,
+  resultDigest: digest,
+  resultObjectRef: digest,
+  resolutionState: Object.freeze({
+    kind: 'fixture',
+    resolutionCount: 0,
+  }),
+  diagnostics: Object.freeze([metadataDiagnostic]),
+});
+
 export const VERSIONING_CONTRACT_FIXTURES = Object.freeze({
   digest,
   historyReadModes,
@@ -217,4 +398,10 @@ export const VERSIONING_CONTRACT_FIXTURES = Object.freeze({
   domainPresenceDetector,
   controlPlanePreflight,
   controlPlaneCompareAndSwap,
+  metadataDiagnostic,
+  pendingRemotePromotionResult,
+  agentProposalRecord,
+  agentProposalAcceptedEvent,
+  appendAgentProposalEventInput,
+  mergePreviewRecord,
 });

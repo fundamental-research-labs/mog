@@ -570,6 +570,314 @@ export interface VersionSyncProvenanceEnvelope {
   readonly domainReceipts: readonly DomainMutationReceipt[];
 }
 
+export type VersionJsonValue =
+  | null
+  | boolean
+  | number
+  | string
+  | readonly VersionJsonValue[]
+  | { readonly [key: string]: VersionJsonValue };
+
+export interface VersionMetadataDiagnostic {
+  readonly severity: VersionVerificationSeverity;
+  readonly code: string;
+  readonly message: string;
+  readonly domainId?: string;
+  readonly data?: Readonly<Record<string, VersionJsonValue>>;
+}
+
+export type VersionPendingRemoteSegmentId = `pending-remote-segment:sha256:${string}` & {
+  readonly __brand?: 'VersionPendingRemoteSegmentId';
+};
+
+export const VERSION_PENDING_REMOTE_PROMOTION_STATUSES = Object.freeze([
+  'success',
+  'partial',
+  'failed',
+] as const);
+export type VersionPendingRemotePromotionStatus =
+  (typeof VERSION_PENDING_REMOTE_PROMOTION_STATUSES)[number];
+
+export const VERSION_PENDING_REMOTE_PROMOTION_SKIP_REASONS = Object.freeze([
+  'batch-status-read-failed',
+  'batch-status-terminal',
+  'completion-failed',
+  'graph-ref-unavailable',
+  'graph-write-failed',
+  'inconsistent-group',
+  'ineligible-operation-context',
+  'ineligible-state',
+  'invalid-required-object',
+  'missing-required-object',
+  'missing-semantic-change-set',
+  'missing-snapshot-root',
+  'provider-read-failed',
+] as const);
+export type VersionPendingRemotePromotionSkipReason =
+  (typeof VERSION_PENDING_REMOTE_PROMOTION_SKIP_REASONS)[number];
+
+export const VERSION_PENDING_REMOTE_PROMOTION_DIAGNOSTIC_CODES = Object.freeze([
+  'VERSION_PENDING_REMOTE_PROMOTION_BATCH_BLOCKED',
+  'VERSION_PENDING_REMOTE_PROMOTION_COMPLETION_FAILED',
+  'VERSION_PENDING_REMOTE_PROMOTION_GRAPH_WRITE_FAILED',
+  'VERSION_PENDING_REMOTE_PROMOTION_INELIGIBLE',
+  'VERSION_PENDING_REMOTE_PROMOTION_OBJECT_READ_FAILED',
+  'VERSION_PENDING_REMOTE_PROMOTION_STORE_UNAVAILABLE',
+] as const);
+export type VersionPendingRemotePromotionDiagnosticCode =
+  (typeof VERSION_PENDING_REMOTE_PROMOTION_DIAGNOSTIC_CODES)[number];
+
+export interface VersionPendingRemotePromotionDiagnostic extends VersionMetadataDiagnostic {
+  readonly code: VersionPendingRemotePromotionDiagnosticCode | (string & {});
+  readonly reason?: VersionPendingRemotePromotionSkipReason;
+  readonly segmentId?: VersionPendingRemoteSegmentId;
+  readonly commitId?: string;
+}
+
+export interface VersionPendingRemotePromotionSkippedSegment {
+  readonly segmentId: VersionPendingRemoteSegmentId;
+  readonly reason: VersionPendingRemotePromotionSkipReason;
+  readonly message: string;
+  readonly commitId?: string;
+}
+
+export interface VersionPendingRemotePromotionResultMetadata {
+  readonly schemaVersion: 1;
+  readonly promotionId: string;
+  readonly status: VersionPendingRemotePromotionStatus;
+  readonly promotedSegmentIds: readonly VersionPendingRemoteSegmentId[];
+  readonly commitIds: readonly string[];
+  readonly skipped: readonly VersionPendingRemotePromotionSkippedSegment[];
+  readonly diagnostics: readonly VersionPendingRemotePromotionDiagnostic[];
+  readonly promotedAt: string;
+}
+
+export const VERSION_AGENT_PROPOSAL_STATUSES = Object.freeze([
+  'draft',
+  'workspace_open',
+  'committed',
+  'verified',
+  'ready_for_review',
+  'rejected',
+  'stale',
+  'superseded',
+  'merge_conflicted',
+  'failed',
+  'applied',
+] as const);
+export type VersionAgentProposalStatus = (typeof VERSION_AGENT_PROPOSAL_STATUSES)[number];
+
+export type VersionAgentProposalId = string & {
+  readonly __brand?: 'VersionAgentProposalId';
+};
+
+export type VersionAgentProposalAcceptResolutionPolicy =
+  | 'fastForwardOnly'
+  | 'allowCleanMerge'
+  | 'allowResolvedMerge';
+
+export interface VersionProposalVerificationCheck {
+  readonly name: string;
+  readonly status: 'passed' | 'failed' | 'blocked';
+  readonly command?: string;
+  readonly artifactRef?: string;
+  readonly diagnostics: readonly VersionMetadataDiagnostic[];
+}
+
+export interface VersionProposalVerificationSummary {
+  readonly status: 'not_run' | 'passed' | 'failed' | 'blocked';
+  readonly checks: readonly VersionProposalVerificationCheck[];
+  readonly createdAt: string;
+  readonly trust?: 'trusted' | 'untrusted' | 'unknown';
+  readonly attestationDigest?: ObjectDigest;
+}
+
+export interface VersionAgentProposalSummary {
+  readonly id: VersionAgentProposalId;
+  readonly documentId: string;
+  readonly title: string;
+  readonly targetRef: string;
+  readonly baseCommitId: string;
+  readonly targetHeadIdAtCreation: string;
+  readonly proposalBranchName: string;
+  readonly proposalBranchNameHint?: string;
+  readonly proposalCommitId?: string;
+  readonly status: VersionAgentProposalStatus;
+  readonly revision: number;
+  readonly agentRunId: string;
+  readonly agent: VersionAuthor;
+  readonly updatedAt: string;
+}
+
+export type VersionAgentProposalAcceptResult =
+  | {
+      readonly status: 'fast_forwarded';
+      readonly proposalId: VersionAgentProposalId;
+      readonly appliedCommitId: string;
+      readonly targetRef: string;
+      readonly newHeadId: string;
+      readonly refUpdateReceiptId: string;
+    }
+  | {
+      readonly status: 'merge_applied';
+      readonly proposalId: VersionAgentProposalId;
+      readonly mergeCommitId: string;
+      readonly targetRef: string;
+      readonly newHeadId: string;
+      readonly mergePreviewId: string;
+      readonly refUpdateReceiptId: string;
+    }
+  | {
+      readonly status: 'merge_conflicted';
+      readonly proposalId: VersionAgentProposalId;
+      readonly mergePreviewId: string;
+      readonly conflictIds: readonly string[];
+    }
+  | {
+      readonly status: 'stale';
+      readonly proposalId: VersionAgentProposalId;
+      readonly expectedTargetHeadId: string;
+      readonly actualTargetHeadId: string;
+    };
+
+export interface VersionAgentProposalRecord extends VersionAgentProposalSummary {
+  readonly schemaVersion: 1;
+  readonly createdAt: string;
+  readonly createdBy: VersionAuthor;
+  readonly lastActor?: VersionAuthor;
+  readonly workspaceId?: string;
+  readonly reviewId?: string;
+  readonly verification?: VersionProposalVerificationSummary;
+  readonly accepted?: VersionAgentProposalAcceptResult;
+  readonly supersededByProposalId?: VersionAgentProposalId;
+  readonly rejectionReason?: string;
+  readonly failureReason?: string;
+  readonly supersedeReason?: string;
+  readonly redaction: VersionRedactionSummary;
+  readonly diagnostics: readonly VersionMetadataDiagnostic[];
+}
+
+export type VersionAgentProposalEvent =
+  | {
+      readonly kind: 'created';
+      readonly clientRequestId: string;
+      readonly actor: VersionAuthor;
+      readonly title: string;
+      readonly targetRef: string;
+      readonly baseCommitId: string;
+      readonly targetHeadIdAtCreation: string;
+      readonly proposalBranchName: string;
+      readonly proposalBranchNameHint?: string;
+      readonly agentRunId: string;
+      readonly agent: VersionAuthor;
+      readonly redactionPolicy: VersionRedactionPolicy;
+      readonly createdAt: string;
+    }
+  | {
+      readonly kind: 'workspaceStarted';
+      readonly clientRequestId: string;
+      readonly actor: VersionAuthor;
+      readonly workspaceId: string;
+      readonly createdAt: string;
+    }
+  | {
+      readonly kind: 'workspaceCommitted';
+      readonly clientRequestId: string;
+      readonly actor: VersionAuthor;
+      readonly proposalCommitId: string;
+      readonly verification?: VersionProposalVerificationSummary;
+      readonly createdAt: string;
+    }
+  | {
+      readonly kind: 'verificationMarked';
+      readonly clientRequestId: string;
+      readonly actor: VersionAuthor;
+      readonly verification: VersionProposalVerificationSummary;
+      readonly createdAt: string;
+    }
+  | {
+      readonly kind: 'reviewOpened';
+      readonly clientRequestId: string;
+      readonly actor: VersionAuthor;
+      readonly reviewId: string;
+      readonly createdAt: string;
+    }
+  | {
+      readonly kind: 'acceptIntent';
+      readonly clientRequestId: string;
+      readonly actor: VersionAuthor;
+      readonly targetRef: string;
+      readonly expectedTargetHeadId: string;
+      readonly proposalCommitId: string;
+      readonly resolutionPolicy: VersionAgentProposalAcceptResolutionPolicy;
+      readonly createdAt: string;
+    }
+  | {
+      readonly kind: 'accepted';
+      readonly clientRequestId: string;
+      readonly actor: VersionAuthor;
+      readonly result: VersionAgentProposalAcceptResult;
+      readonly reviewApplied: boolean;
+      readonly createdAt: string;
+    }
+  | {
+      readonly kind: 'rejected';
+      readonly clientRequestId: string;
+      readonly actor: VersionAuthor;
+      readonly reason?: string;
+      readonly createdAt: string;
+    }
+  | {
+      readonly kind: 'superseded';
+      readonly clientRequestId: string;
+      readonly actor: VersionAuthor;
+      readonly supersededByProposalId?: VersionAgentProposalId;
+      readonly reason?: string;
+      readonly createdAt: string;
+    }
+  | {
+      readonly kind: 'failed';
+      readonly clientRequestId: string;
+      readonly actor: VersionAuthor;
+      readonly diagnostics: readonly VersionMetadataDiagnostic[];
+      readonly createdAt: string;
+    };
+
+export interface VersionAppendAgentProposalEventInput {
+  readonly proposalId: VersionAgentProposalId;
+  readonly expectedRevision: number;
+  readonly event: VersionAgentProposalEvent;
+}
+
+export const VERSION_MERGE_PREVIEW_RECORD_STATUSES = Object.freeze([
+  'clean',
+  'conflicted',
+  'applied',
+  'superseded',
+] as const);
+export type VersionMergePreviewRecordStatus =
+  (typeof VERSION_MERGE_PREVIEW_RECORD_STATUSES)[number];
+
+export interface VersionMergePreviewRecord {
+  readonly schemaVersion: 1;
+  readonly mergePreviewId: string;
+  readonly documentId: string;
+  readonly targetRef?: string;
+  readonly baseCommitId: string;
+  readonly oursCommitId: string;
+  readonly theirsCommitId: string;
+  readonly status: VersionMergePreviewRecordStatus;
+  readonly revision: number;
+  readonly conflictIds: readonly string[];
+  readonly createdAt: string;
+  readonly updatedAt: string;
+  readonly resultDigest: ObjectDigest;
+  readonly resultObjectRef?: ObjectDigest;
+  readonly applyTokenDigest?: ObjectDigest;
+  readonly resolutionState?: VersionJsonValue;
+  readonly diagnostics: readonly VersionMetadataDiagnostic[];
+}
+
 export type VersionMergeRecordStatus = 'planned' | 'applied' | 'rejected' | 'requires-review';
 export type VersionRevertRecordStatus = 'planned' | 'applied' | 'rejected' | 'requires-review';
 export type VersionReviewRecordStatus = 'pending' | 'approved' | 'rejected' | 'changes-requested';
@@ -581,6 +889,10 @@ export interface VersionMergeRecord {
   readonly status: VersionMergeRecordStatus;
   readonly baseCommitId?: string;
   readonly resultCommitId?: string;
+  readonly resultId?: string;
+  readonly resultDigest?: ObjectDigest;
+  readonly reviewId?: string;
+  readonly diagnostics?: readonly VersionMetadataDiagnostic[];
 }
 
 export interface VersionRevertRecord {
@@ -597,6 +909,10 @@ export interface VersionReviewRecord {
   readonly status: VersionReviewRecordStatus;
   readonly reviewer?: VersionAuthor;
   readonly notes?: string;
+  readonly proposalId?: VersionAgentProposalId;
+  readonly mergePreviewId?: string;
+  readonly revision?: number;
+  readonly diagnostics?: readonly VersionMetadataDiagnostic[];
 }
 
 export { VERSIONING_CONTRACT_FIXTURES } from './fixtures';

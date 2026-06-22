@@ -1,6 +1,27 @@
 import type {
+  AcceptAgentProposalInput as ContractsApiAcceptAgentProposalInput,
+  AgentProposal as ContractsApiAgentProposal,
+  AgentProposalAcceptResolutionPolicy as ContractsApiAgentProposalAcceptResolutionPolicy,
+  AgentProposalAcceptResult as ContractsApiAgentProposalAcceptResult,
+  AgentProposalId as ContractsApiAgentProposalId,
+  AgentProposalStatus as ContractsApiAgentProposalStatus,
+  AgentProposalSummary as ContractsApiAgentProposalSummary,
+  AgentProposalWorkspaceHandle as ContractsApiAgentProposalWorkspaceHandle,
+  AgentProposalWorkspaceSession as ContractsApiAgentProposalWorkspaceSession,
+  CommitProposalWorkspaceInput as ContractsApiCommitProposalWorkspaceInput,
   Paged as ContractsApiPaged,
+  CreateAgentProposalInput as ContractsApiCreateAgentProposalInput,
   RedactionPolicy as ContractsApiRedactionPolicy,
+  DisposeProposalWorkspaceInput as ContractsApiDisposeProposalWorkspaceInput,
+  FailAgentProposalInput as ContractsApiFailAgentProposalInput,
+  GetAgentProposalInput as ContractsApiGetAgentProposalInput,
+  GetProposalWorkspaceInput as ContractsApiGetProposalWorkspaceInput,
+  ListAgentProposalsInput as ContractsApiListAgentProposalsInput,
+  MarkAgentProposalVerifiedInput as ContractsApiMarkAgentProposalVerifiedInput,
+  OpenProposalReviewInput as ContractsApiOpenProposalReviewInput,
+  RejectAgentProposalInput as ContractsApiRejectAgentProposalInput,
+  StartProposalWorkspaceInput as ContractsApiStartProposalWorkspaceInput,
+  SupersedeAgentProposalInput as ContractsApiSupersedeAgentProposalInput,
   VersionCapabilityError as ContractsApiCapabilityError,
   CheckoutVersionResult as ContractsApiCheckoutVersionResult,
   VersionBranchRefReadResult as ContractsApiBranchRefReadResult,
@@ -19,6 +40,7 @@ import type {
   VersionPromotePendingRemoteSkippedSegment as ContractsApiPromotePendingRemoteSkippedSegment,
   VersionPromotePendingRemoteSkipReason as ContractsApiPromotePendingRemoteSkipReason,
   VersionPromotePendingRemoteStatus as ContractsApiPromotePendingRemoteStatus,
+  VersionProposalApi as ContractsApiVersionProposalApi,
   VersionPutMergeResolutionPayloadResult as ContractsApiPutMergeResolutionPayloadResult,
   VersionRefMutationResult as ContractsApiRefMutationResult,
   VersionResult as ContractsApiVersionResult,
@@ -34,8 +56,29 @@ import type {
   WorkbookVersionStatus as ContractsApiWorkbookVersionStatus,
 } from '@mog-sdk/contracts/api';
 import type {
+  AcceptAgentProposalInput as ContractsWorkbookAcceptAgentProposalInput,
+  AgentProposal as ContractsWorkbookAgentProposal,
+  AgentProposalAcceptResolutionPolicy as ContractsWorkbookAgentProposalAcceptResolutionPolicy,
+  AgentProposalAcceptResult as ContractsWorkbookAgentProposalAcceptResult,
+  AgentProposalId as ContractsWorkbookAgentProposalId,
+  AgentProposalStatus as ContractsWorkbookAgentProposalStatus,
+  AgentProposalSummary as ContractsWorkbookAgentProposalSummary,
+  AgentProposalWorkspaceHandle as ContractsWorkbookAgentProposalWorkspaceHandle,
+  AgentProposalWorkspaceSession as ContractsWorkbookAgentProposalWorkspaceSession,
+  CommitProposalWorkspaceInput as ContractsWorkbookCommitProposalWorkspaceInput,
   Paged as ContractsWorkbookPaged,
+  CreateAgentProposalInput as ContractsWorkbookCreateAgentProposalInput,
   RedactionPolicy as ContractsWorkbookRedactionPolicy,
+  DisposeProposalWorkspaceInput as ContractsWorkbookDisposeProposalWorkspaceInput,
+  FailAgentProposalInput as ContractsWorkbookFailAgentProposalInput,
+  GetAgentProposalInput as ContractsWorkbookGetAgentProposalInput,
+  GetProposalWorkspaceInput as ContractsWorkbookGetProposalWorkspaceInput,
+  ListAgentProposalsInput as ContractsWorkbookListAgentProposalsInput,
+  MarkAgentProposalVerifiedInput as ContractsWorkbookMarkAgentProposalVerifiedInput,
+  OpenProposalReviewInput as ContractsWorkbookOpenProposalReviewInput,
+  RejectAgentProposalInput as ContractsWorkbookRejectAgentProposalInput,
+  StartProposalWorkspaceInput as ContractsWorkbookStartProposalWorkspaceInput,
+  SupersedeAgentProposalInput as ContractsWorkbookSupersedeAgentProposalInput,
   VersionCapabilityError as ContractsWorkbookCapabilityError,
   CheckoutVersionResult as ContractsWorkbookCheckoutVersionResult,
   VersionBranchRefReadResult as ContractsWorkbookBranchRefReadResult,
@@ -54,6 +97,7 @@ import type {
   VersionPromotePendingRemoteSkippedSegment as ContractsWorkbookPromotePendingRemoteSkippedSegment,
   VersionPromotePendingRemoteSkipReason as ContractsWorkbookPromotePendingRemoteSkipReason,
   VersionPromotePendingRemoteStatus as ContractsWorkbookPromotePendingRemoteStatus,
+  VersionProposalApi as ContractsWorkbookVersionProposalApi,
   VersionPutMergeResolutionPayloadResult as ContractsWorkbookPutMergeResolutionPayloadResult,
   VersionRefMutationResult as ContractsWorkbookRefMutationResult,
   VersionResult as ContractsWorkbookVersionResult,
@@ -71,13 +115,33 @@ import type {
   CapturePolicy,
   DomainMutationReceipt,
   ObjectDigest,
+  VersionAgentProposalAcceptResolutionPolicy,
+  VersionAgentProposalAcceptResult as VersioningAgentProposalAcceptResult,
+  VersionAgentProposalEvent,
+  VersionAgentProposalId as VersioningAgentProposalId,
+  VersionAgentProposalRecord,
+  VersionAgentProposalStatus,
+  VersionAgentProposalSummary,
+  VersionAppendAgentProposalEventInput,
   VersionAuthor,
   VersionDomainCapabilityState,
   VersionExportMetadataSummary,
+  VersionJsonValue,
+  VersionMergePreviewRecord,
+  VersionMergePreviewRecordStatus,
+  VersionMetadataDiagnostic,
   VersionMutationSegment,
   VersionObjectHeader,
   VersionObjectKind,
   VersionOperationContext,
+  VersionPendingRemotePromotionDiagnostic,
+  VersionPendingRemotePromotionDiagnosticCode,
+  VersionPendingRemotePromotionResultMetadata,
+  VersionPendingRemotePromotionSkipReason,
+  VersionPendingRemotePromotionSkippedSegment,
+  VersionPendingRemotePromotionStatus,
+  VersionPendingRemoteSegmentId as VersioningPendingRemoteSegmentId,
+  VersionProposalVerificationSummary,
   VersionShadowObservationRecord,
   VersionShadowObservationSink,
   VersionSyncOperationContext,
@@ -95,6 +159,75 @@ type _ContractsApiWorkbookEntryExportsVersionApi = Assert<
 >;
 type _ContractsApiWorkbookEntryExportsStatus = Assert<
   IsEqual<ContractsApiWorkbookVersionStatus, ContractsWorkbookVersionStatus>
+>;
+type _ContractsApiWorkbookEntryExportsAgentProposalId = Assert<
+  IsEqual<ContractsApiAgentProposalId, ContractsWorkbookAgentProposalId>
+>;
+type _ContractsApiWorkbookEntryExportsAgentProposalStatus = Assert<
+  IsEqual<ContractsApiAgentProposalStatus, ContractsWorkbookAgentProposalStatus>
+>;
+type _ContractsApiWorkbookEntryExportsAgentProposal = Assert<
+  IsEqual<ContractsApiAgentProposal, ContractsWorkbookAgentProposal>
+>;
+type _ContractsApiWorkbookEntryExportsAgentProposalSummary = Assert<
+  IsEqual<ContractsApiAgentProposalSummary, ContractsWorkbookAgentProposalSummary>
+>;
+type _ContractsApiWorkbookEntryExportsAgentProposalWorkspaceHandle = Assert<
+  IsEqual<ContractsApiAgentProposalWorkspaceHandle, ContractsWorkbookAgentProposalWorkspaceHandle>
+>;
+type _ContractsApiWorkbookEntryExportsAgentProposalWorkspaceSession = Assert<
+  IsEqual<ContractsApiAgentProposalWorkspaceSession, ContractsWorkbookAgentProposalWorkspaceSession>
+>;
+type _ContractsApiWorkbookEntryExportsAgentProposalAcceptResolutionPolicy = Assert<
+  IsEqual<
+    ContractsApiAgentProposalAcceptResolutionPolicy,
+    ContractsWorkbookAgentProposalAcceptResolutionPolicy
+  >
+>;
+type _ContractsApiWorkbookEntryExportsAgentProposalAcceptResult = Assert<
+  IsEqual<ContractsApiAgentProposalAcceptResult, ContractsWorkbookAgentProposalAcceptResult>
+>;
+type _ContractsApiWorkbookEntryExportsCreateAgentProposalInput = Assert<
+  IsEqual<ContractsApiCreateAgentProposalInput, ContractsWorkbookCreateAgentProposalInput>
+>;
+type _ContractsApiWorkbookEntryExportsStartProposalWorkspaceInput = Assert<
+  IsEqual<ContractsApiStartProposalWorkspaceInput, ContractsWorkbookStartProposalWorkspaceInput>
+>;
+type _ContractsApiWorkbookEntryExportsCommitProposalWorkspaceInput = Assert<
+  IsEqual<ContractsApiCommitProposalWorkspaceInput, ContractsWorkbookCommitProposalWorkspaceInput>
+>;
+type _ContractsApiWorkbookEntryExportsGetProposalWorkspaceInput = Assert<
+  IsEqual<ContractsApiGetProposalWorkspaceInput, ContractsWorkbookGetProposalWorkspaceInput>
+>;
+type _ContractsApiWorkbookEntryExportsDisposeProposalWorkspaceInput = Assert<
+  IsEqual<ContractsApiDisposeProposalWorkspaceInput, ContractsWorkbookDisposeProposalWorkspaceInput>
+>;
+type _ContractsApiWorkbookEntryExportsFailAgentProposalInput = Assert<
+  IsEqual<ContractsApiFailAgentProposalInput, ContractsWorkbookFailAgentProposalInput>
+>;
+type _ContractsApiWorkbookEntryExportsGetAgentProposalInput = Assert<
+  IsEqual<ContractsApiGetAgentProposalInput, ContractsWorkbookGetAgentProposalInput>
+>;
+type _ContractsApiWorkbookEntryExportsListAgentProposalsInput = Assert<
+  IsEqual<ContractsApiListAgentProposalsInput, ContractsWorkbookListAgentProposalsInput>
+>;
+type _ContractsApiWorkbookEntryExportsMarkAgentProposalVerifiedInput = Assert<
+  IsEqual<ContractsApiMarkAgentProposalVerifiedInput, ContractsWorkbookMarkAgentProposalVerifiedInput>
+>;
+type _ContractsApiWorkbookEntryExportsOpenProposalReviewInput = Assert<
+  IsEqual<ContractsApiOpenProposalReviewInput, ContractsWorkbookOpenProposalReviewInput>
+>;
+type _ContractsApiWorkbookEntryExportsAcceptAgentProposalInput = Assert<
+  IsEqual<ContractsApiAcceptAgentProposalInput, ContractsWorkbookAcceptAgentProposalInput>
+>;
+type _ContractsApiWorkbookEntryExportsRejectAgentProposalInput = Assert<
+  IsEqual<ContractsApiRejectAgentProposalInput, ContractsWorkbookRejectAgentProposalInput>
+>;
+type _ContractsApiWorkbookEntryExportsSupersedeAgentProposalInput = Assert<
+  IsEqual<ContractsApiSupersedeAgentProposalInput, ContractsWorkbookSupersedeAgentProposalInput>
+>;
+type _ContractsApiWorkbookEntryExportsVersionProposalApi = Assert<
+  IsEqual<ContractsApiVersionProposalApi, ContractsWorkbookVersionProposalApi>
 >;
 type _ContractsApiWorkbookEntryExportsCommit = Assert<
   IsEqual<ContractsApiCommitOptions, ContractsWorkbookCommitOptions>
@@ -206,6 +339,28 @@ type PublicVersionApiSurface = {
   readonly workbook: ContractsApiWorkbook;
   readonly version: ContractsApiWorkbookVersion;
   readonly status: ContractsApiWorkbookVersionStatus;
+  readonly agentProposalId: ContractsApiAgentProposalId;
+  readonly agentProposalStatus: ContractsApiAgentProposalStatus;
+  readonly agentProposal: ContractsApiAgentProposal;
+  readonly agentProposalSummary: ContractsApiAgentProposalSummary;
+  readonly agentProposalWorkspaceHandle: ContractsApiAgentProposalWorkspaceHandle;
+  readonly agentProposalWorkspaceSession: ContractsApiAgentProposalWorkspaceSession;
+  readonly agentProposalAcceptResolutionPolicy: ContractsApiAgentProposalAcceptResolutionPolicy;
+  readonly agentProposalAcceptResult: ContractsApiAgentProposalAcceptResult;
+  readonly createAgentProposalInput: ContractsApiCreateAgentProposalInput;
+  readonly startProposalWorkspaceInput: ContractsApiStartProposalWorkspaceInput;
+  readonly commitProposalWorkspaceInput: ContractsApiCommitProposalWorkspaceInput;
+  readonly getProposalWorkspaceInput: ContractsApiGetProposalWorkspaceInput;
+  readonly disposeProposalWorkspaceInput: ContractsApiDisposeProposalWorkspaceInput;
+  readonly failAgentProposalInput: ContractsApiFailAgentProposalInput;
+  readonly getAgentProposalInput: ContractsApiGetAgentProposalInput;
+  readonly listAgentProposalsInput: ContractsApiListAgentProposalsInput;
+  readonly markAgentProposalVerifiedInput: ContractsApiMarkAgentProposalVerifiedInput;
+  readonly openProposalReviewInput: ContractsApiOpenProposalReviewInput;
+  readonly acceptAgentProposalInput: ContractsApiAcceptAgentProposalInput;
+  readonly rejectAgentProposalInput: ContractsApiRejectAgentProposalInput;
+  readonly supersedeAgentProposalInput: ContractsApiSupersedeAgentProposalInput;
+  readonly proposalApi: ContractsApiVersionProposalApi;
   readonly commit: ContractsApiCommitOptions;
   readonly storeDiagnostic: ContractsApiStoreDiagnostic;
   readonly diffEntry: ContractsApiDiffEntry;
@@ -230,7 +385,35 @@ type PublicVersionApiSurface = {
   readonly pendingRemoteSegmentId: ContractsApiPendingRemoteSegmentId;
   readonly promotePendingRemoteOptions: ContractsApiPromotePendingRemoteOptions;
   readonly promotePendingRemoteResult: ContractsApiPromotePendingRemoteResult;
+  readonly promotePendingRemoteSkippedSegment: ContractsApiPromotePendingRemoteSkippedSegment;
+  readonly promotePendingRemoteStatus: ContractsApiPromotePendingRemoteStatus;
+  readonly promotePendingRemoteSkipReason: ContractsApiPromotePendingRemoteSkipReason;
+  readonly promotePendingRemoteDiagnostic: ContractsApiPromotePendingRemoteDiagnostic;
+  readonly promotePendingRemoteDiagnosticCode: ContractsApiPromotePendingRemoteDiagnosticCode;
   readonly page: ContractsApiPaged<string>;
+};
+
+type PublicVersioningMetadataSurface = {
+  readonly json: VersionJsonValue;
+  readonly metadataDiagnostic: VersionMetadataDiagnostic;
+  readonly pendingRemoteSegmentId: VersioningPendingRemoteSegmentId;
+  readonly pendingRemotePromotionStatus: VersionPendingRemotePromotionStatus;
+  readonly pendingRemotePromotionSkipReason: VersionPendingRemotePromotionSkipReason;
+  readonly pendingRemotePromotionDiagnosticCode: VersionPendingRemotePromotionDiagnosticCode;
+  readonly pendingRemotePromotionDiagnostic: VersionPendingRemotePromotionDiagnostic;
+  readonly pendingRemotePromotionSkippedSegment: VersionPendingRemotePromotionSkippedSegment;
+  readonly pendingRemotePromotionResultMetadata: VersionPendingRemotePromotionResultMetadata;
+  readonly agentProposalId: VersioningAgentProposalId;
+  readonly agentProposalStatus: VersionAgentProposalStatus;
+  readonly agentProposalSummary: VersionAgentProposalSummary;
+  readonly agentProposalAcceptResolutionPolicy: VersionAgentProposalAcceptResolutionPolicy;
+  readonly proposalVerificationSummary: VersionProposalVerificationSummary;
+  readonly agentProposalAcceptResult: VersioningAgentProposalAcceptResult;
+  readonly agentProposalRecord: VersionAgentProposalRecord;
+  readonly agentProposalEvent: VersionAgentProposalEvent;
+  readonly appendAgentProposalEventInput: VersionAppendAgentProposalEventInput;
+  readonly mergePreviewRecordStatus: VersionMergePreviewRecordStatus;
+  readonly mergePreviewRecord: VersionMergePreviewRecord;
 };
 
 const vc03ExportSurfaceDomainIds = Object.freeze([
@@ -407,4 +590,4 @@ export const VERSIONING_PUBLIC_EXPORT_FIXTURES = Object.freeze({
   shadowObservationSink,
 });
 
-export type { PublicVersionApiSurface };
+export type { PublicVersionApiSurface, PublicVersioningMetadataSurface };

@@ -137,6 +137,7 @@ export interface AgentProposalMetadataStore {
   readonly documentScope: VersionDocumentScope;
   createProposal(input: CreateAgentProposalStoreInput): Promise<VersionResult<AgentProposalRecord>>;
   getProposal(proposalId: AgentProposalId | string): Promise<VersionResult<AgentProposalRecord>>;
+  getProposalByWorkspaceId(workspaceId: string): Promise<VersionResult<AgentProposalRecord>>;
   listProposals(
     input: ListAgentProposalsStoreInput,
   ): Promise<VersionResult<Paged<AgentProposalSummary>>>;
@@ -323,6 +324,22 @@ export class AgentProposalMetadataStoreImpl implements AgentProposalMetadataStor
   ): Promise<VersionResult<AgentProposalRecord>> {
     const row = await this.adapter.readRow(proposalId);
     return row ? ok(cloneAgentProposalRecord(row.record)) : notFound(proposalId);
+  }
+
+  async getProposalByWorkspaceId(workspaceId: string): Promise<VersionResult<AgentProposalRecord>> {
+    const rows = await this.adapter.listRows();
+    const matches = rows
+      .map((row) => row.record)
+      .filter((record) => record.workspaceId === workspaceId);
+    if (matches.length === 0) return notFound(workspaceId);
+    if (matches.length > 1) {
+      return invalidState(
+        'duplicate_proposal_workspace_binding',
+        ['unique_workspace_id'],
+        'Proposal workspace id must identify exactly one proposal.',
+      );
+    }
+    return ok(cloneAgentProposalRecord(matches[0]!));
   }
 
   async listProposals(

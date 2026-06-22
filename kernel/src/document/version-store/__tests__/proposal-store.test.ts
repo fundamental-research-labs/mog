@@ -96,6 +96,11 @@ describe('AgentProposalMetadataStore', () => {
       ok: true,
       value: { status: 'workspace_open', revision: 2, workspaceId: 'workspace-session-1' },
     });
+    await expect(store.getProposalByWorkspaceId('workspace-session-1')).resolves.toEqual(workspace);
+    await expect(store.getProposalByWorkspaceId('missing-workspace')).resolves.toMatchObject({
+      ok: false,
+      error: { code: 'not_found', target: 'workbook.version.proposal' },
+    });
     await expect(
       store.updateProposal({
         clientRequestId: 'workspace-1',

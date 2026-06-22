@@ -54,6 +54,10 @@ import {
   validateProposalWorkspaceHandle,
 } from './proposal-provider-workspace-binding';
 import {
+  disposeProviderBackedProposalWorkspace,
+  getProviderBackedProposalWorkspace,
+} from './proposal-provider-workspace-access-service';
+import {
   isProposalWorkspaceLifecycleService,
   type ProposalWorkspaceLifecycleService,
 } from './proposal-workspace-lifecycle-service';
@@ -247,19 +251,21 @@ export class ProviderBackedAgentProposalService {
   async getProposalWorkspace(
     input: GetProposalWorkspaceInput,
   ): Promise<VersionResult<AgentProposalWorkspaceHandle>> {
-    if (!this.workspaceService) return workspaceUnavailable('getProposalWorkspace');
-    return this.callWorkspaceService('getProposalWorkspace', () =>
-      this.workspaceService!.getProposalWorkspace(input),
-    );
+    return getProviderBackedProposalWorkspace({
+      input,
+      openStore: this.openStore,
+      ...(this.workspaceService ? { workspaceService: this.workspaceService } : {}),
+    });
   }
 
   async disposeProposalWorkspace(
     input: DisposeProposalWorkspaceInput,
   ): Promise<VersionResult<{ readonly disposed: true }>> {
-    if (!this.workspaceService) return workspaceUnavailable('disposeProposalWorkspace');
-    return this.callWorkspaceService('disposeProposalWorkspace', () =>
-      this.workspaceService!.disposeProposalWorkspace(input),
-    );
+    return disposeProviderBackedProposalWorkspace({
+      input,
+      openStore: this.openStore,
+      ...(this.workspaceService ? { workspaceService: this.workspaceService } : {}),
+    });
   }
 
   async commitProposalWorkspace(

@@ -31,6 +31,9 @@ import {
   DEFAULT_MERGE_COMMIT_MATERIALIZER_KIND,
   createSemanticMergeCommitCapture,
 } from './version-merge-materializer';
+import {
+  createProviderBackedWorkbookVersionProvenanceTruthService,
+} from './version-provenance-truth-service';
 import type { WorkbookVersionSurfaceStatusService } from './version-surface-status-service';
 
 type MutableVersioningContext = DocumentContext & {
@@ -98,11 +101,28 @@ export function attachWorkbookVersioning(
           providerWriteActivityTracker,
         })
       : undefined);
+  const providerBackedProvenanceTruthService = config.provider
+    ? createProviderBackedWorkbookVersionProvenanceTruthService({
+        provider: config.provider,
+        ...(semanticCapture ? { semanticMutationCapture: semanticCapture } : {}),
+        ...(config.snapshotRootByteSyncPort
+          ? { snapshotRootByteSyncPort: config.snapshotRootByteSyncPort }
+          : {}),
+        ...(pendingRemotePromotionService ? { pendingRemotePromotionService } : {}),
+        ...(providerWriteActivityTracker ? { providerWriteActivityTracker } : {}),
+      })
+    : undefined;
+  const provenanceTruthService =
+    providerBackedProvenanceTruthService ??
+    config.provenanceTruthService ??
+    existing.provenanceTruthService ??
+    existing.provenanceAdmissionService;
   if (
     !writeService &&
     !semanticCapture &&
     !pendingRemotePromotionService &&
     !providerWriteActivityTracker &&
+    !provenanceTruthService &&
     !config.reviewService &&
     !config.proposalService &&
     !config.proposalWorkspaceService &&
@@ -225,6 +245,12 @@ export function attachWorkbookVersioning(
                 promotePendingRemoteSegments: () =>
                   pendingRemotePromotionService.promotePendingRemoteSegments(),
               }),
+        }
+      : {}),
+    ...(provenanceTruthService
+      ? {
+          provenanceTruthService,
+          provenanceAdmissionService: provenanceTruthService,
         }
       : {}),
     ...(providerWriteActivityTracker

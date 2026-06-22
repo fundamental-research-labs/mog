@@ -42,6 +42,7 @@ import type { SemanticMutationCaptureServices } from '../../document/version-sto
 import type { VersionSemanticStateReaderPort } from '../../document/version-store/semantic-state-reader';
 import type { VersionStoreProvider } from '../../document/version-store/provider';
 import type { DocumentWorkbookVersioningLifecycleConfig } from '../../document/version-store/lifecycle';
+import type { WorkbookVersionProvenanceTruthService } from './version-provenance-truth-service';
 import type { VersionLiveCollaborationStatusReader } from './version-live-collaboration-status';
 import type { DomainSupportManifestValidationOptions } from '../../document/version-store/domain-support-manifest-validator';
 import type { HandleLiveness } from '../lifecycle/handle-liveness';
@@ -78,6 +79,7 @@ export interface WorkbookVersioningConfig {
     PendingRemotePromotionService,
     'promotePendingRemoteSegments'
   >;
+  readonly provenanceTruthService?: WorkbookVersionProvenanceTruthService;
   readonly providerWriteActivityTracker?: VersionProviderWriteActivityTracker;
   readonly captureNormalCommit?: VersionNormalCommitCapture;
   readonly captureMergeCommit?: VersionMergeCommitCapture;

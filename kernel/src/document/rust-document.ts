@@ -63,6 +63,7 @@ import type {
 } from './providers/provider';
 import {
   completeAppliedSyncUpdateIdentity,
+  completeAppliedSyncUpdateIdentityFailedAfterMutation,
   openAppliedSyncUpdateIdentityStoreFromProvider,
   prepareAppliedSyncUpdateIdentityBeforeApply,
   type AppliedSyncUpdateIdentityStore,
@@ -737,6 +738,18 @@ export class RustDocument {
       const { createBridgeBackedProviderDoc } = await import('./providers/bridge-provider-doc');
       const doc = createBridgeBackedProviderDoc(this.computeBridge, this.docId);
       await doc.applyUpdate(envelope.payload, metadata);
+    } catch (error) {
+      if (identityReservation) {
+        try {
+          await completeAppliedSyncUpdateIdentityFailedAfterMutation(identityReservation);
+        } catch (terminalError) {
+          slog('rustDocument.applyProviderUpdateFailedAfterMutationTerminalFailed', {
+            updateId: envelope.updateId,
+            error: terminalError,
+          });
+        }
+      }
+      throw error;
     } finally {
       this._currentUpdateOrigin = 'local';
     }

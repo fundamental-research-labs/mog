@@ -520,6 +520,90 @@ describe('RustDocument.applyProviderUpdate — inbound update orchestration', ()
 
       await doc.destroy();
     });
+
+    it('marks sync apply failures as failedAfterMutation and blocks reapply', async () => {
+      const store = await createInMemoryVersionStoreProvider({
+        documentScope: versionDocumentScope,
+        backend: new InMemoryVersionDocumentProviderBackend(),
+        durability: 'inbound-update-test-double',
+      }).openAppliedSyncUpdateIdentityStore();
+      const { doc, bridge } = await makeOrchestrator({ appliedSyncUpdateIdentityStore: store });
+      const providerA = makeRecordingProvider('ProviderA');
+      const providerB = makeRecordingProvider('ProviderB');
+      await doc.attachProvider(providerA);
+      await doc.attachProvider(providerB);
+      const syncApply = jest
+        .spyOn(bridge, 'syncApply')
+        .mockImplementation(async () => {
+          throw new Error('sync apply failed after reservation');
+        });
+
+      const envelope = makeV2Envelope({
+        payload: new Uint8Array([0x31, 0x32]),
+        updateId: 'applied-identity-failed-after-mutation-1',
+      });
+
+      await expect(doc.applyProviderUpdate(envelope)).rejects.toThrow(
+        'sync apply failed after reservation',
+      );
+
+      expect(syncApply).toHaveBeenCalledTimes(1);
+      expect(bridge.admissions).toHaveLength(1);
+      const identityKey = await appliedIdentityKeyForAdmission(bridge.admissions[0]!);
+      await expect(store.readByIdentityKey(identityKey)).resolves.toMatchObject({
+        status: 'found',
+        record: {
+          identityKey,
+          payloadHash: envelope.payloadHash,
+          state: 'failedAfterMutation',
+          terminal: {
+            status: 'failedAfterMutation',
+            reason: 'sync-apply-failed-after-identity-reservation',
+          },
+        },
+      });
+
+      const retry = await doc.applyProviderUpdate(envelope);
+
+      expect(retry).toMatchObject({
+        status: 'rejected',
+        reason: 'applied-sync-update-identity-failed-after-mutation',
+      });
+      expect(syncApply).toHaveBeenCalledTimes(1);
+
+      bridge.emit(new Uint8Array([0x7e]));
+      await Promise.resolve();
+      expect(providerA.observed).toHaveLength(1);
+      expect(providerB.observed).toHaveLength(1);
+
+      await doc.destroy();
+    });
+
+    it('preserves compatibility retry behavior without an identity store on sync apply failure', async () => {
+      const { doc, bridge } = await makeOrchestrator();
+      const providerA = makeRecordingProvider('ProviderA');
+      await doc.attachProvider(providerA);
+      const syncApply = jest
+        .spyOn(bridge, 'syncApply')
+        .mockImplementation(async () => {
+          throw new Error('sync apply failed without identity store');
+        });
+      const envelope = makeV2Envelope({
+        payload: new Uint8Array([0x41, 0x42]),
+        updateId: 'applied-identity-no-store-failure-1',
+      });
+
+      await expect(doc.applyProviderUpdate(envelope)).rejects.toThrow(
+        'sync apply failed without identity store',
+      );
+      await expect(doc.applyProviderUpdate(envelope)).rejects.toThrow(
+        'sync apply failed without identity store',
+      );
+
+      expect(syncApply).toHaveBeenCalledTimes(2);
+
+      await doc.destroy();
+    });
   });
 
   describe('stale epoch', () => {

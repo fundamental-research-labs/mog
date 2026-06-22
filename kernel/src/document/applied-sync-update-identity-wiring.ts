@@ -6,6 +6,7 @@ import {
   type AppliedSyncUpdateIdentityOperationContext,
   type AppliedSyncUpdateIdentityStore,
   type AppliedSyncUpdateIdentityStoreDiagnostic,
+  type AppliedSyncUpdateIdentityTerminal,
 } from './version-store/applied-sync-update-identity-store';
 
 export type { AppliedSyncUpdateIdentityStore };
@@ -18,16 +19,23 @@ export type AppliedSyncUpdateIdentityReservation = {
 };
 
 type AppliedSyncUpdateIdentityDuplicateDecision = {
-  readonly status: 'duplicate' | 'conflict' | 'failed' | 'missing' | 'notDuplicate';
+  readonly status:
+    | 'duplicate'
+    | 'conflict'
+    | 'failed'
+    | 'failedAfterMutation'
+    | 'missing'
+    | 'notDuplicate';
 };
 
 type AppliedSyncUpdateIdentityReserveDecision = {
-  readonly status: 'reserved' | 'duplicate' | 'conflict' | 'failed';
+  readonly status: 'reserved' | 'duplicate' | 'conflict' | 'failed' | 'failedAfterMutation';
 };
 
 export type AppliedSyncUpdateIdentityPreApplyRejectionReason =
   | 'duplicate-update-id'
   | 'applied-sync-update-identity-conflict'
+  | 'applied-sync-update-identity-failed-after-mutation'
   | 'applied-sync-update-identity-read-failed'
   | 'applied-sync-update-identity-reservation-failed';
 
@@ -69,6 +77,11 @@ export async function prepareAppliedSyncUpdateIdentityBeforeApply(options: {
         return { status: 'rejected', reason: 'applied-sync-update-identity-conflict' };
       case 'failed':
         return { status: 'rejected', reason: 'applied-sync-update-identity-read-failed' };
+      case 'failedAfterMutation':
+        return {
+          status: 'rejected',
+          reason: 'applied-sync-update-identity-failed-after-mutation',
+        };
       case 'missing':
       case 'notDuplicate':
         return { status: 'rejected', reason: 'duplicate-update-id' };
@@ -87,6 +100,11 @@ export async function prepareAppliedSyncUpdateIdentityBeforeApply(options: {
       return { status: 'rejected', reason: 'applied-sync-update-identity-conflict' };
     case 'failed':
       return { status: 'rejected', reason: 'applied-sync-update-identity-reservation-failed' };
+    case 'failedAfterMutation':
+      return {
+        status: 'rejected',
+        reason: 'applied-sync-update-identity-failed-after-mutation',
+      };
   }
 }
 
@@ -123,6 +141,7 @@ async function readAppliedSyncUpdateIdentityDuplicate(
   if (read.status === 'missing') return { status: 'missing' };
   if (read.record.payloadHash !== reservation.payloadHash) return { status: 'conflict' };
   if (read.record.state === 'applied') return { status: 'duplicate' };
+  if (read.record.state === 'failedAfterMutation') return { status: 'failedAfterMutation' };
   return { status: 'notDuplicate' };
 }
 
@@ -137,8 +156,11 @@ async function reserveAppliedSyncUpdateIdentity(
 
   switch (reserved.status) {
     case 'reserved':
-    case 'existing':
       return { status: 'reserved' };
+    case 'existing':
+      return reserved.record.state === 'failedAfterMutation'
+        ? { status: 'failedAfterMutation' }
+        : { status: 'reserved' };
     case 'duplicate':
       return { status: 'duplicate' };
     case 'conflict':
@@ -151,11 +173,27 @@ async function reserveAppliedSyncUpdateIdentity(
 export async function completeAppliedSyncUpdateIdentity(
   reservation: AppliedSyncUpdateIdentityReservation,
 ): Promise<void> {
+  await completeAppliedSyncUpdateIdentityTerminal(reservation, { status: 'applied' });
+}
+
+export async function completeAppliedSyncUpdateIdentityFailedAfterMutation(
+  reservation: AppliedSyncUpdateIdentityReservation,
+): Promise<void> {
+  await completeAppliedSyncUpdateIdentityTerminal(reservation, {
+    status: 'failedAfterMutation',
+    reason: 'sync-apply-failed-after-identity-reservation',
+  });
+}
+
+async function completeAppliedSyncUpdateIdentityTerminal(
+  reservation: AppliedSyncUpdateIdentityReservation,
+  terminal: AppliedSyncUpdateIdentityTerminal,
+): Promise<void> {
   const completed = await reservation.store.completeIdentity({
     identityKey: reservation.identityKey,
     payloadHash: reservation.payloadHash,
     completedAt: new Date().toISOString(),
-    terminal: { status: 'applied' },
+    terminal,
   });
 
   if (completed.status !== 'completed') {

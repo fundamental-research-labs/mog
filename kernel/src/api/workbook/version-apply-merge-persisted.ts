@@ -37,8 +37,8 @@ import {
 import {
   mapPublicExpectedTargetHead,
   mapPublicObjectDigest,
-  mapPublicTargetRef,
 } from './version-attempt-metadata';
+import { mapPublicApplyTargetRef } from './version-apply-merge-target-ref';
 import { normalizeVersionApplyMergeResolutions } from './version-merge-resolution-normalization';
 
 const VERSION_APPLY_MERGE_PERSISTED_INPUT_KEYS = new Set([
@@ -314,11 +314,9 @@ function normalizePersistedApplyMergeOptions(
     return diagnostics.length === 0 ? { mode: 'preview' } : null;
   }
 
-  const targetRef = mapPublicTargetRef(input.targetRef);
+  const targetRef = mapPublicApplyTargetRef(input.targetRef);
   const expectedTargetHead = mapPublicExpectedTargetHead(input.expectedTargetHead);
-  if (!targetRef) {
-    diagnostics.push(invalidApplyMergeOptionDiagnostic('targetRef', 'targetRef is required.'));
-  }
+  if (!targetRef) diagnostics.push(invalidApplyMergeOptionDiagnostic('targetRef', 'targetRef must name main, scenario/*, or agent/*.'));
   if (!expectedTargetHead) {
     diagnostics.push(
       invalidApplyMergeOptionDiagnostic(
@@ -384,6 +382,9 @@ function validatePersistedIntentRecord(
   options: Extract<NormalizedPersistedApplyMergeOptions, { readonly mode: 'apply' }>,
 ): readonly VersionStoreDiagnostic[] {
   const diagnostics: VersionStoreDiagnostic[] = [];
+  if (record.expectedTargetHead.commitId !== record.ours) {
+    diagnostics.push(resolutionMismatchDiagnostic('persisted merge expectedTargetHead does not match the stored ours commit.'));
+  }
   if (!digestsEqual(record.resultDigest, input.resultDigest)) {
     diagnostics.push(
       resolutionMismatchDiagnostic(

@@ -23,9 +23,9 @@ import type {
 import type { DocumentContext } from '../../context';
 import {
   mapPublicExpectedTargetHead,
-  mapPublicTargetRef,
   mapVersionMergeAttemptMetadata,
 } from './version-attempt-metadata';
+import { mapPublicApplyTargetRef } from './version-apply-merge-target-ref';
 import {
   getVersionMergeCapabilityDecision,
   versionMergeCapabilityDisabledDiagnostic,
@@ -169,6 +169,27 @@ function validateMergeRequest(
     };
   }
 
+  if (
+    normalizedOptions.expectedTargetHead !== undefined &&
+    normalizedOptions.expectedTargetHead.commitId !== normalizedInput.ours
+  ) {
+    diagnostics.push(
+      invalidMergeOptionDiagnostic(
+        'expectedTargetHead.commitId',
+        'expectedTargetHead.commitId must match the merge ours commit.',
+      ),
+    );
+  }
+  if (diagnostics.length > 0) {
+    return {
+      ok: false,
+      base: normalizedInput.base,
+      ours: normalizedInput.ours,
+      theirs: normalizedInput.theirs,
+      diagnostics,
+    };
+  }
+
   return { ok: true, input: normalizedInput, options: normalizedOptions };
 }
 
@@ -252,12 +273,12 @@ function normalizeMergeOptions(
   }
 
   if (input.targetRef !== undefined) {
-    const targetRef = mapPublicTargetRef(input.targetRef);
+    const targetRef = mapPublicApplyTargetRef(input.targetRef);
     if (!targetRef) {
       diagnostics.push(
         invalidMergeOptionDiagnostic(
           'targetRef',
-          'targetRef must name a public-safe version branch.',
+          'targetRef must name main, scenario/*, or agent/*.',
         ),
       );
     } else {

@@ -6,6 +6,10 @@ import { versionDomainSupportManifestRuntime } from './version-domain-support-te
 const BASE_COMMIT_ID = `commit:sha256:${'1'.repeat(64)}`;
 const OURS_COMMIT_ID = `commit:sha256:${'2'.repeat(64)}`;
 const THEIRS_COMMIT_ID = `commit:sha256:${'3'.repeat(64)}`;
+const EXPECTED_TARGET_HEAD = {
+  commitId: OURS_COMMIT_ID,
+  revision: { kind: 'counter' as const, value: '1' },
+};
 
 describe('WorkbookVersion merge facade', () => {
   it('routes explicit commit-id preview requests to the attached merge service', async () => {
@@ -99,6 +103,62 @@ describe('WorkbookVersion merge facade', () => {
         } as any,
         { mode: 'apply' as any, includeDiagnostics: 'yes' as any },
       ),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: {
+        code: 'target_unavailable',
+        target: 'workbook.version.merge',
+        diagnostics: expect.arrayContaining([
+          expect.objectContaining({
+            code: 'VERSION_INVALID_OPTIONS',
+            data: expect.objectContaining({ redacted: true }),
+          }),
+        ]),
+      },
+    });
+    expect(merge).not.toHaveBeenCalled();
+  });
+
+  it('blocks non-applyable target refs and expected-head mismatches before the merge service is called', async () => {
+    const merge = jest.fn();
+    const version = workbookVersionWithMergeService(merge);
+    const input = {
+      base: BASE_COMMIT_ID,
+      ours: OURS_COMMIT_ID,
+      theirs: THEIRS_COMMIT_ID,
+    } as any;
+
+    await expect(
+      version.merge(input, {
+        mode: 'preview',
+        targetRef: 'refs/heads/review/not-applyable' as any,
+        expectedTargetHead: EXPECTED_TARGET_HEAD as any,
+        persistReviewRecord: true,
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: {
+        code: 'target_unavailable',
+        target: 'workbook.version.merge',
+        diagnostics: expect.arrayContaining([
+          expect.objectContaining({
+            code: 'VERSION_INVALID_OPTIONS',
+            data: expect.objectContaining({ redacted: true }),
+          }),
+        ]),
+      },
+    });
+
+    await expect(
+      version.merge(input, {
+        mode: 'preview',
+        targetRef: 'refs/heads/main' as any,
+        expectedTargetHead: {
+          commitId: THEIRS_COMMIT_ID,
+          revision: { kind: 'counter', value: '1' },
+        } as any,
+        persistReviewRecord: true,
+      }),
     ).resolves.toMatchObject({
       ok: false,
       error: {

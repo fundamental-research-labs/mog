@@ -27,6 +27,11 @@ import {
   mapApplyMergeWriteResult,
 } from './version-apply-merge-write-result';
 import { applyPersistedMergeResult } from './version-apply-merge-persisted';
+import {
+  VERSION_BRANCH_REF_PREFIX,
+  VERSION_MAIN_REF,
+  isApplyTargetRefName,
+} from './version-apply-merge-target-ref';
 import { mergeWorkbookVersion } from './version-merge';
 import {
   getVersionMergeCapabilityDecision,
@@ -50,8 +55,6 @@ const VERSION_APPLY_MERGE_EXPECTED_HEAD_KEYS = new Set([
   'symbolicHeadRevision',
 ]);
 const VERSION_HEAD_REF = 'HEAD';
-const VERSION_MAIN_REF = 'refs/heads/main' satisfies VersionMainRefName;
-const VERSION_BRANCH_REF_PREFIX = 'refs/heads/';
 
 type MaybePromise<T> = T | Promise<T>;
 type BoundMethod = (...args: readonly unknown[]) => MaybePromise<unknown>;
@@ -559,9 +562,19 @@ function validateTargetRef(
     return undefined;
   }
 
-  return parsed.name === 'main'
+  const targetRef = parsed.name === 'main'
     ? VERSION_MAIN_REF
     : (`${VERSION_BRANCH_REF_PREFIX}${parsed.name}` as VersionRefName);
+  if (!isApplyTargetRefName(targetRef)) {
+    diagnostics.push(
+      invalidApplyMergeOptionDiagnostic(
+        'targetRef',
+        'targetRef must name main, scenario/*, or agent/*.',
+      ),
+    );
+    return undefined;
+  }
+  return targetRef;
 }
 
 function validateExpectedTargetHead(

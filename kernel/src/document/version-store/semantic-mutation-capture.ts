@@ -16,6 +16,7 @@ import type {
   SheetChange,
   SemanticWorkbookStateEnvelope,
   SortingChange,
+  StructureChangeResult,
   TableChange,
 } from '../../bridges/compute/compute-types.gen';
 import type { DirectEditPosition, DirectEditRange } from '../../bridges/compute/mutation-admission';
@@ -357,6 +358,7 @@ function mapMutationResultToSemanticChanges(
   changes.push(...mapSortingChanges(input.result.sortingChanges ?? [], sequence));
   changes.push(...mapFloatingObjectChanges(input.result.floatingObjectChanges ?? [], sequence));
   changes.push(...mapRangeChanges(input.result.rangeChanges ?? [], sequence));
+  changes.push(...mapStructureChanges(input.result.structureChanges ?? [], sequence));
   return changes;
 }
 
@@ -617,6 +619,85 @@ function mapSheetMoveChanges(
     });
   }
   return changes;
+}
+
+function mapStructureChanges(
+  structureChanges: readonly StructureChangeResult[],
+  sequence: number,
+): readonly VersionSemanticChangeRecord[] {
+  const changes: VersionSemanticChangeRecord[] = [];
+  for (const change of structureChanges) {
+    if (!isStableSheetId(change.sheetId) || !isSheetIndex(change.at) || change.count <= 0) {
+      continue;
+    }
+
+    const axis = structureChangeAxis(change.changeType);
+    const removed = structureChangeRemoved(change.changeType);
+    if (!axis || removed === undefined) continue;
+
+    for (let offset = 0; offset < change.count; offset += 1) {
+      const index = change.at + offset;
+      const displayRef = structureDisplayRef(axis, index);
+      changes.push(
+        metadataChange({
+          sequence,
+          prefix: axis,
+          index: changes.length,
+          domain: 'rows-columns',
+          entityId: `${change.sheetId}!${axis}:${index}`,
+          propertyPath: ['order'],
+          value: semanticObjectValue([
+            { key: 'axis', value: axis },
+            { key: 'sheetId', value: change.sheetId },
+            { key: 'index', value: index },
+            { key: 'displayRef', value: displayRef },
+          ]),
+          removed,
+          display: { address: { kind: 'value', value: displayRef } },
+        }),
+      );
+    }
+  }
+  return changes;
+}
+
+function structureChangeAxis(
+  changeType: StructureChangeResult['changeType'],
+): 'row' | 'column' | null {
+  switch (changeType) {
+    case 'insertRows':
+    case 'deleteRows':
+      return 'row';
+    case 'insertCols':
+    case 'deleteCols':
+      return 'column';
+    default:
+      return null;
+  }
+}
+
+function structureChangeRemoved(
+  changeType: StructureChangeResult['changeType'],
+): boolean | undefined {
+  switch (changeType) {
+    case 'deleteRows':
+    case 'deleteCols':
+      return true;
+    case 'insertRows':
+    case 'insertCols':
+      return false;
+    default:
+      return undefined;
+  }
+}
+
+function structureDisplayRef(axis: 'row' | 'column', index: number): string {
+  if (axis === 'row') {
+    const rowLabel = String(index + 1);
+    return `${rowLabel}:${rowLabel}`;
+  }
+  const columnLabel = toA1(0, index).replace(/\d+$/, '');
+  return `${columnLabel}:${columnLabel}`;
 }
 
 function mapFilterChanges(

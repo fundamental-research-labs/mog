@@ -30,6 +30,7 @@ import type { DocumentContext } from '../../context';
 import { KernelError } from '../../errors';
 import { resolveCell, resolveRange } from '../internal/address-resolver';
 import { normalizeRange, toA1 } from '../internal/utils';
+import { createVersionOperationContext } from '../internal/version-operation-context';
 import { toWorksheetRangeOrNull } from './public-ranges';
 import { WorksheetProtectionImpl } from './protection';
 
@@ -75,9 +76,13 @@ export class WorksheetStructureImpl implements WorksheetStructure {
     if (count <= 0)
       return { kind: 'insertRows', sheetId: this.sheetId, insertedAt: index, count: 0 };
     await this.ensureStructureOpAllowed('insertRows');
-    const result = (await this.ctx.computeBridge.structureChange(this.sheetId, {
-      InsertRows: { at: index, count, new_row_ids: [] },
-    })) as MutationResult | void;
+    const result = (await this.ctx.computeBridge.structureChange(
+      this.sheetId,
+      {
+        InsertRows: { at: index, count, new_row_ids: [] },
+      },
+      this.createStructureMutationOptions('worksheet.structure.insertRows'),
+    )) as MutationResult | void;
     const sc = result?.structureChanges?.[0];
     return {
       kind: 'insertRows',
@@ -93,9 +98,13 @@ export class WorksheetStructureImpl implements WorksheetStructure {
     if (count <= 0)
       return { kind: 'deleteRows', sheetId: this.sheetId, deletedAt: index, count: 0 };
     await this.ensureStructureOpAllowed('deleteRows');
-    const result = (await this.ctx.computeBridge.structureChange(this.sheetId, {
-      DeleteRows: { at: index, count, deleted_cell_ids: [] },
-    })) as MutationResult | void;
+    const result = (await this.ctx.computeBridge.structureChange(
+      this.sheetId,
+      {
+        DeleteRows: { at: index, count, deleted_cell_ids: [] },
+      },
+      this.createStructureMutationOptions('worksheet.structure.deleteRows'),
+    )) as MutationResult | void;
     const sc = result?.structureChanges?.[0];
     return {
       kind: 'deleteRows',
@@ -111,9 +120,13 @@ export class WorksheetStructureImpl implements WorksheetStructure {
     if (count <= 0)
       return { kind: 'insertColumns', sheetId: this.sheetId, insertedAt: index, count: 0 };
     await this.ensureStructureOpAllowed('insertColumns');
-    const result = (await this.ctx.computeBridge.structureChange(this.sheetId, {
-      InsertCols: { at: index, count, new_col_ids: [] },
-    })) as MutationResult | void;
+    const result = (await this.ctx.computeBridge.structureChange(
+      this.sheetId,
+      {
+        InsertCols: { at: index, count, new_col_ids: [] },
+      },
+      this.createStructureMutationOptions('worksheet.structure.insertColumns'),
+    )) as MutationResult | void;
     const sc = result?.structureChanges?.[0];
     return {
       kind: 'insertColumns',
@@ -129,9 +142,13 @@ export class WorksheetStructureImpl implements WorksheetStructure {
     if (count <= 0)
       return { kind: 'deleteColumns', sheetId: this.sheetId, deletedAt: index, count: 0 };
     await this.ensureStructureOpAllowed('deleteColumns');
-    const result = (await this.ctx.computeBridge.structureChange(this.sheetId, {
-      DeleteCols: { at: index, count, deleted_cell_ids: [] },
-    })) as MutationResult | void;
+    const result = (await this.ctx.computeBridge.structureChange(
+      this.sheetId,
+      {
+        DeleteCols: { at: index, count, deleted_cell_ids: [] },
+      },
+      this.createStructureMutationOptions('worksheet.structure.deleteColumns'),
+    )) as MutationResult | void;
     const sc = result?.structureChanges?.[0];
     return {
       kind: 'deleteColumns',
@@ -198,6 +215,16 @@ export class WorksheetStructureImpl implements WorksheetStructure {
       sheetId: this.sheetId,
       range: { startRow, startCol, endRow, endCol },
       direction,
+    };
+  }
+
+  private createStructureMutationOptions(operationIdPrefix: string) {
+    return {
+      operationContext: createVersionOperationContext(this.ctx, {
+        operationIdPrefix,
+        sheetIds: [this.sheetId],
+        domainIds: ['rows-columns', 'cells.formulas', 'recalc-caches'],
+      }),
     };
   }
 

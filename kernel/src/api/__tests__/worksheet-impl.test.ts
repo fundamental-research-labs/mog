@@ -1134,9 +1134,17 @@ describe('WorksheetImpl', () => {
     it('insertRows delegates to computeBridge.structureChange', async () => {
       await ws.structure.insertRows(2, 3);
 
-      expect(ctx.computeBridge.structureChange).toHaveBeenCalledWith(SHEET_ID, {
-        InsertRows: { at: 2, count: 3, new_row_ids: [] },
-      });
+      expect(ctx.computeBridge.structureChange).toHaveBeenCalledWith(
+        SHEET_ID,
+        {
+          InsertRows: { at: 2, count: 3, new_row_ids: [] },
+        },
+        expectVersionOperationOptions('worksheet.structure.insertRows', [
+          'rows-columns',
+          'cells.formulas',
+          'recalc-caches',
+        ]),
+      );
     });
 
     it('insertRows throws on negative index', async () => {
@@ -1146,9 +1154,17 @@ describe('WorksheetImpl', () => {
     it('deleteRows delegates to computeBridge.structureChange', async () => {
       await ws.structure.deleteRows(5, 2);
 
-      expect(ctx.computeBridge.structureChange).toHaveBeenCalledWith(SHEET_ID, {
-        DeleteRows: { at: 5, count: 2, deleted_cell_ids: [] },
-      });
+      expect(ctx.computeBridge.structureChange).toHaveBeenCalledWith(
+        SHEET_ID,
+        {
+          DeleteRows: { at: 5, count: 2, deleted_cell_ids: [] },
+        },
+        expectVersionOperationOptions('worksheet.structure.deleteRows', [
+          'rows-columns',
+          'cells.formulas',
+          'recalc-caches',
+        ]),
+      );
     });
 
     it('deleteRows throws on negative index', async () => {
@@ -1158,9 +1174,17 @@ describe('WorksheetImpl', () => {
     it('insertColumns delegates to computeBridge.structureChange', async () => {
       await ws.structure.insertColumns(1, 4);
 
-      expect(ctx.computeBridge.structureChange).toHaveBeenCalledWith(SHEET_ID, {
-        InsertCols: { at: 1, count: 4, new_col_ids: [] },
-      });
+      expect(ctx.computeBridge.structureChange).toHaveBeenCalledWith(
+        SHEET_ID,
+        {
+          InsertCols: { at: 1, count: 4, new_col_ids: [] },
+        },
+        expectVersionOperationOptions('worksheet.structure.insertColumns', [
+          'rows-columns',
+          'cells.formulas',
+          'recalc-caches',
+        ]),
+      );
     });
 
     it('insertColumns throws on negative index', async () => {
@@ -1170,9 +1194,17 @@ describe('WorksheetImpl', () => {
     it('deleteColumns delegates to computeBridge.structureChange', async () => {
       await ws.structure.deleteColumns(0, 2);
 
-      expect(ctx.computeBridge.structureChange).toHaveBeenCalledWith(SHEET_ID, {
-        DeleteCols: { at: 0, count: 2, deleted_cell_ids: [] },
-      });
+      expect(ctx.computeBridge.structureChange).toHaveBeenCalledWith(
+        SHEET_ID,
+        {
+          DeleteCols: { at: 0, count: 2, deleted_cell_ids: [] },
+        },
+        expectVersionOperationOptions('worksheet.structure.deleteColumns', [
+          'rows-columns',
+          'cells.formulas',
+          'recalc-caches',
+        ]),
+      );
     });
 
     it('deleteColumns throws on negative index', async () => {

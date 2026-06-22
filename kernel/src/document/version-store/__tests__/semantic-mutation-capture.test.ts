@@ -15,6 +15,11 @@ const NAMESPACE: VersionGraphNamespace = {
   graphId: 'graph-1',
   principalScope: 'principal-1',
 };
+const DOCUMENT_SCOPE = {
+  workspaceId: NAMESPACE.workspaceId,
+  documentId: NAMESPACE.documentId,
+  principalScope: NAMESPACE.principalScope,
+};
 
 const AUTHOR: VersionAuthor = {
   authorId: 'user-1',
@@ -99,12 +104,7 @@ describe('semantic mutation capture', () => {
     expect(retryAfterFailure.input.mutationSegmentRecords).toHaveLength(1);
 
     first.finalize?.({ status: 'success', commitId: COMMIT_ID });
-    const afterSuccess = expectCaptureSuccess(await capture.captureNormalCommit(captureInput()));
-    expect(afterSuccess.input.semanticChangeSetRecord.preimage.payload).toEqual({
-      schemaVersion: 1,
-      changes: [],
-    });
-    expect(afterSuccess.input.mutationSegmentRecords).toEqual([]);
+    expectCaptureMissingChangeSet(await capture.captureNormalCommit(captureInput()));
   });
 
   it('captures local sheet renames and skips observer renames without old names', async () => {
@@ -495,12 +495,7 @@ describe('semantic mutation capture', () => {
       }),
     });
 
-    const captured = expectCaptureSuccess(await capture.captureNormalCommit(captureInput()));
-    expect(captured.input.semanticChangeSetRecord.preimage.payload).toEqual({
-      schemaVersion: 1,
-      changes: [],
-    });
-    expect(captured.input.mutationSegmentRecords).toEqual([]);
+    expectCaptureMissingChangeSet(await capture.captureNormalCommit(captureInput()));
   });
 
   it('captures direct date and time value writes', async () => {
@@ -731,12 +726,7 @@ describe('semantic mutation capture', () => {
       }),
     });
 
-    const captured = expectCaptureSuccess(await capture.captureNormalCommit(captureInput()));
-    expect(captured.input.semanticChangeSetRecord.preimage.payload).toEqual({
-      schemaVersion: 1,
-      changes: [],
-    });
-    expect(captured.input.mutationSegmentRecords).toEqual([]);
+    expectCaptureMissingChangeSet(await capture.captureNormalCommit(captureInput()));
   });
 
   it('captures named range, table, and comment receipts with stable identities', async () => {
@@ -779,6 +769,74 @@ describe('semantic mutation capture', () => {
     expect(captured.input.mutationSegmentRecords?.[0]?.preimage.payload).toMatchObject({
       segmentId: 'mutation-1',
       changeIds: ['mutation-1:named-range:0', 'mutation-1:named-range:1', 'mutation-1:table:0', 'mutation-1:table:1', 'mutation-1:comment:0', 'mutation-1:comment:1'],
+    });
+  });
+
+  it('captures row and column structure receipts as rows-columns mutations', async () => {
+    const capture = createSemanticMutationCapture({ author: AUTHOR, now: () => NOW });
+
+    capture.mutationCapture.recordMutationResult({
+      operation: 'compute_structure_change',
+      result: mutationResult({
+        structureChanges: [
+          { sheetId: 'sheet-1', changeType: 'insertRows', at: 1, count: 1 },
+          { sheetId: 'sheet-1', changeType: 'deleteCols', at: 2, count: 1 },
+        ],
+      }),
+    });
+
+    const captured = expectCaptureSuccess(await capture.captureNormalCommit(captureInput()));
+    const changes = capturedChanges(captured);
+    expect(changes.map((change) => change.structural)).toEqual([
+      {
+        kind: 'metadata',
+        changeId: 'mutation-1:row:0',
+        domain: 'rows-columns',
+        entityId: 'sheet-1!row:1',
+        propertyPath: ['order'],
+      },
+      {
+        kind: 'metadata',
+        changeId: 'mutation-1:column:1',
+        domain: 'rows-columns',
+        entityId: 'sheet-1!column:2',
+        propertyPath: ['order'],
+      },
+    ]);
+    expect(changes[0]).toMatchObject({
+      before: { kind: 'value', value: null },
+      after: {
+        kind: 'value',
+        value: expect.objectContaining({
+          fields: expect.arrayContaining([
+            { key: 'axis', value: 'row' },
+            { key: 'sheetId', value: 'sheet-1' },
+            { key: 'index', value: 1 },
+            { key: 'displayRef', value: '2:2' },
+          ]),
+        }),
+      },
+      display: { address: { kind: 'value', value: '2:2' } },
+    });
+    expect(changes[1]).toMatchObject({
+      before: {
+        kind: 'value',
+        value: expect.objectContaining({
+          fields: expect.arrayContaining([
+            { key: 'axis', value: 'column' },
+            { key: 'sheetId', value: 'sheet-1' },
+            { key: 'index', value: 2 },
+            { key: 'displayRef', value: 'C:C' },
+          ]),
+        }),
+      },
+      after: { kind: 'value', value: null },
+      display: { address: { kind: 'value', value: 'C:C' } },
+    });
+    expect(captured.input.mutationSegmentRecords?.[0]?.preimage.payload).toMatchObject({
+      segmentId: 'mutation-1',
+      operation: 'compute_structure_change',
+      changeIds: ['mutation-1:row:0', 'mutation-1:column:1'],
     });
   });
 
@@ -985,7 +1043,15 @@ function floatingObjectData(id: string, type: string, data: Record<string, unkno
   } as any;
 }
 
-function captureInput(): VersionNormalCommitCaptureInput { return { namespace: NAMESPACE } as VersionNormalCommitCaptureInput; }
+function captureInput(): VersionNormalCommitCaptureInput {
+  return {
+    provider: { documentScope: DOCUMENT_SCOPE },
+    namespace: NAMESPACE,
+    currentRef: { name: 'main', commitId: COMMIT_ID },
+    currentHead: { name: 'HEAD', commitId: COMMIT_ID },
+    currentMain: { name: 'main', commitId: COMMIT_ID },
+  } as VersionNormalCommitCaptureInput;
+}
 
 function expectCaptureSuccess(
   result: VersionNormalCommitCaptureResult,
@@ -995,4 +1061,11 @@ function expectCaptureSuccess(
     throw new Error(`expected capture success: ${result.diagnostics[0]?.code}`);
   }
   return result;
+}
+
+function expectCaptureMissingChangeSet(result: VersionNormalCommitCaptureResult): void {
+  expect(result).toMatchObject({
+    status: 'failed',
+    diagnostics: [expect.objectContaining({ code: 'VERSION_MISSING_CHANGE_SET' })],
+  });
 }

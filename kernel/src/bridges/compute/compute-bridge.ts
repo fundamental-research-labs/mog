@@ -1086,8 +1086,12 @@ export class ComputeBridge extends GeneratedBridgeBase {
   }
 
   /** Structural change — delegates to ComputeCore for prefetch invalidation. */
-  async structureChange(sheetId: SheetId, change: StructureChange): Promise<MutationResult> {
-    return this.core.structureChangeWithInvalidation(sheetId, change);
+  async structureChange(
+    sheetId: SheetId,
+    change: StructureChange,
+    options?: MutationAdmissionOptions,
+  ): Promise<MutationResult> {
+    return this.core.structureChangeWithInvalidation(sheetId, change, options);
   }
 
   /** Copy a sheet and return the new sheet ID. */

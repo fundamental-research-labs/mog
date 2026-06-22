@@ -16,7 +16,7 @@
  */
 
 import type { BridgeTransport } from '@rust-bridge/client';
-import { TrapError, resetWasmModule } from '@mog/transport';
+import { TrapError, normalizeBytesTuple, resetWasmModule } from '@mog/transport';
 import { asFormulaA1 } from '@mog/spreadsheet-utils/cells/formula-string';
 import type { SchemaChangedEvent } from '@mog-sdk/contracts/events';
 import type { ViewportRefreshDetails } from '@mog-sdk/contracts/api';
@@ -1229,20 +1229,28 @@ export class ComputeCore {
   async structureChangeWithInvalidation(
     sheetId: SheetId,
     change: StructureChange,
+    options?: MutationAdmissionOptions,
   ): Promise<MutationResult> {
     let result: MutationResult;
     try {
-      result = await this.mutatePublic('compute_structure_change', () => {
-        // Mark old prefetch state stale after admission but before Rust shifts
-        // row/column structure. The awaited forced refresh below restores fresh
-        // buffers and bounds.
-        this.invalidateAllViewportPrefetch();
-        return this.transport.call<MutationTuple>('compute_structure_change', {
-          docId: this.docId,
-          sheetId,
-          change,
-        });
-      });
+      result = await this.mutatePublic(
+        'compute_structure_change',
+        () => {
+          // Mark old prefetch state stale after admission but before Rust shifts
+          // row/column structure. The awaited forced refresh below restores fresh
+          // buffers and bounds.
+          this.invalidateAllViewportPrefetch();
+          return this.transport
+            .call<[Uint8Array, MutationResult] | Uint8Array>('compute_structure_change', {
+              docId: this.docId,
+              sheetId,
+              change,
+            })
+            .then((raw) => normalizeBytesTuple(raw));
+        },
+        undefined,
+        options,
+      );
     } catch (error) {
       // Bridge call failed — Rust is truth. Re-read from engine to recover
       // correct VPI and viewport state (async bridge rule #4).

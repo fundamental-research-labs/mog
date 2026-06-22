@@ -14,8 +14,9 @@
  * Excel Parity: Issue 3 (Sheet Tab Context Menu)
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { CheckmarkSvg } from '@mog/icons';
 import { Button, Dialog, DialogBody, DialogFooter, DialogHeader, Input } from '@mog/shell';
 import type { SheetTabInfo } from '../../internal-api';
 
@@ -78,28 +79,74 @@ export function MoveOrCopySheetDialog({
   const [createCopy, setCreateCopy] = useState(false);
   const [newName, setNewName] = useState('');
   const [selectedBeforeSheetId, setSelectedBeforeSheetId] = useState<string | null>(null);
+  const resetScopeRef = useRef<{ isOpen: boolean; sourceSheetId: string | null }>({
+    isOpen: false,
+    sourceSheetId: null,
+  });
+  const wasCreateCopyRef = useRef(false);
 
-  // Reset state when dialog opens
+  // Reset state when a dialog session starts, not on incidental parent re-renders.
   useEffect(() => {
-    if (isOpen) {
-      setCreateCopy(false);
-      const existingNames = sheets.map((s) => s.name);
-      const defaultName = generateCopyName(sourceSheetName, existingNames);
-      setNewName(defaultName);
+    const previous = resetScopeRef.current;
+    const shouldReset = isOpen && (!previous.isOpen || previous.sourceSheetId !== sourceSheetId);
+    resetScopeRef.current = {
+      isOpen,
+      sourceSheetId: isOpen ? sourceSheetId : null,
+    };
 
-      // Default selection: move to end (null)
+    if (!shouldReset) {
+      if (!isOpen) {
+        wasCreateCopyRef.current = false;
+      }
+      return;
+    }
+
+    wasCreateCopyRef.current = false;
+    setCreateCopy(false);
+    const existingNames = sheets.map((s) => s.name);
+    const defaultName = generateCopyName(sourceSheetName, existingNames);
+    setNewName(defaultName);
+    setSelectedBeforeSheetId(null);
+  }, [isOpen, sourceSheetId, sourceSheetName, sheets]);
+
+  // Seed the default copy name only when the user enters copy mode.
+  useEffect(() => {
+    const shouldSeedCopyName = createCopy && !wasCreateCopyRef.current;
+    wasCreateCopyRef.current = createCopy;
+    if (!shouldSeedCopyName) return;
+
+    const existingNames = sheets.map((s) => s.name);
+    const defaultName = generateCopyName(sourceSheetName, existingNames);
+    setNewName(defaultName);
+  }, [createCopy, sourceSheetName, sheets]);
+
+  // If the target sheet disappears while the dialog is open, fall back to end.
+  useEffect(() => {
+    if (!isOpen || selectedBeforeSheetId === null) return;
+    if (!sheets.some((sheet) => sheet.id === selectedBeforeSheetId)) {
       setSelectedBeforeSheetId(null);
     }
-  }, [isOpen, sourceSheetName, sheets]);
+  }, [isOpen, selectedBeforeSheetId, sheets]);
 
-  // Update default name when createCopy changes
-  useEffect(() => {
+  const handleOk = useCallback(() => {
     if (createCopy) {
-      const existingNames = sheets.map((s) => s.name);
-      const defaultName = generateCopyName(sourceSheetName, existingNames);
-      setNewName(defaultName);
+      // Copy mode: validate name
+      const trimmedName = newName.trim();
+      if (!trimmedName) {
+        // Show error or just prevent submission
+        return;
+      }
+      onCopy(sourceSheetId, selectedBeforeSheetId, trimmedName);
+    } else {
+      // Move mode
+      onMove(sourceSheetId, selectedBeforeSheetId);
     }
-  }, [createCopy, sourceSheetName, sheets]);
+    onClose();
+  }, [createCopy, newName, sourceSheetId, selectedBeforeSheetId, onCopy, onMove, onClose]);
+
+  const handleDoubleClick = useCallback(() => {
+    handleOk();
+  }, [handleOk]);
 
   // Handle keyboard navigation in sheet list
   useEffect(() => {
@@ -130,27 +177,7 @@ export function MoveOrCopySheetDialog({
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, selectedBeforeSheetId, sheets, onClose]);
-
-  const handleOk = useCallback(() => {
-    if (createCopy) {
-      // Copy mode: validate name
-      const trimmedName = newName.trim();
-      if (!trimmedName) {
-        // Show error or just prevent submission
-        return;
-      }
-      onCopy(sourceSheetId, selectedBeforeSheetId, trimmedName);
-    } else {
-      // Move mode
-      onMove(sourceSheetId, selectedBeforeSheetId);
-    }
-    onClose();
-  }, [createCopy, newName, sourceSheetId, selectedBeforeSheetId, onCopy, onMove, onClose]);
-
-  const handleDoubleClick = useCallback(() => {
-    handleOk();
-  }, [handleOk]);
+  }, [isOpen, selectedBeforeSheetId, sheets, onClose, handleOk]);
 
   if (!isOpen) return null;
 
@@ -187,7 +214,11 @@ export function MoveOrCopySheetDialog({
         {/* Before sheet */}
         <div className="mb-4">
           <label className="block text-body-sm text-ss-text-secondary mb-1">Before sheet:</label>
-          <div className="border border-ss-border rounded max-h-[120px] overflow-y-auto">
+          <div
+            className="border border-ss-border rounded max-h-[120px] overflow-y-auto"
+            role="listbox"
+            aria-label="Before sheet"
+          >
             {sheets.map((sheet) => {
               const isSelected = selectedBeforeSheetId === sheet.id;
               return (
@@ -196,9 +227,12 @@ export function MoveOrCopySheetDialog({
                   type="button"
                   onClick={() => setSelectedBeforeSheetId(sheet.id)}
                   onDoubleClick={handleDoubleClick}
-                  className={`flex items-center w-full px-3 py-2 border-none bg-transparent cursor-pointer text-body-sm text-text-ss-primary text-left hover:bg-ss-surface-hover ${
-                    isSelected ? 'bg-ss-primary-light' : ''
+                  className={`flex items-center w-full px-3 py-2 border-none bg-transparent cursor-pointer text-body-sm text-left hover:bg-ss-surface-hover ${
+                    isSelected
+                      ? 'bg-ss-primary-light text-ss-primary font-medium'
+                      : 'text-text-ss-primary'
                   }`}
+                  role="option"
                   aria-selected={isSelected}
                   data-testid={`move-copy-sheet-${sheet.id}`}
                 >
@@ -208,7 +242,13 @@ export function MoveOrCopySheetDialog({
                       backgroundColor: sheet.tabColor || '#fff',
                     }}
                   />
-                  {sheet.name}
+                  <span className="min-w-0 flex-1 truncate">{sheet.name}</span>
+                  <span
+                    className="ml-3 flex h-4 w-4 flex-shrink-0 items-center justify-center text-ss-primary"
+                    aria-hidden="true"
+                  >
+                    {isSelected ? <CheckmarkSvg className="h-3.5 w-3.5" /> : null}
+                  </span>
                 </button>
               );
             })}
@@ -218,13 +258,22 @@ export function MoveOrCopySheetDialog({
               type="button"
               onClick={() => setSelectedBeforeSheetId(null)}
               onDoubleClick={handleDoubleClick}
-              className={`flex items-center w-full px-3 py-2 border-none bg-transparent cursor-pointer text-body-sm text-ss-text-secondary text-left hover:bg-ss-surface-hover ${
-                selectedBeforeSheetId === null ? 'bg-ss-primary-light' : ''
+              className={`flex items-center w-full px-3 py-2 border-none bg-transparent cursor-pointer text-body-sm text-left hover:bg-ss-surface-hover ${
+                selectedBeforeSheetId === null
+                  ? 'bg-ss-primary-light text-ss-primary font-medium'
+                  : 'text-ss-text-secondary'
               }`}
+              role="option"
               aria-selected={selectedBeforeSheetId === null}
               data-testid="move-copy-sheet-to-end"
             >
-              (move to end)
+              <span className="min-w-0 flex-1 truncate">(move to end)</span>
+              <span
+                className="ml-3 flex h-4 w-4 flex-shrink-0 items-center justify-center text-ss-primary"
+                aria-hidden="true"
+              >
+                {selectedBeforeSheetId === null ? <CheckmarkSvg className="h-3.5 w-3.5" /> : null}
+              </span>
             </button>
           </div>
         </div>

@@ -152,20 +152,17 @@ export function useSheetTabActions(
       });
     });
     return out;
-    // updateCounter is a manual cache-bust signal — every relevant sheet event
-    // bumps it, forcing this memo to re-read from the mirror.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wb, updateCounter]);
 
   /**
    * Get visible sheets only (for main tab strip).
    */
-  const sheets = allSheets.filter((sheet) => !sheet.hidden);
+  const sheets = useMemo(() => allSheets.filter((sheet) => !sheet.hidden), [allSheets]);
 
   /**
    * Get hidden sheets (for "Unhide" submenu).
    */
-  const hiddenSheets = allSheets.filter((sheet) => sheet.hidden);
+  const hiddenSheets = useMemo(() => allSheets.filter((sheet) => sheet.hidden), [allSheets]);
 
   // ==========================================================================
   // Core Handlers

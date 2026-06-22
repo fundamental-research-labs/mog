@@ -49,6 +49,7 @@ import {
   recoverStagedMergeCommitIfAlreadyApplied,
   validateAppliedMergeCommitIdentity,
 } from './version-apply-merge-persisted-artifact-recovery';
+import { validateSealedResolutionPayloadRefs } from './version-merge-sealed-payload';
 
 const WORKBOOK_COMMIT_ID_RE = /^commit:sha256:[0-9a-f]{64}$/;
 
@@ -153,6 +154,25 @@ export async function applyPersistedMergePreviewArtifact(
       artifact.payload.ours,
       artifact.payload.theirs,
       validationDiagnostics,
+    );
+  }
+
+  const sealedPayloadDiagnostics = await validateSealedResolutionPayloadRefs({
+    graph: opened.graph,
+    operation: 'applyMerge',
+    resultId: input.resultId,
+    resultDigest: input.resultDigest,
+    targetRef: options.targetRef,
+    expectedTargetHead: options.expectedTargetHead,
+    conflicts: artifact.payload.conflicts,
+    resolutions: input.resolutions,
+  });
+  if (sealedPayloadDiagnostics.length > 0) {
+    return blockedApplyMergeResult(
+      artifact.payload.base,
+      artifact.payload.ours,
+      artifact.payload.theirs,
+      sealedPayloadDiagnostics,
     );
   }
 
@@ -266,7 +286,10 @@ function validatePreviewDigestInput(
   input: NormalizedPersistedApplyMergeInput,
 ): readonly VersionStoreDiagnostic[] {
   const diagnostics: VersionStoreDiagnostic[] = [];
-  if (input.previewArtifactDigest && !digestsEqual(input.previewArtifactDigest, input.resultDigest)) {
+  if (
+    input.previewArtifactDigest &&
+    !digestsEqual(input.previewArtifactDigest, input.resultDigest)
+  ) {
     diagnostics.push(
       resolutionMismatchDiagnostic(
         'persisted merge previewArtifactDigest does not match resultDigest.',
@@ -342,9 +365,7 @@ function previewArtifactMetadata(input: NormalizedPersistedApplyMergeInput) {
   };
 }
 
-async function openPersistedMergeGraph(
-  ctx: DocumentContext,
-): Promise<
+async function openPersistedMergeGraph(ctx: DocumentContext): Promise<
   | {
       readonly ok: true;
       readonly namespace: VersionGraphNamespace;
@@ -473,7 +494,9 @@ function validatePreviewArtifactForApply(
   options: Extract<NormalizedPersistedApplyMergeOptions, { readonly mode: 'apply' }>,
 ): readonly VersionStoreDiagnostic[] {
   if (options.expectedTargetHead.commitId === payload.ours) return [];
-  return [resolutionMismatchDiagnostic('applyMerge expectedTargetHead must match the ours commit.')];
+  return [
+    resolutionMismatchDiagnostic('applyMerge expectedTargetHead must match the ours commit.'),
+  ];
 }
 
 async function prepareResolvedAttempt(
@@ -571,7 +594,10 @@ function validateResolvedAttemptDigests(
   },
 ): readonly VersionStoreDiagnostic[] {
   const diagnostics: VersionStoreDiagnostic[] = [];
-  if (input.resolutionSetDigest && !digestsEqual(input.resolutionSetDigest, expected.resolutionSetDigest)) {
+  if (
+    input.resolutionSetDigest &&
+    !digestsEqual(input.resolutionSetDigest, expected.resolutionSetDigest)
+  ) {
     diagnostics.push(
       resolutionMismatchDiagnostic(
         'persisted merge resolutionSetDigest does not match the resolved artifact.',
@@ -601,12 +627,7 @@ async function resultFromTerminalArtifactIntent(
 
   const current = await readCurrentTargetHead(graph, record.targetRef);
   if (!current.ok) {
-    return blockedApplyMergeResult(
-      record.base,
-      record.ours,
-      record.theirs,
-      current.diagnostics,
-    );
+    return blockedApplyMergeResult(record.base, record.ours, record.theirs, current.diagnostics);
   }
   if (current.commitId !== commitId) {
     return staleTargetHeadArtifactResult(input, record, current.commitId);
@@ -712,7 +733,9 @@ function planResolvedConflicts(
     return {
       ok: false,
       diagnostics: [
-        resolutionMismatchDiagnostic('applyMerge preview requires exactly one resolution per conflict.'),
+        resolutionMismatchDiagnostic(
+          'applyMerge preview requires exactly one resolution per conflict.',
+        ),
       ],
     };
   }
@@ -734,17 +757,22 @@ function planResolvedConflicts(
     if (!conflict || resolution.expectedConflictDigest !== conflict.conflictDigest) {
       return {
         ok: false,
-        diagnostics: [resolutionMismatchDiagnostic('resolution does not match the merge conflict.')],
+        diagnostics: [
+          resolutionMismatchDiagnostic('resolution does not match the merge conflict.'),
+        ],
       };
     }
 
     const option = conflict.resolutionOptions.find(
-      (candidate) => candidate.optionId === resolution.optionId && candidate.kind === resolution.kind,
+      (candidate) =>
+        candidate.optionId === resolution.optionId && candidate.kind === resolution.kind,
     );
     if (!option) {
       return {
         ok: false,
-        diagnostics: [resolutionMismatchDiagnostic('resolution option does not match the conflict.')],
+        diagnostics: [
+          resolutionMismatchDiagnostic('resolution option does not match the conflict.'),
+        ],
       };
     }
 
@@ -791,7 +819,12 @@ function toMergePreviewArtifactPayload(value: unknown): MergePreviewArtifactPayl
 function getAttachedVersionStoreProvider(ctx: DocumentContext): VersionStoreProvider | null {
   const services = getAttachedVersionServices(ctx);
   if (!services) return null;
-  for (const candidate of [services.provider, services.versionStoreProvider, services.storeProvider, services]) {
+  for (const candidate of [
+    services.provider,
+    services.versionStoreProvider,
+    services.storeProvider,
+    services,
+  ]) {
     if (hasVersionStoreProviderReads(candidate)) return candidate as VersionStoreProvider;
   }
   return null;
@@ -843,7 +876,9 @@ function bindMethod(value: unknown, name: string): BoundMethod | null {
   return (...args) => Reflect.apply(method, value, args) as MaybePromise<unknown>;
 }
 
-function mapProviderDiagnostics(diagnostics: readonly unknown[]): readonly VersionStoreDiagnostic[] {
+function mapProviderDiagnostics(
+  diagnostics: readonly unknown[],
+): readonly VersionStoreDiagnostic[] {
   if (!Array.isArray(diagnostics) || diagnostics.length === 0) return [providerErrorDiagnostic()];
   return diagnostics.map((diagnostic) => {
     if (!isRecord(diagnostic)) return providerErrorDiagnostic();

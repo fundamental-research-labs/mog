@@ -757,6 +757,7 @@ export interface VersionApplyMergeResolution {
   readonly expectedConflictDigest: string;
   readonly optionId: string;
   readonly kind: VersionMergeConflictResolutionOptionKind;
+  readonly sealedPayloadRef?: import('./version-merge-review').VersionSealedResolutionPayloadRef;
 }
 
 export type VersionApplyMergeInput =

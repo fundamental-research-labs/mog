@@ -31,7 +31,7 @@ import {
 } from '../../../document/version-store/provider';
 
 const DOCUMENT_ID = 'vc07-merge-review-endpoints';
-const DOCUMENT_SCOPE: VersionDocumentScope = { documentId: DOCUMENT_ID };
+const DOCUMENT_RUN_ID = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 const CREATED_AT = '2026-06-21T00:00:00.000Z';
 const AUTHOR: VersionAuthor = {
   authorId: 'user-1',
@@ -79,139 +79,252 @@ describe('WorkbookVersion merge review endpoints', () => {
   });
 
   it('persists saved resolutions as resolution-set and resolved-attempt artifacts', async () => {
-    await withPersistedConflictPreview('save-persistence', async ({
-      provider,
-      graphId,
-      sourceWb,
-      preview,
-      expectedTargetHead,
-    }) => {
-      const conflict = preview.conflicts[0];
-      const resolution = resolutionFor(conflict, 'acceptTheirs');
+    await withPersistedConflictPreview(
+      'save-persistence',
+      async ({ provider, graphId, documentScope, sourceWb, preview, expectedTargetHead }) => {
+        const conflict = preview.conflicts[0];
+        const resolution = resolutionFor(conflict, 'acceptTheirs');
 
-      const saved = await sourceWb.version.saveMergeResolutions({
-        resultId: preview.resultId,
-        resultDigest: preview.resultDigest,
-        redactionPolicyDigest: preview.resultDigest,
-        targetRef: 'refs/heads/main' as any,
-        expectedTargetHead,
-        resolutions: [resolution],
-      });
-      if (!saved.ok || !saved.value.resolutionSetDigest || !saved.value.resolvedAttemptDigest) {
-        throw new Error('expected saved merge resolutions to expose artifact digests');
-      }
-      expect(saved.value).toMatchObject({
-        schemaVersion: 1,
-        kind: 'mergeResolutionsSaved',
-        status: 'readyToApply',
-        resultId: preview.resultId,
-        resultDigest: preview.resultDigest,
-        attemptKind: 'applyable',
-        attemptPersistence: 'persisted',
-        targetRef: 'refs/heads/main',
-        savedResolutionCount: 1,
-      });
+        const saved = await sourceWb.version.saveMergeResolutions({
+          resultId: preview.resultId,
+          resultDigest: preview.resultDigest,
+          redactionPolicyDigest: preview.resultDigest,
+          targetRef: 'refs/heads/main' as any,
+          expectedTargetHead,
+          resolutions: [resolution],
+        });
+        if (!saved.ok || !saved.value.resolutionSetDigest || !saved.value.resolvedAttemptDigest) {
+          throw new Error('expected saved merge resolutions to expose artifact digests');
+        }
+        expect(saved.value).toMatchObject({
+          schemaVersion: 1,
+          kind: 'mergeResolutionsSaved',
+          status: 'readyToApply',
+          resultId: preview.resultId,
+          resultDigest: preview.resultDigest,
+          attemptKind: 'applyable',
+          attemptPersistence: 'persisted',
+          targetRef: 'refs/heads/main',
+          savedResolutionCount: 1,
+        });
 
-      const graph = await provider.openGraph(
-        namespaceForDocumentScope(DOCUMENT_SCOPE, graphId),
-        provider.accessContext,
-      );
-      await expect(
-        graph.getObjectRecord(mergeResolutionSetArtifactRef(saved.value.resolutionSetDigest)),
-      ).resolves.toMatchObject({
-        preimage: {
-          objectType: 'workbook.mergeResolutionSet.v1',
-          payload: {
-            schemaVersion: 1,
-            recordKind: 'mergeResolutionSet',
-            resolutions: [resolution],
+        const graph = await provider.openGraph(
+          namespaceForDocumentScope(documentScope, graphId),
+          provider.accessContext,
+        );
+        await expect(
+          graph.getObjectRecord(mergeResolutionSetArtifactRef(saved.value.resolutionSetDigest)),
+        ).resolves.toMatchObject({
+          preimage: {
+            objectType: 'workbook.mergeResolutionSet.v1',
+            payload: {
+              schemaVersion: 1,
+              recordKind: 'mergeResolutionSet',
+              resolutions: [resolution],
+            },
           },
-        },
-      });
-      await expect(
-        graph.getObjectRecord(resolvedMergeAttemptArtifactRef(saved.value.resolvedAttemptDigest)),
-      ).resolves.toMatchObject({
-        preimage: {
-          objectType: 'workbook.resolvedMergeAttempt.v1',
-          payload: {
-            schemaVersion: 1,
-            recordKind: 'resolvedMergeAttempt',
-            resultDigest: preview.resultDigest,
-            resolutionSetDigest: saved.value.resolutionSetDigest,
-            targetRef: 'refs/heads/main',
-            expectedTargetHead,
+        });
+        await expect(
+          graph.getObjectRecord(resolvedMergeAttemptArtifactRef(saved.value.resolvedAttemptDigest)),
+        ).resolves.toMatchObject({
+          preimage: {
+            objectType: 'workbook.resolvedMergeAttempt.v1',
+            payload: {
+              schemaVersion: 1,
+              recordKind: 'resolvedMergeAttempt',
+              resultDigest: preview.resultDigest,
+              resolutionSetDigest: saved.value.resolutionSetDigest,
+              targetRef: 'refs/heads/main',
+              expectedTargetHead,
+            },
           },
-        },
-      });
-    });
+        });
+      },
+    );
   });
 
   it('stores a matching sealed resolution payload through the provider graph', async () => {
-    await withPersistedConflictPreview('payload-put', async ({
-      provider,
-      graphId,
-      sourceWb,
-      preview,
-      expectedTargetHead,
-    }) => {
-      const conflict = preview.conflicts[0];
-      const option = conflict.resolutionOptions.find((candidate) => candidate.kind === 'acceptTheirs');
-      if (!option) throw new Error('expected acceptTheirs option');
+    await withPersistedConflictPreview(
+      'payload-put',
+      async ({ provider, graphId, documentScope, sourceWb, preview, expectedTargetHead }) => {
+        const conflict = preview.conflicts[0];
+        const option = conflict.resolutionOptions.find(
+          (candidate) => candidate.kind === 'acceptTheirs',
+        );
+        if (!option) throw new Error('expected acceptTheirs option');
 
-      const put = await sourceWb.version.putMergeResolutionPayload({
-        resultId: preview.resultId,
-        resultDigest: preview.resultDigest,
-        redactionPolicyDigest: preview.resultDigest,
-        conflictId: conflict.conflictId,
-        expectedConflictDigest: conflictDigestObject(conflict.conflictDigest),
-        optionId: option.optionId,
-        kind: option.kind,
-        targetRef: 'refs/heads/main' as any,
-        expectedTargetHead,
-        value: option.value as any,
-        purpose: 'chooseValue',
-      });
-      if (!put.ok) throw new Error(`expected payload put success: ${put.error.code}`);
+        const put = await sourceWb.version.putMergeResolutionPayload({
+          resultId: preview.resultId,
+          resultDigest: preview.resultDigest,
+          redactionPolicyDigest: preview.resultDigest,
+          conflictId: conflict.conflictId,
+          expectedConflictDigest: conflictDigestObject(conflict.conflictDigest),
+          optionId: option.optionId,
+          kind: option.kind,
+          targetRef: 'refs/heads/main' as any,
+          expectedTargetHead,
+          value: option.value as any,
+          purpose: 'chooseValue',
+        });
+        if (!put.ok) throw new Error(`expected payload put success: ${put.error.code}`);
 
-      expect(put.value).toMatchObject({
-        schemaVersion: 1,
-        kind: 'sealedResolutionPayload',
-        payloadId: expect.stringMatching(/^merge-payload:[0-9a-f]{64}$/),
-        payloadDigest: {
-          algorithm: 'sha256',
-          digest: expect.stringMatching(/^[0-9a-f]{64}$/),
-        },
-        storageMode: 'serverEncrypted',
-        resultId: preview.resultId,
-        resultDigest: preview.resultDigest,
-        conflictId: conflict.conflictId,
-        optionId: option.optionId,
-        resolutionKind: option.kind,
-      });
-      const graph = await provider.openGraph(
-        namespaceForDocumentScope(DOCUMENT_SCOPE, graphId),
-        provider.accessContext,
-      );
-      await expect(
-        graph.getObjectRecord({
-          kind: 'object',
-          objectType: 'workbook.reviewExtension.v1',
-          digest: put.value.payloadDigest,
-        }),
-      ).resolves.toMatchObject({
-        preimage: {
-          objectType: 'workbook.reviewExtension.v1',
-          payload: {
-            schemaVersion: 1,
-            recordKind: 'mergeResolutionPayload',
-            resultId: preview.resultId,
-            conflictId: conflict.conflictId,
-            optionId: option.optionId,
-            purpose: 'chooseValue',
+        expect(put.value).toMatchObject({
+          schemaVersion: 1,
+          kind: 'sealedResolutionPayload',
+          payloadId: expect.stringMatching(/^merge-payload:[0-9a-f]{64}$/),
+          payloadDigest: {
+            algorithm: 'sha256',
+            digest: expect.stringMatching(/^[0-9a-f]{64}$/),
           },
-        },
-      });
-    });
+          storageMode: 'serverEncrypted',
+          resultId: preview.resultId,
+          resultDigest: preview.resultDigest,
+          conflictId: conflict.conflictId,
+          optionId: option.optionId,
+          resolutionKind: option.kind,
+        });
+        const graph = await provider.openGraph(
+          namespaceForDocumentScope(documentScope, graphId),
+          provider.accessContext,
+        );
+        await expect(
+          graph.getObjectRecord({
+            kind: 'object',
+            objectType: 'workbook.reviewExtension.v1',
+            digest: put.value.payloadDigest,
+          }),
+        ).resolves.toMatchObject({
+          preimage: {
+            objectType: 'workbook.reviewExtension.v1',
+            payload: {
+              schemaVersion: 1,
+              recordKind: 'mergeResolutionPayload',
+              resultId: preview.resultId,
+              conflictId: conflict.conflictId,
+              optionId: option.optionId,
+              purpose: 'chooseValue',
+            },
+          },
+        });
+      },
+    );
+  });
+
+  it('persists a verified sealed resolution payload ref in the resolution set', async () => {
+    await withPersistedConflictPreview(
+      'payload-save-ref',
+      async ({ provider, graphId, documentScope, sourceWb, preview, expectedTargetHead }) => {
+        const conflict = preview.conflicts[0];
+        const option = conflict.resolutionOptions.find(
+          (candidate) => candidate.kind === 'acceptTheirs',
+        );
+        if (!option) throw new Error('expected acceptTheirs option');
+        const payload = await sourceWb.version.putMergeResolutionPayload({
+          resultId: preview.resultId,
+          resultDigest: preview.resultDigest,
+          redactionPolicyDigest: preview.resultDigest,
+          conflictId: conflict.conflictId,
+          expectedConflictDigest: conflictDigestObject(conflict.conflictDigest),
+          optionId: option.optionId,
+          kind: option.kind,
+          targetRef: 'refs/heads/main' as any,
+          expectedTargetHead,
+          value: option.value as any,
+          purpose: 'chooseValue',
+        });
+        if (!payload.ok) throw new Error(`expected payload put success: ${payload.error.code}`);
+
+        const resolution = {
+          ...resolutionFor(conflict, 'acceptTheirs'),
+          sealedPayloadRef: payload.value,
+        };
+        const saved = await sourceWb.version.saveMergeResolutions({
+          resultId: preview.resultId,
+          resultDigest: preview.resultDigest,
+          redactionPolicyDigest: preview.resultDigest,
+          targetRef: 'refs/heads/main' as any,
+          expectedTargetHead,
+          resolutions: [resolution],
+        });
+        if (!saved.ok || !saved.value.resolutionSetDigest) {
+          throw new Error('expected sealed payload resolution save success');
+        }
+
+        const graph = await provider.openGraph(
+          namespaceForDocumentScope(documentScope, graphId),
+          provider.accessContext,
+        );
+        await expect(
+          graph.getObjectRecord(mergeResolutionSetArtifactRef(saved.value.resolutionSetDigest)),
+        ).resolves.toMatchObject({
+          preimage: {
+            objectType: 'workbook.mergeResolutionSet.v1',
+            payload: {
+              resolutions: [
+                expect.objectContaining({
+                  conflictId: conflict.conflictId,
+                  optionId: option.optionId,
+                  kind: 'acceptTheirs',
+                  sealedPayloadRef: payload.value,
+                }),
+              ],
+            },
+          },
+        });
+      },
+    );
+  });
+
+  it('fails closed when a saved resolution references a missing sealed payload object', async () => {
+    await withPersistedConflictPreview(
+      'payload-save-missing-ref',
+      async ({ sourceWb, preview, expectedTargetHead }) => {
+        const conflict = preview.conflicts[0];
+        const option = conflict.resolutionOptions.find(
+          (candidate) => candidate.kind === 'acceptTheirs',
+        );
+        if (!option) throw new Error('expected acceptTheirs option');
+        const payload = await sourceWb.version.putMergeResolutionPayload({
+          resultId: preview.resultId,
+          resultDigest: preview.resultDigest,
+          redactionPolicyDigest: preview.resultDigest,
+          conflictId: conflict.conflictId,
+          expectedConflictDigest: conflictDigestObject(conflict.conflictDigest),
+          optionId: option.optionId,
+          kind: option.kind,
+          targetRef: 'refs/heads/main' as any,
+          expectedTargetHead,
+          value: option.value as any,
+          purpose: 'chooseValue',
+        });
+        if (!payload.ok) throw new Error(`expected payload put success: ${payload.error.code}`);
+        const missingDigest = { algorithm: 'sha256', digest: 'f'.repeat(64) } as const;
+        const resolution = {
+          ...resolutionFor(conflict, 'acceptTheirs'),
+          sealedPayloadRef: {
+            ...payload.value,
+            payloadId: `merge-payload:${missingDigest.digest}` as const,
+            payloadDigest: missingDigest,
+          },
+        };
+
+        const saved = await sourceWb.version.saveMergeResolutions({
+          resultId: preview.resultId,
+          resultDigest: preview.resultDigest,
+          redactionPolicyDigest: preview.resultDigest,
+          targetRef: 'refs/heads/main' as any,
+          expectedTargetHead,
+          resolutions: [resolution],
+        });
+        expect(saved).toMatchObject({
+          ok: false,
+          error: {
+            code: 'target_unavailable',
+            diagnostics: [expect.objectContaining({ code: 'VERSION_MISSING_OBJECT' })],
+          },
+        });
+      },
+    );
   });
 
   it('fails closed when result id and digest do not match', async () => {
@@ -286,22 +399,26 @@ async function withPersistedConflictPreview(
   run: (fixture: {
     readonly provider: ReturnType<typeof createInMemoryVersionStoreProvider>;
     readonly graphId: string;
+    readonly documentScope: VersionDocumentScope;
     readonly sourceWb: Workbook;
     readonly preview: PersistedConflictPreview;
     readonly expectedTargetHead: VersionCommitExpectedHead;
   }) => Promise<void>,
 ): Promise<void> {
-  const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
-  const initialized = await provider.initializeGraph(await initializeInput(graphId, 'root'));
+  const documentScope = documentScopeForGraph(graphId);
+  const provider = createInMemoryVersionStoreProvider({ documentScope });
+  const initialized = await provider.initializeGraph(
+    await initializeInput(graphId, 'root', documentScope),
+  );
   expectInitializeSuccess(initialized);
 
   const sourceHandle = await DocumentFactory.create({
-    documentId: DOCUMENT_ID,
+    documentId: documentScope.documentId,
     environment: 'headless',
     userTimezone: 'UTC',
   });
   const branchHandle = await DocumentFactory.create({
-    documentId: DOCUMENT_ID,
+    documentId: documentScope.documentId,
     environment: 'headless',
     userTimezone: 'UTC',
   });
@@ -345,7 +462,9 @@ async function withPersistedConflictPreview(
     if (!checkoutBase.ok) {
       throw new Error(`expected branch workbook checkout success: ${checkoutBase.error.code}`);
     }
+    await expect(branchWb.activeSheet.getCell('A1')).resolves.toMatchObject({ value: 'base' });
     await branchWb.activeSheet.setCell('A1', 'theirs');
+    await expect(branchWb.activeSheet.getCell('A1')).resolves.toMatchObject({ value: 'theirs' });
     const theirsCommit = await expectCommit(
       branchWb.version.commit({
         targetRef: `scenario/${graphId}` as any,
@@ -379,12 +498,13 @@ async function withPersistedConflictPreview(
       !preview.value.resultId ||
       !preview.value.resultDigest
     ) {
-      throw new Error('expected persisted conflicted preview metadata');
+      throw new Error(`expected persisted conflicted preview metadata: ${JSON.stringify(preview)}`);
     }
 
     await run({
       provider,
       graphId,
+      documentScope,
       sourceWb,
       preview: preview.value as PersistedConflictPreview,
       expectedTargetHead,
@@ -401,7 +521,11 @@ async function expectCommit(
   resultPromise: ReturnType<Workbook['version']['commit']>,
 ): Promise<WorkbookCommitSummary> {
   const result = await resultPromise;
-  if (!result.ok) throw new Error(`expected commit success: ${result.error.code}`);
+  if (!result.ok) {
+    throw new Error(
+      `expected commit success: ${result.error.code} ${JSON.stringify(result.error)}`,
+    );
+  }
   return result.value;
 }
 
@@ -440,8 +564,9 @@ function conflictDigestObject(conflictDigest: string): ObjectDigest {
 async function initializeInput(
   graphId: string,
   label: string,
+  documentScope: VersionDocumentScope,
 ): Promise<VersionGraphInitializeInput> {
-  const namespace = namespaceForDocumentScope(DOCUMENT_SCOPE, graphId);
+  const namespace = namespaceForDocumentScope(documentScope, graphId);
   return {
     expectedRegistryRevision: null,
     graphId,
@@ -459,6 +584,10 @@ async function initializeInput(
       completenessDiagnostics: [],
     },
   };
+}
+
+function documentScopeForGraph(graphId: string): VersionDocumentScope {
+  return { documentId: `${DOCUMENT_ID}-${DOCUMENT_RUN_ID}-${graphId}` };
 }
 
 async function objectRecord(

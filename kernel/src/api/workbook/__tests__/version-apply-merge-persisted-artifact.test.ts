@@ -21,6 +21,7 @@ import {
 import {
   createMergeResolutionSetArtifactRecord,
   createResolvedMergeAttemptArtifactRecord,
+  mergeResolutionSetArtifactRef,
 } from '../../../document/version-store/merge-attempt-artifacts';
 import type { ObjectDigest } from '../../../document/version-store/object-digest';
 import {
@@ -32,7 +33,7 @@ import {
 } from '../../../document/version-store/provider';
 
 const DOCUMENT_ID = 'vc07-apply-merge-persisted-artifact';
-const DOCUMENT_SCOPE: VersionDocumentScope = { documentId: DOCUMENT_ID };
+const DOCUMENT_RUN_ID = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 const CREATED_AT = '2026-06-21T00:00:00.000Z';
 const AUTHOR: VersionAuthor = {
   authorId: 'user-1',
@@ -42,22 +43,26 @@ const AUTHOR: VersionAuthor = {
 
 describe('WorkbookVersion persisted merge preview artifact apply', () => {
   it('applies a review-only clean preview artifact through the production merge materializer', async () => {
-    const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
-    const initialized = await provider.initializeGraph(await initializeInput('graph-clean-artifact', 'root'));
+    const graphId = 'graph-clean-artifact';
+    const documentScope = documentScopeForGraph(graphId);
+    const provider = createInMemoryVersionStoreProvider({ documentScope });
+    const initialized = await provider.initializeGraph(
+      await initializeInput(graphId, 'root', documentScope),
+    );
     expectInitializeSuccess(initialized);
 
     const sourceHandle = await DocumentFactory.create({
-      documentId: DOCUMENT_ID,
+      documentId: documentScope.documentId,
       environment: 'headless',
       userTimezone: 'UTC',
     });
     const branchHandle = await DocumentFactory.create({
-      documentId: DOCUMENT_ID,
+      documentId: documentScope.documentId,
       environment: 'headless',
       userTimezone: 'UTC',
     });
     const mergedHandle = await DocumentFactory.create({
-      documentId: DOCUMENT_ID,
+      documentId: documentScope.documentId,
       environment: 'headless',
       userTimezone: 'UTC',
     });
@@ -183,7 +188,8 @@ describe('WorkbookVersion persisted merge preview artifact apply', () => {
           expectedTargetHead,
         },
       );
-      if (!applied.ok) throw new Error(`expected persisted clean apply success: ${applied.error.code}`);
+      if (!applied.ok)
+        throw new Error(`expected persisted clean apply success: ${applied.error.code}`);
       expect(applied.value).toMatchObject({
         status: 'applied',
         ours: oursCommit.id,
@@ -202,7 +208,7 @@ describe('WorkbookVersion persisted merge preview artifact apply', () => {
 
       const mergeCommitId = applied.value.commitRef.id;
       const graph = await provider.openGraph(
-        namespaceForDocumentScope(DOCUMENT_SCOPE, 'graph-clean-artifact'),
+        namespaceForDocumentScope(documentScope, graphId),
         provider.accessContext,
       );
       await expect(graph.readCommit(mergeCommitId)).resolves.toMatchObject({
@@ -247,22 +253,26 @@ describe('WorkbookVersion persisted merge preview artifact apply', () => {
   });
 
   it('replays a persisted conflicted review artifact without an apply intent', async () => {
-    const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
-    const initialized = await provider.initializeGraph(await initializeInput('graph-conflict-artifact', 'root'));
+    const graphId = 'graph-conflict-artifact';
+    const documentScope = documentScopeForGraph(graphId);
+    const provider = createInMemoryVersionStoreProvider({ documentScope });
+    const initialized = await provider.initializeGraph(
+      await initializeInput(graphId, 'root', documentScope),
+    );
     expectInitializeSuccess(initialized);
 
     const sourceHandle = await DocumentFactory.create({
-      documentId: DOCUMENT_ID,
+      documentId: documentScope.documentId,
       environment: 'headless',
       userTimezone: 'UTC',
     });
     const branchHandle = await DocumentFactory.create({
-      documentId: DOCUMENT_ID,
+      documentId: documentScope.documentId,
       environment: 'headless',
       userTimezone: 'UTC',
     });
     const mergedHandle = await DocumentFactory.create({
-      documentId: DOCUMENT_ID,
+      documentId: documentScope.documentId,
       environment: 'headless',
       userTimezone: 'UTC',
     });
@@ -335,7 +345,8 @@ describe('WorkbookVersion persisted merge preview artifact apply', () => {
           persistReviewRecord: true,
         },
       );
-      if (!preview.ok) throw new Error(`expected persisted conflicted preview: ${preview.error.code}`);
+      if (!preview.ok)
+        throw new Error(`expected persisted conflicted preview: ${preview.error.code}`);
       if (
         preview.value.status !== 'conflicted' ||
         !preview.value.resultId ||
@@ -383,12 +394,36 @@ describe('WorkbookVersion persisted merge preview artifact apply', () => {
         throw new Error('expected replayed preview to remain conflicted');
       }
 
+      const conflict = replayedPreview.value.conflicts[0];
+      const option = conflict.resolutionOptions.find(
+        (candidate) => candidate.kind === 'acceptTheirs',
+      );
+      if (!option) throw new Error('expected acceptTheirs option');
+      const payload = await sourceWb.version.putMergeResolutionPayload({
+        resultId: preview.value.resultId,
+        resultDigest: preview.value.resultDigest,
+        redactionPolicyDigest: preview.value.resultDigest,
+        conflictId: conflict.conflictId,
+        expectedConflictDigest: conflictDigestObject(conflict.conflictDigest),
+        optionId: option.optionId,
+        kind: option.kind,
+        targetRef: 'refs/heads/main' as any,
+        expectedTargetHead,
+        value: option.value as any,
+        purpose: 'chooseValue',
+      });
+      if (!payload.ok) throw new Error(`expected payload put success: ${payload.error.code}`);
+      const sealedResolution = {
+        ...resolutionFor(conflict, 'acceptTheirs'),
+        sealedPayloadRef: payload.value,
+      };
+
       const applied = await sourceWb.version.applyMerge(
         {
           resultId: preview.value.resultId,
           resultDigest: preview.value.resultDigest,
           previewArtifactDigest: preview.value.previewArtifactDigest,
-          resolutions: [resolutionFor(replayedPreview.value.conflicts[0], 'acceptTheirs')],
+          resolutions: [sealedResolution],
         },
         {
           targetRef: 'refs/heads/main' as any,
@@ -416,6 +451,22 @@ describe('WorkbookVersion persisted merge preview artifact apply', () => {
         targetRef: 'refs/heads/main',
         resolutionCount: 1,
         mutationGuarantee: 'merge-commit-created',
+      });
+      if (!applied.value.resolutionSetDigest) {
+        throw new Error('expected applied merge to expose a resolution set digest');
+      }
+      const graph = await provider.openGraph(
+        namespaceForDocumentScope(documentScope, graphId),
+        provider.accessContext,
+      );
+      await expect(
+        graph.getObjectRecord(mergeResolutionSetArtifactRef(applied.value.resolutionSetDigest)),
+      ).resolves.toMatchObject({
+        preimage: {
+          payload: {
+            resolutions: [expect.objectContaining({ sealedPayloadRef: payload.value })],
+          },
+        },
       });
 
       const mergeCommitId = applied.value.commitRef.id;
@@ -446,7 +497,7 @@ describe('WorkbookVersion persisted merge preview artifact apply', () => {
           resultId: preview.value.resultId,
           resultDigest: preview.value.resultDigest,
           previewArtifactDigest: preview.value.previewArtifactDigest,
-          resolutions: [resolutionFor(replayedPreview.value.conflicts[0], 'acceptTheirs')],
+          resolutions: [sealedResolution],
         },
         {
           targetRef: 'refs/heads/main' as any,
@@ -454,7 +505,9 @@ describe('WorkbookVersion persisted merge preview artifact apply', () => {
         },
       );
       if (!repeated.ok) {
-        throw new Error(`expected repeated persisted conflict apply success: ${repeated.error.code}`);
+        throw new Error(
+          `expected repeated persisted conflict apply success: ${repeated.error.code}`,
+        );
       }
       expect(repeated.value).toMatchObject({
         status: 'alreadyApplied',
@@ -488,18 +541,22 @@ describe('WorkbookVersion persisted merge preview artifact apply', () => {
   });
 
   it('does not recover a conflicted staged intent from parent shape without commit-bound resolved attempt identity', async () => {
-    const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
-    const initialized = await provider.initializeGraph(await initializeInput('graph-conflict-no-identity', 'root'));
+    const graphId = 'graph-conflict-no-identity';
+    const documentScope = documentScopeForGraph(graphId);
+    const provider = createInMemoryVersionStoreProvider({ documentScope });
+    const initialized = await provider.initializeGraph(
+      await initializeInput(graphId, 'root', documentScope),
+    );
     expectInitializeSuccess(initialized);
-    const namespace = namespaceForDocumentScope(DOCUMENT_SCOPE, 'graph-conflict-no-identity');
+    const namespace = namespaceForDocumentScope(documentScope, graphId);
 
     const sourceHandle = await DocumentFactory.create({
-      documentId: DOCUMENT_ID,
+      documentId: documentScope.documentId,
       environment: 'headless',
       userTimezone: 'UTC',
     });
     const branchHandle = await DocumentFactory.create({
-      documentId: DOCUMENT_ID,
+      documentId: documentScope.documentId,
       environment: 'headless',
       userTimezone: 'UTC',
     });
@@ -707,11 +764,19 @@ function resolutionFor(
   };
 }
 
+function conflictDigestObject(conflictDigest: string): ObjectDigest {
+  if (!conflictDigest.startsWith('sha256:')) {
+    throw new Error(`expected sha256 conflict digest: ${conflictDigest}`);
+  }
+  return { algorithm: 'sha256', digest: conflictDigest.slice('sha256:'.length) };
+}
+
 async function initializeInput(
   graphId: string,
   label: string,
+  documentScope: VersionDocumentScope,
 ): Promise<VersionGraphInitializeInput> {
-  const namespace = namespaceForDocumentScope(DOCUMENT_SCOPE, graphId);
+  const namespace = namespaceForDocumentScope(documentScope, graphId);
   return {
     expectedRegistryRevision: null,
     graphId,
@@ -729,6 +794,10 @@ async function initializeInput(
       completenessDiagnostics: [],
     },
   };
+}
+
+function documentScopeForGraph(graphId: string): VersionDocumentScope {
+  return { documentId: `${DOCUMENT_ID}-${DOCUMENT_RUN_ID}-${graphId}` };
 }
 
 async function objectRecord(

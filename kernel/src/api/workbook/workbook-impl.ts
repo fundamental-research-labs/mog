@@ -91,6 +91,7 @@ import { createCheckpointManager } from '../../services/checkpoint';
 import type { ICheckpointManager } from '../../services/checkpoint';
 import type { CheckoutSnapshotApplyInput } from '../../document/version-store/checkout-apply';
 import type { CheckoutMaterializationDiagnostic } from '../../document/version-store/checkout-service';
+import { createComputeBridgeSemanticStateReader } from '../../document/version-store/semantic-state-reader';
 import type { SnapshotRootFreshLifecycleMaterialization } from '../document/snapshot-root-lifecycle-hydrator';
 import {
   getFunctionCatalog as getCatalog,
@@ -187,10 +188,7 @@ import { WorkbookViewportImpl } from './viewport';
 import { WorkbookChangesImpl } from './changes';
 import { WorkbookDiagnosticsImpl } from './diagnostics';
 import { WorkbookLinksImpl } from './links';
-import {
-  createWorkbookContextBinding,
-  type WorkbookContextBinding,
-} from './context-binding';
+import { createWorkbookContextBinding, type WorkbookContextBinding } from './context-binding';
 import { createWorkbookCheckoutSnapshotMaterializer } from './version-checkout-materializer';
 import { createWorkbookVersionSurfaceStatusService } from './version-surface-status-service';
 
@@ -523,6 +521,7 @@ export class WorkbookImpl implements WorkbookInternal {
       eventBus: IEventBus;
       versioning?: unknown;
     };
+    resetSemanticMutationCaptureAfterCheckout(currentVersioning, nextContext);
     mutableNextContext.versioning = currentVersioning;
     mutableNextContext.eventBus = this.eventBus;
 
@@ -2229,6 +2228,24 @@ export class WorkbookImpl implements WorkbookInternal {
   private workbookLinkScope(): WorkbookLinkStatusScope {
     return this.ctx.workbookLinkScope();
   }
+}
+
+function resetSemanticMutationCaptureAfterCheckout(
+  versioning: unknown,
+  nextContext: DocumentContext,
+): void {
+  if (!isVersioningRecord(versioning)) return;
+  const semanticCapture = versioning.semanticMutationCapture;
+  if (!isVersioningRecord(semanticCapture)) return;
+  const reset = semanticCapture.resetNormalCaptureForCheckout;
+  if (typeof reset !== 'function') return;
+  reset.call(semanticCapture, {
+    semanticStateReader: createComputeBridgeSemanticStateReader(nextContext.computeBridge),
+  });
+}
+
+function isVersioningRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
 }
 
 // =============================================================================

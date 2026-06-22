@@ -25,6 +25,7 @@ import {
 } from './version-attempt-metadata';
 import type { VersionMergePublicOperation } from './version-merge-capability';
 import { mergeReviewDiagnostic } from './version-merge-review-artifacts';
+import { normalizeVersionApplyMergeResolutions } from './version-merge-resolution-normalization';
 
 const SAVE_MERGE_RESOLUTIONS_KEYS = new Set([
   'resultId',
@@ -65,8 +66,6 @@ const PUT_MERGE_RESOLUTION_PAYLOAD_KEYS = new Set([
   'value',
   'purpose',
 ]);
-const RESOLUTION_KEYS = new Set(['conflictId', 'expectedConflictDigest', 'optionId', 'kind']);
-
 export type NormalizedSaveMergeResolutionsInput = {
   readonly resultId: VersionSaveMergeResolutionsRequest['resultId'];
   readonly resultDigest: ObjectDigest;
@@ -129,11 +128,16 @@ export function normalizeSaveMergeResolutionsInput(
   rejectUnknownKeys(operation, input, SAVE_MERGE_RESOLUTIONS_KEYS, diagnostics);
 
   const resultId = mapMergeResultId(input.resultId);
-  if (!resultId) diagnostics.push(invalidInputDiagnostic(operation, 'resultId', 'resultId is invalid.'));
+  if (!resultId)
+    diagnostics.push(invalidInputDiagnostic(operation, 'resultId', 'resultId is invalid.'));
   const resultDigest = mapPublicObjectDigest(input.resultDigest);
   if (!resultDigest) {
     diagnostics.push(
-      invalidInputDiagnostic(operation, 'resultDigest', 'resultDigest is required and must be valid.'),
+      invalidInputDiagnostic(
+        operation,
+        'resultDigest',
+        'resultDigest is required and must be valid.',
+      ),
     );
   }
   const redactionPolicyDigest = mapPublicObjectDigest(input.redactionPolicyDigest);
@@ -155,7 +159,9 @@ export function normalizeSaveMergeResolutionsInput(
       ? undefined
       : mapPublicExpectedTargetHead(input.expectedTargetHead);
   if (input.expectedTargetHead !== undefined && !expectedTargetHead) {
-    diagnostics.push(invalidInputDiagnostic(operation, 'expectedTargetHead', 'expectedTargetHead is invalid.'));
+    diagnostics.push(
+      invalidInputDiagnostic(operation, 'expectedTargetHead', 'expectedTargetHead is invalid.'),
+    );
   }
   if ((targetRef && !expectedTargetHead) || (!targetRef && expectedTargetHead)) {
     diagnostics.push(
@@ -168,7 +174,11 @@ export function normalizeSaveMergeResolutionsInput(
   }
   const resolutions = normalizeResolutions(operation, input.resolutions, diagnostics);
 
-  return resultId && resultDigest && redactionPolicyDigest && resolutions && diagnostics.length === 0
+  return resultId &&
+    resultDigest &&
+    redactionPolicyDigest &&
+    resolutions &&
+    diagnostics.length === 0
     ? {
         ok: true,
         input: {
@@ -203,10 +213,15 @@ export function normalizeGetMergeConflictDetailInput(
   const expectedConflictDigest = mapConflictDigest(input.expectedConflictDigest);
   const valueRole = mapValueRole(input.valueRole);
   const purpose = mapDetailPurpose(input.purpose);
-  if (!resultId) diagnostics.push(invalidInputDiagnostic(operation, 'resultId', 'resultId is invalid.'));
+  if (!resultId)
+    diagnostics.push(invalidInputDiagnostic(operation, 'resultId', 'resultId is invalid.'));
   if (!resultDigest) {
     diagnostics.push(
-      invalidInputDiagnostic(operation, 'resultDigest', 'resultDigest is required and must be valid.'),
+      invalidInputDiagnostic(
+        operation,
+        'resultDigest',
+        'resultDigest is required and must be valid.',
+      ),
     );
   }
   if (!redactionPolicyDigest) {
@@ -218,14 +233,21 @@ export function normalizeGetMergeConflictDetailInput(
       ),
     );
   }
-  if (!conflictId) diagnostics.push(invalidInputDiagnostic(operation, 'conflictId', 'conflictId is invalid.'));
+  if (!conflictId)
+    diagnostics.push(invalidInputDiagnostic(operation, 'conflictId', 'conflictId is invalid.'));
   if (!expectedConflictDigest) {
     diagnostics.push(
-      invalidInputDiagnostic(operation, 'expectedConflictDigest', 'expectedConflictDigest is invalid.'),
+      invalidInputDiagnostic(
+        operation,
+        'expectedConflictDigest',
+        'expectedConflictDigest is invalid.',
+      ),
     );
   }
-  if (!valueRole) diagnostics.push(invalidInputDiagnostic(operation, 'valueRole', 'valueRole is invalid.'));
-  if (!purpose) diagnostics.push(invalidInputDiagnostic(operation, 'purpose', 'purpose is invalid.'));
+  if (!valueRole)
+    diagnostics.push(invalidInputDiagnostic(operation, 'valueRole', 'valueRole is invalid.'));
+  if (!purpose)
+    diagnostics.push(invalidInputDiagnostic(operation, 'purpose', 'purpose is invalid.'));
   if (input.pageToken !== undefined) {
     diagnostics.push(
       mergeReviewDiagnostic(
@@ -242,14 +264,22 @@ export function normalizeGetMergeConflictDetailInput(
       ? undefined
       : mapPublicObjectDigest(input.resolutionSetDigest);
   if (input.resolutionSetDigest !== undefined && !resolutionSetDigest) {
-    diagnostics.push(invalidInputDiagnostic(operation, 'resolutionSetDigest', 'resolutionSetDigest is invalid.'));
+    diagnostics.push(
+      invalidInputDiagnostic(operation, 'resolutionSetDigest', 'resolutionSetDigest is invalid.'),
+    );
   }
   const resolvedAttemptDigest =
     input.resolvedAttemptDigest === undefined
       ? undefined
       : mapPublicObjectDigest(input.resolvedAttemptDigest);
   if (input.resolvedAttemptDigest !== undefined && !resolvedAttemptDigest) {
-    diagnostics.push(invalidInputDiagnostic(operation, 'resolvedAttemptDigest', 'resolvedAttemptDigest is invalid.'));
+    diagnostics.push(
+      invalidInputDiagnostic(
+        operation,
+        'resolvedAttemptDigest',
+        'resolvedAttemptDigest is invalid.',
+      ),
+    );
   }
   const optionId = input.optionId === undefined ? undefined : mapNonEmptyString(input.optionId);
   if (input.optionId !== undefined && !optionId) {
@@ -268,7 +298,9 @@ export function normalizeGetMergeConflictDetailInput(
       ? undefined
       : mapPublicExpectedTargetHead(input.expectedTargetHead);
   if (input.expectedTargetHead !== undefined && !expectedTargetHead) {
-    diagnostics.push(invalidInputDiagnostic(operation, 'expectedTargetHead', 'expectedTargetHead is invalid.'));
+    diagnostics.push(
+      invalidInputDiagnostic(operation, 'expectedTargetHead', 'expectedTargetHead is invalid.'),
+    );
   }
 
   return resultId &&
@@ -330,10 +362,15 @@ export function normalizePutMergeResolutionPayloadInput(
       ? undefined
       : mapNonEmptyString(input.domainPayloadSchema);
 
-  if (!resultId) diagnostics.push(invalidInputDiagnostic(operation, 'resultId', 'resultId is invalid.'));
+  if (!resultId)
+    diagnostics.push(invalidInputDiagnostic(operation, 'resultId', 'resultId is invalid.'));
   if (!resultDigest) {
     diagnostics.push(
-      invalidInputDiagnostic(operation, 'resultDigest', 'resultDigest is required and must be valid.'),
+      invalidInputDiagnostic(
+        operation,
+        'resultDigest',
+        'resultDigest is required and must be valid.',
+      ),
     );
   }
   if (!redactionPolicyDigest) {
@@ -346,22 +383,39 @@ export function normalizePutMergeResolutionPayloadInput(
     );
   }
   if (!expectedConflictDigest) {
-    diagnostics.push(invalidInputDiagnostic(operation, 'expectedConflictDigest', 'expectedConflictDigest is invalid.'));
+    diagnostics.push(
+      invalidInputDiagnostic(
+        operation,
+        'expectedConflictDigest',
+        'expectedConflictDigest is invalid.',
+      ),
+    );
   }
-  if (!conflictId) diagnostics.push(invalidInputDiagnostic(operation, 'conflictId', 'conflictId is invalid.'));
-  if (!optionId) diagnostics.push(invalidInputDiagnostic(operation, 'optionId', 'optionId is invalid.'));
-  if (!kind) diagnostics.push(invalidInputDiagnostic(operation, 'kind', 'resolution kind is invalid.'));
+  if (!conflictId)
+    diagnostics.push(invalidInputDiagnostic(operation, 'conflictId', 'conflictId is invalid.'));
+  if (!optionId)
+    diagnostics.push(invalidInputDiagnostic(operation, 'optionId', 'optionId is invalid.'));
+  if (!kind)
+    diagnostics.push(invalidInputDiagnostic(operation, 'kind', 'resolution kind is invalid.'));
   if (input.domainPayloadSchema !== undefined && !domainPayloadSchema) {
-    diagnostics.push(invalidInputDiagnostic(operation, 'domainPayloadSchema', 'domainPayloadSchema is invalid.'));
+    diagnostics.push(
+      invalidInputDiagnostic(operation, 'domainPayloadSchema', 'domainPayloadSchema is invalid.'),
+    );
   }
-  if (!targetRef) diagnostics.push(invalidInputDiagnostic(operation, 'targetRef', 'targetRef is invalid.'));
+  if (!targetRef)
+    diagnostics.push(invalidInputDiagnostic(operation, 'targetRef', 'targetRef is invalid.'));
   if (!expectedTargetHead) {
-    diagnostics.push(invalidInputDiagnostic(operation, 'expectedTargetHead', 'expectedTargetHead is invalid.'));
+    diagnostics.push(
+      invalidInputDiagnostic(operation, 'expectedTargetHead', 'expectedTargetHead is invalid.'),
+    );
   }
   if (value === null && input.value !== null) {
-    diagnostics.push(invalidInputDiagnostic(operation, 'value', 'value must be JSON-serializable.'));
+    diagnostics.push(
+      invalidInputDiagnostic(operation, 'value', 'value must be JSON-serializable.'),
+    );
   }
-  if (!purpose) diagnostics.push(invalidInputDiagnostic(operation, 'purpose', 'purpose is invalid.'));
+  if (!purpose)
+    diagnostics.push(invalidInputDiagnostic(operation, 'purpose', 'purpose is invalid.'));
 
   return resultId &&
     resultDigest &&
@@ -453,7 +507,9 @@ export function validateResolutionsForPreview(
         };
   }
 
-  const conflictsById = new Map(payload.conflicts.map((conflict) => [conflict.conflictId, conflict]));
+  const conflictsById = new Map(
+    payload.conflicts.map((conflict) => [conflict.conflictId, conflict]),
+  );
   const seen = new Set<string>();
   for (const resolution of resolutions) {
     if (seen.has(resolution.conflictId)) {
@@ -522,60 +578,10 @@ function normalizeResolutions(
   value: unknown,
   diagnostics: VersionStoreDiagnostic[],
 ): readonly VersionApplyMergeResolution[] | null {
-  if (!Array.isArray(value)) {
-    diagnostics.push(invalidInputDiagnostic(operation, 'resolutions', 'resolutions must be an array.'));
-    return null;
-  }
-  const resolutions: VersionApplyMergeResolution[] = [];
-  for (let index = 0; index < value.length; index++) {
-    const item = value[index];
-    if (!isRecord(item) || Array.isArray(item)) {
-      diagnostics.push(
-        invalidInputDiagnostic(operation, `resolutions[${index}]`, 'resolution entries must be objects.'),
-      );
-      continue;
-    }
-    rejectUnknownKeys(operation, item, RESOLUTION_KEYS, diagnostics, `resolutions[${index}]`);
-    const conflictId = mapNonEmptyString(item.conflictId);
-    const expectedConflictDigest =
-      typeof item.expectedConflictDigest === 'string' && item.expectedConflictDigest.length > 0
-        ? item.expectedConflictDigest
-        : null;
-    const optionId = mapNonEmptyString(item.optionId);
-    const kind = mapResolutionKind(item.kind);
-    if (!conflictId) {
-      diagnostics.push(
-        invalidInputDiagnostic(operation, `resolutions[${index}].conflictId`, 'conflictId is required.'),
-      );
-    }
-    if (!expectedConflictDigest) {
-      diagnostics.push(
-        invalidInputDiagnostic(
-          operation,
-          `resolutions[${index}].expectedConflictDigest`,
-          'expectedConflictDigest is required.',
-        ),
-      );
-    }
-    if (!optionId) {
-      diagnostics.push(
-        invalidInputDiagnostic(operation, `resolutions[${index}].optionId`, 'optionId is required.'),
-      );
-    }
-    if (!kind) {
-      diagnostics.push(
-        invalidInputDiagnostic(
-          operation,
-          `resolutions[${index}].kind`,
-          'resolution kind must be acceptOurs, acceptTheirs, or acceptBase.',
-        ),
-      );
-    }
-    if (conflictId && expectedConflictDigest && optionId && kind) {
-      resolutions.push({ conflictId, expectedConflictDigest, optionId, kind });
-    }
-  }
-  return diagnostics.length === 0 ? resolutions : null;
+  return normalizeVersionApplyMergeResolutions(value, diagnostics, {
+    allowUndefined: false,
+    invalidDiagnostic: invalidInputDiagnostic.bind(null, operation),
+  });
 }
 
 function rejectUnknownKeys(
@@ -587,7 +593,9 @@ function rejectUnknownKeys(
 ): void {
   for (const key of Object.keys(value)) {
     if (allowed.has(key)) continue;
-    diagnostics.push(invalidInputDiagnostic(operation, `${prefix}.${key}`, `Unknown field "${key}".`));
+    diagnostics.push(
+      invalidInputDiagnostic(operation, `${prefix}.${key}`, `Unknown field "${key}".`),
+    );
   }
 }
 
@@ -598,7 +606,9 @@ function normalizeMaxBytes(
 ): number | undefined {
   if (value === undefined) return undefined;
   if (typeof value !== 'number' || !Number.isInteger(value) || value <= 0) {
-    diagnostics.push(invalidInputDiagnostic(operation, 'maxBytes', 'maxBytes must be a positive integer.'));
+    diagnostics.push(
+      invalidInputDiagnostic(operation, 'maxBytes', 'maxBytes must be a positive integer.'),
+    );
     return undefined;
   }
   return value;

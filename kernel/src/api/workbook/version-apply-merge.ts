@@ -33,6 +33,7 @@ import {
   versionMergeCapabilityDisabledDiagnostic,
 } from './version-merge-capability';
 import { validateVersionDomainSupportManifestGate } from './version-domain-support-gate';
+import { normalizeVersionApplyMergeResolutions } from './version-merge-resolution-normalization';
 
 const WORKBOOK_COMMIT_ID_RE = /^commit:sha256:[0-9a-f]{64}$/;
 const VERSION_APPLY_MERGE_INPUT_KEYS = new Set(['base', 'ours', 'theirs', 'resolutions']);
@@ -159,7 +160,11 @@ export async function applyMergeWorkbookVersion(
   }
 
   if (validated.applyOptions.mode === 'apply' && validated.resolutions.length === 0) {
-    const fastForward = await tryApplyFastForwardMerge(ctx, validated.mergeInput, validated.applyOptions);
+    const fastForward = await tryApplyFastForwardMerge(
+      ctx,
+      validated.mergeInput,
+      validated.applyOptions,
+    );
     if (fastForward.kind !== 'not-fast-forward') return fastForward.result;
   }
 
@@ -203,7 +208,9 @@ export async function applyMergeWorkbookVersion(
   if (validated.resolutions.length === 0) {
     if (validated.applyOptions.mode === 'apply') {
       return blockedApplyMergeResult(preview.base, preview.ours, preview.theirs, [
-        resolutionMismatchDiagnostic('applyMerge apply mode requires resolutions for conflicted previews.'),
+        resolutionMismatchDiagnostic(
+          'applyMerge apply mode requires resolutions for conflicted previews.',
+        ),
       ]);
     }
 
@@ -218,6 +225,14 @@ export async function applyMergeWorkbookVersion(
       requiredResolutionCount: preview.conflicts.length,
       mutationGuarantee: 'preview-only',
     };
+  }
+
+  if (validated.resolutions.some((resolution) => resolution.sealedPayloadRef)) {
+    return blockedApplyMergeResult(preview.base, preview.ours, preview.theirs, [
+      resolutionMismatchDiagnostic(
+        'sealed resolution payload refs require a persisted merge preview artifact.',
+      ),
+    ]);
   }
 
   const plan = planResolvedConflicts(preview.conflicts, validated.resolutions);
@@ -352,8 +367,7 @@ function validateApplyMergeRequest(
       ok: false,
       base: normalizedInput?.mergeInput.base ?? toCommitId(inputRecord?.base),
       ours: normalizedInput?.mergeInput.ours ?? toCommitId(inputRecord?.ours),
-      theirs:
-        normalizedInput?.mergeInput.theirs ?? toCommitId(inputRecord?.theirs),
+      theirs: normalizedInput?.mergeInput.theirs ?? toCommitId(inputRecord?.theirs),
       diagnostics,
     };
   }
@@ -375,7 +389,10 @@ function validateApplyMergeRequest(
 function normalizeApplyMergeInput(
   input: VersionApplyMergeInput,
   diagnostics: VersionStoreDiagnostic[],
-): Pick<Extract<ApplyMergeValidationResult, { readonly ok: true }>, 'mergeInput' | 'resolutions'> | null {
+): Pick<
+  Extract<ApplyMergeValidationResult, { readonly ok: true }>,
+  'mergeInput' | 'resolutions'
+> | null {
   if (!isRecord(input) || Array.isArray(input)) {
     diagnostics.push(
       invalidApplyMergeOptionDiagnostic('input', 'applyMerge input must be an object.'),
@@ -394,8 +411,10 @@ function normalizeApplyMergeInput(
   const base = toCommitId(inputRecord.base);
   const ours = toCommitId(inputRecord.ours);
   const theirs = toCommitId(inputRecord.theirs);
-  if (!base) diagnostics.push(invalidApplyMergeOptionDiagnostic('base', 'base must be a commit id.'));
-  if (!ours) diagnostics.push(invalidApplyMergeOptionDiagnostic('ours', 'ours must be a commit id.'));
+  if (!base)
+    diagnostics.push(invalidApplyMergeOptionDiagnostic('base', 'base must be a commit id.'));
+  if (!ours)
+    diagnostics.push(invalidApplyMergeOptionDiagnostic('ours', 'ours must be a commit id.'));
   if (!theirs) {
     diagnostics.push(invalidApplyMergeOptionDiagnostic('theirs', 'theirs must be a commit id.'));
   }
@@ -410,88 +429,10 @@ function normalizeResolutions(
   value: unknown,
   diagnostics: VersionStoreDiagnostic[],
 ): readonly VersionApplyMergeResolution[] | null {
-  if (value === undefined) return [];
-  if (!Array.isArray(value)) {
-    diagnostics.push(
-      invalidApplyMergeOptionDiagnostic('resolutions', 'resolutions must be an array when supplied.'),
-    );
-    return null;
-  }
-
-  const resolutions: VersionApplyMergeResolution[] = [];
-  for (let index = 0; index < value.length; index++) {
-    const item = value[index];
-    const resolution = normalizeResolution(item, index, diagnostics);
-    if (resolution) resolutions.push(resolution);
-  }
-  return diagnostics.length === 0 ? resolutions : null;
-}
-
-function normalizeResolution(
-  value: unknown,
-  index: number,
-  diagnostics: VersionStoreDiagnostic[],
-): VersionApplyMergeResolution | null {
-  if (!isRecord(value) || Array.isArray(value)) {
-    diagnostics.push(
-      invalidApplyMergeOptionDiagnostic(
-        `resolutions[${index}]`,
-        'resolution entries must be objects.',
-      ),
-    );
-    return null;
-  }
-
-  const keys = new Set(['conflictId', 'expectedConflictDigest', 'optionId', 'kind']);
-  for (const key of Object.keys(value)) {
-    if (keys.has(key)) continue;
-    diagnostics.push(
-      invalidApplyMergeOptionDiagnostic(
-        `resolutions[${index}].${key}`,
-        `Unknown resolution field "${key}".`,
-      ),
-    );
-  }
-
-  const conflictId = typeof value.conflictId === 'string' ? value.conflictId : null;
-  const expectedConflictDigest =
-    typeof value.expectedConflictDigest === 'string' ? value.expectedConflictDigest : null;
-  const optionId = typeof value.optionId === 'string' ? value.optionId : null;
-  const kind =
-    value.kind === 'acceptOurs' || value.kind === 'acceptTheirs' || value.kind === 'acceptBase'
-      ? value.kind
-      : null;
-
-  if (!conflictId) {
-    diagnostics.push(
-      invalidApplyMergeOptionDiagnostic(`resolutions[${index}].conflictId`, 'conflictId is required.'),
-    );
-  }
-  if (!expectedConflictDigest) {
-    diagnostics.push(
-      invalidApplyMergeOptionDiagnostic(
-        `resolutions[${index}].expectedConflictDigest`,
-        'expectedConflictDigest is required.',
-      ),
-    );
-  }
-  if (!optionId) {
-    diagnostics.push(
-      invalidApplyMergeOptionDiagnostic(`resolutions[${index}].optionId`, 'optionId is required.'),
-    );
-  }
-  if (!kind) {
-    diagnostics.push(
-      invalidApplyMergeOptionDiagnostic(
-        `resolutions[${index}].kind`,
-        'resolution kind must be acceptOurs, acceptTheirs, or acceptBase.',
-      ),
-    );
-  }
-
-  return conflictId && expectedConflictDigest && optionId && kind
-    ? { conflictId, expectedConflictDigest, optionId, kind }
-    : null;
+  return normalizeVersionApplyMergeResolutions(value, diagnostics, {
+    allowUndefined: true,
+    invalidDiagnostic: invalidApplyMergeOptionDiagnostic,
+  });
 }
 
 function normalizeApplyMergeOptions(
@@ -525,7 +466,10 @@ function normalizeApplyMergeOptions(
   if (input.includeDiagnostics !== undefined) {
     if (typeof input.includeDiagnostics !== 'boolean') {
       diagnostics.push(
-        invalidApplyMergeOptionDiagnostic('includeDiagnostics', 'includeDiagnostics must be a boolean.'),
+        invalidApplyMergeOptionDiagnostic(
+          'includeDiagnostics',
+          'includeDiagnostics must be a boolean.',
+        ),
       );
     } else {
       baseOptions.includeDiagnostics = input.includeDiagnostics;
@@ -566,7 +510,10 @@ function validateTargetRef(
   }
   if (value === VERSION_HEAD_REF) {
     diagnostics.push(
-      invalidApplyMergeOptionDiagnostic('targetRef', 'targetRef must be a concrete refs/heads/* ref.'),
+      invalidApplyMergeOptionDiagnostic(
+        'targetRef',
+        'targetRef must be a concrete refs/heads/* ref.',
+      ),
     );
     return undefined;
   }
@@ -578,10 +525,14 @@ function validateTargetRef(
   if (!parsed.ok) {
     diagnostics.push(
       ...parsed.diagnostics.map((item) =>
-        publicDiagnostic('VERSION_INVALID_OPTIONS', 'targetRef must name a public-safe version branch.', {
-          recoverability: 'none',
-          payload: { option: 'targetRef', issue: item.issue, refName: 'redacted' },
-        }),
+        publicDiagnostic(
+          'VERSION_INVALID_OPTIONS',
+          'targetRef must name a public-safe version branch.',
+          {
+            recoverability: 'none',
+            payload: { option: 'targetRef', issue: item.issue, refName: 'redacted' },
+          },
+        ),
       ),
     );
     return undefined;
@@ -720,7 +671,9 @@ function planResolvedConflicts(
     return {
       ok: false,
       diagnostics: [
-        resolutionMismatchDiagnostic('applyMerge preview requires exactly one resolution per conflict.'),
+        resolutionMismatchDiagnostic(
+          'applyMerge preview requires exactly one resolution per conflict.',
+        ),
       ],
     };
   }
@@ -742,17 +695,22 @@ function planResolvedConflicts(
     if (!conflict || resolution.expectedConflictDigest !== conflict.conflictDigest) {
       return {
         ok: false,
-        diagnostics: [resolutionMismatchDiagnostic('resolution does not match the merge conflict.')],
+        diagnostics: [
+          resolutionMismatchDiagnostic('resolution does not match the merge conflict.'),
+        ],
       };
     }
 
     const option = conflict.resolutionOptions.find(
-      (candidate) => candidate.optionId === resolution.optionId && candidate.kind === resolution.kind,
+      (candidate) =>
+        candidate.optionId === resolution.optionId && candidate.kind === resolution.kind,
     );
     if (!option) {
       return {
         ok: false,
-        diagnostics: [resolutionMismatchDiagnostic('resolution option does not match the conflict.')],
+        diagnostics: [
+          resolutionMismatchDiagnostic('resolution option does not match the conflict.'),
+        ],
       };
     }
 

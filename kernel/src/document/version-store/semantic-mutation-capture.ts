@@ -60,6 +60,11 @@ export interface SemanticMutationCaptureServices {
   readonly mutationCapture: VersionMutationCaptureSink;
   readonly captureNormalCommit: VersionNormalCommitCapture;
   readonly capturePendingRemoteSegment: VersionPendingRemoteCapture;
+  resetNormalCaptureForCheckout(input: VersionMutationCaptureResetInput): void;
+}
+
+export interface VersionMutationCaptureResetInput {
+  readonly semanticStateReader?: VersionSemanticStateReaderPort;
 }
 
 export interface SemanticMutationCaptureOptions {
@@ -150,13 +155,14 @@ export function createSemanticMutationCapture(
     mutationCapture: buffer,
     captureNormalCommit: (input) => buffer.captureNormalCommit(input),
     capturePendingRemoteSegment: (input) => buffer.capturePendingRemoteSegment(input),
+    resetNormalCaptureForCheckout: (input) => buffer.resetNormalCaptureForCheckout(input),
   };
 }
 
 class SemanticMutationCaptureBuffer implements VersionMutationCaptureSink {
   private readonly author: VersionAuthor;
   private readonly now: () => Date;
-  private readonly semanticStateReader?: VersionSemanticStateReaderPort;
+  private semanticStateReader?: VersionSemanticStateReaderPort;
   private nextNormalSequence = 1;
   private nextPendingRemoteSequence = 1;
   private pendingNormal: PendingSemanticMutation[] = [];
@@ -217,6 +223,16 @@ class SemanticMutationCaptureBuffer implements VersionMutationCaptureSink {
     } else {
       this.nextPendingRemoteSequence++;
       this.pendingRemote.push(record);
+    }
+  }
+
+  resetNormalCaptureForCheckout(input: VersionMutationCaptureResetInput): void {
+    this.nextNormalSequence = 1;
+    this.pendingNormal = [];
+    this.beforeNormalSemanticState = undefined;
+    this.semanticStateCaptureFailure = undefined;
+    if (input.semanticStateReader) {
+      this.semanticStateReader = input.semanticStateReader;
     }
   }
 

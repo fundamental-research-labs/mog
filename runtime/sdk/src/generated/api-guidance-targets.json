@@ -5132,6 +5132,25 @@
     },
     {
       "schemaVersion": "1",
+      "path": "wb.version.promotePendingRemote",
+      "stableId": "WorkbookVersion.promotePendingRemote",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookVersion",
+      "member": "promotePendingRemote",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "promotePendingRemote(\n    options?: VersionPromotePendingRemoteOptions,\n  ): Promise<VersionResult<VersionPromotePendingRemoteResult>>;",
+      "typeText": "Promise<VersionResult<VersionPromotePendingRemoteResult>>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/version-workbook.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
       "path": "wb.version.putMergeResolutionPayload",
       "stableId": "WorkbookVersion.putMergeResolutionPayload",
       "root": "subApi",
@@ -24036,6 +24055,25 @@
       "asyncModel": "promise",
       "signature": "merge(input: VersionMergeInput, options?: VersionMergeOptions): Promise<VersionResult<VersionMergeResult>>;",
       "typeText": "Promise<VersionResult<VersionMergeResult>>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/version-workbook.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "wb.version.promotePendingRemote": {
+      "schemaVersion": "1",
+      "path": "wb.version.promotePendingRemote",
+      "stableId": "WorkbookVersion.promotePendingRemote",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookVersion",
+      "member": "promotePendingRemote",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "promotePendingRemote(\n    options?: VersionPromotePendingRemoteOptions,\n  ): Promise<VersionResult<VersionPromotePendingRemoteResult>>;",
+      "typeText": "Promise<VersionResult<VersionPromotePendingRemoteResult>>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/workbook/version-workbook.ts"

@@ -388,8 +388,29 @@ async function readSemanticChangeSet(
   }
 }
 
-function parseSemanticChangeSet(payload: unknown, branch: 'ours' | 'theirs'): ParsedSemanticChangeSet {
-  if (!isRecord(payload) || payload.schemaVersion !== 1 || !Array.isArray(payload.changes)) {
+function parseSemanticChangeSet(
+  payload: unknown,
+  branch: 'ours' | 'theirs',
+): ParsedSemanticChangeSet {
+  if (!isRecord(payload) || payload.schemaVersion !== 1) {
+    return {
+      ok: false,
+      diagnostics: [
+        diagnostic(
+          'VERSION_UNSUPPORTED_SCHEMA',
+          'Semantic change-set payload is not supported by merge preview.',
+          { payload: { branch } },
+        ),
+      ],
+    };
+  }
+
+  const values = Array.isArray(payload.reviewChanges)
+    ? payload.reviewChanges
+    : Array.isArray(payload.changes)
+      ? payload.changes
+      : null;
+  if (!values) {
     return {
       ok: false,
       diagnostics: [
@@ -404,8 +425,8 @@ function parseSemanticChangeSet(payload: unknown, branch: 'ours' | 'theirs'): Pa
 
   const changes: SemanticValueChange[] = [];
   const seenKeys = new Set<string>();
-  for (let index = 0; index < payload.changes.length; index++) {
-    const parsed = parseSemanticChange(payload.changes[index], branch, index);
+  for (let index = 0; index < values.length; index++) {
+    const parsed = parseSemanticChange(values[index], branch, index);
     if (!parsed.ok) return parsed;
     if (seenKeys.has(parsed.change.key)) {
       return {

@@ -52,6 +52,7 @@ import {
   versionFailureFromStoreDiagnostics,
   versionResultFromMergeEndpointDiagnostics,
 } from './version-result';
+import { validateSealedResolutionPayloadRefs } from './version-merge-sealed-payload';
 
 export async function saveMergeResolutionsWorkbookVersion(
   ctx: DocumentContext,
@@ -117,18 +118,33 @@ export async function saveMergeResolutionsWorkbookVersion(
   if (!resolutionValidation.ok) {
     return mergeEndpointFailure('saveMergeResolutions', resolutionValidation.diagnostics);
   }
+  const target =
+    normalized.input.targetRef && normalized.input.expectedTargetHead
+      ? {
+          targetRef: normalized.input.targetRef,
+          expectedTargetHead: normalized.input.expectedTargetHead,
+        }
+      : null;
+  const sealedPayloadDiagnostics = await validateSealedResolutionPayloadRefs({
+    graph: opened.graph,
+    operation: 'saveMergeResolutions',
+    resultId: normalized.input.resultId,
+    resultDigest: normalized.input.resultDigest,
+    ...(target
+      ? { targetRef: target.targetRef, expectedTargetHead: target.expectedTargetHead }
+      : {}),
+    conflicts: artifact.payload.conflicts,
+    resolutions: normalized.input.resolutions,
+  });
+  if (sealedPayloadDiagnostics.length > 0) {
+    return mergeEndpointFailure('saveMergeResolutions', sealedPayloadDiagnostics);
+  }
 
   try {
     const resolutionSet = await createMergeResolutionSetArtifactRecord(
       opened.namespace,
       normalized.input.resolutions,
     );
-    const target = normalized.input.targetRef && normalized.input.expectedTargetHead
-      ? {
-          targetRef: normalized.input.targetRef,
-          expectedTargetHead: normalized.input.expectedTargetHead,
-        }
-      : null;
     const resultDigest = toInternalSha256Digest(normalized.input.resultDigest);
     if (!resultDigest) {
       return mergeEndpointFailure('saveMergeResolutions', [
@@ -171,7 +187,9 @@ export async function saveMergeResolutionsWorkbookVersion(
         ...(resolvedAttempt ? { resolvedAttemptDigest: resolvedAttempt.digest } : {}),
         attemptKind: resolvedAttempt ? 'applyable' : 'reviewOnly',
         attemptPersistence: 'persisted',
-        ...(target ? { targetRef: target.targetRef, expectedTargetHead: target.expectedTargetHead } : {}),
+        ...(target
+          ? { targetRef: target.targetRef, expectedTargetHead: target.expectedTargetHead }
+          : {}),
         savedResolutionCount: normalized.input.resolutions.length,
         diagnostics: [],
       },
@@ -223,7 +241,11 @@ export async function getMergeConflictDetailWorkbookVersion(
   );
   if (!conflict.ok) return mergeEndpointFailure('getMergeConflictDetail', conflict.diagnostics);
 
-  const selected = selectConflictDetailValue('getMergeConflictDetail', conflict.conflict, normalized.input);
+  const selected = selectConflictDetailValue(
+    'getMergeConflictDetail',
+    conflict.conflict,
+    normalized.input,
+  );
   if (!selected.ok) return mergeEndpointFailure('getMergeConflictDetail', selected.diagnostics);
 
   const value = projectReviewValue(
@@ -267,7 +289,8 @@ export async function putMergeResolutionPayloadWorkbookVersion(
   if (preflight) return preflight;
 
   const normalized = normalizePutMergeResolutionPayloadInput(input);
-  if (!normalized.ok) return mergeEndpointFailure('putMergeResolutionPayload', normalized.diagnostics);
+  if (!normalized.ok)
+    return mergeEndpointFailure('putMergeResolutionPayload', normalized.diagnostics);
 
   const identityDiagnostics = validateMergePreviewIdentity(
     'putMergeResolutionPayload',
@@ -399,7 +422,9 @@ function mergeEndpointPreflight<T>(
   ]);
 }
 
-function capabilityForOperation(operation: VersionMergePublicOperation): VersionMergePublicCapability {
+function capabilityForOperation(
+  operation: VersionMergePublicOperation,
+): VersionMergePublicCapability {
   switch (operation) {
     case 'merge':
     case 'getMergeConflictDetail':

@@ -39,6 +39,7 @@ import {
   mapPublicObjectDigest,
   mapPublicTargetRef,
 } from './version-attempt-metadata';
+import { normalizeVersionApplyMergeResolutions } from './version-merge-resolution-normalization';
 
 const VERSION_APPLY_MERGE_PERSISTED_INPUT_KEYS = new Set([
   'resultId',
@@ -94,13 +95,15 @@ export type NormalizedPersistedApplyMergeInput = {
   readonly resolutions: readonly VersionApplyMergeResolution[];
 };
 
-export type NormalizedPersistedApplyMergeOptions = {
-  readonly mode: 'preview';
-} | {
-  readonly mode: 'apply';
-  readonly targetRef: VersionMainRefName | VersionRefName;
-  readonly expectedTargetHead: VersionCommitExpectedHead;
-};
+export type NormalizedPersistedApplyMergeOptions =
+  | {
+      readonly mode: 'preview';
+    }
+  | {
+      readonly mode: 'apply';
+      readonly targetRef: VersionMainRefName | VersionRefName;
+      readonly expectedTargetHead: VersionCommitExpectedHead;
+    };
 
 export async function applyPersistedMergeResult(
   ctx: DocumentContext,
@@ -205,7 +208,10 @@ function normalizePersistedApplyMergeInput(
   const resultDigest = mapPublicObjectDigest(input.resultDigest);
   if (!resultDigest) {
     diagnostics.push(
-      invalidApplyMergeOptionDiagnostic('resultDigest', 'resultDigest is required and must be valid.'),
+      invalidApplyMergeOptionDiagnostic(
+        'resultDigest',
+        'resultDigest is required and must be valid.',
+      ),
     );
   }
 
@@ -215,7 +221,10 @@ function normalizePersistedApplyMergeInput(
       : mapPublicObjectDigest(input.previewArtifactDigest);
   if (input.previewArtifactDigest !== undefined && !previewArtifactDigest) {
     diagnostics.push(
-      invalidApplyMergeOptionDiagnostic('previewArtifactDigest', 'previewArtifactDigest is invalid.'),
+      invalidApplyMergeOptionDiagnostic(
+        'previewArtifactDigest',
+        'previewArtifactDigest is invalid.',
+      ),
     );
   }
 
@@ -235,7 +244,10 @@ function normalizePersistedApplyMergeInput(
       : mapPublicObjectDigest(input.resolvedAttemptDigest);
   if (input.resolvedAttemptDigest !== undefined && !resolvedAttemptDigest) {
     diagnostics.push(
-      invalidApplyMergeOptionDiagnostic('resolvedAttemptDigest', 'resolvedAttemptDigest is invalid.'),
+      invalidApplyMergeOptionDiagnostic(
+        'resolvedAttemptDigest',
+        'resolvedAttemptDigest is invalid.',
+      ),
     );
   }
 
@@ -278,7 +290,10 @@ function normalizePersistedApplyMergeOptions(
   }
   if (input.includeDiagnostics !== undefined && typeof input.includeDiagnostics !== 'boolean') {
     diagnostics.push(
-      invalidApplyMergeOptionDiagnostic('includeDiagnostics', 'includeDiagnostics must be a boolean.'),
+      invalidApplyMergeOptionDiagnostic(
+        'includeDiagnostics',
+        'includeDiagnostics must be a boolean.',
+      ),
     );
   }
 
@@ -320,19 +335,13 @@ function normalizePersistedResolutions(
   value: unknown,
   diagnostics: VersionStoreDiagnostic[],
 ): readonly VersionApplyMergeResolution[] | null {
-  if (value === undefined) return [];
-  if (!Array.isArray(value)) {
-    diagnostics.push(
-      invalidApplyMergeOptionDiagnostic('resolutions', 'resolutions must be an array when supplied.'),
-    );
-    return null;
-  }
-  return value as readonly VersionApplyMergeResolution[];
+  return normalizeVersionApplyMergeResolutions(value, diagnostics, {
+    allowUndefined: true,
+    invalidDiagnostic: invalidApplyMergeOptionDiagnostic,
+  });
 }
 
-async function openPersistedMergeIntentStore(
-  ctx: DocumentContext,
-): Promise<
+async function openPersistedMergeIntentStore(ctx: DocumentContext): Promise<
   | {
       readonly ok: true;
       readonly provider: VersionStoreProvider & MergeApplyIntentStoreProvider;
@@ -377,10 +386,15 @@ function validatePersistedIntentRecord(
   const diagnostics: VersionStoreDiagnostic[] = [];
   if (!digestsEqual(record.resultDigest, input.resultDigest)) {
     diagnostics.push(
-      resolutionMismatchDiagnostic('persisted merge resultDigest does not match the stored attempt.'),
+      resolutionMismatchDiagnostic(
+        'persisted merge resultDigest does not match the stored attempt.',
+      ),
     );
   }
-  if (input.resolutionSetDigest && !digestsEqual(record.resolutionSetDigest, input.resolutionSetDigest)) {
+  if (
+    input.resolutionSetDigest &&
+    !digestsEqual(record.resolutionSetDigest, input.resolutionSetDigest)
+  ) {
     diagnostics.push(
       resolutionMismatchDiagnostic(
         'persisted merge resolutionSetDigest does not match the stored attempt.',
@@ -492,7 +506,9 @@ async function applyPersistedFastForwardIntent(
     }
     return fastForwardedPersistedResult(completed.record, resultId, commitRef);
   } catch {
-    return blockedApplyMergeResult(record.base, record.ours, record.theirs, [providerErrorDiagnostic()]);
+    return blockedApplyMergeResult(record.base, record.ours, record.theirs, [
+      providerErrorDiagnostic(),
+    ]);
   }
 }
 
@@ -532,12 +548,7 @@ async function completeFastForwardIntentIfAlreadyApplied(
     );
   }
 
-  const completed = await completeFastForwardIntent(
-    store,
-    record,
-    record.theirs,
-    proofRead.proof,
-  );
+  const completed = await completeFastForwardIntent(store, record, record.theirs, proofRead.proof);
   if (completed.status !== 'completed') {
     return blockedApplyMergeResult(
       record.base,
@@ -679,7 +690,10 @@ async function readCurrentTargetHead(
     if (registry.status !== 'ok') {
       return { ok: false, diagnostics: mapProviderDiagnostics(registry.diagnostics) };
     }
-    const graph = await provider.openGraph(namespaceForRegistry(registry.registry), provider.accessContext);
+    const graph = await provider.openGraph(
+      namespaceForRegistry(registry.registry),
+      provider.accessContext,
+    );
     const read = await graph.readRef(record.targetRef);
     if (read.status !== 'success' || !('commitId' in read.ref)) {
       return {
@@ -773,7 +787,10 @@ function persistedPlan(record: MergeApplyIntentRecord) {
   };
 }
 
-function commitRefForIntent(record: MergeApplyIntentRecord, commitId: WorkbookCommitId): WorkbookCommitRef {
+function commitRefForIntent(
+  record: MergeApplyIntentRecord,
+  commitId: WorkbookCommitId,
+): WorkbookCommitRef {
   return {
     id: commitId,
     refName: record.targetRef,
@@ -805,7 +822,9 @@ function getAttachedVersionServices(ctx: DocumentContext): AttachedVersionServic
   return isRecord(services) ? (services as AttachedVersionServices) : null;
 }
 
-function getAttachedVersionApplyMergeService(ctx: DocumentContext): AttachedVersionApplyMergeService | null {
+function getAttachedVersionApplyMergeService(
+  ctx: DocumentContext,
+): AttachedVersionApplyMergeService | null {
   const services = getAttachedVersionServices(ctx);
   if (!services) return null;
   for (const candidate of [
@@ -843,7 +862,12 @@ function getAttachedMergeApplyIntentStoreProvider(
 ): (VersionStoreProvider & MergeApplyIntentStoreProvider) | null {
   const services = getAttachedVersionServices(ctx);
   if (!services) return null;
-  for (const candidate of [services.provider, services.versionStoreProvider, services.storeProvider, services]) {
+  for (const candidate of [
+    services.provider,
+    services.versionStoreProvider,
+    services.storeProvider,
+    services,
+  ]) {
     if (hasMergeApplyIntentStoreProvider(candidate) && hasVersionStoreProviderReads(candidate)) {
       return candidate as VersionStoreProvider & MergeApplyIntentStoreProvider;
     }
@@ -866,7 +890,9 @@ function intentStoreDiagnostics(
   );
 }
 
-function mapProviderDiagnostics(diagnostics: readonly unknown[]): readonly VersionStoreDiagnostic[] {
+function mapProviderDiagnostics(
+  diagnostics: readonly unknown[],
+): readonly VersionStoreDiagnostic[] {
   if (!Array.isArray(diagnostics) || diagnostics.length === 0) return [providerErrorDiagnostic()];
   return diagnostics.map((diagnostic) => {
     if (!isRecord(diagnostic)) return providerErrorDiagnostic();

@@ -1,8 +1,4 @@
-import type {
-  JsonValue,
-  ObjectDigest,
-  VersionStoreDiagnostic,
-} from '@mog-sdk/contracts/api';
+import type { JsonValue, ObjectDigest, VersionStoreDiagnostic } from '@mog-sdk/contracts/api';
 
 import type { DocumentContext } from '../../context';
 import {
@@ -12,14 +8,19 @@ import {
   type MergePreviewArtifactPayload,
 } from '../../document/version-store/merge-attempt-artifacts';
 import type { ObjectDigest as InternalObjectDigest } from '../../document/version-store/object-digest';
-import { VersionObjectStoreError, createVersionObjectRecord, type VersionGraphNamespace, type VersionObjectRecord } from '../../document/version-store/object-store';
+import {
+  VersionObjectStoreError,
+  createVersionObjectRecord,
+  type VersionGraphNamespace,
+  type VersionObjectRecord,
+} from '../../document/version-store/object-store';
 import type { VersionStoreProvider } from '../../document/version-store/provider';
 import type { VersionGraphStore } from '../../document/version-store/provider-graph-store';
 import { namespaceForRegistry } from '../../document/version-store/registry';
 import type { VersionMergePublicOperation } from './version-merge-capability';
 
 const SHA256_HEX_RE = /^[0-9a-f]{64}$/;
-const REVIEW_EXTENSION_OBJECT_TYPE = 'workbook.reviewExtension.v1' as const;
+export const REVIEW_EXTENSION_OBJECT_TYPE = 'workbook.reviewExtension.v1' as const;
 
 type AttachedVersionServices = {
   readonly provider?: unknown;

@@ -34,13 +34,14 @@ const EXPORT_NAMES = new Set(['toCSV', 'toJSON']);
 const READ_NAMES = new Set(['autoFillPreview']);
 const WRITE_NAMES = new Set(['getOrCreateSheet']);
 const VERSION_CAPABILITY_BY_METHOD = {
-  getStatus: 'version:read',
-  getSurfaceStatus: 'version:read',
+  getStatus: null,
+  getSurfaceStatus: null,
   getHead: 'version:read',
   listCommits: 'version:read',
   readRef: 'version:read',
   getRef: 'version:read',
   listRefs: 'version:read',
+  promotePendingRemote: 'version:commit',
   diff: 'version:diff',
   commit: 'version:commit',
   checkout: 'version:checkout',
@@ -92,10 +93,11 @@ function classify(interfaceName, methodName) {
     return { decision: 'allow', capability: 'workbook:policy-admin' };
   }
   if (interfaceName === 'WorkbookVersion') {
-    const capability = VERSION_CAPABILITY_BY_METHOD[methodName];
-    if (!capability) {
+    if (!Object.hasOwn(VERSION_CAPABILITY_BY_METHOD, methodName)) {
       throw new Error(`WorkbookVersion.${methodName} is missing an explicit version capability`);
     }
+    const capability = VERSION_CAPABILITY_BY_METHOD[methodName];
+    if (capability === null) return { decision: 'allow' };
     return { decision: 'allow', capability };
   }
   if (ROUTE_EXPORT.has(methodName) || EXPORT_NAMES.has(methodName)) {
@@ -205,6 +207,14 @@ function assertVersionCapabilityMatrix() {
     const entry = versionMatrix[methodName];
     if (!entry) {
       throw new Error(`workbook facade capability matrix is missing WorkbookVersion.${methodName}`);
+    }
+    if (capability === null) {
+      if (entry.capability !== undefined) {
+        throw new Error(
+          `WorkbookVersion.${methodName} must be capability-free, got ${entry.capability}`,
+        );
+      }
+      continue;
     }
     if (entry.capability !== capability) {
       throw new Error(

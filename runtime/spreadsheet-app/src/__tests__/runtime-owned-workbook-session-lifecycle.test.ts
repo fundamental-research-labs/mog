@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import { createSpreadsheetRuntime } from '../runtime';
 import type {
+  SpreadsheetCapability,
   SpreadsheetRuntime,
   SpreadsheetRuntimeOptions,
   SpreadsheetSaveRequest,
@@ -40,6 +41,37 @@ function runtimeOptions(runtimeId: string): SpreadsheetRuntimeOptions {
         },
         authorize() {
           return { decision: 'allowed', policyVersion: 'runtime-test' };
+        },
+      },
+    },
+    onSaveRequest: savedResult,
+  };
+}
+
+function runtimeOptionsWithDeniedCapabilities(
+  runtimeId: string,
+  deniedCapabilities: ReadonlySet<SpreadsheetCapability>,
+): SpreadsheetRuntimeOptions {
+  return {
+    runtimeId,
+    host: {
+      persistenceMode: 'host-owned-ephemeral',
+      authority: {
+        resolveActor(ref) {
+          return {
+            actorId: ref.actorId,
+            kind: ref.kind ?? 'host',
+            displayName: ref.displayName,
+          };
+        },
+        authorize(_actor, capability) {
+          return deniedCapabilities.has(capability)
+            ? {
+                decision: 'denied',
+                policyVersion: 'runtime-test',
+                reason: `denied ${capability}`,
+              }
+            : { decision: 'allowed', policyVersion: 'runtime-test' };
         },
       },
     },
@@ -240,6 +272,53 @@ test('read-only inspection, screenshot, and dependency reads do not dirty a clea
 
     assert.deepEqual(dirtyStates, []);
     unsubscribeDirty();
+  } finally {
+    await disposeRuntime(runtime);
+  }
+});
+
+test('version status facade methods remain available without version read grant', async () => {
+  let runtime: SpreadsheetRuntime | undefined;
+  try {
+    const deniedVersionCapabilities = new Set<SpreadsheetCapability>([
+      'version:read',
+      'version:diff',
+      'version:commit',
+      'version:branch',
+      'version:checkout',
+      'version:reviewRead',
+      'version:reviewWrite',
+      'version:proposal',
+      'version:mergePreview',
+      'version:mergeApply',
+      'version:revert',
+      'version:provenance',
+    ]);
+    runtime = await createSpreadsheetRuntime(
+      runtimeOptionsWithDeniedCapabilities(
+        'runtime-version-status-capability-free',
+        deniedVersionCapabilities,
+      ),
+    );
+    await runtime.ready;
+
+    const workbook = await runtime.openWorkbook({
+      workbookId: 'runtime-version-status-capability-free-workbook',
+      source: { kind: 'blank' },
+    });
+    await workbook.ready;
+    const actor = await workbook.resolveActor({ actorId: 'reader', kind: 'user' });
+    const facade = actor.getWorkbook();
+
+    assert.equal((await facade.version.getStatus()).schemaVersion, 1);
+    const surface = await facade.version.getSurfaceStatus();
+    assert.equal(surface.schemaVersion, 1);
+    assert.equal(surface.capabilities['version:read'].enabled, false);
+
+    assert.throws(
+      () => void facade.version.getHead(),
+      /Capability "version:read" is denied for WorkbookVersion\.getHead/,
+    );
   } finally {
     await disposeRuntime(runtime);
   }

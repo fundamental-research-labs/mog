@@ -36,6 +36,7 @@ type VersionResultOperation =
   | 'checkout'
   | 'diff'
   | 'merge'
+  | 'promotePendingRemote'
   | 'getMergeConflictDetail'
   | 'putMergeResolutionPayload'
   | 'saveMergeResolutions'

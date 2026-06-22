@@ -8,7 +8,7 @@ import type {
   VersionDeleteRefOptions, VersionDiffOptions, VersionDiagnosticPublicPayload,
   VersionFastForwardBranchOptions, VersionGetHeadOptions, VersionGetMergeConflictDetailRequest,
   VersionListCommitsOptions, VersionListRefsOptions, VersionMainRefName, VersionMergeInput, VersionMergeOptions,
-  VersionMergeConflictDetailResult, VersionMergeResult, VersionPutMergeResolutionPayloadRequest,
+  VersionMergeConflictDetailResult, VersionMergeResult, VersionPromotePendingRemoteOptions, VersionPromotePendingRemoteResult, VersionPutMergeResolutionPayloadRequest,
   VersionPutMergeResolutionPayloadResult, VersionRecordRevision, VersionRef, VersionRefListResult,
   VersionRefMutationResult, VersionRefName, VersionRefReadResult, VersionRefSelector,
   VersionResult, VersionSaveMergeResolutionsRequest, VersionSaveMergeResolutionsResult,
@@ -28,6 +28,7 @@ import { commitWorkbookVersion, hasAttachedVersionWriteService } from './version
 import { diffWorkbookVersion } from './version-diff';
 import { hasAttachedVersionMergeService, mergeWorkbookVersion } from './version-merge';
 import { getMergeConflictDetailWorkbookVersion, putMergeResolutionPayloadWorkbookVersion, saveMergeResolutionsWorkbookVersion } from './version-merge-review-endpoints';
+import { promotePendingRemoteWorkbookVersion } from './version-pending-remote';
 import { versionResultFromApplyMerge, versionResultFromCheckout, versionResultFromCommitPage, versionResultFromDiffPage, versionResultFromHead, versionResultFromMerge, versionResultFromRefList, versionResultFromRefMutation, versionResultFromRefRead } from './version-result';
 import { getWorkbookVersionSurfaceStatus } from './version-surface-status';
 import { createWorkbookVersionBranch, deleteWorkbookVersionBranch, deleteWorkbookVersionRef, fastForwardWorkbookVersionBranch, getWorkbookVersionRef, hasAttachedVersionRefLifecycleService, listWorkbookVersionRefs, readWorkbookVersionRef, updateWorkbookVersionBranch } from './version-refs';
@@ -338,6 +339,7 @@ export class WorkbookVersionImpl implements WorkbookVersion {
   async applyMerge(input: VersionApplyMergeInput, options: VersionApplyMergeOptions = {}): Promise<VersionResult<VersionApplyMergeResult>> {
     return versionResultFromApplyMerge(await applyMergeWorkbookVersion(this.ctx, input, options));
   }
+  async promotePendingRemote(options: VersionPromotePendingRemoteOptions = {}): Promise<VersionResult<VersionPromotePendingRemoteResult>> { return promotePendingRemoteWorkbookVersion(this.ctx, options); }
   async saveMergeResolutions(input: VersionSaveMergeResolutionsRequest): Promise<VersionResult<VersionSaveMergeResolutionsResult>> { return saveMergeResolutionsWorkbookVersion(this.ctx, input); }
   async getMergeConflictDetail(input: VersionGetMergeConflictDetailRequest): Promise<VersionResult<VersionMergeConflictDetailResult>> { return getMergeConflictDetailWorkbookVersion(this.ctx, input); }
   async putMergeResolutionPayload(input: VersionPutMergeResolutionPayloadRequest): Promise<VersionResult<VersionPutMergeResolutionPayloadResult>> { return putMergeResolutionPayloadWorkbookVersion(this.ctx, input); }
@@ -990,11 +992,9 @@ function legacyBranchNameToRefName(
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
   return typeof value === 'object' && value !== null;
 }
-
 function isPayloadPrimitive(value: unknown): value is string | number | boolean | null {
   return value === null || ['string', 'number', 'boolean'].includes(typeof value);
 }
-
 function formatPrimitiveForPayload(value: unknown): string | number | boolean | null {
   return isPayloadPrimitive(value) ? value : String(value);
 }

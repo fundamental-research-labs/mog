@@ -1,11 +1,10 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use snapshot_types::versioning::{
-    ObjectDigest, SemanticChange, SemanticChangeKind, SemanticCompletenessDiagnostic,
-    SemanticDiagnosticSeverity, SemanticDomainCoverage, SemanticDomainCoverageStatus,
-    SemanticObjectDigest, SemanticObjectKind, SemanticWorkbookDiff, SemanticWorkbookState,
-    VersionDomainCapabilityState, VersionDomainClass, canonical_digest,
-    semantic_workbook_state_digest,
+    canonical_digest, semantic_workbook_state_digest, ObjectDigest, SemanticChange,
+    SemanticChangeKind, SemanticCompletenessDiagnostic, SemanticDiagnosticSeverity,
+    SemanticDomainCoverage, SemanticDomainCoverageStatus, SemanticObjectDigest, SemanticObjectKind,
+    SemanticWorkbookDiff, SemanticWorkbookState, VersionDomainCapabilityState, VersionDomainClass,
 };
 
 mod semantic_reader;
@@ -20,7 +19,7 @@ pub enum SemanticStateReadError {
 
 pub trait SemanticWorkbookStateReader {
     fn read_semantic_workbook_state(&self)
-    -> Result<SemanticWorkbookState, SemanticStateReadError>;
+        -> Result<SemanticWorkbookState, SemanticStateReadError>;
 }
 
 pub fn diff_semantic_workbook_states(
@@ -224,6 +223,38 @@ fn semantic_objects(
             },
         );
 
+        for (row_id, row) in &sheet.rows {
+            let digest = match &row.digest {
+                Some(digest) => digest.clone(),
+                None => canonical_digest(row)?,
+            };
+            objects.insert(
+                row_id.clone(),
+                SemanticObjectDigest {
+                    object_id: row_id.clone(),
+                    object_kind: SemanticObjectKind::Row,
+                    domain_id: "rows-columns".to_string(),
+                    digest,
+                },
+            );
+        }
+
+        for (column_id, column) in &sheet.columns {
+            let digest = match &column.digest {
+                Some(digest) => digest.clone(),
+                None => canonical_digest(column)?,
+            };
+            objects.insert(
+                column_id.clone(),
+                SemanticObjectDigest {
+                    object_id: column_id.clone(),
+                    object_kind: SemanticObjectKind::Column,
+                    domain_id: "rows-columns".to_string(),
+                    digest,
+                },
+            );
+        }
+
         for (cell_id, cell) in &sheet.cells {
             let digest = match &cell.digest {
                 Some(digest) => digest.clone(),
@@ -289,8 +320,8 @@ mod tests {
 
     use serde_json::Value;
     use snapshot_types::versioning::{
-        CanonicalCellValue, SEMANTIC_WORKBOOK_STATE_SCHEMA_VERSION, SemanticCellState,
-        SemanticDomainState, SemanticSheetState,
+        CanonicalCellValue, SemanticCellState, SemanticDomainState, SemanticSheetState,
+        SEMANTIC_WORKBOOK_STATE_SCHEMA_VERSION,
     };
 
     use super::*;
@@ -322,6 +353,10 @@ mod tests {
         let mut sheet = SemanticSheetState {
             sheet_id: "sheet-1".to_string(),
             name: "Sheet1".to_string(),
+            row_count: 2,
+            column_count: 2,
+            rows: BTreeMap::new(),
+            columns: BTreeMap::new(),
             cells: BTreeMap::new(),
             digest: None,
         };

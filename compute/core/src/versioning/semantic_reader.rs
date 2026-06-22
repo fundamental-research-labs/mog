@@ -4,16 +4,18 @@ use compute_document::hex::{id_to_hex, parse_cell_id};
 use serde_json::{Number, Value};
 use snapshot_types::versioning::{
     canonical_digest, CanonicalCellValue, CanonicalDirectFormat, CanonicalFormula,
-    SemanticCellState, SemanticDomainState, SemanticObjectDigest, SemanticObjectKind,
-    SemanticSheetState, SemanticWorkbookState, VersionDomainCapabilityState, VersionDomainClass,
+    SemanticCellState, SemanticColumnState, SemanticDomainState, SemanticObjectDigest,
+    SemanticObjectKind, SemanticRowState, SemanticSheetState, SemanticWorkbookState,
+    VersionDomainCapabilityState, VersionDomainClass,
 };
 use value_types::CellValue;
 
-use crate::storage::{engine::YrsComputeEngine, properties};
+use crate::storage::{engine::YrsComputeEngine, properties, sheet::dimensions};
 
 use super::{SemanticStateReadError, SemanticWorkbookStateReader};
 
 const AUTHORED_GRID_DOMAIN: &str = "authored-grid";
+const ROWS_COLUMNS_DOMAIN: &str = "rows-columns";
 const UNSUPPORTED_CELL_VALUES_DOMAIN: &str = "unsupported-cell-values";
 
 impl SemanticWorkbookStateReader for YrsComputeEngine {
@@ -37,6 +39,15 @@ pub fn read_engine_semantic_workbook_state(
             objects: BTreeMap::new(),
         },
     );
+    state.domains.insert(
+        ROWS_COLUMNS_DOMAIN.to_string(),
+        SemanticDomainState {
+            domain_id: ROWS_COLUMNS_DOMAIN.to_string(),
+            domain_class: VersionDomainClass::Authored,
+            capability_state: VersionDomainCapabilityState::Supported,
+            objects: BTreeMap::new(),
+        },
+    );
 
     let mut unsupported_values = BTreeMap::new();
     for (sheet_index, sheet_id) in engine.storage().sheet_order().into_iter().enumerate() {
@@ -44,9 +55,17 @@ pub fn read_engine_semantic_workbook_state(
             continue;
         };
         let sheet_key = canonical_sheet_key(sheet_index);
+        let (row_count, column_count) = engine
+            .grid_index(&sheet_id)
+            .map(|grid| (grid.row_count(), grid.col_count()))
+            .unwrap_or((0, 0));
         let mut sheet_state = SemanticSheetState {
             sheet_id: sheet_key.clone(),
             name: sheet.name.clone(),
+            row_count,
+            column_count,
+            rows: canonical_rows(engine, &sheet_id, &sheet_key, row_count),
+            columns: canonical_columns(engine, &sheet_id, &sheet_key, column_count),
             cells: BTreeMap::new(),
             digest: None,
         };
@@ -189,6 +208,120 @@ fn canonical_cell_key(sheet_key: &str, row: u32, column: u32) -> String {
     format!("cell:{sheet_key}:r{row}:c{column}")
 }
 
+fn canonical_row_key(sheet_key: &str, row: u32) -> String {
+    format!("row:{sheet_key}:r{row}")
+}
+
+fn canonical_column_key(sheet_key: &str, column: u32) -> String {
+    format!("column:{sheet_key}:c{column}")
+}
+
+fn canonical_rows(
+    engine: &YrsComputeEngine,
+    sheet_id: &cell_types::SheetId,
+    sheet_key: &str,
+    row_count: u32,
+) -> BTreeMap<String, SemanticRowState> {
+    let mut rows = BTreeMap::new();
+    let grid = engine.grid_index(sheet_id);
+
+    for row in 0..row_count {
+        let explicit_height_points = dimensions::get_row_height_explicit(
+            engine.storage().doc(),
+            engine.storage().sheets(),
+            sheet_id,
+            row,
+            grid,
+        )
+        .map(|height| height.0);
+        let visibility = dimensions::get_row_visibility_ownership(
+            engine.storage().doc(),
+            engine.storage().sheets(),
+            sheet_id,
+            row,
+            grid,
+        );
+        let filter_hidden = !visibility.filter_owner_ids.is_empty();
+
+        if explicit_height_points.is_none()
+            && !visibility.effective_hidden
+            && !visibility.manual
+            && !visibility.structural
+            && !filter_hidden
+            && !visibility.cache_hidden_without_owner
+        {
+            continue;
+        }
+
+        let object_id = canonical_row_key(sheet_key, row);
+        rows.insert(
+            object_id.clone(),
+            SemanticRowState {
+                object_id,
+                sheet_id: sheet_key.to_string(),
+                index: row,
+                ordinal: row,
+                explicit_height_points,
+                effective_hidden: visibility.effective_hidden,
+                manual_hidden: visibility.manual,
+                structural_hidden: visibility.structural,
+                filter_hidden,
+                cache_hidden_without_owner: visibility.cache_hidden_without_owner,
+                digest: None,
+            },
+        );
+    }
+
+    rows
+}
+
+fn canonical_columns(
+    engine: &YrsComputeEngine,
+    sheet_id: &cell_types::SheetId,
+    sheet_key: &str,
+    column_count: u32,
+) -> BTreeMap<String, SemanticColumnState> {
+    let mut columns = BTreeMap::new();
+    let grid = engine.grid_index(sheet_id);
+
+    for column in 0..column_count {
+        let explicit_width_chars = dimensions::get_col_width_explicit(
+            engine.storage().doc(),
+            engine.storage().sheets(),
+            sheet_id,
+            column,
+            grid,
+        )
+        .map(|width| width.0);
+        let hidden = dimensions::is_column_hidden(
+            engine.storage().doc(),
+            engine.storage().sheets(),
+            sheet_id,
+            column,
+        );
+
+        if explicit_width_chars.is_none() && !hidden {
+            continue;
+        }
+
+        let object_id = canonical_column_key(sheet_key, column);
+        columns.insert(
+            object_id.clone(),
+            SemanticColumnState {
+                object_id,
+                sheet_id: sheet_key.to_string(),
+                index: column,
+                ordinal: column,
+                explicit_width_chars,
+                hidden,
+                digest: None,
+            },
+        );
+    }
+
+    columns
+}
+
 fn canonical_direct_format(
     format: domain_types::CellFormat,
 ) -> Result<CanonicalDirectFormat, SemanticStateReadError> {
@@ -320,8 +453,10 @@ fn opaque_direct_format_digest(
 mod tests {
     use cell_types::CellId;
     use domain_types::CellFormat;
+    use formula_types::StructureChange;
     use snapshot_types::versioning::{
-        semantic_workbook_state_digest, SemanticDiagnosticSeverity, SemanticDomainCoverageStatus,
+        semantic_workbook_state_digest, SemanticChangeKind, SemanticDiagnosticSeverity,
+        SemanticDomainCoverageStatus, SemanticObjectKind,
     };
     use snapshot_types::{CellData, SheetSnapshot, WorkbookSnapshot};
     use value_types::{CellValue, FiniteF64};
@@ -391,6 +526,101 @@ mod tests {
                 .and_then(|value| value.canonical_value.as_ref()),
             Some(&serde_json::json!("beta"))
         );
+    }
+
+    #[test]
+    fn engine_semantic_reader_reads_row_column_axis_counts() {
+        let (engine, _) = YrsComputeEngine::from_snapshot(workbook(vec![])).expect("engine");
+
+        let state = engine.read_semantic_workbook_state().expect("state");
+        let sheet = state.sheets.get("sheet#0").expect("sheet");
+
+        assert_eq!(sheet.row_count, 10);
+        assert_eq!(sheet.column_count, 10);
+        assert!(sheet.rows.is_empty());
+        assert!(sheet.columns.is_empty());
+    }
+
+    #[test]
+    fn engine_semantic_reader_reads_axis_dimensions_and_hidden_state() {
+        let (before, _) = YrsComputeEngine::from_snapshot(workbook(vec![])).expect("before");
+        let (mut after, _) = YrsComputeEngine::from_snapshot(workbook(vec![])).expect("after");
+
+        let sheet_id = after.storage().sheet_order()[0];
+        after
+            .set_row_height(&sheet_id, 2, 40.0)
+            .expect("set row height");
+        after.hide_rows(&sheet_id, &[2]).expect("hide row");
+        after
+            .set_col_width_chars(&sheet_id, 3, 12.5)
+            .expect("set column width");
+        after.hide_columns(&sheet_id, &[3]).expect("hide column");
+
+        let before_state = before.read_semantic_workbook_state().expect("before state");
+        let after_state = after.read_semantic_workbook_state().expect("after state");
+        let sheet = after_state.sheets.get("sheet#0").expect("sheet");
+        let row = sheet.rows.get("row:sheet#0:r2").expect("row");
+        let column = sheet.columns.get("column:sheet#0:c3").expect("column");
+
+        assert_eq!(row.index, 2);
+        assert_eq!(row.ordinal, 2);
+        assert!(row.explicit_height_points.expect("height") > 0.0);
+        assert!(row.effective_hidden);
+        assert!(row.manual_hidden);
+        assert!(!row.structural_hidden);
+        assert!(!row.filter_hidden);
+        assert!(!row.cache_hidden_without_owner);
+        assert_eq!(column.index, 3);
+        assert_eq!(column.ordinal, 3);
+        assert_eq!(column.explicit_width_chars, Some(12.5));
+        assert!(column.hidden);
+
+        let diff = diff_semantic_workbook_states(&before_state, &after_state).expect("diff");
+        assert!(diff.changes.iter().any(|change| {
+            change.kind == SemanticChangeKind::Added
+                && change.object_kind == SemanticObjectKind::Row
+                && change.object_id == "row:sheet#0:r2"
+        }));
+        assert!(diff.changes.iter().any(|change| {
+            change.kind == SemanticChangeKind::Added
+                && change.object_kind == SemanticObjectKind::Column
+                && change.object_id == "column:sheet#0:c3"
+        }));
+    }
+
+    #[test]
+    fn engine_semantic_reader_digest_changes_for_row_insert() {
+        let (before, _) = YrsComputeEngine::from_snapshot(workbook(vec![])).expect("before");
+        let (mut after, _) = YrsComputeEngine::from_snapshot(workbook(vec![])).expect("after");
+
+        let sheet_id = after.storage().sheet_order()[0];
+        after
+            .structure_change(
+                &sheet_id,
+                &StructureChange::InsertRows {
+                    at: 1,
+                    count: 2,
+                    new_row_ids: vec![],
+                },
+            )
+            .expect("insert rows");
+
+        let before_state = before.read_semantic_workbook_state().expect("before state");
+        let after_state = after.read_semantic_workbook_state().expect("after state");
+
+        assert_eq!(before_state.sheets["sheet#0"].row_count, 10);
+        assert_eq!(after_state.sheets["sheet#0"].row_count, 12);
+        assert_ne!(
+            semantic_workbook_state_digest(&before_state).expect("before digest"),
+            semantic_workbook_state_digest(&after_state).expect("after digest")
+        );
+
+        let diff = diff_semantic_workbook_states(&before_state, &after_state).expect("diff");
+        assert!(diff.changes.iter().any(|change| {
+            change.kind == SemanticChangeKind::Updated
+                && change.object_kind == SemanticObjectKind::Sheet
+                && change.object_id == "sheet:sheet#0"
+        }));
     }
 
     #[test]

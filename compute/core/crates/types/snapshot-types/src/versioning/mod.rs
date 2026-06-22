@@ -406,6 +406,8 @@ pub struct SemanticCompletenessDiagnostic {
 pub enum SemanticObjectKind {
     Workbook,
     Sheet,
+    Row,
+    Column,
     Cell,
     CellValue,
     CellFormula,
@@ -471,9 +473,47 @@ pub struct SemanticCellState {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct SemanticRowState {
+    pub object_id: String,
+    pub sheet_id: String,
+    pub index: u32,
+    pub ordinal: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub explicit_height_points: Option<f64>,
+    pub effective_hidden: bool,
+    pub manual_hidden: bool,
+    pub structural_hidden: bool,
+    pub filter_hidden: bool,
+    pub cache_hidden_without_owner: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub digest: Option<ObjectDigest>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SemanticColumnState {
+    pub object_id: String,
+    pub sheet_id: String,
+    pub index: u32,
+    pub ordinal: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub explicit_width_chars: Option<f64>,
+    pub hidden: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub digest: Option<ObjectDigest>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SemanticSheetState {
     pub sheet_id: String,
     pub name: String,
+    pub row_count: u32,
+    pub column_count: u32,
+    #[serde(default)]
+    pub rows: BTreeMap<String, SemanticRowState>,
+    #[serde(default)]
+    pub columns: BTreeMap<String, SemanticColumnState>,
     #[serde(default)]
     pub cells: BTreeMap<String, SemanticCellState>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -661,6 +701,10 @@ mod tests {
         let mut sheet = SemanticSheetState {
             sheet_id: "sheet-1".to_string(),
             name: "Sheet1".to_string(),
+            row_count: 2,
+            column_count: 2,
+            rows: BTreeMap::new(),
+            columns: BTreeMap::new(),
             cells: BTreeMap::new(),
             digest: None,
         };

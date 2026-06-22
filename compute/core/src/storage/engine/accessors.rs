@@ -68,4 +68,12 @@ impl YrsComputeEngine {
     {
         f(&mut self.stores, &mut self.mirror, &mut self.mutation)
     }
+
+    #[cfg(test)]
+    pub(crate) fn with_storage_and_mirror_for_test<F, R>(&mut self, f: F) -> R
+    where
+        F: FnOnce(&mut YrsStorage, &mut CellMirror) -> R,
+    {
+        f(&mut self.stores.storage, &mut self.mirror)
+    }
 }

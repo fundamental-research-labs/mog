@@ -3,18 +3,25 @@ use std::collections::BTreeMap;
 use compute_document::hex::{id_to_hex, parse_cell_id};
 use serde_json::{Number, Value};
 use snapshot_types::versioning::{
-    canonical_digest, CanonicalCellValue, CanonicalDirectFormat, CanonicalFormula,
-    SemanticCellState, SemanticColumnState, SemanticDomainState, SemanticObjectDigest,
-    SemanticObjectKind, SemanticRowState, SemanticSheetState, SemanticWorkbookState,
-    VersionDomainCapabilityState, VersionDomainClass,
+    canonical_digest, CanonicalCellValue, CanonicalDirectFormat, SemanticCellState,
+    SemanticColumnState, SemanticDomainState, SemanticObjectDigest, SemanticObjectKind,
+    SemanticRowState, SemanticSheetState, SemanticWorkbookState, VersionDomainCapabilityState,
+    VersionDomainClass,
 };
 use value_types::CellValue;
 
 use crate::storage::{engine::YrsComputeEngine, properties, sheet::dimensions};
 
+use super::formula_reader::{
+    canonical_formula, record_unrepresented_persisted_formula, UNSUPPORTED_CELL_FORMULAS_DOMAIN,
+};
+use super::semantic_ids::{
+    canonical_cell_key, canonical_column_key, canonical_row_key, canonical_sheet_key,
+};
 use super::{SemanticStateReadError, SemanticWorkbookStateReader};
 
 const AUTHORED_GRID_DOMAIN: &str = "authored-grid";
+const CELL_FORMULAS_DOMAIN: &str = "cells.formulas";
 const ROWS_COLUMNS_DOMAIN: &str = "rows-columns";
 const UNSUPPORTED_CELL_VALUES_DOMAIN: &str = "unsupported-cell-values";
 
@@ -48,9 +55,25 @@ pub fn read_engine_semantic_workbook_state(
             objects: BTreeMap::new(),
         },
     );
+    state.domains.insert(
+        CELL_FORMULAS_DOMAIN.to_string(),
+        SemanticDomainState {
+            domain_id: CELL_FORMULAS_DOMAIN.to_string(),
+            domain_class: VersionDomainClass::Authored,
+            capability_state: VersionDomainCapabilityState::Supported,
+            objects: BTreeMap::new(),
+        },
+    );
 
     let mut unsupported_values = BTreeMap::new();
-    for (sheet_index, sheet_id) in engine.storage().sheet_order().into_iter().enumerate() {
+    let mut unsupported_formulas = BTreeMap::new();
+    let sheet_order = engine.storage().sheet_order();
+    let sheet_keys: Vec<_> = sheet_order
+        .iter()
+        .enumerate()
+        .map(|(sheet_index, sheet_id)| (*sheet_id, canonical_sheet_key(sheet_index)))
+        .collect();
+    for (sheet_index, sheet_id) in sheet_order.into_iter().enumerate() {
         let Some(sheet) = engine.mirror().get_sheet(&sheet_id) else {
             continue;
         };
@@ -82,6 +105,12 @@ pub fn read_engine_semantic_workbook_state(
 
         for (cell_id, entry) in cells {
             let cell_hex = id_to_hex(cell_id.as_u128());
+            let has_persisted_formula = engine
+                .storage()
+                .read_cell_from_yrs(&sheet_id, cell_id)
+                .is_some_and(|(_, legacy_formula, identity_formula)| {
+                    legacy_formula.is_some() || identity_formula.is_some()
+                });
             let direct_format = properties::get_cell_format(
                 engine.storage().doc(),
                 engine.storage().workbook_map(),
@@ -91,7 +120,7 @@ pub fn read_engine_semantic_workbook_state(
             )
             .map(canonical_direct_format)
             .transpose()?;
-            if entry.is_ghost() && direct_format.is_none() {
+            if entry.is_ghost() && direct_format.is_none() && !has_persisted_formula {
                 continue;
             }
             let Some(pos) = sheet.position_for_diagnostics(cell_id) else {
@@ -104,17 +133,30 @@ pub fn read_engine_semantic_workbook_state(
 
             let cell_key = canonical_cell_key(&sheet_key, pos.row(), pos.col());
             let value = canonical_cell_value(&entry.value, &cell_key, &mut unsupported_values)?;
-            let formula = entry.formula.as_deref().map(|formula| CanonicalFormula {
-                normalized_formula: formula.template.clone(),
-                dependency_object_ids: formula
-                    .refs
-                    .iter()
-                    .enumerate()
-                    .map(|(index, _)| format!("{cell_key}:ref:{index}"))
-                    .collect(),
-                volatile: formula.is_volatile,
-                digest: None,
-            });
+            let formula = entry
+                .formula
+                .as_deref()
+                .map(|formula| {
+                    canonical_formula(
+                        engine,
+                        &sheet_keys,
+                        &sheet_id,
+                        &cell_key,
+                        cell_id,
+                        formula,
+                        &mut unsupported_formulas,
+                    )
+                })
+                .transpose()?;
+            if formula.is_none() && has_persisted_formula {
+                record_unrepresented_persisted_formula(
+                    engine,
+                    &sheet_id,
+                    &cell_key,
+                    cell_id,
+                    &mut unsupported_formulas,
+                )?;
+            }
 
             sheet_state.cells.insert(
                 cell_key.clone(),
@@ -196,24 +238,19 @@ pub fn read_engine_semantic_workbook_state(
             },
         );
     }
+    if !unsupported_formulas.is_empty() {
+        state.domains.insert(
+            UNSUPPORTED_CELL_FORMULAS_DOMAIN.to_string(),
+            SemanticDomainState {
+                domain_id: UNSUPPORTED_CELL_FORMULAS_DOMAIN.to_string(),
+                domain_class: VersionDomainClass::Authored,
+                capability_state: VersionDomainCapabilityState::OpaqueBlocking,
+                objects: unsupported_formulas,
+            },
+        );
+    }
 
     Ok(state)
-}
-
-fn canonical_sheet_key(sheet_index: usize) -> String {
-    format!("sheet#{sheet_index}")
-}
-
-fn canonical_cell_key(sheet_key: &str, row: u32, column: u32) -> String {
-    format!("cell:{sheet_key}:r{row}:c{column}")
-}
-
-fn canonical_row_key(sheet_key: &str, row: u32) -> String {
-    format!("row:{sheet_key}:r{row}")
-}
-
-fn canonical_column_key(sheet_key: &str, column: u32) -> String {
-    format!("column:{sheet_key}:c{column}")
 }
 
 fn canonical_rows(
@@ -450,404 +487,4 @@ fn opaque_direct_format_digest(
 }
 
 #[cfg(test)]
-mod tests {
-    use cell_types::CellId;
-    use domain_types::CellFormat;
-    use formula_types::StructureChange;
-    use snapshot_types::versioning::{
-        semantic_workbook_state_digest, SemanticChangeKind, SemanticDiagnosticSeverity,
-        SemanticDomainCoverageStatus, SemanticObjectKind,
-    };
-    use snapshot_types::{CellData, SheetSnapshot, WorkbookSnapshot};
-    use value_types::{CellValue, FiniteF64};
-
-    use crate::storage::engine::YrsComputeEngine;
-    use crate::versioning::{
-        coverage_for_states, diff_semantic_workbook_states, SemanticWorkbookStateReader,
-    };
-
-    fn workbook(cells: Vec<CellData>) -> WorkbookSnapshot {
-        WorkbookSnapshot {
-            sheets: vec![SheetSnapshot {
-                id: "550e8400-e29b-41d4-a716-446655440000".to_string(),
-                name: "Sheet1".to_string(),
-                rows: 10,
-                cols: 10,
-                cells,
-                ranges: vec![],
-            }],
-            named_ranges: vec![],
-            tables: vec![],
-            pivot_tables: vec![],
-            data_table_regions: vec![],
-            iterative_calc: false,
-            max_iterations: 100,
-            max_change: FiniteF64::must(0.001),
-            calculation_settings: None,
-        }
-    }
-
-    fn cell(id_suffix: u32, row: u32, col: u32, value: CellValue) -> CellData {
-        CellData {
-            cell_id: format!("550e8400-e29b-41d4-a716-44665544{id_suffix:04}"),
-            row,
-            col,
-            value,
-            formula: None,
-            identity_formula: None,
-            array_ref: None,
-        }
-    }
-
-    #[test]
-    fn engine_semantic_reader_reads_ordered_authored_cells() {
-        let (engine, _) = YrsComputeEngine::from_snapshot(workbook(vec![
-            cell(2, 1, 1, CellValue::from("beta")),
-            cell(1, 0, 0, CellValue::number(42.0)),
-        ]))
-        .expect("engine");
-
-        let state = engine.read_semantic_workbook_state().expect("state");
-        let sheet = state.sheets.get("sheet#0").expect("sheet");
-        let cell_ids: Vec<_> = sheet.cells.keys().cloned().collect();
-
-        assert_eq!(cell_ids, vec!["cell:sheet#0:r0:c0", "cell:sheet#0:r1:c1"]);
-        assert_eq!(
-            sheet.cells[&cell_ids[0]]
-                .value
-                .as_ref()
-                .and_then(|value| value.canonical_value.as_ref()),
-            Some(&serde_json::json!(42.0))
-        );
-        assert_eq!(
-            sheet.cells[&cell_ids[1]]
-                .value
-                .as_ref()
-                .and_then(|value| value.canonical_value.as_ref()),
-            Some(&serde_json::json!("beta"))
-        );
-    }
-
-    #[test]
-    fn engine_semantic_reader_reads_row_column_axis_counts() {
-        let (engine, _) = YrsComputeEngine::from_snapshot(workbook(vec![])).expect("engine");
-
-        let state = engine.read_semantic_workbook_state().expect("state");
-        let sheet = state.sheets.get("sheet#0").expect("sheet");
-
-        assert_eq!(sheet.row_count, 10);
-        assert_eq!(sheet.column_count, 10);
-        assert!(sheet.rows.is_empty());
-        assert!(sheet.columns.is_empty());
-    }
-
-    #[test]
-    fn engine_semantic_reader_reads_axis_dimensions_and_hidden_state() {
-        let (before, _) = YrsComputeEngine::from_snapshot(workbook(vec![])).expect("before");
-        let (mut after, _) = YrsComputeEngine::from_snapshot(workbook(vec![])).expect("after");
-
-        let sheet_id = after.storage().sheet_order()[0];
-        after
-            .set_row_height(&sheet_id, 2, 40.0)
-            .expect("set row height");
-        after.hide_rows(&sheet_id, &[2]).expect("hide row");
-        after
-            .set_col_width_chars(&sheet_id, 3, 12.5)
-            .expect("set column width");
-        after.hide_columns(&sheet_id, &[3]).expect("hide column");
-
-        let before_state = before.read_semantic_workbook_state().expect("before state");
-        let after_state = after.read_semantic_workbook_state().expect("after state");
-        let sheet = after_state.sheets.get("sheet#0").expect("sheet");
-        let row = sheet.rows.get("row:sheet#0:r2").expect("row");
-        let column = sheet.columns.get("column:sheet#0:c3").expect("column");
-
-        assert_eq!(row.index, 2);
-        assert_eq!(row.ordinal, 2);
-        assert!(row.explicit_height_points.expect("height") > 0.0);
-        assert!(row.effective_hidden);
-        assert!(row.manual_hidden);
-        assert!(!row.structural_hidden);
-        assert!(!row.filter_hidden);
-        assert!(!row.cache_hidden_without_owner);
-        assert_eq!(column.index, 3);
-        assert_eq!(column.ordinal, 3);
-        assert_eq!(column.explicit_width_chars, Some(12.5));
-        assert!(column.hidden);
-
-        let diff = diff_semantic_workbook_states(&before_state, &after_state).expect("diff");
-        assert!(diff.changes.iter().any(|change| {
-            change.kind == SemanticChangeKind::Added
-                && change.object_kind == SemanticObjectKind::Row
-                && change.object_id == "row:sheet#0:r2"
-        }));
-        assert!(diff.changes.iter().any(|change| {
-            change.kind == SemanticChangeKind::Added
-                && change.object_kind == SemanticObjectKind::Column
-                && change.object_id == "column:sheet#0:c3"
-        }));
-    }
-
-    #[test]
-    fn engine_semantic_reader_digest_changes_for_row_insert() {
-        let (before, _) = YrsComputeEngine::from_snapshot(workbook(vec![])).expect("before");
-        let (mut after, _) = YrsComputeEngine::from_snapshot(workbook(vec![])).expect("after");
-
-        let sheet_id = after.storage().sheet_order()[0];
-        after
-            .structure_change(
-                &sheet_id,
-                &StructureChange::InsertRows {
-                    at: 1,
-                    count: 2,
-                    new_row_ids: vec![],
-                },
-            )
-            .expect("insert rows");
-
-        let before_state = before.read_semantic_workbook_state().expect("before state");
-        let after_state = after.read_semantic_workbook_state().expect("after state");
-
-        assert_eq!(before_state.sheets["sheet#0"].row_count, 10);
-        assert_eq!(after_state.sheets["sheet#0"].row_count, 12);
-        assert_ne!(
-            semantic_workbook_state_digest(&before_state).expect("before digest"),
-            semantic_workbook_state_digest(&after_state).expect("after digest")
-        );
-
-        let diff = diff_semantic_workbook_states(&before_state, &after_state).expect("diff");
-        assert!(diff.changes.iter().any(|change| {
-            change.kind == SemanticChangeKind::Updated
-                && change.object_kind == SemanticObjectKind::Sheet
-                && change.object_id == "sheet:sheet#0"
-        }));
-    }
-
-    #[test]
-    fn engine_semantic_reader_digest_changes_for_authored_cell_edit() {
-        let (before, _) = YrsComputeEngine::from_snapshot(workbook(vec![cell(
-            1,
-            0,
-            0,
-            CellValue::from("alpha"),
-        )]))
-        .expect("before");
-        let (after, _) =
-            YrsComputeEngine::from_snapshot(workbook(vec![cell(1, 0, 0, CellValue::from("beta"))]))
-                .expect("after");
-        let before_state = before.read_semantic_workbook_state().expect("before state");
-        let after_state = after.read_semantic_workbook_state().expect("after state");
-
-        assert_ne!(
-            semantic_workbook_state_digest(&before_state).expect("before digest"),
-            semantic_workbook_state_digest(&after_state).expect("after digest")
-        );
-        let diff = diff_semantic_workbook_states(&before_state, &after_state).expect("diff");
-        assert!(diff.changes.iter().any(|change| {
-            change.kind == snapshot_types::versioning::SemanticChangeKind::Updated
-                && change.object_kind == snapshot_types::versioning::SemanticObjectKind::Cell
-        }));
-    }
-
-    #[test]
-    fn engine_semantic_reader_reads_direct_cell_format() {
-        let (before, _) = YrsComputeEngine::from_snapshot(workbook(vec![cell(
-            1,
-            0,
-            0,
-            CellValue::from("alpha"),
-        )]))
-        .expect("before");
-        let (mut after, _) = YrsComputeEngine::from_snapshot(workbook(vec![cell(
-            1,
-            0,
-            0,
-            CellValue::from("alpha"),
-        )]))
-        .expect("after");
-
-        let sheet_id = after.storage().sheet_order()[0];
-        let cell_id =
-            CellId::from_uuid_str("550e8400-e29b-41d4-a716-446655440001").expect("cell id");
-        after
-            .set_cell_format(
-                &sheet_id,
-                &cell_id,
-                &CellFormat {
-                    bold: Some(true),
-                    ..Default::default()
-                },
-            )
-            .expect("set direct format");
-
-        let before_state = before.read_semantic_workbook_state().expect("before state");
-        let after_state = after.read_semantic_workbook_state().expect("after state");
-        let cell_key = "cell:sheet#0:r0:c0";
-        assert!(before_state.sheets["sheet#0"].cells[cell_key]
-            .direct_format
-            .is_none());
-        let direct_format = after_state.sheets["sheet#0"].cells[cell_key]
-            .direct_format
-            .as_ref()
-            .expect("direct format");
-
-        assert_eq!(
-            direct_format.properties.get("bold"),
-            Some(&serde_json::json!(true))
-        );
-        assert_ne!(
-            semantic_workbook_state_digest(&before_state).expect("before digest"),
-            semantic_workbook_state_digest(&after_state).expect("after digest")
-        );
-        let diff = diff_semantic_workbook_states(&before_state, &after_state).expect("diff");
-        assert!(diff.changes.iter().any(|change| {
-            change.kind == snapshot_types::versioning::SemanticChangeKind::Updated
-                && change.object_kind == snapshot_types::versioning::SemanticObjectKind::Cell
-                && change.object_id == cell_key
-        }));
-    }
-
-    #[test]
-    fn engine_semantic_reader_reads_format_only_cell() {
-        let (before, _) = YrsComputeEngine::from_snapshot(workbook(vec![])).expect("before");
-        let (mut after, _) = YrsComputeEngine::from_snapshot(workbook(vec![])).expect("after");
-
-        let sheet_id = after.storage().sheet_order()[0];
-        after
-            .set_format_for_ranges(
-                &sheet_id,
-                &[(1, 1, 1, 1)],
-                &CellFormat {
-                    italic: Some(true),
-                    font_color: Some("#FF0000".to_string()),
-                    ..Default::default()
-                },
-            )
-            .expect("set direct format on blank cell");
-
-        let before_state = before.read_semantic_workbook_state().expect("before state");
-        let after_state = after.read_semantic_workbook_state().expect("after state");
-        let cell_key = "cell:sheet#0:r1:c1";
-
-        assert!(!before_state.sheets["sheet#0"].cells.contains_key(cell_key));
-        let cell_state = after_state.sheets["sheet#0"]
-            .cells
-            .get(cell_key)
-            .expect("format-only cell state");
-        assert!(cell_state.value.is_none());
-        assert!(cell_state.formula.is_none());
-        let direct_format = cell_state.direct_format.as_ref().expect("direct format");
-        assert_eq!(
-            direct_format.properties.get("fontColor"),
-            Some(&serde_json::json!("#FF0000"))
-        );
-        assert_eq!(
-            direct_format.properties.get("italic"),
-            Some(&serde_json::json!(true))
-        );
-        assert_ne!(
-            semantic_workbook_state_digest(&before_state).expect("before digest"),
-            semantic_workbook_state_digest(&after_state).expect("after digest")
-        );
-        let diff = diff_semantic_workbook_states(&before_state, &after_state).expect("diff");
-        assert!(diff.changes.iter().any(|change| {
-            change.kind == snapshot_types::versioning::SemanticChangeKind::Added
-                && change.object_kind == snapshot_types::versioning::SemanticObjectKind::Cell
-                && change.object_id == cell_key
-        }));
-    }
-
-    #[test]
-    fn engine_semantic_reader_digest_ignores_durable_id_allocation() {
-        let (left, _) = YrsComputeEngine::from_snapshot(workbook(vec![
-            cell(1, 0, 0, CellValue::from("alpha")),
-            cell(2, 2, 1, CellValue::number(7.0)),
-        ]))
-        .expect("left");
-        let (right, _) = YrsComputeEngine::from_snapshot(WorkbookSnapshot {
-            sheets: vec![SheetSnapshot {
-                id: "660e8400-e29b-41d4-a716-446655440000".to_string(),
-                name: "Sheet1".to_string(),
-                rows: 10,
-                cols: 10,
-                cells: vec![
-                    CellData {
-                        cell_id: "660e8400-e29b-41d4-a716-446655440101".to_string(),
-                        row: 0,
-                        col: 0,
-                        value: CellValue::from("alpha"),
-                        formula: None,
-                        identity_formula: None,
-                        array_ref: None,
-                    },
-                    CellData {
-                        cell_id: "660e8400-e29b-41d4-a716-446655440102".to_string(),
-                        row: 2,
-                        col: 1,
-                        value: CellValue::number(7.0),
-                        formula: None,
-                        identity_formula: None,
-                        array_ref: None,
-                    },
-                ],
-                ranges: vec![],
-            }],
-            named_ranges: vec![],
-            tables: vec![],
-            pivot_tables: vec![],
-            data_table_regions: vec![],
-            iterative_calc: false,
-            max_iterations: 100,
-            max_change: FiniteF64::must(0.001),
-            calculation_settings: None,
-        })
-        .expect("right");
-        let left_state = left.read_semantic_workbook_state().expect("left state");
-        let right_state = right.read_semantic_workbook_state().expect("right state");
-
-        assert_eq!(
-            semantic_workbook_state_digest(&left_state).expect("left digest"),
-            semantic_workbook_state_digest(&right_state).expect("right digest")
-        );
-        assert_eq!(
-            diff_semantic_workbook_states(&left_state, &right_state)
-                .expect("diff")
-                .changes,
-            Vec::new()
-        );
-    }
-
-    #[test]
-    fn engine_semantic_reader_marks_unsupported_arrays_opaque_blocking() {
-        let (engine, _) = YrsComputeEngine::from_snapshot(workbook(vec![cell(
-            1,
-            0,
-            0,
-            CellValue::array(vec![CellValue::number(1.0), CellValue::number(2.0)], 2),
-        )]))
-        .expect("engine");
-        let state = engine.read_semantic_workbook_state().expect("state");
-        let unsupported = state
-            .domains
-            .get(super::UNSUPPORTED_CELL_VALUES_DOMAIN)
-            .expect("unsupported domain");
-
-        assert_eq!(
-            unsupported.capability_state,
-            snapshot_types::versioning::VersionDomainCapabilityState::OpaqueBlocking
-        );
-        let coverage = coverage_for_states(&state, &state);
-        let unsupported_coverage = coverage
-            .iter()
-            .find(|entry| entry.domain_id == super::UNSUPPORTED_CELL_VALUES_DOMAIN)
-            .expect("unsupported coverage");
-        assert_eq!(
-            unsupported_coverage.status,
-            SemanticDomainCoverageStatus::OpaqueBlocking
-        );
-        assert_eq!(
-            unsupported_coverage.diagnostics[0].severity,
-            SemanticDiagnosticSeverity::Error
-        );
-    }
-}
+mod tests;

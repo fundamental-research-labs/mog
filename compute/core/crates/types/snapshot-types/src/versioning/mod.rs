@@ -436,11 +436,97 @@ pub struct CanonicalCellValue {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[serde(tag = "kind")]
+pub enum CanonicalFormulaRef {
+    #[serde(rename_all = "camelCase")]
+    Cell {
+        object_id: String,
+        sheet_id: String,
+        row: u32,
+        column: u32,
+        row_absolute: bool,
+        column_absolute: bool,
+    },
+    #[serde(rename_all = "camelCase")]
+    Range {
+        sheet_id: String,
+        start_object_id: String,
+        end_object_id: String,
+        start_row: u32,
+        start_column: u32,
+        end_row: u32,
+        end_column: u32,
+        start_row_absolute: bool,
+        start_column_absolute: bool,
+        end_row_absolute: bool,
+        end_column_absolute: bool,
+    },
+    #[serde(rename_all = "camelCase")]
+    RectRange {
+        sheet_id: String,
+        start_row_object_id: String,
+        start_column_object_id: String,
+        end_row_object_id: String,
+        end_column_object_id: String,
+        start_row: u32,
+        start_column: u32,
+        end_row: u32,
+        end_column: u32,
+        start_row_absolute: bool,
+        start_column_absolute: bool,
+        end_row_absolute: bool,
+        end_column_absolute: bool,
+    },
+    #[serde(rename_all = "camelCase")]
+    FullRow {
+        object_id: String,
+        sheet_id: String,
+        row: u32,
+        absolute: bool,
+    },
+    #[serde(rename_all = "camelCase")]
+    RowRange {
+        sheet_id: String,
+        start_object_id: String,
+        end_object_id: String,
+        start_row: u32,
+        end_row: u32,
+        start_absolute: bool,
+        end_absolute: bool,
+    },
+    #[serde(rename_all = "camelCase")]
+    FullColumn {
+        object_id: String,
+        sheet_id: String,
+        column: u32,
+        absolute: bool,
+    },
+    #[serde(rename_all = "camelCase")]
+    ColumnRange {
+        sheet_id: String,
+        start_object_id: String,
+        end_object_id: String,
+        start_column: u32,
+        end_column: u32,
+        start_absolute: bool,
+        end_absolute: bool,
+    },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CanonicalFormula {
     pub normalized_formula: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub dependency_object_ids: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub refs: Vec<CanonicalFormulaRef>,
+    #[serde(default)]
+    pub dynamic_array: bool,
+    #[serde(default)]
     pub volatile: bool,
+    #[serde(default)]
+    pub aggregate: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub digest: Option<ObjectDigest>,
 }
@@ -772,5 +858,20 @@ mod tests {
         assert!(!json.contains("expected-failing"));
         assert!(json.contains("opaque-preserved"));
         assert!(json.contains("opaque-blocking"));
+    }
+
+    #[test]
+    fn versioning_canonical_formula_deserializes_pre_ref_shape() {
+        let formula: CanonicalFormula =
+            serde_json::from_value(serde_json::json!({ "normalizedFormula": "1+1" }))
+                .expect("legacy formula shape");
+
+        assert_eq!(formula.normalized_formula, "1+1");
+        assert!(formula.dependency_object_ids.is_empty());
+        assert!(formula.refs.is_empty());
+        assert!(!formula.dynamic_array);
+        assert!(!formula.volatile);
+        assert!(!formula.aggregate);
+        assert!(formula.digest.is_none());
     }
 }

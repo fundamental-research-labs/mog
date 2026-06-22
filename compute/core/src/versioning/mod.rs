@@ -7,6 +7,8 @@ use snapshot_types::versioning::{
     SemanticWorkbookDiff, SemanticWorkbookState, VersionDomainCapabilityState, VersionDomainClass,
 };
 
+mod formula_reader;
+mod semantic_ids;
 mod semantic_reader;
 
 #[derive(Debug, thiserror::Error)]
@@ -269,6 +271,23 @@ fn semantic_objects(
                     digest,
                 },
             );
+
+            if let Some(formula) = &cell.formula {
+                let digest = match &formula.digest {
+                    Some(digest) => digest.clone(),
+                    None => canonical_digest(formula)?,
+                };
+                let object_id = format!("formula:{cell_id}");
+                objects.insert(
+                    object_id.clone(),
+                    SemanticObjectDigest {
+                        object_id,
+                        object_kind: SemanticObjectKind::CellFormula,
+                        domain_id: "cells.formulas".to_string(),
+                        digest,
+                    },
+                );
+            }
         }
     }
 

@@ -11,10 +11,17 @@ export type AttachedVersionProposalService = {
   [Operation in VersionProposalPublicOperation]?: (
     input: ProposalOperationInput<Operation>,
   ) => MaybePromise<unknown>;
+} & {
+  readonly proposalWorkspaceLifecycleAvailable?: boolean;
 };
 
 export function hasAttachedVersionProposalService(ctxOrServices: unknown): boolean {
   return Boolean(getAttachedVersionProposalService(ctxOrServices));
+}
+
+export function hasAttachedVersionProposalWorkflowService(ctxOrServices: unknown): boolean {
+  const service = getAttachedVersionProposalService(ctxOrServices);
+  return Boolean(service && service.proposalWorkspaceLifecycleAvailable !== false);
 }
 
 export function getAttachedVersionProposalService(
@@ -77,6 +84,13 @@ function createProposalService(
 ): AttachedVersionProposalService | null {
   const proposalService: AttachedVersionProposalService = {};
   bindProposalMethods(value, proposalService, getProposalById);
+  const lifecycleAvailable = proposalWorkspaceLifecycleAvailable(value);
+  if (lifecycleAvailable !== undefined) {
+    Object.defineProperty(proposalService, 'proposalWorkspaceLifecycleAvailable', {
+      value: lifecycleAvailable,
+      enumerable: true,
+    });
+  }
   return Object.keys(proposalService).length > 0 ? proposalService : null;
 }
 
@@ -93,6 +107,20 @@ function bindMethod(value: unknown, name: string): BoundMethod | null {
   const method = value[name];
   if (typeof method !== 'function') return null;
   return (...args) => Reflect.apply(method, value, args) as MaybePromise<unknown>;
+}
+
+function proposalWorkspaceLifecycleAvailable(value: unknown): boolean | undefined {
+  if (!isRecord(value)) return undefined;
+  const explicit = value.proposalWorkspaceLifecycleAvailable;
+  if (typeof explicit === 'boolean') return explicit;
+  const lifecycle = value.proposalWorkspaceLifecycleService;
+  if (!isRecord(lifecycle)) return undefined;
+  return (
+    typeof lifecycle.startProposalWorkspace === 'function' &&
+    typeof lifecycle.getProposalWorkspace === 'function' &&
+    typeof lifecycle.disposeProposalWorkspace === 'function' &&
+    typeof lifecycle.commitProposalWorkspace === 'function'
+  );
 }
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {

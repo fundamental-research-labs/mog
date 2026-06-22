@@ -83,13 +83,14 @@ import type { CodeExecutionResult, CodeExecutionOptions } from '@mog/types-comma
 export type { CustomList } from '@mog/types-editor/fill/custom-lists';
 export type { WorkbookId, WorkbookSessionId, DocumentId, LinkId, ActorId } from './types';
 export type { LinkStatus, LinkStatusReason, LinkStatusView } from './receipt-payloads';
+// prettier-ignore
 export type {
   CheckoutVersionResult,
   GetVersionHeadInput,
   JsonValue, ObjectDigest, PageCursor, Paged,
   ListVersionCommitsInput, ListVersionRefsInput,
   RedactionPolicy, RedactionSummary, RedactedVersionAuthor,
-  VerificationSummary, VersionAnnotationText, VersionBranchName,
+  VerificationSummary, VersionAnnotationText, VersionAuthor, VersionBranchName,
   VersionBranchRefReadResult, VersionBranchSelector,
   VersionCheckoutDependencyRole, VersionCheckoutDependencySummary,
   VersionCheckoutMutationGuarantee, VersionCheckoutOptions, VersionCheckoutPlan,
@@ -101,8 +102,7 @@ export type {
   VersionDiagnosticMessageId, VersionDiagnosticPublicPayload,
   VersionFastForwardBranchOptions, VersionGetMergeConflictDetailRequest,
   VersionGetHeadOptions, VersionHead, VersionListCommitsOptions, VersionListRefsOptions,
-  VersionLiveCollaborationState,
-  VersionMainRefName,
+  VersionLiveCollaborationState, VersionMainRefName,
   VersionApplyMergeInput, VersionApplyMergeMutationGuarantee, VersionApplyMergeOptions,
   VersionApplyMergeResolution, VersionApplyMergeResult,
   VersionApplyMergeAttemptMetadata, VersionMergeAttemptKind, VersionMergeAttemptMetadata,
@@ -132,9 +132,7 @@ export type {
   WorkbookCommitAnnotationSummary, WorkbookCommitId, WorkbookCommitRef, WorkbookCommitSummary,
   WorkbookDiffPage, WorkbookVersion,
   WorkbookVersionCapabilityStage, WorkbookVersionCapabilityStatus, WorkbookVersionDependency,
-  WorkbookVersionDiagnostic,
-  WorkbookVersionDiagnosticCode,
-  WorkbookVersionDiagnosticSeverity,
+  WorkbookVersionDiagnostic, WorkbookVersionDiagnosticCode, WorkbookVersionDiagnosticSeverity,
   WorkbookVersionHead, WorkbookVersionHeadStatus, WorkbookVersionRolloutStage, WorkbookVersionStatus,
 } from './workbook/version';
 export type * from './workbook/version-proposal';

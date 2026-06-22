@@ -3,12 +3,12 @@ import type {
   Paged,
   RedactionPolicy,
   RedactionSummary,
+  VersionAuthor,
   VersionDiagnostic,
   VersionResult,
   VerificationSummary,
   WorkbookCommitId,
 } from '@mog-sdk/contracts/api';
-import type { VersionAuthor } from '@mog-sdk/contracts/versioning';
 
 import { objectDigestFor } from './merge-apply-intent-store';
 import {

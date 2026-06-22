@@ -6,8 +6,7 @@ import type {
   AgentProposalStoreRow,
   AgentProposalMutationLogEntry,
 } from './proposal-store';
-import type { RedactionSummary } from '@mog-sdk/contracts/api';
-import type { VersionAuthor } from '@mog-sdk/contracts/versioning';
+import type { RedactionSummary, VersionAuthor } from '@mog-sdk/contracts/api';
 
 const PROPOSAL_ID_RE = /^proposal:sha256:[0-9a-f]{64}$/;
 const AGENT_PROPOSAL_STATUS_VALUES = Object.freeze([

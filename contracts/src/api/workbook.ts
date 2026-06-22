@@ -22,6 +22,7 @@ export type {
   VersionApplyMergeOptions,
   VersionApplyMergeResolution,
   VersionApplyMergeResult,
+  VersionAuthor,
   VersionBranchName,
   VersionBranchRefReadResult,
   VersionBranchSelector,

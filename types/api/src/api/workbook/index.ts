@@ -44,6 +44,7 @@ export type {
   VersionApplyMergeResolution,
   VersionApplyMergeResult,
   VersionAppendReviewDecisionInput,
+  VersionAuthor,
   VersionBranchName,
   VersionBranchRefReadResult,
   VersionBranchSelector,

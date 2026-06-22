@@ -5,6 +5,10 @@ import { createWorkbookVersionCommitService } from '../../document/version-store
 import { createWorkbookVersionDiffService } from '../../document/version-store/diff-service';
 import { createWorkbookVersionMergeService } from '../../document/version-store/merge-service';
 import {
+  createProviderBackedAgentProposalService,
+  hasAgentProposalMetadataStoreProvider,
+} from '../../document/version-store/proposal-provider-service';
+import {
   createProviderBackedWorkbookVersionReviewService,
   hasWorkbookVersionReviewRecordStoreProvider,
 } from '../../document/version-store/review-provider-service';
@@ -100,6 +104,8 @@ export function attachWorkbookVersioning(
     !pendingRemotePromotionService &&
     !providerWriteActivityTracker &&
     !config.reviewService &&
+    !config.proposalService &&
+    !config.proposalWorkspaceService &&
     !config.readLiveCollaborationStatus &&
     Object.keys(domainSupportManifestFields).length === 0
   ) {
@@ -146,6 +152,24 @@ export function attachWorkbookVersioning(
           diffService: createWorkbookVersionReviewDiffService({ provider: config.provider }),
         })
       : undefined);
+  const proposalWorkspaceService =
+    config.proposalWorkspaceService ??
+    existing.proposalWorkspaceLifecycleService ??
+    existing.proposalWorkspaceSessionService;
+  const proposalService =
+    config.proposalService ??
+    existing.proposalService ??
+    existing.versionProposalService ??
+    existing.agentProposalService ??
+    (hasAgentProposalMetadataStoreProvider(config.provider)
+      ? createProviderBackedAgentProposalService({
+          provider: config.provider,
+          ...(branchService ? { branchService } : {}),
+          graphProvider: config.provider,
+          ...(reviewService ? { reviewService } : {}),
+          ...(proposalWorkspaceService ? { workspaceService: proposalWorkspaceService } : {}),
+        })
+      : undefined);
   runtime.versioning = {
     ...existing,
     ...(config.provider ? { provider: config.provider } : {}),
@@ -180,6 +204,16 @@ export function attachWorkbookVersioning(
     ...(mergeService ? { mergeService } : {}),
     ...(branchService ? { branchService } : {}),
     ...(reviewService ? { reviewService, versionReviewService: reviewService } : {}),
+    ...(proposalService
+      ? {
+          proposalService,
+          versionProposalService: proposalService,
+          agentProposalService: proposalService,
+        }
+      : {}),
+    ...(proposalWorkspaceService
+      ? { proposalWorkspaceLifecycleService: proposalWorkspaceService }
+      : {}),
     ...(pendingRemotePromotionService
       ? {
           pendingRemotePromotionService,

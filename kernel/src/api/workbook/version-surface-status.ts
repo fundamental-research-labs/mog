@@ -37,7 +37,7 @@ import {
   hasAttachedVersionReviewWriteService,
 } from './version-review-service-discovery';
 import { hasAttachedPendingRemotePromotionService } from './version-pending-remote';
-import { hasAttachedVersionProposalService } from './version-proposal-service-discovery';
+import * as proposalServiceDiscovery from './version-proposal-service-discovery';
 
 const VERSION_HEAD_REF = 'HEAD';
 const VERSION_MAIN_REF = 'refs/heads/main' satisfies VersionMainRefName;
@@ -207,7 +207,7 @@ export async function getWorkbookVersionSurfaceStatus(
     checkout: Boolean(workbookStatus?.checkout.available || hasAttachedVersionCheckoutService(ctx)),
     reviewRead: hasAttachedVersionReviewReadService(services),
     reviewWrite: hasAttachedVersionReviewWriteService(services),
-    proposal: hasAttachedVersionProposalService(services),
+    proposal: proposalServiceDiscovery.hasAttachedVersionProposalWorkflowService(services),
     mergePreview: Boolean(workbookStatus?.merge.available || hasAttachedVersionMergeService(ctx)),
     mergeApply:
       Boolean(workbookStatus?.merge.available || hasAttachedVersionMergeService(ctx)) &&
@@ -764,7 +764,7 @@ function hasAnyVersionAttachment(services: AttachedVersionServices): boolean {
     hasAttachedVersionDiffService(services) ||
     hasAttachedVersionReviewReadService(services) ||
     hasAttachedVersionReviewWriteService(services) ||
-    hasAttachedVersionProposalService(services) ||
+    proposalServiceDiscovery.hasAttachedVersionProposalService(services) ||
     hasAttachedVersionApplyMergeService(services) ||
     bindMethod(services.pendingRemotePromotionService, 'promotePendingRemoteSegments') ||
     bindMethod(services.writeService, 'commit') ||

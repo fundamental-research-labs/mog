@@ -139,12 +139,7 @@ export type VersionSurfaceDiagnosticCode =
   | 'version.surfaceStatus.provenanceUnavailable'
   | (string & {});
 
-export type VersionLiveCollaborationState =
-  | 'absent'
-  | 'disabled'
-  | 'idle'
-  | 'active'
-  | 'unknown';
+export type VersionLiveCollaborationState = 'absent' | 'disabled' | 'idle' | 'active' | 'unknown';
 
 export interface VersionSurfaceLiveCollaborationStatus {
   readonly state: VersionLiveCollaborationState;
@@ -409,10 +404,11 @@ export interface VersionListCommitsOptions {
 
 export interface VersionListRefsOptions {
   /**
-   * Optional branch namespace or branch-prefix filter. Examples:
-   * `scenario`, `scenario/budget`, or `refs/heads/scenario/budget`.
+   * Optional branch namespace filter. Examples: `scenario` or
+   * `refs/heads/scenario`. Branch-name prefixes such as `scenario/budget`
+   * are not accepted; `main` is returned only when no prefix is supplied.
    */
-  readonly prefix?: VersionRefNamespace | VersionBranchName | VersionRefName;
+  readonly prefix?: VersionRefNamespace | `refs/heads/${VersionRefNamespace}`;
   readonly includeDiagnostics?: boolean;
 }
 
@@ -529,10 +525,7 @@ export type VersionCheckoutResult =
       >;
     };
 
-export type CheckoutVersionResult = Extract<
-  VersionCheckoutResult,
-  { readonly status: 'success' }
->;
+export type CheckoutVersionResult = Extract<VersionCheckoutResult, { readonly status: 'success' }>;
 
 export type VersionSemanticValue =
   | null
@@ -659,10 +652,7 @@ export interface VersionMergeChange {
   readonly diagnostics?: readonly VersionStoreDiagnostic[];
 }
 
-export type VersionMergeConflictResolutionOptionKind =
-  | 'acceptOurs'
-  | 'acceptTheirs'
-  | 'acceptBase';
+export type VersionMergeConflictResolutionOptionKind = 'acceptOurs' | 'acceptTheirs' | 'acceptBase';
 
 export interface VersionMergeConflictResolutionOption {
   readonly optionId: string;
@@ -712,46 +702,46 @@ export interface VersionMergeAttemptMetadata {
 
 export type VersionMergeResult = VersionMergeAttemptMetadata &
   (
-  | {
-      readonly status: 'clean';
-      readonly base: WorkbookCommitId;
-      readonly ours: WorkbookCommitId;
-      readonly theirs: WorkbookCommitId;
-      readonly changes: readonly VersionMergeChange[];
-      readonly conflicts: readonly [];
-      readonly diagnostics: readonly [];
-      readonly mutationGuarantee: VersionMergeMutationGuarantee;
-    }
-  | {
-      readonly status: 'conflicted';
-      readonly base: WorkbookCommitId;
-      readonly ours: WorkbookCommitId;
-      readonly theirs: WorkbookCommitId;
-      readonly changes: readonly VersionMergeChange[];
-      readonly conflicts: readonly VersionMergeConflict[];
-      readonly diagnostics: readonly [];
-      readonly mutationGuarantee: VersionMergeMutationGuarantee;
-    }
-  | {
-      readonly status: 'fastForward' | 'alreadyMerged';
-      readonly base: WorkbookCommitId;
-      readonly ours: WorkbookCommitId;
-      readonly theirs: WorkbookCommitId;
-      readonly changes: readonly [];
-      readonly conflicts: readonly [];
-      readonly diagnostics: readonly [];
-      readonly mutationGuarantee: VersionMergeMutationGuarantee;
-    }
-  | {
-      readonly status: 'blocked';
-      readonly base: WorkbookCommitId | null;
-      readonly ours: WorkbookCommitId | null;
-      readonly theirs: WorkbookCommitId | null;
-      readonly changes: readonly [];
-      readonly conflicts: readonly [];
-      readonly diagnostics: readonly VersionStoreDiagnostic[];
-      readonly mutationGuarantee: VersionMergeMutationGuarantee;
-    }
+    | {
+        readonly status: 'clean';
+        readonly base: WorkbookCommitId;
+        readonly ours: WorkbookCommitId;
+        readonly theirs: WorkbookCommitId;
+        readonly changes: readonly VersionMergeChange[];
+        readonly conflicts: readonly [];
+        readonly diagnostics: readonly [];
+        readonly mutationGuarantee: VersionMergeMutationGuarantee;
+      }
+    | {
+        readonly status: 'conflicted';
+        readonly base: WorkbookCommitId;
+        readonly ours: WorkbookCommitId;
+        readonly theirs: WorkbookCommitId;
+        readonly changes: readonly VersionMergeChange[];
+        readonly conflicts: readonly VersionMergeConflict[];
+        readonly diagnostics: readonly [];
+        readonly mutationGuarantee: VersionMergeMutationGuarantee;
+      }
+    | {
+        readonly status: 'fastForward' | 'alreadyMerged';
+        readonly base: WorkbookCommitId;
+        readonly ours: WorkbookCommitId;
+        readonly theirs: WorkbookCommitId;
+        readonly changes: readonly [];
+        readonly conflicts: readonly [];
+        readonly diagnostics: readonly [];
+        readonly mutationGuarantee: VersionMergeMutationGuarantee;
+      }
+    | {
+        readonly status: 'blocked';
+        readonly base: WorkbookCommitId | null;
+        readonly ours: WorkbookCommitId | null;
+        readonly theirs: WorkbookCommitId | null;
+        readonly changes: readonly [];
+        readonly conflicts: readonly [];
+        readonly diagnostics: readonly VersionStoreDiagnostic[];
+        readonly mutationGuarantee: VersionMergeMutationGuarantee;
+      }
   );
 
 export interface VersionApplyMergeResolution {
@@ -804,72 +794,72 @@ export interface VersionApplyMergeAttemptMetadata {
 
 export type VersionApplyMergeResult = VersionApplyMergeAttemptMetadata &
   (
-  | {
-      readonly status: 'planned';
-      readonly base: WorkbookCommitId;
-      readonly ours: WorkbookCommitId;
-      readonly theirs: WorkbookCommitId;
-      readonly changes: readonly VersionMergeChange[];
-      readonly conflicts: readonly [];
-      readonly diagnostics: readonly [];
-      readonly resolutionCount: number;
-      readonly mutationGuarantee: VersionApplyMergeMutationGuarantee;
-    }
-  | {
-      readonly status: 'applied';
-      readonly base: WorkbookCommitId;
-      readonly ours: WorkbookCommitId;
-      readonly theirs: WorkbookCommitId;
-      readonly commitRef: WorkbookCommitRef;
-      readonly changes: readonly VersionMergeChange[];
-      readonly conflicts: readonly [];
-      readonly diagnostics: readonly [];
-      readonly resolutionCount: number;
-      readonly mutationGuarantee: VersionApplyMergeMutationGuarantee;
-    }
-  | {
-      readonly status: 'fastForwarded' | 'alreadyApplied' | 'alreadyMerged';
-      readonly base: WorkbookCommitId;
-      readonly ours: WorkbookCommitId;
-      readonly theirs: WorkbookCommitId;
-      readonly commitRef: WorkbookCommitRef;
-      readonly changes: readonly [];
-      readonly conflicts: readonly [];
-      readonly diagnostics: readonly [];
-      readonly resolutionCount: number;
-      readonly mutationGuarantee: 'ref-fast-forwarded' | 'ref-not-mutated';
-    }
-  | {
-      readonly status: 'conflicted';
-      readonly base: WorkbookCommitId;
-      readonly ours: WorkbookCommitId;
-      readonly theirs: WorkbookCommitId;
-      readonly changes: readonly VersionMergeChange[];
-      readonly conflicts: readonly VersionMergeConflict[];
-      readonly diagnostics: readonly [];
-      readonly requiredResolutionCount: number;
-      readonly mutationGuarantee: VersionApplyMergeMutationGuarantee;
-    }
-  | {
-      readonly status: 'blocked';
-      readonly base: WorkbookCommitId | null;
-      readonly ours: WorkbookCommitId | null;
-      readonly theirs: WorkbookCommitId | null;
-      readonly changes: readonly [];
-      readonly conflicts: readonly [];
-      readonly diagnostics: readonly VersionStoreDiagnostic[];
-      readonly mutationGuarantee: VersionApplyMergeMutationGuarantee;
-    }
-  | {
-      readonly status: 'staleTargetHead';
-      readonly base: WorkbookCommitId | null;
-      readonly ours: WorkbookCommitId | null;
-      readonly theirs: WorkbookCommitId | null;
-      readonly changes: readonly [];
-      readonly conflicts: readonly [];
-      readonly diagnostics: readonly VersionStoreDiagnostic[];
-      readonly mutationGuarantee: 'ref-not-mutated';
-    }
+    | {
+        readonly status: 'planned';
+        readonly base: WorkbookCommitId;
+        readonly ours: WorkbookCommitId;
+        readonly theirs: WorkbookCommitId;
+        readonly changes: readonly VersionMergeChange[];
+        readonly conflicts: readonly [];
+        readonly diagnostics: readonly [];
+        readonly resolutionCount: number;
+        readonly mutationGuarantee: VersionApplyMergeMutationGuarantee;
+      }
+    | {
+        readonly status: 'applied';
+        readonly base: WorkbookCommitId;
+        readonly ours: WorkbookCommitId;
+        readonly theirs: WorkbookCommitId;
+        readonly commitRef: WorkbookCommitRef;
+        readonly changes: readonly VersionMergeChange[];
+        readonly conflicts: readonly [];
+        readonly diagnostics: readonly [];
+        readonly resolutionCount: number;
+        readonly mutationGuarantee: VersionApplyMergeMutationGuarantee;
+      }
+    | {
+        readonly status: 'fastForwarded' | 'alreadyApplied' | 'alreadyMerged';
+        readonly base: WorkbookCommitId;
+        readonly ours: WorkbookCommitId;
+        readonly theirs: WorkbookCommitId;
+        readonly commitRef: WorkbookCommitRef;
+        readonly changes: readonly [];
+        readonly conflicts: readonly [];
+        readonly diagnostics: readonly [];
+        readonly resolutionCount: number;
+        readonly mutationGuarantee: 'ref-fast-forwarded' | 'ref-not-mutated';
+      }
+    | {
+        readonly status: 'conflicted';
+        readonly base: WorkbookCommitId;
+        readonly ours: WorkbookCommitId;
+        readonly theirs: WorkbookCommitId;
+        readonly changes: readonly VersionMergeChange[];
+        readonly conflicts: readonly VersionMergeConflict[];
+        readonly diagnostics: readonly [];
+        readonly requiredResolutionCount: number;
+        readonly mutationGuarantee: VersionApplyMergeMutationGuarantee;
+      }
+    | {
+        readonly status: 'blocked';
+        readonly base: WorkbookCommitId | null;
+        readonly ours: WorkbookCommitId | null;
+        readonly theirs: WorkbookCommitId | null;
+        readonly changes: readonly [];
+        readonly conflicts: readonly [];
+        readonly diagnostics: readonly VersionStoreDiagnostic[];
+        readonly mutationGuarantee: VersionApplyMergeMutationGuarantee;
+      }
+    | {
+        readonly status: 'staleTargetHead';
+        readonly base: WorkbookCommitId | null;
+        readonly ours: WorkbookCommitId | null;
+        readonly theirs: WorkbookCommitId | null;
+        readonly changes: readonly [];
+        readonly conflicts: readonly [];
+        readonly diagnostics: readonly VersionStoreDiagnostic[];
+        readonly mutationGuarantee: 'ref-not-mutated';
+      }
   );
 
 export type RedactionPolicy = {

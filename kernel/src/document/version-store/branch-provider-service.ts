@@ -149,6 +149,6 @@ function diagnostic(
     code,
     severity: 'error',
     message,
-    details: Object.freeze({ cause: operation }),
+    details: Object.freeze({ operation, mutationGuarantee: 'no-write-attempted' }),
   });
 }

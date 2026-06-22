@@ -17,7 +17,6 @@ import {
   RefAlreadyExistsError,
   RefCasConflictError,
   RefStoreManifestConflictError,
-  errorMessage,
   persistGraphSnapshot,
 } from './provider-indexeddb-internal';
 import { loadGraphSnapshot } from './provider-indexeddb-reload';
@@ -207,14 +206,14 @@ class IndexedDbGraphBranchLifecycleService implements IndexedDbGraphBranchLifecy
 function branchLifecycleFailure(
   operation: 'createBranch' | 'readBranch' | 'listBranches' | 'fastForwardBranch' | 'getHead',
   message: string,
-  error: unknown,
+  _error: unknown,
 ): BranchFailureResult {
   const diagnostics: readonly VersionDiagnostic[] = Object.freeze([
     Object.freeze({
       code: 'versionCapabilityDisabled',
       severity: 'error',
       message,
-      details: Object.freeze({ cause: errorMessage(error), operation }),
+      details: Object.freeze({ operation }),
     }),
   ]);
   return Object.freeze({

@@ -154,19 +154,20 @@ describe('WorkbookVersion provider-backed ref lifecycle facade', () => {
       },
     });
 
-    await expect(wb.version.readRef('refs/heads/scenario/provider-ref' as any)).resolves
-      .toMatchObject({
-        ok: true,
-        value: {
-          status: 'success',
-          ref: {
-            name: 'refs/heads/scenario/provider-ref',
-            commitId: initialized.rootCommit.id,
-            revision: { kind: 'counter', value: '0' },
-          },
-          diagnostics: [],
+    await expect(
+      wb.version.readRef('refs/heads/scenario/provider-ref' as any),
+    ).resolves.toMatchObject({
+      ok: true,
+      value: {
+        status: 'success',
+        ref: {
+          name: 'refs/heads/scenario/provider-ref',
+          commitId: initialized.rootCommit.id,
+          revision: { kind: 'counter', value: '0' },
         },
-      });
+        diagnostics: [],
+      },
+    });
 
     await expect(wb.version.listRefs({ prefix: 'scenario' as any })).resolves.toMatchObject({
       ok: true,
@@ -178,6 +179,22 @@ describe('WorkbookVersion provider-backed ref lifecycle facade', () => {
           }),
         ],
         limit: 50,
+      },
+    });
+
+    await expect(
+      wb.version.listRefs({ prefix: 'refs/heads/scenario/provider' as any }),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: {
+        diagnostics: [
+          expect.objectContaining({
+            code: 'VERSION_INVALID_OPTIONS',
+            data: expect.objectContaining({
+              payload: expect.objectContaining({ option: 'prefix' }),
+            }),
+          }),
+        ],
       },
     });
 
@@ -201,9 +218,7 @@ describe('WorkbookVersion provider-backed ref lifecycle facade', () => {
     expect(status.refLifecycleFoundation).toMatchObject({
       stage: 'present',
       available: true,
-      diagnostics: [
-        expect.objectContaining({ code: 'version.refLifecycle.foundationPresent' }),
-      ],
+      diagnostics: [expect.objectContaining({ code: 'version.refLifecycle.foundationPresent' })],
     });
   });
 
@@ -330,18 +345,19 @@ describe('WorkbookVersion provider-backed ref lifecycle facade', () => {
       if (!committed.ok) throw new Error(`expected commit success: ${committed.error.code}`);
       expect(committed.value.id).not.toBe(initialized.rootCommit.id);
 
-      await expect(wb.version.readRef('refs/heads/scenario/provider-commit' as any)).resolves
-        .toMatchObject({
-          ok: true,
-          value: {
-            status: 'success',
-            ref: {
-              name: 'refs/heads/scenario/provider-commit',
-              commitId: committed.value.id,
-              revision: { kind: 'counter', value: '1' },
-            },
+      await expect(
+        wb.version.readRef('refs/heads/scenario/provider-commit' as any),
+      ).resolves.toMatchObject({
+        ok: true,
+        value: {
+          status: 'success',
+          ref: {
+            name: 'refs/heads/scenario/provider-commit',
+            commitId: committed.value.id,
+            revision: { kind: 'counter', value: '1' },
           },
-        });
+        },
+      });
       await expect(wb.version.readRef('refs/heads/main')).resolves.toMatchObject({
         ok: true,
         value: {

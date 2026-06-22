@@ -145,7 +145,7 @@ describe('WorkbookVersion public ref lifecycle facade', () => {
     });
   });
 
-  it('filters listRefs by namespace and branch prefix without mutating state', async () => {
+  it('filters listRefs by namespace only without mutating state', async () => {
     const { version } = createWorkbookVersionWithBranchService();
 
     await version.createBranch({ name: 'scenario/budget' as any, targetCommitId: COMMIT_A });
@@ -163,15 +163,35 @@ describe('WorkbookVersion public ref lifecycle facade', () => {
     );
     expect(scenarioRefs.value.items).toHaveLength(2);
 
-    const filtered = await version.listRefs({ prefix: 'refs/heads/scenario/forecast' as any });
-    expect(filtered).toMatchObject({
+    const fullNamespaceRefs = await version.listRefs({ prefix: 'refs/heads/scenario' as any });
+    expect(fullNamespaceRefs).toMatchObject({
       ok: true,
       value: {
-        items: [expect.objectContaining({ name: 'refs/heads/scenario/forecast/q1' })],
+        items: [
+          expect.objectContaining({ name: 'refs/heads/scenario/budget' }),
+          expect.objectContaining({ name: 'refs/heads/scenario/forecast/q1' }),
+        ],
         limit: 50,
       },
     });
-    expect(filtered.ok && filtered.value.items).toHaveLength(1);
+    expect(fullNamespaceRefs.ok && fullNamespaceRefs.value.items).toHaveLength(2);
+
+    await expect(
+      version.listRefs({ prefix: 'refs/heads/scenario/forecast' as any }),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: {
+        code: 'target_unavailable',
+        diagnostics: [
+          expect.objectContaining({
+            code: 'VERSION_INVALID_OPTIONS',
+            data: expect.objectContaining({
+              payload: expect.objectContaining({ option: 'prefix' }),
+            }),
+          }),
+        ],
+      },
+    });
 
     const allRefs = await version.listRefs();
     expect(allRefs.ok).toBe(true);
@@ -337,14 +357,15 @@ describe('WorkbookVersion public ref lifecycle facade', () => {
       },
     });
 
-    await expect(version.deleteRef({ name: 'refs/heads/scenario/delete-me' as any })).resolves
-      .toMatchObject({
-        ok: false,
-        error: {
-          code: 'target_unavailable',
-          diagnostics: [expect.objectContaining({ code: 'VERSION_REF_WRITE_UNAVAILABLE' })],
-        },
-      });
+    await expect(
+      version.deleteRef({ name: 'refs/heads/scenario/delete-me' as any }),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: {
+        code: 'target_unavailable',
+        diagnostics: [expect.objectContaining({ code: 'VERSION_REF_WRITE_UNAVAILABLE' })],
+      },
+    });
 
     expect(branchService.readBranch('scenario/delete-me')).toMatchObject({
       ok: true,

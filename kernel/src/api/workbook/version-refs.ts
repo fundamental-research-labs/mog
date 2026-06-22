@@ -27,6 +27,7 @@ import {
   validateRefName,
   type RefNamespace,
 } from '../../document/version-store/ref-name';
+import { branchDiagnosticMutationGuarantee } from './version-ref-diagnostics';
 
 const VERSION_HEAD_REF = 'HEAD';
 const VERSION_MAIN_REF = 'refs/heads/main' satisfies VersionMainRefName;
@@ -77,7 +78,6 @@ type ParsedRefPrefix =
   | {
       readonly ok: true;
       readonly namespace?: RefNamespace;
-      readonly branchPrefix?: string;
       readonly includeMain: boolean;
     }
   | { readonly ok: false; readonly diagnostics: readonly VersionStoreDiagnostic[] };
@@ -352,9 +352,7 @@ function mapHeadRevision(value: unknown): VersionRecordRevision | undefined {
   return toRevision(head.refVersion) ?? toRevision(head.revision);
 }
 
-function validateCreateBranchOptions(
-  options: VersionCreateBranchOptions,
-):
+function validateCreateBranchOptions(options: VersionCreateBranchOptions):
   | {
       readonly ok: true;
       readonly branchName: string;
@@ -431,7 +429,8 @@ function validateFastForwardOptions(
   const expectedHead = toCommitId(options.expectedHead);
   if (!expectedHead) diagnostics.push(invalidCommitDiagnostic(operation, 'expectedHead'));
   const expectedRefVersion = toCounterRevision(options.expectedRefRevision);
-  if (!expectedRefVersion) diagnostics.push(invalidOptionsDiagnostic(operation, 'expectedRefRevision'));
+  if (!expectedRefVersion)
+    diagnostics.push(invalidOptionsDiagnostic(operation, 'expectedRefRevision'));
 
   if (
     diagnostics.length > 0 ||
@@ -509,38 +508,13 @@ function validateRefListPrefix(value: VersionListRefsOptions['prefix']): ParsedR
   const prefix = value.startsWith(VERSION_BRANCH_REF_PREFIX)
     ? value.slice(VERSION_BRANCH_REF_PREFIX.length)
     : value;
-  const namespace = prefix.split('/', 1)[0] ?? '';
-  if (prefix === namespace && REF_NAMESPACE_SET.has(namespace)) {
-    return {
-      ok: true,
-      namespace: namespace as RefNamespace,
-      branchPrefix: namespace,
-      includeMain: false,
-    };
+  if (REF_NAMESPACE_SET.has(prefix)) {
+    return { ok: true, namespace: prefix as RefNamespace, includeMain: false };
   }
 
-  const parsed = parsePublicBranchName(value, 'listRefs');
-  if (parsed.ok && parsed.branchName === 'main') {
-    return { ok: true, branchPrefix: 'main', includeMain: true };
-  }
-  if (!parsed.ok) return parsed;
-  if (!REF_NAMESPACE_SET.has(namespace)) {
-    return { ok: true, branchPrefix: parsed.branchName, includeMain: false };
-  }
-  if (prefix === namespace) {
-    return {
-      ok: true,
-      namespace: namespace as RefNamespace,
-      branchPrefix: namespace,
-      includeMain: false,
-    };
-  }
-  if (!parsed.ok) return parsed;
   return {
-    ok: true,
-    namespace: namespace as RefNamespace,
-    branchPrefix: parsed.branchName,
-    includeMain: false,
+    ok: false,
+    diagnostics: [invalidRefPrefixDiagnostic('listRefs')],
   };
 }
 
@@ -651,10 +625,9 @@ function refMatchesPrefix(
   prefix: Extract<ParsedRefPrefix, { readonly ok: true }>,
 ): boolean {
   const branchName = ref.name.slice(VERSION_BRANCH_REF_PREFIX.length);
-  if (branchName === 'main') return prefix.includeMain && prefix.branchPrefix === undefined;
-  if (prefix.branchPrefix === undefined) return true;
-  if (prefix.branchPrefix === 'main') return branchName === 'main';
-  return branchName === prefix.branchPrefix || branchName.startsWith(`${prefix.branchPrefix}/`);
+  if (branchName === 'main') return prefix.includeMain && prefix.namespace === undefined;
+  if (prefix.namespace === undefined) return true;
+  return branchName.startsWith(`${prefix.namespace}/`);
 }
 
 function mapBranchFailureDiagnostics(
@@ -686,8 +659,8 @@ function mapBranchDiagnostic(
     severity: value.severity === 'warning' || value.severity === 'info' ? value.severity : 'error',
     recoverability: recoverabilityForIssue(issueCode),
     payload: sanitizeBranchDiagnosticPayload(value, operation),
-    ...(isRefMutationOperation(operation) && issueCode === 'VERSION_REF_WRITE_UNAVAILABLE'
-      ? { mutationGuarantee: 'no-write-attempted' }
+    ...(isRefMutationOperation(operation)
+      ? { mutationGuarantee: branchDiagnosticMutationGuarantee(code, value.details) }
       : {}),
   });
 }
@@ -700,7 +673,6 @@ function sanitizeBranchDiagnosticPayload(
   const details = isRecord(value.details) ? value.details : null;
   if (details && typeof details.issue === 'string') payload.issue = details.issue;
   if (details && typeof details.missingField === 'string') payload.option = details.missingField;
-  if (details && typeof details.cause === 'string') payload.cause = details.cause;
   if (value.refName === 'main' || value.refName === VERSION_MAIN_REF) {
     payload.refName = VERSION_MAIN_REF;
   }
@@ -804,6 +776,19 @@ function invalidRefNameDiagnostic(operation: VersionRefOperation): VersionStoreD
   );
 }
 
+function invalidRefPrefixDiagnostic(operation: VersionRefOperation): VersionStoreDiagnostic {
+  return publicDiagnostic(
+    'VERSION_INVALID_OPTIONS',
+    operation,
+    'The version ref lifecycle options are invalid for this method.',
+    {
+      severity: 'error',
+      recoverability: 'none',
+      payload: { option: 'prefix' },
+    },
+  );
+}
+
 function invalidCommitDiagnostic(
   operation: VersionRefOperation,
   option: string,
@@ -897,6 +882,7 @@ function issueCodeForBranchDiagnostic(code: string): string {
     case 'unsupportedRefOption':
     case 'unsupportedRefMetadataMutation':
     case 'versionCapabilityDisabled':
+    case 'lastLiveRef':
       return 'VERSION_REF_WRITE_UNAVAILABLE';
     default:
       return 'VERSION_INVALID_OPTIONS';

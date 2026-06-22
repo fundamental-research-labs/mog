@@ -39,6 +39,7 @@ export type BranchServiceErrorCode =
   | 'refAlreadyExists'
   | 'refNotFound'
   | 'refTombstoned'
+  | 'lastLiveRef'
   | 'unsupportedRefMetadataMutation'
   | 'versionCapabilityDisabled';
 
@@ -697,6 +698,7 @@ function branchErrorCodeFromRefStore(code: string): BranchServiceErrorCode {
     case 'refAlreadyExists':
     case 'refNotFound':
     case 'refTombstoned':
+    case 'lastLiveRef':
     case 'unsupportedRefMetadataMutation':
     case 'versionCapabilityDisabled':
       return code;

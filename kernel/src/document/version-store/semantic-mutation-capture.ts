@@ -27,6 +27,10 @@ import type {
   VersionNormalCommitCaptureFinalizeResult,
 } from './commit-service';
 import { createVersionObjectRecord, type VersionGraphNamespace } from './object-store';
+import {
+  capturePendingRemoteSemanticMutations,
+  type VersionPendingRemoteCapture,
+} from './pending-remote-capture-service';
 import { classifySemanticMutationCaptureLane } from './semantic-mutation-capture-lanes';
 
 export interface VersionMutationCaptureRecordInput {
@@ -44,6 +48,7 @@ export interface VersionMutationCaptureSink {
 export interface SemanticMutationCaptureServices {
   readonly mutationCapture: VersionMutationCaptureSink;
   readonly captureNormalCommit: VersionNormalCommitCapture;
+  readonly capturePendingRemoteSegment: VersionPendingRemoteCapture;
 }
 
 export interface SemanticMutationCaptureOptions {
@@ -112,6 +117,7 @@ export function createSemanticMutationCapture(
   return {
     mutationCapture: buffer,
     captureNormalCommit: (input) => buffer.captureNormalCommit(input),
+    capturePendingRemoteSegment: (input) => buffer.capturePendingRemoteSegment(input),
   };
 }
 
@@ -189,6 +195,18 @@ class SemanticMutationCaptureBuffer implements VersionMutationCaptureSink {
     };
   }
 
+  async capturePendingRemoteSegment(input: Parameters<VersionPendingRemoteCapture>[0]) {
+    const result = await capturePendingRemoteSemanticMutations({
+      capture: input,
+      records: [...this.pendingRemote],
+      mutationSegmentPayload,
+    });
+    if (result.status === 'success' && result.capturedRecordSequences.length > 0) {
+      this.drainPendingRemoteSequences(result.capturedRecordSequences);
+    }
+    return result;
+  }
+
   snapshotPendingRemoteMutations(): readonly PendingSemanticMutation[] {
     return [...this.pendingRemote];
   }
@@ -196,6 +214,12 @@ class SemanticMutationCaptureBuffer implements VersionMutationCaptureSink {
   private drainNormalThrough(sequence: number): void {
     if (sequence <= 0) return;
     this.pendingNormal = this.pendingNormal.filter((record) => record.sequence > sequence);
+  }
+
+  private drainPendingRemoteSequences(sequences: readonly number[]): void {
+    if (sequences.length === 0) return;
+    const drained = new Set(sequences);
+    this.pendingRemote = this.pendingRemote.filter((record) => !drained.has(record.sequence));
   }
 }
 

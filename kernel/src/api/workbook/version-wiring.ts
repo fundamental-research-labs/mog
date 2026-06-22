@@ -4,7 +4,10 @@ import { createProviderBackedCheckoutMaterializationService } from '../../docume
 import { createWorkbookVersionCommitService } from '../../document/version-store/commit-service';
 import { createWorkbookVersionDiffService } from '../../document/version-store/diff-service';
 import { createWorkbookVersionMergeService } from '../../document/version-store/merge-service';
-import { createSemanticMutationCapture } from '../../document/version-store/semantic-mutation-capture';
+import {
+  createSemanticMutationCapture,
+  type SemanticMutationCaptureServices,
+} from '../../document/version-store/semantic-mutation-capture';
 import type { WorkbookVersioningConfig } from './types';
 import {
   DEFAULT_MERGE_COMMIT_MATERIALIZER_KIND,
@@ -23,10 +26,17 @@ export function attachWorkbookVersioning(
   const runtime = ctx as MutableVersioningContext;
   const existing = isRecord(runtime.versioning) ? runtime.versioning : {};
   const domainSupportManifestFields = domainSupportManifestAttachmentFields(config);
+  const existingSemanticCapture = isSemanticMutationCaptureServices(
+    existing.semanticMutationCapture,
+  )
+    ? existing.semanticMutationCapture
+    : undefined;
   const semanticCapture =
-    !config.captureNormalCommit && config.provider && config.snapshotRootByteSyncPort
+    config.semanticMutationCapture ??
+    existingSemanticCapture ??
+    (!config.captureNormalCommit && config.provider && config.snapshotRootByteSyncPort
       ? createSemanticMutationCapture()
-      : undefined;
+      : undefined);
   const captureNormalCommit = config.captureNormalCommit ?? semanticCapture?.captureNormalCommit;
   const captureMergeCommit =
     config.captureMergeCommit ??
@@ -43,7 +53,9 @@ export function attachWorkbookVersioning(
           snapshotRootByteSyncPort: config.snapshotRootByteSyncPort,
         })
       : undefined);
-  if (!writeService && Object.keys(domainSupportManifestFields).length === 0) return;
+  if (!writeService && !semanticCapture && Object.keys(domainSupportManifestFields).length === 0) {
+    return;
+  }
 
   const diffService =
     existing.diffService ??
@@ -81,7 +93,13 @@ export function attachWorkbookVersioning(
           readService: existing.readService ?? writeService,
         }
       : {}),
-    ...(semanticCapture ? { mutationCapture: semanticCapture.mutationCapture } : {}),
+    ...(semanticCapture
+      ? {
+          semanticMutationCapture: semanticCapture,
+          mutationCapture: semanticCapture.mutationCapture,
+          capturePendingRemoteSegment: semanticCapture.capturePendingRemoteSegment,
+        }
+      : {}),
     ...(captureMergeCommit
       ? {
           captureMergeCommit,
@@ -113,6 +131,18 @@ export function attachWorkbookVersionSurfaceStatusService(
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
   return typeof value === 'object' && value !== null;
+}
+
+function isSemanticMutationCaptureServices(
+  value: unknown,
+): value is SemanticMutationCaptureServices {
+  return (
+    isRecord(value) &&
+    isRecord(value.mutationCapture) &&
+    typeof value.mutationCapture.recordMutationResult === 'function' &&
+    typeof value.captureNormalCommit === 'function' &&
+    typeof value.capturePendingRemoteSegment === 'function'
+  );
 }
 
 function domainSupportManifestAttachmentFields(

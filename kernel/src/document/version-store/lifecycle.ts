@@ -4,6 +4,7 @@ import type {
   WorkbookVersionCommitService,
 } from './commit-service';
 import type { CheckoutSnapshotMaterializer } from './checkout-apply';
+import type { SemanticMutationCaptureServices } from './semantic-mutation-capture';
 import type { SnapshotRootByteSyncPort } from './snapshot-root-capture';
 import {
   namespaceForDocumentScope,
@@ -37,6 +38,7 @@ export type ResolvedWorkbookVersioningConfig = {
   >;
   readonly captureNormalCommit?: VersionNormalCommitCapture;
   readonly captureMergeCommit?: VersionMergeCommitCapture;
+  readonly semanticMutationCapture?: SemanticMutationCaptureServices;
   readonly snapshotRootByteSyncPort?: SnapshotRootByteSyncPort;
   readonly checkoutSnapshotMaterializer?: CheckoutSnapshotMaterializer;
 };
@@ -158,6 +160,7 @@ export async function resolveDocumentWorkbookVersioningLifecycle(input: {
       provider,
       captureNormalCommit: config.captureNormalCommit,
       captureMergeCommit: config.captureMergeCommit,
+      semanticMutationCapture: config.semanticMutationCapture,
       snapshotRootByteSyncPort: config.snapshotRootByteSyncPort,
       writeService: config.writeService,
       checkoutSnapshotMaterializer: config.checkoutSnapshotMaterializer,

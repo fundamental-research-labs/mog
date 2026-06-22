@@ -30,6 +30,7 @@ import type {
 import type { WorkbookVersionMergeService } from '../../document/version-store/merge-service';
 import type { CheckoutSnapshotMaterializer } from '../../document/version-store/checkout-apply';
 import type { SnapshotRootByteSyncPort } from '../../document/version-store/snapshot-root-capture';
+import type { SemanticMutationCaptureServices } from '../../document/version-store/semantic-mutation-capture';
 import type { VersionStoreProvider } from '../../document/version-store/provider';
 import type { DocumentWorkbookVersioningLifecycleConfig } from '../../document/version-store/lifecycle';
 import type {
@@ -64,6 +65,7 @@ export interface WorkbookVersioningConfig {
   readonly mergeService?: Pick<WorkbookVersionMergeService, 'merge'>;
   readonly captureNormalCommit?: VersionNormalCommitCapture;
   readonly captureMergeCommit?: VersionMergeCommitCapture;
+  readonly semanticMutationCapture?: SemanticMutationCaptureServices;
   readonly snapshotRootByteSyncPort?: SnapshotRootByteSyncPort;
   readonly checkoutSnapshotMaterializer?: CheckoutSnapshotMaterializer;
   readonly domainSupportManifest?: DomainSupportManifest | null;

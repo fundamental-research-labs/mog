@@ -22,6 +22,8 @@ import type {
   VersionMergeInput,
   VersionMergeOptions,
   VersionMergeResult,
+  VersionPromotePendingRemoteOptions,
+  VersionPromotePendingRemoteResult,
   VersionRef,
   VersionRefName,
   VersionRefReadResult,
@@ -50,6 +52,9 @@ export interface WorkbookVersion {
   getHead(options: GetVersionHeadInput): Promise<VersionResult<VersionHead>>;
   listCommits(options?: ListVersionCommitsInput): Promise<VersionResult<Paged<WorkbookCommitSummary>>>;
   commit(options?: VersionCommitOptions): Promise<VersionResult<WorkbookCommitSummary>>;
+  promotePendingRemote(
+    options?: VersionPromotePendingRemoteOptions,
+  ): Promise<VersionResult<VersionPromotePendingRemoteResult>>;
   checkout(
     target: VersionCheckoutTarget,
     options?: VersionCheckoutOptions,

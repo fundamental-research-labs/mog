@@ -27,6 +27,14 @@ import type {
   VersionGetMergeConflictDetailRequest as ApiRootGetMergeConflictDetailRequest,
   VersionMergeResult as ApiRootMergeResult,
   VersionMergeResultId as ApiRootMergeResultId,
+  VersionPendingRemoteSegmentId as ApiRootPendingRemoteSegmentId,
+  VersionPromotePendingRemoteDiagnostic as ApiRootPromotePendingRemoteDiagnostic,
+  VersionPromotePendingRemoteDiagnosticCode as ApiRootPromotePendingRemoteDiagnosticCode,
+  VersionPromotePendingRemoteOptions as ApiRootPromotePendingRemoteOptions,
+  VersionPromotePendingRemoteResult as ApiRootPromotePendingRemoteResult,
+  VersionPromotePendingRemoteSkippedSegment as ApiRootPromotePendingRemoteSkippedSegment,
+  VersionPromotePendingRemoteSkipReason as ApiRootPromotePendingRemoteSkipReason,
+  VersionPromotePendingRemoteStatus as ApiRootPromotePendingRemoteStatus,
   VersionPutMergeResolutionPayloadResult as ApiRootPutMergeResolutionPayloadResult,
   VersionRefMutationResult as ApiRootRefMutationResult,
   VersionResult as ApiRootVersionResult,
@@ -69,6 +77,14 @@ import type {
   VersionGetMergeConflictDetailRequest as PackageApiGetMergeConflictDetailRequest,
   VersionMergeResult as PackageApiMergeResult,
   VersionMergeResultId as PackageApiMergeResultId,
+  VersionPendingRemoteSegmentId as PackageApiPendingRemoteSegmentId,
+  VersionPromotePendingRemoteDiagnostic as PackageApiPromotePendingRemoteDiagnostic,
+  VersionPromotePendingRemoteDiagnosticCode as PackageApiPromotePendingRemoteDiagnosticCode,
+  VersionPromotePendingRemoteOptions as PackageApiPromotePendingRemoteOptions,
+  VersionPromotePendingRemoteResult as PackageApiPromotePendingRemoteResult,
+  VersionPromotePendingRemoteSkippedSegment as PackageApiPromotePendingRemoteSkippedSegment,
+  VersionPromotePendingRemoteSkipReason as PackageApiPromotePendingRemoteSkipReason,
+  VersionPromotePendingRemoteStatus as PackageApiPromotePendingRemoteStatus,
   VersionPutMergeResolutionPayloadResult as PackageApiPutMergeResolutionPayloadResult,
   VersionRefMutationResult as PackageApiRefMutationResult,
   VersionResult as PackageApiVersionResult,
@@ -111,6 +127,14 @@ import type {
   VersionGetMergeConflictDetailRequest as PackageWorkbookGetMergeConflictDetailRequest,
   VersionMergeResult as PackageWorkbookMergeResult,
   VersionMergeResultId as PackageWorkbookMergeResultId,
+  VersionPendingRemoteSegmentId as PackageWorkbookPendingRemoteSegmentId,
+  VersionPromotePendingRemoteDiagnostic as PackageWorkbookPromotePendingRemoteDiagnostic,
+  VersionPromotePendingRemoteDiagnosticCode as PackageWorkbookPromotePendingRemoteDiagnosticCode,
+  VersionPromotePendingRemoteOptions as PackageWorkbookPromotePendingRemoteOptions,
+  VersionPromotePendingRemoteResult as PackageWorkbookPromotePendingRemoteResult,
+  VersionPromotePendingRemoteSkippedSegment as PackageWorkbookPromotePendingRemoteSkippedSegment,
+  VersionPromotePendingRemoteSkipReason as PackageWorkbookPromotePendingRemoteSkipReason,
+  VersionPromotePendingRemoteStatus as PackageWorkbookPromotePendingRemoteStatus,
   VersionPutMergeResolutionPayloadResult as PackageWorkbookPutMergeResolutionPayloadResult,
   VersionRefMutationResult as PackageWorkbookRefMutationResult,
   VersionResult as PackageWorkbookVersionResult,
@@ -153,6 +177,14 @@ import type {
   VersionGetMergeConflictDetailRequest as WorkbookNamespaceGetMergeConflictDetailRequest,
   VersionMergeResult as WorkbookNamespaceMergeResult,
   VersionMergeResultId as WorkbookNamespaceMergeResultId,
+  VersionPendingRemoteSegmentId as WorkbookNamespacePendingRemoteSegmentId,
+  VersionPromotePendingRemoteDiagnostic as WorkbookNamespacePromotePendingRemoteDiagnostic,
+  VersionPromotePendingRemoteDiagnosticCode as WorkbookNamespacePromotePendingRemoteDiagnosticCode,
+  VersionPromotePendingRemoteOptions as WorkbookNamespacePromotePendingRemoteOptions,
+  VersionPromotePendingRemoteResult as WorkbookNamespacePromotePendingRemoteResult,
+  VersionPromotePendingRemoteSkippedSegment as WorkbookNamespacePromotePendingRemoteSkippedSegment,
+  VersionPromotePendingRemoteSkipReason as WorkbookNamespacePromotePendingRemoteSkipReason,
+  VersionPromotePendingRemoteStatus as WorkbookNamespacePromotePendingRemoteStatus,
   VersionPutMergeResolutionPayloadResult as WorkbookNamespacePutMergeResolutionPayloadResult,
   VersionRefMutationResult as WorkbookNamespaceRefMutationResult,
   VersionResult as WorkbookNamespaceVersionResult,
@@ -224,6 +256,30 @@ type _WorkbookNamespaceExportsMergeAttemptPersistence = Assert<
 >;
 type _WorkbookNamespaceExportsMergeResultId = Assert<
   IsEqual<WorkbookNamespaceMergeResultId, PackageWorkbookMergeResultId>
+>;
+type _WorkbookNamespaceExportsPendingRemoteSegmentId = Assert<
+  IsEqual<WorkbookNamespacePendingRemoteSegmentId, PackageWorkbookPendingRemoteSegmentId>
+>;
+type _WorkbookNamespaceExportsPromotePendingRemoteOptions = Assert<
+  IsEqual<WorkbookNamespacePromotePendingRemoteOptions, PackageWorkbookPromotePendingRemoteOptions>
+>;
+type _WorkbookNamespaceExportsPromotePendingRemoteResult = Assert<
+  IsEqual<WorkbookNamespacePromotePendingRemoteResult, PackageWorkbookPromotePendingRemoteResult>
+>;
+type _WorkbookNamespaceExportsPromotePendingRemoteSkippedSegment = Assert<
+  IsEqual<WorkbookNamespacePromotePendingRemoteSkippedSegment, PackageWorkbookPromotePendingRemoteSkippedSegment>
+>;
+type _WorkbookNamespaceExportsPromotePendingRemoteStatus = Assert<
+  IsEqual<WorkbookNamespacePromotePendingRemoteStatus, PackageWorkbookPromotePendingRemoteStatus>
+>;
+type _WorkbookNamespaceExportsPromotePendingRemoteSkipReason = Assert<
+  IsEqual<WorkbookNamespacePromotePendingRemoteSkipReason, PackageWorkbookPromotePendingRemoteSkipReason>
+>;
+type _WorkbookNamespaceExportsPromotePendingRemoteDiagnostic = Assert<
+  IsEqual<WorkbookNamespacePromotePendingRemoteDiagnostic, PackageWorkbookPromotePendingRemoteDiagnostic>
+>;
+type _WorkbookNamespaceExportsPromotePendingRemoteDiagnosticCode = Assert<
+  IsEqual<WorkbookNamespacePromotePendingRemoteDiagnosticCode, PackageWorkbookPromotePendingRemoteDiagnosticCode>
 >;
 type _WorkbookNamespaceExportsSaveMergeResolutionsRequest = Assert<
   IsEqual<WorkbookNamespaceSaveMergeResolutionsRequest, PackageWorkbookSaveMergeResolutionsRequest>
@@ -336,6 +392,30 @@ type _ApiRootExportsMergeAttemptPersistence = Assert<
   IsEqual<ApiRootMergeAttemptPersistence, PackageApiMergeAttemptPersistence>
 >;
 type _ApiRootExportsMergeResultId = Assert<IsEqual<ApiRootMergeResultId, PackageApiMergeResultId>>;
+type _ApiRootExportsPendingRemoteSegmentId = Assert<
+  IsEqual<ApiRootPendingRemoteSegmentId, PackageApiPendingRemoteSegmentId>
+>;
+type _ApiRootExportsPromotePendingRemoteOptions = Assert<
+  IsEqual<ApiRootPromotePendingRemoteOptions, PackageApiPromotePendingRemoteOptions>
+>;
+type _ApiRootExportsPromotePendingRemoteResult = Assert<
+  IsEqual<ApiRootPromotePendingRemoteResult, PackageApiPromotePendingRemoteResult>
+>;
+type _ApiRootExportsPromotePendingRemoteSkippedSegment = Assert<
+  IsEqual<ApiRootPromotePendingRemoteSkippedSegment, PackageApiPromotePendingRemoteSkippedSegment>
+>;
+type _ApiRootExportsPromotePendingRemoteStatus = Assert<
+  IsEqual<ApiRootPromotePendingRemoteStatus, PackageApiPromotePendingRemoteStatus>
+>;
+type _ApiRootExportsPromotePendingRemoteSkipReason = Assert<
+  IsEqual<ApiRootPromotePendingRemoteSkipReason, PackageApiPromotePendingRemoteSkipReason>
+>;
+type _ApiRootExportsPromotePendingRemoteDiagnostic = Assert<
+  IsEqual<ApiRootPromotePendingRemoteDiagnostic, PackageApiPromotePendingRemoteDiagnostic>
+>;
+type _ApiRootExportsPromotePendingRemoteDiagnosticCode = Assert<
+  IsEqual<ApiRootPromotePendingRemoteDiagnosticCode, PackageApiPromotePendingRemoteDiagnosticCode>
+>;
 type _ApiRootExportsSaveMergeResolutionsRequest = Assert<
   IsEqual<ApiRootSaveMergeResolutionsRequest, PackageApiSaveMergeResolutionsRequest>
 >;

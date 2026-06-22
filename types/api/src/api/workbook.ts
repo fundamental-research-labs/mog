@@ -114,6 +114,8 @@ export type {
   VersionMergeMutationGuarantee, VersionMergeOptions, VersionMergeResult, VersionMergeResultId,
   VersionCapability, VersionCapabilityDependency, VersionCapabilityError, VersionCapabilityState,
   VersionPage, VersionPageOrder, VersionPageToken,
+  VersionPendingRemoteSegmentId, VersionPromotePendingRemoteDiagnostic, VersionPromotePendingRemoteDiagnosticCode,
+  VersionPromotePendingRemoteOptions, VersionPromotePendingRemoteResult, VersionPromotePendingRemoteSkippedSegment, VersionPromotePendingRemoteSkipReason, VersionPromotePendingRemoteStatus,
   VersionRecordRevision, VersionRedactedValue, VersionRedactionClass,
   VersionRef, VersionRefListResult, VersionRefMutationResult, VersionRefName,
   VersionRefNamespace, VersionRefReadResult, VersionRefSelector,

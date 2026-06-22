@@ -11,6 +11,14 @@ import type {
   VersionCreateBranchOptions as ContractsApiCreateBranchOptions,
   VersionDiffEntry as ContractsApiDiffEntry,
   VersionGetMergeConflictDetailRequest as ContractsApiGetMergeConflictDetailRequest,
+  VersionPendingRemoteSegmentId as ContractsApiPendingRemoteSegmentId,
+  VersionPromotePendingRemoteDiagnostic as ContractsApiPromotePendingRemoteDiagnostic,
+  VersionPromotePendingRemoteDiagnosticCode as ContractsApiPromotePendingRemoteDiagnosticCode,
+  VersionPromotePendingRemoteOptions as ContractsApiPromotePendingRemoteOptions,
+  VersionPromotePendingRemoteResult as ContractsApiPromotePendingRemoteResult,
+  VersionPromotePendingRemoteSkippedSegment as ContractsApiPromotePendingRemoteSkippedSegment,
+  VersionPromotePendingRemoteSkipReason as ContractsApiPromotePendingRemoteSkipReason,
+  VersionPromotePendingRemoteStatus as ContractsApiPromotePendingRemoteStatus,
   VersionPutMergeResolutionPayloadResult as ContractsApiPutMergeResolutionPayloadResult,
   VersionRefMutationResult as ContractsApiRefMutationResult,
   VersionResult as ContractsApiVersionResult,
@@ -38,6 +46,14 @@ import type {
   VersionCreateBranchOptions as ContractsWorkbookCreateBranchOptions,
   VersionDiffEntry as ContractsWorkbookDiffEntry,
   VersionGetMergeConflictDetailRequest as ContractsWorkbookGetMergeConflictDetailRequest,
+  VersionPendingRemoteSegmentId as ContractsWorkbookPendingRemoteSegmentId,
+  VersionPromotePendingRemoteDiagnostic as ContractsWorkbookPromotePendingRemoteDiagnostic,
+  VersionPromotePendingRemoteDiagnosticCode as ContractsWorkbookPromotePendingRemoteDiagnosticCode,
+  VersionPromotePendingRemoteOptions as ContractsWorkbookPromotePendingRemoteOptions,
+  VersionPromotePendingRemoteResult as ContractsWorkbookPromotePendingRemoteResult,
+  VersionPromotePendingRemoteSkippedSegment as ContractsWorkbookPromotePendingRemoteSkippedSegment,
+  VersionPromotePendingRemoteSkipReason as ContractsWorkbookPromotePendingRemoteSkipReason,
+  VersionPromotePendingRemoteStatus as ContractsWorkbookPromotePendingRemoteStatus,
   VersionPutMergeResolutionPayloadResult as ContractsWorkbookPutMergeResolutionPayloadResult,
   VersionRefMutationResult as ContractsWorkbookRefMutationResult,
   VersionResult as ContractsWorkbookVersionResult,
@@ -144,6 +160,30 @@ type _ContractsApiWorkbookEntryExportsPutMergeResolutionPayloadResult = Assert<
 type _ContractsApiWorkbookEntryExportsSealedResolutionPayloadRef = Assert<
   IsEqual<ContractsApiSealedResolutionPayloadRef, ContractsWorkbookSealedResolutionPayloadRef>
 >;
+type _ContractsApiWorkbookEntryExportsPendingRemoteSegmentId = Assert<
+  IsEqual<ContractsApiPendingRemoteSegmentId, ContractsWorkbookPendingRemoteSegmentId>
+>;
+type _ContractsApiWorkbookEntryExportsPromotePendingRemoteOptions = Assert<
+  IsEqual<ContractsApiPromotePendingRemoteOptions, ContractsWorkbookPromotePendingRemoteOptions>
+>;
+type _ContractsApiWorkbookEntryExportsPromotePendingRemoteResult = Assert<
+  IsEqual<ContractsApiPromotePendingRemoteResult, ContractsWorkbookPromotePendingRemoteResult>
+>;
+type _ContractsApiWorkbookEntryExportsPromotePendingRemoteSkippedSegment = Assert<
+  IsEqual<ContractsApiPromotePendingRemoteSkippedSegment, ContractsWorkbookPromotePendingRemoteSkippedSegment>
+>;
+type _ContractsApiWorkbookEntryExportsPromotePendingRemoteStatus = Assert<
+  IsEqual<ContractsApiPromotePendingRemoteStatus, ContractsWorkbookPromotePendingRemoteStatus>
+>;
+type _ContractsApiWorkbookEntryExportsPromotePendingRemoteSkipReason = Assert<
+  IsEqual<ContractsApiPromotePendingRemoteSkipReason, ContractsWorkbookPromotePendingRemoteSkipReason>
+>;
+type _ContractsApiWorkbookEntryExportsPromotePendingRemoteDiagnostic = Assert<
+  IsEqual<ContractsApiPromotePendingRemoteDiagnostic, ContractsWorkbookPromotePendingRemoteDiagnostic>
+>;
+type _ContractsApiWorkbookEntryExportsPromotePendingRemoteDiagnosticCode = Assert<
+  IsEqual<ContractsApiPromotePendingRemoteDiagnosticCode, ContractsWorkbookPromotePendingRemoteDiagnosticCode>
+>;
 
 type PublicVersionApiSurface = {
   readonly workbook: ContractsApiWorkbook;
@@ -170,6 +210,9 @@ type PublicVersionApiSurface = {
   readonly getMergeConflictDetailRequest: ContractsApiGetMergeConflictDetailRequest;
   readonly putMergeResolutionPayloadResult: ContractsApiPutMergeResolutionPayloadResult;
   readonly sealedResolutionPayloadRef: ContractsApiSealedResolutionPayloadRef;
+  readonly pendingRemoteSegmentId: ContractsApiPendingRemoteSegmentId;
+  readonly promotePendingRemoteOptions: ContractsApiPromotePendingRemoteOptions;
+  readonly promotePendingRemoteResult: ContractsApiPromotePendingRemoteResult;
   readonly page: ContractsApiPaged<string>;
 };
 

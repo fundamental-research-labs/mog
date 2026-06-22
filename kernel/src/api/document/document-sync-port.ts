@@ -1,8 +1,13 @@
 import {
+  classifyLegacyRawUpdate,
   validateProviderInboundUpdateEnvelope,
   validateSyncUpdateProvenance,
   type SyncUpdateProvenance,
 } from '@mog-sdk/types-document/storage';
+import {
+  createAdmittedSyncApplyContext,
+  type AdmittedSyncApplyContext,
+} from '../../bridges/compute/sync-apply-admission';
 import { slog } from '../../lib/slog';
 import type {
   ClassifiedRawSyncUpdateProvenance,
@@ -12,7 +17,7 @@ import type {
 } from '../../document/providers/provider';
 
 interface DocumentSyncComputeBridge {
-  syncApply(update: Uint8Array): Promise<unknown>;
+  syncApply(update: Uint8Array, syncApplyContext: AdmittedSyncApplyContext): Promise<unknown>;
   encodeDiff(remoteStateVector: Uint8Array): Promise<Uint8Array>;
   currentStateVector(): Promise<Uint8Array>;
 }
@@ -32,7 +37,25 @@ export function createDocumentByteSyncPort(
     docId: documentId,
     async applyUpdate(update: Uint8Array): Promise<void> {
       assertNotDisposed('syncPort.applyUpdate');
-      await getComputeBridge().syncApply(update);
+      const payloadHash = await sha256Hex(update, 'DocumentHandle.syncPort.applyUpdate');
+      const provenance = classifyLegacyRawUpdate({
+        payloadHash,
+        updateId: `legacy-raw:${payloadHash}`,
+      });
+      const validation = validateSyncUpdateProvenance(provenance, {
+        expectedPayloadHash: payloadHash,
+      });
+      const metadata: DocumentByteSyncPortApplyUpdateMetadata = {
+        source: 'document-sync-port',
+        docId: documentId,
+        envelopeVersion: 'classified-raw',
+        updateId: provenance.updateIdentity.updateId,
+        payloadHash,
+        provenance,
+        validationDiagnostics: validation.diagnostics,
+      };
+      const bridge = getComputeBridge();
+      await bridge.syncApply(update, admitDocumentSyncUpdate(bridge, metadata));
     },
     async applyUpdateWithProvenance(
       update: Uint8Array,
@@ -54,7 +77,7 @@ export function createDocumentByteSyncPort(
           ),
         );
       }
-      emitDocumentSyncAdmission(getComputeBridge(), {
+      const metadata: DocumentByteSyncPortApplyUpdateMetadata = {
         source: 'document-sync-port',
         docId: documentId,
         envelopeVersion: 'provenance-only',
@@ -62,8 +85,9 @@ export function createDocumentByteSyncPort(
         payloadHash,
         provenance,
         validationDiagnostics: validation.diagnostics,
-      });
-      await getComputeBridge().syncApply(update);
+      };
+      const bridge = getComputeBridge();
+      await bridge.syncApply(update, admitDocumentSyncUpdate(bridge, metadata));
     },
     async applyProviderEnvelope(envelope): Promise<void> {
       assertNotDisposed('syncPort.applyProviderEnvelope');
@@ -82,7 +106,7 @@ export function createDocumentByteSyncPort(
           ),
         );
       }
-      emitDocumentSyncAdmission(getComputeBridge(), {
+      const metadata: DocumentByteSyncPortApplyUpdateMetadata = {
         source: 'document-sync-port',
         docId: documentId,
         envelopeVersion: 'provider-inbound-update-v2',
@@ -92,8 +116,9 @@ export function createDocumentByteSyncPort(
         payloadHash,
         provenance: envelope.provenance,
         validationDiagnostics: validation.diagnostics,
-      });
-      await getComputeBridge().syncApply(envelope.payload);
+      };
+      const bridge = getComputeBridge();
+      await bridge.syncApply(envelope.payload, admitDocumentSyncUpdate(bridge, metadata));
     },
     async applyClassifiedRawUpdate(
       update: Uint8Array,
@@ -119,7 +144,7 @@ export function createDocumentByteSyncPort(
           ),
         );
       }
-      emitDocumentSyncAdmission(getComputeBridge(), {
+      const metadata: DocumentByteSyncPortApplyUpdateMetadata = {
         source: 'document-sync-port',
         docId: documentId,
         envelopeVersion: 'classified-raw',
@@ -127,8 +152,9 @@ export function createDocumentByteSyncPort(
         payloadHash,
         provenance,
         validationDiagnostics: validation.diagnostics,
-      });
-      await getComputeBridge().syncApply(update);
+      };
+      const bridge = getComputeBridge();
+      await bridge.syncApply(update, admitDocumentSyncUpdate(bridge, metadata));
     },
     encodeDiff(remoteStateVector: Uint8Array): Promise<Uint8Array> {
       assertNotDisposed('syncPort.encodeDiff');
@@ -154,6 +180,14 @@ function emitDocumentSyncAdmission(
   } catch (err) {
     slog('documentSyncPort.applyUpdateAdmissionSinkFailed', { error: err });
   }
+}
+
+function admitDocumentSyncUpdate(
+  bridge: unknown,
+  metadata: DocumentByteSyncPortApplyUpdateMetadata,
+): AdmittedSyncApplyContext {
+  emitDocumentSyncAdmission(bridge, metadata);
+  return createAdmittedSyncApplyContext(metadata);
 }
 
 function assertClassifiedRawSyncProvenance(

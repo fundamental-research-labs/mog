@@ -52,6 +52,7 @@ import {
   type MutationTuple,
   runSystemMutation,
 } from './mutation-admission';
+import type { AdmittedSyncApplyContext } from './sync-apply-admission';
 
 import type {
   ColumnSchemaWire,
@@ -1086,7 +1087,7 @@ export class ComputeCore {
     directEdits?: DirectEditPosition[],
     options?: MutationAdmissionOptions,
   ): Promise<MutationResult> {
-    const run = () => this.mutate(call(), directEdits, operation);
+    const run = () => this.mutate(call(), directEdits, operation, options);
     return runSystemMutation(this.ctx, this._writeGate, operation, run, options);
   }
 
@@ -1106,6 +1107,7 @@ export class ComputeCore {
         Promise.resolve(toMutationTuple(raw)),
         directEdits,
         operation,
+        options,
       );
       return { raw, mutation };
     };
@@ -1743,7 +1745,10 @@ export class ComputeCore {
    * STARTED phase. It can be called in CREATED (after createEngine) or later
    * phases to hydrate the Rust engine with persisted state.
    */
-  async syncApply(update: Uint8Array): Promise<MutationResult> {
+  async syncApply(
+    update: Uint8Array,
+    syncApplyContext: AdmittedSyncApplyContext,
+  ): Promise<MutationResult> {
     if (!this.engineCreated) {
       throw new BridgeError(
         'BRIDGE_NOT_STARTED',
@@ -1768,6 +1773,8 @@ export class ComputeCore {
         docId: this.docId,
         update,
       }),
+      undefined,
+      { syncApplyContext },
     );
     // Store the hydration result (overrides the empty init result)
     this.initResult = result.recalc;

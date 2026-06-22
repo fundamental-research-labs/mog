@@ -47,6 +47,7 @@ import {
   type TableHeaderRename,
 } from './table-header-write-intercept';
 import type { MutationAdmissionOptions } from './mutation-admission';
+import type { AdmittedSyncApplyContext } from './sync-apply-admission';
 
 export interface PivotCreateWithSheetOptions {
   insertBeforeSheetId?: SheetId;
@@ -797,8 +798,11 @@ export class ComputeBridge extends GeneratedBridgeBase {
     return this.core.syncDiff(remoteSv);
   }
 
-  syncApply(update: Uint8Array): Promise<MutationResult> {
-    return this.core.syncApply(update);
+  syncApply(
+    update: Uint8Array,
+    syncApplyContext: AdmittedSyncApplyContext,
+  ): Promise<MutationResult> {
+    return this.core.syncApply(update, syncApplyContext);
   }
 
   override async drainPendingUpdates(): Promise<Uint8Array[]> {

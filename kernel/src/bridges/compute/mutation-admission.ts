@@ -8,6 +8,11 @@ import {
   type OperationAdmissionClassification,
   type OperationInvocationKind,
 } from './operation-classification';
+import {
+  assertAdmittedSyncApplyContext,
+  SyncApplyAdmissionError,
+  type AdmittedSyncApplyContext,
+} from './sync-apply-admission';
 
 export type MutationTuple = [Uint8Array, MutationResult];
 
@@ -22,7 +27,9 @@ export type DirectEditRange = {
 
 export type MutationAdmissionDiagnosticCode =
   | 'versioning.admission.missing-context'
-  | 'versioning.admission.unclassified-write';
+  | 'versioning.admission.unclassified-write'
+  | 'provenance.missingContext'
+  | 'provenance.invalidContext';
 
 export interface MutationAdmissionDiagnostic {
   readonly code: MutationAdmissionDiagnosticCode;
@@ -37,6 +44,7 @@ export interface MutationAdmissionOptions {
   readonly invocation?: OperationInvocationKind;
   readonly awaitMaterialization?: boolean;
   readonly directEditRanges?: readonly DirectEditRange[];
+  readonly syncApplyContext?: AdmittedSyncApplyContext;
 }
 
 export interface VersionMutationCaptureRecordInput {
@@ -131,6 +139,28 @@ export function observeMutationAdmission(
       classification,
       message: `No VersionOperationContext supplied for '${operation}'.`,
     });
+  }
+
+  if (operation === 'compute_apply_sync_update') {
+    try {
+      assertAdmittedSyncApplyContext(options.syncApplyContext, operation);
+    } catch (error) {
+      const code =
+        error instanceof SyncApplyAdmissionError
+          ? error.code
+          : ('provenance.invalidContext' as const);
+      recordMutationAdmissionDiagnostic(ctx, {
+        code,
+        severity: 'error',
+        command: operation,
+        classification,
+        message:
+          code === 'provenance.missingContext'
+            ? `No admitted sync provenance context supplied for '${operation}'.`
+            : `Invalid admitted sync provenance context supplied for '${operation}'.`,
+      });
+      throw error;
+    }
   }
 
   return classification;

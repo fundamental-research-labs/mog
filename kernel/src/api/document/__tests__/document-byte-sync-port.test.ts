@@ -221,7 +221,16 @@ describe('DocumentHandle.createSyncPort', () => {
     await expect(port.applyUpdate(new Uint8Array([7]))).resolves.toBeUndefined();
     expect(bridge.currentStateVector).toHaveBeenCalledTimes(1);
     expect(bridge.encodeDiff).toHaveBeenCalledWith(new Uint8Array([9]));
-    expect(bridge.syncApply).toHaveBeenCalledWith(new Uint8Array([7]));
+    expect(bridge.syncApply).toHaveBeenCalledWith(new Uint8Array([7]), expect.any(Object));
+    expect(bridge.events).toEqual(['admission:classified-raw', 'syncApply']);
+    expect(bridge.admissions[0]).toMatchObject({
+      source: 'document-sync-port',
+      envelopeVersion: 'classified-raw',
+      provenance: expect.objectContaining({
+        sourceKind: 'legacyRawUnknown',
+        capturePolicy: 'excluded',
+      }),
+    });
 
     const recoveredBridge = createBridge(3);
     lifecycle.setComputeBridge(recoveredBridge);
@@ -249,7 +258,7 @@ describe('DocumentHandle.createSyncPort', () => {
       provenance,
       validationDiagnostics: [],
     });
-    expect(bridge.syncApply).toHaveBeenCalledWith(update);
+    expect(bridge.syncApply).toHaveBeenCalledWith(update, expect.any(Object));
   });
 
   it('applies provider V2 envelopes through the provenance-aware port path', async () => {
@@ -270,7 +279,7 @@ describe('DocumentHandle.createSyncPort', () => {
       provenance: envelope.provenance,
       validationDiagnostics: [],
     });
-    expect(bridge.syncApply).toHaveBeenCalledWith(envelope.payload);
+    expect(bridge.syncApply).toHaveBeenCalledWith(envelope.payload, expect.any(Object));
   });
 
   it('applies classified raw updates without allowing remote authorship claims', async () => {

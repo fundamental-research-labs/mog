@@ -19,6 +19,7 @@ import { attachWsSidecar, ComputeBridgeLike, fetchRoomSnapshot, WsSidecar } from
 import { createEventLog, type EventLog } from '../event-log';
 import { createCollabTestLog, type CollabTestLog } from './test-log-collector';
 import type { ClassifiedRawSyncUpdateProvenance } from '../../providers/provider';
+import { createAdmittedSyncApplyContext } from '../../../bridges/compute/sync-apply-admission';
 
 // ---------------------------------------------------------------------------
 // NAPI addon loading
@@ -531,7 +532,17 @@ describeWithAddon('WsSidecar integration (real server)', () => {
       syncPort: {
         async applyClassifiedRawUpdate(update, provenance) {
           classified.push(provenance);
-          await bridgeB.syncApply(update);
+          await bridgeB.syncApply(
+            update,
+            createAdmittedSyncApplyContext({
+              source: 'test-ws-sidecar',
+              docId: roomId,
+              envelopeVersion: 'classified-raw',
+              updateId: provenance.updateIdentity.updateId,
+              payloadHash: provenance.updateIdentity.payloadHash,
+              provenance,
+            }),
+          );
         },
       },
     });

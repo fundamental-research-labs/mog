@@ -57,6 +57,14 @@ export {
   type MutationAdmissionDiagnosticCode,
   type MutationAdmissionOptions,
 } from './mutation-admission';
+export {
+  SyncApplyAdmissionError,
+  assertAdmittedSyncApplyContext,
+  createAdmittedSyncApplyContext,
+  type AdmittedSyncApplyContext,
+  type SyncApplyAdmissionContextInput,
+  type SyncApplyAdmissionErrorCode,
+} from './sync-apply-admission';
 
 // ComputeCore — the real per-doc compute state holder, re-exported so the
 // shell-side trap-recovery integration tests

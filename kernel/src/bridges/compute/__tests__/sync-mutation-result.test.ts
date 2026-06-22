@@ -19,7 +19,10 @@
  */
 
 import { createRequire } from 'node:module';
+import { createHash } from 'node:crypto';
 import { join } from 'node:path';
+import { classifyLegacyRawUpdate } from '@mog-sdk/types-document/storage';
+import { createAdmittedSyncApplyContext } from '../sync-apply-admission';
 
 // ---------------------------------------------------------------------------
 // NAPI addon + SDK loading (same pattern as collab-e2e.test.ts)
@@ -140,7 +143,19 @@ async function syncAtoB(a: EngineFixture, b: EngineFixture): Promise<any> {
   const svB = await coreB.syncStateVector();
   const diff = await coreA.syncDiff(svB);
   expect(diff.byteLength).toBeGreaterThan(0);
-  return coreB.syncApply(diff);
+  const payloadHash = createHash('sha256').update(diff).digest('hex');
+  const provenance = classifyLegacyRawUpdate({ payloadHash, updateId: `test-sync:${payloadHash}` });
+  return coreB.syncApply(
+    diff,
+    createAdmittedSyncApplyContext({
+      source: 'test-sync-mutation-result',
+      docId: b.docId,
+      envelopeVersion: 'classified-raw',
+      updateId: provenance.updateIdentity.updateId,
+      payloadHash,
+      provenance,
+    }),
+  );
 }
 
 // ---------------------------------------------------------------------------

@@ -23,12 +23,14 @@
  */
 
 import {
+  classifyLegacyRawUpdate,
   DEFAULT_PROVENANCE_REDACTION_POLICY,
   validateSyncUpdateProvenance,
   type SyncUpdateProvenance,
 } from '@mog-sdk/types-document/storage';
 import type { StorageScopeBinding } from '@mog-sdk/types-document/storage/provider-identity';
 import type { ComputeBridge } from '../../bridges/compute/compute-bridge';
+import { createAdmittedSyncApplyContext } from '../../bridges/compute/sync-apply-admission';
 import { slog } from '../../lib/slog';
 import type { Provider, ProviderDoc, ProviderDocApplyUpdateMetadata } from './provider';
 
@@ -98,14 +100,12 @@ export function createBridgeBackedProviderDoc(
               update,
               options.providerReplayAdmission,
             )
-          : undefined);
-      if (admissionMetadata) {
-        emitApplyUpdateAdmission(bridge, options, admissionMetadata);
-      }
+          : await classifyLegacyRawProviderDocApplyUpdate(docId, update));
+      emitApplyUpdateAdmission(bridge, options, admissionMetadata);
       // `syncApply` is a mutation route — its return is the recalc result,
       // which Providers don't observe. We `await` so failures surface to the
       // caller (Provider attach replay would otherwise swallow apply errors).
-      await bridge.syncApply(update);
+      await bridge.syncApply(update, createAdmittedSyncApplyContext(admissionMetadata));
     },
     encodeDiff(remoteSv: Uint8Array): Promise<Uint8Array> {
       return bridge.encodeDiff(remoteSv);
@@ -129,6 +129,26 @@ async function classifyProviderReplayApplyUpdate(
     docId,
     envelopeVersion: 'provider-replay',
     ...(options.providerRefId === undefined ? {} : { providerRefId: options.providerRefId }),
+    payloadHash,
+    provenance,
+    validationDiagnostics: validation.diagnostics,
+  };
+}
+
+async function classifyLegacyRawProviderDocApplyUpdate(
+  docId: string,
+  update: Uint8Array,
+): Promise<ProviderDocApplyUpdateMetadata> {
+  const payloadHash = await sha256Hex(update);
+  const provenance = classifyLegacyRawUpdate({
+    payloadHash,
+    updateId: `legacy-raw:${payloadHash}`,
+  });
+  const validation = validateSyncUpdateProvenance(provenance, { expectedPayloadHash: payloadHash });
+  return {
+    source: 'provider-replay',
+    docId,
+    envelopeVersion: 'provider-replay',
     payloadHash,
     provenance,
     validationDiagnostics: validation.diagnostics,

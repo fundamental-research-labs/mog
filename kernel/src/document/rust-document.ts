@@ -70,6 +70,14 @@ import {
   type AppliedSyncUpdateIdentityStore,
   type AppliedSyncUpdateIdentityPreApplyRejectionReason,
 } from './applied-sync-update-identity-wiring';
+import {
+  completeSyncBatchStatus,
+  completeSyncBatchStatusFailedAfterMutation,
+  openSyncBatchStatusStoreFromProvider,
+  prepareSyncBatchStatusBeforeApply,
+  type SyncBatchStatusPreApplyRejectionReason,
+  type SyncBatchStatusStore,
+} from './sync-batch-status-wiring';
 import type { WriteGate } from './write-gate';
 import { touchDoc } from './providers/indexeddb-meta';
 import { slog } from '../lib/slog';
@@ -95,6 +103,7 @@ export type ProviderInboundUpdateReason =
   | 'document-destroyed'
   | 'provenance-validation-failed'
   | AppliedSyncUpdateIdentityPreApplyRejectionReason
+  | SyncBatchStatusPreApplyRejectionReason
   | `unknown-provider: ${string}`
   | `unsupported-payload-kind: ${ProviderInboundUpdateEnvelopeAny['payloadKind']}`
   | `stale-epoch: ${string} < ${string}`;
@@ -220,7 +229,9 @@ export class RustDocument {
   /** Engine-init options that the constructor caches for `initialize`. */
   private readonly initialSnapshot?: Record<string, unknown>;
   private readonly yrsState?: Uint8Array;
+  private versionSyncServicesProvider?: unknown;
   private appliedSyncUpdateIdentityStore?: AppliedSyncUpdateIdentityStore;
+  private syncBatchStatusStore?: SyncBatchStatusStore;
   /**
    * Full-state diff captured after the bridge reaches STARTED but before
    * Provider attach/replay for document-local structs written before the
@@ -623,8 +634,33 @@ export class RustDocument {
   }
 
   async installAppliedSyncUpdateIdentityStoreFromProvider(provider: unknown): Promise<void> {
-    const store = await openAppliedSyncUpdateIdentityStoreFromProvider(provider);
-    if (store) this.appliedSyncUpdateIdentityStore = store;
+    await this.installVersionSyncServicesFromProvider(provider);
+  }
+
+  async installVersionSyncServicesFromProvider(provider: unknown): Promise<void> {
+    if (provider === null || provider === undefined) return;
+    if (
+      this.versionSyncServicesProvider === provider &&
+      (this.appliedSyncUpdateIdentityStore || this.syncBatchStatusStore)
+    ) {
+      return;
+    }
+
+    this.versionSyncServicesProvider = provider;
+    const [appliedSyncUpdateIdentityStore, syncBatchStatusStore] = await Promise.all([
+      openAppliedSyncUpdateIdentityStoreFromProvider(provider),
+      openSyncBatchStatusStoreFromProvider(provider),
+    ]);
+    if (appliedSyncUpdateIdentityStore) {
+      this.appliedSyncUpdateIdentityStore = appliedSyncUpdateIdentityStore;
+    } else {
+      delete this.appliedSyncUpdateIdentityStore;
+    }
+    if (syncBatchStatusStore) {
+      this.syncBatchStatusStore = syncBatchStatusStore;
+    } else {
+      delete this.syncBatchStatusStore;
+    }
   }
 
   /**
@@ -676,7 +712,11 @@ export class RustDocument {
       };
     }
 
-    if (!this.appliedSyncUpdateIdentityStore && this._inboundUpdateLog.has(envelope.updateId)) {
+    if (
+      !this.appliedSyncUpdateIdentityStore &&
+      !this.syncBatchStatusStore &&
+      this._inboundUpdateLog.has(envelope.updateId)
+    ) {
       return { status: 'rejected', updateId: envelope.updateId, reason: 'duplicate-update-id' };
     }
 
@@ -717,6 +757,23 @@ export class RustDocument {
     };
 
     const admittedContext = createAdmittedSyncApplyContext(metadata);
+    const batchDecision = await prepareSyncBatchStatusBeforeApply({
+      store: this.syncBatchStatusStore,
+      admittedContext,
+    });
+    if (batchDecision.status === 'duplicate') {
+      return { status: 'duplicate', updateId: envelope.updateId, provenance };
+    }
+    if (batchDecision.status === 'rejected') {
+      return {
+        status: 'rejected',
+        updateId: envelope.updateId,
+        reason: batchDecision.reason,
+        provenance,
+      };
+    }
+    const batchReservation = batchDecision.reservation;
+
     const identityDecision = await prepareAppliedSyncUpdateIdentityBeforeApply({
       store: this.appliedSyncUpdateIdentityStore,
       admittedContext,
@@ -742,6 +799,16 @@ export class RustDocument {
       const doc = createBridgeBackedProviderDoc(this.computeBridge, this.docId);
       applyResult = await doc.applyUpdate(envelope.payload, metadata);
     } catch (error) {
+      if (batchReservation) {
+        try {
+          await completeSyncBatchStatusFailedAfterMutation(batchReservation);
+        } catch (terminalError) {
+          slog('rustDocument.applyProviderUpdateSyncBatchFailedAfterMutationTerminalFailed', {
+            updateId: envelope.updateId,
+            error: terminalError,
+          });
+        }
+      }
       if (identityReservation) {
         try {
           await completeAppliedSyncUpdateIdentityFailedAfterMutation(identityReservation);
@@ -757,8 +824,23 @@ export class RustDocument {
       this._currentUpdateOrigin = 'local';
     }
 
+    let terminalError: unknown;
+    if (batchReservation) {
+      try {
+        await completeSyncBatchStatus(batchReservation);
+      } catch (error) {
+        terminalError = error;
+      }
+    }
     if (identityReservation) {
-      await completeAppliedSyncUpdateIdentity(identityReservation);
+      try {
+        await completeAppliedSyncUpdateIdentity(identityReservation);
+      } catch (error) {
+        terminalError ??= error;
+      }
+    }
+    if (terminalError) {
+      throw terminalError;
     }
 
     this._inboundUpdateLog.add(envelope.updateId);

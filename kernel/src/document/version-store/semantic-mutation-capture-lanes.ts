@@ -9,7 +9,7 @@ export function classifySemanticMutationCaptureLane(
   if (!isCommitEligibleCapture(context)) return 'skip';
 
   const collaboration = context.collaboration;
-  if (!collaboration) return 'normalLocal';
+  if (!collaboration) return context.kind === 'sync-import' ? 'skip' : 'normalLocal';
   if (collaboration.replay) return 'skip';
   if (collaboration.authorState === 'mixedRemote' || collaboration.authorState === 'unknown') {
     return 'skip';

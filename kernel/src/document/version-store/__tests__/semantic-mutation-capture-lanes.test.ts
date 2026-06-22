@@ -168,6 +168,12 @@ describe('semantic mutation capture lanes', () => {
         }),
       }),
       operationContext({
+        operationId: 'sync-missing-collaboration',
+        kind: 'sync-import',
+        author: REMOTE_AUTHOR,
+        collaboration: undefined,
+      }),
+      operationContext({
         operationId: 'excluded-lifecycle',
         kind: 'sync-import',
         author: { authorId: 'sync:collaboration-hydration', actorKind: 'system' },

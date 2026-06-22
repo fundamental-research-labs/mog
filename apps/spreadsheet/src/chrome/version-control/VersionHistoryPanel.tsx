@@ -18,6 +18,14 @@ import type {
 } from '@mog-sdk/contracts/api';
 
 import { useWorkbook } from '../../internal-api';
+import {
+  DisabledReason,
+  getBranchAvailability,
+  getCheckoutAvailability,
+  getCommitAvailability,
+  getDiffAvailability,
+  safeDomId,
+} from './version-action-availability';
 
 const COMMIT_PAGE_SIZE = 20;
 const VERSION_BRANCH_REF_PREFIX = 'refs/heads/';
@@ -182,29 +190,20 @@ export function VersionHistoryPanelContent({
   const selectedOrHeadCommitId = data
     ? resolveSelectedOrHeadCommitId(data, selectedCommitId)
     : undefined;
-  const canCommit =
-    Boolean(data) &&
-    !actionBusy &&
-    !loading &&
-    capabilityEnabled(data?.surface, 'version:commit') &&
-    data?.surface?.dirty.commitEligibleChanges === true &&
-    data?.surface?.current.stale !== true &&
-    commitMessage.trim().length > 0;
-  const canCreateBranch =
-    Boolean(data) &&
-    !actionBusy &&
-    !loading &&
-    capabilityEnabled(data?.surface, 'version:branch') &&
-    branchName.trim().length > 0 &&
-    Boolean(selectedOrHeadCommitId);
-  const canCheckout =
-    Boolean(data) &&
-    !actionBusy &&
-    !loading &&
-    capabilityEnabled(data?.surface, 'version:checkout') &&
-    data?.surface?.dirty.checkoutSafe === true;
-  const canDiff =
-    Boolean(data) && !actionBusy && !loading && capabilityEnabled(data?.surface, 'version:diff');
+  const commitAvailability = getCommitAvailability(data, actionBusy, loading, commitMessage);
+  const branchAvailability = getBranchAvailability(
+    data,
+    actionBusy,
+    loading,
+    branchName,
+    selectedOrHeadCommitId,
+  );
+  const checkoutAvailability = getCheckoutAvailability(data, actionBusy, loading);
+  const diffAvailability = getDiffAvailability(data, actionBusy, loading);
+  const canCommit = commitAvailability.enabled;
+  const canCreateBranch = branchAvailability.enabled;
+  const canCheckout = checkoutAvailability.enabled;
+  const canDiff = diffAvailability.enabled;
 
   const handleCommit = useCallback(async () => {
     if (!data || !canCommit) return;
@@ -255,7 +254,10 @@ export function VersionHistoryPanelContent({
 
     setBranchName('');
     setSelectedCommitId(result.value.commitId);
-    setActionState({ status: 'success', message: `Created ${displayBranchName(result.value.name)}` });
+    setActionState({
+      status: 'success',
+      message: `Created ${displayBranchName(result.value.name)}`,
+    });
     await load();
   }, [branchName, canCreateBranch, data, load, selectedOrHeadCommitId, workbook]);
 
@@ -375,6 +377,8 @@ export function VersionHistoryPanelContent({
               actionState={actionState}
               commitEnabled={canCommit}
               branchEnabled={canCreateBranch}
+              commitDisabledReason={commitAvailability.disabledReason}
+              branchDisabledReason={branchAvailability.disabledReason}
               onCommitMessageChange={setCommitMessage}
               onBranchNameChange={setBranchName}
               onCommit={handleCommit}
@@ -383,6 +387,7 @@ export function VersionHistoryPanelContent({
             <RefList
               refs={data.refs}
               checkoutEnabled={canCheckout}
+              checkoutDisabledReason={checkoutAvailability.disabledReason}
               onCheckoutRef={handleCheckoutRef}
             />
             <ProposalSurfaceStatus surface={data.surface} />
@@ -390,6 +395,7 @@ export function VersionHistoryPanelContent({
               commits={data.commits}
               selectedCommitId={selectedCommitId}
               diffEnabled={canDiff}
+              diffDisabledReason={diffAvailability.disabledReason}
               onSelectCommit={setSelectedCommitId}
               onDiffCommit={handleDiffCommit}
             />
@@ -409,6 +415,8 @@ function VersionActions({
   actionState,
   commitEnabled,
   branchEnabled,
+  commitDisabledReason,
+  branchDisabledReason,
   onCommitMessageChange,
   onBranchNameChange,
   onCommit,
@@ -420,11 +428,16 @@ function VersionActions({
   readonly actionState: VersionActionState;
   readonly commitEnabled: boolean;
   readonly branchEnabled: boolean;
+  readonly commitDisabledReason?: string;
+  readonly branchDisabledReason?: string;
   readonly onCommitMessageChange: (value: string) => void;
   readonly onBranchNameChange: (value: string) => void;
   readonly onCommit: () => void;
   readonly onCreateBranch: () => void;
 }): React.JSX.Element {
+  const commitReasonId = 'version-commit-disabled-reason';
+  const branchReasonId = 'version-branch-disabled-reason';
+
   return (
     <section className="flex flex-col gap-3" aria-label="Version actions">
       <div className="flex flex-col gap-2">
@@ -442,11 +455,17 @@ function VersionActions({
           type="button"
           onClick={onCommit}
           disabled={!commitEnabled}
+          aria-describedby={!commitEnabled && commitDisabledReason ? commitReasonId : undefined}
+          title={!commitEnabled ? commitDisabledReason : undefined}
           className="inline-flex h-8 items-center justify-center gap-1.5 rounded-sm border border-ss-border bg-ss-surface-secondary px-2.5 text-body-sm font-medium text-ss-text transition-colors hover:bg-ss-surface-hover disabled:opacity-50 disabled:hover:bg-ss-surface-secondary"
         >
           <GitCommit size={14} strokeWidth={1.75} aria-hidden="true" />
           <span>Commit</span>
         </button>
+        <DisabledReason
+          id={commitReasonId}
+          reason={!commitEnabled ? commitDisabledReason : undefined}
+        />
       </div>
 
       <div className="flex flex-col gap-2">
@@ -468,12 +487,18 @@ function VersionActions({
             type="button"
             onClick={onCreateBranch}
             disabled={!branchEnabled}
+            aria-describedby={!branchEnabled && branchDisabledReason ? branchReasonId : undefined}
+            title={!branchEnabled ? branchDisabledReason : undefined}
             className="inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-sm border border-ss-border bg-ss-surface-secondary px-2.5 text-body-sm font-medium text-ss-text transition-colors hover:bg-ss-surface-hover disabled:opacity-50 disabled:hover:bg-ss-surface-secondary"
           >
             <GitBranch size={14} strokeWidth={1.75} aria-hidden="true" />
             <span>Create branch</span>
           </button>
         </div>
+        <DisabledReason
+          id={branchReasonId}
+          reason={!branchEnabled ? branchDisabledReason : undefined}
+        />
       </div>
 
       <ActionStatus actionState={actionState} />
@@ -607,18 +632,26 @@ function CapabilitySummary({
 function RefList({
   refs,
   checkoutEnabled,
+  checkoutDisabledReason,
   onCheckoutRef,
 }: {
   readonly refs: readonly VersionRef[];
   readonly checkoutEnabled: boolean;
+  readonly checkoutDisabledReason?: string;
   readonly onCheckoutRef: (ref: VersionRef) => void;
 }): React.JSX.Element {
+  const checkoutReasonId = 'version-checkout-disabled-reason';
+
   return (
     <section className="flex flex-col gap-2" aria-label="Branches">
       <div className="flex items-center gap-2 text-body-sm font-semibold text-ss-text">
         <GitBranch size={15} strokeWidth={1.75} aria-hidden="true" />
         <span>Branches</span>
       </div>
+      <DisabledReason
+        id={checkoutReasonId}
+        reason={!checkoutEnabled ? checkoutDisabledReason : undefined}
+      />
       {refs.length === 0 ? (
         <div className="text-body-sm text-ss-text-secondary py-2">No branches available</div>
       ) : (
@@ -641,6 +674,10 @@ function RefList({
                     onClick={() => onCheckoutRef(ref)}
                     disabled={!checkoutEnabled}
                     aria-label={`Checkout ${branchLabel}`}
+                    aria-describedby={
+                      !checkoutEnabled && checkoutDisabledReason ? checkoutReasonId : undefined
+                    }
+                    title={!checkoutEnabled ? checkoutDisabledReason : undefined}
                     className="inline-flex h-7 shrink-0 items-center justify-center rounded-sm border border-ss-border bg-ss-surface-secondary px-2 text-[11px] font-medium text-ss-text transition-colors hover:bg-ss-surface-hover disabled:opacity-50 disabled:hover:bg-ss-surface-secondary"
                   >
                     Checkout
@@ -659,74 +696,100 @@ function CommitList({
   commits,
   selectedCommitId,
   diffEnabled,
+  diffDisabledReason,
   onSelectCommit,
   onDiffCommit,
 }: {
   readonly commits: readonly WorkbookCommitSummary[];
   readonly selectedCommitId?: WorkbookCommitId;
   readonly diffEnabled: boolean;
+  readonly diffDisabledReason?: string;
   readonly onSelectCommit: (commitId: WorkbookCommitId) => void;
   readonly onDiffCommit: (commit: WorkbookCommitSummary) => void;
 }): React.JSX.Element {
+  const diffReasonId = 'version-diff-disabled-reason';
+
   return (
     <section className="flex flex-col gap-2" aria-label="Recent commits">
       <div className="flex items-center gap-2 text-body-sm font-semibold text-ss-text">
         <GitCommit size={15} strokeWidth={1.75} aria-hidden="true" />
         <span>Recent Commits</span>
       </div>
+      <DisabledReason id={diffReasonId} reason={!diffEnabled ? diffDisabledReason : undefined} />
       {commits.length === 0 ? (
         <div className="text-body-sm text-ss-text-secondary py-2">No commits available</div>
       ) : (
         <ol className="flex flex-col gap-2 m-0 p-0 list-none">
-          {commits.map((commit) => (
-            <li
-              key={commit.id}
-              className={`border rounded-sm p-2 bg-ss-surface ${
-                selectedCommitId === commit.id ? 'border-ss-primary' : 'border-ss-border'
-              }`}
-            >
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <div className="text-body-sm font-medium text-ss-text truncate">
-                    {annotationText(commit.annotation?.title) ??
-                      annotationText(commit.annotation?.message) ??
-                      shortCommitId(commit.id)}
+          {commits.map((commit) => {
+            const rootDiffReason =
+              commit.parents.length === 0 ? 'Root commits do not have a parent diff.' : undefined;
+            const commitDiffEnabled = diffEnabled && !rootDiffReason;
+            const commitDiffReasonId = `version-diff-disabled-${safeDomId(commit.id)}`;
+            const describedBy = !diffEnabled
+              ? diffReasonId
+              : rootDiffReason
+                ? commitDiffReasonId
+                : undefined;
+            const buttonTitle = !diffEnabled ? diffDisabledReason : rootDiffReason;
+
+            return (
+              <li
+                key={commit.id}
+                className={`border rounded-sm p-2 bg-ss-surface ${
+                  selectedCommitId === commit.id ? 'border-ss-primary' : 'border-ss-border'
+                }`}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="text-body-sm font-medium text-ss-text truncate">
+                      {annotationText(commit.annotation?.title) ??
+                        annotationText(commit.annotation?.message) ??
+                        shortCommitId(commit.id)}
+                    </div>
+                    <div className="font-mono text-[11px] text-ss-text-secondary truncate">
+                      {shortCommitId(commit.id)}
+                    </div>
                   </div>
-                  <div className="font-mono text-[11px] text-ss-text-secondary truncate">
-                    {shortCommitId(commit.id)}
+                  <div className="flex shrink-0 items-center gap-2">
+                    <time
+                      className="text-[11px] text-ss-text-secondary"
+                      dateTime={commit.createdAt}
+                    >
+                      {formatCommitTime(commit.createdAt)}
+                    </time>
+                    <input
+                      type="radio"
+                      name="version-history-branch-target"
+                      checked={selectedCommitId === commit.id}
+                      onChange={() => onSelectCommit(commit.id)}
+                      aria-label={`Use ${shortCommitId(commit.id)} as branch target`}
+                      className="h-3.5 w-3.5 accent-ss-primary"
+                    />
                   </div>
                 </div>
-                <div className="flex shrink-0 items-center gap-2">
-                  <time className="text-[11px] text-ss-text-secondary" dateTime={commit.createdAt}>
-                    {formatCommitTime(commit.createdAt)}
-                  </time>
-                  <input
-                    type="radio"
-                    name="version-history-branch-target"
-                    checked={selectedCommitId === commit.id}
-                    onChange={() => onSelectCommit(commit.id)}
-                    aria-label={`Use ${shortCommitId(commit.id)} as branch target`}
-                    className="h-3.5 w-3.5 accent-ss-primary"
-                  />
+                <div className="mt-2 flex items-center justify-between gap-2">
+                  <div className="min-w-0 text-[11px] text-ss-text-secondary truncate">
+                    {commit.author.displayName ?? commit.author.actorKind ?? 'Unknown author'}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => onDiffCommit(commit)}
+                    disabled={!commitDiffEnabled}
+                    aria-label={`Diff ${shortCommitId(commit.id)} against parent`}
+                    aria-describedby={describedBy}
+                    title={buttonTitle}
+                    className="inline-flex h-7 shrink-0 items-center justify-center gap-1 rounded-sm border border-ss-border bg-ss-surface-secondary px-2 text-[11px] font-medium text-ss-text transition-colors hover:bg-ss-surface-hover disabled:opacity-50 disabled:hover:bg-ss-surface-secondary"
+                  >
+                    <GitCompare size={13} strokeWidth={1.75} aria-hidden="true" />
+                    <span>Diff</span>
+                  </button>
                 </div>
-              </div>
-              <div className="mt-2 flex items-center justify-between gap-2">
-                <div className="min-w-0 text-[11px] text-ss-text-secondary truncate">
-                  {commit.author.displayName ?? commit.author.actorKind ?? 'Unknown author'}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => onDiffCommit(commit)}
-                  disabled={!diffEnabled || commit.parents.length === 0}
-                  aria-label={`Diff ${shortCommitId(commit.id)} against parent`}
-                  className="inline-flex h-7 shrink-0 items-center justify-center gap-1 rounded-sm border border-ss-border bg-ss-surface-secondary px-2 text-[11px] font-medium text-ss-text transition-colors hover:bg-ss-surface-hover disabled:opacity-50 disabled:hover:bg-ss-surface-secondary"
-                >
-                  <GitCompare size={13} strokeWidth={1.75} aria-hidden="true" />
-                  <span>Diff</span>
-                </button>
-              </div>
-            </li>
-          ))}
+                {diffEnabled ? (
+                  <DisabledReason id={commitDiffReasonId} reason={rootDiffReason} />
+                ) : null}
+              </li>
+            );
+          })}
         </ol>
       )}
     </section>
@@ -842,13 +905,6 @@ async function readVersionResult<T>(
       },
     };
   }
-}
-
-function capabilityEnabled(
-  surface: VersionSurfaceStatus | undefined,
-  capability: VersionCapability,
-): boolean {
-  return surface?.capabilities[capability]?.enabled === true;
 }
 
 function resolveSelectedOrHeadCommitId(

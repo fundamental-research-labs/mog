@@ -116,14 +116,72 @@ describe('VersionHistoryPanelContent', () => {
     await user.type(screen.getByLabelText('Commit message'), 'Checkpoint');
     await user.type(screen.getByLabelText('Branch name'), 'refs/heads/review');
 
-    expect(screen.getByRole('button', { name: /^Commit$/ })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Create branch' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Checkout scenario/budget' })).toBeDisabled();
+    const commitButton = screen.getByRole('button', { name: /^Commit$/ });
+    const branchButton = screen.getByRole('button', { name: 'Create branch' });
+    const checkoutButton = screen.getByRole('button', { name: 'Checkout scenario/budget' });
+    const diffButton = screen.getByRole('button', {
+      name: `Diff ${shortCommitId(HEAD_COMMIT_ID)} against parent`,
+    });
+
+    expect(commitButton).toBeDisabled();
+    expect(commitButton).toHaveAccessibleDescription('version:commit is not available.');
+    expect(screen.getByText('version:commit is not available.')).toBeVisible();
+    expect(branchButton).toBeDisabled();
+    expect(branchButton).toHaveAccessibleDescription('version:branch is not available.');
+    expect(screen.getByText('version:branch is not available.')).toBeVisible();
+    expect(checkoutButton).toBeDisabled();
+    expect(checkoutButton).toHaveAccessibleDescription('version:checkout is not available.');
+    expect(screen.getByText('version:checkout is not available.')).toBeVisible();
+    expect(diffButton).toBeDisabled();
+    expect(diffButton).toHaveAccessibleDescription('version:diff is not available.');
+    expect(screen.getByText('version:diff is not available.')).toBeVisible();
+  });
+
+  it('shows dirty checkout, stale commit, and parentless diff disabled reasons', async () => {
+    const checkoutUnsafeReason = {
+      code: 'version.surfaceStatus.dirtyWorkingState',
+      severity: 'warning' as const,
+      message: 'Workbook has uncommitted local changes; checkout would discard them.',
+    };
+    const workbook = createWorkbook({
+      getSurfaceStatus: jest.fn(async () =>
+        createSurfaceStatus({
+          current: { stale: true, staleReason: 'refMoved' },
+          dirty: {
+            hasUncommittedLocalChanges: true,
+            checkoutSafe: false,
+            unsafeReasons: [checkoutUnsafeReason],
+            diagnostics: [checkoutUnsafeReason],
+          },
+        }),
+      ),
+    });
+    const user = userEvent.setup();
+
+    render(<VersionHistoryPanelContent workbook={workbook} onClose={jest.fn()} />);
+
+    await screen.findByText('Calculated forecast');
+    await user.type(screen.getByLabelText('Commit message'), 'Checkpoint');
+
+    const commitButton = screen.getByRole('button', { name: /^Commit$/ });
+    const checkoutButton = screen.getByRole('button', { name: 'Checkout scenario/budget' });
+    const rootDiffButton = screen.getByRole('button', {
+      name: `Diff ${shortCommitId(PARENT_COMMIT_ID)} against parent`,
+    });
+
+    expect(commitButton).toBeDisabled();
+    expect(commitButton).toHaveAccessibleDescription(
+      'main is stale because the branch head moved. Refresh before committing.',
+    );
     expect(
-      screen.getByRole('button', {
-        name: `Diff ${shortCommitId(HEAD_COMMIT_ID)} against parent`,
-      }),
-    ).toBeDisabled();
+      screen.getByText('main is stale because the branch head moved. Refresh before committing.'),
+    ).toBeVisible();
+    expect(checkoutButton).toBeDisabled();
+    expect(checkoutButton).toHaveAccessibleDescription(checkoutUnsafeReason.message);
+    expect(screen.getByText(checkoutUnsafeReason.message)).toBeVisible();
+    expect(rootDiffButton).toBeDisabled();
+    expect(rootDiffButton).toHaveAccessibleDescription('Root commits do not have a parent diff.');
+    expect(screen.getByText('Root commits do not have a parent diff.')).toBeVisible();
   });
 
   it('calls commit, createBranch, checkout, and parent diff through workbook.version', async () => {
@@ -314,8 +372,12 @@ function createWorkbook(
 
 function createSurfaceStatus({
   disabledCapabilities = [],
+  current = {},
+  dirty = {},
 }: {
   readonly disabledCapabilities?: readonly VersionCapability[];
+  readonly current?: Partial<VersionSurfaceStatus['current']>;
+  readonly dirty?: Partial<VersionSurfaceStatus['dirty']>;
 } = {}): VersionSurfaceStatus {
   const disabled = new Set<VersionCapability>(['version:revert', ...disabledCapabilities]);
 
@@ -334,6 +396,7 @@ function createSurfaceStatus({
       branchName: 'refs/heads/main',
       detached: false,
       stale: false,
+      ...current,
     },
     dirty: {
       statusRevision: '1',
@@ -347,6 +410,7 @@ function createSurfaceStatus({
       unsafeReasons: [],
       source: 'VC-05',
       diagnostics: [],
+      ...dirty,
     },
     capabilities: Object.fromEntries(
       ALL_CAPABILITIES.map((capability) => [

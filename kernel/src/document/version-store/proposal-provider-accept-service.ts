@@ -12,6 +12,7 @@ import { isWorkbookCommitId } from './proposal-provider-service-utils';
 import type { AgentProposalAcceptance, AgentProposalMetadataStore } from './proposal-store';
 import type { VersionStoreProvider } from './provider';
 import { namespaceForRegistry } from './registry';
+import type { WorkbookVersionMarkReviewAppliedInput } from './review-service';
 
 type ProposalGraphProvider = Pick<
   VersionStoreProvider,
@@ -42,6 +43,9 @@ export async function acceptProviderBackedAgentProposal(options: {
   readonly ensureCommitExists: (commitId: WorkbookCommitId) => Promise<CommitExistsResult>;
   readonly resolveTargetHead: (targetRef: string) => Promise<ResolutionResult>;
   readonly getReview?: (reviewId: string) => Promise<VersionResult<WorkbookVersionReviewRecord>>;
+  readonly markReviewApplied?: (
+    input: WorkbookVersionMarkReviewAppliedInput,
+  ) => Promise<VersionResult<WorkbookVersionReviewRecord>>;
 }): Promise<VersionResult<AgentProposalAcceptResult>> {
   const store = await openProposalStore(options.openStore);
   if (!store.ok) return store.result;
@@ -51,6 +55,12 @@ export async function acceptProviderBackedAgentProposal(options: {
   const proposal = proposalResult.value;
 
   if (proposal.status === 'applied' && proposal.accepted) {
+    const finalizedReview = await markLinkedReviewApplied({
+      input: options.input,
+      reviewId: proposal.reviewId,
+      markReviewApplied: options.markReviewApplied,
+    });
+    if (!finalizedReview.ok) return finalizedReview.result;
     return ok(fastForwardAcceptResult(proposal.id, proposal.accepted));
   }
   if (proposal.revision !== options.input.expectedRevision) {
@@ -131,6 +141,13 @@ export async function acceptProviderBackedAgentProposal(options: {
   });
   if (!updated.ok) return storeFailure(updated);
 
+  const finalizedReview = await markLinkedReviewApplied({
+    input: options.input,
+    reviewId: reviewReady.review.id,
+    markReviewApplied: options.markReviewApplied,
+  });
+  if (!finalizedReview.ok) return finalizedReview.result;
+
   return ok(fastForwardAcceptResult(updated.value.id, accepted));
 }
 
@@ -140,7 +157,10 @@ async function requireApprovedProposalReview(input: {
   readonly proposalCommitId: WorkbookCommitId;
   readonly reviewId?: string;
   readonly getReview?: (reviewId: string) => Promise<VersionResult<WorkbookVersionReviewRecord>>;
-}): Promise<{ readonly ok: true } | { readonly ok: false; readonly result: VersionResult<never> }> {
+}): Promise<
+  | { readonly ok: true; readonly review: WorkbookVersionReviewRecord }
+  | { readonly ok: false; readonly result: VersionResult<never> }
+> {
   if (!input.reviewId) {
     return {
       ok: false,
@@ -188,7 +208,23 @@ async function requireApprovedProposalReview(input: {
       ),
     };
   }
-  return { ok: true };
+  return { ok: true, review: review.value };
+}
+
+async function markLinkedReviewApplied(input: {
+  readonly input: AcceptAgentProposalInput;
+  readonly reviewId?: string;
+  readonly markReviewApplied?: (
+    reviewInput: WorkbookVersionMarkReviewAppliedInput,
+  ) => Promise<VersionResult<WorkbookVersionReviewRecord>>;
+}): Promise<{ readonly ok: true } | { readonly ok: false; readonly result: VersionResult<never> }> {
+  if (!input.reviewId || !input.markReviewApplied) return { ok: true };
+  const applied = await input.markReviewApplied({
+    reviewId: input.reviewId,
+    clientRequestId: `${input.input.clientRequestId}:review-applied`,
+    actor: input.input.actor,
+  });
+  return applied.ok ? { ok: true } : { ok: false, result: applied };
 }
 
 async function fastForwardTargetRef(

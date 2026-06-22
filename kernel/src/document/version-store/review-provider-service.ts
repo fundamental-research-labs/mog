@@ -16,6 +16,7 @@ import type {
 import { buildWorkbookVersionReviewApprovalEvidence } from './review-approval';
 import type { WorkbookVersionReviewDiffService } from './review-diff-service';
 import type {
+  WorkbookVersionMarkReviewAppliedInput,
   WorkbookVersionReviewRecordStore,
   WorkbookVersionReviewRecordStoreProvider,
   WorkbookVersionReviewService,
@@ -33,23 +34,33 @@ export class ProviderBackedWorkbookVersionReviewService implements WorkbookVersi
     this.diffService = options.diffService;
   }
 
-  async listReviews(input: VersionListReviewsInput): Promise<VersionResult<Paged<WorkbookVersionReviewRecordSummary>>> {
+  async listReviews(
+    input: VersionListReviewsInput,
+  ): Promise<VersionResult<Paged<WorkbookVersionReviewRecordSummary>>> {
     return (await this.openStore()).listReviews(input);
   }
 
-  async getReview(input: VersionGetReviewInput): Promise<VersionResult<WorkbookVersionReviewRecord>> {
+  async getReview(
+    input: VersionGetReviewInput,
+  ): Promise<VersionResult<WorkbookVersionReviewRecord>> {
     return (await this.openStore()).getReview(input);
   }
 
-  async createReview(input: VersionCreateReviewInput): Promise<VersionResult<WorkbookVersionReviewRecord>> {
+  async createReview(
+    input: VersionCreateReviewInput,
+  ): Promise<VersionResult<WorkbookVersionReviewRecord>> {
     return (await this.openStore()).createReview(input);
   }
 
-  async appendReviewDecision(input: VersionAppendReviewDecisionInput): Promise<VersionResult<WorkbookVersionReviewRecord>> {
+  async appendReviewDecision(
+    input: VersionAppendReviewDecisionInput,
+  ): Promise<VersionResult<WorkbookVersionReviewRecord>> {
     return (await this.openStore()).appendReviewDecision(input);
   }
 
-  async updateReviewStatus(input: VersionUpdateReviewStatusInput): Promise<VersionResult<WorkbookVersionReviewRecord>> {
+  async updateReviewStatus(
+    input: VersionUpdateReviewStatusInput,
+  ): Promise<VersionResult<WorkbookVersionReviewRecord>> {
     const store = await this.openStore();
     if (input.status !== 'approved') return store.updateReviewStatus(input);
 
@@ -77,6 +88,34 @@ export class ProviderBackedWorkbookVersionReviewService implements WorkbookVersi
       approvalEvidence: approvalEvidence.value,
       updatedAt,
     });
+  }
+
+  async markReviewApplied(
+    input: WorkbookVersionMarkReviewAppliedInput,
+  ): Promise<VersionResult<WorkbookVersionReviewRecord>> {
+    const store = await this.openStore();
+    const review = await store.getReview({ reviewId: input.reviewId });
+    if (!review.ok) return review;
+    if (review.value.status === 'applied') return review;
+    if (review.value.status !== 'approved') {
+      return invalidState(
+        'review_not_approved_for_apply',
+        ['approved'],
+        'Only approved reviews can be finalized as applied.',
+      );
+    }
+
+    return store.updateReviewStatus(
+      {
+        reviewId: input.reviewId,
+        expectedRevision: review.value.revision,
+        clientRequestId: input.clientRequestId,
+        status: 'applied',
+        actor: input.actor,
+        ...(input.reason ? { reason: input.reason } : {}),
+      },
+      { flowOwnedStatus: true, preserveApproval: true },
+    );
   }
 
   async getReviewDiff(
@@ -156,11 +195,7 @@ function invalidState<T>(
   return { ok: false, error: { code: 'invalid_state', state, allowed, reason } };
 }
 
-function targetUnavailable<T>(
-  operation: string,
-  code: string,
-  message: string,
-): VersionResult<T> {
+function targetUnavailable<T>(operation: string, code: string, message: string): VersionResult<T> {
   return {
     ok: false,
     error: {

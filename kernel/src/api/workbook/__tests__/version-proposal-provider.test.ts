@@ -243,6 +243,32 @@ describe('WorkbookVersion provider-backed proposal service', () => {
       ok: true,
       value: { status: 'applied', revision: 6 },
     });
+    await expect(version.getReview({ reviewId: review.value.id })).resolves.toMatchObject({
+      ok: true,
+      value: {
+        status: 'applied',
+        revision: approved.value.revision + 1,
+        approval: { reviewRevision: approved.value.revision },
+      },
+    });
+
+    await expect(
+      version.acceptProposal({
+        clientRequestId: 'proposal-accept-1-retry',
+        proposalId: created.value.id,
+        expectedRevision: 5,
+        expectedTargetHeadId: graph.rootCommitId,
+        actor: ACTOR,
+        resolutionPolicy: 'fastForwardOnly',
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      value: {
+        status: 'fast_forwarded',
+        proposalId: created.value.id,
+        appliedCommitId: committed.value.proposalCommitId,
+      },
+    });
   });
 
   it('rejects proposal acceptance until the linked review is approved', async () => {
@@ -283,6 +309,10 @@ describe('WorkbookVersion provider-backed proposal service', () => {
       ok: true,
       value: { status: 'ready_for_review', revision: 5 },
     });
+    await expect(version.getReview({ reviewId: ready.reviewId })).resolves.toMatchObject({
+      ok: true,
+      value: { status: 'open' },
+    });
   });
 
   it('marks a proposal stale when the target ref moves before acceptance', async () => {
@@ -315,6 +345,10 @@ describe('WorkbookVersion provider-backed proposal service', () => {
     await expect(version.getProposal({ proposalId: ready.proposalId })).resolves.toMatchObject({
       ok: true,
       value: { status: 'stale', revision: 6 },
+    });
+    await expect(version.getReview({ reviewId: ready.reviewId })).resolves.toMatchObject({
+      ok: true,
+      value: { status: 'approved' },
     });
   });
 });
@@ -389,7 +423,11 @@ async function createReadyReviewedProposal(
   }
 
   expect(committed.value.baseCommitId).toBe(graph.rootCommitId);
-  return { proposalId: created.value.id, proposalCommitId: committed.value.proposalCommitId };
+  return {
+    proposalId: created.value.id,
+    proposalCommitId: committed.value.proposalCommitId,
+    reviewId: review.value.id,
+  };
 }
 
 function approveReview(

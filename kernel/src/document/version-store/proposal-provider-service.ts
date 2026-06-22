@@ -447,6 +447,11 @@ export class ProviderBackedAgentProposalService {
       ...(this.reviewService
         ? { getReview: (reviewId) => this.reviewService!.getReview({ reviewId }) }
         : {}),
+      ...(this.reviewService?.markReviewApplied
+        ? {
+            markReviewApplied: (reviewInput) => this.reviewService!.markReviewApplied!(reviewInput),
+          }
+        : {}),
     });
   }
 

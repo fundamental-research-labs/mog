@@ -58,14 +58,21 @@ export interface WorkbookVersionReviewService {
     input: VersionListReviewsInput,
   ): Promise<VersionResult<Paged<WorkbookVersionReviewRecordSummary>>>;
   getReview(input: VersionGetReviewInput): Promise<VersionResult<WorkbookVersionReviewRecord>>;
-  createReview(input: VersionCreateReviewInput): Promise<VersionResult<WorkbookVersionReviewRecord>>;
+  createReview(
+    input: VersionCreateReviewInput,
+  ): Promise<VersionResult<WorkbookVersionReviewRecord>>;
   appendReviewDecision(
     input: VersionAppendReviewDecisionInput,
   ): Promise<VersionResult<WorkbookVersionReviewRecord>>;
   updateReviewStatus(
     input: VersionUpdateReviewStatusInput,
   ): Promise<VersionResult<WorkbookVersionReviewRecord>>;
-  getReviewDiff(input: VersionGetReviewDiffInput): Promise<VersionResult<WorkbookVersionReviewDiffPage>>;
+  markReviewApplied?(
+    input: WorkbookVersionMarkReviewAppliedInput,
+  ): Promise<VersionResult<WorkbookVersionReviewRecord>>;
+  getReviewDiff(
+    input: VersionGetReviewDiffInput,
+  ): Promise<VersionResult<WorkbookVersionReviewDiffPage>>;
 }
 
 export interface WorkbookVersionReviewRecordStore {
@@ -74,7 +81,9 @@ export interface WorkbookVersionReviewRecordStore {
     input: VersionListReviewsInput,
   ): Promise<VersionResult<Paged<WorkbookVersionReviewRecordSummary>>>;
   getReview(input: VersionGetReviewInput): Promise<VersionResult<WorkbookVersionReviewRecord>>;
-  createReview(input: VersionCreateReviewInput): Promise<VersionResult<WorkbookVersionReviewRecord>>;
+  createReview(
+    input: VersionCreateReviewInput,
+  ): Promise<VersionResult<WorkbookVersionReviewRecord>>;
   appendReviewDecision(
     input: VersionAppendReviewDecisionInput,
   ): Promise<VersionResult<WorkbookVersionReviewRecord>>;
@@ -86,7 +95,16 @@ export interface WorkbookVersionReviewRecordStore {
 
 export type WorkbookVersionReviewStatusUpdateOptions = {
   readonly approvalEvidence?: WorkbookVersionReviewApprovalEvidence;
+  readonly flowOwnedStatus?: boolean;
+  readonly preserveApproval?: boolean;
   readonly updatedAt?: string;
+};
+
+export type WorkbookVersionMarkReviewAppliedInput = {
+  readonly reviewId: VersionUpdateReviewStatusInput['reviewId'];
+  readonly clientRequestId: VersionUpdateReviewStatusInput['clientRequestId'];
+  readonly actor: VersionUpdateReviewStatusInput['actor'];
+  readonly reason?: VersionUpdateReviewStatusInput['reason'];
 };
 
 export type WorkbookVersionReviewRecordStoreProvider = {
@@ -125,36 +143,30 @@ export type WorkbookVersionReviewRecordStoreAdapter = {
   listRows(): Promise<readonly WorkbookVersionReviewRecordStoreRow[]>;
   mutateRow<T>(
     reviewId: string,
-    mutator: (
-      row: WorkbookVersionReviewRecordStoreRow | undefined,
-    ) => ReviewRecordRowMutation<T>,
+    mutator: (row: WorkbookVersionReviewRecordStoreRow | undefined) => ReviewRecordRowMutation<T>,
   ): Promise<VersionResult<T>>;
   mutateRows<T>(
-    mutator: (
-      rows: readonly WorkbookVersionReviewRecordStoreRow[],
-    ) => ReviewRecordRowMutation<T>,
+    mutator: (rows: readonly WorkbookVersionReviewRecordStoreRow[]) => ReviewRecordRowMutation<T>,
   ): Promise<VersionResult<T>>;
 };
 
 export type ReviewRecordRowMutation<T> =
-  | { readonly action: 'put'; readonly row: WorkbookVersionReviewRecordStoreRow; readonly result: VersionResult<T> }
+  | {
+      readonly action: 'put';
+      readonly row: WorkbookVersionReviewRecordStoreRow;
+      readonly result: VersionResult<T>;
+    }
   | { readonly action: 'none'; readonly result: VersionResult<T> };
 
 export class WorkbookVersionReviewRecordMemoryBackend {
   private readonly rowsByKey = new Map<string, WorkbookVersionReviewRecordStoreRow>();
 
-  get(
-    documentScopeKey: string,
-    reviewId: string,
-  ): WorkbookVersionReviewRecordStoreRow | undefined {
+  get(documentScopeKey: string, reviewId: string): WorkbookVersionReviewRecordStoreRow | undefined {
     return cloneRow(this.rowsByKey.get(reviewRecordStorageKey(documentScopeKey, reviewId)));
   }
 
   put(row: WorkbookVersionReviewRecordStoreRow): void {
-    this.rowsByKey.set(
-      reviewRecordStorageKey(row.documentScopeKey, row.record.id),
-      cloneRow(row),
-    );
+    this.rowsByKey.set(reviewRecordStorageKey(row.documentScopeKey, row.record.id), cloneRow(row));
   }
 
   list(documentScopeKey: string): readonly WorkbookVersionReviewRecordStoreRow[] {
@@ -216,7 +228,9 @@ export class WorkbookVersionReviewRecordStoreImpl implements WorkbookVersionRevi
     };
   }
 
-  async getReview(input: VersionGetReviewInput): Promise<VersionResult<WorkbookVersionReviewRecord>> {
+  async getReview(
+    input: VersionGetReviewInput,
+  ): Promise<VersionResult<WorkbookVersionReviewRecord>> {
     const row = await this.adapter.readRow(input.reviewId);
     return row ? ok(cloneRecord(row.record)) : notFound(input.reviewId);
   }
@@ -230,11 +244,19 @@ export class WorkbookVersionReviewRecordStoreImpl implements WorkbookVersionRevi
     return this.adapter.mutateRows<WorkbookVersionReviewRecord>((rows) => {
       const existing = rows.find((row) => row.record.id === reviewId);
       if (existing) {
-        const idempotent = idempotencyResult<WorkbookVersionReviewRecord>(existing, 'createReview', input.clientRequestId, fingerprint);
+        const idempotent = idempotencyResult<WorkbookVersionReviewRecord>(
+          existing,
+          'createReview',
+          input.clientRequestId,
+          fingerprint,
+        );
         return { action: 'none', result: idempotent ?? invalidClientRequestReuse() };
       }
 
-      const duplicate = rows.find((row) => isActiveReview(row.record) && reviewSubjectsEqual(row.record.subject, input.subject));
+      const duplicate = rows.find(
+        (row) =>
+          isActiveReview(row.record) && reviewSubjectsEqual(row.record.subject, input.subject),
+      );
       if (duplicate) {
         return {
           action: 'none',
@@ -281,7 +303,12 @@ export class WorkbookVersionReviewRecordStoreImpl implements WorkbookVersionRevi
       decision: input.decision,
     });
     const createdAt = new Date().toISOString();
-    const decision = await materializeDecision(input.reviewId, input.clientRequestId, input.decision, createdAt);
+    const decision = await materializeDecision(
+      input.reviewId,
+      input.clientRequestId,
+      input.decision,
+      createdAt,
+    );
     return this.adapter.mutateRow<WorkbookVersionReviewRecord>(input.reviewId, (row) => {
       if (!row) return { action: 'none', result: notFound(input.reviewId) };
       const idempotent = idempotencyResult<WorkbookVersionReviewRecord>(
@@ -352,13 +379,20 @@ export class WorkbookVersionReviewRecordStoreImpl implements WorkbookVersionRevi
         row.record.status,
         input.status,
         Boolean(options.approvalEvidence),
+        options.flowOwnedStatus === true,
       );
       if (!transition.ok) return { action: 'none', result: transition.result };
-      const approval = validateApprovalEvidenceForStatusMutation(row.record, input, options.approvalEvidence);
+      const approval = validateApprovalEvidenceForStatusMutation(
+        row.record,
+        input,
+        options.approvalEvidence,
+      );
       if (!approval.ok) return { action: 'none', result: approval.result };
 
       const updatedAt = options.updatedAt ?? new Date().toISOString();
-      const recordBase = reviewRecordWithoutApproval(row.record);
+      const recordBase = options.preserveApproval
+        ? cloneJson(row.record)
+        : reviewRecordWithoutApproval(row.record);
       const record: WorkbookVersionReviewRecord = {
         ...recordBase,
         status: input.status,
@@ -438,7 +472,10 @@ export function decodeStoredWorkbookVersionReviewRecordRow(
   return value.documentScopeKey === documentScopeKey ? cloneRow(value) : null;
 }
 
-async function reviewIdForCreate(documentScopeKey: string, clientRequestId: string): Promise<string> {
+async function reviewIdForCreate(
+  documentScopeKey: string,
+  clientRequestId: string,
+): Promise<string> {
   const digest = await objectDigestFor('mog.version.review-record.create.v1', {
     documentScopeKey,
     clientRequestId,
@@ -537,7 +574,10 @@ function idempotencyResult<T>(
   return ok(cloneRecord(entry.resultRecord) as T);
 }
 
-function clientRequestIdWasUsed(row: WorkbookVersionReviewRecordStoreRow, clientRequestId: string): boolean {
+function clientRequestIdWasUsed(
+  row: WorkbookVersionReviewRecordStoreRow,
+  clientRequestId: string,
+): boolean {
   return row.mutationLog.some((entry) => entry.clientRequestId === clientRequestId);
 }
 
@@ -553,7 +593,10 @@ function createReviewFingerprint(input: VersionCreateReviewInput): unknown {
   };
 }
 
-function mutationFingerprint(operation: WorkbookVersionReviewMutationOperation, value: unknown): string {
+function mutationFingerprint(
+  operation: WorkbookVersionReviewMutationOperation,
+  value: unknown,
+): string {
   return `${operation}:${canonicalJsonStringify(value)}`;
 }
 
@@ -576,23 +619,35 @@ function isActiveReview(record: WorkbookVersionReviewRecord): boolean {
   return ACTIVE_REVIEW_STATUSES.has(record.status);
 }
 
-function reviewSubjectsEqual(left: WorkbookVersionReviewSubject, right: WorkbookVersionReviewSubject): boolean {
+function reviewSubjectsEqual(
+  left: WorkbookVersionReviewSubject,
+  right: WorkbookVersionReviewSubject,
+): boolean {
   return canonicalJsonStringify(left) === canonicalJsonStringify(right);
 }
 
-function reviewIncludesCommit(record: WorkbookVersionReviewRecord, commitId: WorkbookCommitId): boolean {
+function reviewIncludesCommit(
+  record: WorkbookVersionReviewRecord,
+  commitId: WorkbookCommitId,
+): boolean {
   if (record.baseCommitId === commitId || record.headCommitId === commitId) return true;
   return record.subject.kind === 'commit' && record.subject.commitId === commitId;
 }
 
-function reviewIncludesMergePreview(subject: WorkbookVersionReviewSubject, mergePreviewId: string): boolean {
+function reviewIncludesMergePreview(
+  subject: WorkbookVersionReviewSubject,
+  mergePreviewId: string,
+): boolean {
   return (
     (subject.kind === 'merge' || subject.kind === 'conflict') &&
     subject.mergePreviewId === mergePreviewId
   );
 }
 
-function reviewIncludesConflict(subject: WorkbookVersionReviewSubject, conflictId: string): boolean {
+function reviewIncludesConflict(
+  subject: WorkbookVersionReviewSubject,
+  conflictId: string,
+): boolean {
   return subject.kind === 'conflict' && subject.conflictId === conflictId;
 }
 
@@ -625,7 +680,9 @@ function reviewSummary(record: WorkbookVersionReviewRecord): WorkbookVersionRevi
 
 function validateDecisionDraft(
   decision: WorkbookVersionReviewDecisionDraft,
-): { readonly ok: true } | { readonly ok: false; readonly result: VersionResult<WorkbookVersionReviewRecord> } {
+):
+  | { readonly ok: true }
+  | { readonly ok: false; readonly result: VersionResult<WorkbookVersionReviewRecord> } {
   if (
     decision.decision === 'mark_resolved' &&
     decision.target.kind === 'semanticChange' &&
@@ -657,7 +714,10 @@ function validateStatusTransition(
   current: WorkbookVersionReviewStatus,
   next: WorkbookVersionReviewStatus,
   hasApprovalEvidence: boolean,
-): { readonly ok: true } | { readonly ok: false; readonly result: VersionResult<WorkbookVersionReviewRecord> } {
+  flowOwnedStatus: boolean,
+):
+  | { readonly ok: true }
+  | { readonly ok: false; readonly result: VersionResult<WorkbookVersionReviewRecord> } {
   if (TERMINAL_STATUSES.has(current)) {
     return {
       ok: false,
@@ -665,6 +725,17 @@ function validateStatusTransition(
         'terminal_review_status',
         ['new_review'],
         'Terminal review statuses cannot be manually reopened in this slice.',
+      ),
+    };
+  }
+  if (flowOwnedStatus) {
+    if (current === 'approved' && next === 'applied') return { ok: true };
+    return {
+      ok: false,
+      result: invalidState(
+        'flow_owned_review_status_transition',
+        ['approved_to_applied'],
+        'Only approved reviews can be finalized as applied by proposal, merge, staleness, or supersede flows.',
       ),
     };
   }
@@ -711,21 +782,32 @@ function subjectHeadCommitId(subject: WorkbookVersionReviewSubject): WorkbookCom
   return undefined;
 }
 
-function parseReviewListCursor(
-  cursor: PageCursor | undefined,
-): { readonly ok: true; readonly offset: number } | { readonly ok: false; readonly result: VersionResult<Paged<WorkbookVersionReviewRecordSummary>> } {
+function parseReviewListCursor(cursor: PageCursor | undefined):
+  | { readonly ok: true; readonly offset: number }
+  | {
+      readonly ok: false;
+      readonly result: VersionResult<Paged<WorkbookVersionReviewRecordSummary>>;
+    } {
   if (cursor === undefined) return { ok: true, offset: 0 };
   if (!cursor.startsWith(REVIEW_LIST_CURSOR_PREFIX)) {
     return {
       ok: false,
-      result: invalidState('stale_review_cursor', ['valid_cursor'], 'Review list cursor is not valid for this store.'),
+      result: invalidState(
+        'stale_review_cursor',
+        ['valid_cursor'],
+        'Review list cursor is not valid for this store.',
+      ),
     };
   }
   const offset = Number(cursor.slice(REVIEW_LIST_CURSOR_PREFIX.length));
   if (!Number.isSafeInteger(offset) || offset < 0) {
     return {
       ok: false,
-      result: invalidState('stale_review_cursor', ['valid_cursor'], 'Review list cursor has an invalid offset.'),
+      result: invalidState(
+        'stale_review_cursor',
+        ['valid_cursor'],
+        'Review list cursor has an invalid offset.',
+      ),
     };
   }
   return { ok: true, offset };
@@ -781,7 +863,9 @@ function diagnostic(
   return { code, severity, message };
 }
 
-function isWorkbookVersionReviewRecordStoreRow(value: unknown): value is WorkbookVersionReviewRecordStoreRow {
+function isWorkbookVersionReviewRecordStoreRow(
+  value: unknown,
+): value is WorkbookVersionReviewRecordStoreRow {
   if (!isRecord(value) || value.schemaVersion !== 1) return false;
   if (value.operation !== 'workbook-version-review-record') return false;
   if (typeof value.documentScopeKey !== 'string') return false;
@@ -810,7 +894,8 @@ function isWorkbookVersionReviewRecord(value: unknown): value is WorkbookVersion
   if (typeof value.documentId !== 'string') return false;
   if (!isReviewSubject(value.subject)) return false;
   if (!isReviewStatus(value.status)) return false;
-  if (typeof value.revision !== 'number' || !Number.isInteger(value.revision) || value.revision < 1) return false;
+  if (typeof value.revision !== 'number' || !Number.isInteger(value.revision) || value.revision < 1)
+    return false;
   if (!isRecord(value.createdBy)) return false;
   if (typeof value.createdAt !== 'string' || typeof value.updatedAt !== 'string') return false;
   if (!Array.isArray(value.decisions) || !value.decisions.every(isReviewDecision)) return false;

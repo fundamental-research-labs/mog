@@ -340,14 +340,14 @@ describe('Legacy bypass guards', () => {
   // -------------------------------------------------------------------------
   describe('WebSocket collab sidecar', () => {
     it('attachWsSidecar operates outside the provider registry by design', async () => {
-      // The collab sidecar (ws-sidecar.ts) calls computeBridge.syncApply
-      // directly — it does NOT go through the Provider protocol's
-      // attach/appendUpdate/flush lifecycle. This is by design for R1:
-      // the sidecar is a separate sync channel.
+      // The collab sidecar (ws-sidecar.ts) does NOT go through the Provider
+      // protocol's attach/appendUpdate/flush lifecycle. It receives a
+      // DocumentByteSyncPort so inbound bytes still go through classified raw
+      // sync admission before mutation.
       //
       // This test documents the contract: the sidecar's ComputeBridgeLike
-      // interface requires syncApply/syncDiff/syncStateVector but NOT
-      // appendUpdate/attach/flush. It is structurally NOT a Provider.
+      // interface requires syncDiff/syncStateVector but NOT
+      // syncApply/appendUpdate/attach/flush. It is structurally NOT a Provider.
       const mod = await import('../collab/ws-sidecar');
       const { attachWsSidecar } = mod;
 

@@ -41,6 +41,10 @@ type HeadlessWorkbookLinkScope = {
   readonly principal: { readonly tags: readonly string[] };
 };
 
+type SyncCapableDocumentHandle = DocumentHandle & {
+  createSyncPort(): DocumentByteSyncPort;
+};
+
 // ---------------------------------------------------------------------------
 // Options
 // ---------------------------------------------------------------------------
@@ -176,7 +180,7 @@ export async function createHostBackedCollaborationDocument(
 
   for (let attempt = 0; attempt < 2; attempt += 1) {
     let lifecycle: DocumentLifecycleSystem | null = null;
-    let handle: DocumentHandle | null = null;
+    let handle: SyncCapableDocumentHandle | null = null;
     let sidecar: FlushableCollaborationSidecar | null = null;
     try {
       const snapshot = await fetchRoomSnapshotForHostBootstrap(roomUrl, room.roomId, {
@@ -221,6 +225,7 @@ export async function createHostBackedCollaborationDocument(
           roomId: room.roomId,
           participantId: room.participantId,
           computeBridge: lifecycle.computeBridge,
+          syncPort: handle.createSyncPort(),
           preflightStateVector: snapshot.stateVector,
           preflightRoomEpoch: snapshot.roomEpoch,
           preflightFullStateHash: snapshot.fullStateHash,

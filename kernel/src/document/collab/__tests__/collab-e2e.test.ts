@@ -6,7 +6,7 @@
  * that cell-level edits propagate through the full stack:
  *   engine.workbook.activeSheet.setCell → computeBridge.subscribeUpdateV1 →
  *   ws-sidecar PUSH → collab server → BROADCAST_NUDGE → ws-sidecar →
- *   computeBridge.syncApply → Yrs CRDT state
+ *   syncPort.applyClassifiedRawUpdate → Yrs CRDT state
  *
  * Cell values on the receiving engine are verified through workbook/bridge
  * APIs. Raw Yrs snapshot inspection is reserved for failure diagnostics.
@@ -70,10 +70,12 @@ const sdkPath = join(
 let createHeadlessEngine: any;
 let createHeadlessEngineFromYrsState: any;
 let _getComputeBridge: any;
+let _getDocumentSyncPort: any;
 try {
   const sdkMod = await import(sdkPath);
   createHeadlessEngine = sdkMod.createHeadlessEngine;
   createHeadlessEngineFromYrsState = sdkMod.createHeadlessEngineFromYrsState;
+  _getDocumentSyncPort = sdkMod._getDocumentSyncPort;
   _getComputeBridge =
     sdkMod._getComputeBridge ?? ((engine: any) => engine?.lifecycle?.computeBridge);
 } catch {
@@ -85,6 +87,7 @@ const hasEngineSupport =
   addon &&
   createHeadlessEngine &&
   createHeadlessEngineFromYrsState &&
+  _getDocumentSyncPort &&
   _getComputeBridge &&
   typeof addon.yrs_state_to_snapshot_json === 'function';
 
@@ -277,6 +280,7 @@ async function attach(
     url: `ws://localhost:${wsPort}/${roomId}`,
     participantId: pid,
     computeBridge: f.bridge,
+    syncPort: _getDocumentSyncPort(f.engine),
     preflightStateVector: roomState.coordinatorSv,
     preflightRoomEpoch: roomState.roomEpoch,
     preflightFullStateHash: roomState.fullStateHash,
@@ -394,7 +398,7 @@ describeWithCollabStack('Collab E2E — real engines + WS sidecar', () => {
     }
 
     // Detach all sidecars first — they hold refs to the compute bridge
-    // and will call syncDiff/syncApply on incoming messages.
+    // and classified sync port for incoming messages.
     for (const f of [...fixtures]) {
       try {
         f.sidecar?.detach();

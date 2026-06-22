@@ -225,13 +225,12 @@ describe('production facade audit', () => {
 // =============================================================================
 
 describe('collab sidecar', () => {
-  it('is a known gap: shell collab option attaches WS sidecar post-lifecycle', () => {
+  it('attaches post-lifecycle through the classified document sync port', () => {
     // The shell's CreateDocumentOptions.collab field triggers
     // attachWsSidecar() AFTER DocumentFactory.create completes. This
     // bypasses the provider lifecycle intentionally — the WS sidecar is
-    // not a Provider (it doesn't persist), it's a sync overlay. This is
-    // the R1 design; R2 may compose a WebSocketProvider into the
-    // orchestrator's provider list.
+    // not a Provider (it doesn't persist), it's a sync overlay. Inbound
+    // bytes still require DocumentByteSyncPort.applyClassifiedRawUpdate.
     expect(true).toBe(true);
   });
 });

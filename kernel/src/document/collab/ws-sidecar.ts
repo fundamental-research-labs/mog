@@ -13,10 +13,6 @@ import {
   type SidecarRawSyncClassification,
 } from './sync-provenance';
 import type { DocumentByteSyncPort } from '../providers/provider';
-import {
-  createAdmittedSyncApplyContext,
-  type AdmittedSyncApplyContext,
-} from '../../bridges/compute/sync-apply-admission';
 
 export { fetchRoomSnapshot, type RoomSnapshot } from './room-snapshot';
 
@@ -27,7 +23,6 @@ export { fetchRoomSnapshot, type RoomSnapshot } from './room-snapshot';
 export interface ComputeBridgeLike {
   syncStateVector(): Promise<Uint8Array>;
   syncDiff(remoteSv: Uint8Array): Promise<Uint8Array>;
-  syncApply(update: Uint8Array, syncApplyContext: AdmittedSyncApplyContext): Promise<unknown>;
   subscribeUpdateV1(callback: (update: Uint8Array) => void): { unsubscribe: () => void };
 }
 
@@ -36,7 +31,7 @@ export interface WsSidecarOptions {
   roomId?: string;
   participantId: string;
   computeBridge: ComputeBridgeLike;
-  syncPort?: Pick<DocumentByteSyncPort, 'applyClassifiedRawUpdate'>;
+  syncPort: Pick<DocumentByteSyncPort, 'applyClassifiedRawUpdate'>;
   /** State vector returned by the non-mutating room snapshot used to create this document. */
   preflightStateVector?: Uint8Array;
   /** Room epoch returned by the non-mutating room snapshot used to create this document. */
@@ -90,6 +85,25 @@ export interface WsSidecar {
 
 export interface FlushableWsSidecar extends WsSidecar {
   flushAndDetach(options?: { readonly timeoutMs?: number }): Promise<void>;
+}
+
+export interface SidecarClassifiedRawSyncApplyOptions {
+  readonly syncPort: Pick<DocumentByteSyncPort, 'applyClassifiedRawUpdate'>;
+  readonly roomId: string;
+  readonly update: Uint8Array;
+  readonly classification: SidecarRawSyncClassification;
+}
+
+export async function applySidecarClassifiedRawSyncUpdate(
+  options: SidecarClassifiedRawSyncApplyOptions,
+): Promise<void> {
+  const payloadHash = await sha256Hex(options.update);
+  const provenance = buildSidecarRawSyncProvenance(
+    options.roomId,
+    payloadHash,
+    options.classification,
+  );
+  await options.syncPort.applyClassifiedRawUpdate(options.update, provenance);
 }
 
 // ---------------------------------------------------------------------------
@@ -151,7 +165,7 @@ export function attachWsSidecar(options: WsSidecarOptions): Promise<WsSidecar> {
     }
   >();
 
-  // Serial queue to prevent concurrent syncApply calls.
+  // Serial queue to prevent concurrent inbound sync applies.
   let applyChain: Promise<void> = Promise.resolve();
 
   // Last SV we sent to the server (from JOINs and PUSHes).
@@ -284,7 +298,7 @@ export function attachWsSidecar(options: WsSidecarOptions): Promise<WsSidecar> {
         if (!swallowErrors) {
           throw err;
         }
-        // Live syncApply errors are swallowed — the CRDT will self-heal on the next sync round.
+        // Live sync-apply errors are swallowed — the CRDT will self-heal on the next sync round.
       },
     );
     applyChain = handled.catch(() => undefined);
@@ -295,23 +309,12 @@ export function attachWsSidecar(options: WsSidecarOptions): Promise<WsSidecar> {
     update: Uint8Array,
     classification: SidecarRawSyncClassification,
   ): Promise<void> {
-    const payloadHash = await sha256Hex(update);
-    const provenance = buildSidecarRawSyncProvenance(roomId, payloadHash, classification);
-    if (typeof syncPort?.applyClassifiedRawUpdate === 'function') {
-      await syncPort.applyClassifiedRawUpdate(update, provenance);
-      return;
-    }
-    await computeBridge.syncApply(
+    await applySidecarClassifiedRawSyncUpdate({
+      syncPort,
+      roomId,
       update,
-      createAdmittedSyncApplyContext({
-        source: 'collaboration-sidecar',
-        docId: roomId,
-        envelopeVersion: 'classified-raw',
-        updateId: provenance.updateIdentity.updateId,
-        payloadHash,
-        provenance,
-      }),
-    );
+      classification,
+    });
   }
 
   function nextPushId(): string {

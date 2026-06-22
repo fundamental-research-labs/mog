@@ -104,6 +104,55 @@ export interface VersionAuthor {
   readonly sessionId?: string;
 }
 
+export type VersionSyncSourceKind =
+  | 'providerReplay'
+  | 'providerLiveInbound'
+  | 'providerMixedInbound'
+  | 'collaborationHydration'
+  | 'collaborationLiveRemote'
+  | 'collaborationMixedRemote'
+  | 'importHydration'
+  | 'systemRepair'
+  | 'legacyRawUnknown';
+
+export type VersionSyncOriginKind = 'provider' | 'room' | 'import' | 'system' | 'legacyRaw';
+export type VersionSyncTrustStatus = 'verified' | 'trustedLocalSystem' | 'unverified' | 'legacyRaw';
+export type VersionSyncAuthorState = 'singleRemote' | 'mixedRemote' | 'unknown' | 'agent' | 'system';
+export type VersionSyncCommitGrouping =
+  | 'none'
+  | 'pendingRemote'
+  | 'excludedLifecycle'
+  | 'blockedMissingRedactionKey'
+  | 'blockedMixedRemote'
+  | 'blockedUnknownRemote'
+  | 'blockedUnverified';
+
+export interface VersionSyncOperationContext {
+  readonly sourceKind: VersionSyncSourceKind;
+  readonly originKind: VersionSyncOriginKind;
+  readonly stableOriginId?: string;
+  readonly providerId?: string;
+  readonly providerKind?: string;
+  readonly authorityRef?: string;
+  readonly roomId?: string;
+  readonly epoch?: string;
+  readonly updateId?: string;
+  readonly sequence?: string;
+  readonly payloadHash: string;
+  readonly provenancePayloadHash?: string;
+  readonly trustStatus: VersionSyncTrustStatus;
+  readonly authorState: VersionSyncAuthorState;
+  readonly remoteSessionId?: string;
+  readonly correlationId?: string;
+  readonly causationIds?: readonly string[];
+  readonly replay: boolean;
+  readonly system: boolean;
+  readonly commitGrouping: VersionSyncCommitGrouping;
+  readonly validationDiagnosticCount: number;
+  readonly exclusionReason?: string;
+  readonly exclusionSubreason?: string;
+}
+
 export interface VersionCapabilityGate {
   readonly gateId: string;
   readonly capabilityId: string;
@@ -127,6 +176,7 @@ export interface VersionOperationContext {
   readonly rolloutStage?: VersionRolloutStage;
   readonly capabilityGate?: VersionCapabilityGate;
   readonly clientRequestId?: string;
+  readonly collaboration?: VersionSyncOperationContext;
 }
 
 export interface SemanticOperationIntent {

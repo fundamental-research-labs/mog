@@ -62,6 +62,7 @@ import type {
   VersionObjectHeader,
   VersionObjectKind,
   VersionOperationContext,
+  VersionSyncOperationContext,
   VersionSyncProvenanceEnvelope,
   VersionWriteAdmissionMode,
   WorkbookCommitPersistedShape,
@@ -192,6 +193,19 @@ const author: VersionAuthor = Object.freeze({
   actorKind: 'system',
   displayName: 'VC03-05 public export fixture',
 });
+const syncOperationContext: VersionSyncOperationContext = Object.freeze({
+  sourceKind: 'providerLiveInbound',
+  originKind: 'provider',
+  stableOriginId: 'provider-stable-fixture',
+  updateId: 'provider-update-fixture',
+  payloadHash: '0'.repeat(64),
+  trustStatus: 'verified',
+  authorState: 'singleRemote',
+  replay: false,
+  system: false,
+  commitGrouping: 'pendingRemote',
+  validationDiagnosticCount: 0,
+});
 const operationContext: VersionOperationContext = Object.freeze({
   operationId: 'vc03-05-public-export-surface',
   kind: 'sync-export',
@@ -200,6 +214,7 @@ const operationContext: VersionOperationContext = Object.freeze({
   domainIds: vc03ExportSurfaceDomainIds,
   capturePolicy,
   writeAdmissionMode,
+  collaboration: syncOperationContext,
 });
 const mutationSegment: VersionMutationSegment = Object.freeze({
   segmentId: 'vc03-05-public-export-surface-segment',

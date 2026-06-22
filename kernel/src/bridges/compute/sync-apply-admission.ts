@@ -1,4 +1,10 @@
 import type {
+  CapturePolicy,
+  VersionActorKind,
+  VersionOperationContext,
+  VersionSyncCommitGrouping,
+} from '@mog-sdk/contracts/versioning';
+import type {
   SyncUpdateProvenance,
   SyncUpdateValidationDiagnostic,
 } from '@mog-sdk/types-document/storage';
@@ -24,6 +30,7 @@ export interface SyncApplyAdmissionContextInput {
 
 export interface AdmittedSyncApplyContext extends SyncApplyAdmissionContextInput {
   readonly validationDiagnostics: readonly SyncUpdateValidationDiagnostic[];
+  readonly operationContext: VersionOperationContext;
   readonly [ADMITTED_SYNC_APPLY_CONTEXT]: true;
 }
 
@@ -42,9 +49,12 @@ export class SyncApplyAdmissionError extends Error {
 export function createAdmittedSyncApplyContext(
   input: SyncApplyAdmissionContextInput,
 ): AdmittedSyncApplyContext {
+  const validationDiagnostics = input.validationDiagnostics ?? [];
+  const operationContext = createSyncOperationContext(input, validationDiagnostics);
   const context = Object.freeze({
     ...input,
-    validationDiagnostics: input.validationDiagnostics ?? [],
+    validationDiagnostics,
+    operationContext,
     [ADMITTED_SYNC_APPLY_CONTEXT]: true,
   }) as AdmittedSyncApplyContext;
   admittedSyncApplyContexts.add(context);
@@ -63,3 +73,136 @@ export function assertAdmittedSyncApplyContext(
   }
 }
 
+function createSyncOperationContext(
+  input: SyncApplyAdmissionContextInput,
+  validationDiagnostics: readonly SyncUpdateValidationDiagnostic[],
+): VersionOperationContext {
+  const provenance = input.provenance;
+  const identity = provenance.updateIdentity;
+  const author = versionAuthorForProvenance(provenance);
+  const capturePolicy = versionCapturePolicyForProvenance(provenance);
+  const writeAdmissionMode =
+    capturePolicy === 'commitEligible'
+      ? 'capture'
+      : capturePolicy === 'derivedOnly'
+        ? 'shadowOnly'
+        : 'captureDisabledNoHistory';
+  const operationId = [
+    'sync',
+    provenance.sourceKind,
+    identity.updateId ?? input.updateId ?? identity.payloadHash,
+  ].join(':');
+
+  return {
+    operationId,
+    kind: 'sync-import',
+    author,
+    createdAt: new Date().toISOString(),
+    workbookId: input.docId,
+    domainIds: ['runtime-diagnostics'],
+    capturePolicy,
+    writeAdmissionMode,
+    collaboration: {
+      sourceKind: provenance.sourceKind,
+      originKind: identity.originKind,
+      ...(identity.stableOriginId ? { stableOriginId: identity.stableOriginId } : {}),
+      ...(identity.providerId ? { providerId: identity.providerId } : {}),
+      ...(identity.providerKind ? { providerKind: identity.providerKind } : {}),
+      ...(identity.authorityRef ? { authorityRef: identity.authorityRef } : {}),
+      ...(identity.roomId ? { roomId: identity.roomId } : {}),
+      ...(identity.epoch ? { epoch: identity.epoch } : {}),
+      ...(identity.updateId ? { updateId: identity.updateId } : {}),
+      ...(identity.sequence !== undefined ? { sequence: identity.sequence.toString() } : {}),
+      payloadHash: identity.payloadHash,
+      ...(identity.provenancePayloadHash
+        ? { provenancePayloadHash: identity.provenancePayloadHash }
+        : {}),
+      trustStatus: provenance.trust.status,
+      authorState: provenance.author.kind,
+      ...(provenance.remoteSessionId ? { remoteSessionId: provenance.remoteSessionId } : {}),
+      ...(provenance.correlationId ? { correlationId: provenance.correlationId } : {}),
+      ...(provenance.causationIds?.length ? { causationIds: [...provenance.causationIds] } : {}),
+      replay: provenance.replay,
+      system: provenance.system,
+      commitGrouping: commitGroupingForProvenance(provenance, validationDiagnostics),
+      validationDiagnosticCount: validationDiagnostics.length,
+      ...(provenance.exclusionDiagnostic?.reason
+        ? { exclusionReason: provenance.exclusionDiagnostic.reason }
+        : {}),
+      ...(provenance.exclusionDiagnostic?.subreason
+        ? { exclusionSubreason: provenance.exclusionDiagnostic.subreason }
+        : {}),
+    },
+  };
+}
+
+function versionCapturePolicyForProvenance(provenance: SyncUpdateProvenance): CapturePolicy {
+  switch (provenance.capturePolicy) {
+    case 'commitEligible':
+      return 'commitEligible';
+    case 'derivedOnly':
+      return 'derivedOnly';
+    case 'excluded':
+      return 'excluded';
+  }
+}
+
+function versionAuthorForProvenance(provenance: SyncUpdateProvenance): {
+  readonly authorId: string;
+  readonly actorKind: VersionActorKind;
+  readonly sessionId?: string;
+} {
+  switch (provenance.author.kind) {
+    case 'singleRemote':
+      return {
+        authorId: provenance.author.remoteAuthorRef.value,
+        actorKind: 'user',
+        ...(provenance.remoteSessionId ? { sessionId: provenance.remoteSessionId } : {}),
+      };
+    case 'agent':
+      return {
+        authorId: provenance.author.agentRef.value,
+        actorKind: 'automation',
+        ...(provenance.remoteSessionId ? { sessionId: provenance.remoteSessionId } : {}),
+      };
+    case 'system':
+      return {
+        authorId: `sync:${provenance.author.systemRef}`,
+        actorKind: 'system',
+      };
+    case 'mixedRemote':
+      return {
+        authorId: 'sync:mixed-remote',
+        actorKind: 'system',
+        ...(provenance.remoteSessionId ? { sessionId: provenance.remoteSessionId } : {}),
+      };
+    case 'unknown':
+      return {
+        authorId: `sync:unknown:${provenance.author.reason}`,
+        actorKind: 'system',
+        ...(provenance.remoteSessionId ? { sessionId: provenance.remoteSessionId } : {}),
+      };
+  }
+}
+
+function commitGroupingForProvenance(
+  provenance: SyncUpdateProvenance,
+  validationDiagnostics: readonly SyncUpdateValidationDiagnostic[],
+): VersionSyncCommitGrouping {
+  if (provenance.capturePolicy !== 'commitEligible') {
+    return 'excludedLifecycle';
+  }
+  if (validationDiagnostics.some((diagnostic) => diagnostic.reason === 'missingRedactionKey')) {
+    return 'blockedMissingRedactionKey';
+  }
+  if (provenance.trust.status !== 'verified') {
+    return 'blockedUnverified';
+  }
+  if (provenance.author.kind === 'mixedRemote') {
+    return 'blockedMixedRemote';
+  }
+  if (provenance.author.kind !== 'singleRemote') {
+    return 'blockedUnknownRemote';
+  }
+  return 'pendingRemote';
+}

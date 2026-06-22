@@ -1774,7 +1774,10 @@ export class ComputeCore {
         update,
       }),
       undefined,
-      { syncApplyContext },
+      {
+        operationContext: syncApplyContext?.operationContext,
+        syncApplyContext,
+      },
     );
     // Store the hydration result (overrides the empty init result)
     this.initResult = result.recalc;

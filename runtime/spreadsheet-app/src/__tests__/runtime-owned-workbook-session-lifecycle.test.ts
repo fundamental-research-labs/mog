@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { createSpreadsheetRuntime } from '../runtime';
+import { WORKBOOK_FACADE_CAPABILITY_MATRIX } from '../workbook-facade-capability-matrix';
 import type {
   SpreadsheetCapability,
   SpreadsheetRuntime,
@@ -280,6 +281,11 @@ test('read-only inspection, screenshot, and dependency reads do not dirty a clea
 test('version surface status remains available without version read grant', async () => {
   let runtime: SpreadsheetRuntime | undefined;
   try {
+    const versionMatrix = WORKBOOK_FACADE_CAPABILITY_MATRIX.WorkbookVersion;
+    assert.deepEqual(versionMatrix.getSurfaceStatus.capabilities, []);
+    assert.equal(versionMatrix.getSurfaceStatus.capability, undefined);
+    assert.deepEqual(versionMatrix.getStatus.capabilities, ['version:read']);
+
     const deniedVersionCapabilities = new Set<SpreadsheetCapability>([
       'version:read',
       'version:diff',

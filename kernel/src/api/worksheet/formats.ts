@@ -13,10 +13,9 @@ import type {
   CellRange,
   FormatChangeResult,
   ResolvedCellFormat,
-  SheetId,
   WorksheetFormats,
 } from '@mog-sdk/contracts/api';
-import type { NumberFormatType } from '@mog-sdk/contracts/core';
+import type { NumberFormatType, SheetId } from '@mog-sdk/contracts/core';
 import { MAX_COLS, MAX_ROWS } from '@mog-sdk/contracts/core';
 import type { VersionOperationContext } from '@mog-sdk/contracts/versioning';
 import { detectFormatType } from '@mog/spreadsheet-utils/number-formats';
@@ -48,6 +47,9 @@ type FormatMutationOptions = MutationAdmissionOptions & {
   readonly operationContext: VersionOperationContext;
 };
 
+const FORMAT_DOMAIN_IDS = ['formats'] as const;
+const DIRECT_CELL_FORMAT_DOMAIN_IDS = ['cells.formats.direct'] as const;
+
 export class WorksheetFormatsImpl implements WorksheetFormats {
   constructor(
     private readonly ctx: DocumentContext,
@@ -70,7 +72,7 @@ export class WorksheetFormatsImpl implements WorksheetFormats {
       this.sheetId,
       [[row, col, row, col]],
       format,
-      createFormatMutationOptions(this.ctx, this.sheetId, 'formats.set'),
+      createDirectFormatMutationOptions(this.ctx, this.sheetId, 'formats.set'),
     );
     return { cellCount: result.propertyChanges?.length ?? 0 };
   }
@@ -91,7 +93,7 @@ export class WorksheetFormatsImpl implements WorksheetFormats {
       this.sheetId,
       [[n.startRow, n.startCol, n.endRow, n.endCol]],
       b,
-      createFormatMutationOptions(this.ctx, this.sheetId, 'formats.setRange'),
+      createDirectFormatMutationOptions(this.ctx, this.sheetId, 'formats.setRange'),
     );
     return { cellCount: result.propertyChanges?.length ?? 0 };
   }
@@ -131,7 +133,7 @@ export class WorksheetFormatsImpl implements WorksheetFormats {
           this.sheetId,
           boundedRanges,
           format,
-          nextOptions(),
+          nextOptions(DIRECT_CELL_FORMAT_DOMAIN_IDS),
         ),
       );
     }
@@ -155,7 +157,7 @@ export class WorksheetFormatsImpl implements WorksheetFormats {
     await this.ctx.computeBridge.clearFormatForRanges(
       this.sheetId,
       [[row, col, row, col]],
-      createFormatMutationOptions(this.ctx, this.sheetId, 'formats.clearCell'),
+      createDirectFormatMutationOptions(this.ctx, this.sheetId, 'formats.clearCell'),
     );
   }
 
@@ -165,7 +167,7 @@ export class WorksheetFormatsImpl implements WorksheetFormats {
     await this.ctx.computeBridge.clearFormatForRanges(
       this.sheetId,
       [[0, 0, MAX_ROWS - 1, MAX_COLS - 1]],
-      createFormatMutationOptions(this.ctx, this.sheetId, 'formats.clear'),
+      createDirectFormatMutationOptions(this.ctx, this.sheetId, 'formats.clear'),
     );
   }
 
@@ -183,7 +185,7 @@ export class WorksheetFormatsImpl implements WorksheetFormats {
     await this.ctx.computeBridge.clearFormatForRanges(
       this.sheetId,
       [[n.startRow, n.startCol, n.endRow, n.endCol]],
-      createFormatMutationOptions(this.ctx, this.sheetId, 'formats.clearRange'),
+      createDirectFormatMutationOptions(this.ctx, this.sheetId, 'formats.clearRange'),
     );
   }
 
@@ -197,7 +199,7 @@ export class WorksheetFormatsImpl implements WorksheetFormats {
       await this.ctx.computeBridge.clearFormatForRanges(
         this.sheetId,
         tuples,
-        createFormatMutationOptions(this.ctx, this.sheetId, 'formats.clearRanges'),
+        createDirectFormatMutationOptions(this.ctx, this.sheetId, 'formats.clearRanges'),
       );
     }
   }
@@ -242,7 +244,7 @@ export class WorksheetFormatsImpl implements WorksheetFormats {
       {
         indent: newIndent,
       },
-      createFormatMutationOptions(this.ctx, this.sheetId, 'formats.adjustIndent'),
+      createDirectFormatMutationOptions(this.ctx, this.sheetId, 'formats.adjustIndent'),
     );
   }
 
@@ -262,7 +264,11 @@ export class WorksheetFormatsImpl implements WorksheetFormats {
     const current = (result?.cells?.[0]?.format as CellFormat | undefined) ?? null;
 
     // Clear all formatting on the cell first.
-    await this.ctx.computeBridge.clearFormatForRanges(this.sheetId, [rangeTuple], nextOptions());
+    await this.ctx.computeBridge.clearFormatForRanges(
+      this.sheetId,
+      [rangeTuple],
+      nextOptions(DIRECT_CELL_FORMAT_DOMAIN_IDS),
+    );
 
     if (current) {
       // Strip fill-related properties and re-apply everything else.
@@ -274,7 +280,7 @@ export class WorksheetFormatsImpl implements WorksheetFormats {
           this.sheetId,
           [rangeTuple],
           rest,
-          nextOptions(),
+          nextOptions(DIRECT_CELL_FORMAT_DOMAIN_IDS),
         );
       }
     }
@@ -306,7 +312,11 @@ export class WorksheetFormatsImpl implements WorksheetFormats {
       );
 
       // Clear all format for the range
-      await this.ctx.computeBridge.clearFormatForRanges(this.sheetId, [rangeTuple], nextOptions());
+      await this.ctx.computeBridge.clearFormatForRanges(
+        this.sheetId,
+        [rangeTuple],
+        nextOptions(DIRECT_CELL_FORMAT_DOMAIN_IDS),
+      );
 
       // Re-apply non-fill properties for each cell that had overrides
       for (const cell of result?.cells ?? []) {
@@ -326,7 +336,7 @@ export class WorksheetFormatsImpl implements WorksheetFormats {
             this.sheetId,
             [[cell.row, cell.col, cell.row, cell.col]],
             rest,
-            nextOptions(),
+            nextOptions(DIRECT_CELL_FORMAT_DOMAIN_IDS),
           );
         }
       }
@@ -376,7 +386,7 @@ export class WorksheetFormatsImpl implements WorksheetFormats {
       {
         numberFormat: internalFormat,
       },
-      createFormatMutationOptions(this.ctx, this.sheetId, 'formats.setNumberFormatLocal'),
+      createDirectFormatMutationOptions(this.ctx, this.sheetId, 'formats.setNumberFormatLocal'),
     );
   }
 
@@ -392,7 +402,7 @@ export class WorksheetFormatsImpl implements WorksheetFormats {
       format,
       sourceRange,
       targetRange,
-      createFormatMutationOptions(this.ctx, this.sheetId, 'formats.applyFormatToRange'),
+      createDirectFormatMutationOptions(this.ctx, this.sheetId, 'formats.applyFormatToRange'),
     );
   }
 
@@ -432,7 +442,7 @@ export class WorksheetFormatsImpl implements WorksheetFormats {
         this.ctx,
         this.sheetId,
         updates as Array<{ row: number; col: number; format: CellFormat }>,
-        createFormatMutationOptions(this.ctx, this.sheetId, 'formats.setCellProperties'),
+        createDirectFormatMutationOptions(this.ctx, this.sheetId, 'formats.setCellProperties'),
       ),
     );
   }
@@ -470,17 +480,33 @@ export class WorksheetFormatsImpl implements WorksheetFormats {
   }
 }
 
+function createDirectFormatMutationOptions(
+  ctx: DocumentContext,
+  sheetId: SheetId,
+  operationIdPrefix: string,
+  groupId?: string,
+): FormatMutationOptions {
+  return createFormatMutationOptions(
+    ctx,
+    sheetId,
+    operationIdPrefix,
+    DIRECT_CELL_FORMAT_DOMAIN_IDS,
+    groupId,
+  );
+}
+
 function createFormatMutationOptions(
   ctx: DocumentContext,
   sheetId: SheetId,
   operationIdPrefix: string,
+  domainIds: readonly string[] = FORMAT_DOMAIN_IDS,
   groupId?: string,
 ): FormatMutationOptions {
   return {
     operationContext: createVersionOperationContext(ctx, {
       operationIdPrefix,
       sheetIds: [sheetId],
-      domainIds: ['formats'],
+      domainIds,
       groupId,
     }),
   };
@@ -490,15 +516,17 @@ function createGroupedFormatMutationOptions(
   ctx: DocumentContext,
   sheetId: SheetId,
   operationIdPrefix: string,
-): () => FormatMutationOptions {
-  let nextOptions = ensureFormatMutationGroup(
-    createFormatMutationOptions(ctx, sheetId, operationIdPrefix),
-  );
-  const groupId = nextOptions.operationContext.groupId;
-  return () => {
-    const options = nextOptions;
-    nextOptions = createFormatMutationOptions(ctx, sheetId, operationIdPrefix, groupId);
-    return options;
+): (domainIds?: readonly string[]) => FormatMutationOptions {
+  let groupId: string | undefined;
+  return (domainIds: readonly string[] = FORMAT_DOMAIN_IDS) => {
+    if (!groupId) {
+      const firstOptions = ensureFormatMutationGroup(
+        createFormatMutationOptions(ctx, sheetId, operationIdPrefix, domainIds),
+      );
+      groupId = firstOptions.operationContext.groupId;
+      return firstOptions;
+    }
+    return createFormatMutationOptions(ctx, sheetId, operationIdPrefix, domainIds, groupId);
   };
 }
 

@@ -1,14 +1,15 @@
 use std::collections::BTreeMap;
 
+use compute_document::hex::{id_to_hex, parse_cell_id};
 use serde_json::{Number, Value};
 use snapshot_types::versioning::{
-    canonical_digest, CanonicalCellValue, CanonicalFormula, SemanticCellState, SemanticDomainState,
-    SemanticObjectDigest, SemanticObjectKind, SemanticSheetState, SemanticWorkbookState,
-    VersionDomainCapabilityState, VersionDomainClass,
+    canonical_digest, CanonicalCellValue, CanonicalDirectFormat, CanonicalFormula,
+    SemanticCellState, SemanticDomainState, SemanticObjectDigest, SemanticObjectKind,
+    SemanticSheetState, SemanticWorkbookState, VersionDomainCapabilityState, VersionDomainClass,
 };
 use value_types::CellValue;
 
-use crate::storage::engine::YrsComputeEngine;
+use crate::storage::{engine::YrsComputeEngine, properties};
 
 use super::{SemanticStateReadError, SemanticWorkbookStateReader};
 
@@ -61,7 +62,17 @@ pub fn read_engine_semantic_workbook_state(
         });
 
         for (cell_id, entry) in cells {
-            if entry.is_ghost() {
+            let cell_hex = id_to_hex(cell_id.as_u128());
+            let direct_format = properties::get_cell_format(
+                engine.storage().doc(),
+                engine.storage().workbook_map(),
+                engine.storage().sheets(),
+                &sheet_id,
+                &cell_hex,
+            )
+            .map(canonical_direct_format)
+            .transpose()?;
+            if entry.is_ghost() && direct_format.is_none() {
                 continue;
             }
             let Some(pos) = sheet.position_for_diagnostics(cell_id) else {
@@ -95,7 +106,58 @@ pub fn read_engine_semantic_workbook_state(
                     column: pos.col(),
                     value,
                     formula,
-                    direct_format: None,
+                    direct_format,
+                    digest: None,
+                },
+            );
+        }
+
+        for (cell_hex, props) in properties::iter_all_properties(
+            engine.storage().doc(),
+            engine.storage().workbook_map(),
+            engine.storage().sheets(),
+            &sheet_id,
+        ) {
+            let Some(format) = props.format else {
+                continue;
+            };
+            let Some(cell_id) = parse_cell_id(&cell_hex) else {
+                continue;
+            };
+            let Some((row, col)) = engine
+                .grid_index(&sheet_id)
+                .and_then(|grid| grid.cell_position(&cell_id))
+            else {
+                unsupported_values.insert(
+                    format!(
+                        "cell:{}:{}:direct-format:missing-position",
+                        sheet_key, cell_hex
+                    ),
+                    opaque_direct_format_digest(
+                        &sheet_key,
+                        &cell_hex,
+                        "missing-position",
+                        &format,
+                    )?,
+                );
+                continue;
+            };
+
+            let cell_key = canonical_cell_key(&sheet_key, row, col);
+            if sheet_state.cells.contains_key(&cell_key) {
+                continue;
+            }
+
+            sheet_state.cells.insert(
+                cell_key.clone(),
+                SemanticCellState {
+                    object_id: cell_key,
+                    sheet_id: sheet_key.clone(),
+                    row,
+                    column: col,
+                    value: None,
+                    formula: None,
+                    direct_format: Some(canonical_direct_format(format)?),
                     digest: None,
                 },
             );
@@ -125,6 +187,43 @@ fn canonical_sheet_key(sheet_index: usize) -> String {
 
 fn canonical_cell_key(sheet_key: &str, row: u32, column: u32) -> String {
     format!("cell:{sheet_key}:r{row}:c{column}")
+}
+
+fn canonical_direct_format(
+    format: domain_types::CellFormat,
+) -> Result<CanonicalDirectFormat, SemanticStateReadError> {
+    let value = canonicalize_json_value(serde_json::to_value(format)?);
+    let properties = match value {
+        Value::Object(properties) => properties.into_iter().collect(),
+        _ => BTreeMap::new(),
+    };
+
+    Ok(CanonicalDirectFormat {
+        properties,
+        digest: None,
+    })
+}
+
+fn canonicalize_json_value(value: Value) -> Value {
+    match value {
+        Value::Array(items) => Value::Array(
+            items
+                .into_iter()
+                .map(canonicalize_json_value)
+                .collect::<Vec<_>>(),
+        ),
+        Value::Object(map) => {
+            let mut entries = map.into_iter().collect::<Vec<_>>();
+            entries.sort_by(|(left, _), (right, _)| left.cmp(right));
+
+            let mut sorted = serde_json::Map::new();
+            for (key, value) in entries {
+                sorted.insert(key, canonicalize_json_value(value));
+            }
+            Value::Object(sorted)
+        }
+        scalar => scalar,
+    }
 }
 
 fn canonical_cell_value(
@@ -203,8 +302,24 @@ fn opaque_cell_digest(
     })
 }
 
+fn opaque_direct_format_digest(
+    sheet_key: &str,
+    cell_hex: &str,
+    reason: &str,
+    format: &domain_types::CellFormat,
+) -> Result<SemanticObjectDigest, SemanticStateReadError> {
+    Ok(SemanticObjectDigest {
+        object_id: format!("cell:{sheet_key}:{cell_hex}:direct-format:unsupported:{reason}"),
+        object_kind: SemanticObjectKind::Cell,
+        domain_id: UNSUPPORTED_CELL_VALUES_DOMAIN.to_string(),
+        digest: canonical_digest(&(reason, format))?,
+    })
+}
+
 #[cfg(test)]
 mod tests {
+    use cell_types::CellId;
+    use domain_types::CellFormat;
     use snapshot_types::versioning::{
         semantic_workbook_state_digest, SemanticDiagnosticSeverity, SemanticDomainCoverageStatus,
     };
@@ -301,6 +416,114 @@ mod tests {
         assert!(diff.changes.iter().any(|change| {
             change.kind == snapshot_types::versioning::SemanticChangeKind::Updated
                 && change.object_kind == snapshot_types::versioning::SemanticObjectKind::Cell
+        }));
+    }
+
+    #[test]
+    fn engine_semantic_reader_reads_direct_cell_format() {
+        let (before, _) = YrsComputeEngine::from_snapshot(workbook(vec![cell(
+            1,
+            0,
+            0,
+            CellValue::from("alpha"),
+        )]))
+        .expect("before");
+        let (mut after, _) = YrsComputeEngine::from_snapshot(workbook(vec![cell(
+            1,
+            0,
+            0,
+            CellValue::from("alpha"),
+        )]))
+        .expect("after");
+
+        let sheet_id = after.storage().sheet_order()[0];
+        let cell_id =
+            CellId::from_uuid_str("550e8400-e29b-41d4-a716-446655440001").expect("cell id");
+        after
+            .set_cell_format(
+                &sheet_id,
+                &cell_id,
+                &CellFormat {
+                    bold: Some(true),
+                    ..Default::default()
+                },
+            )
+            .expect("set direct format");
+
+        let before_state = before.read_semantic_workbook_state().expect("before state");
+        let after_state = after.read_semantic_workbook_state().expect("after state");
+        let cell_key = "cell:sheet#0:r0:c0";
+        assert!(before_state.sheets["sheet#0"].cells[cell_key]
+            .direct_format
+            .is_none());
+        let direct_format = after_state.sheets["sheet#0"].cells[cell_key]
+            .direct_format
+            .as_ref()
+            .expect("direct format");
+
+        assert_eq!(
+            direct_format.properties.get("bold"),
+            Some(&serde_json::json!(true))
+        );
+        assert_ne!(
+            semantic_workbook_state_digest(&before_state).expect("before digest"),
+            semantic_workbook_state_digest(&after_state).expect("after digest")
+        );
+        let diff = diff_semantic_workbook_states(&before_state, &after_state).expect("diff");
+        assert!(diff.changes.iter().any(|change| {
+            change.kind == snapshot_types::versioning::SemanticChangeKind::Updated
+                && change.object_kind == snapshot_types::versioning::SemanticObjectKind::Cell
+                && change.object_id == cell_key
+        }));
+    }
+
+    #[test]
+    fn engine_semantic_reader_reads_format_only_cell() {
+        let (before, _) = YrsComputeEngine::from_snapshot(workbook(vec![])).expect("before");
+        let (mut after, _) = YrsComputeEngine::from_snapshot(workbook(vec![])).expect("after");
+
+        let sheet_id = after.storage().sheet_order()[0];
+        after
+            .set_format_for_ranges(
+                &sheet_id,
+                &[(1, 1, 1, 1)],
+                &CellFormat {
+                    italic: Some(true),
+                    font_color: Some("#FF0000".to_string()),
+                    ..Default::default()
+                },
+            )
+            .expect("set direct format on blank cell");
+
+        let before_state = before.read_semantic_workbook_state().expect("before state");
+        let after_state = after.read_semantic_workbook_state().expect("after state");
+        let cell_key = "cell:sheet#0:r1:c1";
+
+        assert!(!before_state.sheets["sheet#0"].cells.contains_key(cell_key));
+        let cell_state = after_state.sheets["sheet#0"]
+            .cells
+            .get(cell_key)
+            .expect("format-only cell state");
+        assert!(cell_state.value.is_none());
+        assert!(cell_state.formula.is_none());
+        let direct_format = cell_state.direct_format.as_ref().expect("direct format");
+        assert_eq!(
+            direct_format.properties.get("fontColor"),
+            Some(&serde_json::json!("#FF0000"))
+        );
+        assert_eq!(
+            direct_format.properties.get("italic"),
+            Some(&serde_json::json!(true))
+        );
+        assert_ne!(
+            semantic_workbook_state_digest(&before_state).expect("before digest"),
+            semantic_workbook_state_digest(&after_state).expect("after digest")
+        );
+        let diff = diff_semantic_workbook_states(&before_state, &after_state).expect("diff");
+        assert!(diff.changes.iter().any(|change| {
+            change.kind == snapshot_types::versioning::SemanticChangeKind::Added
+                && change.object_kind == snapshot_types::versioning::SemanticObjectKind::Cell
+                && change.object_id == cell_key
         }));
     }
 

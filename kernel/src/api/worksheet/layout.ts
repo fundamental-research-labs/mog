@@ -5,8 +5,8 @@
  * operations.
  */
 
-import type { CellRange } from '@mog-sdk/contracts/core';
-import type { SheetId, RangePixelPosition, WorksheetLayout } from '@mog-sdk/contracts/api';
+import type { CellRange, SheetId } from '@mog-sdk/contracts/core';
+import type { RangePixelPosition, WorksheetLayout } from '@mog-sdk/contracts/api';
 import { KernelError } from '../../errors';
 import { invalidCellAddress, operationFailed } from '../../errors/api';
 

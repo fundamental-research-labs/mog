@@ -955,7 +955,7 @@ describe('WorksheetImpl', () => {
         SHEET_ID,
         [[0, 0, 0, 0]],
         format,
-        expectVersionOperationOptions('formats.set', ['formats']),
+        expectVersionOperationOptions('formats.set', ['cells.formats.direct']),
       );
     });
 
@@ -967,7 +967,7 @@ describe('WorksheetImpl', () => {
         SHEET_ID,
         [[4, 2, 4, 2]],
         format,
-        expectVersionOperationOptions('formats.set', ['formats']),
+        expectVersionOperationOptions('formats.set', ['cells.formats.direct']),
       );
     });
 
@@ -979,7 +979,7 @@ describe('WorksheetImpl', () => {
         SHEET_ID,
         [[0, 0, 0, 0]],
         format,
-        expectVersionOperationOptions('formats.set', ['formats']),
+        expectVersionOperationOptions('formats.set', ['cells.formats.direct']),
       );
     });
 
@@ -991,7 +991,7 @@ describe('WorksheetImpl', () => {
         SHEET_ID,
         [[3, 2, 3, 2]],
         format,
-        expectVersionOperationOptions('formats.set', ['formats']),
+        expectVersionOperationOptions('formats.set', ['cells.formats.direct']),
       );
     });
 
@@ -1009,7 +1009,7 @@ describe('WorksheetImpl', () => {
         SHEET_ID,
         [[0, 0, 1, 1]],
         format,
-        expectVersionOperationOptions('formats.setRange', ['formats']),
+        expectVersionOperationOptions('formats.setRange', ['cells.formats.direct']),
       );
     });
 
@@ -1023,7 +1023,7 @@ describe('WorksheetImpl', () => {
       expect(ctx.computeBridge.clearFormatForRanges).toHaveBeenCalledWith(
         SHEET_ID,
         [[0, 0, 0, 0]],
-        expectVersionOperationOptions('formats.clearCell', ['formats']),
+        expectVersionOperationOptions('formats.clearCell', ['cells.formats.direct']),
       );
     });
 
@@ -1033,7 +1033,7 @@ describe('WorksheetImpl', () => {
       expect(ctx.computeBridge.clearFormatForRanges).toHaveBeenCalledWith(
         SHEET_ID,
         [[2, 3, 2, 3]],
-        expectVersionOperationOptions('formats.clearCell', ['formats']),
+        expectVersionOperationOptions('formats.clearCell', ['cells.formats.direct']),
       );
     });
 
@@ -1071,7 +1071,7 @@ describe('WorksheetImpl', () => {
       expect(ctx.computeBridge.clearFormatForRanges).toHaveBeenCalledWith(
         SHEET_ID,
         [[0, 0, 0, 0]],
-        expectVersionOperationOptions('formats.clearFill', ['formats']),
+        expectVersionOperationOptions('formats.clearFill', ['cells.formats.direct']),
       );
       // 3) setFormatForRanges re-applies the non-fill properties
       expect(ctx.computeBridge.setFormatForRanges).toHaveBeenCalledWith(
@@ -1080,7 +1080,7 @@ describe('WorksheetImpl', () => {
         {
           bold: true,
         },
-        expectVersionOperationOptions('formats.clearFill', ['formats']),
+        expectVersionOperationOptions('formats.clearFill', ['cells.formats.direct']),
       );
     });
 
@@ -1099,7 +1099,7 @@ describe('WorksheetImpl', () => {
       expect(ctx.computeBridge.clearFormatForRanges).toHaveBeenCalledWith(
         SHEET_ID,
         [[2, 0, 2, 0]],
-        expectVersionOperationOptions('formats.clearFill', ['formats']),
+        expectVersionOperationOptions('formats.clearFill', ['cells.formats.direct']),
       );
       // setFormatForRanges should NOT be called — no cell-level format to re-apply
       expect(ctx.computeBridge.setFormatForRanges).not.toHaveBeenCalled();
@@ -1119,7 +1119,7 @@ describe('WorksheetImpl', () => {
       expect(ctx.computeBridge.clearFormatForRanges).toHaveBeenCalledWith(
         SHEET_ID,
         [[0, 0, 0, 0]],
-        expectVersionOperationOptions('formats.clearFill', ['formats']),
+        expectVersionOperationOptions('formats.clearFill', ['cells.formats.direct']),
       );
       // setFormatForRanges should NOT be called — stripping fill leaves nothing to re-apply
       expect(ctx.computeBridge.setFormatForRanges).not.toHaveBeenCalled();

@@ -32,6 +32,10 @@ import {
   type VersionPendingRemoteCapture,
 } from './pending-remote-capture-service';
 import { classifySemanticMutationCaptureLane } from './semantic-mutation-capture-lanes';
+import {
+  isDirectCellFormatOperation,
+  mapDirectCellFormatChanges,
+} from './semantic-mutation-direct-format-capture';
 import { mapSyncAuthoredCellChanges } from './semantic-mutation-sync-cell-capture';
 
 export interface VersionMutationCaptureRecordInput {
@@ -239,6 +243,9 @@ function mapMutationResultToSemanticChanges(
         sequence,
       ),
     );
+  }
+  if (isDirectCellFormatOperation(input.operation, input.operationContext)) {
+    changes.push(...mapDirectCellFormatChanges(input.result.propertyChanges ?? [], sequence));
   }
   if (input.operation === 'compute_rename_compute_sheet') {
     changes.push(...mapSheetRenameChanges(input.result.sheetChanges ?? [], sequence));

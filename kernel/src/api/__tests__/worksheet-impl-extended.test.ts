@@ -1243,7 +1243,7 @@ describe('WorksheetImpl Extended Methods', () => {
         format,
         sourceRange,
         targetRange,
-        expectVersionOperationOptions('formats.applyFormatToRange', ['formats']),
+        expectVersionOperationOptions('formats.applyFormatToRange', ['cells.formats.direct']),
       );
     });
 
@@ -1259,7 +1259,7 @@ describe('WorksheetImpl Extended Methods', () => {
         format,
         null,
         targetRange,
-        expectVersionOperationOptions('formats.applyFormatToRange', ['formats']),
+        expectVersionOperationOptions('formats.applyFormatToRange', ['cells.formats.direct']),
       );
     });
 

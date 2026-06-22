@@ -1,4 +1,5 @@
-import type { CellRange, ProtectionOperation, SheetId } from '@mog-sdk/contracts/api';
+import type { ProtectionOperation } from '@mog-sdk/contracts/api';
+import type { CellRange, SheetId } from '@mog-sdk/contracts/core';
 import { MAX_COLS, MAX_ROWS } from '@mog-sdk/contracts/core';
 
 import type { DocumentContext } from '../../context';

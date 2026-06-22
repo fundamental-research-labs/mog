@@ -199,6 +199,9 @@ export async function createFromXlsxDocument<THandle extends DocumentHandleInter
       source: xlsxImportRootSource(source),
       diagnostics: importDiagnostics,
       versionMetadataTrust: versionMetadataTrust.trust,
+      ...(versionMetadataTrust.versionMetadataHeadCandidate
+        ? { versionMetadataHeadCandidate: versionMetadataTrust.versionMetadataHeadCandidate }
+        : {}),
     });
 
     return {
@@ -239,6 +242,7 @@ function xlsxVersionMetadataTrust(
 ): {
   readonly trust: NonNullable<XlsxVersionImportRootProvenance['versionMetadataTrust']>;
   readonly diagnostics: XlsxVersionImportRootProvenance['diagnostics'];
+  readonly versionMetadataHeadCandidate?: XlsxVersionImportRootProvenance['versionMetadataHeadCandidate'];
 } {
   if (source.type !== 'bytes') {
     return {
@@ -255,7 +259,18 @@ function xlsxVersionMetadataTrust(
   });
   return {
     trust: result.trust,
-    diagnostics: result.diagnostics,
+    diagnostics:
+      result.status === 'untrusted' && result.reason === 'head-unverified'
+        ? []
+        : result.diagnostics,
+    ...('metadata' in result && result.metadata?.head
+      ? {
+          versionMetadataHeadCandidate: {
+            documentId: result.metadata.documentId,
+            head: result.metadata.head,
+          },
+        }
+      : {}),
   };
 }
 

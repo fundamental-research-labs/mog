@@ -10,6 +10,7 @@ import {
 import {
   buildXlsxVersionImportRootWrite,
   XLSX_IMPORT_ROOT_GRAPH_ID,
+  type XlsxVersionExistingGraphImportInput,
   type XlsxVersionImportRootProvenance,
 } from './xlsx-import-root';
 
@@ -51,6 +52,17 @@ export async function withDocumentRootInitializer(input: {
 
   return {
     ...input.versioning,
+    ...(input.xlsxImportRoot
+      ? {
+          xlsxImportRootExistingGraph: {
+            namespace,
+            snapshotRootByteSyncPort: input.versioning.snapshotRootByteSyncPort,
+            semanticStateReader: input.versioning.semanticStateReader,
+            provenance: input.xlsxImportRoot,
+            createdAt: input.createdAt,
+          } satisfies Omit<XlsxVersionExistingGraphImportInput, 'graph'>,
+        }
+      : {}),
     providerSelection: {
       ...providerSelection,
       initialize: {

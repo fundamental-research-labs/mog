@@ -25,6 +25,10 @@ import {
   type VersionStoreProvider,
 } from './provider';
 import {
+  applyXlsxVersionImportChangeToExistingGraph,
+  type XlsxVersionExistingGraphImportInput,
+} from './xlsx-import-root';
+import {
   createDefaultVersionStoreProviderRegistry,
   selectVersionStoreProvider,
   type VersionStoreProviderKind,
@@ -105,6 +109,7 @@ export type DocumentWorkbookVersioningLifecycleConfig = ResolvedWorkbookVersioni
    * lower-level WorkbookConfig path still accepts an already-created provider.
    */
   readonly providerSelection?: VersionStoreLifecycleProviderSelection;
+  readonly xlsxImportRootExistingGraph?: Omit<XlsxVersionExistingGraphImportInput, 'graph'>;
 };
 
 export type ResolvedDocumentWorkbookVersioningLifecycle = {
@@ -190,6 +195,7 @@ export async function resolveDocumentWorkbookVersioningLifecycle(input: {
     documentScope,
     provider,
     initialize: providerSelection.initialize,
+    xlsxImportRootExistingGraph: config.xlsxImportRootExistingGraph,
     requireDurablePersistence: providerSelection.requireDurablePersistence,
   });
 
@@ -303,6 +309,7 @@ async function initializeSelectedProviderWhenAbsent(input: {
   readonly documentScope: VersionDocumentScope;
   readonly provider: VersionStoreProvider;
   readonly initialize?: VersionStoreLifecycleProviderSelection['initialize'];
+  readonly xlsxImportRootExistingGraph?: Omit<XlsxVersionExistingGraphImportInput, 'graph'>;
   readonly requireDurablePersistence?: boolean;
 }): Promise<readonly VersionStoreDiagnostic[]> {
   let registryRead: VersionGraphRegistryReadResult;
@@ -313,8 +320,32 @@ async function initializeSelectedProviderWhenAbsent(input: {
   }
 
   if (registryRead.status === 'ok') {
-    assertRegistryMatchesDocumentScope(input.documentScope, registryRead.registry);
-    return [];
+    const namespace = assertRegistryMatchesDocumentScope(input.documentScope, registryRead.registry);
+    if (!input.xlsxImportRootExistingGraph) return [];
+    if (
+      versionGraphNamespaceKey(input.xlsxImportRootExistingGraph.namespace) !==
+      versionGraphNamespaceKey(namespace)
+    ) {
+      return [];
+    }
+    try {
+      const graph = await input.provider.openGraph(namespace);
+      const imported = await applyXlsxVersionImportChangeToExistingGraph({
+        ...input.xlsxImportRootExistingGraph,
+        graph,
+      });
+      return imported.diagnostics;
+    } catch {
+      return [
+        versionStoreDiagnostic('VERSION_PROVIDER_FAILED', {
+          operation: 'commitGraphWrite',
+          documentScope: input.documentScope,
+          namespace,
+          recoverability: 'retry',
+          safeMessage: 'Existing version graph could not process XLSX reimport metadata.',
+        }),
+      ];
+    }
   }
   if (registryRead.status !== 'absent') return registryRead.diagnostics;
   if (!input.initialize) return [];

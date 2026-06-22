@@ -539,7 +539,7 @@ describe('WorkbookVersion XLSX import root', () => {
     }
   });
 
-  it('documents the missing same-document reimport graph replacement contract', async () => {
+  it('advances same-document trusted XLSX reimport as an import-change commit', async () => {
     const originalXlsxBytes = await createSourceXlsx('Original import root');
     const originalImport = await DocumentFactory.createFromXlsx(
       { type: 'bytes', data: originalXlsxBytes },
@@ -556,31 +556,34 @@ describe('WorkbookVersion XLSX import root', () => {
 
     let originalWb: Workbook | undefined;
     let originalRootId: WorkbookCommitId | undefined;
+    let originalMetadata: MogWorkbookVersionXlsxMetadata | undefined;
     try {
       originalWb = await originalImport.handle.workbook({
-        versioning: {
+        versioning: withExportSupportedVersionManifest({
           providerSelection: {
             kind: INDEXEDDB_VERSION_STORE_PROVIDER_KIND,
             requireDurablePersistence: true,
           },
-        },
+        }),
       });
       const head = await originalWb.version.getHead();
       expect(head).toMatchObject({ ok: true });
       if (!head.ok) throw new Error(`expected original import-root head: ${head.error.code}`);
       originalRootId = head.value.id;
+      const metadataExport = await originalWb.toXlsx({ versionMetadata: 'include' });
+      originalMetadata = parseVersionMetadataXml(
+        decodeUtf8(singleZipEntry(zipEntriesNamed(metadataExport, MOG_VERSION_METADATA_PART)).data),
+      ) as unknown as MogWorkbookVersionXlsxMetadata;
     } finally {
       await originalWb?.close('skipSave').catch(() => {});
       await originalImport.handle.dispose().catch(() => {});
     }
     if (!originalRootId) throw new Error('expected original root id');
+    if (!originalMetadata) throw new Error('expected original metadata sidecar');
 
     const reimportedXlsxBytes = addMogVersionMetadataToXlsx(
       await createSourceXlsx('Externally edited import'),
-      testVersionMetadata({
-        documentId: METADATA_TRUST_REIMPORT_DOCUMENT_ID,
-        commitId: originalRootId,
-      }),
+      originalMetadata,
     );
     const reimported = await DocumentFactory.createFromXlsx(
       { type: 'bytes', data: reimportedXlsxBytes },
@@ -595,7 +598,7 @@ describe('WorkbookVersion XLSX import root', () => {
       throw new Error(`expected reimport XLSX import success: ${reimported.error?.message}`);
     }
     expect(reimported.warnings).toEqual(
-      expect.arrayContaining([
+      expect.not.arrayContaining([
         expect.objectContaining({
           reason: 'head-unverified',
           diagnostic: expect.objectContaining({ code: 'mogVersionMetadataUntrusted' }),
@@ -622,7 +625,51 @@ describe('WorkbookVersion XLSX import root', () => {
       if (!reimportedHead.ok) {
         throw new Error(`expected reimport version head: ${reimportedHead.error.code}`);
       }
-      expect(reimportedHead.value.id).toBe(originalRootId);
+      expect(reimportedHead.value.id).not.toBe(originalRootId);
+
+      await expect(reimportedWb.version.listCommits()).resolves.toMatchObject({
+        ok: true,
+        value: {
+          items: [
+            expect.objectContaining({
+              id: reimportedHead.value.id,
+              parents: [originalRootId],
+              author: expect.objectContaining({
+                actorKind: 'system',
+                displayName: 'Mog XLSX Import Change',
+              }),
+            }),
+            expect.objectContaining({
+              id: originalRootId,
+              parents: [],
+            }),
+          ],
+        },
+      });
+
+      const semanticPayload = await readRootSemanticChangeSetPayload(
+        reimportedHead.value.id,
+        METADATA_TRUST_REIMPORT_DOCUMENT_ID,
+      );
+      expect(semanticPayload).toMatchObject({
+        source: {
+          kind: 'xlsxImportChange',
+          versionMetadataTrust: {
+            status: 'trusted',
+            redacted: true,
+          },
+        },
+        changes: expect.arrayContaining([
+          expect.objectContaining({
+            kind: 'updated',
+          }),
+        ]),
+      });
+      expect(semanticPayload).toHaveProperty('semanticState.stateDigest');
+      expect(semanticPayload).toHaveProperty('semanticDiff.changes');
+      expect(JSON.stringify(semanticPayload)).not.toContain(originalRootId);
+      expect(JSON.stringify(semanticPayload)).not.toContain('rawBytes');
+      expect(JSON.stringify(semanticPayload)).not.toContain('rawWorkbookBytes');
     } finally {
       await reimportedWb?.close('skipSave').catch(() => {});
       await reimported.handle.dispose().catch(() => {});

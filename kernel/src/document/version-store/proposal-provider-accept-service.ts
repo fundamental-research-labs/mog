@@ -54,6 +54,14 @@ export async function acceptProviderBackedAgentProposal(options: {
   if (!proposalResult.ok) return storeFailure(proposalResult);
   const proposal = proposalResult.value;
 
+  if (options.input.resolutionPolicy !== 'fastForwardOnly') {
+    return invalidState(
+      'proposal_accept_resolution_policy_unsupported',
+      ['fastForwardOnly'],
+      'Provider-backed proposal acceptance currently supports only fast-forward-only ref advancement.',
+    );
+  }
+
   if (proposal.status === 'applied' && proposal.accepted) {
     const finalizedReview = await markLinkedReviewApplied({
       input: options.input,

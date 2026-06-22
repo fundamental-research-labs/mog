@@ -96,6 +96,7 @@ import type {
   ImportDiagnostic as WireImportDiagnostic,
   MergeChange,
   MutationResult,
+  SyncApplyMutationMetadataWire,
   RuntimeDiagnosticsOptions as WireRuntimeDiagnosticsOptions,
   RuntimeDiagnosticsPage as WireRuntimeDiagnosticsPage,
   RustWorkbookSettingsPatch,
@@ -220,6 +221,7 @@ export type {
   GroupingChange,
   MergeChange,
   MutationResult,
+  SyncApplyMutationMetadataWire,
   NamedRangeChange,
   OutlineLevel,
   OutlineLevelButton,
@@ -410,6 +412,7 @@ export {
 // =============================================================================
 
 export { extractMutationData } from './compute-core';
+export type { SyncApplyWithMetadataResult } from './sync-apply-result';
 
 // =============================================================================
 // ComputeCore & Generated Bridge Methods
@@ -418,6 +421,7 @@ export { extractMutationData } from './compute-core';
 import type { WriteGate } from '../../document/write-gate';
 import { GeneratedBridgeBase } from './compute-bridge.gen';
 import { ComputeCore, extractMutationData } from './compute-core';
+import type { SyncApplyWithMetadataResult } from './sync-apply-result';
 
 // =============================================================================
 // InitPhase type
@@ -803,6 +807,13 @@ export class ComputeBridge extends GeneratedBridgeBase {
     syncApplyContext: AdmittedSyncApplyContext,
   ): Promise<MutationResult> {
     return this.core.syncApply(update, syncApplyContext);
+  }
+
+  syncApplyWithMetadata(
+    update: Uint8Array,
+    syncApplyContext: AdmittedSyncApplyContext,
+  ): Promise<SyncApplyWithMetadataResult> {
+    return this.core.syncApplyWithMetadata(update, syncApplyContext);
   }
 
   override async drainPendingUpdates(): Promise<Uint8Array[]> {

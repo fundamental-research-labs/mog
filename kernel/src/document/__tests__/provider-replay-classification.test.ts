@@ -1,7 +1,13 @@
 import { jest } from '@jest/globals';
 import { createHash } from 'node:crypto';
+import { classifyLegacyRawUpdate } from '@mog-sdk/types-document/storage';
 import type { StorageProviderIdentity } from '@mog-sdk/types-document/storage/provider-identity';
+import type {
+  MutationResult,
+  SyncApplyMutationMetadataWire,
+} from '../../bridges/compute/compute-types.gen';
 import { RustDocument } from '../rust-document';
+import { createBridgeBackedProviderDoc } from '../providers/bridge-provider-doc';
 import type { Provider, ProviderDocApplyUpdateMetadata } from '../providers/provider';
 
 interface StubBridge {
@@ -119,6 +125,53 @@ function sha256Hex(bytes: Uint8Array): string {
 }
 
 describe('provider attach replay provenance classification', () => {
+  it('returns bridge sync apply metadata when the bridge exposes the richer path', async () => {
+    const update = new Uint8Array([0x44, 0x55]);
+    const payloadHash = sha256Hex(update);
+    const admissionMetadata = {
+      source: 'provider-replay',
+      docId: 'provider-replay-doc',
+      envelopeVersion: 'provider-replay',
+      payloadHash,
+      provenance: classifyLegacyRawUpdate({
+        payloadHash,
+        updateId: `provider-replay-test:${payloadHash}`,
+      }),
+      validationDiagnostics: [],
+    } satisfies ProviderDocApplyUpdateMetadata;
+    const mutationResult = { recalc: { changedCells: [] } } as unknown as MutationResult;
+    const syncApplyMetadata = {
+      mutationResult,
+      provenanceReport: {
+        pendingSegmentIds: ['pending-segment-1'],
+      },
+    } as SyncApplyMutationMetadataWire;
+    const syncApply = jest.fn(async () => mutationResult);
+    const syncApplyWithMetadata = jest.fn(async () => ({
+      mutationResult,
+      metadata: syncApplyMetadata,
+    }));
+    const recordProviderDocApplyUpdateAdmission = jest.fn();
+    const bridge = {
+      syncApply,
+      syncApplyWithMetadata,
+      recordProviderDocApplyUpdateAdmission,
+      encodeDiff: async () => new Uint8Array(),
+      currentStateVector: async () => new Uint8Array(),
+    } as unknown as Parameters<typeof createBridgeBackedProviderDoc>[0];
+    const doc = createBridgeBackedProviderDoc(bridge, 'provider-replay-doc');
+
+    const result = await doc.applyUpdate(update, admissionMetadata);
+
+    expect(syncApplyWithMetadata).toHaveBeenCalledWith(
+      update,
+      expect.objectContaining({ operationContext: expect.any(Object) }),
+    );
+    expect(syncApply).not.toHaveBeenCalled();
+    expect(recordProviderDocApplyUpdateAdmission).toHaveBeenCalledWith(admissionMetadata);
+    expect(result).toEqual({ mutationResult, metadata: syncApplyMetadata });
+  });
+
   it('emits providerReplay admission before syncApply for bare attach replay bytes', async () => {
     const { doc, bridge } = await makeOrchestrator();
     const update = new Uint8Array([0xaa, 0xbb, 0xcc]);

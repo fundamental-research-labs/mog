@@ -34,6 +34,8 @@ export {
   type SchemaConstraintsWire,
   type Scope,
   type StructureChange,
+  type SyncApplyMutationMetadataWire,
+  type SyncApplyWithMetadataResult,
   type TableDef,
   type UndoState,
   type WorkbookSnapshot,

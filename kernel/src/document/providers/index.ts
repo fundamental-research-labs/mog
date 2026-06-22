@@ -11,6 +11,8 @@ export type {
   DocumentByteSyncPort,
   Provider,
   ProviderDoc,
+  ProviderDocApplyUpdateResult,
+  ProviderDocApplyUpdateReturn,
   ProviderAttachMode,
   ProviderAttachReturn,
   ProviderCheckpointMode,

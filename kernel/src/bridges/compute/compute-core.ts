@@ -56,6 +56,7 @@ import {
   toSyncApplyOperationContextWire,
   type AdmittedSyncApplyContext,
 } from './sync-apply-admission';
+import type { SyncApplyWithMetadataResult } from './sync-apply-result';
 
 import type {
   ColumnSchemaWire,
@@ -1753,6 +1754,14 @@ export class ComputeCore {
     update: Uint8Array,
     syncApplyContext: AdmittedSyncApplyContext,
   ): Promise<MutationResult> {
+    const { mutationResult } = await this.syncApplyWithMetadata(update, syncApplyContext);
+    return mutationResult;
+  }
+
+  async syncApplyWithMetadata(
+    update: Uint8Array,
+    syncApplyContext: AdmittedSyncApplyContext,
+  ): Promise<SyncApplyWithMetadataResult> {
     if (!this.engineCreated) {
       throw new BridgeError(
         'BRIDGE_NOT_STARTED',
@@ -1772,7 +1781,8 @@ export class ComputeCore {
     if (!this.isInitialized && update.length > 0) {
       this.coordinatorRegistry.markHydrationDeficit();
     }
-    const result = await this.mutateSystem(
+    let syncApplyMetadata!: SyncApplyMutationMetadataWire;
+    const mutationResult = await this.mutateSystem(
       'compute_apply_sync_update',
       async () => {
         const [viewportPatchesBinary, metadata] = await this.transport.call<
@@ -1782,6 +1792,7 @@ export class ComputeCore {
           update,
           syncContext: toSyncApplyOperationContextWire(syncApplyContext),
         });
+        syncApplyMetadata = metadata;
         return [viewportPatchesBinary, metadata.mutationResult] as MutationTuple;
       },
       undefined,
@@ -1791,7 +1802,7 @@ export class ComputeCore {
       },
     );
     // Store the hydration result (overrides the empty init result)
-    this.initResult = result.recalc;
+    this.initResult = mutationResult.recalc;
     // Transition to HYDRATED if we were in CREATED or CONTEXT_SET
     if (this._phase === 'CREATED' || this._phase === 'CONTEXT_SET') {
       this._phase = 'HYDRATED';
@@ -1808,7 +1819,7 @@ export class ComputeCore {
       await this.fetchManager.forceRefreshAllViewports();
     }
 
-    return result;
+    return { mutationResult, metadata: syncApplyMetadata };
   }
 
   async syncFullState(): Promise<Uint8Array> {

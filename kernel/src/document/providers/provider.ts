@@ -25,6 +25,10 @@ import type {
   SyncUpdateProvenance,
   SyncUpdateValidationDiagnostic,
 } from '@mog-sdk/types-document/storage';
+import type {
+  MutationResult,
+  SyncApplyMutationMetadataWire,
+} from '../../bridges/compute/compute-types.gen';
 
 /**
  * The transport-side interface: persistence, replication, or both.
@@ -245,6 +249,13 @@ export type ProviderDocApplyUpdateMetadata =
   | ProviderInboundApplyUpdateMetadata
   | ProviderReplayApplyUpdateMetadata;
 
+export interface ProviderDocApplyUpdateResult {
+  readonly mutationResult: MutationResult;
+  readonly metadata: SyncApplyMutationMetadataWire;
+}
+
+export type ProviderDocApplyUpdateReturn = ProviderDocApplyUpdateResult | void;
+
 export type ClassifiedRawSyncUpdateProvenance = Exclude<
   SyncUpdateProvenance,
   Extract<
@@ -278,8 +289,13 @@ export interface ProviderDoc {
   /**
    * Apply a yrs `update_v1` byte stream into the doc. Idempotent
    * (re-applying the same update is a no-op per yrs CRDT semantics).
+   * Implementations may resolve with sync-apply metadata; Providers can
+   * ignore the result.
    */
-  applyUpdate(update: Uint8Array, metadata?: ProviderDocApplyUpdateMetadata): Promise<void>;
+  applyUpdate(
+    update: Uint8Array,
+    metadata?: ProviderDocApplyUpdateMetadata,
+  ): Promise<ProviderDocApplyUpdateReturn>;
 
   /**
    * Encode all updates the local doc has that the remote (described by

@@ -21,6 +21,10 @@ import {
 } from '@mog-sdk/types-document/storage';
 import { RustDocument } from '../rust-document';
 import type { Provider, ProviderDocApplyUpdateMetadata } from '../providers/provider';
+import type {
+  MutationResult,
+  SyncApplyMutationMetadataWire,
+} from '../../bridges/compute/compute-types.gen';
 import { createAdmittedSyncApplyContext } from '../../bridges/compute/sync-apply-admission';
 import {
   appliedSyncUpdateIdentityKeyMaterialForOperationContext,
@@ -42,6 +46,10 @@ interface StubBridge {
   createEngineFromYrsState(state: Uint8Array): Promise<unknown>;
   flushUndoCapture(): Promise<unknown>;
   syncApply(u: Uint8Array): Promise<unknown>;
+  syncApplyWithMetadata?(
+    u: Uint8Array,
+    syncApplyContext: unknown,
+  ): Promise<{ mutationResult: MutationResult; metadata: SyncApplyMutationMetadataWire }>;
   recordProviderDocApplyUpdateAdmission(metadata: ProviderDocApplyUpdateMetadata): void;
   encodeDiff(sv: Uint8Array): Promise<Uint8Array>;
   currentStateVector(): Promise<Uint8Array>;
@@ -329,6 +337,38 @@ describe('RustDocument.applyProviderUpdate — inbound update orchestration', ()
         validationDiagnostics: [],
       });
       expect(bridge.admissions[0]?.provenance).toBe(envelope.provenance);
+
+      await doc.destroy();
+    });
+
+    it('returns sync apply metadata when the bridge-backed ProviderDoc supplies it', async () => {
+      const { doc, bridge } = await makeOrchestrator();
+      const providerA = makeRecordingProvider('ProviderA');
+      await doc.attachProvider(providerA);
+      const mutationResult = { recalc: { changedCells: [] } } as unknown as MutationResult;
+      const metadata = {
+        mutationResult,
+        provenanceReport: {
+          pendingSegmentIds: ['pending-segment-1'],
+        },
+      } as SyncApplyMutationMetadataWire;
+      bridge.syncApplyWithMetadata = jest.fn(async (u: Uint8Array) => {
+        bridge.emit(u);
+        return { mutationResult, metadata };
+      });
+
+      const envelope = makeV2Envelope({
+        payload: new Uint8Array([0x30, 0x31]),
+        updateId: 'v2-live-metadata-1',
+      });
+      const result = await doc.applyProviderUpdate(envelope);
+
+      expect(result.status).toBe('applied');
+      expect(result.applyResult).toEqual({ mutationResult, metadata });
+      expect(bridge.syncApplyWithMetadata).toHaveBeenCalledWith(
+        envelope.payload,
+        expect.objectContaining({ operationContext: expect.any(Object) }),
+      );
 
       await doc.destroy();
     });

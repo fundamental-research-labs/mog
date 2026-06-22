@@ -30,9 +30,17 @@ import {
 } from '@mog-sdk/types-document/storage';
 import type { StorageScopeBinding } from '@mog-sdk/types-document/storage/provider-identity';
 import type { ComputeBridge } from '../../bridges/compute/compute-bridge';
-import { createAdmittedSyncApplyContext } from '../../bridges/compute/sync-apply-admission';
+import {
+  createAdmittedSyncApplyContext,
+  type AdmittedSyncApplyContext,
+} from '../../bridges/compute/sync-apply-admission';
 import { slog } from '../../lib/slog';
-import type { Provider, ProviderDoc, ProviderDocApplyUpdateMetadata } from './provider';
+import type {
+  Provider,
+  ProviderDoc,
+  ProviderDocApplyUpdateMetadata,
+  ProviderDocApplyUpdateResult,
+} from './provider';
 
 export interface BridgeBackedProviderReplayAdmissionOptions {
   readonly providerRefId?: string;
@@ -62,15 +70,22 @@ type ComputeBridgeAdmissionHooks = {
   recordProviderDocApplyUpdateAdmission?: (metadata: ProviderDocApplyUpdateMetadata) => void;
 };
 
+type ComputeBridgeSyncApplyWithMetadata = {
+  syncApplyWithMetadata?: (
+    update: Uint8Array,
+    syncApplyContext: AdmittedSyncApplyContext,
+  ) => Promise<ProviderDocApplyUpdateResult>;
+};
+
 /**
  * Build a `ProviderDoc` backed by `bridge`. The returned object is stable
  * (same reference returned on subsequent reads of any property) and stateless
  * — all state lives inside the bridge / compute engine.
  *
- * `applyUpdate(bytes)` calls `bridge.syncApply(bytes)` (which the engine
- * routes through `compute_apply_sync_update`); the returned `MutationResult`
- * is discarded — Providers only care that the bytes were accepted, not the
- * recalc result.
+ * `applyUpdate(bytes)` calls the bridge sync-apply path (which the engine
+ * routes through `compute_apply_sync_update`). When the bridge exposes sync
+ * apply metadata, the result is returned for document orchestration; Providers
+ * can continue to ignore it.
  *
  * `currentStateVector()` calls `bridge.currentStateVector()`.
  *
@@ -91,7 +106,7 @@ export function createBridgeBackedProviderDoc(
     async applyUpdate(
       update: Uint8Array,
       metadata?: ProviderDocApplyUpdateMetadata,
-    ): Promise<void> {
+    ): Promise<ProviderDocApplyUpdateResult | void> {
       const admissionMetadata =
         metadata ??
         (options.providerReplayAdmission
@@ -102,10 +117,14 @@ export function createBridgeBackedProviderDoc(
             )
           : await classifyLegacyRawProviderDocApplyUpdate(docId, update));
       emitApplyUpdateAdmission(bridge, options, admissionMetadata);
-      // `syncApply` is a mutation route — its return is the recalc result,
-      // which Providers don't observe. We `await` so failures surface to the
-      // caller (Provider attach replay would otherwise swallow apply errors).
-      await bridge.syncApply(update, createAdmittedSyncApplyContext(admissionMetadata));
+      const admittedContext = createAdmittedSyncApplyContext(admissionMetadata);
+      const syncApplyWithMetadata = (bridge as ComputeBridgeSyncApplyWithMetadata)
+        .syncApplyWithMetadata;
+      if (typeof syncApplyWithMetadata === 'function') {
+        return syncApplyWithMetadata.call(bridge, update, admittedContext);
+      }
+      await bridge.syncApply(update, admittedContext);
+      return undefined;
     },
     encodeDiff(remoteSv: Uint8Array): Promise<Uint8Array> {
       return bridge.encodeDiff(remoteSv);

@@ -8,7 +8,11 @@ import type { BridgeTransport } from '@rust-bridge/client';
 import type { IKernelContext } from '@mog-sdk/contracts/kernel';
 
 import { ComputeCore } from '../compute-core';
-import type { MutationResult, SyncApplyMutationMetadataWire } from '../compute-types.gen';
+import type {
+  MutationResult,
+  SyncApplyMutationMetadataWire,
+  SyncProvenanceApplyReport,
+} from '../compute-types.gen';
 import type { MutationAdmissionDiagnostic } from '../mutation-admission';
 import {
   createAdmittedSyncApplyContext,
@@ -29,9 +33,13 @@ function mutationResult(): MutationResult {
   } as MutationResult;
 }
 
-function syncMutationMetadata(result = mutationResult()): SyncApplyMutationMetadataWire {
+function syncMutationMetadata(
+  result = mutationResult(),
+  provenanceReport?: SyncProvenanceApplyReport,
+): SyncApplyMutationMetadataWire {
   return {
     mutationResult: result,
+    ...(provenanceReport === undefined ? {} : { provenanceReport }),
   } as SyncApplyMutationMetadataWire;
 }
 
@@ -236,6 +244,33 @@ describe('sync apply admission', () => {
     expect(diagnostics).not.toContainEqual(
       expect.objectContaining({ code: 'provenance.missingContext' }),
     );
+  });
+
+  it('returns sync apply metadata from the richer path while syncApply stays compatible', async () => {
+    const diagnostics: MutationAdmissionDiagnostic[] = [];
+    const mutation = mutationResult();
+    const payloadHash = '4'.repeat(64);
+    const syncApplyContext = makeVerifiedProviderContext(payloadHash);
+    const provenanceReport = {
+      appliedContext: toSyncApplyOperationContextWire(syncApplyContext),
+      pendingSegmentStatus: 'notEvaluated',
+      pendingSegmentIds: ['pending-segment-1'],
+      batchDurabilityStatus: 'notEvaluated',
+    } satisfies SyncProvenanceApplyReport;
+    const metadata = syncMutationMetadata(mutation, provenanceReport);
+    const transport: BridgeTransport & { call: jest.Mock } = {
+      call: jest.fn(async () => [new Uint8Array(), metadata]),
+    };
+    const core = createStartedCore(makeMockContext(diagnostics), transport);
+
+    const richResult = await core.syncApplyWithMetadata(new Uint8Array([4]), syncApplyContext);
+    const compatResult = await core.syncApply(new Uint8Array([5]), syncApplyContext);
+
+    expect(richResult).toEqual({ mutationResult: mutation, metadata });
+    expect(richResult.metadata.provenanceReport).toEqual(provenanceReport);
+    expect(compatResult).toBe(mutation);
+    expect((compatResult as MutationResult & { metadata?: unknown }).metadata).toBeUndefined();
+    expect(transport.call).toHaveBeenCalledTimes(2);
   });
 
   it('maps verified live provider provenance into a pending remote operation context', async () => {

@@ -60,6 +60,7 @@ import type {
   ProviderCheckpointMode,
   ProviderCheckpointResult,
   ProviderDocApplyUpdateMetadata,
+  ProviderDocApplyUpdateResult,
 } from './providers/provider';
 import {
   completeAppliedSyncUpdateIdentity,
@@ -87,6 +88,7 @@ export interface ProviderInboundUpdateResult {
   readonly reason?: ProviderInboundUpdateReason;
   readonly diagnostics?: readonly SyncUpdateValidationDiagnostic[];
   readonly provenance?: SyncUpdateProvenance;
+  readonly applyResult?: ProviderDocApplyUpdateResult;
 }
 
 export type ProviderInboundUpdateReason =
@@ -734,10 +736,11 @@ export class RustDocument {
     const identityReservation = identityDecision.reservation;
 
     this._currentUpdateOrigin = `provider:${envelope.providerRefId}`;
+    let applyResult: ProviderDocApplyUpdateResult | void;
     try {
       const { createBridgeBackedProviderDoc } = await import('./providers/bridge-provider-doc');
       const doc = createBridgeBackedProviderDoc(this.computeBridge, this.docId);
-      await doc.applyUpdate(envelope.payload, metadata);
+      applyResult = await doc.applyUpdate(envelope.payload, metadata);
     } catch (error) {
       if (identityReservation) {
         try {
@@ -767,7 +770,12 @@ export class RustDocument {
 
     this._providerEpochs.set(envelope.providerRefId, envelope.providerEpoch);
 
-    return { status: 'applied', updateId: envelope.updateId, provenance };
+    return {
+      status: 'applied',
+      updateId: envelope.updateId,
+      provenance,
+      ...(applyResult === undefined ? {} : { applyResult }),
+    };
   }
 
   /**

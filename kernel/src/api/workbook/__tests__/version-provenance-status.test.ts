@@ -29,6 +29,18 @@ function createMockCtx(overrides: Record<string, unknown> = {}) {
   } as any;
 }
 
+function createDocumentByteSyncPortStub() {
+  return {
+    docId: DOCUMENT_SCOPE.documentId,
+    applyUpdate: jest.fn(async () => undefined),
+    encodeDiff: jest.fn(async () => new Uint8Array([0x01])),
+    currentStateVector: jest.fn(async () => new Uint8Array([0x02])),
+    applyUpdateWithProvenance: jest.fn(async () => undefined),
+    applyProviderEnvelope: jest.fn(async () => undefined),
+    applyClassifiedRawUpdate: jest.fn(async () => undefined),
+  };
+}
+
 describe('WorkbookVersion provenance status', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -103,11 +115,11 @@ describe('WorkbookVersion provenance status', () => {
   it('advertises provenance from the real provider-backed VC09 truth attachment', async () => {
     const ctx = createMockCtx();
     const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
-    const encodeDiff = jest.fn(async () => new Uint8Array([0x01]));
+    const syncPort = createDocumentByteSyncPortStub();
 
     attachWorkbookVersioning(ctx, {
       provider,
-      snapshotRootByteSyncPort: { encodeDiff },
+      snapshotRootByteSyncPort: syncPort,
     });
 
     const versioning = ctx.versioning as {
@@ -142,6 +154,44 @@ describe('WorkbookVersion provenance status', () => {
     });
     expect(status.provenanceAdmission.diagnostics.map((diagnostic) => diagnostic.code)).toEqual(
       expect.arrayContaining(['version.provenanceAdmission.present']),
+    );
+    expect(syncPort.encodeDiff).not.toHaveBeenCalled();
+    expect(syncPort.applyProviderEnvelope).not.toHaveBeenCalled();
+  });
+
+  it('does not attach complete provider-backed truth with only a snapshot encoder', async () => {
+    const ctx = createMockCtx();
+    const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
+    const encodeDiff = jest.fn(async () => new Uint8Array([0x01]));
+
+    attachWorkbookVersioning(ctx, {
+      provider,
+      snapshotRootByteSyncPort: { encodeDiff },
+    });
+
+    const versioning = ctx.versioning as {
+      readonly provenanceTruthService?: unknown;
+      readonly pendingRemotePromotionService?: unknown;
+    };
+    expect(versioning.pendingRemotePromotionService).toBeDefined();
+    expect(versioning.provenanceTruthService).toBeUndefined();
+
+    const status = await new WorkbookVersionImpl(ctx).getStatus();
+
+    expect(status.rolloutStage).toBe('disabled');
+    expect(status.provenanceAdmission).toMatchObject({
+      stage: 'unavailable',
+      available: false,
+    });
+    expect(status.provenanceAdmission.diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'version.provenanceAdmission.vc09TruthUnavailable',
+          data: expect.objectContaining({
+            pendingRemotePromotionServiceAttached: true,
+          }),
+        }),
+      ]),
     );
     expect(encodeDiff).not.toHaveBeenCalled();
   });

@@ -27,6 +27,7 @@ import type { SnapshotRootByteSyncPort } from '../../document/version-store/snap
 import {
   hasSyncBatchStatusStoreProvider,
 } from '../../document/version-store/sync-batch-status-store';
+import type { DocumentByteSyncPort } from '../../document/providers/provider';
 
 export type WorkbookVersionProvenanceTruthRequirement =
   | 'provider'
@@ -62,6 +63,15 @@ export type WorkbookVersionProvenanceTruthService = {
 type PendingRemotePromotionServiceLike = Pick<
   PendingRemotePromotionService,
   'promotePendingRemoteSegments'
+> &
+  Partial<Pick<PendingRemotePromotionService, 'providerWriteActivityTracker'>>;
+
+type DocumentByteSyncProvenanceAdmissionPort = Pick<
+  DocumentByteSyncPort,
+  | 'applyUpdate'
+  | 'applyUpdateWithProvenance'
+  | 'applyProviderEnvelope'
+  | 'applyClassifiedRawUpdate'
 >;
 
 export type ProviderBackedWorkbookVersionProvenanceTruthServiceOptions = {
@@ -92,13 +102,11 @@ export function providerBackedWorkbookVersionProvenanceTruth(
     requirement('providerGraphWriteCapabilities', hasRequiredGraphWriteCapabilities(provider)),
     requirement(
       'providerInboundUpdateEnvelopeValidation',
-      typeof validateProviderInboundUpdateEnvelope === 'function' &&
-        typeof validateSyncUpdateProvenance === 'function',
+      hasProviderInboundUpdateEnvelopeValidation(options.snapshotRootByteSyncPort),
     ),
     requirement(
       'rawAndLegacySyncClassification',
-      typeof classifyLegacyProviderInboundUpdate === 'function' &&
-        typeof classifyLegacyRawUpdate === 'function',
+      hasRawAndLegacySyncClassification(options.snapshotRootByteSyncPort),
     ),
     requirement('syncApplyAdmissionContext', typeof createAdmittedSyncApplyContext === 'function'),
     requirement(
@@ -117,7 +125,10 @@ export function providerBackedWorkbookVersionProvenanceTruth(
     ),
     requirement(
       'pendingRemotePromotionService',
-      isPendingRemotePromotionService(options.pendingRemotePromotionService),
+      isPendingRemotePromotionService(
+        options.pendingRemotePromotionService,
+        options.providerWriteActivityTracker,
+      ),
     ),
     requirement(
       'providerWriteActivityTracker',
@@ -167,7 +178,14 @@ function hasRequiredGraphWriteCapabilities(provider: VersionStoreProvider | unde
 function isSemanticMutationCaptureWithPendingRemoteSegment(
   value: SemanticMutationCaptureServices | undefined,
 ): value is SemanticMutationCaptureServices {
-  return isRecord(value) && typeof value.capturePendingRemoteSegment === 'function';
+  return (
+    isRecord(value) &&
+    isRecord(value.mutationCapture) &&
+    typeof value.mutationCapture.recordMutationResult === 'function' &&
+    typeof value.captureNormalCommit === 'function' &&
+    typeof value.capturePendingRemoteSegment === 'function' &&
+    typeof value.resetNormalCaptureForCheckout === 'function'
+  );
 }
 
 function isSnapshotRootByteSyncPort(
@@ -178,8 +196,42 @@ function isSnapshotRootByteSyncPort(
 
 function isPendingRemotePromotionService(
   value: PendingRemotePromotionServiceLike | undefined,
+  providerWriteActivityTracker: VersionProviderWriteActivityTracker | undefined,
 ): value is PendingRemotePromotionServiceLike {
-  return isRecord(value) && typeof value.promotePendingRemoteSegments === 'function';
+  return (
+    isRecord(value) &&
+    typeof value.promotePendingRemoteSegments === 'function' &&
+    isVersionProviderWriteActivityTracker(value.providerWriteActivityTracker) &&
+    value.providerWriteActivityTracker === providerWriteActivityTracker
+  );
+}
+
+function hasProviderInboundUpdateEnvelopeValidation(value: unknown): boolean {
+  return (
+    typeof validateProviderInboundUpdateEnvelope === 'function' &&
+    typeof validateSyncUpdateProvenance === 'function' &&
+    isDocumentByteSyncProvenanceAdmissionPort(value)
+  );
+}
+
+function hasRawAndLegacySyncClassification(value: unknown): boolean {
+  return (
+    typeof classifyLegacyProviderInboundUpdate === 'function' &&
+    typeof classifyLegacyRawUpdate === 'function' &&
+    isDocumentByteSyncProvenanceAdmissionPort(value)
+  );
+}
+
+function isDocumentByteSyncProvenanceAdmissionPort(
+  value: unknown,
+): value is DocumentByteSyncProvenanceAdmissionPort {
+  return (
+    isRecord(value) &&
+    typeof value.applyUpdate === 'function' &&
+    typeof value.applyUpdateWithProvenance === 'function' &&
+    typeof value.applyProviderEnvelope === 'function' &&
+    typeof value.applyClassifiedRawUpdate === 'function'
+  );
 }
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {

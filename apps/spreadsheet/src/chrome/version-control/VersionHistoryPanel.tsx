@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { GitCommit, History, RefreshCw, X } from 'lucide-react';
+import { GitBranch, GitCommit, GitCompare, History, RefreshCw, X } from 'lucide-react';
 import type {
   Paged,
   VersionAnnotationText,
@@ -7,8 +7,11 @@ import type {
   VersionDiagnostic,
   VersionError,
   VersionHead,
+  VersionRef,
   VersionResult,
+  VersionSemanticDiffPage,
   VersionSurfaceStatus,
+  WorkbookCommitId,
   WorkbookCommitSummary,
   WorkbookVersion,
   WorkbookVersionStatus,
@@ -55,7 +58,15 @@ export interface VersionHistoryPanelContentProps {
 export type VersionHistoryWorkbook = {
   readonly version: Pick<
     WorkbookVersion,
-    'getSurfaceStatus' | 'getStatus' | 'getHead' | 'listCommits'
+    | 'getSurfaceStatus'
+    | 'getStatus'
+    | 'getHead'
+    | 'listCommits'
+    | 'commit'
+    | 'listRefs'
+    | 'createBranch'
+    | 'checkout'
+    | 'diff'
   >;
 };
 
@@ -69,6 +80,7 @@ type VersionHistoryData = {
   readonly rollout?: WorkbookVersionStatus;
   readonly head?: VersionHead;
   readonly commits: readonly WorkbookCommitSummary[];
+  readonly refs: readonly VersionRef[];
   readonly diagnostics: readonly VersionPanelDiagnostic[];
 };
 
@@ -76,6 +88,18 @@ type VersionPanelDiagnostic = {
   readonly code: string;
   readonly severity: VersionDiagnostic['severity'];
   readonly message: string;
+};
+
+type VersionActionState =
+  | { readonly status: 'idle' }
+  | { readonly status: 'running'; readonly label: string }
+  | { readonly status: 'success'; readonly message: string }
+  | { readonly status: 'error'; readonly diagnostic: VersionPanelDiagnostic };
+
+type VersionDiffPreview = {
+  readonly base: WorkbookCommitId;
+  readonly target: WorkbookCommitId;
+  readonly page: VersionSemanticDiffPage;
 };
 
 export function VersionHistoryPanel({ onClose }: VersionHistoryPanelProps): React.JSX.Element {
@@ -88,6 +112,11 @@ export function VersionHistoryPanelContent({
   onClose,
 }: VersionHistoryPanelContentProps): React.JSX.Element {
   const [loadState, setLoadState] = useState<VersionHistoryLoadState>({ status: 'loading' });
+  const [commitMessage, setCommitMessage] = useState('');
+  const [branchName, setBranchName] = useState('');
+  const [selectedCommitId, setSelectedCommitId] = useState<WorkbookCommitId | undefined>();
+  const [actionState, setActionState] = useState<VersionActionState>({ status: 'idle' });
+  const [diffPreview, setDiffPreview] = useState<VersionDiffPreview | undefined>();
 
   const load = useCallback(async () => {
     setLoadState((current) => ({
@@ -101,12 +130,15 @@ export function VersionHistoryPanelContent({
     }));
 
     const diagnostics: VersionPanelDiagnostic[] = [];
-    const [surface, rollout, head, commits] = await Promise.all([
+    const [surface, rollout, head, commits, refs] = await Promise.all([
       readValue('VERSION_UI_SURFACE_STATUS_FAILED', () => workbook.version.getSurfaceStatus()),
       readValue('VERSION_UI_STATUS_FAILED', () => workbook.version.getStatus()),
       readVersionResult('VERSION_UI_HEAD_FAILED', () => workbook.version.getHead()),
       readVersionResult('VERSION_UI_COMMITS_FAILED', () =>
         workbook.version.listCommits({ pageSize: COMMIT_PAGE_SIZE, includeDiagnostics: true }),
+      ),
+      readVersionResult('VERSION_UI_REFS_FAILED', () =>
+        workbook.version.listRefs({ includeDiagnostics: true }),
       ),
     ]);
 
@@ -114,16 +146,18 @@ export function VersionHistoryPanelContent({
     if (!rollout.ok) diagnostics.push(rollout.diagnostic);
     if (!head.ok) diagnostics.push(head.diagnostic);
     if (!commits.ok) diagnostics.push(commits.diagnostic);
+    if (!refs.ok) diagnostics.push(refs.diagnostic);
 
     const data: VersionHistoryData = {
       ...(surface.ok ? { surface: surface.value } : {}),
       ...(rollout.ok ? { rollout: rollout.value } : {}),
       ...(head.ok ? { head: head.value } : {}),
       commits: commits.ok ? commits.value.items : [],
+      refs: refs.ok ? refs.value.items : [],
       diagnostics,
     };
 
-    if (!surface.ok && !rollout.ok && !head.ok && !commits.ok) {
+    if (!surface.ok && !rollout.ok && !head.ok && !commits.ok && !refs.ok) {
       setLoadState({ status: 'error', diagnostics });
       return;
     }
@@ -142,6 +176,136 @@ export function VersionHistoryPanelContent({
         : undefined;
   const diagnostics =
     loadState.status === 'error' ? loadState.diagnostics : (data?.diagnostics ?? []);
+  const actionBusy = actionState.status === 'running';
+  const loading = loadState.status === 'loading';
+  const selectedOrHeadCommitId = data
+    ? resolveSelectedOrHeadCommitId(data, selectedCommitId)
+    : undefined;
+  const canCommit =
+    Boolean(data) &&
+    !actionBusy &&
+    !loading &&
+    capabilityEnabled(data?.surface, 'version:commit') &&
+    data?.surface?.dirty.commitEligibleChanges === true &&
+    data?.surface?.current.stale !== true &&
+    commitMessage.trim().length > 0;
+  const canCreateBranch =
+    Boolean(data) &&
+    !actionBusy &&
+    !loading &&
+    capabilityEnabled(data?.surface, 'version:branch') &&
+    branchName.trim().length > 0 &&
+    Boolean(selectedOrHeadCommitId);
+  const canCheckout =
+    Boolean(data) &&
+    !actionBusy &&
+    !loading &&
+    capabilityEnabled(data?.surface, 'version:checkout') &&
+    data?.surface?.dirty.checkoutSafe === true;
+  const canDiff =
+    Boolean(data) && !actionBusy && !loading && capabilityEnabled(data?.surface, 'version:diff');
+
+  const handleCommit = useCallback(async () => {
+    if (!data || !canCommit) return;
+
+    const message = commitMessage.trim();
+    const expectedHead =
+      data.head?.id && data.head.refRevision
+        ? {
+            commitId: data.head.id,
+            revision: data.head.refRevision,
+          }
+        : undefined;
+    const options: NonNullable<Parameters<WorkbookVersion['commit']>[0]> = expectedHead
+      ? { message, expectedHead }
+      : { message };
+
+    setActionState({ status: 'running', label: 'Committing changes' });
+    const result = await readVersionResult('VERSION_UI_COMMIT_FAILED', () =>
+      workbook.version.commit(options),
+    );
+    if (!result.ok) {
+      setActionState({ status: 'error', diagnostic: result.diagnostic });
+      return;
+    }
+
+    setCommitMessage('');
+    setSelectedCommitId(result.value.id);
+    setActionState({ status: 'success', message: 'Committed changes' });
+    await load();
+  }, [canCommit, commitMessage, data, load, workbook]);
+
+  const handleCreateBranch = useCallback(async () => {
+    if (!data || !canCreateBranch || !selectedOrHeadCommitId) return;
+
+    const name = branchName.trim() as Parameters<WorkbookVersion['createBranch']>[0]['name'];
+    setActionState({ status: 'running', label: 'Creating branch' });
+    const result = await readVersionResult('VERSION_UI_CREATE_BRANCH_FAILED', () =>
+      workbook.version.createBranch({
+        name,
+        targetCommitId: selectedOrHeadCommitId,
+        expectedAbsent: true,
+      }),
+    );
+    if (!result.ok) {
+      setActionState({ status: 'error', diagnostic: result.diagnostic });
+      return;
+    }
+
+    setBranchName('');
+    setSelectedCommitId(result.value.commitId);
+    setActionState({ status: 'success', message: `Created ${result.value.name}` });
+    await load();
+  }, [branchName, canCreateBranch, data, load, selectedOrHeadCommitId, workbook]);
+
+  const handleCheckoutRef = useCallback(
+    async (ref: VersionRef) => {
+      if (!canCheckout) return;
+
+      setActionState({ status: 'running', label: 'Checking out branch' });
+      const result = await readVersionResult('VERSION_UI_CHECKOUT_FAILED', () =>
+        workbook.version.checkout(
+          {
+            kind: 'ref',
+            name: ref.name,
+          },
+          { includeDiagnostics: true },
+        ),
+      );
+      if (!result.ok) {
+        setActionState({ status: 'error', diagnostic: result.diagnostic });
+        return;
+      }
+
+      setSelectedCommitId(result.value.plan.commitId);
+      setActionState({ status: 'success', message: `Checked out ${ref.name}` });
+      await load();
+    },
+    [canCheckout, load, workbook],
+  );
+
+  const handleDiffCommit = useCallback(
+    async (commit: WorkbookCommitSummary) => {
+      const parentId = commit.parents[0];
+      if (!canDiff || !parentId) return;
+
+      setActionState({ status: 'running', label: 'Loading parent diff' });
+      const result = await readVersionResult('VERSION_UI_DIFF_FAILED', () =>
+        workbook.version.diff(parentId, commit.id, {
+          pageSize: 50,
+          includeDiagnostics: true,
+        }),
+      );
+      if (!result.ok) {
+        setActionState({ status: 'error', diagnostic: result.diagnostic });
+        return;
+      }
+
+      setDiffPreview({ base: parentId, target: commit.id, page: result.value });
+      setActionState({ status: 'success', message: 'Loaded parent diff' });
+    },
+    [canDiff, workbook],
+  );
 
   return (
     <aside
@@ -203,13 +367,143 @@ export function VersionHistoryPanelContent({
           <div className="flex flex-col gap-4 p-4">
             <VersionStatusSummary data={data} />
             <CapabilitySummary surface={data.surface} />
+            <VersionActions
+              commitMessage={commitMessage}
+              branchName={branchName}
+              targetCommitId={selectedOrHeadCommitId}
+              actionState={actionState}
+              commitEnabled={canCommit}
+              branchEnabled={canCreateBranch}
+              onCommitMessageChange={setCommitMessage}
+              onBranchNameChange={setBranchName}
+              onCommit={handleCommit}
+              onCreateBranch={handleCreateBranch}
+            />
+            <RefList
+              refs={data.refs}
+              checkoutEnabled={canCheckout}
+              onCheckoutRef={handleCheckoutRef}
+            />
             <ProposalSurfaceStatus surface={data.surface} />
-            <CommitList commits={data.commits} />
+            <CommitList
+              commits={data.commits}
+              selectedCommitId={selectedCommitId}
+              diffEnabled={canDiff}
+              onSelectCommit={setSelectedCommitId}
+              onDiffCommit={handleDiffCommit}
+            />
+            <DiffPreview diffPreview={diffPreview} />
             {diagnostics.length > 0 ? <DiagnosticsBlock diagnostics={diagnostics} /> : null}
           </div>
         ) : null}
       </div>
     </aside>
+  );
+}
+
+function VersionActions({
+  commitMessage,
+  branchName,
+  targetCommitId,
+  actionState,
+  commitEnabled,
+  branchEnabled,
+  onCommitMessageChange,
+  onBranchNameChange,
+  onCommit,
+  onCreateBranch,
+}: {
+  readonly commitMessage: string;
+  readonly branchName: string;
+  readonly targetCommitId?: WorkbookCommitId;
+  readonly actionState: VersionActionState;
+  readonly commitEnabled: boolean;
+  readonly branchEnabled: boolean;
+  readonly onCommitMessageChange: (value: string) => void;
+  readonly onBranchNameChange: (value: string) => void;
+  readonly onCommit: () => void;
+  readonly onCreateBranch: () => void;
+}): React.JSX.Element {
+  return (
+    <section className="flex flex-col gap-3" aria-label="Version actions">
+      <div className="flex flex-col gap-2">
+        <label htmlFor="version-commit-message" className="text-body-sm font-medium text-ss-text">
+          Commit message
+        </label>
+        <textarea
+          id="version-commit-message"
+          value={commitMessage}
+          onChange={(event) => onCommitMessageChange(event.currentTarget.value)}
+          rows={2}
+          className="w-full resize-none rounded-sm border border-ss-border bg-ss-surface px-2 py-1.5 text-body-sm text-ss-text outline-none focus:border-ss-primary"
+        />
+        <button
+          type="button"
+          onClick={onCommit}
+          disabled={!commitEnabled}
+          className="inline-flex h-8 items-center justify-center gap-1.5 rounded-sm border border-ss-border bg-ss-surface-secondary px-2.5 text-body-sm font-medium text-ss-text transition-colors hover:bg-ss-surface-hover disabled:opacity-50 disabled:hover:bg-ss-surface-secondary"
+        >
+          <GitCommit size={14} strokeWidth={1.75} aria-hidden="true" />
+          <span>Commit</span>
+        </button>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <label htmlFor="version-branch-name" className="text-body-sm font-medium text-ss-text">
+          Branch name
+        </label>
+        <input
+          id="version-branch-name"
+          type="text"
+          value={branchName}
+          onChange={(event) => onBranchNameChange(event.currentTarget.value)}
+          className="w-full rounded-sm border border-ss-border bg-ss-surface px-2 py-1.5 text-body-sm text-ss-text outline-none focus:border-ss-primary"
+        />
+        <div className="flex items-center justify-between gap-2">
+          <span className="min-w-0 font-mono text-[11px] text-ss-text-secondary truncate">
+            Target {targetCommitId ? shortCommitId(targetCommitId) : 'unavailable'}
+          </span>
+          <button
+            type="button"
+            onClick={onCreateBranch}
+            disabled={!branchEnabled}
+            className="inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-sm border border-ss-border bg-ss-surface-secondary px-2.5 text-body-sm font-medium text-ss-text transition-colors hover:bg-ss-surface-hover disabled:opacity-50 disabled:hover:bg-ss-surface-secondary"
+          >
+            <GitBranch size={14} strokeWidth={1.75} aria-hidden="true" />
+            <span>Create branch</span>
+          </button>
+        </div>
+      </div>
+
+      <ActionStatus actionState={actionState} />
+    </section>
+  );
+}
+
+function ActionStatus({
+  actionState,
+}: {
+  readonly actionState: VersionActionState;
+}): React.JSX.Element | null {
+  if (actionState.status === 'idle') return null;
+  if (actionState.status === 'error') {
+    return (
+      <div
+        role="alert"
+        className="rounded-sm border border-ss-danger/40 bg-ss-danger/10 px-3 py-2 text-body-sm text-ss-text"
+      >
+        {actionState.diagnostic.message}
+      </div>
+    );
+  }
+
+  return (
+    <div
+      aria-live="polite"
+      className="rounded-sm border border-ss-border bg-ss-surface-secondary px-3 py-2 text-body-sm text-ss-text-secondary"
+    >
+      {actionState.status === 'running' ? actionState.label : actionState.message}
+    </div>
   );
 }
 
@@ -309,10 +603,64 @@ function CapabilitySummary({
   );
 }
 
+function RefList({
+  refs,
+  checkoutEnabled,
+  onCheckoutRef,
+}: {
+  readonly refs: readonly VersionRef[];
+  readonly checkoutEnabled: boolean;
+  readonly onCheckoutRef: (ref: VersionRef) => void;
+}): React.JSX.Element {
+  return (
+    <section className="flex flex-col gap-2" aria-label="Branches">
+      <div className="flex items-center gap-2 text-body-sm font-semibold text-ss-text">
+        <GitBranch size={15} strokeWidth={1.75} aria-hidden="true" />
+        <span>Branches</span>
+      </div>
+      {refs.length === 0 ? (
+        <div className="text-body-sm text-ss-text-secondary py-2">No branches available</div>
+      ) : (
+        <ol className="flex flex-col gap-2 m-0 p-0 list-none">
+          {refs.map((ref) => (
+            <li key={ref.name} className="border border-ss-border rounded-sm p-2 bg-ss-surface">
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="text-body-sm font-medium text-ss-text truncate">{ref.name}</div>
+                  <div className="font-mono text-[11px] text-ss-text-secondary truncate">
+                    {shortCommitId(ref.commitId)}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onCheckoutRef(ref)}
+                  disabled={!checkoutEnabled}
+                  aria-label={`Checkout ${ref.name}`}
+                  className="inline-flex h-7 shrink-0 items-center justify-center rounded-sm border border-ss-border bg-ss-surface-secondary px-2 text-[11px] font-medium text-ss-text transition-colors hover:bg-ss-surface-hover disabled:opacity-50 disabled:hover:bg-ss-surface-secondary"
+                >
+                  Checkout
+                </button>
+              </div>
+            </li>
+          ))}
+        </ol>
+      )}
+    </section>
+  );
+}
+
 function CommitList({
   commits,
+  selectedCommitId,
+  diffEnabled,
+  onSelectCommit,
+  onDiffCommit,
 }: {
   readonly commits: readonly WorkbookCommitSummary[];
+  readonly selectedCommitId?: WorkbookCommitId;
+  readonly diffEnabled: boolean;
+  readonly onSelectCommit: (commitId: WorkbookCommitId) => void;
+  readonly onDiffCommit: (commit: WorkbookCommitSummary) => void;
 }): React.JSX.Element {
   return (
     <section className="flex flex-col gap-2" aria-label="Recent commits">
@@ -325,7 +673,12 @@ function CommitList({
       ) : (
         <ol className="flex flex-col gap-2 m-0 p-0 list-none">
           {commits.map((commit) => (
-            <li key={commit.id} className="border border-ss-border rounded-sm p-2 bg-ss-surface">
+            <li
+              key={commit.id}
+              className={`border rounded-sm p-2 bg-ss-surface ${
+                selectedCommitId === commit.id ? 'border-ss-primary' : 'border-ss-border'
+              }`}
+            >
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <div className="text-body-sm font-medium text-ss-text truncate">
@@ -337,16 +690,76 @@ function CommitList({
                     {shortCommitId(commit.id)}
                   </div>
                 </div>
-                <time
-                  className="text-[11px] text-ss-text-secondary shrink-0"
-                  dateTime={commit.createdAt}
+                <div className="flex shrink-0 items-center gap-2">
+                  <time className="text-[11px] text-ss-text-secondary" dateTime={commit.createdAt}>
+                    {formatCommitTime(commit.createdAt)}
+                  </time>
+                  <input
+                    type="radio"
+                    name="version-history-branch-target"
+                    checked={selectedCommitId === commit.id}
+                    onChange={() => onSelectCommit(commit.id)}
+                    aria-label={`Use ${shortCommitId(commit.id)} as branch target`}
+                    className="h-3.5 w-3.5 accent-ss-primary"
+                  />
+                </div>
+              </div>
+              <div className="mt-2 flex items-center justify-between gap-2">
+                <div className="min-w-0 text-[11px] text-ss-text-secondary truncate">
+                  {commit.author.displayName ?? commit.author.actorKind ?? 'Unknown author'}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onDiffCommit(commit)}
+                  disabled={!diffEnabled || commit.parents.length === 0}
+                  aria-label={`Diff ${shortCommitId(commit.id)} against parent`}
+                  className="inline-flex h-7 shrink-0 items-center justify-center gap-1 rounded-sm border border-ss-border bg-ss-surface-secondary px-2 text-[11px] font-medium text-ss-text transition-colors hover:bg-ss-surface-hover disabled:opacity-50 disabled:hover:bg-ss-surface-secondary"
                 >
-                  {formatCommitTime(commit.createdAt)}
-                </time>
+                  <GitCompare size={13} strokeWidth={1.75} aria-hidden="true" />
+                  <span>Diff</span>
+                </button>
               </div>
-              <div className="mt-1 text-[11px] text-ss-text-secondary truncate">
-                {commit.author.displayName ?? commit.author.actorKind ?? 'Unknown author'}
-              </div>
+            </li>
+          ))}
+        </ol>
+      )}
+    </section>
+  );
+}
+
+function DiffPreview({
+  diffPreview,
+}: {
+  readonly diffPreview?: VersionDiffPreview;
+}): React.JSX.Element | null {
+  if (!diffPreview) return null;
+  const count = diffPreview.page.items.length;
+
+  return (
+    <section
+      className="flex flex-col gap-2 border border-ss-border rounded-sm p-2 bg-ss-surface-secondary"
+      aria-label="Parent diff"
+      data-testid="version-history-parent-diff"
+    >
+      <div className="flex items-center gap-2 text-body-sm font-semibold text-ss-text">
+        <GitCompare size={15} strokeWidth={1.75} aria-hidden="true" />
+        <span>Parent Diff</span>
+      </div>
+      <div className="grid grid-cols-[52px_1fr] gap-x-2 gap-y-1 text-[11px]">
+        <span className="text-ss-text-secondary">Base</span>
+        <span className="font-mono text-ss-text truncate">{shortCommitId(diffPreview.base)}</span>
+        <span className="text-ss-text-secondary">Target</span>
+        <span className="font-mono text-ss-text truncate">{shortCommitId(diffPreview.target)}</span>
+        <span className="text-ss-text-secondary">Changes</span>
+        <span className="text-ss-text">{count}</span>
+      </div>
+      {count === 0 ? (
+        <div className="text-body-sm text-ss-text-secondary">No semantic changes</div>
+      ) : (
+        <ol className="flex flex-col gap-1 m-0 p-0 list-none">
+          {diffPreview.page.items.map((entry, index) => (
+            <li key={index} className="text-[11px] text-ss-text-secondary truncate">
+              {diffEntryLabel(entry)}
             </li>
           ))}
         </ol>
@@ -425,6 +838,22 @@ async function readVersionResult<T>(
   }
 }
 
+function capabilityEnabled(
+  surface: VersionSurfaceStatus | undefined,
+  capability: VersionCapability,
+): boolean {
+  return surface?.capabilities[capability]?.enabled === true;
+}
+
+function resolveSelectedOrHeadCommitId(
+  data: VersionHistoryData,
+  selectedCommitId: WorkbookCommitId | undefined,
+): WorkbookCommitId | undefined {
+  if (selectedCommitId) return selectedCommitId;
+  if (data.head?.id) return data.head.id;
+  return data.surface?.current.headCommitId as WorkbookCommitId | undefined;
+}
+
 function diagnosticFromError(code: string, error: VersionError): VersionPanelDiagnostic {
   if (error.code === 'target_unavailable') {
     return {
@@ -442,7 +871,23 @@ function diagnosticFromError(code: string, error: VersionError): VersionPanelDia
   if (error.code === 'not_found') {
     return { code, severity: 'warning', message: error.reason };
   }
-  return { code, severity: 'warning', message: error.code };
+  if (error.code === 'invalid_branch_name') {
+    return { code, severity: 'warning', message: error.reason };
+  }
+  if (error.code === 'stale_head') {
+    return {
+      code,
+      severity: 'warning',
+      message: `Expected ${shortCommitId(error.expectedHeadId)}`,
+    };
+  }
+  if (error.code === 'stale_revision') {
+    return { code, severity: 'warning', message: 'Version revision is stale.' };
+  }
+  if (error.code === 'redaction_blocked') {
+    return { code, severity: 'warning', message: error.reason };
+  }
+  return { code, severity: 'warning', message: 'Version request failed.' };
 }
 
 function annotationText(value: VersionAnnotationText | undefined): string | undefined {
@@ -454,6 +899,12 @@ function shortCommitId(id: string): string {
   return id.startsWith('commit:sha256:')
     ? id.slice('commit:sha256:'.length, 'commit:sha256:'.length + 12)
     : id;
+}
+
+function diffEntryLabel(entry: VersionSemanticDiffPage['items'][number]): string {
+  if (entry.structural.kind !== 'metadata') return 'Redacted change';
+  const path = entry.structural.propertyPath.join('.');
+  return path ? `${entry.structural.domain} ${path}` : entry.structural.domain;
 }
 
 function formatCommitTime(value: string): string {

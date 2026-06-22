@@ -2,9 +2,9 @@ use std::collections::BTreeMap;
 
 use serde_json::{Number, Value};
 use snapshot_types::versioning::{
-    CanonicalCellValue, CanonicalFormula, SemanticCellState, SemanticDomainState,
+    canonical_digest, CanonicalCellValue, CanonicalFormula, SemanticCellState, SemanticDomainState,
     SemanticObjectDigest, SemanticObjectKind, SemanticSheetState, SemanticWorkbookState,
-    VersionDomainCapabilityState, VersionDomainClass, canonical_digest,
+    VersionDomainCapabilityState, VersionDomainClass,
 };
 use value_types::CellValue;
 
@@ -38,11 +38,11 @@ pub fn read_engine_semantic_workbook_state(
     );
 
     let mut unsupported_values = BTreeMap::new();
-    for sheet_id in engine.storage().sheet_order() {
+    for (sheet_index, sheet_id) in engine.storage().sheet_order().into_iter().enumerate() {
         let Some(sheet) = engine.mirror().get_sheet(&sheet_id) else {
             continue;
         };
-        let sheet_key = sheet_id.to_uuid_string();
+        let sheet_key = canonical_sheet_key(sheet_index);
         let mut sheet_state = SemanticSheetState {
             sheet_id: sheet_key.clone(),
             name: sheet.name.clone(),
@@ -72,7 +72,7 @@ pub fn read_engine_semantic_workbook_state(
                 continue;
             };
 
-            let cell_key = format!("cell:{}:{}", sheet_key, cell_id.to_uuid_string());
+            let cell_key = canonical_cell_key(&sheet_key, pos.row(), pos.col());
             let value = canonical_cell_value(&entry.value, &cell_key, &mut unsupported_values)?;
             let formula = entry.formula.as_deref().map(|formula| CanonicalFormula {
                 normalized_formula: formula.template.clone(),
@@ -117,6 +117,14 @@ pub fn read_engine_semantic_workbook_state(
     }
 
     Ok(state)
+}
+
+fn canonical_sheet_key(sheet_index: usize) -> String {
+    format!("sheet#{sheet_index}")
+}
+
+fn canonical_cell_key(sheet_key: &str, row: u32, column: u32) -> String {
+    format!("cell:{sheet_key}:r{row}:c{column}")
 }
 
 fn canonical_cell_value(
@@ -198,14 +206,14 @@ fn opaque_cell_digest(
 #[cfg(test)]
 mod tests {
     use snapshot_types::versioning::{
-        SemanticDiagnosticSeverity, SemanticDomainCoverageStatus, semantic_workbook_state_digest,
+        semantic_workbook_state_digest, SemanticDiagnosticSeverity, SemanticDomainCoverageStatus,
     };
     use snapshot_types::{CellData, SheetSnapshot, WorkbookSnapshot};
     use value_types::{CellValue, FiniteF64};
 
     use crate::storage::engine::YrsComputeEngine;
     use crate::versioning::{
-        SemanticWorkbookStateReader, coverage_for_states, diff_semantic_workbook_states,
+        coverage_for_states, diff_semantic_workbook_states, SemanticWorkbookStateReader,
     };
 
     fn workbook(cells: Vec<CellData>) -> WorkbookSnapshot {
@@ -250,19 +258,10 @@ mod tests {
         .expect("engine");
 
         let state = engine.read_semantic_workbook_state().expect("state");
-        let sheet = state
-            .sheets
-            .get("550e8400e29b41d4a716446655440000")
-            .expect("sheet");
+        let sheet = state.sheets.get("sheet#0").expect("sheet");
         let cell_ids: Vec<_> = sheet.cells.keys().cloned().collect();
 
-        assert_eq!(
-            cell_ids,
-            vec![
-                "cell:550e8400e29b41d4a716446655440000:550e8400e29b41d4a716446655440001",
-                "cell:550e8400e29b41d4a716446655440000:550e8400e29b41d4a716446655440002",
-            ]
-        );
+        assert_eq!(cell_ids, vec!["cell:sheet#0:r0:c0", "cell:sheet#0:r1:c1"]);
         assert_eq!(
             sheet.cells[&cell_ids[0]]
                 .value
@@ -303,6 +302,66 @@ mod tests {
             change.kind == snapshot_types::versioning::SemanticChangeKind::Updated
                 && change.object_kind == snapshot_types::versioning::SemanticObjectKind::Cell
         }));
+    }
+
+    #[test]
+    fn engine_semantic_reader_digest_ignores_durable_id_allocation() {
+        let (left, _) = YrsComputeEngine::from_snapshot(workbook(vec![
+            cell(1, 0, 0, CellValue::from("alpha")),
+            cell(2, 2, 1, CellValue::number(7.0)),
+        ]))
+        .expect("left");
+        let (right, _) = YrsComputeEngine::from_snapshot(WorkbookSnapshot {
+            sheets: vec![SheetSnapshot {
+                id: "660e8400-e29b-41d4-a716-446655440000".to_string(),
+                name: "Sheet1".to_string(),
+                rows: 10,
+                cols: 10,
+                cells: vec![
+                    CellData {
+                        cell_id: "660e8400-e29b-41d4-a716-446655440101".to_string(),
+                        row: 0,
+                        col: 0,
+                        value: CellValue::from("alpha"),
+                        formula: None,
+                        identity_formula: None,
+                        array_ref: None,
+                    },
+                    CellData {
+                        cell_id: "660e8400-e29b-41d4-a716-446655440102".to_string(),
+                        row: 2,
+                        col: 1,
+                        value: CellValue::number(7.0),
+                        formula: None,
+                        identity_formula: None,
+                        array_ref: None,
+                    },
+                ],
+                ranges: vec![],
+            }],
+            named_ranges: vec![],
+            tables: vec![],
+            pivot_tables: vec![],
+            data_table_regions: vec![],
+            iterative_calc: false,
+            max_iterations: 100,
+            max_change: FiniteF64::must(0.001),
+            calculation_settings: None,
+        })
+        .expect("right");
+        let left_state = left.read_semantic_workbook_state().expect("left state");
+        let right_state = right.read_semantic_workbook_state().expect("right state");
+
+        assert_eq!(
+            semantic_workbook_state_digest(&left_state).expect("left digest"),
+            semantic_workbook_state_digest(&right_state).expect("right digest")
+        );
+        assert_eq!(
+            diff_semantic_workbook_states(&left_state, &right_state)
+                .expect("diff")
+                .changes,
+            Vec::new()
+        );
     }
 
     #[test]

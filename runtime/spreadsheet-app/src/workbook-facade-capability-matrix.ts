@@ -3702,6 +3702,7 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
     },
     getStatus: {
       decision: 'allow',
+      capability: 'version:read',
     },
     getSurfaceStatus: {
       decision: 'allow',
@@ -3720,7 +3721,7 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
     },
     promotePendingRemote: {
       decision: 'allow',
-      capability: 'version:commit',
+      capability: 'version:provenance',
     },
     putMergeResolutionPayload: {
       decision: 'allow',

@@ -277,7 +277,7 @@ test('read-only inspection, screenshot, and dependency reads do not dirty a clea
   }
 });
 
-test('version status facade methods remain available without version read grant', async () => {
+test('version surface status remains available without version read grant', async () => {
   let runtime: SpreadsheetRuntime | undefined;
   try {
     const deniedVersionCapabilities = new Set<SpreadsheetCapability>([
@@ -296,25 +296,28 @@ test('version status facade methods remain available without version read grant'
     ]);
     runtime = await createSpreadsheetRuntime(
       runtimeOptionsWithDeniedCapabilities(
-        'runtime-version-status-capability-free',
+        'runtime-version-surface-status-capability-free',
         deniedVersionCapabilities,
       ),
     );
     await runtime.ready;
 
     const workbook = await runtime.openWorkbook({
-      workbookId: 'runtime-version-status-capability-free-workbook',
+      workbookId: 'runtime-version-surface-status-capability-free-workbook',
       source: { kind: 'blank' },
     });
     await workbook.ready;
     const actor = await workbook.resolveActor({ actorId: 'reader', kind: 'user' });
     const facade = actor.getWorkbook();
 
-    assert.equal((await facade.version.getStatus()).schemaVersion, 1);
     const surface = await facade.version.getSurfaceStatus();
     assert.equal(surface.schemaVersion, 1);
     assert.equal(surface.capabilities['version:read'].enabled, false);
 
+    assert.throws(
+      () => void facade.version.getStatus(),
+      /Capability "version:read" is denied for WorkbookVersion\.getStatus/,
+    );
     assert.throws(
       () => void facade.version.getHead(),
       /Capability "version:read" is denied for WorkbookVersion\.getHead/,

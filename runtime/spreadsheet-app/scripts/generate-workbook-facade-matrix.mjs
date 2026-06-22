@@ -34,14 +34,14 @@ const EXPORT_NAMES = new Set(['toCSV', 'toJSON']);
 const READ_NAMES = new Set(['autoFillPreview']);
 const WRITE_NAMES = new Set(['getOrCreateSheet']);
 const VERSION_CAPABILITY_BY_METHOD = {
-  getStatus: null,
+  getStatus: 'version:read',
   getSurfaceStatus: null,
   getHead: 'version:read',
   listCommits: 'version:read',
   readRef: 'version:read',
   getRef: 'version:read',
   listRefs: 'version:read',
-  promotePendingRemote: 'version:commit',
+  promotePendingRemote: 'version:provenance',
   diff: 'version:diff',
   commit: 'version:commit',
   checkout: 'version:checkout',

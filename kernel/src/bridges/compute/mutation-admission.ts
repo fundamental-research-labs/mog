@@ -27,6 +27,7 @@ export type DirectEditRange = {
 
 export type MutationAdmissionDiagnosticCode =
   | 'versioning.admission.missing-context'
+  | 'versioning.admission.blocked-write'
   | 'versioning.admission.unclassified-write'
   | 'provenance.missingContext'
   | 'provenance.invalidContext';
@@ -128,7 +129,18 @@ export function observeMutationAdmission(
       command: operation,
       message: `No VC-02 operation classification registered for '${operation}'.`,
     });
-    return null;
+    throw new Error(`No VC-02 operation classification registered for '${operation}'.`);
+  }
+
+  if (classification.writeAdmissionMode === 'block') {
+    recordMutationAdmissionDiagnostic(ctx, {
+      code: 'versioning.admission.blocked-write',
+      severity: 'error',
+      command: operation,
+      classification,
+      message: `VC-02 admission blocked '${operation}' before transport execution.`,
+    });
+    throw new Error(`VC-02 admission blocked '${operation}' before transport execution.`);
   }
 
   if (!options.operationContext) {

@@ -1971,24 +1971,24 @@ export class ComputeBridge extends GeneratedBridgeBase {
   // cover the same call surface.
   // ===========================================================================
 
-  wbSecurityAddPolicy(policy: unknown): Promise<string> {
-    this.core.ensureInitialized();
+  async wbSecurityAddPolicy(policy: unknown): Promise<string> {
+    await this.core.admitPublicMutation('compute_wb_security_add_policy');
     return this.core.transport.call<string>('compute_wb_security_add_policy', {
       docId: this.core.docId,
       policy,
     });
   }
 
-  wbSecurityRemovePolicy(id: string): Promise<void> {
-    this.core.ensureInitialized();
+  async wbSecurityRemovePolicy(id: string): Promise<void> {
+    await this.core.admitPublicMutation('compute_wb_security_remove_policy');
     return this.core.transport.call<void>('compute_wb_security_remove_policy', {
       docId: this.core.docId,
       id,
     });
   }
 
-  wbSecurityUpdatePolicy(id: string, patch: unknown): Promise<void> {
-    this.core.ensureInitialized();
+  async wbSecurityUpdatePolicy(id: string, patch: unknown): Promise<void> {
+    await this.core.admitPublicMutation('compute_wb_security_update_policy');
     return this.core.transport.call<void>('compute_wb_security_update_policy', {
       docId: this.core.docId,
       id,
@@ -2023,16 +2023,16 @@ export class ComputeBridge extends GeneratedBridgeBase {
     });
   }
 
-  wbSecurityApplyTemplate(template: unknown): Promise<string[]> {
-    this.core.ensureInitialized();
+  async wbSecurityApplyTemplate(template: unknown): Promise<string[]> {
+    await this.core.admitPublicMutation('compute_wb_security_apply_template');
     return this.core.transport.call<string[]>('compute_wb_security_apply_template', {
       docId: this.core.docId,
       template,
     });
   }
 
-  wbSecurityRemoveTemplate(templateId: string): Promise<void> {
-    this.core.ensureInitialized();
+  async wbSecurityRemoveTemplate(templateId: string): Promise<void> {
+    await this.core.admitPublicMutation('compute_wb_security_remove_template');
     return this.core.transport.call<void>('compute_wb_security_remove_template', {
       docId: this.core.docId,
       templateId,

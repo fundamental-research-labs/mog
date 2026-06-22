@@ -556,7 +556,7 @@ describe('Compute mutation admission', () => {
     });
   });
 
-  it('records unclassified write diagnostics before transport execution', async () => {
+  it('rejects unclassified writes before transport execution', async () => {
     const diagnostics: MutationAdmissionDiagnostic[] = [];
     const ctx = makeMockContext({
       versioningAdmissionDiagnostics: {
@@ -568,12 +568,16 @@ describe('Compute mutation admission', () => {
     };
     const core = createStartedCore(ctx, transport);
 
-    await core.mutatePublic(
-      'custom_unregistered_write',
-      () =>
-        transport.call('custom_unregistered_write', { docId: 'test-doc' }) as Promise<
-          [Uint8Array, MutationResult]
-        >,
+    await expect(
+      core.mutatePublic(
+        'custom_unregistered_write',
+        () =>
+          transport.call('custom_unregistered_write', { docId: 'test-doc' }) as Promise<
+            [Uint8Array, MutationResult]
+          >,
+      ),
+    ).rejects.toThrow(
+      "No VC-02 operation classification registered for 'custom_unregistered_write'.",
     );
 
     expect(diagnostics).toEqual([
@@ -583,7 +587,7 @@ describe('Compute mutation admission', () => {
         command: 'custom_unregistered_write',
       }),
     ]);
-    expect(transport.call).toHaveBeenCalledWith('custom_unregistered_write', { docId: 'test-doc' });
+    expect(transport.call).not.toHaveBeenCalled();
   });
 
   it('rechecks the write gate after materialization before starting public transport', async () => {

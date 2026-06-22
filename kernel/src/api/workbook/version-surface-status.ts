@@ -36,6 +36,7 @@ import {
   hasAttachedVersionReviewReadService,
   hasAttachedVersionReviewWriteService,
 } from './version-review-service-discovery';
+import { hasAttachedPendingRemotePromotionService } from './version-pending-remote';
 
 const VERSION_HEAD_REF = 'HEAD';
 const VERSION_MAIN_REF = 'refs/heads/main' satisfies VersionMainRefName;
@@ -88,6 +89,7 @@ type AttachedVersionServices = AttachedVersionReadService & {
   readonly versionReviewService?: unknown;
   readonly reviewRecordService?: unknown;
   readonly reviewMetadataStore?: unknown;
+  readonly pendingRemotePromotionService?: unknown;
   readonly publicService?: unknown;
   readonly surfaceStatusService?: unknown;
   readonly versionSurfaceStatusService?: unknown;
@@ -114,6 +116,7 @@ type CapabilityAvailability = {
   readonly reviewWrite: boolean;
   readonly mergePreview: boolean;
   readonly mergeApply: boolean;
+  readonly provenance: boolean;
 };
 
 type ProjectedHead = {
@@ -200,6 +203,7 @@ export async function getWorkbookVersionSurfaceStatus(
     mergeApply:
       Boolean(workbookStatus?.merge.available || hasAttachedVersionMergeService(ctx)) &&
       hasAttachedVersionApplyMergeService(services),
+    provenance: hasAttachedPendingRemotePromotionService(ctx),
   };
 
   diagnostics.push(...storage.diagnostics);
@@ -388,16 +392,15 @@ function buildCapabilityStates(
   hostCapabilityDecisions: HostCapabilityDecisions,
   diagnostics: VersionDiagnostic[],
 ): Record<VersionCapability, VersionCapabilityState> {
-  const disabledByGate = (
-    capability: VersionCapability,
-  ): VersionCapabilityState => disabledCapability(
-    diagnostics,
-    capability,
-    'featureGate',
-    'The versionControl feature gate is disabled.',
-    false,
-    'version.surfaceStatus.featureGateDisabled',
-  );
+  const disabledByGate = (capability: VersionCapability): VersionCapabilityState =>
+    disabledCapability(
+      diagnostics,
+      capability,
+      'featureGate',
+      'The versionControl feature gate is disabled.',
+      false,
+      'version.surfaceStatus.featureGateDisabled',
+    );
 
   if (!featureGate.enabled) {
     return Object.fromEntries(
@@ -405,30 +408,28 @@ function buildCapabilityStates(
     ) as Record<VersionCapability, VersionCapabilityState>;
   }
 
-  const disabledByEditingGate = (
-    capability: VersionCapability,
-  ): VersionCapabilityState => disabledCapability(
-    diagnostics,
-    capability,
-    'featureGate',
-    'Workbook editing is disabled by host feature gates.',
-    false,
-    'version.surfaceStatus.editingDisabled',
-  );
+  const disabledByEditingGate = (capability: VersionCapability): VersionCapabilityState =>
+    disabledCapability(
+      diagnostics,
+      capability,
+      'featureGate',
+      'Workbook editing is disabled by host feature gates.',
+      false,
+      'version.surfaceStatus.editingDisabled',
+    );
   const hostDenied = (capability: VersionCapability): boolean => {
     const decision = hostCapabilityDecisions[capability];
     return decision === 'denied' || decision === 'approval-required';
   };
-  const disabledByHostCapability = (
-    capability: VersionCapability,
-  ): VersionCapabilityState => disabledCapability(
-    diagnostics,
-    capability,
-    'hostCapability',
-    `Host policy denies ${capability}.`,
-    false,
-    'version.surfaceStatus.hostCapabilityDenied',
-  );
+  const disabledByHostCapability = (capability: VersionCapability): VersionCapabilityState =>
+    disabledCapability(
+      diagnostics,
+      capability,
+      'hostCapability',
+      `Host policy denies ${capability}.`,
+      false,
+      'version.surfaceStatus.hostCapabilityDenied',
+    );
   const availableCapability = (
     capability: VersionCapability,
     available: boolean,
@@ -485,16 +486,15 @@ function buildCapabilityStates(
       : availableCapability(capability, available, 'VC-07', reason, true, code);
   };
 
-  const storageDisabled = (
-    capability: VersionCapability,
-  ): VersionCapabilityState => disabledCapability(
-    diagnostics,
-    capability,
-    'storage',
-    'Version storage is not ready for this workbook.',
-    true,
-    'version.surfaceStatus.storageUnavailable',
-  );
+  const storageDisabled = (capability: VersionCapability): VersionCapabilityState =>
+    disabledCapability(
+      diagnostics,
+      capability,
+      'storage',
+      'Version storage is not ready for this workbook.',
+      true,
+      'version.surfaceStatus.storageUnavailable',
+    );
   if (!storageReady) {
     return {
       'version:read': storageDisabled('version:read'),
@@ -620,10 +620,10 @@ function buildCapabilityStates(
     ),
     'version:provenance': availableCapability(
       'version:provenance',
-      false,
+      availability.provenance,
       'VC-09',
       'Remote provenance enrichment from VC-09 is not attached.',
-      false,
+      true,
       'version.surfaceStatus.provenanceUnavailable',
     ),
   };
@@ -692,7 +692,9 @@ function toReadService(value: unknown): AttachedVersionReadService | null {
     ...(readHead ? { readHead: () => readHead() } : {}),
     ...(getHead ? { getHead: () => getHead() } : {}),
     ...(readRef ? { readRef: (name: string) => readRef(name) } : {}),
-    ...(listCommits ? { listCommits: (options?: AttachedListCommitsOptions) => listCommits(options) } : {}),
+    ...(listCommits
+      ? { listCommits: (options?: AttachedListCommitsOptions) => listCommits(options) }
+      : {}),
   };
 }
 
@@ -710,8 +712,8 @@ function hasAttachedVersionDiffService(services: AttachedVersionServices | null)
   ].some((candidate) =>
     Boolean(
       bindMethod(candidate, 'diff') ??
-        bindMethod(candidate, 'diffVersions') ??
-        bindMethod(candidate, 'diffCommits'),
+      bindMethod(candidate, 'diffVersions') ??
+      bindMethod(candidate, 'diffCommits'),
     ),
   );
 }
@@ -725,42 +727,45 @@ function hasAttachedVersionApplyMergeService(services: AttachedVersionServices |
   ].some((candidate) =>
     Boolean(
       bindMethod(candidate, 'applyMerge') ??
-        bindMethod(candidate, 'applyMergeVersion') ??
-        bindMethod(candidate, 'applyMergeCommit'),
+      bindMethod(candidate, 'applyMergeVersion') ??
+      bindMethod(candidate, 'applyMergeCommit'),
     ),
   );
   if (hasDirectApplyService) return true;
   const hasMergeCommitWriter = [services.writeService, services.commitService].some((candidate) =>
     Boolean(bindMethod(candidate, 'mergeCommit')),
   );
-  return hasMergeCommitWriter && Boolean(services.captureMergeCommit || services.mergeCommitMaterializer);
+  return (
+    hasMergeCommitWriter && Boolean(services.captureMergeCommit || services.mergeCommitMaterializer)
+  );
 }
 
 function hasAnyVersionAttachment(services: AttachedVersionServices): boolean {
   return Boolean(
     services.provider ||
-      services.storageProvider ||
-      services.objectStore ||
-      services.refStore ||
-      getAttachedVersionReadService(services) ||
-      hasAttachedVersionDiffService(services) ||
-      hasAttachedVersionReviewReadService(services) ||
-      hasAttachedVersionReviewWriteService(services) ||
-      hasAttachedVersionApplyMergeService(services) ||
-      bindMethod(services.writeService, 'commit') ||
-      bindMethod(services.commitService, 'commit') ||
-      bindMethod(services.checkoutService, 'checkout') ||
-      bindMethod(services.checkoutService, 'planCheckout') ||
-      bindMethod(services.refLifecycleService, 'createBranch') ||
-      bindMethod(services.branchService, 'createBranch') ||
-      bindMethod(services.mergeService, 'merge') ||
-      bindMethod(services.versionMergeService, 'merge') ||
-      bindMethod(services.publicService, 'merge') ||
-      bindMethod(services, 'commit') ||
-      bindMethod(services, 'checkout') ||
-      bindMethod(services, 'planCheckout') ||
-      bindMethod(services, 'createBranch') ||
-      bindMethod(services, 'merge'),
+    services.storageProvider ||
+    services.objectStore ||
+    services.refStore ||
+    getAttachedVersionReadService(services) ||
+    hasAttachedVersionDiffService(services) ||
+    hasAttachedVersionReviewReadService(services) ||
+    hasAttachedVersionReviewWriteService(services) ||
+    hasAttachedVersionApplyMergeService(services) ||
+    bindMethod(services.pendingRemotePromotionService, 'promotePendingRemoteSegments') ||
+    bindMethod(services.writeService, 'commit') ||
+    bindMethod(services.commitService, 'commit') ||
+    bindMethod(services.checkoutService, 'checkout') ||
+    bindMethod(services.checkoutService, 'planCheckout') ||
+    bindMethod(services.refLifecycleService, 'createBranch') ||
+    bindMethod(services.branchService, 'createBranch') ||
+    bindMethod(services.mergeService, 'merge') ||
+    bindMethod(services.versionMergeService, 'merge') ||
+    bindMethod(services.publicService, 'merge') ||
+    bindMethod(services, 'commit') ||
+    bindMethod(services, 'checkout') ||
+    bindMethod(services, 'planCheckout') ||
+    bindMethod(services, 'createBranch') ||
+    bindMethod(services, 'merge'),
   );
 }
 

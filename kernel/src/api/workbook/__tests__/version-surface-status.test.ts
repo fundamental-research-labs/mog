@@ -165,7 +165,9 @@ describe('WorkbookVersion surface status', () => {
       checkoutPreflightToken: 'VC-05-checkout-preflight-unavailable',
     });
     expect(Object.keys(surface.capabilities).sort()).toEqual([...SURFACE_CAPABILITY_KEYS].sort());
-    expect(Object.values(surface.capabilities).every((capability) => !capability.enabled)).toBe(true);
+    expect(Object.values(surface.capabilities).every((capability) => !capability.enabled)).toBe(
+      true,
+    );
     expect(surface.diagnostics.map((diagnostic) => diagnostic.code)).toEqual(
       expect.arrayContaining([
         'version.surfaceStatus.featureGateDefaultEnabled',
@@ -451,7 +453,7 @@ describe('WorkbookVersion surface status', () => {
     );
   });
 
-  it('keeps proposal, revert, and provenance disabled by upstream dependency', async () => {
+  it('keeps proposal and revert disabled, and provenance unavailable until its service is attached', async () => {
     const { version } = createSurfaceReadyVersion();
 
     const surface = await version.getSurfaceStatus();
@@ -469,8 +471,29 @@ describe('WorkbookVersion surface status', () => {
     expect(surface.capabilities['version:provenance']).toMatchObject({
       enabled: false,
       dependency: 'VC-09',
-      retryable: false,
+      retryable: true,
     });
+  });
+
+  it('enables provenance when pending remote promotion service is attached', async () => {
+    const promotePendingRemoteSegments = jest.fn();
+    const { version } = createSurfaceReadyVersionWithContext(
+      {},
+      {
+        pendingRemotePromotionService: {
+          promotePendingRemoteSegments,
+        },
+      },
+    );
+
+    const surface = await version.getSurfaceStatus();
+
+    expect(surface.stage).toBe('provenance');
+    expect(surface.capabilities['version:provenance']).toEqual({ enabled: true });
+    expect(promotePendingRemoteSegments).not.toHaveBeenCalled();
+    expect(surface.diagnostics.map((diagnostic) => diagnostic.code)).not.toContain(
+      'version.surfaceStatus.provenanceUnavailable',
+    );
   });
 
   it('keeps read surfaces available and disables mutating capabilities when editing is false', async () => {

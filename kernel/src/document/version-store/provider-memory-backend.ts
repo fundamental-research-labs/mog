@@ -28,6 +28,10 @@ import {
   AppliedSyncUpdateIdentityMemoryBackend,
   type AppliedSyncUpdateIdentityMemoryBackendSnapshot,
 } from './applied-sync-update-identity-store';
+import {
+  SyncBatchStatusMemoryBackend,
+  type SyncBatchStatusMemoryBackendSnapshot,
+} from './sync-batch-status-store';
 
 export type InMemoryVersionProviderDurability = 'ephemeral' | 'snapshot-test-double';
 
@@ -42,6 +46,7 @@ export type InMemoryVersionDocumentProviderBackendSnapshot = {
   readonly mergeApplyIntents: MergeApplyIntentMemoryBackendSnapshot;
   readonly pendingRemoteSegments?: PendingRemoteSegmentMemoryBackendSnapshot;
   readonly appliedSyncUpdateIdentities?: AppliedSyncUpdateIdentityMemoryBackendSnapshot;
+  readonly syncBatchStatuses?: SyncBatchStatusMemoryBackendSnapshot;
 };
 
 export class InMemoryVersionDocumentProviderBackend {
@@ -50,12 +55,14 @@ export class InMemoryVersionDocumentProviderBackend {
   readonly mergeApplyIntentBackend: MergeApplyIntentMemoryBackend;
   readonly pendingRemoteSegmentBackend: PendingRemoteSegmentMemoryBackend;
   readonly appliedSyncUpdateIdentityBackend: AppliedSyncUpdateIdentityMemoryBackend;
+  readonly syncBatchStatusBackend: SyncBatchStatusMemoryBackend;
 
   constructor(
     options: {
       readonly mergeApplyIntentBackend?: MergeApplyIntentMemoryBackend;
       readonly pendingRemoteSegmentBackend?: PendingRemoteSegmentMemoryBackend;
       readonly appliedSyncUpdateIdentityBackend?: AppliedSyncUpdateIdentityMemoryBackend;
+      readonly syncBatchStatusBackend?: SyncBatchStatusMemoryBackend;
     } = {},
   ) {
     this.mergeApplyIntentBackend =
@@ -64,6 +71,8 @@ export class InMemoryVersionDocumentProviderBackend {
       options.pendingRemoteSegmentBackend ?? new PendingRemoteSegmentMemoryBackend();
     this.appliedSyncUpdateIdentityBackend =
       options.appliedSyncUpdateIdentityBackend ?? new AppliedSyncUpdateIdentityMemoryBackend();
+    this.syncBatchStatusBackend =
+      options.syncBatchStatusBackend ?? new SyncBatchStatusMemoryBackend();
   }
 
   readRegistryRecord(
@@ -127,6 +136,7 @@ export class InMemoryVersionDocumentProviderBackend {
       mergeApplyIntents: this.mergeApplyIntentBackend.exportSnapshot(),
       pendingRemoteSegments: this.pendingRemoteSegmentBackend.exportSnapshot(),
       appliedSyncUpdateIdentities: this.appliedSyncUpdateIdentityBackend.exportSnapshot(),
+      syncBatchStatuses: this.syncBatchStatusBackend.exportSnapshot(),
     });
   }
 
@@ -142,6 +152,9 @@ export class InMemoryVersionDocumentProviderBackend {
       ),
       appliedSyncUpdateIdentityBackend: AppliedSyncUpdateIdentityMemoryBackend.fromSnapshot(
         snapshot.appliedSyncUpdateIdentities ?? { records: [] },
+      ),
+      syncBatchStatusBackend: SyncBatchStatusMemoryBackend.fromSnapshot(
+        snapshot.syncBatchStatuses ?? { records: [] },
       ),
     });
     for (const [scope, record] of snapshot.registries) {

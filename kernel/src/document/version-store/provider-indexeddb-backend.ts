@@ -91,6 +91,7 @@ import { graphLoadDiagnostic, loadGraphSnapshot } from './provider-indexeddb-rel
 import { IndexedDbMergeApplyIntentStore } from './provider-indexeddb-merge-intents';
 import { IndexedDbPendingRemoteSegmentStore } from './provider-indexeddb-pending-remote-segments';
 import { IndexedDbAppliedSyncUpdateIdentityStore } from './provider-indexeddb-applied-sync-updates';
+import { IndexedDbSyncBatchStatusStore } from './provider-indexeddb-sync-batch-statuses';
 
 export const INDEXEDDB_VERSION_STORE_PROVIDER_KIND = 'indexeddb' as const;
 
@@ -367,6 +368,13 @@ export class IndexedDbVersionStoreProvider implements VersionStoreProvider {
 
   async openAppliedSyncUpdateIdentityStore(): Promise<IndexedDbAppliedSyncUpdateIdentityStore> {
     return new IndexedDbAppliedSyncUpdateIdentityStore({
+      documentScope: this.documentScope,
+      getDb: () => this.getDb(),
+    });
+  }
+
+  async openSyncBatchStatusStore(): Promise<IndexedDbSyncBatchStatusStore> {
+    return new IndexedDbSyncBatchStatusStore({
       documentScope: this.documentScope,
       getDb: () => this.getDb(),
     });

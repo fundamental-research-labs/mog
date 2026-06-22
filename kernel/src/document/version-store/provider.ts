@@ -24,6 +24,7 @@ import {
 import { InMemoryMergeApplyIntentStore } from './merge-apply-intent-store';
 import { InMemoryPendingRemoteSegmentStore } from './pending-remote-segment-store';
 import { InMemoryAppliedSyncUpdateIdentityStore } from './applied-sync-update-identity-store';
+import { InMemorySyncBatchStatusStore } from './sync-batch-status-store';
 import {
   cloneVersionGraphRegistry,
   createVersionGraphRegistry,
@@ -591,6 +592,13 @@ export class InMemoryVersionStoreProvider implements VersionStoreProvider {
     return new InMemoryAppliedSyncUpdateIdentityStore({
       documentScope: this.documentScope,
       backend: this.backend.appliedSyncUpdateIdentityBackend,
+    });
+  }
+
+  async openSyncBatchStatusStore(): Promise<InMemorySyncBatchStatusStore> {
+    return new InMemorySyncBatchStatusStore({
+      documentScope: this.documentScope,
+      backend: this.backend.syncBatchStatusBackend,
     });
   }
 

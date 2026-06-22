@@ -98,6 +98,24 @@ describe('collaborative engine classified raw coordinator updates', () => {
 
     expect(rawUpdates).toEqual([update]);
   });
+
+  it('allows raw applyUpdate fallback to return ignored sync metadata', async () => {
+    const update = new Uint8Array([7, 8, 9]);
+    const rawUpdates: Uint8Array[] = [];
+    const syncPort = createSyncPort({
+      applyUpdate: async (rawUpdate) => {
+        rawUpdates.push(rawUpdate);
+        return {
+          mutationResult: { applied: true },
+          metadata: { provenanceReport: { status: 'notEvaluated' } },
+        };
+      },
+    });
+
+    await _applyCoordinatorRawUpdate(syncPort, update, 'mixedRemote');
+
+    expect(rawUpdates).toEqual([update]);
+  });
 });
 
 function createSyncPort(

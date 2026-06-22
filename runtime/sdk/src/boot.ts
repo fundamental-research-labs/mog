@@ -52,7 +52,10 @@ import {
   createNodeWasmChartImageExporterFactory,
 } from './chart-export/node-chart-image-exporter';
 import type { NativeChartRasterAddon } from './chart-export/node-chart-image-exporter';
-import type { DocumentByteSyncPortClassifiedRawProvenance } from './document-sync-port-types';
+import type {
+  DocumentByteSyncPortApplyUpdateReturn,
+  DocumentByteSyncPortClassifiedRawProvenance,
+} from './document-sync-port-types';
 
 type KernelCreateWorkbook = (...args: readonly unknown[]) => Promise<Workbook>;
 type HostBackedDocumentHandle = Awaited<ReturnType<typeof createHostBackedDocument>>;
@@ -129,7 +132,7 @@ export interface ComputeEngineInstance {
  */
 export interface DocumentByteSyncPort {
   readonly docId: string;
-  applyUpdate(update: Uint8Array): Promise<void>;
+  applyUpdate(update: Uint8Array): Promise<DocumentByteSyncPortApplyUpdateReturn>;
   applyClassifiedRawUpdate?(
     update: Uint8Array,
     provenance: DocumentByteSyncPortClassifiedRawProvenance,

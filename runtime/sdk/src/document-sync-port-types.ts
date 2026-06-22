@@ -58,3 +58,12 @@ export interface DocumentByteSyncPortSyncUpdateExclusionDiagnostic {
   readonly subreason?: string;
   readonly message?: string;
 }
+
+export interface DocumentByteSyncPortApplyUpdateResult {
+  readonly mutationResult: unknown;
+  readonly metadata: unknown;
+}
+
+export type DocumentByteSyncPortApplyUpdateReturn =
+  | DocumentByteSyncPortApplyUpdateResult
+  | void;

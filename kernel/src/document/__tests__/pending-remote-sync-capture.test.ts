@@ -10,8 +10,15 @@ import {
   type SyncUpdateProvenance,
 } from '@mog-sdk/types-document/storage';
 
-import type { MutationResult } from '../../bridges/compute/compute-types.gen';
-import { createAdmittedSyncApplyContext } from '../../bridges/compute/sync-apply-admission';
+import type {
+  MutationResult,
+  SyncApplyMutationMetadataWire,
+} from '../../bridges/compute/compute-types.gen';
+import {
+  createAdmittedSyncApplyContext,
+  toSyncApplyOperationContextWire,
+  type AdmittedSyncApplyContext,
+} from '../../bridges/compute/sync-apply-admission';
 import { RustDocument } from '../rust-document';
 import type { Provider, ProviderDocApplyUpdateMetadata } from '../providers/provider';
 import {
@@ -38,6 +45,10 @@ type StubBridge = {
   createEngineFromYrsState(state: Uint8Array): Promise<unknown>;
   flushUndoCapture(): Promise<unknown>;
   syncApply(u: Uint8Array): Promise<unknown>;
+  syncApplyWithMetadata(
+    u: Uint8Array,
+    syncApplyContext: AdmittedSyncApplyContext,
+  ): Promise<{ mutationResult: MutationResult; metadata: SyncApplyMutationMetadataWire }>;
   recordProviderDocApplyUpdateAdmission(metadata: ProviderDocApplyUpdateMetadata): void;
   encodeDiff(stateVector: Uint8Array): Promise<Uint8Array>;
   currentStateVector(): Promise<Uint8Array>;
@@ -84,7 +95,7 @@ describe('RustDocument pending remote sync capture', () => {
       author: VERSION_AUTHOR,
       now: () => new Date('2026-06-21T00:00:00.000Z'),
     });
-    const { doc, bridge } = await makeOrchestrator({ identityStore });
+    const { doc, bridge } = await makeOrchestrator({ identityStore, semanticMutationCapture });
     await doc.installVersionSyncServices({
       provider: versionProvider,
       semanticMutationCapture,
@@ -95,12 +106,6 @@ describe('RustDocument pending remote sync capture', () => {
       payload: new Uint8Array([0x55, 0x56]),
       updateId: 'pending-remote-capture-1',
     });
-    semanticMutationCapture.mutationCapture.recordMutationResult({
-      operation: 'compute_rename_compute_sheet',
-      operationContext: admittedContextForEnvelope(envelope).operationContext,
-      result: sheetRenameResult(),
-    });
-
     const result = await doc.applyProviderUpdate(envelope);
 
     expect(result.status).toBe('applied');
@@ -151,8 +156,9 @@ describe('RustDocument pending remote sync capture', () => {
 
 async function makeOrchestrator(options: {
   readonly identityStore: AppliedSyncUpdateIdentityStore;
+  readonly semanticMutationCapture: ReturnType<typeof createSemanticMutationCapture>;
 }): Promise<{ doc: RustDocument; bridge: StubBridge }> {
-  const bridge = makeBridge();
+  const bridge = makeBridge(options.semanticMutationCapture);
   const doc = new RustDocument({
     docId: VERSION_DOCUMENT_SCOPE.documentId,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -165,7 +171,9 @@ async function makeOrchestrator(options: {
   return { doc, bridge };
 }
 
-function makeBridge(): StubBridge {
+function makeBridge(
+  semanticMutationCapture: ReturnType<typeof createSemanticMutationCapture>,
+): StubBridge {
   const subscribers = new Set<(u: Uint8Array) => void>();
   const admissions: ProviderDocApplyUpdateMetadata[] = [];
   return {
@@ -179,6 +187,27 @@ function makeBridge(): StubBridge {
     syncApply: async (update) => {
       for (const subscriber of subscribers) subscriber(update);
       return { recalc: { changedCells: [] } };
+    },
+    syncApplyWithMetadata: async (update, syncApplyContext) => {
+      const mutationResult = syncAuthoredCellMutationResult();
+      semanticMutationCapture.mutationCapture.recordMutationResult({
+        operation: 'compute_apply_sync_update',
+        operationContext: syncApplyContext.operationContext,
+        result: mutationResult,
+      });
+      for (const subscriber of subscribers) subscriber(update);
+      return {
+        mutationResult,
+        metadata: {
+          mutationResult,
+          provenanceReport: {
+            appliedContext: toSyncApplyOperationContextWire(syncApplyContext),
+            pendingSegmentStatus: 'notEvaluated',
+            pendingSegmentIds: [],
+            batchDurabilityStatus: 'notEvaluated',
+          },
+        } as SyncApplyMutationMetadataWire,
+      };
     },
     recordProviderDocApplyUpdateAdmission(metadata) {
       admissions.push(metadata);
@@ -315,30 +344,23 @@ function proof(
   };
 }
 
-function admittedContextForEnvelope(envelope: ProviderInboundUpdateEnvelopeV2) {
-  return createAdmittedSyncApplyContext({
-    source: 'provider-inbound',
-    docId: VERSION_DOCUMENT_SCOPE.documentId,
-    envelopeVersion: envelope.schemaVersion,
-    providerRefId: envelope.providerRefId,
-    providerEpoch: envelope.providerEpoch,
-    updateId: envelope.updateId,
-    payloadHash: envelope.payloadHash,
-    provenance: envelope.provenance,
-    validationDiagnostics: [],
-  });
-}
-
-function sheetRenameResult(): MutationResult {
+function syncAuthoredCellMutationResult(): MutationResult {
   return {
-    recalc: { changedCells: [] },
-    sheetChanges: [
+    recalc: {
+      changedCells: [],
+      projectionChanges: [],
+      errors: [],
+      validationAnnotations: [],
+      metrics: {},
+    },
+    authoredCellChanges: [
       {
+        cellId: 'remote-cell-1',
         sheetId: 'sheet-remote-1',
-        kind: 'Set',
-        field: 'name',
-        oldName: 'Sheet1',
-        name: 'Remote Sheet',
+        position: { row: 0, col: 0 },
+        oldValue: null,
+        value: 'Remote',
+        extraFlags: 0,
       },
     ],
   } as unknown as MutationResult;

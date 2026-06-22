@@ -32,6 +32,7 @@ import {
   type VersionPendingRemoteCapture,
 } from './pending-remote-capture-service';
 import { classifySemanticMutationCaptureLane } from './semantic-mutation-capture-lanes';
+import { mapSyncAuthoredCellChanges } from './semantic-mutation-sync-cell-capture';
 
 export interface VersionMutationCaptureRecordInput {
   readonly operation: string;
@@ -228,6 +229,7 @@ function mapMutationResultToSemanticChanges(
   sequence: number,
 ): readonly VersionSemanticChangeRecord[] {
   const changes: VersionSemanticChangeRecord[] = [];
+  if (input.operation === 'compute_apply_sync_update') changes.push(...mapSyncAuthoredCellChanges(input.result.authoredCellChanges ?? [], sequence));
   if (isDirectCellValueOperation(input.operation)) {
     changes.push(
       ...mapCellWriteChanges(

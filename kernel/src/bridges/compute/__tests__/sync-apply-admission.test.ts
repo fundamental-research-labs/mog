@@ -45,6 +45,7 @@ function syncMutationMetadata(
 
 function makeMockContext(
   diagnostics: MutationAdmissionDiagnostic[],
+  recordMutationResult?: jest.Mock,
 ): IKernelContext {
   return {
     eventBus: { emit: jest.fn(), on: jest.fn(() => () => {}), off: jest.fn() },
@@ -55,6 +56,9 @@ function makeMockContext(
     versioningAdmissionDiagnostics: {
       record: (diagnostic: MutationAdmissionDiagnostic) => diagnostics.push(diagnostic),
     },
+    ...(recordMutationResult
+      ? { versioning: { mutationCapture: { recordMutationResult } } }
+      : {}),
   } as unknown as IKernelContext;
 }
 
@@ -338,5 +342,37 @@ describe('sync apply admission', () => {
     expect(diagnostics).not.toContainEqual(
       expect.objectContaining({ code: 'versioning.admission.missing-context' }),
     );
+  });
+
+  it('records verified live sync mutation results for pending remote capture', async () => {
+    const diagnostics: MutationAdmissionDiagnostic[] = [];
+    const recordMutationResult = jest.fn();
+    const mutation = {
+      ...mutationResult(),
+      authoredCellChanges: [
+        {
+          cellId: 'cell-1',
+          sheetId: 'sheet-1',
+          position: { row: 0, col: 0 },
+          oldValue: null,
+          value: 'remote',
+          extraFlags: 0,
+        },
+      ],
+    } as MutationResult;
+    const transport: BridgeTransport & { call: jest.Mock } = {
+      call: jest.fn(async () => [new Uint8Array(), syncMutationMetadata(mutation)]),
+    };
+    const core = createStartedCore(makeMockContext(diagnostics, recordMutationResult), transport);
+    const payloadHash = '5'.repeat(64);
+    const syncApplyContext = makeVerifiedProviderContext(payloadHash);
+
+    await core.syncApplyWithMetadata(new Uint8Array([5]), syncApplyContext);
+
+    expect(recordMutationResult).toHaveBeenCalledWith({
+      operation: 'compute_apply_sync_update',
+      result: mutation,
+      operationContext: syncApplyContext.operationContext,
+    });
   });
 });

@@ -1091,8 +1091,9 @@ export class ComputeCore {
     call: () => Promise<MutationTuple>,
     directEdits?: DirectEditPosition[],
     options?: MutationAdmissionOptions,
+    captureMutation = false,
   ): Promise<MutationResult> {
-    const run = () => this.mutate(call(), directEdits, operation, options);
+    const run = () => this.mutate(call(), directEdits, operation, options, captureMutation);
     return runSystemMutation(this.ctx, this._writeGate, operation, run, options);
   }
 
@@ -1800,6 +1801,7 @@ export class ComputeCore {
         operationContext: syncApplyContext?.operationContext,
         syncApplyContext,
       },
+      true,
     );
     // Store the hydration result (overrides the empty init result)
     this.initResult = mutationResult.recalc;

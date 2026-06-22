@@ -89,6 +89,12 @@ import {
   createVersionProviderWriteActivityTracker,
   type VersionProviderWriteActivityTracker,
 } from './version-store/provider-write-activity';
+import type { PendingRemotePromotionResult } from './version-store/pending-remote-promotion-service';
+import {
+  promoteCapturedPendingRemoteSegment,
+  resolvePendingRemotePromotionService,
+  type PendingRemotePromotionServiceLike,
+} from './pending-remote-auto-promotion';
 import type { VersionStoreProvider } from './version-store/provider';
 import type { SnapshotRootByteSyncPort } from './version-store/snapshot-root-capture';
 import type { WriteGate } from './write-gate';
@@ -110,6 +116,7 @@ export interface ProviderInboundUpdateResult {
   readonly diagnostics?: readonly SyncUpdateValidationDiagnostic[];
   readonly provenance?: SyncUpdateProvenance;
   readonly applyResult?: ProviderDocApplyUpdateResult;
+  readonly pendingRemotePromotionResult?: PendingRemotePromotionResult;
 }
 
 export type ProviderInboundUpdateReason =
@@ -248,6 +255,9 @@ export class RustDocument {
   private versionStoreProvider?: VersionStoreProvider;
   private versioningSnapshotRootByteSyncPort?: SnapshotRootByteSyncPort;
   private capturePendingRemoteSegment?: VersionPendingRemoteCapture;
+  private pendingRemotePromotionService?: PendingRemotePromotionServiceLike;
+  private pendingRemotePromotionServiceProvider?: VersionStoreProvider;
+  private pendingRemotePromotionServiceTracker?: VersionProviderWriteActivityTracker;
   private providerWriteActivityTracker: VersionProviderWriteActivityTracker;
   private appliedSyncUpdateIdentityStore?: AppliedSyncUpdateIdentityStore;
   private syncBatchStatusStore?: SyncBatchStatusStore;
@@ -672,6 +682,7 @@ export class RustDocument {
       ResolvedWorkbookVersioningConfig,
       | 'provider'
       | 'providerWriteActivityTracker'
+      | 'pendingRemotePromotionService'
       | 'semanticMutationCapture'
       | 'snapshotRootByteSyncPort'
     > | null | undefined,
@@ -685,14 +696,25 @@ export class RustDocument {
 
     const capturePendingRemoteSegment =
       versioning?.semanticMutationCapture?.capturePendingRemoteSegment;
+    const explicitPendingRemotePromotionService = versioning?.pendingRemotePromotionService;
     const providerWriteActivityTracker = versioning?.providerWriteActivityTracker;
     const snapshotRootByteSyncPort = versioning?.snapshotRootByteSyncPort;
     if (providerWriteActivityTracker) {
       this.providerWriteActivityTracker = providerWriteActivityTracker;
     }
+    const resolvedPendingRemotePromotionService = resolvePendingRemotePromotionService({
+      explicit: explicitPendingRemotePromotionService,
+      provider,
+      providerWriteActivityTracker: this.providerWriteActivityTracker,
+      existing: this.pendingRemotePromotionService,
+      existingProvider: this.pendingRemotePromotionServiceProvider,
+      existingProviderWriteActivityTracker: this.pendingRemotePromotionServiceTracker,
+    });
+    const pendingRemotePromotionService = resolvedPendingRemotePromotionService.service;
     if (
       this.versionSyncServicesProvider === provider &&
       this.capturePendingRemoteSegment === capturePendingRemoteSegment &&
+      this.pendingRemotePromotionService === pendingRemotePromotionService &&
       this.versioningSnapshotRootByteSyncPort === snapshotRootByteSyncPort &&
       (this.appliedSyncUpdateIdentityStore || this.syncBatchStatusStore)
     ) {
@@ -709,6 +731,16 @@ export class RustDocument {
       this.capturePendingRemoteSegment = capturePendingRemoteSegment;
     } else {
       delete this.capturePendingRemoteSegment;
+    }
+    if (pendingRemotePromotionService) {
+      this.pendingRemotePromotionService = pendingRemotePromotionService;
+      this.pendingRemotePromotionServiceProvider = resolvedPendingRemotePromotionService.provider;
+      this.pendingRemotePromotionServiceTracker =
+        resolvedPendingRemotePromotionService.providerWriteActivityTracker;
+    } else {
+      delete this.pendingRemotePromotionService;
+      delete this.pendingRemotePromotionServiceProvider;
+      delete this.pendingRemotePromotionServiceTracker;
     }
     if (snapshotRootByteSyncPort) {
       this.versioningSnapshotRootByteSyncPort = snapshotRootByteSyncPort;
@@ -732,6 +764,9 @@ export class RustDocument {
     delete this.versionStoreProvider;
     delete this.versioningSnapshotRootByteSyncPort;
     delete this.capturePendingRemoteSegment;
+    delete this.pendingRemotePromotionService;
+    delete this.pendingRemotePromotionServiceProvider;
+    delete this.pendingRemotePromotionServiceTracker;
     delete this.appliedSyncUpdateIdentityStore;
     delete this.syncBatchStatusStore;
   }
@@ -923,6 +958,12 @@ export class RustDocument {
         throw terminalError;
       }
 
+      const pendingRemotePromotionResult = await promoteCapturedPendingRemoteSegment({
+        updateId: envelope.updateId,
+        captured: appliedTerminalMetadata !== undefined,
+        service: this.pendingRemotePromotionService,
+      });
+
       this._inboundUpdateLog.add(envelope.updateId);
       this._inboundUpdateOrder.push(envelope.updateId);
       while (this._inboundUpdateOrder.length > RustDocument.INBOUND_LOG_CAPACITY) {
@@ -937,6 +978,9 @@ export class RustDocument {
         updateId: envelope.updateId,
         provenance,
         ...(applyResult === undefined ? {} : { applyResult }),
+        ...(pendingRemotePromotionResult === undefined
+          ? {}
+          : { pendingRemotePromotionResult }),
       };
     });
   }

@@ -102,8 +102,9 @@ export async function _applyCoordinatorRawUpdate(
   classification: CoordinatorRawUpdateClassification,
 ): Promise<void> {
   if (typeof syncPort.applyClassifiedRawUpdate !== 'function') {
-    await syncPort.applyUpdate(update);
-    return;
+    throw new Error(
+      `CollaborativeEngine coordinator ${classification} update requires DocumentByteSyncPort.applyClassifiedRawUpdate`,
+    );
   }
 
   const payloadHash = await sha256Hex(update);

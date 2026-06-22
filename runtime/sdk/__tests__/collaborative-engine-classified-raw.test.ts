@@ -85,7 +85,7 @@ describe('collaborative engine classified raw coordinator updates', () => {
     });
   });
 
-  it('falls back to raw applyUpdate when classified raw is unavailable', async () => {
+  it('fails closed when classified raw is unavailable', async () => {
     const update = new Uint8Array([4, 5, 6]);
     const rawUpdates: Uint8Array[] = [];
     const syncPort = createSyncPort({
@@ -94,12 +94,14 @@ describe('collaborative engine classified raw coordinator updates', () => {
       },
     });
 
-    await _applyCoordinatorRawUpdate(syncPort, update, 'mixedRemote');
+    await expect(_applyCoordinatorRawUpdate(syncPort, update, 'mixedRemote')).rejects.toThrow(
+      'requires DocumentByteSyncPort.applyClassifiedRawUpdate',
+    );
 
-    expect(rawUpdates).toEqual([update]);
+    expect(rawUpdates).toEqual([]);
   });
 
-  it('allows raw applyUpdate fallback to return ignored sync metadata', async () => {
+  it('does not accept sync metadata from raw fallback ports', async () => {
     const update = new Uint8Array([7, 8, 9]);
     const rawUpdates: Uint8Array[] = [];
     const syncPort = createSyncPort({
@@ -112,9 +114,11 @@ describe('collaborative engine classified raw coordinator updates', () => {
       },
     });
 
-    await _applyCoordinatorRawUpdate(syncPort, update, 'mixedRemote');
+    await expect(_applyCoordinatorRawUpdate(syncPort, update, 'mixedRemote')).rejects.toThrow(
+      'requires DocumentByteSyncPort.applyClassifiedRawUpdate',
+    );
 
-    expect(rawUpdates).toEqual([update]);
+    expect(rawUpdates).toEqual([]);
   });
 });
 

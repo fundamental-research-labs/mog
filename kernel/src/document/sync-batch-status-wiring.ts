@@ -4,6 +4,7 @@ import {
   syncBatchStatusKeyMaterialForOperationContext,
   type SyncBatchStatusId,
   type SyncBatchStatusOperationContext,
+  type SyncBatchStatusReserveResult,
   type SyncBatchStatusStore,
   type SyncBatchStatusStoreDiagnostic,
   type SyncBatchStatusTerminal,
@@ -61,14 +62,19 @@ export async function prepareSyncBatchStatusBeforeApply(options: {
 
   if (!reservation) return { status: 'apply', reservation: null };
 
-  const reserved = await reservation.store.reserveBatchStatus({
-    batchStatusId: reservation.batchStatusId,
-    operationContext: reservation.operationContext,
-    batchId: reservation.batchId,
-    orderedSubUpdatePayloadHashes: reservation.orderedSubUpdatePayloadHashes,
-    subUpdateCount: reservation.subUpdateCount,
-    createdAt: new Date().toISOString(),
-  });
+  let reserved: SyncBatchStatusReserveResult;
+  try {
+    reserved = await reservation.store.reserveBatchStatus({
+      batchStatusId: reservation.batchStatusId,
+      operationContext: reservation.operationContext,
+      batchId: reservation.batchId,
+      orderedSubUpdatePayloadHashes: reservation.orderedSubUpdatePayloadHashes,
+      subUpdateCount: reservation.subUpdateCount,
+      createdAt: new Date().toISOString(),
+    });
+  } catch {
+    return { status: 'rejected', reason: 'sync-batch-status-reservation-failed' };
+  }
 
   switch (reserved.status) {
     case 'reserved':

@@ -7,6 +7,7 @@ import type {
   WorkbookVersionReviewRecord,
 } from '@mog-sdk/contracts/api';
 
+import { ensureProposalBranchFastForwardFromExpectedHead } from './proposal-provider-branch-head-validation';
 import type { ResolvedBranchHead } from './proposal-provider-service';
 import { isWorkbookCommitId } from './proposal-provider-service-utils';
 import type { AgentProposalAcceptance, AgentProposalMetadataStore } from './proposal-store';
@@ -116,6 +117,23 @@ export async function acceptProviderBackedAgentProposal(options: {
       store: store.value,
       input: options.input,
       actualTargetHeadId: target.head.commitId,
+    });
+  }
+
+  const proposalBranchReady = await ensureProposalBranchFastForwardFromExpectedHead({
+    graphProvider: options.graphProvider,
+    operation: 'acceptProposal',
+    proposalBranchName: proposal.proposalBranchName,
+    expectedHeadCommitId: options.input.expectedTargetHeadId,
+    proposalCommitId: proposal.proposalCommitId,
+  });
+  if (!proposalBranchReady.ok) {
+    if (!('stale' in proposalBranchReady)) return proposalBranchReady.result;
+    return markProposalStale({
+      store: store.value,
+      input: options.input,
+      actualTargetHeadId: target.head.commitId,
+      diagnostics: proposalBranchReady.diagnostics,
     });
   }
 
@@ -300,7 +318,7 @@ async function fastForwardTargetRef(
     if (advanced.status === 'success') return { ok: true };
     return {
       ok: false,
-      stale: advanced.diagnostics.some((item) => item.code === 'VERSION_REF_CONFLICT'),
+      stale: advanced.diagnostics.some((item) => isStaleFastForwardDiagnostic(item.code)),
       actualTargetHeadId: actualHeadFromDiagnostics(advanced.diagnostics),
       result: graphFailure(advanced.diagnostics),
     };
@@ -338,6 +356,7 @@ async function markProposalStale(options: {
   readonly store: AgentProposalMetadataStore;
   readonly input: AcceptAgentProposalInput;
   readonly actualTargetHeadId: WorkbookCommitId;
+  readonly diagnostics?: readonly VersionDiagnostic[];
 }): Promise<VersionResult<AgentProposalAcceptResult>> {
   const updated = await options.store.updateProposal({
     clientRequestId: options.input.clientRequestId,
@@ -350,6 +369,7 @@ async function markProposalStale(options: {
         expectedTargetHeadId: options.input.expectedTargetHeadId,
         actualTargetHeadId: options.actualTargetHeadId,
       }),
+      ...(options.diagnostics ?? []),
     ],
   });
   if (!updated.ok) return storeFailure(updated);
@@ -494,6 +514,10 @@ function actualHeadFromDiagnostics(diagnostics: readonly unknown[]): WorkbookCom
     if (isWorkbookCommitId(commitId)) return commitId;
   }
   return undefined;
+}
+
+function isStaleFastForwardDiagnostic(code: unknown): boolean {
+  return code === 'VERSION_REF_CONFLICT' || code === 'VERSION_UNSUPPORTED_PARENT_COMMIT';
 }
 
 function diagnostic(

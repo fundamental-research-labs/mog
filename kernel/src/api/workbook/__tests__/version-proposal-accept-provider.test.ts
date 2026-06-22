@@ -55,6 +55,154 @@ const PASSED_VERIFICATION = {
 } as const;
 
 describe('WorkbookVersion provider-backed proposal accept policy', () => {
+  it('fast-forwards the target branch through provider-backed refs after approved review', async () => {
+    const graph = await graphWithRoot();
+    const version = versionForProvider(
+      graph.provider,
+      graphCommittingWorkspaceService(graph.provider),
+    );
+    const ready = await createReadyReviewedProposal(version, graph, 'fast-forward');
+
+    const accepted = await version.acceptProposal({
+      clientRequestId: 'proposal-accept-fast-forward',
+      proposalId: ready.proposalId,
+      expectedRevision: 5,
+      expectedTargetHeadId: graph.rootCommitId,
+      actor: ACTOR,
+      resolutionPolicy: 'fastForwardOnly',
+    });
+
+    expect(accepted).toMatchObject({
+      ok: true,
+      value: {
+        status: 'fast_forwarded',
+        proposalId: ready.proposalId,
+        appliedCommitId: ready.proposalCommitId,
+        targetRef: 'refs/heads/main',
+        newHeadId: ready.proposalCommitId,
+        refUpdateReceiptId: expect.stringContaining('proposal-accept:'),
+      },
+    });
+    await expect(version.readRef('refs/heads/main')).resolves.toMatchObject({
+      ok: true,
+      value: {
+        status: 'success',
+        ref: { commitId: ready.proposalCommitId },
+      },
+    });
+    await expect(version.getProposal({ proposalId: ready.proposalId })).resolves.toMatchObject({
+      ok: true,
+      value: { status: 'applied', revision: 6 },
+    });
+    await expect(version.getReview({ reviewId: ready.reviewId })).resolves.toMatchObject({
+      ok: true,
+      value: { status: 'applied' },
+    });
+  });
+
+  it('marks a reviewed proposal stale when the target branch head moved', async () => {
+    const graph = await graphWithRoot();
+    const version = versionForProvider(
+      graph.provider,
+      graphCommittingWorkspaceService(graph.provider),
+    );
+    const ready = await createReadyReviewedProposal(version, graph, 'target-stale');
+    const movedMainCommitId = await commitRef(
+      graph.provider,
+      'refs/heads/main',
+      graph.rootCommitId,
+    );
+
+    const accepted = await version.acceptProposal({
+      clientRequestId: 'proposal-accept-target-stale',
+      proposalId: ready.proposalId,
+      expectedRevision: 5,
+      expectedTargetHeadId: graph.rootCommitId,
+      actor: ACTOR,
+      resolutionPolicy: 'fastForwardOnly',
+    });
+
+    expect(accepted).toMatchObject({
+      ok: true,
+      value: {
+        status: 'stale',
+        proposalId: ready.proposalId,
+        expectedTargetHeadId: graph.rootCommitId,
+        actualTargetHeadId: movedMainCommitId,
+      },
+    });
+    await expect(version.readRef('refs/heads/main')).resolves.toMatchObject({
+      ok: true,
+      value: {
+        status: 'success',
+        ref: { commitId: movedMainCommitId },
+      },
+    });
+    await expect(version.getProposal({ proposalId: ready.proposalId })).resolves.toMatchObject({
+      ok: true,
+      value: {
+        status: 'stale',
+        revision: 6,
+        diagnostics: [expect.objectContaining({ code: 'stale_head' })],
+      },
+    });
+  });
+
+  it('marks a reviewed proposal stale when the proposal branch head changed', async () => {
+    const graph = await graphWithRoot();
+    const version = versionForProvider(
+      graph.provider,
+      graphCommittingWorkspaceService(graph.provider),
+    );
+    const ready = await createReadyReviewedProposal(version, graph, 'proposal-branch-stale');
+    await commitRef(
+      graph.provider,
+      `refs/heads/${ready.proposalBranchName}`,
+      ready.proposalCommitId,
+    );
+
+    const accepted = await version.acceptProposal({
+      clientRequestId: 'proposal-accept-proposal-branch-stale',
+      proposalId: ready.proposalId,
+      expectedRevision: 5,
+      expectedTargetHeadId: graph.rootCommitId,
+      actor: ACTOR,
+      resolutionPolicy: 'fastForwardOnly',
+    });
+
+    expect(accepted).toMatchObject({
+      ok: true,
+      value: {
+        status: 'stale',
+        proposalId: ready.proposalId,
+        expectedTargetHeadId: graph.rootCommitId,
+        actualTargetHeadId: graph.rootCommitId,
+      },
+    });
+    await expect(version.readRef('refs/heads/main')).resolves.toMatchObject({
+      ok: true,
+      value: {
+        status: 'success',
+        ref: { commitId: graph.rootCommitId },
+      },
+    });
+    await expect(version.getProposal({ proposalId: ready.proposalId })).resolves.toMatchObject({
+      ok: true,
+      value: {
+        status: 'stale',
+        revision: 6,
+        diagnostics: [
+          expect.objectContaining({ code: 'stale_head' }),
+          expect.objectContaining({ code: 'stale_proposal_branch_head' }),
+        ],
+      },
+    });
+    await expect(version.getReview({ reviewId: ready.reviewId })).resolves.toMatchObject({
+      ok: true,
+      value: { status: 'approved' },
+    });
+  });
+
   it.each(['allowCleanMerge', 'allowResolvedMerge'] as const)(
     'fails closed for unsupported %s acceptance policy',
     async (resolutionPolicy) => {
@@ -166,6 +314,8 @@ async function createReadyReviewedProposal(
   expect(committed.value.baseCommitId).toBe(graph.rootCommitId);
   return {
     proposalId: created.value.id,
+    proposalCommitId: committed.value.proposalCommitId,
+    proposalBranchName: created.value.proposalBranchName,
     reviewId: review.value.id,
   };
 }
@@ -253,6 +403,26 @@ async function graphWithRoot() {
     provider,
     rootCommitId: initialized.rootCommit.id,
   };
+}
+
+async function commitRef(
+  provider: ReturnType<typeof createInMemoryVersionStoreProvider>,
+  targetRef: string,
+  expectedHeadCommitId: WorkbookCommitId,
+): Promise<WorkbookCommitId> {
+  const namespace = namespaceForDocumentScope(DOCUMENT_SCOPE, 'graph-1');
+  const graph = await provider.openGraph(namespace);
+  const ref = await graph.readRef(targetRef);
+  if (ref.status !== 'success' || ref.ref.name === 'HEAD') {
+    throw new Error(`expected ${targetRef} before proposal accept test`);
+  }
+  const committed = await graph.commit(
+    await commitInput(namespace, expectedHeadCommitId, ref.ref.revision, targetRef),
+  );
+  if (committed.status !== 'success') {
+    throw new Error(`expected ${targetRef} move success: ${committed.diagnostics[0]?.code}`);
+  }
+  return committed.commit.id;
 }
 
 function expectInitializeSuccess(

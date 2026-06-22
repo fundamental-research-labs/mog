@@ -5,6 +5,7 @@ import type {
 import type {
   CapturePolicy,
   DomainCapabilityPolicyManifest,
+  DomainPresenceDetector,
   ObjectDigest,
   VersionWriteAdmissionMode,
   VersionCapabilityGate,
@@ -75,6 +76,12 @@ type _ExactWriteAdmissionModeSet = Assert<
 type _CapabilityStatesFieldUsesCapabilityMap = Assert<
   IsEqual<DomainCapabilityPolicyManifest['capabilityStates'], VersionDomainCapabilityStateMap>
 >;
+type _MatrixRowIdFieldUsesString = Assert<
+  IsEqual<DomainCapabilityPolicyManifest['matrixRowId'], string>
+>;
+type _DetectorMatrixRowIdFieldUsesString = Assert<
+  IsEqual<DomainPresenceDetector['matrixRowId'], string>
+>;
 type _LegacyCapabilityStateFieldUsesCapabilityUnion = Assert<
   IsEqual<
     Exclude<DomainCapabilityPolicyManifest['capabilityState'], undefined>,
@@ -130,6 +137,7 @@ const contractedCapabilityStates: VersionDomainCapabilityStateMap = Object.freez
 });
 
 const domainPolicy: DomainCapabilityPolicyManifest = Object.freeze({
+  matrixRowId: 'authored-grid',
   domainId: 'authored-grid',
   domainClass: 'authored',
   capabilityStates: contractedCapabilityStates,
@@ -142,6 +150,15 @@ const domainPolicy: DomainCapabilityPolicyManifest = Object.freeze({
     redactionPolicy: 'metadata-only',
   }),
   redactionPolicy: 'metadata-only',
+});
+
+const domainPresenceDetector: DomainPresenceDetector = Object.freeze({
+  detectorId: 'detector.authored-grid',
+  matrixRowId: domainPolicy.matrixRowId,
+  domainId: domainPolicy.domainId,
+  domainClass: domainPolicy.domainClass,
+  detectsObjectKinds: Object.freeze(['worksheet.cell']),
+  capabilityStatesWhenPresent: contractedCapabilityStates,
 });
 
 const controlPlanePreflight: ControlPlaneDryRunRequest = Object.freeze({
@@ -172,6 +189,7 @@ export const VERSIONING_CONTRACT_FIXTURES = Object.freeze({
   digest,
   versionCapabilityGate,
   domainPolicy,
+  domainPresenceDetector,
   controlPlanePreflight,
   controlPlaneCompareAndSwap,
 });

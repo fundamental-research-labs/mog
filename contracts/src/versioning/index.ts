@@ -365,6 +365,7 @@ export interface EntityLifecycleAndTombstonePolicy {
 }
 
 export interface DomainCapabilityPolicyManifest {
+  readonly matrixRowId: string;
   readonly domainId: string;
   readonly domainClass: VersionDomainClass;
   readonly capabilityStates: VersionDomainCapabilityStateMap;
@@ -394,6 +395,7 @@ export interface DomainSupportManifest {
 
 export interface DomainPresenceDetector {
   readonly detectorId: string;
+  readonly matrixRowId: string;
   readonly domainId: string;
   readonly domainClass: VersionDomainClass;
   readonly detectsObjectKinds: readonly string[];

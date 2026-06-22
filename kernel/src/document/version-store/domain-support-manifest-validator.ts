@@ -26,8 +26,8 @@ import {
  * outside this set is rejected (fail-closed) rather than best-effort parsed.
  */
 export const SUPPORTED_DOMAIN_SUPPORT_MANIFEST_SCHEMA_VERSIONS = Object.freeze([
-  '1',
-  'domain-support-manifest.v1',
+  '2',
+  'domain-support-manifest.v2',
 ] as const);
 
 /**
@@ -45,6 +45,20 @@ export const REQUIRED_FIRST_SLICE_DOMAIN_IDS = Object.freeze([
   'recalc-caches',
 ] as const);
 
+/**
+ * Support policy rows are keyed by matrix row, not by broad domain family. The
+ * current first slice happens to use row ids equal to domain ids, but subtype
+ * rows such as cells.formats.direct must be represented independently.
+ */
+export const REQUIRED_FIRST_SLICE_MATRIX_ROW_IDS = Object.freeze([
+  'workbook-metadata',
+  'sheets',
+  'rows-columns',
+  'cells.values',
+  'cells.formulas',
+  'recalc-caches',
+] as const);
+
 export type DomainSupportManifestDiagnosticCode =
   | 'schema-version-missing'
   | 'schema-version-unsupported'
@@ -53,8 +67,10 @@ export type DomainSupportManifestDiagnosticCode =
   | 'generated-at-malformed'
   | 'manifest-stale'
   | 'domains-missing'
+  | 'required-matrix-row-missing'
   | 'required-domain-missing'
-  | 'duplicate-domain'
+  | 'matrix-row-id-missing'
+  | 'duplicate-matrix-row'
   | 'domain-malformed'
   | 'unknown-domain-class'
   | 'capability-states-missing'
@@ -67,6 +83,8 @@ export type DomainSupportManifestDiagnosticCode =
 export interface DomainSupportManifestDiagnostic {
   readonly code: DomainSupportManifestDiagnosticCode;
   readonly message: string;
+  /** Subtype-capable matrix row the diagnostic applies to, when row-scoped. */
+  readonly matrixRowId?: string;
   /** Domain the diagnostic applies to, when domain-scoped. */
   readonly domainId?: string;
   readonly capabilityKey?: VersionDomainCapabilityKey;
@@ -75,7 +93,9 @@ export interface DomainSupportManifestDiagnostic {
 
 export interface DomainSupportManifestValidationOk {
   readonly ok: true;
-  /** Domain ids that carry a present detector row, for caller convenience. */
+  /** Matrix row ids that carry a present policy row, for caller convenience. */
+  readonly presentMatrixRowIds: readonly string[];
+  /** Domain ids that carry at least one present policy row, for caller convenience. */
   readonly presentDomainIds: readonly string[];
 }
 
@@ -99,6 +119,7 @@ export type DomainSupportManifestValidationResult =
  * DomainPresenceDetector wiring that VC-06 owns.
  */
 export interface DomainSupportDetectorRow {
+  readonly matrixRowId?: string;
   readonly domainId: string;
   /** True when the detector observed the domain present in the workbook. */
   readonly present: boolean;
@@ -126,8 +147,14 @@ export interface DomainSupportManifestValidationOptions {
    */
   readonly minGeneratedAt?: Date;
   /**
-   * Override the required first-slice domain set. Defaults to
-   * REQUIRED_FIRST_SLICE_DOMAIN_IDS. A manifest missing any required id fails.
+   * Override the required first-slice matrix row set. Defaults to
+   * REQUIRED_FIRST_SLICE_MATRIX_ROW_IDS. A manifest missing any required row
+   * fails, even when another row exists for the same broad domainId.
+   */
+  readonly requiredMatrixRowIds?: readonly string[];
+  /**
+   * Optional broad-domain completeness check. Matrix rows are the primary
+   * support key; use this only when a caller also needs a domain-family floor.
    */
   readonly requiredDomainIds?: readonly string[];
   /**
@@ -190,6 +217,7 @@ function isSupportedSchemaVersion(value: string): boolean {
 }
 
 function validateCapabilityStates(
+  matrixRowId: string,
   domainId: string,
   capabilityStates: unknown,
   diagnostics: DomainSupportManifestDiagnostic[],
@@ -197,7 +225,8 @@ function validateCapabilityStates(
   if (!isPlainRecord(capabilityStates)) {
     diagnostics.push({
       code: 'capability-states-missing',
-      message: `Domain "${domainId}" must provide capabilityStates keyed by version capability.`,
+      message: `Matrix row "${matrixRowId}" for domain "${domainId}" must provide capabilityStates keyed by version capability.`,
+      matrixRowId,
       domainId,
     });
     return;
@@ -207,7 +236,8 @@ function validateCapabilityStates(
     if (!CAPABILITY_KEY_SET.has(key)) {
       diagnostics.push({
         code: 'unknown-capability-key',
-        message: `Domain "${domainId}" references unknown capability key "${key}".`,
+        message: `Matrix row "${matrixRowId}" for domain "${domainId}" references unknown capability key "${key}".`,
+        matrixRowId,
         domainId,
       });
     }
@@ -218,7 +248,8 @@ function validateCapabilityStates(
     if (state === undefined) {
       diagnostics.push({
         code: 'capability-state-missing',
-        message: `Domain "${domainId}" is missing capability state for "${key}".`,
+        message: `Matrix row "${matrixRowId}" for domain "${domainId}" is missing capability state for "${key}".`,
+        matrixRowId,
         domainId,
       });
       continue;
@@ -226,7 +257,8 @@ function validateCapabilityStates(
     if (!isVersionDomainCapabilityState(state)) {
       diagnostics.push({
         code: 'unknown-capability-state',
-        message: `Domain "${domainId}" capability "${key}" references unknown state "${String(state)}".`,
+        message: `Matrix row "${matrixRowId}" for domain "${domainId}" capability "${key}" references unknown state "${String(state)}".`,
+        matrixRowId,
         domainId,
       });
     }
@@ -242,6 +274,7 @@ function requiredCapabilityKeysForOptions(
 }
 
 function validateRequiredCapabilityState(
+  matrixRowId: string,
   domainId: string,
   domainClass: VersionDomainClass,
   capabilityStates: unknown,
@@ -258,7 +291,8 @@ function validateRequiredCapabilityState(
 
     diagnostics.push({
       code: 'capability-state-blocked',
-      message: `Domain "${domainId}" has state "${state}" for capability "${capabilityKey}", which is not allowed for this durable operation.`,
+      message: `Matrix row "${matrixRowId}" for domain "${domainId}" has state "${state}" for capability "${capabilityKey}", which is not allowed for this durable operation.`,
+      matrixRowId,
       domainId,
       capabilityKey,
       capabilityState: state,
@@ -377,14 +411,16 @@ export function validateDomainSupportManifest(
 
   // --- domain rows --------------------------------------------------------
   const domains = candidate.domains;
-  const presentDomainIds: string[] = [];
+  const presentMatrixRowIds: string[] = [];
+  const presentDomainIds = new Set<string>();
   if (!Array.isArray(domains)) {
     diagnostics.push({
       code: 'domains-missing',
       message: 'Manifest domains must be an array.',
     });
   } else {
-    const seen = new Set<string>();
+    const seenMatrixRows = new Set<string>();
+    const seenDomains = new Set<string>();
     for (let index = 0; index < domains.length; index += 1) {
       const row = domains[index] as Partial<DomainCapabilityPolicyManifest> | unknown;
       if (row === null || typeof row !== 'object') {
@@ -395,36 +431,51 @@ export function validateDomainSupportManifest(
         continue;
       }
       const typed = row as Partial<DomainCapabilityPolicyManifest>;
+      const matrixRowId = typed.matrixRowId;
       const domainId = typed.domainId;
+      if (typeof matrixRowId !== 'string' || matrixRowId === '') {
+        diagnostics.push({
+          code: 'matrix-row-id-missing',
+          message: `Domain row at index ${index} has a missing or empty matrixRowId.`,
+          ...(typeof domainId === 'string' && domainId !== '' ? { domainId } : {}),
+        });
+        continue;
+      }
       if (typeof domainId !== 'string' || domainId === '') {
         diagnostics.push({
           code: 'domain-malformed',
           message: `Domain row at index ${index} has a missing or empty domainId.`,
+          matrixRowId,
         });
         continue;
       }
-      if (seen.has(domainId)) {
+      if (seenMatrixRows.has(matrixRowId)) {
         diagnostics.push({
-          code: 'duplicate-domain',
-          message: `Domain "${domainId}" appears more than once.`,
+          code: 'duplicate-matrix-row',
+          message: `Matrix row "${matrixRowId}" appears more than once.`,
+          matrixRowId,
           domainId,
         });
         continue;
       }
-      seen.add(domainId);
-      presentDomainIds.push(domainId);
+      seenMatrixRows.add(matrixRowId);
+      seenDomains.add(domainId);
+      presentMatrixRowIds.push(matrixRowId);
+      presentDomainIds.add(domainId);
 
       const domainClass = typed.domainClass;
       if (!isVersionDomainClass(domainClass)) {
         diagnostics.push({
           code: 'unknown-domain-class',
-          message: `Domain "${domainId}" references unknown domainClass "${String(typed.domainClass)}".`,
+          message: `Matrix row "${matrixRowId}" for domain "${domainId}" references unknown domainClass "${String(typed.domainClass)}".`,
+          matrixRowId,
           domainId,
         });
       }
-      validateCapabilityStates(domainId, typed.capabilityStates, diagnostics);
+      validateCapabilityStates(matrixRowId, domainId, typed.capabilityStates, diagnostics);
       if (isVersionDomainClass(domainClass)) {
         validateRequiredCapabilityState(
+          matrixRowId,
           domainId,
           domainClass,
           typed.capabilityStates,
@@ -439,28 +490,54 @@ export function validateDomainSupportManifest(
       ) {
         diagnostics.push({
           code: 'unknown-capability-state',
-          message: `Domain "${domainId}" references unknown legacy capabilityState "${String(typed.capabilityState)}".`,
+          message: `Matrix row "${matrixRowId}" for domain "${domainId}" references unknown legacy capabilityState "${String(typed.capabilityState)}".`,
+          matrixRowId,
           domainId,
         });
       }
     }
 
-    // --- required first-slice coverage ------------------------------------
-    const required = options.requiredDomainIds ?? REQUIRED_FIRST_SLICE_DOMAIN_IDS;
-    for (const requiredId of required) {
-      if (!seen.has(requiredId)) {
+    // --- required first-slice matrix row coverage -------------------------
+    const requiredMatrixRows = options.requiredMatrixRowIds ?? REQUIRED_FIRST_SLICE_MATRIX_ROW_IDS;
+    for (const matrixRowId of requiredMatrixRows) {
+      if (!seenMatrixRows.has(matrixRowId)) {
         diagnostics.push({
-          code: 'required-domain-missing',
-          message: `Required first-slice domain "${requiredId}" is absent from the manifest.`,
-          domainId: requiredId,
+          code: 'required-matrix-row-missing',
+          message: `Required first-slice matrix row "${matrixRowId}" is absent from the manifest.`,
+          matrixRowId,
         });
       }
     }
 
-    // --- detector row coverage: a present domain needs a policy row -------
+    if (options.requiredDomainIds) {
+      for (const requiredId of options.requiredDomainIds) {
+        if (!seenDomains.has(requiredId)) {
+          diagnostics.push({
+            code: 'required-domain-missing',
+            message: `Required domain "${requiredId}" is absent from the manifest.`,
+            domainId: requiredId,
+          });
+        }
+      }
+    }
+
+    // --- detector row coverage: a present matrix row needs policy ---------
     if (options.detectorRows) {
       for (const detector of options.detectorRows) {
-        if (detector.present && !seen.has(detector.domainId)) {
+        if (!detector.present) continue;
+
+        if (detector.matrixRowId) {
+          if (seenMatrixRows.has(detector.matrixRowId)) continue;
+          diagnostics.push({
+            code: 'detector-row-missing',
+            message: `Matrix row "${detector.matrixRowId}" was detected present but has no policy row in the manifest.`,
+            matrixRowId: detector.matrixRowId,
+            domainId: detector.domainId,
+          });
+          continue;
+        }
+
+        if (!seenDomains.has(detector.domainId)) {
           diagnostics.push({
             code: 'detector-row-missing',
             message: `Domain "${detector.domainId}" was detected present but has no policy row in the manifest.`,
@@ -474,7 +551,7 @@ export function validateDomainSupportManifest(
   if (diagnostics.length > 0) {
     return { ok: false, diagnostics };
   }
-  return { ok: true, presentDomainIds };
+  return { ok: true, presentMatrixRowIds, presentDomainIds: [...presentDomainIds] };
 }
 
 /**
@@ -505,5 +582,5 @@ export function assertDomainSupportManifest(
   if (!result.ok) {
     throw new DomainSupportManifestError(result.diagnostics);
   }
-  return result.presentDomainIds;
+  return result.presentMatrixRowIds;
 }

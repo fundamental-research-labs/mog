@@ -135,6 +135,7 @@ function domainSupportManifestInvalidDiagnostic(
     'The document domain support manifest is invalid for durable version operations.',
     {
       diagnosticCode: diagnostic.code,
+      ...(diagnostic.matrixRowId ? { matrixRowId: diagnostic.matrixRowId } : {}),
       ...(diagnostic.domainId ? { domainId: diagnostic.domainId } : {}),
       ...(diagnostic.capabilityKey ? { capabilityKey: diagnostic.capabilityKey } : {}),
       ...(diagnostic.capabilityState ? { capabilityState: diagnostic.capabilityState } : {}),

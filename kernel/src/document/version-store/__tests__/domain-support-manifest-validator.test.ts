@@ -7,6 +7,7 @@ import type {
 import {
   DomainSupportManifestError,
   REQUIRED_FIRST_SLICE_DOMAIN_IDS,
+  REQUIRED_FIRST_SLICE_MATRIX_ROW_IDS,
   assertDomainSupportManifest,
   validateDomainSupportManifest,
   type DomainSupportDetectorRow,
@@ -33,6 +34,7 @@ function domainRow(
   overrides: Partial<DomainCapabilityPolicyManifest> = {},
 ): DomainCapabilityPolicyManifest {
   return {
+    matrixRowId: overrides.matrixRowId ?? domainId,
     domainId,
     domainClass: 'authored',
     capabilityStates: capabilityStates(),
@@ -53,7 +55,7 @@ function freshManifest(
   overrides: Partial<DomainSupportManifest> = {},
 ): DomainSupportManifest {
   return {
-    schemaVersion: '1',
+    schemaVersion: 'domain-support-manifest.v2',
     generatedAt: '2026-06-21T00:00:00.000Z',
     workbookId: 'wb-1',
     domains: REQUIRED_FIRST_SLICE_DOMAIN_IDS.map((id) => domainRow(id)),
@@ -73,6 +75,7 @@ describe('validateDomainSupportManifest (fail-closed)', () => {
 
     expect(result.ok).toBe(true);
     if (result.ok) {
+      expect(result.presentMatrixRowIds).toEqual([...REQUIRED_FIRST_SLICE_MATRIX_ROW_IDS]);
       expect(result.presentDomainIds).toEqual([...REQUIRED_FIRST_SLICE_DOMAIN_IDS]);
     }
   });
@@ -93,6 +96,18 @@ describe('validateDomainSupportManifest (fail-closed)', () => {
   it('fails closed when schemaVersion is unsupported', () => {
     const result = validateDomainSupportManifest(
       freshManifest({ schemaVersion: '999' }),
+      { now: NOW },
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.diagnostics.map((d) => d.code)).toContain('schema-version-unsupported');
+    }
+  });
+
+  it('fails closed on legacy v1 manifests without subtype matrix row authority', () => {
+    const result = validateDomainSupportManifest(
+      freshManifest({ schemaVersion: 'domain-support-manifest.v1' }),
       { now: NOW },
     );
 
@@ -128,7 +143,7 @@ describe('validateDomainSupportManifest (fail-closed)', () => {
     }
   });
 
-  it('fails closed when a required first-slice domain row is absent', () => {
+  it('fails closed when a required first-slice matrix row is absent', () => {
     const manifest = freshManifest({
       domains: REQUIRED_FIRST_SLICE_DOMAIN_IDS.filter((id) => id !== 'cells.formulas').map(
         (id) => domainRow(id),
@@ -139,9 +154,72 @@ describe('validateDomainSupportManifest (fail-closed)', () => {
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      const missing = result.diagnostics.find((d) => d.code === 'required-domain-missing');
+      const missing = result.diagnostics.find((d) => d.code === 'required-matrix-row-missing');
       expect(missing).toBeDefined();
-      expect(missing?.domainId).toBe('cells.formulas');
+      expect(missing?.matrixRowId).toBe('cells.formulas');
+    }
+  });
+
+  it('does not let a broad domain row stand in for a required subtype matrix row', () => {
+    const result = validateDomainSupportManifest(
+      freshManifest({
+        domains: [
+          ...REQUIRED_FIRST_SLICE_DOMAIN_IDS.map((id) => domainRow(id)),
+          domainRow('cells.formats', { matrixRowId: 'cells.formats' }),
+        ],
+      }),
+      {
+        now: NOW,
+        requiredMatrixRowIds: ['cells.formats.direct'],
+      },
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      const missing = result.diagnostics.find((d) => d.code === 'required-matrix-row-missing');
+      expect(missing).toMatchObject({ matrixRowId: 'cells.formats.direct' });
+    }
+  });
+
+  it('accepts multiple subtype rows for the same broad domain when matrix row ids differ', () => {
+    const result = validateDomainSupportManifest(
+      freshManifest({
+        domains: [
+          ...REQUIRED_FIRST_SLICE_DOMAIN_IDS.map((id) => domainRow(id)),
+          domainRow('cells.formats', { matrixRowId: 'cells.formats.direct' }),
+          domainRow('cells.formats', { matrixRowId: 'cells.formats.catalogs' }),
+        ],
+      }),
+      {
+        now: NOW,
+        requiredMatrixRowIds: ['cells.formats.direct', 'cells.formats.catalogs'],
+      },
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.presentMatrixRowIds).toEqual(
+        expect.arrayContaining(['cells.formats.direct', 'cells.formats.catalogs']),
+      );
+      expect(result.presentDomainIds).toContain('cells.formats');
+    }
+  });
+
+  it('fails closed when a policy row omits matrixRowId', () => {
+    const row = domainRow('filters') as any;
+    delete row.matrixRowId;
+    const result = validateDomainSupportManifest(
+      freshManifest({
+        domains: [...REQUIRED_FIRST_SLICE_DOMAIN_IDS.map((id) => domainRow(id)), row],
+      }),
+      { now: NOW },
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.diagnostics.find((d) => d.code === 'matrix-row-id-missing')).toMatchObject({
+        domainId: 'filters',
+      });
     }
   });
 
@@ -394,6 +472,36 @@ describe('validateDomainSupportManifest (fail-closed)', () => {
     }
   });
 
+  it('fails closed when a detected-present subtype matrix row has no policy row', () => {
+    const detectorRows: readonly DomainSupportDetectorRow[] = [
+      {
+        matrixRowId: 'cells.formats.direct',
+        domainId: 'cells.formats',
+        present: true,
+        detectorId: 'detector.formats',
+      },
+    ];
+    const manifest = freshManifest({
+      domains: [
+        ...REQUIRED_FIRST_SLICE_DOMAIN_IDS.map((id) => domainRow(id)),
+        domainRow('cells.formats', { matrixRowId: 'cells.formats.catalogs' }),
+      ],
+    });
+
+    const result = validateDomainSupportManifest(manifest, {
+      now: NOW,
+      detectorRows,
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.diagnostics.find((d) => d.code === 'detector-row-missing')).toMatchObject({
+        matrixRowId: 'cells.formats.direct',
+        domainId: 'cells.formats',
+      });
+    }
+  });
+
   it('accepts when a detected-present domain has a matching policy row', () => {
     const manifest = freshManifest({
       domains: [...REQUIRED_FIRST_SLICE_DOMAIN_IDS.map((id) => domainRow(id)), domainRow('pivots')],
@@ -420,26 +528,29 @@ describe('validateDomainSupportManifest (fail-closed)', () => {
     }
   });
 
-  it('reports duplicate domain rows', () => {
+  it('reports duplicate matrix row ids', () => {
     const manifest = freshManifest({
-      domains: [...REQUIRED_FIRST_SLICE_DOMAIN_IDS.map((id) => domainRow(id)), domainRow('sheets')],
+      domains: [
+        ...REQUIRED_FIRST_SLICE_DOMAIN_IDS.map((id) => domainRow(id)),
+        domainRow('cells.formats', { matrixRowId: 'sheets' }),
+      ],
     });
 
     const result = validateDomainSupportManifest(manifest, { now: NOW });
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.diagnostics.map((d) => d.code)).toContain('duplicate-domain');
+      expect(result.diagnostics.map((d) => d.code)).toContain('duplicate-matrix-row');
     }
   });
 });
 
 describe('assertDomainSupportManifest', () => {
-  it('returns present domain ids on a valid manifest', () => {
+  it('returns present matrix row ids on a valid manifest', () => {
     const ids = assertDomainSupportManifest(freshManifest(), {
       now: NOW,
       maxAgeMs: ONE_HOUR_MS,
     });
-    expect(ids).toEqual([...REQUIRED_FIRST_SLICE_DOMAIN_IDS]);
+    expect(ids).toEqual([...REQUIRED_FIRST_SLICE_MATRIX_ROW_IDS]);
   });
 
   it('throws a typed DomainSupportManifestError carrying diagnostics', () => {

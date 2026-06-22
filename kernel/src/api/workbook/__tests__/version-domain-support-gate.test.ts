@@ -47,6 +47,7 @@ function domainRow(
   overrides: Partial<DomainCapabilityPolicyManifest> = {},
 ): DomainCapabilityPolicyManifest {
   return {
+    matrixRowId: overrides.matrixRowId ?? domainId,
     domainId,
     domainClass: 'authored',
     capabilityStates: capabilityStates(),
@@ -67,7 +68,7 @@ function freshManifest(
   overrides: Partial<DomainSupportManifest> = {},
 ): DomainSupportManifest {
   return {
-    schemaVersion: '1',
+    schemaVersion: 'domain-support-manifest.v2',
     generatedAt: CREATED_AT,
     workbookId: 'wb-1',
     domains: REQUIRED_FIRST_SLICE_DOMAIN_IDS.map((id) => domainRow(id)),
@@ -227,7 +228,7 @@ describe('WorkbookVersion domain support manifest gate', () => {
     expect(commit).not.toHaveBeenCalled();
   });
 
-  it('blocks checkout before invoking materialization services when a required domain is missing', async () => {
+  it('blocks checkout before invoking materialization services when a required matrix row is missing', async () => {
     const checkout = jest.fn();
     const planCheckout = jest.fn();
     const version = new WorkbookVersionImpl({
@@ -253,16 +254,56 @@ describe('WorkbookVersion domain support manifest gate', () => {
               operation: 'checkout',
               mutationGuarantee: 'no-write-attempted',
               payload: expect.objectContaining({
-                diagnosticCode: 'required-domain-missing',
-                domainId: 'cells.formulas',
+                  diagnosticCode: 'required-matrix-row-missing',
+                  matrixRowId: 'cells.formulas',
+                }),
+              }),
+            }),
+        ],
+      },
+    });
+    expect(checkout).not.toHaveBeenCalled();
+    expect(planCheckout).not.toHaveBeenCalled();
+  });
+
+  it('blocks commit when a broad domain row masks a required subtype matrix row', async () => {
+    const commit = jest.fn();
+    const version = new WorkbookVersionImpl({
+      versioning: {
+        writeService: { commit },
+        domainSupportManifest: freshManifest({
+          domains: [
+            ...REQUIRED_FIRST_SLICE_DOMAIN_IDS.map((id) => domainRow(id)),
+            domainRow('cells.formats', { matrixRowId: 'cells.formats' }),
+          ],
+        }),
+        domainSupportManifestOptions: {
+          now: NOW,
+          requiredMatrixRowIds: ['cells.formats.direct'],
+        },
+      },
+    } as any);
+
+    await expect(version.commit()).resolves.toMatchObject({
+      ok: false,
+      error: {
+        target: 'workbook.version.commit',
+        diagnostics: [
+          expect.objectContaining({
+            code: 'VERSION_DOMAIN_SUPPORT_MANIFEST_INVALID',
+            data: expect.objectContaining({
+              operation: 'commit',
+              mutationGuarantee: 'no-write-attempted',
+              payload: expect.objectContaining({
+                diagnosticCode: 'required-matrix-row-missing',
+                matrixRowId: 'cells.formats.direct',
               }),
             }),
           }),
         ],
       },
     });
-    expect(checkout).not.toHaveBeenCalled();
-    expect(planCheckout).not.toHaveBeenCalled();
+    expect(commit).not.toHaveBeenCalled();
   });
 
   it('blocks checkout based on checkout capability state', async () => {
